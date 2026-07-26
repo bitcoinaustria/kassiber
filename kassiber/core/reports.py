@@ -207,16 +207,6 @@ AUSTRIAN_TAX_SECTION_METADATA = {
         "kennzahlen": (),
     },
 }
-AUSTRIAN_TAX_SECTION_GROUPS = (
-    (
-        "1. Steuerpflichtige Einkuenfte aus dem Handel mit Kryptowaehrungen",
-        ("1.1", "1.2", "1.3"),
-    ),
-    ("2. Steuerpflichtige laufende Einkuenfte", ("2.1", "2.2")),
-    ("3. Nicht steuerbare Einkuenfte", ("3.1", "3.2", "3.3")),
-    ("4. Sonstige Ein- und Ausgaenge", ("4.1", "4.2", "4.3", "4.4", "4.5")),
-)
-
 ScopeResolver = Callable[[sqlite3.Connection, str | None, str | None], tuple[Mapping[str, Any], Mapping[str, Any]]]
 AccountResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
 WalletResolver = Callable[[sqlite3.Connection, str, str], Mapping[str, Any]]
@@ -4992,26 +4982,6 @@ def _austrian_tax_sections(rows):
         totals["gain_loss_eur_cents"] += int(row["gain_loss_eur_cents"] or 0)
         totals["income_eur_cents"] += int(row["income_eur_cents"] or 0)
     return sections
-
-
-def _austrian_section_title(section_id, section):
-    law = f" ({section['law']})" if section["law"] else ""
-    return f"{section_id}. {section['label']}{law}"
-
-
-def _austrian_section_amount(section):
-    return _report_eur_cents(section["totals"]["amount_eur_cents"])
-
-
-def _austrian_unsupported_section_lines(section_id, section):
-    title = _austrian_section_title(section_id, section)
-    return [
-        title,
-        "-" * len(title),
-        "Status: not modelled in Kassiber yet; placeholder total is 0.00 EUR.",
-        "Amount: 0.00 EUR",
-        "",
-    ]
 
 
 def _austrian_disposal_split(rows):

@@ -1937,30 +1937,6 @@ def suggest_links(
     }
 
 
-def _reachable_link_ids(conn: sqlite3.Connection, profile_id: str, target_transaction_id: str) -> set[str]:
-    found: set[str] = set()
-    queue = deque([target_transaction_id])
-    visited: set[str] = set()
-    while queue:
-        tx_id = queue.popleft()
-        if tx_id in visited:
-            continue
-        visited.add(tx_id)
-        rows = conn.execute(
-            """
-            SELECT id, from_transaction_id
-            FROM source_funds_links
-            WHERE profile_id = ? AND to_transaction_id = ? AND state != 'rejected'
-            """,
-            (profile_id, tx_id),
-        ).fetchall()
-        for row in rows:
-            found.add(row["id"])
-            if row["from_transaction_id"]:
-                queue.append(row["from_transaction_id"])
-    return found
-
-
 def _tx_node(
     row: Mapping[str, Any],
     reveal_mode: str,
