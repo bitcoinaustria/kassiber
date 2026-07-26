@@ -70,7 +70,7 @@ export function ActivityMarkerSlider({
           <option key={mark} value={index} label={serializeActivityMarkerMinimum(mark)} />
         ))}
       </datalist>
-      <div className="flex justify-between text-[10px] text-muted-foreground">
+      <div className="flex justify-between text-2xs text-muted-foreground">
         {ACTIVITY_MARKER_SLIDER_MARKS.map((mark) => (
           <span key={mark} className="tabular-nums">
             {serializeActivityMarkerMinimum(mark)}
@@ -208,7 +208,7 @@ export function ChartControlsSheet({
                 {t("controls.description")}
               </SheetDescription>
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-2xs text-muted-foreground">
                   {t("controls.dotsVisible", {
                     visible: formatCount(visibleMarkerCount),
                     total: formatCount(markerCount),

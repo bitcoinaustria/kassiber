@@ -526,7 +526,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
                   <span className="text-sm font-medium">{backend.name}</span>
                   <span
                     className={cn(
-                      "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+                      "inline-flex items-center rounded-md border px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide",
                       index === 0
                         ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                         : "border-border bg-muted text-muted-foreground",

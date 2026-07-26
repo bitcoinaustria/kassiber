@@ -498,7 +498,7 @@ export function FlowPathPreview({
                 className="flex items-center gap-2"
               >
                 <div className="w-44 rounded-md border bg-background p-2">
-                  <div className="mb-2 text-[10px] font-semibold uppercase text-muted-foreground">
+                  <div className="mb-2 text-2xs font-semibold uppercase text-muted-foreground">
                     {pretty(level.role || "flow")}
                   </div>
                   <div className="space-y-1">
@@ -524,7 +524,7 @@ export function FlowPathPreview({
                           <div className="truncate text-xs font-medium">
                             {node.label || node.id}
                           </div>
-                          <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
                             {pretty(node.kind || node.node_type || "")}
                             {node.amount != null
                               ? ` · ${formatBtc(node.amount, node.asset || "BTC")}`
@@ -844,7 +844,7 @@ export function CoveragePanel({
                 Coverage truncated to {totalTxCount} of{" "}
                 {coverage.truncation.inbound_total_count} inbound transactions
                 ({coverage.truncation.not_classified_count} not classified).
-                Run <code className="text-[10px]">source-funds coverage</code>{" "}
+                Run <code className="text-2xs">source-funds coverage</code>{" "}
                 with a higher --max-transactions to compute the full set.
               </div>
             )}
@@ -1059,7 +1059,7 @@ export function DisclosureNodeOverrides({
   }
   const buttonClass = (active: boolean, tone: "show" | "hide") =>
     [
-      "rounded border px-2 py-0.5 text-[11px] transition-colors",
+      "rounded border px-2 py-0.5 text-xs transition-colors",
       active
         ? tone === "show"
           ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
@@ -1071,7 +1071,7 @@ export function DisclosureNodeOverrides({
       <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
         Per-transaction disclosure
       </div>
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         Override the reveal mode for individual transactions. Changes update the
         preview live and freeze into the exported case.
       </p>
@@ -1092,7 +1092,7 @@ export function DisclosureNodeOverrides({
                 <div className="truncate text-xs">
                   {stringValue(node.label) || id}
                 </div>
-                <div className="truncate font-mono text-[10px] text-muted-foreground">
+                <div className="truncate font-mono text-2xs text-muted-foreground">
                   {external ? shortId(external) : "(redacted)"}
                 </div>
               </div>

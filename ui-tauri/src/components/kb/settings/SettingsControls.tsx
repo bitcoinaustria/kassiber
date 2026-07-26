@@ -12,7 +12,7 @@ export function PlannedBadge({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-md border border-dashed border-border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground",
+        "inline-flex items-center rounded-md border border-dashed border-border px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground",
         className,
       )}
     >

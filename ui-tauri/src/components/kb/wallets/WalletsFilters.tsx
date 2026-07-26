@@ -30,7 +30,7 @@ const statusFilterOptions: ConnectionStatus[] = [
 ];
 
 const filterChipClassName =
-  "inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted sm:text-xs";
+  "inline-flex items-center gap-1 rounded-md border bg-background px-2 py-1 text-2xs font-medium text-muted-foreground transition-colors hover:bg-muted sm:text-xs";
 
 interface WalletsFiltersProps {
   filteredCount: number;
@@ -62,7 +62,7 @@ export function WalletsFilters({
           <span className="text-sm font-medium sm:text-base">
             {t("filters.heading")}
           </span>
-          <span className="ml-1 inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-[10px] font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
+          <span className="ml-1 inline-flex items-center rounded-md bg-gray-50 px-2 py-1 text-2xs font-medium text-gray-600 ring-1 ring-gray-500/10 ring-inset sm:text-xs dark:bg-gray-800/50 dark:text-gray-400 dark:ring-gray-400/20">
             {filteredCount}
           </span>
         </div>
@@ -82,7 +82,7 @@ export function WalletsFilters({
                 <SlidersHorizontal className="size-3.5 sm:size-4" aria-hidden="true" />
                 <span className="hidden sm:inline">{t("filters.menu")}</span>
                 {activeFilterCount > 0 ? (
-                  <span className="grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
+                  <span className="grid min-w-4 place-items-center rounded-full bg-primary px-1 text-2xs font-semibold leading-4 text-primary-foreground">
                     {activeFilterCount}
                   </span>
                 ) : null}
@@ -146,7 +146,7 @@ export function WalletsFilters({
 
       {hasActiveFilters && (
         <div className="flex flex-wrap items-center gap-2 px-3 pb-3 sm:px-6">
-          <span className="text-[10px] text-muted-foreground sm:text-xs">
+          <span className="text-2xs text-muted-foreground sm:text-xs">
             {t("filters.label")}
           </span>
           {statusFilter !== "all" && (
@@ -176,7 +176,7 @@ export function WalletsFilters({
           <button
             type="button"
             onClick={onClearFilters}
-            className="text-[10px] text-destructive hover:underline sm:text-xs"
+            className="text-2xs text-destructive hover:underline sm:text-xs"
           >
             {t("filters.clearAll")}
           </button>

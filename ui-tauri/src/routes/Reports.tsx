@@ -987,7 +987,7 @@ function ReportMetricStrip({
             <p className="min-w-0 text-lg leading-tight font-semibold tracking-tight tabular-nums sm:text-xl">
               {metric.value}
             </p>
-            <p className="text-[10px] text-muted-foreground sm:text-xs">
+            <p className="text-2xs text-muted-foreground sm:text-xs">
               {metric.sub}
             </p>
             </div>
@@ -1041,7 +1041,7 @@ function KennzahlOverviewPanel({
             <h2 className="truncate text-sm font-medium sm:text-base">
               Tax fields overview
             </h2>
-            <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
+            <p className="truncate text-2xs text-muted-foreground sm:text-xs">
               {jurisdiction.code} filing fields from the export taxonomy
             </p>
           </div>
@@ -1058,7 +1058,7 @@ function KennzahlOverviewPanel({
           rowGroups.map((group) => (
             <Fragment key={group.form}>
               {rowGroups.length > 1 ? (
-                <div className="pt-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase sm:col-span-2">
+                <div className="pt-1 text-2xs font-medium tracking-wide text-muted-foreground uppercase sm:col-span-2">
                   {group.form === "E 1kv"
                     ? "E 1kv filing fields"
                     : `${group.form} fields outside E 1kv`}
@@ -1085,7 +1085,7 @@ function KennzahlOverviewPanel({
                           <Badge variant="outline" className="rounded-md">
                             Field {row.code}
                           </Badge>
-                          <span className="text-[10px] text-muted-foreground sm:text-xs">
+                          <span className="text-2xs text-muted-foreground sm:text-xs">
                             {row.rowCount} row{row.rowCount === 1 ? "" : "s"}
                           </span>
                         </div>
@@ -1093,7 +1093,7 @@ function KennzahlOverviewPanel({
                           {displayLabel}
                         </p>
                         {displayNote ? (
-                          <p className="mt-1 text-[10px] text-muted-foreground">
+                          <p className="mt-1 text-2xs text-muted-foreground">
                             {displayNote}
                           </p>
                         ) : null}
@@ -1164,7 +1164,7 @@ function SummaryPdfPanel({
             <h2 className="truncate text-sm font-medium sm:text-base">
               Summary snapshot
             </h2>
-            <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
+            <p className="truncate text-2xs text-muted-foreground sm:text-xs">
               {year} · {selectedCount || "No"} wallet{selectedCount === 1 ? "" : "s"}
             </p>
           </div>
@@ -1219,7 +1219,7 @@ function SummaryPdfPanel({
                     />
                     <span className="min-w-0 flex-1 truncate">{wallet.label}</span>
                     {wallet.chain ? (
-                      <Badge variant="outline" className="rounded-md text-[10px]">
+                      <Badge variant="outline" className="rounded-md text-2xs">
                         {wallet.chain}
                       </Badge>
                     ) : null}
@@ -1272,7 +1272,7 @@ function ReportFilesPanel({
             <h2 className="text-sm font-medium sm:text-base">
               Report package
             </h2>
-            <p className="text-[10px] text-muted-foreground sm:text-xs">
+            <p className="text-2xs text-muted-foreground sm:text-xs">
               Filing exports
             </p>
           </div>
@@ -1467,7 +1467,7 @@ function HandoffScopePanel({
             <h2 className="truncate text-sm font-medium sm:text-base">
               Auditor handoff
             </h2>
-            <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
+            <p className="truncate text-2xs text-muted-foreground sm:text-xs">
               Audit exports and evidence boundaries
             </p>
           </div>
@@ -1716,7 +1716,7 @@ function AuditPackageControls({
 
 function LabelText({ children }: { children: ReactNode }) {
   return (
-    <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+    <div className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
       {children}
     </div>
   );
@@ -1950,7 +1950,7 @@ function LotAuditPanel({
             <h2 className="truncate text-sm font-medium sm:text-base">
               Disposed lot audit
             </h2>
-            <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
+            <p className="truncate text-2xs text-muted-foreground sm:text-xs">
               Acquisition, disposal, proceeds, basis, and gain
             </p>
           </div>
@@ -2085,7 +2085,7 @@ function NeutralSwapAuditPanel({
             <h2 className="truncate text-sm font-medium sm:text-base">
               Tax-neutral swap audit
             </h2>
-            <p className="truncate text-[10px] text-muted-foreground sm:text-xs">
+            <p className="truncate text-2xs text-muted-foreground sm:text-xs">
               Reviewed carrying-value movement and fee delta
             </p>
           </div>

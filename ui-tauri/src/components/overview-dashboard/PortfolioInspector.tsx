@@ -59,10 +59,10 @@ export function PortfolioInspector({
         )}
       >
         <div className="min-w-[88px] pr-1">
-          <p className="text-[9px] font-medium tracking-wide text-muted-foreground uppercase">
+          <p className="text-3xs font-medium tracking-wide text-muted-foreground uppercase">
             {t("inspector.position")}
           </p>
-          <p className="truncate text-[11px] font-semibold">
+          <p className="truncate text-xs font-semibold">
             {point?.detailLabel ?? t("inspector.noDateSelected")}
           </p>
         </div>
@@ -100,7 +100,7 @@ export function PortfolioInspector({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+          <p className="text-2xs font-medium tracking-wide text-muted-foreground uppercase">
             {t("inspector.position")}
           </p>
           {!collapsed && (
@@ -173,7 +173,7 @@ export function InspectorMetric({
 }) {
   return (
     <div className="rounded-md bg-muted/25 px-2.5 py-2">
-      <p className="text-[10px] font-medium text-muted-foreground">{label}</p>
+      <p className="text-2xs font-medium text-muted-foreground">{label}</p>
       <p
         className={cn(
           "mt-0.5 truncate text-sm font-semibold tabular-nums",
@@ -185,7 +185,7 @@ export function InspectorMetric({
         {value}
       </p>
       {detail && (
-        <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+        <p className="mt-0.5 truncate text-2xs text-muted-foreground">
           {detail}
         </p>
       )}
@@ -208,12 +208,12 @@ function HeaderInspectorMetric({
 }) {
   return (
     <div className="min-w-[92px] rounded bg-muted/20 px-2 py-1">
-      <p className="truncate text-[9px] font-medium text-muted-foreground">
+      <p className="truncate text-3xs font-medium text-muted-foreground">
         {label}
       </p>
       <p
         className={cn(
-          "truncate text-[11px] font-semibold tabular-nums",
+          "truncate text-xs font-semibold tabular-nums",
           tone === "good" && "text-emerald-600 dark:text-emerald-400",
           tone === "bad" && "text-[var(--kb-accent)]",
           blurClass(hidden),
@@ -222,7 +222,7 @@ function HeaderInspectorMetric({
         {value}
       </p>
       {detail ? (
-        <p className="truncate text-[9px] text-muted-foreground">{detail}</p>
+        <p className="truncate text-3xs text-muted-foreground">{detail}</p>
       ) : null}
     </div>
   );

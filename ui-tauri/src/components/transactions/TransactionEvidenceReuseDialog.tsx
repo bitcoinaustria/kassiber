@@ -102,7 +102,7 @@ export function TransactionEvidenceReuseDialog({
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
               {t("evidenceReuse.sourceTransaction")}
             </div>
             <Select

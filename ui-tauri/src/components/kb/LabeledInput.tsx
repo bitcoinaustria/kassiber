@@ -16,7 +16,7 @@ export const LabeledInput = React.forwardRef<HTMLInputElement, LabeledInputProps
       <div className="flex flex-col gap-2">
         <Label
           htmlFor={inputId}
-          className="font-sans text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-2"
+          className="font-sans text-2xs font-semibold uppercase tracking-[0.12em] text-ink-2"
         >
           {label}
         </Label>

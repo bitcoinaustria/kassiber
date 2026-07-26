@@ -1337,7 +1337,7 @@ const TransactionsTable = ({
         isExpanded && "mr-3 justify-end sm:mr-4",
       )}
     >
-      <span className="text-[10px] text-muted-foreground sm:text-xs">
+      <span className="text-2xs text-muted-foreground sm:text-xs">
         {t("table.filters")}
       </span>
       {chartSelection && (
@@ -1478,7 +1478,7 @@ const TransactionsTable = ({
       )}
       <button
         onClick={clearFilters}
-        className="text-[10px] text-destructive hover:underline sm:text-xs"
+        className="text-2xs text-destructive hover:underline sm:text-xs"
       >
         {t("table.clearAll")}
       </button>
@@ -1502,7 +1502,7 @@ const TransactionsTable = ({
             <SlidersHorizontal className="size-3.5 sm:size-4" aria-hidden="true" />
             <span>{t("table.filter.menuTrigger")}</span>
             {activeFilterCount > 0 ? (
-              <span className="grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-4 text-primary-foreground">
+              <span className="grid min-w-4 place-items-center rounded-full bg-primary px-1 text-2xs font-semibold leading-4 text-primary-foreground">
                 {activeFilterCount}
               </span>
             ) : null}
@@ -1976,7 +1976,7 @@ const TransactionsTable = ({
                               </Badge>
                             ) : null}
                           </div>
-                          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
+                          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-2xs text-muted-foreground sm:text-xs">
                             <span
                               className={cn("truncate", blurClass(hideSensitive))}
                             >
@@ -2013,7 +2013,7 @@ const TransactionsTable = ({
                       </CurrencyToggleText>
                       <div
                         className={cn(
-                          "mt-1 text-[10px] text-muted-foreground tabular-nums sm:text-xs",
+                          "mt-1 text-2xs text-muted-foreground tabular-nums sm:text-xs",
                           blurClass(hideSensitive),
                         )}
                       >
@@ -2044,7 +2044,7 @@ const TransactionsTable = ({
                           </Badge>
                         )}
                       </div>
-                      <p className="mt-1 truncate text-[10px] text-muted-foreground sm:text-xs">
+                      <p className="mt-1 truncate text-2xs text-muted-foreground sm:text-xs">
                         {collateralRole
                           ? (t as (key: string) => string)(
                               loanRoleAccountingLabelKey(collateralRole),
@@ -2059,7 +2059,7 @@ const TransactionsTable = ({
                       <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                         <span
                           className={cn(
-                            "inline-flex max-w-full items-center truncate rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
+                            "inline-flex max-w-full items-center truncate rounded-md px-2 py-1 text-2xs font-medium sm:text-xs",
                             pricingSourceStyles[rowPricingValue],
                           )}
                         >
@@ -2073,7 +2073,7 @@ const TransactionsTable = ({
                         </span>
                         {draft.pricingQuality === "coarse_fallback" ? (
                           <span
-                            className="inline-flex max-w-full items-center gap-1 truncate rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-400"
+                            className="inline-flex max-w-full items-center gap-1 truncate rounded-md bg-amber-500/10 px-1.5 py-0.5 text-2xs font-medium text-amber-700 dark:text-amber-400"
                             title={t("table.coarse.title")}
                           >
                             <AlertTriangle className="size-3" aria-hidden="true" />
@@ -2083,7 +2083,7 @@ const TransactionsTable = ({
                       </div>
                       <p
                         className={cn(
-                          "mt-1 truncate text-[10px] text-muted-foreground sm:text-xs",
+                          "mt-1 truncate text-2xs text-muted-foreground sm:text-xs",
                           blurClass(hideSensitive),
                         )}
                       >
@@ -2097,7 +2097,7 @@ const TransactionsTable = ({
                       </p>
                       {rowPricingSummary ? (
                         <p
-                          className="truncate text-[10px] text-muted-foreground/80"
+                          className="truncate text-2xs text-muted-foreground/80"
                           title={rowPricingSummary}
                         >
                           {rowPricingSummary}
@@ -2106,7 +2106,7 @@ const TransactionsTable = ({
                     </TableCell>
                     <TableCell className="hidden overflow-hidden whitespace-normal xl:table-cell">
                       <div className="flex min-w-0 flex-wrap gap-1 overflow-hidden">
-                        <span className="inline-flex max-w-full items-center truncate rounded-md border px-2 py-0.5 text-[10px] font-normal text-muted-foreground sm:text-xs">
+                        <span className="inline-flex max-w-full items-center truncate rounded-md border px-2 py-0.5 text-2xs font-normal text-muted-foreground sm:text-xs">
                           {networkLabel}
                         </span>
                       </div>
@@ -2114,7 +2114,7 @@ const TransactionsTable = ({
                     <TableCell className="overflow-hidden">
                       <span
                         className={cn(
-                          "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium sm:text-xs",
+                          "inline-flex items-center gap-1 rounded-md px-2 py-1 text-2xs font-medium sm:text-xs",
                           transactionStatusStyles[draft.reviewStatus],
                         )}
                       >
@@ -2124,7 +2124,7 @@ const TransactionsTable = ({
                           transactionStatusLabels[draft.reviewStatus],
                         )}
                       </span>
-                      <p className="mt-1 hidden text-[10px] text-muted-foreground sm:block sm:text-xs">
+                      <p className="mt-1 hidden text-2xs text-muted-foreground sm:block sm:text-xs">
                         {collateralRole
                           ? t("table.row.loanNonEvent")
                           : draft.excluded
@@ -2341,7 +2341,7 @@ const TransactionsTable = ({
                 : t("table.virtual.loaded", { count: loadedRecordCount })}
           </span>
           {!isRefreshing && !isCompleteRecordSet ? (
-            <span className="text-[10px] sm:text-xs">
+            <span className="text-2xs sm:text-xs">
               {isLoadingMoreRecords
                 ? t("table.virtual.loadingMore")
                 : t("table.virtual.moreHint")}

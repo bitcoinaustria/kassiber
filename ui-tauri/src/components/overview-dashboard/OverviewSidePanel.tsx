@@ -64,7 +64,7 @@ export const BalanceDriversCard = ({
             <span className="text-sm font-medium">{t("drivers.title")}</span>
             <p
               className={cn(
-                "text-[10px] text-muted-foreground sm:text-xs",
+                "text-2xs text-muted-foreground sm:text-xs",
                 blurClass(hideSensitive),
               )}
             >
@@ -109,7 +109,7 @@ export const BalanceDriversCard = ({
                   <span className="truncate text-xs text-muted-foreground">
                     {driverLabel}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-2xs text-muted-foreground">
                     {item.count}
                   </span>
                 </div>
@@ -197,11 +197,11 @@ export const HoldingsBySourceChart = ({
               {t("holdings.title")}
             </span>
             {isBitcoinMode ? (
-              <p className="text-[10px] text-muted-foreground sm:text-xs">
+              <p className="text-2xs text-muted-foreground sm:text-xs">
                 {t("holdings.btcAllocation")}
               </p>
             ) : (
-              <p className="flex items-center gap-1 text-[10px] text-muted-foreground sm:text-xs">
+              <p className="flex items-center gap-1 text-2xs text-muted-foreground sm:text-xs">
                 <ArrowUpRight
                   className={cn(
                     "size-3",
@@ -251,7 +251,7 @@ export const HoldingsBySourceChart = ({
                 {/* dynamic key */}
                 {singleHolding.nameKey ? t(singleHolding.nameKey as never) : singleHolding.name}
               </p>
-              <p className="text-[10px] text-muted-foreground sm:text-xs">
+              <p className="text-2xs text-muted-foreground sm:text-xs">
                 {t("holdings.onlyActiveSource")}
               </p>
             </div>
@@ -272,7 +272,7 @@ export const HoldingsBySourceChart = ({
             </p>
             <p
               className={cn(
-                "text-[10px] text-muted-foreground tabular-nums sm:text-xs",
+                "text-2xs text-muted-foreground tabular-nums sm:text-xs",
                 blurClass(hideSensitive),
               )}
             >
@@ -320,7 +320,7 @@ export const HoldingsBySourceChart = ({
             >
               {totalHoldingsLabel}
             </span>
-            <span className="text-[8px] text-muted-foreground sm:text-[10px]">
+            <span className="text-3xs text-muted-foreground sm:text-2xs">
               {t("holdings.total")}
             </span>
           </div>
@@ -342,12 +342,12 @@ export const HoldingsBySourceChart = ({
                   className="mt-1 size-2 shrink-0 rounded-full sm:size-2.5"
                   style={{ backgroundColor: item.color }}
                 />
-                <span className="min-w-0 break-words text-[10px] leading-4 text-muted-foreground sm:text-xs">
+                <span className="min-w-0 break-words text-2xs leading-4 text-muted-foreground sm:text-xs">
                   {/* dynamic key */}
                   {item.nameKey ? t(item.nameKey as never) : item.name}
                 </span>
               </div>
-              <div className="flex shrink-0 flex-wrap justify-end gap-x-1.5 text-[10px] sm:text-xs">
+              <div className="flex shrink-0 flex-wrap justify-end gap-x-1.5 text-2xs sm:text-xs">
                 <span
                   className={cn(
                     "font-medium tabular-nums",

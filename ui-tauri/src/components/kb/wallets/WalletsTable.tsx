@@ -414,7 +414,7 @@ function WalletRow({
               {connection.label}
             </div>
             {metadataItems.length > 0 ? (
-              <div className="mt-1 truncate text-[10px] text-muted-foreground sm:text-xs">
+              <div className="mt-1 truncate text-2xs text-muted-foreground sm:text-xs">
                 {metadataItems.join(" · ")}
               </div>
             ) : null}

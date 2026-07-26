@@ -767,7 +767,7 @@ export function NetworkStatusIndicator({
           )}
         </div>
         {lastCheckedAt ? (
-          <div className="border-t px-3 py-2 text-[11px] text-muted-foreground">
+          <div className="border-t px-3 py-2 text-xs text-muted-foreground">
             {t("network.lastChecked", {
               time: new Date(lastCheckedAt).toLocaleTimeString(currentUiLocale()),
             })}

@@ -100,7 +100,7 @@ export const ReviewStep = ({
                                 <span className="font-medium text-ink">
                                   {detail.label}
                                 </span>
-                                <span className="break-all font-mono text-[11px] leading-5 text-ink-2">
+                                <span className="break-all font-mono text-xs leading-5 text-ink-2">
                                   {detail.value}
                                 </span>
                               </li>

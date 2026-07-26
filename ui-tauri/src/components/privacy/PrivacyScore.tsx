@@ -144,7 +144,7 @@ export function PrivacyScoreHero({ model }: { model: PrivacyScoreModel }) {
             aria-hidden="true"
           />
         </div>
-        <div className="mt-1 flex justify-between font-mono text-[10px] text-muted-foreground">
+        <div className="mt-1 flex justify-between font-mono text-2xs text-muted-foreground">
           {GRADE_ZONES.map((zone) => (
             <span key={zone.grade}>{zone.grade}</span>
           ))}
@@ -217,12 +217,12 @@ export function SeverityRing({
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className="font-mono text-2xl font-bold tabular-nums">{total}</span>
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <span className="text-2xs uppercase tracking-wide text-muted-foreground">
             {t("score.findings")}
           </span>
         </div>
       </div>
-      <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 font-mono text-[11px]">
+      <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 font-mono text-xs">
         {SEVERITY_ORDER.map((key) => (
           <span key={key} className="flex items-center gap-1.5">
             <span className="size-2 rounded-sm" style={{ backgroundColor: SEVERITY_HEX[key] }} />
@@ -318,7 +318,7 @@ export function PrivacyFindingCard({
           <span className={cn("inline-block size-2.5 shrink-0 rounded-full", tone.dot)} aria-hidden="true" />
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium">{tellLabel(finding.kind, t)}</span>
-            <span className={cn("font-mono text-[10px] font-semibold uppercase tracking-wide", tone.text)}>
+            <span className={cn("font-mono text-2xs font-semibold uppercase tracking-wide", tone.text)}>
               {t(`severity.${finding.severity}`)}
             </span>
           </span>
@@ -390,7 +390,7 @@ export function HeuristicCoverage() {
           </span>
         ))}
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[11px] text-muted-foreground">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-muted-foreground">
         {order.map((status) => (
           <span key={status} className="flex items-center gap-1.5">
             <span
@@ -460,7 +460,7 @@ export function LinkageGraph({
           {linkedCount > 0 ? (
             <>
               <circle cx={observerX} cy={observerY} r={26} fill={`${SEVERITY_HEX.warning}22`} stroke={SEVERITY_HEX.warning} strokeWidth={1.5} />
-              <text x={observerX} y={observerY + 40} textAnchor="middle" className="fill-muted-foreground text-[10px]">
+              <text x={observerX} y={observerY + 40} textAnchor="middle" className="fill-muted-foreground text-2xs">
                 {t("linkage.observer")}
               </text>
             </>
@@ -472,10 +472,10 @@ export function LinkageGraph({
             return (
               <g key={`node-${row.wallet_id ?? index}`}>
                 <rect x={8} y={y - 16} width={leftX - 8} height={32} rx={6} fill={`${color}18`} stroke={color} strokeWidth={1} />
-                <text x={16} y={y - 2} className="fill-foreground text-[11px] font-medium">
+                <text x={16} y={y - 2} className="fill-foreground text-xs font-medium">
                   {shortId(row.wallet_id)}
                 </text>
-                <text x={16} y={y + 11} className="fill-muted-foreground text-[10px]">
+                <text x={16} y={y + 11} className="fill-muted-foreground text-2xs">
                   {t("linkage.edges", { count: row.linkage_edge_count ?? 0 })} · {fmtMsat(row.amount_msat)}
                 </text>
               </g>

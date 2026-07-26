@@ -75,7 +75,7 @@ function FieldDiffRow({
       <div className="flex min-w-0 items-center gap-1.5">
         <Badge
           variant="outline"
-          className={cn("rounded-md text-[11px]", transactionHistoryFamilyClass(field.family))}
+          className={cn("rounded-md text-xs", transactionHistoryFamilyClass(field.family))}
         >
           {field.family}
         </Badge>
@@ -83,19 +83,19 @@ function FieldDiffRow({
       </div>
       <div className="grid min-w-0 gap-1 sm:grid-cols-2">
         <div className="min-w-0 rounded border bg-muted/40 px-2 py-1">
-          <div className="text-[10px] uppercase text-muted-foreground">{t("history.before")}</div>
+          <div className="text-2xs uppercase text-muted-foreground">{t("history.before")}</div>
           <div className={cn("truncate", hiddenClass(hideSensitive))}>
             {field.before_label}
           </div>
         </div>
         <div className="min-w-0 rounded border bg-background px-2 py-1">
-          <div className="text-[10px] uppercase text-muted-foreground">{t("history.after")}</div>
+          <div className="text-2xs uppercase text-muted-foreground">{t("history.after")}</div>
           <div className={cn("truncate", hiddenClass(hideSensitive))}>
             {field.after_label}
           </div>
         </div>
         {added.length || removed.length ? (
-          <div className="sm:col-span-2 flex flex-wrap gap-1 text-[11px] text-muted-foreground">
+          <div className="sm:col-span-2 flex flex-wrap gap-1 text-xs text-muted-foreground">
             {added.map((tag) => (
               <span key={`add-${tag}`} className={cn("rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300", hiddenClass(hideSensitive))}>
                 +{tag}
@@ -109,7 +109,7 @@ function FieldDiffRow({
           </div>
         ) : null}
         {field.redacted ? (
-          <div className="sm:col-span-2 text-[11px] text-muted-foreground">
+          <div className="sm:col-span-2 text-xs text-muted-foreground">
             {t("history.redacted")}
           </div>
         ) : null}

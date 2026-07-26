@@ -116,7 +116,7 @@ function ModelSelectorLabel({
       {kindStyle ? (
         <span
           className={cn(
-            "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium uppercase",
+            "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-2xs font-medium uppercase",
             kindStyle.tone,
           )}
         >
