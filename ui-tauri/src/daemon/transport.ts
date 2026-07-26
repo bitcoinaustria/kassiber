@@ -87,20 +87,6 @@ export interface DaemonStreamOptions<T = unknown> {
   signal?: AbortSignal;
 }
 
-/**
- * Unsolicited daemon→UI event record (`event: true`, never a
- * `request_id`), e.g. `ui.freshness.background` / `ui.freshness.worker`
- * from the background freshness worker. The Rust supervisor forwards
- * these on the `daemon://event` Tauri channel, separate from the
- * per-request `daemon://stream` records.
- */
-export interface DaemonEventRecord<T = unknown> {
-  kind: string;
-  schema_version: number;
-  event: true;
-  data?: T;
-}
-
 export interface DaemonTransport {
   invoke<T = unknown>(req: DaemonRequest): Promise<DaemonEnvelope<T>>;
   /** Streaming variant; resolves with the terminal envelope. */

@@ -1435,10 +1435,6 @@ export function formatFiatPrice(value: number, fiatCurrency = "EUR") {
   return `${rounded} ${fiatCurrency}`;
 }
 
-export function treasuryPrimaryValue(point: TreasuryChartPoint) {
-  return point.balanceBtc;
-}
-
 export function formatBtcAxis(value: number) {
   const precision = Math.abs(value) >= 10 ? 0 : Math.abs(value) >= 1 ? 2 : 3;
   return formatBtc(value, { precision }).replace("₿ ", "₿");
