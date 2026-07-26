@@ -40,7 +40,7 @@ function WalletsOverviewStat({
         {value}
       </p>
       {detail != null ? (
-        <p className="truncate text-[10px] font-medium leading-tight text-muted-foreground sm:text-xs">
+        <p className="truncate text-2xs font-medium leading-tight text-muted-foreground sm:text-xs">
           {detail}
         </p>
       ) : null}

@@ -8,16 +8,12 @@ const buttonVariants = cva(
   // Press feedback on pointer-down (active), not click — keeps controls feeling
   // direct. Scale resets instantly when disabled so a dead control never dips.
   //
-  // The `after` pseudo-element is an invisible hit-area floor, and the reason
-  // it is sized in **px** rather than rem: the whole UI is rem-based off a root
-  // font-size that ranges 10.24px–19.2px (16 × auto-fit × the user's scale, see
-  // lib/appAutoScale.ts), so a rem-sized floor would shrink right along with
-  // the thing it is supposed to be protecting. Without it, `sm` drops to 23px
-  // and `icon-xs` to 17.3px at the auto-fit floor on a 13" laptop — under the
-  // WCAG 2.2 AA 24×24 target minimum. It overlays the button centred, takes
-  // pointer events (so it must NOT be `pointer-events-none`), and paints
-  // nothing, so layout and appearance are untouched at every scale.
-  "relative inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none after:absolute after:top-1/2 after:left-1/2 after:size-full after:min-h-[24px] after:min-w-[24px] after:-translate-x-1/2 after:-translate-y-1/2 after:content-[''] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 disabled:active:scale-100 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  // `kb-hit-floor` holds the tap target at the WCAG 2.2 AA 24x24 minimum even as
+  // the UI scales down (`sm` would otherwise fall to 23px and `icon-xs` to
+  // 17.3px at the auto-fit floor on a 13" laptop). It is shared with Checkbox
+  // and the onboarding stepper instead of repeated per component — globals.css
+  // explains why the floor has to be px rather than rem.
+  "kb-hit-floor inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 disabled:active:scale-100 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {

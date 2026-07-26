@@ -164,7 +164,7 @@ export function GenericLedgerPreview({
       </div>
 
       {detectedColumns.length > 0 ? (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {t("add.genericLedger.preview.detected", {
             columns: detectedColumns.join(", "),
           })}

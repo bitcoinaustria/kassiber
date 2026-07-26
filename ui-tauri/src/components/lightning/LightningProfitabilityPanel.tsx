@@ -280,7 +280,7 @@ function LightningProfitabilityBody({
                   <TableCell className="text-right">
                     <span
                       className={cn(
-                        "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset",
+                        "inline-flex items-center rounded-md px-1.5 py-0.5 text-2xs font-medium ring-1 ring-inset",
                         channel.coversOpenCost
                           ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-400/20"
                           : "bg-muted text-muted-foreground ring-border",
@@ -312,7 +312,7 @@ function Stat({
 }) {
   return (
     <div className="space-y-1 rounded-md border bg-background px-3 py-2.5">
-      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
       <p

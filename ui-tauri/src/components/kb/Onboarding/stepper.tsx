@@ -41,13 +41,16 @@ export const OnboardingStepper = ({
                 aria-current={active ? "step" : undefined}
                 onClick={() => done && onJump?.(index)}
                 className={cn(
-                  "flex shrink-0 items-center gap-2 rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  // Completed steps are clickable and render 18.6px tall, under
+                  // the 24px target minimum; disabled ones are exempt but the
+                  // floor is harmless on them.
+                  "kb-hit-floor flex shrink-0 items-center gap-2 rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
                   done ? "cursor-pointer hover:opacity-80" : "cursor-default",
                 )}
               >
                 <span
                   className={cn(
-                    "flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold transition-colors",
+                    "flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors",
                     done
                       ? "border-ink bg-ink text-paper"
                       : active

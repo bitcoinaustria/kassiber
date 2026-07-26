@@ -369,12 +369,12 @@ export function AttachmentsPanel({
                       autoFocus
                     />
                     {item.detail ? (
-                      <div className="truncate text-[10px] text-muted-foreground">
+                      <div className="truncate text-2xs text-muted-foreground">
                         {item.detail}
                       </div>
                     ) : null}
                     {renameError ? (
-                      <div role="alert" className="text-[10px] text-destructive">
+                      <div role="alert" className="text-2xs text-destructive">
                         {renameError}
                       </div>
                     ) : null}
@@ -397,7 +397,7 @@ export function AttachmentsPanel({
                     {item.detail ? (
                       <div
                         className={cn(
-                          "truncate text-[10px] text-muted-foreground",
+                          "truncate text-2xs text-muted-foreground",
                           blurClass(hideSensitive),
                         )}
                       >
@@ -423,7 +423,7 @@ export function AttachmentsPanel({
                     {item.detail ? (
                       <div
                         className={cn(
-                          "truncate text-[10px] text-muted-foreground",
+                          "truncate text-2xs text-muted-foreground",
                           blurClass(hideSensitive),
                         )}
                       >

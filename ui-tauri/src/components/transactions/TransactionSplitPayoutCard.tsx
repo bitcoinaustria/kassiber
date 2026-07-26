@@ -121,11 +121,11 @@ export function TransactionSplitPayoutCard({
             value={outAmount}
             onChange={(event) => setOutAmount(event.target.value)}
           />
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             Outbound total: {outboundBtc} {sourceAsset}
           </span>
           {outError ? (
-            <span className="text-[11px] text-destructive">{outError}</span>
+            <span className="text-xs text-destructive">{outError}</span>
           ) : null}
         </div>
 
@@ -157,7 +157,7 @@ export function TransactionSplitPayoutCard({
             onChange={(event) => setPayoutAmount(event.target.value)}
           />
           {payoutError ? (
-            <span className="text-[11px] text-destructive">{payoutError}</span>
+            <span className="text-xs text-destructive">{payoutError}</span>
           ) : null}
         </div>
 
@@ -207,7 +207,7 @@ export function TransactionSplitPayoutCard({
         </Button>
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         Cross-asset carrying value is supported for Austrian books; otherwise
         choose taxable.
       </p>

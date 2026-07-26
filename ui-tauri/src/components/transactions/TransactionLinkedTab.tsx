@@ -48,7 +48,7 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
                     {pair ? (
                       <div className="overflow-hidden rounded-md border">
                         <div className="flex items-center justify-between border-b bg-muted px-3 py-1.5">
-                          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          <div className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                             <Repeat2
                               className="size-3"
                               aria-hidden="true"
@@ -57,7 +57,7 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
                             {pair.policy ? (
                               <Badge
                                 variant="outline"
-                                className="rounded-md text-[10px]"
+                                className="rounded-md text-2xs"
                               >
                                 {pair.policy}
                               </Badge>
@@ -152,12 +152,12 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
                     {loanMark ? (
                       <div className="overflow-hidden rounded-md border">
                         <div className="flex items-center justify-between border-b bg-muted px-3 py-1.5">
-                          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          <div className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                             <Coins className="size-3" aria-hidden="true" />
                             {t("linked.loanLegs")}
                           </div>
                           {loanMark.loan_id ? (
-                            <Badge variant="outline" className="rounded-md text-[10px]">
+                            <Badge variant="outline" className="rounded-md text-2xs">
                               {t("linked.loanId", { id: shortTransactionId(loanMark.loan_id) })}
                             </Badge>
                           ) : null}
@@ -182,7 +182,7 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
                                   {mark.occurred_at ? ` · ${mark.occurred_at}` : ""}
                                 </p>
                               </div>
-                              <Badge variant="outline" className="shrink-0 rounded-md text-[10px]">
+                              <Badge variant="outline" className="shrink-0 rounded-md text-2xs">
                                 {t("linked.loanLinked")}
                               </Badge>
                             </div>
@@ -194,7 +194,7 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
                         )}
                         {loanLinkCandidates.length ? (
                           <div className="border-t bg-muted/30 px-3 py-2">
-                            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            <p className="mb-2 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                               {t("linked.loanLinkCandidates")}
                             </p>
                             <div className="space-y-1.5">
@@ -235,7 +235,7 @@ export function TransactionLinkedTab({ ctx }: { ctx: TransactionDetailTabContext
                     ) : null}
 
                     <div className="overflow-hidden rounded-md border">
-                      <div className="flex items-center gap-2 border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <div className="flex items-center gap-2 border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                         <FileText
                           className="size-3"
                           aria-hidden="true"

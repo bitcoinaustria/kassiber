@@ -45,6 +45,22 @@
   --font-mono:
     "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
+  /*
+   * Two steps below `text-xs`, because the app had four arbitrary rungs down
+   * there — text-[11px], [10px], [9px], [8px] — spanning 3px in total. Sized in
+   * rem so they track the root font-size like every other step: the literals
+   * did not, so on a densified laptop viewport `text-xs` fell to 8.6px while a
+   * `text-[10px]` label stayed at 10px, inverting the hierarchy, and neither
+   * responded to the user's zoom at all.
+   *
+   * The values reproduce today's rendered size at the default scale (root
+   * 14.4px = 16 x 0.9), so this is a behaviour fix rather than a restyle. No
+   * paired `--text-*--line-height`, so leading stays the inherited 1.5x the
+   * arbitrary values had.
+   */
+  --text-2xs: 0.694rem;
+  --text-3xs: 0.625rem;
+
   --shadow-hard-ink: 8px 8px 0 #222222;
   --shadow-hard-accent: 3px 3px 0 #e3000f;
 
@@ -99,6 +115,13 @@
    * brand red is intended.
    */
   --kb-accent: #e3000f;
+  /*
+   * Brand red for small text. `--kb-accent` on `--color-paper-2` measures
+   * 4.16:1, under the 4.5:1 AA floor; this is the least darkening that clears it
+   * (4.78:1). Dark mode keeps the lifted red, which already measures 4.95:1 on
+   * its own chip, so only light mode diverges.
+   */
+  --kb-accent-text: #d1000e;
   /*
    * Light theme, built on the Bitcoin Austria Markenfarben (Rot #e3000f,
    * Dunkel #222222, Weiß #ffffff, Hellgrau #ececec). Surfaces layer for
@@ -450,6 +473,32 @@
 }
 
 /*
+ * Invisible hit-area floor for small controls.
+ *
+ * **px, not rem** — that is the whole point. The UI is rem-based off a root
+ * font-size that ranges 10.24-19.2px (16 x auto-fit x the user's scale), so a
+ * rem-sized floor would shrink along with the control it is meant to protect.
+ * The overlay is centred, paints nothing, and takes pointer events (so it must
+ * NOT be `pointer-events-none`), which leaves layout and appearance untouched
+ * while guaranteeing the WCAG 2.2 AA 24x24 minimum at every scale.
+ */
+.kb-hit-floor {
+  position: relative;
+}
+
+.kb-hit-floor::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  min-width: 24px;
+  min-height: 24px;
+  transform: translate(-50%, -50%);
+}
+
+/*
  * Frosted shell surfaces.
  *
  * Deliberately declared OUTSIDE `@layer components`: they are applied to
@@ -701,6 +750,8 @@
   --color-accent-2: #ff6a73;
 
   --kb-accent: #ff3341;
+  /* Already 4.95:1 on dark mode's chip, so small red text needs no separate value. */
+  --kb-accent-text: #ff3341;
 
   --background: oklch(0.145 0 0);
   --app-chrome: oklch(0.18 0 0);

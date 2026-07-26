@@ -526,7 +526,7 @@ export function Logs() {
           <div
             ref={viewportRef}
             onScroll={onScroll}
-            className="h-full overflow-auto font-mono text-[12px] leading-5"
+            className="h-full overflow-auto font-mono text-xs leading-5"
           >
             {visibleRecords.length === 0 ? (
               <div className="flex h-full min-h-64 flex-col items-center justify-center gap-1 text-sm text-muted-foreground">

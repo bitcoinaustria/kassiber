@@ -567,7 +567,7 @@ export function ProviderModelPicker({
                         : t("modelPicker.models")}
                     </p>
                     {activeGroup ? (
-                      <p className="truncate text-[11px] text-muted-foreground">
+                      <p className="truncate text-xs text-muted-foreground">
                         {isCliProvider(activeGroup.provider)
                           ? activeRuntime?.message ??
                             (runtimeQuery.isFetching
@@ -577,7 +577,7 @@ export function ProviderModelPicker({
                       </p>
                     ) : null}
                     {activeDiscovery?.stale ? (
-                      <p className="truncate text-[11px] text-amber-600 dark:text-amber-400">
+                      <p className="truncate text-xs text-amber-600 dark:text-amber-400">
                         {t("modelPicker.staleModels", {
                           error: activeDiscovery.error?.message ?? "",
                         })}
@@ -586,7 +586,7 @@ export function ProviderModelPicker({
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <div
-                      className="inline-flex rounded-md bg-muted p-0.5 text-[10px]"
+                      className="inline-flex rounded-md bg-muted p-0.5 text-2xs"
                       role="group"
                       aria-label={t("modelPicker.privacyFilter")}
                     >
@@ -675,14 +675,14 @@ export function ProviderModelPicker({
                             {model.display_name || model.id}
                           </span>
                           {model.display_name ? (
-                            <span className="block truncate font-mono text-[10px] text-muted-foreground">
+                            <span className="block truncate font-mono text-2xs text-muted-foreground">
                               {model.id}
                             </span>
                           ) : null}
                         </span>
                         <span
                           className={cn(
-                            "shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase",
+                            "shrink-0 rounded-full px-1.5 py-0.5 text-3xs font-medium uppercase",
                             KIND_TONE[privacyPosture],
                           )}
                           title={model.privacy_reason}

@@ -52,7 +52,7 @@ export const BooksHealthPanel = ({
             <span className="text-sm font-medium">
               {t("health.title")}
             </span>
-            <p className="text-[10px] text-muted-foreground sm:text-xs">
+            <p className="text-2xs text-muted-foreground sm:text-xs">
               {t("health.subtitle")}
             </p>
           </div>
@@ -115,7 +115,7 @@ export const BooksHealthPanel = ({
                       : /* dynamic key */ t(item.value.key as never, item.value.params)}
                   </span>
                 </span>
-                <span className="hidden max-w-[140px] text-right text-[10px] leading-4 text-muted-foreground sm:block">
+                <span className="hidden max-w-[140px] text-right text-2xs leading-4 text-muted-foreground sm:block">
                   {/* dynamic key */}
                   {t(item.detail.key as never, item.detail.params)}
                 </span>

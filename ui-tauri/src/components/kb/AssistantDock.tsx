@@ -331,7 +331,7 @@ export function AssistantDock({
                       {t("page.messageCount", { count: messages.length })}
                     </span>
                     {isStreaming ? (
-                      <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                      <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-2xs font-medium text-primary">
                         <span
                           className="size-1.5 animate-pulse rounded-full bg-primary"
                           aria-hidden="true"
@@ -427,7 +427,7 @@ export function AssistantDock({
                       })}
                     </span>
                     {isStreaming ? (
-                      <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                      <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-2xs font-medium text-primary">
                         {workingLabel}
                       </span>
                     ) : null}
@@ -577,7 +577,7 @@ function MinimizedChip({
           className="h-3.5 w-3.5 text-muted-foreground"
           aria-hidden="true"
         />
-        <span className="rounded-full bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+        <span className="rounded-full bg-muted-foreground/15 px-1.5 py-0.5 text-2xs font-semibold tabular-nums text-muted-foreground">
           {messageCount}
         </span>
       </button>

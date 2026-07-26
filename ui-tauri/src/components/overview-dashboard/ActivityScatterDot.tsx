@@ -392,7 +392,7 @@ export function ActivityScatterDot({
         <text
           x={cx + radius + 4}
           y={cy - radius - 2}
-          className="fill-foreground text-[10px] font-semibold tabular-nums opacity-0 transition-opacity duration-150 group-hover/activity-marker:opacity-90 group-focus/activity-marker:opacity-90"
+          className="fill-foreground text-2xs font-semibold tabular-nums opacity-0 transition-opacity duration-150 group-hover/activity-marker:opacity-90 group-focus/activity-marker:opacity-90"
           pointerEvents="none"
         >
           {markerCount}

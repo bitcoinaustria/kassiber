@@ -662,7 +662,7 @@ const TransactionWorkbench = ({
               )}
             </div>
             <div className="flex flex-col items-end gap-2">
-              <div className="flex flex-wrap justify-end gap-x-2 gap-y-1 text-[10px] text-muted-foreground sm:text-xs">
+              <div className="flex flex-wrap justify-end gap-x-2 gap-y-1 text-2xs text-muted-foreground sm:text-xs">
                 {[
                   ["incoming", t("chartSegment.incoming")],
                   ["outgoing", t("chartSegment.outgoing")],
@@ -711,7 +711,7 @@ const TransactionWorkbench = ({
                       aria-pressed={chartMetric === metric}
                       onClick={() => setChartMetric(metric)}
                       className={cn(
-                        "h-7 rounded-md border px-2 text-[10px] font-medium transition-colors sm:text-xs",
+                        "h-7 rounded-md border px-2 text-2xs font-medium transition-colors sm:text-xs",
                         chartMetric === metric
                           ? "border-primary bg-primary text-primary-foreground"
                           : "border-border bg-background text-muted-foreground hover:text-foreground",
@@ -729,7 +729,7 @@ const TransactionWorkbench = ({
                     aria-pressed={chartMode === mode}
                     onClick={() => setChartMode(mode)}
                     className={cn(
-                      "h-7 rounded-md border px-2 text-[10px] font-medium transition-colors sm:text-xs",
+                      "h-7 rounded-md border px-2 text-2xs font-medium transition-colors sm:text-xs",
                       chartMode === mode
                         ? "border-primary bg-primary text-primary-foreground"
                         : "border-border bg-background text-muted-foreground hover:text-foreground",
@@ -984,7 +984,7 @@ function FlowTooltip({
                 </span>
               </div>
               {stats && (
-                <div className="space-y-1 pl-4 text-[10px] text-muted-foreground sm:text-xs">
+                <div className="space-y-1 pl-4 text-2xs text-muted-foreground sm:text-xs">
                   <div className="flex justify-between gap-3">
                     <span>{t("workbench.tooltip.txCount", { count: stats.count })}</span>
                     <span className={blurClass(hideSensitive)}>

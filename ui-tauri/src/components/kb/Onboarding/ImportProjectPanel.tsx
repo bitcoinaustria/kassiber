@@ -294,7 +294,7 @@ function ProfileList({
         <section key={workspace.id} className="space-y-2">
           <div className="flex flex-wrap items-baseline gap-2 border-b border-line pb-1">
             <h4 className="text-sm font-semibold text-ink">{workspace.name}</h4>
-            <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-ink-3">
+            <span className="font-mono text-2xs uppercase tracking-[0.1em] text-ink-3">
               {workspace.currency} · {workspace.jurisdiction}
             </span>
           </div>
@@ -327,7 +327,7 @@ function ProfileList({
                     <p className="line-clamp-2 text-xs leading-5 text-ink-2">
                       {profile.taxPolicy}
                     </p>
-                    <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-3">
+                    <p className="font-mono text-2xs uppercase tracking-[0.08em] text-ink-3">
                       {t("import.accountsWallets", {
                         accounts: profile.accounts,
                         wallets: profile.wallets,

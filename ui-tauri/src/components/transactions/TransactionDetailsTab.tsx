@@ -178,7 +178,7 @@ function TransactionPrivacyMirrorPanel({
       <div className="flex items-center justify-between gap-3 border-b bg-muted px-3 py-1.5">
         <div className="flex min-w-0 items-center gap-2">
           <ShieldAlert className="size-4 text-amber-600" aria-hidden="true" />
-          <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          <span className="truncate text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("detail.transactionTitle")}
           </span>
         </div>
@@ -186,7 +186,7 @@ function TransactionPrivacyMirrorPanel({
       </div>
       <div className="grid gap-3 p-3 sm:grid-cols-3">
         <div>
-          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
             {t("detail.transactionTells")}
           </p>
           <p className="font-mono text-lg tabular-nums">
@@ -194,7 +194,7 @@ function TransactionPrivacyMirrorPanel({
           </p>
         </div>
         <div>
-          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
             {t("detail.transactionPenalties")}
           </p>
           <p className="font-mono text-lg tabular-nums">
@@ -202,7 +202,7 @@ function TransactionPrivacyMirrorPanel({
           </p>
         </div>
         <div className="min-w-0">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
             {t("detail.transactionKinds")}
           </p>
           <p className="truncate text-sm">
@@ -411,7 +411,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                     </div>
                     <div className="grid gap-3 lg:grid-cols-2">
                       <div className="overflow-hidden rounded-md border">
-                        <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <div className="border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                           {t("details.sourceRecord")}
                         </div>
                         <LedgerRow
@@ -447,7 +447,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         ) : null}
                       </div>
                       <div className="overflow-hidden rounded-md border">
-                        <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <div className="border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                           {t("details.bookMetadata")}
                         </div>
                         <LedgerRow
@@ -525,7 +525,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                       </div>
                     </div>
                     <div className="overflow-hidden rounded-md border">
-                      <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <div className="border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {t("graph.sectionTitle")}
                       </div>
                       <div className="p-3">
@@ -548,7 +548,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                     />
                     {technicalRows.length ? (
                       <div className="overflow-hidden rounded-md border">
-                        <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <div className="border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                           {t("details.technical")}
                         </div>
                         <div className="grid sm:grid-cols-2">
