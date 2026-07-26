@@ -78,6 +78,7 @@ import {
   portfolioChartColors,
   positiveLogDomain,
   rawTreasuryBrushRange,
+  resolveAutoTimePeriod,
   sameTreasuryBrushRange,
   selectableTimePeriods,
   serializeActivityMarkerMinimum,
@@ -385,6 +386,12 @@ export const BtcActivityChart = ({
         period,
       ),
     [currency, period, snapshot],
+  );
+  // What "auto" settled on, so the chip can say so instead of leaving the
+  // resolved window a mystery.
+  const resolvedPeriod = React.useMemo(
+    () => resolveAutoTimePeriod(snapshot, period),
+    [period, snapshot],
   );
   // Only offer ranges the book's history actually covers, and always keep the
   // active one visible (a range persisted from a longer-history book stays
@@ -1359,6 +1366,7 @@ export const BtcActivityChart = ({
             <ChartRangeToolbar
               period={period}
               periodOptions={periodOptions}
+              resolvedPeriod={period === "auto" ? resolvedPeriod : null}
               onPeriodChange={handlePeriodChange}
               yScaleLog={yScaleLog}
               onYScaleLogChange={setYScaleLog}

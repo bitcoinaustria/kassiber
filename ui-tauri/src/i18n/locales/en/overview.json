@@ -279,6 +279,7 @@
   },
   "period": {
     "auto": "Auto",
+    "autoResolved": "Auto: {{period}}",
     "30days": "30 Days",
     "3months": "3 Months",
     "6months": "6 Months",

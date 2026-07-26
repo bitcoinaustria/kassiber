@@ -16,6 +16,7 @@ import {
   periodKeys,
   periodLabelKeys,
   periodShortLabelKeys,
+  type ResolvedTimePeriod,
   type TimePeriod,
 } from "./model";
 
@@ -29,6 +30,7 @@ const preventClickFocus = (event: React.MouseEvent) => event.preventDefault();
 export function ChartRangeToolbar({
   period,
   periodOptions = periodKeys,
+  resolvedPeriod = null,
   onPeriodChange,
   yScaleLog,
   onYScaleLogChange,
@@ -40,6 +42,8 @@ export function ChartRangeToolbar({
 }: {
   period: TimePeriod;
   periodOptions?: TimePeriod[];
+  /** Window "auto" resolved to, named in the Auto chip's tooltip. */
+  resolvedPeriod?: ResolvedTimePeriod | null;
   onPeriodChange: (period: TimePeriod) => void;
   yScaleLog: boolean;
   onYScaleLogChange: (value: boolean) => void;
@@ -64,20 +68,28 @@ export function ChartRangeToolbar({
         aria-label={t("controls.timeRange")}
         className="flex flex-wrap items-center gap-0.5"
       >
-        {periodOptions.map((key) => (
+        {periodOptions.map((key) => {
+          const label =
+            key === "auto" && resolvedPeriod
+              ? t("period.autoResolved", {
+                  period: t(periodLabelKeys[resolvedPeriod]),
+                })
+              : t(periodLabelKeys[key]);
+          return (
           <button
             key={key}
             type="button"
             aria-pressed={period === key}
-            aria-label={t(periodLabelKeys[key])}
-            title={t(periodLabelKeys[key])}
+            aria-label={label}
+            title={label}
             className={chipClass(period === key)}
             onClick={() => onPeriodChange(key)}
             onMouseDown={preventClickFocus}
           >
             {t(periodShortLabelKeys[key])}
           </button>
-        ))}
+          );
+        })}
       </div>
       <div
         role="group"

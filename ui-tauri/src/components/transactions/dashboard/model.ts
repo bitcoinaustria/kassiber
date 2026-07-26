@@ -634,6 +634,7 @@ const emptyFlowChartStats = (): Record<FlowChartSegment, FlowChartSegmentStats> 
 const periodKeys = PERIOD_KEYS;
 
 const AUTO_MIN_MEANINGFUL_TRANSACTIONS = 3;
+const AUTO_MIN_ACTIVE_BUCKETS = 2;
 const AUTO_MIN_TRANSACTION_VOLUME_BTC = 0.00001;
 
 function isLongHistoryPeriod(period: PeriodKey | ResolvedPeriodKey) {
@@ -794,6 +795,22 @@ function recordsForPeriod(records: Transaction[], period: ResolvedPeriodKey) {
     .map((entry) => entry.record);
 }
 
+// Years of history between the daemon's full-history bounds, or undefined when
+// the book set has none yet. Auto and the range tabs both gate on this rather
+// than on the span of the fetched page.
+function historyYearsForBounds(
+  earliest: string | null | undefined,
+  latest: string | null | undefined,
+): number | undefined {
+  const earliestDate = earliest ? parseTransactionDate(earliest) : null;
+  const latestDate = latest ? parseTransactionDate(latest) : null;
+  if (!earliestDate || !latestDate) return undefined;
+  return historyYearsBetween(
+    startOfLocalDay(earliestDate),
+    startOfLocalDay(periodAnchorDate([latestDate])),
+  );
+}
+
 // Periods a book's history can fill. `earliest`/`latest` come from the daemon's
 // full-history bounds; the record-based variant is for mock mode, where the
 // in-memory rows *are* the whole book.
@@ -801,15 +818,7 @@ function availablePeriodKeysForHistory(
   earliest: string | null | undefined,
   latest: string | null | undefined,
 ): ResolvedPeriodKey[] {
-  const earliestDate = earliest ? parseTransactionDate(earliest) : null;
-  const latestDate = latest ? parseTransactionDate(latest) : null;
-  if (!earliestDate || !latestDate) return selectablePeriods(0);
-  return selectablePeriods(
-    historyYearsBetween(
-      startOfLocalDay(earliestDate),
-      startOfLocalDay(periodAnchorDate([latestDate])),
-    ),
-  );
+  return selectablePeriods(historyYearsForBounds(earliest, latest) ?? 0);
 }
 
 function availablePeriodKeysForRecords(records: Transaction[]): ResolvedPeriodKey[] {
@@ -825,9 +834,34 @@ function availablePeriodKeysForRecords(records: Transaction[]): ResolvedPeriodKe
   );
 }
 
+// How many distinct chart buckets the window's activity falls into. A window
+// holding three payments from the same afternoon draws one bar whatever the
+// numbers say, so auto keeps widening until the flow chart has a shape.
+function activeBucketCount(
+  records: Transaction[],
+  period: ResolvedPeriodKey,
+): number {
+  const buckets = new Set<string>();
+  for (const record of records) {
+    const date = parseTransactionDate(record.date);
+    if (date) buckets.add(bucketTransactionDate(date, period).key);
+  }
+  return buckets.size;
+}
+
+/**
+ * Smallest window that still shows something worth looking at.
+ *
+ * `historyYears` should come from the daemon's full-history bounds; deriving it
+ * from `records` alone measures the fetched page (and shifts as more pages
+ * load), which kept long windows out of reach on deep books. Counting activity
+ * *within* a window from `records` is fine — the page holds the most recent
+ * transactions, which is exactly what the short candidates need.
+ */
 function resolveAutoPeriodForRecords(
   records: Transaction[],
   period: PeriodKey,
+  historyYears?: number,
 ): ResolvedPeriodKey {
   if (period !== "auto") return period;
   if (!records.length) return "1year";
@@ -844,18 +878,28 @@ function resolveAutoPeriodForRecords(
   const dated = records
     .map((record) => parseTransactionDate(record.date))
     .filter((date): date is Date => date !== null);
-  const historyYears = dated.length
-    ? historyYearsBetween(
-        dated.reduce((min, date) => (date < min ? date : min), dated[0]),
-        periodAnchorDate(dated),
-      )
-    : 0;
+  const depthYears =
+    historyYears ??
+    (dated.length
+      ? historyYearsBetween(
+          dated.reduce((min, date) => (date < min ? date : min), dated[0]),
+          periodAnchorDate(dated),
+        )
+      : 0);
 
+  const candidates = autoCandidatePeriods(depthYears);
+  const withEnoughActivity = candidates.filter(
+    (candidate) =>
+      recordsForPeriod(meaningfulRecords, candidate).length >= targetCount,
+  );
   return (
-    autoCandidatePeriods(historyYears).find(
+    withEnoughActivity.find(
       (candidate) =>
-        recordsForPeriod(meaningfulRecords, candidate).length >= targetCount,
-    ) ?? "all"
+        activeBucketCount(recordsForPeriod(meaningfulRecords, candidate), candidate) >=
+        AUTO_MIN_ACTIVE_BUCKETS,
+    ) ??
+    withEnoughActivity[0] ??
+    "all"
   );
 }
 
@@ -1768,6 +1812,7 @@ export {
   attachmentRecordToItem,
   availablePeriodKeysForRecords,
   availablePeriodKeysForHistory,
+  historyYearsForBounds,
   breakdownSelectionLabel,
   bucketTransactionDate,
   buildTransactionListFilterArgs,

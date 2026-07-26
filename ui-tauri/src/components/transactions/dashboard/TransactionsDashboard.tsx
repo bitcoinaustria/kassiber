@@ -39,6 +39,7 @@ import {
   buildTransactionListFilterArgs,
   DEFAULT_TRANSACTION_TABLE_FILTER_STATE,
   dashboardRecordsFromTxs,
+  historyYearsForBounds,
   initialPeriodFromUrl,
   recordsForPeriod,
   resolveAutoPeriodForRecords,
@@ -105,7 +106,7 @@ const TransactionsDashboard = ({
     (state) => state.setBookChartPeriod,
   );
   const initialPeriod =
-    scopeParams.period ?? initialPeriodFromUrl(storedBookChartPeriod ?? "1year");
+    scopeParams.period ?? initialPeriodFromUrl(storedBookChartPeriod ?? "auto");
   const [filterState, patchFilterState] = React.useReducer(
     (state: TransactionFilterState, patch: Partial<TransactionFilterState>) => ({
       ...state,
@@ -244,12 +245,20 @@ const TransactionsDashboard = ({
     () => sortTransactionsByDateDesc(records),
     [records],
   );
+  // The daemon reports the book's true first/last transaction; the fetched page
+  // only spans its own rows. Auto reads this so a deep book can settle on a
+  // long window. It lands one render after the first dashboard response (which
+  // auto resolves the period for), then stays put — the bounds don't depend on
+  // the requested window.
+  const [daemonHistoryYears, setDaemonHistoryYears] = React.useState<
+    number | undefined
+  >(undefined);
   // The aggregate endpoint owns full-history bounds in real mode, so long-range
   // tabs never imply that a capped client page represents the whole book.
   // Mock mode keeps deriving the options from its in-memory records.
   const resolvedPeriod = React.useMemo<ResolvedPeriodKey>(
-    () => resolveAutoPeriodForRecords(records, period),
-    [period, records],
+    () => resolveAutoPeriodForRecords(records, period, daemonHistoryYears),
+    [daemonHistoryYears, period, records],
   );
   const dashboardWindow = React.useMemo(
     () => transactionPeriodDateWindow(resolvedPeriod),
@@ -278,6 +287,16 @@ const TransactionsDashboard = ({
       ? dashboardQuery.data.data
       : null;
   const showRefreshSkeleton = baseRefreshSkeleton || dashboardQuery.isLoading;
+  React.useEffect(() => {
+    setDaemonHistoryYears(
+      dashboardSnapshot
+        ? historyYearsForBounds(
+            dashboardSnapshot.history.earliest,
+            dashboardSnapshot.history.latest,
+          )
+        : undefined,
+    );
+  }, [dashboardSnapshot]);
   const availablePeriods = React.useMemo(
     () =>
       dashboardSnapshot
@@ -373,8 +392,9 @@ const TransactionsDashboard = ({
   React.useEffect(() => {
     if (previousBookKey.current === bookKey) return;
     previousBookKey.current = bookKey;
+    setDaemonHistoryYears(undefined);
     patchFilterState({
-      period: scopeParams.period ?? storedBookChartPeriod ?? "1year",
+      period: scopeParams.period ?? storedBookChartPeriod ?? "auto",
       flowChartSelection: null,
       quickFilter: null,
       breakdownSelection: null,
