@@ -26,7 +26,8 @@ vi.mock("@tanstack/react-router", async () => {
 import { MOCK_OVERVIEW } from "@/mocks/seed";
 
 import { buildStatsData } from "./model";
-import { StatsCards, statStatusText } from "./StatsCards";
+import { StatsCards } from "./StatsCards";
+import { statStatusText } from "./statStatus";
 
 describe("overview stats cards", () => {
   it("does not label the BTC balance as an estimate", () => {
