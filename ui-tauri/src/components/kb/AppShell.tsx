@@ -148,7 +148,10 @@ import {
   type SettingsSectionId,
 } from "@/components/kb/settingsSections";
 import { ShellSearch } from "@/components/kb/shell/ShellSearch";
-import { SidebarStageBackdrop } from "@/components/kb/shell/SidebarStageBackdrop";
+import {
+  LedgerStageBand,
+  SidebarStageBackdrop,
+} from "@/components/kb/shell/SidebarStageBackdrop";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantScreenContext } from "@/components/ai/assistantSession";
 import { assistantScreenContextFor } from "@/components/ai/assistantScreenContext";
@@ -3292,9 +3295,14 @@ function LockScreen({
   }, [autoTouchIdPrompt, canUseTouchId, submitTouchId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background px-4 text-foreground">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-background px-4 text-foreground">
+      {/* The nav's ledger page, run across the top of the lock screen: the same
+          stock the chrome is made of, so a locked window still looks like the
+          app rather than a bare dialog on a flat field. It fades into
+          `--background` because that is what this overlay paints. */}
+      <LedgerStageBand className="h-64" fade="var(--background)" pages={4} />
       <form
-        className="w-full max-w-md rounded-lg border border-border bg-card p-5 text-card-foreground shadow-xl ring-1 ring-border/60"
+        className="relative z-10 w-full max-w-md rounded-lg border border-border bg-card p-5 text-card-foreground shadow-xl ring-1 ring-border/60"
         onSubmit={(event) => {
           void submit(event);
         }}
