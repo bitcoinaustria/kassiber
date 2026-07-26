@@ -40,6 +40,11 @@ const COLUMN_WIDTH = 96;
 const GLOW_TILE = 2048;
 /** Base spacing between repeats of the bookkeeping marks, in viewBox units. */
 const MARK_TILE = 576;
+/**
+ * The ruling scale `fitPages` aims for — viewBox units per CSS pixel, measured
+ * off the nav band, which is the reference the other surfaces should match.
+ */
+const TARGET_ART_SCALE = 0.5;
 
 export function SidebarStageBackdrop() {
   return <LedgerStageBand className="h-14" />;
@@ -61,13 +66,39 @@ export function LedgerStageBand({
   className,
   fade,
   pages = 1,
+  fitPages = false,
 }: {
   className?: string;
   fade?: string;
   pages?: number;
+  fitPages?: boolean;
 }) {
+  const hostRef = React.useRef<HTMLDivElement | null>(null);
+  const [fittedPages, setFittedPages] = React.useState(pages);
+
+  // `fitPages` derives the page count from the band's own height so the ruling
+  // holds a constant scale no matter how tall the band is. A fixed `pages` on a
+  // viewport-sized band cannot: `slice` fits the shorter axis, so the ruling
+  // would coarsen on a tall window and tighten on a short one.
+  React.useLayoutEffect(() => {
+    const host = hostRef.current;
+    if (!fitPages || !host) return;
+    const measure = () => {
+      const height = host.getBoundingClientRect().height;
+      if (!height) return;
+      setFittedPages(
+        Math.max(1, Math.round(height / (STAGE_PAGE * TARGET_ART_SCALE))),
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [fitPages]);
+
   return (
     <div
+      ref={hostRef}
       aria-hidden="true"
       className={cn(
         "kb-stage-backdrop pointer-events-none absolute inset-x-0 top-0 z-0 overflow-hidden select-none",
@@ -77,7 +108,7 @@ export function LedgerStageBand({
         fade ? ({ "--stage-fade": fade } as React.CSSProperties) : undefined
       }
     >
-      <LedgerPaperArt pages={pages} />
+      <LedgerPaperArt pages={fitPages ? fittedPages : pages} />
     </div>
   );
 }
