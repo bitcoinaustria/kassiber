@@ -547,6 +547,17 @@ describe("transaction dashboard chart selection", () => {
     expect(resolveAutoPeriodForRecords(sparseOldPage, "auto", 12)).toBe("10years");
   });
 
+  it("uses the daemon's full-history auto period over a capped page", () => {
+    const recentPage = [
+      transaction({ id: "r-1", date: "2026-06-28T12:00:00Z" }),
+      transaction({ id: "r-2", date: "2026-06-20T12:00:00Z" }),
+      transaction({ id: "r-3", date: "2026-06-10T12:00:00Z" }),
+    ];
+    expect(
+      resolveAutoPeriodForRecords(recentPage, "auto", 12, "5years"),
+    ).toBe("5years");
+  });
+
   it("does not substitute demo rows for an empty live transaction list", () => {
     expect(dashboardRecordsFromTxs([])).toEqual([]);
   });

@@ -253,12 +253,21 @@ const TransactionsDashboard = ({
   const [daemonHistoryYears, setDaemonHistoryYears] = React.useState<
     number | undefined
   >(undefined);
+  const [daemonAutoPeriod, setDaemonAutoPeriod] = React.useState<
+    ResolvedPeriodKey | undefined
+  >(undefined);
   // The aggregate endpoint owns full-history bounds in real mode, so long-range
   // tabs never imply that a capped client page represents the whole book.
   // Mock mode keeps deriving the options from its in-memory records.
   const resolvedPeriod = React.useMemo<ResolvedPeriodKey>(
-    () => resolveAutoPeriodForRecords(records, period, daemonHistoryYears),
-    [daemonHistoryYears, period, records],
+    () =>
+      resolveAutoPeriodForRecords(
+        records,
+        period,
+        daemonHistoryYears,
+        dataMode === "mock" ? undefined : daemonAutoPeriod,
+      ),
+    [daemonAutoPeriod, daemonHistoryYears, dataMode, period, records],
   );
   const dashboardWindow = React.useMemo(
     () => transactionPeriodDateWindow(resolvedPeriod),
@@ -274,6 +283,7 @@ const TransactionsDashboard = ({
     {
       period: resolvedPeriod,
       ...(dashboardWindow ?? {}),
+      resolveAuto: period === "auto",
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       ...(dashboardWallet ? { wallet: dashboardWallet } : {}),
     },
@@ -296,6 +306,9 @@ const TransactionsDashboard = ({
           )
         : undefined,
     );
+    if (dashboardSnapshot?.history.autoPeriod) {
+      setDaemonAutoPeriod(dashboardSnapshot.history.autoPeriod);
+    }
   }, [dashboardSnapshot]);
   const availablePeriods = React.useMemo(
     () =>
@@ -393,6 +406,7 @@ const TransactionsDashboard = ({
     if (previousBookKey.current === bookKey) return;
     previousBookKey.current = bookKey;
     setDaemonHistoryYears(undefined);
+    setDaemonAutoPeriod(undefined);
     patchFilterState({
       period: scopeParams.period ?? storedBookChartPeriod ?? "auto",
       flowChartSelection: null,

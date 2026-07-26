@@ -65,6 +65,7 @@ type TransactionDashboardSnapshot = {
     latest: string | null;
     walletOptions: string[];
     paymentMethods?: string[];
+    autoPeriod?: ResolvedPeriodKey;
   };
   counts: { all: number; external: number };
   summary: Record<FlowChartSegment, FlowChartSegmentStats> & {
@@ -862,8 +863,10 @@ function resolveAutoPeriodForRecords(
   records: Transaction[],
   period: PeriodKey,
   historyYears?: number,
+  authoritativePeriod?: ResolvedPeriodKey,
 ): ResolvedPeriodKey {
   if (period !== "auto") return period;
+  if (authoritativePeriod) return authoritativePeriod;
   if (!records.length) return "1year";
 
   const meaningfulRecords = records.filter(

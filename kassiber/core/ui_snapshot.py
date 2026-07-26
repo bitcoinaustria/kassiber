@@ -68,6 +68,9 @@ MAX_UI_PREVIEW_LIMIT = 100
 MAX_UI_TRANSACTION_IDS = 128
 MAX_UI_DASHBOARD_CANDIDATES = 256
 MAX_UI_TRANSACTION_CANDIDATE_IDS = MAX_UI_DASHBOARD_CANDIDATES * 2
+_DASHBOARD_AUTO_MIN_AMOUNT_MSAT = 1_000_000
+_DASHBOARD_AUTO_MIN_TRANSACTIONS = 3
+_DASHBOARD_AUTO_MIN_BUCKETS = 2
 DISPLAY_BALANCE_ASSETS = {"BTC", "LBTC", "L-BTC"}
 _UI_TRANSACTION_EXTERNAL_SIGN_SQL = """
     CASE
@@ -4146,6 +4149,80 @@ def _dashboard_next_bucket(value: datetime, period: str) -> datetime:
     return value.replace(year=month_index // 12, month=month_index % 12 + 1, day=1)
 
 
+def _dashboard_auto_period(
+    conn: sqlite3.Connection,
+    filters: list[str],
+    params: list[Any],
+    *,
+    earliest: str | None,
+    end: datetime,
+) -> str:
+    if not earliest:
+        return "1year"
+    rows = conn.execute(
+        f"""
+        SELECT t.occurred_at
+        FROM transactions t JOIN wallets w ON w.id = t.wallet_id
+        WHERE {' AND '.join(filters)}
+          AND {_UI_TRANSACTION_DISPLAY_AMOUNT_SQL} >= ?
+        ORDER BY t.occurred_at
+        """,
+        [*params, _DASHBOARD_AUTO_MIN_AMOUNT_MSAT],
+    ).fetchall()
+    if not rows:
+        return "ytd"
+    dates = [
+        _parse_iso_datetime(str(row["occurred_at"]), "occurred_at").astimezone(
+            end.tzinfo
+        )
+        for row in rows
+    ]
+
+    history_years = max(
+        0.0,
+        (
+            end.astimezone(timezone.utc)
+            - _parse_iso_datetime(earliest, "earliest")
+        ).total_seconds()
+        / (365.2425 * 24 * 60 * 60),
+    )
+    candidates = ["ytd", "1year"]
+    candidates.extend(
+        period
+        for period, years in (("5years", 5), ("10years", 10), ("15years", 15))
+        if history_years >= years * 0.8
+    )
+    candidates.append("all")
+    target_count = min(_DASHBOARD_AUTO_MIN_TRANSACTIONS, len(dates))
+
+    def period_start(period: str) -> datetime | None:
+        if period == "all":
+            return None
+        if period == "ytd":
+            return end.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        years = int(period.removesuffix("years").removesuffix("year"))
+        try:
+            return end.replace(year=end.year - years)
+        except ValueError:
+            return end.replace(year=end.year - years, day=28)
+
+    qualifying: list[str] = []
+    for period in candidates:
+        start = period_start(period)
+        visible = [
+            date
+            for date in dates
+            if (start is None or date >= start) and date <= end
+        ]
+        if len(visible) < target_count:
+            continue
+        qualifying.append(period)
+        buckets = {_dashboard_bucket_key(date, period)[0] for date in visible}
+        if len(buckets) >= _DASHBOARD_AUTO_MIN_BUCKETS:
+            return period
+    return qualifying[0] if qualifying else "all"
+
+
 def build_transactions_dashboard_snapshot(
     conn: sqlite3.Connection,
     args: dict[str, Any] | None = None,
@@ -4153,7 +4230,10 @@ def build_transactions_dashboard_snapshot(
     candidates: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     raw_args = _coerce_args(args)
-    unknown = sorted(set(raw_args) - {"period", "since", "until", "wallet", "timezone"})
+    unknown = sorted(
+        set(raw_args)
+        - {"period", "since", "until", "wallet", "timezone", "resolveAuto"}
+    )
     if unknown:
         raise AppError(
             "ui.transactions.dashboard received unsupported filters",
@@ -4161,6 +4241,7 @@ def build_transactions_dashboard_snapshot(
             details={"unknown": unknown},
             retryable=False,
         )
+    resolve_auto = _coerce_optional_bool_arg(raw_args, "resolveAuto")
     context = current_context_snapshot(conn)
     profile_id = context.get("profile_id")
     if not profile_id:
@@ -4171,7 +4252,13 @@ def build_transactions_dashboard_snapshot(
         return {
             "period": "all",
             "window": {"since": None, "until": None},
-            "history": {"count": 0, "earliest": None, "latest": None, "walletOptions": []},
+            "history": {
+                "count": 0,
+                "earliest": None,
+                "latest": None,
+                "walletOptions": [],
+                **({"autoPeriod": "1year"} if resolve_auto else {}),
+            },
             "counts": {"all": 0, "external": 0},
             "summary": {
                 **empty_summary,
@@ -4233,6 +4320,21 @@ def build_transactions_dashboard_snapshot(
         """,
         base_params,
     ).fetchall()
+    auto_period = (
+        _dashboard_auto_period(
+            conn,
+            base_filters,
+            base_params,
+            earliest=str(history["earliest"]) if history["earliest"] else None,
+            end=(
+                _parse_iso_datetime(until, "until").astimezone(display_timezone)
+                if until
+                else datetime.now(display_timezone)
+            ),
+        )
+        if resolve_auto
+        else None
+    )
     filters = list(base_filters)
     params = list(base_params)
     if since:
@@ -4418,6 +4520,7 @@ def build_transactions_dashboard_snapshot(
             "latest": history["latest"],
             "walletOptions": [str(row["label"]) for row in wallet_rows],
             "paymentMethods": payment_methods,
+            **({"autoPeriod": auto_period} if auto_period else {}),
         },
         "counts": {"all": len(transactions), "external": external_count},
         "summary": summary,
