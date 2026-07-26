@@ -11,7 +11,6 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import lru_cache
-from pathlib import Path
 
 from .. import __version__
 from ..backends import (
@@ -60,10 +59,23 @@ from ..core import sync as core_sync
 from ..core import sync_backends as core_sync_backends
 from ..core import transfer_matching as core_transfer_matching
 from ..core import wallets as core_wallets
+from ..core.accounts import normalize_code
 from ..core.chain_observer.provenance import canonical_graph_hash
-from ..core.repo import current_context_snapshot, resolve_account
+from ..core.repo import (
+    current_context_snapshot,
+    invalidate_journals,
+    resolve_account,
+    resolve_profile,
+    resolve_scope,
+    resolve_wallet,
+    resolve_workspace,
+)
 from ..core.runtime import (
     build_status_payload,
+)
+from ..core.wallets import (
+    load_wallet_descriptor_plan_from_config,
+    read_text_argument,
 )
 from ..db import (
     APP_NAME,
@@ -124,7 +136,6 @@ from ..wallet_descriptors import (
     MAX_DESCRIPTOR_GAP_LIMIT,
     derive_descriptor_targets,
     liquid_plan_can_unblind,
-    load_descriptor_plan,
     normalize_asset_code,
     normalize_chain,
     normalize_network,
@@ -149,11 +160,6 @@ RP2_ACCOUNTING_METHODS = (
     "MOVING_AVERAGE",
     "MOVING_AVERAGE_AT",
 )
-def normalize_code(value):
-    code = str(value).strip().lower().replace(" ", "-")
-    if not code:
-        raise AppError("Code cannot be empty")
-    return code
 
 
 def normalize_addresses(values):
@@ -172,88 +178,6 @@ def normalize_addresses(values):
     return output
 
 
-def resolve_workspace(conn, ref=None):
-    ref = ref or get_setting(conn, "context_workspace")
-    if not ref:
-        raise AppError("No workspace selected. Create one or run `kassiber context set --workspace ...`.")
-    ref = str(ref).strip()
-    if not ref:
-        raise AppError("No workspace selected. Create one or run `kassiber context set --workspace ...`.")
-    row = conn.execute(
-        "SELECT * FROM workspaces WHERE id = ? LIMIT 1",
-        (ref,),
-    ).fetchone()
-    if row:
-        return row
-    rows = conn.execute(
-        "SELECT * FROM workspaces WHERE lower(label) = lower(?) ORDER BY label ASC, id ASC",
-        (ref,),
-    ).fetchall()
-    if len(rows) == 1:
-        return rows[0]
-    if len(rows) > 1:
-        raise AppError(
-            f"Workspace label '{ref}' is ambiguous",
-            code="validation",
-            hint="Use the workspace id instead of the non-unique label.",
-            details={
-                "matches": [
-                    {"id": row["id"], "label": row["label"]}
-                    for row in rows
-                ]
-            },
-        )
-    raise AppError(f"Workspace '{ref}' not found", code="not_found")
-
-
-def resolve_profile(conn, workspace_id, ref=None):
-    ref = ref or get_setting(conn, "context_profile")
-    if not ref:
-        raise AppError("No profile selected. Create one or run `kassiber context set --profile ...`.")
-    ref = str(ref).strip()
-    if not ref:
-        raise AppError("No profile selected. Create one or run `kassiber context set --profile ...`.")
-    row = conn.execute(
-        """
-        SELECT * FROM profiles
-        WHERE workspace_id = ? AND id = ?
-        LIMIT 1
-        """,
-        (workspace_id, ref),
-    ).fetchone()
-    if row:
-        return row
-    rows = conn.execute(
-        """
-        SELECT * FROM profiles
-        WHERE workspace_id = ? AND lower(label) = lower(?)
-        ORDER BY label ASC, id ASC
-        """,
-        (workspace_id, ref),
-    ).fetchall()
-    if len(rows) == 1:
-        return rows[0]
-    if len(rows) > 1:
-        raise AppError(
-            f"Profile label '{ref}' is ambiguous in the selected workspace",
-            code="validation",
-            hint="Use the profile id instead of the non-unique label.",
-            details={
-                "matches": [
-                    {"id": row["id"], "label": row["label"]}
-                    for row in rows
-                ]
-            },
-        )
-    raise AppError(f"Profile '{ref}' not found in the selected workspace", code="not_found")
-
-
-def resolve_scope(conn, workspace_ref=None, profile_ref=None):
-    workspace = resolve_workspace(conn, workspace_ref)
-    profile = resolve_profile(conn, workspace["id"], profile_ref)
-    return workspace, profile
-
-
 def cache_swap_candidate_count(conn, workspace_ref, profile_ref, total):
     """Persist the unresolved swap/transfer candidate count for the side-nav hint.
 
@@ -266,51 +190,6 @@ def cache_swap_candidate_count(conn, workspace_ref, profile_ref, total):
         "UPDATE profiles SET swap_candidate_count = ? WHERE id = ?",
         (int(total), profile["id"]),
     )
-
-
-def resolve_wallet(conn, profile_id, ref):
-    normalized_ref = str(ref).strip()
-    row = conn.execute(
-        """
-        SELECT w.*, a.code AS account_code, a.label AS account_label
-        FROM wallets w
-        LEFT JOIN accounts a ON a.id = w.account_id
-        WHERE w.profile_id = ? AND w.id = ?
-        LIMIT 1
-        """,
-        (profile_id, normalized_ref),
-    ).fetchone()
-    if row:
-        return row
-    rows = conn.execute(
-        """
-        SELECT w.*, a.code AS account_code, a.label AS account_label
-        FROM wallets w
-        LEFT JOIN accounts a ON a.id = w.account_id
-        WHERE w.profile_id = ? AND lower(w.label) = lower(?)
-        ORDER BY w.label ASC, w.id ASC
-        """,
-        (profile_id, normalized_ref),
-    ).fetchall()
-    if len(rows) == 1:
-        return rows[0]
-    if len(rows) > 1:
-        raise AppError(
-            f"Wallet label '{ref}' is ambiguous",
-            code="validation",
-            hint="Use the wallet id instead of the non-unique label.",
-            details={
-                "matches": [
-                    {
-                        "id": row["id"],
-                        "label": row["label"],
-                        "account_code": row["account_code"],
-                    }
-                    for row in rows
-                ]
-            },
-        )
-    raise AppError(f"Wallet '{ref}' not found", code="not_found")
 
 
 def resolve_transaction(conn, profile_id, ref, direction=None):
@@ -357,20 +236,6 @@ def resolve_tag(conn, profile_id, ref):
     if not row:
         raise AppError(f"Tag '{ref}' not found")
     return row
-
-
-def invalidate_journals(conn, profile_id):
-    conn.execute(
-        """
-        UPDATE profiles
-        SET last_processed_at = NULL,
-            last_processed_tx_count = 0,
-            journal_input_version = journal_input_version + 1,
-            ownership_review_counts_json = NULL
-        WHERE id = ?
-        """,
-        (profile_id,),
-    )
 
 
 def _row_int(row, key, default=0):
@@ -1340,17 +1205,6 @@ def init_app(conn):
     conn.commit()
 
 
-def read_text_argument(value, file_path, label):
-    if value not in (None, ""):
-        return str(value).strip()
-    if not file_path:
-        return None
-    text = Path(file_path).expanduser().read_text(encoding="utf-8").strip()
-    if not text:
-        raise AppError(f"{label} file '{file_path}' is empty")
-    return text
-
-
 def wallet_live_chain_config(config):
     if not any(
         [
@@ -1365,13 +1219,6 @@ def wallet_live_chain_config(config):
     chain = normalize_chain_value(config.get("chain"))
     network = normalize_network_value(chain, config.get("network"))
     return chain, network
-
-
-def load_wallet_descriptor_plan_from_config(config):
-    try:
-        return load_descriptor_plan(config)
-    except ValueError as exc:
-        raise AppError(str(exc)) from exc
 
 
 def parse_wallet_config(args):
