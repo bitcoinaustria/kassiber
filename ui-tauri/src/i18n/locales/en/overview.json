@@ -285,6 +285,8 @@
     "ytd": "YTD",
     "1year": "1 Year",
     "5years": "5 Years",
+    "10years": "10 Years",
+    "15years": "15 Years",
     "all": "All Time",
     "short": {
       "auto": "Auto",
@@ -294,6 +296,8 @@
       "ytd": "YTD",
       "1year": "1Y",
       "5years": "5Y",
+      "10years": "10Y",
+      "15years": "15Y",
       "all": "All"
     }
   },
@@ -363,13 +367,11 @@
   },
   "controls": {
     "title": "Chart controls",
-    "description": "Time range, chart series, and BTC dot minimums",
+    "description": "Chart series and BTC dot minimums",
     "dotsVisible": "{{visible}} of {{total}} activity dots visible",
     "close": "Close chart controls",
     "timeRange": "Time Range",
     "scale": "Scale",
-    "logScale": "Logarithmic scale",
-    "autoFitScale": "Auto (fit data to screen)",
     "lastValueLabel": "Show last value on the axis",
     "logChip": "log",
     "autoChip": "auto",

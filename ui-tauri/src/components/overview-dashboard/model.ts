@@ -26,6 +26,16 @@ import {
 } from "@/lib/currency";
 import { formatShortDate } from "@/lib/date";
 import { currentUiLocale } from "@/lib/localeFormat";
+import {
+  autoCandidatePeriods,
+  historyYearsBetween,
+  normalizePeriodParam,
+  PERIOD_KEYS,
+  periodParamFromUrl,
+  selectablePeriods,
+  type PeriodKey,
+  type ResolvedPeriodKey,
+} from "@/lib/period";
 import { useUiStore } from "@/store/ui";
 import {
   type OverviewSnapshot,
@@ -150,8 +160,6 @@ export const ACTIVITY_MARKER_INPUT_STEP_BTC = 0.00000001;
 export const ACTIVITY_MARKER_SLIDER_MARKS = [0, 0.0025, 0.01, 0.1, 0.5, 1] as const;
 export const INCOMING_MARKER_MIN_PARAM = "incomingMinBtc";
 export const OUTGOING_MARKER_MIN_PARAM = "outgoingMinBtc";
-export const LEGACY_INCOMING_MARKER_MIN_PARAM = "incomingMin";
-export const LEGACY_OUTGOING_MARKER_MIN_PARAM = "outgoingMin";
 export const Y_SCALE_PARAM = "scale";
 export const Y_AUTO_FIT_PARAM = "fit";
 export const ACTIVITY_MARKER_GROUPING_PARAM = "groupEvents";
@@ -715,17 +723,8 @@ export function buildStatsData(
   ];
 }
 
-export type TimePeriod =
-  | "auto"
-  | "30days"
-  | "3months"
-  | "6months"
-  | "ytd"
-  | "1year"
-  | "5years"
-  | "all";
-
-export type ResolvedTimePeriod = Exclude<TimePeriod, "auto"> | "10years" | "15years";
+export type TimePeriod = PeriodKey;
+export type ResolvedTimePeriod = ResolvedPeriodKey;
 
 // i18n keys in the `overview` namespace, resolved via `t()` at the call site.
 export const periodLabelKeys = {
@@ -736,6 +735,8 @@ export const periodLabelKeys = {
   ytd: "period.ytd",
   "1year": "period.1year",
   "5years": "period.5years",
+  "10years": "period.10years",
+  "15years": "period.15years",
   all: "period.all",
 } as const satisfies Record<TimePeriod, string>;
 
@@ -747,90 +748,35 @@ export const periodShortLabelKeys = {
   ytd: "period.short.ytd",
   "1year": "period.short.1year",
   "5years": "period.short.5years",
+  "10years": "period.short.10years",
+  "15years": "period.short.15years",
   all: "period.short.all",
 } as const satisfies Record<TimePeriod, string>;
 
-export const periodKeys: TimePeriod[] = [
-  "auto",
-  "30days",
-  "3months",
-  "6months",
-  "ytd",
-  "1year",
-  "5years",
-  "all",
-];
+export const periodKeys = PERIOD_KEYS;
 
-export function normalizeTimePeriodParam(value: string | null): TimePeriod | null {
-  if (!value) return null;
-  const normalized = value.toLowerCase().replace(/[\s_-]/g, "");
-  if (normalized === "auto" || normalized === "automatic") return "auto";
-  if (normalized === "30days" || normalized === "30day" || normalized === "30d") {
-    return "30days";
-  }
-  if (
-    normalized === "3months" ||
-    normalized === "3month" ||
-    normalized === "3mos" ||
-    normalized === "3mo" ||
-    normalized === "3m"
-  ) {
-    return "3months";
-  }
-  if (
-    normalized === "6months" ||
-    normalized === "6month" ||
-    normalized === "6mos" ||
-    normalized === "6mo" ||
-    normalized === "6m"
-  ) {
-    return "6months";
-  }
-  if (normalized === "ytd") return "ytd";
-  if (
-    normalized === "1year" ||
-    normalized === "1years" ||
-    normalized === "1yr" ||
-    normalized === "1y"
-  ) {
-    return "1year";
-  }
-  if (
-    normalized === "5years" ||
-    normalized === "5year" ||
-    normalized === "5yrs" ||
-    normalized === "5yr" ||
-    normalized === "5y"
-  ) {
-    return "5years";
-  }
-  if (normalized === "all" || normalized === "max") return "all";
-  return null;
+export const normalizeTimePeriodParam = normalizePeriodParam;
+
+function urlParam(name: string): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get(name);
 }
 
 export function initialTimePeriodFromUrl(fallback: TimePeriod = "auto"): TimePeriod {
-  if (typeof window === "undefined") return fallback;
-  const params = new URLSearchParams(window.location.search);
-  return normalizeTimePeriodParam(params.get("period")) ?? fallback;
+  return periodParamFromUrl(fallback);
 }
 
 export function initialYScaleLogFromUrl(): boolean {
-  if (typeof window === "undefined") return false;
-  const params = new URLSearchParams(window.location.search);
-  return params.get(Y_SCALE_PARAM)?.toLowerCase() === "log";
+  return urlParam(Y_SCALE_PARAM)?.toLowerCase() === "log";
 }
 
 export function initialYAutoFitFromUrl(): boolean {
-  if (typeof window === "undefined") return false;
-  const params = new URLSearchParams(window.location.search);
-  const value = params.get(Y_AUTO_FIT_PARAM)?.toLowerCase();
+  const value = urlParam(Y_AUTO_FIT_PARAM)?.toLowerCase();
   return value === "auto" || value === "1";
 }
 
 export function initialActivityMarkerGroupingFromUrl(): boolean {
-  if (typeof window === "undefined") return false;
-  const params = new URLSearchParams(window.location.search);
-  const value = params.get(ACTIVITY_MARKER_GROUPING_PARAM)?.toLowerCase();
+  const value = urlParam(ACTIVITY_MARKER_GROUPING_PARAM)?.toLowerCase();
   return value === "1" || value === "true" || value === "on";
 }
 
@@ -1000,21 +946,11 @@ export function clampActivityMarkerMinimum(value: number) {
 export function initialActivityMarkerMinimumFromUrl(
   param: string,
   fallback: number,
-  legacyParam?: string,
 ) {
-  if (typeof window === "undefined") return fallback;
-  const params = new URLSearchParams(window.location.search);
-  const rawValue = params.get(param);
-  if (rawValue !== null) {
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed)) return fallback;
-    return clampActivityMarkerMinimum(parsed);
-  }
-  const legacyValue = legacyParam ? params.get(legacyParam) : null;
-  if (legacyValue === null) return fallback;
-  const parsed = Number(legacyValue);
+  const rawValue = urlParam(param);
+  if (rawValue === null) return fallback;
+  const parsed = Number(rawValue);
   if (!Number.isFinite(parsed)) return fallback;
-  if (parsed <= 0) return fallback;
   return clampActivityMarkerMinimum(parsed);
 }
 
@@ -1032,14 +968,12 @@ export function formatEditableActivityMarkerMinimum(value: number) {
   return clampActivityMarkerMinimum(value).toFixed(precision);
 }
 
-// Whether the snapshot carries real treasury data worth plotting. Mirrors the
-// fallback gate inside `getDataForPeriod`: with no portfolio series, an
-// all-zero balance series, and no activity events, the chart would otherwise
-// render synthetic demo points. Callers use this to show an empty state with a
-// refresh prompt instead of misleading placeholder data.
+// Whether the snapshot carries anything the treasury chart can actually draw:
+// a dated portfolio series (the lines) or activity events (the markers).
+// Callers use this to show an empty state with a refresh prompt instead of an
+// axis with nothing on it.
 export function hasTreasuryChartData(snapshot: OverviewSnapshot): boolean {
   if (snapshot.portfolioSeries?.length) return true;
-  if (snapshot.balanceSeries.some((value) => value !== 0)) return true;
   return activityTxs(snapshot).length > 0;
 }
 export function getDataForPeriod(
@@ -1060,87 +994,37 @@ export function getDataForPeriod(
     );
     if (points.length) return points;
   }
-  if (!snapshot.balanceSeries.some((value) => value !== 0)) {
-    // A book without history gets an honest empty chart, never invented
-    // demo numbers. (Mock mode ships non-zero series via fixtures, so the
-    // demo experience is unaffected.)
-    return [];
-  }
-  const fiatRate = activeMarketFiatRate(snapshot);
-  const labels =
-    resolvedPeriod === "5years"
-      ? ["2022", "2023", "2024", "2025", "2026"]
-      : [
-          "Jan",
-          "Feb",
-          "Mar",
-          "Apr",
-          "May",
-          "Jun",
-          "Jul",
-          "Aug",
-          "Sep",
-          "Oct",
-          "Nov",
-          "Dec",
-        ];
-  const points = snapshot.balanceSeries.map((btc, index) => {
-    const isLatestPoint = index === snapshot.balanceSeries.length - 1;
-    const value = isLatestPoint
-      ? snapshot.fiat.eurBalance
-      : btc * fiatRate;
-    const basisShare =
-      snapshot.fiat.eurBalance > 0
-        ? value / snapshot.fiat.eurBalance
-        : index / Math.max(1, snapshot.balanceSeries.length - 1);
-    const label = labels[index % labels.length];
-    return buildPortfolioChartPoint(
-      {
-        date: `series-${index}`,
-        label,
-        balanceBtc: btc,
-        valueEur: value,
-        costBasisEur:
-          snapshot.fiat.eurCostBasis * Math.max(0, Math.min(1, basisShare)),
-      },
-      label,
-      label,
-      metric,
-      currency,
-    );
-  });
-  if (resolvedPeriod === "30days") return points.slice(-4);
-  if (resolvedPeriod === "3months") return points.slice(-3);
-  if (resolvedPeriod === "6months") return points.slice(-6);
-  if (resolvedPeriod === "ytd") {
-    return points.slice(0, Math.max(1, new Date().getMonth() + 1));
-  }
-  if (resolvedPeriod === "5years") {
-    return points.filter((_, index) => index % 3 === 0).slice(-5);
-  }
-  return points;
+  // No dated portfolio series means the book has no priced BTC history: an
+  // honest empty chart, never month-labelled placeholder points.
+  return [];
 }
 
 const AUTO_MIN_MEANINGFUL_EVENTS = 3;
 const AUTO_MIN_ACTIVITY_VOLUME_BTC = 0.00001;
 const AUTO_MIN_BALANCE_RANGE_BTC = 0.001;
 const AUTO_MIN_BALANCE_RANGE_RATIO = 0.01;
-const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000;
 
-function autoCandidatePeriodsForHistory(
-  oldestDate: Date,
-  latestDate: Date,
-): ResolvedTimePeriod[] {
-  const historyYears =
-    (latestDate.valueOf() - oldestDate.valueOf()) / MS_PER_YEAR;
-  return [
-    "ytd",
-    "1year",
-    "5years",
-    ...(historyYears >= 8 ? (["10years"] as const) : []),
-    ...(historyYears >= 12 ? (["15years"] as const) : []),
-    "all",
+// Oldest and latest instants the chart can draw, across the priced series and
+// the activity events. Anchors both the auto window and the selectable ranges.
+export function treasuryHistoryBounds(
+  snapshot: OverviewSnapshot,
+  events: TreasuryActivityEvent[] = activityTxs(snapshot),
+) {
+  const times = [
+    ...(snapshot.portfolioSeries ?? [])
+      .map((point) => parseSeriesDate(point.date).valueOf())
+      .filter((time) => Number.isFinite(time)),
+    ...events.map((event) => event.occurredAt.valueOf()),
   ];
+  const latest = new Date(times.length ? Math.max(...times) : Date.now());
+  const oldest = new Date(times.length ? Math.min(...times) : latest.valueOf());
+  return { oldest, latest };
+}
+
+// Ranges the chart offers: "auto" plus every window the book's history covers.
+export function selectableTimePeriods(snapshot: OverviewSnapshot): TimePeriod[] {
+  const { oldest, latest } = treasuryHistoryBounds(snapshot);
+  return ["auto", ...selectablePeriods(historyYearsBetween(oldest, latest))];
 }
 
 function portfolioBalanceValuesForPeriod(
@@ -1179,18 +1063,7 @@ export function resolveAutoTimePeriod(
   if (period !== "auto") return period;
   const events = activityTxs(snapshot);
   if (!events.length) return "ytd";
-  const candidateTimes = [
-    ...(snapshot.portfolioSeries ?? [])
-      .map((point) => parseSeriesDate(point.date).valueOf())
-      .filter((time) => Number.isFinite(time)),
-    ...events.map((event) => event.occurredAt.valueOf()),
-  ];
-  const latestDate = new Date(
-    candidateTimes.length ? Math.max(...candidateTimes) : Date.now(),
-  );
-  const oldestDate = new Date(
-    candidateTimes.length ? Math.min(...candidateTimes) : latestDate.valueOf(),
-  );
+  const { oldest, latest } = treasuryHistoryBounds(snapshot, events);
   const meaningfulEvents = events.filter(
     (event) => event.volumeBtc >= AUTO_MIN_ACTIVITY_VOLUME_BTC,
   );
@@ -1200,19 +1073,14 @@ export function resolveAutoTimePeriod(
     meaningfulEvents.length,
   );
   return (
-    autoCandidatePeriodsForHistory(oldestDate, latestDate).find(
+    autoCandidatePeriods(historyYearsBetween(oldest, latest)).find(
       (candidate) => {
         const visibleEvents = meaningfulEvents.filter((event) =>
-          isActivityInTreasuryPeriod(event, latestDate, candidate),
+          isActivityInTreasuryPeriod(event, latest, candidate),
         );
         if (visibleEvents.length < targetEventCount) return false;
         return hasMeaningfulBalanceRange(
-          portfolioBalanceValuesForPeriod(
-            snapshot,
-            events,
-            latestDate,
-            candidate,
-          ),
+          portfolioBalanceValuesForPeriod(snapshot, events, latest, candidate),
         );
       },
     ) ?? "all"
@@ -1251,16 +1119,13 @@ export function parseSeriesDate(value: string | undefined) {
   return parsed && !Number.isNaN(parsed.valueOf()) ? parsed : new Date();
 }
 
-export function isPointInPeriod(
-  value: string,
+// The treasury chart windows in UTC against the book's latest data point (not
+// today), so a stale book still shows its own last months rather than an empty
+// tail. "auto"/"all" are unbounded; everything else offsets from `latestDate`.
+function treasuryPeriodStart(
   latestDate: Date,
   period: TimePeriod | ResolvedTimePeriod,
-) {
-  if (period === "auto") return true;
-  const pointDate = parseSeriesDate(value);
-  if (period === "ytd") {
-    return pointDate.getUTCFullYear() === latestDate.getUTCFullYear();
-  }
+): Date | null {
   const start = new Date(latestDate);
   if (period === "30days") {
     start.setUTCDate(start.getUTCDate() - 30);
@@ -1277,9 +1142,31 @@ export function isPointInPeriod(
   } else if (period === "15years") {
     start.setUTCFullYear(start.getUTCFullYear() - 15);
   } else {
-    return true;
+    return null;
   }
-  return pointDate >= start && pointDate <= latestDate;
+  return start;
+}
+
+export function isTimeInTreasuryPeriod(
+  time: Date,
+  latestDate: Date,
+  period: TimePeriod | ResolvedTimePeriod,
+) {
+  if (period === "auto" || period === "all") return true;
+  if (period === "ytd") {
+    return time.getUTCFullYear() === latestDate.getUTCFullYear();
+  }
+  const start = treasuryPeriodStart(latestDate, period);
+  if (!start) return true;
+  return time >= start && time <= latestDate;
+}
+
+export function isPointInPeriod(
+  value: string,
+  latestDate: Date,
+  period: TimePeriod | ResolvedTimePeriod,
+) {
+  return isTimeInTreasuryPeriod(parseSeriesDate(value), latestDate, period);
 }
 
 export function buildPortfolioChartPoint(
@@ -1739,28 +1626,7 @@ export function isActivityInTreasuryPeriod(
   latestDate: Date,
   period: TimePeriod | ResolvedTimePeriod,
 ) {
-  if (period === "auto") return true;
-  if (period === "all") return true;
-  if (period === "ytd") {
-    return event.occurredAt.getUTCFullYear() === latestDate.getUTCFullYear();
-  }
-  const start = new Date(latestDate);
-  if (period === "30days") {
-    start.setUTCDate(start.getUTCDate() - 30);
-  } else if (period === "3months") {
-    start.setUTCMonth(start.getUTCMonth() - 3);
-  } else if (period === "6months") {
-    start.setUTCMonth(start.getUTCMonth() - 6);
-  } else if (period === "1year") {
-    start.setUTCFullYear(start.getUTCFullYear() - 1);
-  } else if (period === "5years") {
-    start.setUTCFullYear(start.getUTCFullYear() - 5);
-  } else if (period === "10years") {
-    start.setUTCFullYear(start.getUTCFullYear() - 10);
-  } else if (period === "15years") {
-    start.setUTCFullYear(start.getUTCFullYear() - 15);
-  }
-  return event.occurredAt >= start && event.occurredAt <= latestDate;
+  return isTimeInTreasuryPeriod(event.occurredAt, latestDate, period);
 }
 
 export function activityDateKey(event: TreasuryActivityEvent) {
@@ -2196,9 +2062,6 @@ export function portfolioTickBucket(
   point: PortfolioChartPoint,
   period: TimePeriod | ResolvedTimePeriod,
 ) {
-  if (point.date.startsWith("fallback-") || point.date.startsWith("series-")) {
-    return point.month;
-  }
   if (period === "30days" || period === "3months") return point.month;
   if (
     period === "5years" ||
