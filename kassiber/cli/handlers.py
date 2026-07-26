@@ -11,7 +11,6 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import lru_cache
-from pathlib import Path
 
 from .. import __version__
 from ..backends import (
@@ -60,6 +59,7 @@ from ..core import sync as core_sync
 from ..core import sync_backends as core_sync_backends
 from ..core import transfer_matching as core_transfer_matching
 from ..core import wallets as core_wallets
+from ..core.accounts import normalize_code
 from ..core.chain_observer.provenance import canonical_graph_hash
 from ..core.repo import (
     current_context_snapshot,
@@ -72,6 +72,10 @@ from ..core.repo import (
 )
 from ..core.runtime import (
     build_status_payload,
+)
+from ..core.wallets import (
+    load_wallet_descriptor_plan_from_config,
+    read_text_argument,
 )
 from ..db import (
     APP_NAME,
@@ -132,7 +136,6 @@ from ..wallet_descriptors import (
     MAX_DESCRIPTOR_GAP_LIMIT,
     derive_descriptor_targets,
     liquid_plan_can_unblind,
-    load_descriptor_plan,
     normalize_asset_code,
     normalize_chain,
     normalize_network,
@@ -157,11 +160,6 @@ RP2_ACCOUNTING_METHODS = (
     "MOVING_AVERAGE",
     "MOVING_AVERAGE_AT",
 )
-def normalize_code(value):
-    code = str(value).strip().lower().replace(" ", "-")
-    if not code:
-        raise AppError("Code cannot be empty")
-    return code
 
 
 def normalize_addresses(values):
@@ -1207,17 +1205,6 @@ def init_app(conn):
     conn.commit()
 
 
-def read_text_argument(value, file_path, label):
-    if value not in (None, ""):
-        return str(value).strip()
-    if not file_path:
-        return None
-    text = Path(file_path).expanduser().read_text(encoding="utf-8").strip()
-    if not text:
-        raise AppError(f"{label} file '{file_path}' is empty")
-    return text
-
-
 def wallet_live_chain_config(config):
     if not any(
         [
@@ -1232,13 +1219,6 @@ def wallet_live_chain_config(config):
     chain = normalize_chain_value(config.get("chain"))
     network = normalize_network_value(chain, config.get("network"))
     return chain, network
-
-
-def load_wallet_descriptor_plan_from_config(config):
-    try:
-        return load_descriptor_plan(config)
-    except ValueError as exc:
-        raise AppError(str(exc)) from exc
 
 
 def parse_wallet_config(args):
