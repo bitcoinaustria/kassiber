@@ -1789,6 +1789,13 @@ def _ui_swap_matching_payload_from_conn(
     *,
     authored_source: str = "gui",
 ) -> dict[str, Any]:
+    """Dispatch ``ui.transfers.*`` and ``ui.saved_views.*`` daemon kinds.
+
+    The UI calls these kinds explicitly from dialogs, so consent is the
+    dialog itself — there's no per-kind consent gate at this layer.
+    The AI-callable subset is gated upstream by ``kassiber.ai.tools``.
+    """
+
     workspace = args.get("workspace")
     profile = args.get("profile")
 
@@ -2126,21 +2133,6 @@ def _ui_swap_matching_payload_from_conn(
     raise AppError(f"Unsupported swap-matching daemon kind '{kind}'", code="validation")
 
 
-def _ui_swap_matching_payload(
-    ctx: DaemonContext,
-    kind: str,
-    args: dict[str, Any],
-) -> dict[str, Any]:
-    """Dispatch ``ui.transfers.*`` and ``ui.saved_views.*`` daemon kinds.
-
-    The UI calls these kinds explicitly from dialogs, so consent is the
-    dialog itself — there's no per-kind consent gate at this layer.
-    AI-callable subset is gated upstream via the ``TOOL_CATALOG`` in
-    ``kassiber.ai.tools``.
-    """
-    return _ui_swap_matching_payload_from_conn(_require_conn(ctx), kind, args)
-
-
 def _ui_custody_gap_payload_from_conn(
     conn: sqlite3.Connection,
     kind: str,
@@ -2357,14 +2349,6 @@ def _ui_custody_gap_payload_from_conn(
         "next_cursor": raw_payload.get("next_cursor"),
     }
     return _ui_exact_integer_payload(payload)
-
-
-def _ui_custody_gap_payload(
-    ctx: DaemonContext,
-    kind: str,
-    args: dict[str, Any],
-) -> dict[str, Any]:
-    return _ui_custody_gap_payload_from_conn(_require_conn(ctx), kind, args)
 
 
 def _ui_custody_coverage_payload_from_conn(
@@ -2640,20 +2624,6 @@ def _ui_commercial_payload_from_conn(
             media_type=args.get("media_type"),
         )
     raise AppError(f"Unsupported commercial daemon kind '{kind}'", code="validation")
-
-
-def _ui_commercial_payload(
-    ctx: DaemonContext,
-    kind: str,
-    args: dict[str, Any],
-) -> dict[str, Any]:
-    return _ui_commercial_payload_from_conn(
-        _require_conn(ctx),
-        ctx.runtime_config,
-        ctx.data_root,
-        kind,
-        args,
-    )
 
 
 def _ui_source_funds_payload_from_conn(
@@ -3100,19 +3070,6 @@ def _ui_source_funds_payload_from_conn(
     raise AppError(f"unsupported source-funds daemon export kind: {kind}", code="validation")
 
 
-def _ui_source_funds_payload(
-    ctx: DaemonContext,
-    kind: str,
-    args: dict[str, Any],
-) -> dict[str, Any]:
-    return _ui_source_funds_payload_from_conn(
-        _require_conn(ctx),
-        kind,
-        args,
-        data_root=ctx.data_root,
-    )
-
-
 def _optional_bool_arg(args: dict[str, Any], key: str, default: bool) -> bool:
     value = args.get(key, default)
     if not isinstance(value, bool):
@@ -3468,19 +3425,6 @@ def _ui_report_export_payload_from_conn(
     raise AppError(
         f"unsupported report export kind {kind}",
         code="unsupported_kind",
-    )
-
-
-def _ui_report_export_payload(
-    ctx: DaemonContext,
-    kind: str,
-    args: dict[str, Any],
-) -> dict[str, Any]:
-    return _ui_report_export_payload_from_conn(
-        _require_conn(ctx),
-        ctx.data_root,
-        kind,
-        args,
     )
 
 
@@ -4746,10 +4690,6 @@ def _reports_summary_payload(
     )
 
 
-def _msat_to_sat_value(value: Any) -> float:
-    return int(value or 0) / 1000.0
-
-
 def _totals_by_asset(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Aggregate per-asset totals from balance-sheet / portfolio-summary rows.
 
@@ -4779,7 +4719,7 @@ def _totals_by_asset(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         bucket["market_value"] += float(row.get("market_value") or 0)
         bucket["unrealized_pnl"] += float(row.get("unrealized_pnl") or 0)
     for bucket in totals_by_asset.values():
-        bucket["quantity_sat"] = _msat_to_sat_value(bucket["quantity_msat"])
+        bucket["quantity_sat"] = int(bucket["quantity_msat"] or 0) / 1000.0
     return [totals_by_asset[key] for key in sorted(totals_by_asset)]
 
 
@@ -6767,14 +6707,6 @@ def _execute_mutating_ai_tool(
         )
 
 
-def _tool_result_content_for_model(result: dict[str, Any]) -> str:
-    return json.dumps(
-        json_ready(redact_ai_tool_result(result)),
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-
-
 def _record_nonexecuted_custody_ai_call(
     *,
     call: ParsedAiToolCall,
@@ -8425,7 +8357,11 @@ def _run_ai_chat_tool_loop(
                 {
                     "type": "function_call_output",
                     "call_id": call.call_id,
-                    "output": _tool_result_content_for_model(result),
+                    "output": json.dumps(
+                        json_ready(redact_ai_tool_result(result)),
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
                 }
             )
             if cancel_event.is_set():
@@ -11873,10 +11809,6 @@ def _loans_snapshot_from_conn(conn: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
-def _loans_snapshot(ctx: DaemonContext) -> dict[str, Any]:
-    return _loans_snapshot_from_conn(_require_conn(ctx))
-
-
 def _ui_loans_payload_from_conn(
     conn: sqlite3.Connection,
     kind: str,
@@ -14355,7 +14287,13 @@ def handle_request(
 
     if kind == "ui.loans.list":
         return (
-            _with_request_id(build_envelope("ui.loans.list", _loans_snapshot(ctx)), request_id),
+            _with_request_id(
+                build_envelope(
+                    "ui.loans.list",
+                    _loans_snapshot_from_conn(_require_conn(ctx)),
+                ),
+                request_id,
+            ),
             False,
         )
     if kind == "ui.loans.link":
@@ -14881,8 +14819,9 @@ def handle_request(
             _with_request_id(
                 build_envelope(
                     kind,
-                    _ui_report_export_payload(
-                        ctx,
+                    _ui_report_export_payload_from_conn(
+                        _require_conn(ctx),
+                        ctx.data_root,
                         kind,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
@@ -14919,10 +14858,11 @@ def handle_request(
             _with_request_id(
                 build_envelope(
                     kind,
-                    _ui_source_funds_payload(
-                        ctx,
+                    _ui_source_funds_payload_from_conn(
+                        _require_conn(ctx),
                         kind,
                         _coerce_args_dict(request_id, request.get("args")),
+                        data_root=ctx.data_root,
                     ),
                 ),
                 request_id,
@@ -14945,8 +14885,10 @@ def handle_request(
             _with_request_id(
                 build_envelope(
                     kind,
-                    _ui_commercial_payload(
-                        ctx,
+                    _ui_commercial_payload_from_conn(
+                        _require_conn(ctx),
+                        ctx.runtime_config,
+                        ctx.data_root,
                         kind,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
@@ -15037,8 +14979,8 @@ def handle_request(
             _with_request_id(
                 build_envelope(
                     kind,
-                    _ui_custody_gap_payload(
-                        ctx,
+                    _ui_custody_gap_payload_from_conn(
+                        _require_conn(ctx),
                         kind,
                         _coerce_args_dict(request_id, request.get("args")),
                     ),
@@ -15083,8 +15025,10 @@ def handle_request(
             _with_request_id(
                 build_envelope(
                     kind,
-                    _ui_swap_matching_payload(
-                        ctx, kind, _coerce_args_dict(request_id, request.get("args"))
+                    _ui_swap_matching_payload_from_conn(
+                        _require_conn(ctx),
+                        kind,
+                        _coerce_args_dict(request_id, request.get("args")),
                     ),
                 ),
                 request_id,
