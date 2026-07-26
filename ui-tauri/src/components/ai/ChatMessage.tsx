@@ -39,8 +39,9 @@ import {
   formatUiNumber,
 } from "@/lib/localeFormat";
 import {
-  visibleThinkingSegments,
+  chatMessageRounds,
   type AiChatMessage,
+  type AiChatRound,
 } from "@/daemon/stream";
 import { cn } from "@/lib/utils";
 
@@ -65,9 +66,9 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
   const isStreaming =
     message.status === "streaming" || message.status === "pending";
   const hasAnswer = Boolean(message.content);
-  const hasToolCalls = Boolean(message.toolCalls?.length);
-  const thinkingSegments = visibleThinkingSegments(message);
-  const hasThinking = thinkingSegments.length > 0;
+  const rounds = chatMessageRounds(message);
+  const hasToolCalls = rounds.some((round) => round.toolCalls.length > 0);
+  const hasThinking = rounds.some((round) => round.thinking.length > 0);
   const showLoader =
     !hasAnswer &&
     !hasThinking &&
@@ -80,34 +81,15 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
       data-message-id={message.id}
     >
       <div className="w-full min-w-0 px-1 py-0.5 text-sm">
-        {hasThinking ? (
-          <ChatReasoning
-            segments={thinkingSegments}
-            isStreaming={isStreaming}
+        {rounds.map((round, index) => (
+          <AssistantRound
+            key={round.id}
+            round={round}
+            toolUsageLabel={t("message.toolUsage")}
+            isStreaming={isStreaming && index === rounds.length - 1}
             hasAnswer={hasAnswer}
           />
-        ) : null}
-        {hasToolCalls ? (
-          <div
-            className={cn(
-              hasThinking ? "mt-2" : undefined,
-              "mb-2 w-full min-w-0",
-            )}
-          >
-            <ChainOfThought>
-              <ChainOfThoughtHeader icon={Wrench}>
-                {t("message.toolUsage")}
-              </ChainOfThoughtHeader>
-              <ChainOfThoughtContent>
-                <div className="mt-1 space-y-1 border-l border-border/70 py-0.5 pl-3">
-                  {message.toolCalls?.map((toolCall) => (
-                    <ChatToolCall key={toolCall.callId} toolCall={toolCall} />
-                  ))}
-                </div>
-              </ChainOfThoughtContent>
-            </ChainOfThought>
-          </div>
-        ) : null}
+        ))}
         {hasAnswer ? (
           <div
             className={cn(
@@ -150,6 +132,47 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
         ) : null}
       </div>
     </div>
+  );
+}
+
+/** Reasoning plus the tool calls of one provider completion round. */
+function AssistantRound({
+  round,
+  toolUsageLabel,
+  isStreaming,
+  hasAnswer,
+}: {
+  round: AiChatRound;
+  toolUsageLabel: string;
+  isStreaming: boolean;
+  hasAnswer: boolean;
+}) {
+  return (
+    <>
+      {round.thinking ? (
+        <ChatReasoning
+          segments={[{ id: round.id, content: round.thinking }]}
+          isStreaming={isStreaming}
+          hasAnswer={hasAnswer}
+        />
+      ) : null}
+      {round.toolCalls.length > 0 ? (
+        <div className="mb-2 w-full min-w-0">
+          <ChainOfThought>
+            <ChainOfThoughtHeader icon={Wrench}>
+              {toolUsageLabel}
+            </ChainOfThoughtHeader>
+            <ChainOfThoughtContent>
+              <div className="mt-1 space-y-1 border-l border-border/70 py-0.5 pl-3">
+                {round.toolCalls.map((toolCall) => (
+                  <ChatToolCall key={toolCall.callId} toolCall={toolCall} />
+                ))}
+              </div>
+            </ChainOfThoughtContent>
+          </ChainOfThought>
+        </div>
+      ) : null}
+    </>
   );
 }
 

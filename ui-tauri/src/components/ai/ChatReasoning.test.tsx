@@ -51,8 +51,7 @@ describe("ChatReasoning", () => {
       />,
     );
 
-    expect(html).toContain("Thoughts · round 1");
-    expect(html).toContain("Thoughts · round 2");
+    expect(html.match(/Thoughts/g)?.length ?? 0).toBe(2);
     expect(html).toContain("First round plan.");
     expect(html).toContain("Second round after tools.");
   });

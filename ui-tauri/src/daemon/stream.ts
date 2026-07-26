@@ -113,6 +113,8 @@ export interface AiChatToolCall {
   status: AiToolCallStatus;
   result?: unknown;
   reason?: string;
+  /** Reasoning segment (provider completion round) this call belongs to. */
+  segmentId?: string;
 }
 
 export interface AiChatRequest {
@@ -335,21 +337,69 @@ export function visibleThinkingSegments(
   return [{ id: `${message.id}-thinking`, content: message.thinking! }];
 }
 
+/** One provider completion round: its reasoning trace plus its tool calls. */
+export interface AiChatRound {
+  id: string;
+  thinking: string;
+  toolCalls: AiChatToolCall[];
+}
+
+/**
+ * Group an assistant turn into rounds so reasoning and the tool calls it led
+ * to render together (think → tools → think again). Tool calls without a
+ * segment (restored history, calls before any reasoning) lead the first round.
+ */
+export function chatMessageRounds(message: AiChatMessage): AiChatRound[] {
+  const toolCalls = message.toolCalls ?? [];
+  const segments =
+    message.thinkingSegments && message.thinkingSegments.length > 0
+      ? message.thinkingSegments
+      : visibleThinkingSegments(message);
+  if (segments.length === 0) {
+    return toolCalls.length > 0
+      ? [{ id: `${message.id}-round`, thinking: "", toolCalls }]
+      : [];
+  }
+  const knownIds = new Set(segments.map((segment) => segment.id));
+  const rounds = segments.map((segment) => ({
+    id: segment.id,
+    thinking: segment.content,
+    toolCalls: toolCalls.filter((call) => call.segmentId === segment.id),
+  }));
+  const untagged = toolCalls.filter(
+    (call) => !call.segmentId || !knownIds.has(call.segmentId),
+  );
+  rounds[0]!.toolCalls = [...untagged, ...rounds[0]!.toolCalls];
+  return rounds.filter(
+    (round) => round.thinking.length > 0 || round.toolCalls.length > 0,
+  );
+}
+
 /**
  * Open a new reasoning segment for the next provider completion round.
  * Skips when the current segment is still empty so repeated status
- * records do not create blank panes.
+ * records do not create blank panes — unless that segment already owns tool
+ * calls, which would otherwise fold two rounds into one pane.
  */
 export function beginThinkingSegment(current: AiChatMessage): AiChatMessage {
   const segments = current.thinkingSegments ?? [];
   const last = segments[segments.length - 1];
-  if (last && last.content.length === 0) {
+  const lastHasTools = last
+    ? (current.toolCalls ?? []).some((call) => call.segmentId === last.id)
+    : false;
+  if (last && last.content.length === 0 && !lastHasTools) {
     return current;
   }
   return {
     ...current,
     thinkingSegments: [...segments, { id: makeId(), content: "" }],
   };
+}
+
+/** Reasoning segment a freshly streamed tool call belongs to, if any. */
+function activeSegmentId(current: AiChatMessage): string | undefined {
+  const segments = current.thinkingSegments ?? [];
+  return segments[segments.length - 1]?.id;
 }
 
 function appendThinkingToMessage(
@@ -535,6 +585,7 @@ export function applyAiChatStreamRecordToMessage(
       kindClass: data.kind_class ?? "unknown",
       needsConsent: Boolean(data.needs_consent),
       status: data.needs_consent ? "pending" : "running",
+      segmentId: activeSegmentId(current),
     };
     const existing = current.toolCalls ?? [];
     const found = existing.some((toolCall) => toolCall.callId === data.call_id);
@@ -578,6 +629,7 @@ export function applyAiChatStreamRecordToMessage(
               kindClass: "unknown",
               needsConsent: false,
               status,
+              segmentId: activeSegmentId(current),
             }),
           ],
     };
@@ -594,6 +646,7 @@ export function applyAiChatStreamRecordToMessage(
       kindClass: "mutating",
       needsConsent: true,
       status: "awaiting_consent",
+      segmentId: activeSegmentId(current),
     };
     return {
       ...current,

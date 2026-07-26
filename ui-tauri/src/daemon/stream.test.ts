@@ -9,6 +9,7 @@ import {
   buildAiChatStreamArgs,
   buildChatCancelArgs,
   buildToolConsentArgs,
+  chatMessageRounds,
   completedAiMutationKind,
   terminalAiChatStatus,
   type AiChatMessage,
@@ -505,5 +506,68 @@ describe("completedAiMutationKind", () => {
         data: { call_id: "write-1", ok: false, reason: "user_denied" },
       }),
     ).toBeNull();
+  });
+
+  it("splits tool calls into the round that made them", () => {
+    const parser = new ThinkParser();
+    let message = assistantMessage();
+    const status = (phase: string) => ({
+      kind: "ai.chat.status",
+      schema_version: 1,
+      data: { phase },
+    });
+    const delta = (reasoning: string) => ({
+      kind: "ai.chat.delta",
+      schema_version: 1,
+      data: { delta: { reasoning } },
+    });
+    const toolCall = (callId: string) => ({
+      kind: "ai.chat.tool_call",
+      schema_version: 1,
+      data: { call_id: callId, name: "ui.workspace.health" },
+    });
+
+    for (const record of [
+      status("waiting_for_model"),
+      delta("first plan"),
+      toolCall("call-1"),
+      status("waiting_for_model"),
+      delta("second plan"),
+      toolCall("call-2"),
+    ]) {
+      message = applyAiChatStreamRecordToMessage(
+        message,
+        record as never,
+        parser,
+        false,
+      );
+    }
+
+    const rounds = chatMessageRounds(message);
+    expect(rounds).toHaveLength(2);
+    expect(rounds[0]!.thinking).toBe("first plan");
+    expect(rounds[0]!.toolCalls.map((call) => call.callId)).toEqual(["call-1"]);
+    expect(rounds[1]!.thinking).toBe("second plan");
+    expect(rounds[1]!.toolCalls.map((call) => call.callId)).toEqual(["call-2"]);
+  });
+
+  it("keeps untagged tool calls in the first round", () => {
+    const rounds = chatMessageRounds(
+      assistantMessage({
+        thinkingSegments: [{ id: "seg-1", content: "plan" }],
+        toolCalls: [
+          {
+            callId: "legacy",
+            name: "ui.workspace.health",
+            arguments: {},
+            kindClass: "read_only",
+            needsConsent: false,
+            status: "done",
+          },
+        ],
+      }),
+    );
+    expect(rounds).toHaveLength(1);
+    expect(rounds[0]!.toolCalls.map((call) => call.callId)).toEqual(["legacy"]);
   });
 });

@@ -169,8 +169,44 @@ describe("ChatMessage", () => {
 
     const html = renderToStaticMarkup(<ChatMessage message={message} />);
 
-    expect(html).toContain("Thoughts · round 1");
-    expect(html).toContain("Thoughts · round 2");
+    expect(html.match(/Thoughts/g)?.length ?? 0).toBe(2);
+    expect(html).not.toMatch(/round \d/);
+  });
+
+  it("groups tool usage per model round", () => {
+    const call = (callId: string, segmentId: string) => ({
+      callId,
+      name: "ui.workspace.health",
+      arguments: {},
+      kindClass: "read_only" as const,
+      needsConsent: false,
+      status: "done" as const,
+      segmentId,
+    });
+    const message: AiChatMessage = {
+      id: "assistant-round-tools",
+      role: "assistant",
+      content: "Done.",
+      status: "done",
+      thinkingSegments: [
+        { id: "seg-1", content: "Plan the first call." },
+        { id: "seg-2", content: "Plan the second call." },
+      ],
+      toolCalls: [call("call-1", "seg-1"), call("call-2", "seg-2")],
+    };
+
+    const perRound = renderToStaticMarkup(<ChatMessage message={message} />);
+    expect(perRound.match(/Tool usage/g)?.length ?? 0).toBe(2);
+
+    const shared = renderToStaticMarkup(
+      <ChatMessage
+        message={{
+          ...message,
+          toolCalls: [call("call-1", "seg-1"), call("call-2", "seg-1")],
+        }}
+      />,
+    );
+    expect(shared.match(/Tool usage/g)?.length ?? 0).toBe(1);
   });
 
   it("shows the status pill before visible reasoning content arrives", () => {

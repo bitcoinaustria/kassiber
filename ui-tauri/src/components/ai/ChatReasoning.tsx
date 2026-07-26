@@ -127,7 +127,6 @@ export function ChatReasoning({
   if (resolvedSegments.length === 0) return null;
 
   const durationLabel = elapsedSeconds > 0 ? `${elapsedSeconds}s` : "<1s";
-  const multi = resolvedSegments.length > 1;
 
   return (
     <div className="mb-2 flex w-full min-w-0 flex-col gap-1.5">
@@ -135,19 +134,9 @@ export function ChatReasoning({
         const isActive = index === activeIndex;
         let headerLabel: React.ReactNode;
         if (isActive) {
-          headerLabel = (
-            <ThinkingHeaderLabel
-              label={
-                multi
-                  ? t("message.thinkingRound", { round: index + 1 })
-                  : t("message.thinking")
-              }
-            />
-          );
-        } else if (wasStreamingRef.current && !multi && index === 0) {
+          headerLabel = <ThinkingHeaderLabel label={t("message.thinking")} />;
+        } else if (wasStreamingRef.current && index === 0) {
           headerLabel = t("message.thoughtFor", { duration: durationLabel });
-        } else if (multi) {
-          headerLabel = t("message.thoughtsRound", { round: index + 1 });
         } else {
           headerLabel = t("message.thoughts");
         }
