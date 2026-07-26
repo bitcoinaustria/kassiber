@@ -95,7 +95,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { bookIdentityKey, isDaemonDataMode, useUiStore } from "@/store/ui";
+import { bookIdentityKey, useUiStore } from "@/store/ui";
 import type { AppNotification, Identity, ThemePreference } from "@/store/ui";
 import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
 import {
@@ -623,7 +623,6 @@ export function AppShell() {
   const [touchIdStatus, setTouchIdStatus] =
     React.useState<TouchIdPassphraseStatus | null>(null);
   const requiresDaemonUnlock = shouldUseDaemonUnlock({
-    dataMode,
     hasIdentity: Boolean(identity),
     daemonAuthRequired,
   });
@@ -784,7 +783,7 @@ export function AppShell() {
       clearSessionUnlockPassphrase();
       clearDaemonQueryCache();
       setLocked(true);
-      void getTransport("real").invoke({ kind: "daemon.lock" });
+      void getTransport().invoke({ kind: "daemon.lock" });
       return;
     }
     if (!hasSessionUnlockPassphrase()) {
@@ -828,7 +827,7 @@ export function AppShell() {
         let nextIdentity: ProjectIdentity | null = null;
         if (pendingProjectUnlock) {
           const projectEnvelope =
-            await getTransport("real").invoke<ProjectSelectSnapshot>({
+            await getTransport().invoke<ProjectSelectSnapshot>({
               kind: "ui.projects.select",
               args: {
                 project_id: pendingProjectUnlock.id,
@@ -847,7 +846,7 @@ export function AppShell() {
             );
           }
         } else {
-          envelope = await getTransport("real").invoke({
+          envelope = await getTransport().invoke({
             kind: "daemon.unlock",
             args: {
               ...(identity?.importedProject
@@ -1041,9 +1040,8 @@ export function AppShell() {
 
   const switchProject = React.useCallback(
     async (project: ProjectCatalogEntry) => {
-      if (!isDaemonDataMode(dataMode)) return;
       try {
-        const envelope = await getTransport("real").invoke<ProjectSelectSnapshot>({
+        const envelope = await getTransport().invoke<ProjectSelectSnapshot>({
           kind: "ui.projects.select",
           args: { project_id: project.id },
         });
@@ -1093,7 +1091,6 @@ export function AppShell() {
       addNotification,
       bumpDaemonSession,
       clearDaemonQueryCache,
-      dataMode,
       navigate,
       queryClient,
       setIdentity,
@@ -1279,7 +1276,6 @@ export function AppShell() {
   // workspace; if not, drop the stale identity and bounce back to onboarding
   // instead of stranding the user on /overview with no data.
   React.useEffect(() => {
-    if (!isDaemonDataMode(dataMode)) return;
     if (!daemonEnabled) return;
     if (identity?.importedProject) return;
     if (!identity) return;
@@ -1288,7 +1284,7 @@ export function AppShell() {
     let cancelled = false;
     void (async () => {
       try {
-        const envelope = await getTransport("real").invoke<ProfilesSnapshot>({
+        const envelope = await getTransport().invoke<ProfilesSnapshot>({
           kind: "ui.profiles.snapshot",
         });
         if (cancelled) return;
@@ -1448,11 +1444,10 @@ export function AppShell() {
   }, [appLockPolicy.lockOnWindowClose, encryptedWorkspace, lockApp]);
 
   React.useEffect(() => {
-    const bridgeable = daemonEnabled && isDaemonDataMode(dataMode);
-    if (!bridgeable) return;
-    startDaemonLogBridge({ isEnabled: () => bridgeable });
+    if (!daemonEnabled) return;
+    startDaemonLogBridge({ isEnabled: () => daemonEnabled });
     return () => stopDaemonLogBridge();
-  }, [daemonEnabled, dataMode]);
+  }, [daemonEnabled]);
 
   React.useEffect(() => {
     if (!isAssistantRoute) {

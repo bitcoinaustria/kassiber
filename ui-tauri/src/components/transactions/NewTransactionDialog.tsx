@@ -44,7 +44,7 @@ import {
   isExternalPricingSource,
   isTwoLegNewTransactionFlow,
   austrianTaxClassificationOptions,
-  mockNewTransactionMovementCandidates,
+  newTransactionMovementCandidates,
   newTransactionFlowOptions,
   newTransactionNetworkOptions,
   newTransactionPricingOptions,
@@ -75,7 +75,7 @@ export function NewTransactionDialog({
   open,
   draft,
   walletSourceOptions,
-  movementCandidates = mockNewTransactionMovementCandidates,
+  movementCandidates = newTransactionMovementCandidates,
   onOpenChange,
   onDraftChange,
   onSaveDraft,
@@ -83,7 +83,7 @@ export function NewTransactionDialog({
   open: boolean;
   draft: NewTransactionDraft;
   walletSourceOptions: string[];
-  movementCandidates?: typeof mockNewTransactionMovementCandidates;
+  movementCandidates?: typeof newTransactionMovementCandidates;
   onOpenChange: (open: boolean) => void;
   onDraftChange: (draft: NewTransactionDraft) => void;
   onSaveDraft: () => void;

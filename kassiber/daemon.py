@@ -9473,8 +9473,8 @@ def _lightning_adapter_unavailable_error(kind: str) -> AppError:
         code="lightning_adapter_unavailable",
         hint=(
             f"Registered Lightning kinds: {registered}. Install the matching"
-            " Lightning sync (LND or Core Lightning), or run the desktop in"
-            " mock mode."
+            " Lightning sync (LND or Core Lightning) and configure that"
+            " connection."
         ),
         retryable=False,
     )
@@ -16416,7 +16416,10 @@ def handle_request(
                 f"daemon kind {kind!r} is not wired to real UI data yet",
                 request_id=request_id,
                 details={"kind": kind},
-                hint="Use VITE_DAEMON=mock for dashboard fixture development until typed UI snapshot kinds land.",
+                hint=(
+                    "Add a typed daemon handler and wire the kind through the"
+                    " desktop and browser-bridge allowlists."
+                ),
                 retryable=True,
             ),
             False,

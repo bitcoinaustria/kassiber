@@ -50,7 +50,7 @@ import {
   type AppLogRecord,
 } from "@/lib/appLogs";
 import { confirmAction } from "@/lib/confirmAction";
-import { isFilePickerAvailable, saveFile } from "@/lib/filePicker";
+import { isFileSaveAvailable, saveFile } from "@/lib/filePicker";
 import { appVersionLabel } from "@/lib/appVersion";
 import {
   pageHeaderActionClassName,
@@ -226,7 +226,7 @@ export function Logs() {
       },
     });
     try {
-      if (isFilePickerAvailable) {
+      if (isFileSaveAvailable) {
         const destination = await saveFile({
           title: t("logs.exportTitle"),
           defaultPath: filename,
@@ -269,7 +269,7 @@ export function Logs() {
       regex,
     });
     try {
-      if (isFilePickerAvailable) {
+      if (isFileSaveAvailable) {
         const destination = await saveFile({
           title: t("logs.exportSupportTitle"),
           defaultPath: filename,

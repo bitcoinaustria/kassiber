@@ -3,8 +3,7 @@
  *
  * Mirrors `kassiber/core/lightning/profitability.py::DEFAULT_OPEN_COST_SAT`
  * and the wallet kinds tuple. When the Python default changes, update this
- * file in the same commit so the mock daemon and Reports panel agree with
- * what live adapters return.
+ * file in the same commit so the Reports panel agrees with live adapters.
  */
 
 export const DEFAULT_OPEN_COST_SAT = 2_500;

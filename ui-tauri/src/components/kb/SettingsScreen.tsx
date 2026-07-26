@@ -905,7 +905,7 @@ export function SettingsScreen({
 
     setTouchIdEnrollPending(true);
     try {
-      const envelope = await getTransport("real").invoke({
+      const envelope = await getTransport().invoke({
         kind: "daemon.unlock",
         args: {
           ...(identity?.importedProject

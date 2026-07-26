@@ -630,14 +630,14 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 - [x] `ui-tauri/` workspace skeleton: Vite + React 19 + TS + Tailwind v4
   + TanStack Query/Router + Zustand + theme tokens (Bitcoin Austria palette)
-  + bundled Blinker/JetBrains Mono fonts + mock daemon transport. Claude
+  + bundled Blinker/JetBrains Mono fonts + typed daemon transport. Claude
   Design originals staged under `ui-tauri/claude-design/` for reference;
   translation lands in `ui-tauri/src/routes/` per phase 1.3.
 - [x] Configure shadcn registries for `@shadcnblocks` and `@blocks-so`,
   keep the local development API key in ignored `ui-tauri/.env`, and
   document `SHADCNBLOCKS_API_KEY` via `ui-tauri/.env.example`
 - [x] Add the shadcn primitives and block dependencies currently needed by
-  the mock shell and first dashboards: button/card/dialog/input/label/select/
+  the desktop shell and first dashboards: button/card/dialog/input/label/select/
   table/sidebar/sheet/dropdown-menu/tooltip/scroll-area/separator/switch/
   textarea/chart/avatar/skeleton. Future screens should still install only
   what they actually use.
@@ -748,10 +748,10 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ### 1.3 Read-only screens
 
-- [x] Overview dashboard shell using shadcn block components and mock daemon
-  fixture data
-- [x] Transactions dashboard shell using shadcn block components and mock
-  daemon fixture data
+- [x] Overview dashboard shell using shadcn block components and daemon-backed
+  snapshot data
+- [x] Transactions dashboard shell using shadcn block components and
+  daemon-backed transaction data
 - [x] Connections screen reshaped to the shared shadcn dashboard language,
   including connection metrics, source table, and the existing Add connection
   modal flow
@@ -784,7 +784,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   current-rule defaults without book-level long-term exemption controls,
   captures optional AI assistant intent with a disable-for-now button, opens
   existing local Kassiber roots through the native desktop picker, and
-  offers a dev-only mock preview shortcut.
+  supports the daemon-backed regtest browser preview.
 - [x] Replace the Overview mock fixture with a read-only
   `ui.overview.snapshot` daemon kind backed by the current SQLite profile
 - [x] Replace the Transactions table mock fixture with a read-only

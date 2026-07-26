@@ -4,26 +4,22 @@ import { OverviewDashboard } from "@/components/overview-dashboard/OverviewDashb
 import { ScreenNotice, ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon } from "@/daemon/client";
 import { normalizeOverviewSnapshot } from "@/lib/normalizeUiSnapshots";
-import { MOCK_OVERVIEW, type OverviewSnapshot } from "@/mocks/seed";
-import { isDaemonDataMode, useUiStore } from "@/store/ui";
+import type { OverviewSnapshot } from "@/mocks/seed";
 
 export function Overview() {
   const { t } = useTranslation("overview");
-  const dataMode = useUiStore((state) => state.dataMode);
   const { data, isLoading, isFetching, isError, error } =
     useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const hasLiveOverview =
     data?.kind === "ui.overview.snapshot" && Boolean(data.data);
-  const daemonBacked = isDaemonDataMode(dataMode);
-  const shouldUseMockOverview = !daemonBacked && !hasLiveOverview;
   const shouldShowLiveSkeleton =
-    daemonBacked && (isLoading || isFetching) && !hasLiveOverview;
+    (isLoading || isFetching) && !hasLiveOverview;
 
   if (shouldShowLiveSkeleton) {
     return <ScreenSkeleton titleWidth="w-32" />;
   }
 
-  if (daemonBacked && !hasLiveOverview) {
+  if (!hasLiveOverview) {
     return (
       <ScreenNotice
         title={t("screen.unavailableTitle")}
@@ -39,17 +35,12 @@ export function Overview() {
     );
   }
 
-  const snapshot =
-    hasLiveOverview && data.data
-      ? normalizeOverviewSnapshot(data.data)
-      : shouldUseMockOverview
-        ? MOCK_OVERVIEW
-        : data?.data;
+  const snapshot = normalizeOverviewSnapshot(data.data!);
 
   return (
     <OverviewDashboard
-      snapshot={snapshot ?? MOCK_OVERVIEW}
-      isSnapshotRefreshing={hasLiveOverview && isFetching}
+      snapshot={snapshot}
+      isSnapshotRefreshing={isFetching}
     />
   );
 }

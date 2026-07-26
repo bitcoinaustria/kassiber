@@ -113,9 +113,6 @@ describe("daemon mutation key", () => {
       "real",
       "ui.wallets.sync",
     ]);
-    expect(daemonMutationKey("mock", "ui.wallets.sync")).not.toEqual(
-      daemonMutationKey("real", "ui.wallets.sync"),
-    );
     expect(daemonMutationKey("regtest", "ui.wallets.sync")).toEqual([
       "daemon-mutation",
       "regtest",

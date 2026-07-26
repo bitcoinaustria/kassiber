@@ -51,7 +51,6 @@ export function AssistantSessionProvider({
     loadConversation,
     forgetSession,
   } = useAiChatStream();
-  const dataMode = useUiStore((state) => state.dataMode);
   const setAssistantDraft = useAssistantDraftStore((state) => state.setDraft);
   const [queuedPrompts, setQueuedPrompts] = React.useState<string[]>([]);
   const [incognito, setIncognito] = React.useState(false);
@@ -148,7 +147,7 @@ export function AssistantSessionProvider({
   const resumeSession = React.useCallback(
     async (targetSessionId: string) => {
       if (isStreaming) return;
-      const envelope = await getTransport(dataMode).invoke<StoredSessionShape>({
+      const envelope = await getTransport().invoke<StoredSessionShape>({
         kind: "ui.chat.sessions.get",
         request_id: makeDaemonRequestId(),
         args: { session_id: targetSessionId },
@@ -175,7 +174,7 @@ export function AssistantSessionProvider({
       seedHistoryPendingRef.current = false;
       loadConversation(entries, envelope.data?.id ?? targetSessionId);
     },
-    [dataMode, isStreaming, loadConversation, setAssistantDraft],
+    [isStreaming, loadConversation, setAssistantDraft],
   );
 
   const branchFromMessage = React.useCallback(

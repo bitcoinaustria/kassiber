@@ -9,7 +9,7 @@ import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { useCurrency } from "@/lib/currency";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
-import { MOCK_OVERVIEW, type OverviewSnapshot } from "@/mocks/seed";
+import type { OverviewSnapshot } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 
 import { BooksHealthPanel } from "./BooksHealthPanel";
@@ -27,11 +27,11 @@ import { WelcomeSection } from "./WelcomeSection";
 
 export const OverviewDashboard = ({
   className,
-  snapshot = MOCK_OVERVIEW,
+  snapshot,
   isSnapshotRefreshing = false,
 }: {
   className?: string;
-  snapshot?: OverviewSnapshot;
+  snapshot: OverviewSnapshot;
   isSnapshotRefreshing?: boolean;
 }) => {
   const [addConnectionOpen, setAddConnectionOpen] = React.useState(false);

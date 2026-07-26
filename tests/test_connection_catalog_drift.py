@@ -192,9 +192,9 @@ def _invoked_ui_daemon_kinds() -> dict[str, str]:
 
     Only genuine invocation sites count: the ``useDaemon*`` hooks (kind is the
     first argument) and inline ``transport.invoke`` / ``transport.stream``
-    calls (kind is the ``kind:`` field). Test files and the mock daemon are
-    skipped — the mock never consults an allowlist, so a kind only the mock
-    handles is not a packaged-app concern. Kinds the UI merely *handles*
+    calls (kind is the ``kind:`` field). Test and static fixture files are
+    skipped because they are not packaged-app invocation sites. Kinds the UI
+    merely *handles*
     (stream sub-records like ``ai.chat.delta``, unsolicited ``ui.freshness``
     events, or ``envelope.kind === ...`` checks) never appear as an invocation
     argument, so they are correctly excluded.
@@ -203,7 +203,7 @@ def _invoked_ui_daemon_kinds() -> dict[str, str]:
     invoked: dict[str, str] = {}
     for path in sorted(_UI_SRC_DIR.rglob("*.ts*")):
         name = path.as_posix()
-        if ".test." in name or "/mocks/" in name or "/daemon/mock" in name:
+        if ".test." in name or "/mocks/" in name:
             continue
         text = path.read_text(encoding="utf-8")
         for regex in (_WRAPPER_KIND_RE, _INLINE_KIND_RE):
@@ -415,11 +415,9 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
 
         The subset test above only proves the allowlist holds nothing the
         daemon cannot handle; it says nothing about a kind the UI invokes
-        that nobody allowlisted. That gap ships silently — mock dev mode
-        (``VITE_DAEMON=mock``) never consults an allowlist, so the feature
-        looks fine until the packaged app returns ``kind_not_allowed`` (or
-        ``dev:bridge`` returns HTTP 403). This test turns that runtime
-        surprise into a gate failure: when the UI wires a new ``ui.*``
+        that nobody allowlisted. The browser bridge and packaged app both
+        reject that gap, but this test turns the runtime failure into an
+        earlier gate failure: when the UI wires a new ``ui.*``
         invoke, add the kind to ``ALLOWED_DAEMON_KINDS`` in
         ``ui-tauri/src-tauri/src/lib.rs`` (and the matching
         ``ALLOWED_BRIDGE_KINDS`` in ``ui-tauri/vite.config.ts`` — the parity

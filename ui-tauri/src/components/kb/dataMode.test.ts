@@ -16,15 +16,4 @@ describe("sidebar data mode model", () => {
   it("coerces stale regtest mode back to live data outside regtest books", () => {
     expect(dataModeForActiveBackend("regtest", false)).toBe("real");
   });
-
-  it("coerces persisted mock mode to the daemon-backed side", () => {
-    expect(dataModeForActiveBackend("mock", true)).toBe("regtest");
-    expect(dataModeForActiveBackend("mock", false)).toBe("real");
-    expect(dataModeLabelKey(dataModeForActiveBackend("mock", true))).toBe(
-      "regtest",
-    );
-    expect(dataModeLabelKey(dataModeForActiveBackend("mock", false))).toBe(
-      "real",
-    );
-  });
 });

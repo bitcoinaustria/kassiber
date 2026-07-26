@@ -674,8 +674,8 @@ fixture set.
 `pnpm dev:demo` runs the Vite daemon bridge with
 `KASSIBER_DEV_DATA_ROOT` pointed at the demo book; the desktop preview then
 shows the regtest data mode instead of static fixtures. `pnpm dev:browser` is an
-alias for the same regtest-backed browser preview. Fixture responses remain for UI
-unit tests only; they are no longer an interactive data mode.
+alias for the same regtest-backed browser preview. Focused fixture objects remain
+in UI unit tests; there is no interactive mock transport.
 
 ### Making resync do something (`demo-tick`)
 

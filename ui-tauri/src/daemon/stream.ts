@@ -672,7 +672,6 @@ export function terminalAiChatStatus(
 
 /** React hook driving one assistant thread. */
 export function useAiChatStream(): UseAiChatStreamResult {
-  const dataMode = useUiStore((state) => state.dataMode);
   const queryClient = useQueryClient();
   const [messages, setMessages] = React.useState<AiChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = React.useState(false);
@@ -691,12 +690,8 @@ export function useAiChatStream(): UseAiChatStreamResult {
     DaemonStreamRecord<AiChatStreamRecordData>[]
   >([]);
   const flushTimerRef = React.useRef<number | null>(null);
-  const dataModeRef = React.useRef(dataMode);
   const mountedRef = React.useRef(true);
 
-  React.useEffect(() => {
-    dataModeRef.current = dataMode;
-  }, [dataMode]);
 
   const updateAssistant = React.useCallback(
     (
@@ -754,7 +749,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
       if (completedMutation) {
         invalidateDaemonQueriesForMutation(
           queryClient,
-          dataModeRef.current,
+          useUiStore.getState().dataMode,
           completedMutation,
         );
       }
@@ -798,7 +793,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
       flushTimerRef.current = null;
     }
     if (requestId) {
-      void getTransport(dataModeRef.current)
+      void getTransport()
         .invoke({
           kind: "ai.chat.cancel",
           request_id: makeDaemonRequestId(),
@@ -851,7 +846,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
       const requestId = makeDaemonRequestId();
       requestIdRef.current = requestId;
       try {
-        const transport = getTransport(dataMode);
+        const transport = getTransport();
         const envelope = (await transport.stream<
           AiChatTerminalShape,
           AiChatStreamRecordData
@@ -955,7 +950,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
         requestIdRef.current = null;
       }
     },
-    [dataMode, flushQueuedRecords, isStreaming, onRecord, updateAssistant],
+    [flushQueuedRecords, isStreaming, onRecord, updateAssistant],
   );
 
   const sendConsent = React.useCallback(
@@ -965,7 +960,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
       setPendingConsent(null);
       try {
         const envelope =
-          await getTransport(dataMode).invoke<AiToolConsentResponseShape>({
+          await getTransport().invoke<AiToolConsentResponseShape>({
             kind: "ai.tool_call.consent",
             request_id: makeDaemonRequestId(),
             args: buildToolConsentArgs(request, decision),
@@ -1028,7 +1023,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
         );
       }
     },
-    [dataMode, pendingConsent, updateAssistant],
+    [pendingConsent, updateAssistant],
   );
 
   const abort = React.useCallback(() => {

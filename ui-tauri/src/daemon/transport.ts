@@ -1,17 +1,15 @@
 /**
  * Daemon transport selector.
  *
- * Three runtime modes per docs/plan/04-desktop-ui.md §2.6:
- *   - "mock"   — fixture responses, no Python required (default dev mode)
- *   - "bridge" — Vite dev-server bridge to the Python daemon, dev-only
+ * Two runtime modes:
+ *   - "bridge" — Vite server bridge to the Python daemon for local browsers
  *   - "tauri"  — JSONL over stdin/stdout via Rust supervisor (production)
  *
  * The Tauri mode calls the Rust shell command boundary, which forwards
  * whitelisted requests to the local Python daemon.
  */
 
-import { mockDaemon, mockStream } from "./mock";
-import { isDaemonDataMode, useUiStore, type DataMode } from "@/store/ui";
+import { useUiStore } from "@/store/ui";
 import {
   emitAppLog,
   type AppLogField,
@@ -19,23 +17,20 @@ import {
 } from "@/lib/appLogs";
 import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
 
-export type DaemonMode = "mock" | "bridge" | "tauri";
+export type DaemonMode = "bridge" | "tauri";
 
 function defaultDaemonMode(): DaemonMode {
   if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
     return "tauri";
   }
-  if (import.meta.env.DEV) {
-    return "bridge";
-  }
-  return "mock";
+  return "bridge";
 }
 
 const RAW_MODE = (import.meta.env.VITE_DAEMON ?? defaultDaemonMode()) as string;
 
-if (!["mock", "bridge", "tauri"].includes(RAW_MODE)) {
+if (!["bridge", "tauri"].includes(RAW_MODE)) {
   throw new Error(
-    `VITE_DAEMON must be one of mock|bridge|tauri (got ${RAW_MODE})`,
+    `VITE_DAEMON must be one of bridge|tauri (got ${RAW_MODE})`,
   );
 }
 
@@ -626,7 +621,9 @@ export async function selectImportProjectDirectory(): Promise<ImportProjectSelec
     return response.selection;
   }
   if (DAEMON_MODE !== "tauri") {
-    throw new Error("Project import is available in the desktop app or dev bridge.");
+    throw new Error(
+      "Project import is available in the desktop app or browser bridge.",
+    );
   }
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<ImportProjectSelection | null>("select_import_project_directory");
@@ -642,7 +639,9 @@ async function activateImportProjectViaMode(
     return response.selection;
   }
   if (DAEMON_MODE !== "tauri") {
-    throw new Error("Project import is available in the desktop app or dev bridge.");
+    throw new Error(
+      "Project import is available in the desktop app or browser bridge.",
+    );
   }
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<ImportProjectSelection>("activate_import_project", {
@@ -689,9 +688,6 @@ export function noteActiveImportProject(selection: ImportProjectSelection): void
 }
 
 export async function clearImportProject(): Promise<void> {
-  if (DAEMON_MODE === "mock") {
-    return;
-  }
   importProjectActivationGeneration += 1;
   activeImportProjectActivation = null;
   if (DAEMON_MODE === "bridge") {
@@ -741,7 +737,9 @@ export function canResetRegtestDemo(dataRoot?: string | null): boolean {
 
 export async function resetRegtestDemo(): Promise<{ dataRoot: string }> {
   if (!canResetRegtestDemo()) {
-    throw new Error("Resetting the regtest demo is only available in the dev bridge.");
+    throw new Error(
+      "Resetting the regtest demo is only available in the browser bridge.",
+    );
   }
   const response = await fetch(RESET_REGTEST_BRIDGE_PATH, {
     method: "POST",
@@ -948,20 +946,8 @@ const bridgeDaemon: DaemonTransport = {
   },
 };
 
-export function getTransport(dataMode?: DataMode): DaemonTransport {
-  if (!isDaemonDataMode(dataMode ?? useUiStore.getState().dataMode)) {
-    return withDaemonLogging(
-      { invoke: mockDaemon.invoke, stream: mockStream },
-      "daemon:mock",
-    );
-  }
-
+export function getTransport(): DaemonTransport {
   switch (DAEMON_MODE) {
-    case "mock":
-      return withDaemonLogging(
-        { invoke: mockDaemon.invoke, stream: mockStream },
-        "daemon:mock",
-      );
     case "bridge":
       return withDaemonLogging(bridgeDaemon, "daemon:bridge");
     case "tauri":

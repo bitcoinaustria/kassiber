@@ -77,7 +77,7 @@ export function ImportProjectPanel({
     setOpenError(null);
     setOpeningProfileId(profile.id);
     try {
-      const envelope = await getTransport("real").invoke<{
+      const envelope = await getTransport().invoke<{
         activeProfileId: string;
       }>({
         kind: "ui.profiles.switch",

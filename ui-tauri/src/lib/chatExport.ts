@@ -1,5 +1,5 @@
 import type { AiChatMessage } from "@/daemon/stream";
-import { isFilePickerAvailable, saveFile } from "@/lib/filePicker";
+import { isFileSaveAvailable, saveFile } from "@/lib/filePicker";
 import { saveChatExportAs } from "@/lib/saveText";
 
 type ChatExportResult = "saved" | "download-started" | "cancelled";
@@ -84,7 +84,7 @@ export async function saveChatExport(
   const exportedAt = new Date();
   const filename = chatExportFilename(exportedAt);
   const contents = buildChatExportMarkdown(messages, exportedAt);
-  if (isFilePickerAvailable) {
+  if (isFileSaveAvailable) {
     const destination = await saveFile({
       title: "Save chat export",
       defaultPath: filename,

@@ -13,7 +13,7 @@ import {
   explorerTargetForTransaction,
   type ExplorerSettings,
 } from "@/lib/explorer";
-import { MOCK_OVERVIEW, type Tx } from "@/mocks/seed";
+import type { Tx } from "@/mocks/seed";
 
 export type TransactionStatus = "completed" | "pending" | "failed" | "review";
 
@@ -614,11 +614,6 @@ export function sourceKindForNetwork(
   return "offchain";
 }
 
-export const mockNewTransactionWalletSourceOptions = [
-  ...MOCK_OVERVIEW.connections.map((connection) => connection.label),
-  "External",
-];
-
 // `label` holds an i18n key (resolved with t() at the call site).
 export const newTransactionFlowOptions: Array<{
   value: TransactionFlow;
@@ -633,7 +628,7 @@ export const newTransactionFlowOptions: Array<{
 
 // `labelKey`/`detailKey` hold i18n keys (resolved with t() at the call site);
 // `id` stays a stable lookup key.
-export const mockNewTransactionMovementCandidates = [
+export const newTransactionMovementCandidates = [
   {
     id: "movement-ln-channel-open",
     labelKey: "transactions:movementCandidate.channelOpen.label",

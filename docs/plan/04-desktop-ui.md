@@ -66,8 +66,8 @@ malicious page could appear there.
   sees a hand-maintained type file that has drifted.
 - **HMR end-to-end.** Vite for the web layer; daemon hot-reload via watch
   mode in dev so backend handler tweaks don't require a full rebuild.
-- **Fixture transport for tests only.** Generated from the same JSON Schema
-  with fixture responses; interactive development uses the regtest demo book.
+- **Focused fixtures for unit tests only.** Interactive development uses the
+  real daemon with the persistent regtest demo book.
 - **Stack picks match v0/Lovable/Artifacts defaults** (React + TS +
   Tailwind + shadcn/ui + TanStack). Any AI-generated screen drops in with
   minimal reshaping.
