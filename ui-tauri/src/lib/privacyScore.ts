@@ -164,12 +164,6 @@ export interface PrivacyScoreModel {
 // English (like the raw tell kinds); only the wrapper strings are localized.
 export type HeuristicStatus = "computed" | "partial" | "not_local";
 
-export const HEURISTIC_STATUS_HEX: Record<HeuristicStatus, string> = {
-  computed: "#22c55e",
-  partial: "#f59e0b",
-  not_local: "#6b7280",
-};
-
 export const AIE_HEURISTIC_COVERAGE: Array<{ id: string; name: string; status: HeuristicStatus }> = [
   { id: "h3", name: "Common input ownership", status: "computed" },
   { id: "h8", name: "Address reuse", status: "computed" },

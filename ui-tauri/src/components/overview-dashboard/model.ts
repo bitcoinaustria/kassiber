@@ -378,18 +378,6 @@ export function formatDriverValue(
   return formatCompactDisplayMoney(btc * fiatRate, fiatRate, currency, fiatCurrency);
 }
 
-export function formatDetailedPortfolioMoney(
-  amount: number,
-  fiatRate: number,
-  currency: Currency,
-  fiatCurrency = "EUR",
-) {
-  if (currency === "btc") {
-    return formatBtc(amount, { precision: Math.abs(amount) < 0.01 ? 8 : 4 });
-  }
-  return formatDisplayMoney(amount, fiatRate, currency, fiatCurrency);
-}
-
 export function activeMarketFiatCurrency(snapshot: OverviewSnapshot) {
   return (
     snapshot.marketRate?.fiatCurrency ??
@@ -1447,14 +1435,6 @@ export function formatFiatPrice(value: number, fiatCurrency = "EUR") {
   return `${rounded} ${fiatCurrency}`;
 }
 
-export function formatEurPrice(eur: number) {
-  return formatFiatPrice(eur, "EUR");
-}
-
-export function treasuryPrimaryValue(point: TreasuryChartPoint) {
-  return point.balanceBtc;
-}
-
 export function formatBtcAxis(value: number) {
   const precision = Math.abs(value) >= 10 ? 0 : Math.abs(value) >= 1 ? 2 : 3;
   return formatBtc(value, { precision }).replace("₿ ", "₿");
@@ -1798,33 +1778,6 @@ export function enrichTreasuryChartData(
   });
 }
 
-export function buildTreasuryChartStats(points: TreasuryChartPoint[]) {
-  if (!points.length) return null;
-  const firstPoint = points[0];
-  const lastPoint = points[points.length - 1] ?? firstPoint;
-  const first = treasuryPrimaryValue(firstPoint);
-  const last = treasuryPrimaryValue(lastPoint);
-  const delta = last - first;
-  const highPoint = points.reduce((highest, point) =>
-    treasuryPrimaryValue(point) > treasuryPrimaryValue(highest)
-      ? point
-      : highest,
-  );
-  const lowPoint = points.reduce((lowest, point) =>
-    treasuryPrimaryValue(point) < treasuryPrimaryValue(lowest)
-      ? point
-      : lowest,
-  );
-  return {
-    first,
-    last,
-    delta,
-    pct: first !== 0 ? (delta / Math.abs(first)) * 100 : null,
-    highPoint,
-    lowPoint,
-  };
-}
-
 export function activityMarkerView(
   plottedData: TreasuryChartPoint[],
   showEvents: boolean,
@@ -1976,34 +1929,6 @@ export function brushedActivityMarkers(
     selectedChartDisplayData.map((point) => String(point.date)),
   );
   return activityMarkers.filter((point) => selectedDates.has(String(point.date)));
-}
-
-export function expandFallbackYearData(
-  data: Array<{ month: string; thisYear: number; prevYear: number }>,
-  priceEur: number,
-) {
-  return data.flatMap((point, index) => {
-    if (index === 0) return [point];
-    const previous = data[index - 1];
-    const swing = Math.sin(index * 2.43) * 0.06;
-    const midValue =
-      previous.thisYear + (point.thisYear - previous.thisYear) * 0.52;
-    const midBasis =
-      previous.prevYear + (point.prevYear - previous.prevYear) * 0.52;
-    return [
-      {
-        month: `${point.month} · 1`,
-        thisYear: Math.max(0, midValue * (1 + swing)),
-        prevYear: Math.max(0, midBasis),
-      },
-      point,
-    ];
-  }).map((point) => ({
-    ...point,
-    thisYear: Math.round(point.thisYear * 100) / 100,
-    prevYear: Math.round(point.prevYear * 100) / 100,
-    balanceBtc: btcFromEur(point.thisYear, priceEur),
-  }));
 }
 
 export function samplePortfolioPoints(

@@ -17,10 +17,6 @@ export function hasSessionUnlockPassphrase(): boolean {
   return unlockedDaemonSession;
 }
 
-export function getSessionUnlockBackoffMs(): number {
-  return 0;
-}
-
 export async function verifySessionUnlockPassphrase(
   passphrase: string,
 ): Promise<boolean> {

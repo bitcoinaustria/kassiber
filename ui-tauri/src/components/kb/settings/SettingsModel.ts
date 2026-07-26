@@ -13,11 +13,6 @@ import {
   CLN_PRESENCE_SENTINEL_LIGHTNING_DIR,
   CLN_PRESENCE_SENTINEL_RPC_FILE,
 } from "@/lib/lightning";
-import {
-  DEFAULT_BACKEND_NAME,
-  DEFAULT_BACKEND_URL,
-} from "@/components/kb/Onboarding/constants";
-
 export const PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA";
 export const KRAKEN_OHLCVT_SUPPORT_URL =
   "https://support.kraken.com/hc/articles/360047124832-Downloadable-historical-OHLCVT-Open-High-Low-Close-Volume-Trades-data";
@@ -348,50 +343,6 @@ export function formatModelSummary(models: AiModelRow[]): string {
   if (ids.length <= 3) return ids.join(", ");
   return `${ids.slice(0, 3).join(", ")} +${ids.length - 3}`;
 }
-
-export const DEFAULT_BACKENDS: Backend[] = [
-  {
-    id: "b1",
-    name: DEFAULT_BACKEND_NAME,
-    url: DEFAULT_BACKEND_URL,
-    net: "BTC",
-    health: "#893,014 - 2m",
-    on: true,
-    auth: "none",
-  },
-  {
-    id: "b2",
-    name: "BullBitcoin Liquid Electrum",
-    url: "ssl://les.bullbitcoin.com:995",
-    net: "LIQUID",
-    kind: "electrum",
-    health: "Electrum / Fulcrum",
-    on: true,
-    auth: "none",
-  },
-  {
-    id: "b3",
-    name: "Coinbase Exchange",
-    url: "https://api.exchange.coinbase.com",
-    net: "FX",
-    health: "Built-in default provider",
-    on: true,
-    auth: "none",
-  },
-  {
-    id: "b4",
-    name: "CoinGecko",
-    url: "https://api.coingecko.com/api/v3",
-    net: "FX",
-    health: "Built-in fallback provider",
-    on: false,
-    auth: "none",
-  },
-];
-
-export const DEFAULT_RATE_BACKENDS: Backend[] = DEFAULT_BACKENDS.filter(
-  (backend) => backend.net === "FX",
-);
 
 function isHttpEndpoint(url: string) {
   try {

@@ -126,10 +126,6 @@ export function rankSearchResults(
     : ranked;
 }
 
-export function searchResultMatches(result: SearchResult, query: string) {
-  return rankSearchResult(result, query) !== null;
-}
-
 function compareRankedResults(a: RankedSearchResult, b: RankedSearchResult) {
   if (b.match.score !== a.match.score) return b.match.score - a.match.score;
   const titleOrder = a.title.localeCompare(b.title);

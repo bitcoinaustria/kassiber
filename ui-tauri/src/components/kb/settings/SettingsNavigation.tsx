@@ -214,8 +214,6 @@ export const SETTINGS_GROUP_ORDER: SettingsGroup[] = [
   "Desktop",
 ];
 
-export const DEFAULT_SETTINGS_SECTION: SettingsSectionId = "general-appearance";
-
 export function sectionMeta(id: SettingsSectionId): SettingsSectionMeta {
   return (
     SETTINGS_SECTIONS.find((section) => section.id === id) ??
