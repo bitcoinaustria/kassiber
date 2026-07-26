@@ -83,7 +83,7 @@ const ExplainerShell = ({
                   <p className="m-0 text-sm font-semibold text-ink">
                     {optTitle}
                     {active && (
-                      <span className="ml-2 font-mono text-3xs font-medium uppercase tracking-[0.12em] text-[var(--kb-accent)]">
+                      <span className="ml-2 font-mono text-3xs font-medium uppercase tracking-[0.12em] text-[var(--kb-accent-text)]">
                         {t("explainer.selected")}
                       </span>
                     )}
