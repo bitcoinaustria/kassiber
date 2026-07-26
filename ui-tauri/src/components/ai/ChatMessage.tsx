@@ -241,7 +241,7 @@ function UserMessage({
             aria-label={t("message.edit")}
             className="min-h-[60px] w-full resize-none rounded-2xl bg-secondary text-sm"
           />
-          <div className="mt-1 flex items-center justify-end gap-0.5 text-muted-foreground">
+          <div className="mt-1 flex items-center justify-end gap-1.5 text-muted-foreground">
             <Button
               type="button"
               variant="ghost"
@@ -295,7 +295,7 @@ function UserMessage({
         </p>
       </div>
       {canCollapse || canEdit ? (
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-1.5">
           {canCollapse ? (
             <Button
               type="button"
@@ -380,7 +380,7 @@ function ChatMessageActions({
   }, [canSpeak, speaking, message.content]);
 
   return (
-    <div className="mt-1.5 flex items-center gap-0.5 text-muted-foreground opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/assistant:opacity-100">
+    <div className="mt-1.5 flex items-center gap-1.5 text-muted-foreground opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/assistant:opacity-100">
       <Button
         type="button"
         variant="ghost"
