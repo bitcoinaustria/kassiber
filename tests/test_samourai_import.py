@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from kassiber.core import samourai as core_samourai
-from kassiber.core.engines import build_tax_engine
+from kassiber.core.engines import GenericRP2TaxEngine
 from kassiber.core.output_inventory import (
     list_wallet_output_inventory,
     update_wallet_output_inventory,
@@ -693,7 +693,7 @@ class SamouraiImportTest(unittest.TestCase):
                 )
             ),
         ]
-        state = build_tax_engine(profile).build_ledger_state(
+        state = GenericRP2TaxEngine(profile).build_ledger_state(
             finalized_tax_inputs(profile,
                 rows=rows,
                 wallet_refs_by_id=wallet_refs,
@@ -871,7 +871,7 @@ class SamouraiImportTest(unittest.TestCase):
                 )
             ),
         ]
-        state = build_tax_engine(profile).build_ledger_state(
+        state = GenericRP2TaxEngine(profile).build_ledger_state(
             finalized_tax_inputs(profile,
                 rows=rows,
                 wallet_refs_by_id=wallet_refs,

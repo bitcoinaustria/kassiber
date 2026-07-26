@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Mapping, Sequence
 
 from ..custody_tax_projection import FinalizedTaxProjection
 
@@ -48,18 +48,7 @@ class TaxEngineLedgerResult:
     wallet_holdings: dict[tuple[Any, ...], dict[str, Any]]
 
 
-class TaxEngine(Protocol):
-    """Profile-level tax engine interface.
-
-    Engines receive a finalized tax projection and return journal state.
-    """
-
-    def build_ledger_state(self, inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult:
-        """Return aggregated ledger state for one profile."""
-
-
 __all__ = [
-    "TaxEngine",
     "TaxEngineLedgerInputs",
     "TaxEngineLedgerResult",
 ]

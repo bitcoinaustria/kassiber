@@ -69,10 +69,12 @@ carried-basis math for reviewed Neu cross-asset swaps.
 
 ## Current Engine Boundary
 
-The shared engine seam is intentionally narrow:
+The RP2 engine boundary is intentionally narrow:
 
 ```python
-TaxEngine.build_ledger_state(inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult
+GenericRP2TaxEngine.build_ledger_state(
+    inputs: TaxEngineLedgerInputs,
+) -> TaxEngineLedgerResult
 ```
 
 `TaxEngineLedgerResult` returns journal entries, quarantines, transfer audit

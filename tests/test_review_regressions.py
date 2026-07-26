@@ -38,7 +38,7 @@ from kassiber.core import custody_journal as core_custody_journal
 from kassiber.core import pricing
 from kassiber.core import rates as core_rates
 from kassiber.core.engines import rp2 as rp2_engine
-from kassiber.core.engines import build_tax_engine
+from kassiber.core.engines import GenericRP2TaxEngine
 from kassiber.core.reports import (
     ReportHooks,
     _generic_report_transfer_pair_rows,
@@ -8816,7 +8816,7 @@ class ReviewRegressionTest(unittest.TestCase):
         )
 
     def _direct_engine_snapshot(self, profile, inputs):
-        state = build_tax_engine(profile).build_ledger_state(inputs)
+        state = GenericRP2TaxEngine(profile).build_ledger_state(inputs)
         return {
             "entries": _normalize_engine_entries(state.entries),
             "quarantines": _normalize_quarantines(state.quarantines),
@@ -12072,7 +12072,7 @@ class ReviewRegressionTest(unittest.TestCase):
         disposal's pool and raised "Total in-transaction crypto value < total taxable crypto value".
         """
         profile, inputs = self._direct_austrian_transfer_then_sell_inputs()
-        state = build_tax_engine(profile).build_ledger_state(inputs)
+        state = GenericRP2TaxEngine(profile).build_ledger_state(inputs)
         entries = _normalize_engine_entries(state.entries)
 
         # No quarantine / no crash: the sale from wallet-b computes against the global Neu pool.
@@ -12143,7 +12143,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 "created_at": occurred_at,
             }
 
-        state = build_tax_engine(profile).build_ledger_state(
+        state = GenericRP2TaxEngine(profile).build_ledger_state(
             finalized_tax_inputs(
                 profile,
                 rows=[
@@ -12261,7 +12261,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 "created_at": occurred_at,
             }
 
-        state = build_tax_engine(profile).build_ledger_state(
+        state = GenericRP2TaxEngine(profile).build_ledger_state(
             finalized_tax_inputs(
                 profile,
                 rows=[
@@ -12327,7 +12327,7 @@ class ReviewRegressionTest(unittest.TestCase):
 
     def test_austrian_direct_swap_payout_carries_then_disposes(self):
         profile, inputs = self._direct_austrian_swap_payout_inputs()
-        state = build_tax_engine(profile).build_ledger_state(inputs)
+        state = GenericRP2TaxEngine(profile).build_ledger_state(inputs)
         entries = _normalize_engine_entries(state.entries)
 
         self.assertEqual(state.quarantines, [])
@@ -12408,7 +12408,7 @@ class ReviewRegressionTest(unittest.TestCase):
             "tax_long_term_days": 365,
             "gains_algorithm": "FIFO",
         }
-        state = build_tax_engine(profile).build_ledger_state(inputs)
+        state = GenericRP2TaxEngine(profile).build_ledger_state(inputs)
         entries = _normalize_engine_entries(state.entries)
 
         self.assertEqual(state.quarantines, [])
@@ -12486,7 +12486,7 @@ class ReviewRegressionTest(unittest.TestCase):
             )
 
         with patch.object(rp2_engine, "normalize_tax_asset_inputs", side_effect=spy_normalize):
-            build_tax_engine(profile).build_ledger_state(sorted_inputs)
+            GenericRP2TaxEngine(profile).build_ledger_state(sorted_inputs)
 
         self.assertTrue(btc_orders)
         positions = {
@@ -12505,7 +12505,7 @@ class ReviewRegressionTest(unittest.TestCase):
 
     def test_generic_direct_swap_payout_uses_reviewed_sale_proceeds(self):
         profile, inputs = self._direct_generic_swap_payout_inputs()
-        state = build_tax_engine(profile).build_ledger_state(inputs)
+        state = GenericRP2TaxEngine(profile).build_ledger_state(inputs)
         entries = _normalize_engine_entries(state.entries)
 
         self.assertEqual(state.quarantines, [])
@@ -12873,7 +12873,7 @@ class ReviewRegressionTest(unittest.TestCase):
 
         self.assertEqual(calls, [{"BTC", "LBTC"}])
 
-    def test_build_tax_engine_accepts_austrian_profile_and_routes_to_rp2_at(self):
+    def test_rp2_engine_accepts_austrian_profile_and_routes_to_rp2_at(self):
         profile = {
             "id": "profile-at",
             "workspace_id": "workspace-main",
@@ -12883,7 +12883,7 @@ class ReviewRegressionTest(unittest.TestCase):
             "tax_long_term_days": 365,
             "gains_algorithm": "moving_average_at",
         }
-        engine = build_tax_engine(profile)
+        engine = GenericRP2TaxEngine(profile)
         self.assertIsNotNone(engine)
         # Policy should reflect rp2's AT plugin — moving_average_at default,
         # English fallback generators, and Austrian accounting methods.
@@ -12971,7 +12971,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 }
             ],
         )
-        state = build_tax_engine(profile).build_ledger_state(inputs)
+        state = GenericRP2TaxEngine(profile).build_ledger_state(inputs)
         self.assertEqual(state.entries, [])
         self.assertEqual(len(state.quarantines), 2)
         reasons_by_id = {q["transaction_id"]: q["reason"] for q in state.quarantines}

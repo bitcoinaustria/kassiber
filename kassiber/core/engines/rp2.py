@@ -15,7 +15,7 @@ from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 from ...errors import AppError
 from ...msat import btc_to_msat, dec, msat_to_btc
-from ...tax_policy import build_tax_policy
+from ...tax_policy import build_tax_policy, require_tax_processing_supported
 from ...transfers import is_bitcoin_rail_pair
 from .. import pricing
 from ..ownership_transfers import (
@@ -2067,9 +2067,10 @@ def _apply_generic_bitcoin_rail_carry_values(
 
 
 class GenericRP2TaxEngine:
-    """Current generic RP2-backed implementation behind the engine seam."""
+    """RP2-backed tax engine for every supported profile."""
 
     def __init__(self, profile: Mapping[str, Any]):
+        require_tax_processing_supported(profile)
         self.profile = profile
 
     def _build_finalized_ledger_state(
