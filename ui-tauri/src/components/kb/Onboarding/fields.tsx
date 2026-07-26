@@ -63,7 +63,7 @@ export const TextField = ({
       {showHint && (
         <p
           id={`${name}-hint`}
-          className="m-0 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--kb-accent)]"
+          className="m-0 font-mono text-2xs uppercase tracking-[0.08em] text-[var(--kb-accent)]"
         >
           {hint}
         </p>
@@ -116,7 +116,7 @@ export const NumberField = ({
       {showHint && (
         <p
           id={`${name}-hint`}
-          className="m-0 font-mono text-[10px] uppercase tracking-[0.08em] text-[var(--kb-accent)]"
+          className="m-0 font-mono text-2xs uppercase tracking-[0.08em] text-[var(--kb-accent)]"
         >
           {hint}
         </p>

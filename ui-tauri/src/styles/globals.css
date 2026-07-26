@@ -45,6 +45,22 @@
   --font-mono:
     "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
+  /*
+   * Two steps below `text-xs`, because the app had four arbitrary rungs down
+   * there — text-[11px], [10px], [9px], [8px] — spanning 3px in total. Sized in
+   * rem so they track the root font-size like every other step: the literals
+   * did not, so on a densified laptop viewport `text-xs` fell to 8.6px while a
+   * `text-[10px]` label stayed at 10px, inverting the hierarchy, and neither
+   * responded to the user's zoom at all.
+   *
+   * The values reproduce today's rendered size at the default scale (root
+   * 14.4px = 16 x 0.9), so this is a behaviour fix rather than a restyle. No
+   * paired `--text-*--line-height`, so leading stays the inherited 1.5x the
+   * arbitrary values had.
+   */
+  --text-2xs: 0.694rem;
+  --text-3xs: 0.625rem;
+
   --shadow-hard-ink: 8px 8px 0 #222222;
   --shadow-hard-accent: 3px 3px 0 #e3000f;
 
@@ -412,16 +428,32 @@
   --stage-paper-mid: #eae7e0;
   --stage-paper-bottom: #dedad1;
   --stage-glow: #ffffff;
+  --stage-glow-peak: 0.42;
+  --stage-glow-soft: 0.14;
   --stage-rule: rgb(34 34 34 / 20%);
   --stage-column: rgb(34 34 34 / 11%);
   --stage-ink: #222222;
 }
 
+/*
+ * Dark mode runs the page a step lower than light does, and it is the only
+ * theme where that is a legibility question rather than a taste one: the header
+ * text is relit to white here (see `.dark .kb-stage-header-content` below), and
+ * white has to hold up against the *brightest* point of the art — the glow's
+ * peak sitting over the top paper stop. At the previous values that composite
+ * came out rgb(127,129,134), which is 3.9:1 against white and 2.8:1 against the
+ * 72% muted variant: under the 4.5:1 AA floor for text and under even the 3:1
+ * floor for UI. Paper down 10%, glow dimmed 8% and its peak from 0.42 to 0.34
+ * lifts those to 5.3:1 and 3.7:1 while keeping the sheet plainly lighter than
+ * the near-black nav it is laid on, which is the whole point of the dark page.
+ */
 .dark .kb-stage-ledger {
-  --stage-paper-top: #45454b;
-  --stage-paper-mid: #383840;
-  --stage-paper-bottom: #2a2a31;
-  --stage-glow: #cfd3d8;
+  --stage-paper-top: #3e3e44;
+  --stage-paper-mid: #32323a;
+  --stage-paper-bottom: #26262c;
+  --stage-glow: #bec2c7;
+  --stage-glow-peak: 0.34;
+  --stage-glow-soft: 0.11;
   --stage-rule: rgb(255 255 255 / 24%);
   --stage-column: rgb(255 255 255 / 13%);
   --stage-ink: #e8e8ea;

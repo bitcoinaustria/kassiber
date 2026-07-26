@@ -156,7 +156,7 @@ export function FirstSyncCard({
                 ? ` — ${Math.round(value)}%`
                 : ` — ${t("firstSync.working")}`}
             </span>
-            <div className="flex h-[14px] items-center justify-between gap-3 text-[11px] font-medium leading-none">
+            <div className="flex h-[14px] items-center justify-between gap-3 text-xs font-medium leading-none">
               <span className="min-w-0 truncate text-primary" title={statusLabel}>
                 {progressMain}
               </span>
@@ -240,7 +240,7 @@ export function FirstSyncCard({
         </ul>
 
         <div className="mt-5 flex flex-col items-center gap-2.5 border-t border-border/60 pt-4">
-          <p className="text-center text-[11px] leading-snug text-muted-foreground">
+          <p className="text-center text-xs leading-snug text-muted-foreground">
             {failed ? t("firstSync.failedHint") : t("firstSync.keepUsing")}
           </p>
           <Button

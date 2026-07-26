@@ -34,7 +34,7 @@ export function KbCard({
     >
       {title !== undefined && (
         <div className="flex h-9 flex-shrink-0 items-center justify-between border-b border-border px-3.5">
-          <span className="font-sans text-[13px] font-semibold tracking-[0.005em] text-foreground">
+          <span className="font-sans text-sm font-semibold tracking-[0.005em] text-foreground">
             {title}
           </span>
           {action}

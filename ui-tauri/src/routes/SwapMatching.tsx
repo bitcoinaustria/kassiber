@@ -1851,7 +1851,7 @@ function PairedSwaps({
       <div className="overflow-hidden rounded-lg border bg-card">
         <header className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
           <div className="min-w-0 space-y-1">
-            <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
+            <p className="text-2xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
               {t("swap.paired.label")}
             </p>
             <h1 className="text-base font-semibold">{title}</h1>
@@ -1919,7 +1919,7 @@ function PairedSwaps({
                     <TableRow className="bg-muted/30 hover:bg-muted/30">
                       <TableCell colSpan={6} className="py-2">
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                          <Badge variant="secondary" className="font-mono text-[10px]">
+                          <Badge variant="secondary" className="font-mono text-2xs">
                             {group.sourceCount}→{group.sinkCount}
                           </Badge>
                           <span className="font-medium">
@@ -2083,12 +2083,12 @@ function PairingCell({ pair }: { pair: PairedSwap }) {
     : null;
   return (
     <div className="space-y-1">
-      <Badge variant="outline" className="text-[11px]">
+      <Badge variant="outline" className="text-xs">
         {pair.kind}
       </Badge>
       <div className="text-xs text-muted-foreground">{pair.policy}</div>
       {sourceLabel || confidenceLabel ? (
-        <div className="text-[11px] text-muted-foreground/80">
+        <div className="text-xs text-muted-foreground/80">
           {sourceLabel}
           {sourceLabel && confidenceLabel ? " · " : null}
           {confidenceLabel}
@@ -2257,7 +2257,7 @@ function PairedDetailSheet({
                     </SelectContent>
                   </Select>
                   {sameAsset ? (
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {t("swap.paired.sameAssetTaxableHint")}
                     </p>
                   ) : null}
@@ -2879,7 +2879,7 @@ function PairingReview({
         <div className="overflow-hidden rounded-lg border bg-card">
           <header className="flex flex-col gap-2.5 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
             <div className="min-w-0">
-              <p className="text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
+              <p className="text-2xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
                 {t("swap.queueLabel")}
               </p>
               <div className="mt-0.5 flex flex-wrap items-center gap-2">
@@ -3109,13 +3109,13 @@ function PairingReview({
                     className="flex flex-wrap items-center gap-2 rounded border border-border/60 bg-background px-2 py-1"
                   >
                     <span className="font-medium">{rule.name ?? t("swap.rules.unnamed")}</span>
-                    <code className="rounded bg-muted px-1 text-[10px]">
+                    <code className="rounded bg-muted px-1 text-2xs">
                       {Object.entries(rule.predicate)
                         .filter(([, v]) => v !== null && v !== "")
                         .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
                         .join(" · ") || t("swap.rules.anyCandidate")}
                     </code>
-                    <Badge variant="outline" className="text-[10px]">
+                    <Badge variant="outline" className="text-2xs">
                       {rule.kind} · {rule.policy}
                     </Badge>
                     <div className="ml-auto flex items-center gap-2">
@@ -3593,7 +3593,7 @@ function SwapLegInline({
           <span aria-hidden="true">·</span>
           <span className="shrink-0">{formatTimestamp(timestamp)}</span>
         </div>
-        <div className={cn("mt-1 truncate font-mono text-[11px] text-muted-foreground/80", blurClass(hideSensitive))}>
+        <div className={cn("mt-1 truncate font-mono text-xs text-muted-foreground/80", blurClass(hideSensitive))}>
           id {compactRecordId(txId)}
         </div>
       </div>
@@ -3610,7 +3610,7 @@ function SwapLegInline({
           {formatBtc(amount)}
         </div>
         {showAllocation ? (
-          <div className="mt-0.5 text-[10px] text-muted-foreground">
+          <div className="mt-0.5 text-2xs text-muted-foreground">
             {fullAmount !== undefined && fullAmount !== amount
               ? `${t("swap.paired.allocatedOf")} ${formatBtc(fullAmount)}`
               : t("swap.paired.allocated")}
@@ -4392,7 +4392,7 @@ function RailBadge({ rail, asset }: RailBadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase",
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-2xs font-medium uppercase",
         details.className,
       )}
       title={`${details.label} ${displayAssetLabel(asset)}`}
@@ -4453,7 +4453,7 @@ function SwapStatusCell({ candidate, conflicted, hiddenSiblings }: SwapStatusCel
       <span className={cn("size-2 shrink-0 rounded-full", dotClass)} aria-hidden="true" />
       <span className={cn("text-sm", labelClass)}>{label}</span>
       {candidate.rule_match ? (
-        <Badge variant="outline" className="px-1 py-0 text-[9px] leading-tight">
+        <Badge variant="outline" className="px-1 py-0 text-3xs leading-tight">
           {t("swap.table.ruleBadge")}
         </Badge>
       ) : null}

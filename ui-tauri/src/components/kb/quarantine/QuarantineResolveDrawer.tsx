@@ -37,7 +37,7 @@ export function QuarantineResolveDrawer({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-[92vw] gap-0 p-0 sm:max-w-xl">
         <SheetHeader className="border-b px-5 py-4">
-          <div className="flex items-center gap-2 text-[10px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
+          <div className="flex items-center gap-2 text-2xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
             <Sparkles className="size-3.5" aria-hidden="true" />
             {t("quarantine.resolvePlan.eyebrow")}
           </div>
@@ -155,7 +155,7 @@ function ResolveStepCard({
 
           {step.previewRows.length ? (
             <div className="mt-3 space-y-1.5">
-              <p className="text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+              <p className="text-2xs font-medium tracking-[0.14em] text-muted-foreground uppercase">
                 {t("quarantine.resolvePlan.affectedRows")}
               </p>
               {step.previewRows.map((row) => (
@@ -165,17 +165,17 @@ function ResolveStepCard({
                 >
                   <div className="min-w-0">
                     <p className="truncate font-medium">{row.event}</p>
-                    <p className="truncate text-[11px] text-muted-foreground">
+                    <p className="truncate text-xs text-muted-foreground">
                       {row.id} · {row.account}
                     </p>
                   </div>
-                  <span className="self-center font-mono text-[11px] text-muted-foreground">
+                  <span className="self-center font-mono text-xs text-muted-foreground">
                     {row.amount}
                   </span>
                 </div>
               ))}
               {step.count > step.previewRows.length ? (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t("quarantine.resolvePlan.moreRows", {
                     count: step.count - step.previewRows.length,
                   })}

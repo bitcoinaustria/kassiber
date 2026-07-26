@@ -148,7 +148,7 @@ export function WalletBalanceHistoryCard({
           </div>
           {!query.isLoading ? (
             <div className="shrink-0 text-right">
-              <div className="text-[10px] font-medium text-muted-foreground">
+              <div className="text-2xs font-medium text-muted-foreground">
                 {t("detail.balanceHistory.change", {
                   count: points.length || 12,
                 })}

@@ -32,7 +32,7 @@ export function RangeTabs({ value, onChange, className }: RangeTabsProps) {
             key={id}
             onClick={() => onChange(id)}
             className={cn(
-              "cursor-pointer border px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]",
+              "cursor-pointer border px-1.5 py-0.5 font-mono text-2xs font-semibold uppercase tracking-[0.08em]",
               active
                 ? "border-ink bg-ink text-paper"
                 : "border-line bg-transparent text-ink-2",

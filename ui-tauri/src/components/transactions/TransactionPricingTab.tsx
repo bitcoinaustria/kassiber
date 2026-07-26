@@ -212,7 +212,7 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                             }
                             placeholder={t("pricing.evidencePlaceholder")}
                           />
-                          <p className="text-[11px] text-muted-foreground">
+                          <p className="text-xs text-muted-foreground">
                             <Trans
                               i18nKey="pricing.attachHint"
                               ns="transactions"
@@ -257,7 +257,7 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                           )}
                         >
                           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase text-muted-foreground">
+                            <div className="flex items-center gap-1.5 text-2xs font-medium uppercase text-muted-foreground">
                               {isCoarsePricing ? (
                                 <AlertTriangle
                                   className="size-3 text-amber-600 dark:text-amber-400"

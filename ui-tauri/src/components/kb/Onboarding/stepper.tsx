@@ -50,7 +50,7 @@ export const OnboardingStepper = ({
               >
                 <span
                   className={cn(
-                    "flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold transition-colors",
+                    "flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors",
                     done
                       ? "border-ink bg-ink text-paper"
                       : active

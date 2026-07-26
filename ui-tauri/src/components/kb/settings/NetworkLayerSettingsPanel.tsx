@@ -143,12 +143,12 @@ export function BackendLayerCard({
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{backend.name}</span>
             {backend.isDefault ? (
-              <span className="inline-flex items-center rounded-md border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+              <span className="inline-flex items-center rounded-md border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-primary">
                 Default
               </span>
             ) : null}
             {!backend.on ? (
-              <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
+              <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
                 <AlertTriangle className="size-3" aria-hidden="true" />
                 No endpoint
               </span>

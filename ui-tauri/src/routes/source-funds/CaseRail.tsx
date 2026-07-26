@@ -75,7 +75,7 @@ export function CaseRail({ state }: { state: SourceFundsCaseState }) {
     <aside className="flex h-fit flex-col gap-4 lg:sticky lg:top-4">
       <div className="kb-surface-inset">
         <div className="border-b px-4 py-3">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Source of funds
           </div>
           <div className="mt-0.5 text-sm font-semibold">
@@ -109,7 +109,7 @@ export function CaseRail({ state }: { state: SourceFundsCaseState }) {
                 <span
                   aria-hidden="true"
                   className={[
-                    "z-10 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold",
+                    "z-10 mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
                     done
                       ? "border-emerald-600/40 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
                       : active
@@ -140,7 +140,7 @@ export function CaseRail({ state }: { state: SourceFundsCaseState }) {
 
       <div className="kb-surface-inset px-4 py-3">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Case state
           </span>
           {state.report ? (
@@ -190,7 +190,7 @@ export function CaseRail({ state }: { state: SourceFundsCaseState }) {
             {state.warnings.length}
           </dd>
         </dl>
-        <p className="mt-3 border-t pt-2 text-[11px] leading-snug text-muted-foreground">
+        <p className="mt-3 border-t pt-2 text-xs leading-snug text-muted-foreground">
           Reviewed local evidence only. Nothing leaves this device until you
           export a frozen case.
         </p>

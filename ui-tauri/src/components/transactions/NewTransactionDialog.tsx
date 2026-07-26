@@ -668,7 +668,7 @@ export function NewTransactionDialog({
                       key={candidate.id}
                       type="button"
                       className={cn(
-                        "min-w-0 rounded-md border p-1.5 text-left text-[11px] transition-colors hover:bg-muted/40",
+                        "min-w-0 rounded-md border p-1.5 text-left text-xs transition-colors hover:bg-muted/40",
                         draft.movementId === candidate.id && "bg-muted",
                       )}
                       onClick={() => updateDraft({ movementId: candidate.id })}

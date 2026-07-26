@@ -101,17 +101,17 @@ export function TreasuryTooltip({
                 {t(activityFlowLabelKeys[eventFlow])}
               </span>
               {markerCount > 1 && (
-                <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-2xs text-muted-foreground">
                   {markerCount} events
                 </span>
               )}
               {point.eventType && (
-                <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-2xs text-muted-foreground">
                   {point.eventType}
                 </span>
               )}
             </div>
-            <p className="mt-1 text-[10px] text-muted-foreground">
+            <p className="mt-1 text-2xs text-muted-foreground">
               {point.detailLabel ?? label}
             </p>
           </div>
@@ -130,7 +130,7 @@ export function TreasuryTooltip({
         <div className="mt-3 space-y-1.5">
           {groupedPreview.length > 1 && (
             <div className="mb-2 rounded-md border bg-muted/20 p-2">
-              <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="mb-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                 {t("tooltip.groupedEvents")}
               </div>
               <div className="space-y-1.5">
@@ -175,7 +175,7 @@ export function TreasuryTooltip({
                 })}
               </div>
               {markerCount > groupedPreview.length && (
-                <div className="mt-1.5 text-[10px] text-muted-foreground">
+                <div className="mt-1.5 text-2xs text-muted-foreground">
                   {t("tooltip.groupedMore", {
                     count: markerCount - groupedPreview.length,
                   })}
@@ -255,12 +255,12 @@ export function TreasuryTooltip({
           {(point.eventTag || eventId) && (
             <div className="flex flex-wrap gap-1.5 pt-1">
               {point.eventTag && (
-                <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-2xs text-muted-foreground">
                   {point.eventTag}
                 </span>
               )}
               {eventId && (
-                <span className="rounded border bg-muted/30 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                <span className="rounded border bg-muted/30 px-1.5 py-0.5 font-mono text-2xs text-muted-foreground">
                   {eventId}
                 </span>
               )}

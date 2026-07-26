@@ -37,7 +37,7 @@ export const OnboardingStepHeader = ({
       )}
       <div>
         {showProgress && (
-          <p className="mb-2 font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-ink-3">
+          <p className="mb-2 font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
             {t("frame.step", { current: stepIndex + 1, total: totalSteps })}
           </p>
         )}
@@ -61,10 +61,15 @@ export const OnboardingStepActions = ({
   children: ReactNode;
 }) => {
   return (
-    <div className="sticky bottom-0 z-10 mt-2 bg-paper pt-4">
+    // `bg-paper` would now read as an opaque patch stamped onto the frosted
+    // frame, since the two are no longer the same colour. Frosting the bar
+    // instead keeps it the same material as the panel while still masking the
+    // fields that scroll beneath it, and the gradient above it fades into
+    // `--card` to match.
+    <div className="kb-glass-panel sticky bottom-0 z-10 mt-2 pt-4">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-paper to-transparent"
+        className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-card to-transparent"
       />
       {children}
     </div>
@@ -73,7 +78,12 @@ export const OnboardingStepActions = ({
 
 export const OnboardingStepFrame = ({ children }: { children: ReactNode }) => {
   return (
-    <div className="flex w-full flex-col-reverse gap-8 rounded-lg border border-line bg-paper md:min-h-[78dvh] md:flex-row lg:rounded-lg">
+    // Frosted rather than an opaque sheet: there is now ledger art behind this
+    // panel, and `backdrop-filter` only has something to do where the backdrop
+    // varies. It reads as glass over the art at the top of the flow and settles
+    // into a plain tinted panel below it, which is the same behaviour the nav's
+    // frosted header has.
+    <div className="kb-glass-panel flex w-full flex-col-reverse gap-8 rounded-lg border border-line md:min-h-[78dvh] md:flex-row lg:rounded-lg">
       {children}
     </div>
   );

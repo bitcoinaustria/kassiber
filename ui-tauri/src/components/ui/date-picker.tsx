@@ -136,7 +136,7 @@ export function DatePicker({ value, onChange, className, id }: DatePickerProps) 
             <ChevronRight className="size-4" />
           </Button>
         </div>
-        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-muted-foreground">
+        <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-muted-foreground">
           {WEEKDAYS.map((weekday) => (
             <div key={weekday} className="py-1">
               {weekday}

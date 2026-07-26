@@ -93,7 +93,7 @@ export function CommercialProvenancePanel({
   if (loading) {
     return (
       <div className="overflow-hidden rounded-md border">
-        <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
           {t("commercial.title")}
         </div>
         <div className="px-3 py-3 text-sm text-muted-foreground">{t("commercial.loading")}</div>
@@ -102,7 +102,7 @@ export function CommercialProvenancePanel({
   }
   return (
     <div className="overflow-hidden rounded-md border">
-      <div className="border-b bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
         {t("commercial.title")}
       </div>
       {btcpay.map((match) => {

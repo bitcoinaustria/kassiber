@@ -483,7 +483,7 @@ function JournalMetric({
           {value}
         </p>
         <p
-          className="truncate text-[10px] font-medium leading-tight text-muted-foreground sm:text-xs"
+          className="truncate text-2xs font-medium leading-tight text-muted-foreground sm:text-xs"
           title={sub}
         >
           {sub}

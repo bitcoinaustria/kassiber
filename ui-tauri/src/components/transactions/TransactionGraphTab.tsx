@@ -304,7 +304,7 @@ function TransactionIoRow({
         >
           {nodeDetailReference(node, hideSensitive, t)}
         </div>
-        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
           {nodeDetailMeta(node, side, hideSensitive, t).map((part, index) => (
             <span
               key={`${node.id}-${part}-${index}`}
@@ -376,10 +376,10 @@ function TransactionIoColumn({
   return (
     <div className="min-w-0">
       <div className="flex items-center justify-between gap-2 border-b pb-1.5">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
           {title}
         </div>
-        <div className="text-[10px] text-muted-foreground">
+        <div className="text-2xs text-muted-foreground">
           {formatCount(nodes.length)}
         </div>
       </div>
@@ -1108,7 +1108,7 @@ function SwapRouteLeg({
     >
       <div className="flex min-w-0 items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-[10px] font-medium uppercase text-muted-foreground">
+          <div className="text-2xs font-medium uppercase text-muted-foreground">
             {label}
           </div>
           <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm font-medium">
@@ -1117,7 +1117,7 @@ function SwapRouteLeg({
           </div>
         </div>
         {active ? (
-          <Badge variant="outline" className="shrink-0 rounded-md px-1.5 py-0 text-[10px]">
+          <Badge variant="outline" className="shrink-0 rounded-md px-1.5 py-0 text-2xs">
             {selectedLabel}
           </Badge>
         ) : null}
@@ -1219,7 +1219,7 @@ function SwapRouteStrip({
               {counterparty || pairFallback}
             </div>
             {route.policy ? (
-              <div className="mt-1 truncate text-[11px] text-muted-foreground">
+              <div className="mt-1 truncate text-xs text-muted-foreground">
                 {route.policy}
               </div>
             ) : null}
@@ -1227,7 +1227,7 @@ function SwapRouteStrip({
               <button
                 type="button"
                 className={cn(
-                  "mt-2 inline-flex max-w-full items-center justify-center rounded border border-border/70 bg-muted/35 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "mt-2 inline-flex max-w-full items-center justify-center rounded border border-border/70 bg-muted/35 px-1.5 py-0.5 text-2xs font-medium tabular-nums text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   hideSensitive && "sensitive",
                 )}
                 aria-pressed={feeMode === "absolute"}
