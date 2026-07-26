@@ -601,11 +601,6 @@ def project_metadata_for_data_root(data_root: str | Path) -> dict[str, Any] | No
     return None
 
 
-def _legacy_database_path() -> Path | None:
-    layout = _legacy_layout()
-    return layout.database if layout is not None else None
-
-
 def _legacy_layout() -> LegacyLayout | None:
     candidate_data_roots = (
         Path(DEFAULT_DATA_ROOT).expanduser(),

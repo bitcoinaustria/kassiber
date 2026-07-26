@@ -378,18 +378,6 @@ export function formatDriverValue(
   return formatCompactDisplayMoney(btc * fiatRate, fiatRate, currency, fiatCurrency);
 }
 
-export function formatDetailedPortfolioMoney(
-  amount: number,
-  fiatRate: number,
-  currency: Currency,
-  fiatCurrency = "EUR",
-) {
-  if (currency === "btc") {
-    return formatBtc(amount, { precision: Math.abs(amount) < 0.01 ? 8 : 4 });
-  }
-  return formatDisplayMoney(amount, fiatRate, currency, fiatCurrency);
-}
-
 export function activeMarketFiatCurrency(snapshot: OverviewSnapshot) {
   return (
     snapshot.marketRate?.fiatCurrency ??
@@ -1447,14 +1435,6 @@ export function formatFiatPrice(value: number, fiatCurrency = "EUR") {
   return `${rounded} ${fiatCurrency}`;
 }
 
-export function formatEurPrice(eur: number) {
-  return formatFiatPrice(eur, "EUR");
-}
-
-export function treasuryPrimaryValue(point: TreasuryChartPoint) {
-  return point.balanceBtc;
-}
-
 export function formatBtcAxis(value: number) {
   const precision = Math.abs(value) >= 10 ? 0 : Math.abs(value) >= 1 ? 2 : 3;
   return formatBtc(value, { precision }).replace("₿ ", "₿");
@@ -1798,33 +1778,6 @@ export function enrichTreasuryChartData(
   });
 }
 
-export function buildTreasuryChartStats(points: TreasuryChartPoint[]) {
-  if (!points.length) return null;
-  const firstPoint = points[0];
-  const lastPoint = points[points.length - 1] ?? firstPoint;
-  const first = treasuryPrimaryValue(firstPoint);
-  const last = treasuryPrimaryValue(lastPoint);
-  const delta = last - first;
-  const highPoint = points.reduce((highest, point) =>
-    treasuryPrimaryValue(point) > treasuryPrimaryValue(highest)
-      ? point
-      : highest,
-  );
-  const lowPoint = points.reduce((lowest, point) =>
-    treasuryPrimaryValue(point) < treasuryPrimaryValue(lowest)
-      ? point
-      : lowest,
-  );
-  return {
-    first,
-    last,
-    delta,
-    pct: first !== 0 ? (delta / Math.abs(first)) * 100 : null,
-    highPoint,
-    lowPoint,
-  };
-}
-
 export function activityMarkerView(
   plottedData: TreasuryChartPoint[],
   showEvents: boolean,
@@ -1976,34 +1929,6 @@ export function brushedActivityMarkers(
     selectedChartDisplayData.map((point) => String(point.date)),
   );
   return activityMarkers.filter((point) => selectedDates.has(String(point.date)));
-}
-
-export function expandFallbackYearData(
-  data: Array<{ month: string; thisYear: number; prevYear: number }>,
-  priceEur: number,
-) {
-  return data.flatMap((point, index) => {
-    if (index === 0) return [point];
-    const previous = data[index - 1];
-    const swing = Math.sin(index * 2.43) * 0.06;
-    const midValue =
-      previous.thisYear + (point.thisYear - previous.thisYear) * 0.52;
-    const midBasis =
-      previous.prevYear + (point.prevYear - previous.prevYear) * 0.52;
-    return [
-      {
-        month: `${point.month} · 1`,
-        thisYear: Math.max(0, midValue * (1 + swing)),
-        prevYear: Math.max(0, midBasis),
-      },
-      point,
-    ];
-  }).map((point) => ({
-    ...point,
-    thisYear: Math.round(point.thisYear * 100) / 100,
-    prevYear: Math.round(point.prevYear * 100) / 100,
-    balanceBtc: btcFromEur(point.thisYear, priceEur),
-  }));
 }
 
 export function samplePortfolioPoints(
@@ -2332,216 +2257,6 @@ export function transactionsDriverSearch(driver: BalanceDriverItem["key"]) {
   }
   return search;
 }
-
-export const transactionStatuses: TransactionStatus[] = [
-  "confirmed",
-  "pending",
-  "review",
-  "failed",
-];
-
-export const transactionRecords: Transaction[] = [
-  {
-    id: "1",
-    txid: "TX-2026-001",
-    counterparty: "Cold Storage",
-    counterpartyInitials: "CS",
-    tags: ["Invoice", "ACME GmbH"],
-    status: "confirmed",
-    amount: 2499.0,
-    date: "Jan 28, 2026",
-  },
-  {
-    id: "2",
-    txid: "TX-2026-002",
-    counterparty: "Home Node",
-    counterpartyInitials: "HN",
-    tags: ["Server rental", "Hetzner"],
-    status: "review",
-    amount: 1348.0,
-    date: "Jan 27, 2026",
-  },
-  {
-    id: "3",
-    txid: "TX-2026-003",
-    counterparty: "Multisig Vault",
-    counterpartyInitials: "MV",
-    tags: ["Internal transfer"],
-    status: "pending",
-    amount: 1198.0,
-    date: "Jan 27, 2026",
-  },
-  {
-    id: "4",
-    txid: "TX-2026-004",
-    counterparty: "Alby Hub",
-    counterpartyInitials: "AH",
-    tags: ["Lightning payment"],
-    status: "confirmed",
-    amount: 799.0,
-    date: "Jan 26, 2026",
-  },
-  {
-    id: "5",
-    txid: "TX-2026-005",
-    counterparty: "Cashu Wallet",
-    counterpartyInitials: "CW",
-    tags: ["Ecash spend"],
-    status: "failed",
-    amount: 599.0,
-    date: "Jan 26, 2026",
-  },
-  {
-    id: "6",
-    txid: "TX-2026-006",
-    counterparty: "BTCPay Server",
-    counterpartyInitials: "BP",
-    tags: ["Customer invoice", "Bitcoin Austria"],
-    status: "confirmed",
-    amount: 5498.0,
-    date: "Jan 25, 2026",
-  },
-  {
-    id: "7",
-    txid: "TX-2026-007",
-    counterparty: "Bitstamp",
-    counterpartyInitials: "BS",
-    tags: ["EUR off-ramp"],
-    status: "confirmed",
-    amount: 1199.0,
-    date: "Jan 25, 2026",
-  },
-  {
-    id: "8",
-    txid: "TX-2026-008",
-    counterparty: "Kraken",
-    counterpartyInitials: "KR",
-    tags: ["Withdrawal", "Self-custody"],
-    status: "pending",
-    amount: 878.0,
-    date: "Jan 24, 2026",
-  },
-  {
-    id: "9",
-    txid: "TX-2026-009",
-    counterparty: "Phoenix Wallet",
-    counterpartyInitials: "PW",
-    tags: ["Lightning sweep"],
-    status: "confirmed",
-    amount: 549.0,
-    date: "Jan 24, 2026",
-  },
-  {
-    id: "10",
-    txid: "TX-2026-010",
-    counterparty: "Voltage Cloud",
-    counterpartyInitials: "VC",
-    tags: ["Node hosting"],
-    status: "confirmed",
-    amount: 1648.0,
-    date: "Jan 23, 2026",
-  },
-  {
-    id: "11",
-    txid: "TX-2026-011",
-    counterparty: "Mullvad VPN",
-    counterpartyInitials: "MU",
-    tags: ["Subscription", "Privacy"],
-    status: "confirmed",
-    amount: 96.0,
-    date: "Jan 23, 2026",
-  },
-  {
-    id: "12",
-    txid: "TX-2026-012",
-    counterparty: "OpenSats",
-    counterpartyInitials: "OS",
-    tags: ["Donation"],
-    status: "confirmed",
-    amount: 250.0,
-    date: "Jan 22, 2026",
-  },
-  {
-    id: "13",
-    txid: "TX-2026-013",
-    counterparty: "Bitrefill",
-    counterpartyInitials: "BR",
-    tags: ["Gift card"],
-    status: "confirmed",
-    amount: 199.0,
-    date: "Jan 22, 2026",
-  },
-  {
-    id: "14",
-    txid: "TX-2026-014",
-    counterparty: "Hardware Wallet",
-    counterpartyInitials: "HW",
-    tags: ["Cold storage move"],
-    status: "review",
-    amount: 12498.0,
-    date: "Jan 21, 2026",
-  },
-  {
-    id: "15",
-    txid: "TX-2026-015",
-    counterparty: "River Financial",
-    counterpartyInitials: "RF",
-    tags: ["Recurring buy", "DCA"],
-    status: "confirmed",
-    amount: 648.0,
-    date: "Jan 21, 2026",
-  },
-  {
-    id: "16",
-    txid: "TX-2026-016",
-    counterparty: "Strike",
-    counterpartyInitials: "SK",
-    tags: ["Auto-buy"],
-    status: "pending",
-    amount: 249.0,
-    date: "Jan 20, 2026",
-  },
-  {
-    id: "17",
-    txid: "TX-2026-017",
-    counterparty: "Lightning Labs",
-    counterpartyInitials: "LL",
-    tags: ["Service payment"],
-    status: "confirmed",
-    amount: 399.0,
-    date: "Jan 20, 2026",
-  },
-  {
-    id: "18",
-    txid: "TX-2026-018",
-    counterparty: "Mobile Wallet",
-    counterpartyInitials: "MW",
-    tags: ["Tip jar"],
-    status: "confirmed",
-    amount: 42.0,
-    date: "Jan 19, 2026",
-  },
-  {
-    id: "19",
-    txid: "TX-2026-019",
-    counterparty: "Coinbase",
-    counterpartyInitials: "CB",
-    tags: ["Withdrawal"],
-    status: "failed",
-    amount: 448.0,
-    date: "Jan 19, 2026",
-  },
-  {
-    id: "20",
-    txid: "TX-2026-020",
-    counterparty: "Project Treasury",
-    counterpartyInitials: "PT",
-    tags: ["Reimbursement"],
-    status: "review",
-    amount: 1299.0,
-    date: "Jan 18, 2026",
-  },
-];
 
 export const readinessToneStyles: Record<OverviewHealthTone, string> = {
   good:

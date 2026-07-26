@@ -32,12 +32,6 @@ from ..operator.policy import (
 CLI_REMEMBERED_PASSPHRASE_SERVICE = "Kassiber CLI Database Passphrase"
 LEGACY_SHARED_PASSPHRASE_SERVICE = "Kassiber Database Passphrase"
 DESKTOP_BIOMETRIC_STALE_MARKER_SERVICE = "Kassiber Desktop Biometric Invalidated"
-DESKTOP_BIOMETRY_CURRENT_SET_MARKER_SERVICE = (
-    "Kassiber Desktop Biometric Enrollment (Current Set)"
-)
-DESKTOP_APPLICATION_GATE_MARKER_SERVICE = (
-    "Kassiber Desktop Biometric Enrollment (Application Gate)"
-)
 CLI_REMEMBERED_UNLOCK_SETTING = "cli_remembered_unlock"
 CLI_REMEMBERED_UNLOCK_ENROLLMENT_SETTING = "cli_remembered_unlock_enrollment"
 CLI_LEGACY_UNLOCK_QUARANTINED_SETTING = "cli_legacy_unlock_quarantined"

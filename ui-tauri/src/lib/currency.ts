@@ -146,22 +146,3 @@ export function formatSats(btc: number, opts: FormatSatsOpts = {}): string {
   const prefix = sign ? signedPrefix(sats) : "";
   return prefix + abs;
 }
-
-interface FmtCcyOpts {
-  sign?: boolean;
-}
-
-/**
- * Currency-aware single-line formatter — chooses BTC or EUR based on
- * the user's toggle. Use for places where the same slot has to swap
- * between the two units.
- */
-export function fmtCcy(
-  btc: number,
-  currency: Currency,
-  priceEur: number,
-  opts: FmtCcyOpts = {},
-): string {
-  if (currency === "eur") return formatEur(btc, priceEur, opts);
-  return formatBtc(btc, opts);
-}

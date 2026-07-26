@@ -33,7 +33,7 @@ from . import pricing
 from . import tax_events
 from . import transfer_matching
 from .custody_evidence import build_canonical_quantity_input, enriched_quantity_rows
-from .engines import TaxEngineLedgerInputs, build_tax_engine
+from .engines import GenericRP2TaxEngine, TaxEngineLedgerInputs
 from .lightning import channel_lifecycle
 from .repo import resolve_scope
 
@@ -765,7 +765,7 @@ class CustodyJournalBuilder:
 
     def build(self) -> dict[str, Any]:
         custody = self.build_custody_projection()
-        engine_state = build_tax_engine(self.profile).build_ledger_state(
+        engine_state = GenericRP2TaxEngine(self.profile).build_ledger_state(
             TaxEngineLedgerInputs(
                 finalized_tax_projection=custody.finalized_tax_projection,
                 wallet_refs_by_id=custody.wallet_refs_by_id,

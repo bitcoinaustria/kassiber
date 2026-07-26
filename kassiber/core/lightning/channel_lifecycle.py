@@ -34,7 +34,6 @@ from ..loans import (
 )
 from ..transfer_matching import DEFAULT_FEE_PCT_MAX, DEFAULT_FEE_SATS_MIN, fee_threshold_msat
 
-CHANNEL_RECORD_TYPE = "channel"
 _ATOMIC_CHANNEL_ID_PREFIXES = ("lnd:", "coreln:")
 LifecycleScope: TypeAlias = tuple[str, str, str]
 

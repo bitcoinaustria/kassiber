@@ -256,17 +256,6 @@ function normalizedRef(value: unknown) {
   return String(value || "").trim().toLowerCase();
 }
 
-export function findPrivacyWalletRow(
-  payload: PrivacyMirrorPayload | undefined,
-  refs: Array<string | null | undefined>,
-) {
-  const candidates = new Set(refs.map(normalizedRef).filter(Boolean));
-  if (!candidates.size) return undefined;
-  return (payload?.wallet_view ?? []).find((row) =>
-    candidates.has(normalizedRef(row.wallet_id)),
-  );
-}
-
 export function findPrivacyTransactionRow(
   payload: PrivacyMirrorPayload | undefined,
   refs: Array<string | null | undefined>,

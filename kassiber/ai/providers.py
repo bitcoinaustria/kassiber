@@ -98,8 +98,6 @@ DEFAULT_BOOTSTRAP_PROVIDERS = (
         "notes": "Chat-only broker using the installed OpenCode server and existing configuration.",
     },
 )
-DEFAULT_BOOTSTRAP_PROVIDER = DEFAULT_BOOTSTRAP_PROVIDERS[0]
-
 AI_PROVIDER_SAFE_OUTPUT_FIELDS = (
     "name",
     "display_name",

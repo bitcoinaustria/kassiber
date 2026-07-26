@@ -21,7 +21,7 @@ from pathlib import Path
 
 from kassiber.cli import handlers
 from kassiber.core import custody_journal
-from kassiber.core.engines import build_tax_engine
+from kassiber.core.engines import GenericRP2TaxEngine
 from kassiber.core.ownership import OwnedIndex, OwnedMatch
 from kassiber.core.sync_backends import address_to_scriptpubkey
 from kassiber.db import open_db
@@ -239,7 +239,7 @@ def _fanout_rows():
 
 class OwnershipDeriverEngineTest(unittest.TestCase):
     def _run(self, owned_index):
-        return build_tax_engine(PROFILE).build_ledger_state(
+        return GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=_fanout_rows(),
                 wallet_refs_by_id=WALLET_REFS,
@@ -277,7 +277,7 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
         )
         acquisition["occurred_at"] = "2025-01-01T00:00:00Z"
         rows = [acquisition, source, fake_b, fake_c]
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(
                 PROFILE,
                 rows=rows,
@@ -368,7 +368,7 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
             ),
         )
 
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -411,7 +411,7 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
             _row("C", "inbound", 85 * BTC // 100, external_id="dup-tx"),
         ]
 
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -463,7 +463,7 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
             _row("A", "outbound", BTC, external_id="move-tx"),
             _row("B", "inbound", BTC, external_id="move-tx"),
         ]
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -493,7 +493,7 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
             "A", "inbound", BTC, external_id="acq-forged-inbound"
         )
         acquisition["occurred_at"] = "2025-01-01T00:00:00Z"
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(
                 PROFILE,
                 rows=[
@@ -558,7 +558,7 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
         ]
         index = OwnedIndex()
         index.add_script(SCRIPT_B, _match("B", "Hot"))
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(
                 PROFILE,
                 rows=rows,
@@ -613,7 +613,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         index = OwnedIndex()
         index.add_script(SCRIPT_A, _match("A", "Cold"))
         index.add_script(SCRIPT_B, _match("B", "Hot"))
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=self._rows(),
                 wallet_refs_by_id=WALLET_REFS,
@@ -662,7 +662,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
                 "out_amount": 20_000_000_000,
             }
         ]
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=self._rows(),
                 wallet_refs_by_id=WALLET_REFS,
@@ -731,7 +731,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
         self.assertEqual(projected_out["amount"], principal_msat)
         self.assertEqual(projected_out["fee"], fee_msat)
 
-        state = build_tax_engine(PROFILE).build_ledger_state(inputs)
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(inputs)
         self.assertFalse(state.quarantines)
         self.assertEqual(
             [entry["entry_type"] for entry in state.entries].count("disposal"),
@@ -764,7 +764,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
             "out_amount": principal_msat + fee_msat,
         }
 
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(
                 PROFILE,
                 rows=[outbound],
@@ -814,7 +814,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
                 "out_amount": 50 * BTC // 100,  # whole row
             }
         ]
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -889,7 +889,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
                 "out_amount": 50 * BTC // 100,
             }
         ]
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -935,7 +935,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
                 "out_amount": 60 * BTC // 100,  # > source amount -> invalid/blocked
             }
         ]
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -979,7 +979,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
             }
         ]
 
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(
                 PROFILE,
                 rows=rows,
@@ -1040,7 +1040,7 @@ class OwnershipDeriverMixedSpendTest(unittest.TestCase):
                 "out_amount": 50 * BTC // 100,  # whole row
             }
         ]
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -1091,7 +1091,7 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
             _row("B", "inbound", 50_000_000_000, external_id="prov-genuine"),
             _row("B", "inbound", 50_000_000_000, external_id="prov-other"),
         ]
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -1132,7 +1132,7 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
         ]
         rows[-2]["id"] = "b-in-1"
         rows[-1]["id"] = "b-in-2"
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -1197,7 +1197,7 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
                 external_id="provider-batch-17",
             ),
         ]
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -1248,7 +1248,7 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
             _row("B", "inbound", 10 * BTC // 100, external_id="multi-source"),
             _row("B", "outbound", 80 * BTC // 100, external_id="other-payment"),
         ]
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -1289,7 +1289,7 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
             _row("A", "outbound", 80_000_000_000, external_id="multi-source", raw_json=spend),
         ]
         rows[0]["occurred_at"] = "2025-12-31T00:00:00Z"
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -1341,7 +1341,7 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
             _row("B", "outbound", 30_000_000_000, external_id="consol", raw_json=consol),
             _row("C", "inbound", 80_000_000_000, external_id="consol"),
         ]
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -1397,7 +1397,7 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
             _row("C", "inbound", 30_000_000_000, external_id="fan"),
         ]
         rows[0]["occurred_at"] = "2025-12-31T00:00:00Z"
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -1447,7 +1447,7 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
         rows[1]["occurred_at"] = "2025-12-31T00:00:00Z"
 
         def _total(owned_index):
-            state = build_tax_engine(PROFILE).build_ledger_state(
+            state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
                 finalized_tax_inputs(PROFILE,
                     rows=rows,
                     wallet_refs_by_id=WALLET_REFS,
@@ -1504,7 +1504,7 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
             _row("C", "inbound", 30_000_000_000, external_id="exchange-deposit-77"),
         ]
         rows[0]["occurred_at"] = "2025-12-31T00:00:00Z"
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -1788,7 +1788,7 @@ class RecordedFanoutEngineTest(unittest.TestCase):
         ]
 
     def test_liquid_fanout_books_moves_without_index(self):
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=self._liquid_fanout_rows(fee=2_000_000),
                 wallet_refs_by_id=WALLET_REFS,
@@ -1816,7 +1816,7 @@ class RecordedFanoutEngineTest(unittest.TestCase):
         # decomposer declines and the spend stays on its review path (not booked
         # as a partial/incorrect split).
         rows = self._liquid_fanout_rows(fee=0)[:-1]  # drop C's inbound
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -1851,7 +1851,7 @@ class RecordedFanoutEngineTest(unittest.TestCase):
                 asset="LBTC",
             ),
         ]
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -1874,7 +1874,7 @@ class MultiSourceConsolidationEngineTest(unittest.TestCase):
         index.add_script(SCRIPT_A, _match("A", "Cold"))
         index.add_script(SCRIPT_B, _match("B", "Hot"))
         index.add_script(SCRIPT_C, _match("C", "Savings"))
-        return build_tax_engine(PROFILE).build_ledger_state(
+        return GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -2054,7 +2054,7 @@ class SameTimestampTransferOrderingEngineTest(unittest.TestCase):
             _row("C", "inbound", 60_000_000_000, external_id="hot-to-savings"),
         ]
 
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -2119,7 +2119,7 @@ class PartialPaymentCustodyArbitrationEngineTest(unittest.TestCase):
             later_out["occurred_at"] = "2026-01-02T00:00:00Z"
             later_out["created_at"] = "2026-01-02T00:00:00Z"
             rows.append(later_out)
-        return build_tax_engine(PROFILE).build_ledger_state(
+        return GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -2152,7 +2152,7 @@ class PartialPaymentCustodyArbitrationEngineTest(unittest.TestCase):
             # B recorded its receipt under the SAME txid, so detect_intra pairs it.
             _row("B", "inbound", 50_000_000_000, external_id="partial-pp"),
         ]
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=WALLET_REFS,
@@ -2271,7 +2271,7 @@ class PartialPaymentCustodyArbitrationEngineTest(unittest.TestCase):
             _row("B", "inbound", 50_000_000_000, external_id="ambig-pp"),
         ]
         rows[0]["occurred_at"] = "2025-12-31T00:00:00Z"
-        state = build_tax_engine(PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
             finalized_tax_inputs(PROFILE, rows=rows, wallet_refs_by_id=WALLET_REFS,
                                   manual_pair_records=[], owned_index=index)
         )
@@ -2384,7 +2384,7 @@ class MultiTimestampGroupGateTest(unittest.TestCase):
                 "pair_source": "manual",
             },
         ]
-        state = build_tax_engine(profile).build_ledger_state(
+        state = GenericRP2TaxEngine(profile).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=refs,
@@ -2489,7 +2489,7 @@ class GroupSourceDrainGateTest(unittest.TestCase):
                 "pair_source": "manual",
             },
         ]
-        state = build_tax_engine(profile).build_ledger_state(
+        state = GenericRP2TaxEngine(profile).build_ledger_state(
             finalized_tax_inputs(PROFILE,
                 rows=rows,
                 wallet_refs_by_id=refs,
@@ -2554,7 +2554,7 @@ class AustrianSelfTransferEngineTest(unittest.TestCase):
             self._at_row("B", "inbound", 50_000_000_000, "2025-02-01T00:00:00Z", "selfmove", rate=60000.0),
         ]
         # Must not raise AppError("Ambiguous Austrian disposal").
-        state = build_tax_engine(self.AT_PROFILE).build_ledger_state(
+        state = GenericRP2TaxEngine(self.AT_PROFILE).build_ledger_state(
             finalized_tax_inputs(self.AT_PROFILE, rows=rows, wallet_refs_by_id=WALLET_REFS,
                                   manual_pair_records=[], owned_index=None)
         )

@@ -11,7 +11,6 @@ import {
   type PeriodKey as SharedPeriodKey,
   type ResolvedPeriodKey as SharedResolvedPeriodKey,
 } from "@/lib/period";
-import { transactionRecords } from "./demoRecords";
 import { type Tx } from "@/mocks/seed";
 import {
   type AttachmentItem,
@@ -1869,7 +1868,6 @@ export {
   transactionPeriodDateWindow,
   transactionFlowWithCandidateOverrides,
   upsertAttachmentRecords,
-  transactionRecords,
   updateTransactionDetailParams,
 };
 

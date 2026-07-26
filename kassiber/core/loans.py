@@ -55,7 +55,6 @@ COLLATERAL_ROLES = (
 # ``COLLATERAL_ROLES`` (the loan-mark validator's allow-list).
 CHANNEL_OPEN = "channel_open"
 CHANNEL_CLOSE = "channel_close"
-CHANNEL_ROLES = (CHANNEL_OPEN, CHANNEL_CLOSE)
 # A funding tx whose recorded outflow clearly exceeds the channel's funded
 # amount also paid an external recipient. Suppressing the whole row would
 # silently untax that payment, so the row is quarantined for explicit review

@@ -62,13 +62,6 @@ def _pct(value: Any) -> str:
     return f"{_decimal(value).quantize(Decimal('0.1'))}%"
 
 
-def _amount_with_asset(value: Any, asset: Any) -> str:
-    if value is None or value == "":
-        return ""
-    suffix = f" {asset}" if asset else ""
-    return f"{_btc(value)}{suffix}"
-
-
 def _node_time(node: Mapping[str, Any]) -> str:
     return _datetime(node.get("occurred_at") or node.get("acquired_at") or "")
 

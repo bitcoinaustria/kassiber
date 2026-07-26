@@ -1298,15 +1298,6 @@ def _can_lookup_public_bitcoin_prevouts(row: Mapping[str, Any], raw: Mapping[str
     )
 
 
-def _graph_lookup_backend(
-    conn: sqlite3.Connection,
-    row: Mapping[str, Any],
-    runtime_config: Mapping[str, Any] | None,
-) -> dict[str, Any] | None:
-    backends = _graph_lookup_backends(conn, row, runtime_config)
-    return backends[0] if backends else None
-
-
 def _graph_lookup_backends(
     conn: sqlite3.Connection,
     row: Mapping[str, Any],
@@ -1348,15 +1339,6 @@ def _graph_lookup_backends(
     for configured in _configured_graph_backends(conn, chain, network):
         append(configured)
     return candidates
-
-
-def _liquid_graph_lookup_backend(
-    conn: sqlite3.Connection,
-    row: Mapping[str, Any],
-    runtime_config: Mapping[str, Any] | None,
-) -> dict[str, Any] | None:
-    backends = _liquid_graph_lookup_backends(conn, row, runtime_config)
-    return backends[0] if backends else None
 
 
 def _liquid_graph_lookup_backends(
@@ -1428,15 +1410,6 @@ def _default_graph_backend(
     return None
 
 
-def _configured_graph_backend(
-    conn: sqlite3.Connection,
-    chain: str,
-    network: str,
-) -> dict[str, Any] | None:
-    backends = _configured_graph_backends(conn, chain, network)
-    return backends[0] if backends else None
-
-
 def _configured_graph_backends(
     conn: sqlite3.Connection,
     chain: str,
@@ -1465,15 +1438,6 @@ def _configured_graph_backends(
         if _graph_backend_matches(backend, chain, network):
             backends.append(_normalized_graph_lookup_backend(backend))
     return backends
-
-
-def _runtime_graph_lookup_backend(
-    runtime_config: Mapping[str, Any] | None,
-    chain: str,
-    network: str,
-) -> dict[str, Any] | None:
-    backends = _runtime_graph_lookup_backends(runtime_config, chain, network)
-    return backends[0] if backends else None
 
 
 def _runtime_graph_lookup_backends(

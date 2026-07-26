@@ -243,10 +243,6 @@ function replaceKeyedAmounts(text: string, showScale: boolean): string {
   );
 }
 
-export function appLogLevels(): AppLogLevel[] {
-  return ["trace", "debug", "info", "warning", "error"];
-}
-
 export function subscribeAppLogRecords(listener: () => void): () => void {
   subscribers.add(listener);
   return () => {

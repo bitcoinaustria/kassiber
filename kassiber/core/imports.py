@@ -464,19 +464,6 @@ def _find_existing_profile_transaction_result(
     return None, "unmatched"
 
 
-def _find_existing_profile_transaction(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    normalized: Mapping[str, Any],
-) -> sqlite3.Row | None:
-    match, _status = _find_existing_profile_transaction_result(
-        conn,
-        profile_id,
-        normalized,
-    )
-    return match
-
-
 PRICE_COLUMNS = (
     "fiat_rate",
     "fiat_value",
