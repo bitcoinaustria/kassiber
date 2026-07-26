@@ -677,14 +677,6 @@ def _journal_transaction_id(row: Mapping[str, Any] | None, fallback: str) -> str
     return str(_row_get(row, "journal_transaction_id", fallback))
 
 
-def _transaction_row_sort_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
-    return (
-        str(_row_get(row, "occurred_at", "")),
-        str(_row_get(row, "created_at", "")),
-        str(_row_get(row, "id", "")),
-    )
-
-
 def _earliest_lot_contamination(dropped_acquisition_at, events) -> str | None:
     """Earliest instant the asset's lot state becomes uncertain.
 

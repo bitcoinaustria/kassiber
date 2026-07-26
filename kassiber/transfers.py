@@ -502,21 +502,8 @@ def _row_field(row, key):
         return None
 
 
-_LIGHTNING_PAYMENT_HASH_SOURCES = frozenset({"core_lightning", "lnd"})
 _NON_LIGHTNING_PAYMENT_HASH_SOURCES = frozenset(
     {"chain_script", "chain_script_unique_outpoint"}
-)
-_LIGHTNING_TRANSACTION_KINDS = frozenset(
-    {
-        "cln_invoice",
-        "cln_pay",
-        "lightning_received",
-        "lightning_sent",
-        "ln_invoice",
-        "ln_pay",
-        "lnd_invoice",
-        "lnd_pay",
-    }
 )
 
 
