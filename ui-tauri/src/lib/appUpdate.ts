@@ -216,10 +216,13 @@ export function startAppUpdateScheduler(
   let periodId: ReturnType<typeof globalThis.setInterval> | undefined;
   const run = async () => {
     try {
+      // Mirror a CLI-side revocation before invoking the native checker. The
+      // native gate fails closed too, but its rejection would otherwise skip
+      // the post-check sync below and leave the renderer toggle stale.
+      if (!(await isEnabled())) return;
       const result = await check();
-      // Re-reading consent also mirrors it into the store, so a revocation
-      // that landed during the check both suppresses this result and turns the
-      // toggle off without a separate setter.
+      // Re-read after the request as well so a revocation that landed during
+      // the check suppresses its result.
       const stillEnabled = await isEnabled();
       if (disposed || !stillEnabled) return;
       setUpdate(result);

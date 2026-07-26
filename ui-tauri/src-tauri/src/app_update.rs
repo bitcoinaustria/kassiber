@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
+use tokio::io::AsyncReadExt;
 
 #[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -118,31 +119,50 @@ fn cli_error_message(error: &CliErrorBody) -> String {
 /// Run `kassiber --format json update` under a deadline.
 ///
 /// `kill_on_drop` plus `tokio::time::timeout` replace what used to be a manual
-/// `try_wait` poll loop, a stdout-draining thread to avoid filling the pipe, and
-/// three copies of kill/wait/join cleanup.
+/// `try_wait` poll loop and three copies of kill/wait/join cleanup. Stdout is
+/// still read through a hard cap so a broken sidecar cannot grow memory without
+/// bound; stderr stays discarded.
 async fn run_sidecar_update_check(resource_dir: Option<&Path>) -> Result<AppUpdateCheck, String> {
     // `--format` is a global option and must precede the subcommand.
     let (program, args, cwd) = crate::supervisor::cli_invocation(
         resource_dir,
         vec!["--format".into(), "json".into(), "update".into()],
     );
-    let output = tokio::time::timeout(
-        SIDECAR_UPDATE_TIMEOUT,
-        tokio::process::Command::new(&program)
-            .args(&args)
-            .current_dir(&cwd)
-            .stdin(Stdio::null())
-            .stderr(Stdio::null())
-            .kill_on_drop(true)
-            .output(),
-    )
+    let mut child = tokio::process::Command::new(&program)
+        .args(&args)
+        .current_dir(&cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|_| "Could not start the Kassiber CLI to check for updates.".to_string())?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "Could not read the Kassiber CLI update output.".to_string())?;
+    let body = tokio::time::timeout(SIDECAR_UPDATE_TIMEOUT, async {
+        let mut body = Vec::new();
+        stdout
+            .take(MAX_SIDECAR_OUTPUT_BYTES as u64 + 1)
+            .read_to_end(&mut body)
+            .await
+            .map_err(|_| "Could not read the Kassiber CLI update output.".to_string())?;
+        if body.len() > MAX_SIDECAR_OUTPUT_BYTES {
+            let _ = child.kill().await;
+            return Err(
+                "The Kassiber CLI returned an unexpectedly large update response.".to_string(),
+            );
+        }
+        child
+            .wait()
+            .await
+            .map_err(|_| "Could not run the Kassiber CLI update check.".to_string())?;
+        Ok(body)
+    })
     .await
-    .map_err(|_| "The update check timed out.".to_string())?
-    .map_err(|_| "Could not start the Kassiber CLI to check for updates.".to_string())?;
-    if output.stdout.len() > MAX_SIDECAR_OUTPUT_BYTES {
-        return Err("The Kassiber CLI returned an unexpectedly large update response.".to_string());
-    }
-    update_check_from_envelope(&output.stdout)
+    .map_err(|_| "The update check timed out.".to_string())??;
+    update_check_from_envelope(&body)
 }
 
 fn environment_disables_update_checks() -> bool {

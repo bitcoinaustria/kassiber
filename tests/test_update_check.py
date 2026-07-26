@@ -295,7 +295,6 @@ def test_fetch_latest_release_accepts_an_asset_heavy_listing_page():
         for index in range(update_check._RELEASES_PER_PAGE)
     ]
     body = json.dumps(page).encode()
-    assert len(body) <= update_check._MAX_RESPONSE_BYTES
     # Headroom for a build matrix that keeps growing, which is what ran out.
     assert len(body) * 4 <= update_check._MAX_RESPONSE_BYTES
 

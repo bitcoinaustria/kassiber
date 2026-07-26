@@ -103,15 +103,38 @@ describe("app update checks", () => {
       });
       const setUpdate = vi.fn();
       const setEnabled = vi.fn();
+      const readEnabled = vi
+        .fn<() => Promise<boolean>>()
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
       // The consent re-read is what mirrors revocation into the store, so the
       // scheduler needs no separate setter for it.
       startAppUpdateScheduler(check, setUpdate, () =>
+        syncAppUpdateChecksEnabled(setEnabled, readEnabled),
+      );
+
+      await vi.advanceTimersByTimeAsync(APP_UPDATE_START_DELAY_MS);
+
+      expect(check).toHaveBeenCalledTimes(1);
+      expect(setUpdate).not.toHaveBeenCalled();
+      expect(setEnabled.mock.calls).toEqual([[true], [false]]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("mirrors consent revoked before an automatic check", async () => {
+    vi.useFakeTimers();
+    try {
+      const check = vi.fn();
+      const setEnabled = vi.fn();
+      startAppUpdateScheduler(check, vi.fn(), () =>
         syncAppUpdateChecksEnabled(setEnabled, async () => false),
       );
 
       await vi.advanceTimersByTimeAsync(APP_UPDATE_START_DELAY_MS);
 
-      expect(setUpdate).not.toHaveBeenCalled();
+      expect(check).not.toHaveBeenCalled();
       expect(setEnabled).toHaveBeenCalledWith(false);
     } finally {
       vi.useRealTimers();
