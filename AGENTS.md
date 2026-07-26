@@ -249,11 +249,10 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 
 The Tauri shell is deny-by-default: it forwards a daemon `kind` to the Python
 daemon only when that `kind` is in a hand-maintained allowlist. A new `ui.*`
-kind the desktop UI invokes must be added to every layer below, or it works in
-mock dev mode and then fails in the packaged app with `kind_not_allowed` (and
-in `pnpm dev:bridge` with HTTP 403). `pnpm dev:browser` (`VITE_DAEMON=mock`)
-never consults an allowlist, so the mock dev server does **not** prove a kind
-is wired correctly — reproduce against `dev:bridge` or the packaged shell.
+kind the desktop UI invokes must be added to every layer below, or it fails in
+the packaged app with `kind_not_allowed` and in the browser bridge with HTTP
+403. Both `pnpm dev:browser` and `pnpm dev:bridge` use that real bridge, so
+either exposes a missing bridge allowlist entry.
 
 When you wire a new desktop-invoked `ui.*` kind, update all of:
 

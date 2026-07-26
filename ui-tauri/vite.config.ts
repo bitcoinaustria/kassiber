@@ -677,38 +677,43 @@ class DaemonBridgeSupervisor {
   }
 }
 
+function installDaemonBridge(
+  server: import("vite").ViteDevServer | import("vite").PreviewServer,
+) {
+  const supervisor = new DaemonBridgeSupervisor();
+  server.httpServer?.once("close", () => supervisor.shutdown());
+
+  server.middlewares.use(async (req, res, next) => {
+    const pathname = (req.url ?? "").split("?")[0];
+    if (pathname === DAEMON_BRIDGE_STREAM_PATH) {
+      await handleBridgeStream(req, res, supervisor);
+      return;
+    }
+    if (pathname === DAEMON_BRIDGE_PATH) {
+      await handleBridgeInvoke(req, res, supervisor);
+      return;
+    }
+    if (pathname === FILE_PICKER_BRIDGE_PATH) {
+      await handleBridgeFilePicker(req, res, supervisor);
+      return;
+    }
+    if (pathname === IMPORT_PROJECT_BRIDGE_PATH) {
+      await handleBridgeImportProject(req, res, supervisor);
+      return;
+    }
+    if (pathname === RESET_REGTEST_BRIDGE_PATH) {
+      await handleBridgeResetRegtest(req, res, supervisor);
+      return;
+    }
+    next();
+  });
+}
+
 function daemonBridgePlugin() {
   return {
     name: "kassiber-daemon-bridge",
-    configureServer(server: import("vite").ViteDevServer) {
-      const supervisor = new DaemonBridgeSupervisor();
-      server.httpServer?.once("close", () => supervisor.shutdown());
-
-      server.middlewares.use(async (req, res, next) => {
-        const pathname = (req.url ?? "").split("?")[0];
-        if (pathname === DAEMON_BRIDGE_STREAM_PATH) {
-          await handleBridgeStream(req, res, supervisor);
-          return;
-        }
-        if (pathname === DAEMON_BRIDGE_PATH) {
-          await handleBridgeInvoke(req, res, supervisor);
-          return;
-        }
-        if (pathname === FILE_PICKER_BRIDGE_PATH) {
-          await handleBridgeFilePicker(req, res, supervisor);
-          return;
-        }
-        if (pathname === IMPORT_PROJECT_BRIDGE_PATH) {
-          await handleBridgeImportProject(req, res, supervisor);
-          return;
-        }
-        if (pathname === RESET_REGTEST_BRIDGE_PATH) {
-          await handleBridgeResetRegtest(req, res, supervisor);
-          return;
-        }
-        next();
-      });
-    },
+    configureServer: installDaemonBridge,
+    configurePreviewServer: installDaemonBridge,
   };
 }
 

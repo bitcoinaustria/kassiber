@@ -1620,8 +1620,7 @@ run_custody_desktop() {
     tests.test_connection_catalog_drift \
     -v
   pnpm --dir ui-tauri exec vitest run \
-    src/routes/CustodyGaps.test.tsx \
-    src/daemon/mock.test.ts
+    src/routes/CustodyGaps.test.tsx
 }
 
 case "$MODE" in
