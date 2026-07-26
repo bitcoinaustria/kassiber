@@ -7,8 +7,6 @@ It is not meant to be a hand-maintained inventory of every transitive package in
 ## Core dependency credit
 
 Kassiber currently depends directly on the Kassiber-maintained [RP2 fork](https://github.com/bitcoinaustria/rp2) as its tax engine, [BDK Python](https://github.com/bitcoindevkit/bdk-python) for dependency-backed Bitcoin observation, [Liquid Wallet Kit](https://github.com/Blockstream/lwk) for dependency-backed Liquid observation, [embit](https://github.com/diybitcoinhardware/embit) for compatibility descriptor derivation and Liquid decoding, [XlsxWriter](https://xlsxwriter.readthedocs.io/) for styled XLSX report exports and the generic-ledger import template, [openpyxl](https://openpyxl.readthedocs.io/) for reading filled-in `.xlsx` generic-ledger imports, [ReportLab](https://www.reportlab.com/) for styled PDF report exports, and [keyring](https://github.com/jaraco/keyring) for opt-in CLI access to native OS credential stores.
-The in-development Tauri frontend also depends directly on TanStack Table for
-interactive local data grids.
 The descriptor connection screen uses local-only QR scanner libraries for
 webcam-based descriptor and BBQR import.
 The desktop shell includes Rust keyring crates for AI-provider-key native
@@ -35,7 +33,6 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `spake2` | `0.9` | Password-authenticated key exchange for explicit LAN/Tor direct pairing | MIT |
 | `zeroconf` | `>=0.150,<1` | Rotating, unlinkable mDNS advertisement for the opt-in LAN fast path | LGPL-2.1-or-later |
 | `PyYAML` | `>=6,<7` | Structured parsing for the repository-wide GitHub Actions pin-policy test | MIT |
-| `@tanstack/react-table` | `^8.21.3` | Interactive sorting, filtering, selection, and pagination in desktop UI data tables | MIT |
 | `pako` | `^2.1.0` | Zlib/deflate decoding for Better Bitcoin QR descriptor import | MIT |
 | `qr-scanner` | `^1.4.2` | Local webcam QR decoding for descriptor-family connection setup | MIT |
 | `qrcode` | `^1.5.4` | On-device QR generation for signed join requests and sealed invitations | MIT |
