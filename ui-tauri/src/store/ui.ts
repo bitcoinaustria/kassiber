@@ -8,6 +8,7 @@ import {
   type ExplorerSettings,
 } from "@/lib/explorer";
 import type { AppUpdateCheck } from "@/lib/appUpdate";
+import type { PeriodKey } from "@/lib/period";
 
 // The supported language set lives in `@/i18n/config` so adding a language is
 // a one-place change; the store type follows it.
@@ -16,17 +17,9 @@ type Currency = "btc" | "eur";
 export type DataMode = "mock" | "real" | "regtest";
 export type ThemePreference = "system" | "light" | "dark";
 export type NotificationTone = "info" | "success" | "warning" | "error";
-export type BookChartPeriod =
-  | "auto"
-  | "30days"
-  | "3months"
-  | "6months"
-  | "ytd"
-  | "1year"
-  | "5years"
-  | "10years"
-  | "15years"
-  | "all";
+// Chart/table range shared by the Overview chart and the Transactions
+// workbench, so switching screens keeps the range the user picked.
+export type BookChartPeriod = PeriodKey;
 
 export const DEFAULT_APP_SCALE = 0.9;
 export const DEFAULT_THEME: ThemePreference = "dark";

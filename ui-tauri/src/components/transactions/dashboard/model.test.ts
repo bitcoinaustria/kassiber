@@ -502,6 +502,62 @@ describe("transaction dashboard chart selection", () => {
     ).toBe("1year");
   });
 
+  it("widens auto past a window whose activity draws a single bar", () => {
+    // All of this year's activity sits in one month, so YTD's monthly buckets
+    // stack it into a single bar. Widening to 5 years puts the older cluster in
+    // its own quarter and the chart finally has a shape.
+    const oneMonthThisYear = [
+      transaction({ id: "burst-1", date: "2026-06-10T09:00:00Z" }),
+      transaction({ id: "burst-2", date: "2026-06-12T12:00:00Z" }),
+      transaction({ id: "burst-3", date: "2026-06-14T17:00:00Z" }),
+      transaction({ id: "older-1", date: "2022-02-10T09:00:00Z" }),
+      transaction({ id: "older-2", date: "2022-02-14T09:00:00Z" }),
+      transaction({ id: "older-3", date: "2022-02-18T09:00:00Z" }),
+    ];
+    expect(resolveAutoPeriodForRecords(oneMonthThisYear, "auto")).toBe("5years");
+  });
+
+  it("keeps the count-based window when no wider one adds a bar", () => {
+    // A single afternoon's activity: zooming out cannot split one bucket, so
+    // auto stays on the smallest window that holds it instead of jumping to all.
+    const sameDay = [
+      transaction({ id: "burst-1", date: "2026-06-10T09:00:00Z" }),
+      transaction({ id: "burst-2", date: "2026-06-10T12:00:00Z" }),
+      transaction({ id: "burst-3", date: "2026-06-10T17:00:00Z" }),
+    ];
+    expect(resolveAutoPeriodForRecords(sameDay, "auto")).toBe("ytd");
+  });
+
+  it("takes the history depth it is given over the fetched page's span", () => {
+    // A recent page from an old book: without the daemon's bounds auto cannot
+    // see past the page and stops at 1 year.
+    const recentPage = [
+      transaction({ id: "r-1", date: "2026-06-28T12:00:00Z" }),
+      transaction({ id: "r-2", date: "2026-02-20T12:00:00Z" }),
+      transaction({ id: "r-3", date: "2025-11-10T12:00:00Z" }),
+    ];
+    expect(resolveAutoPeriodForRecords(recentPage, "auto")).toBe("1year");
+    expect(resolveAutoPeriodForRecords(recentPage, "auto", 12)).toBe("1year");
+    // …and a window that only the deeper candidates can fill widens to them.
+    const sparseOldPage = [
+      transaction({ id: "o-1", date: "2019-06-28T12:00:00Z" }),
+      transaction({ id: "o-2", date: "2020-06-20T12:00:00Z" }),
+      transaction({ id: "o-3", date: "2021-06-10T12:00:00Z" }),
+    ];
+    expect(resolveAutoPeriodForRecords(sparseOldPage, "auto", 12)).toBe("10years");
+  });
+
+  it("uses the daemon's full-history auto period over a capped page", () => {
+    const recentPage = [
+      transaction({ id: "r-1", date: "2026-06-28T12:00:00Z" }),
+      transaction({ id: "r-2", date: "2026-06-20T12:00:00Z" }),
+      transaction({ id: "r-3", date: "2026-06-10T12:00:00Z" }),
+    ];
+    expect(
+      resolveAutoPeriodForRecords(recentPage, "auto", 12, "5years"),
+    ).toBe("5years");
+  });
+
   it("does not substitute demo rows for an empty live transaction list", () => {
     expect(dashboardRecordsFromTxs([])).toEqual([]);
   });

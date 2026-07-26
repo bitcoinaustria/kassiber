@@ -1,3 +1,4 @@
+import { keepPreviousData } from "@tanstack/react-query";
 import { useRouterState } from "@tanstack/react-router";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -86,6 +87,10 @@ export function Transactions() {
     "ui.transactions.list",
     transactionArgs,
     (lastPage) => lastPage.data?.nextCursor ?? undefined,
+    // Filter and period changes rewrite the query key. Keeping the previous
+    // rows as placeholder data means the table dims and updates instead of
+    // emptying itself on every click.
+    { placeholderData: keepPreviousData },
   );
   const hasNextTransactionsPage = transactionsQuery.hasNextPage;
   const isFetchingNextTransactionsPage = transactionsQuery.isFetchingNextPage;
@@ -122,19 +127,11 @@ export function Transactions() {
     isFetchingNextTransactionsPage,
   ]);
   const transactions: TransactionsList =
-    liveTransactions
-      ? liveTransactions
-      : hasLiveTransactions && firstPage?.data
-        ? firstPage.data
-        : daemonBacked
-          ? { ...MOCK_TRANSACTIONS, txs: [], nextCursor: null, hasMore: false }
-          : MOCK_TRANSACTIONS;
-  const tableTransactions: TransactionsList =
     liveTransactions ??
     (hasLiveTransactions ? firstPage?.data : null) ??
     (daemonBacked
       ? { ...MOCK_TRANSACTIONS, txs: [], nextCursor: null, hasMore: false }
-      : transactions);
+      : MOCK_TRANSACTIONS);
   const hasMoreTransactions = Boolean(hasNextTransactionsPage);
   const shouldShowLiveSkeleton =
     daemonBacked &&
@@ -171,7 +168,6 @@ export function Transactions() {
   return (
     <TransactionsDashboard
       transactions={transactions}
-      tableTransactions={tableTransactions}
       nowRate={nowRate}
       isDataRefreshing={
         hasLiveTransactions &&

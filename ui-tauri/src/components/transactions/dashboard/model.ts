@@ -1,6 +1,16 @@
 import { type ChartConfig } from "@/components/ui/chart";
 import { type Currency } from "@/lib/currency";
 import { currentUiLocale } from "@/lib/localeFormat";
+import {
+  autoCandidatePeriods,
+  historyYearsBetween,
+  normalizePeriodParam,
+  PERIOD_KEYS,
+  periodParamFromUrl,
+  selectablePeriods,
+  type PeriodKey as SharedPeriodKey,
+  type ResolvedPeriodKey as SharedResolvedPeriodKey,
+} from "@/lib/period";
 import { transactionRecords } from "./demoRecords";
 import { type Tx } from "@/mocks/seed";
 import {
@@ -16,18 +26,8 @@ import {
   type TransactionStatus,
 } from "@/components/transactions";
 
-type PeriodKey =
-  | "auto"
-  | "ytd"
-  | "30days"
-  | "3months"
-  | "6months"
-  | "1year"
-  | "5years"
-  | "10years"
-  | "15years"
-  | "all";
-type ResolvedPeriodKey = Exclude<PeriodKey, "auto">;
+type PeriodKey = SharedPeriodKey;
+type ResolvedPeriodKey = SharedResolvedPeriodKey;
 type FlowChartMetric = "amount" | "count";
 type FlowChartMode = "external" | "all";
 type FlowChartSegment = "incoming" | "outgoing" | "transfers" | "swaps";
@@ -65,6 +65,7 @@ type TransactionDashboardSnapshot = {
     latest: string | null;
     walletOptions: string[];
     paymentMethods?: string[];
+    autoPeriod?: ResolvedPeriodKey;
   };
   counts: { all: number; external: number };
   summary: Record<FlowChartSegment, FlowChartSegmentStats> & {
@@ -631,33 +632,10 @@ const emptyFlowChartStats = (): Record<FlowChartSegment, FlowChartSegmentStats> 
   swaps: emptyFlowChartSegmentStats(),
 });
 
-const periodKeys: PeriodKey[] = [
-  "auto",
-  "30days",
-  "3months",
-  "6months",
-  "ytd",
-  "1year",
-  "5years",
-  "10years",
-  "15years",
-  "all",
-];
+const periodKeys = PERIOD_KEYS;
 
-const basePeriodKeys: ResolvedPeriodKey[] = [
-  "30days",
-  "3months",
-  "6months",
-  "ytd",
-  "1year",
-];
-const longHistoryPeriodKeys = [
-  { key: "5years", years: 5 },
-  { key: "10years", years: 10 },
-  { key: "15years", years: 15 },
-] as const satisfies ReadonlyArray<{ key: ResolvedPeriodKey; years: number }>;
-const MS_PER_YEAR = 365.2425 * 24 * 60 * 60 * 1000;
 const AUTO_MIN_MEANINGFUL_TRANSACTIONS = 3;
+const AUTO_MIN_ACTIVE_BUCKETS = 2;
 const AUTO_MIN_TRANSACTION_VOLUME_BTC = 0.00001;
 
 function isLongHistoryPeriod(period: PeriodKey | ResolvedPeriodKey) {
@@ -669,77 +647,8 @@ function isLongHistoryPeriod(period: PeriodKey | ResolvedPeriodKey) {
   );
 }
 
-function normalizePeriodParam(value: string | null): PeriodKey | null {
-  if (!value) return null;
-  const normalized = value.toLowerCase().replace(/[\s_-]/g, "");
-  if (normalized === "auto" || normalized === "automatic") return "auto";
-  if (normalized === "30days" || normalized === "30day" || normalized === "30d") {
-    return "30days";
-  }
-  if (
-    normalized === "3months" ||
-    normalized === "3month" ||
-    normalized === "3mos" ||
-    normalized === "3mo" ||
-    normalized === "3m"
-  ) {
-    return "3months";
-  }
-  if (
-    normalized === "6months" ||
-    normalized === "6month" ||
-    normalized === "6mos" ||
-    normalized === "6mo" ||
-    normalized === "6m"
-  ) {
-    return "6months";
-  }
-  if (normalized === "ytd") return "ytd";
-  if (
-    normalized === "1year" ||
-    normalized === "1years" ||
-    normalized === "1yr" ||
-    normalized === "1y"
-  ) {
-    return "1year";
-  }
-  if (
-    normalized === "5years" ||
-    normalized === "5year" ||
-    normalized === "5yrs" ||
-    normalized === "5yr" ||
-    normalized === "5y"
-  ) {
-    return "5years";
-  }
-  if (
-    normalized === "10years" ||
-    normalized === "10year" ||
-    normalized === "10yrs" ||
-    normalized === "10yr" ||
-    normalized === "10y"
-  ) {
-    return "10years";
-  }
-  if (
-    normalized === "15years" ||
-    normalized === "15year" ||
-    normalized === "15yrs" ||
-    normalized === "15yr" ||
-    normalized === "15y"
-  ) {
-    return "15years";
-  }
-  if (normalized === "all" || normalized === "max") {
-    return "all";
-  }
-  return null;
-}
-
 function initialPeriodFromUrl(fallback: PeriodKey = "1year"): PeriodKey {
-  if (typeof window === "undefined") return fallback;
-  const params = new URLSearchParams(window.location.search);
-  return normalizePeriodParam(params.get("period")) ?? fallback;
+  return periodParamFromUrl(fallback);
 }
 
 function transactionListPeriodFilter(
@@ -858,18 +767,6 @@ function buildTransactionListFilterArgs({
   return args;
 }
 
-function periodLimit(period: ResolvedPeriodKey) {
-  if (period === "30days") return 10;
-  if (period === "3months") return 18;
-  if (period === "6months") return 24;
-  if (period === "ytd") return 40;
-  if (period === "5years") return 60;
-  if (period === "10years") return 90;
-  if (period === "15years") return 120;
-  if (period === "all") return Number.MAX_SAFE_INTEGER;
-  return 30;
-}
-
 function sortTransactionsByDateDesc(records: Transaction[]) {
   return [...records].sort((a, b) => {
     const dateA = parseTransactionDate(a.date)?.getTime() ?? -Infinity;
@@ -888,9 +785,7 @@ function recordsForPeriod(records: Transaction[], period: ResolvedPeriodKey) {
         entry.date !== null,
   );
 
-  if (!dated.length) {
-    return records.slice(0, periodLimit(period));
-  }
+  if (!dated.length) return records;
 
   const end = periodAnchorDate(dated.map((entry) => entry.date));
   const start = periodStartDate(end, period);
@@ -901,56 +796,77 @@ function recordsForPeriod(records: Transaction[], period: ResolvedPeriodKey) {
     .map((entry) => entry.record);
 }
 
-function availablePeriodKeysForRecords(records: Transaction[]): ResolvedPeriodKey[] {
-  const dated = records
-    .map((record) => parseTransactionDate(record.date))
-    .filter((date): date is Date => date !== null);
-  if (!dated.length) return [...basePeriodKeys, "all"];
-
-  const end = periodAnchorDate(dated);
-  const earliest = dated.reduce((min, date) => (date < min ? date : min), dated[0]);
-  const historyYears = Math.max(
-    0,
-    (startOfLocalDay(end).getTime() - startOfLocalDay(earliest).getTime()) /
-      MS_PER_YEAR,
+// Years of history between the daemon's full-history bounds, or undefined when
+// the book set has none yet. Auto and the range tabs both gate on this rather
+// than on the span of the fetched page.
+function historyYearsForBounds(
+  earliest: string | null | undefined,
+  latest: string | null | undefined,
+): number | undefined {
+  const earliestDate = earliest ? parseTransactionDate(earliest) : null;
+  const latestDate = latest ? parseTransactionDate(latest) : null;
+  if (!earliestDate || !latestDate) return undefined;
+  return historyYearsBetween(
+    startOfLocalDay(earliestDate),
+    startOfLocalDay(periodAnchorDate([latestDate])),
   );
-
-  return [
-    ...basePeriodKeys,
-    ...longHistoryPeriodKeys
-      .filter((period) => historyYears >= period.years)
-      .map((period) => period.key),
-    "all",
-  ];
 }
 
+// Periods a book's history can fill. `earliest`/`latest` come from the daemon's
+// full-history bounds; the record-based variant is for mock mode, where the
+// in-memory rows *are* the whole book.
 function availablePeriodKeysForHistory(
   earliest: string | null | undefined,
   latest: string | null | undefined,
 ): ResolvedPeriodKey[] {
-  const earliestDate = earliest ? parseTransactionDate(earliest) : null;
-  const latestDate = latest ? parseTransactionDate(latest) : null;
-  if (!earliestDate || !latestDate) return [...basePeriodKeys, "all"];
-  const end = periodAnchorDate([latestDate]);
-  const historyYears = Math.max(
-    0,
-    (startOfLocalDay(end).getTime() - startOfLocalDay(earliestDate).getTime()) /
-      MS_PER_YEAR,
-  );
-  return [
-    ...basePeriodKeys,
-    ...longHistoryPeriodKeys
-      .filter((period) => historyYears >= period.years)
-      .map((period) => period.key),
-    "all",
-  ];
+  return selectablePeriods(historyYearsForBounds(earliest, latest) ?? 0);
 }
 
+function availablePeriodKeysForRecords(records: Transaction[]): ResolvedPeriodKey[] {
+  const dated = records
+    .map((record) => parseTransactionDate(record.date))
+    .filter((date): date is Date => date !== null);
+  if (!dated.length) return selectablePeriods(0);
+  const earliest = dated.reduce((min, date) => (date < min ? date : min), dated[0]);
+  const latest = dated.reduce((max, date) => (date > max ? date : max), dated[0]);
+  return availablePeriodKeysForHistory(
+    earliest.toISOString(),
+    latest.toISOString(),
+  );
+}
+
+// How many distinct chart buckets the window's activity falls into. A window
+// holding three payments from the same afternoon draws one bar whatever the
+// numbers say, so auto keeps widening until the flow chart has a shape.
+function activeBucketCount(
+  records: Transaction[],
+  period: ResolvedPeriodKey,
+): number {
+  const buckets = new Set<string>();
+  for (const record of records) {
+    const date = parseTransactionDate(record.date);
+    if (date) buckets.add(bucketTransactionDate(date, period).key);
+  }
+  return buckets.size;
+}
+
+/**
+ * Smallest window that still shows something worth looking at.
+ *
+ * `historyYears` should come from the daemon's full-history bounds; deriving it
+ * from `records` alone measures the fetched page (and shifts as more pages
+ * load), which kept long windows out of reach on deep books. Counting activity
+ * *within* a window from `records` is fine — the page holds the most recent
+ * transactions, which is exactly what the short candidates need.
+ */
 function resolveAutoPeriodForRecords(
   records: Transaction[],
   period: PeriodKey,
+  historyYears?: number,
+  authoritativePeriod?: ResolvedPeriodKey,
 ): ResolvedPeriodKey {
   if (period !== "auto") return period;
+  if (authoritativePeriod) return authoritativePeriod;
   if (!records.length) return "1year";
 
   const meaningfulRecords = records.filter(
@@ -962,23 +878,31 @@ function resolveAutoPeriodForRecords(
     AUTO_MIN_MEANINGFUL_TRANSACTIONS,
     meaningfulRecords.length,
   );
-  const availablePeriods = availablePeriodKeysForRecords(records);
-  const candidates: ResolvedPeriodKey[] = [
-    "ytd",
-    "1year",
-    "5years",
-    "10years",
-    "15years",
-    "all",
-  ].filter((candidate): candidate is ResolvedPeriodKey =>
-    availablePeriods.includes(candidate as ResolvedPeriodKey),
-  );
+  const dated = records
+    .map((record) => parseTransactionDate(record.date))
+    .filter((date): date is Date => date !== null);
+  const depthYears =
+    historyYears ??
+    (dated.length
+      ? historyYearsBetween(
+          dated.reduce((min, date) => (date < min ? date : min), dated[0]),
+          periodAnchorDate(dated),
+        )
+      : 0);
 
+  const candidates = autoCandidatePeriods(depthYears);
+  const withEnoughActivity = candidates.filter(
+    (candidate) =>
+      recordsForPeriod(meaningfulRecords, candidate).length >= targetCount,
+  );
   return (
-    candidates.find(
+    withEnoughActivity.find(
       (candidate) =>
-        recordsForPeriod(meaningfulRecords, candidate).length >= targetCount,
-    ) ?? "all"
+        activeBucketCount(recordsForPeriod(meaningfulRecords, candidate), candidate) >=
+        AUTO_MIN_ACTIVE_BUCKETS,
+    ) ??
+    withEnoughActivity[0] ??
+    "all"
   );
 }
 
@@ -1891,6 +1815,7 @@ export {
   attachmentRecordToItem,
   availablePeriodKeysForRecords,
   availablePeriodKeysForHistory,
+  historyYearsForBounds,
   breakdownSelectionLabel,
   bucketTransactionDate,
   buildTransactionListFilterArgs,

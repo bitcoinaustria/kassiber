@@ -10724,6 +10724,97 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(len(dashboard["buckets"]), 12)
         self.assertNotIn("txs", dashboard)
 
+    def test_ui_transactions_dashboard_auto_uses_full_history(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES('ws', 'Main', '2026-01-01T00:00:00Z')"
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(id, workspace_id, label, fiat_currency, created_at)
+            VALUES('profile', 'ws', 'Default', 'EUR', '2026-01-01T00:00:00Z')
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, label, kind, created_at
+            ) VALUES(
+                'wallet', 'ws', 'profile', 'Auto', 'custom', '2026-01-01T00:00:00Z'
+            )
+            """
+        )
+        set_setting(conn, "context_workspace", "ws")
+        set_setting(conn, "context_profile", "profile")
+        profile = conn.execute(
+            "SELECT id, workspace_id, fiat_currency FROM profiles WHERE label = 'Default'"
+        ).fetchone()
+        wallet = conn.execute("SELECT id FROM wallets WHERE label = 'Auto'").fetchone()
+        dates = [
+            f"2026-06-{index % 28 + 1:02d}T12:{index % 60:02d}:00Z"
+            for index in range(101)
+        ] + [
+            "2022-02-10T12:00:00Z",
+            "2022-02-14T12:00:00Z",
+            "2022-02-18T12:00:00Z",
+        ]
+        conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, direction, asset, amount, fee, fiat_currency,
+                fiat_rate, fiat_value, kind, description, counterparty, note,
+                excluded, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    f"auto-{index:03d}",
+                    profile["workspace_id"],
+                    profile["id"],
+                    wallet["id"],
+                    f"auto-{index:03d}",
+                    f"fp-auto-{index:03d}",
+                    occurred_at,
+                    "inbound",
+                    "BTC",
+                    100_000_000,
+                    0,
+                    profile["fiat_currency"],
+                    None,
+                    None,
+                    "deposit",
+                    f"auto-{index:03d}",
+                    None,
+                    None,
+                    0,
+                    "{}",
+                    occurred_at,
+                )
+                for index, occurred_at in enumerate(dates)
+            ],
+        )
+        conn.commit()
+
+        first_page = build_transactions_snapshot(conn, {"limit": 100})
+        self.assertEqual(len(first_page["txs"]), 100)
+        self.assertTrue(
+            all(str(row["date"]).startswith("2026-06") for row in first_page["txs"])
+        )
+
+        dashboard = build_transactions_dashboard_snapshot(
+            conn,
+            {
+                "period": "ytd",
+                "since": "2026-01-01T00:00:00Z",
+                "until": "2026-06-30T23:59:59Z",
+                "timezone": "UTC",
+                "resolveAuto": True,
+            },
+        )
+        self.assertEqual(dashboard["history"]["autoPeriod"], "5years")
+
     def test_report_journal_entries_is_not_truncated_to_internal_page_size(self):
         self._bootstrap_wallet(label="Ledger")
         self._insert_transaction(

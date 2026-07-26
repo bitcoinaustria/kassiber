@@ -1,7 +1,7 @@
 import { Download } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "@tanstack/react-router";
+import { keepPreviousData } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -22,11 +22,7 @@ import { useCurrency } from "@/lib/currency";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { MOCK_TRANSACTIONS, type TransactionsList } from "@/mocks/transactions";
 import { MOCK_OVERVIEW } from "@/mocks/seed";
-import {
-  bookIdentityKey,
-  type BookChartPeriod,
-  useUiStore,
-} from "@/store/ui";
+import { bookIdentityKey, useUiStore } from "@/store/ui";
 import {
   DocumentImportDialog,
   NewTransactionDialog,
@@ -43,6 +39,7 @@ import {
   buildTransactionListFilterArgs,
   DEFAULT_TRANSACTION_TABLE_FILTER_STATE,
   dashboardRecordsFromTxs,
+  historyYearsForBounds,
   initialPeriodFromUrl,
   recordsForPeriod,
   resolveAutoPeriodForRecords,
@@ -67,16 +64,9 @@ interface TransactionsExportResult {
   filename?: string;
 }
 
-function transactionPeriodFromSharedPeriod(
-  period: BookChartPeriod | undefined,
-): PeriodKey {
-  return period ?? "1year";
-}
-
 const TransactionsDashboard = ({
   className,
   transactions = MOCK_TRANSACTIONS,
-  tableTransactions,
   nowRate = MOCK_OVERVIEW.priceEur,
   pairingCandidateRefs,
   swapCandidateTotal,
@@ -93,7 +83,6 @@ const TransactionsDashboard = ({
 }: {
   className?: string;
   transactions?: TransactionsList;
-  tableTransactions?: TransactionsList;
   nowRate?: number | null;
   pairingCandidateRefs?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
@@ -109,7 +98,6 @@ const TransactionsDashboard = ({
   onTableFilterArgsChange?: (args: Record<string, unknown>) => void;
 }) => {
   const { t } = useTranslation("transactions");
-  const navigate = useNavigate();
   const bookKey = useUiStore((state) => bookIdentityKey(state.identity));
   const storedBookChartPeriod = useUiStore((state) =>
     bookKey ? state.bookChartPeriods[bookKey] : undefined,
@@ -118,8 +106,7 @@ const TransactionsDashboard = ({
     (state) => state.setBookChartPeriod,
   );
   const initialPeriod =
-    scopeParams.period ??
-    initialPeriodFromUrl(transactionPeriodFromSharedPeriod(storedBookChartPeriod));
+    scopeParams.period ?? initialPeriodFromUrl(storedBookChartPeriod ?? "auto");
   const [filterState, patchFilterState] = React.useReducer(
     (state: TransactionFilterState, patch: Partial<TransactionFilterState>) => ({
       ...state,
@@ -166,7 +153,6 @@ const TransactionsDashboard = ({
   const baseRefreshSkeleton = isSyncing || isDataRefreshing;
   const addNotification = useUiStore((s) => s.addNotification);
   const previousBookKey = React.useRef(bookKey);
-  const skipNextPeriodPersist = React.useRef(false);
   const exportTransactionsXlsx = useDaemonMutation<TransactionsExportResult>(
     "ui.transactions.export_xlsx",
   );
@@ -226,9 +212,11 @@ const TransactionsDashboard = ({
       },
     );
   };
-  const records = React.useMemo(
-    () => {
-      const txs = transactions.txs.length ? [...transactions.txs] : [];
+  // A deep-linked transaction may sit outside the fetched page; prepend it so
+  // both the workbench and the table can resolve it.
+  const buildRecords = React.useCallback(
+    (list: TransactionsList) => {
+      const txs = [...list.txs];
       if (
         focusedTransaction &&
         !txs.some(
@@ -247,40 +235,39 @@ const TransactionsDashboard = ({
         t as (key: string, opts?: Record<string, unknown>) => string,
       );
     },
-    [focusedTransaction, transactions.txs, t],
+    [focusedTransaction, t],
   );
-  const tableSourceRecords = React.useMemo(() => {
-    const txs = (tableTransactions ?? transactions).txs.length
-      ? [...(tableTransactions ?? transactions).txs]
-      : [];
-    if (
-      focusedTransaction &&
-      !txs.some(
-        (tx) =>
-          tx.id === focusedTransaction.id ||
-          (Boolean(tx.externalId) &&
-            tx.externalId === focusedTransaction.externalId) ||
-          (Boolean(tx.explorerId) &&
-            tx.explorerId === focusedTransaction.explorerId),
-      )
-    ) {
-      txs.unshift(focusedTransaction);
-    }
-    return dashboardRecordsFromTxs(
-      txs,
-      t as (key: string, opts?: Record<string, unknown>) => string,
-    );
-  }, [focusedTransaction, tableTransactions, transactions, t]);
+  const records = React.useMemo(
+    () => buildRecords(transactions),
+    [buildRecords, transactions],
+  );
   const allPeriodRecords = React.useMemo(
     () => sortTransactionsByDateDesc(records),
     [records],
   );
+  // The daemon reports the book's true first/last transaction; the fetched page
+  // only spans its own rows. Auto reads this so a deep book can settle on a
+  // long window. It lands one render after the first dashboard response (which
+  // auto resolves the period for), then stays put — the bounds don't depend on
+  // the requested window.
+  const [daemonHistoryYears, setDaemonHistoryYears] = React.useState<
+    number | undefined
+  >(undefined);
+  const [daemonAutoPeriod, setDaemonAutoPeriod] = React.useState<
+    ResolvedPeriodKey | undefined
+  >(undefined);
   // The aggregate endpoint owns full-history bounds in real mode, so long-range
   // tabs never imply that a capped client page represents the whole book.
   // Mock mode keeps deriving the options from its in-memory records.
   const resolvedPeriod = React.useMemo<ResolvedPeriodKey>(
-    () => resolveAutoPeriodForRecords(records, period),
-    [period, records],
+    () =>
+      resolveAutoPeriodForRecords(
+        records,
+        period,
+        daemonHistoryYears,
+        dataMode === "mock" ? undefined : daemonAutoPeriod,
+      ),
+    [daemonAutoPeriod, daemonHistoryYears, dataMode, period, records],
   );
   const dashboardWindow = React.useMemo(
     () => transactionPeriodDateWindow(resolvedPeriod),
@@ -296,16 +283,33 @@ const TransactionsDashboard = ({
     {
       period: resolvedPeriod,
       ...(dashboardWindow ?? {}),
+      resolveAuto: period === "auto",
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       ...(dashboardWallet ? { wallet: dashboardWallet } : {}),
     },
-    { enabled: dataMode !== "mock" },
+    // Changing the period changes the query key. Without the previous snapshot
+    // as placeholder every range click blanked the whole workbench into
+    // skeletons; keep the old numbers on screen until the new ones land.
+    { enabled: dataMode !== "mock", placeholderData: keepPreviousData },
   );
   const dashboardSnapshot =
     dashboardQuery.data?.kind === "ui.transactions.dashboard"
       ? dashboardQuery.data.data
       : null;
-  const showRefreshSkeleton = baseRefreshSkeleton || dashboardQuery.isFetching;
+  const showRefreshSkeleton = baseRefreshSkeleton || dashboardQuery.isLoading;
+  React.useEffect(() => {
+    setDaemonHistoryYears(
+      dashboardSnapshot
+        ? historyYearsForBounds(
+            dashboardSnapshot.history.earliest,
+            dashboardSnapshot.history.latest,
+          )
+        : undefined,
+    );
+    if (dashboardSnapshot?.history.autoPeriod) {
+      setDaemonAutoPeriod(dashboardSnapshot.history.autoPeriod);
+    }
+  }, [dashboardSnapshot]);
   const availablePeriods = React.useMemo(
     () =>
       dashboardSnapshot
@@ -316,10 +320,13 @@ const TransactionsDashboard = ({
         : availablePeriodKeysForRecords(records),
     [dashboardSnapshot, records],
   );
-  const periodOptions = React.useMemo<PeriodKey[]>(
-    () => ["auto", ...availablePeriods],
-    [availablePeriods],
-  );
+  // Keep the active period selectable even when the book's history no longer
+  // covers it (a range carried over from another book), instead of snapping the
+  // user's choice to something else the moment the tabs re-render.
+  const periodOptions = React.useMemo<PeriodKey[]>(() => {
+    const options: PeriodKey[] = ["auto", ...availablePeriods];
+    return options.includes(period) ? options : [...options, period];
+  }, [availablePeriods, period]);
   const effectiveCandidateRefs =
     dashboardSnapshot?.candidates ?? pairingCandidateRefs;
   // In daemon-backed (real/regtest) mode the New Transaction picker must not
@@ -347,7 +354,7 @@ const TransactionsDashboard = ({
   );
   const focusedRecord = React.useMemo(() => {
     if (!focusedTransaction) return null;
-    return tableSourceRecords.find(
+    return records.find(
       (record) =>
         record.id === focusedTransaction.id ||
         (Boolean(focusedTransaction.externalId) &&
@@ -355,7 +362,7 @@ const TransactionsDashboard = ({
         (Boolean(focusedTransaction.explorerId) &&
           record.explorerId === focusedTransaction.explorerId),
     ) ?? null;
-  }, [focusedTransaction, tableSourceRecords]);
+  }, [focusedTransaction, records]);
   // Real table pages are already scoped by the canonical daemon request. A
   // second client-side period pass would erase exact txid/chart-bucket results
   // that intentionally override the broad period (the original empty-table
@@ -363,9 +370,9 @@ const TransactionsDashboard = ({
   const tablePeriodRecords = React.useMemo(
     () =>
       dataMode !== "mock" || resolvedPeriod === "all"
-        ? sortTransactionsByDateDesc(tableSourceRecords)
-        : recordsForPeriod(tableSourceRecords, resolvedPeriod),
-    [dataMode, resolvedPeriod, tableSourceRecords],
+        ? sortTransactionsByDateDesc(records)
+        : recordsForPeriod(records, resolvedPeriod),
+    [dataMode, resolvedPeriod, records],
   );
   const tableRecords = React.useMemo(() => {
     if (
@@ -398,11 +405,10 @@ const TransactionsDashboard = ({
   React.useEffect(() => {
     if (previousBookKey.current === bookKey) return;
     previousBookKey.current = bookKey;
-    skipNextPeriodPersist.current = true;
+    setDaemonHistoryYears(undefined);
+    setDaemonAutoPeriod(undefined);
     patchFilterState({
-      period:
-        scopeParams.period ??
-        transactionPeriodFromSharedPeriod(storedBookChartPeriod),
+      period: scopeParams.period ?? storedBookChartPeriod ?? "auto",
       flowChartSelection: null,
       quickFilter: null,
       breakdownSelection: null,
@@ -413,22 +419,9 @@ const TransactionsDashboard = ({
 
   React.useEffect(() => {
     if (!bookKey) return;
-    if (skipNextPeriodPersist.current) {
-      skipNextPeriodPersist.current = false;
-      return;
-    }
     setStoredBookChartPeriod(bookKey, period);
   }, [bookKey, period, setStoredBookChartPeriod]);
 
-  React.useEffect(() => {
-    if (period === "auto") return;
-    if (availablePeriods.includes(period)) return;
-    handlePeriodChange(
-      availablePeriods.includes("1year")
-        ? "1year"
-        : availablePeriods[availablePeriods.length - 1] ?? "all",
-    );
-  }, [availablePeriods, handlePeriodChange, period]);
   const resetTableFilters = React.useCallback(() => {
     patchFilterState({ table: { ...DEFAULT_TRANSACTION_TABLE_FILTER_STATE } });
   }, []);
@@ -472,6 +465,10 @@ const TransactionsDashboard = ({
     tableFilterState,
   ]);
 
+  // Mirror the filters into the URL for deep links and reloads. `replaceState`
+  // (the same mechanism the Overview chart uses) rather than a router navigate:
+  // navigating this route re-renders it and bounced the state we just set back
+  // through `scopeParams`, which is what made range clicks need two goes.
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     const nextQuery = serializeTransactionFilterParams(
@@ -482,8 +479,8 @@ const TransactionsDashboard = ({
       ? `${window.location.pathname}?${nextQuery}`
       : window.location.pathname;
     if (`${window.location.pathname}${window.location.search}` === nextUrl) return;
-    void navigate({ to: nextUrl, replace: true });
-  }, [filterState, navigate]);
+    window.history.replaceState(null, "", nextUrl);
+  }, [filterState]);
 
   React.useLayoutEffect(() => {
     if (!tableExpanded || typeof window === "undefined") return;
@@ -624,7 +621,7 @@ const TransactionsDashboard = ({
       >
         <TransactionsTable
           records={tableRecords}
-          transactionSetRecords={tableSourceRecords}
+          transactionSetRecords={records}
           hideSensitive={hideSensitive}
           currency={currency}
           nowRate={nowRate}

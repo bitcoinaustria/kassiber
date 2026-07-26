@@ -12,7 +12,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-import { periodKeys, periodShortLabelKeys, type TimePeriod } from "./model";
+import {
+  periodKeys,
+  periodLabelKeys,
+  periodShortLabelKeys,
+  type ResolvedTimePeriod,
+  type TimePeriod,
+} from "./model";
 
 // Don't take focus on click: macOS Full Keyboard Access draws a native focus
 // ring that ignores CSS. Keyboard tab focus still works.
@@ -23,6 +29,8 @@ const preventClickFocus = (event: React.MouseEvent) => event.preventDefault();
 // scale menu) on the right.
 export function ChartRangeToolbar({
   period,
+  periodOptions = periodKeys,
+  resolvedPeriod = null,
   onPeriodChange,
   yScaleLog,
   onYScaleLogChange,
@@ -30,11 +38,12 @@ export function ChartRangeToolbar({
   onYAutoFitChange,
   showLastValue,
   onShowLastValueChange,
-  groupActivityMarkers,
-  onGroupActivityMarkersChange,
   onOpenMoreSettings,
 }: {
   period: TimePeriod;
+  periodOptions?: TimePeriod[];
+  /** Window "auto" resolved to, named in the Auto chip's tooltip. */
+  resolvedPeriod?: ResolvedTimePeriod | null;
   onPeriodChange: (period: TimePeriod) => void;
   yScaleLog: boolean;
   onYScaleLogChange: (value: boolean) => void;
@@ -42,8 +51,6 @@ export function ChartRangeToolbar({
   onYAutoFitChange: (value: boolean) => void;
   showLastValue: boolean;
   onShowLastValueChange: (value: boolean) => void;
-  groupActivityMarkers: boolean;
-  onGroupActivityMarkersChange: (value: boolean) => void;
   onOpenMoreSettings: () => void;
 }) {
   const { t } = useTranslation("overview");
@@ -61,18 +68,28 @@ export function ChartRangeToolbar({
         aria-label={t("controls.timeRange")}
         className="flex flex-wrap items-center gap-0.5"
       >
-        {periodKeys.map((key) => (
+        {periodOptions.map((key) => {
+          const label =
+            key === "auto" && resolvedPeriod
+              ? t("period.autoResolved", {
+                  period: t(periodLabelKeys[resolvedPeriod]),
+                })
+              : t(periodLabelKeys[key]);
+          return (
           <button
             key={key}
             type="button"
             aria-pressed={period === key}
+            aria-label={label}
+            title={label}
             className={chipClass(period === key)}
             onClick={() => onPeriodChange(key)}
             onMouseDown={preventClickFocus}
           >
             {t(periodShortLabelKeys[key])}
           </button>
-        ))}
+          );
+        })}
       </div>
       <div
         role="group"
@@ -113,33 +130,14 @@ export function ChartRangeToolbar({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="end" className="w-64">
-            <DropdownMenuCheckboxItem
-              checked={yAutoFit}
-              onCheckedChange={onYAutoFitChange}
-              onSelect={(event) => event.preventDefault()}
-            >
-              {t("controls.autoFitScale")}
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={yScaleLog}
-              onCheckedChange={onYScaleLogChange}
-              onSelect={(event) => event.preventDefault()}
-            >
-              {t("controls.logScale")}
-            </DropdownMenuCheckboxItem>
+            {/* Log and auto-fit are the chips to the left; only what has no
+                chip of its own lives in here. */}
             <DropdownMenuCheckboxItem
               checked={showLastValue}
               onCheckedChange={onShowLastValueChange}
               onSelect={(event) => event.preventDefault()}
             >
               {t("controls.lastValueLabel")}
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={groupActivityMarkers}
-              onCheckedChange={onGroupActivityMarkersChange}
-              onSelect={(event) => event.preventDefault()}
-            >
-              {t("controls.groupActivityMarkers")}
             </DropdownMenuCheckboxItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={onOpenMoreSettings}>

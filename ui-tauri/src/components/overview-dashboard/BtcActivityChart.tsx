@@ -34,11 +34,7 @@ import {
 import { formatBtc, type Currency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
-import {
-  bookIdentityKey,
-  type BookChartPeriod,
-  useUiStore,
-} from "@/store/ui";
+import { bookIdentityKey, useUiStore } from "@/store/ui";
 
 import { ActivityScatterDot } from "./ActivityScatterDot";
 import { ChartControlsSheet } from "./ChartControlsSheet";
@@ -71,8 +67,6 @@ import {
   initialYScaleLogFromUrl,
   INCOMING_MARKER_MIN_PARAM,
   lastTreasuryLineValue,
-  LEGACY_INCOMING_MARKER_MIN_PARAM,
-  LEGACY_OUTGOING_MARKER_MIN_PARAM,
   linearAxisTicks,
   logAxisTicks,
   logSafeActivityMarkers,
@@ -84,7 +78,9 @@ import {
   portfolioChartColors,
   positiveLogDomain,
   rawTreasuryBrushRange,
+  resolveAutoTimePeriod,
   sameTreasuryBrushRange,
+  selectableTimePeriods,
   serializeActivityMarkerMinimum,
   useHoverHighlight,
   useResolvedColorMode,
@@ -113,27 +109,8 @@ function shouldShowPortfolioValueByDefault(
   return fiatSeriesEnabled && currency !== "btc";
 }
 
-function overviewTimePeriodFromSharedPeriod(
-  period: BookChartPeriod | undefined,
-): TimePeriod {
-  if (period === "10years" || period === "15years") return "5years";
-  return period ?? "auto";
-}
-
-function hasTimePeriodUrlParam() {
-  if (typeof window === "undefined") return false;
-  return new URLSearchParams(window.location.search).has("period");
-}
-
-function isLossySharedPeriodFallback(
-  sharedPeriod: BookChartPeriod | undefined,
-  overviewPeriod: TimePeriod,
-) {
-  return (
-    (sharedPeriod === "10years" || sharedPeriod === "15years") &&
-    overviewPeriod === overviewTimePeriodFromSharedPeriod(sharedPeriod)
-  );
-}
+// The card renders twice: inline and inside the expand dialog.
+type ChartView = "compact" | "expanded";
 
 export const BtcActivityChart = ({
   snapshot,
@@ -166,9 +143,7 @@ export const BtcActivityChart = ({
     (state) => state.setBookChartPeriod,
   );
   const [period, setPeriod] = React.useState<TimePeriod>(() =>
-    initialTimePeriodFromUrl(
-      overviewTimePeriodFromSharedPeriod(storedBookChartPeriod),
-    ),
+    initialTimePeriodFromUrl(storedBookChartPeriod ?? "auto"),
   );
   const [yScaleLog, setYScaleLog] = React.useState<boolean>(
     initialYScaleLogFromUrl,
@@ -199,7 +174,6 @@ export const BtcActivityChart = ({
       initialActivityMarkerMinimumFromUrl(
         INCOMING_MARKER_MIN_PARAM,
         DEFAULT_INCOMING_MARKER_MIN_BTC,
-        LEGACY_INCOMING_MARKER_MIN_PARAM,
       ),
     );
   const [outgoingMarkerMinimumBtc, setOutgoingMarkerMinimumBtc] =
@@ -207,31 +181,24 @@ export const BtcActivityChart = ({
       initialActivityMarkerMinimumFromUrl(
         OUTGOING_MARKER_MIN_PARAM,
         DEFAULT_OUTGOING_MARKER_MIN_BTC,
-        LEGACY_OUTGOING_MARKER_MIN_PARAM,
       ),
     );
-  const [chartControlsOpen, setChartControlsOpen] = React.useState(false);
-  const [expandedChartControlsOpen, setExpandedChartControlsOpen] =
-    React.useState(false);
-  const [compactBrushRange, setCompactBrushRange] =
-    React.useState<TreasuryBrushRange | null>(null);
-  const [expandedBrushRange, setExpandedBrushRange] =
-    React.useState<TreasuryBrushRange | null>(null);
-  const [compactBrushRevision, setCompactBrushRevision] = React.useState(0);
-  const [expandedBrushRevision, setExpandedBrushRevision] = React.useState(0);
+  // The compact and expanded charts render the same series independently, so
+  // each keeps its own controls-sheet, brush window, and brush remount counter.
+  const [controlsOpenByView, setControlsOpenByView] = React.useState<
+    Record<ChartView, boolean>
+  >({ compact: false, expanded: false });
+  const [brushRangeByView, setBrushRangeByView] = React.useState<
+    Record<ChartView, TreasuryBrushRange | null>
+  >({ compact: null, expanded: null });
+  const [brushRevisionByView, setBrushRevisionByView] = React.useState<
+    Record<ChartView, number>
+  >({ compact: 0, expanded: 0 });
   const [hoveredActivityPoint, setHoveredActivityPoint] =
     React.useState<TreasuryChartPoint | null>(null);
   const previousFiatSeriesEnabled = React.useRef(fiatSeriesEnabled);
   const previousPortfolioValueDefault = React.useRef(defaultPortfolioValueVisible);
   const previousBookKey = React.useRef(bookKey);
-  const skipNextPeriodPersist = React.useRef(
-    Boolean(
-      storedBookChartPeriod &&
-        overviewTimePeriodFromSharedPeriod(storedBookChartPeriod) !==
-          storedBookChartPeriod &&
-        !hasTimePeriodUrlParam(),
-    ),
-  );
   const { active: activeSeries, handleHover } =
     useHoverHighlight<TreasuryChartSeriesKey>();
   const colorMode = useResolvedColorMode();
@@ -307,24 +274,14 @@ export const BtcActivityChart = ({
   React.useEffect(() => {
     if (previousBookKey.current === bookKey) return;
     previousBookKey.current = bookKey;
-    skipNextPeriodPersist.current = true;
-    setPeriod(
-      initialTimePeriodFromUrl(
-        overviewTimePeriodFromSharedPeriod(storedBookChartPeriod),
-      ),
-    );
-    setCompactBrushRange(null);
-    setExpandedBrushRange(null);
+    setPeriod(initialTimePeriodFromUrl(storedBookChartPeriod ?? "auto"));
+    setBrushRangeByView({ compact: null, expanded: null });
     setExpandedPointDate(null);
     setHoveredActivityPoint(null);
   }, [bookKey, storedBookChartPeriod]);
 
   React.useEffect(() => {
     if (!bookKey) return;
-    if (skipNextPeriodPersist.current) {
-      skipNextPeriodPersist.current = false;
-      return;
-    }
     setStoredBookChartPeriod(bookKey, period);
   }, [bookKey, period, setStoredBookChartPeriod]);
 
@@ -355,15 +312,11 @@ export const BtcActivityChart = ({
     if (typeof window === "undefined") return;
     const timeout = window.setTimeout(() => {
       const params = new URLSearchParams(window.location.search);
-      if (isLossySharedPeriodFallback(storedBookChartPeriod, period)) {
-        params.delete("period");
-      } else if (period === "auto") {
+      if (period === "auto") {
         params.delete("period");
       } else {
         params.set("period", period);
       }
-      params.delete(LEGACY_INCOMING_MARKER_MIN_PARAM);
-      params.delete(LEGACY_OUTGOING_MARKER_MIN_PARAM);
       if (incomingMarkerMinimumBtc === DEFAULT_INCOMING_MARKER_MIN_BTC) {
         params.delete(INCOMING_MARKER_MIN_PARAM);
       } else {
@@ -407,7 +360,6 @@ export const BtcActivityChart = ({
     incomingMarkerMinimumBtc,
     outgoingMarkerMinimumBtc,
     period,
-    storedBookChartPeriod,
     yAutoFit,
     yScaleLog,
   ]);
@@ -435,14 +387,26 @@ export const BtcActivityChart = ({
       ),
     [currency, period, snapshot],
   );
+  // What "auto" settled on, so the chip can say so instead of leaving the
+  // resolved window a mystery.
+  const resolvedPeriod = React.useMemo(
+    () => resolveAutoTimePeriod(snapshot, period),
+    [period, snapshot],
+  );
+  // Only offer ranges the book's history actually covers, and always keep the
+  // active one visible (a range persisted from a longer-history book stays
+  // selected rather than silently losing its chip).
+  const periodOptions = React.useMemo(() => {
+    const options = selectableTimePeriods(snapshot);
+    return options.includes(period) ? options : [...options, period];
+  }, [period, snapshot]);
   const handlePeriodChange = React.useCallback((next: TimePeriod) => {
     // The brush window is a zoom *within* a period's data, keyed by index.
     // Switching periods swaps the underlying series (and its length), so any
     // carried-over window would clamp to a partial, stale slice that never
     // re-expands. Reset to the full range so the new period renders whole.
     setPeriod(next);
-    setCompactBrushRange(null);
-    setExpandedBrushRange(null);
+    setBrushRangeByView({ compact: null, expanded: null });
   }, []);
   const toggleSeries = React.useCallback((key: TreasuryChartSeriesKey) => {
     setSeriesVisible((current) => ({ ...current, [key]: !current[key] }));
@@ -494,43 +458,52 @@ export const BtcActivityChart = ({
     [activityMarkerMinimumForPoint, expandedChartData, period, seriesVisible.events],
   );
 
+  // Keep each view's stored window valid as its data changes (a shorter series
+  // must clamp the window instead of leaving a stale, out-of-range slice).
   React.useEffect(() => {
-    const data = compactMarkerView.chartDisplayData;
-    setCompactBrushRange((current) => {
-      const next = normalizeTreasuryBrushRange(
-        data,
-        current ?? fullTreasuryBrushRange(data.length),
-        current,
-      );
-      return sameTreasuryBrushRange(current, next) ? current : next;
+    const dataByView: Record<ChartView, TreasuryChartPoint[]> = {
+      compact: compactMarkerView.chartDisplayData,
+      expanded: expandedMarkerView.chartDisplayData,
+    };
+    setBrushRangeByView((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const view of ["compact", "expanded"] as const) {
+        const data = dataByView[view];
+        const normalized = normalizeTreasuryBrushRange(
+          data,
+          current[view] ?? fullTreasuryBrushRange(data.length),
+          current[view],
+        );
+        if (sameTreasuryBrushRange(current[view], normalized)) continue;
+        next[view] = normalized;
+        changed = true;
+      }
+      return changed ? next : current;
     });
-  }, [compactMarkerView.chartDisplayData]);
-
-  React.useEffect(() => {
-    const data = expandedMarkerView.chartDisplayData;
-    setExpandedBrushRange((current) => {
-      const next = normalizeTreasuryBrushRange(
-        data,
-        current ?? fullTreasuryBrushRange(data.length),
-        current,
-      );
-      return sameTreasuryBrushRange(current, next) ? current : next;
-    });
-  }, [expandedMarkerView.chartDisplayData]);
+  }, [compactMarkerView.chartDisplayData, expandedMarkerView.chartDisplayData]);
 
   const renderChartCard = (expanded = false) => {
+    const view: ChartView = expanded ? "expanded" : "compact";
     const plottedData = expanded ? expandedChartData : chartData;
     const markerView = expanded ? expandedMarkerView : compactMarkerView;
-    const brushRange = expanded ? expandedBrushRange : compactBrushRange;
-    const setBrushRange = expanded ? setExpandedBrushRange : setCompactBrushRange;
-    const brushRevision = expanded ? expandedBrushRevision : compactBrushRevision;
-    const bumpBrushRevision = expanded
-      ? setExpandedBrushRevision
-      : setCompactBrushRevision;
-    const controlsOpen = expanded ? expandedChartControlsOpen : chartControlsOpen;
-    const setControlsOpen = expanded
-      ? setExpandedChartControlsOpen
-      : setChartControlsOpen;
+    const brushRange = brushRangeByView[view];
+    const setBrushRange = (
+      update: (current: TreasuryBrushRange | null) => TreasuryBrushRange | null,
+    ) =>
+      setBrushRangeByView((current) => ({
+        ...current,
+        [view]: update(current[view]),
+      }));
+    const brushRevision = brushRevisionByView[view];
+    const bumpBrushRevision = () =>
+      setBrushRevisionByView((current) => ({
+        ...current,
+        [view]: current[view] + 1,
+      }));
+    const controlsOpen = controlsOpenByView[view];
+    const setControlsOpen = (open: boolean) =>
+      setControlsOpenByView((current) => ({ ...current, [view]: open }));
     const {
       activityPoints,
       chartDisplayData,
@@ -645,7 +618,7 @@ export const BtcActivityChart = ({
       if (!sameTreasuryBrushRange(rawRange, normalizedRange)) {
         // Recharts keeps the dragged handle's internal position; remount the
         // brush after state settles so the visual handle reflects the clamped range.
-        window.setTimeout(() => bumpBrushRevision((revision) => revision + 1), 0);
+        window.setTimeout(bumpBrushRevision, 0);
       }
       setBrushRange((current) =>
         sameTreasuryBrushRange(current, normalizedRange)
@@ -657,7 +630,7 @@ export const BtcActivityChart = ({
       const fullRange = fullTreasuryBrushRange(chartDisplayData.length);
       setBrushRange((current) => {
         if (sameTreasuryBrushRange(current, fullRange)) return current;
-        window.setTimeout(() => bumpBrushRevision((revision) => revision + 1), 0);
+        window.setTimeout(bumpBrushRevision, 0);
         return fullRange;
       });
     };
@@ -763,9 +736,6 @@ export const BtcActivityChart = ({
         <ChartControlsSheet
           open={controlsOpen}
           onOpenChange={setControlsOpen}
-          period={period}
-          onPeriodChange={handlePeriodChange}
-          primaryColor={primaryColor}
           legendItems={legendItems}
           seriesVisible={seriesVisible}
           onToggleSeries={toggleSeries}
@@ -1395,6 +1365,8 @@ export const BtcActivityChart = ({
             </div>
             <ChartRangeToolbar
               period={period}
+              periodOptions={periodOptions}
+              resolvedPeriod={period === "auto" ? resolvedPeriod : null}
               onPeriodChange={handlePeriodChange}
               yScaleLog={yScaleLog}
               onYScaleLogChange={setYScaleLog}
@@ -1402,8 +1374,6 @@ export const BtcActivityChart = ({
               onYAutoFitChange={setYAutoFit}
               showLastValue={showLastValue}
               onShowLastValueChange={setShowLastValue}
-              groupActivityMarkers={groupActivityMarkers}
-              onGroupActivityMarkersChange={setGroupActivityMarkers}
               onOpenMoreSettings={() => setControlsOpen(true)}
             />
           </div>
