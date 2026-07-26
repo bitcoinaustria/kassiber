@@ -393,10 +393,6 @@ def _endpoint_host(url: Any) -> str:
     return (parsed.hostname or raw).lower().strip("[]")
 
 
-def _is_onion_host(host: str) -> bool:
-    return host.lower().endswith(".onion")
-
-
 def _is_local_or_private_host(host: str) -> bool:
     normalized = (host or "").lower().strip("[]")
     if not normalized:
@@ -429,7 +425,7 @@ def _backend_privacy_posture(
     proxy_honored = bool(has_proxy) and (
         not normalized_kind or normalized_kind in _PRIVACY_PROXY_AWARE_TRANSPORTS
     )
-    if _is_onion_host(host) or proxy_honored:
+    if host.lower().endswith(".onion") or proxy_honored:
         return "shielded"
     if host:
         return "remote"
@@ -1053,10 +1049,6 @@ def _mirror_evidence_level(items: Sequence[Mapping[str, Any]]) -> str:
     return "exact"
 
 
-def _mirror_severity_rank(value: Any) -> int:
-    return {"alert": 3, "warning": 2, "info": 1}.get(str(value or ""), 0)
-
-
 def _mirror_finding_candidates(
     graph_payload: Mapping[str, Any],
     hygiene_payload: Mapping[str, Any],
@@ -1104,7 +1096,10 @@ def _privacy_mirror_worst_risk(
     ranked = sorted(
         candidates,
         key=lambda item: (
-            _mirror_severity_rank(item.get("severity")),
+            {"alert": 3, "warning": 2, "info": 1}.get(
+                str(item.get("severity") or ""),
+                0,
+            ),
             str(item.get("id") or ""),
         ),
         reverse=True,
@@ -4180,10 +4175,6 @@ _TAX_SUMMARY_ROW_KEYS = (
 )
 
 
-def _tax_summary_detail_row(row):
-    return _normalize_tax_summary_row({"row_type": "detail", **row})
-
-
 def _normalize_tax_summary_row(row):
     normalized = dict(row)
     for key in _TAX_SUMMARY_ROW_KEYS:
@@ -4493,7 +4484,9 @@ def report_tax_summary(
         cost_basis = dec(row["cost_basis"])
         gain_loss = dec(row["gain_loss"])
         year = int(row["year"])
-        grouped_rows[year].append(_tax_summary_detail_row(row))
+        grouped_rows[year].append(
+            _normalize_tax_summary_row({"row_type": "detail", **row})
+        )
         grouped_by_year[year]["assets"].add(row["asset"])
         grouped_by_year[year]["quantity"] += quantity
         grouped_by_year[year]["proceeds"] += proceeds
@@ -6252,28 +6245,6 @@ def _generic_report_overview_rows(context):
     ]
 
 
-def _generic_report_wallet_rows(context):
-    return [
-        {
-            "wallet": _row_get(row, "label"),
-            "kind": _row_get(row, "kind"),
-            "chain": _row_get(row, "chain"),
-            "network": _row_get(row, "network"),
-            "backend": _row_get(row, "backend"),
-            "gap_limit": _row_get(row, "gap_limit"),
-        }
-        for row in context["scope_wallets"]
-    ]
-
-
-def _generic_report_asset_flow_rows(context):
-    return _summary_flow_rows(context["query_rows"]["flow_by_asset"])
-
-
-def _generic_report_wallet_flow_rows(context):
-    return _summary_wallet_flow_rows(context["query_rows"]["flow_by_wallet"])
-
-
 def _pair_swap_fee_msat(row):
     """Return the persisted swap fee, or 0 when the pair stores NULL.
 
@@ -6383,10 +6354,6 @@ def _generic_report_balance_rows(context):
     return rows
 
 
-def _generic_report_portfolio_rows(context):
-    return [dict(row) for row in context["portfolio_rows"]]
-
-
 def _generic_report_capital_summary_rows(context):
     grouped = {}
     for row in context["capital_rows"]:
@@ -6430,17 +6397,6 @@ def _generic_report_capital_detail_rows(context):
             }
         )
     return rows
-
-
-def _generic_report_balance_history_rows(context):
-    return [dict(row) for row in context["history_rows"]]
-
-
-def _generic_report_data_quality_rows(context):
-    return [
-        {"reason": row["reason"], "count": int(row["count"] or 0)}
-        for row in context["query_rows"]["quarantine_rows"]
-    ]
 
 
 def _optional_decimal(value):
@@ -6530,7 +6486,17 @@ def _generic_report_section_specs(context):
             "sheet_name": "Wallets",
             "title": "Wallet Inventory",
             "headers": ("wallet", "kind", "chain", "network", "backend", "gap_limit"),
-            "rows": _generic_report_wallet_rows(context),
+            "rows": [
+                {
+                    "wallet": _row_get(row, "label"),
+                    "kind": _row_get(row, "kind"),
+                    "chain": _row_get(row, "chain"),
+                    "network": _row_get(row, "network"),
+                    "backend": _row_get(row, "backend"),
+                    "gap_limit": _row_get(row, "gap_limit"),
+                }
+                for row in context["scope_wallets"]
+            ],
         },
         {
             "sheet_name": "Asset Flow",
@@ -6550,7 +6516,7 @@ def _generic_report_section_specs(context):
                 "fee_amount_sat",
                 "fee_amount_msat",
             ),
-            "rows": _generic_report_asset_flow_rows(context),
+            "rows": _summary_flow_rows(context["query_rows"]["flow_by_asset"]),
         },
         {
             "sheet_name": "Wallet Metrics",
@@ -6573,7 +6539,9 @@ def _generic_report_section_specs(context):
                 "first_transaction_at",
                 "last_transaction_at",
             ),
-            "rows": _generic_report_wallet_flow_rows(context),
+            "rows": _summary_wallet_flow_rows(
+                context["query_rows"]["flow_by_wallet"]
+            ),
         },
         {
             "sheet_name": "Transfers & Swaps",
@@ -6637,7 +6605,7 @@ def _generic_report_section_specs(context):
                 "market_value",
                 "unrealized_pnl",
             ),
-            "rows": _generic_report_portfolio_rows(context),
+            "rows": [dict(row) for row in context["portfolio_rows"]],
         },
         {
             "sheet_name": "Capital Summary",
@@ -6669,13 +6637,16 @@ def _generic_report_section_specs(context):
             "sheet_name": "Balance History",
             "title": "Balance History",
             "headers": ("period_start", "period_end", "asset", "quantity", "cumulative_cost_basis", "market_value"),
-            "rows": _generic_report_balance_history_rows(context),
+            "rows": [dict(row) for row in context["history_rows"]],
         },
         {
             "sheet_name": "Data Quality",
             "title": "Data Quality",
             "headers": ("reason", "count"),
-            "rows": _generic_report_data_quality_rows(context),
+            "rows": [
+                {"reason": row["reason"], "count": int(row["count"] or 0)}
+                for row in context["query_rows"]["quarantine_rows"]
+            ],
         },
         {
             "sheet_name": "Transactions",
@@ -6805,10 +6776,6 @@ def _estimate_wrapped_lines(text, width_chars):
     return max(1, total)
 
 
-def _row_height_for_lines(lines):
-    return max(16, lines * 15 + 4)
-
-
 def _generic_report_xlsx_write_sheet(workbook, spec, formats):
     worksheet = workbook.add_worksheet(spec["sheet_name"])
     worksheet.set_landscape()
@@ -6844,7 +6811,7 @@ def _generic_report_xlsx_write_sheet(workbook, spec, formats):
                 if format_name == "text":
                     lines = max(lines, _estimate_wrapped_lines(value, widths[column_index]))
                 _xlsx_write_value(worksheet, row_index, column_index, value, formats[format_name])
-            worksheet.set_row(row_index, _row_height_for_lines(lines))
+            worksheet.set_row(row_index, max(16, lines * 15 + 4))
             row_index += 1
     else:
         worksheet.write_string(row_index, 0, "No rows in scope.", formats["text"])
