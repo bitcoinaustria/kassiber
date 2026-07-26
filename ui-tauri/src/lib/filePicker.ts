@@ -3,9 +3,11 @@
  *
  * Uses the Tauri dialog plugin when running inside the desktop shell so the
  * user gets a real OS file picker that returns an absolute path the daemon
- * can open. In Vite dev bridge mode, a loopback-only bridge endpoint opens
+ * can open. In Vite browser bridge mode, a loopback-only bridge endpoint opens
  * the same kind of native picker from the local dev server. Outside those
  * local runtimes the picker is unavailable and callers fall back to text input.
+ * Saving remains Tauri-only; browser builds use their existing download/save
+ * fallbacks because the bridge deliberately does not accept destination paths.
  *
  * Contract:
  *   - `null` (single) / `[]` (multi) means the user cancelled, or the runtime
@@ -20,12 +22,14 @@
  * opaque session token plus display metadata.
  */
 
+import { DAEMON_MODE } from "@/daemon/transport";
+
 export interface FilePickerOptions {
   title?: string;
   filters?: { name: string; extensions: string[] }[];
   /**
    * Pick a directory instead of a file. Honored by the Tauri picker and the
-   * dev bridge (osascript `choose folder`, zenity `--directory`).
+   * browser bridge (osascript `choose folder`, zenity `--directory`).
    */
   directory?: boolean;
   defaultPath?: string;
@@ -51,10 +55,13 @@ const FILE_PICKER_BRIDGE_PATH = "/__kassiber__/pick-file";
 const isTauriRuntime =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-const isDevBridgeRuntime =
-  typeof window !== "undefined" && import.meta.env.DEV && !isTauriRuntime;
+const isBridgeRuntime =
+  typeof window !== "undefined" &&
+  DAEMON_MODE === "bridge" &&
+  !isTauriRuntime;
 
-export const isFilePickerAvailable = isTauriRuntime || isDevBridgeRuntime;
+export const isFilePickerAvailable = isTauriRuntime || isBridgeRuntime;
+export const isFileSaveAvailable = isTauriRuntime;
 
 async function callFilePickerBridge(
   body: Record<string, unknown>,
@@ -106,7 +113,7 @@ function documentImportSourceSelection(
 
 export async function pickDocumentImportSource(): Promise<DocumentImportSourceSelection | null> {
   if (!isFilePickerAvailable) return null;
-  if (isDevBridgeRuntime) {
+  if (isBridgeRuntime) {
     const payload = await callFilePickerBridge({ purpose: "document_import" });
     if (payload.error) throw new Error(String(payload.error));
     return documentImportSourceSelection(payload.documentImportSource);
@@ -162,7 +169,7 @@ export async function pickFile(
   options: FilePickerOptions = {},
 ): Promise<string | null> {
   if (!isFilePickerAvailable) return null;
-  if (isDevBridgeRuntime) {
+  if (isBridgeRuntime) {
     return pickFileViaDevBridge(options);
   }
   const { open } = await import("@tauri-apps/plugin-dialog");
@@ -180,7 +187,7 @@ export async function pickFileWithContentsBase64(
   options: FilePickerOptions = {},
 ): Promise<PickedFileWithContents | null> {
   if (!isFilePickerAvailable) return null;
-  if (isDevBridgeRuntime) {
+  if (isBridgeRuntime) {
     return pickFileWithContentsViaDevBridge(options);
   }
   const selected = await pickFile(options);
@@ -200,7 +207,7 @@ export async function pickFiles(
   options: FilePickerOptions = {},
 ): Promise<string[]> {
   if (!isFilePickerAvailable) return [];
-  if (isDevBridgeRuntime) {
+  if (isBridgeRuntime) {
     return pickFilesViaDevBridge(options);
   }
   const { open } = await import("@tauri-apps/plugin-dialog");
@@ -220,7 +227,7 @@ export async function pickFiles(
 export async function saveFile(
   options: FilePickerOptions = {},
 ): Promise<string | null> {
-  if (!isFilePickerAvailable) return null;
+  if (!isFileSaveAvailable) return null;
   const { save } = await import("@tauri-apps/plugin-dialog");
   const selection = await save({
     title: options.title,

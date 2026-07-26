@@ -20,8 +20,7 @@ import {
 } from "@/lib/screen-layout";
 import { useCurrency } from "@/lib/currency";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
-import { MOCK_TRANSACTIONS, type TransactionsList } from "@/mocks/transactions";
-import { MOCK_OVERVIEW } from "@/mocks/seed";
+import type { TransactionsList } from "@/mocks/transactions";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
 import {
   DocumentImportDialog,
@@ -65,8 +64,8 @@ interface TransactionsExportResult {
 
 const TransactionsDashboard = ({
   className,
-  transactions = MOCK_TRANSACTIONS,
-  nowRate = MOCK_OVERVIEW.priceEur,
+  transactions,
+  nowRate,
   pairingCandidateRefs,
   swapCandidateTotal,
   isDataRefreshing = false,
@@ -81,8 +80,8 @@ const TransactionsDashboard = ({
   onTableFilterArgsChange,
 }: {
   className?: string;
-  transactions?: TransactionsList;
-  nowRate?: number | null;
+  transactions: TransactionsList;
+  nowRate: number | null;
   pairingCandidateRefs?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
   isDataRefreshing?: boolean;

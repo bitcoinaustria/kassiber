@@ -2,7 +2,7 @@
  * Daemon transport selector.
  *
  * Two runtime modes:
- *   - "bridge" — Vite dev-server bridge to the Python daemon, dev-only
+ *   - "bridge" — Vite server bridge to the Python daemon for local browsers
  *   - "tauri"  — JSONL over stdin/stdout via Rust supervisor (production)
  *
  * The Tauri mode calls the Rust shell command boundary, which forwards
@@ -621,7 +621,9 @@ export async function selectImportProjectDirectory(): Promise<ImportProjectSelec
     return response.selection;
   }
   if (DAEMON_MODE !== "tauri") {
-    throw new Error("Project import is available in the desktop app or dev bridge.");
+    throw new Error(
+      "Project import is available in the desktop app or browser bridge.",
+    );
   }
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<ImportProjectSelection | null>("select_import_project_directory");
@@ -637,7 +639,9 @@ async function activateImportProjectViaMode(
     return response.selection;
   }
   if (DAEMON_MODE !== "tauri") {
-    throw new Error("Project import is available in the desktop app or dev bridge.");
+    throw new Error(
+      "Project import is available in the desktop app or browser bridge.",
+    );
   }
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<ImportProjectSelection>("activate_import_project", {
@@ -733,7 +737,9 @@ export function canResetRegtestDemo(dataRoot?: string | null): boolean {
 
 export async function resetRegtestDemo(): Promise<{ dataRoot: string }> {
   if (!canResetRegtestDemo()) {
-    throw new Error("Resetting the regtest demo is only available in the dev bridge.");
+    throw new Error(
+      "Resetting the regtest demo is only available in the browser bridge.",
+    );
   }
   const response = await fetch(RESET_REGTEST_BRIDGE_PATH, {
     method: "POST",

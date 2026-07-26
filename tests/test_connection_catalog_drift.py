@@ -203,7 +203,7 @@ def _invoked_ui_daemon_kinds() -> dict[str, str]:
     invoked: dict[str, str] = {}
     for path in sorted(_UI_SRC_DIR.rglob("*.ts*")):
         name = path.as_posix()
-        if ".test." in name or "/mocks/" in name or "/daemon/mock" in name:
+        if ".test." in name or "/mocks/" in name:
             continue
         text = path.read_text(encoding="utf-8")
         for regex in (_WRAPPER_KIND_RE, _INLINE_KIND_RE):

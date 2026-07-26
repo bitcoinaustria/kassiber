@@ -23,7 +23,7 @@ export interface SaveDaemonExportResult {
  * Offer to save a daemon-produced export to a user-chosen location.
  *
  * In the desktop app this opens a native save dialog and copies the managed
- * export there; outside the desktop app (bridge/mock) it is a no-op that
+ * export there; outside the desktop app (bridge) it is a no-op that
  * returns the managed path so callers can still surface it.
  */
 export async function saveDaemonExport(
