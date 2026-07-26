@@ -1659,7 +1659,9 @@ class OperatorService:
         operation.output_error = None
         operation.retained_result_bytes = 0
         if result is not None:
-            operation.retained_result_bytes = _result_bytes(result)
+            operation.retained_result_bytes = len(
+                result.stdout.encode("utf-8")
+            ) + len(result.stderr.encode("utf-8"))
             if _result_exceeds_protocol_frame(result):
                 operation.output_error = {
                     "code": "operator_result_too_large",
@@ -2029,10 +2031,6 @@ def _broker_stopped_error() -> AppError:
         code="operator_broker_stopped",
         retryable=True,
     )
-
-
-def _result_bytes(result: OperationResult) -> int:
-    return len(result.stdout.encode("utf-8")) + len(result.stderr.encode("utf-8"))
 
 
 def _result_exceeds_protocol_frame(result: OperationResult) -> bool:
