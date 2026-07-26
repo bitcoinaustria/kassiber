@@ -37,7 +37,7 @@ export const OnboardingStepHeader = ({
       )}
       <div>
         {showProgress && (
-          <p className="mb-2 font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-ink-3">
+          <p className="mb-2 font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
             {t("frame.step", { current: stepIndex + 1, total: totalSteps })}
           </p>
         )}

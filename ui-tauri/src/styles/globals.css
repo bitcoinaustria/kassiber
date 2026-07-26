@@ -45,6 +45,22 @@
   --font-mono:
     "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
+  /*
+   * Two steps below `text-xs`, because the app had four arbitrary rungs down
+   * there — text-[11px], [10px], [9px], [8px] — spanning 3px in total. Sized in
+   * rem so they track the root font-size like every other step: the literals
+   * did not, so on a densified laptop viewport `text-xs` fell to 8.6px while a
+   * `text-[10px]` label stayed at 10px, inverting the hierarchy, and neither
+   * responded to the user's zoom at all.
+   *
+   * The values reproduce today's rendered size at the default scale (root
+   * 14.4px = 16 x 0.9), so this is a behaviour fix rather than a restyle. No
+   * paired `--text-*--line-height`, so leading stays the inherited 1.5x the
+   * arbitrary values had.
+   */
+  --text-2xs: 0.694rem;
+  --text-3xs: 0.625rem;
+
   --shadow-hard-ink: 8px 8px 0 #222222;
   --shadow-hard-accent: 3px 3px 0 #e3000f;
 

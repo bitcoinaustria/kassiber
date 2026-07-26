@@ -74,12 +74,12 @@ function ToolHeader({
         )}
         aria-hidden="true"
       />
-      <code className="min-w-0 flex-1 truncate font-mono text-[10px] text-foreground">
+      <code className="min-w-0 flex-1 truncate font-mono text-2xs text-foreground">
         {name}
       </code>
       <Badge
         variant={state === "error" ? "destructive" : "secondary"}
-        className="shrink-0 px-1.5 py-0 text-[9px] uppercase"
+        className="shrink-0 px-1.5 py-0 text-3xs uppercase"
       >
         {labelForState(state)}
       </Badge>
@@ -122,10 +122,10 @@ function ToolInput({
       className={cn("border-t border-border/60 px-2 py-1.5", className)}
       {...props}
     >
-      <p className="mb-0.5 text-[9px] font-medium uppercase text-muted-foreground">
+      <p className="mb-0.5 text-3xs font-medium uppercase text-muted-foreground">
         {label}
       </p>
-      <pre className="max-h-28 max-w-full overflow-auto whitespace-pre-wrap break-words rounded bg-muted/55 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
+      <pre className="max-h-28 max-w-full overflow-auto whitespace-pre-wrap break-words rounded bg-muted/55 px-1.5 py-0.5 font-mono text-3xs text-muted-foreground">
         {JSON.stringify(input, null, 2)}
       </pre>
     </section>
@@ -152,17 +152,17 @@ function ToolOutput({
       className={cn("border-t border-border/60 px-2 py-1.5", className)}
       {...props}
     >
-      <p className="mb-0.5 text-[9px] font-medium uppercase text-muted-foreground">
+      <p className="mb-0.5 text-3xs font-medium uppercase text-muted-foreground">
         {error ? "Error" : label}
       </p>
       {isPlainText ? (
-        <p className="rounded bg-muted/55 px-1.5 py-0.5 text-[11px] leading-snug text-muted-foreground">
+        <p className="rounded bg-muted/55 px-1.5 py-0.5 text-xs leading-snug text-muted-foreground">
           {formatted}
         </p>
       ) : (
         <pre
           className={cn(
-            "max-h-32 overflow-auto whitespace-pre-wrap break-words rounded px-1.5 py-0.5 font-mono text-[9px]",
+            "max-h-32 overflow-auto whitespace-pre-wrap break-words rounded px-1.5 py-0.5 font-mono text-3xs",
             error
               ? "max-w-full bg-destructive/10 text-destructive"
               : "max-w-full bg-muted/55 text-muted-foreground",

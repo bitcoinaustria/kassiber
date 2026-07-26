@@ -891,7 +891,7 @@ export function TransactionDetailSheet({
                     <TabsTrigger value="linked">
                       {t("sheet.tab.linked")}
                       {linkedCount > 0 ? (
-                        <span className="rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                        <span className="rounded-full bg-muted px-1.5 text-2xs tabular-nums text-muted-foreground">
                           {linkedCount}
                         </span>
                       ) : null}

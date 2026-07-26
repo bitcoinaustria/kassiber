@@ -158,7 +158,7 @@ export function DetailField({
     <div className="min-w-0 rounded-md border bg-background p-3">
       <div className="mb-1 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className="min-w-0 truncate text-[10px] font-medium uppercase text-muted-foreground">
+          <span className="min-w-0 truncate text-2xs font-medium uppercase text-muted-foreground">
             {label}
           </span>
           {hint ? (
@@ -255,7 +255,7 @@ export function SourceRecordRow({
         {icon}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="text-[10px] font-medium uppercase text-muted-foreground">
+        <div className="text-2xs font-medium uppercase text-muted-foreground">
           {label}
         </div>
         <div
@@ -335,7 +335,7 @@ export function StatusTimeline({ steps }: { steps: TimelineStep[] }) {
           <span
             aria-hidden="true"
             className={cn(
-              "flex size-4 shrink-0 items-center justify-center rounded-full border text-[10px]",
+              "flex size-4 shrink-0 items-center justify-center rounded-full border text-2xs",
               step.done
                 ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                 : step.warn

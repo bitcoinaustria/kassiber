@@ -828,7 +828,7 @@ function coreReadinessMessages(
 
 function InlineCode({ children }: { children?: React.ReactNode }) {
   return (
-    <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+    <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
       {children}
     </code>
   );
@@ -836,7 +836,7 @@ function InlineCode({ children }: { children?: React.ReactNode }) {
 
 function CommandSnippet({ children }: { children: React.ReactNode }) {
   return (
-    <code className="block overflow-x-auto rounded border bg-background px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground">
+    <code className="block overflow-x-auto rounded border bg-background px-2 py-1.5 font-mono text-xs leading-relaxed text-foreground">
       {children}
     </code>
   );
@@ -2856,7 +2856,7 @@ export function AddConnectionDialog({
               <span className="min-w-0 flex-1 truncate">{entry.address}</span>
               <button
                 type="button"
-                className="rounded border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground hover:bg-muted/40"
+                className="rounded border px-2 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground hover:bg-muted/40"
                 onClick={() => void copyAddress(entry.address)}
                 title={t("add.descriptor.copyAddress")}
               >
@@ -4154,7 +4154,7 @@ export function AddConnectionDialog({
                   },
                 ].map((item) => (
                   <div key={item.key} className="rounded-md border bg-background p-2">
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {item.label}
                     </p>
                     <p className="text-lg font-semibold tabular-nums">{item.value}</p>
@@ -5039,7 +5039,7 @@ export function AddConnectionDialog({
                         <span className="block truncate">
                           {candidate.network || "main"} · {candidate.url}
                         </span>
-                        <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                        <span className="block truncate text-xs font-normal text-muted-foreground">
                           {t("add.core.candidateMeta", {
                             status: t(
                               `add.core.status.${coreNodeStatusKey(candidate.status)}`,
@@ -5051,7 +5051,7 @@ export function AddConnectionDialog({
                           })}
                         </span>
                         {readinessMessages.length > 0 ? (
-                          <span className="block whitespace-normal text-[11px] font-normal text-amber-700 dark:text-amber-300">
+                          <span className="block whitespace-normal text-xs font-normal text-amber-700 dark:text-amber-300">
                             {readinessMessages.join(" ")}
                           </span>
                         ) : null}
@@ -5355,7 +5355,7 @@ export function AddConnectionDialog({
         ))}
       </ul>
 
-      <p className="border-t pt-3 text-[11px] leading-4 text-muted-foreground">
+      <p className="border-t pt-3 text-xs leading-4 text-muted-foreground">
         {t("add.trademarkDisclaimer")}
       </p>
     </div>
@@ -5502,7 +5502,7 @@ export function AddConnectionDialog({
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {metrics.map(([label, value]) => (
             <div key={label} className="rounded-md border border-border/60 p-2">
-              <p className="text-[11px] text-muted-foreground">{label}</p>
+              <p className="text-xs text-muted-foreground">{label}</p>
               <p className="font-medium tabular-nums">
                 {formatImportCount(value as number | null | undefined)}
               </p>

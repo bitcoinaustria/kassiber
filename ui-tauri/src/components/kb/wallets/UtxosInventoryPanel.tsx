@@ -765,7 +765,7 @@ export function UtxosInventoryPanel({
             <CardTitle className="text-sm sm:text-base">
               {t("utxos.title")}
             </CardTitle>
-            <p className="mt-0.5 truncate text-[11px] font-medium text-muted-foreground">
+            <p className="mt-0.5 truncate text-xs font-medium text-muted-foreground">
               {inventorySummary}
             </p>
           </div>

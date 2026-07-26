@@ -84,13 +84,13 @@ function ChatCodeBlock({
   return (
     <div className="my-4 overflow-hidden rounded-xl border border-border bg-muted/70 first:mt-0 last:mb-0">
       <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/50 py-1 pr-1.5 pl-3">
-        <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+        <span className="font-mono text-2xs uppercase tracking-wide text-muted-foreground">
           {language ?? t("message.code")}
         </span>
         <button
           type="button"
           onClick={handleCopy}
-          className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-2xs font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={copyLabel}
           title={copyLabel}
         >

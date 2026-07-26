@@ -176,7 +176,7 @@ export function AiProvidersSettingsPanel({
                       <span className="font-medium">{displayName}</span>
                       <span
                         className={cn(
-                          "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+                          "inline-flex rounded-full border px-2 py-0.5 text-2xs font-medium uppercase tracking-wide",
                           AI_KIND_BADGE[row.kind],
                         )}
                       >
@@ -185,7 +185,7 @@ export function AiProvidersSettingsPanel({
                           : t(`aiProvider.posture.${row.kind}`)}
                       </span>
                       {row.is_default ? (
-                        <span className="inline-flex items-center rounded-md border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+                        <span className="inline-flex items-center rounded-md border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-primary">
                           {t("ai.default")}
                         </span>
                       ) : null}

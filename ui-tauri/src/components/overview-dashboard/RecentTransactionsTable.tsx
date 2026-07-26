@@ -174,32 +174,32 @@ export const RecentTransactionsTable = ({
                     <span className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
                       <span
                         className={cn(
-                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-2xs font-medium",
                           overviewFlowStyles[flow],
                         )}
                       >
                         {primaryTag}
                       </span>
                       {extraTags > 0 && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-2xs text-muted-foreground">
                           +{extraTags}
                         </span>
                       )}
                       <span
                         className={cn(
-                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                          "inline-flex items-center rounded-md px-1.5 py-0.5 text-2xs font-medium",
                           statusStyles[tx.status],
                         )}
                       >
                         {t(statusLabelKeys[tx.status])}
                       </span>
-                      <span className="truncate text-[10px] text-muted-foreground">
+                      <span className="truncate text-2xs text-muted-foreground">
                         {tx.date}
                       </span>
                       {tx.scopeLabel ? (
                         <span
                           className={cn(
-                            "truncate text-[10px] font-medium text-muted-foreground",
+                            "truncate text-2xs font-medium text-muted-foreground",
                             blurClass(hideSensitive),
                           )}
                         >
@@ -220,7 +220,7 @@ export const RecentTransactionsTable = ({
                     </CurrencyToggleText>
                     <span
                       className={cn(
-                        "text-[10px] text-muted-foreground tabular-nums",
+                        "text-2xs text-muted-foreground tabular-nums",
                         blurClass(hideSensitive),
                       )}
                     >

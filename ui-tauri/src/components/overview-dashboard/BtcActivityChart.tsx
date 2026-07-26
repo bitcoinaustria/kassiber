@@ -796,13 +796,13 @@ export const BtcActivityChart = ({
                 {t("treasury.title")}
               </p>
               {hasChartData && (
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-2xs text-muted-foreground">
                   {t("treasury.asOf", { date: detailDate })}
                 </span>
               )}
               {expanded && priceSyncLabel && (
                 <span
-                  className="text-[10px] text-muted-foreground"
+                  className="text-2xs text-muted-foreground"
                   title={priceSyncDetail}
                 >
                   {t("treasury.priced", { time: priceSyncLabel })}
@@ -810,7 +810,7 @@ export const BtcActivityChart = ({
               )}
             </div>
             {hasChartData && (
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground sm:text-xs">
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground sm:text-xs">
                 <span>
                   {t("treasury.net")}{" "}
                   <span
@@ -935,7 +935,7 @@ export const BtcActivityChart = ({
 
         {hasChartData ? (
           <>
-            <div className="flex select-none flex-wrap items-center justify-start gap-x-2 gap-y-1 text-[11px] text-muted-foreground sm:text-xs">
+            <div className="flex select-none flex-wrap items-center justify-start gap-x-2 gap-y-1 text-xs text-muted-foreground sm:text-xs">
               {legendItems.map((item) => (
                 <button
                   key={item.key}
@@ -1006,7 +1006,7 @@ export const BtcActivityChart = ({
             >
               {expanded && (
                 <div className="pointer-events-none flex items-center justify-center">
-                  <span className="-rotate-90 whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
+                  <span className="-rotate-90 whitespace-nowrap text-2xs font-semibold text-muted-foreground">
                     {t("treasury.series.bitcoinBalance")}
                   </span>
                 </div>
@@ -1386,7 +1386,7 @@ export const BtcActivityChart = ({
               {expanded && (
                 <div className="pointer-events-none flex items-center justify-center">
                   {fiatSeriesEnabled ? (
-                    <span className="rotate-90 whitespace-nowrap text-[10px] font-semibold text-muted-foreground">
+                    <span className="rotate-90 whitespace-nowrap text-2xs font-semibold text-muted-foreground">
                       {t("treasury.btcPriceAxis", { currency: fiatCurrency })}
                     </span>
                   ) : null}
