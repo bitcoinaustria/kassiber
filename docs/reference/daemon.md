@@ -710,7 +710,10 @@ only when source staleness, missing rates, or journal readiness makes the
 report unsafe. Rate limits are normal state: a 429/`Retry-After` cools down the
 affected source/provider only, while other queued jobs can continue. The
 `blocking_reports` flag, not the cooldown label alone, decides whether reports
-must wait.
+must wait. Final accounting exports enforce that persisted flag in both the
+desktop daemon and CLI. Read-only previews, raw transaction exports, and audit
+packages remain available so a failed source can still be investigated and
+repaired without producing a misleading final report.
 
 `ui.freshness.status` returns the active profile policy, source states, active
 jobs, and summary counts. `ui.freshness.configure` writes the general freshness

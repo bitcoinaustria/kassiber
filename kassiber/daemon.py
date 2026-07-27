@@ -3128,6 +3128,22 @@ def _audit_package_options(args: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_FINAL_ACCOUNTING_REPORT_EXPORT_KINDS = frozenset(
+    {
+        "ui.reports.export_pdf",
+        "ui.reports.export_summary_pdf",
+        "ui.reports.export_csv",
+        "ui.reports.export_xlsx",
+        "ui.reports.export_capital_gains_csv",
+        "ui.reports.export_austrian_e1kv_pdf",
+        "ui.reports.export_austrian_e1kv_xlsx",
+        "ui.reports.export_austrian_e1kv_csv",
+        "ui.reports.export_exit_tax_pdf",
+        "ui.reports.export_exit_tax_xlsx",
+    }
+)
+
+
 def _ui_report_export_payload_from_conn(
     conn: sqlite3.Connection,
     data_root: str,
@@ -3135,6 +3151,9 @@ def _ui_report_export_payload_from_conn(
     args: dict[str, Any],
 ) -> dict[str, Any]:
     hooks = _report_hooks()
+    if kind in _FINAL_ACCOUNTING_REPORT_EXPORT_KINDS:
+        _, profile = hooks.resolve_scope(conn, None, None)
+        core_freshness.require_report_freshness(conn, profile["id"])
     transactions_exports = {
         "ui.transactions.export_csv": ("csv", ".csv", core_reports.export_transactions_csv_report),
         "ui.transactions.export_xlsx": ("xlsx", ".xlsx", core_reports.export_transactions_xlsx_report),

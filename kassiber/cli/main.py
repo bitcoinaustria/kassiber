@@ -129,6 +129,7 @@ from ..core import metadata as core_metadata
 from ..core import ownership as core_ownership
 from ..core import rates as core_rates
 from ..core import reports as core_reports
+from ..core import freshness as core_freshness
 from ..core import samourai as core_samourai
 from ..core import source_funds as core_source_funds
 from ..core import source_funds_coverage as core_source_funds_coverage
@@ -195,6 +196,20 @@ from .command_registry import command_needs_database, describe_command_catalog
 _AI_PROVIDER_KINDS_LIST = AI_PROVIDER_KINDS
 _AI_PROVIDER_CLEARABLE_FIELDS = ("api_key", "default_model", "notes")
 _MIN_PROJECT_PASSPHRASE_CHARS = 12
+_FINAL_ACCOUNTING_REPORT_EXPORT_COMMANDS = frozenset(
+    {
+        "export-pdf",
+        "export-summary-pdf",
+        "export-csv",
+        "export-xlsx",
+        "export-austrian-e1kv-pdf",
+        "export-austrian",
+        "export-austrian-e1kv-xlsx",
+        "export-austrian-e1kv-csv",
+        "export-exit-tax-pdf",
+        "export-exit-tax-xlsx",
+    }
+)
 
 
 def _ai_provider_redacted(conn: sqlite3.Connection, provider: dict) -> dict:
@@ -5091,6 +5106,9 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 )
     if args.command == "reports":
         report_hooks = _report_hooks()
+        if args.reports_command in _FINAL_ACCOUNTING_REPORT_EXPORT_COMMANDS:
+            _, profile = resolve_scope(conn, args.workspace, args.profile)
+            core_freshness.require_report_freshness(conn, profile["id"])
         if args.reports_command == "filed-snapshots":
             workspace, profile = resolve_scope(conn, args.workspace, args.profile)
             if args.filed_snapshots_command == "list":

@@ -3,12 +3,17 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+from kassiber import daemon
+from kassiber.cli.main import build_parser, dispatch
+from kassiber.core import freshness
 from kassiber.core.ui_snapshot import (
     _load_swap_report_matcher_rows,
     build_report_blockers_snapshot,
 )
 from kassiber.db import open_db, set_setting
+from kassiber.errors import AppError
 from kassiber.msat import btc_to_msat
 
 
@@ -175,6 +180,161 @@ class SwapCandidateReportBlockerTests(unittest.TestCase):
             )
         finally:
             conn.close()
+
+    def test_persisted_freshness_failure_blocks_final_exports_without_leaking_error_text(self):
+        tmp = tempfile.TemporaryDirectory(prefix="kassiber-freshness-blocker-")
+        self.addCleanup(tmp.cleanup)
+        data_root = Path(tmp.name) / "data"
+        conn = open_db(data_root)
+        self.addCleanup(conn.close)
+        _seed_book(conn)
+        freshness.upsert_source_state(
+            conn,
+            profile_id="pf",
+            source_key="onchain:wallet",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Bull-Onchain",
+            status="failed",
+            stale_reason="observer_projection_conflict",
+            blocking_reports=True,
+            last_error_code="observer_projection_conflict",
+            last_error_message="secret backend https://node.invalid/token",
+            progress={"response_preview": "private progress"},
+            checkpoint={"descriptor": "private checkpoint"},
+        )
+        conn.commit()
+
+        snapshot = build_report_blockers_snapshot(conn)
+
+        blocker = next(
+            item for item in snapshot["blockers"] if item["id"] == "sync_failed"
+        )
+        self.assertFalse(snapshot["ready"])
+        self.assertEqual(blocker["daemon_kind"], "ui.freshness.run")
+        self.assertEqual(blocker["counts"], {"sources": 1})
+        self.assertEqual(
+            blocker["sources"],
+            [
+                {
+                    "source_type": freshness.SOURCE_ONCHAIN,
+                    "source_label": "Bull-Onchain",
+                    "status": freshness.STATUS_BLOCKING_REPORTS,
+                    "stale_reason": "observer_projection_conflict",
+                    "last_error_code": "observer_projection_conflict",
+                }
+            ],
+        )
+        encoded = json.dumps(snapshot, sort_keys=True)
+        self.assertNotIn("node.invalid", encoded)
+        self.assertNotIn("private progress", encoded)
+        self.assertNotIn("private checkpoint", encoded)
+
+        with self.assertRaises(AppError) as raised:
+            freshness.require_report_freshness(conn, "pf")
+        self.assertEqual(raised.exception.code, "report_freshness_blocked")
+        self.assertFalse(raised.exception.retryable)
+        self.assertNotIn("node.invalid", json.dumps(raised.exception.details))
+
+        managed_path = Path(tmp.name) / "should-not-exist.pdf"
+        with (
+            mock.patch(
+                "kassiber.daemon._managed_report_export_path",
+                return_value=managed_path,
+            ) as path_mock,
+            mock.patch(
+                "kassiber.daemon.core_reports.export_pdf_report"
+            ) as report_export,
+        ):
+            with self.assertRaises(AppError) as daemon_error:
+                daemon._ui_report_export_payload_from_conn(
+                    conn,
+                    str(data_root),
+                    "ui.reports.export_pdf",
+                    {},
+                )
+        self.assertEqual(daemon_error.exception.code, "report_freshness_blocked")
+        path_mock.assert_not_called()
+        report_export.assert_not_called()
+        self.assertFalse(managed_path.exists())
+
+        cli_path = Path(tmp.name) / "cli-should-not-exist.pdf"
+        cli_args = build_parser().parse_args(
+            [
+                "reports",
+                "export-pdf",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Main",
+                "--file",
+                str(cli_path),
+            ]
+        )
+        with mock.patch(
+            "kassiber.cli.main.core_reports.export_pdf_report"
+        ) as cli_export:
+            with self.assertRaises(AppError) as cli_error:
+                dispatch(conn, cli_args)
+        self.assertEqual(cli_error.exception.code, "report_freshness_blocked")
+        cli_export.assert_not_called()
+        self.assertFalse(cli_path.exists())
+
+        raw_path = Path(tmp.name) / "transactions.csv"
+        with (
+            mock.patch(
+                "kassiber.daemon._managed_report_export_path",
+                return_value=raw_path,
+            ),
+            mock.patch(
+                "kassiber.daemon.core_reports.export_transactions_csv_report",
+                return_value={"file": str(raw_path), "rows": 0},
+            ) as transaction_export,
+        ):
+            raw_payload = daemon._ui_report_export_payload_from_conn(
+                conn,
+                str(data_root),
+                "ui.transactions.export_csv",
+                {},
+            )
+        self.assertEqual(raw_payload["scope"], "transactions")
+        transaction_export.assert_called_once()
+
+        audit_path = Path(tmp.name) / "audit-package"
+        with (
+            mock.patch(
+                "kassiber.daemon._managed_report_export_path",
+                return_value=audit_path,
+            ),
+            mock.patch(
+                "kassiber.daemon.core_audit_package.export_audit_package",
+                return_value={"directory": str(audit_path)},
+            ) as audit_export,
+        ):
+            audit_payload = daemon._ui_report_export_payload_from_conn(
+                conn,
+                str(data_root),
+                "ui.reports.export_audit_package",
+                {},
+            )
+        self.assertEqual(audit_payload["directory"], str(audit_path))
+        audit_export.assert_called_once()
+
+        freshness.upsert_source_state(
+            conn,
+            profile_id="pf",
+            source_key="onchain:wallet",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Bull-Onchain",
+            status=freshness.STATUS_FRESH,
+            blocking_reports=False,
+        )
+        conn.commit()
+        refreshed = build_report_blockers_snapshot(conn)
+        self.assertNotIn(
+            "sync_failed",
+            [item["id"] for item in refreshed["blockers"]],
+        )
+        freshness.require_report_freshness(conn, "pf")
 
     def test_route_only_provider_candidate_stays_strong_and_blocks_reports(self):
         conn = self._with_conn()

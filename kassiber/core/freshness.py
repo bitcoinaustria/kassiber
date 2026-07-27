@@ -444,6 +444,57 @@ def list_source_states(conn: sqlite3.Connection, profile_id: str) -> list[dict[s
     return [_row_payload(row) for row in rows]
 
 
+def report_blocking_source_summary(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Return the bounded, public-safe subset needed to explain report blocks."""
+    count_row = conn.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM freshness_source_states
+        WHERE profile_id = ? AND blocking_reports = 1
+        """,
+        (profile_id,),
+    ).fetchone()
+    rows = conn.execute(
+        """
+        SELECT source_type, source_label, status, stale_reason, last_error_code
+        FROM freshness_source_states
+        WHERE profile_id = ? AND blocking_reports = 1
+        ORDER BY source_type ASC, source_label ASC, source_key ASC
+        LIMIT ?
+        """,
+        (profile_id, max(1, int(limit))),
+    ).fetchall()
+    return {
+        "count": int(count_row["count"] or 0),
+        "sources": [dict(row) for row in rows],
+    }
+
+
+def require_report_freshness(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> None:
+    """Fail closed when a source says finalized accounting reports are stale."""
+    summary = report_blocking_source_summary(conn, profile_id)
+    if not summary["count"]:
+        return
+    raise AppError(
+        "Final report export is blocked by source freshness failures",
+        code="report_freshness_blocked",
+        hint="Refresh or repair the failed source before exporting a final report.",
+        details={
+            "source_count": summary["count"],
+            "sources": summary["sources"],
+        },
+        retryable=False,
+    )
+
+
 def pause_source(conn: sqlite3.Connection, profile_id: str, key: str) -> dict[str, Any]:
     state = get_source_state(conn, profile_id, key)
     if state is None:
@@ -1267,6 +1318,8 @@ __all__ = [
     "redact_freshness_payload",
     "recover_interrupted_jobs",
     "reset_source_checkpoint",
+    "report_blocking_source_summary",
+    "require_report_freshness",
     "resume_source",
     "run_due_jobs",
     "run_job",

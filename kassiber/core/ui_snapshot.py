@@ -7246,6 +7246,25 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     else:
         counts = health["counts"]
         journals = health["journals"]
+        freshness_blocked = core_freshness.report_blocking_source_summary(
+            conn,
+            health["profile"]["id"],
+        )
+        if freshness_blocked["count"]:
+            blockers.append(
+                {
+                    "id": "sync_failed",
+                    "severity": "blocking",
+                    "title": "Connection refresh failed",
+                    "detail": (
+                        f"{freshness_blocked['count']} source refresh failure(s) "
+                        "must be repaired before final reports can be exported."
+                    ),
+                    "daemon_kind": "ui.freshness.run",
+                    "counts": {"sources": freshness_blocked["count"]},
+                    "sources": freshness_blocked["sources"],
+                }
+            )
         custody_quantity = (
             core_custody_quantity_store.custody_quantity_readiness_summary(
                 conn,
