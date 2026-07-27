@@ -386,7 +386,18 @@ class ChainObserverContractTest(unittest.TestCase):
 
         def insert_records(*_args, **kwargs):
             insert_calls.append(kwargs)
-            return {"imported": 0, "skipped": 0}
+            return {
+                "imported": 0,
+                "skipped": 0,
+                "_observer_resolved_records": [
+                    {
+                        "transaction_id": "transaction-row",
+                        "external_id": "tx-1",
+                        "asset": "",
+                        "direction": "",
+                    }
+                ],
+            }
 
         hooks = core_sync.WalletSyncHooks(
             import_file=lambda *_args: {},
@@ -406,7 +417,7 @@ class ChainObserverContractTest(unittest.TestCase):
             "persist_chain_observation_provenance",
             return_value=0,
         ) as persist_provenance:
-            core_sync.sync_wallet_from_backend(
+            outcome = core_sync.sync_wallet_from_backend(
                 self.conn,
                 {},
                 profile,
@@ -419,6 +430,18 @@ class ChainObserverContractTest(unittest.TestCase):
 
         self.assertEqual(insert_calls, [{"authoritative_chain_observer": True}])
         persist_provenance.assert_called_once()
+        self.assertNotIn("_observer_resolved_records", outcome)
+        self.assertEqual(
+            persist_provenance.call_args.kwargs["resolved_records"],
+            (
+                {
+                    "transaction_id": "transaction-row",
+                    "external_id": "tx-1",
+                    "asset": "",
+                    "direction": "",
+                },
+            ),
+        )
 
     def test_sync_fetch_projects_facts_and_rejects_shadow_projection(self):
         observer, prepared = self._prepare()

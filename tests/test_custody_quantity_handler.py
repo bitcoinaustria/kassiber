@@ -187,6 +187,16 @@ class CustodyQuantityHandlerTests(unittest.TestCase):
                                 "observer_kinds": ["bdk"],
                             },
                         ),
+                        resolved_records=(
+                            {
+                                "transaction_id": (
+                                    "out" if direction == "outbound" else "in"
+                                ),
+                                "external_id": native_txid,
+                                "asset": "BTC",
+                                "direction": direction,
+                            },
+                        ),
                     )
 
                 result = handlers.process_journals(conn, "Books", "Book")
@@ -238,6 +248,16 @@ class CustodyQuantityHandlerTests(unittest.TestCase):
                                 "observer_kinds": ["bdk"],
                             },
                         ),
+                        resolved_records=(
+                            {
+                                "transaction_id": (
+                                    "out" if direction == "outbound" else "in"
+                                ),
+                                "external_id": native_txid,
+                                "asset": "BTC",
+                                "direction": direction,
+                            },
+                        ),
                     )
 
                 result = handlers.process_journals(conn, "Books", "Book")
@@ -283,6 +303,16 @@ class CustodyQuantityHandlerTests(unittest.TestCase):
                                 "direction": direction,
                                 "observer_ids": [f"test-observer:{wallet_id}"],
                                 "observer_kinds": ["bdk"],
+                            },
+                        ),
+                        resolved_records=(
+                            {
+                                "transaction_id": (
+                                    "out" if direction == "outbound" else "in"
+                                ),
+                                "external_id": native_txid,
+                                "asset": "BTC",
+                                "direction": direction,
                             },
                         ),
                     )

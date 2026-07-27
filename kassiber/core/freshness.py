@@ -29,8 +29,12 @@ _SAFE_OBSERVER_PROJECTION_CONFLICT_KINDS = frozenset(
     {
         "bdk_conflicting_prevouts",
         "bdk_inconsistent_inputs",
+        "excluded_exact_transaction_row",
         "mixed_observer_routes",
+        "multiple_active_transaction_rows",
+        "multiple_excluded_transaction_rows",
         "multiple_transaction_rows",
+        "provenance_resolution_mismatch",
         "provenance_row_cardinality",
     }
 )

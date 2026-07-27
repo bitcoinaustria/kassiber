@@ -151,50 +151,73 @@ def persist_chain_observation_provenance(
     chain: str,
     network: str,
     entries: Sequence[Mapping[str, Any]],
+    resolved_records: Sequence[Mapping[str, Any]],
 ) -> int:
     """Persist authority after normalized insertion, without committing."""
 
+    def fail(reason: str, **details: Any) -> None:
+        raise AppError(
+            "Authoritative observation transaction resolution failed",
+            code="observer_projection_conflict",
+            hint="Retry refresh. If the conflict persists, review duplicate transactions.",
+            details={
+                "conflict_kind": "provenance_resolution_mismatch",
+                "resolution_reason": reason,
+                **details,
+            },
+            retryable=False,
+        )
+
+    resolved_by_key: dict[tuple[str, str, str], str] = {}
+    for record in resolved_records:
+        key = _record_key(record)
+        transaction_id = str(record.get("transaction_id") or "")
+        if not key[0] or not transaction_id:
+            fail("invalid_resolved_record")
+        previous = resolved_by_key.setdefault(key, transaction_id)
+        if previous != transaction_id:
+            fail("conflicting_resolved_ids")
+
+    entry_keys = [_record_key(entry) for entry in entries]
+    if len(entry_keys) != len(set(entry_keys)):
+        fail("duplicate_provenance_key")
+    if set(entry_keys) != set(resolved_by_key):
+        fail(
+            "provenance_key_mismatch",
+            entry_count=len(entry_keys),
+            resolved_count=len(resolved_by_key),
+        )
+
     persisted = 0
     timestamp = now_iso()
-    for entry in entries:
-        asset = normalize_asset_code(entry.get("asset"))
+    for entry, key in zip(entries, entry_keys, strict=True):
         external_id = str(entry.get("external_id") or "").strip()
         canonical_txid = (
             _canonical_txid(external_id)
             if str(chain).strip().lower() in {"bitcoin", "liquid"}
             else None
         )
-        rows = conn.execute(
-            f"""
+        row = conn.execute(
+            """
             SELECT * FROM transactions
-            WHERE profile_id = ? AND wallet_id = ?
-              AND {"LOWER(external_id)" if canonical_txid else "external_id"} = ?
-              AND asset = ? AND direction = ?
-            ORDER BY created_at DESC
-            LIMIT 2
+            WHERE id = ? AND workspace_id = ? AND profile_id = ? AND wallet_id = ?
             """,
             (
+                resolved_by_key[key],
+                str(_field(profile, "workspace_id") or ""),
                 str(_field(profile, "id") or ""),
                 str(_field(wallet, "id") or ""),
-                canonical_txid or external_id,
-                asset,
-                str(entry.get("direction") or ""),
             ),
-        ).fetchall()
-        if len(rows) != 1:
-            raise AppError(
-                "Authoritative observation did not resolve to one transaction row",
-                code="observer_projection_conflict",
-                details={
-                    "conflict_kind": "provenance_row_cardinality",
-                    "external_id": canonical_txid or external_id,
-                    "asset": asset,
-                    "direction": str(entry.get("direction") or ""),
-                    "match_count": len(rows),
-                },
-                retryable=False,
-            )
-        row = rows[0]
+        ).fetchone()
+        if row is None:
+            fail("resolved_row_missing")
+        row_key = (
+            str(row["external_id"] or "").strip().lower(),
+            normalize_asset_code(row["asset"]),
+            str(row["direction"] or "").strip().lower(),
+        )
+        if row_key != key:
+            fail("resolved_row_identity_mismatch")
         if canonical_txid is not None and str(row["external_id_kind"] or "") != "txid":
             # Native identity typing is part of the same closed authority
             # channel as graph/quantity provenance. Core receive payloads are

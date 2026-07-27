@@ -155,9 +155,82 @@ _EXISTING_TRANSACTION_COLUMNS = """
        fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,
        pricing_timestamp, pricing_fetched_at, pricing_granularity, pricing_method,
        pricing_external_ref, pricing_quality, kind, privacy_boundary, description,
-       counterparty, raw_json, payment_hash, payment_hash_source,
+       counterparty, excluded, raw_json, payment_hash, payment_hash_source,
        swap_refund_funding_txid, swap_refund_funding_vout
 """
+
+_OBSERVER_DUPLICATE_HINT = (
+    "Choose one transaction as the keeper and exclude every sibling through "
+    "the audited transaction metadata action, then retry refresh."
+)
+
+
+def _find_authoritative_chain_transaction(
+    conn: sqlite3.Connection,
+    wallet_id: str,
+    normalized: Mapping[str, Any],
+    fingerprint: str,
+) -> sqlite3.Row | None:
+    external_id = canonical_txid(normalized["external_id"])
+    if external_id is None:
+        return None
+    rows = conn.execute(
+        f"""
+        SELECT {_EXISTING_TRANSACTION_COLUMNS}
+        FROM transactions
+        WHERE wallet_id = ? AND LOWER(external_id) = ?
+          AND direction = ? AND asset = ?
+        ORDER BY created_at DESC, id DESC
+        """,
+        (
+            wallet_id,
+            external_id,
+            normalized["direction"],
+            normalized["asset"],
+        ),
+    ).fetchall()
+    if len(rows) <= 1:
+        return _single_match(rows)
+
+    active = [row for row in rows if not bool(row["excluded"])]
+    exact = [row for row in rows if row["fingerprint"] == fingerprint]
+    if len(active) == 1:
+        if exact and exact[0]["id"] != active[0]["id"]:
+            raise AppError(
+                "An excluded transaction owns the authoritative observer fingerprint",
+                code="observer_projection_conflict",
+                hint=_OBSERVER_DUPLICATE_HINT,
+                details={
+                    "conflict_kind": "excluded_exact_transaction_row",
+                    "txid": external_id,
+                    "asset": normalized["asset"],
+                    "direction": normalized["direction"],
+                    "match_count": len(rows),
+                    "active_match_count": 1,
+                },
+                retryable=False,
+            )
+        return active[0]
+
+    conflict_kind = (
+        "multiple_active_transaction_rows"
+        if active
+        else "multiple_excluded_transaction_rows"
+    )
+    raise AppError(
+        "Authoritative chain observation matched ambiguous transaction rows",
+        code="observer_projection_conflict",
+        hint=_OBSERVER_DUPLICATE_HINT,
+        details={
+            "conflict_kind": conflict_kind,
+            "txid": external_id,
+            "asset": normalized["asset"],
+            "direction": normalized["direction"],
+            "match_count": len(rows),
+            "active_match_count": len(active),
+        },
+        retryable=False,
+    )
 
 
 def _find_existing_transaction(
@@ -168,6 +241,16 @@ def _find_existing_transaction(
     *,
     authoritative_chain_observer: bool = False,
 ):
+    if authoritative_chain_observer and canonical_txid(normalized["external_id"]):
+        # Observer txids are physical identities. Resolve them before the
+        # fingerprint fast path so an exact stale sibling cannot hide an
+        # ambiguous active projection.
+        return _find_authoritative_chain_transaction(
+            conn,
+            wallet_id,
+            normalized,
+            fingerprint,
+        )
     existing = conn.execute(
         f"""
         SELECT {_EXISTING_TRANSACTION_COLUMNS}
@@ -200,41 +283,6 @@ def _find_existing_transaction(
         ).fetchone()
         if existing:
             return existing
-    if authoritative_chain_observer and canonical_txid(normalized["external_id"]):
-        # Dependency observers own the economic interpretation of a canonical
-        # on-chain transaction. Match the prior compatibility projection by
-        # txid/component even when the dependency corrects its amount or fee.
-        rows = conn.execute(
-            f"""
-            SELECT {_EXISTING_TRANSACTION_COLUMNS}
-            FROM transactions
-            WHERE wallet_id = ? AND external_id = ?
-              AND direction = ? AND asset = ?
-            ORDER BY created_at DESC
-            LIMIT 2
-            """,
-            (
-                wallet_id,
-                normalized["external_id"],
-                normalized["direction"],
-                normalized["asset"],
-            ),
-        ).fetchall()
-        existing = _single_match(rows)
-        if existing:
-            return existing
-        if len(rows) > 1:
-            raise AppError(
-                "Authoritative chain observation matched multiple transaction rows",
-                code="observer_projection_conflict",
-                details={
-                    "conflict_kind": "multiple_transaction_rows",
-                    "txid": normalized["external_id"],
-                    "asset": normalized["asset"],
-                    "direction": normalized["direction"],
-                },
-                retryable=False,
-            )
     existing = conn.execute(
         f"""
         SELECT {_EXISTING_TRANSACTION_COLUMNS}
@@ -655,6 +703,8 @@ def _transaction_merge_updates(
         incoming_amount = btc_to_msat(normalized["amount"])
         incoming_fee = btc_to_msat(normalized["fee"])
         incoming_amount_includes_fee = 1 if normalized.get("amount_includes_fee") else 0
+        if existing["external_id"] != normalized["external_id"]:
+            updates["external_id"] = normalized["external_id"]
         authoritative_amount_changed = int(existing["amount"] or 0) != incoming_amount
         if authoritative_amount_changed:
             updates["amount"] = incoming_amount
@@ -1336,6 +1386,7 @@ def insert_wallet_records(
     unchanged = 0
     inserted_records: list[dict[str, Any]] = []
     updated_records: list[dict[str, Any]] = []
+    observer_resolved_records: list[dict[str, str]] = []
     total = len(records)
     progress = sync_progress_emitter.get()
     if progress is not None:
@@ -1347,6 +1398,11 @@ def insert_wallet_records(
         )
     for index, record in enumerate(records, start=1):
         normalized = normalize_import_record(record, source_label=source_label)
+        if authoritative_chain_observer:
+            external_id = canonical_txid(normalized["external_id"])
+            if external_id is not None:
+                normalized["external_id"] = external_id
+                normalized["external_id_kind"] = "txid"
         fingerprint = make_transaction_fingerprint(
             wallet["id"],
             normalized["external_id"],
@@ -1364,6 +1420,15 @@ def insert_wallet_records(
             authoritative_chain_observer=authoritative_chain_observer,
         )
         if existing:
+            if authoritative_chain_observer:
+                observer_resolved_records.append(
+                    {
+                        "transaction_id": str(existing["id"]),
+                        "external_id": str(normalized["external_id"]),
+                        "asset": str(normalized["asset"]),
+                        "direction": str(normalized["direction"]),
+                    }
+                )
             _validate_import_price_currency(profile, normalized)
             updates = _transaction_merge_updates(
                 existing,
@@ -1473,6 +1538,15 @@ def insert_wallet_records(
                 now_iso(),
             ),
         )
+        if authoritative_chain_observer:
+            observer_resolved_records.append(
+                {
+                    "transaction_id": tx_id,
+                    "external_id": str(normalized["external_id"]),
+                    "asset": str(normalized["asset"]),
+                    "direction": str(normalized["direction"]),
+                }
+            )
         imported += 1
         inserted_records.append(
             _import_change_record(
@@ -1510,6 +1584,8 @@ def insert_wallet_records(
         "inserted_records": inserted_records,
         "updated_records": updated_records,
     }
+    if authoritative_chain_observer:
+        outcome["_observer_resolved_records"] = observer_resolved_records
     if report_updates and updated:
         outcome["updated"] = updated
     return outcome

@@ -130,6 +130,15 @@ facts cannot be applied together: the coordinator raises
 `observer_projection_conflict` instead of running a shadow observer or falling
 back after dependency application begins.
 
+Authoritative Bitcoin-family transaction identity is case-insensitive. Refresh
+updates the existing row in place and passes that exact row id into provenance.
+If legacy imports left several rows for the same wallet/txid/direction/asset,
+one active row may be selected only when every sibling was already excluded
+through the audited transaction metadata action. Multiple active rows, or
+multiple excluded rows with no selected keeper, remain a fail-closed
+`observer_projection_conflict`; refresh never merges, deletes or automatically
+excludes authored transaction rows.
+
 ## Capability matrix
 
 Capability selection occurs before network access; a dependency failure is

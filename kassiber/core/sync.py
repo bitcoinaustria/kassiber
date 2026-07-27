@@ -972,6 +972,7 @@ def sync_wallet_from_backend(
         f"backend:{backend['name']}",
         **insert_kwargs,
     )
+    observer_resolved_records = outcome.pop("_observer_resolved_records", ())
     if isinstance(observation_provenance, Mapping):
         persist_chain_observation_provenance(
             conn,
@@ -983,6 +984,7 @@ def sync_wallet_from_backend(
             chain=str(sync_state.chain),
             network=str(sync_state.network),
             entries=tuple(observation_provenance.get("entries") or ()),
+            resolved_records=tuple(observer_resolved_records),
         )
     notify_apply_stage(hooks, APPLY_STAGE_TRANSACTION_INSERTION)
     if observed_utxos is not None and hooks.update_output_inventory is not None:

@@ -818,6 +818,14 @@ class CustodyComponentApiTests(unittest.TestCase):
                     "observer_kinds": ["bdk"],
                 },
             ),
+            resolved_records=(
+                {
+                    "transaction_id": "in-1",
+                    "external_id": txid,
+                    "asset": "BTC",
+                    "direction": "inbound",
+                },
+            ),
         )
         activated = activate_component(
             self.conn,
@@ -870,6 +878,14 @@ class CustodyComponentApiTests(unittest.TestCase):
                     "direction": "inbound",
                     "observer_ids": ["descriptor:default"],
                     "observer_kinds": ["bdk"],
+                },
+            ),
+            resolved_records=(
+                {
+                    "transaction_id": "in-1",
+                    "external_id": txid,
+                    "asset": "BTC",
+                    "direction": "inbound",
                 },
             ),
         )
