@@ -166,6 +166,10 @@ import {
   startDaemonLogBridge,
   stopDaemonLogBridge,
 } from "@/lib/daemonLogBridge";
+import {
+  classifyDaemonFreshnessEvent,
+  DAEMON_EVENT_CHANNEL,
+} from "@/lib/daemonFreshnessEvent";
 import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
 import {
   dataModeForActiveBackend,
@@ -560,7 +564,7 @@ function identityFromProject(
 }
 
 export function AppShell() {
-  const { t } = useTranslation("chrome");
+  const { t } = useTranslation(["chrome", "overview"]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -1572,6 +1576,51 @@ export function AppShell() {
     setHideSensitive,
     t,
   ]);
+
+  React.useEffect(() => {
+    if (!daemonEnabled || !("__TAURI_INTERNALS__" in window)) return;
+
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen<unknown>(DAEMON_EVENT_CHANNEL, (event) => {
+          if (disposed) return;
+          const signal = classifyDaemonFreshnessEvent(event.payload);
+          if (!signal) return;
+
+          void queryClient.invalidateQueries({ queryKey: ["daemon"] });
+          if (signal === "refresh") return;
+
+          addNotification({
+            title:
+              signal === "worker-error"
+                ? t("overview:bookRefresh.failedTitle")
+                : t("overview:bookRefresh.needsAttentionTitle"),
+            body: t("overview:bookRefresh.failedBody"),
+            tone: signal === "worker-error" ? "error" : "warning",
+            dedupeKey: "book-refresh",
+            target: "/logs",
+          });
+        }),
+      )
+      .then((nextUnlisten) => {
+        if (disposed) {
+          safeTauriUnlisten(nextUnlisten);
+          return;
+        }
+        unlisten = nextUnlisten;
+      })
+      .catch((error) => {
+        console.warn("Could not attach Kassiber daemon event listener", error);
+      });
+
+    return () => {
+      disposed = true;
+      safeTauriUnlisten(unlisten);
+    };
+  }, [addNotification, daemonEnabled, queryClient, t]);
 
   React.useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
