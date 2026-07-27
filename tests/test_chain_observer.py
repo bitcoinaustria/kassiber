@@ -554,10 +554,13 @@ class ChainObserverContractTest(unittest.TestCase):
             "observer": "bdk",
         }
 
+        stale_txid = "66" * 32
+
         class StaticBdkObserver:
-            def __init__(self, owned_script, direction):
+            def __init__(self, owned_script, direction, retracted=()):
                 self.owned_script = owned_script
                 self.direction = direction
+                self.retracted = retracted
 
             def prepare(self, _request, _prior_state):
                 return {"ready": True}
@@ -581,6 +584,7 @@ class ChainObserverContractTest(unittest.TestCase):
                                 "raw_json": json.dumps(raw, sort_keys=True),
                             },
                         ),
+                        retracted_external_ids=self.retracted,
                     ),
                 )
 
@@ -608,7 +612,7 @@ class ChainObserverContractTest(unittest.TestCase):
         second = prepare_observer_update(
             self.conn,
             second_identity,
-            StaticBdkObserver(script_b, "inbound"),
+            StaticBdkObserver(script_b, "inbound", (txid, stale_txid)),
             ObserverPrepareRequest("regtest", "electrum"),
         )
         sync_state = core_sync.WalletSyncState(
@@ -639,6 +643,10 @@ class ChainObserverContractTest(unittest.TestCase):
         self.assertEqual(str(record["fee"]), "0.00001")
         merged_raw = json.loads(record["raw_json"])
         self.assertTrue(all(vin.get("prevout") for vin in merged_raw["vin"]))
+        self.assertEqual(
+            projected.adapter_meta["observer_retracted_external_ids"],
+            [stale_txid],
+        )
         self.conn.execute("ROLLBACK TO SAVEPOINT shared_bdk_transaction")
         self.conn.execute("RELEASE SAVEPOINT shared_bdk_transaction")
 

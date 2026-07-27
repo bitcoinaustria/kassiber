@@ -14,6 +14,7 @@ from typing import Any, Callable, Mapping, MutableMapping, Protocol, Sequence
 
 from ..backends import redact_backend_text, redact_backend_url
 from ..errors import AppError
+from ..transfers import canonical_txid
 from ..util import str_or_none
 from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT, MAX_DESCRIPTOR_GAP_LIMIT
 from . import source_overlap
@@ -796,6 +797,18 @@ def apply_fetch_observer_updates(
                 records_by_key[key] = normalized
     records = list(records_by_key.values())
     outputs = list(outputs_by_key.values())
+    live_external_ids = {
+        canonical_txid(record.get("txid") or record.get("external_id"))
+        or str(record.get("txid") or record.get("external_id") or "").strip()
+        for record in records
+    }
+    retracted = [
+        value
+        for value in retracted
+        if (
+            canonical_txid(value) or str(value or "").strip()
+        ) not in live_external_ids
+    ]
     adapter_meta = dict(fetch.adapter_meta or {})
     # Observer facts are an authoritative full output snapshot. Preserve an
     # empty list so spending the final output clears the prior inventory.
