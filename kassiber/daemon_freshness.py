@@ -1268,6 +1268,27 @@ def _freshness_background_source_due(
     status = state.get("status")
     if status in {
         core_freshness.STATUS_FAILED,
+        core_freshness.STATUS_BLOCKING_REPORTS,
+    }:
+        latest = conn.execute(
+            """
+            SELECT status, error_json
+            FROM freshness_jobs
+            WHERE profile_id = ? AND source_key = ?
+            ORDER BY created_at DESC, rowid DESC
+            LIMIT 1
+            """,
+            (profile_id, spec["source_key"]),
+        ).fetchone()
+        if latest is not None and latest["status"] == core_freshness.JOB_ERROR:
+            try:
+                error = json.loads(latest["error_json"] or "{}")
+            except (TypeError, ValueError, json.JSONDecodeError):
+                error = None
+            if isinstance(error, dict) and error.get("retryable") is False:
+                return False
+    if status in {
+        core_freshness.STATUS_FAILED,
         core_freshness.STATUS_PARTIALLY_STALE,
         core_freshness.STATUS_BLOCKING_REPORTS,
         core_freshness.STATUS_RATE_LIMITED,
