@@ -86,6 +86,7 @@ DEFAULT_TIME_WINDOW_SECONDS = 24 * 60 * 60  # 24h
 DEFAULT_FEE_PCT_MAX = 0.01  # 1%
 DEFAULT_FEE_SATS_MIN = 2500  # absolute floor for small swaps
 SATS_TO_MSAT = 1000
+_BITCOIN_SWAP_ASSETS = frozenset({"BTC", "LBTC"})
 
 METHOD_PAYMENT_HASH = "payment_hash"
 METHOD_HEURISTIC = "heuristic"
@@ -429,13 +430,17 @@ def default_kind_for(
 
     Heavy-user defaults:
 
-    * Chain → Lightning → ``submarine-swap``.
-    * Lightning → chain → ``reverse-submarine-swap``.
+    * Bitcoin-chain → Lightning → ``submarine-swap``.
+    * Lightning → Bitcoin-chain → ``reverse-submarine-swap``.
     * Both legs are chain wallets:
       * BTC → LBTC → ``peg-in``.
       * LBTC → BTC → ``peg-out``.
-    * Everything else → ``manual`` (the user picks).
+    * Non-Bitcoin assets and everything else → ``manual`` (the user picks).
     """
+    out_asset = str(out_asset or "").strip().upper()
+    in_asset = str(in_asset or "").strip().upper()
+    if out_asset not in _BITCOIN_SWAP_ASSETS or in_asset not in _BITCOIN_SWAP_ASSETS:
+        return KIND_MANUAL
     out_kind = normalize_wallet_kind_alias(out_wallet_kind)
     in_kind = normalize_wallet_kind_alias(in_wallet_kind)
     out_is_lightning = out_kind in LIGHTNING_WALLET_KINDS

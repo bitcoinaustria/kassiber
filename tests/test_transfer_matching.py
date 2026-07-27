@@ -226,6 +226,16 @@ class DefaultKindTests(unittest.TestCase):
     def test_unknown_shape_falls_back_to_manual(self):
         self.assertEqual(default_kind_for("BTC", "BTC", "descriptor", "descriptor"), KIND_MANUAL)
 
+    def test_non_bitcoin_asset_does_not_infer_a_lightning_swap(self):
+        self.assertEqual(
+            default_kind_for("ETH", "BTC", "phoenix", "descriptor"),
+            KIND_MANUAL,
+        )
+        self.assertEqual(
+            default_kind_for("BTC", "USDT", "descriptor", "lnd"),
+            KIND_MANUAL,
+        )
+
 
 class DefaultPolicyTests(unittest.TestCase):
     def test_matcher_api_has_no_profile_or_country_policy_input(self):
@@ -275,14 +285,16 @@ class DefaultPolicyTests(unittest.TestCase):
             wallet_id="B",
             wallet_kind="custom",
             payment_hash=_PAY_HASH,
-            payment_hash_source="chain_script_unique_outpoint",
+            payment_hash_source="importer",
             direction="inbound",
             asset="USDT",
+            raw_json={"chain": "bitcoin", "network": "main"},
         )
 
         candidates = suggest_swap_candidates([out, inbound])
 
         self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].method, METHOD_PAYMENT_HASH)
         self.assertEqual(candidates[0].default_policy, POLICY_TAXABLE)
         self.assertEqual(
             recommended_pair_policy(
@@ -1473,6 +1485,27 @@ class HeuristicMatchTests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].method, METHOD_HEURISTIC)
         self.assertEqual(candidates[0].default_kind, KIND_SUBMARINE_SWAP)
+
+    def test_non_bitcoin_cross_asset_lightning_shape_is_not_a_heuristic_candidate(self):
+        out = _row(
+            id="unrelated-asset-out",
+            wallet_id="exchange",
+            wallet_kind="descriptor",
+            direction="outbound",
+            asset="ETH",
+            amount=100_000_000,
+        )
+        inbound = _row(
+            id="lightning-in",
+            wallet_id="node",
+            wallet_kind="lnd",
+            direction="inbound",
+            asset="BTC",
+            occurred_at="2026-03-14T17:32:00Z",
+            amount=99_500_000,
+        )
+
+        self.assertEqual(suggest_swap_candidates([out, inbound]), [])
 
     def test_same_txid_cross_asset_not_treated_as_self_transfer(self):
         out = _row(
