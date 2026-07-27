@@ -360,6 +360,28 @@ class DaemonSwapMatchingTest(unittest.TestCase):
 
         self._with_daemon(call)
 
+    def test_035_ui_transfers_rules_create_rejects_array_predicate(self):
+        def call(proc):
+            envelope = _request_response(
+                proc,
+                {
+                    "kind": "ui.transfers.rules.create",
+                    "request_id": "req-rules-create-invalid-predicate",
+                    "args": {
+                        "workspace": "Main",
+                        "profile": "Swap",
+                        "predicate": [],
+                        "kind": "submarine-swap",
+                        "policy": "carrying-value",
+                    },
+                },
+            )
+            self.assertEqual(envelope["kind"], "error")
+            self.assertEqual(envelope["error"]["code"], "validation")
+            self.assertIn("predicate must be an object", envelope["error"]["message"])
+
+        self._with_daemon(call)
+
 
 class SwapReviewSuggestedActionTest(unittest.TestCase):
     def test_exact_candidate_action_pairs_only_the_reviewed_legs(self):

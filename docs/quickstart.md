@@ -126,6 +126,10 @@ python3 -m kassiber transfers pair --tx-out <out-id> --tx-in <in-id> \
   --kind submarine-swap --policy carrying-value
 ```
 
+Auto-pair rule predicates reject unknown or malformed fields. A malformed
+legacy or replicated rule remains visible as disabled and is never applied;
+delete and recreate it instead of re-enabling it.
+
 For 1:N, N:1, N:M, or multi-wallet histories with missing intermediate
 wallets, use the atomic custody-component resolver instead of forcing a chain
 of ambiguous pairs:

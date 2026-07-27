@@ -1011,9 +1011,12 @@ def create_transfer_rule(
             f"Unsupported pair kind '{kind}'. Supported: {', '.join(TRANSFER_PAIR_KINDS)}",
             code="validation",
         )
-    predicate = predicate or {}
-    if not isinstance(predicate, dict):
-        raise AppError("predicate must be a JSON object", code="validation")
+    try:
+        predicate = core_swap_rules.validate_rule_predicate(
+            {} if predicate is None else predicate
+        )
+    except ValueError as exc:
+        raise AppError(str(exc), code="validation") from exc
     if policy is None:
         policy = _default_transfer_rule_policy(profile, predicate)
     if policy not in TRANSFER_PAIR_POLICIES:
@@ -1069,6 +1072,16 @@ def set_transfer_rule_enabled(conn, workspace_ref, profile_ref, rule_id, enabled
     ).fetchone()
     if not row:
         raise AppError(f"Rule '{rule_id}' not found", code="not_found")
+    if enabled:
+        loaded = core_swap_rules.load_rule(row)
+        if loaded.invalid_reason:
+            raise AppError(
+                "Invalid auto-pair rule cannot be enabled",
+                code="validation",
+                hint="Delete and recreate the rule with a valid predicate.",
+                details={"reason": loaded.invalid_reason},
+                retryable=False,
+            )
     conn.execute(
         "UPDATE swap_matching_rules SET enabled = ?, updated_at = ? WHERE id = ?",
         (1 if enabled else 0, now_iso(), rule_id),
@@ -1079,23 +1092,22 @@ def set_transfer_rule_enabled(conn, workspace_ref, profile_ref, rule_id, enabled
 
 
 def _rule_row_to_dict(row):
-    predicate = {}
-    try:
-        predicate = json.loads(row["predicate_json"] or "{}")
-    except (TypeError, ValueError, json.JSONDecodeError):
-        predicate = {}
-    return {
+    rule = core_swap_rules.load_rule(row)
+    payload = {
         "id": row["id"],
         "workspace_id": row["workspace_id"],
         "profile_id": row["profile_id"],
         "name": row["name"],
-        "predicate": predicate,
-        "kind": row["kind"],
-        "policy": row["policy"],
-        "enabled": bool(row["enabled"]),
+        "predicate": dict(rule.predicate),
+        "kind": rule.kind,
+        "policy": rule.policy,
+        "enabled": rule.enabled,
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+    if rule.invalid_reason:
+        payload["invalid_reason"] = rule.invalid_reason
+    return payload
 
 
 # -- saved views CRUD --------------------------------------------------------

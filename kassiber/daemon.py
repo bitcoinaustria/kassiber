@@ -2052,7 +2052,9 @@ def _ui_swap_matching_payload_from_conn(
     if kind == "ui.transfers.rules.list":
         return {"rules": list_transfer_rules(conn, workspace, profile)}
     if kind == "ui.transfers.rules.create":
-        predicate = args.get("predicate") or {}
+        predicate = args.get("predicate")
+        if predicate is None:
+            predicate = {}
         if not isinstance(predicate, dict):
             raise AppError(
                 "ui.transfers.rules.create predicate must be an object", code="validation"
