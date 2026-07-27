@@ -9,6 +9,8 @@ exercise the full algorithm end-to-end.
 import json
 import inspect
 import hashlib
+import os
+import time
 import unittest
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -1634,6 +1636,41 @@ class HeuristicMatchTests(unittest.TestCase):
             [],
         )
 
+    @unittest.skipUnless(hasattr(time, "tzset"), "tzset required")
+    def test_mixed_naive_and_utc_timestamps_use_utc_semantics(self):
+        previous_tz = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "America/Los_Angeles"
+            time.tzset()
+            out = _row(
+                id="o",
+                wallet_id="A",
+                direction="outbound",
+                asset="LBTC",
+                occurred_at="2026-03-14T00:00:00Z",
+            )
+            inbound = _row(
+                id="i",
+                wallet_id="B",
+                direction="inbound",
+                asset="BTC",
+                occurred_at="2026-03-15T00:00:00",
+                amount=99_500_000_000,
+            )
+            candidates = suggest_swap_candidates(
+                [out, inbound],
+                time_window_seconds=24 * 3600,
+            )
+            self.assertEqual(len(candidates), 1)
+            self.assertEqual(candidates[0].confidence, CONFIDENCE_STRONG)
+            self.assertEqual(candidates[0].method, METHOD_HEURISTIC)
+        finally:
+            if previous_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = previous_tz
+            time.tzset()
+
     def test_inbound_larger_than_outbound_rejected(self):
         out = _row(id="o", wallet_id="A", direction="outbound", amount=100, asset="LBTC")
         inbound = _row(id="i", wallet_id="B", direction="inbound", amount=200, asset="BTC")
@@ -1963,6 +2000,31 @@ class PairAndDismissalSuppressionTests(unittest.TestCase):
             now_iso="2026-06-01T00:00:00Z",
         )
         self.assertEqual(len(candidates), 1)
+
+    @unittest.skipUnless(hasattr(time, "tzset"), "tzset required")
+    def test_naive_dismissal_now_uses_utc_semantics(self):
+        previous_tz = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "America/Los_Angeles"
+            time.tzset()
+            candidates = suggest_swap_candidates(
+                self._legs(),
+                dismissals=[
+                    {
+                        "out_transaction_id": "o",
+                        "in_transaction_id": "i",
+                        "expires_at": "2026-06-01T01:00:00Z",
+                    }
+                ],
+                now_iso="2026-06-01T00:30:00",
+            )
+            self.assertEqual(candidates, [])
+        finally:
+            if previous_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = previous_tz
+            time.tzset()
 
     def test_dismissed_exact_link_does_not_consume_leg_before_heuristic(self):
         out, exact_in = self._legs()

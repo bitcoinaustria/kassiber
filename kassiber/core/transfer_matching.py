@@ -59,6 +59,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, Mapping, Optional, Sequence
 
+from ..time_utils import parse_iso_datetime_or_none
 from ..transfers import (
     CHAIN_INFERENCE_WALLET_KINDS,
     LIGHTNING_INFERENCE_WALLET_KINDS,
@@ -488,17 +489,8 @@ def _seconds_or_now(now_iso: Optional[str]) -> float:
 
 
 def _iso_to_seconds(value: Optional[str]) -> Optional[float]:
-    if not value:
-        return None
-    raw = str(value).strip()
-    if not raw:
-        return None
-    if raw.endswith("Z"):
-        raw = raw[:-1] + "+00:00"
-    try:
-        return datetime.fromisoformat(raw).timestamp()
-    except ValueError:
-        return None
+    parsed = parse_iso_datetime_or_none(value)
+    return None if parsed is None else parsed.timestamp()
 
 
 def _active_paired_ids(pair_records: Iterable[Mapping]) -> set[str]:
