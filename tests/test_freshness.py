@@ -438,6 +438,53 @@ class FreshnessTest(unittest.TestCase):
             captured.output,
         )
 
+    def test_projection_conflict_logs_only_allowlisted_discriminator(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+
+        def run(details):
+            freshness.enqueue_job(
+                conn,
+                profile_id=profile_id,
+                job_type=freshness.JOB_ONCHAIN_WALLET,
+                source_key="onchain_wallet:cold",
+                source_type=freshness.SOURCE_ONCHAIN,
+                source_label="Cold wallet",
+                priority=10,
+            )
+            conn.commit()
+
+            def boom(conn, job, progress, check_cancelled):
+                raise AppError(
+                    "projection failed",
+                    code="observer_projection_conflict",
+                    details=details,
+                )
+
+            with self.assertLogs(
+                "kassiber.core.freshness", level="ERROR"
+            ) as captured:
+                freshness.run_due_jobs(
+                    conn,
+                    {freshness.JOB_ONCHAIN_WALLET: boom},
+                    profile_id=profile_id,
+                    limit=1,
+                )
+            return captured.output
+
+        known = run({"conflict_kind": "multiple_transaction_rows"})
+        self.assertTrue(
+            any("multiple_transaction_rows" in line for line in known),
+            known,
+        )
+
+        unknown_value = "not_an_allowlisted_conflict_kind"
+        unknown = run({"conflict_kind": unknown_value})
+        self.assertFalse(
+            any(unknown_value in line for line in unknown),
+            unknown,
+        )
+
     def test_failed_job_txid_and_amount_pseudonymized_on_disk(self):
         # The freshness DISK write (freshness_jobs.error_json + source-state
         # last_error_message) must pseudonymize txids/amounts in BOTH the message

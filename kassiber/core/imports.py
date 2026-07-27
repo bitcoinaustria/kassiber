@@ -228,6 +228,7 @@ def _find_existing_transaction(
                 "Authoritative chain observation matched multiple transaction rows",
                 code="observer_projection_conflict",
                 details={
+                    "conflict_kind": "multiple_transaction_rows",
                     "txid": normalized["external_id"],
                     "asset": normalized["asset"],
                     "direction": normalized["direction"],

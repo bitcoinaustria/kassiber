@@ -670,6 +670,7 @@ def apply_fetch_observer_updates(
             "A wallet refresh cannot apply dependency and compatibility projections together",
             code="observer_projection_conflict",
             hint="Select exactly one observer route before contacting the backend.",
+            details={"conflict_kind": "mixed_observer_routes"},
             retryable=False,
         )
     observer_records: list[BackendRecord] = []
@@ -761,7 +762,10 @@ def apply_fetch_observer_updates(
                         raise AppError(
                             "BDK observers returned inconsistent inputs for one transaction",
                             code="observer_projection_conflict",
-                            details={"txid": txid},
+                            details={
+                                "conflict_kind": "bdk_inconsistent_inputs",
+                                "txid": txid,
+                            },
                             retryable=False,
                         )
                     existing = merged_vin[target_index].get("prevout")
@@ -769,7 +773,10 @@ def apply_fetch_observer_updates(
                         raise AppError(
                             "BDK observers returned conflicting prevouts for one transaction",
                             code="observer_projection_conflict",
-                            details={"txid": txid},
+                            details={
+                                "conflict_kind": "bdk_conflicting_prevouts",
+                                "txid": txid,
+                            },
                             retryable=False,
                         )
                     merged_vin[target_index]["prevout"] = vin["prevout"]

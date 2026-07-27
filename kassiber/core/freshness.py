@@ -25,6 +25,16 @@ from ..time_utils import now_iso, parse_iso_datetime_or_none
 # living only in structured job state.
 _LOGGER = logging.getLogger(__name__)
 
+_SAFE_OBSERVER_PROJECTION_CONFLICT_KINDS = frozenset(
+    {
+        "bdk_conflicting_prevouts",
+        "bdk_inconsistent_inputs",
+        "mixed_observer_routes",
+        "multiple_transaction_rows",
+        "provenance_row_cardinality",
+    }
+)
+
 JOB_ONCHAIN_WALLET = "onchain_wallet_history"
 JOB_BTCPAY_WALLET = "btcpay_wallet_source"
 JOB_BTCPAY_PROVENANCE = "btcpay_provenance"
@@ -912,6 +922,14 @@ def _mark_error(
     sqlite_error_name = (
         exc.details.get("sqlite_error_name") if isinstance(exc.details, dict) else None
     )
+    conflict_kind = (
+        exc.details.get("conflict_kind")
+        if error_code == "observer_projection_conflict"
+        and isinstance(exc.details, dict)
+        else None
+    )
+    if conflict_kind not in _SAFE_OBSERVER_PROJECTION_CONFLICT_KINDS:
+        conflict_kind = None
     if cooldown_until:
         if sqlite_error_name:
             _LOGGER.warning(
@@ -933,6 +951,13 @@ def _mark_error(
             )
         else:
             _LOGGER.error("Freshness %s failed (%s; %s)", source_name, error_code, error_class)
+    elif conflict_kind:
+        _LOGGER.error(
+            "Freshness %s failed (%s; %s)",
+            source_name,
+            error_code,
+            conflict_kind,
+        )
     else:
         _LOGGER.error("Freshness %s failed (%s)", source_name, error_code)
     now = now_iso()

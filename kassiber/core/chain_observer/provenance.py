@@ -186,6 +186,7 @@ def persist_chain_observation_provenance(
                 "Authoritative observation did not resolve to one transaction row",
                 code="observer_projection_conflict",
                 details={
+                    "conflict_kind": "provenance_row_cardinality",
                     "external_id": canonical_txid or external_id,
                     "asset": asset,
                     "direction": str(entry.get("direction") or ""),
