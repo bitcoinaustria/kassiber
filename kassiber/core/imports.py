@@ -1626,7 +1626,8 @@ def retract_wallet_records(
                   FROM transactions
                  WHERE profile_id = ?
                    AND wallet_id = ?
-                   AND external_id IN ({placeholders})
+                   AND external_id IS NOT NULL
+                   AND LOWER(external_id) IN ({placeholders})
                 """,
                 (profile["id"], wallet["id"], *chunk),
             ).fetchall()

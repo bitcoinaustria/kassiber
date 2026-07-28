@@ -4981,6 +4981,57 @@ class RetractWalletRecordsDbTest(unittest.TestCase):
         )
         self.assertEqual(self.invalidated, [])
 
+    def test_retract_matches_legacy_uppercase_external_ids(self):
+        # Observer lookup/index are case-insensitive and normalize new writes to
+        # lowercase, but legacy rows may still store uppercase hex. Retraction
+        # must hit those rows or a multi-observer "gone here, live elsewhere"
+        # cleanup can leave stale booked transactions behind.
+        uppercase_txid = ("ab" * 32).upper()
+        self.conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, direction, asset, amount, fee, fiat_currency,
+                fiat_rate, fiat_value, kind, description, counterparty, raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "tx-upper",
+                "ws-1",
+                "profile-1",
+                "wallet-a",
+                uppercase_txid,
+                "fp-tx-upper",
+                _RETRACT_NOW,
+                "outbound",
+                "BTC",
+                100_000_000,
+                0,
+                "EUR",
+                40_000.0,
+                None,
+                "withdrawal",
+                None,
+                None,
+                "{}",
+                _RETRACT_NOW,
+            ),
+        )
+        self.conn.commit()
+
+        result = core_imports.retract_wallet_records(
+            self.conn,
+            {"id": "profile-1"},
+            {"id": "wallet-a", "label": "Cold"},
+            [uppercase_txid.lower()],
+            "observer",
+            self.hooks,
+        )
+        self.assertEqual(result["retracted"], 1)
+        self.assertEqual(result["retracted_records"][0]["external_id"], uppercase_txid)
+        self.assertNotIn(uppercase_txid, self._external_ids())
+        self.assertEqual(self.invalidated, ["profile-1"])
+
 
 if __name__ == "__main__":
     unittest.main()
