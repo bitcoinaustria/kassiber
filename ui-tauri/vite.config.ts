@@ -693,6 +693,7 @@ function installDaemonBridge(
   server: import("vite").ViteDevServer | import("vite").PreviewServer,
 ) {
   const supervisor = new DaemonBridgeSupervisor();
+  const approvedImportProjectDataRoots = new Set<string>();
   server.httpServer?.once("close", () => supervisor.shutdown());
 
   server.middlewares.use(async (req, res, next) => {
@@ -725,7 +726,12 @@ function installDaemonBridge(
       return;
     }
     if (pathname === IMPORT_PROJECT_BRIDGE_PATH) {
-      await handleBridgeImportProject(req, res, supervisor);
+      await handleBridgeImportProject(
+        req,
+        res,
+        supervisor,
+        approvedImportProjectDataRoots,
+      );
       return;
     }
     if (pathname === RESET_REGTEST_BRIDGE_PATH) {
@@ -968,6 +974,7 @@ async function handleBridgeImportProject(
   req: IncomingMessage,
   res: ServerResponse,
   supervisor: DaemonBridgeSupervisor,
+  approvedDataRoots: Set<string>,
 ) {
   if (!isLoopbackHost(req.headers.host)) {
     writeJsonError(
@@ -1026,14 +1033,22 @@ async function handleBridgeImportProject(
         writeJson(res, 200, { selection: null });
         return;
       }
+      const selection = inspectImportProjectDirectory(paths[0]);
+      approvedDataRoots.add(selection.dataRoot);
+      supervisor.setDataRoot(selection.dataRoot);
       writeJson(res, 200, {
-        selection: inspectImportProjectDirectory(paths[0]),
+        selection,
       });
       return;
     }
     if (action === "activate") {
       if (typeof request.dataRoot !== "string" || !request.dataRoot.trim()) {
         throw new Error("dataRoot is required.");
+      }
+      if (!approvedDataRoots.has(request.dataRoot)) {
+        throw new Error(
+          "Choose this Kassiber project with the native folder picker before opening it.",
+        );
       }
       const selection = inspectImportProjectDirectory(request.dataRoot);
       supervisor.setDataRoot(selection.dataRoot);

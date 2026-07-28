@@ -612,19 +612,30 @@ async function requestBridgeImportProject<T>(
 }
 
 export async function selectImportProjectDirectory(): Promise<ImportProjectSelection | null> {
+  let selection: ImportProjectSelection | null;
   if (DAEMON_MODE === "bridge") {
     const response = await requestBridgeImportProject<{
       selection: ImportProjectSelection | null;
     }>({ action: "select" });
-    return response.selection;
-  }
-  if (DAEMON_MODE !== "tauri") {
+    selection = response.selection;
+  } else if (DAEMON_MODE === "tauri") {
+    const { invoke } = await import("@tauri-apps/api/core");
+    selection = await invoke<ImportProjectSelection | null>(
+      "select_import_project_directory",
+    );
+  } else {
     throw new Error(
       "Project import is available in the desktop app or browser bridge.",
     );
   }
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<ImportProjectSelection | null>("select_import_project_directory");
+  if (
+    selection &&
+    activeImportProjectSelection?.dataRoot !== selection.dataRoot
+  ) {
+    useUiStore.getState().bumpDaemonSession();
+    activeImportProjectSelection = selection;
+  }
+  return selection;
 }
 
 async function activateImportProjectViaMode(

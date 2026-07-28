@@ -51,6 +51,7 @@ const DB_FILENAMES: &[&str] = &["kassiber.sqlite3", "satbooks.sqlite3"];
 const LEDGER_PREVIEW_EXTENSIONS: &[&str] = &["csv", "tsv", "xlsx", "xlsm"];
 const DOCUMENT_IMPORT_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif", "pdf"];
 const DOCUMENT_IMPORT_STAGE_KIND: &str = "internal.document_import.stage";
+const APPROVED_IMPORT_PROJECTS_FILENAME: &str = "approved-import-projects.json";
 const IMPORT_PICKER_TIMEOUT: Duration = Duration::from_secs(300);
 const TERMINAL_COMMAND_NAME: &str = "kassiber";
 const TERMINAL_COMMAND_MARKER: &str =
@@ -487,6 +488,11 @@ pub struct ImportProjectSelection {
     encrypted: bool,
 }
 
+#[derive(Debug, Default, Deserialize, Serialize)]
+struct ApprovedImportProjects {
+    data_roots: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MenuActionPayload {
@@ -599,6 +605,10 @@ async fn daemon_invoke(
 
     let request_id = request.request_id.clone();
     let streaming = STREAMING_DAEMON_KINDS.contains(&request.kind.as_str());
+    let approves_project = matches!(
+        request.kind.as_str(),
+        "ui.projects.create" | "ui.projects.select"
+    );
     let task_request_id = request_id.clone();
     let supervisor = Arc::clone(state.inner());
     let DaemonRequest {
@@ -610,6 +620,18 @@ async fn daemon_invoke(
         match supervisor.invoke(&kind, args, &app, streaming, client_request_id) {
             Ok(mut response) => {
                 attach_secret_store_policy_status(&mut response);
+                if approves_project {
+                    if let Err(error) = approve_daemon_project_response(&app, &response) {
+                        return error_envelope(
+                            "project_approval_store_failed",
+                            error,
+                            Some("Choose the project again after checking app config permissions."),
+                            None,
+                            task_request_id.clone(),
+                            true,
+                        );
+                    }
+                }
                 match serde_json::from_value(response) {
                     Ok(envelope) => envelope,
                     Err(error) => error_envelope(
@@ -992,23 +1014,39 @@ fn open_external_url(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn select_import_project_directory() -> Result<Option<ImportProjectSelection>, String> {
-    tauri::async_runtime::spawn_blocking(|| {
+async fn select_import_project_directory(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<DaemonSupervisor>>,
+) -> Result<Option<ImportProjectSelection>, String> {
+    let selection = tauri::async_runtime::spawn_blocking(|| {
         let Some(selected) = choose_import_project_directory()? else {
             return Ok(None);
         };
         inspect_import_project_directory(&selected).map(Some)
     })
     .await
-    .map_err(|error| format!("Project folder picker task failed: {error}"))?
+    .map_err(|error| format!("Project folder picker task failed: {error}"))??;
+    let Some(selection) = selection else {
+        return Ok(None);
+    };
+    approve_import_project_data_root(&approved_import_projects_path(&app)?, &selection.data_root)?;
+    state
+        .set_data_root(PathBuf::from(&selection.data_root))
+        .map_err(|error| error.message)?;
+    Ok(Some(selection))
 }
 
 #[tauri::command]
 fn activate_import_project(
+    app: tauri::AppHandle,
     state: State<'_, Arc<DaemonSupervisor>>,
     data_root: String,
 ) -> Result<ImportProjectSelection, String> {
-    let selection = inspect_import_project_directory(Path::new(&data_root))?;
+    let approved_data_root = require_approved_import_project_data_root(
+        &approved_import_projects_path(&app)?,
+        &data_root,
+    )?;
+    let selection = inspect_import_project_directory(Path::new(&approved_data_root))?;
     state
         .set_data_root(PathBuf::from(&selection.data_root))
         .map_err(|error| error.message)?;
@@ -1377,6 +1415,78 @@ fn clear_desktop_biometric_stale_guard_if_matches(
 
 fn clear_desktop_biometric_stale_guard(data_root: &str) -> Result<bool, String> {
     update_desktop_biometric_stale_guard(data_root, None)
+}
+
+fn approved_import_projects_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|dir| dir.join(APPROVED_IMPORT_PROJECTS_FILENAME))
+        .map_err(|error| format!("Approved project store is unavailable: {error}"))
+}
+
+fn read_approved_import_projects(path: &Path) -> Result<ApprovedImportProjects, String> {
+    let raw = match fs::read(path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            return Ok(ApprovedImportProjects::default());
+        }
+        Err(error) => {
+            return Err(format!("Approved project store could not be read: {error}"));
+        }
+    };
+    serde_json::from_slice(&raw)
+        .map_err(|error| format!("Approved project store is invalid: {error}"))
+}
+
+fn approve_import_project_data_root(path: &Path, data_root: &str) -> Result<(), String> {
+    let mut approved = read_approved_import_projects(path)?;
+    if approved.data_roots.iter().any(|stored| stored == data_root) {
+        return Ok(());
+    }
+    approved.data_roots.push(data_root.to_string());
+    approved.data_roots.sort();
+    let parent = path
+        .parent()
+        .ok_or_else(|| "Approved project store has no parent folder.".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("Approved project store could not be created: {error}"))?;
+    let encoded = serde_json::to_vec_pretty(&approved)
+        .map_err(|error| format!("Approved project store could not be encoded: {error}"))?;
+    fs::write(path, encoded)
+        .map_err(|error| format!("Approved project store could not be written: {error}"))
+}
+
+fn approve_daemon_project_response(app: &tauri::AppHandle, response: &Value) -> Result<(), String> {
+    if !matches!(
+        response.get("kind").and_then(Value::as_str),
+        Some("ui.projects.create" | "ui.projects.select")
+    ) {
+        return Ok(());
+    }
+    let Some(data_root) = response
+        .get("data")
+        .and_then(|data| data.get("project"))
+        .and_then(|project| project.get("data_root"))
+        .and_then(Value::as_str)
+    else {
+        return Ok(());
+    };
+    approve_import_project_data_root(&approved_import_projects_path(app)?, data_root)
+}
+
+fn require_approved_import_project_data_root(
+    path: &Path,
+    requested: &str,
+) -> Result<String, String> {
+    let approved = read_approved_import_projects(path)?;
+    approved
+        .data_roots
+        .into_iter()
+        .find(|stored| stored == requested)
+        .ok_or_else(|| {
+            "Choose this Kassiber project with the native folder picker before opening it."
+                .to_string()
+        })
 }
 
 fn inspect_import_project_directory(path: &Path) -> Result<ImportProjectSelection, String> {
@@ -3650,24 +3760,26 @@ fn verified_codesign_identity(path: &Path) -> Result<(String, String), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        bundled_macos_terminal_launcher, clear_desktop_biometric_stale_guard_if_matches,
-        copy_report_export_directory, database_is_encrypted, desktop_biometric_stale_generation,
+        approve_import_project_data_root, bundled_macos_terminal_launcher,
+        clear_desktop_biometric_stale_guard_if_matches, copy_report_export_directory,
+        database_is_encrypted, desktop_biometric_stale_generation,
         ensure_export_destination_outside_managed_root, inspect_import_project_directory,
         inspect_terminal_command, is_managed_report_export_path, is_supported_audit_package_dir,
         is_supported_austrian_csv_bundle_dir, is_supported_export_file,
         is_supported_report_export_target, managed_settings_path, menu_action,
         menu_action_for_deep_link, menu_action_for_id, navigate_action, open_settings_action,
-        path_is_on_path, read_operator_native_auth_secret, terminal_command_contents,
+        path_is_on_path, read_operator_native_auth_secret,
+        require_approved_import_project_data_root, terminal_command_contents,
         terminal_command_path_hint, terminal_command_target_is_transient,
         touch_id_managed_unlock_state, touch_id_scope_for_selected, validated_attachment_file_path,
-        validated_external_url, TerminalCommandFileState, TerminalCommandPaths,
-        ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS, DOCUMENT_IMPORT_STAGE_KIND,
-        MENU_CHECK_UPDATES, MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS,
-        MENU_OPEN_SETTINGS, MENU_SETTINGS_AI, MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA,
-        MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL, MENU_SETTINGS_PRIVACY,
-        MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE,
-        MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET, MENU_WORKFLOW_ADD_WALLET,
-        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
+        validated_external_url, validated_report_export_target, TerminalCommandFileState,
+        TerminalCommandPaths, ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS,
+        DOCUMENT_IMPORT_STAGE_KIND, MENU_CHECK_UPDATES, MENU_HELP_DOCS, MENU_LOCK_APP,
+        MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_OPEN_SETTINGS, MENU_SETTINGS_AI,
+        MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL,
+        MENU_SETTINGS_PRIVACY, MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN,
+        MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET,
+        MENU_WORKFLOW_ADD_WALLET, MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
         MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
     };
     use std::fs;
@@ -4790,6 +4902,36 @@ mod tests {
             data.join("satbooks.sqlite3").to_string_lossy().to_string()
         );
         assert!(selection.encrypted);
+    }
+
+    #[test]
+    fn import_project_activation_requires_native_approval() {
+        let store_root = unique_temp_dir("approved-project-store");
+        let store = store_root.join("approved-import-projects.json");
+        let approved = "/books/approved/data";
+        approve_import_project_data_root(&store, approved).expect("approve picked project");
+
+        assert_eq!(
+            require_approved_import_project_data_root(&store, approved)
+                .expect("approved project should be restored"),
+            approved
+        );
+        let error = require_approved_import_project_data_root(&store, "/books/unapproved/data")
+            .expect_err("renderer paths without native approval must be rejected");
+        assert!(error.contains("native folder picker"));
+    }
+
+    #[test]
+    fn missing_project_approval_store_fails_closed() {
+        let store_root = unique_temp_dir("missing-approved-project-store");
+        let missing_store = store_root
+            .join("missing")
+            .join("approved-import-projects.json");
+        let error =
+            require_approved_import_project_data_root(&missing_store, "/known/but/unapproved/data")
+                .expect_err("missing approval state must not authorize a path");
+        assert!(error.contains("native folder picker"));
+        assert!(!missing_store.exists());
     }
 
     #[test]
