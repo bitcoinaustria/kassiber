@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   isAllowedBridgeOrigin,
+  isLoopbackAddress,
   isLoopbackHost,
   redactBridgeText,
 } from "../../vite.config";
@@ -12,6 +13,16 @@ describe("daemon bridge containment", () => {
     expect(isLoopbackHost("localhost:5173")).toBe(true);
     expect(isLoopbackHost("[::1]:5173")).toBe(true);
     expect(isLoopbackHost("example.test:5173")).toBe(false);
+  });
+
+  it("requires the bridge peer socket itself to be loopback", () => {
+    expect(isLoopbackAddress("127.0.0.1")).toBe(true);
+    expect(isLoopbackAddress("127.12.34.56")).toBe(true);
+    expect(isLoopbackAddress("::1")).toBe(true);
+    expect(isLoopbackAddress("::ffff:127.0.0.1")).toBe(true);
+    expect(isLoopbackAddress("192.168.1.20")).toBe(false);
+    expect(isLoopbackAddress("::ffff:192.168.1.20")).toBe(false);
+    expect(isLoopbackAddress(undefined)).toBe(false);
   });
 
   it("requires same-origin loopback browser requests", () => {

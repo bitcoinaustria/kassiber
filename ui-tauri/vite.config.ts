@@ -411,6 +411,18 @@ export function isLoopbackHost(hostHeader: string | string[] | undefined) {
   );
 }
 
+export function isLoopbackAddress(address: string | undefined) {
+  if (!address) return false;
+  const normalized = address.startsWith("::ffff:")
+    ? address.slice("::ffff:".length)
+    : address;
+  return (
+    normalized === "::1" ||
+    normalized === "0:0:0:0:0:0:0:1" ||
+    /^127(?:\.\d{1,3}){3}$/.test(normalized)
+  );
+}
+
 export function isAllowedBridgeOrigin(
   originHeader: string | string[] | undefined,
   hostHeader: string | string[] | undefined,
@@ -685,6 +697,21 @@ function installDaemonBridge(
 
   server.middlewares.use(async (req, res, next) => {
     const pathname = (req.url ?? "").split("?")[0];
+    const isBridgeRequest =
+      pathname === DAEMON_BRIDGE_STREAM_PATH ||
+      pathname === DAEMON_BRIDGE_PATH ||
+      pathname === FILE_PICKER_BRIDGE_PATH ||
+      pathname === IMPORT_PROJECT_BRIDGE_PATH ||
+      pathname === RESET_REGTEST_BRIDGE_PATH;
+    if (isBridgeRequest && !isLoopbackAddress(req.socket.remoteAddress)) {
+      writeJsonError(
+        res,
+        403,
+        "bridge_forbidden_peer",
+        "daemon bridge only accepts loopback connections",
+      );
+      return;
+    }
     if (pathname === DAEMON_BRIDGE_STREAM_PATH) {
       await handleBridgeStream(req, res, supervisor);
       return;
