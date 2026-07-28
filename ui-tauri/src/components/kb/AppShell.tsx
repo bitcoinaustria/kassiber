@@ -1591,7 +1591,14 @@ export function AppShell() {
           if (!signal) return;
 
           void queryClient.invalidateQueries({ queryKey: ["daemon"] });
-          if (signal === "refresh") return;
+          if (signal === "refresh") {
+            const store = useUiStore.getState();
+            const previousFailure = store.notifications.find(
+              (item) => item.dedupeKey === "background-freshness",
+            );
+            if (previousFailure) store.clearNotification(previousFailure.id);
+            return;
+          }
 
           addNotification({
             title:
@@ -1600,7 +1607,7 @@ export function AppShell() {
                 : t("overview:bookRefresh.needsAttentionTitle"),
             body: t("overview:bookRefresh.failedBody"),
             tone: signal === "worker-error" ? "error" : "warning",
-            dedupeKey: "book-refresh",
+            dedupeKey: "background-freshness",
             target: "/logs",
           });
         }),
