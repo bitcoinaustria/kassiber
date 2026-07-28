@@ -193,6 +193,36 @@ def migrate_plaintext_to_encrypted(
     # SQLCipher-built connections.
     src_conn = sqlcipher.connect(str(src))
     try:
+        try:
+            checkpoint = src_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+            if checkpoint and int(checkpoint[0]) != 0:
+                raise AppError(
+                    "plaintext database is busy; WAL checkpoint could not complete",
+                    code="database_busy",
+                    hint="Close every process using this Kassiber project and retry.",
+                    details={"database": str(src), "checkpoint": list(checkpoint)},
+                    retryable=True,
+                )
+            journal_mode_row = src_conn.execute("PRAGMA journal_mode=DELETE").fetchone()
+        except AppError:
+            raise
+        except Exception as exc:
+            raise AppError(
+                "plaintext database is busy; journal mode could not be secured for migration",
+                code="database_busy",
+                hint="Close every process using this Kassiber project and retry.",
+                details={"database": str(src), "error": str(exc)},
+                retryable=True,
+            ) from exc
+        journal_mode = str(journal_mode_row[0] if journal_mode_row else "").lower()
+        if journal_mode != "delete":
+            raise AppError(
+                "plaintext database is busy; WAL mode remains active",
+                code="database_busy",
+                hint="Close every process using this Kassiber project and retry.",
+                details={"database": str(src), "journal_mode": journal_mode},
+                retryable=True,
+            )
         plaintext_user_version = src_conn.execute("PRAGMA user_version").fetchone()[0]
         plaintext_auto_vacuum = src_conn.execute("PRAGMA auto_vacuum").fetchone()[0]
 
@@ -207,6 +237,20 @@ def migrate_plaintext_to_encrypted(
         src_conn.execute("DETACH DATABASE encrypted")
     finally:
         src_conn.close()
+
+    plaintext_sidecars = [
+        sidecar
+        for sidecar in (Path(f"{src}-wal"), Path(f"{src}-shm"))
+        if sidecar.exists()
+    ]
+    if plaintext_sidecars:
+        raise AppError(
+            "plaintext database sidecars remain after closing the migration source",
+            code="database_busy",
+            hint="Close every process using this Kassiber project and retry.",
+            details={"sidecars": [str(path) for path in plaintext_sidecars]},
+            retryable=True,
+        )
 
     new_conn = open_encrypted(
         encrypted_path,
