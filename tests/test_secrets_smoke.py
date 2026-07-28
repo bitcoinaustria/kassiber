@@ -1219,6 +1219,8 @@ class CredentialMigrationTests(unittest.TestCase):
             self.assertEqual(result["migrated"], [])
             self.assertEqual(len(result["skipped"]), 1)
             self.assertEqual(result["skipped"][0]["reason"], "backend_not_in_db")
+            self.assertNotIn("value", result["skipped"][0])
+            self.assertNotIn("tok-orphan", json.dumps(result, sort_keys=True))
             self.assertIn(
                 "KASSIBER_BACKEND_GHOST_TOKEN=tok-orphan",
                 env_file.read_text(encoding="utf-8"),
