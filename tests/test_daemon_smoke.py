@@ -4436,6 +4436,31 @@ class DaemonSmokeTest(unittest.TestCase):
                     ],
                 )
 
+                secret_values = {
+                    "descriptor": "wpkh(secret-descriptor)",
+                    "xpub": "secret-xpub",
+                    "blinding_key": "secret-blinding-key",
+                }
+                secret_conn = open_db(data_root)
+                try:
+                    wallet_row = secret_conn.execute(
+                        "SELECT id, config_json FROM wallets WHERE label = ?",
+                        ("BTCPay Account UI - Membership - BTC-CHAIN",),
+                    ).fetchone()
+                    self.assertIsNotNone(wallet_row)
+                    secret_config = json.loads(wallet_row["config_json"])
+                    secret_config.update(secret_values)
+                    secret_conn.execute(
+                        "UPDATE wallets SET config_json = ? WHERE id = ?",
+                        (
+                            json.dumps(secret_config, sort_keys=True),
+                            wallet_row["id"],
+                        ),
+                    )
+                    secret_conn.commit()
+                finally:
+                    secret_conn.close()
+
                 _write_payload(
                     proc,
                     {
@@ -4454,6 +4479,13 @@ class DaemonSmokeTest(unittest.TestCase):
                     account_setup_repeat["data"]["wallet_sources"][0]["label"],
                     "BTCPay Account UI - Membership - BTC-CHAIN",
                 )
+                reused_wallet = account_setup_repeat["data"]["wallet_sources"][0]
+                self.assertEqual(reused_wallet["config"]["descriptor"], "[redacted]")
+                self.assertEqual(reused_wallet["config"]["xpub"], "[redacted]")
+                self.assertNotIn("blinding_key", reused_wallet["config"])
+                serialized_repeat = json.dumps(account_setup_repeat, sort_keys=True)
+                for secret in secret_values.values():
+                    self.assertNotIn(secret, serialized_repeat)
                 self.assertEqual(
                     account_setup_repeat["data"]["account_routes"][0]["id"],
                     account_setup["data"]["account_routes"][0]["id"],
