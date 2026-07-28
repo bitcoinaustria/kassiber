@@ -9071,6 +9071,13 @@ def _onboarding_complete_payload(
     ctx: "DaemonContext",
     args: dict[str, Any],
 ) -> dict[str, Any]:
+    if ctx.conn.execute("SELECT 1 FROM workspaces LIMIT 1").fetchone():
+        raise AppError(
+            "Onboarding has already been completed.",
+            code="conflict",
+            hint="Use Books and Backend settings to add or change an existing installation.",
+            retryable=False,
+        )
     workspace_label = _optional_string_arg(args, "workspace_label")
     profile_label = _optional_string_arg(args, "profile_label")
     if not workspace_label:
