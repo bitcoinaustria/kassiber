@@ -6580,7 +6580,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertNotIn("rpcpassword", payload["data"])
         self.assertNotIn("api_key", payload["data"])
 
-    def test_backends_delete_detaches_wallet_backend_references(self):
+    def test_backends_delete_refuses_wallet_backend_references(self):
         self._bootstrap_profile()
 
         payload, result = self._run_json(
@@ -6605,12 +6605,15 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "backends.set-default")
 
         payload, result = self._run_json("backends", "delete", "mempool")
-        self._assert_ok(payload, result, "backends.delete")
-        self.assertTrue(payload["data"]["deleted"])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(payload["error"]["code"], "conflict")
         self.assertEqual(
-            payload["data"]["detached_wallet_refs"],
+            payload["error"]["details"]["wallet_refs"],
             ["Main/Default/Tracked"],
         )
+
+        payload, result = self._run_json("backends", "get", "mempool")
+        self._assert_ok(payload, result, "backends.get")
 
         payload, result = self._run_json(
             "wallets",
@@ -6623,7 +6626,7 @@ class ReviewRegressionTest(unittest.TestCase):
             "Tracked",
         )
         self._assert_ok(payload, result, "wallets.get")
-        self.assertNotIn("backend", payload["data"]["config"])
+        self.assertEqual(payload["data"]["config"]["backend"], "mempool")
 
     def test_backends_delete_removes_btcpay_account_routes(self):
         self._bootstrap_profile()

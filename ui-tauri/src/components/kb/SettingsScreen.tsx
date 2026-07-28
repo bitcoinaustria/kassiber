@@ -202,7 +202,6 @@ export function SettingsScreen({
   const deleteBackend = useDaemonMutation<{
     name: string;
     deleted: boolean;
-    detached_wallet_refs?: string[];
   }>("ui.backends.delete");
   const [settingDefaultBackendId, setSettingDefaultBackendId] =
     React.useState<string | null>(null);
@@ -595,15 +594,17 @@ export function SettingsScreen({
 
   const onDeleteBackend = async (backend: Backend) => {
     const affectedWallets = backend.walletRefs ?? [];
-    const walletWarning =
-      affectedWallets.length > 0
-        ? `\n\n${t("deleteBackend.walletWarning", {
-            wallets: affectedWallets.join("\n- "),
-          })}`
-        : "";
-    const ok = await confirmAction(
-      `${t("deleteBackend.confirm", { name: backend.name })}${walletWarning}`,
-    );
+    if (affectedWallets.length > 0) {
+      addNotification({
+        title: t("deleteBackend.blockedTitle"),
+        body: t("deleteBackend.walletWarning", {
+          wallets: affectedWallets.join("\n- "),
+        }),
+        tone: "error",
+      });
+      return;
+    }
+    const ok = await confirmAction(t("deleteBackend.confirm", { name: backend.name }));
     if (!ok) return;
     await deleteBackend.mutateAsync({ name: backend.id });
     const refreshed = await backendSettingsQuery.refetch();
