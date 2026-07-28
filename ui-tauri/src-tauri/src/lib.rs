@@ -1723,7 +1723,7 @@ fn terminal_command_windows_candidate_dirs(home: &Path) -> Vec<PathBuf> {
 
 #[cfg(target_os = "windows")]
 fn terminal_command_filename() -> &'static str {
-    "kassiber.cmd"
+    "kassiber.exe"
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -1752,6 +1752,25 @@ fn terminal_command_status() -> Result<TerminalCommandStatus, String> {
             target_path: paths.target_path.to_string_lossy().into_owned(),
             path_hint: String::new(),
             message: "The terminal command is installed and managed by your installer or package manager."
+                .to_string(),
+        });
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return Ok(TerminalCommandStatus {
+            platform: paths.platform,
+            available: false,
+            installed: false,
+            managed: false,
+            needs_repair: false,
+            conflict: false,
+            path_on_path: false,
+            command: TERMINAL_COMMAND_NAME.to_string(),
+            bin_dir: paths.bin_dir.to_string_lossy().into_owned(),
+            command_path: paths.command_path.to_string_lossy().into_owned(),
+            target_path: paths.target_path.to_string_lossy().into_owned(),
+            path_hint: String::new(),
+            message: "Install Kassiber with the Windows installer to add its native CLI executable to PATH."
                 .to_string(),
         });
     }
@@ -1796,7 +1815,7 @@ fn package_managed_terminal_command(target_path: &Path) -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     let candidates = target_path
         .parent()
-        .map(|parent| vec![parent.join("bin").join("kassiber.cmd")])
+        .map(|parent| vec![parent.join("bin").join("kassiber.exe")])
         .unwrap_or_default();
     #[cfg(target_os = "macos")]
     let candidates = vec![
@@ -1868,6 +1887,13 @@ fn install_terminal_command() -> Result<(), String> {
     if package_managed_terminal_command(&paths.target_path).is_some() {
         return Ok(());
     }
+    #[cfg(target_os = "windows")]
+    {
+        return Err(
+            "Install Kassiber with the Windows installer to add its native CLI executable to PATH."
+                .to_string(),
+        );
+    }
     if !terminal_command_target_is_available(&paths.target_path) {
         return Err(
             "Move Kassiber out of the disk image and into Applications before installing the terminal command."
@@ -1909,6 +1935,12 @@ fn install_terminal_command() -> Result<(), String> {
 
 fn remove_terminal_command() -> Result<(), String> {
     let paths = terminal_command_paths()?;
+    #[cfg(target_os = "windows")]
+    {
+        return Err(
+            "The native Windows CLI executable is managed by the Kassiber installer.".to_string(),
+        );
+    }
     match inspect_terminal_command(&paths)? {
         TerminalCommandFileState::Missing => {}
         TerminalCommandFileState::Current | TerminalCommandFileState::ManagedStale => {
@@ -1939,15 +1971,6 @@ fn set_terminal_command_permissions(_path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-#[cfg(target_os = "windows")]
-fn terminal_command_contents(target_path: &Path) -> String {
-    let target = target_path.to_string_lossy().replace('%', "%%");
-    format!(
-        "@echo off\r\nREM {TERMINAL_COMMAND_MARKER}\r\nREM target: {}\r\n\"{}\" --cli %*\r\n",
-        target, target
-    )
-}
-
 #[cfg(not(target_os = "windows"))]
 fn terminal_command_contents(target_path: &Path) -> String {
     let cli_flag = if bundled_terminal_launcher_path(target_path) {
@@ -1960,6 +1983,11 @@ fn terminal_command_contents(target_path: &Path) -> String {
         target_path.to_string_lossy(),
         shell_single_quote(&target_path.to_string_lossy())
     )
+}
+
+#[cfg(target_os = "windows")]
+fn terminal_command_contents(_target_path: &Path) -> String {
+    unreachable!("Windows terminal commands are native installer-managed executables")
 }
 
 #[cfg(not(target_os = "windows"))]

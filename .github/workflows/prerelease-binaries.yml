@@ -619,6 +619,11 @@ jobs:
           test "$count" = "${{ matrix.sidecar_expected }}"
           find "$root" -maxdepth 1 -type f -name 'kassiber-cli-*' -exec chmod 755 {} +
           find "$root" -maxdepth 1 -type f -name 'kassiber-cli-*' -print
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            sidecar="$(find "$root" -maxdepth 1 -type f -name 'kassiber-cli-*.exe' -print -quit)"
+            test -n "$sidecar"
+            cp "$sidecar" ui-tauri/src-tauri/bin/kassiber.exe
+          fi
 
       - name: Build unsigned desktop preview
         working-directory: ui-tauri
@@ -644,11 +649,9 @@ jobs:
                 | grep "$expected_commit"
               ;;
             Windows)
-              # Invoke the .cmd directly: Git Bash runs it via cmd.exe with
-              # correct argument passing. An explicit `cmd.exe /d /c ...` is
-              # broken here because MSYS path conversion mangles /d and /c,
-              # leaving cmd interactive and the smoke silently failing.
-              ./ui-tauri/src-tauri/bin/kassiber.cmd --version \
+              # The PATH entry exposes a native executable so arguments are
+              # never reparsed by cmd.exe.
+              ./ui-tauri/src-tauri/bin/kassiber.exe --version \
                 | grep "$expected_commit"
               ;;
           esac

@@ -98,13 +98,22 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertIn("--machine operator unlock", workflow)
         self.assertIn("Smoke desktop terminal forwarding", workflow)
 
-    def test_windows_bundle_launcher_executes_the_console_sidecar(self):
-        launcher = (ROOT / "ui-tauri/src-tauri/bin/kassiber.cmd").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("kassiber-cli-x86_64-pc-windows-msvc.exe", launcher)
-        self.assertIn('"%KASSIBER_SIDECAR%" %*', launcher)
-        self.assertNotIn("start ", launcher.lower())
+    def test_windows_bundle_stages_a_native_cli_executable(self):
+        workflow = (
+            ROOT / ".github/workflows/prerelease-binaries.yml"
+        ).read_text(encoding="utf-8")
+        rust = (ROOT / "ui-tauri/src-tauri/src/lib.rs").read_text(encoding="utf-8")
+        path_script = (
+            ROOT / "ui-tauri/src-tauri/windows/update-path.ps1"
+        ).read_text(encoding="utf-8")
+
+        self.assertFalse((ROOT / "ui-tauri/src-tauri/bin/kassiber.cmd").exists())
+        self.assertIn("ui-tauri/src-tauri/bin/kassiber.exe", workflow)
+        self.assertIn("./ui-tauri/src-tauri/bin/kassiber.exe --version", workflow)
+        self.assertIn('"kassiber.exe"', rust)
+        self.assertNotIn("%*", rust)
+        self.assertIn('"kassiber.cmd"', path_script)
+        self.assertIn("Remove-Item", path_script)
 
     def test_macos_bundle_launcher_executes_the_console_sidecar_without_appkit(self):
         launcher = (ROOT / "ui-tauri/src-tauri/bin/kassiber").read_text(
