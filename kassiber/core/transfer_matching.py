@@ -1366,7 +1366,6 @@ def _match_heuristic(
             )
             if (
                 same_asset
-                and out_route_asset is not None
                 and out_txid is not None
                 and in_txid is not None
                 and out_txid != in_txid

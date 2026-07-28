@@ -1442,6 +1442,46 @@ class HeuristicMatchTests(unittest.TestCase):
 
         self.assertEqual(suggest_swap_candidates([out, inbound]), [])
 
+    def test_different_txids_do_not_match_for_a_liquid_issued_asset(self):
+        """The one-move-one-txid rule is asset-agnostic.
+
+        Regression: the guard also required `out_route_asset is not None`, i.e.
+        BTC or L-BTC. A Liquid-issued asset canonicalizes to None on both legs,
+        so `same_asset` fell through to the raw code compare and the txid check
+        was skipped — two unrelated same-asset spends inside the window got
+        stamped `strong` and invented a transfer.
+        """
+        asset_id = "3d" * 32
+
+        def liquid_leg(row_id, txid, wallet_id, direction, amount, occurred_at):
+            return _row(
+                id=row_id,
+                external_id=txid,
+                wallet_id=wallet_id,
+                wallet_kind="descriptor",
+                direction=direction,
+                asset=asset_id.upper(),
+                occurred_at=occurred_at,
+                amount=amount,
+                raw_json={
+                    "txid": txid,
+                    "chain": "liquid",
+                    "network": "liquidv1",
+                    "component": {"asset_id": asset_id, "asset": asset_id.upper()},
+                },
+            )
+
+        out = liquid_leg(
+            "liquid-out", _TXID_A, "cold", "outbound",
+            15_025_943_000, "2023-02-01T04:41:00Z",
+        )
+        inbound = liquid_leg(
+            "liquid-in", _TXID_B, "hot", "inbound",
+            14_964_523_000, "2023-02-01T02:15:00Z",
+        )
+
+        self.assertEqual(suggest_swap_candidates([out, inbound]), [])
+
     def test_unknown_txid_leg_still_matches_a_known_onchain_txid(self):
         # An import that never carried a txid is not evidence of a *different*
         # physical transaction. A chain wallet whose sibling leg was imported
