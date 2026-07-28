@@ -1800,7 +1800,7 @@ class FreshnessTest(unittest.TestCase):
             [],
         )
 
-    def test_background_terminal_failure_does_not_starve_journal(self):
+    def test_background_terminal_failure_does_not_starve_and_can_recover(self):
         conn = self._db()
         profile_id = _seed_profile(conn)
         onchain_spec = {
@@ -1869,6 +1869,46 @@ class FreshnessTest(unittest.TestCase):
         )
         self.assertEqual(second[0]["status"], freshness.JOB_DONE)
         self.assertEqual(completed, [freshness.JOB_JOURNAL_REFRESH])
+
+        freshness.reset_source_checkpoint(
+            conn,
+            profile_id,
+            onchain_spec["source_key"],
+            stale_reason="wallet_config_changed",
+        )
+        self.assertEqual(
+            daemon_freshness._filter_freshness_specs_for_background(
+                conn,
+                profile_id,
+                [onchain_spec],
+            ),
+            [onchain_spec],
+        )
+
+        conn.execute(
+            """
+            UPDATE freshness_source_states
+            SET status = ?, stale_reason = ?, blocking_reports = 1,
+                last_error_at = ?
+            WHERE profile_id = ? AND source_key = ?
+            """,
+            (
+                freshness.STATUS_BLOCKING_REPORTS,
+                "observer_projection_conflict",
+                _minutes_ago(61),
+                profile_id,
+                onchain_spec["source_key"],
+            ),
+        )
+        conn.commit()
+        self.assertEqual(
+            daemon_freshness._filter_freshness_specs_for_background(
+                conn,
+                profile_id,
+                [onchain_spec],
+            ),
+            [onchain_spec],
+        )
 
         manual = freshness.enqueue_job(
             conn,

@@ -65,6 +65,7 @@ AUTO_SYNC_PROFILE_MIN_INTERVAL_SECONDS = 60
 FRESHNESS_BACKGROUND_POLL_SECONDS = 5.0
 FRESHNESS_BACKGROUND_REFRESH_INTERVAL_SECONDS = 15 * 60
 FRESHNESS_BACKGROUND_RATE_REFRESH_INTERVAL_SECONDS = 60 * 60
+FRESHNESS_BACKGROUND_TERMINAL_RETRY_INTERVAL_SECONDS = 60 * 60
 _AUTO_SYNC_PROFILE_LAST_ATTEMPT: dict[str, float] = {}
 _AUTO_SYNC_PROFILE_LAST_RESULT: dict[str, dict[str, Any]] = {}
 _AUTO_SYNC_PROFILE_LOCK = threading.Lock()
@@ -1286,7 +1287,15 @@ def _freshness_background_source_due(
             except (TypeError, ValueError, json.JSONDecodeError):
                 error = None
             if isinstance(error, dict) and error.get("retryable") is False:
-                return False
+                error_code = str(error.get("code") or "")
+                if str(state.get("stale_reason") or "") == error_code:
+                    last_error = _parse_freshness_timestamp(state.get("last_error_at"))
+                    if (
+                        last_error is None
+                        or (now - last_error).total_seconds()
+                        < FRESHNESS_BACKGROUND_TERMINAL_RETRY_INTERVAL_SECONDS
+                    ):
+                        return False
     if status in {
         core_freshness.STATUS_FAILED,
         core_freshness.STATUS_PARTIALLY_STALE,
