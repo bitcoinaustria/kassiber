@@ -7,7 +7,7 @@ from unittest import mock
 
 from kassiber import daemon
 from kassiber.cli.main import build_parser, dispatch
-from kassiber.core import freshness
+from kassiber.core import commercial, freshness, wallets as core_wallets
 from kassiber.core.ui_snapshot import (
     _load_swap_report_matcher_rows,
     build_report_blockers_snapshot,
@@ -335,6 +335,104 @@ class SwapCandidateReportBlockerTests(unittest.TestCase):
             [item["id"] for item in refreshed["blockers"]],
         )
         freshness.require_report_freshness(conn, "pf")
+
+    def test_obsolete_freshness_sources_stop_blocking_reports(self):
+        conn = self._with_conn()
+        try:
+            _seed_book(conn)
+            for wallet_id in ("deprecated-wallet", "deleted-wallet"):
+                _wallet(conn, wallet_id, wallet_id, "address")
+                conn.execute(
+                    "UPDATE wallets SET config_json = ? WHERE id = ?",
+                    (json.dumps({"addresses": [f"bc1q{wallet_id}"]}), wallet_id),
+                )
+
+            def block(key, source_type, job_type):
+                freshness.enqueue_job(
+                    conn,
+                    profile_id="pf",
+                    job_type=job_type,
+                    source_key=key,
+                    source_type=source_type,
+                    source_label=key,
+                )
+                freshness.upsert_source_state(
+                    conn,
+                    profile_id="pf",
+                    source_key=key,
+                    source_type=source_type,
+                    source_label=key,
+                    status=freshness.STATUS_FAILED,
+                    blocking_reports=True,
+                )
+
+            deprecated_key = freshness.source_key(
+                freshness.SOURCE_ONCHAIN,
+                "deprecated-wallet",
+            )
+            deleted_key = freshness.source_key(
+                freshness.SOURCE_ONCHAIN,
+                "deleted-wallet",
+            )
+            block(
+                deprecated_key,
+                freshness.SOURCE_ONCHAIN,
+                freshness.JOB_ONCHAIN_WALLET,
+            )
+            block(
+                deleted_key,
+                freshness.SOURCE_ONCHAIN,
+                freshness.JOB_ONCHAIN_WALLET,
+            )
+            core_wallets.update_wallet(
+                conn,
+                "ws",
+                "pf",
+                "deprecated-wallet",
+                {"config": {"deprecated": True}},
+            )
+            core_wallets.delete_wallet(conn, "ws", "pf", "deleted-wallet")
+
+            route = commercial.upsert_btcpay_account_route(
+                conn,
+                {"id": "ws"},
+                {"id": "pf"},
+                backend_name="btcpay",
+                store_id="store",
+                payment_method_id="BTC-CHAIN",
+            )
+            route_key = freshness.source_key(
+                freshness.SOURCE_BTCPAY_PROVENANCE,
+                f"account:{route['id']}",
+            )
+            block(
+                route_key,
+                freshness.SOURCE_BTCPAY_PROVENANCE,
+                freshness.JOB_BTCPAY_PROVENANCE,
+            )
+            conn.commit()
+
+            commercial.delete_btcpay_account_route(
+                conn,
+                "pf",
+                backend_name="btcpay",
+                store_id="store",
+                payment_method_id="BTC-CHAIN",
+            )
+            conn.commit()
+
+            for key in (deprecated_key, deleted_key, route_key):
+                self.assertIsNone(freshness.get_source_state(conn, "pf", key))
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM freshness_jobs WHERE source_key = ?",
+                        (key,),
+                    ).fetchone()[0],
+                    0,
+                )
+            freshness.require_report_freshness(conn, "pf")
+        finally:
+            conn.close()
 
     def test_route_only_provider_candidate_stays_strong_and_blocks_reports(self):
         conn = self._with_conn()

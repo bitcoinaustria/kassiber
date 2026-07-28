@@ -255,6 +255,26 @@ def journal_source_key(profile_id: str) -> str:
     return source_key(SOURCE_JOURNALS, profile_id)
 
 
+def delete_source_records(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    keys: list[str] | tuple[str, ...],
+) -> None:
+    """Remove disposable freshness state and jobs for sources that no longer exist."""
+    if not keys:
+        return
+    placeholders = ", ".join("?" for _ in keys)
+    params = (profile_id, *keys)
+    conn.execute(
+        f"DELETE FROM freshness_jobs WHERE profile_id = ? AND source_key IN ({placeholders})",
+        params,
+    )
+    conn.execute(
+        f"DELETE FROM freshness_source_states WHERE profile_id = ? AND source_key IN ({placeholders})",
+        params,
+    )
+
+
 def _row_payload(row: sqlite3.Row) -> dict[str, Any]:
     payload = dict(row)
     for key in ("payload_json", "progress_json", "result_json", "error_json", "checkpoint_json"):
@@ -1306,6 +1326,7 @@ __all__ = [
     "build_snapshot",
     "cancel_job",
     "default_policy",
+    "delete_source_records",
     "enqueue_job",
     "get_policy",
     "get_source_state",

@@ -12,6 +12,7 @@ import uuid
 from pathlib import Path
 
 from kassiber.cli.handlers import process_journals
+from kassiber.core import freshness
 from kassiber.core.accounts import create_profile, create_workspace
 from kassiber.core.ownership_policy_epochs import ensure_active_wallet_epoch
 from kassiber.core.sync_replication.bundle import (
@@ -614,6 +615,74 @@ class SyncBundleReplayTests(unittest.TestCase):
             ).fetchone()[0],
             0,
         )
+
+    def test_replicated_wallet_lifecycle_removes_orphaned_freshness_records(self):
+        self._join_peer("editor")
+        wallet_id, _, _, _ = self._insert_wallet_transaction_attachment()
+        initial = build_bundle(
+            self.owner,
+            profile_id=self.profile["id"],
+            attachments_root=self.attachments_a,
+        )
+        import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=initial.ciphertext,
+            attachments_root=self.attachments_b,
+        )
+        source_key = freshness.source_key(freshness.SOURCE_ONCHAIN, wallet_id)
+        freshness.enqueue_job(
+            self.peer,
+            profile_id=self.profile["id"],
+            job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key=source_key,
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Watch",
+        )
+
+        config = json.loads(
+            self.owner.execute(
+                "SELECT config_json FROM wallets WHERE id = ?",
+                (wallet_id,),
+            ).fetchone()[0]
+        )
+        config.pop("xpub")
+        self.owner.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps(config), wallet_id),
+        )
+        changed = build_bundle(self.owner, profile_id=self.profile["id"])
+        import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=changed.ciphertext,
+        )
+        self.assertIsNone(freshness.get_source_state(self.peer, self.profile["id"], source_key))
+        self.assertEqual(
+            self.peer.execute(
+                "SELECT COUNT(*) FROM freshness_jobs WHERE source_key = ?",
+                (source_key,),
+            ).fetchone()[0],
+            0,
+        )
+
+        freshness.upsert_source_state(
+            self.peer,
+            profile_id=self.profile["id"],
+            source_key=source_key,
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Watch",
+            status=freshness.STATUS_FAILED,
+            blocking_reports=True,
+        )
+        self.owner.execute("DELETE FROM wallets WHERE id = ?", (wallet_id,))
+        deleted = build_bundle(self.owner, profile_id=self.profile["id"])
+        import_bundle(
+            self.peer,
+            profile_id=self.profile["id"],
+            ciphertext=deleted.ciphertext,
+        )
+        self.assertIsNone(freshness.get_source_state(self.peer, self.profile["id"], source_key))
 
     def test_replicated_alias_only_wallet_change_preserves_epoch_and_observer(self):
         self._join_peer("editor")
