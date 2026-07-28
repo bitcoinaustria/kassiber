@@ -692,7 +692,13 @@ smuggle a hidden network or mutation argument into a narrower tool.
   category fields, reviewed pair context for swap/peg rows, and an optional
   transaction filter
 - `ui_journals_transfers_list` maps to daemon kind
-  `ui.journals.transfers.list`
+  `ui.journals.transfers.list`; it is where deterministic same-asset
+  self-transfers already booked by the journal appear, since
+  `ui.transfers.suggest` deliberately excludes them. When the journal needs
+  processing it returns `summary.projection_status = "stale"` with every count at
+  zero and no pairs, so an empty result is not evidence that no transfers were
+  booked — the tool description tells the model to check that field before
+  answering rather than reporting zero
 - `ui_rates_summary` maps to daemon kind `ui.rates.summary`
 - `ui_rates_coverage` maps to daemon kind `ui.rates.coverage`; it returns
   transaction pricing coverage, rows that still require a usable fiat spot
@@ -763,6 +769,24 @@ smuggle a hidden network or mutation argument into a narrower tool.
   `candidate_type=swap` for other cross-asset swaps. Bitcoin swap review still
   requires ownership intent: if the swap route paid or received from an external
   counterparty, it should remain an ordinary payment or receipt.
+  The `method` filter accepts `ownership_graph` in addition to the matcher's own
+  methods, because journal ownership proofs are merged into the same candidate
+  graph. It is deliberately absent from the `ui.transfers.bulk_pair` filter:
+  ownership candidates always require explicit per-row review and are never
+  rule- or bulk-paired.
+  The heuristic band is tunable per call through `time_window_seconds`
+  (default 86400), `fee_pct_max` (default 0.01) and `fee_sats_min`
+  (default 2500), so the assistant can answer "widen the window to 48h" instead
+  of reporting the default band as fixed. `route_pair` filters on the
+  rail-aware route shape where `asset_pair` only sees assets.
+  When a provider candidate is `strong` rather than `exact`, `evidence.conflicts`
+  names the contradictions that denied exactness (`amount`, `route`, `identity`,
+  `semantic`), and `evidence.send_amount_msat` / `evidence.receive_amount_msat`
+  carry the provider's declared leg amounts that whole-row coverage compared.
+  Those facts were previously computed and discarded, which left a `strong`
+  verdict on deterministic-looking metadata unexplainable to both the reviewer
+  and the assistant. Route txids are intentionally not repeated: the matcher
+  already requires each declared route txid to equal that row's own scope txid.
 - `ui_transfers_review_context` maps to daemon kind
   `ui.transfers.review_context`; it returns a bounded deterministic pair-review
   packet with candidate leg summaries, confidence reasons, fee assessment,
@@ -770,6 +794,13 @@ smuggle a hidden network or mutation argument into a narrower tool.
   suggested next action, active pairs, rules, and saved candidate views. Pass
   `candidate_type=transfer` or `candidate_type=swap` when the review packet
   should follow one split queue; without a candidate type it includes both.
+  It is the preferred entry point for a human-facing review; bare
+  `ui_transfers_suggest` is for counts or a filtered sweep. It accepts the same
+  `method` values and heuristic-band arguments as `ui_transfers_suggest`. Note
+  that `limit` (default 8) truncates `active_pairs`, `rules` and `saved_views`
+  alongside candidates, and that `conflict.candidate_count` reports the true
+  cluster size even when the competing candidates fall outside that limit — read
+  the full cluster from `ui_transfers_suggest` grouped by `conflict_set_id`.
 - `ui_transfers_list` maps to daemon kind `ui.transfers.list`; it returns active
   reviewed transfer/swap pairs
 - `ui_transfers_payouts_list` returns reviewed direct/split payouts where the

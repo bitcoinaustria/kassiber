@@ -197,6 +197,58 @@ _TRANSFER_MATCH_METHODS = (
     "heuristic",
     "htlc_refund",
 )
+# Read filters additionally accept ownership_graph. Those candidates come from a
+# journal ownership proof and always require explicit per-row review, so they are
+# deliberately excluded from rule and bulk auto-pairing (see
+# transfer_matching.METHOD_OWNERSHIP_GRAPH and handlers.bulk_pair_transfers).
+_TRANSFER_MATCH_METHODS_READ = _TRANSFER_MATCH_METHODS + ("ownership_graph",)
+_TRANSFER_MATCH_METHOD_GLOSS = (
+    "payment_hash = a Lightning/HTLC hash proving both legs; "
+    "provider_swap_id = declared provider swap metadata whose route txids and "
+    "whole-row amounts agree; htlc_refund = the inbound refund's input spent the "
+    "outbound's HTLC funding output; ownership_graph = a journal ownership proof "
+    "that always needs per-row review and is never bulk/rule-paired; "
+    "heuristic = time + amount proximity only, no deterministic evidence."
+)
+# Shared parameter docs for the heuristic band. The handlers accept these
+# (daemon.suggest_transfer_candidates, daemon_swap_review) but they were absent
+# from the schemas, so the model could not answer "widen the window to 48h".
+_TRANSFER_BAND_PARAMETERS: dict[str, Any] = {
+    "time_window_seconds": {
+        "type": "integer",
+        "minimum": 1,
+        "description": (
+            "Maximum seconds between the two legs for the heuristic to consider "
+            "them. Default 86400 (24h). Only affects heuristic candidates; "
+            "deterministic evidence ignores the window."
+        ),
+    },
+    "fee_pct_max": {
+        "type": "number",
+        "exclusiveMinimum": 0,
+        "description": (
+            "Fractional fee tolerance for the heuristic, e.g. 0.01 for 1%. "
+            "Default 0.01. The effective tolerance is "
+            "max(fee_pct_max * out_amount, fee_sats_min)."
+        ),
+    },
+    "fee_sats_min": {
+        "type": "integer",
+        "minimum": 0,
+        "description": (
+            "Absolute floor of the fee tolerance in sats, applied when the "
+            "percentage falls below it. Default 2500. Note this floor means very "
+            "small pairs qualify on a large proportional loss."
+        ),
+    },
+    "route_pair": {
+        "type": "string",
+        "description": (
+            "Rail-aware OUT-IN route shape, e.g. 'LNBTC-BTC' for a reverse "
+            "submarine swap. Use instead of asset_pair when the rail matters."
+        ),
+    },
+}
 _TRANSFER_PAIR_KINDS = (
     "manual",
     "coinjoin",
@@ -1002,7 +1054,16 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.journals.transfers.list",
         description=(
             "Read bounded transfer-pair audit data and transfer entry counts "
-            "without changing journal state."
+            "without changing journal state. This is where deterministic "
+            "same-asset self-transfers already booked by the journal appear — "
+            "ui.transfers.suggest deliberately excludes them, so their absence "
+            "there is expected.\n"
+            "IMPORTANT: when the journal needs processing this returns "
+            "summary.projection_status == 'stale' with every count at 0 and an "
+            "empty pairs list. An empty result is therefore NOT evidence that no "
+            "transfers were booked. Always check projection_status before "
+            "answering; if it is stale, say the journal must be reprocessed "
+            "rather than reporting zero transfers."
         ),
         parameters={
             "type": "object",
@@ -1591,9 +1652,33 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.transfers.suggest",
         description=(
             "Read transfer/swap candidate pairings the matcher infers from unpaired "
-            "transactions. Surfaces exact deterministic candidates (payment_hash, "
-            "provider_swap_id, htlc_refund) and strong time + amount heuristic "
-            "candidates with computed fee deltas and conflict cluster ids. No DB writes."
+            "transactions, with computed fee deltas and conflict cluster ids. "
+            "No DB writes.\n"
+            "Confidence: 'exact' is deterministic whole-row proof and is safe to "
+            "pair when conflict_size is 1; 'strong' is incomplete evidence — "
+            "route-only provider metadata, a legacy batched script hash, or a "
+            "different-wallet time+amount guess inside the fee band — and must be "
+            "confirmed leg by leg with the user.\n"
+            "conflict_size > 1 means two or more candidates claim the same leg. "
+            "Every member is blocked from bulk_pair and rule auto-apply, the count "
+            "stays truthful even when a filter hides the siblings, and pairing one "
+            "consumes its legs and discards the alternatives. Resolve by pairing "
+            "the correct candidate or dismissing the wrong ones — never by taking "
+            "the first row. Group by conflict_set_id to see the competing set.\n"
+            "When a provider candidate is 'strong', evidence.conflicts names which "
+            "contradiction denied exactness (amount, route, identity, semantic).\n"
+            "Amounts and fees are integer millisatoshi (*_msat) with a BTC float "
+            "alongside. swap_fee_msat is signed: positive means the principal plus "
+            "outbound network fee shrank across the swap (normal); negative means "
+            "the inbound exceeded it, which is an anomaly and a do-not-auto-pair "
+            "signal.\n"
+            "Expected pairs can be absent by design: legs already in an active "
+            "pair, legs under an unexpired dismissal, and deterministic same-asset "
+            "self-transfers the journal already books (those appear in "
+            "ui.journals.transfers.list instead). Prefer "
+            "ui.transfers.review_context for a human-facing review; use this for "
+            "counts or a filtered sweep. Call "
+            "read_skill_reference('swap-matching') for the full review policy."
         ),
         parameters={
             "type": "object",
@@ -1606,8 +1691,11 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 },
                 "method": {
                     "type": "string",
-                    "enum": list(_TRANSFER_MATCH_METHODS),
-                    "description": "Optional filter pinning to one match method.",
+                    "enum": list(_TRANSFER_MATCH_METHODS_READ),
+                    "description": (
+                        "Optional filter pinning to one match method. "
+                        + _TRANSFER_MATCH_METHOD_GLOSS
+                    ),
                 },
                 "asset_pair": {
                     "type": "string",
@@ -1618,6 +1706,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "enum": ["transfer", "swap"],
                     "description": "Optional filter for Bitcoin movements or other cross-asset swaps.",
                 },
+                **_TRANSFER_BAND_PARAMETERS,
             },
         },
         kind_class="read_only",
@@ -1786,10 +1875,25 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.transfers.review_context",
         description=(
-            "Read a deterministic pair-review packet for the active profile: "
-            "candidate legs, confidence reasons, fee assessment, conflict "
-            "status, metadata clues, journal impact if left unpaired, active "
-            "pairs, rules, and saved review views. No DB writes."
+            "PREFERRED entry point for any human-facing transfer/swap review. "
+            "Reads a deterministic pair-review packet for the active profile: "
+            "candidate legs with per-leg journal entries and quarantines, a "
+            "confidence reason sentence, fee assessment, conflict status, metadata "
+            "clues, the report impact if left unpaired, a suggested_action "
+            "pre-filled with the exact pairing arguments, active pairs, rules, and "
+            "saved review views. No DB writes.\n"
+            "Gate on conflict.requires_manual_resolution: when true the cluster "
+            "must be resolved with the user before any pairing. "
+            "conflict.candidate_count is the true cluster size even when the "
+            "competing candidates fall outside `limit` — call ui.transfers.suggest "
+            "and group by conflict_set_id to actually see them.\n"
+            "fee.assessment is one of normal, no_fee_detected, "
+            "above_default_heuristic_threshold, or "
+            "anomaly_inbound_exceeds_outbound; the last means the inbound exceeded "
+            "the outbound plus its fee and must not be auto-paired.\n"
+            "`limit` truncates active_pairs, rules and saved_views as well as "
+            "candidates. Call read_skill_reference('swap-matching') for the full "
+            "review policy."
         ),
         parameters={
             "type": "object",
@@ -1799,7 +1903,10 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 50,
-                    "description": "Maximum candidate review items to return.",
+                    "description": (
+                        "Maximum candidate review items to return. Default 8. "
+                        "Also caps active_pairs, rules and saved_views."
+                    ),
                 },
                 "confidence": {
                     "type": "string",
@@ -1808,22 +1915,22 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 },
                 "method": {
                     "type": "string",
-                    "enum": list(_TRANSFER_MATCH_METHODS),
-                    "description": "Optional filter pinning to one match method.",
+                    "enum": list(_TRANSFER_MATCH_METHODS_READ),
+                    "description": (
+                        "Optional filter pinning to one match method. "
+                        + _TRANSFER_MATCH_METHOD_GLOSS
+                    ),
                 },
                 "asset_pair": {
                     "type": "string",
                     "description": "OUT-IN asset shape, e.g. 'LBTC-BTC'.",
-                },
-                "route_pair": {
-                    "type": "string",
-                    "description": "Rail-aware OUT-IN route, e.g. 'LNBTC-LBTC'.",
                 },
                 "candidate_type": {
                     "type": "string",
                     "enum": ["transfer", "swap"],
                     "description": "Optional filter for Bitcoin movements or other cross-asset swaps.",
                 },
+                **_TRANSFER_BAND_PARAMETERS,
             },
         },
         kind_class="read_only",
@@ -3018,8 +3125,13 @@ def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
         capabilities.add("source_funds")
     if name.startswith(("ui.btcpay.", "ui.documents.")) or name == "ui.transactions.commercial_context":
         capabilities.add("merchant")
-    if name.startswith(("ui.transfers.", "ui.saved_views.", "ui.custody.")) or (
-        name == "ui.journals.transfers.list"
+    if name.startswith(("ui.transfers.", "ui.saved_views.", "ui.custody.")) or name in (
+        "ui.journals.transfers.list",
+        # Deciding a manual match means answering "is this counterparty leg
+        # mine?" — a leg that resolves external makes the flow a payment, not a
+        # pairable transfer. Without this the tool is only offered when the user
+        # happens to say "wallet".
+        "ui.wallets.identify",
     ):
         capabilities.add("transfers")
     if name.startswith("ui.journals."):
