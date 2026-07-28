@@ -277,7 +277,21 @@ def _samourai_privacy_pairs(
                         if exact_coordinator_fee
                         else "implicit_wallet_delta_unallocated"
                     ),
-                    atomic_bundle_id=f"pair-group:{group_id}",
+                    # Only bundle the residual when it shares the pair priority.
+                    # `_pair_claims` always emits this group's MOVE claims at
+                    # EXACT_NATIVE_EVENT under the same `pair-group:` id, and the
+                    # arbiter discards any bundle whose members disagree on
+                    # priority. Bundling an ACCOUNTING_CONVENTION residual with
+                    # them therefore destroyed every correct MOVE in the group and
+                    # replaced the whole source spend with one suspense claim —
+                    # with empty blocked ids and quarantines, so nothing told the
+                    # user what happened. An unbundled residual still forces
+                    # source suspense, so the report barrier is preserved. This
+                    # mirrors the implicit-wallet-delta residual below, which
+                    # carries no bundle id for exactly this reason.
+                    atomic_bundle_id=(
+                        f"pair-group:{group_id}" if exact_coordinator_fee else None
+                    ),
                     # A targetless fee is a finalized external classification.
                     # An imported or implicit wallet delta is only a custody
                     # discrepancy and must remain destination-neutral suspense.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -530,6 +531,87 @@ def test_same_timestamp_native_siblings_compile_before_rp2_without_audit_input()
     assert {row["journal_transaction_id"] for row in projection.rows} == {
         "acquisition", "out", "in"
     }
+
+
+def _whirlpool_tx0_compilation(*, fee_attribution: str):
+    """A Tx0 fan-out whose coordinator fee is the unallocated residual."""
+
+    txid = "ef" * 32
+
+    def leg(row_id, wallet, section, direction, amount):
+        row = {
+            **_row(row_id, wallet, direction, amount, "2025-01-01T00:00:00Z"),
+            "external_id": txid,
+            "external_id_kind": "txid",
+            "raw_json": {"txid": txid, "network": "main", "chain": "bitcoin"},
+            "config_json": json.dumps(
+                {"samourai": {"role": "child", "section": section, "group_id": "wp"}}
+            ),
+        }
+        return authoritative_chain_observation(row, fee_attribution=fee_attribution)
+
+    rows = [
+        leg("dep-out", "deposit", "deposit", "outbound", 10_000_000),
+        leg("pre-in", "premix", "premix", "inbound", 9_500_000),
+        leg("bad-in", "badbank", "badbank", "inbound", 450_000),
+    ]
+    refs = {
+        wallet: {
+            "id": wallet,
+            "label": wallet,
+            "wallet_account_id": "account",
+            "account_code": "treasury",
+            "account_label": "Treasury",
+        }
+        for wallet in ("deposit", "premix", "badbank")
+    }
+    canonical = build_canonical_quantity_input(enriched_quantity_rows(rows))
+    compiled = compile_custody_interpreters(rows, canonical, wallet_refs_by_id=refs)
+    state = build_canonical_quantity_state(
+        rows, interpreter_claims=compiled.claims
+    )
+    return compiled, state
+
+
+def test_inexact_whirlpool_coordinator_fee_keeps_its_group_moves():
+    """A non-exact coordinator fee must not destroy the group's MOVEs.
+
+    Regression: the residual claim was bundled under the same `pair-group:` id as
+    the group's MOVE claims, but its priority is conditional while `_pair_claims`
+    always emits MOVEs at EXACT_NATIVE_EVENT. The arbiter discards any bundle
+    whose members disagree on priority, so an ordinary compatibility-observer
+    sync (fee_attribution='unknown') replaced two correct internal MOVEs with a
+    single suspense claim — and left blocked ids and quarantines empty, so
+    nothing told the user why every report was blocked.
+    """
+
+    compiled, state = _whirlpool_tx0_compilation(fee_attribution="unknown")
+
+    # The collision is only possible because both priorities share one bundle.
+    assert len({claim.priority for claim in compiled.claims}) > 1
+    assert not [
+        claim
+        for claim in compiled.claims
+        if claim.priority != ClaimPriority.EXACT_NATIVE_EVENT
+        and claim.atomic_bundle_id is not None
+    ]
+    assert not [
+        issue for issue in state.issues if "bundle" in str(issue.reason)
+    ], [str(issue.reason) for issue in state.issues]
+
+
+def test_exact_whirlpool_coordinator_fee_stays_atomic_with_its_group():
+    """The negative control: an exact fee must remain one atomic unit.
+
+    Unbundling it unconditionally would let the fee arbitrate independently of
+    the MOVEs it belongs to, so the fix must keep the exact case bundled.
+    """
+
+    compiled, _state = _whirlpool_tx0_compilation(fee_attribution="exact")
+
+    bundles = {claim.atomic_bundle_id for claim in compiled.claims}
+    assert bundles == {f"pair-group:samourai:wp:{'ef' * 32}"}
+    assert len({claim.priority for claim in compiled.claims}) == 1
 
 
 def test_unreviewed_privacy_hop_is_a_specific_pre_tax_blocker():
