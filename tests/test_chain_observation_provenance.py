@@ -133,9 +133,9 @@ class ChainObservationProvenanceTest(unittest.TestCase):
         amount: str,
         excluded: bool,
         transaction_id: str = "sibling",
+        txid: str = "ab" * 32,
     ) -> None:
         row = self._row()
-        txid = "ab" * 32
         self.conn.execute(
             """
             INSERT INTO transactions(
@@ -419,6 +419,44 @@ class ChainObservationProvenanceTest(unittest.TestCase):
                     """
                 ).fetchall()
                 self.assertEqual([tuple(row) for row in after], [tuple(row) for row in before])
+
+    def test_mixed_case_legacy_duplicate_remains_ambiguous(self):
+        self._set_base_projection()
+        self._insert_sibling(
+            amount="0.000002",
+            excluded=False,
+            txid="aB" * 32,
+        )
+
+        with self.assertRaises(AppError) as raised:
+            self._insert_authoritative(self._observer_record(amount="0.000003"))
+
+        self.assertEqual(
+            raised.exception.details["conflict_kind"],
+            "multiple_active_transaction_rows",
+        )
+
+    def test_authoritative_lookup_uses_case_insensitive_index(self):
+        plan = self.conn.execute(
+            """
+            EXPLAIN QUERY PLAN
+            SELECT id
+            FROM transactions
+            WHERE wallet_id = ? AND external_id IS NOT NULL
+              AND LOWER(external_id) = ?
+              AND direction = ? AND asset = ?
+            ORDER BY created_at DESC, id DESC
+            """,
+            ("wallet", "ab" * 32, "outbound", "LBTC"),
+        ).fetchall()
+
+        self.assertTrue(
+            any(
+                "idx_transactions_wallet_external_ci_match" in row["detail"]
+                for row in plan
+            ),
+            [row["detail"] for row in plan],
+        )
 
     def test_excluded_exact_fingerprint_never_switches_active_keeper(self):
         self._set_base_projection()

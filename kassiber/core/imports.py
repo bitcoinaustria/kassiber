@@ -178,7 +178,8 @@ def _find_authoritative_chain_transaction(
         f"""
         SELECT {_EXISTING_TRANSACTION_COLUMNS}
         FROM transactions
-        WHERE wallet_id = ? AND LOWER(external_id) = ?
+        WHERE wallet_id = ? AND external_id IS NOT NULL
+          AND LOWER(external_id) = ?
           AND direction = ? AND asset = ?
         ORDER BY created_at DESC, id DESC
         """,
