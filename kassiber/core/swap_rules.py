@@ -1,18 +1,16 @@
 """Auto-pair rules for the swap-candidate matcher.
 
 A *rule* declares: "candidates that look like X should be paired as
-``kind=Y`` with ``policy=Z`` automatically." Once a heavy user has
-manually paired the same Phoenix→Liquid swap shape a handful of times,
-this module promotes that pattern to a rule so future identical
+``kind=Y`` with ``policy=Z`` automatically." A heavy user who repeatedly pairs
+the same Phoenix→Liquid swap shape by hand writes one rule and future identical
 candidates get auto-paired without per-row clicking.
 
 Boundaries:
 
 * Pure functions, no SQLite, no logging. Callers feed in
   :class:`~kassiber.core.transfer_matching.SwapCandidate` instances and
-  parsed rule records, receive a partition into ``(auto_paired,
-  remaining)`` plus a separate "detected pattern" surface for the UI's
-  *Create rule from pattern* prompt.
+  parsed rule records, and receive a partition into ``(auto_paired,
+  remaining)``.
 * Specificity is explicit: the rule with the most non-default predicate
   fields wins. Ties are broken by ``id`` so the result is deterministic.
 * ``min_confidence`` gates whether a rule applies to heuristic
@@ -54,7 +52,6 @@ _PREDICATE_FIELDS = (
 )
 
 DEFAULT_MIN_CONFIDENCE = CONFIDENCE_STRONG
-PATTERN_MIN_OCCURRENCES = 3
 _PREDICATE_FIELD_SET = frozenset(_PREDICATE_FIELDS)
 _STRING_PREDICATE_FIELDS = (
     "out_wallet_id",
@@ -96,31 +93,6 @@ class RuleMatch:
     rule_id: str
     rule_name: Optional[str]
     candidate: SwapCandidate
-
-
-@dataclass(frozen=True)
-class PatternSuggestion:
-    """A repeating shape in the manual-pair history worth promoting to a rule."""
-
-    out_wallet_id: Optional[str]
-    in_wallet_id: Optional[str]
-    out_asset: Optional[str]
-    in_asset: Optional[str]
-    kind: str
-    policy: str
-    occurrences: int
-
-    def to_predicate(self) -> dict:
-        predicate: dict = {}
-        if self.out_wallet_id:
-            predicate["out_wallet_id"] = self.out_wallet_id
-        if self.in_wallet_id:
-            predicate["in_wallet_id"] = self.in_wallet_id
-        if self.out_asset:
-            predicate["out_asset"] = self.out_asset
-        if self.in_asset:
-            predicate["in_asset"] = self.in_asset
-        return predicate
 
 
 def load_rule(record: Mapping) -> SwapMatchingRule:
@@ -305,61 +277,6 @@ def apply_rules(
             )
         )
     return auto_paired, remaining
-
-
-def detect_repeating_patterns(
-    pair_history: Iterable[Mapping],
-    *,
-    min_occurrences: int = PATTERN_MIN_OCCURRENCES,
-) -> list[PatternSuggestion]:
-    """Find wallet-pair / asset-pair shapes that have been manually paired
-    at least ``min_occurrences`` times.
-
-    Each pair_history record must expose ``out_wallet_id``,
-    ``in_wallet_id``, ``out_asset``, ``in_asset``, ``kind``, ``policy``,
-    ``pair_source``. Only records with ``pair_source`` of ``"manual"``
-    feed pattern detection — bulk-paired and rule-paired rows do not
-    count, otherwise rules would propagate themselves indefinitely.
-    """
-    buckets: dict[tuple, dict] = {}
-    for record in pair_history:
-        if (_record_get(record, "pair_source") or "manual") != "manual":
-            continue
-        out_wallet = _record_get(record, "out_wallet_id")
-        in_wallet = _record_get(record, "in_wallet_id")
-        out_asset = _record_get(record, "out_asset")
-        in_asset = _record_get(record, "in_asset")
-        kind = _record_get(record, "kind") or "manual"
-        policy = _record_get(record, "policy") or "carrying-value"
-        key = (out_wallet, in_wallet, out_asset, in_asset, kind, policy)
-        bucket = buckets.setdefault(
-            key,
-            {
-                "out_wallet_id": out_wallet,
-                "in_wallet_id": in_wallet,
-                "out_asset": out_asset,
-                "in_asset": in_asset,
-                "kind": kind,
-                "policy": policy,
-                "occurrences": 0,
-            },
-        )
-        bucket["occurrences"] += 1
-    suggestions = [
-        PatternSuggestion(
-            out_wallet_id=bucket["out_wallet_id"],
-            in_wallet_id=bucket["in_wallet_id"],
-            out_asset=bucket["out_asset"],
-            in_asset=bucket["in_asset"],
-            kind=bucket["kind"],
-            policy=bucket["policy"],
-            occurrences=bucket["occurrences"],
-        )
-        for bucket in buckets.values()
-        if bucket["occurrences"] >= min_occurrences
-    ]
-    suggestions.sort(key=lambda s: (-s.occurrences, s.kind, str(s.out_wallet_id), str(s.in_wallet_id)))
-    return suggestions
 
 
 def _confidence_meets(actual: str, required: str) -> bool:
