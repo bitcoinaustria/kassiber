@@ -717,24 +717,12 @@ fn daemon_lifecycle_snapshot(
 }
 
 #[tauri::command]
-fn open_exported_file(path: String) -> Result<(), String> {
-    let requested = PathBuf::from(path);
-    if !requested.is_absolute() {
-        return Err("Report export paths must be absolute.".to_string());
-    }
-
-    let canonical = std::fs::canonicalize(&requested)
-        .map_err(|error| format!("Report export file could not be found: {error}"))?;
-    let metadata = canonical
-        .metadata()
-        .map_err(|error| format!("Report export file could not be inspected: {error}"))?;
-    if !is_supported_report_export_target(&canonical, &metadata) {
-        return Err(
-            "Only managed PDF, XLSX, CSV files, Austrian CSV bundle folders, and audit package folders can be opened."
-                .to_string(),
-        );
-    }
-
+fn open_exported_file(state: State<'_, Arc<DaemonSupervisor>>, path: String) -> Result<(), String> {
+    let data_root = state
+        .current_data_root()
+        .map_err(|error| error.message)?
+        .unwrap_or_else(default_state_data_root);
+    let (canonical, _) = validated_report_export_target(&data_root, Path::new(&path))?;
     open_with_default_app(&canonical)
 }
 
@@ -788,27 +776,45 @@ fn validated_attachment_file_path(data_root: &Path, requested: &Path) -> Result<
 }
 
 #[tauri::command]
-fn save_exported_file_as(source_path: String, destination_path: String) -> Result<String, String> {
-    let source = PathBuf::from(source_path);
-    if !source.is_absolute() {
-        return Err("Report export source paths must be absolute.".to_string());
-    }
-    let destination = PathBuf::from(destination_path);
-    if !destination.is_absolute() {
-        return Err("Report export destination paths must be absolute.".to_string());
-    }
-
-    let canonical_source = std::fs::canonicalize(&source)
-        .map_err(|error| format!("Report export file could not be found: {error}"))?;
-    let metadata = canonical_source
-        .metadata()
-        .map_err(|error| format!("Report export file could not be inspected: {error}"))?;
-    if !is_supported_report_export_target(&canonical_source, &metadata) {
-        return Err(
-            "Only managed PDF, XLSX, CSV files, Austrian CSV bundle folders, and audit package folders can be saved."
-                .to_string(),
-        );
-    }
+fn save_exported_file_as(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<DaemonSupervisor>>,
+    source_path: String,
+) -> Result<Option<String>, String> {
+    let data_root = state
+        .current_data_root()
+        .map_err(|error| error.message)?
+        .unwrap_or_else(default_state_data_root);
+    let (canonical_source, metadata) =
+        validated_report_export_target(&data_root, Path::new(&source_path))?;
+    let source_name = canonical_source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "Report export source filename is unavailable.".to_string())?;
+    let dialog = app
+        .dialog()
+        .file()
+        .set_title("Save Kassiber report export")
+        .set_file_name(source_name);
+    let selection = match canonical_source
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("pdf") => dialog.add_filter("PDF", &["pdf"]).blocking_save_file(),
+        Some("xlsx") => dialog
+            .add_filter("Excel workbook", &["xlsx"])
+            .blocking_save_file(),
+        Some("csv") => dialog.add_filter("CSV", &["csv"]).blocking_save_file(),
+        _ => dialog.blocking_save_file(),
+    };
+    let Some(selection) = selection else {
+        return Ok(None);
+    };
+    let destination = selection
+        .into_path()
+        .map_err(|_| "The selected report destination is unavailable.".to_string())?;
     ensure_export_destination_outside_managed_root(&canonical_source, &destination)?;
 
     if metadata.is_file() {
@@ -816,7 +822,7 @@ fn save_exported_file_as(source_path: String, destination_path: String) -> Resul
     } else {
         copy_report_export_directory(&canonical_source, &destination)?;
     }
-    Ok(destination.to_string_lossy().into_owned())
+    Ok(Some(destination.to_string_lossy().into_owned()))
 }
 
 /// Write ``contents`` to ``destination_path`` after validating that the
@@ -2491,6 +2497,46 @@ fn is_supported_audit_package_dir(path: &Path) -> bool {
 
 fn is_managed_report_export_path(path: &Path) -> bool {
     managed_report_exports_root(path).is_some()
+}
+
+fn state_root_for_data_root(data_root: &Path) -> &Path {
+    if data_root.file_name().and_then(|name| name.to_str()) == Some(DEFAULT_DATA_DIR) {
+        data_root.parent().unwrap_or(data_root)
+    } else {
+        data_root
+    }
+}
+
+fn validated_report_export_target(
+    data_root: &Path,
+    requested: &Path,
+) -> Result<(PathBuf, std::fs::Metadata), String> {
+    if !requested.is_absolute() {
+        return Err("Report export paths must be absolute.".to_string());
+    }
+    let managed_root = std::fs::canonicalize(
+        state_root_for_data_root(data_root)
+            .join("exports")
+            .join("reports"),
+    )
+    .map_err(|error| format!("Managed report export folder could not be found: {error}"))?;
+    let canonical = std::fs::canonicalize(requested)
+        .map_err(|error| format!("Report export file could not be found: {error}"))?;
+    if canonical.parent() != Some(managed_root.as_path()) {
+        return Err(
+            "Only exports from the active Kassiber project can be opened or saved.".to_string(),
+        );
+    }
+    let metadata = canonical
+        .metadata()
+        .map_err(|error| format!("Report export file could not be inspected: {error}"))?;
+    if !is_supported_report_export_target(&canonical, &metadata) {
+        return Err(
+            "Only managed PDF, XLSX, CSV files, Austrian CSV bundle folders, and audit package folders can be opened or saved."
+                .to_string(),
+        );
+    }
+    Ok((canonical, metadata))
 }
 
 fn managed_report_exports_root(path: &Path) -> Option<&Path> {
@@ -4550,6 +4596,53 @@ mod tests {
             &nested_dir,
             &nested_dir.metadata().expect("nested metadata")
         ));
+    }
+
+    #[test]
+    fn report_exports_must_belong_to_the_active_data_root() {
+        let active = unique_temp_dir("active-report-export");
+        let active_data = active.join("data");
+        let active_reports = active.join("exports").join("reports");
+        fs::create_dir_all(&active_data).expect("create active data dir");
+        fs::create_dir_all(&active_reports).expect("create active reports dir");
+        let active_report = active_reports.join("report.pdf");
+        fs::write(&active_report, b"%PDF").expect("write active report");
+
+        let unrelated = unique_temp_dir("unrelated-report-export");
+        let unrelated_reports = unrelated.join("exports").join("reports");
+        fs::create_dir_all(&unrelated_reports).expect("create unrelated reports dir");
+        let unrelated_report = unrelated_reports.join("report.pdf");
+        fs::write(&unrelated_report, b"%PDF").expect("write unrelated report");
+
+        let (validated, _) = validated_report_export_target(&active_data, &active_report)
+            .expect("active report should validate");
+        assert_eq!(
+            validated,
+            active_report
+                .canonicalize()
+                .expect("canonical active report")
+        );
+        let error = validated_report_export_target(&active_data, &unrelated_report).unwrap_err();
+        assert!(error.contains("active Kassiber project"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn report_export_validation_rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let active = unique_temp_dir("symlink-report-export");
+        let active_data = active.join("data");
+        let active_reports = active.join("exports").join("reports");
+        fs::create_dir_all(&active_data).expect("create active data dir");
+        fs::create_dir_all(&active_reports).expect("create active reports dir");
+        let outside = active.join("outside.pdf");
+        fs::write(&outside, b"%PDF").expect("write outside report");
+        let linked = active_reports.join("linked.pdf");
+        symlink(&outside, &linked).expect("link report outside managed root");
+
+        let error = validated_report_export_target(&active_data, &linked).unwrap_err();
+        assert!(error.contains("active Kassiber project"));
     }
 
     #[test]

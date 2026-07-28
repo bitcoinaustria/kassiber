@@ -51,7 +51,6 @@ import {
   openExportedFile,
   saveExportedFileAs,
 } from "@/daemon/transport";
-import { saveFile } from "@/lib/filePicker";
 import {
   pageHeaderActionClassName,
   pageHeaderClassName,
@@ -129,20 +128,12 @@ export function ExitTax() {
         onSuccess: async (envelope) => {
           const payload = (envelope.data ?? {}) as {
             file?: string;
-            filename?: string;
           };
           const exportPath = payload.file ?? "";
-          const filename = payload.filename ?? basename(exportPath) ?? "exit-tax";
           let savedPath = exportPath;
           if (exportPath && canSaveExportedFiles()) {
             try {
-              const destinationPath = await saveFile({
-                title: "Save exit-tax handoff",
-                defaultPath: filename,
-              });
-              if (destinationPath) {
-                savedPath = await saveExportedFileAs(exportPath, destinationPath);
-              }
+              savedPath = (await saveExportedFileAs(exportPath)) ?? exportPath;
             } catch (error) {
               setActiveExport(null);
               setExportStatus({

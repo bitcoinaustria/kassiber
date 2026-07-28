@@ -539,15 +539,13 @@ export async function openAttachmentFile(path: string): Promise<void> {
 
 export async function saveExportedFileAs(
   sourcePath: string,
-  destinationPath: string,
-): Promise<string> {
+): Promise<string | null> {
   if (DAEMON_MODE !== "tauri") {
     throw new Error("Saving exported files is available in the desktop app.");
   }
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<string>("save_exported_file_as", {
+  return invoke<string | null>("save_exported_file_as", {
     sourcePath,
-    destinationPath,
   });
 }
 
