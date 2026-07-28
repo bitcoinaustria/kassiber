@@ -149,7 +149,7 @@ export function ExitTax() {
           setExportStatus({
             tone: "success",
             message: `Saved ${format.toUpperCase()} handoff — ${basename(savedPath)}`,
-            path: savedPath,
+            path: exportPath,
           });
         },
         onError: (error: unknown) => {
