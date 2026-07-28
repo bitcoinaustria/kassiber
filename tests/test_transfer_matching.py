@@ -950,6 +950,43 @@ class ProviderEvidenceExactMatchTests(unittest.TestCase):
 
         self.assertEqual(candidate.method, METHOD_PROVIDER_SWAP_ID)
         self.assertEqual(candidate.confidence, CONFIDENCE_STRONG)
+        # The downgrade must be explainable, not silent: name the contradiction
+        # that denied exact confidence so a reviewer (and the assistant) can say
+        # why deterministic-looking provider metadata was not trusted.
+        self.assertIn("route", candidate.evidence_conflicts)
+
+    def test_noncontradictory_provider_evidence_reports_no_conflicts(self):
+        """The negative control: agreeing metadata names no contradiction.
+
+        Deliberately asserts only the conflict set and the declared amounts, not
+        the confidence band — whole-row exactness additionally depends on scope
+        resolution, which is covered by its own tests.
+        """
+        provider = {
+            "provider": "boltz",
+            "swap_id": "clean-route",
+            "flow": "chain",
+            "send_txid": _TXID_A,
+            "receive_txid": _TXID_B,
+            "send_amount_msat": 100_000_000,
+            "receive_amount_msat": 99_500_000,
+        }
+        out = _row(
+            id="out", external_id=_TXID_A, wallet_id="btc",
+            direction="outbound", amount=100_000_000, raw_json=dict(provider),
+        )
+        inbound = _row(
+            id="in", external_id=_TXID_B, wallet_id="liquid", asset="LBTC",
+            direction="inbound", amount=99_500_000, raw_json=dict(provider),
+        )
+
+        candidate = suggest_swap_candidates([out, inbound])[0]
+
+        self.assertEqual(candidate.evidence_conflicts, ())
+        # The declared leg amounts the whole-row coverage test compared are not
+        # derivable from the rows, so they travel with the candidate.
+        self.assertEqual(candidate.evidence_send_amount_msat, 100_000_000)
+        self.assertEqual(candidate.evidence_receive_amount_msat, 99_500_000)
 
     def test_strong_provider_hint_keeps_competing_heuristic_visible(self):
         provider = {

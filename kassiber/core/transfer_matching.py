@@ -160,6 +160,18 @@ class SwapCandidate:
     evidence_taproot: str = ""
     evidence_cooperative: str = ""
     evidence_spend_path: str = ""
+    # Why exactness was denied. Provider evidence computes four independent
+    # contradiction checks and any one of them demotes exact -> strong; without
+    # them neither a reviewer nor the assistant can explain a `strong` verdict on
+    # otherwise deterministic-looking metadata. Empty on a clean or non-provider
+    # candidate. Route txids are deliberately not repeated here: the matcher
+    # already requires each declared route txid to equal that row's own scope
+    # txid, so they carry no information the rows do not.
+    evidence_conflicts: tuple[str, ...] = ()
+    # The provider's own declared leg amounts, which `_provider_whole_row_coverage`
+    # compares against the whole row amounts. Not derivable from the rows.
+    evidence_send_amount_msat: Optional[int] = None
+    evidence_receive_amount_msat: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -1477,7 +1489,36 @@ def _build_candidate(
         evidence_taproot=evidence.taproot if evidence else "",
         evidence_cooperative=evidence.cooperative if evidence else "",
         evidence_spend_path=evidence.spend_path if evidence else "",
+        evidence_conflicts=_evidence_conflict_names(evidence),
+        evidence_send_amount_msat=evidence.send_amount_msat if evidence else None,
+        evidence_receive_amount_msat=(
+            evidence.receive_amount_msat if evidence else None
+        ),
         # conflict_set_id / conflict_size are filled in by _stamp_conflict_set_ids
+    )
+
+
+def _evidence_conflict_names(
+    evidence: Optional[_ProviderSwapEvidence],
+) -> tuple[str, ...]:
+    """Name the provider contradictions that denied exact confidence.
+
+    Any one of these demotes the candidate to ``strong``. Surfacing the names is
+    what makes a ``strong`` verdict on provider metadata explainable rather than
+    an unexplained downgrade.
+    """
+
+    if evidence is None:
+        return ()
+    return tuple(
+        name
+        for name, fired in (
+            ("amount", evidence.amount_evidence_conflict),
+            ("route", evidence.route_evidence_conflict),
+            ("identity", evidence.identity_evidence_conflict),
+            ("semantic", evidence.semantic_evidence_conflict),
+        )
+        if fired
     )
 
 

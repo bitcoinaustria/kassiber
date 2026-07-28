@@ -423,6 +423,11 @@ def _candidate_to_dict(candidate):
             "taproot": candidate.evidence_taproot,
             "cooperative": candidate.evidence_cooperative,
             "spend_path": candidate.evidence_spend_path,
+            # Present and non-empty only when a contradiction denied exact
+            # confidence. This is the "why strong, not exact" answer.
+            "conflicts": list(candidate.evidence_conflicts),
+            "send_amount_msat": candidate.evidence_send_amount_msat,
+            "receive_amount_msat": candidate.evidence_receive_amount_msat,
         }
     return data
 
