@@ -964,51 +964,6 @@ def compile_custody_interpreters(
         else []
     )
     rows_by_id = {str(_field(row, "id") or ""): row for row in rows}
-    resolved_privacy_ids: set[str] = set()
-    # Structured Samourai groups get their own exact quarantine below. Avoid a
-    # second generic privacy-hop blocker for the same rows; authoritative groups
-    # are resolved, while unverified groups remain blocked by the specific
-    # native-event requirement.
-    resolved_privacy_ids.update(samourai_candidate_ids)
-    # Canonical native-event identity is stronger than the generic privacy-hop
-    # warning. This does not trust amount-only CoinJoin matches: both rows must
-    # resolve to the same protocol-qualified txid above.
-    resolved_privacy_ids.update(_exact_native_pair_ids(auto_pairs, observations))
-    resolved_privacy_ids.update(excluded)
-    privacy_quarantines = (
-        tuple(
-            {
-                "transaction_id": str(_field(row, "id") or ""),
-                "workspace_id": _field(row, "workspace_id"),
-                "profile_id": _field(row, "profile_id"),
-                "reason": "privacy_hop_unresolved",
-                "detail_json": json.dumps(
-                    {
-                        "wallet": _field(
-                            wallet_refs_by_id.get(
-                                str(_field(row, "wallet_id") or ""), {}
-                            ),
-                            "label",
-                            _field(row, "wallet_id"),
-                        ),
-                        "asset": str(_field(row, "asset") or "").upper(),
-                        "direction": _field(row, "direction"),
-                        **(privacy_hop_evidence_from_row(row) or {}),
-                    },
-                    sort_keys=True,
-                ),
-            }
-            for row in rows
-            if str(_field(row, "id") or "") not in resolved_privacy_ids
-            and privacy_hop_evidence_from_row(row) is not None
-        )
-        if has_privacy_boundaries
-        else ()
-    )
-    privacy_blocked_ids = {
-        str(_field(item, "transaction_id") or "")
-        for item in privacy_quarantines
-    }
     samourai_unverified_ids = samourai_candidate_ids - samourai_touched_ids - excluded
     samourai_unverified_quarantines = tuple(
         {
@@ -1144,6 +1099,59 @@ def compile_custody_interpreters(
         )
         if transaction_id
     )
+    # The generic privacy-hop blocker is resolved only after derivation, because
+    # a proven fan-out / fan-in / consolidation is exactly as strong as the 1:1
+    # case. Computing it earlier meant `detect_intra_transfers`' 1-out/1-in shape
+    # was the only thing that could clear it, so the same physical proof booked a
+    # MOVE and simultaneously blocked every report purely on cardinality.
+    resolved_privacy_ids: set[str] = set()
+    # Structured Samourai groups get their own exact quarantine below. Avoid a
+    # second generic privacy-hop blocker for the same rows; authoritative groups
+    # are resolved, while unverified groups remain blocked by the specific
+    # native-event requirement.
+    resolved_privacy_ids.update(samourai_candidate_ids)
+    # Canonical native-event identity is stronger than the generic privacy-hop
+    # warning. This does not trust amount-only CoinJoin matches: both rows must
+    # resolve to the same protocol-qualified txid. `_exact_native_pair_ids`
+    # requires an authoritative observation on both anchors, so a rowless or
+    # synthesized destination still stays blocked.
+    resolved_privacy_ids.update(_exact_native_pair_ids(auto_pairs, observations))
+    resolved_privacy_ids.update(_exact_native_pair_ids(derived_pairs, observations))
+    resolved_privacy_ids.update(excluded)
+    privacy_quarantines = (
+        tuple(
+            {
+                "transaction_id": str(_field(row, "id") or ""),
+                "workspace_id": _field(row, "workspace_id"),
+                "profile_id": _field(row, "profile_id"),
+                "reason": "privacy_hop_unresolved",
+                "detail_json": json.dumps(
+                    {
+                        "wallet": _field(
+                            wallet_refs_by_id.get(
+                                str(_field(row, "wallet_id") or ""), {}
+                            ),
+                            "label",
+                            _field(row, "wallet_id"),
+                        ),
+                        "asset": str(_field(row, "asset") or "").upper(),
+                        "direction": _field(row, "direction"),
+                        **(privacy_hop_evidence_from_row(row) or {}),
+                    },
+                    sort_keys=True,
+                ),
+            }
+            for row in rows
+            if str(_field(row, "id") or "") not in resolved_privacy_ids
+            and privacy_hop_evidence_from_row(row) is not None
+        )
+        if has_privacy_boundaries
+        else ()
+    )
+    privacy_blocked_ids = {
+        str(_field(item, "transaction_id") or "")
+        for item in privacy_quarantines
+    }
     same_asset_pairs = [
         pair
         for pair in same_asset_pairs

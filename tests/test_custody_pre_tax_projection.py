@@ -510,3 +510,71 @@ def test_unreviewed_privacy_hop_is_a_specific_pre_tax_blocker():
     assert compiled.blocked_transaction_ids == ("coinjoin",)
     assert len(compiled.quarantines) == 1
     assert compiled.quarantines[0]["reason"] == "privacy_hop_unresolved"
+
+
+def _privacy_fanout_rows(*, authoritative_destinations: bool):
+    """One authoritative 1:N chain event where every leg is privacy-tagged."""
+
+    txid = "cd" * 32
+    chain_raw = {"txid": txid, "network": "main", "chain": "bitcoin"}
+    privacy = {"privacy_boundary": "coinjoin"}
+
+    def leg(row_id, wallet, direction, amount):
+        return {
+            **_row(row_id, wallet, direction, amount, "2025-01-01T00:00:00Z"),
+            **privacy,
+            "external_id": txid,
+            "external_id_kind": "txid",
+            "raw_json": dict(chain_raw),
+        }
+
+    source = authoritative_chain_observation(leg("fanout-out", "source", "outbound", 10_000))
+    destinations = [
+        leg("fanout-in-1", "dest-a", "inbound", 6_000),
+        leg("fanout-in-2", "dest-b", "inbound", 4_000),
+    ]
+    if authoritative_destinations:
+        destinations = [authoritative_chain_observation(row) for row in destinations]
+    rows = [source, *destinations]
+    refs = {
+        wallet: {
+            "id": wallet,
+            "label": wallet,
+            "wallet_account_id": "account",
+            "account_code": "treasury",
+            "account_label": "Treasury",
+        }
+        for wallet in ("source", "dest-a", "dest-b")
+    }
+    canonical = build_canonical_quantity_input(enriched_quantity_rows(rows))
+    return compile_custody_interpreters(rows, canonical, wallet_refs_by_id=refs)
+
+
+def test_proven_privacy_tagged_fanout_clears_the_generic_privacy_blocker():
+    """A derived 1:N MOVE is exactly as strong as the 1:1 case.
+
+    Regression: the privacy-hop blocker used to be resolved before derivation, so
+    only ``detect_intra_transfers``' 1-out/1-in shape could clear it. A proven
+    fan-out was booked as a MOVE *and* blocked every report on cardinality alone.
+    """
+
+    compiled = _privacy_fanout_rows(authoritative_destinations=True)
+
+    assert [item["reason"] for item in compiled.quarantines] == []
+    assert compiled.blocked_transaction_ids == ()
+    assert len(compiled.claims) >= 1
+
+
+def test_unproven_privacy_tagged_fanout_still_blocks():
+    """The negative control for the fix above.
+
+    Clearing the blocker must require an authoritative observation on *both*
+    ends. A destination we have not observed is still an unexplained privacy hop.
+    """
+
+    compiled = _privacy_fanout_rows(authoritative_destinations=False)
+
+    assert "privacy_hop_unresolved" in {
+        item["reason"] for item in compiled.quarantines
+    }
+    assert compiled.blocked_transaction_ids != ()
