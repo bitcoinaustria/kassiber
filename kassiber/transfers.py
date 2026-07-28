@@ -58,7 +58,6 @@ _WALLET_KIND_ALIASES = {
     "core-lightning": "coreln",
 }
 _SYNTHETIC_TRANSFER_ID_PREFIXES = (
-    "custody:",
     "custody-tax:",
     "cross-split:",
     "direct-payout:",
@@ -658,8 +657,6 @@ def detect_intra_transfers(rows):
         # a taxable disposal plus fresh acquisition. The txid path above stays
         # cross-wallet-only because same-wallet on-chain txid rows are less
         # semantically precise (change, provider artifacts, or manual repair rows).
-        if out_row["id"] in matched_ids or in_row["id"] in matched_ids:
-            continue
         pairs.append(
             {
                 "out": out_row,
