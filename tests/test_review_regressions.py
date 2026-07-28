@@ -10167,6 +10167,14 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         conn.execute(
             """
+            UPDATE wallets
+            SET config_json = ?
+            WHERE label = 'Cold'
+            """,
+            (json.dumps({"descriptor": "wpkh(network-oracle-secret)"}),),
+        )
+        conn.execute(
+            """
             UPDATE transactions
             SET fiat_rate = 70000, fiat_value = 140, fee = 1000
             WHERE id = 'public-spend'
@@ -10275,6 +10283,20 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self._assert_ok(payload, result, "transactions.list")
         self.assertEqual([row["id"] for row in payload["data"]], ["liquid-row"])
+
+        payload, result = self._run_json(
+            "transactions",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--network",
+            "network-oracle-secret",
+        )
+        self._assert_ok(payload, result, "transactions.list")
+        self.assertEqual(payload["count"], 0)
+        self.assertEqual(payload["data"], [])
 
         payload, result = self._run_json(
             "transactions",
@@ -10417,6 +10439,14 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         conn.execute(
             """
+            UPDATE wallets
+            SET config_json = ?
+            WHERE label = 'Cold'
+            """,
+            (json.dumps({"descriptor": "wpkh(network-oracle-secret)"}),),
+        )
+        conn.execute(
+            """
             UPDATE transactions
             SET fiat_rate = 70000, fiat_value = 140, fee = 1000
             WHERE id = 'public-spend'
@@ -10513,6 +10543,13 @@ class ReviewRegressionTest(unittest.TestCase):
         )
         self.assertEqual(liquid["count"], 1)
         self.assertEqual(liquid["txs"][0]["id"], "liquid-row")
+
+        oracle_probe = build_transactions_snapshot(
+            conn,
+            {"network": "network-oracle-secret", "limit": 10},
+        )
+        self.assertEqual(oracle_probe["count"], 0)
+        self.assertEqual(oracle_probe["txs"], [])
 
         with_fees = build_transactions_snapshot(
             conn,

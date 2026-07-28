@@ -3725,16 +3725,18 @@ def _build_transactions_page_snapshot(
             filters.append(
                 """(
                   lower(w.kind) = ?
-                  OR lower(w.config_json) LIKE ?
-                  OR lower(w.label) LIKE ?
+                  OR CASE WHEN json_valid(w.config_json)
+                       THEN lower(json_extract(w.config_json, '$.chain')) END = ?
+                  OR CASE WHEN json_valid(w.config_json)
+                       THEN lower(json_extract(w.config_json, '$.network')) END = ?
                   OR upper(t.asset) = ?
                 )"""
             )
             params.extend(
                 [
                     normalized_network,
-                    f"%{normalized_network}%",
-                    f"%{normalized_network}%",
+                    normalized_network,
+                    normalized_network,
                     "LBTC" if normalized_network == "liquid" else normalized_network.upper(),
                 ]
             )
