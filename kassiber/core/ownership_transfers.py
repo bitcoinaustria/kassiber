@@ -1231,11 +1231,9 @@ def derive_multi_source_consolidations(
         if len(dropped_destination_rows) > 1:
             continue  # ambiguous recorded destination receipt split
 
-        # Whole fee on the largest contributor; deterministic tie-break.
-        senders_sorted = sorted(
-            senders,
-            key=lambda row: (-int(_get(row, "amount") or 0), str(_get(row, "wallet_id"))),
-        )
+        # Whole fee on the lowest row id — the same keeper the canonical
+        # boundary normalizer picks in enriched_quantity_rows.
+        senders_sorted = sorted(senders, key=lambda row: str(_get(row, "id")))
         bearer_id = str(_get(senders_sorted[0], "id"))
         txid = str(canonical_txid(parsed.get("txid")) or txid_key)
         transfer_group_id = f"multi-consol:{txid}"
