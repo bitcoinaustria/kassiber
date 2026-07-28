@@ -736,13 +736,25 @@ def _http_url_base(url, *, api: bool) -> str | None:
     parsed = urlsplit(value)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return None
+    netloc = parsed.netloc
+    if not api:
+        hostname = parsed.hostname
+        if not hostname:
+            return None
+        netloc = f"[{hostname}]" if ":" in hostname else hostname
+        try:
+            port = parsed.port
+        except ValueError:
+            return None
+        if port is not None:
+            netloc = f"{netloc}:{port}"
     path = (parsed.path or "").rstrip("/")
     if api:
         if not path.lower().endswith("/api"):
             path = f"{path}/api" if path else "/api"
     elif path.lower().endswith("/api"):
         path = path[:-4] or ""
-    return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))
+    return urlunsplit((parsed.scheme, netloc, path, "", ""))
 
 
 def _backend_matches_chain_network(backend, chain, network):
