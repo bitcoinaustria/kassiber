@@ -3911,6 +3911,7 @@ mod tests {
         assert!(ALLOWED_DAEMON_KINDS.contains(&"ui.wallets.document_import.import"));
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn terminal_command_launcher_targets_desktop_executable_when_no_bundle_launcher_is_used() {
         let target = Path::new("/Applications/Kassiber.app/Contents/MacOS/kassiber-ui");
@@ -4177,6 +4178,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn terminal_command_inspection_tracks_managed_conflict_and_stale_files() {
         let root = unique_temp_dir("terminal-command-inspect");
