@@ -223,6 +223,16 @@ class DefaultKindTests(unittest.TestCase):
             KIND_PEG_IN,
         )
 
+    def test_bitcoin_asset_aliases_use_canonical_routes(self):
+        self.assertEqual(
+            default_kind_for("XBT", "LBTC", "descriptor", "descriptor"),
+            KIND_PEG_IN,
+        )
+        self.assertEqual(
+            default_kind_for("XXBT", "BTC", "descriptor", "lnd"),
+            KIND_SUBMARINE_SWAP,
+        )
+
     def test_unknown_shape_falls_back_to_manual(self):
         self.assertEqual(default_kind_for("BTC", "BTC", "descriptor", "descriptor"), KIND_MANUAL)
 
@@ -1485,6 +1495,32 @@ class HeuristicMatchTests(unittest.TestCase):
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].method, METHOD_HEURISTIC)
         self.assertEqual(candidates[0].default_kind, KIND_SUBMARINE_SWAP)
+
+    def test_bitcoin_alias_heuristic_preserves_stored_asset_codes(self):
+        out = _row(
+            id="chain-lockup",
+            wallet_id="chain",
+            wallet_kind="descriptor",
+            direction="outbound",
+            asset="XBT",
+            amount=100_000_000,
+        )
+        inbound = _row(
+            id="lightning-settlement",
+            wallet_id="node",
+            wallet_kind="lnd",
+            direction="inbound",
+            asset="BTC",
+            occurred_at="2026-03-14T17:32:00Z",
+            amount=99_500_000,
+        )
+
+        candidate = suggest_swap_candidates([out, inbound])[0]
+
+        self.assertEqual(candidate.method, METHOD_HEURISTIC)
+        self.assertEqual(candidate.default_kind, KIND_SUBMARINE_SWAP)
+        self.assertEqual(candidate.default_policy, POLICY_CARRYING_VALUE)
+        self.assertEqual((candidate.out_asset, candidate.in_asset), ("XBT", "BTC"))
 
     def test_non_bitcoin_cross_asset_lightning_shape_is_not_a_heuristic_candidate(self):
         out = _row(
