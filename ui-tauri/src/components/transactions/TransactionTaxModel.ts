@@ -1,7 +1,6 @@
 import type { ParseKeys } from "i18next";
 
 import type { JournalEventItem } from "./TransactionDetailSheetParts";
-import type { TransactionFlow } from "./model";
 
 type TaxEffectState =
   | "pending"
@@ -60,7 +59,6 @@ function sumJournalValues(
 
 export function summarizeTransactionTaxEffect(
   events: JournalEventItem[],
-  flow: TransactionFlow,
 ): TransactionTaxEffect {
   if (!events.length) {
     return {
@@ -80,7 +78,18 @@ export function summarizeTransactionTaxEffect(
   const transferEvents = events.filter((event) =>
     TRANSFER_ENTRY_TYPES.has(event.entryType),
   );
-  if (transferEvents.length || flow === "transfer") {
+  // A transaction can carry a transfer leg AND a real disposal: a split spend
+  // books transfer_out for the owned slice and disposal for the external one,
+  // both stamped with the same journal transaction id. Only claim "nothing was
+  // realized" when the journal genuinely holds no gain-bearing entry — the
+  // journal is booked truth and must win over a presentation guess.
+  // fee/transfer_fee/neutral_swap stay out of this test on purpose: rp2 clamps
+  // them to proceeds == cost_basis and gain_loss == 0, so they realize nothing.
+  const realizes = events.some(
+    (event) =>
+      event.entryType === "disposal" || INCOME_ENTRY_TYPES.has(event.entryType),
+  );
+  if (transferEvents.length && !realizes) {
     return {
       state: "transfer",
       costBasisEur: null,

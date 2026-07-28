@@ -34,7 +34,6 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
     localDraft,
     dirty,
     dirtyExcluded,
-    flow,
     taxNarrative,
     hideSensitive,
     updateDraft,
@@ -42,7 +41,7 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
     isBasisQuarantine,
     suppressBasisQuarantineWarning,
   } = ctx;
-  const taxEffect = summarizeTransactionTaxEffect(journalEvents, flow);
+  const taxEffect = summarizeTransactionTaxEffect(journalEvents);
   const showBasisQuarantineGuidance = Boolean(
     isBasisQuarantine && !localDraft.excluded && !suppressBasisQuarantineWarning,
   );
