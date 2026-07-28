@@ -166,7 +166,7 @@ def _wallets_sync_payload(
             sync_all=args["all"],
             force_full=args["force_full"],
         )
-    return _redact_sync_payload_for_ui(payload)
+    return _freshness_payload_for_ui(payload)
 
 
 def _redact_sync_payload_for_ui(value: Any) -> Any:
@@ -187,6 +187,12 @@ def _redact_sync_payload_for_ui(value: Any) -> Any:
     return value
 
 
+def _freshness_payload_for_ui(value: Any) -> Any:
+    return _redact_sync_payload_for_ui(
+        core_freshness.redact_freshness_payload(value)
+    )
+
+
 def _freshness_snapshot_for_ui(
     conn: sqlite3.Connection, profile_id: str
 ) -> dict[str, Any]:
@@ -200,9 +206,7 @@ def _freshness_snapshot_for_ui(
     is surfaced. Routing every consumer through here keeps that guarantee in one
     place instead of relying on each call site to remember.
     """
-    return _redact_sync_payload_for_ui(
-        core_freshness.build_snapshot(conn, profile_id)
-    )
+    return _freshness_payload_for_ui(core_freshness.build_snapshot(conn, profile_id))
 
 
 _SYNC_URL_RE = re.compile(
@@ -1342,7 +1346,7 @@ def _emit_background_freshness_event(
     # must use the `event: true` envelope class — the desktop supervisor
     # kills the daemon over any other post-ready record without a
     # request_id.
-    out.write(build_event_envelope(kind, core_freshness.redact_freshness_payload(dict(payload))))
+    out.write(build_event_envelope(kind, _freshness_payload_for_ui(dict(payload))))
 
 
 def _freshness_background_tick(
@@ -1663,15 +1667,17 @@ def _freshness_run_payload(
                 else None
             )
             progress_observer(
-                {
-                    **dict(payload),
-                    **(
-                        {"job_index": job_index}
-                        if job_index is not None
-                        else {}
-                    ),
-                    "job_total": max(run_total, len(seen_job_ids)),
-                }
+                _freshness_payload_for_ui(
+                    {
+                        **dict(payload),
+                        **(
+                            {"job_index": job_index}
+                            if job_index is not None
+                            else {}
+                        ),
+                        "job_total": max(run_total, len(seen_job_ids)),
+                    }
+                )
             )
 
         token = (
@@ -1716,15 +1722,17 @@ def _freshness_run_payload(
             ),
         )
     snapshot = _freshness_snapshot_for_ui(conn, profile["id"])
-    return {
-        "profile": {"id": profile["id"], "label": profile["label"]},
-        "results": _sync_results_from_freshness_jobs(completed),
-        "force_full": force_full,
-        "recovered": recovered,
-        "enqueued": enqueued,
-        "completed": completed,
-        **snapshot,
-    }
+    return _freshness_payload_for_ui(
+        {
+            "profile": {"id": profile["id"], "label": profile["label"]},
+            "results": _sync_results_from_freshness_jobs(completed),
+            "force_full": force_full,
+            "recovered": recovered,
+            "enqueued": enqueued,
+            "completed": completed,
+            **snapshot,
+        }
+    )
 
 
 def _workspace_freshness_run_payload(
@@ -1819,11 +1827,13 @@ def _workspace_freshness_run_payload(
             if progress_observer is None:
                 return
             progress_observer(
+                _freshness_payload_for_ui(
                 {
                     "workspace": {"id": workspace["id"], "label": workspace["label"]},
                     "profile": {"id": profile_id, "label": profile_label},
                     **dict(payload),
                 }
+                )
             )
 
         completed: list[dict[str, Any]] = []
@@ -1872,15 +1882,17 @@ def _workspace_freshness_run_payload(
                 **snapshot,
             }
         )
-    return {
-        "workspace": {"id": workspace["id"], "label": workspace["label"]},
-        "books": books,
-        "summary": {
-            **totals,
-            "ok": totals["errors"] == 0 and totals["blocked_books"] == 0,
-            "reports_blocked": totals["blocked_books"],
-        },
-    }
+    return _freshness_payload_for_ui(
+        {
+            "workspace": {"id": workspace["id"], "label": workspace["label"]},
+            "books": books,
+            "summary": {
+                **totals,
+                "ok": totals["errors"] == 0 and totals["blocked_books"] == 0,
+                "reports_blocked": totals["blocked_books"],
+            },
+        }
+    )
 
 
 def _freshness_control_payload(
@@ -2094,7 +2106,7 @@ def _auto_sync_wallets_if_enabled(
                 {"all": True},
                 strict=False,
             )
-            payload = _redact_sync_payload_for_ui(payload)
+            payload = _freshness_payload_for_ui(payload)
             ok = not _sync_payload_has_errors(payload)
             payload["ok"] = ok
             state["auto_sync"] = {"ok": ok, "payload": payload}
@@ -2122,7 +2134,7 @@ def _auto_sync_wallets_if_enabled(
             "completed": completed,
             "freshness": _freshness_snapshot_for_ui(conn, profile["id"]),
         }
-        payload = _redact_sync_payload_for_ui(payload)
+        payload = _freshness_payload_for_ui(payload)
         ok = not _sync_payload_has_errors(payload)
         payload["ok"] = ok
         state["auto_sync"] = {"ok": ok, "payload": payload}
