@@ -19,6 +19,10 @@ from kassiber.core.custody_quantity import (
     QuantitySlice,
 )
 from kassiber.core.custody_interpreters import compile_custody_interpreters
+from kassiber.transfers import (
+    _SYNTHETIC_TRANSFER_ID_PREFIXES,
+    onchain_transfer_scope,
+)
 from kassiber.core.engines.base import TaxEngineLedgerInputs
 from kassiber.core.engines.rp2 import GenericRP2TaxEngine, _GenericRailCarryResult
 from tests.custody_tax_helpers import (
@@ -106,6 +110,48 @@ def test_residual_suspense_keeps_finalized_sibling_but_blocks_later_sale():
         item["transaction_id"] == "later-sale"
         and item["reason"] == "custody_basis_barrier"
         for item in projection.quarantines
+    )
+
+
+def test_every_projected_row_id_is_synthetic_and_pairs_are_edge_disjoint():
+    """Pin the two invariants a large amount of tax_events.py silently rests on.
+
+    `normalize_tax_asset_inputs` only ever sees a `FinalizedTaxProjection`, and
+    several of its branches are reachable only for rows that resolve an
+    `onchain_transfer_scope` or that share a pair leg. Neither is possible today:
+
+    1. every projected row id is re-stamped with a member of
+       `_SYNTHETIC_TRANSFER_ID_PREFIXES`, and `onchain_transfer_scope` returns
+       `None` for those prefixes — so the txid-scope-gated paths (the
+       Samourai/Whirlpool splitter, `_owned_fanout_row_ids`) are inert;
+    2. each decision mints its own fresh move rows, so the pair graph is a
+       perfect matching and no multi-pair component can form — which is what
+       makes `_build_manual_multi_pair_transfers`' multi-pair branch inert.
+
+    Nothing in `custody_tax_projection` asserts either property, so without this
+    test the inertness is an unasserted cross-module coupling. Anyone deleting
+    that dead code needs this guard; anyone breaking these invariants needs to
+    know the dead code became live again.
+    """
+
+    rows, state = _residual_state()
+    profile = {"id": "profile", "workspace_id": "workspace", "label": "Book"}
+
+    projection = compile_finalized_tax_projection(profile, rows, state)
+
+    assert projection.rows, "fixture must project at least one row"
+    for row in projection.rows:
+        row_id = str(row["id"])
+        assert row_id.startswith(_SYNTHETIC_TRANSFER_ID_PREFIXES), row_id
+        assert onchain_transfer_scope(row) is None, row_id
+
+    leg_ids = [
+        str((pair[side] or {})["id"])
+        for pair in projection.intra_pairs
+        for side in ("out", "in")
+    ]
+    assert len(leg_ids) == len(set(leg_ids)), (
+        f"pair legs must be edge-disjoint, got {leg_ids}"
     )
 
 
