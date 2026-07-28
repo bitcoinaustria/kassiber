@@ -16,6 +16,7 @@ from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from . import attachments as core_attachments
+from . import freshness as core_freshness
 from . import pricing
 
 
@@ -242,11 +243,12 @@ def delete_btcpay_account_route(
     action: str = "provenance_only",
 ) -> int:
     normalized_action = normalize_btcpay_account_route_action(action)
-    cursor = conn.execute(
+    route = conn.execute(
         """
         DELETE FROM btcpay_account_routes
         WHERE profile_id = ? AND backend_name = ? AND store_id = ?
           AND payment_method_id = ? AND action = ?
+        RETURNING id
         """,
         (
             profile_id,
@@ -255,19 +257,45 @@ def delete_btcpay_account_route(
             payment_method_id,
             normalized_action,
         ),
-    )
-    return int(cursor.rowcount or 0)
+    ).fetchone()
+    if route is not None:
+        core_freshness.delete_source_records(
+            conn,
+            profile_id,
+            [
+                core_freshness.source_key(
+                    core_freshness.SOURCE_BTCPAY_PROVENANCE,
+                    f"account:{route['id']}",
+                )
+            ],
+        )
+    return int(route is not None)
 
 
 def delete_btcpay_account_routes_for_backend(
     conn: sqlite3.Connection,
     backend_name: str,
 ) -> int:
-    cursor = conn.execute(
-        "DELETE FROM btcpay_account_routes WHERE backend_name = ?",
+    routes = conn.execute(
+        """
+        DELETE FROM btcpay_account_routes
+        WHERE backend_name = ?
+        RETURNING id, profile_id
+        """,
         (str(backend_name).strip().lower(),),
-    )
-    return int(cursor.rowcount or 0)
+    ).fetchall()
+    for route in routes:
+        core_freshness.delete_source_records(
+            conn,
+            route["profile_id"],
+            [
+                core_freshness.source_key(
+                    core_freshness.SOURCE_BTCPAY_PROVENANCE,
+                    f"account:{route['id']}",
+                )
+            ],
+        )
+    return len(routes)
 
 
 def upsert_btcpay_provenance(

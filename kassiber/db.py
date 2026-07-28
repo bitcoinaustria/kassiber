@@ -422,6 +422,10 @@ CREATE INDEX IF NOT EXISTS idx_transactions_wallet_external_match
     ON transactions(wallet_id, external_id, direction, asset, amount, fee, created_at)
     WHERE external_id IS NOT NULL;
 
+CREATE INDEX IF NOT EXISTS idx_transactions_wallet_external_ci_match
+    ON transactions(wallet_id, LOWER(external_id), direction, asset)
+    WHERE external_id IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_transactions_profile_economic_match
     ON transactions(profile_id, direction, asset, amount, occurred_at, created_at);
 
@@ -6318,6 +6322,10 @@ def _recreate_msat_migration_indexes(conn):
 
         CREATE INDEX IF NOT EXISTS idx_transactions_wallet_external_match
             ON transactions(wallet_id, external_id, direction, asset, amount, fee, created_at)
+            WHERE external_id IS NOT NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_transactions_wallet_external_ci_match
+            ON transactions(wallet_id, LOWER(external_id), direction, asset)
             WHERE external_id IS NOT NULL;
 
         CREATE INDEX IF NOT EXISTS idx_transactions_profile_economic_match

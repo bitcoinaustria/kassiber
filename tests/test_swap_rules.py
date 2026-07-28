@@ -12,6 +12,7 @@ from kassiber.core.swap_rules import (
     load_rule,
     predicate_matches,
     rule_specificity,
+    validate_rule_predicate,
 )
 from kassiber.core.transfer_matching import (
     CONFIDENCE_EXACT,
@@ -78,9 +79,12 @@ class LoadRuleTests(unittest.TestCase):
         self.assertEqual(rule.predicate, {"out_wallet_kind": "phoenix", "in_asset": "LBTC"})
         self.assertTrue(rule.enabled)
 
-    def test_broken_predicate_decodes_to_empty(self):
+    def test_broken_predicate_disables_rule(self):
         record = {"id": "r1", "predicate_json": "{not json", "kind": "manual", "policy": "taxable"}
-        self.assertEqual(load_rule(record).predicate, {})
+        rule = load_rule(record)
+        self.assertEqual(rule.predicate, {})
+        self.assertFalse(rule.enabled)
+        self.assertEqual(rule.invalid_reason, "predicate JSON is invalid")
 
     def test_disabled_record(self):
         record = {"id": "r1", "predicate_json": "{}", "kind": "manual", "policy": "taxable", "enabled": 0}
@@ -106,6 +110,33 @@ class LoadRuleTests(unittest.TestCase):
         record = {"id": "r1", "predicate_json": "{}", "kind": "manual", "policy": "taxable"}
         self.assertTrue(load_rule(record).enabled)
 
+    def test_unknown_predicate_field_disables_rule(self):
+        record = {
+            "id": "r1",
+            "predicate_json": json.dumps({"unknown": "value"}),
+            "kind": "manual",
+            "policy": "taxable",
+        }
+        rule = load_rule(record)
+        self.assertFalse(rule.enabled)
+        self.assertEqual(rule.invalid_reason, "predicate has unsupported field(s): unknown")
+
+    def test_invalid_kind_and_policy_disable_rule(self):
+        record = {
+            "id": "r1",
+            "predicate_json": "{}",
+            "kind": "bogus",
+            "policy": "wrong",
+        }
+        rule = load_rule(record)
+        self.assertFalse(rule.enabled)
+        self.assertEqual(rule.kind, "manual")
+        self.assertEqual(rule.policy, "carrying-value")
+        self.assertEqual(
+            rule.invalid_reason,
+            "unsupported kind 'bogus'; unsupported policy 'wrong'",
+        )
+
 
 class PredicateMatchesTests(unittest.TestCase):
     def test_empty_predicate_matches_everything(self):
@@ -115,6 +146,9 @@ class PredicateMatchesTests(unittest.TestCase):
         predicate = {"out_wallet_id": "phoenix", "in_wallet_id": "liquid"}
         self.assertTrue(predicate_matches(_candidate(), predicate))
         self.assertFalse(predicate_matches(_candidate(out_wallet_id="other"), predicate))
+
+    def test_unknown_field_fails_closed(self):
+        self.assertFalse(predicate_matches(_candidate(), {"unknown": "value"}))
 
     def test_asset_predicate(self):
         predicate = {"out_asset": "BTC", "in_asset": "LBTC"}
@@ -132,6 +166,13 @@ class PredicateMatchesTests(unittest.TestCase):
 
     def test_max_fee_pct_cap_rejects_over(self):
         self.assertFalse(predicate_matches(_candidate(), {"max_fee_pct": 0.001}))
+
+    def test_boolean_max_fee_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "must be a number"):
+            validate_rule_predicate({"max_fee_pct": True})
+
+    def test_invalid_max_fee_pct_fails_closed(self):
+        self.assertFalse(predicate_matches(_candidate(), {"max_fee_pct": "nan"}))
 
     def test_min_confidence_strong_admits_exact(self):
         self.assertTrue(

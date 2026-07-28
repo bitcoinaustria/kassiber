@@ -65,6 +65,7 @@ AUTO_SYNC_PROFILE_MIN_INTERVAL_SECONDS = 60
 FRESHNESS_BACKGROUND_POLL_SECONDS = 5.0
 FRESHNESS_BACKGROUND_REFRESH_INTERVAL_SECONDS = 15 * 60
 FRESHNESS_BACKGROUND_RATE_REFRESH_INTERVAL_SECONDS = 60 * 60
+FRESHNESS_BACKGROUND_TERMINAL_RETRY_INTERVAL_SECONDS = 60 * 60
 _AUTO_SYNC_PROFILE_LAST_ATTEMPT: dict[str, float] = {}
 _AUTO_SYNC_PROFILE_LAST_RESULT: dict[str, dict[str, Any]] = {}
 _AUTO_SYNC_PROFILE_LOCK = threading.Lock()
@@ -1266,6 +1267,35 @@ def _freshness_background_source_due(
     if limited_until is not None and limited_until > now:
         return False
     status = state.get("status")
+    if status in {
+        core_freshness.STATUS_FAILED,
+        core_freshness.STATUS_BLOCKING_REPORTS,
+    }:
+        latest = conn.execute(
+            """
+            SELECT status, error_json
+            FROM freshness_jobs
+            WHERE profile_id = ? AND source_key = ?
+            ORDER BY created_at DESC, rowid DESC
+            LIMIT 1
+            """,
+            (profile_id, spec["source_key"]),
+        ).fetchone()
+        if latest is not None and latest["status"] == core_freshness.JOB_ERROR:
+            try:
+                error = json.loads(latest["error_json"] or "{}")
+            except (TypeError, ValueError, json.JSONDecodeError):
+                error = None
+            if isinstance(error, dict) and error.get("retryable") is False:
+                error_code = str(error.get("code") or "")
+                if str(state.get("stale_reason") or "") == error_code:
+                    last_error = _parse_freshness_timestamp(state.get("last_error_at"))
+                    if (
+                        last_error is None
+                        or (now - last_error).total_seconds()
+                        < FRESHNESS_BACKGROUND_TERMINAL_RETRY_INTERVAL_SECONDS
+                    ):
+                        return False
     if status in {
         core_freshness.STATUS_FAILED,
         core_freshness.STATUS_PARTIALLY_STALE,

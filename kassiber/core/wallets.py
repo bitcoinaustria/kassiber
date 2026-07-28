@@ -220,6 +220,26 @@ def _reset_onchain_freshness_checkpoint(conn, profile_id: str, wallet_id: str) -
     )
 
 
+def wallet_freshness_source_types(kind: str, config: dict) -> set[str]:
+    if wallet_is_deprecated(config):
+        return set()
+    source_types = set()
+    if (
+        kind != "coreln"
+        and not (config.get("source_file") and config.get("source_format"))
+        and (
+            has_descriptor_sync_material(config)
+            or normalize_addresses(config.get("addresses"))
+        )
+    ):
+        source_types.add(core_freshness.SOURCE_ONCHAIN)
+    if wallet_btcpay_sync_config(config):
+        source_types.add(core_freshness.SOURCE_BTCPAY_WALLET)
+    if wallet_btcpay_provenance_config(config):
+        source_types.add(core_freshness.SOURCE_BTCPAY_PROVENANCE)
+    return source_types
+
+
 def load_wallet_descriptor_plan_from_config(config):
     try:
         return load_descriptor_plan(config)
@@ -1062,6 +1082,20 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
                 commit=False,
             )
             _reset_onchain_freshness_checkpoint(conn, profile["id"], wallet["id"])
+        active_source_types = wallet_freshness_source_types(wallet["kind"], config)
+        core_freshness.delete_source_records(
+            conn,
+            profile["id"],
+            [
+                core_freshness.source_key(source_type, wallet["id"])
+                for source_type in (
+                    core_freshness.SOURCE_ONCHAIN,
+                    core_freshness.SOURCE_BTCPAY_WALLET,
+                    core_freshness.SOURCE_BTCPAY_PROVENANCE,
+                )
+                if source_type not in active_source_types
+            ],
+        )
         invalidate_journals(conn, profile["id"])
         conn.commit()
     except Exception:
@@ -1086,6 +1120,18 @@ def delete_wallet(conn, workspace_ref, profile_ref, wallet_ref, cascade=False):
             details={"transactions": tx_count},
         )
     conn.execute("DELETE FROM wallets WHERE id = ?", (wallet["id"],))
+    core_freshness.delete_source_records(
+        conn,
+        profile["id"],
+        [
+            core_freshness.source_key(source_type, wallet["id"])
+            for source_type in (
+                core_freshness.SOURCE_ONCHAIN,
+                core_freshness.SOURCE_BTCPAY_WALLET,
+                core_freshness.SOURCE_BTCPAY_PROVENANCE,
+            )
+        ],
+    )
     invalidate_journals(conn, profile["id"])
     conn.commit()
     return {
@@ -1121,6 +1167,7 @@ __all__ = [
     "wallet_btcpay_provenance_config",
     "wallet_btcpay_sync_config",
     "wallet_descriptor_material",
+    "wallet_freshness_source_types",
     "reveal_wallet_descriptor_material",
     "wallet_live_chain_config",
     "wallet_policy_asset_id",

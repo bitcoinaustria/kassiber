@@ -59,6 +59,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, Mapping, Optional, Sequence
 
+from ..asset_codes import canonical_bitcoin_asset
+from ..time_utils import parse_iso_datetime_or_none
 from ..transfers import (
     CHAIN_INFERENCE_WALLET_KINDS,
     LIGHTNING_INFERENCE_WALLET_KINDS,
@@ -428,13 +430,17 @@ def default_kind_for(
 
     Heavy-user defaults:
 
-    * Chain → Lightning → ``submarine-swap``.
-    * Lightning → chain → ``reverse-submarine-swap``.
+    * Bitcoin-chain → Lightning → ``submarine-swap``.
+    * Lightning → Bitcoin-chain → ``reverse-submarine-swap``.
     * Both legs are chain wallets:
       * BTC → LBTC → ``peg-in``.
       * LBTC → BTC → ``peg-out``.
-    * Everything else → ``manual`` (the user picks).
+    * Non-Bitcoin assets and everything else → ``manual`` (the user picks).
     """
+    out_asset = canonical_bitcoin_asset(out_asset)
+    in_asset = canonical_bitcoin_asset(in_asset)
+    if out_asset is None or in_asset is None:
+        return KIND_MANUAL
     out_kind = normalize_wallet_kind_alias(out_wallet_kind)
     in_kind = normalize_wallet_kind_alias(in_wallet_kind)
     out_is_lightning = out_kind in LIGHTNING_WALLET_KINDS
@@ -488,17 +494,8 @@ def _seconds_or_now(now_iso: Optional[str]) -> float:
 
 
 def _iso_to_seconds(value: Optional[str]) -> Optional[float]:
-    if not value:
-        return None
-    raw = str(value).strip()
-    if not raw:
-        return None
-    if raw.endswith("Z"):
-        raw = raw[:-1] + "+00:00"
-    try:
-        return datetime.fromisoformat(raw).timestamp()
-    except ValueError:
-        return None
+    parsed = parse_iso_datetime_or_none(value)
+    return None if parsed is None else parsed.timestamp()
 
 
 def _active_paired_ids(pair_records: Iterable[Mapping]) -> set[str]:
@@ -1351,6 +1348,7 @@ def _match_heuristic(
         lo = bisect.bisect_left(in_times, out_seconds - time_window_seconds)
         hi = bisect.bisect_right(in_times, out_seconds + time_window_seconds)
         out_asset = str(_record_get(out_row, "asset") or "")
+        out_route_asset = canonical_bitcoin_asset(out_asset)
         out_wallet_kind = str(_record_get(out_row, "wallet_kind") or "")
         out_txid = _observed_onchain_txid(out_row)
         for _, in_row, in_amount, in_txid in in_entries[lo:hi]:
@@ -1360,10 +1358,15 @@ def _match_heuristic(
             if delta < 0 or delta > threshold:
                 continue
             in_asset = str(_record_get(in_row, "asset") or "")
-            same_asset = out_asset.upper() == in_asset.upper()
+            in_route_asset = canonical_bitcoin_asset(in_asset)
+            same_asset = (
+                out_route_asset == in_route_asset
+                if out_route_asset is not None and in_route_asset is not None
+                else out_asset.upper() == in_asset.upper()
+            )
             if (
                 same_asset
-                and out_asset.upper() in {"BTC", "LBTC"}
+                and out_route_asset is not None
                 and out_txid is not None
                 and in_txid is not None
                 and out_txid != in_txid
@@ -1418,12 +1421,14 @@ def _build_candidate(
     in_asset = str(_record_get(in_row, "asset") or "")
     out_wallet_kind = str(_record_get(out_row, "wallet_kind") or "")
     in_wallet_kind = str(_record_get(in_row, "wallet_kind") or "")
+    out_policy_asset = canonical_bitcoin_asset(out_asset) or out_asset.upper()
+    in_policy_asset = canonical_bitcoin_asset(in_asset) or in_asset.upper()
     default_policy = (
         POLICY_CARRYING_VALUE
-        if out_asset.upper() == in_asset.upper()
+        if out_policy_asset == in_policy_asset
         else default_ownership_policy_for(
-            out_asset,
-            in_asset,
+            out_policy_asset,
+            in_policy_asset,
         )
     )
     return SwapCandidate(

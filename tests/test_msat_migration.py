@@ -113,6 +113,15 @@ class MsatMigrationTests(unittest.TestCase):
             self.assertEqual(row["at_regime_override"], "new")
             self.assertEqual(row["at_category_override"], "capital")
             self.assertEqual(row["privacy_boundary"], "coinjoin")
+            self.assertIsNotNone(
+                conn.execute(
+                    """
+                    SELECT 1 FROM sqlite_master
+                    WHERE type = 'index'
+                      AND name = 'idx_transactions_wallet_external_ci_match'
+                    """
+                ).fetchone()
+            )
 
     def test_legacy_derived_journal_quantities_migrate_to_msat(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-msat-migration-") as tmp:

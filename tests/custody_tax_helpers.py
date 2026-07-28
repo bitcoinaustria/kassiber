@@ -135,6 +135,14 @@ def persist_authoritative_chain_observation(
                 "observer_kinds": [observer_kind],
             },
         ),
+        resolved_records=(
+            {
+                "transaction_id": transaction_id,
+                "external_id": row["external_id"],
+                "asset": row["asset"],
+                "direction": row["direction"],
+            },
+        ),
     )
 
 

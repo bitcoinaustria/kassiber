@@ -25,6 +25,20 @@ from ..time_utils import now_iso, parse_iso_datetime_or_none
 # living only in structured job state.
 _LOGGER = logging.getLogger(__name__)
 
+_SAFE_OBSERVER_PROJECTION_CONFLICT_KINDS = frozenset(
+    {
+        "bdk_conflicting_prevouts",
+        "bdk_inconsistent_inputs",
+        "excluded_exact_transaction_row",
+        "mixed_observer_routes",
+        "multiple_active_transaction_rows",
+        "multiple_excluded_transaction_rows",
+        "multiple_transaction_rows",
+        "provenance_resolution_mismatch",
+        "provenance_row_cardinality",
+    }
+)
+
 JOB_ONCHAIN_WALLET = "onchain_wallet_history"
 JOB_BTCPAY_WALLET = "btcpay_wallet_source"
 JOB_BTCPAY_PROVENANCE = "btcpay_provenance"
@@ -241,6 +255,26 @@ def journal_source_key(profile_id: str) -> str:
     return source_key(SOURCE_JOURNALS, profile_id)
 
 
+def delete_source_records(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    keys: list[str] | tuple[str, ...],
+) -> None:
+    """Remove disposable freshness state and jobs for sources that no longer exist."""
+    if not keys:
+        return
+    placeholders = ", ".join("?" for _ in keys)
+    params = (profile_id, *keys)
+    conn.execute(
+        f"DELETE FROM freshness_jobs WHERE profile_id = ? AND source_key IN ({placeholders})",
+        params,
+    )
+    conn.execute(
+        f"DELETE FROM freshness_source_states WHERE profile_id = ? AND source_key IN ({placeholders})",
+        params,
+    )
+
+
 def _row_payload(row: sqlite3.Row) -> dict[str, Any]:
     payload = dict(row)
     for key in ("payload_json", "progress_json", "result_json", "error_json", "checkpoint_json"):
@@ -428,6 +462,57 @@ def list_source_states(conn: sqlite3.Connection, profile_id: str) -> list[dict[s
         (profile_id,),
     ).fetchall()
     return [_row_payload(row) for row in rows]
+
+
+def report_blocking_source_summary(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Return the bounded, public-safe subset needed to explain report blocks."""
+    count_row = conn.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM freshness_source_states
+        WHERE profile_id = ? AND blocking_reports = 1
+        """,
+        (profile_id,),
+    ).fetchone()
+    rows = conn.execute(
+        """
+        SELECT source_type, source_label, status, stale_reason, last_error_code
+        FROM freshness_source_states
+        WHERE profile_id = ? AND blocking_reports = 1
+        ORDER BY source_type ASC, source_label ASC, source_key ASC
+        LIMIT ?
+        """,
+        (profile_id, max(1, int(limit))),
+    ).fetchall()
+    return {
+        "count": int(count_row["count"] or 0),
+        "sources": [dict(row) for row in rows],
+    }
+
+
+def require_report_freshness(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> None:
+    """Fail closed when a source says finalized accounting reports are stale."""
+    summary = report_blocking_source_summary(conn, profile_id)
+    if not summary["count"]:
+        return
+    raise AppError(
+        "Final report export is blocked by source freshness failures",
+        code="report_freshness_blocked",
+        hint="Refresh or repair the failed source before exporting a final report.",
+        details={
+            "source_count": summary["count"],
+            "sources": summary["sources"],
+        },
+        retryable=False,
+    )
 
 
 def pause_source(conn: sqlite3.Connection, profile_id: str, key: str) -> dict[str, Any]:
@@ -912,6 +997,14 @@ def _mark_error(
     sqlite_error_name = (
         exc.details.get("sqlite_error_name") if isinstance(exc.details, dict) else None
     )
+    conflict_kind = (
+        exc.details.get("conflict_kind")
+        if error_code == "observer_projection_conflict"
+        and isinstance(exc.details, dict)
+        else None
+    )
+    if conflict_kind not in _SAFE_OBSERVER_PROJECTION_CONFLICT_KINDS:
+        conflict_kind = None
     if cooldown_until:
         if sqlite_error_name:
             _LOGGER.warning(
@@ -933,6 +1026,13 @@ def _mark_error(
             )
         else:
             _LOGGER.error("Freshness %s failed (%s; %s)", source_name, error_code, error_class)
+    elif conflict_kind:
+        _LOGGER.error(
+            "Freshness %s failed (%s; %s)",
+            source_name,
+            error_code,
+            conflict_kind,
+        )
     else:
         _LOGGER.error("Freshness %s failed (%s)", source_name, error_code)
     now = now_iso()
@@ -1226,6 +1326,7 @@ __all__ = [
     "build_snapshot",
     "cancel_job",
     "default_policy",
+    "delete_source_records",
     "enqueue_job",
     "get_policy",
     "get_source_state",
@@ -1238,6 +1339,8 @@ __all__ = [
     "redact_freshness_payload",
     "recover_interrupted_jobs",
     "reset_source_checkpoint",
+    "report_blocking_source_summary",
+    "require_report_freshness",
     "resume_source",
     "run_due_jobs",
     "run_job",

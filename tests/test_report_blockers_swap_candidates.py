@@ -3,12 +3,17 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+from kassiber import daemon
+from kassiber.cli.main import build_parser, dispatch
+from kassiber.core import commercial, freshness, wallets as core_wallets
 from kassiber.core.ui_snapshot import (
     _load_swap_report_matcher_rows,
     build_report_blockers_snapshot,
 )
 from kassiber.db import open_db, set_setting
+from kassiber.errors import AppError
 from kassiber.msat import btc_to_msat
 
 
@@ -173,6 +178,259 @@ class SwapCandidateReportBlockerTests(unittest.TestCase):
             self.assertIn(
                 "no_legs", blocker["components"][0]["issue_codes"]
             )
+        finally:
+            conn.close()
+
+    def test_persisted_freshness_failure_blocks_final_exports_without_leaking_error_text(self):
+        tmp = tempfile.TemporaryDirectory(prefix="kassiber-freshness-blocker-")
+        self.addCleanup(tmp.cleanup)
+        data_root = Path(tmp.name) / "data"
+        conn = open_db(data_root)
+        self.addCleanup(conn.close)
+        _seed_book(conn)
+        freshness.upsert_source_state(
+            conn,
+            profile_id="pf",
+            source_key="onchain:wallet",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Bull-Onchain",
+            status="failed",
+            stale_reason="observer_projection_conflict",
+            blocking_reports=True,
+            last_error_code="observer_projection_conflict",
+            last_error_message="secret backend https://node.invalid/token",
+            progress={"response_preview": "private progress"},
+            checkpoint={"descriptor": "private checkpoint"},
+        )
+        conn.commit()
+
+        snapshot = build_report_blockers_snapshot(conn)
+
+        blocker = next(
+            item for item in snapshot["blockers"] if item["id"] == "sync_failed"
+        )
+        self.assertFalse(snapshot["ready"])
+        self.assertEqual(blocker["daemon_kind"], "ui.freshness.run")
+        self.assertEqual(blocker["counts"], {"sources": 1})
+        self.assertEqual(
+            blocker["sources"],
+            [
+                {
+                    "source_type": freshness.SOURCE_ONCHAIN,
+                    "source_label": "Bull-Onchain",
+                    "status": freshness.STATUS_BLOCKING_REPORTS,
+                    "stale_reason": "observer_projection_conflict",
+                    "last_error_code": "observer_projection_conflict",
+                }
+            ],
+        )
+        encoded = json.dumps(snapshot, sort_keys=True)
+        self.assertNotIn("node.invalid", encoded)
+        self.assertNotIn("private progress", encoded)
+        self.assertNotIn("private checkpoint", encoded)
+
+        with self.assertRaises(AppError) as raised:
+            freshness.require_report_freshness(conn, "pf")
+        self.assertEqual(raised.exception.code, "report_freshness_blocked")
+        self.assertFalse(raised.exception.retryable)
+        self.assertNotIn("node.invalid", json.dumps(raised.exception.details))
+
+        managed_path = Path(tmp.name) / "should-not-exist.pdf"
+        with (
+            mock.patch(
+                "kassiber.daemon._managed_report_export_path",
+                return_value=managed_path,
+            ) as path_mock,
+            mock.patch(
+                "kassiber.daemon.core_reports.export_pdf_report"
+            ) as report_export,
+        ):
+            with self.assertRaises(AppError) as daemon_error:
+                daemon._ui_report_export_payload_from_conn(
+                    conn,
+                    str(data_root),
+                    "ui.reports.export_pdf",
+                    {},
+                )
+        self.assertEqual(daemon_error.exception.code, "report_freshness_blocked")
+        path_mock.assert_not_called()
+        report_export.assert_not_called()
+        self.assertFalse(managed_path.exists())
+
+        cli_path = Path(tmp.name) / "cli-should-not-exist.pdf"
+        cli_args = build_parser().parse_args(
+            [
+                "reports",
+                "export-pdf",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Main",
+                "--file",
+                str(cli_path),
+            ]
+        )
+        with mock.patch(
+            "kassiber.cli.main.core_reports.export_pdf_report"
+        ) as cli_export:
+            with self.assertRaises(AppError) as cli_error:
+                dispatch(conn, cli_args)
+        self.assertEqual(cli_error.exception.code, "report_freshness_blocked")
+        cli_export.assert_not_called()
+        self.assertFalse(cli_path.exists())
+
+        raw_path = Path(tmp.name) / "transactions.csv"
+        with (
+            mock.patch(
+                "kassiber.daemon._managed_report_export_path",
+                return_value=raw_path,
+            ),
+            mock.patch(
+                "kassiber.daemon.core_reports.export_transactions_csv_report",
+                return_value={"file": str(raw_path), "rows": 0},
+            ) as transaction_export,
+        ):
+            raw_payload = daemon._ui_report_export_payload_from_conn(
+                conn,
+                str(data_root),
+                "ui.transactions.export_csv",
+                {},
+            )
+        self.assertEqual(raw_payload["scope"], "transactions")
+        transaction_export.assert_called_once()
+
+        audit_path = Path(tmp.name) / "audit-package"
+        with (
+            mock.patch(
+                "kassiber.daemon._managed_report_export_path",
+                return_value=audit_path,
+            ),
+            mock.patch(
+                "kassiber.daemon.core_audit_package.export_audit_package",
+                return_value={"directory": str(audit_path)},
+            ) as audit_export,
+        ):
+            audit_payload = daemon._ui_report_export_payload_from_conn(
+                conn,
+                str(data_root),
+                "ui.reports.export_audit_package",
+                {},
+            )
+        self.assertEqual(audit_payload["directory"], str(audit_path))
+        audit_export.assert_called_once()
+
+        freshness.upsert_source_state(
+            conn,
+            profile_id="pf",
+            source_key="onchain:wallet",
+            source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Bull-Onchain",
+            status=freshness.STATUS_FRESH,
+            blocking_reports=False,
+        )
+        conn.commit()
+        refreshed = build_report_blockers_snapshot(conn)
+        self.assertNotIn(
+            "sync_failed",
+            [item["id"] for item in refreshed["blockers"]],
+        )
+        freshness.require_report_freshness(conn, "pf")
+
+    def test_obsolete_freshness_sources_stop_blocking_reports(self):
+        conn = self._with_conn()
+        try:
+            _seed_book(conn)
+            for wallet_id in ("deprecated-wallet", "deleted-wallet"):
+                _wallet(conn, wallet_id, wallet_id, "address")
+                conn.execute(
+                    "UPDATE wallets SET config_json = ? WHERE id = ?",
+                    (json.dumps({"addresses": [f"bc1q{wallet_id}"]}), wallet_id),
+                )
+
+            def block(key, source_type, job_type):
+                freshness.enqueue_job(
+                    conn,
+                    profile_id="pf",
+                    job_type=job_type,
+                    source_key=key,
+                    source_type=source_type,
+                    source_label=key,
+                )
+                freshness.upsert_source_state(
+                    conn,
+                    profile_id="pf",
+                    source_key=key,
+                    source_type=source_type,
+                    source_label=key,
+                    status=freshness.STATUS_FAILED,
+                    blocking_reports=True,
+                )
+
+            deprecated_key = freshness.source_key(
+                freshness.SOURCE_ONCHAIN,
+                "deprecated-wallet",
+            )
+            deleted_key = freshness.source_key(
+                freshness.SOURCE_ONCHAIN,
+                "deleted-wallet",
+            )
+            block(
+                deprecated_key,
+                freshness.SOURCE_ONCHAIN,
+                freshness.JOB_ONCHAIN_WALLET,
+            )
+            block(
+                deleted_key,
+                freshness.SOURCE_ONCHAIN,
+                freshness.JOB_ONCHAIN_WALLET,
+            )
+            core_wallets.update_wallet(
+                conn,
+                "ws",
+                "pf",
+                "deprecated-wallet",
+                {"config": {"deprecated": True}},
+            )
+            core_wallets.delete_wallet(conn, "ws", "pf", "deleted-wallet")
+
+            route = commercial.upsert_btcpay_account_route(
+                conn,
+                {"id": "ws"},
+                {"id": "pf"},
+                backend_name="btcpay",
+                store_id="store",
+                payment_method_id="BTC-CHAIN",
+            )
+            route_key = freshness.source_key(
+                freshness.SOURCE_BTCPAY_PROVENANCE,
+                f"account:{route['id']}",
+            )
+            block(
+                route_key,
+                freshness.SOURCE_BTCPAY_PROVENANCE,
+                freshness.JOB_BTCPAY_PROVENANCE,
+            )
+            conn.commit()
+
+            commercial.delete_btcpay_account_route(
+                conn,
+                "pf",
+                backend_name="btcpay",
+                store_id="store",
+                payment_method_id="BTC-CHAIN",
+            )
+            conn.commit()
+
+            for key in (deprecated_key, deleted_key, route_key):
+                self.assertIsNone(freshness.get_source_state(conn, "pf", key))
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM freshness_jobs WHERE source_key = ?",
+                        (key,),
+                    ).fetchone()[0],
+                    0,
+                )
+            freshness.require_report_freshness(conn, "pf")
         finally:
             conn.close()
 

@@ -438,6 +438,53 @@ class FreshnessTest(unittest.TestCase):
             captured.output,
         )
 
+    def test_projection_conflict_logs_only_allowlisted_discriminator(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+
+        def run(details):
+            freshness.enqueue_job(
+                conn,
+                profile_id=profile_id,
+                job_type=freshness.JOB_ONCHAIN_WALLET,
+                source_key="onchain_wallet:cold",
+                source_type=freshness.SOURCE_ONCHAIN,
+                source_label="Cold wallet",
+                priority=10,
+            )
+            conn.commit()
+
+            def boom(conn, job, progress, check_cancelled):
+                raise AppError(
+                    "projection failed",
+                    code="observer_projection_conflict",
+                    details=details,
+                )
+
+            with self.assertLogs(
+                "kassiber.core.freshness", level="ERROR"
+            ) as captured:
+                freshness.run_due_jobs(
+                    conn,
+                    {freshness.JOB_ONCHAIN_WALLET: boom},
+                    profile_id=profile_id,
+                    limit=1,
+                )
+            return captured.output
+
+        known = run({"conflict_kind": "multiple_transaction_rows"})
+        self.assertTrue(
+            any("multiple_transaction_rows" in line for line in known),
+            known,
+        )
+
+        unknown_value = "not_an_allowlisted_conflict_kind"
+        unknown = run({"conflict_kind": unknown_value})
+        self.assertFalse(
+            any(unknown_value in line for line in unknown),
+            unknown,
+        )
+
     def test_failed_job_txid_and_amount_pseudonymized_on_disk(self):
         # The freshness DISK write (freshness_jobs.error_json + source-state
         # last_error_message) must pseudonymize txids/amounts in BOTH the message
@@ -1751,6 +1798,166 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(
             daemon_freshness._filter_freshness_specs_for_background(conn, profile_id, [spec]),
             [],
+        )
+
+    def test_background_terminal_failure_does_not_starve_and_can_recover(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        onchain_spec = {
+            "job_type": freshness.JOB_ONCHAIN_WALLET,
+            "source_key": "onchain_wallet:cold",
+            "source_type": freshness.SOURCE_ONCHAIN,
+            "source_label": "Cold wallet",
+        }
+        freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            priority=30,
+            **onchain_spec,
+        )
+        freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_JOURNAL_REFRESH,
+            source_key=freshness.journal_source_key(profile_id),
+            source_type=freshness.SOURCE_JOURNALS,
+            source_label="Journal refresh",
+            priority=80,
+        )
+        conn.commit()
+
+        def terminal(conn, job, progress, check_cancelled):
+            raise AppError(
+                "repair required",
+                code="observer_projection_conflict",
+                retryable=False,
+            )
+
+        completed = []
+
+        def journal(conn, job, progress, check_cancelled):
+            completed.append(job["job_type"])
+            return {"status": "processed"}
+
+        first = freshness.run_due_jobs(
+            conn,
+            {
+                freshness.JOB_ONCHAIN_WALLET: terminal,
+                freshness.JOB_JOURNAL_REFRESH: journal,
+            },
+            profile_id=profile_id,
+            limit=1,
+        )
+        self.assertEqual(first[0]["status"], freshness.JOB_ERROR)
+        self.assertEqual(
+            daemon_freshness._filter_freshness_specs_for_background(
+                conn,
+                profile_id,
+                [onchain_spec],
+            ),
+            [],
+        )
+
+        second = freshness.run_due_jobs(
+            conn,
+            {
+                freshness.JOB_ONCHAIN_WALLET: terminal,
+                freshness.JOB_JOURNAL_REFRESH: journal,
+            },
+            profile_id=profile_id,
+            limit=1,
+        )
+        self.assertEqual(second[0]["status"], freshness.JOB_DONE)
+        self.assertEqual(completed, [freshness.JOB_JOURNAL_REFRESH])
+
+        freshness.reset_source_checkpoint(
+            conn,
+            profile_id,
+            onchain_spec["source_key"],
+            stale_reason="wallet_config_changed",
+        )
+        self.assertEqual(
+            daemon_freshness._filter_freshness_specs_for_background(
+                conn,
+                profile_id,
+                [onchain_spec],
+            ),
+            [onchain_spec],
+        )
+
+        conn.execute(
+            """
+            UPDATE freshness_source_states
+            SET status = ?, stale_reason = ?, blocking_reports = 1,
+                last_error_at = ?
+            WHERE profile_id = ? AND source_key = ?
+            """,
+            (
+                freshness.STATUS_BLOCKING_REPORTS,
+                "observer_projection_conflict",
+                _minutes_ago(61),
+                profile_id,
+                onchain_spec["source_key"],
+            ),
+        )
+        conn.commit()
+        self.assertEqual(
+            daemon_freshness._filter_freshness_specs_for_background(
+                conn,
+                profile_id,
+                [onchain_spec],
+            ),
+            [onchain_spec],
+        )
+
+        manual = freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            **onchain_spec,
+        )
+        self.assertEqual(manual["status"], freshness.JOB_QUEUED)
+
+    def test_background_uses_latest_job_retryability(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        spec = {
+            "job_type": freshness.JOB_ONCHAIN_WALLET,
+            "source_key": "onchain_wallet:cold",
+            "source_type": freshness.SOURCE_ONCHAIN,
+            "source_label": "Cold wallet",
+        }
+
+        terminal = freshness.enqueue_job(conn, profile_id=profile_id, **spec)
+
+        def fail(conn, job, progress, check_cancelled):
+            raise AppError("repair required", retryable=False)
+
+        freshness.run_job(
+            conn,
+            terminal["id"],
+            {freshness.JOB_ONCHAIN_WALLET: fail},
+        )
+        partial = freshness.enqueue_job(conn, profile_id=profile_id, **spec)
+
+        def partially_succeed(conn, job, progress, check_cancelled):
+            return {
+                "partial_success": True,
+                "blocking_reports": True,
+            }
+
+        freshness.run_job(
+            conn,
+            partial["id"],
+            {freshness.JOB_ONCHAIN_WALLET: partially_succeed},
+        )
+
+        self.assertEqual(
+            daemon_freshness._filter_freshness_specs_for_background(
+                conn,
+                profile_id,
+                [spec],
+            ),
+            [spec],
         )
 
     def test_background_due_filter_uses_hourly_market_rate_interval(self):

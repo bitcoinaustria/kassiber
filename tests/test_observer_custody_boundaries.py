@@ -161,6 +161,14 @@ class ObserverCustodyBoundaryTest(unittest.TestCase):
                     "observer_kinds": [observer_kind],
                 },
             ),
+            resolved_records=(
+                {
+                    "transaction_id": transaction_id,
+                    "external_id": transaction["external_id"],
+                    "asset": transaction["asset"],
+                    "direction": transaction["direction"],
+                },
+            ),
         )
         self.assertEqual(persisted, 1)
 

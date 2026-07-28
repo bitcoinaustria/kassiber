@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from uuid import uuid4
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -585,6 +586,85 @@ class SwapMatchingCliTest(unittest.TestCase):
         self.assertEqual(code, 0, payload)
         self.assertEqual(payload["data"]["policy"], "taxable")
 
+    def test_rule_create_rejects_unknown_predicate_field(self):
+        data_root = self._fresh_root("rules-invalid-predicate-field")
+        _run(data_root, "init")
+        _run(data_root, "workspaces", "create", "Main")
+        _run(
+            data_root, "profiles", "create",
+            "--workspace", "Main",
+            "--tax-country", "at",
+            "P",
+        )
+
+        payload, code = _run(
+            data_root, "transfers", "rules", "create",
+            "--workspace", "Main", "--profile", "P",
+            "--predicate", json.dumps({"unknown": "value"}),
+            "--kind", "submarine-swap",
+            "--policy", "carrying-value",
+        )
+        self.assertNotEqual(code, 0, payload)
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("unsupported field", payload["error"]["message"])
+
+    def test_rule_create_rejects_invalid_max_fee_pct(self):
+        data_root = self._fresh_root("rules-invalid-max-fee")
+        _run(data_root, "init")
+        _run(data_root, "workspaces", "create", "Main")
+        _run(
+            data_root, "profiles", "create",
+            "--workspace", "Main",
+            "--tax-country", "at",
+            "P",
+        )
+
+        payload, code = _run(
+            data_root, "transfers", "rules", "create",
+            "--workspace", "Main", "--profile", "P",
+            "--predicate", json.dumps({"max_fee_pct": "not-a-number"}),
+            "--kind", "submarine-swap",
+            "--policy", "carrying-value",
+        )
+        self.assertNotEqual(code, 0, payload)
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("max_fee_pct", payload["error"]["message"])
+
+    def test_rule_create_rejects_empty_array_predicate(self):
+        data_root = self._fresh_root("rules-array-predicate")
+        _run(data_root, "init")
+        _run(data_root, "workspaces", "create", "Main")
+        _run(
+            data_root,
+            "profiles",
+            "create",
+            "--workspace",
+            "Main",
+            "--tax-country",
+            "at",
+            "P",
+        )
+
+        payload, code = _run(
+            data_root,
+            "transfers",
+            "rules",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "P",
+            "--predicate",
+            "[]",
+            "--kind",
+            "submarine-swap",
+            "--policy",
+            "carrying-value",
+        )
+        self.assertNotEqual(code, 0, payload)
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("predicate must be an object", payload["error"]["message"])
+
     def test_rules_apply_pairs_matching_candidates(self):
         data_root = self._fresh_root("rules-apply")
         _bootstrap_profile(data_root, self.phoenix_csv, self.liquid_csv)
@@ -651,6 +731,77 @@ class SwapMatchingCliTest(unittest.TestCase):
         pair = payload["data"][0]
         self.assertEqual(pair["pair_source"], "rule_auto")
         self.assertEqual(pair["confidence_at_pair"], "strong")
+
+    def test_corrupt_stored_rule_is_listed_disabled_and_ignored_by_apply(self):
+        data_root = self._fresh_root("rules-corrupt-row")
+        _bootstrap_profile(data_root, self.phoenix_csv, self.liquid_csv)
+        rule_id = str(uuid4())
+        conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+        try:
+            workspace_id = conn.execute(
+                "SELECT id FROM workspaces WHERE label = 'Main'"
+            ).fetchone()[0]
+            profile_id = conn.execute(
+                "SELECT id FROM profiles WHERE label = 'Swap'"
+            ).fetchone()[0]
+            conn.execute(
+                """
+                INSERT INTO swap_matching_rules(
+                    id, workspace_id, profile_id, name, predicate_json, kind, policy,
+                    enabled, created_at, updated_at
+                ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                """,
+                (
+                    rule_id,
+                    workspace_id,
+                    profile_id,
+                    "Broken replicated rule",
+                    "{not json",
+                    "submarine-swap",
+                    "carrying-value",
+                    1,
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        payload, code = _run(
+            data_root, "transfers", "rules", "list",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(len(payload["data"]), 1)
+        self.assertFalse(payload["data"][0]["enabled"])
+        self.assertEqual(payload["data"][0]["predicate"], {})
+        self.assertEqual(
+            payload["data"][0]["invalid_reason"],
+            "predicate JSON is invalid",
+        )
+
+        payload, code = _run(
+            data_root,
+            "transfers",
+            "rules",
+            "enable",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Swap",
+            "--rule-id",
+            rule_id,
+        )
+        self.assertNotEqual(code, 0, payload)
+        self.assertEqual(payload["error"]["code"], "validation")
+        self.assertIn("cannot be enabled", payload["error"]["message"])
+
+        payload, code = _run(
+            data_root, "transfers", "rules", "apply",
+            "--workspace", "Main", "--profile", "Swap",
+            "--dry-run",
+        )
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["data"]["summary"]["count"], 0)
 
     def test_tax_summary_csv_surfaces_swap_fee_columns(self):
         data_root = self._fresh_root("tax-summary-fees")

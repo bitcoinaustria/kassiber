@@ -9,6 +9,8 @@ exercise the full algorithm end-to-end.
 import json
 import inspect
 import hashlib
+import os
+import time
 import unittest
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -221,8 +223,28 @@ class DefaultKindTests(unittest.TestCase):
             KIND_PEG_IN,
         )
 
+    def test_bitcoin_asset_aliases_use_canonical_routes(self):
+        self.assertEqual(
+            default_kind_for("XBT", "LBTC", "descriptor", "descriptor"),
+            KIND_PEG_IN,
+        )
+        self.assertEqual(
+            default_kind_for("XXBT", "BTC", "descriptor", "lnd"),
+            KIND_SUBMARINE_SWAP,
+        )
+
     def test_unknown_shape_falls_back_to_manual(self):
         self.assertEqual(default_kind_for("BTC", "BTC", "descriptor", "descriptor"), KIND_MANUAL)
+
+    def test_non_bitcoin_asset_does_not_infer_a_lightning_swap(self):
+        self.assertEqual(
+            default_kind_for("ETH", "BTC", "phoenix", "descriptor"),
+            KIND_MANUAL,
+        )
+        self.assertEqual(
+            default_kind_for("BTC", "USDT", "descriptor", "lnd"),
+            KIND_MANUAL,
+        )
 
 
 class DefaultPolicyTests(unittest.TestCase):
@@ -273,14 +295,16 @@ class DefaultPolicyTests(unittest.TestCase):
             wallet_id="B",
             wallet_kind="custom",
             payment_hash=_PAY_HASH,
-            payment_hash_source="chain_script_unique_outpoint",
+            payment_hash_source="importer",
             direction="inbound",
             asset="USDT",
+            raw_json={"chain": "bitcoin", "network": "main"},
         )
 
         candidates = suggest_swap_candidates([out, inbound])
 
         self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0].method, METHOD_PAYMENT_HASH)
         self.assertEqual(candidates[0].default_policy, POLICY_TAXABLE)
         self.assertEqual(
             recommended_pair_policy(
@@ -1472,6 +1496,53 @@ class HeuristicMatchTests(unittest.TestCase):
         self.assertEqual(candidates[0].method, METHOD_HEURISTIC)
         self.assertEqual(candidates[0].default_kind, KIND_SUBMARINE_SWAP)
 
+    def test_bitcoin_alias_heuristic_preserves_stored_asset_codes(self):
+        out = _row(
+            id="chain-lockup",
+            wallet_id="chain",
+            wallet_kind="descriptor",
+            direction="outbound",
+            asset="XBT",
+            amount=100_000_000,
+        )
+        inbound = _row(
+            id="lightning-settlement",
+            wallet_id="node",
+            wallet_kind="lnd",
+            direction="inbound",
+            asset="BTC",
+            occurred_at="2026-03-14T17:32:00Z",
+            amount=99_500_000,
+        )
+
+        candidate = suggest_swap_candidates([out, inbound])[0]
+
+        self.assertEqual(candidate.method, METHOD_HEURISTIC)
+        self.assertEqual(candidate.default_kind, KIND_SUBMARINE_SWAP)
+        self.assertEqual(candidate.default_policy, POLICY_CARRYING_VALUE)
+        self.assertEqual((candidate.out_asset, candidate.in_asset), ("XBT", "BTC"))
+
+    def test_non_bitcoin_cross_asset_lightning_shape_is_not_a_heuristic_candidate(self):
+        out = _row(
+            id="unrelated-asset-out",
+            wallet_id="exchange",
+            wallet_kind="descriptor",
+            direction="outbound",
+            asset="ETH",
+            amount=100_000_000,
+        )
+        inbound = _row(
+            id="lightning-in",
+            wallet_id="node",
+            wallet_kind="lnd",
+            direction="inbound",
+            asset="BTC",
+            occurred_at="2026-03-14T17:32:00Z",
+            amount=99_500_000,
+        )
+
+        self.assertEqual(suggest_swap_candidates([out, inbound]), [])
+
     def test_same_txid_cross_asset_not_treated_as_self_transfer(self):
         out = _row(
             id="btc-out",
@@ -1633,6 +1704,41 @@ class HeuristicMatchTests(unittest.TestCase):
             suggest_swap_candidates([out, inbound], time_window_seconds=24 * 3600),
             [],
         )
+
+    @unittest.skipUnless(hasattr(time, "tzset"), "tzset required")
+    def test_mixed_naive_and_utc_timestamps_use_utc_semantics(self):
+        previous_tz = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "America/Los_Angeles"
+            time.tzset()
+            out = _row(
+                id="o",
+                wallet_id="A",
+                direction="outbound",
+                asset="LBTC",
+                occurred_at="2026-03-14T00:00:00Z",
+            )
+            inbound = _row(
+                id="i",
+                wallet_id="B",
+                direction="inbound",
+                asset="BTC",
+                occurred_at="2026-03-15T00:00:00",
+                amount=99_500_000_000,
+            )
+            candidates = suggest_swap_candidates(
+                [out, inbound],
+                time_window_seconds=24 * 3600,
+            )
+            self.assertEqual(len(candidates), 1)
+            self.assertEqual(candidates[0].confidence, CONFIDENCE_STRONG)
+            self.assertEqual(candidates[0].method, METHOD_HEURISTIC)
+        finally:
+            if previous_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = previous_tz
+            time.tzset()
 
     def test_inbound_larger_than_outbound_rejected(self):
         out = _row(id="o", wallet_id="A", direction="outbound", amount=100, asset="LBTC")
@@ -1963,6 +2069,31 @@ class PairAndDismissalSuppressionTests(unittest.TestCase):
             now_iso="2026-06-01T00:00:00Z",
         )
         self.assertEqual(len(candidates), 1)
+
+    @unittest.skipUnless(hasattr(time, "tzset"), "tzset required")
+    def test_naive_dismissal_now_uses_utc_semantics(self):
+        previous_tz = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "America/Los_Angeles"
+            time.tzset()
+            candidates = suggest_swap_candidates(
+                self._legs(),
+                dismissals=[
+                    {
+                        "out_transaction_id": "o",
+                        "in_transaction_id": "i",
+                        "expires_at": "2026-06-01T01:00:00Z",
+                    }
+                ],
+                now_iso="2026-06-01T00:30:00",
+            )
+            self.assertEqual(candidates, [])
+        finally:
+            if previous_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = previous_tz
+            time.tzset()
 
     def test_dismissed_exact_link_does_not_consume_leg_before_heuristic(self):
         out, exact_in = self._legs()

@@ -27,6 +27,7 @@ from ..ownership_policy_epochs import (
     roll_wallet_policy_epoch,
 )
 from ..repo import invalidate_journals
+from ..wallets import wallet_freshness_source_types
 from .bundle import (
     BUNDLE_MANIFEST_DOMAIN,
     MAX_SYNC_SEQUENCE,
@@ -1330,15 +1331,26 @@ def _apply_row_upsert(
                 str(prior_wallet["id"]),
                 commit=False,
             )
-            core_freshness.reset_source_checkpoint(
-                conn,
-                str(prior_wallet["profile_id"]),
-                core_freshness.source_key(
-                    core_freshness.SOURCE_ONCHAIN,
-                    str(prior_wallet["id"]),
-                ),
-                stale_reason="wallet_config_changed",
+            onchain_source_key = core_freshness.source_key(
+                core_freshness.SOURCE_ONCHAIN,
+                str(prior_wallet["id"]),
             )
+            if core_freshness.SOURCE_ONCHAIN in wallet_freshness_source_types(
+                str(actual["kind"]),
+                dict(updated_config),
+            ):
+                core_freshness.reset_source_checkpoint(
+                    conn,
+                    str(prior_wallet["profile_id"]),
+                    onchain_source_key,
+                    stale_reason="wallet_config_changed",
+                )
+            else:
+                core_freshness.delete_source_records(
+                    conn,
+                    str(prior_wallet["profile_id"]),
+                    [onchain_source_key],
+                )
     for field, value in merged.items():
         winner = winning_events.get(field, event)
         _write_field_state(
@@ -1489,6 +1501,19 @@ def _apply_row_delete(conn, *, book, event: Mapping[str, Any]) -> tuple[bool, in
             )
         else:
             conn.execute(f"DELETE FROM {spec.table} WHERE {where}", local_pk)
+            if spec.table == "wallets":
+                core_freshness.delete_source_records(
+                    conn,
+                    str(book["profile_id"]),
+                    [
+                        core_freshness.source_key(source_type, str(local_pk[0]))
+                        for source_type in (
+                            core_freshness.SOURCE_ONCHAIN,
+                            core_freshness.SOURCE_BTCPAY_WALLET,
+                            core_freshness.SOURCE_BTCPAY_PROVENANCE,
+                        )
+                    ],
+                )
     _write_field_state(
         conn,
         profile_id=book["profile_id"],
