@@ -1065,6 +1065,14 @@ def compile_custody_interpreters(
     for blocked in derivation_blocks:
         blocked_row = _field(blocked, "row") or {}
         blocked_id = _row_id(blocked_row)
+        if blocked_id in excluded:
+            # An active reviewed component already authored this row's custody.
+            # Re-deriving and re-blocking it makes the review powerless: the
+            # block propagates over the reviewed MOVE in custody_tax_projection,
+            # and nothing the user can author will ever clear it. `excluded`
+            # already suppresses pair claims, native audits, privacy blockers and
+            # gap discovery; the derivation blocks were the one path it missed.
+            continue
         reason = str(
             _field(blocked, "reason") or "ownership_transfer_unresolved"
         )
