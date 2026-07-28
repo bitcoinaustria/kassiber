@@ -105,6 +105,12 @@ CORE_TOOL_NAMES = frozenset(
         "ui.wallets.sync", "ui.journals.process", "ui.maintenance.run",
         "ui.transfers.suggest", "ui.transfers.review_context",
         "ui.transfers.list", "ui.transfers.rules.list",
+        # Natural-language pairing needs a write path, or the assistant can
+        # analyse a review queue and never act on it. Both still require per-call
+        # consent, and a pair is reversible through ui.transfers.unpair (a
+        # soft-delete that keeps the audit row). `bulk_pair` is deliberately kept
+        # out of the core profile: one approval must not sweep a whole queue.
+        "ui.transfers.pair", "ui.transfers.dismiss",
         "ui.custody.coverage.snapshot",
         "ui.custody.lineage.snapshot",
         "ui.custody.gaps.list", "ui.custody.gaps.review_context",
@@ -2170,33 +2176,85 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.transfers.pair",
         description=(
-            "Pair one outbound + one inbound transaction after explicit "
-            "consent. Use kind='coinjoin' or kind='whirlpool' for a reviewed "
-            "same-asset Coinjoin ownership hop. Computes swap_fee_msat at pair "
-            "time for swap-like pairs and invalidates the journal so the next "
-            "report read reflects the change."
+            "Pair one outbound + one inbound transaction after explicit consent. "
+            "Computes swap_fee_msat at pair time for swap-like pairs and "
+            "invalidates the journal so the next report read reflects the change. "
+            "A pair is undoable, but ui.transfers.unpair may not be available in "
+            "the current tool profile — do not promise the user that you can undo "
+            "it yourself; they can always unpair from the desktop review screen.\n"
+            "BEFORE asking for consent, check conflict_size on the candidate. "
+            "Unlike ui.transfers.bulk_pair — which refuses any conflicted "
+            "candidate — this tool will pair one member of a conflict cluster, "
+            "which consumes both legs and makes the competing candidates "
+            "impossible to author afterwards. If conflict_size > 1, list the "
+            "competing candidates to the user and let them choose; never pick for "
+            "them. Prefer the out_id/in_id that "
+            "ui.transfers.review_context.suggested_action already supplies.\n"
+            "This asserts custody meaning, so do not pair when either leg's "
+            "counterparty is external: use ui.wallets.identify to confirm both "
+            "legs are the user's before pairing as a self-transfer or "
+            "carrying-value swap. Call read_skill_reference('swap-matching') if "
+            "the review policy is unclear."
         ),
         parameters={
             "type": "object",
             "additionalProperties": False,
             "required": ["tx_out", "tx_in"],
             "properties": {
-                "tx_out": {"type": "string", "description": "Outbound transaction id."},
-                "tx_in": {"type": "string", "description": "Inbound transaction id."},
+                "tx_out": {
+                    "type": "string",
+                    "description": (
+                        "Outbound leg. Prefer the internal transaction id (the "
+                        "`out_id` from suggest/review_context). A raw on-chain "
+                        "txid also resolves via external_id, but fails with "
+                        "ambiguous_reference when several rows share it."
+                    ),
+                },
+                "tx_in": {
+                    "type": "string",
+                    "description": (
+                        "Inbound leg. Same resolution rules as tx_out; prefer the "
+                        "`in_id` from suggest/review_context."
+                    ),
+                },
                 "kind": {
                     "type": "string",
                     "enum": list(_TRANSFER_PAIR_KINDS),
+                    "description": (
+                        "What kind of movement this is. Default 'manual'. Use "
+                        "'coinjoin' or 'whirlpool' for a reviewed same-asset "
+                        "privacy hop (these are the only kinds that may reuse a "
+                        "transaction leg across pairs); 'peg-in' BTC->L-BTC and "
+                        "'peg-out' L-BTC->BTC; 'submarine-swap' chain->Lightning "
+                        "and 'reverse-submarine-swap' Lightning->chain; "
+                        "'chain-swap' between two chains; 'swap-refund' when a "
+                        "failed swap returned the funds. Take the candidate's "
+                        "default_kind unless the user says otherwise."
+                    ),
                 },
                 "policy": {
                     "type": "string",
                     "enum": ["carrying-value", "taxable"],
+                    "description": (
+                        "Tax treatment, so do not guess it. 'carrying-value' means "
+                        "the basis carries across the move and nothing is realized "
+                        "— correct for a self-transfer and for an enabled "
+                        "BTC/L-BTC rail change. 'taxable' means the move realizes "
+                        "a disposal. Take the candidate's default_policy unless "
+                        "the user overrides it, and say which one you used."
+                    ),
                 },
                 "notes": {"type": "string"},
                 "out_amount": {
                     "type": "string",
                     "description": (
-                        "Optional BTC amount from the outbound used by the cross-asset "
-                        "swap; the remainder can resolve as a same-asset self-transfer."
+                        "Optional partial amount of the outbound consumed by this "
+                        "pair; the remainder can resolve as a same-asset "
+                        "self-transfer. UNIT WARNING: this is a decimal BTC string "
+                        "(e.g. '0.05'), the only non-msat amount in this surface. "
+                        "Every amount you read from a candidate is integer "
+                        "millisatoshi — divide by 100,000,000,000 before putting it "
+                        "here. Omit it to consume the whole outbound."
                     ),
                 },
             },

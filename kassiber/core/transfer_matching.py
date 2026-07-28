@@ -173,6 +173,16 @@ class SwapCandidate:
     evidence_send_amount_msat: Optional[int] = None
     evidence_receive_amount_msat: Optional[int] = None
 
+    def __post_init__(self) -> None:
+        # `evidence_conflicts` is the first non-scalar field here, and the
+        # ownership-review projection round-trips candidates through JSON, so it
+        # comes back as a list. Normalize at the dataclass boundary rather than in
+        # each loader: every construction path then yields one comparable shape.
+        if not isinstance(self.evidence_conflicts, tuple):
+            object.__setattr__(
+                self, "evidence_conflicts", tuple(self.evidence_conflicts or ())
+            )
+
 
 @dataclass(frozen=True)
 class SwapFeeComponents:

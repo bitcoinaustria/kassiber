@@ -846,6 +846,32 @@ supports `coinjoin` and `whirlpool` kinds for user-reviewed same-asset
 ownership hops, including reviewed one-to-many / many-to-one same-asset links.
 Cross-asset and layer-transition links remain one-to-one. The AI may propose
 these pairings, but the write still requires explicit user consent.
+
+Natural-language pairing ("pair the Phoenix payment with the Liquid receipt") is
+supported on the `core` tool profile through `ui_transfers_pair` and
+`ui_transfers_dismiss` only. `ui_transfers_bulk_pair` is deliberately excluded
+from that profile so a single consent can never sweep a whole review queue, and
+`ui_transfers_unpair` is excluded too — the assistant is told not to promise an
+undo it may not be able to perform, since the user can always unpair from the
+desktop review screen.
+
+Three properties of `ui_transfers_pair` are documented on the tool because the
+model would otherwise have to guess them, and each guess is a real error class:
+
+- `policy` decides tax treatment (`carrying-value` carries basis across the move
+  and realizes nothing; `taxable` realizes a disposal). Both values now carry an
+  explanation and the model is told to take the candidate's `default_policy` and
+  state which one it used rather than inferring.
+- `out_amount` is a decimal **BTC** string — the only non-msat amount in the AI
+  surface, next to `out_amount_msat` fields the model has just read. The
+  parameter doc carries an explicit unit warning.
+- unlike `ui_transfers_bulk_pair`, which refuses any candidate with
+  `conflict_size > 1`, this tool *will* pair one member of a conflict cluster and
+  thereby consume both legs, making the competing candidates unauthorable. The
+  description requires the model to check `conflict_size`, list the competing
+  candidates, and let the user choose. Blocking it outright would break the
+  desktop flow, where the human resolves the cluster by choosing; disclosure at
+  the consent surface is the remaining gap.
 The desktop/CLI custody-component resolver handles 1:N, N:1, N:M, multi-hop,
 and missing-wallet histories atomically; those authored component mutations are
 not generic AI pairing shortcuts.

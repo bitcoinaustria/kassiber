@@ -32,6 +32,7 @@ from kassiber.core.transfer_matching import (
     METHOD_OWNERSHIP_GRAPH,
     POLICY_CARRYING_VALUE,
     POLICY_TAXABLE,
+    SwapCandidate,
     compute_swap_fee,
     compute_swap_fee_components,
     default_kind_for,
@@ -954,6 +955,30 @@ class ProviderEvidenceExactMatchTests(unittest.TestCase):
         # that denied exact confidence so a reviewer (and the assistant) can say
         # why deterministic-looking provider metadata was not trusted.
         self.assertIn("route", candidate.evidence_conflicts)
+
+    def test_evidence_conflicts_survives_a_json_round_trip_as_a_tuple(self):
+        """The ownership-review projection persists candidates as JSON.
+
+        `evidence_conflicts` is the first non-scalar field on SwapCandidate, so a
+        tuple returns from storage as a list. Normalizing in `__post_init__` keeps
+        one comparable shape for every construction path — without it, a reloaded
+        card compares unequal to the one that was stored.
+        """
+        import dataclasses
+        import json as _json
+
+        out = _row(id="out", wallet_id="a", direction="outbound", amount=100_000_000)
+        inbound = _row(id="in", wallet_id="b", direction="inbound", amount=99_000_000)
+        original = dataclasses.replace(
+            suggest_swap_candidates([out, inbound])[0],
+            evidence_conflicts=("route", "amount"),
+        )
+        reloaded = SwapCandidate(
+            **_json.loads(_json.dumps(dataclasses.asdict(original)))
+        )
+
+        self.assertIsInstance(reloaded.evidence_conflicts, tuple)
+        self.assertEqual(dataclasses.asdict(reloaded), dataclasses.asdict(original))
 
     def test_noncontradictory_provider_evidence_reports_no_conflicts(self):
         """The negative control: agreeing metadata names no contradiction.
