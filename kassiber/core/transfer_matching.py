@@ -60,7 +60,7 @@ from datetime import datetime, timezone
 from typing import Iterable, Mapping, Optional, Sequence
 
 from ..asset_codes import canonical_bitcoin_asset
-from ..time_utils import parse_iso_datetime_or_none
+from ..time_utils import UNKNOWN_OCCURRED_AT, parse_iso_datetime_or_none
 from ..transfers import (
     CHAIN_INFERENCE_WALLET_KINDS,
     LIGHTNING_INFERENCE_WALLET_KINDS,
@@ -496,6 +496,23 @@ def _seconds_or_now(now_iso: Optional[str]) -> float:
 def _iso_to_seconds(value: Optional[str]) -> Optional[float]:
     parsed = parse_iso_datetime_or_none(value)
     return None if parsed is None else parsed.timestamp()
+
+
+def _occurred_at_seconds(value: Optional[str]) -> Optional[float]:
+    """Seconds for a *usable* event time, ``None`` when there is none.
+
+    ``UNKNOWN_OCCURRED_AT`` is a perfectly parseable RFC3339 string, so the
+    plain parse treats it as a real instant at epoch 0. Two rows that merely
+    lack a timestamp then land on the identical key and look zero seconds apart
+    inside any window. No Bitcoin event predates 2009, so the placeholder can
+    only ever mean "unknown" — never a real proximity signal. Kept separate from
+    :func:`_iso_to_seconds` because dismissal expiry gives ``None`` the opposite
+    meaning ("never expires").
+    """
+
+    if str(value or "").strip() == UNKNOWN_OCCURRED_AT:
+        return None
+    return _iso_to_seconds(value)
 
 
 def _active_paired_ids(pair_records: Iterable[Mapping]) -> set[str]:
@@ -1318,7 +1335,7 @@ def _match_heuristic(
     """
     in_entries: list[tuple[float, Mapping, int, str | None]] = []
     for in_row in in_rows:
-        in_seconds = _iso_to_seconds(_record_get(in_row, "occurred_at"))
+        in_seconds = _occurred_at_seconds(_record_get(in_row, "occurred_at"))
         if in_seconds is None:
             continue
         in_amount = int(_record_get(in_row, "amount") or 0)
@@ -1335,7 +1352,7 @@ def _match_heuristic(
 
     pairs: list[tuple[Mapping, Mapping]] = []
     for out_row in out_rows:
-        out_seconds = _iso_to_seconds(_record_get(out_row, "occurred_at"))
+        out_seconds = _occurred_at_seconds(_record_get(out_row, "occurred_at"))
         if out_seconds is None:
             continue
         out_amount = int(_record_get(out_row, "amount") or 0)

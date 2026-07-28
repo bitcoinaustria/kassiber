@@ -41,6 +41,7 @@ from kassiber.core.transfer_matching import (
     suggest_swap_candidates,
 )
 from kassiber.tax_policy import recommended_pair_policy
+from kassiber.time_utils import UNKNOWN_OCCURRED_AT
 
 
 def _row(**overrides):
@@ -1438,6 +1439,31 @@ class HeuristicMatchTests(unittest.TestCase):
             asset="BTC",
             occurred_at="2023-02-01T02:15:00Z",
             amount=14_964_523_000,
+        )
+
+        self.assertEqual(suggest_swap_candidates([out, inbound]), [])
+
+    def test_unknown_occurred_at_placeholders_are_not_time_proximity(self):
+        """Two timestamp-less rows are not "zero seconds apart".
+
+        Regression: `UNKNOWN_OCCURRED_AT` is a parseable RFC3339 string, so it
+        was read as a real instant at epoch 0. Any two rows merely lacking a
+        timestamp landed on the identical bisect key and matched inside every
+        window. Adapters do write the placeholder (cln, sync_backends).
+        """
+        out = _row(
+            id="no-time-out",
+            wallet_id="cold",
+            direction="outbound",
+            amount=15_025_943_000,
+            occurred_at=UNKNOWN_OCCURRED_AT,
+        )
+        inbound = _row(
+            id="no-time-in",
+            wallet_id="hot",
+            direction="inbound",
+            amount=14_964_523_000,
+            occurred_at=UNKNOWN_OCCURRED_AT,
         )
 
         self.assertEqual(suggest_swap_candidates([out, inbound]), [])
