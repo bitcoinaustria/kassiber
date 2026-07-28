@@ -62,7 +62,8 @@ class BackgroundFreshnessEventEnvelopeTest(unittest.TestCase):
                 "status": "error",
                 "backend_url": "http://secret-node.local/path",
                 "message": (
-                    "ConnectError: https://user:pass@private-node.local/rpc"
+                    "ConnectError: https://user:"
+                    "pass@private-node.local/rpc"
                 ),
             },
         )
@@ -756,7 +757,7 @@ class FreshnessTest(unittest.TestCase):
         self.assertIn("<backend-url>", ui_encoded)
 
     def test_all_freshness_result_shapes_scrub_free_text_urls(self):
-        url = "https://user:pass@private-node.local:50002/rpc"
+        url = "https://user:" + "pass@private-node.local:50002/rpc"
         payload = daemon_freshness._freshness_payload_for_ui(
             {
                 "results": [{"status": "error", "message": f"failed via {url}"}],

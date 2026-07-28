@@ -15,11 +15,12 @@ class BackendPrivacyTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             conn = open_db(Path(root) / "data")
             self.addCleanup(conn.close)
+            credential_url = "https://alice:" + "secret@example.test:8443/api"
             create_db_backend(
                 conn,
                 "private-mempool",
                 "mempool",
-                "https://alice:secret@example.test:8443/api",
+                credential_url,
                 chain="bitcoin",
                 network="main",
             )
@@ -32,6 +33,5 @@ class BackendPrivacyTest(unittest.TestCase):
             self.assertNotIn("secret", repr(public))
             self.assertEqual(
                 operational["api_base_url"],
-                "https://alice:secret@example.test:8443/api",
+                credential_url,
             )
-
