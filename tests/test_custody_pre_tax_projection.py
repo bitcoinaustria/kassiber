@@ -15,6 +15,7 @@ from kassiber.core.custody_tax_projection import compile_finalized_tax_projectio
 from kassiber.core.custody_evidence import build_canonical_quantity_input, enriched_quantity_rows
 from kassiber.core.custody_quantity import (
     CUSTODY_SUSPENSE,
+    INTERNAL_VERIFIED,
     ClaimPriority,
     QuantityClaim,
     QuantitySlice,
@@ -587,7 +588,17 @@ def test_inexact_whirlpool_coordinator_fee_keeps_its_group_moves():
 
     compiled, state = _whirlpool_tx0_compilation(fee_attribution="unknown")
 
-    # The collision is only possible because both priorities share one bundle.
+    # Behaviour first, because that is what the fix is for: both the premix and
+    # badbank receipts must still be covered by an internal MOVE decision...
+    decisions = state.projection.decisions
+    internal = [d for d in decisions if str(d.state) == INTERNAL_VERIFIED]
+    assert len(internal) == 2, [str(d.state) for d in decisions]
+    # ...and the coordinator fee stays explicit suspense rather than silently
+    # becoming a disposal, so the report barrier survives without a basis edge.
+    assert [str(d.state) for d in decisions].count(CUSTODY_SUSPENSE) == 1
+
+    # Then the mechanism, so a future regression is diagnosable and not just red:
+    # the collision was only possible because both priorities shared one bundle.
     assert len({claim.priority for claim in compiled.claims}) > 1
     assert not [
         claim

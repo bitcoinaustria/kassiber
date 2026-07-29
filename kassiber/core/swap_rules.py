@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 from ..util import parse_bool
 from .custody_review_terms import TRANSFER_PAIR_KINDS, TRANSFER_PAIR_POLICIES

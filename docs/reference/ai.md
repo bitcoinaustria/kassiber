@@ -848,12 +848,20 @@ Cross-asset and layer-transition links remain one-to-one. The AI may propose
 these pairings, but the write still requires explicit user consent.
 
 Natural-language pairing ("pair the Phoenix payment with the Liquid receipt") is
-supported on the `core` tool profile through `ui_transfers_pair` and
-`ui_transfers_dismiss` only. `ui_transfers_bulk_pair` is deliberately excluded
-from that profile so a single consent can never sweep a whole review queue, and
-`ui_transfers_unpair` is excluded too — the assistant is told not to promise an
-undo it may not be able to perform, since the user can always unpair from the
-desktop review screen.
+supported on the `core` tool profile through `ui_transfers_pair` only.
+`ui_transfers_bulk_pair` is excluded so a single consent can never sweep a whole
+review queue, and `ui_transfers_unpair` is excluded too — the assistant is told
+not to promise an undo it may not be able to perform, since the user can always
+unpair from the desktop review screen.
+
+`ui_transfers_dismiss` is excluded on stronger grounds: it is the one review-queue
+write with neither a read-back nor an undo. `transaction_pair_dismissals` has a
+single upsert and no `DELETE` anywhere in the codebase, no list/read daemon kind
+and no AI tool, and the desktop undo path only calls `unpair`. With
+`expires_in_days: 0` the matcher would stop offering a candidate permanently while
+neither the assistant nor the user could discover that the dismissal exists — and
+`ui_transfers_suggest` explicitly documents that dismissed legs are silently
+absent. It should join the profile once a dismissal read path exists.
 
 Three properties of `ui_transfers_pair` are documented on the tool because the
 model would otherwise have to guess them, and each guess is a real error class:

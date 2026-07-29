@@ -106,11 +106,18 @@ CORE_TOOL_NAMES = frozenset(
         "ui.transfers.suggest", "ui.transfers.review_context",
         "ui.transfers.list", "ui.transfers.rules.list",
         # Natural-language pairing needs a write path, or the assistant can
-        # analyse a review queue and never act on it. Both still require per-call
-        # consent, and a pair is reversible through ui.transfers.unpair (a
-        # soft-delete that keeps the audit row). `bulk_pair` is deliberately kept
-        # out of the core profile: one approval must not sweep a whole queue.
-        "ui.transfers.pair", "ui.transfers.dismiss",
+        # analyse a review queue and never act on it. It still requires per-call
+        # consent, and a pair is undoable (ui.transfers.unpair soft-deletes and
+        # keeps the audit row; the desktop review screen exposes it).
+        #
+        # `bulk_pair` is deliberately kept out: one approval must not sweep a
+        # whole queue. `dismiss` is kept out too, on stronger grounds — it is the
+        # one write with neither a read-back nor an undo. transaction_pair_dismissals
+        # has a single upsert and no DELETE anywhere, no list/read daemon kind and
+        # no AI tool, so after dismissing, neither the assistant nor the user can
+        # discover that the dismissal exists — while the matcher silently stops
+        # offering the pair. Add it once a read path exists.
+        "ui.transfers.pair",
         "ui.custody.coverage.snapshot",
         "ui.custody.lineage.snapshot",
         "ui.custody.gaps.list", "ui.custody.gaps.review_context",
@@ -240,7 +247,12 @@ _TRANSFER_BAND_PARAMETERS: dict[str, Any] = {
     },
     "fee_sats_min": {
         "type": "integer",
-        "minimum": 0,
+        # Minimum 1, not 0: every handler reads this as
+        # `int(args.get("fee_sats_min") or DEFAULT_FEE_SATS_MIN)`, so a falsy 0
+        # silently becomes 2500 and the default band would come back reported as
+        # if the floor had been removed. The sibling params avoid the same trap
+        # via minimum 1 / exclusiveMinimum 0.
+        "minimum": 1,
         "description": (
             "Absolute floor of the fee tolerance in sats, applied when the "
             "percentage falls below it. Default 2500. Note this floor means very "
