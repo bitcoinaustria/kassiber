@@ -9071,6 +9071,13 @@ def _onboarding_complete_payload(
     ctx: "DaemonContext",
     args: dict[str, Any],
 ) -> dict[str, Any]:
+    if ctx.conn.execute("SELECT 1 FROM workspaces LIMIT 1").fetchone():
+        raise AppError(
+            "Onboarding has already been completed.",
+            code="conflict",
+            hint="Use Books and Backend settings to add or change an existing installation.",
+            retryable=False,
+        )
     workspace_label = _optional_string_arg(args, "workspace_label")
     profile_label = _optional_string_arg(args, "profile_label")
     if not workspace_label:
@@ -10950,12 +10957,6 @@ def _wallet_config_from_json(value: str | None) -> dict[str, Any]:
     return decoded if isinstance(decoded, dict) else {}
 
 
-def _wallet_payload_from_row(row: sqlite3.Row) -> dict[str, Any]:
-    payload = dict(row)
-    payload["config"] = _wallet_config_from_json(payload.pop("config_json", None))
-    return payload
-
-
 def _btcpay_discovery_existing_routes(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -11040,7 +11041,7 @@ def _create_or_reuse_btcpay_wallet_source(
         payment_method_id=payment_method_id,
     )
     if existing_by_route is not None:
-        return _wallet_payload_from_row(existing_by_route), True
+        return core_wallets.wallet_row_to_dict(existing_by_route), True
     existing_by_label = conn.execute(
         "SELECT * FROM wallets WHERE profile_id = ? AND label = ?",
         (profile["id"], label),

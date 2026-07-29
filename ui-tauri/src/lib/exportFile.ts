@@ -1,5 +1,4 @@
 import { canSaveExportedFiles, saveExportedFileAs } from "@/daemon/transport";
-import { saveFile } from "@/lib/filePicker";
 
 export interface SaveDaemonExportOptions {
   /** Absolute path of the file the daemon wrote into the managed exports dir. */
@@ -22,7 +21,7 @@ export interface SaveDaemonExportResult {
 /**
  * Offer to save a daemon-produced export to a user-chosen location.
  *
- * In the desktop app this opens a native save dialog and copies the managed
+ * In the desktop app the Rust command opens a native save dialog and copies the managed
  * export there; outside the desktop app (bridge) it is a no-op that
  * returns the managed path so callers can still surface it.
  */
@@ -33,14 +32,10 @@ export async function saveDaemonExport(
   if (!exportPath || !canSaveExportedFiles()) {
     return { savedPath: exportPath, copied: false };
   }
-  const destination = await saveFile({
-    title: options.title,
-    defaultPath: options.defaultName,
-    filters: options.filters,
-  });
-  if (!destination) return { savedPath: exportPath, copied: false };
-  const savedPath = await saveExportedFileAs(exportPath, destination);
-  return { savedPath, copied: true };
+  const savedPath = await saveExportedFileAs(exportPath);
+  return savedPath
+    ? { savedPath, copied: true }
+    : { savedPath: exportPath, copied: false };
 }
 
 export function exportBasename(path: string): string {

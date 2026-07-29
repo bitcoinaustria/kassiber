@@ -257,7 +257,8 @@
   },
   "deleteBackend": {
     "confirm": "Delete backend '{{name}}'?",
-    "walletWarning": "These wallets will have no backend and cannot sync until you add one back:\n- {{wallets}}"
+    "blockedTitle": "Backend is still in use",
+    "walletWarning": "Reassign these wallets to another backend before deleting it:\n- {{wallets}}"
   },
   "defaultBackend": {
     "updatedTitle": "Default backend updated",

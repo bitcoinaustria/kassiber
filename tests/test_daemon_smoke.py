@@ -4436,6 +4436,31 @@ class DaemonSmokeTest(unittest.TestCase):
                     ],
                 )
 
+                secret_values = {
+                    "descriptor": "wpkh(secret-descriptor)",
+                    "xpub": "secret-xpub",
+                    "blinding_key": "secret-blinding-key",
+                }
+                secret_conn = open_db(data_root)
+                try:
+                    wallet_row = secret_conn.execute(
+                        "SELECT id, config_json FROM wallets WHERE label = ?",
+                        ("BTCPay Account UI - Membership - BTC-CHAIN",),
+                    ).fetchone()
+                    self.assertIsNotNone(wallet_row)
+                    secret_config = json.loads(wallet_row["config_json"])
+                    secret_config.update(secret_values)
+                    secret_conn.execute(
+                        "UPDATE wallets SET config_json = ? WHERE id = ?",
+                        (
+                            json.dumps(secret_config, sort_keys=True),
+                            wallet_row["id"],
+                        ),
+                    )
+                    secret_conn.commit()
+                finally:
+                    secret_conn.close()
+
                 _write_payload(
                     proc,
                     {
@@ -4454,6 +4479,13 @@ class DaemonSmokeTest(unittest.TestCase):
                     account_setup_repeat["data"]["wallet_sources"][0]["label"],
                     "BTCPay Account UI - Membership - BTC-CHAIN",
                 )
+                reused_wallet = account_setup_repeat["data"]["wallet_sources"][0]
+                self.assertEqual(reused_wallet["config"]["descriptor"], "[redacted]")
+                self.assertEqual(reused_wallet["config"]["xpub"], "[redacted]")
+                self.assertNotIn("blinding_key", reused_wallet["config"])
+                serialized_repeat = json.dumps(account_setup_repeat, sort_keys=True)
+                for secret in secret_values.values():
+                    self.assertNotIn(secret, serialized_repeat)
                 self.assertEqual(
                     account_setup_repeat["data"]["account_routes"][0]["id"],
                     account_setup["data"]["account_routes"][0]["id"],
@@ -4703,6 +4735,92 @@ class DaemonSmokeTest(unittest.TestCase):
                 _write_payload(
                     proc,
                     {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+
+    def test_ui_onboarding_complete_cannot_replace_existing_backend(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-once-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "onboarding-first",
+                        "kind": "ui.onboarding.complete",
+                        "args": {
+                            "workspace_label": "Existing Books",
+                            "profile_label": "Existing Profile",
+                            "backend": {
+                                "name": "trusted-electrum",
+                                "kind": "electrum",
+                                "url": "ssl://trusted.example:50002",
+                            },
+                        },
+                    },
+                )
+                completed = _read_payload_timeout(proc)
+                self.assertEqual(completed["kind"], "ui.onboarding.complete")
+                self.assertEqual(completed["data"]["default_backend"], "trusted-electrum")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "onboarding-attacker",
+                        "kind": "ui.onboarding.complete",
+                        "args": {
+                            "workspace_label": "Attacker Books",
+                            "profile_label": "Attacker Profile",
+                            "backend": {
+                                "name": "attacker-electrum",
+                                "kind": "electrum",
+                                "url": "ssl://attacker.example:50002",
+                            },
+                        },
+                    },
+                )
+                rejected = _read_payload_timeout(proc)
+                self.assertEqual(rejected["kind"], "error")
+                self.assertEqual(rejected["error"]["code"], "conflict")
+
+                _write_payload(
+                    proc,
+                    {"request_id": "profiles-after-replay", "kind": "ui.profiles.snapshot"},
+                )
+                profiles = _read_payload_timeout(proc)
+                self.assertEqual(len(profiles["data"]["workspaces"]), 1)
+                self.assertEqual(
+                    profiles["data"]["workspaces"][0]["name"],
+                    "Existing Books",
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "backends-after-replay",
+                        "kind": "ui.backends.settings.list",
+                    },
+                )
+                backends = _read_payload_timeout(proc)
+                self.assertEqual(
+                    backends["data"]["summary"]["default_backend"],
+                    "trusted-electrum",
+                )
+                names = {row["name"] for row in backends["data"]["backends"]}
+                self.assertIn("trusted-electrum", names)
+                self.assertNotIn("attacker-electrum", names)
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-after-replay", "kind": "daemon.shutdown"},
                 )
                 self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
                 code, stderr = _close_daemon(proc)

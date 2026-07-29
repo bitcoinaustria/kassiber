@@ -263,15 +263,13 @@ def migrate_dotenv_credentials(
         backend_name = finding["backend"]
         field = finding["field"]
         value = finding.get("value")
+        public_finding = {
+            key: entry_value
+            for key, entry_value in finding.items()
+            if key != "value"
+        }
         if value is None:
-            skipped.append(
-                {
-                    key: entry_value
-                    for key, entry_value in finding.items()
-                    if key != "value"
-                }
-                | {"reason": "value_missing"}
-            )
+            skipped.append(public_finding | {"reason": "value_missing"})
             continue
 
         try:
@@ -283,7 +281,7 @@ def migrate_dotenv_credentials(
 
         if existing is None:
             if not create_missing_backends or not fallback_kind or not fallback_url:
-                skipped.append({**finding, "reason": "backend_not_in_db"})
+                skipped.append({**public_finding, "reason": "backend_not_in_db"})
                 continue
             create_db_backend(
                 conn,
@@ -298,11 +296,6 @@ def migrate_dotenv_credentials(
             updates = {field: value}
 
         update_db_backend(conn, backend_name, updates)
-        public_finding = {
-            key: entry_value
-            for key, entry_value in finding.items()
-            if key != "value"
-        }
         migrated.append({**public_finding, "applied": True})
         drop_linenos.add(finding["lineno"])
 

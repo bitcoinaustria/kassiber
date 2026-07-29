@@ -71,6 +71,7 @@ from kassiber.secrets.sqlcipher import (
     escape_passphrase,
     looks_like_plaintext_sqlite,
     open_encrypted,
+    require_sqlcipher,
     sqlcipher_available,
 )
 
@@ -384,6 +385,47 @@ class OpenDbEncryptedTests(unittest.TestCase):
 
 
 class MigrationTests(unittest.TestCase):
+    def test_active_wal_reader_blocks_migration_without_replacing_plaintext(self):
+        with tempfile.TemporaryDirectory() as root:
+            db_path = Path(root) / "kassiber.sqlite3"
+            writer = require_sqlcipher().connect(str(db_path))
+            reader = None
+            try:
+                self.assertEqual(
+                    writer.execute("PRAGMA journal_mode=WAL").fetchone()[0].lower(),
+                    "wal",
+                )
+                writer.execute("CREATE TABLE x(a)")
+                writer.execute("INSERT INTO x VALUES('before-reader')")
+                writer.commit()
+
+                reader = require_sqlcipher().connect(str(db_path))
+                reader.execute("BEGIN")
+                self.assertEqual(
+                    reader.execute("SELECT count(*) FROM x").fetchone()[0],
+                    1,
+                )
+                writer.execute("INSERT INTO x VALUES('after-reader')")
+                writer.commit()
+                self.assertTrue(Path(f"{db_path}-wal").exists())
+
+                with self.assertRaises(AppError) as raised:
+                    migrate_plaintext_to_encrypted(db_path, "busy-passphrase")
+
+                self.assertEqual(raised.exception.code, "database_busy")
+                self.assertTrue(raised.exception.retryable)
+                self.assertTrue(looks_like_plaintext_sqlite(db_path))
+                self.assertFalse(
+                    (Path(root) / "kassiber.encrypted.sqlite3").exists()
+                )
+                self.assertFalse(
+                    (Path(root) / "kassiber.pre-encryption.sqlite3.bak").exists()
+                )
+            finally:
+                if reader is not None:
+                    reader.close()
+                writer.close()
+
     def test_round_trip_preserves_user_version(self):
         with tempfile.TemporaryDirectory() as root:
             db_path = Path(root) / "kassiber.sqlite3"
@@ -399,6 +441,8 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(result.integrity_check, "ok")
             self.assertTrue(result.credential_marker_clean)
             self.assertTrue(result.backup_path.exists())
+            self.assertFalse(Path(f"{db_path}-wal").exists())
+            self.assertFalse(Path(f"{db_path}-shm").exists())
 
             conn = open_encrypted(db_path, "weird 'pass\";rule")
             try:
@@ -1219,6 +1263,8 @@ class CredentialMigrationTests(unittest.TestCase):
             self.assertEqual(result["migrated"], [])
             self.assertEqual(len(result["skipped"]), 1)
             self.assertEqual(result["skipped"][0]["reason"], "backend_not_in_db")
+            self.assertNotIn("value", result["skipped"][0])
+            self.assertNotIn("tok-orphan", json.dumps(result, sort_keys=True))
             self.assertIn(
                 "KASSIBER_BACKEND_GHOST_TOKEN=tok-orphan",
                 env_file.read_text(encoding="utf-8"),

@@ -7,7 +7,6 @@ import { Wordmark } from "@/components/kb/Wordmark";
 import { LedgerStageBand } from "@/components/kb/shell/SidebarStageBackdrop";
 import { dispatchDaemonAuthRequired, useDaemon } from "@/daemon/client";
 import {
-  activateImportProject,
   canImportProjects,
   canUseTouchIdPassphraseUnlock,
   clearImportProject,
@@ -660,12 +659,11 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         return;
       }
       setDataMode("real");
-      const activated = await activateImportProject(picked.dataRoot);
       clearDaemonQueryCache();
-      setImportSelection(activated);
+      setImportSelection(picked);
       activatedImport = true;
-      if (!activated.encrypted) {
-        await unlockAndLoadImportedProfiles(activated, null);
+      if (!picked.encrypted) {
+        await unlockAndLoadImportedProfiles(picked, null);
       }
     })()
       .catch((error: unknown) => {

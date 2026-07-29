@@ -60,7 +60,6 @@ import {
   openExportedFile,
   saveExportedFileAs,
 } from "@/daemon/transport";
-import { saveFile } from "@/lib/filePicker";
 import {
   HANDOFF_EXPORT_MODES,
   NORMAL_HANDOFF_EXCLUSIONS,
@@ -236,42 +235,6 @@ interface ReportReadiness {
     label: string;
     href: ReportHref;
   };
-}
-
-function reportExportDefaultFilename(
-  format: ReportExportFormatId,
-  year: number,
-  austrian: boolean,
-) {
-  if (format === "transactions_xlsx") return "kassiber-transactions.xlsx";
-  if (format === "transactions_csv") return "kassiber-transactions.csv";
-  if (format === "audit_package") return `kassiber-audit-package-${year}`;
-  if (format === "summary_pdf") return `kassiber-summary-report-${year}.pdf`;
-  if (austrian) {
-    if (format === "pdf") return `kassiber-austrian-e1kv-${year}.pdf`;
-    if (format === "xlsx") return `kassiber-austrian-e1kv-${year}.xlsx`;
-    return `kassiber-austrian-e1kv-${year}-csv`;
-  }
-  if (format === "pdf") return "kassiber-report.pdf";
-  if (format === "xlsx") return "kassiber-report.xlsx";
-  return "kassiber-report.csv";
-}
-
-function reportExportSaveFilters(
-  format: ReportExportFormatId,
-  payload?: ReportExportResult,
-) {
-  if (format === "audit_package") return undefined;
-  if (payload?.format === "csv" && payload.files?.length) return undefined;
-  if (format === "transactions_xlsx") {
-    return [{ name: "Excel workbook", extensions: ["xlsx"] }];
-  }
-  if (format === "transactions_csv") return [{ name: "CSV", extensions: ["csv"] }];
-  if (format === "pdf" || format === "summary_pdf") {
-    return [{ name: "PDF report", extensions: ["pdf"] }];
-  }
-  if (format === "xlsx") return [{ name: "Excel workbook", extensions: ["xlsx"] }];
-  return [{ name: "CSV report", extensions: ["csv"] }];
 }
 
 function basename(path: string) {
@@ -581,25 +544,7 @@ function ReportsView({
         let savedPath = exportPath;
         if (exportPath && canSaveExportedFiles()) {
           try {
-            const destination = await saveFile({
-              title:
-                payload?.scope === "audit_package"
-                  ? "Save audit package"
-                  : isTransactionExport
-                    ? "Save transactions export"
-                  : payload?.format === "csv" && payload.files?.length
-                  ? "Save CSV bundle"
-                  : "Save report export",
-              defaultPath: reportExportDefaultFilename(
-                format,
-                exportYear,
-                activeProfileIsAustrian,
-              ),
-              filters: reportExportSaveFilters(format, payload),
-            });
-            if (destination) {
-              savedPath = await saveExportedFileAs(exportPath, destination);
-            }
+            savedPath = (await saveExportedFileAs(exportPath)) ?? exportPath;
           } catch (error) {
             const message =
               error instanceof Error ? error.message : "Could not save report export";

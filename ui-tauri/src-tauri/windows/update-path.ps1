@@ -36,6 +36,11 @@ $kept = @($entries | Where-Object {
 })
 
 if ($Action -eq "add") {
+    # Releases before 0.22.63 shipped a batch forwarder whose `%*` expansion
+    # let cmd.exe reinterpret argument metacharacters. The installer now ships
+    # a native kassiber.exe in this directory.
+    Remove-Item -LiteralPath (Join-Path $normalizedDirectory "kassiber.cmd") `
+        -Force -ErrorAction SilentlyContinue
     $kept += $normalizedDirectory
 }
 

@@ -104,23 +104,33 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertIn("git merge-base --is-ancestor HEAD origin/main", workflow)
         self.assertIn("LINUX_ARCHIVE_GPG_FINGERPRINT", workflow)
 
-    def test_publication_jobs_execute_against_the_verified_release_tag(self):
+    def test_publication_jobs_execute_against_the_verified_release_commit(self):
         workflow = (
             ROOT / ".github/workflows/publish-linux-channels.yml"
         ).read_text(encoding="utf-8")
+        prepare = workflow.split("\n  prepare:\n", 1)[1].split(
+            "\n  repositories:\n", 1
+        )[0]
         repositories = workflow.split("\n  repositories:\n", 1)[1].split(
             "\n  aur:\n", 1
         )[0]
         nix = workflow.split("\n  nix:\n", 1)[1]
 
+        self.assertIn('echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"', prepare)
+        self.assertIn(
+            "release_commit: ${{ steps.release-ref.outputs.commit }}", prepare
+        )
         for job in (repositories, nix):
             kassiber_checkout = job.split(
                 "uses: actions/checkout@", 1
             )[1].split("\n      - ", 1)[0]
-            self.assertIn("ref: ${{ inputs.tag_name }}", kassiber_checkout)
+            self.assertIn(
+                "ref: ${{ needs.prepare.outputs.release_commit }}",
+                kassiber_checkout,
+            )
 
         self.assertLess(
-            repositories.index("ref: ${{ inputs.tag_name }}"),
+            repositories.index("ref: ${{ needs.prepare.outputs.release_commit }}"),
             repositories.index("scripts/release_manifest.py policy"),
         )
 

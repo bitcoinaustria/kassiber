@@ -51,6 +51,7 @@ const DB_FILENAMES: &[&str] = &["kassiber.sqlite3", "satbooks.sqlite3"];
 const LEDGER_PREVIEW_EXTENSIONS: &[&str] = &["csv", "tsv", "xlsx", "xlsm"];
 const DOCUMENT_IMPORT_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif", "pdf"];
 const DOCUMENT_IMPORT_STAGE_KIND: &str = "internal.document_import.stage";
+const APPROVED_IMPORT_PROJECTS_FILENAME: &str = "approved-import-projects.json";
 const IMPORT_PICKER_TIMEOUT: Duration = Duration::from_secs(300);
 const TERMINAL_COMMAND_NAME: &str = "kassiber";
 const TERMINAL_COMMAND_MARKER: &str =
@@ -487,6 +488,11 @@ pub struct ImportProjectSelection {
     encrypted: bool,
 }
 
+#[derive(Debug, Default, Deserialize, Serialize)]
+struct ApprovedImportProjects {
+    data_roots: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct MenuActionPayload {
@@ -599,6 +605,10 @@ async fn daemon_invoke(
 
     let request_id = request.request_id.clone();
     let streaming = STREAMING_DAEMON_KINDS.contains(&request.kind.as_str());
+    let approves_project = matches!(
+        request.kind.as_str(),
+        "ui.projects.create" | "ui.projects.select"
+    );
     let task_request_id = request_id.clone();
     let supervisor = Arc::clone(state.inner());
     let DaemonRequest {
@@ -610,6 +620,18 @@ async fn daemon_invoke(
         match supervisor.invoke(&kind, args, &app, streaming, client_request_id) {
             Ok(mut response) => {
                 attach_secret_store_policy_status(&mut response);
+                if approves_project {
+                    if let Err(error) = approve_daemon_project_response(&app, &response) {
+                        return error_envelope(
+                            "project_approval_store_failed",
+                            error,
+                            Some("Choose the project again after checking app config permissions."),
+                            None,
+                            task_request_id.clone(),
+                            true,
+                        );
+                    }
+                }
                 match serde_json::from_value(response) {
                     Ok(envelope) => envelope,
                     Err(error) => error_envelope(
@@ -717,24 +739,12 @@ fn daemon_lifecycle_snapshot(
 }
 
 #[tauri::command]
-fn open_exported_file(path: String) -> Result<(), String> {
-    let requested = PathBuf::from(path);
-    if !requested.is_absolute() {
-        return Err("Report export paths must be absolute.".to_string());
-    }
-
-    let canonical = std::fs::canonicalize(&requested)
-        .map_err(|error| format!("Report export file could not be found: {error}"))?;
-    let metadata = canonical
-        .metadata()
-        .map_err(|error| format!("Report export file could not be inspected: {error}"))?;
-    if !is_supported_report_export_target(&canonical, &metadata) {
-        return Err(
-            "Only managed PDF, XLSX, CSV files, Austrian CSV bundle folders, and audit package folders can be opened."
-                .to_string(),
-        );
-    }
-
+fn open_exported_file(state: State<'_, Arc<DaemonSupervisor>>, path: String) -> Result<(), String> {
+    let data_root = state
+        .current_data_root()
+        .map_err(|error| error.message)?
+        .unwrap_or_else(default_state_data_root);
+    let (canonical, _) = validated_report_export_target(&data_root, Path::new(&path))?;
     open_with_default_app(&canonical)
 }
 
@@ -788,27 +798,45 @@ fn validated_attachment_file_path(data_root: &Path, requested: &Path) -> Result<
 }
 
 #[tauri::command]
-fn save_exported_file_as(source_path: String, destination_path: String) -> Result<String, String> {
-    let source = PathBuf::from(source_path);
-    if !source.is_absolute() {
-        return Err("Report export source paths must be absolute.".to_string());
-    }
-    let destination = PathBuf::from(destination_path);
-    if !destination.is_absolute() {
-        return Err("Report export destination paths must be absolute.".to_string());
-    }
-
-    let canonical_source = std::fs::canonicalize(&source)
-        .map_err(|error| format!("Report export file could not be found: {error}"))?;
-    let metadata = canonical_source
-        .metadata()
-        .map_err(|error| format!("Report export file could not be inspected: {error}"))?;
-    if !is_supported_report_export_target(&canonical_source, &metadata) {
-        return Err(
-            "Only managed PDF, XLSX, CSV files, Austrian CSV bundle folders, and audit package folders can be saved."
-                .to_string(),
-        );
-    }
+fn save_exported_file_as(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<DaemonSupervisor>>,
+    source_path: String,
+) -> Result<Option<String>, String> {
+    let data_root = state
+        .current_data_root()
+        .map_err(|error| error.message)?
+        .unwrap_or_else(default_state_data_root);
+    let (canonical_source, metadata) =
+        validated_report_export_target(&data_root, Path::new(&source_path))?;
+    let source_name = canonical_source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "Report export source filename is unavailable.".to_string())?;
+    let dialog = app
+        .dialog()
+        .file()
+        .set_title("Save Kassiber report export")
+        .set_file_name(source_name);
+    let selection = match canonical_source
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("pdf") => dialog.add_filter("PDF", &["pdf"]).blocking_save_file(),
+        Some("xlsx") => dialog
+            .add_filter("Excel workbook", &["xlsx"])
+            .blocking_save_file(),
+        Some("csv") => dialog.add_filter("CSV", &["csv"]).blocking_save_file(),
+        _ => dialog.blocking_save_file(),
+    };
+    let Some(selection) = selection else {
+        return Ok(None);
+    };
+    let destination = selection
+        .into_path()
+        .map_err(|_| "The selected report destination is unavailable.".to_string())?;
     ensure_export_destination_outside_managed_root(&canonical_source, &destination)?;
 
     if metadata.is_file() {
@@ -816,7 +844,7 @@ fn save_exported_file_as(source_path: String, destination_path: String) -> Resul
     } else {
         copy_report_export_directory(&canonical_source, &destination)?;
     }
-    Ok(destination.to_string_lossy().into_owned())
+    Ok(Some(destination.to_string_lossy().into_owned()))
 }
 
 /// Write ``contents`` to ``destination_path`` after validating that the
@@ -986,23 +1014,39 @@ fn open_external_url(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn select_import_project_directory() -> Result<Option<ImportProjectSelection>, String> {
-    tauri::async_runtime::spawn_blocking(|| {
+async fn select_import_project_directory(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<DaemonSupervisor>>,
+) -> Result<Option<ImportProjectSelection>, String> {
+    let selection = tauri::async_runtime::spawn_blocking(|| {
         let Some(selected) = choose_import_project_directory()? else {
             return Ok(None);
         };
         inspect_import_project_directory(&selected).map(Some)
     })
     .await
-    .map_err(|error| format!("Project folder picker task failed: {error}"))?
+    .map_err(|error| format!("Project folder picker task failed: {error}"))??;
+    let Some(selection) = selection else {
+        return Ok(None);
+    };
+    approve_import_project_data_root(&approved_import_projects_path(&app)?, &selection.data_root)?;
+    state
+        .set_data_root(PathBuf::from(&selection.data_root))
+        .map_err(|error| error.message)?;
+    Ok(Some(selection))
 }
 
 #[tauri::command]
 fn activate_import_project(
+    app: tauri::AppHandle,
     state: State<'_, Arc<DaemonSupervisor>>,
     data_root: String,
 ) -> Result<ImportProjectSelection, String> {
-    let selection = inspect_import_project_directory(Path::new(&data_root))?;
+    let approved_data_root = require_approved_import_project_data_root(
+        &approved_import_projects_path(&app)?,
+        &data_root,
+    )?;
+    let selection = inspect_import_project_directory(Path::new(&approved_data_root))?;
     state
         .set_data_root(PathBuf::from(&selection.data_root))
         .map_err(|error| error.message)?;
@@ -1373,6 +1417,78 @@ fn clear_desktop_biometric_stale_guard(data_root: &str) -> Result<bool, String> 
     update_desktop_biometric_stale_guard(data_root, None)
 }
 
+fn approved_import_projects_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|dir| dir.join(APPROVED_IMPORT_PROJECTS_FILENAME))
+        .map_err(|error| format!("Approved project store is unavailable: {error}"))
+}
+
+fn read_approved_import_projects(path: &Path) -> Result<ApprovedImportProjects, String> {
+    let raw = match fs::read(path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            return Ok(ApprovedImportProjects::default());
+        }
+        Err(error) => {
+            return Err(format!("Approved project store could not be read: {error}"));
+        }
+    };
+    serde_json::from_slice(&raw)
+        .map_err(|error| format!("Approved project store is invalid: {error}"))
+}
+
+fn approve_import_project_data_root(path: &Path, data_root: &str) -> Result<(), String> {
+    let mut approved = read_approved_import_projects(path)?;
+    if approved.data_roots.iter().any(|stored| stored == data_root) {
+        return Ok(());
+    }
+    approved.data_roots.push(data_root.to_string());
+    approved.data_roots.sort();
+    let parent = path
+        .parent()
+        .ok_or_else(|| "Approved project store has no parent folder.".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("Approved project store could not be created: {error}"))?;
+    let encoded = serde_json::to_vec_pretty(&approved)
+        .map_err(|error| format!("Approved project store could not be encoded: {error}"))?;
+    fs::write(path, encoded)
+        .map_err(|error| format!("Approved project store could not be written: {error}"))
+}
+
+fn approve_daemon_project_response(app: &tauri::AppHandle, response: &Value) -> Result<(), String> {
+    if !matches!(
+        response.get("kind").and_then(Value::as_str),
+        Some("ui.projects.create" | "ui.projects.select")
+    ) {
+        return Ok(());
+    }
+    let Some(data_root) = response
+        .get("data")
+        .and_then(|data| data.get("project"))
+        .and_then(|project| project.get("data_root"))
+        .and_then(Value::as_str)
+    else {
+        return Ok(());
+    };
+    approve_import_project_data_root(&approved_import_projects_path(app)?, data_root)
+}
+
+fn require_approved_import_project_data_root(
+    path: &Path,
+    requested: &str,
+) -> Result<String, String> {
+    let approved = read_approved_import_projects(path)?;
+    approved
+        .data_roots
+        .into_iter()
+        .find(|stored| stored == requested)
+        .ok_or_else(|| {
+            "Choose this Kassiber project with the native folder picker before opening it."
+                .to_string()
+        })
+}
+
 fn inspect_import_project_directory(path: &Path) -> Result<ImportProjectSelection, String> {
     let canonical = path
         .expanduser()
@@ -1723,7 +1839,7 @@ fn terminal_command_windows_candidate_dirs(home: &Path) -> Vec<PathBuf> {
 
 #[cfg(target_os = "windows")]
 fn terminal_command_filename() -> &'static str {
-    "kassiber.cmd"
+    "kassiber.exe"
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -1752,6 +1868,25 @@ fn terminal_command_status() -> Result<TerminalCommandStatus, String> {
             target_path: paths.target_path.to_string_lossy().into_owned(),
             path_hint: String::new(),
             message: "The terminal command is installed and managed by your installer or package manager."
+                .to_string(),
+        });
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return Ok(TerminalCommandStatus {
+            platform: paths.platform,
+            available: false,
+            installed: false,
+            managed: false,
+            needs_repair: false,
+            conflict: false,
+            path_on_path: false,
+            command: TERMINAL_COMMAND_NAME.to_string(),
+            bin_dir: paths.bin_dir.to_string_lossy().into_owned(),
+            command_path: paths.command_path.to_string_lossy().into_owned(),
+            target_path: paths.target_path.to_string_lossy().into_owned(),
+            path_hint: String::new(),
+            message: "Install Kassiber with the Windows installer to add its native CLI executable to PATH."
                 .to_string(),
         });
     }
@@ -1796,7 +1931,7 @@ fn package_managed_terminal_command(target_path: &Path) -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     let candidates = target_path
         .parent()
-        .map(|parent| vec![parent.join("bin").join("kassiber.cmd")])
+        .map(|parent| vec![parent.join("bin").join("kassiber.exe")])
         .unwrap_or_default();
     #[cfg(target_os = "macos")]
     let candidates = vec![
@@ -1868,6 +2003,13 @@ fn install_terminal_command() -> Result<(), String> {
     if package_managed_terminal_command(&paths.target_path).is_some() {
         return Ok(());
     }
+    #[cfg(target_os = "windows")]
+    {
+        return Err(
+            "Install Kassiber with the Windows installer to add its native CLI executable to PATH."
+                .to_string(),
+        );
+    }
     if !terminal_command_target_is_available(&paths.target_path) {
         return Err(
             "Move Kassiber out of the disk image and into Applications before installing the terminal command."
@@ -1909,6 +2051,12 @@ fn install_terminal_command() -> Result<(), String> {
 
 fn remove_terminal_command() -> Result<(), String> {
     let paths = terminal_command_paths()?;
+    #[cfg(target_os = "windows")]
+    {
+        return Err(
+            "The native Windows CLI executable is managed by the Kassiber installer.".to_string(),
+        );
+    }
     match inspect_terminal_command(&paths)? {
         TerminalCommandFileState::Missing => {}
         TerminalCommandFileState::Current | TerminalCommandFileState::ManagedStale => {
@@ -1939,15 +2087,6 @@ fn set_terminal_command_permissions(_path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-#[cfg(target_os = "windows")]
-fn terminal_command_contents(target_path: &Path) -> String {
-    let target = target_path.to_string_lossy().replace('%', "%%");
-    format!(
-        "@echo off\r\nREM {TERMINAL_COMMAND_MARKER}\r\nREM target: {}\r\n\"{}\" --cli %*\r\n",
-        target, target
-    )
-}
-
 #[cfg(not(target_os = "windows"))]
 fn terminal_command_contents(target_path: &Path) -> String {
     let cli_flag = if bundled_terminal_launcher_path(target_path) {
@@ -1960,6 +2099,11 @@ fn terminal_command_contents(target_path: &Path) -> String {
         target_path.to_string_lossy(),
         shell_single_quote(&target_path.to_string_lossy())
     )
+}
+
+#[cfg(target_os = "windows")]
+fn terminal_command_contents(_target_path: &Path) -> String {
+    unreachable!("Windows terminal commands are native installer-managed executables")
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -2463,6 +2607,46 @@ fn is_supported_audit_package_dir(path: &Path) -> bool {
 
 fn is_managed_report_export_path(path: &Path) -> bool {
     managed_report_exports_root(path).is_some()
+}
+
+fn state_root_for_data_root(data_root: &Path) -> &Path {
+    if data_root.file_name().and_then(|name| name.to_str()) == Some(DEFAULT_DATA_DIR) {
+        data_root.parent().unwrap_or(data_root)
+    } else {
+        data_root
+    }
+}
+
+fn validated_report_export_target(
+    data_root: &Path,
+    requested: &Path,
+) -> Result<(PathBuf, std::fs::Metadata), String> {
+    if !requested.is_absolute() {
+        return Err("Report export paths must be absolute.".to_string());
+    }
+    let managed_root = std::fs::canonicalize(
+        state_root_for_data_root(data_root)
+            .join("exports")
+            .join("reports"),
+    )
+    .map_err(|error| format!("Managed report export folder could not be found: {error}"))?;
+    let canonical = std::fs::canonicalize(requested)
+        .map_err(|error| format!("Report export file could not be found: {error}"))?;
+    if canonical.parent() != Some(managed_root.as_path()) {
+        return Err(
+            "Only exports from the active Kassiber project can be opened or saved.".to_string(),
+        );
+    }
+    let metadata = canonical
+        .metadata()
+        .map_err(|error| format!("Report export file could not be inspected: {error}"))?;
+    if !is_supported_report_export_target(&canonical, &metadata) {
+        return Err(
+            "Only managed PDF, XLSX, CSV files, Austrian CSV bundle folders, and audit package folders can be opened or saved."
+                .to_string(),
+        );
+    }
+    Ok((canonical, metadata))
 }
 
 fn managed_report_exports_root(path: &Path) -> Option<&Path> {
@@ -3576,24 +3760,26 @@ fn verified_codesign_identity(path: &Path) -> Result<(String, String), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        bundled_macos_terminal_launcher, clear_desktop_biometric_stale_guard_if_matches,
-        copy_report_export_directory, database_is_encrypted, desktop_biometric_stale_generation,
+        approve_import_project_data_root, bundled_macos_terminal_launcher,
+        clear_desktop_biometric_stale_guard_if_matches, copy_report_export_directory,
+        database_is_encrypted, desktop_biometric_stale_generation,
         ensure_export_destination_outside_managed_root, inspect_import_project_directory,
         inspect_terminal_command, is_managed_report_export_path, is_supported_audit_package_dir,
         is_supported_austrian_csv_bundle_dir, is_supported_export_file,
         is_supported_report_export_target, managed_settings_path, menu_action,
         menu_action_for_deep_link, menu_action_for_id, navigate_action, open_settings_action,
-        path_is_on_path, read_operator_native_auth_secret, terminal_command_contents,
+        path_is_on_path, read_operator_native_auth_secret,
+        require_approved_import_project_data_root, terminal_command_contents,
         terminal_command_path_hint, terminal_command_target_is_transient,
         touch_id_managed_unlock_state, touch_id_scope_for_selected, validated_attachment_file_path,
-        validated_external_url, TerminalCommandFileState, TerminalCommandPaths,
-        ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS, DOCUMENT_IMPORT_STAGE_KIND,
-        MENU_CHECK_UPDATES, MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS,
-        MENU_OPEN_SETTINGS, MENU_SETTINGS_AI, MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA,
-        MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL, MENU_SETTINGS_PRIVACY,
-        MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE,
-        MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET, MENU_WORKFLOW_ADD_WALLET,
-        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
+        validated_external_url, validated_report_export_target, TerminalCommandFileState,
+        TerminalCommandPaths, ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS,
+        DOCUMENT_IMPORT_STAGE_KIND, MENU_CHECK_UPDATES, MENU_HELP_DOCS, MENU_LOCK_APP,
+        MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_OPEN_SETTINGS, MENU_SETTINGS_AI,
+        MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL,
+        MENU_SETTINGS_PRIVACY, MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN,
+        MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET,
+        MENU_WORKFLOW_ADD_WALLET, MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
         MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
     };
     use std::fs;
@@ -3725,6 +3911,7 @@ mod tests {
         assert!(ALLOWED_DAEMON_KINDS.contains(&"ui.wallets.document_import.import"));
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn terminal_command_launcher_targets_desktop_executable_when_no_bundle_launcher_is_used() {
         let target = Path::new("/Applications/Kassiber.app/Contents/MacOS/kassiber-ui");
@@ -3991,6 +4178,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn terminal_command_inspection_tracks_managed_conflict_and_stale_files() {
         let root = unique_temp_dir("terminal-command-inspect");
@@ -4525,6 +4713,53 @@ mod tests {
     }
 
     #[test]
+    fn report_exports_must_belong_to_the_active_data_root() {
+        let active = unique_temp_dir("active-report-export");
+        let active_data = active.join("data");
+        let active_reports = active.join("exports").join("reports");
+        fs::create_dir_all(&active_data).expect("create active data dir");
+        fs::create_dir_all(&active_reports).expect("create active reports dir");
+        let active_report = active_reports.join("report.pdf");
+        fs::write(&active_report, b"%PDF").expect("write active report");
+
+        let unrelated = unique_temp_dir("unrelated-report-export");
+        let unrelated_reports = unrelated.join("exports").join("reports");
+        fs::create_dir_all(&unrelated_reports).expect("create unrelated reports dir");
+        let unrelated_report = unrelated_reports.join("report.pdf");
+        fs::write(&unrelated_report, b"%PDF").expect("write unrelated report");
+
+        let (validated, _) = validated_report_export_target(&active_data, &active_report)
+            .expect("active report should validate");
+        assert_eq!(
+            validated,
+            active_report
+                .canonicalize()
+                .expect("canonical active report")
+        );
+        let error = validated_report_export_target(&active_data, &unrelated_report).unwrap_err();
+        assert!(error.contains("active Kassiber project"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn report_export_validation_rejects_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let active = unique_temp_dir("symlink-report-export");
+        let active_data = active.join("data");
+        let active_reports = active.join("exports").join("reports");
+        fs::create_dir_all(&active_data).expect("create active data dir");
+        fs::create_dir_all(&active_reports).expect("create active reports dir");
+        let outside = active.join("outside.pdf");
+        fs::write(&outside, b"%PDF").expect("write outside report");
+        let linked = active_reports.join("linked.pdf");
+        symlink(&outside, &linked).expect("link report outside managed root");
+
+        let error = validated_report_export_target(&active_data, &linked).unwrap_err();
+        assert!(error.contains("active Kassiber project"));
+    }
+
+    #[test]
     fn export_save_destination_must_stay_outside_managed_exports() {
         let root = unique_temp_dir("report-export-destination");
         let reports = root.join("exports").join("reports");
@@ -4669,6 +4904,36 @@ mod tests {
             data.join("satbooks.sqlite3").to_string_lossy().to_string()
         );
         assert!(selection.encrypted);
+    }
+
+    #[test]
+    fn import_project_activation_requires_native_approval() {
+        let store_root = unique_temp_dir("approved-project-store");
+        let store = store_root.join("approved-import-projects.json");
+        let approved = "/books/approved/data";
+        approve_import_project_data_root(&store, approved).expect("approve picked project");
+
+        assert_eq!(
+            require_approved_import_project_data_root(&store, approved)
+                .expect("approved project should be restored"),
+            approved
+        );
+        let error = require_approved_import_project_data_root(&store, "/books/unapproved/data")
+            .expect_err("renderer paths without native approval must be rejected");
+        assert!(error.contains("native folder picker"));
+    }
+
+    #[test]
+    fn missing_project_approval_store_fails_closed() {
+        let store_root = unique_temp_dir("missing-approved-project-store");
+        let missing_store = store_root
+            .join("missing")
+            .join("approved-import-projects.json");
+        let error =
+            require_approved_import_project_data_root(&missing_store, "/known/but/unapproved/data")
+                .expect_err("missing approval state must not authorize a path");
+        assert!(error.contains("native folder picker"));
+        assert!(!missing_store.exists());
     }
 
     #[test]

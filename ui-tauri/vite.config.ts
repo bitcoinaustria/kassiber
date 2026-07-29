@@ -411,6 +411,18 @@ export function isLoopbackHost(hostHeader: string | string[] | undefined) {
   );
 }
 
+export function isLoopbackAddress(address: string | undefined) {
+  if (!address) return false;
+  const normalized = address.startsWith("::ffff:")
+    ? address.slice("::ffff:".length)
+    : address;
+  return (
+    normalized === "::1" ||
+    normalized === "0:0:0:0:0:0:0:1" ||
+    /^127(?:\.\d{1,3}){3}$/.test(normalized)
+  );
+}
+
 export function isAllowedBridgeOrigin(
   originHeader: string | string[] | undefined,
   hostHeader: string | string[] | undefined,
@@ -681,10 +693,26 @@ function installDaemonBridge(
   server: import("vite").ViteDevServer | import("vite").PreviewServer,
 ) {
   const supervisor = new DaemonBridgeSupervisor();
+  const approvedImportProjectDataRoots = new Set<string>();
   server.httpServer?.once("close", () => supervisor.shutdown());
 
   server.middlewares.use(async (req, res, next) => {
     const pathname = (req.url ?? "").split("?")[0];
+    const isBridgeRequest =
+      pathname === DAEMON_BRIDGE_STREAM_PATH ||
+      pathname === DAEMON_BRIDGE_PATH ||
+      pathname === FILE_PICKER_BRIDGE_PATH ||
+      pathname === IMPORT_PROJECT_BRIDGE_PATH ||
+      pathname === RESET_REGTEST_BRIDGE_PATH;
+    if (isBridgeRequest && !isLoopbackAddress(req.socket.remoteAddress)) {
+      writeJsonError(
+        res,
+        403,
+        "bridge_forbidden_peer",
+        "daemon bridge only accepts loopback connections",
+      );
+      return;
+    }
     if (pathname === DAEMON_BRIDGE_STREAM_PATH) {
       await handleBridgeStream(req, res, supervisor);
       return;
@@ -698,7 +726,12 @@ function installDaemonBridge(
       return;
     }
     if (pathname === IMPORT_PROJECT_BRIDGE_PATH) {
-      await handleBridgeImportProject(req, res, supervisor);
+      await handleBridgeImportProject(
+        req,
+        res,
+        supervisor,
+        approvedImportProjectDataRoots,
+      );
       return;
     }
     if (pathname === RESET_REGTEST_BRIDGE_PATH) {
@@ -941,6 +974,7 @@ async function handleBridgeImportProject(
   req: IncomingMessage,
   res: ServerResponse,
   supervisor: DaemonBridgeSupervisor,
+  approvedDataRoots: Set<string>,
 ) {
   if (!isLoopbackHost(req.headers.host)) {
     writeJsonError(
@@ -999,14 +1033,22 @@ async function handleBridgeImportProject(
         writeJson(res, 200, { selection: null });
         return;
       }
+      const selection = inspectImportProjectDirectory(paths[0]);
+      approvedDataRoots.add(selection.dataRoot);
+      supervisor.setDataRoot(selection.dataRoot);
       writeJson(res, 200, {
-        selection: inspectImportProjectDirectory(paths[0]),
+        selection,
       });
       return;
     }
     if (action === "activate") {
       if (typeof request.dataRoot !== "string" || !request.dataRoot.trim()) {
         throw new Error("dataRoot is required.");
+      }
+      if (!approvedDataRoots.has(request.dataRoot)) {
+        throw new Error(
+          "Choose this Kassiber project with the native folder picker before opening it.",
+        );
       }
       const selection = inspectImportProjectDirectory(request.dataRoot);
       supervisor.setDataRoot(selection.dataRoot);

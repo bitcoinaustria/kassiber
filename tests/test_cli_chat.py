@@ -248,7 +248,7 @@ class CliChatTest(unittest.TestCase):
         transcript = io.StringIO()
         args = argparse.Namespace(
             data_root="/tmp/kassiber-chat-private-unlock",
-            env_file=None,
+            env_file="/tmp/kassiber-chat-private-unlock/backends.env",
             db_passphrase_fd=None,
         )
 
@@ -264,13 +264,28 @@ class CliChatTest(unittest.TestCase):
         with patch(
             "kassiber.cli.chat.resolve_db_passphrase_for_bypass",
             return_value="private-bootstrap-secret",
-        ), patch("kassiber.cli.chat.subprocess.Popen", return_value=fake), patch.object(
+        ), patch(
+            "kassiber.cli.chat.subprocess.Popen", return_value=fake
+        ) as popen, patch.object(
             _DaemonChatClient,
             "read",
             read_with_request_id,
         ):
             client = _DaemonChatClient(args, transcript=transcript)
 
+        command = popen.call_args.args[0]
+        self.assertEqual(
+            popen.call_args.kwargs["cwd"],
+            Path(__file__).resolve().parents[1],
+        )
+        self.assertEqual(
+            command[command.index("--data-root") + 1],
+            str(Path(args.data_root).resolve()),
+        )
+        self.assertEqual(
+            command[command.index("--env-file") + 1],
+            str(Path(args.env_file).resolve()),
+        )
         outbound = fake.stdin.getvalue()
         self.assertIn('"kind":"daemon.unlock"', outbound)
         self.assertIn("private-bootstrap-secret", outbound)

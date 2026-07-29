@@ -61,6 +61,10 @@ class BackgroundFreshnessEventEnvelopeTest(unittest.TestCase):
             {
                 "status": "error",
                 "backend_url": "http://secret-node.local/path",
+                "message": (
+                    "ConnectError: https://user:"
+                    "pass@private-node.local/rpc"
+                ),
             },
         )
         self.assertEqual(len(out.payloads), 1)
@@ -73,6 +77,11 @@ class BackgroundFreshnessEventEnvelopeTest(unittest.TestCase):
         self.assertNotIn("request_id", envelope)
         self.assertNotIn("backend_url", envelope["data"])
         self.assertTrue(envelope["data"]["has_backend_url"])
+        encoded = json.dumps(envelope, sort_keys=True)
+        self.assertNotIn("private-node.local", encoded)
+        self.assertNotIn("user:pass", encoded)
+        self.assertNotIn("/rpc", encoded)
+        self.assertIn("<backend-url>", encoded)
 
 
 class FreshnessTest(unittest.TestCase):
@@ -746,6 +755,27 @@ class FreshnessTest(unittest.TestCase):
         self.assertNotIn("user:pass", ui_encoded)
         self.assertNotIn("/rpc", ui_encoded)
         self.assertIn("<backend-url>", ui_encoded)
+
+    def test_all_freshness_result_shapes_scrub_free_text_urls(self):
+        url = "https://user:" + "pass@private-node.local:50002/rpc"
+        payload = daemon_freshness._freshness_payload_for_ui(
+            {
+                "results": [{"status": "error", "message": f"failed via {url}"}],
+                "completed": [{"error": {"message": url, "details": {"cause": url}}}],
+                "books": [
+                    {
+                        "results": [{"status": "error", "message": url}],
+                        "completed": [{"error": {"message": url}}],
+                    }
+                ],
+            }
+        )
+
+        encoded = json.dumps(payload, sort_keys=True)
+        self.assertNotIn("private-node.local", encoded)
+        self.assertNotIn("user:pass", encoded)
+        self.assertNotIn("/rpc", encoded)
+        self.assertIn("<backend-url>", encoded)
 
     def test_sync_text_scrubber_redacts_schemeless_host(self):
         # Defense in depth: an HTTP-client connection-error repr (urllib3/httpx)

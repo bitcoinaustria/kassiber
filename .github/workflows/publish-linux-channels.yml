@@ -43,6 +43,8 @@ jobs:
     name: Verify release and render channel definitions
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    outputs:
+      release_commit: ${{ steps.release-ref.outputs.commit }}
     steps:
       - name: Require the trusted main workflow ref
         run: test "$GITHUB_REF" = "refs/heads/main"
@@ -52,12 +54,14 @@ jobs:
           persist-credentials: false
           ref: ${{ inputs.tag_name }}
       - name: Require the release tag to come from trusted main history
+        id: release-ref
         run: |
           set -euo pipefail
           if ! git merge-base --is-ancestor HEAD origin/main; then
             echo "Release tag must point to a commit in origin/main history." >&2
             exit 1
           fi
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Install package inspection tools
         run: |
           sudo apt-get update
@@ -218,7 +222,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: ${{ inputs.tag_name }}
+          ref: ${{ needs.prepare.outputs.release_commit }}
           persist-credentials: false
       - name: Install repository tooling
         run: |
@@ -491,7 +495,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: ${{ inputs.tag_name }}
+          ref: ${{ needs.prepare.outputs.release_commit }}
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:

@@ -8,6 +8,7 @@ import sys
 import threading
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Iterable, TextIO
 
 from ..ai.contracts import CLI_DEFAULT_MODEL, is_cli_provider_locator
@@ -93,6 +94,7 @@ class _DaemonChatClient:
         command = self._daemon_command(args)
         self._proc = subprocess.Popen(
             command,
+            cwd=Path(__file__).resolve().parents[2],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -164,10 +166,12 @@ class _DaemonChatClient:
             "-m",
             "kassiber",
             "--data-root",
-            args.data_root,
+            str(Path(args.data_root).expanduser().resolve()),
         ]
         if getattr(args, "env_file", None):
-            command.extend(["--env-file", args.env_file])
+            command.extend(
+                ["--env-file", str(Path(args.env_file).expanduser().resolve())]
+            )
         self._bootstrap_passphrase = resolve_db_passphrase_for_bypass(
             args,
             allow_prompt=self._allow_passphrase_prompt,
