@@ -176,7 +176,6 @@ import {
   dataModeLabelKey,
 } from "@/components/kb/dataMode";
 import { isTypingTarget } from "@/lib/keymap";
-import { macTitleBarInset } from "@/lib/titleBarInset";
 import { FirstSyncCard } from "./FirstSyncCard";
 import { AssistantDock } from "./AssistantDock";
 import { PreAlphaBanner } from "./PreAlphaBanner";
@@ -320,6 +319,26 @@ const navRowClassName =
   "h-8 gap-2 rounded-md text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground data-[active=true]:bg-sidebar-row-active data-[active=true]:text-sidebar-foreground";
 const navSubRowClassName =
   "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground data-[active=true]:bg-sidebar-row-active data-[active=true]:text-sidebar-foreground";
+
+/**
+ * Click handler for a submenu row's trigger, for the collapsed rail.
+ *
+ * Collapsed, `SidebarMenuSub` is `hidden`, so a submenu row had nowhere to put
+ * its children and the click read as dead. Expand the nav and open the submenu
+ * instead. `preventDefault` is what keeps it open: Radix runs the trigger's own
+ * handler first and skips its toggle when the event was default-prevented, so
+ * the submenu is not immediately closed again by the same click.
+ */
+function useRailSubmenuTrigger(setSubmenuOpen: (open: boolean) => void) {
+  const { state, isMobile, setOpen: setNavOpen } = useSidebar();
+  const collapsedRail = state === "collapsed" && !isMobile;
+  return (event: React.MouseEvent) => {
+    if (!collapsedRail) return;
+    event.preventDefault();
+    setNavOpen(true);
+    setSubmenuOpen(true);
+  };
+}
 
 function appCanStartTouchIdPrompt() {
   if (typeof document === "undefined") {
@@ -590,9 +609,6 @@ export function AppShell() {
   const assistantDockExpanded = useUiStore((s) => s.assistantDockExpanded);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const preAlphaBannerVisible = useUiStore((s) => s.preAlphaBannerVisible);
-  // The lights sit on the banner while it is shown, so the shell only makes
-  // room for them once it is hidden.
-  const titleBarInset = macTitleBarInset && !preAlphaBannerVisible;
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
   const activeMaintenanceProgress = useUiStore(
     (s) => s.activeMaintenanceProgress,
@@ -1700,41 +1716,23 @@ export function AppShell() {
 
   return (
     <TooltipProvider>
-      {/* The sidebar is `fixed`, so it cannot flow below the banner on its own:
-          it reads the banner's height off this variable and drops the offset
-          entirely once the banner is hidden. */}
+      {/* The top strip is always there — red while the pre-alpha warning is on,
+          plain window background once it is dismissed — so the macOS traffic
+          lights always have their own row and nothing below has to dodge them.
+          The sidebar is `fixed`, so it reads the strip's height off this
+          variable to sit under it. */}
       <div
         className="flex h-svh flex-col overflow-hidden bg-sidebar"
-        style={
-          {
-            "--kb-banner-height": preAlphaBannerVisible ? "28px" : "0px",
-          } as React.CSSProperties
-        }
+        style={{ "--kb-banner-height": "28px" } as React.CSSProperties}
       >
-        {preAlphaBannerVisible ? <PreAlphaBanner className="shrink-0" /> : null}
+        <PreAlphaBanner className="shrink-0" muted={!preAlphaBannerVisible} />
         {/*
           The shell is a two-column frame: the side nav owns all navigation
           (brand, book switcher, search, pages, settings), and the content panel
           carries only its own page plus a floating strip of shell controls.
           There is no full-width top bar — the controls float over the panel.
         */}
-        <SidebarProvider
-          className="min-h-0 flex-1 bg-sidebar"
-          // Signal's collapsed rail is as wide as the traffic lights it carries.
-          // Ours matches: the light zone runs 20–72px, so 92px leaves the same
-          // margin on both sides and the rail's icons centre under them. Px, not
-          // rem — the interface-scale setting must not shrink a rail that has to
-          // fit native chrome.
-          style={
-            titleBarInset
-              ? ({
-                  "--sidebar-width-icon": "92px",
-                  "--sidebar-icon-button": "44px",
-                  "--sidebar-icon-glyph": "20px",
-                } as React.CSSProperties)
-              : undefined
-          }
-        >
+        <SidebarProvider className="min-h-0 flex-1 bg-sidebar">
           <a
             href="#app-main"
             className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
@@ -1751,8 +1749,10 @@ export function AppShell() {
               aiFeaturesEnabled={aiFeaturesEnabled}
               developerToolsEnabled={developerToolsEnabled}
             />
-            <div className="min-h-0 w-full overflow-hidden lg:pt-1.5 lg:pr-1.5 lg:pb-1.5">
-              <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-tl-xl lg:rounded-tr-xl">
+            {/* `pl-3` is two gutters: the nav card is shifted right by one, so
+                this is what leaves a matching gap on the seam between them. */}
+            <div className="min-h-0 w-full overflow-hidden lg:pt-1.5 lg:pr-1.5 lg:pb-1.5 lg:pl-3">
+              <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl">
                 <ShellFloatingControls
                   meta={routeMeta}
                   onLock={lockApp}
@@ -2019,10 +2019,16 @@ function AppSidebar({
     <Sidebar
       variant="sidebar"
       collapsible="icon"
-      /* The frosted nav and the content panel land within a few percent of each
-         other in lightness by design (T3Code's quiet hierarchy), so the seam
-         needs an explicit hairline or the two surfaces visually merge. */
-      className="kb-glass-panel top-[var(--kb-banner-height,0px)] h-[calc(100svh-var(--kb-banner-height,0px))] border-r border-sidebar-border/70"
+      /* A card under the top strip, on the same terms as the content panel: the
+         same 1.5 gutter on every free side, the same corner radius, and a
+         hairline all the way round. The frosted nav and the panel land within a
+         few percent of each other in lightness by design (T3Code's quiet
+         hierarchy), so that hairline is what keeps the two surfaces apart.
+         The card keeps its full width and only shifts right by one gutter — the
+         seam gap comes from the content panel's own `pl-3` instead. Narrowing it
+         here would eat the collapsed rail, which is only 3rem wide to begin
+         with. */
+      className="kb-glass-panel top-[calc(var(--kb-banner-height,0px)+(--spacing(1.5)))] left-1.5 h-[calc(100svh-var(--kb-banner-height,0px)-(--spacing(3)))] overflow-hidden rounded-xl border border-sidebar-border/70"
     >
       {/* Header stays mounted across both nav modes, so the wordmark and the ⌘K
           palette are reachable from settings too. `relative` + the children's
@@ -2143,24 +2149,11 @@ function SidebarBrand() {
   const { t } = useTranslation("chrome");
   const { state, isMobile } = useSidebar();
   const collapsed = state === "collapsed" && !isMobile;
-  // With the banner gone the brand row is the window's top-left corner, where
-  // macOS draws the traffic lights (T3 Code puts its own collapse button and
-  // wordmark right next to them). Expanded, the row makes room beside them;
-  // collapsed it is too narrow for that, so it drops below them instead.
-  const bannerVisible = useUiStore((s) => s.preAlphaBannerVisible);
-  const inset = macTitleBarInset && !bannerVisible;
-
   return (
     <div
-      data-tauri-drag-region={macTitleBarInset ? "" : undefined}
       className={cn(
         "flex h-8 min-w-0 items-center gap-0.5",
         collapsed && "justify-center",
-        // Expanded: sit *in* the title-bar band rather than below it — cancel
-        // the header's top padding and match the band's 28px so the row's
-        // centre lands on the lights' centre. Collapsed: the rail is narrower
-        // than the 72px light zone, so it starts under the band instead.
-        inset && (collapsed ? "mt-[28px]" : "-mt-2 h-[28px] pl-[72px]"),
       )}
     >
       <SidebarTrigger className={navIconButtonClassName} />
@@ -2333,6 +2326,12 @@ function SidebarActions({
     `shell.dataMode.${dataModeLabelKey(normalizedDataMode)}`,
   );
   const supportActive = pathname === "/diagnostics";
+  // Controlled, so a click on the collapsed rail can force them open while it
+  // expands the nav (see `useRailSubmenuTrigger`).
+  const [supportOpen, setSupportOpen] = React.useState(supportActive);
+  const [extrasOpen, setExtrasOpen] = React.useState(false);
+  const onSupportClick = useRailSubmenuTrigger(setSupportOpen);
+  const onExtrasClick = useRailSubmenuTrigger(setExtrasOpen);
 
   return (
     <SidebarMenu>
@@ -2376,13 +2375,19 @@ function SidebarActions({
         </SidebarMenuItem>
       ) : null}
       <SidebarMenuItem>
-        <Collapsible asChild defaultOpen={supportActive} className="group/collapsible">
+        <Collapsible
+          asChild
+          open={supportOpen}
+          onOpenChange={setSupportOpen}
+          className="group/collapsible"
+        >
           <div>
             <CollapsibleTrigger asChild>
               <SidebarMenuButton
                 isActive={supportActive}
                 tooltip={t("shell.support.title")}
                 className={navRowClassName}
+                onClick={onSupportClick}
               >
                 <LifeBuoy className="size-4" aria-hidden="true" />
                 <span>{t("shell.support.title")}</span>
@@ -2421,12 +2426,18 @@ function SidebarActions({
         </Collapsible>
       </SidebarMenuItem>
       <SidebarMenuItem>
-        <Collapsible asChild className="group/collapsible">
+        <Collapsible
+          asChild
+          open={extrasOpen}
+          onOpenChange={setExtrasOpen}
+          className="group/collapsible"
+        >
           <div>
             <CollapsibleTrigger asChild>
               <SidebarMenuButton
                 tooltip={t("shell.extras.title")}
                 className={navRowClassName}
+                onClick={onExtrasClick}
               >
                 <Plus className="size-4" aria-hidden="true" />
                 <span>{t("shell.extras.title")}</span>
@@ -2557,6 +2568,7 @@ function NavMenuItem({
     pathname.startsWith(`${item.href}/`) ||
     Boolean(childActive);
   const [open, setOpen] = React.useState(active);
+  const onTriggerClick = useRailSubmenuTrigger(setOpen);
 
   React.useEffect(() => {
     if (active) setOpen(true);
@@ -2594,6 +2606,7 @@ function NavMenuItem({
             isActive={active}
             tooltip={t(item.labelKey as never) /* dynamic key */}
             className={navRowClassName}
+            onClick={onTriggerClick}
           >
             <Icon className="size-4" aria-hidden="true" />
             <span>{t(item.labelKey as never) /* dynamic key */}</span>
