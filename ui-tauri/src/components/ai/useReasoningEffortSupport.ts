@@ -23,7 +23,7 @@ export function useReasoningEffortSupport(
   const providersQuery = useDaemon<AiProvidersListData>(
     "ai.providers.list",
     undefined,
-    { enabled },
+    { enabled, meta: { shellProgress: false } },
   );
   const providersData =
     providersQuery.data?.kind === "ai.providers.list"
@@ -44,6 +44,7 @@ export function useReasoningEffortSupport(
     {
       enabled: enabled && Boolean(selectedProvider),
       staleTime: 5 * 60 * 1000,
+      meta: { shellProgress: false },
     },
   );
   const modelsData =

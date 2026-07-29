@@ -38,7 +38,7 @@ export function RecentChats() {
   const list = useDaemon<ChatSessionsListShape>(
     "ui.chat.sessions.list",
     { limit: 3 },
-    { staleTime: 30 * 1000 },
+    { staleTime: 30 * 1000, meta: { shellProgress: false } },
   );
   const sessions = list.data?.data?.sessions ?? [];
   if (sessions.length === 0) return null;

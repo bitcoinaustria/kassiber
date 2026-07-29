@@ -185,6 +185,7 @@ import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
 import { NetworkStatusIndicator } from "./NetworkStatusIndicator";
 import {
+  daemonQueryUsesShellProgress,
   routeProgressFromActiveMaintenance,
   routeProgressFromNotifications,
   type RouteProgressState,
@@ -661,7 +662,10 @@ export function AppShell() {
   const routerBusy = useRouterState({
     select: (s) => s.isLoading || s.isTransitioning || s.status === "pending",
   });
-  const daemonFetchCount = useIsFetching({ queryKey: ["daemon"] });
+  const foregroundDaemonFetchCount = useIsFetching({
+    queryKey: ["daemon"],
+    predicate: daemonQueryUsesShellProgress,
+  });
   const [assistantCollapsed, setAssistantCollapsed] = React.useState(false);
   const [assistantDockSuppressed, setAssistantDockSuppressed] =
     React.useState(false);
@@ -688,7 +692,7 @@ export function AppShell() {
     routeProgressFromActiveMaintenance(activeMaintenanceProgress) ??
     routeProgressFromNotifications(appNotifications);
   const shellBusy =
-    routerBusy || daemonFetchCount > 0 || Boolean(shellProgress);
+    routerBusy || foregroundDaemonFetchCount > 0 || Boolean(shellProgress);
   const firstSyncDone = useUiStore((s) => s.firstSyncDone);
   const bookKey = React.useMemo(() => bookIdentityKey(identity), [identity]);
   const bookRefreshActive =
@@ -1915,7 +1919,7 @@ function RouteTopProgressLine({
     <div
       className={cn(
         "pointer-events-none absolute inset-x-0 top-0 z-30 h-[3px] transition-opacity duration-200",
-        active ? "opacity-100" : "opacity-0",
+        active ? "delay-150 opacity-100" : "delay-0 opacity-0",
       )}
     >
       <div className="h-full w-full overflow-hidden" aria-hidden="true">

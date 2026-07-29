@@ -6,6 +6,13 @@ export interface RouteProgressState {
   value?: number;
 }
 
+export function daemonQueryUsesShellProgress(query: {
+  state: { data: unknown };
+  meta?: Record<string, unknown>;
+}) {
+  return query.state.data === undefined && query.meta?.shellProgress !== false;
+}
+
 function compactProgressTitle(title: string) {
   return title
     .replace(/\s+(started|running)$/i, "")

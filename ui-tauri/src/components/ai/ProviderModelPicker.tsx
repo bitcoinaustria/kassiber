@@ -232,6 +232,7 @@ export function ProviderModelPicker({
       refetchOnMount: false,
       staleTime: LOCAL_MODEL_REFRESH_MS,
       gcTime: 60 * 60 * 1000,
+      meta: { shellProgress: false },
     })),
   });
   const modelSnapshotsByProvider = React.useMemo(() => {

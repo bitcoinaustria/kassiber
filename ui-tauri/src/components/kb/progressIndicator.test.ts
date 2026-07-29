@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { AppNotification } from "@/store/ui";
 
 import {
+  daemonQueryUsesShellProgress,
   routeProgressFromActiveMaintenance,
   routeProgressFromNotifications,
   routeProgressLabelFromNotifications,
@@ -23,6 +24,21 @@ function notification(
 }
 
 describe("route progress indicator label", () => {
+  it("only uses foreground daemon loads for shell progress", () => {
+    expect(
+      daemonQueryUsesShellProgress({ state: { data: undefined } }),
+    ).toBe(true);
+    expect(
+      daemonQueryUsesShellProgress({ state: { data: { cached: true } } }),
+    ).toBe(false);
+    expect(
+      daemonQueryUsesShellProgress({
+        state: { data: undefined },
+        meta: { shellProgress: false },
+      }),
+    ).toBe(false);
+  });
+
   it("stays quiet when no daemon progress notification is active", () => {
     expect(
       routeProgressLabelFromNotifications([
