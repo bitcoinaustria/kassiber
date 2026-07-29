@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
+import binanceIcon from "@/assets/integrations/binance.svg";
 import bitpandaIcon from "@/assets/integrations/bitpanda.svg";
 import bitboxIcon from "@/assets/integrations/bitbox.svg";
 import bluewalletIcon from "@/assets/integrations/bluewallet.png";
@@ -31,9 +32,11 @@ import mempoolIcon from "@/assets/integrations/mempool-space.svg";
 import nunchukIcon from "@/assets/integrations/nunchuk.svg";
 import pocketBitcoinIcon from "@/assets/integrations/pocket-bitcoin.svg";
 import relaiIcon from "@/assets/integrations/relai.svg";
+import riverIcon from "@/assets/integrations/river.png";
 import samouraiIcon from "@/assets/integrations/samourai.png";
 import sparrowIcon from "@/assets/integrations/sparrow.png";
 import strikeIcon from "@/assets/integrations/strike.jpg";
+import swanBitcoinIcon from "@/assets/integrations/swan-bitcoin.svg";
 import trezorIcon from "@/assets/integrations/trezor.svg";
 import twentyOneBitcoinIcon from "@/assets/integrations/21bitcoin.png";
 import wasabiIcon from "@/assets/integrations/wasabi.png";
@@ -91,6 +94,8 @@ export interface ConnectionSource {
   formatLabel?: string;
   docsHref?: string;
   setupKind?: SetupKind;
+  /** Reuses another source's setup flow — the brand only needs its own artwork. */
+  forwardTo?: string;
   walletKind?: string;
   sourceFormat?: ConnectionSourceFormat;
   chain?: "bitcoin" | "liquid";
@@ -307,50 +312,52 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "sparrow",
     title: "Sparrow",
-    description: "Desktop wallet import for PSBT, descriptor, or xpub exports.",
+    description: "Descriptor or xpub export.",
     category: "wallets",
     image: sparrowIcon,
     imageClassName: "size-9",
-    status: "planned",
+    status: "ready",
     pathLabel: "Wallet export",
+    forwardTo: "descriptor",
     formatLabel: "descriptor/xpub",
-    details: ["Use the Wallet export connection for exported descriptors today"],
+    details: ["Continue opens the Wallet export form for the exported material"],
   },
   {
     id: "specter",
     title: "Specter Desktop",
-    description: "Multisig wallet descriptor export.",
+    description: "Descriptor export.",
     category: "wallets",
     image: sourceIcon("SP", "#7c3aed", "#ffffff"),
-    status: "planned",
+    status: "ready",
     pathLabel: "Wallet export",
+    forwardTo: "descriptor",
     formatLabel: "descriptor",
-    details: ["Use the Wallet export connection for exported descriptors today"],
+    details: ["Continue opens the Wallet export form for the exported material"],
   },
   {
     id: "bluewallet",
     title: "BlueWallet",
-    description: "Mobile wallet xpub and transaction export.",
+    description: "Account xpub export.",
     category: "wallets",
     image: bluewalletIcon,
     imageClassName: "size-9",
-    status: "planned",
+    status: "ready",
     pathLabel: "Wallet export",
-    details: ["Use generic CSV or address wallets until a dedicated parser lands"],
+    forwardTo: "descriptor",
+    details: ["Export the account xpub — never the seed or a private key"],
   },
   {
     id: "blockstream-green",
     title: "Blockstream Green",
-    description: "Bitcoin and Liquid wallet export.",
+    description: "Bitcoin singlesig xpub export.",
     category: "wallets",
     image: blockstreamGreenIcon,
     imageClassName: "size-9",
-    status: "planned",
+    status: "ready",
     pathLabel: "Wallet export",
+    forwardTo: "descriptor",
     formatLabel: "descriptor/xpub",
-    details: [
-      "Use Wallet export or Liquid wallet export when you have an exported descriptor",
-    ],
+    details: ["Continue opens the Wallet export form for the exported material"],
   },
   {
     id: "liana",
@@ -359,58 +366,63 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     category: "wallets",
     image: lianaIcon,
     imageClassName: "size-9",
-    status: "planned",
+    status: "ready",
     pathLabel: "Wallet export",
+    forwardTo: "descriptor",
     formatLabel: "descriptor",
-    details: ["Use the Wallet export connection for exported descriptors today"],
+    details: ["Continue opens the Wallet export form for the exported material"],
   },
   {
     id: "nunchuk",
     title: "Nunchuk",
-    description: "Collaborative multisig wallet export.",
+    description: "Descriptor or BSMS export.",
     category: "wallets",
     image: nunchukIcon,
     imageClassName: "size-9",
-    status: "planned",
+    status: "ready",
     pathLabel: "Wallet export",
-    details: ["Use the Wallet export connection for exported descriptors today"],
+    forwardTo: "descriptor",
+    details: ["Continue opens the Wallet export form for the exported material"],
   },
   {
     id: "bitbox",
     title: "BitBox",
-    description: "BitBox hardware wallet account export.",
+    description: "Account xpub export.",
     category: "wallets",
     image: bitboxIcon,
     imageFrameClassName: lightLogoFrame,
     imageClassName: hardwareWalletIconClassName,
-    status: "planned",
+    status: "ready",
     pathLabel: "Wallet export",
-    details: ["Use the Wallet export connection for exported descriptors today"],
+    forwardTo: "descriptor",
+    details: ["Continue opens the Wallet export form for the exported material"],
   },
   {
     id: "trezor",
     title: "Trezor",
-    description: "Trezor Suite account export.",
+    description: "Account xpub export.",
     category: "wallets",
     image: trezorIcon,
     imageFrameClassName: lightLogoFrame,
     imageClassName: hardwareWalletIconClassName,
-    status: "planned",
+    status: "ready",
     pathLabel: "Wallet export",
-    details: ["Use the Wallet export connection for exported descriptors today"],
+    forwardTo: "descriptor",
+    details: ["Continue opens the Wallet export form for the exported material"],
   },
   {
     id: "coldcard",
     title: "Coldcard",
-    description: "Coldcard skeleton wallet or descriptor import.",
+    description: "Descriptor or xpub export.",
     category: "wallets",
     image: coldcardIcon,
     imageFrameClassName: lightLogoFrame,
     imageClassName: hardwareWalletIconClassName,
-    status: "planned",
+    status: "ready",
     pathLabel: "Wallet export",
-    formatLabel: "skeleton/descriptor",
-    details: ["Use the Wallet export connection for exported descriptors today"],
+    forwardTo: "descriptor",
+    formatLabel: "descriptor/xpub",
+    details: ["Continue opens the Wallet export form for the exported material"],
   },
   {
     id: "ledger",
@@ -434,14 +446,15 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "foundation-passport",
     title: "Foundation Passport",
-    description: "Passport wallet export or descriptor import.",
+    description: "Descriptor or xpub export.",
     category: "wallets",
     image: foundationPassportIcon,
     imageFrameClassName: lightLogoFrame,
     imageClassName: hardwareWalletIconClassName,
-    status: "planned",
+    status: "ready",
     pathLabel: "Wallet export",
-    details: ["Use the Wallet export connection for exported descriptors today"],
+    forwardTo: "descriptor",
+    details: ["Continue opens the Wallet export form for the exported material"],
   },
   {
     id: "core-ln",
@@ -483,13 +496,13 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "zeus",
     title: "ZEUS",
-    description: "Lightning wallet and node app export.",
+    description: "Lightning node interface.",
     category: "lightning",
     image: lightningIcon,
     imageClassName: "size-8",
     status: "planned",
-    pathLabel: "Lightning wallet",
-    details: ["Use Phoenix CSV today when the activity comes from Phoenix"],
+    pathLabel: "Lightning app",
+    details: ["Add the underlying LND or Core Lightning node"],
   },
   {
     id: "phoenix",
@@ -572,7 +585,8 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     title: "River",
     description: "Bitcoin Activity or Account Activity CSV import.",
     category: "exchanges",
-    image: sourceIcon("RV", "#1e3a8a", "#ffffff"),
+    image: riverIcon,
+    imageClassName: "size-9 rounded-md",
     status: "ready",
     pathLabel: "CSV import",
     formatLabel: "river_csv",
@@ -616,7 +630,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     pathLabel: "CSV import",
     docsHref:
       "https://support.relai.app/en/articles/194348-how-do-i-export-my-order-history",
-    details: ["Order-history export exists; dedicated parser is not wired yet"],
+    details: ["Dedicated parser is planned"],
   },
   {
     id: "pocket-bitcoin",
@@ -642,10 +656,11 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     title: "Swan Bitcoin",
     description: "Bitcoin-only savings and broker activity import.",
     category: "exchanges",
-    image: sourceIcon("SW", "#111827", "#ffffff"),
+    image: swanBitcoinIcon,
+    imageClassName: "size-9",
     status: "planned",
     pathLabel: "CSV import",
-    details: ["Dedicated parser is not wired yet"],
+    details: ["Dedicated parser is planned"],
   },
   {
     id: "strike",
@@ -710,21 +725,21 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
   {
     id: "bitpanda",
     title: "Bitpanda",
-    description: "BTC rows from Bitpanda history exports.",
+    description: "Bitpanda history export.",
     category: "exchanges",
     image: bitpandaIcon,
     imageFrameClassName: "bg-[#103e36]",
     imageClassName: "h-9 w-auto",
     status: "planned",
-    pathLabel: "CSV/API import",
+    pathLabel: "CSV import",
     docsHref:
       "https://support.bitpanda.com/hc/en-us/articles/360000122759-How-can-I-download-the-history-of-my-Bitpanda-account",
-    details: ["History export exists; dedicated BTC parser is not wired yet"],
+    details: ["Dedicated BTC parser is planned"],
   },
   {
     id: "kraken",
     title: "Kraken",
-    description: "BTC rows from Kraken private API history.",
+    description: "Kraken private API history.",
     category: "exchanges",
     image: krakenIcon,
     imageClassName: "size-8",
@@ -732,31 +747,26 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     pathLabel: "API import",
     docsHref:
       "https://support.kraken.com/articles/360001169383-how-to-interpret-ledger-history-fields",
-    details: [
-      "CLI API import pairs BTC/LBTC ledgers with trade history for exact pricing",
-      "Desktop credential setup is not wired yet",
-    ],
+    details: ["CLI API import is available; desktop setup is planned"],
   },
   {
     id: "coinbase",
     title: "Coinbase",
-    description: "BTC rows from Coinbase account activity exports.",
+    description: "Coinbase API history.",
     category: "exchanges",
     image: coinbaseIcon,
     imageClassName: "size-8",
     status: "planned",
-    pathLabel: "CSV/API import",
-    details: [
-      "CLI API import handles BTC account trades and wallet movement",
-      "Desktop credential setup is not wired yet",
-    ],
+    pathLabel: "API import",
+    details: ["CDP API authentication is planned"],
   },
   {
     id: "binance",
     title: "Binance",
     description: "BTC supplemental rows from Binance exports.",
     category: "exchanges",
-    image: sourceIcon("BN", "#f0b90b", "#111827"),
+    image: binanceIcon,
+    imageClassName: "size-8",
     status: "ready",
     pathLabel: "Supplemental CSV",
     formatLabel: "binance_supplemental_csv",
