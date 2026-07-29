@@ -189,6 +189,8 @@ export interface UiState {
   identity: Identity | null;
   aiFeaturesEnabled: boolean;
   developerToolsEnabled: boolean;
+  /** Alpha warning banner across the top of the shell. */
+  preAlphaBannerVisible: boolean;
   /** Native-hydrated app-wide GitHub update-check permission. */
   automaticUpdateChecks: boolean;
   /** Latest native GitHub release check; transient and never persisted. */
@@ -259,6 +261,7 @@ export interface UiState {
   setIdentity: (identity: Identity | null) => void;
   setAiFeaturesEnabled: (enabled: boolean) => void;
   setDeveloperToolsEnabled: (enabled: boolean) => void;
+  setPreAlphaBannerVisible: (visible: boolean) => void;
   setAutomaticUpdateChecks: (enabled: boolean) => void;
   setAppUpdate: (update: AppUpdateCheck | null) => void;
   setAssistantModelSelection: (selection: AiModelSelection | null) => void;
@@ -414,6 +417,7 @@ export function uiStatePartialForStorage(state: UiState) {
     identity: state.identity,
     aiFeaturesEnabled: state.aiFeaturesEnabled,
     developerToolsEnabled: state.developerToolsEnabled,
+    preAlphaBannerVisible: state.preAlphaBannerVisible,
     assistantModelSelection: state.assistantModelSelection,
     assistantDockAutoHide: state.assistantDockAutoHide,
     assistantDockPosition: state.assistantDockPosition,
@@ -442,6 +446,7 @@ export const useUiStore = create<UiState>()(
       identity: null,
       aiFeaturesEnabled: true,
       developerToolsEnabled: true,
+      preAlphaBannerVisible: true,
       automaticUpdateChecks: false,
       appUpdate: null,
       assistantModelSelection: null,
@@ -501,6 +506,8 @@ export const useUiStore = create<UiState>()(
       setAiFeaturesEnabled: (enabled) => set({ aiFeaturesEnabled: enabled }),
       setDeveloperToolsEnabled: (enabled) =>
         set({ developerToolsEnabled: enabled }),
+      setPreAlphaBannerVisible: (visible) =>
+        set({ preAlphaBannerVisible: visible }),
       setAutomaticUpdateChecks: (enabled) =>
         set({
           automaticUpdateChecks: enabled,
@@ -672,6 +679,8 @@ export const useUiStore = create<UiState>()(
           aiFeaturesEnabled,
           developerToolsEnabled:
             restored.developerToolsEnabled ?? current.developerToolsEnabled,
+          preAlphaBannerVisible:
+            restored.preAlphaBannerVisible ?? current.preAlphaBannerVisible,
           // The owner-only native/CLI preference is canonical. Never restore
           // this permission from renderer-local storage.
           automaticUpdateChecks: current.automaticUpdateChecks,

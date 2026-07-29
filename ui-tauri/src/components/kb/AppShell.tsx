@@ -585,6 +585,7 @@ export function AppShell() {
   const assistantDockMinimized = useUiStore((s) => s.assistantDockMinimized);
   const assistantDockExpanded = useUiStore((s) => s.assistantDockExpanded);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
+  const preAlphaBannerVisible = useUiStore((s) => s.preAlphaBannerVisible);
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
   const activeMaintenanceProgress = useUiStore(
     (s) => s.activeMaintenanceProgress,
@@ -1693,7 +1694,7 @@ export function AppShell() {
   return (
     <TooltipProvider>
       <div className="flex h-svh flex-col overflow-hidden bg-sidebar">
-        <PreAlphaBanner className="shrink-0" />
+        {preAlphaBannerVisible ? <PreAlphaBanner className="shrink-0" /> : null}
         {/*
           The shell is a two-column frame: the side nav owns all navigation
           (brand, book switcher, search, pages, settings), and the content panel

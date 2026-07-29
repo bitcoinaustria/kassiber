@@ -16,10 +16,14 @@ import { formatBytes } from "./SettingsModel";
 export function DeveloperToolsSettingsPanel({
   enabled,
   setEnabled,
+  bannerVisible,
+  setBannerVisible,
   onOpenLogs,
 }: {
   enabled: boolean;
   setEnabled: (enabled: boolean) => void;
+  bannerVisible: boolean;
+  setBannerVisible: (visible: boolean) => void;
   onOpenLogs: () => void;
 }) {
   const { t } = useTranslation("settings");
@@ -36,6 +40,12 @@ export function DeveloperToolsSettingsPanel({
         }
         checked={enabled}
         onCheckedChange={setEnabled}
+      />
+      <SettingsSwitchRow
+        label={t("developer.alphaBannerLabel")}
+        description={t("developer.alphaBannerDescription")}
+        checked={bannerVisible}
+        onCheckedChange={setBannerVisible}
       />
       {enabled ? (
         <Button

@@ -567,6 +567,8 @@
     "enableLabel": "Enable Logs page",
     "enableOn": "Logs is visible in Support and route navigation.",
     "enableOff": "Logs is hidden and direct navigation redirects to Overview.",
+    "alphaBannerLabel": "Show the alpha warning banner",
+    "alphaBannerDescription": "The red strip across the top of the window. Hiding it does not make the software any less alpha.",
     "openLogs": "Open Logs",
     "bufferHeading": "In-memory log buffer",
     "bufferDescription": "{{retained}} retained in this GUI session. Kassiber keeps at most {{records}} records or {{bytes}}, whichever is reached first. Refreshing or closing the app clears the buffer unless you export it first."
