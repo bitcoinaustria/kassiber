@@ -495,6 +495,58 @@ class TransactionGraphTest(unittest.TestCase):
                 )
         self.assertEqual(tg._size_metadata_from_raw_hex("not-hex"), {})
 
+    def test_local_inventory_amounts_never_cross_liquid_assets(self):
+        # A Liquid wallet holds L-BTC next to other assets, with one inventory row
+        # per asset. Using the wrong row would draw and format a token amount as
+        # bitcoin — mempool.space guards the same case by treating a non-policy
+        # asset leg as valueless.
+        txid = "88" * 32
+        prev_txid = "89" * 32
+        usdt = "ce" * 32
+        self._utxo(
+            "wallet-a",
+            ADDR_A,
+            prev_txid,
+            0,
+            amount=1_000_000,
+            chain="liquid",
+            network="liquidv1",
+            asset="LBTC",
+        )
+        self._utxo(
+            "wallet-a",
+            ADDR_B,
+            prev_txid,
+            1,
+            amount=5_000_000_000,
+            chain="liquid",
+            network="liquidv1",
+            asset=usdt,
+        )
+        raw = {
+            "txid": txid,
+            "vin": [
+                {"txid": prev_txid, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}},
+                {"txid": prev_txid, "vout": 1, "prevout": {"scriptpubkey": SCRIPT_B}},
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "valuecommitment": "09" + "bb" * 32}],
+        }
+        self._tx(
+            "multi-asset-liquid-row",
+            "wallet-a",
+            "outbound",
+            999_000_000,
+            txid,
+            raw,
+            asset="LBTC",
+        )
+
+        payload = self._graph("multi-asset-liquid-row")
+
+        self.assertEqual(payload["inputs"][0]["valueSats"], 1_000_000)
+        self.assertEqual(payload["inputs"][1]["valueState"], "confidential")
+        self.assertNotIn("valueSats", payload["inputs"][1])
+
     def test_bitcoin_missing_input_prevout_values_are_explained_precisely(self):
         raw = {
             "txid": "prevout-missing-tx",

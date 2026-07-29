@@ -53,7 +53,8 @@ SATS_TO_MSAT = 1000
 COINBASE_PREVOUT_TXID = "00" * 32
 COINBASE_PREVOUT_VOUT = 0xFFFFFFFF
 # Upper bound on how many input/output strands a single graph payload carries
-# per side. Mirrors mempool.space's line limit so a fan-out transaction (large
+# per side. Matches the default line limit of mempool.space's bowtie component
+# (its own transaction page passes 150) so a fan-out transaction (large
 # CoinJoins, sweeping consolidations) cannot inflate the payload or the rendered
 # strand count without bound; the remainder collapses into one overflow node.
 MAX_GRAPH_NODES_PER_SIDE = 250
@@ -553,10 +554,15 @@ def _local_wallet_outpoint_amounts(
         if _looks_liquid_or_confidential(row, raw)
         else _row_chain_network(row)
     )
+    # The graph's value axis is one asset. A Liquid wallet holding L-BTC next to a
+    # stablecoin has an inventory row per asset for the same transaction, and using
+    # the wrong one would draw (and format) a token amount as bitcoin.
+    row_asset = _string_or_none(_row_get(row, "asset"))
+    wanted_asset = row_asset.upper() if row_asset else None
     placeholders = ", ".join("?" for _ in outpoints)
     rows = conn.execute(
         f"""
-        SELECT lower(outpoint) AS outpoint, amount, chain, network
+        SELECT lower(outpoint) AS outpoint, amount, chain, network, UPPER(asset) AS asset
         FROM wallet_utxos
         WHERE profile_id = ?
           AND lower(outpoint) IN ({placeholders})
@@ -565,6 +571,11 @@ def _local_wallet_outpoint_amounts(
     ).fetchall()
     amounts: dict[str, int] = {}
     for amount_row in rows:
+        # Only skip on a known mismatch: legacy rows with no asset recorded are
+        # Bitcoin, and dropping them would lose amounts kassiber does have.
+        utxo_asset = _string_or_none(_row_get(amount_row, "asset"))
+        if wanted_asset and utxo_asset and utxo_asset != wanted_asset:
+            continue
         # Normalize BOTH sides, as core.ownership does when it seeds the owned
         # index: the transactions side is canonical ('main') while the inventory
         # column keeps whatever the writer stored ('mainnet' on the Wasabi import
