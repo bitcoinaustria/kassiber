@@ -587,6 +587,9 @@ export function AppShell() {
   const assistantDockExpanded = useUiStore((s) => s.assistantDockExpanded);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const preAlphaBannerVisible = useUiStore((s) => s.preAlphaBannerVisible);
+  // The lights sit on the banner while it is shown, so the shell only makes
+  // room for them once it is hidden.
+  const titleBarInset = macTitleBarInset && !preAlphaBannerVisible;
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
   const activeMaintenanceProgress = useUiStore(
     (s) => s.activeMaintenanceProgress,
@@ -1712,7 +1715,19 @@ export function AppShell() {
           carries only its own page plus a floating strip of shell controls.
           There is no full-width top bar — the controls float over the panel.
         */}
-        <SidebarProvider className="min-h-0 flex-1 bg-sidebar">
+        <SidebarProvider
+          className="min-h-0 flex-1 bg-sidebar"
+          // Signal's collapsed rail is as wide as the traffic lights it carries.
+          // Ours matches: the light zone runs 20–72px, so 92px leaves the same
+          // margin on both sides and the rail's icons centre under them. Px, not
+          // rem — the interface-scale setting must not shrink a rail that has to
+          // fit native chrome.
+          style={
+            titleBarInset
+              ? ({ "--sidebar-width-icon": "92px" } as React.CSSProperties)
+              : undefined
+          }
+        >
           <a
             href="#app-main"
             className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
@@ -2862,10 +2877,6 @@ function ShellFloatingControls({
 }) {
   const { t } = useTranslation(["chrome", "nav"]);
   const navigate = useNavigate();
-  const { state: sidebarState, isMobile } = useSidebar();
-  const collapsedSidebar = sidebarState === "collapsed" && !isMobile;
-  const bannerVisible = useUiStore((s) => s.preAlphaBannerVisible);
-  const titleBarInset = macTitleBarInset && !bannerVisible;
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const appNotifications = useUiStore((s) => s.notifications);
@@ -2955,18 +2966,7 @@ function ShellFloatingControls({
         foreground weight. It is not an ancestor chain — T3Code has no
         Breadcrumb component and no deeper trail than these two levels.
       */}
-      <div
-        className={cn(
-          "flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3",
-          // Collapsed, the icon rail is narrower than the traffic lights, so
-          // the last light overhangs into this row. Start the breadcrumb clear
-          // of whatever sticks out; the rail width is a scale-aware variable,
-          // so the overhang is computed rather than hardcoded.
-          titleBarInset &&
-            collapsedSidebar &&
-            "pl-[max(0px,calc(72px-var(--sidebar-width-icon)))]",
-        )}
-      >
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
         <BreadcrumbBook daemonEnabled={daemonEnabled} />
         <span
           className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
