@@ -716,6 +716,7 @@
     "roles": {
       "ambiguousOwnedOutput": "Ambiguous owned output",
       "change": "Change",
+      "coinbase": "Coinbase",
       "externalRecipient": "External recipient",
       "fee": "Fee",
       "incomingPayment": "Incoming payment",
@@ -731,6 +732,7 @@
     "ownership": {
       "aggregated": "Aggregated legs",
       "ambiguousWallet": "Ambiguous wallet ownership",
+      "coinbase": "Newly issued",
       "externalWallet": "External wallet leg",
       "internalChange": "Internal change output",
       "internalWallet": "Internal wallet leg",
@@ -769,6 +771,7 @@
       "booked_custody_conversion": "Booked custody conversion",
       "booked_custody_direct_payout": "Booked direct payout",
       "booked_custody_move": "Booked custody move",
+      "coinbase": "Newly issued (coinbase)",
       "peg_in": "Peg-in from Bitcoin",
       "peg_out": "Peg-out to Bitcoin"
     },

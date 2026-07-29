@@ -109,6 +109,7 @@ function roleLabel(role: string | undefined, t: TFunction<"transactions">) {
     incoming_payment: t("graph.roles.incomingPayment"),
     owned_destination: t("graph.roles.ownedDestination"),
     op_return: t("graph.roles.opReturn"),
+    coinbase: t("graph.roles.coinbase"),
     peg_in: t("graph.roles.pegIn"),
     peg_out: t("graph.roles.pegOut"),
     fee: t("graph.roles.fee"),
@@ -129,6 +130,7 @@ function ownershipBoundaryLabel(node: TransactionGraphNode, t: TFunction<"transa
   if (node.ownership === "ambiguous") return t("graph.ownership.ambiguousWallet");
   if (node.ownership === "unspendable") return t("graph.ownership.unspendable");
   if (node.ownership === "peg_out") return t("graph.ownership.pegOut");
+  if (node.ownership === "coinbase") return t("graph.ownership.coinbase");
   if (node.ownership === "overflow") return t("graph.ownership.aggregated");
   return t("graph.ownership.unknown");
 }

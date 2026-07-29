@@ -735,6 +735,7 @@
     "roles": {
       "ambiguousOwnedOutput": "Mehrdeutig eigener Output",
       "change": "Wechselgeld",
+      "coinbase": "Coinbase",
       "externalRecipient": "Externer Empfänger",
       "fee": "Gebühr",
       "incomingPayment": "Eingehende Zahlung",
@@ -750,6 +751,7 @@
     "ownership": {
       "aggregated": "Zusammengefasste Stränge",
       "ambiguousWallet": "Mehrdeutige Wallet-Zugehörigkeit",
+      "coinbase": "Neu ausgegeben",
       "externalWallet": "Externer Wallet-Strang",
       "internalChange": "Interner Wechselgeld-Output",
       "internalWallet": "Interner Wallet-Strang",
@@ -788,6 +790,7 @@
       "booked_custody_conversion": "Gebuchte Custody-Konversion",
       "booked_custody_direct_payout": "Gebuchte Direktauszahlung",
       "booked_custody_move": "Gebuchter Custody-Move",
+      "coinbase": "Neu ausgegeben (Coinbase)",
       "peg_in": "Peg-in von Bitcoin",
       "peg_out": "Peg-out nach Bitcoin"
     },

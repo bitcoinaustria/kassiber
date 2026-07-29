@@ -547,6 +547,60 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["inputs"][1]["valueState"], "confidential")
         self.assertNotIn("valueSats", payload["inputs"][1])
 
+    def test_coinbase_input_is_not_reported_as_an_external_wallet(self):
+        txid = "8c" * 32
+        raw = {
+            "txid": txid,
+            "vin": [{"is_coinbase": True, "prevout": None}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 312_500_000}],
+        }
+        self._tx("coinbase-row", "wallet-a", "inbound", 312_500_000_000, txid, raw)
+
+        node = self._graph("coinbase-row")["inputs"][0]
+
+        self.assertEqual(node["role"], "coinbase")
+        self.assertEqual(node["ownership"], "coinbase")
+
+    def test_electrum_coinbase_sentinel_survives_the_cache_as_coinbase(self):
+        # The Electrum normalizer strips the all-zero sentinel, so the flag has to
+        # be recorded or a cached coinbase graph loses the distinction.
+        txid = "8d" * 32
+        create_db_backend(
+            self.conn,
+            "graph-fulcrum",
+            "electrum",
+            "ssl://fulcrum.example:50002",
+            chain="bitcoin",
+            network="main",
+            timeout=60,
+            commit=False,
+        )
+        self._tx("coinbase-electrum-row", "wallet-a", "inbound", 312_500_000_000, txid, "{}")
+        decoded = {
+            "version": 2,
+            "locktime": 0,
+            "vin": [{"txid": "00" * 32, "vout": 0xFFFFFFFF}],
+            "vout": [{"n": 0, "script_hex": SCRIPT_B, "value_sats": 312_500_000}],
+        }
+        _FakeElectrumClient.calls = []
+        _FakeElectrumClient.responses = {txid: "coinbase-raw"}
+
+        with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
+            "kassiber.core.transaction_graph.decode_raw_transaction",
+            return_value=decoded,
+        ):
+            payload = self._graph("coinbase-electrum-row", allow_public_lookup=True)
+
+        self.assertEqual(payload["inputs"][0]["role"], "coinbase")
+        cached = self._cached_graph_raw(txid)
+        self.assertTrue(cached["vin"][0]["is_coinbase"])
+
+        _FakeElectrumClient.calls = []
+        with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient):
+            reopened = self._graph("coinbase-electrum-row", allow_public_lookup=True)
+        self.assertEqual(_FakeElectrumClient.calls, [])
+        self.assertEqual(reopened["inputs"][0]["role"], "coinbase")
+
     def test_liquid_peg_legs_are_classified_from_chain_data(self):
         # The chain says outright which legs are pegs, so no federation-address
         # heuristic is needed — but the signal has to survive sanitization.

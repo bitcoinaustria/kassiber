@@ -689,6 +689,8 @@ def _parse_graph(
         }
         if _is_pegin_leg(entry):
             node["_pegin"] = True
+        if _is_coinbase_leg(entry):
+            node["_coinbase"] = True
         inputs.append(node)
 
     outputs: list[dict[str, Any]] = []
@@ -2000,6 +2002,8 @@ def _sanitize_graph_vin(entry: Any, chain: str) -> dict[str, Any] | None:
     # addresses is needed when the source data says so outright.
     if _is_pegin_leg(entry):
         sanitized["is_pegin"] = True
+    if _is_coinbase_leg(entry):
+        sanitized["is_coinbase"] = True
     prevout = entry.get("prevout")
     if isinstance(prevout, Mapping):
         clean_prevout = _sanitize_graph_value_script(prevout, chain, include_n=False)
@@ -2070,7 +2074,15 @@ def _annotate_graph(
         )
         _apply_match_annotation(node, matches, "owned_input", "external_input")
         input_owner_ids.update(str(match.wallet_id) for match in matches)
-        if node.get("_pegin"):
+        if node.get("_coinbase"):
+            # Newly issued supply: there is no previous owner, so "external
+            # wallet" would be the wrong thing to say about it.
+            node["ownership"] = "coinbase"
+            node["role"] = "coinbase"
+            node["annotations"].append(
+                _node_annotation("coinbase", "Newly issued (coinbase)")
+            )
+        elif node.get("_pegin"):
             # Value entering Liquid from Bitcoin, not a payment from a stranger.
             node["role"] = "peg_in"
             node["annotations"].append(
@@ -2619,6 +2631,30 @@ def _is_liquid_fee_output(entry: Mapping[str, Any]) -> bool:
     if _string_or_none(entry.get("scriptpubkey") or entry.get("script_hex")):
         return False
     return entry.get("value") is not None
+
+
+def _is_coinbase_leg(entry: Mapping[str, Any]) -> bool:
+    """True for the synthetic input of a coinbase transaction.
+
+    Either the source says so, or the input carries the all-zero prevout sentinel
+    that only a coinbase has. The Electrum path strips that sentinel while
+    normalizing, leaving an input with no outpoint at all, so that counts too.
+    """
+    for key in ("is_coinbase", "isCoinbase", "coinbase"):
+        value = entry.get(key)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value.strip().lower() in {"true", "1"}:
+            return True
+    txid = _string_or_none(entry.get("txid"))
+    vout = _int_or_none(entry.get("vout"))
+    if txid is None and vout is None:
+        return True
+    return (
+        txid is not None
+        and txid.lower() == COINBASE_PREVOUT_TXID
+        and vout == COINBASE_PREVOUT_VOUT
+    )
 
 
 def _is_pegin_leg(entry: Mapping[str, Any]) -> bool:
