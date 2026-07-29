@@ -1526,7 +1526,11 @@ export const BtcActivityChart = ({
       {renderChartCard()}
       <DialogContent
         showCloseButton={false}
-        className="top-0 left-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 sm:max-w-none"
+        // `zoom-in-95` is the shared dialog's entrance, sized for a small
+        // centred modal. On a full-screen surface it scales the whole chart up
+        // from 95% around the viewport centre, which reads as the chart sliding
+        // sideways as it settles. Full screen fades, it does not zoom.
+        className="top-0 left-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:max-w-none"
       >
         <DialogTitle className="sr-only">
           {t("treasury.expandedTitle")}
