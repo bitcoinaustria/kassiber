@@ -2134,7 +2134,11 @@ function SidebarBrand() {
       className={cn(
         "flex h-8 min-w-0 items-center gap-0.5",
         collapsed && "justify-center",
-        inset && (collapsed ? "mt-[28px]" : "pl-[72px]"),
+        // Expanded: sit *in* the title-bar band rather than below it — cancel
+        // the header's top padding and match the band's 28px so the row's
+        // centre lands on the lights' centre. Collapsed: the rail is narrower
+        // than the 72px light zone, so it starts under the band instead.
+        inset && (collapsed ? "mt-[28px]" : "-mt-2 h-[28px] pl-[72px]"),
       )}
     >
       <SidebarTrigger className={navIconButtonClassName} />
@@ -2858,6 +2862,10 @@ function ShellFloatingControls({
 }) {
   const { t } = useTranslation(["chrome", "nav"]);
   const navigate = useNavigate();
+  const { state: sidebarState, isMobile } = useSidebar();
+  const collapsedSidebar = sidebarState === "collapsed" && !isMobile;
+  const bannerVisible = useUiStore((s) => s.preAlphaBannerVisible);
+  const titleBarInset = macTitleBarInset && !bannerVisible;
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
   const appNotifications = useUiStore((s) => s.notifications);
@@ -2938,14 +2946,27 @@ function ShellFloatingControls({
       under a button — and the buttons themselves sit bare on the panel, as
       T3Code's workspace controls do.
     */
-    <div className="relative z-20 flex h-[var(--kb-topbar-height)] w-full shrink-0 items-center justify-between gap-2 px-3 sm:gap-3 sm:px-4 md:px-5">
+    <div
+      className="relative z-20 flex h-[var(--kb-topbar-height)] w-full shrink-0 items-center justify-between gap-2 px-3 sm:gap-3 sm:px-4 md:px-5"
+    >
       {/*
         T3Code's breadcrumb, shape for shape: the owning scope leads in muted
         text, a 40%-opacity `/` separates, and the current item sits in the
         foreground weight. It is not an ancestor chain — T3Code has no
         Breadcrumb component and no deeper trail than these two levels.
       */}
-      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3",
+          // Collapsed, the icon rail is narrower than the traffic lights, so
+          // the last light overhangs into this row. Start the breadcrumb clear
+          // of whatever sticks out; the rail width is a scale-aware variable,
+          // so the overhang is computed rather than hardcoded.
+          titleBarInset &&
+            collapsedSidebar &&
+            "pl-[max(0px,calc(72px-var(--sidebar-width-icon)))]",
+        )}
+      >
         <BreadcrumbBook daemonEnabled={daemonEnabled} />
         <span
           className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
