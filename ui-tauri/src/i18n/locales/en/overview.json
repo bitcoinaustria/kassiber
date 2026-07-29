@@ -394,6 +394,7 @@
     "showSeries": "Show {{label}}",
     "markerSize": "Marker size",
     "minBtcSize": "Minimum BTC size for activity dots",
+    "groupDotsLabel": "Group overlapping dots",
     "allDots": "All dots",
     "resetMarkerMinimums": "Reset dot minimums",
     "incomingPayments": "Incoming payments",

@@ -160,6 +160,7 @@ export const ACTIVITY_MARKER_INPUT_STEP_BTC = 0.00000001;
 export const ACTIVITY_MARKER_SLIDER_MARKS = [0, 0.0025, 0.01, 0.1, 0.5, 1] as const;
 export const INCOMING_MARKER_MIN_PARAM = "incomingMinBtc";
 export const OUTGOING_MARKER_MIN_PARAM = "outgoingMinBtc";
+export const GROUP_DOTS_PARAM = "groupEvents";
 export const Y_SCALE_PARAM = "scale";
 export const Y_AUTO_FIT_PARAM = "fit";
 export const TREASURY_BRUSH_MIN_WINDOW_MS = (7 * 24 * 60 * 60 * 1000) / 3;
@@ -760,6 +761,12 @@ export function initialYScaleLogFromUrl(): boolean {
 export function initialYAutoFitFromUrl(): boolean {
   const value = urlParam(Y_AUTO_FIT_PARAM)?.toLowerCase();
   return value === "auto" || value === "1";
+}
+
+// Grouping is on unless a bookmarked URL says otherwise.
+export function initialGroupActivityDotsFromUrl(): boolean {
+  const value = urlParam(GROUP_DOTS_PARAM)?.toLowerCase();
+  return value !== "0" && value !== "off";
 }
 
 // A log scale has no place for zero: before the first funding the balance

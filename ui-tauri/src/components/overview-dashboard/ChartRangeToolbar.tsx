@@ -85,6 +85,8 @@ export function ChartRangeToolbar({
   onYAutoFitChange,
   showLastValue,
   onShowLastValueChange,
+  groupActivityDots,
+  onGroupActivityDotsChange,
   incomingMarkerMinimumBtc,
   onIncomingMarkerMinimumChange,
   outgoingMarkerMinimumBtc,
@@ -103,6 +105,8 @@ export function ChartRangeToolbar({
   onYAutoFitChange: (value: boolean) => void;
   showLastValue: boolean;
   onShowLastValueChange: (value: boolean) => void;
+  groupActivityDots: boolean;
+  onGroupActivityDotsChange: (value: boolean) => void;
   incomingMarkerMinimumBtc: number;
   onIncomingMarkerMinimumChange: (value: number) => void;
   outgoingMarkerMinimumBtc: number;
@@ -199,6 +203,13 @@ export function ChartRangeToolbar({
               onSelect={(event) => event.preventDefault()}
             >
               {t("controls.lastValueLabel")}
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={groupActivityDots}
+              onCheckedChange={onGroupActivityDotsChange}
+              onSelect={(event) => event.preventDefault()}
+            >
+              {t("controls.groupDotsLabel")}
             </DropdownMenuCheckboxItem>
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-2xs text-muted-foreground">

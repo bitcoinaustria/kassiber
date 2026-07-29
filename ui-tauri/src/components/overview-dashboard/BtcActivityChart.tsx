@@ -58,8 +58,10 @@ import {
   formatTreasuryTick,
   fullTreasuryBrushRange,
   getDataForPeriod,
+  GROUP_DOTS_PARAM,
   hasTreasuryChartData,
   initialActivityMarkerMinimumFromUrl,
+  initialGroupActivityDotsFromUrl,
   initialTimePeriodFromUrl,
   initialYAutoFitFromUrl,
   initialYScaleLogFromUrl,
@@ -143,6 +145,9 @@ export const BtcActivityChart = ({
     initialYAutoFitFromUrl,
   );
   const [showLastValue, setShowLastValue] = React.useState(true);
+  const [groupActivityDots, setGroupActivityDots] = React.useState<boolean>(
+    initialGroupActivityDotsFromUrl,
+  );
   const [expandedPointDate, setExpandedPointDate] = React.useState<string | null>(
     null,
   );
@@ -312,8 +317,11 @@ export const BtcActivityChart = ({
           serializeActivityMarkerMinimum(outgoingMarkerMinimumBtc),
         );
       }
-      // The grouping toggle is gone; clear its param off bookmarked URLs.
-      params.delete("groupEvents");
+      if (groupActivityDots) {
+        params.delete(GROUP_DOTS_PARAM);
+      } else {
+        params.set(GROUP_DOTS_PARAM, "0");
+      }
       if (yScaleLog) {
         params.set(Y_SCALE_PARAM, "log");
       } else {
@@ -332,6 +340,7 @@ export const BtcActivityChart = ({
     }, 150);
     return () => window.clearTimeout(timeout);
   }, [
+    groupActivityDots,
     incomingMarkerMinimumBtc,
     outgoingMarkerMinimumBtc,
     period,
@@ -510,12 +519,21 @@ export const BtcActivityChart = ({
     const drawableActivityMarkers = yScaleLog
       ? logSafeActivityMarkers(selectedActivityMarkers)
       : selectedActivityMarkers;
-    // Always bucketed: overlapping dots are never useful, and zooming the
-    // brush is what splits a bucket back into its events.
+    // Grouping only changes how wide a bucket reaches: on, dots merge until
+    // ~32/56 survive; off, the target is one dot per plotted column, so only
+    // events landing on the very same column still share a dot. Off still goes
+    // through bucketing because two dots at identical coordinates are a worse
+    // answer than one dot labelled "2".
     const plotMarkers = bucketActivityMarkers(
       drawableActivityMarkers,
       selectedChartDisplayData,
-      { maxVisibleMarkers: expanded ? 56 : 32 },
+      {
+        maxVisibleMarkers: groupActivityDots
+          ? expanded
+            ? 56
+            : 32
+          : selectedChartDisplayData.length,
+      },
     );
     const btcAxisValues = [
       ...(seriesVisible.primary
@@ -1352,6 +1370,8 @@ export const BtcActivityChart = ({
               onYAutoFitChange={setYAutoFit}
               showLastValue={showLastValue}
               onShowLastValueChange={setShowLastValue}
+              groupActivityDots={groupActivityDots}
+              onGroupActivityDotsChange={setGroupActivityDots}
               incomingMarkerMinimumBtc={incomingMarkerMinimumBtc}
               onIncomingMarkerMinimumChange={setIncomingMarkerMinimumBtc}
               outgoingMarkerMinimumBtc={outgoingMarkerMinimumBtc}

@@ -394,6 +394,7 @@
     "showSeries": "{{label}} anzeigen",
     "markerSize": "Markergröße",
     "minBtcSize": "Mindestgröße in BTC für Aktivitätspunkte",
+    "groupDotsLabel": "Überlappende Punkte gruppieren",
     "allDots": "Alle Punkte",
     "resetMarkerMinimums": "Mindestgrößen zurücksetzen",
     "incomingPayments": "Eingehende Zahlungen",
