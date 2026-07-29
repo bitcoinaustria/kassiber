@@ -218,7 +218,11 @@ references while keeping confidential amounts unsized or hidden. When the user
 allows a configured public backend lookup, the daemon caches only the sanitized
 reference graph inside the local DB/SQLCipher boundary, keyed by schema version,
 chain, network, and txid, so reopening the same transaction does not refetch the
-same public tx/prevtx material. Kassiber deliberately does not persist raw
+same public tx/prevtx material. A previous output is resolved from the cheapest
+source that has it: the graph cache, then the profile's own stored transaction
+graphs (a fan-in prevout is frequently the body of another synced row), and only
+then the configured backend. The payload reports the row's resolved `chain` and
+`network` so clients do not have to infer the network from asset labels. Kassiber deliberately does not persist raw
 serialized transactions for this graph cache: the graph endpoint needs only the
 normalized refs, prevout values/scripts, and size metadata required to rebuild a
 complete current-transaction graph, not witnesses, arbitrary script payloads, or

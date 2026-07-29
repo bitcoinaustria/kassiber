@@ -356,6 +356,41 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["transaction"]["vsize"], 60)
         self.assertEqual(payload["transaction"]["weight"], 240)
 
+    def test_payload_reports_the_row_chain_and_network(self):
+        self._tx("chain-row", "wallet-a", "outbound", 100_000_000, "chain-1", "{}")
+        self.conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps({"chain": "bitcoin", "network": "signet"}), "wallet-a"),
+        )
+        self._tx("liquid-chain-row", "wallet-b", "outbound", 100_000_000, "chain-2", "{}", asset="LBTC")
+
+        self.assertEqual(self._graph("chain-row")["transaction"]["chain"], "bitcoin")
+        self.assertEqual(self._graph("chain-row")["transaction"]["network"], "signet")
+        liquid = self._graph("liquid-chain-row")["transaction"]
+        self.assertEqual((liquid["chain"], liquid["network"]), ("liquid", "liquidv1"))
+
+    def test_bitcoin_prevout_amounts_come_from_local_inventory_without_chain_config(self):
+        # wallet-a has no chain material in its config (a BTCPay store, a CSV
+        # import or a Lightning node): the local amount lookup must still read the
+        # profile's Bitcoin inventory rather than filtering it to Liquid.
+        prev_txid = "71" * 32
+        txid = "72" * 32
+        self._utxo("wallet-a", ADDR_A, prev_txid, 0, amount=600_000)
+        raw = {
+            "txid": txid,
+            "vin": [{"txid": prev_txid, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 500_000}],
+        }
+        self._tx("local-amount-row", "wallet-a", "outbound", 500_000_000, txid, raw)
+
+        payload = self._graph("local-amount-row")
+
+        self.assertEqual(payload["supportLevel"], "full")
+        self.assertIsNone(payload["unsupportedReason"])
+        self.assertEqual(payload["inputs"][0]["valueSats"], 600_000)
+        self.assertEqual(payload["inputs"][0]["valueState"], "known")
+        self.assertEqual(payload["fee"]["valueSats"], 100_000)
+
     def test_bitcoin_missing_input_prevout_values_are_explained_precisely(self):
         raw = {
             "txid": "prevout-missing-tx",
@@ -2033,6 +2068,93 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["outputs"][0]["valueSats"], 600_000)
         self.assertEqual(payload["fee"]["valueSats"], 100_000)
 
+    def test_bitcoin_prevout_is_read_from_a_local_transaction_graph(self):
+        txid = "73" * 32
+        prev_txid = "74" * 32
+        create_db_backend(
+            self.conn,
+            "graph-fulcrum",
+            "electrum",
+            "ssl://fulcrum.example:50002",
+            chain="bitcoin",
+            network="main",
+            timeout=60,
+            commit=False,
+        )
+        # wallet-b already synced the previous transaction in full. Its stored
+        # shape is the Esplora one, which carries no explicit "n".
+        self._tx(
+            "local-prev-row",
+            "wallet-b",
+            "inbound",
+            700_000_000,
+            prev_txid,
+            {
+                "txid": prev_txid,
+                "vin": [],
+                "vout": [{"scriptpubkey": SCRIPT_A, "value": 700_000}],
+            },
+        )
+        self._tx("local-prev-spend-row", "wallet-a", "outbound", 600_000_000, txid, "{}")
+        decoded_current = {
+            "version": 2,
+            "locktime": 0,
+            "vin": [{"txid": prev_txid, "vout": 0}],
+            "vout": [{"n": 0, "script_hex": SCRIPT_B, "value_sats": 600_000}],
+        }
+        _FakeElectrumClient.calls = []
+        _FakeElectrumClient.backends = []
+        _FakeElectrumClient.responses = {txid: "current-raw"}
+
+        with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
+            "kassiber.core.transaction_graph.decode_raw_transaction",
+            return_value=decoded_current,
+        ):
+            payload = self._graph("local-prev-spend-row", allow_public_lookup=True)
+
+        # Only the focused transaction went to the backend; the prevout was local.
+        self.assertEqual(
+            _FakeElectrumClient.calls,
+            [("blockchain.transaction.get", (txid,))],
+        )
+        self.assertEqual(payload["supportLevel"], "full")
+        self.assertEqual(payload["inputs"][0]["valueSats"], 700_000)
+        self.assertEqual(payload["fee"]["valueSats"], 100_000)
+
+    def test_failed_lookup_keeps_the_partial_local_graph(self):
+        txid = "75" * 32
+        create_db_backend(
+            self.conn,
+            "graph-mempool",
+            "mempool",
+            "https://mempool.example/api",
+            chain="bitcoin",
+            network="main",
+            timeout=5,
+            commit=False,
+        )
+        raw = {
+            "txid": txid,
+            "vin": [{"txid": "76" * 32, "vout": 0}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 500_000}],
+        }
+        self._tx("failed-lookup-row", "wallet-a", "inbound", 500_000_000, txid, raw)
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            side_effect=RuntimeError("backend down"),
+        ):
+            payload = self._graph("failed-lookup-row", allow_public_lookup=True)
+
+        # A failed enrichment must not throw away the graph the row already had.
+        self.assertEqual(payload["supportLevel"], "partial")
+        self.assertEqual(payload["unsupportedReason"], "input_prevout_values_missing")
+        self.assertEqual(payload["outputs"][0]["valueSats"], 500_000)
+        self.assertIn(
+            "bitcoin_reference_lookup_failed",
+            {warning["code"] for warning in payload["warnings"]},
+        )
+
     def test_bitcoin_electrum_prevtx_fan_in_limit_surfaces_partial_without_batch_fetch(self):
         txid = "1b" * 32
         create_db_backend(
@@ -2046,7 +2168,7 @@ class TransactionGraphTest(unittest.TestCase):
             commit=False,
         )
         self._tx("fan-in-limit-row", "wallet-a", "outbound", 1_000_000_000, txid, "{}")
-        prev_txids = [f"{index:064x}" for index in range(tg.MAX_ELECTRUM_GRAPH_PREVTX_LOOKUPS + 1)]
+        prev_txids = [f"{index:064x}" for index in range(tg.MAX_GRAPH_PREVTX_LOOKUPS + 1)]
         decoded_current = {
             "version": 2,
             "locktime": 0,

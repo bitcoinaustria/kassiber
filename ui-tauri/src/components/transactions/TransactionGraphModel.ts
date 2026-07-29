@@ -90,6 +90,9 @@ export type TransactionGraphPayload = {
     vsize?: number | null;
     weight?: number | null;
     feeRateSatVb?: number | null;
+    // Resolved by the daemon (`_row_chain_network`); do not infer either of
+    // these from asset or wallet labels.
+    chain?: string | null;
     network?: string | null;
   } | null;
   supportLevel: "full" | "partial" | "graphless" | "unsupported";
@@ -109,11 +112,102 @@ export type TransactionGraphPayload = {
 
 export type TransactionGraphIssueTarget = "bitcoin" | "liquid";
 
+export type TransactionRouteKind = "swap" | "coinjoin" | "transfer" | "pair";
+
+function lowerJoin(parts: Array<string | null | undefined>) {
+  return parts.filter(Boolean).join(" ").toLowerCase();
+}
+
+export function looksLiquid(...parts: Array<string | null | undefined>) {
+  const text = lowerJoin(parts);
+  return text.includes("liquid") || text.includes("lbtc") || text.includes("l-btc");
+}
+
+export function looksLightning(...parts: Array<string | null | undefined>) {
+  const text = lowerJoin(parts);
+  return text.includes("lightning") || text.includes("ln-btc");
+}
+
+/** "Liquid" / "Bitcoin" for display, or the raw asset when neither applies. */
+export function routeNetworkLabel(
+  asset?: string | null,
+  ...walletHints: Array<string | null | undefined>
+) {
+  if (looksLiquid(asset, ...walletHints)) return "Liquid";
+  if (String(asset || "").toUpperCase() === "BTC") return "Bitcoin";
+  return asset || undefined;
+}
+
+function normalizedAsset(asset?: string | null) {
+  return String(asset || "").trim().toUpperCase();
+}
+
+/**
+ * Classify a paired route.
+ *
+ * The daemon ships `routeKind` and per-leg `role` for current payloads; this is
+ * the single client heuristic used for everything that predates them (older
+ * snapshots, and the pair fallback built from a transactions-list row). It
+ * deliberately mirrors `_paired_route_kind` in `core/transaction_graph.py`.
+ */
+export function classifyRouteKind({
+  kind,
+  policy,
+  outAsset,
+  inAsset,
+}: {
+  kind?: string | null;
+  policy?: string | null;
+  outAsset?: string | null;
+  inAsset?: string | null;
+}): TransactionRouteKind {
+  const text = String(kind || "").toLowerCase();
+  if (text.includes("coinjoin") || text.includes("whirlpool")) return "coinjoin";
+  if (
+    text.includes("swap") ||
+    text.startsWith("peg-") ||
+    normalizedAsset(outAsset) !== normalizedAsset(inAsset)
+  ) {
+    return "swap";
+  }
+  if (policy === "carrying-value") return "transfer";
+  return "pair";
+}
+
+/**
+ * Whether the outgoing leg of a swap reads as a consolidation rather than a
+ * plain spend: a Liquid-side leg feeding a different network, or a leg the
+ * source data already describes as one.
+ */
+export function classifyRouteOutRole({
+  kind,
+  policy,
+  description,
+  outAsset,
+  inAsset,
+  outWallet,
+  inWallet,
+}: {
+  kind?: string | null;
+  policy?: string | null;
+  description?: string | null;
+  outAsset?: string | null;
+  inAsset?: string | null;
+  outWallet?: string | null;
+  inWallet?: string | null;
+}): "consolidation" | "spend" {
+  if (classifyRouteKind({ kind, policy, outAsset, inAsset }) !== "swap") return "spend";
+  if (lowerJoin([kind, description]).includes("consolidat")) return "consolidation";
+  const outNetwork = routeNetworkLabel(outAsset, outWallet);
+  const inNetwork = routeNetworkLabel(inAsset, inWallet);
+  return outNetwork === "Liquid" && outNetwork !== inNetwork ? "consolidation" : "spend";
+}
+
 export type TransactionSwapRouteLegKey = "out" | "in";
 
 export type GraphRow = TransactionGraphNode & { side: "input" | "output" | "fee" };
 
-const MAX_COMPACT_ROWS = 24;
+export const MAX_COMPACT_ROWS = 24;
 
 export function compactGraphRows(
   nodes: TransactionGraphNode[],
@@ -158,7 +252,7 @@ export function compactGraphRows(
 export function sensitiveGraphText(
   value: string | null | undefined,
   hidden: boolean,
-  hiddenLabel = "Hidden",
+  hiddenLabel: string,
 ) {
   if (!value) return "";
   return hidden ? hiddenLabel : value;

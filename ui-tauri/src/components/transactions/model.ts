@@ -354,6 +354,7 @@ export function explorerForTransaction(
     return explorerTargetForTransaction({
       txid: txn.explorerId,
       network: "liquid",
+      networkName: txn.network,
       settings,
     });
   }
@@ -361,6 +362,7 @@ export function explorerForTransaction(
     return explorerTargetForTransaction({
       txid: txn.explorerId,
       network: "bitcoin",
+      networkName: txn.network,
       settings,
     });
   }

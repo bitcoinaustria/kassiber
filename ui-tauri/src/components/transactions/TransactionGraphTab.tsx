@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { openExternalUrl } from "@/daemon/transport";
 import { formatBtc } from "@/lib/currency";
-import { formatCount, formatSats } from "@/lib/localeFormat";
+import { formatCount } from "@/lib/localeFormat";
 import {
   connectionAssetIconKind,
   type ConnectionAssetLabel,
@@ -40,10 +40,16 @@ import { useUiStore } from "@/store/ui";
 
 import { copyText, formatShortTxid } from "./model";
 import {
+  classifyRouteKind,
+  classifyRouteOutRole,
   compactGraphRows,
+  looksLightning,
+  looksLiquid,
   nodeTooltipTitle,
   sensitiveGraphText,
+  MAX_COMPACT_ROWS,
   type GraphRow,
+  type TransactionRouteKind,
   type TransactionGraphAnnotation,
   type TransactionGraphIssueTarget,
   type TransactionGraphNode,
@@ -74,7 +80,6 @@ type TransactionGraphIssueAction = {
   labelKey: TransactionGraphIssueLabelKey;
 };
 
-const MAX_COMPACT_ROWS = 24;
 // The expanded dialog shows far more strands, but still caps so a fan-out
 // transaction cannot render thousands of paths. Matches the backend node cap.
 const MAX_EXPANDED_ROWS = 250;
@@ -83,12 +88,8 @@ const MAX_DETAIL_COLLAPSED_ROWS = 8;
 function formatNodeAmount(node: TransactionGraphNode, hidden: boolean, t: TFunction<"transactions">) {
   if (hidden) return t("graph.hidden");
   if (node.valueState === "confidential") return t("graph.confidentialAmount");
-  if (typeof node.valueBtc === "number") {
-    return formatBtc(node.valueBtc);
-  }
-  if (typeof node.valueSats === "number") {
-    return formatSats(node.valueSats);
-  }
+  // The daemon always ships valueSats and valueBtc together, or neither.
+  if (typeof node.valueBtc === "number") return formatBtc(node.valueBtc);
   return "";
 }
 
@@ -129,8 +130,15 @@ function ownershipBoundaryLabel(node: TransactionGraphNode, t: TFunction<"transa
   return t("graph.ownership.unknown");
 }
 
-function nodeReference(node: TransactionGraphNode) {
+// Two deliberately different orders: a detail row identifies a leg by address,
+// while the strand's copy target must be the outpoint its aria-label promises —
+// and must never fall back to a synthetic label like "+12 more".
+function displayReference(node: TransactionGraphNode) {
   return node.address || node.outpoint || node.txid || node.label || "";
+}
+
+function copyReference(node: TransactionGraphNode) {
+  return node.outpoint || node.address || node.txid || null;
 }
 
 function nodeDetailReference(
@@ -138,7 +146,7 @@ function nodeDetailReference(
   hidden: boolean,
   t: TFunction<"transactions">,
 ) {
-  const reference = nodeReference(node);
+  const reference = displayReference(node);
   if (!reference) return t("graph.inputsOutputs.unknownReference");
   return sensitiveGraphText(formatShortTxid(reference), hidden, t("graph.hidden"));
 }
@@ -176,8 +184,10 @@ function nodeDetailMeta(
 }
 
 function graphExplorerNetwork(graph: TransactionGraphPayload): ExplorerNetwork {
-  const text = `${graph.transaction?.network ?? ""} ${graph.transaction?.asset ?? ""}`.toLowerCase();
-  return text.includes("liquid") || text.includes("lbtc") || text.includes("l-btc")
+  const chain = graph.transaction?.chain?.trim().toLowerCase();
+  if (chain === "liquid" || chain === "bitcoin") return chain;
+  // Pre-`chain` payloads only: fall back to the old label sniffing.
+  return looksLiquid(graph.transaction?.network, graph.transaction?.asset)
     ? "liquid"
     : "bitcoin";
 }
@@ -192,10 +202,12 @@ function explorerTargetForGraphNode({
   settings: ExplorerSettings;
 }): ExplorerTarget | null {
   const network = graphExplorerNetwork(graph);
+  const networkName = graph.transaction?.network;
   if (node.address) {
     return explorerTargetForAddress({
       address: node.address,
       network,
+      networkName,
       settings,
     });
   }
@@ -203,6 +215,7 @@ function explorerTargetForGraphNode({
   return explorerTargetForTransaction({
     txid,
     network,
+    networkName,
     settings,
   });
 }
@@ -215,15 +228,12 @@ function amountSummary(nodes: TransactionGraphNode[]) {
       } else if (typeof node.valueSats === "number") {
         summary.knownCount += 1;
         summary.knownSats += node.valueSats;
-      } else {
-        summary.unknownCount += 1;
       }
       return summary;
     },
     {
       knownSats: 0,
       knownCount: 0,
-      unknownCount: 0,
       confidentialCount: 0,
     },
   );
@@ -539,17 +549,29 @@ type DrawableGraphRow = GraphRow & {
   zeroValue: boolean;
 };
 
-type GraphHoverDetail = {
-  node: DrawableGraphRow;
-};
-
 const AMOUNTLESS_FEE_STRAND_THICKNESS = 0.5;
 const GRAPH_ROW_HEIGHT = 29;
 const GRAPH_MULTI_LEG_GAP = 4;
 
+/** Drawing-only view of a leg's amount. Nothing here is accounting truth. */
+type GeometryValue = {
+  /** No usable amount: missing, or confidential on Liquid. */
+  amountless: boolean;
+  /** A known amount of zero — drawn as a stub, not a hairline. */
+  zero: boolean;
+  /** Known visual sats, or null when amountless. */
+  known: number | null;
+  /** Always-positive sats, so an unknown leg still gets a visible strand. */
+  visual: number;
+};
+
+function isAmountless(node: TransactionGraphNode) {
+  return typeof node.valueSats !== "number" || node.valueState === "confidential";
+}
+
 function positiveKnownSats(node: TransactionGraphNode) {
-  return typeof node.valueSats === "number" && node.valueSats > 0
-    ? node.valueSats
+  return !isAmountless(node) && (node.valueSats as number) > 0
+    ? (node.valueSats as number)
     : 0;
 }
 
@@ -565,33 +587,26 @@ function fallbackVisualSats(visualTotalSats: number, rowCount: number) {
   return Math.max(1, visualTotalSats / Math.max(1, rowCount));
 }
 
-function hasAmountlessGeometryValue(node: TransactionGraphNode) {
-  return typeof node.valueSats !== "number" || node.valueState === "confidential";
-}
-
-function hasKnownZeroGeometryValue(node: TransactionGraphNode) {
-  return !hasAmountlessGeometryValue(node) && typeof node.valueSats === "number" && node.valueSats <= 0;
-}
-
-function visualSatsForNode(node: TransactionGraphNode, fallbackSats: number) {
-  if (hasAmountlessGeometryValue(node)) {
-    return Math.max(1, fallbackSats);
-  }
-  if (typeof node.valueSats === "number") {
-    return Math.max(0, node.valueSats);
-  }
-  return Math.max(1, fallbackSats);
-}
-
-function visualKnownSatsForNode(
-  node: GraphRow,
-  hasAmountlessNonFeeRows: boolean,
-) {
-  const valueSats = node.valueSats;
-  if (typeof valueSats !== "number" || node.valueState === "confidential") return null;
-  const value = Math.max(0, valueSats);
-  if (node.side === "fee" && hasAmountlessNonFeeRows && value > 0) return 1;
-  return value;
+function geometryValues(rows: GraphRow[], fallbackSats: number) {
+  const hasAmountlessNonFeeRows = rows.some(
+    (node) => node.side !== "fee" && isAmountless(node),
+  );
+  const values: GeometryValue[] = rows.map((node) => {
+    if (isAmountless(node)) {
+      return {
+        amountless: true,
+        zero: false,
+        known: null,
+        visual: Math.max(1, fallbackSats),
+      };
+    }
+    const sats = Math.max(0, node.valueSats as number);
+    // A known fee sitting next to amountless legs would otherwise dominate the
+    // band, so it contributes a single sat of visual weight.
+    const known = node.side === "fee" && hasAmountlessNonFeeRows && sats > 0 ? 1 : sats;
+    return { amountless: false, zero: sats <= 0, known, visual: known };
+  });
+  return { values, hasAmountlessNonFeeRows };
 }
 
 function redactRowsForGeometry(rows: GraphRow[]): GraphRow[] {
@@ -617,32 +632,18 @@ function buildDrawableRows(
 ): DrawableGraphRow[] {
   if (!rows.length) return [];
   const centerY = height / 2;
-  const hasAmountlessNonFeeRows = rows.some(
-    (node) => node.side !== "fee" && hasAmountlessGeometryValue(node),
-  );
-  const knownVisualValues = rows.map((node) =>
-    visualKnownSatsForNode(node, hasAmountlessNonFeeRows),
-  );
-  const visualValues = rows.map((node, index) =>
-    knownVisualValues[index] ?? visualSatsForNode(node, fallbackSats),
-  );
-  const unknownCount = rows.filter(hasAmountlessGeometryValue).length;
-  const knownTotal = knownVisualValues.reduce(
-    (sum: number, value) => sum + (value ?? 0),
-    0,
-  );
-  const unknownShare =
-    unknownCount > 0
-      ? Math.max(1, (Math.max(totalSats, knownTotal) - knownTotal) / unknownCount)
-      : 0;
-  const weights = rows.map((_node, index) => {
-    if (!totalSats) return combinedWeight / rows.length;
-    const value = knownVisualValues[index] ?? (unknownShare || visualValues[index]);
-    return (combinedWeight * value) / Math.max(1, totalSats);
-  });
+  const { values, hasAmountlessNonFeeRows } = geometryValues(rows, fallbackSats);
+  const unknownCount = values.filter((value) => value.amountless).length;
+  const knownTotal = values.reduce((sum, value) => sum + (value.known ?? 0), 0);
+  // Unknown legs share whatever the opposite side says is unaccounted for.
+  const unknownShare = unknownCount
+    ? Math.max(1, (Math.max(totalSats, knownTotal) - knownTotal) / unknownCount)
+    : 0;
   const lines = rows.map((node, index) => {
-    const knownZero = hasKnownZeroGeometryValue(node);
-    const weight = weights[index] ?? 0;
+    const value = values[index];
+    const weight = totalSats
+      ? (combinedWeight * (value.known ?? unknownShare)) / Math.max(1, totalSats)
+      : combinedWeight / rows.length;
     const amountlessPeerFee =
       node.side === "fee" && hasAmountlessNonFeeRows && weight > 0;
     return {
@@ -651,14 +652,14 @@ function buildDrawableRows(
       innerY: centerY,
       thickness: amountlessPeerFee
         ? AMOUNTLESS_FEE_STRAND_THICKNESS
-        : knownZero
+        : value.zero
         ? 3
         : Math.min(combinedWeight + 0.5, Math.max(2, weight) + 1),
       weight,
       offset: 0,
-      visualValueSats: visualValues[index] ?? 0,
-      estimatedVisualValue: hasAmountlessGeometryValue(node),
-      zeroValue: knownZero,
+      visualValueSats: value.visual,
+      estimatedVisualValue: value.amountless,
+      zeroValue: value.zero,
     };
   });
   const visibleWeight = lines.reduce((sum, line) => sum + line.thickness, 0);
@@ -804,10 +805,6 @@ function makeZeroValuePath(
   return `M ${canvasWidth - start} ${y} L ${canvasWidth - start - length} ${y}`;
 }
 
-function copyReference(node: GraphRow) {
-  return node.outpoint || node.address || node.txid || null;
-}
-
 function copyAriaLabel(side: GraphRow["side"], t: TFunction<"transactions">) {
   if (side === "input") return t("graph.copyInput");
   if (side === "fee") return t("graph.copyFee");
@@ -829,7 +826,6 @@ function strandMarkerId(
 function GraphStrand({
   node,
   path,
-  markerPath,
   testId,
   active,
   gradientIds,
@@ -840,7 +836,6 @@ function GraphStrand({
 }: {
   node: DrawableGraphRow;
   path: string;
-  markerPath: string;
   testId?: string;
   active?: boolean;
   gradientIds: StrandGradientIds;
@@ -871,7 +866,7 @@ function GraphStrand({
   return (
     <>
       <path
-        d={markerPath}
+        d={path}
         role={reference ? "button" : "img"}
         tabIndex={reference ? 0 : undefined}
         aria-label={ariaLabel}
@@ -904,25 +899,52 @@ function GraphStrand({
   );
 }
 
+const MAX_ANNOTATION_BADGES = 8;
+
+// The daemon's `message`/`label` strings are English by construction (they are
+// built in Python, which stays machine-deterministic). Codes are stable, so the
+// UI translates by code and only falls back to the English text for codes it has
+// no key for — quarantine reasons and journal blockers, mostly.
+function graphCodeText(
+  t: TFunction<"transactions">,
+  namespace: "warnings" | "annotations",
+  code: string | undefined,
+  fallback: string | undefined,
+) {
+  const key = `graph.${namespace}.${String(code || "").trim()}`;
+  return t(key, { defaultValue: fallback || code || "" });
+}
+
 function AnnotationStrip({
   annotations,
-  hideSensitive,
 }: {
   annotations?: TransactionGraphAnnotation[];
-  hideSensitive: boolean;
 }) {
-  const items = (annotations ?? []).slice(0, 8);
-  if (!items.length) return null;
+  const { t } = useTranslation("transactions");
+  // Group ids used to be concatenated into the badge text, which put a raw
+  // internal identifier on screen. Collapse repeats of the same annotation into
+  // one badge with a count instead; the pairing itself lives in the Linked tab.
+  const badges = new Map<string, { label: string; severity?: string; count: number }>();
+  for (const annotation of annotations ?? []) {
+    const label = graphCodeText(t, "annotations", annotation.code, annotation.label);
+    if (!label) continue;
+    const existing = badges.get(label);
+    if (existing) {
+      existing.count += 1;
+    } else if (badges.size < MAX_ANNOTATION_BADGES) {
+      badges.set(label, { label, severity: annotation.severity, count: 1 });
+    }
+  }
+  if (!badges.size) return null;
   return (
     <div className="flex flex-wrap gap-1.5">
-      {items.map((annotation, index) => (
+      {[...badges.values()].map((badge) => (
         <Badge
-          key={`${annotation.code}-${annotation.groupId ?? ""}-${index}`}
-          variant={annotation.severity === "warning" ? "destructive" : "secondary"}
-          className={cn("rounded-md", hideSensitive && annotation.groupId && "sensitive")}
+          key={badge.label}
+          variant={badge.severity === "warning" ? "destructive" : "secondary"}
+          className="rounded-md"
         >
-          {annotation.label ?? annotation.code}
-          {annotation.groupId ? ` · ${annotation.groupId}` : ""}
+          {badge.count > 1 ? `${badge.label} · ${formatCount(badge.count)}` : badge.label}
         </Badge>
       ))}
     </div>
@@ -933,7 +955,7 @@ function formatRouteAmount(
   amountBtc: number | null | undefined,
   asset: string | null | undefined,
   hidden: boolean,
-  hiddenLabel = "Hidden",
+  hiddenLabel: string,
   showAsset = true,
 ) {
   if (hidden) return hiddenLabel;
@@ -946,7 +968,7 @@ function formatRouteFeePercent(
   feeBtc: number | null | undefined,
   baseBtc: number | null | undefined,
   hidden: boolean,
-  hiddenLabel = "Hidden",
+  hiddenLabel: string,
 ) {
   if (hidden) return hiddenLabel;
   if (
@@ -964,22 +986,11 @@ function formatRouteFeePercent(
 }
 
 function routeLegAssetLabel(leg: TransactionSwapRouteLeg): ConnectionAssetLabel | null {
-  const text = [
-    leg.asset,
-    leg.network,
-    leg.wallet?.kind,
-    leg.wallet?.label,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+  const parts = [leg.asset, leg.network, leg.wallet?.kind, leg.wallet?.label];
+  const text = parts.filter(Boolean).join(" ").toLowerCase();
   if (!text) return null;
-  if (text.includes("liquid") || text.includes("lbtc") || text.includes("l-btc")) {
-    return "LBTC";
-  }
-  if (text.includes("lightning") || text.includes("ln-btc")) {
-    return "LN-BTC";
-  }
+  if (looksLiquid(...parts)) return "LBTC";
+  if (looksLightning(...parts)) return "LN-BTC";
   if (text.includes("btc") || text.includes("bitcoin") || text.includes("descriptor")) {
     return "BTC";
   }
@@ -1036,24 +1047,19 @@ function routeCounterparty(
   return "";
 }
 
-function pairedRouteKind(route: TransactionSwapRoute): "swap" | "coinjoin" | "transfer" | "pair" {
-  // Prefer the daemon-computed routeKind; the heuristic below only covers
+function pairedRouteKind(route: TransactionSwapRoute): TransactionRouteKind {
+  // Prefer the daemon-computed routeKind; the shared classifier only covers
   // payloads that predate it (older snapshots, mocks).
   const server = String(route.routeKind || "").toLowerCase();
   if (server === "swap" || server === "coinjoin" || server === "transfer" || server === "pair") {
     return server;
   }
-  const explicit = String(route.kind || "").toLowerCase();
-  if (explicit.includes("coinjoin") || explicit.includes("whirlpool")) return "coinjoin";
-  if (
-    explicit.includes("swap") ||
-    explicit.startsWith("peg-") ||
-    route.out.asset?.toUpperCase() !== route.in.asset?.toUpperCase()
-  ) {
-    return "swap";
-  }
-  if (route.policy === "carrying-value") return "transfer";
-  return "pair";
+  return classifyRouteKind({
+    kind: route.kind,
+    policy: route.policy,
+    outAsset: route.out.asset,
+    inAsset: route.in.asset,
+  });
 }
 
 function swapRouteOutLooksLikeConsolidation(route: TransactionSwapRoute) {
@@ -1062,11 +1068,15 @@ function swapRouteOutLooksLikeConsolidation(route: TransactionSwapRoute) {
   // only re-derive it for payloads that predate per-leg roles.
   if (route.out.role === "consolidation") return true;
   if (route.out.role === "spend") return false;
-  const text = `${route.out.kind || ""} ${route.out.description || ""}`.toLowerCase();
-  if (text.includes("consolidat")) return true;
-  const outNetwork = String(route.out.network || route.out.asset || "").toLowerCase();
-  const inNetwork = String(route.in.network || route.in.asset || "").toLowerCase();
-  return outNetwork.includes("liquid") && outNetwork !== inNetwork;
+  return (
+    classifyRouteOutRole({
+      kind: route.out.kind || route.kind,
+      policy: route.policy,
+      description: route.out.description,
+      outAsset: route.out.network || route.out.asset,
+      inAsset: route.in.network || route.in.asset,
+    }) === "consolidation"
+  );
 }
 
 function SwapRouteLeg({
@@ -1220,7 +1230,7 @@ function SwapRouteStrip({
             </div>
             {route.policy ? (
               <div className="mt-1 truncate text-xs text-muted-foreground">
-                {route.policy}
+                {t(`graph.policy.${route.policy}`, { defaultValue: route.policy })}
               </div>
             ) : null}
             {fee ? (
@@ -1286,19 +1296,18 @@ export function TransactionFlowDiagram({
   };
   const preferredCanvasWidth = expanded ? 1120 : 960;
   const shellRef = useRef<HTMLDivElement | null>(null);
-  const [hoverDetail, setHoverDetail] = useState<GraphHoverDetail | null>(null);
+  const [hoverDetail, setHoverDetail] = useState<DrawableGraphRow | null>(null);
   const [measuredCanvasWidth, setMeasuredCanvasWidth] = useState<number | null>(null);
   const inputRows = compactGraphRows(
     graph.inputs,
     "input",
     expanded ? MAX_EXPANDED_ROWS : MAX_COMPACT_ROWS,
   );
-  const outputRowsBase = compactGraphRows(
+  const outputRows = compactGraphRows(
     graph.outputs,
     "output",
     expanded ? MAX_EXPANDED_ROWS : MAX_COMPACT_ROWS,
   );
-  const outputRows: GraphRow[] = outputRowsBase;
   const feeRow: GraphRow | null = graph.fee ? { ...graph.fee, side: "fee" } : null;
   const destinationRows = feeRow ? [feeRow, ...outputRows] : outputRows;
   const layoutInputRows = hideSensitive ? redactRowsForGeometry(inputRows) : inputRows;
@@ -1347,35 +1356,13 @@ export function TransactionFlowDiagram({
     curveWidth,
     fallbackSats,
   );
-  const pathFor = (node: DrawableGraphRow) =>
-    node.zeroValue
-      ? makeZeroValuePath(
-          node,
-          node.side === "input" ? "input" : "output",
-          canvasWidth,
-          edgePadding,
-          centerX,
-        )
-      : makeBowtiePath(node, node.side === "input" ? "input" : "output", canvasWidth, edgePadding, centerX);
-  const markerPathFor = (node: DrawableGraphRow) =>
-    node.zeroValue
-      ? makeZeroValuePath(
-          node,
-          node.side === "input" ? "input" : "output",
-          canvasWidth,
-          edgePadding,
-          centerX,
-        )
-      : makeBowtiePath(
-          node,
-          node.side === "input" ? "input" : "output",
-          canvasWidth,
-          edgePadding,
-          centerX,
-        );
-  const showHoverDetail = (node: DrawableGraphRow) => {
-    setHoverDetail({ node });
+  // The visible strand and its wide invisible hit target follow the same path.
+  const pathFor = (node: DrawableGraphRow) => {
+    const side = node.side === "input" ? "input" : "output";
+    const make = node.zeroValue ? makeZeroValuePath : makeBowtiePath;
+    return make(node, side, canvasWidth, edgePadding, centerX);
   };
+
   return (
     <div
       ref={shellRef}
@@ -1500,13 +1487,12 @@ export function TransactionFlowDiagram({
               key={`curve-${node.id}`}
               node={node}
               path={pathFor(node)}
-              markerPath={markerPathFor(node)}
               testId="transaction-input-strand"
-              active={hoverDetail?.node.id === node.id && hoverDetail.node.side === node.side}
+              active={hoverDetail?.id === node.id && hoverDetail.side === node.side}
               gradientIds={gradientIds}
               markerIds={markerIds}
               hideSensitive={hideSensitive}
-              onHover={showHoverDetail}
+              onHover={setHoverDetail}
               onLeave={() => setHoverDetail(null)}
             />
           ))}
@@ -1515,13 +1501,12 @@ export function TransactionFlowDiagram({
               key={`curve-${node.id}`}
               node={node}
               path={pathFor(node)}
-              markerPath={markerPathFor(node)}
               testId={node.side === "fee" ? "transaction-fee-strand" : "transaction-output-strand"}
-              active={hoverDetail?.node.id === node.id && hoverDetail.node.side === node.side}
+              active={hoverDetail?.id === node.id && hoverDetail.side === node.side}
               gradientIds={gradientIds}
               markerIds={markerIds}
               hideSensitive={hideSensitive}
-              onHover={showHoverDetail}
+              onHover={setHoverDetail}
               onLeave={() => setHoverDetail(null)}
             />
           ))}
@@ -1536,22 +1521,22 @@ export function TransactionFlowDiagram({
           <div className="grid min-w-0 gap-1">
             <div className="truncate font-medium">
               {sensitiveGraphText(
-                nodeDisplayTitle(hoverDetail.node, t),
+                nodeDisplayTitle(hoverDetail, t),
                 hideSensitive,
                 t("graph.hidden"),
               )}
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-white/70">
-              {formatNodeAmount(hoverDetail.node, hideSensitive, t) ? (
-                <span>{formatNodeAmount(hoverDetail.node, hideSensitive, t)}</span>
+              {formatNodeAmount(hoverDetail, hideSensitive, t) ? (
+                <span>{formatNodeAmount(hoverDetail, hideSensitive, t)}</span>
               ) : null}
-              <span>{roleLabel(hoverDetail.node.role, t)}</span>
-              <span>{ownershipBoundaryLabel(hoverDetail.node, t)}</span>
-              {copyReference(hoverDetail.node) ? (
+              <span>{roleLabel(hoverDetail.role, t)}</span>
+              <span>{ownershipBoundaryLabel(hoverDetail, t)}</span>
+              {copyReference(hoverDetail) ? (
                 <span className={cn("truncate font-mono", hideSensitive && "sensitive")}>
                   {hideSensitive
                     ? t("graph.hidden")
-                    : formatShortTxid(copyReference(hoverDetail.node) ?? "")}
+                    : formatShortTxid(copyReference(hoverDetail) ?? "")}
                 </span>
               ) : null}
             </div>
@@ -1591,9 +1576,6 @@ function GraphEmptyState({
       : reason === "liquid_reference_graph_not_local"
         ? t("graph.liquidBody")
         : t("graph.graphlessBody");
-  const alertWarnings = (graph?.warnings ?? []).filter(
-    (warning) => warning.level === "warning" || warning.level === "error",
-  );
   const diagnosticAction = graphDiagnosticAction(graph);
   return (
     <div className="space-y-2">
@@ -1620,15 +1602,47 @@ function GraphEmptyState({
           </div>
         </div>
       </div>
-      {alertWarnings.map((warning) => (
+      <GraphWarnings graph={graph} />
+    </div>
+  );
+}
+
+function GraphWarnings({
+  graph,
+  onResolveIssue,
+}: {
+  graph?: TransactionGraphPayload;
+  onResolveIssue?: (target: TransactionGraphIssueTarget) => void;
+}) {
+  const { t } = useTranslation("transactions");
+  const alerts = (graph?.warnings ?? []).filter(
+    (warning) => warning.level === "warning" || warning.level === "error",
+  );
+  const action = graphDiagnosticAction(graph);
+  if (!alerts.length) return null;
+  return (
+    <div className="space-y-2">
+      {alerts.map((warning) => (
         <div
           key={`${warning.code}-${warning.message}`}
           className="flex gap-2 rounded-md border bg-muted/35 px-3 py-2 text-sm"
         >
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
-          <span>{warning.message}</span>
+          <span>{graphCodeText(t, "warnings", warning.code, warning.message)}</span>
         </div>
       ))}
+      {action && onResolveIssue ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => onResolveIssue(action.target)}
+        >
+          <ArrowRight className="size-4" aria-hidden="true" />
+          {t(action.labelKey)}
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -1665,7 +1679,7 @@ function graphDiagnosticAction(
 
 function graphSupportText(
   graph: TransactionGraphPayload,
-  t: ReturnType<typeof useTranslation<"transactions">>["t"],
+  t: TFunction<"transactions">,
 ) {
   if (graph.supportLevel !== "partial") return t("graph.fullSupport");
   if (graph.unsupportedReason === "confidential_values_hidden") {
@@ -1699,10 +1713,6 @@ export function TransactionGraphPanel({
     graph &&
     (graph.supportLevel === "full" || graph.supportLevel === "partial") &&
     (graph.inputs.length > 0 || graph.outputs.length > 0);
-  const alertWarnings = (graph?.warnings ?? []).filter(
-    (warning) => warning.level === "warning" || warning.level === "error",
-  );
-  const diagnosticAction = graphDiagnosticAction(graph);
 
   return (
     <div className="space-y-4">
@@ -1740,34 +1750,10 @@ export function TransactionGraphPanel({
               </DialogContent>
             </Dialog>
           </div>
-          <AnnotationStrip annotations={graph.annotations} hideSensitive={hideSensitive} />
+          <AnnotationStrip annotations={graph.annotations} />
           <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} />
           <TransactionInputsOutputsPanel graph={graph} hideSensitive={hideSensitive} />
-          {alertWarnings.length ? (
-            <div className="space-y-2">
-              {alertWarnings.map((warning) => (
-                <div
-                  key={`${warning.code}-${warning.message}`}
-                  className="flex gap-2 rounded-md border bg-muted/35 px-3 py-2 text-sm"
-                >
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
-                  <span>{warning.message}</span>
-                </div>
-              ))}
-              {diagnosticAction && onResolveIssue ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => onResolveIssue(diagnosticAction.target)}
-                >
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                  {t(diagnosticAction.labelKey)}
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
+          <GraphWarnings graph={graph} onResolveIssue={onResolveIssue} />
         </>
       ) : (
         <GraphEmptyState

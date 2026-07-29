@@ -26,6 +26,23 @@ const PUBLIC_EXPLORERS: Record<ExplorerNetwork, { label: string; baseUrl: string
   liquid: { label: "Liquid Network", baseUrl: "https://liquid.network" },
 };
 
+// The public fallbacks above serve mainnet only. A configured explorer is used
+// for any network, but without one a testnet/signet/regtest reference gets no
+// link at all rather than a wrong-chain lookup against a public mainnet host.
+const MAINNET_NETWORK_NAMES: Record<ExplorerNetwork, readonly string[]> = {
+  bitcoin: ["", "main", "mainnet", "bitcoin"],
+  liquid: ["", "main", "mainnet", "liquid", "liquidv1"],
+};
+
+function isMainnetNetworkName(
+  network: ExplorerNetwork,
+  networkName: string | null | undefined,
+) {
+  return MAINNET_NETWORK_NAMES[network].includes(
+    String(networkName ?? "").trim().toLowerCase(),
+  );
+}
+
 export function normalizeExplorerBaseUrl(baseUrl: string) {
   return baseUrl.trim().replace(/\/+$/, "").replace(/\/api$/i, "");
 }
@@ -58,11 +75,13 @@ function explorerUrl(baseUrl: string, segment: "address" | "tx", value: string) 
 function targetForExplorerValue({
   value,
   network,
+  networkName,
   settings,
   segment,
 }: {
   value: string | undefined;
   network: ExplorerNetwork;
+  networkName?: string | null;
   settings?: ExplorerSettings;
   segment: "address" | "tx";
 }): ExplorerTarget | null {
@@ -74,6 +93,7 @@ function targetForExplorerValue({
   const configured = Boolean(configuredBase?.trim());
   const fallback = PUBLIC_EXPLORERS[network];
   if (!configured && settings?.publicFallbacks === false) return null;
+  if (!configured && !isMainnetNetworkName(network, networkName)) return null;
   const baseUrl = configured ? configuredBase?.trim() ?? "" : fallback.baseUrl;
   const url = explorerUrl(baseUrl, segment, id);
   if (!url) return null;
@@ -88,15 +108,18 @@ function targetForExplorerValue({
 export function explorerTargetForTransaction({
   txid,
   network,
+  networkName,
   settings,
 }: {
   txid: string | undefined;
   network: ExplorerNetwork;
+  networkName?: string | null;
   settings?: ExplorerSettings;
 }): ExplorerTarget | null {
   return targetForExplorerValue({
     value: txid,
     network,
+    networkName,
     settings,
     segment: "tx",
   });
@@ -105,15 +128,18 @@ export function explorerTargetForTransaction({
 export function explorerTargetForAddress({
   address,
   network,
+  networkName,
   settings,
 }: {
   address: string | undefined;
   network: ExplorerNetwork;
+  networkName?: string | null;
   settings?: ExplorerSettings;
 }): ExplorerTarget | null {
   return targetForExplorerValue({
     value: address,
     network,
+    networkName,
     settings,
     segment: "address",
   });

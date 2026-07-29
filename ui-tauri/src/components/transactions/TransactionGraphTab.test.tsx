@@ -9,8 +9,11 @@ import {
   TransactionInputsOutputsPanel,
 } from "./TransactionGraphTab";
 import {
+  classifyRouteKind,
+  classifyRouteOutRole,
   compactGraphRows,
   nodeTooltipTitle,
+  routeNetworkLabel,
   sensitiveGraphText,
   type TransactionGraphPayload,
 } from "./TransactionGraphModel";
@@ -738,8 +741,10 @@ describe("TransactionFlowDiagram", () => {
   });
 
   it("returns an explicit placeholder for hidden sensitive text", () => {
-    expect(sensitiveGraphText("bc1qsecret", true)).toBe("Hidden");
-    expect(sensitiveGraphText("bc1qsecret", false)).toBe("bc1qsecret");
+    // The placeholder is always passed in by the caller (a translated string);
+    // the helper never carries an English default of its own.
+    expect(sensitiveGraphText("bc1qsecret", true, "Hidden")).toBe("Hidden");
+    expect(sensitiveGraphText("bc1qsecret", false, "Hidden")).toBe("bc1qsecret");
   });
 });
 
@@ -1262,6 +1267,104 @@ describe("TransactionGraphPanel", () => {
     );
 
     expect(html).toContain("Review Bitcoin backend");
-    expect(html).toContain("Could not fetch public Bitcoin transaction references");
+    // The warning renders from its stable code, not the daemon's English text.
+    expect(html).toContain("Could not fetch Bitcoin transaction references");
+    expect(html).not.toContain("Review the backend URL and network in Settings");
+  });
+
+  it("falls back to the daemon message for codes without a translation", () => {
+    const quarantined: TransactionGraphPayload = {
+      ...graph,
+      warnings: [
+        {
+          code: "journal_blocker_missing_rate",
+          level: "warning",
+          message: "Journal blocker: Missing rate",
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionGraphPanel graph={quarantined} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("Journal blocker: Missing rate");
+  });
+
+  it("collapses repeated annotations instead of printing internal group ids", () => {
+    const paired: TransactionGraphPayload = {
+      ...graph,
+      annotations: [
+        {
+          code: "booked_custody_move",
+          label: "Booked custody move",
+          groupId: "custody-decision:0f8c1a42-1111-2222-3333-444455556666",
+        },
+        {
+          code: "booked_custody_move",
+          label: "Booked custody move",
+          groupId: "custody-decision:0f8c1a42-aaaa-bbbb-cccc-ddddeeeeffff",
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionGraphPanel graph={paired} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    expect(html).not.toContain("custody-decision:");
+    expect(html).toContain("Booked custody move · 2");
+  });
+});
+
+describe("route classifiers", () => {
+  it("classifies coinjoin, swap, transfer and plain pairs", () => {
+    expect(
+      classifyRouteKind({ kind: "whirlpool-mix", outAsset: "BTC", inAsset: "BTC" }),
+    ).toBe("coinjoin");
+    expect(classifyRouteKind({ kind: "peg-in", outAsset: "BTC", inAsset: "BTC" })).toBe(
+      "swap",
+    );
+    // Cross-asset legs are a swap even when the kind says nothing.
+    expect(classifyRouteKind({ kind: "withdrawal", outAsset: "BTC", inAsset: "LBTC" })).toBe(
+      "swap",
+    );
+    expect(
+      classifyRouteKind({ kind: "withdrawal", policy: "carrying-value", outAsset: "BTC", inAsset: "btc" }),
+    ).toBe("transfer");
+    expect(classifyRouteKind({ kind: "withdrawal", outAsset: "BTC", inAsset: "BTC" })).toBe(
+      "pair",
+    );
+    // Missing assets on both sides must not read as cross-asset.
+    expect(classifyRouteKind({})).toBe("pair");
+  });
+
+  it("treats a Liquid-side swap leg as a consolidation", () => {
+    expect(
+      classifyRouteOutRole({ kind: "peg-out", outAsset: "LBTC", inAsset: "BTC" }),
+    ).toBe("consolidation");
+    expect(
+      classifyRouteOutRole({ kind: "swap", description: "Consolidating inputs", outAsset: "BTC", inAsset: "LBTC" }),
+    ).toBe("consolidation");
+    expect(
+      classifyRouteOutRole({ kind: "peg-in", outAsset: "BTC", inAsset: "LBTC" }),
+    ).toBe("spend");
+    // Same network spelled two ways is not a cross-network move.
+    expect(
+      classifyRouteOutRole({ kind: "swap", outAsset: "Liquid", inAsset: "LBTC" }),
+    ).toBe("spend");
+    expect(classifyRouteOutRole({ kind: "withdrawal", outAsset: "BTC", inAsset: "BTC" })).toBe(
+      "spend",
+    );
+  });
+
+  it("labels networks from asset and wallet hints", () => {
+    expect(routeNetworkLabel("LBTC")).toBe("Liquid");
+    expect(routeNetworkLabel("BTC", "Liquid vault")).toBe("Liquid");
+    expect(routeNetworkLabel("BTC")).toBe("Bitcoin");
+    expect(routeNetworkLabel("USDT")).toBe("USDT");
+    expect(routeNetworkLabel(null)).toBeUndefined();
   });
 });

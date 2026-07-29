@@ -754,6 +754,36 @@
       "unspendable": "Nicht ausgebbarer Output",
       "aggregated": "Zusammengefasste Stränge",
       "unknown": "Zugehörigkeit unbekannt"
+    },
+    "warnings": {
+      "bitcoin_reference_lookup_failed": "Die Bitcoin-Transaktions-Referenzen konnten von keinem konfigurierten Backend abgerufen werden.",
+      "bitcoin_reference_lookup_incomplete": "Der Bitcoin-Referenz-Abruf hat nicht alle Referenzen für einen vollständigen Graph geliefert.",
+      "bitcoin_reference_lookup_invalid": "Ein konfiguriertes Bitcoin-Backend hat eine ungültige Transaktions-Antwort geliefert.",
+      "bitcoin_reference_lookup_mismatch": "Der Bitcoin-Referenz-Abruf hat eine andere Transaktion geliefert.",
+      "bitcoin_reference_lookup_prevout_limit": "Diese Transaktion bräuchte zu viele ungecachte vorherige Transaktionen; der Abruf wurde begrenzt, um das Backend nicht zu überlasten.",
+      "bitcoin_reference_lookup_unavailable": "Kein konfiguriertes Bitcoin-Backend kann öffentliche Transaktions-Referenzen abrufen.",
+      "confidential_values_hidden": "Bei mindestens einem Liquid-Leg sind die Beträge vertraulich. Referenzen und Eigentums-Hinweise sind verfügbar, aber keine betragsproportionalen Stränge und keine Gebührenrate.",
+      "custody_projection_stale": "Custody-Annotationen sind erst nach einem Neuaufbau der Journale verfügbar.",
+      "graphless_import": "Dieser Quelldatensatz enthält keine Bitcoin-Input/Output-Referenzen.",
+      "input_prevout_values_missing": "Input-Beträge stammen aus den ausgegebenen vorherigen Outputs, die lokal nicht gespeichert sind. Referenzen und Outputs werden trotzdem gezeichnet; Gebühr und Gebührenrate brauchen diese Beträge.",
+      "liquid_reference_graph_not_local": "Lokal liegt nur die importierte Liquid-Zeile. Füge ein Liquid-Explorer-Backend hinzu, um öffentliche Referenzen zu sehen; vertrauliche Beträge bleiben verborgen.",
+      "liquid_reference_lookup_failed": "Die Liquid-Transaktions-Referenzen konnten von keinem konfigurierten Backend abgerufen werden.",
+      "liquid_reference_lookup_incomplete": "Der Liquid-Referenz-Abruf hat keine öffentlichen Input/Output-Referenzen geliefert.",
+      "liquid_reference_lookup_invalid": "Ein konfiguriertes Liquid-Backend hat eine ungültige Transaktions-Antwort geliefert.",
+      "liquid_reference_lookup_mismatch": "Der Liquid-Referenz-Abruf hat eine andere Transaktion geliefert.",
+      "liquid_reference_lookup_unavailable": "Kein konfiguriertes Liquid-Backend kann öffentliche Transaktions-Referenzen abrufen.",
+      "no_active_profile": "Kein aktives Buch, daher gibt es keinen Transaktions-Graph.",
+      "not_found": "Diese Transaktion ist nicht im aktiven Buch.",
+      "partial_graph_values_missing": "Für ein oder mehrere Legs fehlen die Beträge. Referenzen und Eigentums-Hinweise werden trotzdem gezeichnet; Gebühr und Gebührenrate können unvollständig sein."
+    },
+    "annotations": {
+      "booked_custody_conversion": "Gebuchte Custody-Konversion",
+      "booked_custody_direct_payout": "Gebuchte Direktauszahlung",
+      "booked_custody_move": "Gebuchter Custody-Move"
+    },
+    "policy": {
+      "carrying-value": "Buchwertfortführung",
+      "taxable": "Steuerpflichtig"
     }
   },
   "commercial": {

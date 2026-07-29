@@ -43,6 +43,11 @@ import {
   preloadableSwapLegGraphLookupArgs,
   transactionGraphLookupReferenceArgs,
 } from "./TransactionGraphLookup";
+import {
+  classifyRouteKind,
+  classifyRouteOutRole,
+  routeNetworkLabel,
+} from "./TransactionGraphModel";
 
 function graphWithPairFallbackRoute(
   graphData: TransactionGraphPayload | undefined,
@@ -77,7 +82,7 @@ function graphWithPairFallbackRoute(
       direction: "outbound",
       role: fallbackSwapOutRole(pair),
       asset: pair.outAsset,
-      network: routeNetwork(pair.outAsset, pair.outWallet),
+      network: routeNetworkLabel(pair.outAsset, pair.outWallet),
       amountBtc:
         typeof pair.outAmountSat === "number"
           ? Math.abs(pair.outAmountSat) / SATS_PER_BTC
@@ -92,7 +97,7 @@ function graphWithPairFallbackRoute(
       direction: "inbound",
       role: "receive",
       asset: pair.inAsset,
-      network: routeNetwork(pair.inAsset, pair.inWallet),
+      network: routeNetworkLabel(pair.inAsset, pair.inWallet),
       amountBtc:
         typeof pair.inAmountSat === "number"
           ? Math.abs(pair.inAmountSat) / SATS_PER_BTC
@@ -104,39 +109,29 @@ function graphWithPairFallbackRoute(
   return { ...graphData, swapRoute: route };
 }
 
-function fallbackSwapOutRole(pair: NonNullable<TransactionDetailTabContext["transaction"]["pair"]>) {
-  if (fallbackRouteKind(pair) !== "swap") return "spend" as const;
-  const kind = String(pair.kind || pair.type || "").toLowerCase();
-  const outNetwork = routeNetwork(pair.outAsset, pair.outWallet);
-  const inNetwork = routeNetwork(pair.inAsset, pair.inWallet);
-  if (kind.includes("swap") && outNetwork === "Liquid" && outNetwork !== inNetwork) {
-    return "consolidation" as const;
-  }
-  return "spend" as const;
+// The transactions-list pair row carries the same fields the graph payload's
+// swapRoute does, so both go through the shared classifiers.
+type PairRow = NonNullable<TransactionDetailTabContext["transaction"]["pair"]>;
+
+function pairRouteArgs(pair: PairRow) {
+  return {
+    kind: pair.kind || pair.type,
+    policy: pair.policy,
+    outAsset: pair.outAsset,
+    inAsset: pair.inAsset,
+  };
 }
 
-function fallbackRouteKind(pair: NonNullable<TransactionDetailTabContext["transaction"]["pair"]>) {
-  const kind = String(pair.kind || pair.type || "").toLowerCase();
-  if (kind.includes("coinjoin") || kind.includes("whirlpool")) return "coinjoin";
-  if (
-    kind.includes("swap") ||
-    kind.startsWith("peg-") ||
-    String(pair.outAsset || "").toUpperCase() !== String(pair.inAsset || "").toUpperCase()
-  ) {
-    return "swap";
-  }
-  if (pair.policy === "carrying-value") return "transfer";
-  return "pair";
+function fallbackSwapOutRole(pair: PairRow) {
+  return classifyRouteOutRole({
+    ...pairRouteArgs(pair),
+    outWallet: pair.outWallet,
+    inWallet: pair.inWallet,
+  });
 }
 
-function routeNetwork(asset?: string | null, wallet?: string | null) {
-  const assetText = String(asset || "").toUpperCase();
-  const walletText = String(wallet || "").toLowerCase();
-  if (assetText === "LBTC" || assetText === "L-BTC" || walletText.includes("liquid")) {
-    return "Liquid";
-  }
-  if (assetText === "BTC") return "Bitcoin";
-  return asset || undefined;
+function fallbackRouteKind(pair: PairRow) {
+  return classifyRouteKind(pairRouteArgs(pair));
 }
 
 function PrivacyEvidencePill({ level }: { level?: EvidenceLevel }) {
