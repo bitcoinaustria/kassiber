@@ -384,7 +384,7 @@
     "scale": "Skala",
     "lastValueLabel": "Letzten Wert an der Achse anzeigen",
     "logChip": "log",
-    "autoChip": "auto",
+    "autoChip": "fit",
     "moreSettings": "Weitere Einstellungen …",
     "scaleMenuAria": "Skaleneinstellungen",
     "logScaleTitle": "Logarithmische Skala umschalten",

@@ -384,7 +384,7 @@
     "scale": "Scale",
     "lastValueLabel": "Show last value on the axis",
     "logChip": "log",
-    "autoChip": "auto",
+    "autoChip": "fit",
     "moreSettings": "More settings…",
     "scaleMenuAria": "Chart scale settings",
     "logScaleTitle": "Toggle logarithmic scale",
