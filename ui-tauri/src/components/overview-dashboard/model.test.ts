@@ -33,6 +33,10 @@ import {
   normalizeTimePeriodParam,
   overviewTransactions,
   positiveLogDomain,
+  powerLawDaysFor,
+  powerLawXDomain,
+  powerLawXTicks,
+  formatPowerLawTick,
   resolveAutoTimePeriod,
   serializeActivityMarkerMinimum,
   type TreasuryChartPoint,
@@ -68,6 +72,7 @@ function activityMarkerFixture(
     eventTransactionId: `tx-${column}`,
     markerBalanceBtc: 28,
     sortTimeMs: baseTime + column * 60 * 60 * 1000,
+    powerLawDays: powerLawDaysFor(baseTime + column * 60 * 60 * 1000),
     isActivityEvent: true,
     ...overrides,
   };
@@ -813,6 +818,44 @@ describe("chart scale helpers", () => {
     vi.stubGlobal("window", { location: { search: "?period=30d" } });
     expect(initialTimePeriodFromUrl("5years")).toBe("30days");
     vi.unstubAllGlobals();
+  });
+
+  it("measures power-law time from the genesis block", () => {
+    // 2009-01-03 18:15:05Z is day 0; a log axis needs day 1 as its floor.
+    expect(powerLawDaysFor(Date.parse("2009-01-03T18:15:05Z"))).toBe(1);
+    expect(powerLawDaysFor(Date.parse("2008-01-01T00:00:00Z"))).toBe(1);
+    expect(powerLawDaysFor(Number.NaN)).toBe(1);
+    expect(
+      Math.round(powerLawDaysFor(Date.parse("2019-01-03T18:15:05Z"))),
+    ).toBe(3652);
+  });
+
+  it("only offers a power-law domain when the window spans time", () => {
+    const day = (days: number) => ({ powerLawDays: days }) as TreasuryChartPoint;
+    expect(powerLawXDomain([day(100), day(4000), day(2500)])).toEqual([
+      100, 4000,
+    ]);
+    expect(powerLawXDomain([day(4000)])).toBeNull();
+    expect(powerLawXDomain([day(4000), day(4000)])).toBeNull();
+    expect(powerLawXDomain([])).toBeNull();
+  });
+
+  it("thins power-law year ticks and labels them by year", () => {
+    const yearDay = (year: number) =>
+      (Date.UTC(year, 0, 1) - Date.UTC(2009, 0, 3, 18, 15, 5)) / 86_400_000;
+    const ticks = powerLawXTicks([yearDay(2011), yearDay(2026)]);
+
+    expect(ticks.length).toBeGreaterThanOrEqual(2);
+    expect(ticks.length).toBeLessThanOrEqual(7);
+    expect(ticks).toEqual([...ticks].sort((a, b) => a - b));
+    expect(formatPowerLawTick(ticks[0])).toBe(
+      String(new Date(Date.UTC(2009, 0, 3, 18, 15, 5) + ticks[0] * 86_400_000).getUTCFullYear()),
+    );
+
+    // A sub-year window holds no year start, so the ends label the axis.
+    const shortWindow: [number, number] = [yearDay(2026) + 10, yearDay(2026) + 40];
+    expect(powerLawXTicks(shortWindow)).toEqual(shortWindow);
+    expect(formatPowerLawTick(shortWindow[0])).not.toBe("2026");
   });
 
   it("keeps dot grouping on unless the URL turns it off", () => {

@@ -53,6 +53,7 @@ import {
   enrichTreasuryChartData,
   formatBtcAxisFitted,
   formatFiatPrice,
+  formatPowerLawTick,
   formatRelativeMarketRateTime,
   formatTreasuryDetailDate,
   formatTreasuryTick,
@@ -63,6 +64,7 @@ import {
   initialActivityMarkerMinimumFromUrl,
   initialGroupActivityDotsFromUrl,
   initialTimePeriodFromUrl,
+  initialXScaleLogFromUrl,
   initialYAutoFitFromUrl,
   initialYScaleLogFromUrl,
   INCOMING_MARKER_MIN_PARAM,
@@ -77,6 +79,8 @@ import {
   portfolioAxisTicks,
   portfolioChartColors,
   positiveLogDomain,
+  powerLawXDomain,
+  powerLawXTicks,
   rawTreasuryBrushRange,
   resolveAutoTimePeriod,
   sameTreasuryBrushRange,
@@ -84,6 +88,7 @@ import {
   serializeActivityMarkerMinimum,
   useHoverHighlight,
   useResolvedColorMode,
+  X_SCALE_PARAM,
   Y_AUTO_FIT_PARAM,
   Y_SCALE_PARAM,
   type OverviewTranslate,
@@ -143,6 +148,10 @@ export const BtcActivityChart = ({
   );
   const [yAutoFit, setYAutoFit] = React.useState<boolean>(
     initialYAutoFitFromUrl,
+  );
+  // Log time axis: with a log value axis too, this is the power-law view.
+  const [xScaleLog, setXScaleLog] = React.useState<boolean>(
+    initialXScaleLogFromUrl,
   );
   const [showLastValue, setShowLastValue] = React.useState(true);
   const [groupActivityDots, setGroupActivityDots] = React.useState<boolean>(
@@ -327,6 +336,11 @@ export const BtcActivityChart = ({
       } else {
         params.delete(Y_SCALE_PARAM);
       }
+      if (xScaleLog) {
+        params.set(X_SCALE_PARAM, "log");
+      } else {
+        params.delete(X_SCALE_PARAM);
+      }
       if (yAutoFit) {
         params.set(Y_AUTO_FIT_PARAM, "auto");
       } else {
@@ -344,6 +358,7 @@ export const BtcActivityChart = ({
     incomingMarkerMinimumBtc,
     outgoingMarkerMinimumBtc,
     period,
+    xScaleLog,
     yAutoFit,
     yScaleLog,
   ]);
@@ -392,6 +407,17 @@ export const BtcActivityChart = ({
     setPeriod(next);
     setBrushRangeByView({ compact: null, expanded: null });
   }, []);
+  // A log time axis is about the whole run, not a slice of it: switching it on
+  // jumps to the full history (always a selectable range) unless the window is
+  // already there. Switching it off leaves the range alone — the reader picked
+  // "all" by then, and yanking it back would undo their own choice.
+  const enableLogTime = React.useCallback(
+    (enabled: boolean) => {
+      setXScaleLog(enabled);
+      if (enabled && period !== "all") handlePeriodChange("all");
+    },
+    [handlePeriodChange, period],
+  );
   const toggleSeries = React.useCallback((key: TreasuryChartSeriesKey) => {
     setSeriesVisible((current) => ({ ...current, [key]: !current[key] }));
   }, []);
@@ -708,6 +734,10 @@ export const BtcActivityChart = ({
       if (isActivityMarkerEvent(event)) return;
       if (event.detail >= 2) handleChartDoubleClick(event);
     };
+    // Null whenever the window is too thin for a log time axis (one point, or a
+    // single instant): the category axis stays in charge rather than handing
+    // recharts a degenerate log domain.
+    const powerLawDomain = xScaleLog ? powerLawXDomain(plotData) : null;
     const xAxisTicks = portfolioAxisTicks(
       balancePoints.length ? balancePoints : selectedChartDisplayData,
       period,
@@ -1020,20 +1050,35 @@ export const BtcActivityChart = ({
                     strokeOpacity={0.45}
                   />
                   <XAxis
-                    dataKey="date"
-                    // Scatter has its own marker data; category lookup must use
-                    // the date value instead of the marker array index.
-                    allowDuplicatedCategory={false}
                     axisLine={false}
                     tickLine={false}
                     tick={{ fontSize: 10 }}
                     dy={8}
                     minTickGap={expanded ? 18 : 24}
-                    ticks={xAxisTicks}
-                    tickFormatter={(value) =>
-                      plottedData.find((point) => point.date === value)?.month ??
-                      formatTreasuryTick(String(value))
-                    }
+                    {...(powerLawDomain
+                      ? {
+                          // Power law: days since the genesis block on a log
+                          // axis, labelled by year.
+                          dataKey: "powerLawDays" as const,
+                          type: "number" as const,
+                          scale: "log" as const,
+                          domain: powerLawDomain,
+                          allowDataOverflow: true,
+                          ticks: powerLawXTicks(powerLawDomain),
+                          tickFormatter: (value: number | string) =>
+                            formatPowerLawTick(Number(value)),
+                        }
+                      : {
+                          dataKey: "date" as const,
+                          // Scatter has its own marker data; category lookup
+                          // must use the date value instead of the marker array
+                          // index.
+                          allowDuplicatedCategory: false,
+                          ticks: xAxisTicks,
+                          tickFormatter: (value: number | string) =>
+                            plottedData.find((point) => point.date === value)
+                              ?.month ?? formatTreasuryTick(String(value)),
+                        })}
                   />
                   <YAxis
                     yAxisId="btc"
@@ -1363,12 +1408,19 @@ export const BtcActivityChart = ({
               onPeriodChange={handlePeriodChange}
               yScaleLog={yScaleLog}
               onYScaleLogChange={setYScaleLog}
+              xScaleLog={xScaleLog}
+              onXScaleLogChange={enableLogTime}
               yAutoFit={yAutoFit}
               onYAutoFitChange={setYAutoFit}
               showLastValue={showLastValue}
               onShowLastValueChange={setShowLastValue}
               groupActivityDots={groupActivityDots}
               onGroupActivityDotsChange={setGroupActivityDots}
+              powerLawView={xScaleLog && yScaleLog}
+              onPowerLawViewChange={(enabled) => {
+                enableLogTime(enabled);
+                setYScaleLog(enabled);
+              }}
               incomingMarkerMinimumBtc={incomingMarkerMinimumBtc}
               onIncomingMarkerMinimumChange={setIncomingMarkerMinimumBtc}
               outgoingMarkerMinimumBtc={outgoingMarkerMinimumBtc}

@@ -27,6 +27,7 @@ function point(flow: ActivityFlow, eventSize: number): TreasuryChartPoint {
     eventSize,
     eventFlow: flow,
     sortTimeMs: 0,
+    powerLawDays: 1,
     isActivityEvent: true,
   };
 }

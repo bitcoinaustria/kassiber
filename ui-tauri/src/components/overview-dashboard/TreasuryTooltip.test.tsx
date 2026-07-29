@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { TreasuryTooltip, type TreasuryTooltipPayload } from "./TreasuryTooltip";
-import type { TreasuryChartPoint } from "./model";
+import { powerLawDaysFor, type TreasuryChartPoint } from "./model";
 
 function activityPoint(
   id: string,
@@ -46,6 +46,7 @@ function activityPoint(
     eventId: id,
     eventTransactionId: id,
     sortTimeMs: Date.parse("2026-05-15T12:00:00Z"),
+    powerLawDays: powerLawDaysFor(Date.parse("2026-05-15T12:00:00Z")),
     isActivityEvent: true,
   };
 }

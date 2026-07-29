@@ -81,12 +81,16 @@ export function ChartRangeToolbar({
   onPeriodChange,
   yScaleLog,
   onYScaleLogChange,
+  xScaleLog,
+  onXScaleLogChange,
   yAutoFit,
   onYAutoFitChange,
   showLastValue,
   onShowLastValueChange,
   groupActivityDots,
   onGroupActivityDotsChange,
+  powerLawView,
+  onPowerLawViewChange,
   incomingMarkerMinimumBtc,
   onIncomingMarkerMinimumChange,
   outgoingMarkerMinimumBtc,
@@ -101,12 +105,16 @@ export function ChartRangeToolbar({
   onPeriodChange: (period: TimePeriod) => void;
   yScaleLog: boolean;
   onYScaleLogChange: (value: boolean) => void;
+  xScaleLog: boolean;
+  onXScaleLogChange: (value: boolean) => void;
   yAutoFit: boolean;
   onYAutoFitChange: (value: boolean) => void;
   showLastValue: boolean;
   onShowLastValueChange: (value: boolean) => void;
   groupActivityDots: boolean;
   onGroupActivityDotsChange: (value: boolean) => void;
+  powerLawView: boolean;
+  onPowerLawViewChange: (value: boolean) => void;
   incomingMarkerMinimumBtc: number;
   onIncomingMarkerMinimumChange: (value: number) => void;
   outgoingMarkerMinimumBtc: number;
@@ -154,6 +162,19 @@ export function ChartRangeToolbar({
           </button>
           );
         })}
+        {/* The time axis' own scale, next to the ranges it applies to. With the
+            value axis' `log` chip on the right, that is the power-law view. */}
+        <button
+          type="button"
+          aria-pressed={xScaleLog}
+          aria-label={t("controls.logTimeTitle")}
+          title={t("controls.logTimeTitle")}
+          className={chipClass(xScaleLog)}
+          onClick={() => onXScaleLogChange(!xScaleLog)}
+          onMouseDown={preventClickFocus}
+        >
+          {t("controls.logChip")}
+        </button>
       </div>
       <div
         role="group"
@@ -210,6 +231,15 @@ export function ChartRangeToolbar({
               onSelect={(event) => event.preventDefault()}
             >
               {t("controls.groupDotsLabel")}
+            </DropdownMenuCheckboxItem>
+            {/* One switch for both axes: a log price axis against linear time
+                is not a power-law chart, so the item owns the pair. */}
+            <DropdownMenuCheckboxItem
+              checked={powerLawView}
+              onCheckedChange={onPowerLawViewChange}
+              onSelect={(event) => event.preventDefault()}
+            >
+              {t("controls.powerLawLabel")}
             </DropdownMenuCheckboxItem>
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-2xs text-muted-foreground">
