@@ -13,6 +13,7 @@ import sqlite3
 from collections import defaultdict
 from typing import Any, Collection, Mapping, NamedTuple, Sequence
 
+from ..asset_codes import canonical_bitcoin_asset
 from ..backends import (
     BACKEND_CONFIG_FIELDS,
     BOOTSTRAP_DEFAULT_BACKEND_SETTING,
@@ -27,6 +28,7 @@ from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import msat_to_btc
 from ..time_utils import now_iso
+from ..wallet_descriptors import default_policy_asset_id, liquid_asset_code
 from . import custody_journal
 from . import ownership as core_ownership
 from .ownership_transfers import (
@@ -594,6 +596,28 @@ def _local_wallet_outpoint_amounts(
     return amounts
 
 
+def _apply_foreign_asset(
+    node: dict[str, Any],
+    leg_asset: str | None,
+    row_asset: str | None,
+) -> bool:
+    """Mark a leg denominated in something other than the row's asset.
+
+    The graph has one value axis, so a leg in another asset carries no width here
+    — the same call mempool.space makes when a Liquid leg is not the policy asset.
+    Unlike theirs we have no asset registry, so there is no precision to render
+    the amount with: the leg is named rather than given a number that could be off
+    by orders of magnitude, and it never reaches the totals or the fee.
+    """
+    if _same_asset(leg_asset, row_asset):
+        return False
+    node["asset"] = _short_asset_label(leg_asset)
+    node["valueSats"] = None
+    node["valueBtc"] = None
+    node["valueState"] = "other_asset"
+    return True
+
+
 def _local_outpoint_sats(
     local_outpoint_amounts: Mapping[str, int],
     outpoint: str | None,
@@ -616,6 +640,8 @@ def _parse_graph(
     vout = raw.get("vout")
     warnings: list[dict[str, str]] = _graph_lookup_warnings(raw)
     confidential = _looks_liquid_or_confidential(row, raw)
+    policy_asset_id = _policy_asset_id_for_row(row) if confidential else None
+    row_asset = _leg_asset({"asset": _row_get(row, "asset")}, policy_asset_id)
     metadata = _transaction_metadata(raw, confidential=confidential)
     if not isinstance(vin, list) or not isinstance(vout, list):
         reason = "graphless_import"
@@ -691,6 +717,8 @@ def _parse_graph(
             node["_pegin"] = True
         if _is_coinbase_leg(entry):
             node["_coinbase"] = True
+        if _apply_foreign_asset(node, _leg_asset(prevout, policy_asset_id), row_asset):
+            input_value_complete = False
         inputs.append(node)
 
     outputs: list[dict[str, Any]] = []
@@ -725,8 +753,7 @@ def _parse_graph(
         if value_sats is None:
             output_value_complete = False
         pegout_address = _pegout_address(entry)
-        outputs.append(
-            {
+        node = {
                 "id": f"out-{n}",
                 "index": n,
                 "outpoint": outpoint,
@@ -741,8 +768,10 @@ def _parse_graph(
                 "annotations": [],
                 "_script": script,
                 "_pegoutAddress": pegout_address,
-            }
-        )
+        }
+        if _apply_foreign_asset(node, _leg_asset(entry, policy_asset_id), row_asset):
+            output_value_complete = False
+        outputs.append(node)
 
     if input_value_complete and output_value_complete and (valued is not None or confidential):
         support = "full"
@@ -2041,6 +2070,9 @@ def _sanitize_graph_value_script(
     address = output_address(entry)
     if address is not None:
         sanitized["scriptpubkey_address"] = address
+    asset = _leg_asset(entry)
+    if asset is not None:
+        sanitized["asset"] = asset
     pegout_address = _pegout_address(entry)
     if pegout_address is not None:
         # Only the destination address: the rest of the pegout object (genesis
@@ -2631,6 +2663,57 @@ def _is_liquid_fee_output(entry: Mapping[str, Any]) -> bool:
     if _string_or_none(entry.get("scriptpubkey") or entry.get("script_hex")):
         return False
     return entry.get("value") is not None
+
+
+def _leg_asset(entry: Mapping[str, Any], policy_asset_id: str | None = None) -> str | None:
+    """The asset a leg is denominated in.
+
+    A consensus asset id is preferred where one is given, but the network's policy
+    asset resolves to ``LBTC`` so an id-versus-code comparison cannot mistake
+    L-BTC for a foreign token.
+    """
+    asset_id = _string_or_none(entry.get("asset_id") or entry.get("assetId"))
+    if asset_id:
+        return liquid_asset_code(asset_id, policy_asset_id) or asset_id.lower()
+    asset = _string_or_none(entry.get("asset"))
+    if not asset:
+        return None
+    if len(asset) == 64:
+        return liquid_asset_code(asset, policy_asset_id) or asset.lower()
+    return asset.upper()
+
+
+def _policy_asset_id_for_row(row: Mapping[str, Any]) -> str | None:
+    """The Liquid policy asset of the row's own network.
+
+    Taken from the wallet's configured ``policy_asset`` when it has one (custom
+    Elements chains), otherwise the network default.
+    """
+    config = _json_obj(_row_get(row, "wallet_config_json"))
+    configured = _string_or_none(config.get("policy_asset"))
+    if configured:
+        return configured.lower()
+    _chain, network = _row_chain_network(
+        row, default_chain="liquid", default_network="liquidv1"
+    )
+    return default_policy_asset_id(network)
+
+
+def _same_asset(left: str | None, right: str | None) -> bool:
+    """Whether two asset labels denote the same asset, tolerating code aliases."""
+    if not left or not right:
+        return True
+    if left == right:
+        return True
+    canonical_left = canonical_bitcoin_asset(left)
+    canonical_right = canonical_bitcoin_asset(right)
+    return bool(canonical_left) and canonical_left == canonical_right
+
+
+def _short_asset_label(asset: str | None) -> str | None:
+    if not asset:
+        return None
+    return f"{asset[:8]}…" if len(asset) == 64 else asset
 
 
 def _is_coinbase_leg(entry: Mapping[str, Any]) -> bool:

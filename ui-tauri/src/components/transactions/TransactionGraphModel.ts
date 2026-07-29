@@ -21,7 +21,9 @@ export type TransactionGraphNode = {
   scriptType?: string;
   valueSats?: number | null;
   valueBtc?: number | null;
-  valueState?: "known" | "missing" | "confidential";
+  valueState?: "known" | "missing" | "confidential" | "other_asset";
+  /** Set when the leg is denominated in something other than the row's asset. */
+  asset?: string;
   label?: string;
   wallet?: string;
   walletId?: string | null;

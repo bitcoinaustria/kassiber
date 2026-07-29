@@ -88,6 +88,13 @@ const MAX_DETAIL_COLLAPSED_ROWS = 8;
 function formatNodeAmount(node: TransactionGraphNode, hidden: boolean, t: TFunction<"transactions">) {
   if (hidden) return t("graph.hidden");
   if (node.valueState === "confidential") return t("graph.confidentialAmount");
+  if (node.valueState === "other_asset") {
+    // No asset registry means no precision, so naming the asset is as far as we
+    // can honestly go — a raw integer could be wrong by orders of magnitude.
+    return node.asset
+      ? t("graph.otherAssetNamed", { asset: node.asset })
+      : t("graph.otherAsset");
+  }
   // The daemon always ships valueSats and valueBtc together, or neither.
   if (typeof node.valueBtc === "number") return formatBtc(node.valueBtc);
   return "";
@@ -240,7 +247,7 @@ function explorerTargetForGraphNode({
 function amountSummary(nodes: TransactionGraphNode[]) {
   return nodes.reduce(
     (summary, node) => {
-      if (node.valueState === "confidential") {
+      if (node.valueState === "confidential" || node.valueState === "other_asset") {
         summary.confidentialCount += 1;
       } else if (typeof node.valueSats === "number") {
         summary.knownCount += 1;
@@ -261,6 +268,7 @@ function hasCompleteTotal(nodes: TransactionGraphNode[]) {
   return nodes.every(
     (node) =>
       node.valueState !== "confidential" &&
+      node.valueState !== "other_asset" &&
       typeof node.valueSats === "number",
   );
 }
@@ -583,7 +591,11 @@ type GeometryValue = {
 };
 
 function isAmountless(node: TransactionGraphNode) {
-  return typeof node.valueSats !== "number" || node.valueState === "confidential";
+  return (
+    typeof node.valueSats !== "number" ||
+    node.valueState === "confidential" ||
+    node.valueState === "other_asset"
+  );
 }
 
 function positiveKnownSats(node: TransactionGraphNode) {
@@ -631,7 +643,10 @@ function redactRowsForGeometry(rows: GraphRow[]): GraphRow[] {
     ...node,
     valueSats: null,
     valueBtc: null,
-    valueState: node.valueState === "confidential" ? "confidential" : "missing",
+    valueState:
+      node.valueState === "confidential" || node.valueState === "other_asset"
+        ? node.valueState
+        : "missing",
   }));
 }
 

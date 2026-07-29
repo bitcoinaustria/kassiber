@@ -547,6 +547,109 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["inputs"][1]["valueState"], "confidential")
         self.assertNotIn("valueSats", payload["inputs"][1])
 
+    def test_foreign_asset_leg_is_named_not_called_confidential(self):
+        # An explicit token amount is public, so "confidential" would be wrong —
+        # but without an asset registry there is no precision to render it with.
+        txid = "8e" * 32
+        usdt = "ce" * 32
+        raw = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "8f" * 32,
+                    "vout": 0,
+                    "prevout": {
+                        "scriptpubkey": SCRIPT_A,
+                        "value_sats": 5_000_000_000,
+                        "asset_id": usdt,
+                    },
+                }
+            ],
+            "vout": [
+                {"n": 0, "scriptpubkey": SCRIPT_B, "value_sats": 4_999_000_000, "asset_id": usdt},
+            ],
+        }
+        self._tx("foreign-asset-row", "wallet-a", "outbound", 999_000_000, txid, raw, asset="LBTC")
+
+        payload = self._graph("foreign-asset-row")
+
+        node = payload["inputs"][0]
+        self.assertEqual(node["valueState"], "other_asset")
+        self.assertEqual(node["asset"], "cececece…")
+        self.assertNotIn("valueSats", node)
+        # A blanked leg must not leave the payload claiming a complete graph.
+        self.assertEqual(payload["supportLevel"], "partial")
+
+    def test_policy_asset_id_is_not_treated_as_a_foreign_asset(self):
+        # Legs carry the consensus asset id while the row carries "LBTC"; comparing
+        # those directly would flag every L-BTC leg as a foreign token.
+        txid = "92" * 32
+        prev_txid = "93" * 32
+        policy = "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d"
+        usdt = "ce" * 32
+        self._utxo(
+            "wallet-a",
+            ADDR_A,
+            prev_txid,
+            0,
+            amount=600_000,
+            chain="liquid",
+            network="liquidv1",
+            asset="LBTC",
+        )
+        raw = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": prev_txid,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "asset_id": policy},
+                },
+                {
+                    "txid": prev_txid,
+                    "vout": 1,
+                    "prevout": {"scriptpubkey": SCRIPT_B, "asset_id": usdt},
+                },
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "valuecommitment": "09" + "bb" * 32}],
+        }
+        self._tx("policy-asset-row", "wallet-a", "outbound", 500_000_000, txid, raw, asset="LBTC")
+
+        payload = self._graph("policy-asset-row")
+
+        self.assertEqual(payload["inputs"][0]["valueSats"], 600_000)
+        self.assertNotIn("asset", payload["inputs"][0])
+        self.assertEqual(payload["inputs"][1]["valueState"], "other_asset")
+        self.assertEqual(payload["inputs"][1]["asset"], "cececece…")
+
+    def test_policy_asset_aliases_are_not_treated_as_foreign(self):
+        txid = "90" * 32
+        raw = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "91" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value_sats": 600_000, "asset": "L-BTC"},
+                }
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value_sats": 500_000, "asset": "LBTC"}],
+        }
+        self._tx("alias-asset-row", "wallet-a", "outbound", 500_000_000, txid, raw, asset="LBTC")
+
+        payload = self._graph("alias-asset-row")
+
+        # Liquid rows hide leg amounts for their own reason; what matters here is
+        # that an L-BTC/LBTC spelling difference is not reported as a foreign asset.
+        for node in (payload["inputs"][0], payload["outputs"][0]):
+            self.assertEqual(node["valueState"], "confidential")
+            self.assertNotIn("asset", node)
+        self.assertTrue(tg._same_asset("L-BTC", "LBTC"))
+        self.assertTrue(tg._same_asset("XBT", "BTC"))
+        self.assertFalse(tg._same_asset("ce" * 32, "LBTC"))
+        # An unknown asset on either side is not evidence of a mismatch.
+        self.assertTrue(tg._same_asset(None, "LBTC"))
+
     def test_coinbase_input_is_not_reported_as_an_external_wallet(self):
         txid = "8c" * 32
         raw = {
