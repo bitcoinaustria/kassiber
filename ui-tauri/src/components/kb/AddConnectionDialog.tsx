@@ -1091,6 +1091,9 @@ export function AddConnectionDialog({
     CONNECTION_SOURCES.find((source) => source.id === selectedId) ??
     CONNECTION_SOURCES[0];
   const setupKind = selected.setupKind ?? "planned";
+  const forwardTarget = selected.forwardTo
+    ? CONNECTION_SOURCES.find((source) => source.id === selected.forwardTo)
+    : undefined;
   const isSetupStep = step === "setup";
   const allBackends = backendOptions.data?.data?.backends ?? [];
   const bitcoinBackends = allBackends.filter(
@@ -1377,7 +1380,8 @@ export function AddConnectionDialog({
               : setupKind === "file-enrichment"
                 ? t("add.submit.importPricing")
               : t("add.submit.createConnection");
-  const canContinue = selected.status === "ready" && setupKind !== "planned";
+  const canContinue =
+    selected.status === "ready" && (setupKind !== "planned" || !!forwardTarget);
 
   React.useEffect(() => {
     setForm(formDefaultsFor(selected, t));
@@ -1409,7 +1413,11 @@ export function AddConnectionDialog({
     const source = requestedSource ?? CONNECTION_SOURCES[0];
     setActiveCategory(source.category);
     setSelectedId(source.id);
-    setStep(requestedSource && source.status === "ready" ? "setup" : "source");
+    setStep(
+      requestedSource && source.status === "ready" && !source.forwardTo
+        ? "setup"
+        : "source",
+    );
     setSetupError(null);
     setLastImportResult(null);
     setGenericLedgerPreviewBlocksSubmit(false);
@@ -1564,7 +1572,7 @@ export function AddConnectionDialog({
     setActiveCategory(source.category);
     setSelectedId(source.id);
     setSourceQuery("");
-    setStep(source.status === "ready" ? "setup" : "source");
+    setStep(source.status === "ready" && !source.forwardTo ? "setup" : "source");
   };
 
   const updateForm = <Key extends keyof SetupFormState>(
@@ -5756,7 +5764,10 @@ export function AddConnectionDialog({
                 <Button
                   type="button"
                   disabled={!canContinue}
-                  onClick={() => setStep("setup")}
+                  onClick={() => {
+                    if (forwardTarget) setSelectedId(forwardTarget.id);
+                    setStep("setup");
+                  }}
                 >
                   {selected.status === "ready"
                     ? t("add.continue")

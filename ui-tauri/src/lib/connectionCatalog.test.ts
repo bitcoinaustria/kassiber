@@ -34,7 +34,37 @@ describe("connection catalog", () => {
     for (const source of CONNECTION_SOURCES.filter(
       (candidate) => candidate.status === "ready",
     )) {
-      expect(implementedSetupKinds.has(source.setupKind ?? "")).toBe(true);
+      const target = source.forwardTo
+        ? CONNECTION_SOURCES.find(
+            (candidate) => candidate.id === source.forwardTo,
+          )
+        : source;
+
+      expect(target?.status).toBe("ready");
+      expect(implementedSetupKinds.has(target?.setupKind ?? "")).toBe(true);
+    }
+  });
+
+  it("forwards brand wallet cards to the shared Wallet export setup", () => {
+    const forwarded = CONNECTION_SOURCES.filter((source) => source.forwardTo);
+
+    expect(forwarded.map((source) => source.id)).toEqual([
+      "sparrow",
+      "specter",
+      "bluewallet",
+      "blockstream-green",
+      "liana",
+      "nunchuk",
+      "bitbox",
+      "trezor",
+      "coldcard",
+      "foundation-passport",
+    ]);
+
+    for (const source of forwarded) {
+      expect(source.forwardTo).toBe("descriptor");
+      expect(source.setupKind).toBeUndefined();
+      expect(source.pathLabel).toBe("Wallet export");
     }
   });
 
