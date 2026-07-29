@@ -330,6 +330,51 @@ class FreshnessTest(unittest.TestCase):
             any("transactions.wallet_id IN (" in statement for statement in traces)
         )
 
+    def test_forced_rescan_supersedes_a_stuck_rate_limited_job(self):
+        """A rate-limited leftover must not wedge every later rescan.
+
+        `single_flight=False` (what a full rescan enqueues with) used to insert
+        straight into the queued/running/rate_limited unique index and raise
+        IntegrityError, failing the whole book refresh at the discovery phase.
+        """
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        stuck = freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_BTCPAY_WALLET,
+            source_key="btcpay_wallet:store",
+            source_type=freshness.SOURCE_BTCPAY_WALLET,
+            source_label="BTCPay store",
+            priority=10,
+        )
+        conn.execute(
+            "UPDATE freshness_jobs SET status = ? WHERE id = ?",
+            (freshness.JOB_RATE_LIMITED, stuck["id"]),
+        )
+        conn.commit()
+
+        forced = freshness.enqueue_job(
+            conn,
+            profile_id=profile_id,
+            job_type=freshness.JOB_BTCPAY_WALLET,
+            source_key="btcpay_wallet:store",
+            source_type=freshness.SOURCE_BTCPAY_WALLET,
+            source_label="BTCPay store",
+            payload={"force_full": True},
+            priority=10,
+            single_flight=False,
+        )
+
+        self.assertNotEqual(forced["id"], stuck["id"])
+        self.assertEqual(forced["status"], freshness.JOB_QUEUED)
+        superseded = conn.execute(
+            "SELECT status FROM freshness_jobs WHERE id = ?", (stuck["id"],)
+        ).fetchone()
+        self.assertEqual(superseded["status"], freshness.JOB_CANCELLED)
+        state = freshness.get_source_state(conn, profile_id, "btcpay_wallet:store")
+        self.assertEqual(state["status"], freshness.STATUS_QUEUED)
+
     def test_rate_limited_source_keeps_other_jobs_moving_and_redacts(self):
         conn = self._db()
         profile_id = _seed_profile(conn)

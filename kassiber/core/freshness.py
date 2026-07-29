@@ -641,10 +641,20 @@ def enqueue_job(
             stale_reason="paused",
             checkpoint=state.get("checkpoint", {}),
         )
-    if single_flight:
-        existing = _pending_job_for_source(conn, profile_id, source_key, job_type)
-        if existing is not None:
+    # A pending row always has to be resolved, not just under single flight:
+    # `idx_freshness_jobs_singleflight` is UNIQUE over
+    # (profile_id, source_key, job_type) for queued/running/rate_limited, so
+    # inserting alongside one raises IntegrityError and takes the whole enqueue
+    # batch (a full rescan enqueues with single_flight=False) down with it.
+    existing = _pending_job_for_source(conn, profile_id, source_key, job_type)
+    if existing is not None:
+        # ponytail: a running job wins — the worker owns the row and cancelling
+        # it here would leave the unique slot taken until it notices. The caller
+        # gets the in-flight (possibly incremental) job; re-run the rescan once
+        # it settles if the forced payload matters.
+        if single_flight or existing["status"] == JOB_RUNNING:
             return _row_payload(existing)
+        _set_cancelled(conn, _row_payload(existing))
     job_id = str(uuid.uuid4())
     now = now_iso()
     conn.execute(
