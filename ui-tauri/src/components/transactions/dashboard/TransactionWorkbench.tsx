@@ -644,7 +644,7 @@ const TransactionWorkbench = ({
           );
         })}
 
-        <div className="relative z-40 col-span-2 flex min-h-[360px] flex-col p-3 sm:p-4 md:col-span-3 xl:col-span-6 xl:min-h-0">
+        <div className="relative z-40 col-span-2 flex min-h-[360px] flex-col p-3 sm:p-4 md:col-span-3 xl:col-span-6">
           <div className="mb-3 flex shrink-0 items-start justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold">
