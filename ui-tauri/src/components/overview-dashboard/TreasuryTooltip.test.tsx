@@ -2,7 +2,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { TreasuryTooltip, type TreasuryTooltipPayload } from "./TreasuryTooltip";
-import { powerLawDaysFor, type TreasuryChartPoint } from "./model";
+import {
+  createHoveredActivityPointStore,
+  powerLawDaysFor,
+  type TreasuryChartPoint,
+} from "./model";
 
 function activityPoint(
   id: string,
@@ -55,6 +59,8 @@ describe("treasury tooltip", () => {
   it("prefers the hovered marker point over the shared chart payload", () => {
     const stalePayloadPoint = activityPoint("tx-stale", 0.21, 1.2);
     const hoveredPoint = activityPoint("tx-hovered", 0.05, 1.05);
+    const hoverStore = createHoveredActivityPointStore();
+    hoverStore.set(hoveredPoint);
     const payload: TreasuryTooltipPayload[] = [
       { dataKey: "markerBalanceBtc", payload: stalePayloadPoint },
     ];
@@ -62,7 +68,7 @@ describe("treasury tooltip", () => {
     const html = renderToStaticMarkup(
       <TreasuryTooltip
         active
-        activityPointOverride={hoveredPoint}
+        hoveredPointStore={hoverStore}
         fiatCurrency="EUR"
         hideSensitive={false}
         payload={payload}

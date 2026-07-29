@@ -47,6 +47,7 @@ import {
   brushedActivityMarkers,
   blurClass,
   bucketActivityMarkers,
+  createHoveredActivityPointStore,
   defaultTreasurySeriesVisibility,
   DEFAULT_INCOMING_MARKER_MIN_BTC,
   DEFAULT_OUTGOING_MARKER_MIN_BTC,
@@ -91,6 +92,7 @@ import {
   X_SCALE_PARAM,
   Y_AUTO_FIT_PARAM,
   Y_SCALE_PARAM,
+  type ActivityScatterDotProps,
   type OverviewTranslate,
   type PortfolioChartMouseState,
   type TimePeriod,
@@ -193,8 +195,8 @@ export const BtcActivityChart = ({
   const [brushRevisionByView, setBrushRevisionByView] = React.useState<
     Record<ChartView, number>
   >({ compact: 0, expanded: 0 });
-  const [hoveredActivityPoint, setHoveredActivityPoint] =
-    React.useState<TreasuryChartPoint | null>(null);
+  // Hover lives outside React state on purpose — see the store's own comment.
+  const hoveredPointStore = React.useMemo(createHoveredActivityPointStore, []);
   const previousFiatSeriesEnabled = React.useRef(fiatSeriesEnabled);
   const previousBookKey = React.useRef(bookKey);
   const { active: activeSeries, handleHover } =
@@ -275,8 +277,8 @@ export const BtcActivityChart = ({
     setPeriod(initialTimePeriodFromUrl(storedBookChartPeriod ?? "auto"));
     setBrushRangeByView({ compact: null, expanded: null });
     setExpandedPointDate(null);
-    setHoveredActivityPoint(null);
-  }, [bookKey, storedBookChartPeriod]);
+    hoveredPointStore.set(null);
+  }, [bookKey, hoveredPointStore, storedBookChartPeriod]);
 
   React.useEffect(() => {
     if (!bookKey) return;
@@ -365,8 +367,8 @@ export const BtcActivityChart = ({
 
   React.useEffect(() => {
     setExpandedPointDate(null);
-    setHoveredActivityPoint(null);
-  }, [currency, period]);
+    hoveredPointStore.set(null);
+  }, [currency, hoveredPointStore, period]);
 
   const chartData = React.useMemo(
     () =>
@@ -425,17 +427,38 @@ export const BtcActivityChart = ({
     setIncomingMarkerMinimumBtc(DEFAULT_INCOMING_MARKER_MIN_BTC);
     setOutgoingMarkerMinimumBtc(DEFAULT_OUTGOING_MARKER_MIN_BTC);
   }, []);
+  // The parent re-creates this callback whenever its transaction list changes,
+  // and every dot takes it as a prop — route it through a ref so a new identity
+  // upstream cannot re-key the Scatter and remount the dots mid-hover.
+  const openTransactionDetailRef = React.useRef(onOpenTransactionDetail);
+  React.useEffect(() => {
+    openTransactionDetailRef.current = onOpenTransactionDetail;
+  }, [onOpenTransactionDetail]);
+  const openTransactionDetail = React.useCallback((transactionId: string) => {
+    openTransactionDetailRef.current?.(transactionId);
+  }, []);
   const openActivityPointTransaction = React.useCallback(
     (point: unknown) => {
-      if (!onOpenTransactionDetail) return;
       const payload =
         (point as { payload?: TreasuryChartPoint } | null)?.payload ??
         (point as TreasuryChartPoint | null);
       const transactionId = payload?.eventTransactionId ?? payload?.eventId;
       if (!transactionId) return;
-      onOpenTransactionDetail(transactionId);
+      openTransactionDetail(transactionId);
     },
-    [onOpenTransactionDetail],
+    [openTransactionDetail],
+  );
+  const renderActivityDot = React.useCallback(
+    (dotProps: unknown) => (
+      <ActivityScatterDot
+        {...(dotProps as ActivityScatterDotProps)}
+        activeSeries={activeSeries}
+        flowColors={flowColors}
+        onHoverActivityPoint={hoveredPointStore.set}
+        onOpenTransactionDetail={openTransactionDetail}
+      />
+    ),
+    [activeSeries, flowColors, hoveredPointStore.set, openTransactionDetail],
   );
   const activityMarkerMinimumForPoint = React.useCallback(
     (point: TreasuryChartPoint) => {
@@ -493,11 +516,77 @@ export const BtcActivityChart = ({
     });
   }, [compactMarkerView.chartDisplayData, expandedMarkerView.chartDisplayData]);
 
+  // Everything recharts consumes has to keep its identity between renders.
+  // `Scatter` is `React.memo`'d on `data` by reference; a miss re-keys its
+  // animation layer, which throws away and re-creates every dot node. Hovering
+  // a dot sets state, so rebuilding this array per render meant each hover
+  // destroyed the very dot under the pointer: Chromium re-resolves `:hover`
+  // after the swap, WebKit does not, so the mac build flickered the dot and
+  // dropped the tooltip.
+  const plotGeometryByView = React.useMemo(() => {
+    const build = (view: ChartView) => {
+      const expanded = view === "expanded";
+      const { chartDisplayData, visibleActivityMarkers } =
+        expanded ? expandedMarkerView : compactMarkerView;
+      const effectiveBrushRange =
+        brushRangeByView[view] ?? fullTreasuryBrushRange(chartDisplayData.length);
+      const selectedChartDisplayData =
+        chartDisplayData.length > 3
+          ? chartDisplayData.slice(
+              effectiveBrushRange.startIndex,
+              effectiveBrushRange.endIndex + 1,
+            )
+          : chartDisplayData;
+      const selectedActivityMarkers = brushedActivityMarkers(
+        visibleActivityMarkers,
+        selectedChartDisplayData,
+      );
+      const plotData = yScaleLog
+        ? logSafeTreasuryPoints(selectedChartDisplayData)
+        : selectedChartDisplayData;
+      // Drop log-undrawable markers BEFORE bucketing: a bucket takes its x and y
+      // from its anchor, so a zero-balance anchor would filter out every event
+      // merged behind it.
+      const drawableActivityMarkers = yScaleLog
+        ? logSafeActivityMarkers(selectedActivityMarkers)
+        : selectedActivityMarkers;
+      // Grouping only changes how wide a bucket reaches: on, dots merge until
+      // ~32/56 survive; off, the target is one dot per plotted column, so only
+      // events landing on the very same column still share a dot. Off still goes
+      // through bucketing because two dots at identical coordinates are a worse
+      // answer than one dot labelled "2".
+      const plotMarkers = bucketActivityMarkers(
+        drawableActivityMarkers,
+        selectedChartDisplayData,
+        {
+          maxVisibleMarkers: groupActivityDots
+            ? expanded
+              ? 56
+              : 32
+            : selectedChartDisplayData.length,
+        },
+      );
+      return {
+        effectiveBrushRange,
+        selectedChartDisplayData,
+        selectedActivityMarkers,
+        plotData,
+        plotMarkers,
+      };
+    };
+    return { compact: build("compact"), expanded: build("expanded") };
+  }, [
+    brushRangeByView,
+    compactMarkerView,
+    expandedMarkerView,
+    groupActivityDots,
+    yScaleLog,
+  ]);
+
   const renderChartCard = (expanded = false) => {
     const view: ChartView = expanded ? "expanded" : "compact";
     const plottedData = expanded ? expandedChartData : chartData;
     const markerView = expanded ? expandedMarkerView : compactMarkerView;
-    const brushRange = brushRangeByView[view];
     const setBrushRange = (
       update: (current: TreasuryBrushRange | null) => TreasuryBrushRange | null,
     ) =>
@@ -523,44 +612,12 @@ export const BtcActivityChart = ({
     const brushGradientId = expanded
       ? "treasuryBrushGradientExpanded"
       : "treasuryBrushGradient";
-    const effectiveBrushRange =
-      brushRange ?? fullTreasuryBrushRange(chartDisplayData.length);
-    const selectedChartDisplayData =
-      chartDisplayData.length > 3
-        ? chartDisplayData.slice(
-            effectiveBrushRange.startIndex,
-            effectiveBrushRange.endIndex + 1,
-          )
-        : chartDisplayData;
-    const selectedActivityMarkers = brushedActivityMarkers(
-      visibleActivityMarkers,
+    const {
+      effectiveBrushRange,
       selectedChartDisplayData,
-    );
-    const plotData = yScaleLog
-      ? logSafeTreasuryPoints(selectedChartDisplayData)
-      : selectedChartDisplayData;
-    // Drop log-undrawable markers BEFORE bucketing: a bucket takes its x and y
-    // from its anchor, so a zero-balance anchor would filter out every event
-    // merged behind it.
-    const drawableActivityMarkers = yScaleLog
-      ? logSafeActivityMarkers(selectedActivityMarkers)
-      : selectedActivityMarkers;
-    // Grouping only changes how wide a bucket reaches: on, dots merge until
-    // ~32/56 survive; off, the target is one dot per plotted column, so only
-    // events landing on the very same column still share a dot. Off still goes
-    // through bucketing because two dots at identical coordinates are a worse
-    // answer than one dot labelled "2".
-    const plotMarkers = bucketActivityMarkers(
-      drawableActivityMarkers,
-      selectedChartDisplayData,
-      {
-        maxVisibleMarkers: groupActivityDots
-          ? expanded
-            ? 56
-            : 32
-          : selectedChartDisplayData.length,
-      },
-    );
+      plotData,
+      plotMarkers,
+    } = plotGeometryByView[view];
     const btcAxisValues = [
       ...(seriesVisible.primary
         ? plotData.map((point) => point.lineBalanceBtc)
@@ -1195,7 +1252,7 @@ export const BtcActivityChart = ({
                     allowEscapeViewBox={{ x: false, y: true }}
                     content={
                       <TreasuryTooltip
-                        activityPointOverride={hoveredActivityPoint}
+                        hoveredPointStore={hoveredPointStore}
                         hideSensitive={hideSensitive}
                         priceEur={fiatRate}
                         fiatCurrency={fiatCurrency}
@@ -1294,15 +1351,7 @@ export const BtcActivityChart = ({
                       name={t("treasury.series.activity")}
                       fill="transparent"
                       onClick={openActivityPointTransaction}
-                      shape={(props) => (
-                        <ActivityScatterDot
-                          {...props}
-                          activeSeries={activeSeries}
-                          flowColors={flowColors}
-                          onHoverActivityPoint={setHoveredActivityPoint}
-                          onOpenTransactionDetail={onOpenTransactionDetail}
-                        />
-                      )}
+                      shape={renderActivityDot}
                       isAnimationActive={false}
                     />
                   )}

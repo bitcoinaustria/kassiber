@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { formatBtc } from "@/lib/currency";
@@ -10,6 +11,7 @@ import {
   formatFiatPrice,
   formatPortfolioMoney,
   statusLabelKeys,
+  type HoveredActivityPointStore,
   useActivityFlowColors,
   type TreasuryChartPoint,
 } from "./model";
@@ -24,18 +26,30 @@ export interface TreasuryTooltipProps {
   active?: boolean;
   payload?: TreasuryTooltipPayload[];
   label?: string | number;
-  activityPointOverride?: TreasuryChartPoint | null;
+  /** Live hovered dot, read by subscription so hovering never re-renders the chart. */
+  hoveredPointStore?: HoveredActivityPointStore;
   hideSensitive: boolean;
   priceEur: number;
   fiatCurrency: string;
   fiatSeriesEnabled?: boolean;
 }
 
+const EMPTY_SUBSCRIBE = () => () => {};
+const NO_POINT = () => null;
+
+function useHoveredActivityPoint(store?: HoveredActivityPointStore) {
+  return React.useSyncExternalStore(
+    store?.subscribe ?? EMPTY_SUBSCRIBE,
+    store?.get ?? NO_POINT,
+    store?.get ?? NO_POINT,
+  );
+}
+
 export function TreasuryTooltip({
   active,
   payload,
   label,
-  activityPointOverride,
+  hoveredPointStore,
   hideSensitive,
   priceEur,
   fiatCurrency,
@@ -43,6 +57,7 @@ export function TreasuryTooltip({
 }: TreasuryTooltipProps) {
   const { t } = useTranslation("overview");
   const flowColors = useActivityFlowColors();
+  const activityPointOverride = useHoveredActivityPoint(hoveredPointStore);
   if ((!active || !payload?.length) && !activityPointOverride) return null;
 
   const payloadPoint =

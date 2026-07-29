@@ -239,6 +239,39 @@ export type ActivityScatterDotProps = {
   onHoverActivityPoint?: (point: TreasuryChartPoint | null) => void;
 };
 
+/**
+ * Which activity dot the pointer is on.
+ *
+ * Deliberately not React state: the tooltip is the only reader, and putting it
+ * in the chart's state re-rendered the whole card on every hover. Recharts
+ * re-keys its scatter animation layer whenever the `Scatter` re-renders, which
+ * destroys and re-creates every dot node — including the one under the pointer.
+ * Chromium re-resolves `:hover` after that swap; WebKit does not, so the macOS
+ * build flickered the dot and dropped the tooltip.
+ */
+export type HoveredActivityPointStore = {
+  subscribe: (listener: () => void) => () => void;
+  get: () => TreasuryChartPoint | null;
+  set: (point: TreasuryChartPoint | null) => void;
+};
+
+export function createHoveredActivityPointStore(): HoveredActivityPointStore {
+  let current: TreasuryChartPoint | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    get: () => current,
+    set: (point) => {
+      if (point === current) return;
+      current = point;
+      for (const listener of listeners) listener();
+    },
+  };
+}
+
 export type ActivityMarkerView = {
   activityPoints: TreasuryChartPoint[];
   chartDisplayData: TreasuryChartPoint[];
