@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -14,11 +15,16 @@ from kassiber.core.custody_tax_projection import compile_finalized_tax_projectio
 from kassiber.core.custody_evidence import build_canonical_quantity_input, enriched_quantity_rows
 from kassiber.core.custody_quantity import (
     CUSTODY_SUSPENSE,
+    INTERNAL_VERIFIED,
     ClaimPriority,
     QuantityClaim,
     QuantitySlice,
 )
 from kassiber.core.custody_interpreters import compile_custody_interpreters
+from kassiber.transfers import (
+    _SYNTHETIC_TRANSFER_ID_PREFIXES,
+    onchain_transfer_scope,
+)
 from kassiber.core.engines.base import TaxEngineLedgerInputs
 from kassiber.core.engines.rp2 import GenericRP2TaxEngine, _GenericRailCarryResult
 from tests.custody_tax_helpers import (
@@ -106,6 +112,48 @@ def test_residual_suspense_keeps_finalized_sibling_but_blocks_later_sale():
         item["transaction_id"] == "later-sale"
         and item["reason"] == "custody_basis_barrier"
         for item in projection.quarantines
+    )
+
+
+def test_every_projected_row_id_is_synthetic_and_pairs_are_edge_disjoint():
+    """Pin the two invariants a large amount of tax_events.py silently rests on.
+
+    `normalize_tax_asset_inputs` only ever sees a `FinalizedTaxProjection`, and
+    several of its branches are reachable only for rows that resolve an
+    `onchain_transfer_scope` or that share a pair leg. Neither is possible today:
+
+    1. every projected row id is re-stamped with a member of
+       `_SYNTHETIC_TRANSFER_ID_PREFIXES`, and `onchain_transfer_scope` returns
+       `None` for those prefixes — so the txid-scope-gated paths (the
+       Samourai/Whirlpool splitter, `_owned_fanout_row_ids`) are inert;
+    2. each decision mints its own fresh move rows, so the pair graph is a
+       perfect matching and no multi-pair component can form — which is what
+       makes `_build_manual_multi_pair_transfers`' multi-pair branch inert.
+
+    Nothing in `custody_tax_projection` asserts either property, so without this
+    test the inertness is an unasserted cross-module coupling. Anyone deleting
+    that dead code needs this guard; anyone breaking these invariants needs to
+    know the dead code became live again.
+    """
+
+    rows, state = _residual_state()
+    profile = {"id": "profile", "workspace_id": "workspace", "label": "Book"}
+
+    projection = compile_finalized_tax_projection(profile, rows, state)
+
+    assert projection.rows, "fixture must project at least one row"
+    for row in projection.rows:
+        row_id = str(row["id"])
+        assert row_id.startswith(_SYNTHETIC_TRANSFER_ID_PREFIXES), row_id
+        assert onchain_transfer_scope(row) is None, row_id
+
+    leg_ids = [
+        str((pair[side] or {})["id"])
+        for pair in projection.intra_pairs
+        for side in ("out", "in")
+    ]
+    assert len(leg_ids) == len(set(leg_ids)), (
+        f"pair legs must be edge-disjoint, got {leg_ids}"
     )
 
 
@@ -486,6 +534,97 @@ def test_same_timestamp_native_siblings_compile_before_rp2_without_audit_input()
     }
 
 
+def _whirlpool_tx0_compilation(*, fee_attribution: str):
+    """A Tx0 fan-out whose coordinator fee is the unallocated residual."""
+
+    txid = "ef" * 32
+
+    def leg(row_id, wallet, section, direction, amount):
+        row = {
+            **_row(row_id, wallet, direction, amount, "2025-01-01T00:00:00Z"),
+            "external_id": txid,
+            "external_id_kind": "txid",
+            "raw_json": {"txid": txid, "network": "main", "chain": "bitcoin"},
+            "config_json": json.dumps(
+                {"samourai": {"role": "child", "section": section, "group_id": "wp"}}
+            ),
+        }
+        return authoritative_chain_observation(row, fee_attribution=fee_attribution)
+
+    rows = [
+        leg("dep-out", "deposit", "deposit", "outbound", 10_000_000),
+        leg("pre-in", "premix", "premix", "inbound", 9_500_000),
+        leg("bad-in", "badbank", "badbank", "inbound", 450_000),
+    ]
+    refs = {
+        wallet: {
+            "id": wallet,
+            "label": wallet,
+            "wallet_account_id": "account",
+            "account_code": "treasury",
+            "account_label": "Treasury",
+        }
+        for wallet in ("deposit", "premix", "badbank")
+    }
+    canonical = build_canonical_quantity_input(enriched_quantity_rows(rows))
+    compiled = compile_custody_interpreters(rows, canonical, wallet_refs_by_id=refs)
+    state = build_canonical_quantity_state(
+        rows, interpreter_claims=compiled.claims
+    )
+    return compiled, state
+
+
+def test_inexact_whirlpool_coordinator_fee_keeps_its_group_moves():
+    """A non-exact coordinator fee must not destroy the group's MOVEs.
+
+    Regression: the residual claim was bundled under the same `pair-group:` id as
+    the group's MOVE claims, but its priority is conditional while `_pair_claims`
+    always emits MOVEs at EXACT_NATIVE_EVENT. The arbiter discards any bundle
+    whose members disagree on priority, so an ordinary compatibility-observer
+    sync (fee_attribution='unknown') replaced two correct internal MOVEs with a
+    single suspense claim — and left blocked ids and quarantines empty, so
+    nothing told the user why every report was blocked.
+    """
+
+    compiled, state = _whirlpool_tx0_compilation(fee_attribution="unknown")
+
+    # Behaviour first, because that is what the fix is for: both the premix and
+    # badbank receipts must still be covered by an internal MOVE decision...
+    decisions = state.projection.decisions
+    internal = [d for d in decisions if str(d.state) == INTERNAL_VERIFIED]
+    assert len(internal) == 2, [str(d.state) for d in decisions]
+    # ...and the coordinator fee stays explicit suspense rather than silently
+    # becoming a disposal, so the report barrier survives without a basis edge.
+    assert [str(d.state) for d in decisions].count(CUSTODY_SUSPENSE) == 1
+
+    # Then the mechanism, so a future regression is diagnosable and not just red:
+    # the collision was only possible because both priorities shared one bundle.
+    assert len({claim.priority for claim in compiled.claims}) > 1
+    assert not [
+        claim
+        for claim in compiled.claims
+        if claim.priority != ClaimPriority.EXACT_NATIVE_EVENT
+        and claim.atomic_bundle_id is not None
+    ]
+    assert not [
+        issue for issue in state.issues if "bundle" in str(issue.reason)
+    ], [str(issue.reason) for issue in state.issues]
+
+
+def test_exact_whirlpool_coordinator_fee_stays_atomic_with_its_group():
+    """The negative control: an exact fee must remain one atomic unit.
+
+    Unbundling it unconditionally would let the fee arbitrate independently of
+    the MOVEs it belongs to, so the fix must keep the exact case bundled.
+    """
+
+    compiled, _state = _whirlpool_tx0_compilation(fee_attribution="exact")
+
+    bundles = {claim.atomic_bundle_id for claim in compiled.claims}
+    assert bundles == {f"pair-group:samourai:wp:{'ef' * 32}"}
+    assert len({claim.priority for claim in compiled.claims}) == 1
+
+
 def test_unreviewed_privacy_hop_is_a_specific_pre_tax_blocker():
     row = {
         **_row("coinjoin", "source", "outbound", 1_000, "2025-01-01T00:00:00Z"),
@@ -510,3 +649,71 @@ def test_unreviewed_privacy_hop_is_a_specific_pre_tax_blocker():
     assert compiled.blocked_transaction_ids == ("coinjoin",)
     assert len(compiled.quarantines) == 1
     assert compiled.quarantines[0]["reason"] == "privacy_hop_unresolved"
+
+
+def _privacy_fanout_rows(*, authoritative_destinations: bool):
+    """One authoritative 1:N chain event where every leg is privacy-tagged."""
+
+    txid = "cd" * 32
+    chain_raw = {"txid": txid, "network": "main", "chain": "bitcoin"}
+    privacy = {"privacy_boundary": "coinjoin"}
+
+    def leg(row_id, wallet, direction, amount):
+        return {
+            **_row(row_id, wallet, direction, amount, "2025-01-01T00:00:00Z"),
+            **privacy,
+            "external_id": txid,
+            "external_id_kind": "txid",
+            "raw_json": dict(chain_raw),
+        }
+
+    source = authoritative_chain_observation(leg("fanout-out", "source", "outbound", 10_000))
+    destinations = [
+        leg("fanout-in-1", "dest-a", "inbound", 6_000),
+        leg("fanout-in-2", "dest-b", "inbound", 4_000),
+    ]
+    if authoritative_destinations:
+        destinations = [authoritative_chain_observation(row) for row in destinations]
+    rows = [source, *destinations]
+    refs = {
+        wallet: {
+            "id": wallet,
+            "label": wallet,
+            "wallet_account_id": "account",
+            "account_code": "treasury",
+            "account_label": "Treasury",
+        }
+        for wallet in ("source", "dest-a", "dest-b")
+    }
+    canonical = build_canonical_quantity_input(enriched_quantity_rows(rows))
+    return compile_custody_interpreters(rows, canonical, wallet_refs_by_id=refs)
+
+
+def test_proven_privacy_tagged_fanout_clears_the_generic_privacy_blocker():
+    """A derived 1:N MOVE is exactly as strong as the 1:1 case.
+
+    Regression: the privacy-hop blocker used to be resolved before derivation, so
+    only ``detect_intra_transfers``' 1-out/1-in shape could clear it. A proven
+    fan-out was booked as a MOVE *and* blocked every report on cardinality alone.
+    """
+
+    compiled = _privacy_fanout_rows(authoritative_destinations=True)
+
+    assert [item["reason"] for item in compiled.quarantines] == []
+    assert compiled.blocked_transaction_ids == ()
+    assert len(compiled.claims) >= 1
+
+
+def test_unproven_privacy_tagged_fanout_still_blocks():
+    """The negative control for the fix above.
+
+    Clearing the blocker must require an authoritative observation on *both*
+    ends. A destination we have not observed is still an unexplained privacy hop.
+    """
+
+    compiled = _privacy_fanout_rows(authoritative_destinations=False)
+
+    assert "privacy_hop_unresolved" in {
+        item["reason"] for item in compiled.quarantines
+    }
+    assert compiled.blocked_transaction_ids != ()

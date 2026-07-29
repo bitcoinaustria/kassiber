@@ -435,7 +435,21 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "reverse-submarine-swap",
             pair_schema["properties"]["kind"]["enum"],
         )
-        self.assertIn("Coinjoin", get_tool("ui_transfers_pair").description)
+        # The coinjoin/whirlpool guidance lives on the `kind` parameter rather
+        # than in the prose description: that is where the model reads the enum it
+        # has to choose from, and it also documents that these are the only kinds
+        # allowed to reuse a transaction leg.
+        pair_kind_doc = pair_schema["properties"]["kind"]["description"]
+        self.assertIn("coinjoin", pair_kind_doc)
+        self.assertIn("whirlpool", pair_kind_doc)
+        # The tax-consequential argument must never be left for the model to
+        # guess, so both policy values carry an explanation.
+        pair_policy_doc = pair_schema["properties"]["policy"]["description"]
+        self.assertIn("carrying-value", pair_policy_doc)
+        self.assertIn("taxable", pair_policy_doc)
+        # out_amount is the only non-msat amount in the surface; the unit warning
+        # is what stops a 1e11 error when the model copies a msat field.
+        self.assertIn("BTC", pair_schema["properties"]["out_amount"]["description"])
         bulk_pair_schema = get_tool("ui_transfers_bulk_pair").parameters
         self.assertIn("method", bulk_pair_schema["properties"])
         self.assertIn(

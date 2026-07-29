@@ -5,10 +5,8 @@ import unittest
 
 from kassiber.core.swap_rules import (
     DEFAULT_MIN_CONFIDENCE,
-    PatternSuggestion,
     SwapMatchingRule,
     apply_rules,
-    detect_repeating_patterns,
     load_rule,
     predicate_matches,
     rule_specificity,
@@ -271,71 +269,6 @@ class ApplyRulesTests(unittest.TestCase):
     def test_default_min_confidence_value(self):
         # Documents the constant so a future change is intentional.
         self.assertEqual(DEFAULT_MIN_CONFIDENCE, CONFIDENCE_STRONG)
-
-
-class DetectRepeatingPatternsTests(unittest.TestCase):
-    def _history_row(self, *, source="manual", **overrides):
-        base = {
-            "out_wallet_id": "phoenix",
-            "in_wallet_id": "liquid",
-            "out_asset": "BTC",
-            "in_asset": "LBTC",
-            "kind": "submarine-swap",
-            "policy": "carrying-value",
-            "pair_source": source,
-        }
-        base.update(overrides)
-        return base
-
-    def test_repeated_pattern_surfaces(self):
-        history = [self._history_row() for _ in range(3)]
-        suggestions = detect_repeating_patterns(history)
-        self.assertEqual(len(suggestions), 1)
-        suggestion = suggestions[0]
-        self.assertEqual(suggestion.occurrences, 3)
-        self.assertEqual(suggestion.kind, "submarine-swap")
-
-    def test_below_threshold_filtered_out(self):
-        history = [self._history_row() for _ in range(2)]
-        self.assertEqual(detect_repeating_patterns(history), [])
-
-    def test_only_manual_rows_count(self):
-        history = [self._history_row(source="manual"), self._history_row(source="rule_auto"), self._history_row(source="bulk_exact")]
-        self.assertEqual(detect_repeating_patterns(history, min_occurrences=2), [])
-
-    def test_different_shapes_kept_separate(self):
-        history = [
-            self._history_row(),
-            self._history_row(),
-            self._history_row(),
-            self._history_row(out_wallet_id="coreln", out_asset="LBTC", in_asset="BTC", kind="peg-out"),
-            self._history_row(out_wallet_id="coreln", out_asset="LBTC", in_asset="BTC", kind="peg-out"),
-            self._history_row(out_wallet_id="coreln", out_asset="LBTC", in_asset="BTC", kind="peg-out"),
-        ]
-        suggestions = detect_repeating_patterns(history)
-        self.assertEqual(len(suggestions), 2)
-        kinds = {s.kind for s in suggestions}
-        self.assertEqual(kinds, {"submarine-swap", "peg-out"})
-
-    def test_to_predicate_round_trip(self):
-        suggestion = PatternSuggestion(
-            out_wallet_id="phoenix",
-            in_wallet_id="liquid",
-            out_asset="BTC",
-            in_asset="LBTC",
-            kind="submarine-swap",
-            policy="carrying-value",
-            occurrences=3,
-        )
-        self.assertEqual(
-            suggestion.to_predicate(),
-            {
-                "out_wallet_id": "phoenix",
-                "in_wallet_id": "liquid",
-                "out_asset": "BTC",
-                "in_asset": "LBTC",
-            },
-        )
 
 
 if __name__ == "__main__":

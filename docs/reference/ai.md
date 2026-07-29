@@ -692,7 +692,13 @@ smuggle a hidden network or mutation argument into a narrower tool.
   category fields, reviewed pair context for swap/peg rows, and an optional
   transaction filter
 - `ui_journals_transfers_list` maps to daemon kind
-  `ui.journals.transfers.list`
+  `ui.journals.transfers.list`; it is where deterministic same-asset
+  self-transfers already booked by the journal appear, since
+  `ui.transfers.suggest` deliberately excludes them. When the journal needs
+  processing it returns `summary.projection_status = "stale"` with every count at
+  zero and no pairs, so an empty result is not evidence that no transfers were
+  booked — the tool description tells the model to check that field before
+  answering rather than reporting zero
 - `ui_rates_summary` maps to daemon kind `ui.rates.summary`
 - `ui_rates_coverage` maps to daemon kind `ui.rates.coverage`; it returns
   transaction pricing coverage, rows that still require a usable fiat spot
@@ -763,6 +769,24 @@ smuggle a hidden network or mutation argument into a narrower tool.
   `candidate_type=swap` for other cross-asset swaps. Bitcoin swap review still
   requires ownership intent: if the swap route paid or received from an external
   counterparty, it should remain an ordinary payment or receipt.
+  The `method` filter accepts `ownership_graph` in addition to the matcher's own
+  methods, because journal ownership proofs are merged into the same candidate
+  graph. It is deliberately absent from the `ui.transfers.bulk_pair` filter:
+  ownership candidates always require explicit per-row review and are never
+  rule- or bulk-paired.
+  The heuristic band is tunable per call through `time_window_seconds`
+  (default 86400), `fee_pct_max` (default 0.01) and `fee_sats_min`
+  (default 2500), so the assistant can answer "widen the window to 48h" instead
+  of reporting the default band as fixed. `route_pair` filters on the
+  rail-aware route shape where `asset_pair` only sees assets.
+  When a provider candidate is `strong` rather than `exact`, `evidence.conflicts`
+  names the contradictions that denied exactness (`amount`, `route`, `identity`,
+  `semantic`), and `evidence.send_amount_msat` / `evidence.receive_amount_msat`
+  carry the provider's declared leg amounts that whole-row coverage compared.
+  Those facts were previously computed and discarded, which left a `strong`
+  verdict on deterministic-looking metadata unexplainable to both the reviewer
+  and the assistant. Route txids are intentionally not repeated: the matcher
+  already requires each declared route txid to equal that row's own scope txid.
 - `ui_transfers_review_context` maps to daemon kind
   `ui.transfers.review_context`; it returns a bounded deterministic pair-review
   packet with candidate leg summaries, confidence reasons, fee assessment,
@@ -770,6 +794,13 @@ smuggle a hidden network or mutation argument into a narrower tool.
   suggested next action, active pairs, rules, and saved candidate views. Pass
   `candidate_type=transfer` or `candidate_type=swap` when the review packet
   should follow one split queue; without a candidate type it includes both.
+  It is the preferred entry point for a human-facing review; bare
+  `ui_transfers_suggest` is for counts or a filtered sweep. It accepts the same
+  `method` values and heuristic-band arguments as `ui_transfers_suggest`. Note
+  that `limit` (default 8) truncates `active_pairs`, `rules` and `saved_views`
+  alongside candidates, and that `conflict.candidate_count` reports the true
+  cluster size even when the competing candidates fall outside that limit — read
+  the full cluster from `ui_transfers_suggest` grouped by `conflict_set_id`.
 - `ui_transfers_list` maps to daemon kind `ui.transfers.list`; it returns active
   reviewed transfer/swap pairs
 - `ui_transfers_payouts_list` returns reviewed direct/split payouts where the
@@ -815,6 +846,40 @@ supports `coinjoin` and `whirlpool` kinds for user-reviewed same-asset
 ownership hops, including reviewed one-to-many / many-to-one same-asset links.
 Cross-asset and layer-transition links remain one-to-one. The AI may propose
 these pairings, but the write still requires explicit user consent.
+
+Natural-language pairing ("pair the Phoenix payment with the Liquid receipt") is
+supported on the `core` tool profile through `ui_transfers_pair` only.
+`ui_transfers_bulk_pair` is excluded so a single consent can never sweep a whole
+review queue, and `ui_transfers_unpair` is excluded too — the assistant is told
+not to promise an undo it may not be able to perform, since the user can always
+unpair from the desktop review screen.
+
+`ui_transfers_dismiss` is excluded on stronger grounds: it is the one review-queue
+write with neither a read-back nor an undo. `transaction_pair_dismissals` has a
+single upsert and no `DELETE` anywhere in the codebase, no list/read daemon kind
+and no AI tool, and the desktop undo path only calls `unpair`. With
+`expires_in_days: 0` the matcher would stop offering a candidate permanently while
+neither the assistant nor the user could discover that the dismissal exists — and
+`ui_transfers_suggest` explicitly documents that dismissed legs are silently
+absent. It should join the profile once a dismissal read path exists.
+
+Three properties of `ui_transfers_pair` are documented on the tool because the
+model would otherwise have to guess them, and each guess is a real error class:
+
+- `policy` decides tax treatment (`carrying-value` carries basis across the move
+  and realizes nothing; `taxable` realizes a disposal). Both values now carry an
+  explanation and the model is told to take the candidate's `default_policy` and
+  state which one it used rather than inferring.
+- `out_amount` is a decimal **BTC** string — the only non-msat amount in the AI
+  surface, next to `out_amount_msat` fields the model has just read. The
+  parameter doc carries an explicit unit warning.
+- unlike `ui_transfers_bulk_pair`, which refuses any candidate with
+  `conflict_size > 1`, this tool *will* pair one member of a conflict cluster and
+  thereby consume both legs, making the competing candidates unauthorable. The
+  description requires the model to check `conflict_size`, list the competing
+  candidates, and let the user choose. Blocking it outright would break the
+  desktop flow, where the human resolves the cluster by choosing; disclosure at
+  the consent surface is the remaining gap.
 The desktop/CLI custody-component resolver handles 1:N, N:1, N:M, multi-hop,
 and missing-wallet histories atomically; those authored component mutations are
 not generic AI pairing shortcuts.

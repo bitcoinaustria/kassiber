@@ -235,11 +235,13 @@ per-source allocation is known.
 
 For an automatically proven many-wallet consolidation, Bitcoin does not define
 which contributing input paid which sat of the transaction fee. Kassiber's
-derived journal uses a stable convention: the largest contributor (wallet-id
-tie-break) bears the single shared fee. This is an accounting allocation, not a
-claim about Bitcoin's transaction graph. If wallet-level fee/lot attribution is
-material, replace the derived interpretation with an explicit reviewed N:M
-component.
+derived journal uses a stable convention: the contributing row with the lowest
+transaction id bears the single shared fee. That is the same keeper the canonical
+boundary normalizer picks in `enriched_quantity_rows`, so the deriver and the
+normalizer cannot disagree about which row carries the fee. This is an accounting
+allocation, not a claim about Bitcoin's transaction graph. If wallet-level fee/lot
+attribution is material, replace the derived interpretation with an explicit
+reviewed N:M component.
 
 Fee legs are loss sinks of their allocation source. Their asset and any named
 wallet must match that source, as must their Bitcoin rail/network scope. A

@@ -1112,6 +1112,53 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
         self.assertNotIn("transfer_in", entry_types)
         self.assertEqual(state.wallet_holdings, {})
 
+    def test_reviewed_pair_resolves_the_ambiguity_the_deriver_blocked(self):
+        """A user's review must be able to clear a derivation block.
+
+        Regression: `excluded` (transactions an active reviewed component
+        already authored) suppressed pair claims, native audits, privacy
+        blockers and gap discovery, but not the derivation blocks. So the
+        deriver re-blocked the very row the user had just reviewed, the block
+        propagated over the reviewed MOVE, and the review was powerless.
+        """
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        spend = json.dumps(
+            {
+                "txid": "real-T",
+                "vin": [{"txid": "pv", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}}],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 50_000_000}],
+            }
+        )
+        rows = [
+            _row("A", "inbound", 70_000_000_000, external_id="acq"),
+            _row("A", "outbound", 50_000_000_000, external_id="real-T", raw_json=spend),
+            _row("B", "inbound", 50_000_000_000, external_id="prov-genuine"),
+            _row("B", "inbound", 50_000_000_000, external_id="prov-other"),
+        ]
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
+            finalized_tax_inputs(PROFILE,
+                rows=rows,
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[
+                    {
+                        "id": "reviewed-ambiguity",
+                        "out_transaction_id": "A-outbound-real-T",
+                        "in_transaction_id": "B-inbound-prov-genuine",
+                        "kind": "manual",
+                        "policy": "carrying-value",
+                    }
+                ],
+                owned_index=index,
+            )
+        )
+        self.assertEqual([q["reason"] for q in state.quarantines], [])
+        entry_types = [entry["entry_type"] for entry in state.entries]
+        self.assertIn("transfer_out", entry_types)
+        self.assertIn("transfer_in", entry_types)
+        self.assertNotEqual(state.wallet_holdings, {})
+
     def test_duplicate_same_txid_destination_quarantines_source(self):
         index = OwnedIndex()
         index.add_script(SCRIPT_A, _match("A", "Cold"))

@@ -32,6 +32,7 @@ from kassiber.core.transfer_matching import (
     METHOD_OWNERSHIP_GRAPH,
     POLICY_CARRYING_VALUE,
     POLICY_TAXABLE,
+    SwapCandidate,
     compute_swap_fee,
     compute_swap_fee_components,
     default_kind_for,
@@ -41,6 +42,7 @@ from kassiber.core.transfer_matching import (
     suggest_swap_candidates,
 )
 from kassiber.tax_policy import recommended_pair_policy
+from kassiber.time_utils import UNKNOWN_OCCURRED_AT
 
 
 def _row(**overrides):
@@ -949,6 +951,67 @@ class ProviderEvidenceExactMatchTests(unittest.TestCase):
 
         self.assertEqual(candidate.method, METHOD_PROVIDER_SWAP_ID)
         self.assertEqual(candidate.confidence, CONFIDENCE_STRONG)
+        # The downgrade must be explainable, not silent: name the contradiction
+        # that denied exact confidence so a reviewer (and the assistant) can say
+        # why deterministic-looking provider metadata was not trusted.
+        self.assertIn("route", candidate.evidence_conflicts)
+
+    def test_evidence_conflicts_survives_a_json_round_trip_as_a_tuple(self):
+        """The ownership-review projection persists candidates as JSON.
+
+        `evidence_conflicts` is the first non-scalar field on SwapCandidate, so a
+        tuple returns from storage as a list. Normalizing in `__post_init__` keeps
+        one comparable shape for every construction path — without it, a reloaded
+        card compares unequal to the one that was stored.
+        """
+        import dataclasses
+        import json as _json
+
+        out = _row(id="out", wallet_id="a", direction="outbound", amount=100_000_000)
+        inbound = _row(id="in", wallet_id="b", direction="inbound", amount=99_000_000)
+        original = dataclasses.replace(
+            suggest_swap_candidates([out, inbound])[0],
+            evidence_conflicts=("route", "amount"),
+        )
+        reloaded = SwapCandidate(
+            **_json.loads(_json.dumps(dataclasses.asdict(original)))
+        )
+
+        self.assertIsInstance(reloaded.evidence_conflicts, tuple)
+        self.assertEqual(dataclasses.asdict(reloaded), dataclasses.asdict(original))
+
+    def test_noncontradictory_provider_evidence_reports_no_conflicts(self):
+        """The negative control: agreeing metadata names no contradiction.
+
+        Deliberately asserts only the conflict set and the declared amounts, not
+        the confidence band — whole-row exactness additionally depends on scope
+        resolution, which is covered by its own tests.
+        """
+        provider = {
+            "provider": "boltz",
+            "swap_id": "clean-route",
+            "flow": "chain",
+            "send_txid": _TXID_A,
+            "receive_txid": _TXID_B,
+            "send_amount_msat": 100_000_000,
+            "receive_amount_msat": 99_500_000,
+        }
+        out = _row(
+            id="out", external_id=_TXID_A, wallet_id="btc",
+            direction="outbound", amount=100_000_000, raw_json=dict(provider),
+        )
+        inbound = _row(
+            id="in", external_id=_TXID_B, wallet_id="liquid", asset="LBTC",
+            direction="inbound", amount=99_500_000, raw_json=dict(provider),
+        )
+
+        candidate = suggest_swap_candidates([out, inbound])[0]
+
+        self.assertEqual(candidate.evidence_conflicts, ())
+        # The declared leg amounts the whole-row coverage test compared are not
+        # derivable from the rows, so they travel with the candidate.
+        self.assertEqual(candidate.evidence_send_amount_msat, 100_000_000)
+        self.assertEqual(candidate.evidence_receive_amount_msat, 99_500_000)
 
     def test_strong_provider_hint_keeps_competing_heuristic_visible(self):
         provider = {
@@ -1438,6 +1501,71 @@ class HeuristicMatchTests(unittest.TestCase):
             asset="BTC",
             occurred_at="2023-02-01T02:15:00Z",
             amount=14_964_523_000,
+        )
+
+        self.assertEqual(suggest_swap_candidates([out, inbound]), [])
+
+    def test_unknown_occurred_at_placeholders_are_not_time_proximity(self):
+        """Two timestamp-less rows are not "zero seconds apart".
+
+        Regression: `UNKNOWN_OCCURRED_AT` is a parseable RFC3339 string, so it
+        was read as a real instant at epoch 0. Any two rows merely lacking a
+        timestamp landed on the identical bisect key and matched inside every
+        window. Adapters do write the placeholder (cln, sync_backends).
+        """
+        out = _row(
+            id="no-time-out",
+            wallet_id="cold",
+            direction="outbound",
+            amount=15_025_943_000,
+            occurred_at=UNKNOWN_OCCURRED_AT,
+        )
+        inbound = _row(
+            id="no-time-in",
+            wallet_id="hot",
+            direction="inbound",
+            amount=14_964_523_000,
+            occurred_at=UNKNOWN_OCCURRED_AT,
+        )
+
+        self.assertEqual(suggest_swap_candidates([out, inbound]), [])
+
+    def test_different_txids_do_not_match_for_a_liquid_issued_asset(self):
+        """The one-move-one-txid rule is asset-agnostic.
+
+        Regression: the guard also required `out_route_asset is not None`, i.e.
+        BTC or L-BTC. A Liquid-issued asset canonicalizes to None on both legs,
+        so `same_asset` fell through to the raw code compare and the txid check
+        was skipped — two unrelated same-asset spends inside the window got
+        stamped `strong` and invented a transfer.
+        """
+        asset_id = "3d" * 32
+
+        def liquid_leg(row_id, txid, wallet_id, direction, amount, occurred_at):
+            return _row(
+                id=row_id,
+                external_id=txid,
+                wallet_id=wallet_id,
+                wallet_kind="descriptor",
+                direction=direction,
+                asset=asset_id.upper(),
+                occurred_at=occurred_at,
+                amount=amount,
+                raw_json={
+                    "txid": txid,
+                    "chain": "liquid",
+                    "network": "liquidv1",
+                    "component": {"asset_id": asset_id, "asset": asset_id.upper()},
+                },
+            )
+
+        out = liquid_leg(
+            "liquid-out", _TXID_A, "cold", "outbound",
+            15_025_943_000, "2023-02-01T04:41:00Z",
+        )
+        inbound = liquid_leg(
+            "liquid-in", _TXID_B, "hot", "inbound",
+            14_964_523_000, "2023-02-01T02:15:00Z",
         )
 
         self.assertEqual(suggest_swap_candidates([out, inbound]), [])
