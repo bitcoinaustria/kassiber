@@ -240,6 +240,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     graphData,
     graphLoading,
     graphError,
+    onOpenTransaction,
   } = ctx;
   const displayGraphData = graphWithPairFallbackRoute(graphData, transaction);
   const swapRoute = displayGraphData?.swapRoute ?? null;
@@ -532,6 +533,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                           selectedSwapLeg={activeSwapLeg}
                           onSelectSwapLeg={setSelectedSwapLeg}
                           onResolveIssue={resolveGraphIssue}
+                          onOpenTransaction={onOpenTransaction}
                         />
                       </div>
                     </div>

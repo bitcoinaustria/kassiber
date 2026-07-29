@@ -111,6 +111,11 @@ export function TransactionDetailController({
     React.useState("");
 
   const metadataUpdate = useDaemonMutation("ui.transactions.metadata.update");
+  // Resolving server-side means following a spend works regardless of what the
+  // table currently has loaded or filtered.
+  const resolveTransaction = useDaemonMutation<{ transaction?: Transaction | null }>(
+    "ui.transactions.resolve",
+  );
   const attachmentAdd = useDaemonMutation<AttachmentRecord>("ui.attachments.add");
   const attachmentCopy = useDaemonMutation<AttachmentsCopyData>(
     "ui.attachments.copy",
@@ -536,6 +541,22 @@ export function TransactionDetailController({
           }
         }}
         onOpenExplorer={(txn) => setExplorerTransaction(txn)}
+        onOpenTransaction={
+          onNavigate
+            ? (transactionId) => {
+                void resolveTransaction
+                  .mutateAsync({ transaction: transactionId })
+                  .then((envelope: DaemonEnvelope<{ transaction?: Transaction | null }>) => {
+                    const resolved = envelope?.data?.transaction;
+                    if (resolved) onNavigate(resolved, "details");
+                  })
+                  .catch(() => {
+                    // A spend we cannot resolve is not worth an error dialog; the
+                    // row still carries the txid for an explorer lookup.
+                  });
+              }
+            : undefined
+        }
         onSave={async (transactionId, draft) => {
           try {
             await saveTransactionDraft(transactionId, draft);

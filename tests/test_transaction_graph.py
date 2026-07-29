@@ -547,6 +547,73 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["inputs"][1]["valueState"], "confidential")
         self.assertNotIn("valueSats", payload["inputs"][1])
 
+    def test_outputs_carry_a_local_spend_reference(self):
+        # Purely local: another row in the profile spends this output, so the panel
+        # can offer an internal jump without any lookup.
+        txid = "94" * 32
+        spender_txid = "95" * 32
+        raw = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "96" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value": 600_000},
+                }
+            ],
+            "vout": [
+                {"n": 0, "scriptpubkey": SCRIPT_B, "value": 400_000},
+                {"n": 1, "scriptpubkey": SCRIPT_A, "value": 100_000},
+            ],
+        }
+        self._tx("spent-source-row", "wallet-a", "outbound", 400_000_000, txid, raw)
+        self._tx(
+            "spender-row",
+            "wallet-b",
+            "outbound",
+            390_000_000,
+            spender_txid,
+            {
+                "txid": spender_txid,
+                "vin": [{"txid": txid, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B, "value": 400_000}}],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_A, "value": 390_000}],
+            },
+        )
+
+        outputs = self._graph("spent-source-row")["outputs"]
+
+        self.assertEqual(outputs[0]["spentByTxid"], spender_txid)
+        self.assertEqual(outputs[0]["spentByTransactionId"], "spender-row")
+        # The unspent sibling gets no spend reference.
+        self.assertNotIn("spentByTxid", outputs[1])
+
+    def test_output_spend_reference_falls_back_to_inventory_spent_by(self):
+        txid = "97" * 32
+        spender_txid = "98" * 32
+        self._utxo("wallet-a", ADDR_B, txid, 0, amount=400_000)
+        self.conn.execute(
+            "UPDATE wallet_utxos SET spent_by = ? WHERE txid = ?",
+            (spender_txid, txid),
+        )
+        raw = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "99" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value": 600_000},
+                }
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 400_000}],
+        }
+        self._tx("inventory-spent-row", "wallet-a", "outbound", 400_000_000, txid, raw)
+
+        output = self._graph("inventory-spent-row")["outputs"][0]
+
+        self.assertEqual(output["spentByTxid"], spender_txid)
+        # No local row for the spender, so there is nothing to navigate to.
+        self.assertNotIn("spentByTransactionId", output)
+
     def test_foreign_asset_leg_is_named_not_called_confidential(self):
         # An explicit token amount is public, so "confidential" would be wrong —
         # but without an asset registry there is no precision to render it with.

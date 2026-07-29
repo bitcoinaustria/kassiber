@@ -138,6 +138,7 @@ def build_transaction_graph_snapshot(
         ),
     )
     _annotate_graph(graph, row, owned_index, semantics)
+    _annotate_local_spends(conn, profile_id, row, graph)
     warnings = list(graph.pop("_warnings", []))
     warnings.extend(
         {"code": "ownership_index", "level": "info", "message": str(message)}
@@ -618,6 +619,74 @@ def _apply_foreign_asset(
     return True
 
 
+def _local_outpoint_spends(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    txid: str | None,
+    output_count: int,
+) -> dict[int, dict[str, Any]]:
+    """Which of this transaction's outputs the profile already knows are spent.
+
+    Purely local: a spend is recorded either as ``wallet_utxos.spent_by`` or as an
+    input of another transaction in the same profile. Both are references, not
+    amounts — the worst a stale or partial row can do is fail to offer a link, and
+    the returned transaction id is what makes the link internal rather than a
+    lookup.
+    """
+    if not txid or output_count <= 0:
+        return {}
+    prefix = f"{txid.lower()}:"
+    spends: dict[int, dict[str, Any]] = {}
+
+    def record(vout: Any, spending_txid: Any, transaction_id: Any = None) -> None:
+        index = _int_or_none(vout)
+        spending = _string_or_none(spending_txid)
+        if index is None or index < 0 or not spending:
+            return
+        entry = spends.setdefault(index, {})
+        entry.setdefault("txid", spending.lower())
+        if transaction_id is not None:
+            entry.setdefault("transactionId", str(transaction_id))
+
+    for row in conn.execute(
+        """
+        SELECT vout, spent_by
+        FROM wallet_utxos
+        WHERE profile_id = ?
+          AND lower(txid) = ?
+          AND spent_by IS NOT NULL
+          AND spent_by != ''
+        """,
+        (profile_id, txid.lower()),
+    ).fetchall():
+        record(_row_get(row, "vout"), _row_get(row, "spent_by"))
+
+    # Any local transaction spending one of these outputs names it in its own vin.
+    for row in conn.execute(
+        """
+        SELECT t.id, t.external_id, t.raw_json
+        FROM transactions t
+        WHERE t.profile_id = ?
+          AND t.raw_json LIKE ?
+        """,
+        (profile_id, f"%{prefix.split(':')[0]}%"),
+    ).fetchall():
+        graph = _json_obj(_row_get(row, "raw_json"))
+        vin = graph.get("vin")
+        if not isinstance(vin, list):
+            continue
+        spending_txid = _string_or_none(graph.get("txid")) or _string_or_none(
+            _row_get(row, "external_id")
+        )
+        for entry in vin:
+            if not isinstance(entry, Mapping):
+                continue
+            outpoint = _outpoint(entry)
+            if outpoint and outpoint.startswith(prefix):
+                record(entry.get("vout"), spending_txid, _row_get(row, "id"))
+    return {index: entry for index, entry in spends.items() if index < output_count}
+
+
 def _local_outpoint_sats(
     local_outpoint_amounts: Mapping[str, int],
     outpoint: str | None,
@@ -813,6 +882,7 @@ def _parse_graph(
         "outputs": outputs,
         "fee": fee,
         "_warnings": warnings,
+        "_txid": _string_or_none(raw.get("txid")),
     }
 
 
@@ -2192,6 +2262,34 @@ def _annotate_graph(
                 node["annotations"].append(
                     _node_annotation("linked_transfer_group", "Linked transfer group", group_id)
                 )
+
+
+def _annotate_local_spends(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    row: Mapping[str, Any],
+    graph: dict[str, Any],
+) -> None:
+    """Tag outputs the profile already knows were spent, and by what."""
+    outputs = graph.get("outputs")
+    if not isinstance(outputs, list) or not outputs:
+        return
+    spends = _local_outpoint_spends(
+        conn,
+        profile_id,
+        _string_or_none(graph.get("_txid")) or _txid_from_row(row),
+        len(outputs),
+    )
+    if not spends:
+        return
+    for node in outputs:
+        spend = spends.get(_int_or_none(node.get("index")))
+        if not spend:
+            continue
+        node["spentByTxid"] = spend["txid"]
+        if spend.get("transactionId"):
+            node["spentByTransactionId"] = spend["transactionId"]
+        node["annotations"].append(_node_annotation("spent", "Spent by a known transaction"))
 
 
 def _inferred_incoming_payment_output_ids(

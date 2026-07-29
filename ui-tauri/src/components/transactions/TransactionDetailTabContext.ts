@@ -103,4 +103,6 @@ export type TransactionDetailTabContext = {
   graphData?: TransactionGraphPayload;
   graphLoading?: boolean;
   graphError?: string | null;
+  /** Opens another transaction in this book by id, when the host supports it. */
+  onOpenTransaction?: (transactionId: string) => void;
 };

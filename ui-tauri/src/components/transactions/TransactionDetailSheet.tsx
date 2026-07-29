@@ -128,6 +128,7 @@ export function TransactionDetailSheet({
   onLinkLoan,
   onOpenChange,
   onOpenExplorer,
+  onOpenTransaction,
   onSave,
   onSaveAndNext,
   hasNext,
@@ -177,6 +178,8 @@ export function TransactionDetailSheet({
   onLinkLoan?: (transaction: Transaction, targetTransactionId: string) => void | Promise<void>;
   onOpenChange: (open: boolean) => void;
   onOpenExplorer: (transaction: Transaction) => void;
+  /** Opens another transaction in this book by id (spend follow-through). */
+  onOpenTransaction?: (transactionId: string) => void;
   onSave: (
     transactionId: string,
     draft: TransactionEditDraft,
@@ -814,6 +817,7 @@ export function TransactionDetailSheet({
     netImpactBtc,
     netImpactEur,
     graphData,
+    onOpenTransaction,
     graphLoading: graphQuery.isLoading || (graphQuery.isFetching && !graphData),
     graphError:
       graphQuery.error instanceof Error

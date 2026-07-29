@@ -192,6 +192,15 @@ function nodeDetailMeta(
   if (!hidden && node.address && node.outpoint) {
     parts.push(formatShortTxid(node.outpoint));
   }
+  if (node.spentByTxid) {
+    parts.push(
+      hidden
+        ? t("graph.inputsOutputs.spent")
+        : t("graph.inputsOutputs.spentBy", {
+            reference: formatShortTxid(node.spentByTxid),
+          }),
+    );
+  }
   return parts;
 }
 
@@ -315,18 +324,24 @@ function TransactionIoRow({
   hideSensitive,
   explorerTarget,
   onOpenExplorer,
+  onOpenTransaction,
 }: {
   node: TransactionGraphNode;
   side: "input" | "output";
   hideSensitive: boolean;
   explorerTarget: ExplorerTarget | null;
   onOpenExplorer: (target: ExplorerTarget) => void;
+  onOpenTransaction?: (transactionId: string) => void;
 }) {
   const { t } = useTranslation("transactions");
   const amount =
     formatNodeAmount(node, hideSensitive, t) ||
     t("graph.inputsOutputs.unknownAmount");
   const canOpenExplorer = Boolean(explorerTarget && !hideSensitive && !node.overflow);
+  const spendTarget =
+    onOpenTransaction && !hideSensitive && node.spentByTransactionId
+      ? node.spentByTransactionId
+      : null;
   const content = (
     <>
       <TransactionIoMarker side={side} />
@@ -360,6 +375,23 @@ function TransactionIoRow({
       </div>
     </>
   );
+  if (spendTarget) {
+    // Following the money inside the book beats leaving for an explorer.
+    const openLabel = t("graph.inputsOutputs.openSpendingTransaction", {
+      reference: formatShortTxid(node.spentByTxid ?? ""),
+    });
+    return (
+      <button
+        type="button"
+        className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 text-left first:border-t-0 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={openLabel}
+        title={openLabel}
+        onClick={() => onOpenTransaction?.(spendTarget)}
+      >
+        {content}
+      </button>
+    );
+  }
   if (canOpenExplorer && explorerTarget) {
     const openLabel = t("graph.inputsOutputs.openExplorer", {
       explorer: explorerTarget.label,
@@ -394,6 +426,7 @@ function TransactionIoColumn({
   explorerSettings,
   graph,
   onOpenExplorer,
+  onOpenTransaction,
 }: {
   title: string;
   nodes: TransactionGraphNode[];
@@ -404,6 +437,7 @@ function TransactionIoColumn({
   explorerSettings: ExplorerSettings;
   graph: TransactionGraphPayload;
   onOpenExplorer: (target: ExplorerTarget) => void;
+  onOpenTransaction?: (transactionId: string) => void;
 }) {
   const { t } = useTranslation("transactions");
   const visibleNodes = expanded ? nodes : nodes.slice(0, MAX_DETAIL_COLLAPSED_ROWS);
@@ -431,6 +465,7 @@ function TransactionIoColumn({
                 : explorerTargetForGraphNode({ graph, node, settings: explorerSettings })
             }
             onOpenExplorer={onOpenExplorer}
+            onOpenTransaction={onOpenTransaction}
           />
         ))}
         {nodes.length > MAX_DETAIL_COLLAPSED_ROWS ? (
@@ -506,9 +541,11 @@ function TransactionIoTotalsPane({
 export function TransactionInputsOutputsPanel({
   graph,
   hideSensitive,
+  onOpenTransaction,
 }: {
   graph: TransactionGraphPayload;
   hideSensitive: boolean;
+  onOpenTransaction?: (transactionId: string) => void;
 }) {
   const { t } = useTranslation("transactions");
   const explorerSettings = useUiStore((state) => state.explorerSettings);
@@ -556,6 +593,7 @@ export function TransactionInputsOutputsPanel({
           explorerSettings={explorerSettings}
           graph={graph}
           onOpenExplorer={handleOpenExplorer}
+          onOpenTransaction={onOpenTransaction}
         />
       </div>
       <TransactionIoTotalsPane graph={graph} hideSensitive={hideSensitive} />
@@ -1733,6 +1771,7 @@ export function TransactionGraphPanel({
   selectedSwapLeg,
   onSelectSwapLeg,
   onResolveIssue,
+  onOpenTransaction,
 }: {
   graph?: TransactionGraphPayload;
   loading?: boolean;
@@ -1741,6 +1780,7 @@ export function TransactionGraphPanel({
   selectedSwapLeg?: TransactionSwapRouteLegKey | null;
   onSelectSwapLeg?: (leg: TransactionSwapRouteLegKey) => void;
   onResolveIssue?: (target: TransactionGraphIssueTarget) => void;
+  onOpenTransaction?: (transactionId: string) => void;
 }) {
   const { t } = useTranslation("transactions");
   const showDiagram =
@@ -1786,7 +1826,11 @@ export function TransactionGraphPanel({
           </div>
           <AnnotationStrip annotations={graph.annotations} />
           <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} />
-          <TransactionInputsOutputsPanel graph={graph} hideSensitive={hideSensitive} />
+          <TransactionInputsOutputsPanel
+            graph={graph}
+            hideSensitive={hideSensitive}
+            onOpenTransaction={onOpenTransaction}
+          />
           <GraphWarnings graph={graph} onResolveIssue={onResolveIssue} />
         </>
       ) : (

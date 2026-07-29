@@ -749,6 +749,78 @@ describe("TransactionFlowDiagram", () => {
 });
 
 describe("TransactionInputsOutputsPanel", () => {
+  it("offers an internal jump for a locally known spend", () => {
+    const spent: TransactionGraphPayload = {
+      ...graph,
+      outputs: [
+        {
+          ...graph.outputs[0],
+          spentByTxid: "d".repeat(64),
+          spentByTransactionId: "tx-spender",
+        },
+      ],
+    };
+    const opened: string[] = [];
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel
+          graph={spent}
+          hideSensitive={false}
+          onOpenTransaction={(id) => opened.push(id)}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("Open the spending transaction dddddddddd...dddd");
+    expect(html).toContain("spent by dddddddddd...dddd");
+    // Following the money inside the book wins over leaving for an explorer.
+    expect(html).not.toContain("Open bc1qrecipi...000000 in");
+  });
+
+  it("keeps the explorer link when the spend cannot be opened internally", () => {
+    const spent: TransactionGraphPayload = {
+      ...graph,
+      outputs: [{ ...graph.outputs[0], spentByTxid: "d".repeat(64) }],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel
+          graph={spent}
+          hideSensitive={false}
+          onOpenTransaction={() => undefined}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("spent by dddddddddd...dddd");
+    expect(html).toContain("Open bc1qrecipi...000000 in");
+  });
+
+  it("does not leak a spend reference in hidden-sensitive mode", () => {
+    const spent: TransactionGraphPayload = {
+      ...graph,
+      outputs: [
+        {
+          ...graph.outputs[0],
+          spentByTxid: "d".repeat(64),
+          spentByTransactionId: "tx-spender",
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel
+          graph={spent}
+          hideSensitive
+          onOpenTransaction={() => undefined}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(html).not.toContain("dddddddddd...dddd");
+    expect(html).toContain("spent");
+  });
+
   it("labels Liquid peg legs and shows the peg-out destination", () => {
     const pegs: TransactionGraphPayload = {
       ...graph,

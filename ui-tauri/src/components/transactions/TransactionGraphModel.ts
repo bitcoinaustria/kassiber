@@ -31,6 +31,9 @@ export type TransactionGraphNode = {
   role?: string;
   overflow?: boolean;
   overflowCount?: number;
+  /** Locally known spend of this output; the id is set when the row is local. */
+  spentByTxid?: string;
+  spentByTransactionId?: string;
   annotations?: TransactionGraphAnnotation[];
 };
 
