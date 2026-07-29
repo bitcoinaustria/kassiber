@@ -697,6 +697,10 @@
     "inputCount": "Inputs",
     "inputPrevoutSupport": "Referenzgraph: Outputs sind bewertet; Input-Beträge brauchen die ausgegebenen vorherigen Outputs",
     "inputsOutputs": {
+      "blocksEarlier_one": "{{count}} Block früher",
+      "blocksEarlier_other": "{{count}} Blöcke früher",
+      "blocksLater_one": "{{count}} Block später",
+      "blocksLater_other": "{{count}} Blöcke später",
       "counts": "{{inputs}} Inputs · {{outputs}} Outputs",
       "createdOutput": "Erzeugter Output",
       "index": "#{{index}}",
@@ -706,6 +710,7 @@
       "openExplorer": "{{reference}} in {{explorer}} öffnen",
       "openSpendingTransaction": "Ausgebende Transaktion {{reference}} öffnen",
       "outputs": "Outputs",
+      "sameBlock": "im selben Block",
       "showAll": "Alle {{count}} weiteren anzeigen",
       "showFewer": "Weniger anzeigen",
       "spent": "ausgegeben",

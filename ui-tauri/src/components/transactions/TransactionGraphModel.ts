@@ -34,6 +34,9 @@ export type TransactionGraphNode = {
   /** Locally known spend of this output; the id is set when the row is local. */
   spentByTxid?: string;
   spentByTransactionId?: string;
+  /** Confirmation heights of the counterpart transaction, when locally known. */
+  prevoutBlockHeight?: number;
+  spentByBlockHeight?: number;
   annotations?: TransactionGraphAnnotation[];
 };
 
@@ -99,6 +102,7 @@ export type TransactionGraphPayload = {
     // these from asset or wallet labels.
     chain?: string | null;
     network?: string | null;
+    blockHeight?: number | null;
   } | null;
   supportLevel: "full" | "partial" | "graphless" | "unsupported";
   unsupportedReason?: string | null;

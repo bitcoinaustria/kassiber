@@ -678,6 +678,10 @@
     "inputCount": "Inputs",
     "inputPrevoutSupport": "Reference graph: outputs are valued; input amounts need spent previous-output data",
     "inputsOutputs": {
+      "blocksEarlier_one": "{{count}} block earlier",
+      "blocksEarlier_other": "{{count}} blocks earlier",
+      "blocksLater_one": "{{count}} block later",
+      "blocksLater_other": "{{count}} blocks later",
       "counts": "{{inputs}} inputs · {{outputs}} outputs",
       "createdOutput": "Created output",
       "index": "#{{index}}",
@@ -687,6 +691,7 @@
       "openExplorer": "Open {{reference}} in {{explorer}}",
       "openSpendingTransaction": "Open the spending transaction {{reference}}",
       "outputs": "Outputs",
+      "sameBlock": "in the same block",
       "showAll": "Show all {{count}} more",
       "showFewer": "Show fewer",
       "spent": "spent",

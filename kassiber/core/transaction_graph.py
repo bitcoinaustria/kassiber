@@ -139,6 +139,7 @@ def build_transaction_graph_snapshot(
     )
     _annotate_graph(graph, row, owned_index, semantics)
     _annotate_local_spends(conn, profile_id, row, graph)
+    _annotate_block_heights(conn, profile_id, row, graph)
     warnings = list(graph.pop("_warnings", []))
     warnings.extend(
         {"code": "ownership_index", "level": "info", "message": str(message)}
@@ -617,6 +618,70 @@ def _apply_foreign_asset(
     node["valueBtc"] = None
     node["valueState"] = "other_asset"
     return True
+
+
+def _row_block_height(row: Mapping[str, Any], raw: Mapping[str, Any] | None = None) -> int | None:
+    """Confirmation height for a row, where a local source recorded one.
+
+    Esplora-shaped raws carry it under ``status``; the Electrum path records only
+    a confirmed flag, so many rows legitimately have no height.
+    """
+    for candidate in (raw, _json_obj(_row_get(row, "raw_json"))):
+        if not isinstance(candidate, Mapping):
+            continue
+        status = candidate.get("status")
+        if isinstance(status, Mapping):
+            height = _int_or_none(status.get("block_height") or status.get("blockHeight"))
+            if height is not None and height > 0:
+                return height
+        height = _int_or_none(candidate.get("block_height") or candidate.get("blockHeight"))
+        if height is not None and height > 0:
+            return height
+    return None
+
+
+def _local_block_heights(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    txids: Sequence[str],
+) -> dict[str, int]:
+    """Confirmation heights the profile already knows for these txids."""
+    normalized = sorted({str(txid).strip().lower() for txid in txids if txid})
+    if not normalized:
+        return {}
+    placeholders = ", ".join("?" for _ in normalized)
+    heights: dict[str, int] = {}
+    for row in conn.execute(
+        f"""
+        SELECT lower(t.external_id) AS txid, t.raw_json
+        FROM transactions t
+        WHERE t.profile_id = ?
+          AND lower(t.external_id) IN ({placeholders})
+        """,
+        (profile_id, *normalized),
+    ).fetchall():
+        txid = _string_or_none(_row_get(row, "txid"))
+        if txid is None or txid in heights:
+            continue
+        height = _row_block_height(row)
+        if height is not None:
+            heights[txid] = height
+    for row in conn.execute(
+        f"""
+        SELECT lower(txid) AS txid, MAX(block_height) AS block_height
+        FROM wallet_utxos
+        WHERE profile_id = ?
+          AND lower(txid) IN ({placeholders})
+          AND block_height IS NOT NULL
+        GROUP BY lower(txid)
+        """,
+        (profile_id, *normalized),
+    ).fetchall():
+        txid = _string_or_none(_row_get(row, "txid"))
+        height = _int_or_none(_row_get(row, "block_height"))
+        if txid is not None and height is not None and height > 0:
+            heights.setdefault(txid, height)
+    return heights
 
 
 def _local_outpoint_spends(
@@ -2264,6 +2329,46 @@ def _annotate_graph(
                 )
 
 
+def _annotate_block_heights(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    row: Mapping[str, Any],
+    graph: dict[str, Any],
+) -> None:
+    """Attach the confirmation height of each leg's counterpart transaction.
+
+    Only where a local source recorded one on both ends, so the client can show
+    "N blocks earlier/later" without inventing a distance.
+    """
+    inputs = graph.get("inputs") if isinstance(graph.get("inputs"), list) else []
+    outputs = graph.get("outputs") if isinstance(graph.get("outputs"), list) else []
+    wanted = [
+        _string_or_none(node.get("txid"))
+        for node in inputs
+        if _string_or_none(node.get("txid"))
+    ]
+    wanted.extend(
+        _string_or_none(node.get("spentByTxid"))
+        for node in outputs
+        if _string_or_none(node.get("spentByTxid"))
+    )
+    if not wanted:
+        return
+    heights = _local_block_heights(conn, profile_id, [txid for txid in wanted if txid])
+    if not heights:
+        return
+    for node in inputs:
+        txid = _string_or_none(node.get("txid"))
+        height = heights.get(txid.lower()) if txid else None
+        if height is not None:
+            node["prevoutBlockHeight"] = height
+    for node in outputs:
+        txid = _string_or_none(node.get("spentByTxid"))
+        height = heights.get(txid.lower()) if txid else None
+        if height is not None:
+            node["spentByBlockHeight"] = height
+
+
 def _annotate_local_spends(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -2382,10 +2487,12 @@ def _transaction_meta(row: Mapping[str, Any], graph: Mapping[str, Any]) -> dict[
     # resolved. Clients previously had to guess the chain from asset/label text
     # and could only ever guess mainnet.
     chain, network = _row_chain_network(row)
+    block_height = _row_block_height(row)
     return {
         "id": str(_row_get(row, "id")),
         "chain": chain,
         "network": network,
+        "blockHeight": block_height,
         "externalId": external_id,
         "txid": _txid_from_row(row),
         "occurredAt": _row_get(row, "occurred_at"),

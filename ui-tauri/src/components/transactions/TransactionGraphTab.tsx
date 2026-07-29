@@ -173,11 +173,33 @@ function conciseScriptType(scriptType: string | undefined) {
   return normalized;
 }
 
+/**
+ * "3 blocks earlier" / "12 blocks later" for a leg whose counterpart transaction
+ * has a locally known height. Absent heights render nothing rather than a guess.
+ */
+function blockDistanceLabel(
+  node: TransactionGraphNode,
+  side: "input" | "output",
+  blockHeight: number | null | undefined,
+  t: TFunction<"transactions">,
+) {
+  if (typeof blockHeight !== "number") return null;
+  const other = side === "input" ? node.prevoutBlockHeight : node.spentByBlockHeight;
+  if (typeof other !== "number") return null;
+  const delta = side === "input" ? blockHeight - other : other - blockHeight;
+  if (delta < 0) return null;
+  if (delta === 0) return t("graph.inputsOutputs.sameBlock");
+  return side === "input"
+    ? t("graph.inputsOutputs.blocksEarlier", { count: delta })
+    : t("graph.inputsOutputs.blocksLater", { count: delta });
+}
+
 function nodeDetailMeta(
   node: TransactionGraphNode,
   side: "input" | "output",
   hidden: boolean,
   t: TFunction<"transactions">,
+  blockHeight?: number | null,
 ) {
   const parts = [];
   if (node.role && node.role !== side) {
@@ -201,6 +223,8 @@ function nodeDetailMeta(
           }),
     );
   }
+  const distance = blockDistanceLabel(node, side, blockHeight, t);
+  if (distance) parts.push(distance);
   return parts;
 }
 
@@ -325,6 +349,7 @@ function TransactionIoRow({
   explorerTarget,
   onOpenExplorer,
   onOpenTransaction,
+  blockHeight,
 }: {
   node: TransactionGraphNode;
   side: "input" | "output";
@@ -332,6 +357,7 @@ function TransactionIoRow({
   explorerTarget: ExplorerTarget | null;
   onOpenExplorer: (target: ExplorerTarget) => void;
   onOpenTransaction?: (transactionId: string) => void;
+  blockHeight?: number | null;
 }) {
   const { t } = useTranslation("transactions");
   const amount =
@@ -355,7 +381,7 @@ function TransactionIoRow({
           {nodeDetailReference(node, hideSensitive, t)}
         </div>
         <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-          {nodeDetailMeta(node, side, hideSensitive, t).map((part, index) => (
+          {nodeDetailMeta(node, side, hideSensitive, t, blockHeight).map((part, index) => (
             <span
               key={`${node.id}-${part}-${index}`}
               className={cn(index > 3 && "hidden sm:inline")}
@@ -466,6 +492,7 @@ function TransactionIoColumn({
             }
             onOpenExplorer={onOpenExplorer}
             onOpenTransaction={onOpenTransaction}
+            blockHeight={graph.transaction?.blockHeight}
           />
         ))}
         {nodes.length > MAX_DETAIL_COLLAPSED_ROWS ? (

@@ -547,6 +547,79 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["inputs"][1]["valueState"], "confidential")
         self.assertNotIn("valueSats", payload["inputs"][1])
 
+    def test_block_heights_are_reported_for_both_ends_when_known(self):
+        txid = "9a" * 32
+        prev_txid = "9b" * 32
+        spender_txid = "9c" * 32
+        raw = {
+            "txid": txid,
+            "status": {"confirmed": True, "block_height": 800_100},
+            "vin": [
+                {
+                    "txid": prev_txid,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value": 600_000},
+                }
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 500_000}],
+        }
+        self._tx("height-row", "wallet-a", "outbound", 500_000_000, txid, raw)
+        self._tx(
+            "height-prev-row",
+            "wallet-b",
+            "inbound",
+            600_000_000,
+            prev_txid,
+            {
+                "txid": prev_txid,
+                "status": {"confirmed": True, "block_height": 800_000},
+                "vin": [],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_A, "value": 600_000}],
+            },
+        )
+        self._tx(
+            "height-spender-row",
+            "wallet-b",
+            "outbound",
+            490_000_000,
+            spender_txid,
+            {
+                "txid": spender_txid,
+                "status": {"confirmed": True, "block_height": 800_150},
+                "vin": [{"txid": txid, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B, "value": 500_000}}],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_A, "value": 490_000}],
+            },
+        )
+
+        payload = self._graph("height-row")
+
+        self.assertEqual(payload["transaction"]["blockHeight"], 800_100)
+        self.assertEqual(payload["inputs"][0]["prevoutBlockHeight"], 800_000)
+        self.assertEqual(payload["outputs"][0]["spentByBlockHeight"], 800_150)
+
+    def test_block_heights_are_absent_when_no_source_recorded_one(self):
+        # The Electrum path records only a confirmed flag, so there is no height
+        # to report and none may be invented.
+        txid = "9d" * 32
+        raw = {
+            "txid": txid,
+            "status": {"confirmed": True},
+            "vin": [
+                {
+                    "txid": "9e" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value": 600_000},
+                }
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 500_000}],
+        }
+        self._tx("heightless-row", "wallet-a", "outbound", 500_000_000, txid, raw)
+
+        payload = self._graph("heightless-row")
+
+        self.assertIsNone(payload["transaction"]["blockHeight"])
+        self.assertNotIn("prevoutBlockHeight", payload["inputs"][0])
+
     def test_outputs_carry_a_local_spend_reference(self):
         # Purely local: another row in the profile spends this output, so the panel
         # can offer an internal jump without any lookup.

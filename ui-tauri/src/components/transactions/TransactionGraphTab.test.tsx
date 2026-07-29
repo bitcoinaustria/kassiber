@@ -749,6 +749,36 @@ describe("TransactionFlowDiagram", () => {
 });
 
 describe("TransactionInputsOutputsPanel", () => {
+  it("shows block distance only when both ends have a known height", () => {
+    const withHeights: TransactionGraphPayload = {
+      ...graph,
+      transaction: { ...graph.transaction!, blockHeight: 800_100 },
+      inputs: [
+        { ...graph.inputs[0], prevoutBlockHeight: 800_000 },
+        { ...graph.inputs[1] },
+        { ...graph.inputs[2], prevoutBlockHeight: 800_100 },
+      ],
+      outputs: [
+        {
+          ...graph.outputs[0],
+          spentByTxid: "d".repeat(64),
+          spentByBlockHeight: 800_101,
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel graph={withHeights} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("100 blocks earlier");
+    expect(html).toContain("in the same block");
+    expect(html).toContain("1 block later");
+    // The leg with no counterpart height gets no invented distance.
+    expect(html.match(/blocks earlier/g)?.length).toBe(1);
+  });
+
   it("offers an internal jump for a locally known spend", () => {
     const spent: TransactionGraphPayload = {
       ...graph,
