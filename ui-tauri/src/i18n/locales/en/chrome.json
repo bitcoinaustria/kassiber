@@ -7,6 +7,11 @@
     "copyFailed": "Could not copy diagnostics. Open Developer tools → Logs after reloading.",
     "details": "The error and recent redacted logs are available through Copy diagnostics."
   },
+  "notFound": {
+    "title": "Page not found",
+    "message": "There is nothing at {{path}}. The link may be stale, or it may point at a page that was renamed.",
+    "backToOverview": "Back to overview"
+  },
   "shell": {
     "skipToContent": "Skip to main content",
     "lockKassiber": "Lock Kassiber",

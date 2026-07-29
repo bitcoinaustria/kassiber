@@ -138,7 +138,15 @@ export const StatsCards = ({
             >
               <>
                 <Link
-                  to={balanceWarningHref ?? stat.href}
+                  // In BTC mode this card is the Bitcoin balance, so it belongs
+                  // to the wallets overview — that is where the balance is made
+                  // of parts. (That page is routed at `/connections`, which is
+                  // also where the nav's "Wallets" row goes.) The fiat card is a
+                  // portfolio value and stays on Reports.
+                  to={
+                    balanceWarningHref ??
+                    (isBitcoinPortfolio ? "/connections" : stat.href)
+                  }
                   className="absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label={t("stats.openStat", { title: statTitle })}
                 />

@@ -31,6 +31,10 @@ function RoutePending() {
 }
 
 const Welcome = lazyRouteComponent(() => import("./routes/Welcome"), "Welcome");
+const NotFound = lazyRouteComponent(
+  () => import("./routes/NotFound"),
+  "NotFound",
+);
 const AppShell = lazyRouteComponent(
   () => import("./components/kb/AppShell"),
   "AppShell",
@@ -437,6 +441,15 @@ const proofFundsAliasRoute = createRoute({
   },
 });
 
+// Catch-all, last in rank: anything that matches no real route still renders
+// inside the nav layout, so a stale or mistyped link leaves the nav and the
+// search palette reachable instead of a bare black 404.
+const notFoundRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "$",
+  component: NotFound,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   assistantTypoRoute,
@@ -480,6 +493,7 @@ const routeTree = rootRoute.addChildren([
     settingsTerminalRoute,
     settingsDeveloperRoute,
     assistantRoute,
+    notFoundRoute,
   ]),
 ]);
 
@@ -487,6 +501,9 @@ export const router = createRouter({
   routeTree,
   defaultPreload: "intent",
   defaultPendingComponent: RoutePending,
+  // A `notFound()` thrown from inside a page renders at that page's own slot, so
+  // this stays within the shell too.
+  defaultNotFoundComponent: NotFound,
 });
 
 declare module "@tanstack/react-router" {
