@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { MOCK_OVERVIEW, type OverviewSnapshot } from "@/mocks/seed";
 
 import {
+  ACTIVITY_MARKER_SLIDER_MARKS,
   activityMarkerView,
   activeMarketFiatCurrency,
   activeMarketFiatRate,
@@ -18,6 +19,7 @@ import {
   formatMarketRateValue,
   formatRelativeMarketRateTime,
   getDataForPeriod,
+  initialGroupActivityDotsFromUrl,
   initialTimePeriodFromUrl,
   isPointInPeriod,
   lastTreasuryLineValue,
@@ -31,7 +33,12 @@ import {
   normalizeTimePeriodParam,
   overviewTransactions,
   positiveLogDomain,
+  powerLawDaysFor,
+  powerLawXDomain,
+  powerLawXTicks,
+  formatPowerLawTick,
   resolveAutoTimePeriod,
+  serializeActivityMarkerMinimum,
   type TreasuryChartPoint,
 } from "./model";
 
@@ -65,6 +72,7 @@ function activityMarkerFixture(
     eventTransactionId: `tx-${column}`,
     markerBalanceBtc: 28,
     sortTimeMs: baseTime + column * 60 * 60 * 1000,
+    powerLawDays: powerLawDaysFor(baseTime + column * 60 * 60 * 1000),
     isActivityEvent: true,
     ...overrides,
   };
@@ -812,6 +820,53 @@ describe("chart scale helpers", () => {
     vi.unstubAllGlobals();
   });
 
+  it("measures power-law time from the genesis block", () => {
+    // 2009-01-03 18:15:05Z is day 0; a log axis needs day 1 as its floor.
+    expect(powerLawDaysFor(Date.parse("2009-01-03T18:15:05Z"))).toBe(1);
+    expect(powerLawDaysFor(Date.parse("2008-01-01T00:00:00Z"))).toBe(1);
+    expect(powerLawDaysFor(Number.NaN)).toBe(1);
+    expect(
+      Math.round(powerLawDaysFor(Date.parse("2019-01-03T18:15:05Z"))),
+    ).toBe(3652);
+  });
+
+  it("only offers a power-law domain when the window spans time", () => {
+    const day = (days: number) => ({ powerLawDays: days }) as TreasuryChartPoint;
+    expect(powerLawXDomain([day(100), day(4000), day(2500)])).toEqual([
+      100, 4000,
+    ]);
+    expect(powerLawXDomain([day(4000)])).toBeNull();
+    expect(powerLawXDomain([day(4000), day(4000)])).toBeNull();
+    expect(powerLawXDomain([])).toBeNull();
+  });
+
+  it("thins power-law year ticks and labels them by year", () => {
+    const yearDay = (year: number) =>
+      (Date.UTC(year, 0, 1) - Date.UTC(2009, 0, 3, 18, 15, 5)) / 86_400_000;
+    const ticks = powerLawXTicks([yearDay(2011), yearDay(2026)]);
+
+    expect(ticks.length).toBeGreaterThanOrEqual(2);
+    expect(ticks.length).toBeLessThanOrEqual(7);
+    expect(ticks).toEqual([...ticks].sort((a, b) => a - b));
+    expect(formatPowerLawTick(ticks[0])).toBe(
+      String(new Date(Date.UTC(2009, 0, 3, 18, 15, 5) + ticks[0] * 86_400_000).getUTCFullYear()),
+    );
+
+    // A sub-year window holds no year start, so the ends label the axis.
+    const shortWindow: [number, number] = [yearDay(2026) + 10, yearDay(2026) + 40];
+    expect(powerLawXTicks(shortWindow)).toEqual(shortWindow);
+    expect(formatPowerLawTick(shortWindow[0])).not.toBe("2026");
+  });
+
+  it("keeps dot grouping on unless the URL turns it off", () => {
+    vi.stubGlobal("window", { location: { search: "" } });
+    expect(initialGroupActivityDotsFromUrl()).toBe(true);
+
+    vi.stubGlobal("window", { location: { search: "?groupEvents=0" } });
+    expect(initialGroupActivityDotsFromUrl()).toBe(false);
+    vi.unstubAllGlobals();
+  });
+
   it("zooms out when recent periods do not contain enough activity", () => {
     const snapshot: OverviewSnapshot = {
       ...MOCK_OVERVIEW,
@@ -999,6 +1054,14 @@ describe("chart scale helpers", () => {
     expect(formatBtcAxisFitted(40.827, [40.82, 40.85])).toBe("₿40.827");
     expect(formatBtcAxisFitted(40.8, [39, 43])).toBe("₿40.8");
     expect(formatBtcAxisFitted(40.8, null)).toBe("₿41");
+  });
+
+  // The quick-settings menu keys its dot-minimum radio items by the serialized
+  // mark and parses the selection back with Number().
+  it("round-trips every dot-minimum preset through its serialized form", () => {
+    for (const mark of ACTIVITY_MARKER_SLIDER_MARKS) {
+      expect(Number(serializeActivityMarkerMinimum(mark))).toBe(mark);
+    }
   });
 
   it("finds the latest drawable line value for the axis tag", () => {

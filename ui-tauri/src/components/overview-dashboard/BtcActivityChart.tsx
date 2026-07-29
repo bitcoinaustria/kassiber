@@ -47,20 +47,25 @@ import {
   brushedActivityMarkers,
   blurClass,
   bucketActivityMarkers,
+  createHoveredActivityPointStore,
   defaultTreasurySeriesVisibility,
   DEFAULT_INCOMING_MARKER_MIN_BTC,
   DEFAULT_OUTGOING_MARKER_MIN_BTC,
   enrichTreasuryChartData,
   formatBtcAxisFitted,
   formatFiatPrice,
+  formatPowerLawTick,
   formatRelativeMarketRateTime,
   formatTreasuryDetailDate,
   formatTreasuryTick,
   fullTreasuryBrushRange,
   getDataForPeriod,
+  GROUP_DOTS_PARAM,
   hasTreasuryChartData,
   initialActivityMarkerMinimumFromUrl,
+  initialGroupActivityDotsFromUrl,
   initialTimePeriodFromUrl,
+  initialXScaleLogFromUrl,
   initialYAutoFitFromUrl,
   initialYScaleLogFromUrl,
   INCOMING_MARKER_MIN_PARAM,
@@ -75,6 +80,8 @@ import {
   portfolioAxisTicks,
   portfolioChartColors,
   positiveLogDomain,
+  powerLawXDomain,
+  powerLawXTicks,
   rawTreasuryBrushRange,
   resolveAutoTimePeriod,
   sameTreasuryBrushRange,
@@ -82,8 +89,10 @@ import {
   serializeActivityMarkerMinimum,
   useHoverHighlight,
   useResolvedColorMode,
+  X_SCALE_PARAM,
   Y_AUTO_FIT_PARAM,
   Y_SCALE_PARAM,
+  type ActivityScatterDotProps,
   type OverviewTranslate,
   type PortfolioChartMouseState,
   type TimePeriod,
@@ -99,13 +108,6 @@ import { renderLastValueTag } from "./LastValueTag";
 import { PortfolioInspector } from "./PortfolioInspector";
 import { ActivityLegendSwatch } from "./ChartControlsSheet";
 import { TreasuryTooltip } from "./TreasuryTooltip";
-
-function shouldShowPortfolioValueByDefault(
-  fiatSeriesEnabled: boolean,
-  currency: Currency,
-) {
-  return fiatSeriesEnabled && currency !== "btc";
-}
 
 // The card renders twice: inline and inside the expand dialog.
 type ChartView = "compact" | "expanded";
@@ -149,18 +151,22 @@ export const BtcActivityChart = ({
   const [yAutoFit, setYAutoFit] = React.useState<boolean>(
     initialYAutoFitFromUrl,
   );
+  // Log time axis: with a log value axis too, this is the power-law view.
+  const [xScaleLog, setXScaleLog] = React.useState<boolean>(
+    initialXScaleLogFromUrl,
+  );
   const [showLastValue, setShowLastValue] = React.useState(true);
-  const defaultPortfolioValueVisible = shouldShowPortfolioValueByDefault(
-    fiatSeriesEnabled,
-    currency,
+  const [groupActivityDots, setGroupActivityDots] = React.useState<boolean>(
+    initialGroupActivityDotsFromUrl,
   );
   const [expandedPointDate, setExpandedPointDate] = React.useState<string | null>(
     null,
   );
+  // The portfolio value line stays off until asked for: it plots the same
+  // holdings the balance line already shows, just in fiat.
   const [seriesVisible, setSeriesVisible] =
     React.useState<TreasurySeriesVisibility>(() => ({
       ...defaultTreasurySeriesVisibility,
-      portfolioValue: defaultPortfolioValueVisible,
       basis: fiatSeriesEnabled,
       price: fiatSeriesEnabled,
     }));
@@ -189,10 +195,9 @@ export const BtcActivityChart = ({
   const [brushRevisionByView, setBrushRevisionByView] = React.useState<
     Record<ChartView, number>
   >({ compact: 0, expanded: 0 });
-  const [hoveredActivityPoint, setHoveredActivityPoint] =
-    React.useState<TreasuryChartPoint | null>(null);
+  // Hover lives outside React state on purpose — see the store's own comment.
+  const hoveredPointStore = React.useMemo(createHoveredActivityPointStore, []);
   const previousFiatSeriesEnabled = React.useRef(fiatSeriesEnabled);
-  const previousPortfolioValueDefault = React.useRef(defaultPortfolioValueVisible);
   const previousBookKey = React.useRef(bookKey);
   const { active: activeSeries, handleHover } =
     useHoverHighlight<TreasuryChartSeriesKey>();
@@ -272,8 +277,8 @@ export const BtcActivityChart = ({
     setPeriod(initialTimePeriodFromUrl(storedBookChartPeriod ?? "auto"));
     setBrushRangeByView({ compact: null, expanded: null });
     setExpandedPointDate(null);
-    setHoveredActivityPoint(null);
-  }, [bookKey, storedBookChartPeriod]);
+    hoveredPointStore.set(null);
+  }, [bookKey, hoveredPointStore, storedBookChartPeriod]);
 
   React.useEffect(() => {
     if (!bookKey) return;
@@ -283,11 +288,7 @@ export const BtcActivityChart = ({
   React.useEffect(() => {
     setSeriesVisible((current) => ({
       ...current,
-      portfolioValue: defaultPortfolioValueVisible
-        ? previousPortfolioValueDefault.current
-          ? current.portfolioValue
-          : true
-        : false,
+      portfolioValue: fiatSeriesEnabled ? current.portfolioValue : false,
       basis: fiatSeriesEnabled
         ? previousFiatSeriesEnabled.current
           ? current.basis
@@ -300,8 +301,7 @@ export const BtcActivityChart = ({
         : false,
     }));
     previousFiatSeriesEnabled.current = fiatSeriesEnabled;
-    previousPortfolioValueDefault.current = defaultPortfolioValueVisible;
-  }, [defaultPortfolioValueVisible, fiatSeriesEnabled]);
+  }, [fiatSeriesEnabled]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
@@ -328,12 +328,20 @@ export const BtcActivityChart = ({
           serializeActivityMarkerMinimum(outgoingMarkerMinimumBtc),
         );
       }
-      // The grouping toggle is gone; clear its param off bookmarked URLs.
-      params.delete("groupEvents");
+      if (groupActivityDots) {
+        params.delete(GROUP_DOTS_PARAM);
+      } else {
+        params.set(GROUP_DOTS_PARAM, "0");
+      }
       if (yScaleLog) {
         params.set(Y_SCALE_PARAM, "log");
       } else {
         params.delete(Y_SCALE_PARAM);
+      }
+      if (xScaleLog) {
+        params.set(X_SCALE_PARAM, "log");
+      } else {
+        params.delete(X_SCALE_PARAM);
       }
       if (yAutoFit) {
         params.set(Y_AUTO_FIT_PARAM, "auto");
@@ -348,17 +356,19 @@ export const BtcActivityChart = ({
     }, 150);
     return () => window.clearTimeout(timeout);
   }, [
+    groupActivityDots,
     incomingMarkerMinimumBtc,
     outgoingMarkerMinimumBtc,
     period,
+    xScaleLog,
     yAutoFit,
     yScaleLog,
   ]);
 
   React.useEffect(() => {
     setExpandedPointDate(null);
-    setHoveredActivityPoint(null);
-  }, [currency, period]);
+    hoveredPointStore.set(null);
+  }, [currency, hoveredPointStore, period]);
 
   const chartData = React.useMemo(
     () =>
@@ -399,6 +409,17 @@ export const BtcActivityChart = ({
     setPeriod(next);
     setBrushRangeByView({ compact: null, expanded: null });
   }, []);
+  // A log time axis is about the whole run, not a slice of it: switching it on
+  // jumps to the full history (always a selectable range) unless the window is
+  // already there. Switching it off leaves the range alone — the reader picked
+  // "all" by then, and yanking it back would undo their own choice.
+  const enableLogTime = React.useCallback(
+    (enabled: boolean) => {
+      setXScaleLog(enabled);
+      if (enabled && period !== "all") handlePeriodChange("all");
+    },
+    [handlePeriodChange, period],
+  );
   const toggleSeries = React.useCallback((key: TreasuryChartSeriesKey) => {
     setSeriesVisible((current) => ({ ...current, [key]: !current[key] }));
   }, []);
@@ -406,17 +427,38 @@ export const BtcActivityChart = ({
     setIncomingMarkerMinimumBtc(DEFAULT_INCOMING_MARKER_MIN_BTC);
     setOutgoingMarkerMinimumBtc(DEFAULT_OUTGOING_MARKER_MIN_BTC);
   }, []);
+  // The parent re-creates this callback whenever its transaction list changes,
+  // and every dot takes it as a prop — route it through a ref so a new identity
+  // upstream cannot re-key the Scatter and remount the dots mid-hover.
+  const openTransactionDetailRef = React.useRef(onOpenTransactionDetail);
+  React.useEffect(() => {
+    openTransactionDetailRef.current = onOpenTransactionDetail;
+  }, [onOpenTransactionDetail]);
+  const openTransactionDetail = React.useCallback((transactionId: string) => {
+    openTransactionDetailRef.current?.(transactionId);
+  }, []);
   const openActivityPointTransaction = React.useCallback(
     (point: unknown) => {
-      if (!onOpenTransactionDetail) return;
       const payload =
         (point as { payload?: TreasuryChartPoint } | null)?.payload ??
         (point as TreasuryChartPoint | null);
       const transactionId = payload?.eventTransactionId ?? payload?.eventId;
       if (!transactionId) return;
-      onOpenTransactionDetail(transactionId);
+      openTransactionDetail(transactionId);
     },
-    [onOpenTransactionDetail],
+    [openTransactionDetail],
+  );
+  const renderActivityDot = React.useCallback(
+    (dotProps: unknown) => (
+      <ActivityScatterDot
+        {...(dotProps as ActivityScatterDotProps)}
+        activeSeries={activeSeries}
+        flowColors={flowColors}
+        onHoverActivityPoint={hoveredPointStore.set}
+        onOpenTransactionDetail={openTransactionDetail}
+      />
+    ),
+    [activeSeries, flowColors, hoveredPointStore.set, openTransactionDetail],
   );
   const activityMarkerMinimumForPoint = React.useCallback(
     (point: TreasuryChartPoint) => {
@@ -474,11 +516,77 @@ export const BtcActivityChart = ({
     });
   }, [compactMarkerView.chartDisplayData, expandedMarkerView.chartDisplayData]);
 
+  // Everything recharts consumes has to keep its identity between renders.
+  // `Scatter` is `React.memo`'d on `data` by reference; a miss re-keys its
+  // animation layer, which throws away and re-creates every dot node. Hovering
+  // a dot sets state, so rebuilding this array per render meant each hover
+  // destroyed the very dot under the pointer: Chromium re-resolves `:hover`
+  // after the swap, WebKit does not, so the mac build flickered the dot and
+  // dropped the tooltip.
+  const plotGeometryByView = React.useMemo(() => {
+    const build = (view: ChartView) => {
+      const expanded = view === "expanded";
+      const { chartDisplayData, visibleActivityMarkers } =
+        expanded ? expandedMarkerView : compactMarkerView;
+      const effectiveBrushRange =
+        brushRangeByView[view] ?? fullTreasuryBrushRange(chartDisplayData.length);
+      const selectedChartDisplayData =
+        chartDisplayData.length > 3
+          ? chartDisplayData.slice(
+              effectiveBrushRange.startIndex,
+              effectiveBrushRange.endIndex + 1,
+            )
+          : chartDisplayData;
+      const selectedActivityMarkers = brushedActivityMarkers(
+        visibleActivityMarkers,
+        selectedChartDisplayData,
+      );
+      const plotData = yScaleLog
+        ? logSafeTreasuryPoints(selectedChartDisplayData)
+        : selectedChartDisplayData;
+      // Drop log-undrawable markers BEFORE bucketing: a bucket takes its x and y
+      // from its anchor, so a zero-balance anchor would filter out every event
+      // merged behind it.
+      const drawableActivityMarkers = yScaleLog
+        ? logSafeActivityMarkers(selectedActivityMarkers)
+        : selectedActivityMarkers;
+      // Grouping only changes how wide a bucket reaches: on, dots merge until
+      // ~32/56 survive; off, the target is one dot per plotted column, so only
+      // events landing on the very same column still share a dot. Off still goes
+      // through bucketing because two dots at identical coordinates are a worse
+      // answer than one dot labelled "2".
+      const plotMarkers = bucketActivityMarkers(
+        drawableActivityMarkers,
+        selectedChartDisplayData,
+        {
+          maxVisibleMarkers: groupActivityDots
+            ? expanded
+              ? 56
+              : 32
+            : selectedChartDisplayData.length,
+        },
+      );
+      return {
+        effectiveBrushRange,
+        selectedChartDisplayData,
+        selectedActivityMarkers,
+        plotData,
+        plotMarkers,
+      };
+    };
+    return { compact: build("compact"), expanded: build("expanded") };
+  }, [
+    brushRangeByView,
+    compactMarkerView,
+    expandedMarkerView,
+    groupActivityDots,
+    yScaleLog,
+  ]);
+
   const renderChartCard = (expanded = false) => {
     const view: ChartView = expanded ? "expanded" : "compact";
     const plottedData = expanded ? expandedChartData : chartData;
     const markerView = expanded ? expandedMarkerView : compactMarkerView;
-    const brushRange = brushRangeByView[view];
     const setBrushRange = (
       update: (current: TreasuryBrushRange | null) => TreasuryBrushRange | null,
     ) =>
@@ -504,35 +612,12 @@ export const BtcActivityChart = ({
     const brushGradientId = expanded
       ? "treasuryBrushGradientExpanded"
       : "treasuryBrushGradient";
-    const effectiveBrushRange =
-      brushRange ?? fullTreasuryBrushRange(chartDisplayData.length);
-    const selectedChartDisplayData =
-      chartDisplayData.length > 3
-        ? chartDisplayData.slice(
-            effectiveBrushRange.startIndex,
-            effectiveBrushRange.endIndex + 1,
-          )
-        : chartDisplayData;
-    const selectedActivityMarkers = brushedActivityMarkers(
-      visibleActivityMarkers,
+    const {
+      effectiveBrushRange,
       selectedChartDisplayData,
-    );
-    const plotData = yScaleLog
-      ? logSafeTreasuryPoints(selectedChartDisplayData)
-      : selectedChartDisplayData;
-    // Drop log-undrawable markers BEFORE bucketing: a bucket takes its x and y
-    // from its anchor, so a zero-balance anchor would filter out every event
-    // merged behind it.
-    const drawableActivityMarkers = yScaleLog
-      ? logSafeActivityMarkers(selectedActivityMarkers)
-      : selectedActivityMarkers;
-    // Always bucketed: overlapping dots are never useful, and zooming the
-    // brush is what splits a bucket back into its events.
-    const plotMarkers = bucketActivityMarkers(
-      drawableActivityMarkers,
-      selectedChartDisplayData,
-      { maxVisibleMarkers: expanded ? 56 : 32 },
-    );
+      plotData,
+      plotMarkers,
+    } = plotGeometryByView[view];
     const btcAxisValues = [
       ...(seriesVisible.primary
         ? plotData.map((point) => point.lineBalanceBtc)
@@ -706,6 +791,10 @@ export const BtcActivityChart = ({
       if (isActivityMarkerEvent(event)) return;
       if (event.detail >= 2) handleChartDoubleClick(event);
     };
+    // Null whenever the window is too thin for a log time axis (one point, or a
+    // single instant): the category axis stays in charge rather than handing
+    // recharts a degenerate log domain.
+    const powerLawDomain = xScaleLog ? powerLawXDomain(plotData) : null;
     const xAxisTicks = portfolioAxisTicks(
       balancePoints.length ? balancePoints : selectedChartDisplayData,
       period,
@@ -732,11 +821,6 @@ export const BtcActivityChart = ({
         <ChartControlsSheet
           open={controlsOpen}
           onOpenChange={setControlsOpen}
-          legendItems={legendItems}
-          seriesVisible={seriesVisible}
-          onToggleSeries={toggleSeries}
-          activeSeries={activeSeries}
-          onHoverSeries={handleHover}
           markerCount={activityPoints.length}
           visibleMarkerCount={visibleActivityMarkers.length}
           incomingMarkerCount={incomingActivityPoints.length}
@@ -748,6 +832,8 @@ export const BtcActivityChart = ({
           outgoingMarkerMinimumBtc={outgoingMarkerMinimumBtc}
           onOutgoingMarkerMinimumChange={setOutgoingMarkerMinimumBtc}
           onResetMarkerMinimums={resetActivityMarkerMinimums}
+          groupActivityDots={groupActivityDots}
+          onGroupActivityDotsChange={setGroupActivityDots}
           hideSensitive={hideSensitive}
         />
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1021,20 +1107,35 @@ export const BtcActivityChart = ({
                     strokeOpacity={0.45}
                   />
                   <XAxis
-                    dataKey="date"
-                    // Scatter has its own marker data; category lookup must use
-                    // the date value instead of the marker array index.
-                    allowDuplicatedCategory={false}
                     axisLine={false}
                     tickLine={false}
                     tick={{ fontSize: 10 }}
                     dy={8}
                     minTickGap={expanded ? 18 : 24}
-                    ticks={xAxisTicks}
-                    tickFormatter={(value) =>
-                      plottedData.find((point) => point.date === value)?.month ??
-                      formatTreasuryTick(String(value))
-                    }
+                    {...(powerLawDomain
+                      ? {
+                          // Power law: days since the genesis block on a log
+                          // axis, labelled by year.
+                          dataKey: "powerLawDays" as const,
+                          type: "number" as const,
+                          scale: "log" as const,
+                          domain: powerLawDomain,
+                          allowDataOverflow: true,
+                          ticks: powerLawXTicks(powerLawDomain),
+                          tickFormatter: (value: number | string) =>
+                            formatPowerLawTick(Number(value)),
+                        }
+                      : {
+                          dataKey: "date" as const,
+                          // Scatter has its own marker data; category lookup
+                          // must use the date value instead of the marker array
+                          // index.
+                          allowDuplicatedCategory: false,
+                          ticks: xAxisTicks,
+                          tickFormatter: (value: number | string) =>
+                            plottedData.find((point) => point.date === value)
+                              ?.month ?? formatTreasuryTick(String(value)),
+                        })}
                   />
                   <YAxis
                     yAxisId="btc"
@@ -1151,7 +1252,7 @@ export const BtcActivityChart = ({
                     allowEscapeViewBox={{ x: false, y: true }}
                     content={
                       <TreasuryTooltip
-                        activityPointOverride={hoveredActivityPoint}
+                        hoveredPointStore={hoveredPointStore}
                         hideSensitive={hideSensitive}
                         priceEur={fiatRate}
                         fiatCurrency={fiatCurrency}
@@ -1250,15 +1351,7 @@ export const BtcActivityChart = ({
                       name={t("treasury.series.activity")}
                       fill="transparent"
                       onClick={openActivityPointTransaction}
-                      shape={(props) => (
-                        <ActivityScatterDot
-                          {...props}
-                          activeSeries={activeSeries}
-                          flowColors={flowColors}
-                          onHoverActivityPoint={setHoveredActivityPoint}
-                          onOpenTransactionDetail={onOpenTransactionDetail}
-                        />
-                      )}
+                      shape={renderActivityDot}
                       isAnimationActive={false}
                     />
                   )}
@@ -1364,10 +1457,24 @@ export const BtcActivityChart = ({
               onPeriodChange={handlePeriodChange}
               yScaleLog={yScaleLog}
               onYScaleLogChange={setYScaleLog}
+              xScaleLog={xScaleLog}
+              onXScaleLogChange={enableLogTime}
               yAutoFit={yAutoFit}
               onYAutoFitChange={setYAutoFit}
               showLastValue={showLastValue}
               onShowLastValueChange={setShowLastValue}
+              groupActivityDots={groupActivityDots}
+              onGroupActivityDotsChange={setGroupActivityDots}
+              powerLawView={xScaleLog && yScaleLog}
+              onPowerLawViewChange={(enabled) => {
+                enableLogTime(enabled);
+                setYScaleLog(enabled);
+              }}
+              incomingMarkerMinimumBtc={incomingMarkerMinimumBtc}
+              onIncomingMarkerMinimumChange={setIncomingMarkerMinimumBtc}
+              outgoingMarkerMinimumBtc={outgoingMarkerMinimumBtc}
+              onOutgoingMarkerMinimumChange={setOutgoingMarkerMinimumBtc}
+              onResetMarkerMinimums={resetActivityMarkerMinimums}
               onOpenMoreSettings={() => setControlsOpen(true)}
             />
           </div>
@@ -1419,7 +1526,11 @@ export const BtcActivityChart = ({
       {renderChartCard()}
       <DialogContent
         showCloseButton={false}
-        className="top-0 left-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 sm:max-w-none"
+        // `zoom-in-95` is the shared dialog's entrance, sized for a small
+        // centred modal. On a full-screen surface it scales the whole chart up
+        // from 95% around the viewport centre, which reads as the chart sliding
+        // sideways as it settles. Full screen fades, it does not zoom.
+        className="top-0 left-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:max-w-none"
       >
         <DialogTitle className="sr-only">
           {t("treasury.expandedTitle")}

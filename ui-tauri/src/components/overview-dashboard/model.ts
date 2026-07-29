@@ -160,7 +160,9 @@ export const ACTIVITY_MARKER_INPUT_STEP_BTC = 0.00000001;
 export const ACTIVITY_MARKER_SLIDER_MARKS = [0, 0.0025, 0.01, 0.1, 0.5, 1] as const;
 export const INCOMING_MARKER_MIN_PARAM = "incomingMinBtc";
 export const OUTGOING_MARKER_MIN_PARAM = "outgoingMinBtc";
+export const GROUP_DOTS_PARAM = "groupEvents";
 export const Y_SCALE_PARAM = "scale";
+export const X_SCALE_PARAM = "xscale";
 export const Y_AUTO_FIT_PARAM = "fit";
 export const TREASURY_BRUSH_MIN_WINDOW_MS = (7 * 24 * 60 * 60 * 1000) / 3;
 export const TREASURY_BRUSH_MIN_INDEX_SPAN = 2;
@@ -205,6 +207,8 @@ export type TreasuryChartPoint = PortfolioChartPoint & {
   markerGroupedPoints?: TreasuryChartPoint[];
   markerMixedFlows?: boolean;
   sortTimeMs: number;
+  /** Days since the genesis block — the x value of the power-law view. */
+  powerLawDays: number;
   isActivityEvent?: boolean;
 };
 
@@ -234,6 +238,39 @@ export type ActivityScatterDotProps = {
   onOpenTransactionDetail?: (transactionId: string) => void;
   onHoverActivityPoint?: (point: TreasuryChartPoint | null) => void;
 };
+
+/**
+ * Which activity dot the pointer is on.
+ *
+ * Deliberately not React state: the tooltip is the only reader, and putting it
+ * in the chart's state re-rendered the whole card on every hover. Recharts
+ * re-keys its scatter animation layer whenever the `Scatter` re-renders, which
+ * destroys and re-creates every dot node — including the one under the pointer.
+ * Chromium re-resolves `:hover` after that swap; WebKit does not, so the macOS
+ * build flickered the dot and dropped the tooltip.
+ */
+export type HoveredActivityPointStore = {
+  subscribe: (listener: () => void) => () => void;
+  get: () => TreasuryChartPoint | null;
+  set: (point: TreasuryChartPoint | null) => void;
+};
+
+export function createHoveredActivityPointStore(): HoveredActivityPointStore {
+  let current: TreasuryChartPoint | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    get: () => current,
+    set: (point) => {
+      if (point === current) return;
+      current = point;
+      for (const listener of listeners) listener();
+    },
+  };
+}
 
 export type ActivityMarkerView = {
   activityPoints: TreasuryChartPoint[];
@@ -757,9 +794,19 @@ export function initialYScaleLogFromUrl(): boolean {
   return urlParam(Y_SCALE_PARAM)?.toLowerCase() === "log";
 }
 
+export function initialXScaleLogFromUrl(): boolean {
+  return urlParam(X_SCALE_PARAM)?.toLowerCase() === "log";
+}
+
 export function initialYAutoFitFromUrl(): boolean {
   const value = urlParam(Y_AUTO_FIT_PARAM)?.toLowerCase();
   return value === "auto" || value === "1";
+}
+
+// Grouping is on unless a bookmarked URL says otherwise.
+export function initialGroupActivityDotsFromUrl(): boolean {
+  const value = urlParam(GROUP_DOTS_PARAM)?.toLowerCase();
+  return value !== "0" && value !== "off";
 }
 
 // A log scale has no place for zero: before the first funding the balance
@@ -1629,6 +1676,7 @@ export function buildTreasuryBasePoint(
     eventBalanceBtc: undefined,
     eventSize: 0,
     sortTimeMs: treasurySortTime(point.date) ?? 0,
+    powerLawDays: powerLawDaysFor(treasurySortTime(point.date) ?? 0),
     month: point.month || formatTreasuryTick(point.date),
     detailLabel: point.detailLabel || formatTreasuryDetailDate(point.date),
   };
@@ -1707,6 +1755,7 @@ export function buildTreasuryActivityPoint(
     eventId: event.tx.explorerId ?? event.tx.externalId ?? event.tx.id,
     eventTransactionId: event.tx.id,
     sortTimeMs: event.occurredAt.valueOf() + event.sequence / 1000,
+    powerLawDays: powerLawDaysFor(event.occurredAt.valueOf()),
     isActivityEvent: true,
   };
 }
@@ -1760,6 +1809,68 @@ export function enrichTreasuryChartData(
     if (a.isActivityEvent === b.isActivityEvent) return a.date.localeCompare(b.date);
     return a.isActivityEvent ? -1 : 1;
   });
+}
+
+// Bitcoin's genesis block. The power-law view plots against time since *this*
+// instant, not since the series starts: the straight line only appears when the
+// x axis shares Bitcoin's own origin.
+export const BITCOIN_GENESIS_MS = Date.UTC(2009, 0, 3, 18, 15, 5);
+const POWER_LAW_DAY_MS = 86_400_000;
+
+export function powerLawDaysFor(timeMs: number) {
+  if (!Number.isFinite(timeMs)) return 1;
+  // A log axis has no room for zero or negative days, and a bogus pre-genesis
+  // timestamp must land somewhere visible rather than break the axis.
+  return Math.max(1, (timeMs - BITCOIN_GENESIS_MS) / POWER_LAW_DAY_MS);
+}
+
+export function powerLawDayToDate(days: number) {
+  return new Date(BITCOIN_GENESIS_MS + days * POWER_LAW_DAY_MS);
+}
+
+export function powerLawXDomain(
+  points: TreasuryChartPoint[],
+): [number, number] | null {
+  const days = points
+    .map((point) => point.powerLawDays)
+    .filter((value) => Number.isFinite(value) && value > 0);
+  if (days.length < 2) return null;
+  const low = Math.min(...days);
+  const high = Math.max(...days);
+  return high > low ? [low, high] : null;
+}
+
+// Year starts, thinned by log distance: without that, a decade of years piles
+// up at the right edge where a log axis has almost no room left.
+export function powerLawXTicks(
+  domain: [number, number],
+  maxTicks = 6,
+): number[] {
+  const [low, high] = domain;
+  const minGap = (Math.log10(high) - Math.log10(low)) / Math.max(1, maxTicks);
+  const ticks: number[] = [];
+  const firstYear = powerLawDayToDate(low).getUTCFullYear();
+  const lastYear = powerLawDayToDate(high).getUTCFullYear();
+  for (let year = firstYear; year <= lastYear; year += 1) {
+    const days = (Date.UTC(year, 0, 1) - BITCOIN_GENESIS_MS) / POWER_LAW_DAY_MS;
+    if (days < low || days > high) continue;
+    const previous = ticks.at(-1);
+    if (previous !== undefined && Math.log10(days) - Math.log10(previous) < minGap) {
+      continue;
+    }
+    ticks.push(days);
+  }
+  // A window shorter than a year holds no year start: label its ends instead of
+  // drawing a bare axis.
+  return ticks.length >= 2 ? ticks : [low, high];
+}
+
+export function formatPowerLawTick(days: number) {
+  const date = powerLawDayToDate(days);
+  if (date.getUTCMonth() === 0 && date.getUTCDate() <= 2) {
+    return String(date.getUTCFullYear());
+  }
+  return formatTreasuryTick(date.toISOString().slice(0, 10));
 }
 
 export function activityMarkerView(
@@ -1821,6 +1932,8 @@ function mergedActivityMarker(group: TreasuryChartPoint[]): TreasuryChartPoint {
     month: anchor.month,
     detailLabel: first === lastLabel ? first : `${first} – ${lastLabel}`,
     sortTimeMs: anchor.sortTimeMs,
+    // The anchor decides x on both axis kinds, category and power-law days.
+    powerLawDays: anchor.powerLawDays,
     markerBalanceBtc: anchor.markerBalanceBtc ?? anchor.balanceBtc,
     // Everything numeric describes the whole bucket, not one member — a merged
     // dot that reported one event's amount would just be a lie.

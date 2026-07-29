@@ -1,4 +1,4 @@
-import { Settings } from "lucide-react";
+import { RefreshCw, Settings } from "lucide-react";
 import type * as React from "react";
 import { useTranslation } from "react-i18next";
 
@@ -7,15 +7,25 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 import {
+  ACTIVITY_MARKER_SLIDER_MARKS,
+  DEFAULT_INCOMING_MARKER_MIN_BTC,
+  DEFAULT_OUTGOING_MARKER_MIN_BTC,
   periodKeys,
   periodLabelKeys,
   periodShortLabelKeys,
+  serializeActivityMarkerMinimum,
   type ResolvedTimePeriod,
   type TimePeriod,
 } from "./model";
@@ -23,6 +33,43 @@ import {
 // Don't take focus on click: macOS Full Keyboard Access draws a native focus
 // ring that ignores CSS. Keyboard tab focus still works.
 const preventClickFocus = (event: React.MouseEvent) => event.preventDefault();
+
+// Dot minimums are the only drawer setting that changes what the chart shows,
+// so the quick menu carries the presets; the drawer keeps the free-form value.
+function MarkerMinimumSubmenu({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const { t } = useTranslation("overview");
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>{label}</DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuRadioGroup
+          value={serializeActivityMarkerMinimum(value)}
+          onValueChange={(next) => onChange(Number(next))}
+        >
+          {ACTIVITY_MARKER_SLIDER_MARKS.map((mark) => (
+            <DropdownMenuRadioItem
+              key={mark}
+              value={serializeActivityMarkerMinimum(mark)}
+              onSelect={(event) => event.preventDefault()}
+            >
+              {mark === 0
+                ? t("controls.allDots")
+                : `≥ ${serializeActivityMarkerMinimum(mark)} BTC`}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
 
 // TradingView-style chart footer: quick range presets on the left; scale-mode
 // chips plus a small collapsible settings menu (TradingView's bottom-right
@@ -34,10 +81,21 @@ export function ChartRangeToolbar({
   onPeriodChange,
   yScaleLog,
   onYScaleLogChange,
+  xScaleLog,
+  onXScaleLogChange,
   yAutoFit,
   onYAutoFitChange,
   showLastValue,
   onShowLastValueChange,
+  groupActivityDots,
+  onGroupActivityDotsChange,
+  powerLawView,
+  onPowerLawViewChange,
+  incomingMarkerMinimumBtc,
+  onIncomingMarkerMinimumChange,
+  outgoingMarkerMinimumBtc,
+  onOutgoingMarkerMinimumChange,
+  onResetMarkerMinimums,
   onOpenMoreSettings,
 }: {
   period: TimePeriod;
@@ -47,13 +105,27 @@ export function ChartRangeToolbar({
   onPeriodChange: (period: TimePeriod) => void;
   yScaleLog: boolean;
   onYScaleLogChange: (value: boolean) => void;
+  xScaleLog: boolean;
+  onXScaleLogChange: (value: boolean) => void;
   yAutoFit: boolean;
   onYAutoFitChange: (value: boolean) => void;
   showLastValue: boolean;
   onShowLastValueChange: (value: boolean) => void;
+  groupActivityDots: boolean;
+  onGroupActivityDotsChange: (value: boolean) => void;
+  powerLawView: boolean;
+  onPowerLawViewChange: (value: boolean) => void;
+  incomingMarkerMinimumBtc: number;
+  onIncomingMarkerMinimumChange: (value: number) => void;
+  outgoingMarkerMinimumBtc: number;
+  onOutgoingMarkerMinimumChange: (value: number) => void;
+  onResetMarkerMinimums: () => void;
   onOpenMoreSettings: () => void;
 }) {
-  const { t } = useTranslation("overview");
+  const { t } = useTranslation(["overview", "common"]);
+  const markerMinimumsAtDefault =
+    incomingMarkerMinimumBtc === DEFAULT_INCOMING_MARKER_MIN_BTC &&
+    outgoingMarkerMinimumBtc === DEFAULT_OUTGOING_MARKER_MIN_BTC;
   const chipClass = (active: boolean) =>
     cn(
       "rounded px-1.5 py-0.5 text-xs font-medium tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -90,6 +162,19 @@ export function ChartRangeToolbar({
           </button>
           );
         })}
+        {/* The time axis' own scale, next to the ranges it applies to. With the
+            value axis' `log` chip on the right, that is the power-law view. */}
+        <button
+          type="button"
+          aria-pressed={xScaleLog}
+          aria-label={t("controls.logTimeTitle")}
+          title={t("controls.logTimeTitle")}
+          className={chipClass(xScaleLog)}
+          onClick={() => onXScaleLogChange(!xScaleLog)}
+          onMouseDown={preventClickFocus}
+        >
+          {t("controls.logChip")}
+        </button>
       </div>
       <div
         role="group"
@@ -130,8 +215,9 @@ export function ChartRangeToolbar({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="end" className="w-64">
-            {/* Log and auto-fit are the chips to the left; only what has no
-                chip of its own lives in here. */}
+            {/* Log and auto-fit are the chips to the left; series toggles are
+                the legend row above the chart. Only what has neither lives in
+                here. */}
             <DropdownMenuCheckboxItem
               checked={showLastValue}
               onCheckedChange={onShowLastValueChange}
@@ -139,6 +225,43 @@ export function ChartRangeToolbar({
             >
               {t("controls.lastValueLabel")}
             </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              checked={groupActivityDots}
+              onCheckedChange={onGroupActivityDotsChange}
+              onSelect={(event) => event.preventDefault()}
+            >
+              {t("controls.groupDotsLabel")}
+            </DropdownMenuCheckboxItem>
+            {/* One switch for both axes: a log price axis against linear time
+                is not a power-law chart, so the item owns the pair. */}
+            <DropdownMenuCheckboxItem
+              checked={powerLawView}
+              onCheckedChange={onPowerLawViewChange}
+              onSelect={(event) => event.preventDefault()}
+            >
+              {t("controls.powerLawLabel")}
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-2xs text-muted-foreground">
+              {t("controls.minBtcSize")}
+            </DropdownMenuLabel>
+            <MarkerMinimumSubmenu
+              label={t("controls.incomingPayments")}
+              value={incomingMarkerMinimumBtc}
+              onChange={onIncomingMarkerMinimumChange}
+            />
+            <MarkerMinimumSubmenu
+              label={t("controls.outgoingActivity")}
+              value={outgoingMarkerMinimumBtc}
+              onChange={onOutgoingMarkerMinimumChange}
+            />
+            <DropdownMenuItem
+              disabled={markerMinimumsAtDefault}
+              onSelect={onResetMarkerMinimums}
+            >
+              <RefreshCw className="size-4" aria-hidden="true" />
+              {t("controls.resetMarkerMinimums")}
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={onOpenMoreSettings}>
               <Settings className="size-4" aria-hidden="true" />

@@ -567,6 +567,8 @@
     "enableLabel": "Logs-Seite aktivieren",
     "enableOn": "Logs ist in Support und Routennavigation sichtbar.",
     "enableOff": "Logs ist ausgeblendet und direkte Navigation leitet zur Übersicht um.",
+    "alphaBannerLabel": "Alpha-Warnbanner anzeigen",
+    "alphaBannerDescription": "Der rote Streifen am oberen Fensterrand. Ausblenden macht die Software nicht weniger Alpha.",
     "openLogs": "Logs öffnen",
     "bufferHeading": "Log-Puffer im Speicher",
     "bufferDescription": "{{retained}} in dieser GUI-Sitzung vorgehalten. Kassiber behält höchstens {{records}} Einträge oder {{bytes}}, je nachdem, was zuerst erreicht wird. Ein Neuladen oder Schließen der App leert den Puffer, sofern du ihn nicht zuerst exportierst."

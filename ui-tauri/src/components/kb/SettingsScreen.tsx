@@ -129,6 +129,10 @@ export function SettingsScreen({
   const setDeveloperToolsEnabled = useUiStore(
     (s) => s.setDeveloperToolsEnabled,
   );
+  const preAlphaBannerVisible = useUiStore((s) => s.preAlphaBannerVisible);
+  const setPreAlphaBannerVisible = useUiStore(
+    (s) => s.setPreAlphaBannerVisible,
+  );
   const automaticUpdateChecks = useUiStore((s) => s.automaticUpdateChecks);
   const identity = useUiStore((s) => s.identity);
   const setIdentity = useUiStore((s) => s.setIdentity);
@@ -1085,6 +1089,8 @@ export function SettingsScreen({
           <DeveloperToolsSettingsPanel
             enabled={developerToolsEnabled}
             setEnabled={setDeveloperToolsEnabled}
+            bannerVisible={preAlphaBannerVisible}
+            setBannerVisible={setPreAlphaBannerVisible}
             onOpenLogs={() => void navigate({ to: "/logs" })}
           />
         );

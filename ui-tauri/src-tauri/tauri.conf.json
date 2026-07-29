@@ -13,6 +13,8 @@
     "windows": [
       {
         "title": "",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
         "width": 1760,
         "height": 1160,
         "minWidth": 980,
