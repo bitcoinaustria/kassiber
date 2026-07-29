@@ -733,27 +733,30 @@
       "openExplorer": "{{reference}} in {{explorer}} öffnen"
     },
     "roles": {
-      "input": "Input",
-      "output": "Output",
+      "ambiguousOwnedOutput": "Mehrdeutig eigener Output",
       "change": "Wechselgeld",
       "externalRecipient": "Externer Empfänger",
-      "incomingPayment": "Eingehende Zahlung",
-      "ownedDestination": "Eigene Ziel-Wallet",
-      "opReturn": "OP_RETURN / keine Adresse",
       "fee": "Gebühr",
+      "incomingPayment": "Eingehende Zahlung",
+      "input": "Input",
+      "leg": "Strang",
+      "opReturn": "OP_RETURN / keine Adresse",
+      "output": "Output",
       "overflow": "Weitere",
-      "ambiguousOwnedOutput": "Mehrdeutig eigener Output",
-      "leg": "Strang"
+      "ownedDestination": "Eigene Ziel-Wallet",
+      "pegIn": "Peg-in",
+      "pegOut": "Peg-out"
     },
     "ownership": {
-      "networkFee": "Netzwerkgebühr",
+      "aggregated": "Zusammengefasste Stränge",
+      "ambiguousWallet": "Mehrdeutige Wallet-Zugehörigkeit",
+      "externalWallet": "Externer Wallet-Strang",
       "internalChange": "Interner Wechselgeld-Output",
       "internalWallet": "Interner Wallet-Strang",
-      "externalWallet": "Externer Wallet-Strang",
-      "ambiguousWallet": "Mehrdeutige Wallet-Zugehörigkeit",
-      "unspendable": "Nicht ausgebbarer Output",
-      "aggregated": "Zusammengefasste Stränge",
-      "unknown": "Zugehörigkeit unbekannt"
+      "networkFee": "Netzwerkgebühr",
+      "pegOut": "Verlässt Liquid",
+      "unknown": "Zugehörigkeit unbekannt",
+      "unspendable": "Nicht ausgebbarer Output"
     },
     "warnings": {
       "bitcoin_reference_lookup_failed": "Die Bitcoin-Transaktions-Referenzen konnten von keinem konfigurierten Backend abgerufen werden.",
@@ -784,7 +787,9 @@
     "annotations": {
       "booked_custody_conversion": "Gebuchte Custody-Konversion",
       "booked_custody_direct_payout": "Gebuchte Direktauszahlung",
-      "booked_custody_move": "Gebuchter Custody-Move"
+      "booked_custody_move": "Gebuchter Custody-Move",
+      "peg_in": "Peg-in von Bitcoin",
+      "peg_out": "Peg-out nach Bitcoin"
     },
     "policy": {
       "carrying-value": "Buchwertfortführung",

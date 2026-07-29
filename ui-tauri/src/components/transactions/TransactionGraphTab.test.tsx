@@ -749,6 +749,48 @@ describe("TransactionFlowDiagram", () => {
 });
 
 describe("TransactionInputsOutputsPanel", () => {
+  it("labels Liquid peg legs and shows the peg-out destination", () => {
+    const pegs: TransactionGraphPayload = {
+      ...graph,
+      transaction: { ...graph.transaction!, chain: "liquid", network: "liquidv1" },
+      inputs: [
+        {
+          id: "in-0",
+          outpoint: `${"8b".repeat(32)}:0`,
+          valueSats: 1_000_000,
+          valueBtc: 0.01,
+          ownership: "external",
+          role: "peg_in",
+        },
+      ],
+      outputs: [
+        {
+          id: "out-0",
+          address: "bc1qpegoutdestination00000000000000000000000",
+          valueSats: 900_000,
+          valueBtc: 0.009,
+          ownership: "peg_out",
+          role: "peg_out",
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel graph={pegs} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("Peg-in");
+    expect(html).toContain("Peg-out");
+    expect(html).toContain("Leaving Liquid");
+    // The Bitcoin destination is the accounting-relevant fact about a peg-out.
+    expect(html).toContain("bc1qpegout...000000");
+    // And it is a Bitcoin address: it must not link to the Liquid explorer.
+    expect(html).toContain("Open bc1qpegout...000000 in mempool.bitcoin-austria.at");
+    expect(html).toContain("Open 8b8b8b8b8b...8b8b:0 in Liquid Network");
+  });
+
+
   it("renders detailed inputs and outputs with spending indicators", () => {
     const html = renderToStaticMarkup(
       <TooltipProvider>

@@ -109,6 +109,8 @@ function roleLabel(role: string | undefined, t: TFunction<"transactions">) {
     incoming_payment: t("graph.roles.incomingPayment"),
     owned_destination: t("graph.roles.ownedDestination"),
     op_return: t("graph.roles.opReturn"),
+    peg_in: t("graph.roles.pegIn"),
+    peg_out: t("graph.roles.pegOut"),
     fee: t("graph.roles.fee"),
     overflow: t("graph.roles.overflow"),
     ambiguous_owned_output: t("graph.roles.ambiguousOwnedOutput"),
@@ -126,6 +128,7 @@ function ownershipBoundaryLabel(node: TransactionGraphNode, t: TFunction<"transa
   if (node.ownership === "external") return t("graph.ownership.externalWallet");
   if (node.ownership === "ambiguous") return t("graph.ownership.ambiguousWallet");
   if (node.ownership === "unspendable") return t("graph.ownership.unspendable");
+  if (node.ownership === "peg_out") return t("graph.ownership.pegOut");
   if (node.ownership === "overflow") return t("graph.ownership.aggregated");
   return t("graph.ownership.unknown");
 }
@@ -192,6 +195,14 @@ function graphExplorerNetwork(graph: TransactionGraphPayload): ExplorerNetwork {
     : "bitcoin";
 }
 
+// Liquid mainnet pegs out to Bitcoin mainnet; the Liquid testnets peg out to
+// Bitcoin testnet.
+function bitcoinNetworkForPeg(graph: TransactionGraphPayload) {
+  const network = graph.transaction?.network?.trim().toLowerCase();
+  if (!network || network === "liquidv1") return "main";
+  return "test";
+}
+
 function explorerTargetForGraphNode({
   graph,
   node,
@@ -201,8 +212,12 @@ function explorerTargetForGraphNode({
   node: TransactionGraphNode;
   settings: ExplorerSettings;
 }): ExplorerTarget | null {
-  const network = graphExplorerNetwork(graph);
-  const networkName = graph.transaction?.network;
+  // A peg-out's destination is a Bitcoin address on a Liquid transaction, so it
+  // has to resolve against the Bitcoin explorer, not the graph's own chain.
+  const network: ExplorerNetwork =
+    node.role === "peg_out" ? "bitcoin" : graphExplorerNetwork(graph);
+  const networkName =
+    node.role === "peg_out" ? bitcoinNetworkForPeg(graph) : graph.transaction?.network;
   if (node.address) {
     return explorerTargetForAddress({
       address: node.address,

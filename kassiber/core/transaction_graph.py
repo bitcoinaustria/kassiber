@@ -670,25 +670,26 @@ def _parse_graph(
         if value_sats is None:
             input_value_complete = False
         script = _string_or_none(output_script(prevout))
-        inputs.append(
-            {
-                "id": f"in-{index}",
-                "index": index,
-                "outpoint": outpoint,
-                "txid": str(entry.get("txid") or "") or None,
-                "vout": _int_or_none(entry.get("vout")),
-                "address": output_address(prevout),
-                "scriptType": _script_type(prevout, script),
-                "valueSats": value_sats,
-                "valueBtc": _sats_to_btc(value_sats),
-                "valueState": "confidential" if value_hidden else ("missing" if value_sats is None else "known"),
-                "label": outpoint or f"Input {index + 1}",
-                "ownership": "unknown",
-                "role": "input",
-                "annotations": [],
-                "_script": script,
-            }
-        )
+        node: dict[str, Any] = {
+            "id": f"in-{index}",
+            "index": index,
+            "outpoint": outpoint,
+            "txid": str(entry.get("txid") or "") or None,
+            "vout": _int_or_none(entry.get("vout")),
+            "address": output_address(prevout),
+            "scriptType": _script_type(prevout, script),
+            "valueSats": value_sats,
+            "valueBtc": _sats_to_btc(value_sats),
+            "valueState": "confidential" if value_hidden else ("missing" if value_sats is None else "known"),
+            "label": outpoint or f"Input {index + 1}",
+            "ownership": "unknown",
+            "role": "input",
+            "annotations": [],
+            "_script": script,
+        }
+        if _is_pegin_leg(entry):
+            node["_pegin"] = True
+        inputs.append(node)
 
     outputs: list[dict[str, Any]] = []
     output_value_complete = True
@@ -721,12 +722,13 @@ def _parse_graph(
         )
         if value_sats is None:
             output_value_complete = False
+        pegout_address = _pegout_address(entry)
         outputs.append(
             {
                 "id": f"out-{n}",
                 "index": n,
                 "outpoint": outpoint,
-                "address": output_address(entry),
+                "address": output_address(entry) or pegout_address,
                 "scriptType": _script_type(entry, script),
                 "valueSats": value_sats,
                 "valueBtc": _sats_to_btc(value_sats),
@@ -736,6 +738,7 @@ def _parse_graph(
                 "role": "output",
                 "annotations": [],
                 "_script": script,
+                "_pegoutAddress": pegout_address,
             }
         )
 
@@ -1992,6 +1995,11 @@ def _sanitize_graph_vin(entry: Any, chain: str) -> dict[str, Any] | None:
     prev_vout = _int_or_none(entry.get("vout"))
     if prev_vout is not None:
         sanitized["vout"] = prev_vout
+    # Peg and coinbase status come from the chain itself, so they are kept: a
+    # peg-in is not an ordinary external input, and no heuristic over federation
+    # addresses is needed when the source data says so outright.
+    if _is_pegin_leg(entry):
+        sanitized["is_pegin"] = True
     prevout = entry.get("prevout")
     if isinstance(prevout, Mapping):
         clean_prevout = _sanitize_graph_value_script(prevout, chain, include_n=False)
@@ -2029,6 +2037,11 @@ def _sanitize_graph_value_script(
     address = output_address(entry)
     if address is not None:
         sanitized["scriptpubkey_address"] = address
+    pegout_address = _pegout_address(entry)
+    if pegout_address is not None:
+        # Only the destination address: the rest of the pegout object (genesis
+        # hash, asm) is backend response shape the graph does not need.
+        sanitized["pegout_address"] = pegout_address
     confidential = _confidential_leg(entry)
     value_sats = output_value_sats(entry)
     if confidential:
@@ -2057,6 +2070,12 @@ def _annotate_graph(
         )
         _apply_match_annotation(node, matches, "owned_input", "external_input")
         input_owner_ids.update(str(match.wallet_id) for match in matches)
+        if node.get("_pegin"):
+            # Value entering Liquid from Bitcoin, not a payment from a stranger.
+            node["role"] = "peg_in"
+            node["annotations"].append(
+                _node_annotation("peg_in", "Peg-in from Bitcoin")
+            )
 
     contributor_ids = (
         input_owner_ids
@@ -2068,6 +2087,15 @@ def _annotate_graph(
     )
     for node in graph["outputs"]:
         script = node.get("_script")
+        if node.get("_pegoutAddress"):
+            # A peg-out rides an unspendable Liquid output, so this has to be
+            # checked before the OP_RETURN branch or the destination is lost.
+            node["ownership"] = "peg_out"
+            node["role"] = "peg_out"
+            node["annotations"].append(
+                _node_annotation("peg_out", "Peg-out to Bitcoin")
+            )
+            continue
         if _is_unspendable(script):
             node["ownership"] = "unspendable"
             node["role"] = "op_return"
@@ -2591,6 +2619,37 @@ def _is_liquid_fee_output(entry: Mapping[str, Any]) -> bool:
     if _string_or_none(entry.get("scriptpubkey") or entry.get("script_hex")):
         return False
     return entry.get("value") is not None
+
+
+def _is_pegin_leg(entry: Mapping[str, Any]) -> bool:
+    """True for an input funded by a Bitcoin peg-in."""
+    for key in ("is_pegin", "isPegin", "pegin"):
+        value = entry.get(key)
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str) and value.strip().lower() in {"true", "1"}:
+            return True
+    return False
+
+
+def _pegout_address(entry: Mapping[str, Any]) -> str | None:
+    """The Bitcoin destination of a Liquid peg-out output, if this is one.
+
+    A peg-out is encoded as an unspendable Liquid output whose script carries the
+    destination, so without this the leg reads as a bare OP_RETURN and the
+    accounting-relevant fact — value leaving Liquid for a known Bitcoin address —
+    is lost.
+    """
+    for key in ("pegout_address", "pegoutAddress"):
+        address = _string_or_none(entry.get(key))
+        if address:
+            return address
+    pegout = entry.get("pegout")
+    if isinstance(pegout, Mapping):
+        return _string_or_none(
+            pegout.get("scriptpubkey_address") or pegout.get("scriptpubkeyAddress")
+        )
+    return None
 
 
 def _outpoint(entry: Mapping[str, Any]) -> str | None:

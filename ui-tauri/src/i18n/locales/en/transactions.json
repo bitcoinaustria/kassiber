@@ -714,27 +714,30 @@
       "openExplorer": "Open {{reference}} in {{explorer}}"
     },
     "roles": {
-      "input": "Input",
-      "output": "Output",
+      "ambiguousOwnedOutput": "Ambiguous owned output",
       "change": "Change",
       "externalRecipient": "External recipient",
-      "incomingPayment": "Incoming payment",
-      "ownedDestination": "Owned destination",
-      "opReturn": "OP_RETURN / non-address",
       "fee": "Fee",
+      "incomingPayment": "Incoming payment",
+      "input": "Input",
+      "leg": "Leg",
+      "opReturn": "OP_RETURN / non-address",
+      "output": "Output",
       "overflow": "More",
-      "ambiguousOwnedOutput": "Ambiguous owned output",
-      "leg": "Leg"
+      "ownedDestination": "Owned destination",
+      "pegIn": "Peg-in",
+      "pegOut": "Peg-out"
     },
     "ownership": {
-      "networkFee": "Network fee",
+      "aggregated": "Aggregated legs",
+      "ambiguousWallet": "Ambiguous wallet ownership",
+      "externalWallet": "External wallet leg",
       "internalChange": "Internal change output",
       "internalWallet": "Internal wallet leg",
-      "externalWallet": "External wallet leg",
-      "ambiguousWallet": "Ambiguous wallet ownership",
-      "unspendable": "Unspendable output",
-      "aggregated": "Aggregated legs",
-      "unknown": "Ownership unknown"
+      "networkFee": "Network fee",
+      "pegOut": "Leaving Liquid",
+      "unknown": "Ownership unknown",
+      "unspendable": "Unspendable output"
     },
     "warnings": {
       "bitcoin_reference_lookup_failed": "Could not fetch Bitcoin transaction references from a configured backend.",
@@ -765,7 +768,9 @@
     "annotations": {
       "booked_custody_conversion": "Booked custody conversion",
       "booked_custody_direct_payout": "Booked direct payout",
-      "booked_custody_move": "Booked custody move"
+      "booked_custody_move": "Booked custody move",
+      "peg_in": "Peg-in from Bitcoin",
+      "peg_out": "Peg-out to Bitcoin"
     },
     "policy": {
       "carrying-value": "Carrying value",

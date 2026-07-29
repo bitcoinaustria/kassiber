@@ -547,6 +547,81 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["inputs"][1]["valueState"], "confidential")
         self.assertNotIn("valueSats", payload["inputs"][1])
 
+    def test_liquid_peg_legs_are_classified_from_chain_data(self):
+        # The chain says outright which legs are pegs, so no federation-address
+        # heuristic is needed — but the signal has to survive sanitization.
+        txid = "8a" * 32
+        peg_destination = "bc1qpegoutdestination00000000000000000000000"
+        create_db_backend(
+            self.conn,
+            "graph-liquid-pegs",
+            "mempool",
+            "https://liquid.example/api",
+            chain="liquid",
+            network="liquidv1",
+            timeout=5,
+            commit=False,
+        )
+        fetched = {
+            "txid": txid,
+            "version": 2,
+            "locktime": 0,
+            "vin": [
+                {
+                    "txid": "8b" * 32,
+                    "vout": 0,
+                    "is_pegin": True,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value": 1_000_000},
+                }
+            ],
+            "vout": [
+                {
+                    "n": 0,
+                    "scriptpubkey": "6a" + "00" * 4,
+                    "scriptpubkey_type": "op_return",
+                    "value": 900_000,
+                    "pegout": {
+                        "genesis_hash": "ff" * 32,
+                        "scriptpubkey": "0014" + "ab" * 20,
+                        "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_20 " + "ab" * 20,
+                        "scriptpubkey_address": peg_destination,
+                    },
+                },
+                {"n": 1, "scriptpubkey_type": "fee", "value": 1_000},
+            ],
+        }
+        self._tx("liquid-pegs-row", "wallet-a", "outbound", 900_000_000, txid, "{}", asset="LBTC")
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            return_value=fetched,
+        ):
+            payload = self._graph("liquid-pegs-row", allow_public_lookup=True)
+
+        self.assertEqual(payload["inputs"][0]["role"], "peg_in")
+        pegout = payload["outputs"][0]
+        self.assertEqual(pegout["role"], "peg_out")
+        self.assertEqual(pegout["ownership"], "peg_out")
+        self.assertEqual(pegout["address"], peg_destination)
+        self.assertNotEqual(pegout["role"], "op_return")
+
+        # And the signals survive the durable cache, so a reopen still shows them.
+        cached = self._cached_graph_raw(txid, chain="liquid", network="liquidv1")
+        self.assertTrue(cached["vin"][0]["is_pegin"])
+        self.assertEqual(cached["vout"][0]["pegout_address"], peg_destination)
+        serialized = json.dumps(cached)
+        self.assertNotIn("genesis_hash", serialized)
+        self.assertNotIn("scriptpubkey_asm", serialized)
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction"
+        ) as refetch:
+            reopened = self._graph("liquid-pegs-row", allow_public_lookup=True)
+        refetch.assert_not_called()
+        self.assertEqual(reopened["inputs"][0]["role"], "peg_in")
+        self.assertEqual(reopened["outputs"][0]["role"], "peg_out")
+        self.assertEqual(reopened["outputs"][0]["address"], peg_destination)
+
     def test_bitcoin_missing_input_prevout_values_are_explained_precisely(self):
         raw = {
             "txid": "prevout-missing-tx",
