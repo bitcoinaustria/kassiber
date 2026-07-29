@@ -100,13 +100,6 @@ import { PortfolioInspector } from "./PortfolioInspector";
 import { ActivityLegendSwatch } from "./ChartControlsSheet";
 import { TreasuryTooltip } from "./TreasuryTooltip";
 
-function shouldShowPortfolioValueByDefault(
-  fiatSeriesEnabled: boolean,
-  currency: Currency,
-) {
-  return fiatSeriesEnabled && currency !== "btc";
-}
-
 // The card renders twice: inline and inside the expand dialog.
 type ChartView = "compact" | "expanded";
 
@@ -150,17 +143,14 @@ export const BtcActivityChart = ({
     initialYAutoFitFromUrl,
   );
   const [showLastValue, setShowLastValue] = React.useState(true);
-  const defaultPortfolioValueVisible = shouldShowPortfolioValueByDefault(
-    fiatSeriesEnabled,
-    currency,
-  );
   const [expandedPointDate, setExpandedPointDate] = React.useState<string | null>(
     null,
   );
+  // The portfolio value line stays off until asked for: it plots the same
+  // holdings the balance line already shows, just in fiat.
   const [seriesVisible, setSeriesVisible] =
     React.useState<TreasurySeriesVisibility>(() => ({
       ...defaultTreasurySeriesVisibility,
-      portfolioValue: defaultPortfolioValueVisible,
       basis: fiatSeriesEnabled,
       price: fiatSeriesEnabled,
     }));
@@ -192,7 +182,6 @@ export const BtcActivityChart = ({
   const [hoveredActivityPoint, setHoveredActivityPoint] =
     React.useState<TreasuryChartPoint | null>(null);
   const previousFiatSeriesEnabled = React.useRef(fiatSeriesEnabled);
-  const previousPortfolioValueDefault = React.useRef(defaultPortfolioValueVisible);
   const previousBookKey = React.useRef(bookKey);
   const { active: activeSeries, handleHover } =
     useHoverHighlight<TreasuryChartSeriesKey>();
@@ -283,11 +272,7 @@ export const BtcActivityChart = ({
   React.useEffect(() => {
     setSeriesVisible((current) => ({
       ...current,
-      portfolioValue: defaultPortfolioValueVisible
-        ? previousPortfolioValueDefault.current
-          ? current.portfolioValue
-          : true
-        : false,
+      portfolioValue: fiatSeriesEnabled ? current.portfolioValue : false,
       basis: fiatSeriesEnabled
         ? previousFiatSeriesEnabled.current
           ? current.basis
@@ -300,8 +285,7 @@ export const BtcActivityChart = ({
         : false,
     }));
     previousFiatSeriesEnabled.current = fiatSeriesEnabled;
-    previousPortfolioValueDefault.current = defaultPortfolioValueVisible;
-  }, [defaultPortfolioValueVisible, fiatSeriesEnabled]);
+  }, [fiatSeriesEnabled]);
 
   React.useEffect(() => {
     if (typeof window === "undefined") return;
