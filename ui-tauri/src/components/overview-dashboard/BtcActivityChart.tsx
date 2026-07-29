@@ -32,6 +32,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { formatBtc, type Currency } from "@/lib/currency";
+import { macTitleBarInset } from "@/lib/titleBarInset";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
@@ -838,7 +839,10 @@ export const BtcActivityChart = ({
         />
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div
-            className="min-w-[220px]"
+            className={cn(
+              "min-w-[220px]",
+              expanded && macTitleBarInset && "ml-[72px]",
+            )}
             aria-label={t("treasury.chartLabel")}
           >
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
