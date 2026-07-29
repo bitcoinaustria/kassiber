@@ -837,7 +837,12 @@ export const BtcActivityChart = ({
           onGroupActivityDotsChange={setGroupActivityDots}
           hideSensitive={hideSensitive}
         />
-        <div className="flex flex-wrap items-start justify-between gap-2">
+        <div
+          data-tauri-drag-region={
+            expanded && macTitleBarInset ? "deep" : undefined
+          }
+          className="flex flex-wrap items-start justify-between gap-2"
+        >
           <div
             className={cn(
               "min-w-[220px]",
