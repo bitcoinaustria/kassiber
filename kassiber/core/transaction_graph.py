@@ -11,10 +11,11 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections import defaultdict
-from typing import Any, Mapping, NamedTuple, Sequence
+from typing import Any, Collection, Mapping, NamedTuple, Sequence
 
 from ..backends import (
     BACKEND_CONFIG_FIELDS,
+    BOOTSTRAP_DEFAULT_BACKEND_SETTING,
     DEFAULT_BACKEND_SETTING,
     DEFAULT_BACKENDS,
     _http_url_base,
@@ -1221,16 +1222,40 @@ def _graph_lookup_backends(
     default_chain: str = "bitcoin",
     default_network: str = "main",
 ) -> list[dict[str, Any]]:
+    """Backends this row's graph may be looked up against, best first.
+
+    The wallet's own backend leads: whatever observed this transaction is the
+    right thing to ask about it, and it is the one the user picked for this
+    wallet. Everything Kassiber ships as a convenience default is excluded — see
+    ``_is_user_provided_graph_backend`` — so a graph lookup only ever reaches
+    infrastructure the user chose. With nothing configured the caller surfaces
+    "add a backend" instead of silently querying a third party.
+    """
     chain, network = _row_chain_network(
         row,
         default_chain=default_chain,
         default_network=default_network,
     )
+    wallet_backend_name = _wallet_graph_backend_name(row)
+    chosen_names = {
+        name
+        for name in (
+            wallet_backend_name,
+            _explicitly_chosen_default_backend_name(conn, runtime_config),
+        )
+        if name
+    }
     candidates: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str, str]] = set()
 
     def append(candidate: dict[str, Any] | None) -> None:
         if candidate is None:
+            return
+        if not _is_user_provided_graph_backend(
+            candidate,
+            runtime_config,
+            chosen_names=chosen_names,
+        ):
             return
         normalized = _normalized_graph_lookup_backend(candidate)
         normalized_kind = normalize_backend_kind(normalized.get("kind"))
@@ -1245,6 +1270,7 @@ def _graph_lookup_backends(
         seen.add(identity)
         candidates.append(normalized)
 
+    append(_wallet_graph_backend(conn, wallet_backend_name, chain, network))
     for runtime_candidate in _runtime_graph_lookup_backends(runtime_config, chain, network):
         append(runtime_candidate)
     default_candidate = _default_graph_backend(conn, chain, network)
@@ -1254,6 +1280,105 @@ def _graph_lookup_backends(
     for configured in _configured_graph_backends(conn, chain, network):
         append(configured)
     return candidates
+
+
+def _wallet_graph_backend_name(row: Mapping[str, Any]) -> str | None:
+    config = _json_obj(_row_get(row, "wallet_config_json"))
+    name = _string_or_none(config.get("backend"))
+    return name.lower() if name else None
+
+
+def _wallet_graph_backend(
+    conn: sqlite3.Connection,
+    wallet_backend_name: str | None,
+    chain: str,
+    network: str,
+) -> dict[str, Any] | None:
+    """The backend the wallet itself syncs against, if it can answer a lookup.
+
+    This is what makes the graph independent of the observation method: a BDK or
+    LWK descriptor wallet points at its Esplora/Electrum server, a Core wallet at
+    its node, a Silent Payments wallet at its scanning Electrum server. Wallets
+    whose backend cannot serve a transaction lookup (BTCPay stores, exchange
+    connections) fall through to the user's other backends.
+    """
+    if not wallet_backend_name:
+        return None
+    row = conn.execute(
+        """
+        SELECT name, kind, chain, network, url, timeout, batch_size, tor_proxy, config_json
+        FROM backends
+        WHERE lower(name) = ?
+        LIMIT 1
+        """,
+        (wallet_backend_name,),
+    ).fetchone()
+    if row is None:
+        return None
+    backend = _graph_backend_from_row(row)
+    if not _graph_backend_matches(backend, chain, network):
+        return None
+    return backend
+
+
+def _is_user_provided_graph_backend(
+    backend: Mapping[str, Any],
+    runtime_config: Mapping[str, Any] | None,
+    *,
+    chosen_names: Collection[str],
+) -> bool:
+    """False for a convenience default the user never opted into.
+
+    Kassiber seeds a few public Bitcoin/Liquid servers so a fresh install can
+    sync, and the bootstrap default backend names one of them. Reaching for those
+    to draw a graph would send the txid of a transaction the user never asked to
+    publish to a third party. A shipped default counts as user-provided once the
+    user points a wallet at it, selects it as the default, marks it as their own
+    infrastructure, or defines it in the environment.
+    """
+    name = _string_or_none(backend.get("name"))
+    normalized_name = name.lower() if name else ""
+    if normalized_name not in DEFAULT_BACKENDS:
+        return True
+    if normalized_name in chosen_names:
+        return True
+    config = backend.get("config")
+    owner = backend.get("infrastructure_owner")
+    if owner is None and isinstance(config, Mapping):
+        owner = config.get("infrastructure_owner")
+    if str(owner or "").strip().lower() == "self":
+        return True
+    if isinstance(runtime_config, Mapping):
+        if normalized_name in set(runtime_config.get("dotenv_backends") or ()):
+            return True
+        overrides = runtime_config.get("process_env_overrides")
+        env_backends = (
+            overrides.get("backends", {}) if isinstance(overrides, Mapping) else {}
+        )
+        if isinstance(env_backends, Mapping) and env_backends.get(normalized_name):
+            return True
+    return False
+
+
+def _explicitly_chosen_default_backend_name(
+    conn: sqlite3.Connection,
+    runtime_config: Mapping[str, Any] | None,
+) -> str | None:
+    """The default backend the user actively selected, if any.
+
+    Bootstrap records the shipped default it installed, so "the default setting
+    names X" only proves a choice when it differs from what bootstrap put there —
+    or when the environment set it.
+    """
+    stored = _string_or_none(get_setting(conn, DEFAULT_BACKEND_SETTING))
+    bootstrap = _string_or_none(get_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING))
+    if stored and (bootstrap is None or stored.lower() != bootstrap.lower()):
+        return stored.lower()
+    if isinstance(runtime_config, Mapping):
+        name = _string_or_none(runtime_config.get("default_backend"))
+        if name and _runtime_default_choice_is_explicit(runtime_config, name):
+            return name.lower()
+    return None
 
 
 def _liquid_graph_lookup_backends(
@@ -1268,10 +1393,6 @@ def _liquid_graph_lookup_backends(
     )
     if chain != "liquid":
         return []
-    # Symmetry with the Bitcoin path: try every configured Liquid backend, but
-    # never silently fetch from a hardcoded third-party explorer. Without a
-    # configured Liquid backend we decline the lookup; the caller surfaces a
-    # warning and the UI still offers an explicit, user-initiated explorer link.
     return _graph_lookup_backends(
         conn,
         row,
@@ -1369,7 +1490,6 @@ def _runtime_graph_lookup_backends(
     names = [default_name] if default_name else []
     names.extend(sorted(str(name) for name in backends if str(name) not in names))
     default_candidate: dict[str, Any] | None = None
-    implicit_candidates: list[dict[str, Any]] = []
     candidates: list[dict[str, Any]] = []
     for name in names:
         backend = backends.get(name)
@@ -1385,13 +1505,13 @@ def _runtime_graph_lookup_backends(
                 default_candidate = None
             continue
         if _implicit_builtin_runtime_graph_backend(runtime_config, name, backend):
-            implicit_candidates.append(candidate)
             continue
         candidates.append(candidate)
     if default_candidate is not None:
         candidates.append(default_candidate)
-    if chain != "liquid" and implicit_candidates:
-        candidates.extend(implicit_candidates)
+    # Implicit shipped defaults are dropped for every chain by
+    # _is_user_provided_graph_backend; collecting them here would only add
+    # candidates that the caller then filters out.
     return [_normalized_graph_lookup_backend(candidate) for candidate in candidates]
 
 
@@ -1402,6 +1522,14 @@ def _runtime_default_graph_backend_is_explicit(
 ) -> bool:
     if not _implicit_builtin_runtime_graph_backend(runtime_config, name, backend):
         return True
+    return _runtime_default_choice_is_explicit(runtime_config, name)
+
+
+def _runtime_default_choice_is_explicit(
+    runtime_config: Mapping[str, Any],
+    name: str,
+) -> bool:
+    """Whether naming ``name`` as the default was a choice, not the bootstrap value."""
     normalized_name = str(name).strip().lower()
     bootstrap_default = str(runtime_config.get("bootstrap_default_backend") or "").strip().lower()
     if normalized_name and bootstrap_default and normalized_name != bootstrap_default:

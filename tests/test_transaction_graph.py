@@ -2088,6 +2088,162 @@ class TransactionGraphTest(unittest.TestCase):
         fetch.assert_called_once_with(DEFAULT_BACKENDS["mempool"]["url"], txid, timeout=5)
         self.assertEqual(payload["supportLevel"], "full")
 
+    def test_lookup_prefers_the_wallets_own_backend(self):
+        # Whatever observed the wallet is what the graph asks: this is what makes
+        # the panel independent of the observation method (BDK/LWK descriptor
+        # servers, a Core node, a Silent Payments scanner).
+        txid = "81" * 32
+        self.conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (
+                json.dumps(
+                    {"chain": "bitcoin", "network": "main", "backend": "wallet-node"}
+                ),
+                "wallet-a",
+            ),
+        )
+        for name, url in (("other-explorer", "https://other.example/api"), ("wallet-node", "https://wallet.example/api")):
+            create_db_backend(
+                self.conn,
+                name,
+                "mempool",
+                url,
+                chain="bitcoin",
+                network="main",
+                timeout=5,
+                commit=False,
+            )
+        fetched = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "82" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value": 600_000},
+                }
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 500_000}],
+        }
+        self._tx("wallet-backend-row", "wallet-a", "outbound", 500_000_000, txid, "{}")
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            return_value=fetched,
+        ) as fetch:
+            payload = self._graph("wallet-backend-row", allow_public_lookup=True)
+
+        fetch.assert_called_once_with("https://wallet.example/api", txid, timeout=5)
+        self.assertEqual(payload["supportLevel"], "full")
+
+    def test_lookup_declines_shipped_defaults_the_user_never_chose(self):
+        # A seeded convenience default must not receive the txid of a transaction
+        # the user never asked to publish.
+        txid = "83" * 32
+        for name in ("mempool", "fulcrum"):
+            spec = DEFAULT_BACKENDS[name]
+            create_db_backend(
+                self.conn,
+                name,
+                spec["kind"],
+                spec["url"],
+                chain="bitcoin",
+                network="main",
+                timeout=5,
+                commit=False,
+            )
+        set_setting(self.conn, "bootstrap_default_backend", "fulcrum")
+        set_setting(self.conn, "default_backend", "fulcrum")
+        self._tx("shipped-default-row", "wallet-a", "outbound", 500_000_000, txid, "{}")
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction"
+        ) as fetch, patch(
+            "kassiber.core.transaction_graph.ElectrumClient"
+        ) as electrum:
+            payload = self._graph("shipped-default-row", allow_public_lookup=True)
+
+        fetch.assert_not_called()
+        electrum.assert_not_called()
+        self.assertIn(
+            "bitcoin_reference_lookup_unavailable",
+            {warning["code"] for warning in payload["warnings"]},
+        )
+
+    def test_lookup_uses_a_shipped_default_the_user_pointed_a_wallet_at(self):
+        txid = "84" * 32
+        spec = DEFAULT_BACKENDS["mempool"]
+        create_db_backend(
+            self.conn,
+            "mempool",
+            spec["kind"],
+            spec["url"],
+            chain="bitcoin",
+            network="main",
+            timeout=5,
+            commit=False,
+        )
+        self.conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps({"chain": "bitcoin", "network": "main", "backend": "mempool"}), "wallet-a"),
+        )
+        fetched = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "85" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value": 600_000},
+                }
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 500_000}],
+        }
+        self._tx("chosen-default-row", "wallet-a", "outbound", 500_000_000, txid, "{}")
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            return_value=fetched,
+        ) as fetch:
+            payload = self._graph("chosen-default-row", allow_public_lookup=True)
+
+        fetch.assert_called_once_with(spec["url"], txid, timeout=5)
+        self.assertEqual(payload["supportLevel"], "full")
+
+    def test_lookup_uses_a_shipped_default_marked_as_own_infrastructure(self):
+        txid = "86" * 32
+        spec = DEFAULT_BACKENDS["mempool"]
+        create_db_backend(
+            self.conn,
+            "mempool",
+            spec["kind"],
+            spec["url"],
+            chain="bitcoin",
+            network="main",
+            timeout=5,
+            config={"infrastructure_owner": "self"},
+            commit=False,
+        )
+        fetched = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "87" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value": 600_000},
+                }
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 500_000}],
+        }
+        self._tx("own-default-row", "wallet-a", "outbound", 500_000_000, txid, "{}")
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            return_value=fetched,
+        ) as fetch:
+            payload = self._graph("own-default-row", allow_public_lookup=True)
+
+        fetch.assert_called_once_with(spec["url"], txid, timeout=5)
+        self.assertEqual(payload["supportLevel"], "full")
+
     def test_liquid_lookup_skips_implicit_builtin_runtime_backends(self):
         txid = "25" * 32
         runtime_config = {
