@@ -734,11 +734,6 @@ export const BtcActivityChart = ({
         <ChartControlsSheet
           open={controlsOpen}
           onOpenChange={setControlsOpen}
-          legendItems={legendItems}
-          seriesVisible={seriesVisible}
-          onToggleSeries={toggleSeries}
-          activeSeries={activeSeries}
-          onHoverSeries={handleHover}
           markerCount={activityPoints.length}
           visibleMarkerCount={visibleActivityMarkers.length}
           incomingMarkerCount={incomingActivityPoints.length}
@@ -750,6 +745,8 @@ export const BtcActivityChart = ({
           outgoingMarkerMinimumBtc={outgoingMarkerMinimumBtc}
           onOutgoingMarkerMinimumChange={setOutgoingMarkerMinimumBtc}
           onResetMarkerMinimums={resetActivityMarkerMinimums}
+          groupActivityDots={groupActivityDots}
+          onGroupActivityDotsChange={setGroupActivityDots}
           hideSensitive={hideSensitive}
         />
         <div className="flex flex-wrap items-start justify-between gap-2">

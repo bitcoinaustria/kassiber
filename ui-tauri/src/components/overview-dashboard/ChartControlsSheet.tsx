@@ -27,9 +27,6 @@ import {
   formatEditableActivityMarkerMinimum,
   serializeActivityMarkerMinimum,
   useActivityFlowColors,
-  type TreasuryChartSeriesKey,
-  type TreasuryLegendItem,
-  type TreasurySeriesVisibility,
 } from "./model";
 
 export function ActivityMarkerSlider({
@@ -81,11 +78,6 @@ export function ActivityMarkerSlider({
 export type ChartControlsSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  legendItems: TreasuryLegendItem[];
-  seriesVisible: TreasurySeriesVisibility;
-  onToggleSeries: (key: TreasuryChartSeriesKey) => void;
-  activeSeries: TreasuryChartSeriesKey | null;
-  onHoverSeries: (key: TreasuryChartSeriesKey | null) => void;
   markerCount: number;
   visibleMarkerCount: number;
   incomingMarkerCount: number;
@@ -97,6 +89,8 @@ export type ChartControlsSheetProps = {
   outgoingMarkerMinimumBtc: number;
   onOutgoingMarkerMinimumChange: (value: number) => void;
   onResetMarkerMinimums: () => void;
+  groupActivityDots: boolean;
+  onGroupActivityDotsChange: (value: boolean) => void;
   hideSensitive: boolean;
 };
 
@@ -152,14 +146,69 @@ export function ActivityLegendSwatch({ muted = false }: { muted?: boolean }) {
   );
 }
 
+// Incoming and outgoing are the same control twice over, so they render from
+// one row: same shape, same counts, only the flow colour differs.
+function MarkerMinimumRow({
+  id,
+  label,
+  sliderLabel,
+  color,
+  value,
+  onChange,
+  visibleCount,
+  totalCount,
+  hideSensitive,
+}: {
+  id: string;
+  label: string;
+  sliderLabel: string;
+  color: string;
+  value: number;
+  onChange: (value: number) => void;
+  visibleCount: number;
+  totalCount: number;
+  hideSensitive: boolean;
+}) {
+  const { t } = useTranslation("overview");
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-xs font-medium text-foreground">
+            <span
+              className="size-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: color }}
+              aria-hidden="true"
+            />
+            <span className="truncate">{label}</span>
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t("controls.dotsShownOfTotal", {
+              visible: formatCount(visibleCount),
+              total: formatCount(totalCount),
+            })}
+          </p>
+        </div>
+        <ActivityMarkerValueEditor
+          value={value}
+          onChange={onChange}
+          hidden={hideSensitive}
+        />
+      </div>
+      <ActivityMarkerSlider
+        id={id}
+        label={sliderLabel}
+        value={value}
+        color={color}
+        onChange={onChange}
+      />
+    </div>
+  );
+}
+
 export function ChartControlsSheet({
   open,
   onOpenChange,
-  legendItems,
-  seriesVisible,
-  onToggleSeries,
-  activeSeries,
-  onHoverSeries,
   markerCount,
   visibleMarkerCount,
   incomingMarkerCount,
@@ -171,6 +220,8 @@ export function ChartControlsSheet({
   outgoingMarkerMinimumBtc,
   onOutgoingMarkerMinimumChange,
   onResetMarkerMinimums,
+  groupActivityDots,
+  onGroupActivityDotsChange,
   hideSensitive,
 }: ChartControlsSheetProps) {
   const { t } = useTranslation(["overview", "common"]);
@@ -191,17 +242,12 @@ export function ChartControlsSheet({
               <SheetTitle className="truncate text-xl sm:text-2xl">
                 {t("controls.title")}
               </SheetTitle>
-              <SheetDescription className="mt-1 truncate">
-                {t("controls.description")}
+              <SheetDescription className="mt-1">
+                {t("controls.dotsVisible", {
+                  visible: formatCount(visibleMarkerCount),
+                  total: formatCount(markerCount),
+                })}
               </SheetDescription>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-2xs text-muted-foreground">
-                  {t("controls.dotsVisible", {
-                    visible: formatCount(visibleMarkerCount),
-                    total: formatCount(markerCount),
-                  })}
-                </span>
-              </div>
             </div>
             <Button
               type="button"
@@ -216,60 +262,28 @@ export function ChartControlsSheet({
         </SheetHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
+          {/* Series live in the legend row above the chart, the time range in
+              the chart's own footer toolbar. This panel is the dots. */}
           <div className="space-y-5 p-4 sm:p-6">
-            {/* The time range lives in the chart's own footer toolbar. */}
-            <ActivityFlowKey />
+            <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3 text-sm transition-colors hover:bg-muted/35">
+              <Checkbox
+                checked={groupActivityDots}
+                onCheckedChange={(checked) =>
+                  onGroupActivityDotsChange(checked === true)
+                }
+                className="mt-0.5"
+              />
+              <span className="min-w-0">
+                <span className="block text-xs font-medium text-foreground">
+                  {t("controls.groupDotsLabel")}
+                </span>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  {t("controls.mergedMarkersHint")}
+                </span>
+              </span>
+            </label>
 
-            <div className="rounded-md border p-3">
-              <p className="text-xs font-medium text-muted-foreground">
-                {t("controls.series")}
-              </p>
-              <div className="mt-3 space-y-1">
-                {legendItems.map((item) => (
-                  <label
-                    key={item.key}
-                    className={cn(
-                      "flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted/35",
-                      !seriesVisible[item.key] && "text-muted-foreground",
-                      activeSeries !== null &&
-                        activeSeries !== item.key &&
-                        "opacity-55",
-                    )}
-                    onMouseEnter={() => onHoverSeries(item.key)}
-                    onMouseLeave={() => onHoverSeries(null)}
-                  >
-                    <Checkbox
-                      checked={seriesVisible[item.key]}
-                      onCheckedChange={() => onToggleSeries(item.key)}
-                      aria-label={t("controls.showSeries", { label: item.label })}
-                      className="data-[state=checked]:border-[var(--chart-control-accent)] data-[state=checked]:bg-[var(--chart-control-accent)] data-[state=checked]:text-background"
-                      style={
-                        {
-                          "--chart-control-accent": item.color,
-                        } as React.CSSProperties
-                      }
-                    />
-                    {item.key === "events" ? (
-                      <ActivityLegendSwatch muted={!seriesVisible.events} />
-                    ) : (
-                      <span
-                        className={cn(
-                          "h-0.5 w-6 shrink-0 rounded-full",
-                          item.dashed && "border-t border-dashed bg-transparent",
-                        )}
-                        style={{
-                          backgroundColor: item.dashed ? "transparent" : item.color,
-                          borderColor: item.color,
-                        }}
-                      />
-                    )}
-                    <span className="truncate">{item.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-3 rounded-md border p-3">
+            <div className="space-y-4 rounded-md border p-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-muted-foreground">
@@ -291,64 +305,31 @@ export function ChartControlsSheet({
                   {t("common:actions.reset")}
                 </Button>
               </div>
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">
-                    {t("controls.incomingPayments")}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t("controls.minSizeWithCount", {
-                      visible: formatCount(visibleIncomingMarkerCount),
-                      total: formatCount(incomingMarkerCount),
-                    })}
-                  </p>
-                </div>
-                <ActivityMarkerValueEditor
-                  value={incomingMarkerMinimumBtc}
-                  onChange={onIncomingMarkerMinimumChange}
-                  hidden={hideSensitive}
-                />
-              </div>
-              <ActivityMarkerSlider
+              <MarkerMinimumRow
                 id="incoming-marker-minimum"
-                label={t("controls.incomingSliderAria")}
-                value={incomingMarkerMinimumBtc}
+                label={t("controls.incomingPayments")}
+                sliderLabel={t("controls.incomingSliderAria")}
                 color={activityFlowColors.incoming}
+                value={incomingMarkerMinimumBtc}
                 onChange={onIncomingMarkerMinimumChange}
+                visibleCount={visibleIncomingMarkerCount}
+                totalCount={incomingMarkerCount}
+                hideSensitive={hideSensitive}
               />
-              <p className="px-2 text-xs text-muted-foreground">
-                {t("controls.mergedMarkersHint")}
-              </p>
+              <MarkerMinimumRow
+                id="outgoing-marker-minimum"
+                label={t("controls.outgoingActivity")}
+                sliderLabel={t("controls.outgoingSliderAria")}
+                color={activityFlowColors.outgoing}
+                value={outgoingMarkerMinimumBtc}
+                onChange={onOutgoingMarkerMinimumChange}
+                visibleCount={visibleOutgoingMarkerCount}
+                totalCount={outgoingMarkerCount}
+                hideSensitive={hideSensitive}
+              />
             </div>
 
-            <div className="rounded-md border border-red-500/20 bg-red-500/5 p-3">
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <div>
-                  <p className="text-xs font-medium text-red-500 dark:text-red-400">
-                    {t("controls.outgoingActivity")}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {t("controls.minSizeWithCount", {
-                      visible: formatCount(visibleOutgoingMarkerCount),
-                      total: formatCount(outgoingMarkerCount),
-                    })}
-                  </p>
-                </div>
-                <ActivityMarkerValueEditor
-                  value={outgoingMarkerMinimumBtc}
-                  onChange={onOutgoingMarkerMinimumChange}
-                  className="text-red-500 dark:text-red-400"
-                  hidden={hideSensitive}
-                />
-              </div>
-              <ActivityMarkerSlider
-                id="outgoing-marker-minimum"
-                label={t("controls.outgoingSliderAria")}
-                value={outgoingMarkerMinimumBtc}
-                color={activityFlowColors.outgoing}
-                onChange={onOutgoingMarkerMinimumChange}
-              />
-            </div>
+            <ActivityFlowKey />
           </div>
         </div>
       </SheetContent>
