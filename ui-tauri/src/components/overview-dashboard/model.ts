@@ -162,7 +162,6 @@ export const INCOMING_MARKER_MIN_PARAM = "incomingMinBtc";
 export const OUTGOING_MARKER_MIN_PARAM = "outgoingMinBtc";
 export const Y_SCALE_PARAM = "scale";
 export const Y_AUTO_FIT_PARAM = "fit";
-export const ACTIVITY_MARKER_GROUPING_PARAM = "groupEvents";
 export const TREASURY_BRUSH_MIN_WINDOW_MS = (7 * 24 * 60 * 60 * 1000) / 3;
 export const TREASURY_BRUSH_MIN_INDEX_SPAN = 2;
 
@@ -242,7 +241,7 @@ export type ActivityMarkerView = {
   visibleActivityMarkers: TreasuryChartPoint[];
 };
 
-export type ActivityMarkerClusterOptions = {
+export type ActivityMarkerBucketOptions = {
   maxVisibleMarkers?: number;
 };
 
@@ -761,11 +760,6 @@ export function initialYScaleLogFromUrl(): boolean {
 export function initialYAutoFitFromUrl(): boolean {
   const value = urlParam(Y_AUTO_FIT_PARAM)?.toLowerCase();
   return value === "auto" || value === "1";
-}
-
-export function initialActivityMarkerGroupingFromUrl(): boolean {
-  const value = urlParam(ACTIVITY_MARKER_GROUPING_PARAM)?.toLowerCase();
-  return value === "1" || value === "true" || value === "on";
 }
 
 // A log scale has no place for zero: before the first funding the balance
@@ -1502,16 +1496,6 @@ export const activityFlowLabelKeys = {
   fee: "activityFlow.fee",
 } as const satisfies Record<ActivityFlow, string>;
 
-// English fallback labels, kept for call sites not yet migrated to i18n
-// (e.g. ActivityScatterDot's aria-label). Visible overview copy uses
-// `activityFlowLabelKeys` + `t()`.
-export const activityFlowLabels: Record<ActivityFlow, string> = {
-  incoming: "Received",
-  outgoing: "Spent",
-  movement: "Movement",
-  fee: "Fee",
-};
-
 // Marker colors need different weights per theme: the airy 400-tier hues read
 // well on the dark card but wash out on white, so light mode steps down to
 // the 600-tier of the same hues. Fee remains a flow for summaries/tooltips but
@@ -1801,17 +1785,7 @@ export function activityMarkerView(
   };
 }
 
-const DEFAULT_ACTIVITY_MARKER_CLUSTER_TARGET = 36;
-const MAX_ACTIVITY_CLUSTER_CANDIDATES = 256;
-// A cluster becomes both an SVG fanout and an exact `txids` URL payload.
-// Chunk dense runs so neither surface grows without bound while every event
-// remains reachable through a neighboring cluster marker.
-export const MAX_ACTIVITY_MARKER_GROUP_SIZE = 64;
-
-function markerGroupToleranceBtc(balanceBtc: number) {
-  return Math.max(Math.abs(balanceBtc) * 0.006, 0.00005);
-}
-
+const DEFAULT_ACTIVITY_MARKER_BUCKET_TARGET = 36;
 function dominantActivityFlow(points: TreasuryChartPoint[]): ActivityFlow {
   const totals: Record<ActivityFlow, number> = {
     incoming: 0,
@@ -1829,96 +1803,132 @@ function dominantActivityFlow(points: TreasuryChartPoint[]): ActivityFlow {
   )[0];
 }
 
-function representativeActivityPoint(points: TreasuryChartPoint[]) {
-  return points.reduce((winner, point) =>
-    (point.eventSize || point.activityBtc || 0) >
-    (winner.eventSize || winner.activityBtc || 0)
-      ? point
-      : winner,
-  );
+function mergedActivityMarker(group: TreasuryChartPoint[]): TreasuryChartPoint {
+  // Two provenances only: the anchor decides where the dot lands (x category
+  // and the balance it sits on), the last event decides every "after this"
+  // figure. Anything in between would put a Monday price next to a Friday
+  // position.
+  const anchor = group[0];
+  const last = group.at(-1) ?? anchor;
+  const sum = (pick: (point: TreasuryChartPoint) => number | undefined) =>
+    group.reduce((total, point) => total + (pick(point) ?? 0), 0);
+  const flows = new Set(group.map((point) => point.eventFlow).filter(Boolean));
+  const first = anchor.detailLabel;
+  const lastLabel = last.detailLabel;
+  return {
+    ...last,
+    date: anchor.date,
+    month: anchor.month,
+    detailLabel: first === lastLabel ? first : `${first} – ${lastLabel}`,
+    sortTimeMs: anchor.sortTimeMs,
+    markerBalanceBtc: anchor.markerBalanceBtc ?? anchor.balanceBtc,
+    // Everything numeric describes the whole bucket, not one member — a merged
+    // dot that reported one event's amount would just be a lie.
+    eventFlow: dominantActivityFlow(group),
+    // NOT the sum: `eventSize` is the ZAxis key, so summing would make dot area
+    // encode how many events merged rather than how big the moves were, and one
+    // dense bucket would squash every real transaction to the minimum radius.
+    eventSize: Math.max(
+      ...group.map((point) => point.eventSize || point.activityBtc || 0),
+    ),
+    activityBtc: sum((point) => point.activityBtc),
+    activityCount: group.length,
+    activityValueEur: sum((point) => point.activityValueEur),
+    eventSignedBtc: sum((point) => point.eventSignedBtc),
+    eventFeeBtc: sum((point) => point.eventFeeBtc),
+    eventFiatValueEur: sum((point) => point.eventFiatValueEur),
+    markerCount: group.length,
+    markerGroupedPoints: group,
+    markerMixedFlows: flows.size > 1,
+    // Single-event detail that no longer applies to a bucket.
+    eventAccount: undefined,
+    eventCounter: undefined,
+    eventTag: undefined,
+    eventType: undefined,
+    eventStatus: undefined,
+    eventConfirmations: undefined,
+    eventId: undefined,
+    eventTransactionId: undefined,
+  };
 }
 
-export function clusterActivityMarkers(
+// Stable slice order so a bucket's dot doesn't reshuffle between renders.
+const FLOW_ORDER: ActivityFlow[] = ["incoming", "movement", "outgoing", "fee"];
+
+export function activityFlowShares(points: TreasuryChartPoint[]) {
+  const totals = new Map<ActivityFlow, number>();
+  for (const point of points) {
+    const flow = point.eventFlow;
+    if (!flow) continue;
+    const weight = Math.max(point.eventSize || point.activityBtc || 0, 1e-9);
+    totals.set(flow, (totals.get(flow) ?? 0) + weight);
+  }
+  const total = [...totals.values()].reduce((sum, value) => sum + value, 0);
+  if (!total) return [];
+  return FLOW_ORDER.filter((flow) => totals.has(flow)).map((flow) => ({
+    flow,
+    share: (totals.get(flow) ?? 0) / total,
+  }));
+}
+
+// Pie slice from 12 o'clock, clockwise.
+export function activityFlowSlicePath(cx: number, cy: number, r: number, from: number, to: number) {
+  const point = (turn: number) => [
+    cx + r * Math.sin(turn * 2 * Math.PI),
+    cy - r * Math.cos(turn * 2 * Math.PI),
+  ];
+  const [x1, y1] = point(from);
+  const [x2, y2] = point(to);
+  const largeArc = to - from > 0.5 ? 1 : 0;
+  return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+}
+
+// Overlapping dots are a pixel problem, so solve them in pixel space. The x
+// axis spreads `displayData` evenly across the plot, which makes a category
+// index gap a proportional pixel gap: keeping every surviving marker at least
+// `length / maxVisibleMarkers` categories apart leaves them ~plot width /
+// maxVisibleMarkers pixels apart no matter how the events bunch up. Zooming
+// the brush shrinks `displayData`, so a bucket splits back into its events —
+// that, not a toggle, is the way to see individual dots.
+// ponytail: index gap instead of measuring the plot; measure with a
+// ResizeObserver if the card ever renders at a very different width.
+export function bucketActivityMarkers(
   markers: TreasuryChartPoint[],
-  options: ActivityMarkerClusterOptions = {},
+  displayData: TreasuryChartPoint[],
+  options: ActivityMarkerBucketOptions = {},
 ): TreasuryChartPoint[] {
   if (markers.length < 2) return markers;
-  const target = options.maxVisibleMarkers ?? DEFAULT_ACTIVITY_MARKER_CLUSTER_TARGET;
+  const target = Math.max(
+    1,
+    options.maxVisibleMarkers ?? DEFAULT_ACTIVITY_MARKER_BUCKET_TARGET,
+  );
+  const indexByDate = new Map(
+    displayData.map((point, index) => [String(point.date), index]),
+  );
+  const columnOf = (marker: TreasuryChartPoint) =>
+    indexByDate.get(String(marker.date)) ?? 0;
+  const minColumnGap = Math.max(1, Math.ceil(displayData.length / target));
   const ordered = [...markers].sort((a, b) => {
-    const timeDelta = a.sortTimeMs - b.sortTimeMs;
-    if (timeDelta !== 0) return timeDelta;
-    return (a.markerBalanceBtc ?? 0) - (b.markerBalanceBtc ?? 0);
+    const columnDelta = columnOf(a) - columnOf(b);
+    if (columnDelta !== 0) return columnDelta;
+    return a.sortTimeMs - b.sortTimeMs;
   });
-  const firstTime = ordered[0]?.sortTimeMs ?? 0;
-  const lastTime = ordered.at(-1)?.sortTimeMs ?? firstTime;
-  const densityBucketMs =
-    markers.length > target && lastTime > firstTime
-      ? Math.max((lastTime - firstTime) / target, 60 * 60 * 1000)
-      : 0;
+
   const groups: TreasuryChartPoint[][] = [];
-
+  let anchorColumn = Number.NEGATIVE_INFINITY;
   for (const marker of ordered) {
-    const markerBalance = marker.markerBalanceBtc ?? marker.balanceBtc;
-    const markerTime = marker.sortTimeMs;
-    let group: TreasuryChartPoint[] | undefined;
-    let candidatesChecked = 0;
-    for (
-      let index = groups.length - 1;
-      index >= 0 && candidatesChecked < MAX_ACTIVITY_CLUSTER_CANDIDATES;
-      index -= 1, candidatesChecked += 1
-    ) {
-      const candidate = groups[index];
-      if (!candidate || candidate.length >= MAX_ACTIVITY_MARKER_GROUP_SIZE) {
-        continue;
-      }
-      const anchor = candidate[0];
-      if (!anchor) continue;
-      const anchorBalance = anchor.markerBalanceBtc ?? anchor.balanceBtc;
-      const sameAnchor = String(anchor.date) === String(marker.date);
-      const nearbyDenseTime =
-        densityBucketMs > 0 && Math.abs(markerTime - anchor.sortTimeMs) <= densityBucketMs;
-      if (
-        (sameAnchor || nearbyDenseTime) &&
-        Math.abs(markerBalance - anchorBalance) <=
-          markerGroupToleranceBtc(anchorBalance)
-      ) {
-        group = candidate;
-        break;
-      }
-    }
-    if (group) {
-      group.push(marker);
-    } else {
+    const column = columnOf(marker);
+    if (column - anchorColumn >= minColumnGap) {
       groups.push([marker]);
-    }
-  }
-
-  const clustered: TreasuryChartPoint[] = [];
-  for (const group of groups) {
-    if (group.length === 1) {
-      clustered.push(group[0]);
+      anchorColumn = column;
       continue;
     }
-    const representative = representativeActivityPoint(group);
-    const eventFlow = dominantActivityFlow(group);
-    const eventSize = Math.max(
-      ...group.map((point) => point.eventSize || point.activityBtc || 0),
-    );
-    const flowCount = new Set(group.map((point) => point.eventFlow).filter(Boolean))
-      .size;
-    clustered.push({
-      ...representative,
-      eventFlow,
-      eventSize: eventSize * (1 + Math.min(group.length - 1, 8) * 0.12),
-      markerCount: group.length,
-      markerGroupedPoints: group,
-      markerMixedFlows: flowCount > 1,
-      eventId: undefined,
-      eventTransactionId: undefined,
-    });
+    groups.at(-1)?.push(marker);
   }
 
-  return clustered.sort((a, b) => a.sortTimeMs - b.sortTimeMs);
+  return groups.map((group) =>
+    group.length === 1 ? group[0] : mergedActivityMarker(group),
+  );
 }
 
 export function brushedActivityMarkers(

@@ -63,15 +63,33 @@ export function TreasuryTooltip({
       (a, b) =>
         (b.eventSize || b.activityBtc || 0) - (a.eventSize || a.activityBtc || 0),
     )
-    .slice(0, 5);
+    .slice(0, 8);
+  const mergedNetBtc = point.eventSignedBtc ?? 0;
+  // A bucket that nets to zero (a buy and a matching sell, or pure movement)
+  // is not a gain — only a strictly positive net earns the green.
   const eventTone =
-    eventFlow === "incoming"
-      ? "good"
-      : eventFlow === "outgoing" || eventFlow === "fee"
-        ? "bad"
-        : "neutral";
+    markerCount > 1
+      ? mergedNetBtc > 0
+        ? "good"
+        : mergedNetBtc < 0
+          ? "bad"
+          : "neutral"
+      : eventFlow === "incoming"
+        ? "good"
+        : eventFlow === "outgoing" || eventFlow === "fee"
+          ? "bad"
+          : "neutral";
+  const mergedIsNetless = markerCount > 1 && mergedNetBtc === 0;
   const eventAmount =
-    eventFlow === "movement"
+    // A merged dot reports the bucket's net, not one member's amount — unless
+    // the legs cancel out (transfers, swaps), where volume is the real story.
+    markerCount > 1
+      ? mergedIsNetless
+        ? t("tooltip.volume", {
+            value: formatBtc(point.activityBtc, { precision: 8 }),
+          })
+        : formatBtc(mergedNetBtc, { precision: 8, sign: true })
+      : eventFlow === "movement"
       ? t("tooltip.volume", {
           value: formatBtc(point.activityBtc, { precision: 8 }),
         })
@@ -102,7 +120,7 @@ export function TreasuryTooltip({
               </span>
               {markerCount > 1 && (
                 <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-2xs text-muted-foreground">
-                  {markerCount} events
+                  {t("tooltip.mergedEvents", { count: markerCount })}
                 </span>
               )}
               {point.eventType && (
@@ -115,16 +133,23 @@ export function TreasuryTooltip({
               {point.detailLabel ?? label}
             </p>
           </div>
-          <span
-            className={cn(
-              "shrink-0 text-right font-semibold tabular-nums",
-              eventTone === "good" && "text-emerald-500",
-              eventTone === "bad" && "text-[var(--kb-accent)]",
-              blurClass(hideSensitive),
+          <div className="shrink-0 text-right">
+            {markerCount > 1 && !mergedIsNetless && (
+              <div className="text-2xs text-muted-foreground">
+                {t("tooltip.netAmount")}
+              </div>
             )}
-          >
-            {eventAmount}
-          </span>
+            <span
+              className={cn(
+                "font-semibold tabular-nums",
+                eventTone === "good" && "text-emerald-500",
+                eventTone === "bad" && "text-[var(--kb-accent)]",
+                blurClass(hideSensitive),
+              )}
+            >
+              {eventAmount}
+            </span>
+          </div>
         </div>
 
         <div className="mt-3 space-y-1.5">
@@ -200,7 +225,11 @@ export function TreasuryTooltip({
           {fiatSeriesEnabled ? (
             <>
               <TooltipMetricRow
-                label={t("tooltip.fiatValue")}
+                label={
+                  markerCount > 1
+                    ? t("tooltip.fiatVolume")
+                    : t("tooltip.fiatValue")
+                }
                 value={formatPortfolioMoney(
                   point.eventFiatValueEur ?? 0,
                   priceEur,
@@ -239,19 +268,21 @@ export function TreasuryTooltip({
               hidden={hideSensitive}
             />
           ) : null}
-          <TooltipMetricRow
-            label={t("tooltip.status")}
-            value={
-              point.eventStatus === "confirmed"
-                ? t("tooltip.confirmations", {
-                    count: point.eventConfirmations ?? 0,
-                  })
-                : point.eventStatus
-                  ? t(statusLabelKeys[point.eventStatus])
-                  : t("tooltip.unknown")
-            }
-            hidden={false}
-          />
+          {point.eventStatus !== undefined || markerCount <= 1 ? (
+            <TooltipMetricRow
+              label={t("tooltip.status")}
+              value={
+                point.eventStatus === "confirmed"
+                  ? t("tooltip.confirmations", {
+                      count: point.eventConfirmations ?? 0,
+                    })
+                  : point.eventStatus
+                    ? t(statusLabelKeys[point.eventStatus])
+                    : t("tooltip.unknown")
+              }
+              hidden={false}
+            />
+          ) : null}
           {(point.eventTag || eventId) && (
             <div className="flex flex-wrap gap-1.5 pt-1">
               {point.eventTag && (

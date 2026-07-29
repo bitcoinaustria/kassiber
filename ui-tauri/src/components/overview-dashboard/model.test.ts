@@ -10,7 +10,7 @@ import {
   brushedActivityMarkers,
   buildBalanceRailItems,
   buildHoldingsBySource,
-  clusterActivityMarkers,
+  bucketActivityMarkers,
   enrichTreasuryChartData,
   formatBtcAxisFitted,
   formatCompactDisplayMoney,
@@ -18,14 +18,12 @@ import {
   formatMarketRateValue,
   formatRelativeMarketRateTime,
   getDataForPeriod,
-  initialActivityMarkerGroupingFromUrl,
   initialTimePeriodFromUrl,
   isPointInPeriod,
   lastTreasuryLineValue,
   linearAxisTicks,
   logAxisTicks,
   logSafeTreasuryPoints,
-  MAX_ACTIVITY_MARKER_GROUP_SIZE,
   latestPortfolioBalanceBtc,
   marketRateCompactLabel,
   marketRateDetailLabel,
@@ -36,6 +34,41 @@ import {
   resolveAutoTimePeriod,
   type TreasuryChartPoint,
 } from "./model";
+
+// One synthetic chart point per rendered column, so a bucketing test can talk
+// about columns instead of hand-rolling a snapshot.
+function activityMarkerFixture(
+  column: number,
+  baseTime: number,
+  overrides: Partial<TreasuryChartPoint> = {},
+): TreasuryChartPoint {
+  const date = `column-${column}`;
+  return {
+    date,
+    month: date,
+    detailLabel: date,
+    thisYear: 100_000,
+    balanceBtc: 28,
+    valueEur: 100_000,
+    costBasisEur: 80_000,
+    unrealizedEur: 20_000,
+    bitcoinPriceEur: 100_000,
+    avgCostEur: 80_000,
+    brushBalanceBtc: 28,
+    reserveValueEur: 100_000,
+    activityBtc: 0.01,
+    activityCount: 1,
+    activityValueEur: 1_000,
+    eventSize: 0.01,
+    eventFlow: column % 3 === 0 ? "incoming" : "outgoing",
+    eventSignedBtc: column % 3 === 0 ? 0.01 : -0.01,
+    eventTransactionId: `tx-${column}`,
+    markerBalanceBtc: 28,
+    sortTimeMs: baseTime + column * 60 * 60 * 1000,
+    isActivityEvent: true,
+    ...overrides,
+  };
+}
 
 describe("overview market rate display", () => {
   it("formats the active book fiat rate with source and sync metadata", () => {
@@ -538,7 +571,7 @@ describe("overview treasury chart", () => {
       .toEqual(["tx-transfer", "tx-swap"]);
   });
 
-  it("clusters overlapping activity markers on the same chart anchor", () => {
+  it("merges overlapping activity markers on the same chart anchor", () => {
     const snapshot: OverviewSnapshot = {
       ...MOCK_OVERVIEW,
       portfolioSeries: [
@@ -587,95 +620,145 @@ describe("overview treasury chart", () => {
       "all",
     );
     const markerView = activityMarkerView(points, true, () => 0, false);
-    const clustered = clusterActivityMarkers(markerView.visibleActivityMarkers);
+    const bucketed = bucketActivityMarkers(
+      markerView.visibleActivityMarkers,
+      markerView.chartDisplayData,
+    );
 
-    expect(clustered).toHaveLength(1);
-    expect(clustered[0]?.markerCount).toBe(2);
-    expect(clustered[0]?.markerGroupedPoints?.map((point) => point.eventTransactionId))
+    expect(bucketed).toHaveLength(1);
+    expect(bucketed[0]?.markerCount).toBe(2);
+    expect(bucketed[0]?.markerGroupedPoints?.map((point) => point.eventTransactionId))
       .toEqual(["tx-one", "tx-two"]);
+    // +0.001 in, -0.0005 out: the dot reports the bucket's net, not either leg.
+    expect(bucketed[0]?.eventSignedBtc).toBeCloseTo(0.0005, 8);
+    expect(bucketed[0]?.markerMixedFlows).toBe(true);
   });
 
-  it("density-clusters long near-horizontal marker runs", () => {
+  it("keeps merged markers at least one column gap apart", () => {
     const baseTime = Date.parse("2026-01-01T00:00:00Z");
-    const markers = Array.from({ length: 64 }, (_, index) => ({
-      date: new Date(baseTime + index * 60 * 60 * 1000).toISOString(),
-      month: "Jan",
-      detailLabel: "Jan",
-      thisYear: 100_000,
-      balanceBtc: 28 + (index % 2) * 0.00002,
-      valueEur: 100_000,
-      costBasisEur: 80_000,
-      unrealizedEur: 20_000,
-      bitcoinPriceEur: 100_000,
-      avgCostEur: 80_000,
-      brushBalanceBtc: 28,
-      reserveValueEur: 100_000,
-      activityBtc: 0.01,
-      activityCount: 1,
-      activityValueEur: 1_000,
-      eventSize: 0.01,
-      eventFlow: index % 3 === 0 ? "incoming" : "outgoing",
-      eventTransactionId: `tx-${index}`,
-      markerBalanceBtc: 28 + (index % 2) * 0.00002,
-      sortTimeMs: baseTime + index * 60 * 60 * 1000,
-      isActivityEvent: true,
-    })) satisfies TreasuryChartPoint[];
+    const displayData = Array.from({ length: 160 }, (_, index) =>
+      activityMarkerFixture(index, baseTime, { isActivityEvent: false }),
+    );
+    // 240 events crammed into 160 rendered columns — the shape that used to
+    // draw dozens of dots on top of each other.
+    const markers = Array.from({ length: 240 }, (_, index) =>
+      activityMarkerFixture(Math.floor(index / 1.5), baseTime),
+    );
 
-    const clustered = clusterActivityMarkers(markers, { maxVisibleMarkers: 16 });
+    const bucketed = bucketActivityMarkers(markers, displayData, {
+      maxVisibleMarkers: 16,
+    });
+    const columns = bucketed.map((marker) =>
+      displayData.findIndex((point) => point.date === marker.date),
+    );
 
-    expect(clustered.length).toBeLessThanOrEqual(16);
+    expect(bucketed.length).toBeLessThanOrEqual(16);
+    for (let index = 1; index < columns.length; index += 1) {
+      expect(columns[index] - columns[index - 1]).toBeGreaterThanOrEqual(10);
+    }
+    // Nothing is dropped: every event stays reachable through its bucket.
     expect(
-      clustered.flatMap((point) =>
-        (point.markerGroupedPoints ?? [point])
-          .map((groupedPoint) => groupedPoint.eventTransactionId)
-          .filter(Boolean),
+      bucketed.flatMap(
+        (marker) => marker.markerGroupedPoints ?? [marker],
       ),
-    ).toHaveLength(64);
+    ).toHaveLength(240);
   });
 
-  it("bounds each cluster payload without dropping activity events", () => {
+  it("splits a bucket back apart as the visible window zooms in", () => {
     const baseTime = Date.parse("2026-01-01T00:00:00Z");
-    const markers = Array.from(
-      { length: MAX_ACTIVITY_MARKER_GROUP_SIZE * 2 + 1 },
-      (_, index) => ({
-        date: "2026-01-01",
-        month: "Jan",
-        detailLabel: "Jan",
-        thisYear: 100_000,
-        balanceBtc: 28,
-        valueEur: 100_000,
-        costBasisEur: 80_000,
-        unrealizedEur: 20_000,
-        bitcoinPriceEur: 100_000,
-        avgCostEur: 80_000,
-        brushBalanceBtc: 28,
-        reserveValueEur: 100_000,
-        activityBtc: 0.01,
-        activityCount: 1,
-        activityValueEur: 1_000,
-        eventSize: 0.01,
-        eventFlow: "incoming" as const,
-        eventTransactionId: `tx-${index}`,
-        markerBalanceBtc: 28,
-        sortTimeMs: baseTime + index * 60_000,
-        isActivityEvent: true,
+    const displayData = Array.from({ length: 8 }, (_, index) =>
+      activityMarkerFixture(index, baseTime, { isActivityEvent: false }),
+    );
+    const markers = [0, 1, 2].map((index) =>
+      activityMarkerFixture(index, baseTime),
+    );
+
+    expect(
+      bucketActivityMarkers(markers, displayData, { maxVisibleMarkers: 2 }),
+    ).toHaveLength(1);
+    expect(
+      bucketActivityMarkers(markers, displayData, { maxVisibleMarkers: 8 }),
+    ).toHaveLength(3);
+  });
+
+  it("reports the whole bucket, not its loudest member", () => {
+    const baseTime = Date.parse("2026-01-01T00:00:00Z");
+    const displayData = Array.from({ length: 4 }, (_, index) =>
+      activityMarkerFixture(index, baseTime, { isActivityEvent: false }),
+    );
+    const markers = [
+      activityMarkerFixture(0, baseTime, {
+        eventFlow: "incoming",
+        eventSize: 0.2,
+        activityBtc: 0.2,
+        eventSignedBtc: 0.2,
+        eventFeeBtc: 0.0001,
+        eventFiatValueEur: 200,
+        markerBalanceBtc: 5,
+        balanceBtc: 5,
+        avgCostEur: 1_000,
+        eventTransactionId: "tx-small",
+        eventStatus: "confirmed",
+        eventCounter: "Payroll",
       }),
-    ) satisfies TreasuryChartPoint[];
+      activityMarkerFixture(1, baseTime, {
+        eventFlow: "outgoing",
+        eventSize: 3,
+        activityBtc: 3,
+        eventSignedBtc: -3,
+        eventFeeBtc: 0.0002,
+        eventFiatValueEur: 3_000,
+        markerBalanceBtc: 2,
+        balanceBtc: 2,
+        avgCostEur: 2_000,
+        eventTransactionId: "tx-big",
+        eventStatus: "pending",
+        eventCounter: "Exchange",
+      }),
+    ];
 
-    const clustered = clusterActivityMarkers(markers, { maxVisibleMarkers: 16 });
-    const groupedPoints = clustered.flatMap((point) =>
-      point.markerGroupedPoints ?? [point],
-    );
+    const [bucket] = bucketActivityMarkers(markers, displayData, {
+      maxVisibleMarkers: 1,
+    });
 
-    expect(clustered).toHaveLength(3);
+    // Anchored on the first event: that is where the dot is drawn.
+    expect(bucket.date).toBe("column-0");
+    expect(bucket.markerBalanceBtc).toBe(5);
+    // "After this" figures come from the last event, never the biggest.
+    expect(bucket.balanceBtc).toBe(2);
+    expect(bucket.avgCostEur).toBe(2_000);
+    // Amounts are bucket-wide sums.
+    expect(bucket.eventSignedBtc).toBeCloseTo(-2.8, 10);
+    expect(bucket.activityBtc).toBeCloseTo(3.2, 10);
+    expect(bucket.eventFeeBtc).toBeCloseTo(0.0003, 10);
+    expect(bucket.eventFiatValueEur).toBe(3_200);
+    // eventSize drives the ZAxis: it must stay the largest single move, or one
+    // dense bucket squashes every real transaction to the minimum radius.
+    expect(bucket.eventSize).toBe(3);
+    // Single-event detail must not survive into a bucket.
+    expect(bucket.eventTransactionId).toBeUndefined();
+    expect(bucket.eventStatus).toBeUndefined();
+    expect(bucket.eventCounter).toBeUndefined();
+    // Every member stays reachable for the tooltip list and the click href.
     expect(
-      Math.max(
-        ...clustered.map((point) => point.markerGroupedPoints?.length ?? 1),
-      ),
-    ).toBe(MAX_ACTIVITY_MARKER_GROUP_SIZE);
-    expect(groupedPoints.map((point) => point.eventTransactionId)).toHaveLength(
-      markers.length,
+      bucket.markerGroupedPoints?.map((point) => point.eventTransactionId),
+    ).toEqual(["tx-small", "tx-big"]);
+    expect(bucket.markerCount).toBe(2);
+    expect(bucket.markerMixedFlows).toBe(true);
+  });
+
+  it("survives a display window that shares no dates with the markers", () => {
+    const baseTime = Date.parse("2026-01-01T00:00:00Z");
+    const markers = [0, 1].map((index) =>
+      activityMarkerFixture(index, baseTime),
     );
+
+    // Degenerate inputs must not throw or lose events.
+    expect(bucketActivityMarkers(markers, [])).toHaveLength(1);
+    expect(
+      bucketActivityMarkers(markers, [], { maxVisibleMarkers: 0 }),
+    ).toHaveLength(1);
+    expect(bucketActivityMarkers([], [])).toEqual([]);
   });
 });
 
@@ -726,18 +809,6 @@ describe("chart scale helpers", () => {
 
     vi.stubGlobal("window", { location: { search: "?period=30d" } });
     expect(initialTimePeriodFromUrl("5years")).toBe("30days");
-    vi.unstubAllGlobals();
-  });
-
-  it("keeps nearby-event grouping off unless the URL explicitly enables it", () => {
-    vi.stubGlobal("window", { location: { search: "" } });
-    expect(initialActivityMarkerGroupingFromUrl()).toBe(false);
-
-    vi.stubGlobal("window", { location: { search: "?groupEvents=1" } });
-    expect(initialActivityMarkerGroupingFromUrl()).toBe(true);
-
-    vi.stubGlobal("window", { location: { search: "?groupEvents=0" } });
-    expect(initialActivityMarkerGroupingFromUrl()).toBe(false);
     vi.unstubAllGlobals();
   });
 

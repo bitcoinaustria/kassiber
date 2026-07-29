@@ -324,6 +324,11 @@
       "activity": "Activity"
     },
     "chartLabel": "BTC activity chart",
+    "marker": {
+      "openTransaction": "Open {{flow}} transaction",
+      "openGroup_one": "Open {{count}} transaction",
+      "openGroup_other": "Open {{count}} merged transactions"
+    },
     "title": "BTC activity",
     "asOf": "As of {{date}}",
     "currentSnapshot": "Current snapshot",
@@ -350,6 +355,7 @@
     "source": "Source",
     "counterparty": "Counterparty",
     "fiatValue": "Fiat value",
+    "fiatVolume": "Fiat volume",
     "btcPrice": "BTC price",
     "fee": "Fee",
     "positionAfter": "Position after",
@@ -362,7 +368,10 @@
     "avgBasis": "Avg cost / BTC",
     "unrealized": "Unrealized",
     "volume": "{{value}} volume",
-    "groupedEvents": "Grouped events",
+    "mergedEvents_one": "{{count}} event",
+    "mergedEvents_other": "{{count}} events",
+    "netAmount": "Net",
+    "groupedEvents": "Events in this dot",
     "groupedMore_one": "+ {{count}} more event",
     "groupedMore_other": "+ {{count}} more events"
   },
@@ -390,8 +399,7 @@
     "minSizeWithCount": "Minimum size in BTC · {{visible}} of {{total}} dots shown",
     "incomingSliderAria": "Minimum incoming payment dot size in BTC",
     "outgoingSliderAria": "Minimum outgoing activity dot size in BTC",
-    "groupActivityMarkers": "Group nearby events",
-    "groupActivityMarkersHint": "Cluster overlapping dots; hover to inspect, click a cluster to filter the table.",
+    "mergedMarkersHint": "Dots that would overlap merge into one, labelled with the event count. Zoom in with the range slider below the chart to split apart events on different days; same-day events always share a dot — hover it to list them.",
     "customMinTitle": "Click to enter a custom BTC minimum",
     "customMinAria": "Custom marker minimum in BTC"
   },

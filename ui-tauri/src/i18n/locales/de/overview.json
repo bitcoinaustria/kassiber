@@ -324,6 +324,11 @@
       "activity": "Aktivität"
     },
     "chartLabel": "BTC-Aktivitätsdiagramm",
+    "marker": {
+      "openTransaction": "Transaktion ({{flow}}) öffnen",
+      "openGroup_one": "{{count}} Transaktion öffnen",
+      "openGroup_other": "{{count}} zusammengefasste Transaktionen öffnen"
+    },
     "title": "BTC-Aktivität",
     "asOf": "Stand {{date}}",
     "currentSnapshot": "Aktueller Snapshot",
@@ -350,6 +355,7 @@
     "source": "Quelle",
     "counterparty": "Gegenpartei",
     "fiatValue": "Fiat-Wert",
+    "fiatVolume": "Fiat-Volumen",
     "btcPrice": "BTC-Kurs",
     "fee": "Gebühr",
     "positionAfter": "Position danach",
@@ -362,7 +368,10 @@
     "avgBasis": "Ø Kosten / BTC",
     "unrealized": "Unrealisiert",
     "volume": "{{value}} Volumen",
-    "groupedEvents": "Gruppierte Ereignisse",
+    "mergedEvents_one": "{{count}} Ereignis",
+    "mergedEvents_other": "{{count}} Ereignisse",
+    "netAmount": "Netto",
+    "groupedEvents": "Ereignisse in diesem Punkt",
     "groupedMore_one": "+ {{count}} weiteres Ereignis",
     "groupedMore_other": "+ {{count}} weitere Ereignisse"
   },
@@ -390,8 +399,7 @@
     "minSizeWithCount": "Mindestgröße in BTC · {{visible}} von {{total}} Punkten gezeigt",
     "incomingSliderAria": "Mindestgröße eingehender Zahlungspunkte in BTC",
     "outgoingSliderAria": "Mindestgröße ausgehender Aktivitätspunkte in BTC",
-    "groupActivityMarkers": "Nahe Ereignisse gruppieren",
-    "groupActivityMarkersHint": "Überlappende Punkte clustern; per Hover prüfen, per Klick die Tabelle filtern.",
+    "mergedMarkersHint": "Punkte, die sich überlappen würden, werden zu einem zusammengefasst und mit der Anzahl beschriftet. Zoom mit dem Bereichsregler unter dem Diagramm hinein, um Ereignisse an verschiedenen Tagen aufzuteilen; Ereignisse am selben Tag teilen sich immer einen Punkt — fahr mit der Maus darüber, um sie aufzulisten.",
     "customMinTitle": "Klicke, um eine eigene BTC-Mindestgröße einzugeben",
     "customMinAria": "Eigene Marker-Mindestgröße in BTC"
   },

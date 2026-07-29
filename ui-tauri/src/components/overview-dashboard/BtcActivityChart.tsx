@@ -41,13 +41,12 @@ import { ChartControlsSheet } from "./ChartControlsSheet";
 import {
   activeMarketFiatCurrency,
   activeMarketFiatRate,
-  ACTIVITY_MARKER_GROUPING_PARAM,
   activityFlowPalettes,
   activityMarkerView,
   autoFitDomain,
   brushedActivityMarkers,
   blurClass,
-  clusterActivityMarkers,
+  bucketActivityMarkers,
   defaultTreasurySeriesVisibility,
   DEFAULT_INCOMING_MARKER_MIN_BTC,
   DEFAULT_OUTGOING_MARKER_MIN_BTC,
@@ -60,7 +59,6 @@ import {
   fullTreasuryBrushRange,
   getDataForPeriod,
   hasTreasuryChartData,
-  initialActivityMarkerGroupingFromUrl,
   initialActivityMarkerMinimumFromUrl,
   initialTimePeriodFromUrl,
   initialYAutoFitFromUrl,
@@ -152,9 +150,6 @@ export const BtcActivityChart = ({
     initialYAutoFitFromUrl,
   );
   const [showLastValue, setShowLastValue] = React.useState(true);
-  const [groupActivityMarkers, setGroupActivityMarkers] = React.useState(
-    initialActivityMarkerGroupingFromUrl,
-  );
   const defaultPortfolioValueVisible = shouldShowPortfolioValueByDefault(
     fiatSeriesEnabled,
     currency,
@@ -333,6 +328,8 @@ export const BtcActivityChart = ({
           serializeActivityMarkerMinimum(outgoingMarkerMinimumBtc),
         );
       }
+      // The grouping toggle is gone; clear its param off bookmarked URLs.
+      params.delete("groupEvents");
       if (yScaleLog) {
         params.set(Y_SCALE_PARAM, "log");
       } else {
@@ -343,11 +340,6 @@ export const BtcActivityChart = ({
       } else {
         params.delete(Y_AUTO_FIT_PARAM);
       }
-      if (groupActivityMarkers) {
-        params.set(ACTIVITY_MARKER_GROUPING_PARAM, "1");
-      } else {
-        params.delete(ACTIVITY_MARKER_GROUPING_PARAM);
-      }
       const nextQuery = params.toString();
       const nextUrl = nextQuery
         ? `${window.location.pathname}?${nextQuery}`
@@ -356,7 +348,6 @@ export const BtcActivityChart = ({
     }, 150);
     return () => window.clearTimeout(timeout);
   }, [
-    groupActivityMarkers,
     incomingMarkerMinimumBtc,
     outgoingMarkerMinimumBtc,
     period,
@@ -526,17 +517,22 @@ export const BtcActivityChart = ({
       visibleActivityMarkers,
       selectedChartDisplayData,
     );
-    const selectedClusteredActivityMarkers = groupActivityMarkers
-      ? clusterActivityMarkers(selectedActivityMarkers, {
-          maxVisibleMarkers: expanded ? 56 : 32,
-        })
-      : selectedActivityMarkers;
     const plotData = yScaleLog
       ? logSafeTreasuryPoints(selectedChartDisplayData)
       : selectedChartDisplayData;
-    const plotMarkers = yScaleLog
-      ? logSafeActivityMarkers(selectedClusteredActivityMarkers)
-      : selectedClusteredActivityMarkers;
+    // Drop log-undrawable markers BEFORE bucketing: a bucket takes its x and y
+    // from its anchor, so a zero-balance anchor would filter out every event
+    // merged behind it.
+    const drawableActivityMarkers = yScaleLog
+      ? logSafeActivityMarkers(selectedActivityMarkers)
+      : selectedActivityMarkers;
+    // Always bucketed: overlapping dots are never useful, and zooming the
+    // brush is what splits a bucket back into its events.
+    const plotMarkers = bucketActivityMarkers(
+      drawableActivityMarkers,
+      selectedChartDisplayData,
+      { maxVisibleMarkers: expanded ? 56 : 32 },
+    );
     const btcAxisValues = [
       ...(seriesVisible.primary
         ? plotData.map((point) => point.lineBalanceBtc)
@@ -752,8 +748,6 @@ export const BtcActivityChart = ({
           outgoingMarkerMinimumBtc={outgoingMarkerMinimumBtc}
           onOutgoingMarkerMinimumChange={setOutgoingMarkerMinimumBtc}
           onResetMarkerMinimums={resetActivityMarkerMinimums}
-          groupActivityMarkers={groupActivityMarkers}
-          onGroupActivityMarkersChange={setGroupActivityMarkers}
           hideSensitive={hideSensitive}
         />
         <div className="flex flex-wrap items-start justify-between gap-2">
