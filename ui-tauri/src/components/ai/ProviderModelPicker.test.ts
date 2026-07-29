@@ -8,6 +8,7 @@ import {
   providerRuntimeSelectable,
   providerRuntimeTone,
   shouldPollProviderModels,
+  sortModelRowsByPosture,
 } from "./providerModelSearch";
 import {
   ClaudeIcon,
@@ -34,6 +35,42 @@ describe("filterModelRows", () => {
     expect(filterModelRows(models, "claude anthropic")).toEqual([models[1]]);
     expect(filterModelRows(models, "openai 5.4")).toEqual([models[0]]);
     expect(filterModelRows(models, "missing")).toEqual([]);
+  });
+});
+
+describe("sortModelRowsByPosture", () => {
+  const provider = {
+    name: "mixed",
+    kind: "remote",
+    base_url: "https://example.invalid",
+  } as Parameters<typeof sortModelRowsByPosture>[0];
+
+  it("puts on-device models above TEE above off-device, order preserved within", () => {
+    const models = [
+      { id: "cloud-b", privacy_posture: "remote" as const },
+      { id: "on-device-a", privacy_posture: "local" as const },
+      { id: "cloud-a", privacy_posture: "remote" as const },
+      { id: "enclave", privacy_posture: "tee" as const },
+      { id: "on-device-b", privacy_posture: "local" as const },
+    ];
+
+    expect(sortModelRowsByPosture(provider, models).map((m) => m.id)).toEqual([
+      "on-device-a",
+      "on-device-b",
+      "enclave",
+      // Input order inside a posture group is kept: cloud-b came first.
+      "cloud-b",
+      "cloud-a",
+    ]);
+  });
+
+  it("falls back to the provider kind when a model declares no posture", () => {
+    const models = [{ id: "default" }, { id: "on-device", privacy_posture: "local" as const }];
+
+    expect(sortModelRowsByPosture(provider, models).map((m) => m.id)).toEqual([
+      "on-device",
+      "default",
+    ]);
   });
 });
 

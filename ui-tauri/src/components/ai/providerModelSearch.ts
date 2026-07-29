@@ -68,6 +68,29 @@ export function modelPrivacyPosture(
   return model.privacy_posture ?? provider.kind;
 }
 
+/** Privacy-first row order: on-device, then TEE, then anything off-device. */
+const POSTURE_RANK: Record<AiProviderRow["kind"], number> = {
+  local: 0,
+  tee: 1,
+  remote: 2,
+};
+
+/**
+ * Sort a provider's models by privacy posture, leaving the order inside each
+ * posture untouched (`Array.sort` is stable) so the deliberate
+ * default-model-first / selected-model-first placement survives.
+ */
+export function sortModelRowsByPosture(
+  provider: AiProviderRow,
+  models: AiModelsListData["models"],
+): AiModelsListData["models"] {
+  return [...models].sort(
+    (a, b) =>
+      POSTURE_RANK[modelPrivacyPosture(provider, a)] -
+      POSTURE_RANK[modelPrivacyPosture(provider, b)],
+  );
+}
+
 export function filterModelsByPrivacy(
   provider: AiProviderRow,
   models: AiModelsListData["models"],

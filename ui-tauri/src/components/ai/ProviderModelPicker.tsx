@@ -58,6 +58,7 @@ import {
   dedupeProviderRows,
   filterModelsByPrivacy,
   filterModelRows,
+  sortModelRowsByPosture,
   modelPrivacyPosture,
   providerRuntimeSelectable,
   providerRuntimeTone,
@@ -437,7 +438,12 @@ export function ProviderModelPicker({
     : activeGroup
       ? modelSnapshotsByProvider.get(activeGroup.provider.name)
       : undefined;
-  const filteredModels = filterModelRows(activeGroup?.models ?? [], search);
+  const filteredModels = activeGroup
+    ? sortModelRowsByPosture(
+        activeGroup.provider,
+        filterModelRows(activeGroup.models, search),
+      )
+    : [];
 
   const selectModel = async (provider: AiProviderRow, model: string) => {
     if (provider.kind !== "local" && !provider.acknowledged_at) {
