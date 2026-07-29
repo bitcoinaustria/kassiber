@@ -312,7 +312,10 @@ const shellIconButtonClassName =
  */
 /* Same recipe on the nav surface, where hover/glyph read from `sidebar-*`. */
 const navIconButtonClassName =
-  "size-7 shrink-0 rounded-md border border-transparent text-sidebar-foreground hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar [&>svg]:text-sidebar-muted-foreground hover:[&>svg]:text-sidebar-foreground";
+  // Sized off the same variables as the nav rows: 8 tall next to an h-8 row when
+  // expanded, and the rail's own icon metrics when collapsed, so the collapse
+  // trigger reads as one of the sidebar's buttons rather than a stray control.
+  "size-8 shrink-0 rounded-md border border-transparent text-sidebar-foreground hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar [&>svg]:text-sidebar-muted-foreground hover:[&>svg]:text-sidebar-foreground group-data-[collapsible=icon]:size-(--sidebar-icon-button) group-data-[collapsible=icon]:[&>svg]:size-(--sidebar-icon-glyph)";
 const navRowClassName =
   "h-8 gap-2 rounded-md text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground data-[active=true]:bg-sidebar-row-active data-[active=true]:text-sidebar-foreground";
 const navSubRowClassName =
@@ -1724,7 +1727,11 @@ export function AppShell() {
           // fit native chrome.
           style={
             titleBarInset
-              ? ({ "--sidebar-width-icon": "92px" } as React.CSSProperties)
+              ? ({
+                  "--sidebar-width-icon": "92px",
+                  "--sidebar-icon-button": "44px",
+                  "--sidebar-icon-glyph": "20px",
+                } as React.CSSProperties)
               : undefined
           }
         >
