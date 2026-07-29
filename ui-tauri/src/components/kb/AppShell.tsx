@@ -176,6 +176,7 @@ import {
   dataModeLabelKey,
 } from "@/components/kb/dataMode";
 import { isTypingTarget } from "@/lib/keymap";
+import { macTitleBarInset } from "@/lib/titleBarInset";
 import { FirstSyncCard } from "./FirstSyncCard";
 import { AssistantDock } from "./AssistantDock";
 import { PreAlphaBanner } from "./PreAlphaBanner";
@@ -1693,7 +1694,17 @@ export function AppShell() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-svh flex-col overflow-hidden bg-sidebar">
+      {/* The sidebar is `fixed`, so it cannot flow below the banner on its own:
+          it reads the banner's height off this variable and drops the offset
+          entirely once the banner is hidden. */}
+      <div
+        className="flex h-svh flex-col overflow-hidden bg-sidebar"
+        style={
+          {
+            "--kb-banner-height": preAlphaBannerVisible ? "28px" : "0px",
+          } as React.CSSProperties
+        }
+      >
         {preAlphaBannerVisible ? <PreAlphaBanner className="shrink-0" /> : null}
         {/*
           The shell is a two-column frame: the side nav owns all navigation
@@ -1989,7 +2000,7 @@ function AppSidebar({
       /* The frosted nav and the content panel land within a few percent of each
          other in lightness by design (T3Code's quiet hierarchy), so the seam
          needs an explicit hairline or the two surfaces visually merge. */
-      className="kb-glass-panel top-6 h-[calc(100svh-1.5rem)] border-r border-sidebar-border/70"
+      className="kb-glass-panel top-[var(--kb-banner-height,0px)] h-[calc(100svh-var(--kb-banner-height,0px))] border-r border-sidebar-border/70"
     >
       {/* Header stays mounted across both nav modes, so the wordmark and the ⌘K
           palette are reachable from settings too. `relative` + the children's
@@ -2110,12 +2121,20 @@ function SidebarBrand() {
   const { t } = useTranslation("chrome");
   const { state, isMobile } = useSidebar();
   const collapsed = state === "collapsed" && !isMobile;
+  // With the banner gone the brand row is the window's top-left corner, where
+  // macOS draws the traffic lights (T3 Code puts its own collapse button and
+  // wordmark right next to them). Expanded, the row makes room beside them;
+  // collapsed it is too narrow for that, so it drops below them instead.
+  const bannerVisible = useUiStore((s) => s.preAlphaBannerVisible);
+  const inset = macTitleBarInset && !bannerVisible;
 
   return (
     <div
+      data-tauri-drag-region={macTitleBarInset ? "" : undefined}
       className={cn(
         "flex h-8 min-w-0 items-center gap-0.5",
         collapsed && "justify-center",
+        inset && (collapsed ? "mt-[28px]" : "pl-[72px]"),
       )}
     >
       <SidebarTrigger className={navIconButtonClassName} />
