@@ -2186,7 +2186,7 @@ function SidebarBrand() {
             aria-label={t("shell.overviewLink")}
             className="ml-1 flex h-7 min-w-0 shrink items-center truncate rounded-md text-sm font-medium tracking-tight text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           >
-            Kassiber
+            Kassiber.app
           </Link>
         </>
       )}
