@@ -994,7 +994,12 @@ export const BtcActivityChart = ({
 
         {hasChartData ? (
           <>
-            <div className="flex select-none flex-wrap items-center justify-start gap-x-2 gap-y-1 text-xs text-muted-foreground sm:text-xs">
+            <div
+              className={cn(
+                "flex select-none flex-wrap items-center justify-start gap-x-2 gap-y-1 text-xs text-muted-foreground sm:text-xs",
+                expanded && macTitleBarInset && "ml-[72px]",
+              )}
+            >
               {legendItems.map((item) => (
                 <button
                   key={item.key}
