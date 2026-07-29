@@ -305,6 +305,17 @@
     }
   }
 
+  /*
+   * Inset variant for a composer nested in a floating panel (the assistant
+   * dock): same frosted fill and hairline as the page composer, minus the drop
+   * shadow — the dock's own card already casts one, and two would read as a
+   * card inside a card. Must stay after `.kb-composer-glass` to win the
+   * equal-specificity `box-shadow` tie. Dark mode is hairline-only already.
+   */
+  .kb-composer-inset {
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 8%);
+  }
+
   /* Assistant reasoning header — ChatGPT-style streaming label. */
   .thinking-label-active {
     animation: thinking-pulse 2.2s ease-in-out infinite;

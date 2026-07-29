@@ -68,6 +68,13 @@ const DOCK_POSITION_CLASS: Record<AssistantDockPosition, string> = {
 const CARD_SURFACE =
   "pointer-events-auto relative flex border border-border/70 bg-card/95 shadow-[0_20px_48px_-24px_rgba(15,23,42,0.45)] backdrop-blur-md dark:border-white/10 dark:bg-card/90 dark:shadow-[0_20px_48px_-22px_rgba(0,0,0,0.65)] origin-bottom transition-[transform,opacity,box-shadow] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none";
 
+// Concentric with the composer nested inside: the card's corner is the
+// composer's own `rounded-[22px]` plus the `p-2` inset it sits in. Derived, not
+// a hand-picked number, because `--spacing` follows the UI scale while the
+// composer radius is fixed px — `rounded-3xl` only lined up at 100% zoom.
+const DOCK_CARD_RADIUS =
+  "rounded-[calc(22px_+_var(--spacing)_*_2)] p-2";
+
 export function AssistantDock({
   className,
   collapsed = false,
@@ -284,7 +291,8 @@ export function AssistantDock({
             className={cn(
               CARD_SURFACE,
               DOCK_POSITION_CLASS[position],
-              "w-full flex-col rounded-3xl p-2",
+              DOCK_CARD_RADIUS,
+              "w-full flex-col",
               showThread
                 ? "max-w-5xl gap-2"
                 : showComposerPeek || compact
@@ -469,8 +477,8 @@ export function AssistantDock({
                 </div>
               ) : null}
               <Ai02
-                className="max-w-none border-0 bg-transparent p-0 shadow-none ring-0 backdrop-blur-0"
-                composerClassName="border-0 bg-muted shadow-none backdrop-blur-0 dark:bg-muted"
+                className="max-w-none"
+                composerClassName="kb-composer-inset"
                 compact={compact || showComposerPeek}
                 selection={selection}
                 onSelectionChange={setSelection}
@@ -484,7 +492,6 @@ export function AssistantDock({
                   supportsThinkingEffort ? setThinkingEffort : undefined
                 }
                 showThinkingEffort={supportsThinkingEffort}
-                inputPanelElevated={false}
                 modelPickerEnabled={
                   modelPickerEnabled || Boolean(selection?.provider)
                 }
@@ -626,7 +633,8 @@ function WorkingFollowUpSurface({
     <div
       className={cn(
         className,
-        "ml-auto w-full max-w-md flex-col gap-2 rounded-3xl p-2 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-300",
+        DOCK_CARD_RADIUS,
+        "ml-auto w-full max-w-md flex-col gap-2 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-300",
       )}
     >
       <div className="flex items-center gap-1.5 px-1">
@@ -661,8 +669,8 @@ function WorkingFollowUpSurface({
         ) : null}
       </div>
       <Ai02
-        className="max-w-none border-0 bg-transparent p-0 shadow-none ring-0 backdrop-blur-0"
-        composerClassName="border-0 bg-muted shadow-none backdrop-blur-0 dark:bg-muted"
+        className="max-w-none"
+        composerClassName="kb-composer-inset"
         compact
         selection={selection}
         onSelectionChange={onSelectionChange}
@@ -674,7 +682,6 @@ function WorkingFollowUpSurface({
         thinkingEffort={thinkingEffort}
         onThinkingEffortChange={onThinkingEffortChange}
         showThinkingEffort={showThinkingEffort}
-        inputPanelElevated={false}
         modelPickerEnabled={modelPickerEnabled}
         placeholder={followUpPlaceholder}
         prompts={[]}

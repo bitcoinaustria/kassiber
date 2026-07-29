@@ -42,7 +42,6 @@ interface Ai02Props {
   thinkingEffort?: AssistantThinkingEffort;
   onThinkingEffortChange?: (effort: AssistantThinkingEffort) => void;
   showThinkingEffort?: boolean;
-  inputPanelElevated?: boolean;
   modelPickerEnabled?: boolean;
 }
 
@@ -71,7 +70,6 @@ export default function Ai02({
   thinkingEffort = "auto",
   onThinkingEffortChange,
   showThinkingEffort = false,
-  inputPanelElevated = true,
   modelPickerEnabled = true,
 }: Ai02Props) {
   const { t } = useTranslation("assistant");
@@ -153,10 +151,12 @@ export default function Ai02({
           // surface below already owns `box-shadow`; a ring would override the
           // hairline+drop-shadow on focus. Brand-red for the a11y affordance.
           "focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring/55",
-          // T3Code's understated frosted-glass surface. The dock opts out
-          // (inputPanelElevated=false) and supplies its own flat fill via
-          // composerClassName so it doesn't stack a second card inside its own.
-          inputPanelElevated ? "kb-composer-glass" : "shadow-none",
+          // T3Code's understated frosted-glass surface, in every host so the
+          // dock composer and the Assistant page composer are the same
+          // material. A composer nested in a floating panel adds
+          // `.kb-composer-inset` via composerClassName to drop the second drop
+          // shadow.
+          "kb-composer-glass",
           compact
             ? "min-h-[52px] group-focus-within/assistant:min-h-[72px]"
             : "min-h-[72px]",
