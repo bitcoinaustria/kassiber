@@ -76,6 +76,7 @@ class _ProfileSemantics(NamedTuple):
     owned_index: Any | None
     index_warnings: list[str]
     semantics: dict[str, Any]
+    outpoint_spends: dict[str, dict[str, Any]]
 
 
 def build_transaction_graph_snapshot(
@@ -138,7 +139,7 @@ def build_transaction_graph_snapshot(
         ),
     )
     _annotate_graph(graph, row, owned_index, semantics)
-    _annotate_local_spends(conn, profile_id, row, graph)
+    _annotate_local_spends(row, graph, bundle.outpoint_spends)
     _annotate_block_heights(conn, profile_id, row, graph)
     warnings = list(graph.pop("_warnings", []))
     warnings.extend(
@@ -148,7 +149,7 @@ def build_transaction_graph_snapshot(
     warnings.extend(_warnings_for_row(row, semantics))
     warnings.extend(_journal_warnings(row))
 
-    tx_meta = _transaction_meta(row, graph)
+    tx_meta = _transaction_meta(row, graph, enriched_raw)
     tx_id = str(row["id"])
     swap_route = (
         _swap_route_for_row(conn, profile_id, row)
@@ -317,6 +318,7 @@ def _compute_profile_semantics(
         owned_index=owned_index,
         index_warnings=list(index_warnings),
         semantics=semantics,
+        outpoint_spends=_profile_outpoint_spends(conn, profile_id),
     )
 
 
@@ -558,11 +560,12 @@ def _local_wallet_outpoint_amounts(
         if _looks_liquid_or_confidential(row, raw)
         else _row_chain_network(row)
     )
-    # The graph's value axis is one asset. A Liquid wallet holding L-BTC next to a
+    # The graph's value axis is bitcoin. A Liquid wallet holding L-BTC next to a
     # stablecoin has an inventory row per asset for the same transaction, and using
     # the wrong one would draw (and format) a token amount as bitcoin.
-    row_asset = _string_or_none(_row_get(row, "asset"))
-    wanted_asset = row_asset.upper() if row_asset else None
+    liquid_axis = _graph_axis_is_liquid(row, _looks_liquid_or_confidential(row, raw))
+    policy_asset_id = _policy_asset_id_for_row(row) if liquid_axis else None
+    axis_asset = _graph_axis_asset(liquid_axis)
     placeholders = ", ".join("?" for _ in outpoints)
     rows = conn.execute(
         f"""
@@ -576,9 +579,14 @@ def _local_wallet_outpoint_amounts(
     amounts: dict[str, int] = {}
     for amount_row in rows:
         # Only skip on a known mismatch: legacy rows with no asset recorded are
-        # Bitcoin, and dropping them would lose amounts kassiber does have.
-        utxo_asset = _string_or_none(_row_get(amount_row, "asset"))
-        if wanted_asset and utxo_asset and utxo_asset != wanted_asset:
+        # Bitcoin, and dropping them would lose amounts kassiber does have. The
+        # comparison goes through the same normalization the legs use, or an
+        # inventory row holding the policy asset id would look foreign next to an
+        # "LBTC" axis.
+        utxo_asset = _leg_asset(
+            {"asset": _row_get(amount_row, "asset")}, policy_asset_id
+        )
+        if not _same_asset(utxo_asset, axis_asset):
             continue
         # Normalize BOTH sides, as core.ownership does when it seeds the owned
         # index: the transactions side is canonical ('main') while the inventory
@@ -601,9 +609,9 @@ def _local_wallet_outpoint_amounts(
 def _apply_foreign_asset(
     node: dict[str, Any],
     leg_asset: str | None,
-    row_asset: str | None,
+    axis_asset: str | None,
 ) -> bool:
-    """Mark a leg denominated in something other than the row's asset.
+    """Mark a leg denominated in something other than the drawing's axis asset.
 
     The graph has one value axis, so a leg in another asset carries no width here
     — the same call mempool.space makes when a Liquid leg is not the policy asset.
@@ -611,7 +619,7 @@ def _apply_foreign_asset(
     the amount with: the leg is named rather than given a number that could be off
     by orders of magnitude, and it never reaches the totals or the fee.
     """
-    if _same_asset(leg_asset, row_asset):
+    if _same_asset(leg_asset, axis_asset):
         return False
     node["asset"] = _short_asset_label(leg_asset)
     node["valueSats"] = None
@@ -684,57 +692,34 @@ def _local_block_heights(
     return heights
 
 
-def _local_outpoint_spends(
+def _profile_outpoint_spends(
     conn: sqlite3.Connection,
     profile_id: str,
-    txid: str | None,
-    output_count: int,
-) -> dict[int, dict[str, Any]]:
-    """Which of this transaction's outputs the profile already knows are spent.
+) -> dict[str, dict[str, Any]]:
+    """Map every outpoint the profile knows was spent to what spent it.
 
-    Purely local: a spend is recorded either as ``wallet_utxos.spent_by`` or as an
-    input of another transaction in the same profile. Both are references, not
-    amounts — the worst a stale or partial row can do is fail to offer a link, and
-    the returned transaction id is what makes the link internal rather than a
-    lookup.
+    Built once per profile version alongside the rest of the semantics bundle
+    rather than per graph request: the only cheap way to find a spend is to read
+    the vin of every local transaction, and doing that on each panel open cost
+    hundreds of milliseconds on a large book.
+
+    A local transaction naming the outpoint is the authoritative source, and only
+    it can supply a navigable id. ``wallet_utxos.spent_by`` fills gaps for
+    outpoints no local row spends. Both are references, never amounts, so a stale
+    row can only fail to offer a link.
+
+    ponytail: whole-profile map held in memory (~100 bytes per spent outpoint);
+    move to an indexed spent-outpoint table if a book ever makes that hurt.
     """
-    if not txid or output_count <= 0:
-        return {}
-    prefix = f"{txid.lower()}:"
-    spends: dict[int, dict[str, Any]] = {}
-
-    def record(vout: Any, spending_txid: Any, transaction_id: Any = None) -> None:
-        index = _int_or_none(vout)
-        spending = _string_or_none(spending_txid)
-        if index is None or index < 0 or not spending:
-            return
-        entry = spends.setdefault(index, {})
-        entry.setdefault("txid", spending.lower())
-        if transaction_id is not None:
-            entry.setdefault("transactionId", str(transaction_id))
-
-    for row in conn.execute(
-        """
-        SELECT vout, spent_by
-        FROM wallet_utxos
-        WHERE profile_id = ?
-          AND lower(txid) = ?
-          AND spent_by IS NOT NULL
-          AND spent_by != ''
-        """,
-        (profile_id, txid.lower()),
-    ).fetchall():
-        record(_row_get(row, "vout"), _row_get(row, "spent_by"))
-
-    # Any local transaction spending one of these outputs names it in its own vin.
+    spends: dict[str, dict[str, Any]] = {}
     for row in conn.execute(
         """
         SELECT t.id, t.external_id, t.raw_json
         FROM transactions t
         WHERE t.profile_id = ?
-          AND t.raw_json LIKE ?
+        ORDER BY t.occurred_at, t.created_at, t.id
         """,
-        (profile_id, f"%{prefix.split(':')[0]}%"),
+        (profile_id,),
     ).fetchall():
         graph = _json_obj(_row_get(row, "raw_json"))
         vin = graph.get("vin")
@@ -743,14 +728,41 @@ def _local_outpoint_spends(
         spending_txid = _string_or_none(graph.get("txid")) or _string_or_none(
             _row_get(row, "external_id")
         )
+        if not _looks_like_txid(spending_txid):
+            continue
         for entry in vin:
             if not isinstance(entry, Mapping):
                 continue
             outpoint = _outpoint(entry)
-            if outpoint and outpoint.startswith(prefix):
-                record(entry.get("vout"), spending_txid, _row_get(row, "id"))
-    return {index: entry for index, entry in spends.items() if index < output_count}
-
+            if outpoint:
+                # First writer wins, so the ordering above makes the pick stable
+                # when two retained rows (an RBF pair) spend the same outpoint.
+                spends.setdefault(
+                    outpoint.lower(),
+                    {
+                        "txid": str(spending_txid).lower(),
+                        "transactionId": str(_row_get(row, "id")),
+                    },
+                )
+    for row in conn.execute(
+        """
+        SELECT lower(outpoint) AS outpoint, spent_by
+        FROM wallet_utxos
+        WHERE profile_id = ?
+          AND spent_by IS NOT NULL
+          AND spent_by != ''
+        ORDER BY outpoint
+        """,
+        (profile_id,),
+    ).fetchall():
+        outpoint = _string_or_none(_row_get(row, "outpoint"))
+        spent_by = _string_or_none(_row_get(row, "spent_by"))
+        if not outpoint or not _looks_like_txid(spent_by):
+            continue
+        # No transaction id: nothing local to navigate to. Never paired with
+        # another row's id, or the reference and the jump would disagree.
+        spends.setdefault(outpoint.lower(), {"txid": str(spent_by).lower()})
+    return spends
 
 def _local_outpoint_sats(
     local_outpoint_amounts: Mapping[str, int],
@@ -774,8 +786,9 @@ def _parse_graph(
     vout = raw.get("vout")
     warnings: list[dict[str, str]] = _graph_lookup_warnings(raw)
     confidential = _looks_liquid_or_confidential(row, raw)
-    policy_asset_id = _policy_asset_id_for_row(row) if confidential else None
-    row_asset = _leg_asset({"asset": _row_get(row, "asset")}, policy_asset_id)
+    liquid_axis = _graph_axis_is_liquid(row, confidential)
+    policy_asset_id = _policy_asset_id_for_row(row) if liquid_axis else None
+    axis_asset = _graph_axis_asset(liquid_axis)
     metadata = _transaction_metadata(raw, confidential=confidential)
     if not isinstance(vin, list) or not isinstance(vout, list):
         reason = "graphless_import"
@@ -851,7 +864,7 @@ def _parse_graph(
             node["_pegin"] = True
         if _is_coinbase_leg(entry):
             node["_coinbase"] = True
-        if _apply_foreign_asset(node, _leg_asset(prevout, policy_asset_id), row_asset):
+        if _apply_foreign_asset(node, _leg_asset(prevout, policy_asset_id), axis_asset):
             input_value_complete = False
         inputs.append(node)
 
@@ -903,7 +916,7 @@ def _parse_graph(
                 "_script": script,
                 "_pegoutAddress": pegout_address,
         }
-        if _apply_foreign_asset(node, _leg_asset(entry, policy_asset_id), row_asset):
+        if _apply_foreign_asset(node, _leg_asset(entry, policy_asset_id), axis_asset):
             output_value_complete = False
         outputs.append(node)
 
@@ -947,7 +960,6 @@ def _parse_graph(
         "outputs": outputs,
         "fee": fee,
         "_warnings": warnings,
-        "_txid": _string_or_none(raw.get("txid")),
     }
 
 
@@ -2046,6 +2058,10 @@ def _bitcoin_electrum_decoded_to_graph_raw(
         if prev_txid and prev_txid.lower() == COINBASE_PREVOUT_TXID and prev_vout == COINBASE_PREVOUT_VOUT:
             prev_txid = None
             prev_vout = None
+            # Record what the sentinel meant before dropping it, or the coinbase
+            # is indistinguishable from an input whose prevout simply wasn't
+            # decodable.
+            vin_entry["is_coinbase"] = True
         if prev_txid:
             vin_entry["txid"] = prev_txid.lower()
         if prev_vout is not None:
@@ -2370,31 +2386,26 @@ def _annotate_block_heights(
 
 
 def _annotate_local_spends(
-    conn: sqlite3.Connection,
-    profile_id: str,
     row: Mapping[str, Any],
     graph: dict[str, Any],
+    spends: Mapping[str, Mapping[str, Any]],
 ) -> None:
     """Tag outputs the profile already knows were spent, and by what."""
     outputs = graph.get("outputs")
-    if not isinstance(outputs, list) or not outputs:
+    if not isinstance(outputs, list) or not outputs or not spends:
         return
-    spends = _local_outpoint_spends(
-        conn,
-        profile_id,
-        _string_or_none(graph.get("_txid")) or _txid_from_row(row),
-        len(outputs),
-    )
-    if not spends:
-        return
+    row_id = str(_row_get(row, "id") or "")
     for node in outputs:
-        spend = spends.get(_int_or_none(node.get("index")))
+        outpoint = _string_or_none(node.get("outpoint"))
+        spend = spends.get(outpoint.lower()) if outpoint else None
         if not spend:
             continue
         node["spentByTxid"] = spend["txid"]
-        if spend.get("transactionId"):
-            node["spentByTransactionId"] = spend["transactionId"]
-        node["annotations"].append(_node_annotation("spent", "Spent by a known transaction"))
+        transaction_id = spend.get("transactionId")
+        # A transaction spending its own output would offer a jump to the page the
+        # user is already on.
+        if transaction_id and str(transaction_id) != row_id:
+            node["spentByTransactionId"] = str(transaction_id)
 
 
 def _inferred_incoming_payment_output_ids(
@@ -2478,7 +2489,11 @@ def _apply_match_annotation(
     )
 
 
-def _transaction_meta(row: Mapping[str, Any], graph: Mapping[str, Any]) -> dict[str, Any]:
+def _transaction_meta(
+    row: Mapping[str, Any],
+    graph: Mapping[str, Any],
+    raw: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     amount_msat = int(_row_get(row, "amount") or 0)
     fee_msat = int(_row_get(row, "fee") or 0)
     external_id = _string_or_none(_row_get(row, "external_id"))
@@ -2487,7 +2502,7 @@ def _transaction_meta(row: Mapping[str, Any], graph: Mapping[str, Any]) -> dict[
     # resolved. Clients previously had to guess the chain from asset/label text
     # and could only ever guess mainnet.
     chain, network = _row_chain_network(row)
-    block_height = _row_block_height(row)
+    block_height = _row_block_height(row, raw)
     return {
         "id": str(_row_get(row, "id")),
         "chain": chain,
@@ -2891,17 +2906,42 @@ def _leg_asset(entry: Mapping[str, Any], policy_asset_id: str | None = None) -> 
 def _policy_asset_id_for_row(row: Mapping[str, Any]) -> str | None:
     """The Liquid policy asset of the row's own network.
 
-    Taken from the wallet's configured ``policy_asset`` when it has one (custom
-    Elements chains), otherwise the network default.
+    Taken from the wallet's configured ``policy_asset`` when that names an actual
+    asset id (custom Elements chains), otherwise the network default. A symbolic
+    "LBTC" in that field is not an id — `db.py` heals the same historical shape —
+    and treating it as one would stop every genuine L-BTC leg from resolving.
     """
     config = _json_obj(_row_get(row, "wallet_config_json"))
     configured = _string_or_none(config.get("policy_asset"))
-    if configured:
+    if configured and canonical_bitcoin_asset(configured) is None and len(configured) == 64:
         return configured.lower()
     _chain, network = _row_chain_network(
         row, default_chain="liquid", default_network="liquidv1"
     )
     return default_policy_asset_id(network)
+
+
+def _graph_axis_is_liquid(row: Mapping[str, Any], confidential: bool) -> bool:
+    """Whether this row's value axis is L-BTC rather than BTC.
+
+    Keyed on the chain, not on whether values happen to be hidden: an
+    all-explicit Liquid transaction is still Liquid, and resolving its policy
+    asset is what keeps its L-BTC legs from looking like a foreign token.
+    """
+    chain, _network = _row_chain_network(row)
+    return chain == "liquid" or confidential
+
+
+def _graph_axis_asset(liquid_axis: bool) -> str:
+    """The asset the drawing measures in.
+
+    The graph is bitcoin-denominated end to end — strand widths, the totals and
+    the fee are all sats — so the axis is BTC on Bitcoin and the policy asset on
+    Liquid, never whatever asset the accounting row happens to be about. Measuring
+    against the row's asset would blank the L-BTC legs of a token transaction
+    while still pricing its fee in bitcoin.
+    """
+    return "LBTC" if liquid_axis else "BTC"
 
 
 def _same_asset(left: str | None, right: str | None) -> bool:
@@ -2936,8 +2976,9 @@ def _is_coinbase_leg(entry: Mapping[str, Any]) -> bool:
             return True
     txid = _string_or_none(entry.get("txid"))
     vout = _int_or_none(entry.get("vout"))
-    if txid is None and vout is None:
-        return True
+    # Deliberately not inferred from a missing outpoint: the Liquid decoder emits
+    # txid-less inputs when it cannot read prevout material, and calling those
+    # newly issued would put a fabricated origin on a real leg.
     return (
         txid is not None
         and txid.lower() == COINBASE_PREVOUT_TXID

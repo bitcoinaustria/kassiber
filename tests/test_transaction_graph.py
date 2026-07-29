@@ -418,10 +418,11 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["inputs"][0]["valueSats"], 600_000)
         self.assertEqual(payload["fee"]["valueSats"], 100_000)
 
-    def test_local_inventory_amounts_reach_a_bare_asset_id_liquid_row(self):
-        # A non-policy Liquid asset stores the bare 64-hex asset id, and no wallet
-        # kind contains "liquid", so the row is only recognizable as Liquid from
-        # its confidential legs. It must still read the Liquid inventory.
+    def test_token_row_legs_are_not_valued_on_the_bitcoin_axis(self):
+        # The drawing measures in bitcoin, so a token transaction's own legs carry
+        # no width here even though the profile has their amounts — the same call
+        # mempool.space makes for a non-policy asset. Drawing them would price a
+        # token in BTC next to an L-BTC fee.
         prev_txid = "79" * 32
         txid = "7a" * 32
         asset_id = "ab" * 32
@@ -458,8 +459,12 @@ class TransactionGraphTest(unittest.TestCase):
 
         payload = self._graph("bare-asset-liquid-row")
 
-        self.assertEqual(payload["inputs"][0]["valueSats"], 13_000_000)
-        self.assertEqual(payload["inputs"][0]["valueState"], "known")
+        # The leg itself is blinded, so "confidential" is the honest label — the
+        # point is that the token amount sitting in the inventory for this exact
+        # outpoint is not drawn as bitcoin.
+        node = payload["inputs"][0]
+        self.assertEqual(node["valueState"], "confidential")
+        self.assertNotIn("valueSats", node)
 
     def test_malformed_raw_hex_yields_no_fabricated_size_metadata(self):
         # Slicing truncates instead of raising, so a bad hex can walk to the wrong
@@ -619,6 +624,150 @@ class TransactionGraphTest(unittest.TestCase):
 
         self.assertIsNone(payload["transaction"]["blockHeight"])
         self.assertNotIn("prevoutBlockHeight", payload["inputs"][0])
+
+    def test_spend_reference_and_jump_always_name_the_same_transaction(self):
+        # A stale inventory spent_by must not be shown next to a jump that opens a
+        # different transaction.
+        txid = "a0" * 32
+        stale_txid = "a1" * 32
+        real_txid = "a2" * 32
+        raw = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "a3" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value": 600_000},
+                }
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 500_000}],
+        }
+        self._tx("stale-spend-row", "wallet-a", "outbound", 500_000_000, txid, raw)
+        self._tx(
+            "real-spender-row",
+            "wallet-b",
+            "outbound",
+            490_000_000,
+            real_txid,
+            {
+                "txid": real_txid,
+                "vin": [{"txid": txid, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B, "value": 500_000}}],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_A, "value": 490_000}],
+            },
+        )
+        self._utxo("wallet-a", ADDR_B, txid, 0, amount=500_000)
+        self.conn.execute(
+            "UPDATE wallet_utxos SET spent_by = ? WHERE txid = ?", (stale_txid, txid)
+        )
+
+        node = self._graph("stale-spend-row")["outputs"][0]
+
+        self.assertEqual(node["spentByTxid"], real_txid)
+        self.assertEqual(node["spentByTransactionId"], "real-spender-row")
+
+    def test_spend_reference_survives_a_removed_liquid_fee_output(self):
+        # Liquid drops the fee vout from outputs, so a ceiling based on the list
+        # length would silently lose the highest real index.
+        txid = "a4" * 32
+        spender_txid = "a5" * 32
+        raw = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "a6" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "valuecommitment": "09" + "aa" * 32},
+                }
+            ],
+            "vout": [
+                {"n": 0, "scriptpubkey_type": "fee", "value": 1_000},
+                {"n": 1, "scriptpubkey": SCRIPT_B, "valuecommitment": "09" + "bb" * 32},
+                {"n": 2, "scriptpubkey": SCRIPT_A, "valuecommitment": "09" + "cc" * 32},
+            ],
+        }
+        self._tx("liquid-fee-shift-row", "wallet-a", "outbound", 500_000_000, txid, raw, asset="LBTC")
+        self._tx(
+            "liquid-spender-row",
+            "wallet-b",
+            "outbound",
+            400_000_000,
+            spender_txid,
+            {
+                "txid": spender_txid,
+                "vin": [{"txid": txid, "vout": 2}],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_A}],
+            },
+            asset="LBTC",
+        )
+
+        outputs = self._graph("liquid-fee-shift-row")["outputs"]
+        top = [node for node in outputs if node["index"] == 2][0]
+
+        self.assertEqual(top["spentByTxid"], spender_txid)
+
+    def test_a_self_spend_offers_no_jump_to_the_open_transaction(self):
+        txid = "a7" * 32
+        raw = {
+            "txid": txid,
+            "vin": [{"txid": txid, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 600_000}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 500_000}],
+        }
+        self._tx("self-spend-row", "wallet-a", "outbound", 500_000_000, txid, raw)
+
+        node = self._graph("self-spend-row")["outputs"][0]
+
+        self.assertEqual(node["spentByTxid"], txid)
+        self.assertNotIn("spentByTransactionId", node)
+
+    def test_outpointless_input_is_not_called_newly_issued(self):
+        # The Liquid decoder emits txid-less inputs when it cannot read prevout
+        # material; those are not coinbases.
+        txid = "a8" * 32
+        raw = {
+            "txid": txid,
+            "vin": [{"prevout": {"scriptpubkey": SCRIPT_A, "value": 10_000}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 9_000}],
+        }
+        self._tx("outpointless-row", "wallet-a", "outbound", 9_000_000, txid, raw)
+
+        node = self._graph("outpointless-row")["inputs"][0]
+
+        self.assertNotEqual(node["role"], "coinbase")
+        self.assertNotEqual(node["ownership"], "coinbase")
+
+    def test_all_explicit_liquid_row_values_its_policy_asset_legs(self):
+        # The value axis follows the chain, not whether amounts happen to be
+        # hidden: a token row's L-BTC legs stay valued, its token legs are named.
+        txid = "a9" * 32
+        policy = "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d"
+        usdt = "ce" * 32
+        raw = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": "aa" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value_sats": 600_000, "asset_id": policy},
+                },
+                {
+                    "txid": "aa" * 32,
+                    "vout": 1,
+                    "prevout": {"scriptpubkey": SCRIPT_B, "value_sats": 5_000_000_000, "asset_id": usdt},
+                },
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value_sats": 500_000, "asset_id": policy}],
+        }
+        self.conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps({"chain": "liquid", "network": "liquidv1"}), "wallet-a"),
+        )
+        self._tx("token-axis-row", "wallet-a", "outbound", 500_000_000, txid, raw, asset=usdt)
+
+        payload = self._graph("token-axis-row")
+
+        self.assertEqual(payload["inputs"][0]["valueSats"], 600_000)
+        self.assertNotIn("asset", payload["inputs"][0])
+        self.assertEqual(payload["inputs"][1]["valueState"], "other_asset")
 
     def test_outputs_carry_a_local_spend_reference(self):
         # Purely local: another row in the profile spends this output, so the panel

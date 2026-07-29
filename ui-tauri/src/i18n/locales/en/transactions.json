@@ -650,10 +650,7 @@
     "annotations": {
       "booked_custody_conversion": "Booked custody conversion",
       "booked_custody_direct_payout": "Booked direct payout",
-      "booked_custody_move": "Booked custody move",
-      "coinbase": "Newly issued (coinbase)",
-      "peg_in": "Peg-in from Bitcoin",
-      "peg_out": "Peg-out to Bitcoin"
+      "booked_custody_move": "Booked custody move"
     },
     "availableReferences": "Graph references are available from each strand",
     "backendSettingsReasonBitcoin": "Transaction graph needs a Bitcoin backend",

@@ -242,7 +242,7 @@ function graphExplorerNetwork(graph: TransactionGraphPayload): ExplorerNetwork {
 function bitcoinNetworkForPeg(graph: TransactionGraphPayload) {
   const network = graph.transaction?.network?.trim().toLowerCase();
   if (!network || network === "liquidv1") return "main";
-  return "test";
+  return network === "elementsregtest" ? "regtest" : "test";
 }
 
 function explorerTargetForGraphNode({
@@ -280,8 +280,10 @@ function explorerTargetForGraphNode({
 function amountSummary(nodes: TransactionGraphNode[]) {
   return nodes.reduce(
     (summary, node) => {
-      if (node.valueState === "confidential" || node.valueState === "other_asset") {
+      if (node.valueState === "confidential") {
         summary.confidentialCount += 1;
+      } else if (node.valueState === "other_asset") {
+        summary.otherAssetCount += 1;
       } else if (typeof node.valueSats === "number") {
         summary.knownCount += 1;
         summary.knownSats += node.valueSats;
@@ -292,6 +294,7 @@ function amountSummary(nodes: TransactionGraphNode[]) {
       knownSats: 0,
       knownCount: 0,
       confidentialCount: 0,
+      otherAssetCount: 0,
     },
   );
 }
@@ -312,6 +315,8 @@ function formatTotal(nodes: TransactionGraphNode[], t: TFunction<"transactions">
   if (summary.confidentialCount > 0) {
     return t("graph.confidentialAmount");
   }
+  // Nothing on this side is measured in bitcoin, which is not the same as hidden.
+  if (summary.otherAssetCount > 0) return t("graph.otherAsset");
   return t("graph.inputsOutputs.unknownAmount");
 }
 

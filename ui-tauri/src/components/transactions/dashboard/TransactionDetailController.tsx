@@ -545,14 +545,14 @@ export function TransactionDetailController({
           onNavigate
             ? (transactionId) => {
                 void resolveTransaction
-                  .mutateAsync({ transaction: transactionId })
+                  .mutateAsync({ query: transactionId })
                   .then((envelope: DaemonEnvelope<{ transaction?: Transaction | null }>) => {
                     const resolved = envelope?.data?.transaction;
                     if (resolved) onNavigate(resolved, "details");
                   })
                   .catch(() => {
                     // A spend we cannot resolve is not worth an error dialog; the
-                    // row still carries the txid for an explorer lookup.
+                    // row still shows the spending txid in its detail line.
                   });
               }
             : undefined
