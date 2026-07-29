@@ -4159,6 +4159,7 @@ def decode_raw_transaction(raw_hex):
                 "script_hex": script.hex(),
             }
         )
+    witness_start = offset
     if has_witness:
         for index in range(input_count):
             witness_count, offset = read_varint(payload, offset)
@@ -4169,7 +4170,7 @@ def decode_raw_transaction(raw_hex):
                 offset += item_length
             vin[index]["witness"] = items
     locktime = int.from_bytes(payload[offset : offset + 4], "little")
-    return {
+    decoded = {
         "version": version,
         "locktime": locktime,
         "vin": vin,
@@ -4177,6 +4178,23 @@ def decode_raw_transaction(raw_hex):
         "total_output_sats": total_output_sats,
         "raw_hex": raw_hex,
     }
+    # This walk already knows where the witness section starts and ends, so the
+    # BIP141 sizes come for free: no consumer needs a second varint pass over the
+    # same hex to recover size/vsize/weight.
+    #
+    # Python slicing truncates instead of raising, so a malformed payload can walk
+    # "successfully" and land at the wrong offset — which would yield fabricated or
+    # even negative sizes. Only report sizes when the walk consumed the payload
+    # exactly, ending on the 4 locktime bytes.
+    if offset + 4 != len(payload):
+        return decoded
+    size = len(payload)
+    stripped_size = size - (2 + offset - witness_start if has_witness else 0)
+    weight = stripped_size * 3 + size
+    decoded["size"] = size
+    decoded["vsize"] = (weight + 3) // 4
+    decoded["weight"] = weight
+    return decoded
 
 
 def block_header_timestamp(header_hex):

@@ -214,11 +214,33 @@ annotations, and reviewed paired-route context. Bitcoin transactions with
 stored valued vin/vout can render a proportional flow graph; records with only
 safe references render a reference/amountless graph; graphless imports return a
 typed empty state. Liquid confidential transactions may expose public
-references while keeping confidential amounts unsized or hidden. When the user
-allows a configured public backend lookup, the daemon caches only the sanitized
+references while keeping confidential amounts unsized or hidden.
+
+A reference lookup only ever reaches infrastructure the user chose, and it does
+not depend on how a wallet is observed. The wallet's own backend is tried first —
+a BDK or LWK descriptor wallet points at its Esplora/Electrum server, a Core
+wallet at its node, a Silent Payments wallet at its scanning server — then the
+user's other backends whose kind can answer a transaction lookup. Wallets whose
+backend cannot (BTCPay stores, exchange connections) fall through to those;
+wallets with no backend at all keep a graphless payload carrying an explicit "add
+a backend" action rather than a guessed graph. The servers Kassiber seeds so a
+fresh install can sync are deliberately excluded: sending the txid of a
+transaction to a third party is not something a convenience default should do
+silently. A seeded default becomes eligible once the user points a wallet at it,
+selects it as the default, marks it as their own infrastructure, or defines it in
+the environment.
+
+When the user allows a configured public backend lookup, the daemon caches only the sanitized
 reference graph inside the local DB/SQLCipher boundary, keyed by schema version,
 chain, network, and txid, so reopening the same transaction does not refetch the
-same public tx/prevtx material. Kassiber deliberately does not persist raw
+same public tx/prevtx material. Previous outputs are resolved from that cache
+first and from the configured backend otherwise, deduplicated per txid and capped
+so a many-input transaction cannot fan out into an unbounded run of requests.
+They are deliberately not read out of the profile's own stored transaction rows:
+a stored row's output list is not guaranteed to be the transaction's complete,
+in-order set, so its index cannot be trusted to identify the spent output. The
+payload reports the row's resolved `chain` and `network` so clients do not have to
+infer the network from asset labels. Kassiber deliberately does not persist raw
 serialized transactions for this graph cache: the graph endpoint needs only the
 normalized refs, prevout values/scripts, and size metadata required to rebuild a
 complete current-transaction graph, not witnesses, arbitrary script payloads, or

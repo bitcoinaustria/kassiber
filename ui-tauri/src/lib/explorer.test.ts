@@ -37,6 +37,48 @@ describe("explorerTargetForTransaction", () => {
     });
   });
 
+  it("does not send a non-mainnet reference to a public mainnet explorer", () => {
+    expect(
+      explorerTargetForTransaction({
+        txid: "abc123",
+        network: "bitcoin",
+        networkName: "signet",
+      }),
+    ).toBeNull();
+    // A configured explorer is trusted for any network.
+    expect(
+      explorerTargetForTransaction({
+        txid: "abc123",
+        network: "bitcoin",
+        networkName: "signet",
+        settings: {
+          bitcoinBaseUrl: "https://signet.example.test",
+          liquidBaseUrl: "",
+          publicFallbacks: true,
+        },
+      })?.url,
+    ).toBe("https://signet.example.test/tx/abc123");
+  });
+
+  it("still uses the public fallback for the mainnet aliases the daemon emits", () => {
+    for (const networkName of ["main", "mainnet", undefined]) {
+      expect(
+        explorerTargetForTransaction({
+          txid: "abc123",
+          network: "bitcoin",
+          networkName,
+        })?.configured,
+      ).toBe(false);
+    }
+    expect(
+      explorerTargetForTransaction({
+        txid: "abc123",
+        network: "liquid",
+        networkName: "liquidv1",
+      })?.url,
+    ).toBe("https://liquid.network/tx/abc123");
+  });
+
   it("returns no target when public fallbacks are disabled and no explorer is configured", () => {
     expect(
       explorerTargetForTransaction({

@@ -9,8 +9,11 @@ import {
   TransactionInputsOutputsPanel,
 } from "./TransactionGraphTab";
 import {
+  classifyRouteKind,
+  classifyRouteOutRole,
   compactGraphRows,
   nodeTooltipTitle,
+  routeNetworkLabel,
   sensitiveGraphText,
   type TransactionGraphPayload,
 } from "./TransactionGraphModel";
@@ -738,12 +741,158 @@ describe("TransactionFlowDiagram", () => {
   });
 
   it("returns an explicit placeholder for hidden sensitive text", () => {
-    expect(sensitiveGraphText("bc1qsecret", true)).toBe("Hidden");
-    expect(sensitiveGraphText("bc1qsecret", false)).toBe("bc1qsecret");
+    // The placeholder is always passed in by the caller (a translated string);
+    // the helper never carries an English default of its own.
+    expect(sensitiveGraphText("bc1qsecret", true, "Hidden")).toBe("Hidden");
+    expect(sensitiveGraphText("bc1qsecret", false, "Hidden")).toBe("bc1qsecret");
   });
 });
 
 describe("TransactionInputsOutputsPanel", () => {
+  it("shows block distance only when both ends have a known height", () => {
+    const withHeights: TransactionGraphPayload = {
+      ...graph,
+      transaction: { ...graph.transaction!, blockHeight: 800_100 },
+      inputs: [
+        { ...graph.inputs[0], prevoutBlockHeight: 800_000 },
+        { ...graph.inputs[1] },
+        { ...graph.inputs[2], prevoutBlockHeight: 800_100 },
+      ],
+      outputs: [
+        {
+          ...graph.outputs[0],
+          spentByTxid: "d".repeat(64),
+          spentByBlockHeight: 800_101,
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel graph={withHeights} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("100 blocks earlier");
+    expect(html).toContain("in the same block");
+    expect(html).toContain("1 block later");
+    // The leg with no counterpart height gets no invented distance.
+    expect(html.match(/blocks earlier/g)?.length).toBe(1);
+  });
+
+  it("offers an internal jump for a locally known spend", () => {
+    const spent: TransactionGraphPayload = {
+      ...graph,
+      outputs: [
+        {
+          ...graph.outputs[0],
+          spentByTxid: "d".repeat(64),
+          spentByTransactionId: "tx-spender",
+        },
+      ],
+    };
+    const opened: string[] = [];
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel
+          graph={spent}
+          hideSensitive={false}
+          onOpenTransaction={(id) => opened.push(id)}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("Open the spending transaction dddddddddd...dddd");
+    expect(html).toContain("spent by dddddddddd...dddd");
+    // Following the money inside the book wins over leaving for an explorer.
+    expect(html).not.toContain("Open bc1qrecipi...000000 in");
+  });
+
+  it("keeps the explorer link when the spend cannot be opened internally", () => {
+    const spent: TransactionGraphPayload = {
+      ...graph,
+      outputs: [{ ...graph.outputs[0], spentByTxid: "d".repeat(64) }],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel
+          graph={spent}
+          hideSensitive={false}
+          onOpenTransaction={() => undefined}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("spent by dddddddddd...dddd");
+    expect(html).toContain("Open bc1qrecipi...000000 in");
+  });
+
+  it("does not leak a spend reference in hidden-sensitive mode", () => {
+    const spent: TransactionGraphPayload = {
+      ...graph,
+      outputs: [
+        {
+          ...graph.outputs[0],
+          spentByTxid: "d".repeat(64),
+          spentByTransactionId: "tx-spender",
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel
+          graph={spent}
+          hideSensitive
+          onOpenTransaction={() => undefined}
+        />
+      </TooltipProvider>,
+    );
+
+    expect(html).not.toContain("dddddddddd...dddd");
+    expect(html).toContain("spent");
+  });
+
+  it("labels Liquid peg legs and shows the peg-out destination", () => {
+    const pegs: TransactionGraphPayload = {
+      ...graph,
+      transaction: { ...graph.transaction!, chain: "liquid", network: "liquidv1" },
+      inputs: [
+        {
+          id: "in-0",
+          outpoint: `${"8b".repeat(32)}:0`,
+          valueSats: 1_000_000,
+          valueBtc: 0.01,
+          ownership: "external",
+          role: "peg_in",
+        },
+      ],
+      outputs: [
+        {
+          id: "out-0",
+          address: "bc1qpegoutdestination00000000000000000000000",
+          valueSats: 900_000,
+          valueBtc: 0.009,
+          ownership: "peg_out",
+          role: "peg_out",
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel graph={pegs} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("Peg-in");
+    expect(html).toContain("Peg-out");
+    expect(html).toContain("Leaving Liquid");
+    // The Bitcoin destination is the accounting-relevant fact about a peg-out.
+    expect(html).toContain("bc1qpegout...000000");
+    // And it is a Bitcoin address: it must not link to the Liquid explorer.
+    expect(html).toContain("Open bc1qpegout...000000 in mempool.bitcoin-austria.at");
+    expect(html).toContain("Open 8b8b8b8b8b...8b8b:0 in Liquid Network");
+  });
+
+
   it("renders detailed inputs and outputs with spending indicators", () => {
     const html = renderToStaticMarkup(
       <TooltipProvider>
@@ -1262,6 +1411,139 @@ describe("TransactionGraphPanel", () => {
     );
 
     expect(html).toContain("Review Bitcoin backend");
-    expect(html).toContain("Could not fetch public Bitcoin transaction references");
+    // The warning renders from its stable code, not the daemon's English text.
+    expect(html).toContain("Could not fetch Bitcoin transaction references");
+    expect(html).not.toContain("Review the backend URL and network in Settings");
+  });
+
+  it("names which backend kind failed", () => {
+    const failed: TransactionGraphPayload = {
+      ...graph,
+      supportLevel: "partial",
+      warnings: [
+        {
+          code: "bitcoin_reference_lookup_failed_electrum",
+          level: "warning",
+          message: "Could not fetch public Bitcoin transaction references from a configured Electrum backend.",
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionGraphPanel
+          graph={failed}
+          hideSensitive={false}
+          onResolveIssue={() => undefined}
+        />
+      </TooltipProvider>,
+    );
+
+    // A user with several backends configured needs to know which one failed.
+    expect(html).toContain("from the configured Electrum backend");
+    expect(html).toContain("Review Bitcoin backend");
+  });
+
+  it("falls back to the daemon message for codes without a translation", () => {
+    const quarantined: TransactionGraphPayload = {
+      ...graph,
+      warnings: [
+        {
+          code: "journal_blocker_missing_rate",
+          level: "warning",
+          message: "Journal blocker: Missing rate",
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionGraphPanel graph={quarantined} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    expect(html).toContain("Journal blocker: Missing rate");
+  });
+
+  it("collapses repeated annotations instead of printing internal group ids", () => {
+    const paired: TransactionGraphPayload = {
+      ...graph,
+      annotations: [
+        {
+          code: "booked_custody_move",
+          label: "Booked custody move",
+          groupId: "custody-decision:0f8c1a42-1111-2222-3333-444455556666",
+        },
+        {
+          code: "booked_custody_move",
+          label: "Booked custody move",
+          groupId: "custody-decision:0f8c1a42-aaaa-bbbb-cccc-ddddeeeeffff",
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionGraphPanel graph={paired} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+
+    expect(html).not.toContain("custody-decision:");
+    expect(html).toContain("Booked custody move · 2");
+  });
+});
+
+describe("route classifiers", () => {
+  it("classifies coinjoin, swap, transfer and plain pairs", () => {
+    expect(
+      classifyRouteKind({ kind: "whirlpool-mix", outAsset: "BTC", inAsset: "BTC" }),
+    ).toBe("coinjoin");
+    expect(classifyRouteKind({ kind: "peg-in", outAsset: "BTC", inAsset: "BTC" })).toBe(
+      "swap",
+    );
+    // Cross-asset legs are a swap even when the kind says nothing.
+    expect(classifyRouteKind({ kind: "withdrawal", outAsset: "BTC", inAsset: "LBTC" })).toBe(
+      "swap",
+    );
+    expect(
+      classifyRouteKind({ kind: "withdrawal", policy: "carrying-value", outAsset: "BTC", inAsset: "btc" }),
+    ).toBe("transfer");
+    expect(classifyRouteKind({ kind: "withdrawal", outAsset: "BTC", inAsset: "BTC" })).toBe(
+      "pair",
+    );
+    // Missing assets must not read as cross-asset, on either side.
+    expect(classifyRouteKind({})).toBe("pair");
+    expect(classifyRouteKind({ kind: "withdrawal", outAsset: "BTC" })).toBe("pair");
+    expect(classifyRouteKind({ kind: "withdrawal", inAsset: "BTC" })).toBe("pair");
+  });
+
+  it("treats a Liquid-side swap leg as a consolidation", () => {
+    expect(
+      classifyRouteOutRole({ kind: "chain-swap", outNetwork: "LBTC", inNetwork: "BTC" }),
+    ).toBe("consolidation");
+    expect(
+      classifyRouteOutRole({ kind: "swap", description: "Consolidating inputs" }),
+    ).toBe("consolidation");
+    expect(
+      classifyRouteOutRole({ kind: "swap", outNetwork: "BTC", inNetwork: "LBTC" }),
+    ).toBe("spend");
+    // A peg crosses networks but is not a consolidation.
+    expect(
+      classifyRouteOutRole({ kind: "peg-out", outNetwork: "LBTC", inNetwork: "BTC" }),
+    ).toBe("spend");
+    // An unknown counterpart network is unknown, not a cross-network move.
+    expect(
+      classifyRouteOutRole({ kind: "swap", outNetwork: "LBTC", inNetwork: null }),
+    ).toBe("spend");
+    // Same network spelled two ways is not a cross-network move.
+    expect(
+      classifyRouteOutRole({ kind: "swap", outNetwork: "Liquid", inNetwork: "LBTC" }),
+    ).toBe("spend");
+    expect(classifyRouteOutRole({ kind: "withdrawal" })).toBe("spend");
+  });
+
+  it("labels networks from asset and wallet hints", () => {
+    expect(routeNetworkLabel("LBTC")).toBe("Liquid");
+    expect(routeNetworkLabel("BTC", "Liquid vault")).toBe("Liquid");
+    expect(routeNetworkLabel("BTC")).toBe("Bitcoin");
+    expect(routeNetworkLabel("USDT")).toBe("USDT");
+    expect(routeNetworkLabel(null)).toBeUndefined();
   });
 });

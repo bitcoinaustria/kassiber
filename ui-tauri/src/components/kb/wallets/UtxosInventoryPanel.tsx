@@ -352,6 +352,7 @@ export function explorerTargetForUtxo(row: WalletUtxoRow, settings: ExplorerSett
   return explorerTargetForTransaction({
     txid: row.txid,
     network,
+    networkName: row.source?.network,
     settings,
   });
 }

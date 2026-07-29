@@ -154,7 +154,11 @@ panel uses `ui.transactions.graph` to draw a local, read-only flow view: valued
 Bitcoin vin/vout become proportional input/output strands with a distinct fee
 leg, reference-only or confidential records can show amountless public
 references, and unsupported imports get an explicit empty state instead of a
-guessed graph. The view is explanatory, not a source of new accounting truth;
+guessed graph. Lookups use the wallet's own backend first and never a server
+Kassiber merely ships as a default, so the panel follows whatever observes the
+wallet and stays silent instead of reaching for third-party infrastructure; with
+nothing configured it offers an explicit backend-setup action. The view is
+explanatory, not a source of new accounting truth;
 ownership tags such as owned wallet, external recipient, change, transfer,
 swap, Coinjoin, blocker, or quarantine come from the same transaction graph and
 manual-pair semantics used by the journal pipeline. If a public backend lookup
