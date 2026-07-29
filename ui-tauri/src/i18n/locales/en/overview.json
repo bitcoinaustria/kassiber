@@ -394,6 +394,8 @@
     "showSeries": "Show {{label}}",
     "markerSize": "Marker size",
     "minBtcSize": "Minimum BTC size for activity dots",
+    "allDots": "All dots",
+    "resetMarkerMinimums": "Reset dot minimums",
     "incomingPayments": "Incoming payments",
     "outgoingActivity": "Outgoing activity",
     "minSizeWithCount": "Minimum size in BTC · {{visible}} of {{total}} dots shown",

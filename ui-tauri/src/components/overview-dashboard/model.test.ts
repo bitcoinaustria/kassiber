@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { MOCK_OVERVIEW, type OverviewSnapshot } from "@/mocks/seed";
 
 import {
+  ACTIVITY_MARKER_SLIDER_MARKS,
   activityMarkerView,
   activeMarketFiatCurrency,
   activeMarketFiatRate,
@@ -32,6 +33,7 @@ import {
   overviewTransactions,
   positiveLogDomain,
   resolveAutoTimePeriod,
+  serializeActivityMarkerMinimum,
   type TreasuryChartPoint,
 } from "./model";
 
@@ -999,6 +1001,14 @@ describe("chart scale helpers", () => {
     expect(formatBtcAxisFitted(40.827, [40.82, 40.85])).toBe("₿40.827");
     expect(formatBtcAxisFitted(40.8, [39, 43])).toBe("₿40.8");
     expect(formatBtcAxisFitted(40.8, null)).toBe("₿41");
+  });
+
+  // The quick-settings menu keys its dot-minimum radio items by the serialized
+  // mark and parses the selection back with Number().
+  it("round-trips every dot-minimum preset through its serialized form", () => {
+    for (const mark of ACTIVITY_MARKER_SLIDER_MARKS) {
+      expect(Number(serializeActivityMarkerMinimum(mark))).toBe(mark);
+    }
   });
 
   it("finds the latest drawable line value for the axis tag", () => {

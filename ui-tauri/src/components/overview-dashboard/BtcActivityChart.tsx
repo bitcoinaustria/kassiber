@@ -1368,6 +1368,11 @@ export const BtcActivityChart = ({
               onYAutoFitChange={setYAutoFit}
               showLastValue={showLastValue}
               onShowLastValueChange={setShowLastValue}
+              incomingMarkerMinimumBtc={incomingMarkerMinimumBtc}
+              onIncomingMarkerMinimumChange={setIncomingMarkerMinimumBtc}
+              outgoingMarkerMinimumBtc={outgoingMarkerMinimumBtc}
+              onOutgoingMarkerMinimumChange={setOutgoingMarkerMinimumBtc}
+              onResetMarkerMinimums={resetActivityMarkerMinimums}
               onOpenMoreSettings={() => setControlsOpen(true)}
             />
           </div>
