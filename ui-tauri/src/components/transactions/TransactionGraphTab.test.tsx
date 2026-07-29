@@ -1272,6 +1272,33 @@ describe("TransactionGraphPanel", () => {
     expect(html).not.toContain("Review the backend URL and network in Settings");
   });
 
+  it("names which backend kind failed", () => {
+    const failed: TransactionGraphPayload = {
+      ...graph,
+      supportLevel: "partial",
+      warnings: [
+        {
+          code: "bitcoin_reference_lookup_failed_electrum",
+          level: "warning",
+          message: "Could not fetch public Bitcoin transaction references from a configured Electrum backend.",
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionGraphPanel
+          graph={failed}
+          hideSensitive={false}
+          onResolveIssue={() => undefined}
+        />
+      </TooltipProvider>,
+    );
+
+    // A user with several backends configured needs to know which one failed.
+    expect(html).toContain("from the configured Electrum backend");
+    expect(html).toContain("Review Bitcoin backend");
+  });
+
   it("falls back to the daemon message for codes without a translation", () => {
     const quarantined: TransactionGraphPayload = {
       ...graph,
@@ -1337,27 +1364,35 @@ describe("route classifiers", () => {
     expect(classifyRouteKind({ kind: "withdrawal", outAsset: "BTC", inAsset: "BTC" })).toBe(
       "pair",
     );
-    // Missing assets on both sides must not read as cross-asset.
+    // Missing assets must not read as cross-asset, on either side.
     expect(classifyRouteKind({})).toBe("pair");
+    expect(classifyRouteKind({ kind: "withdrawal", outAsset: "BTC" })).toBe("pair");
+    expect(classifyRouteKind({ kind: "withdrawal", inAsset: "BTC" })).toBe("pair");
   });
 
   it("treats a Liquid-side swap leg as a consolidation", () => {
     expect(
-      classifyRouteOutRole({ kind: "peg-out", outAsset: "LBTC", inAsset: "BTC" }),
+      classifyRouteOutRole({ kind: "chain-swap", outNetwork: "LBTC", inNetwork: "BTC" }),
     ).toBe("consolidation");
     expect(
-      classifyRouteOutRole({ kind: "swap", description: "Consolidating inputs", outAsset: "BTC", inAsset: "LBTC" }),
+      classifyRouteOutRole({ kind: "swap", description: "Consolidating inputs" }),
     ).toBe("consolidation");
     expect(
-      classifyRouteOutRole({ kind: "peg-in", outAsset: "BTC", inAsset: "LBTC" }),
+      classifyRouteOutRole({ kind: "swap", outNetwork: "BTC", inNetwork: "LBTC" }),
+    ).toBe("spend");
+    // A peg crosses networks but is not a consolidation.
+    expect(
+      classifyRouteOutRole({ kind: "peg-out", outNetwork: "LBTC", inNetwork: "BTC" }),
+    ).toBe("spend");
+    // An unknown counterpart network is unknown, not a cross-network move.
+    expect(
+      classifyRouteOutRole({ kind: "swap", outNetwork: "LBTC", inNetwork: null }),
     ).toBe("spend");
     // Same network spelled two ways is not a cross-network move.
     expect(
-      classifyRouteOutRole({ kind: "swap", outAsset: "Liquid", inAsset: "LBTC" }),
+      classifyRouteOutRole({ kind: "swap", outNetwork: "Liquid", inNetwork: "LBTC" }),
     ).toBe("spend");
-    expect(classifyRouteOutRole({ kind: "withdrawal", outAsset: "BTC", inAsset: "BTC" })).toBe(
-      "spend",
-    );
+    expect(classifyRouteOutRole({ kind: "withdrawal" })).toBe("spend");
   });
 
   it("labels networks from asset and wallet hints", () => {

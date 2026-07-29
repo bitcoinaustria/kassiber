@@ -163,10 +163,14 @@ export function classifyRouteKind({
 }): TransactionRouteKind {
   const text = String(kind || "").toLowerCase();
   if (text.includes("coinjoin") || text.includes("whirlpool")) return "coinjoin";
+  const out = normalizedAsset(outAsset);
+  const into = normalizedAsset(inAsset);
   if (
     text.includes("swap") ||
     text.startsWith("peg-") ||
-    normalizedAsset(outAsset) !== normalizedAsset(inAsset)
+    // Both sides must be known before a mismatch means cross-asset, matching
+    // `_paired_route_kind`: one missing asset is unknown, not a swap.
+    (Boolean(out) && Boolean(into) && out !== into)
   ) {
     return "swap";
   }
@@ -175,32 +179,34 @@ export function classifyRouteKind({
 }
 
 /**
- * Whether the outgoing leg of a swap reads as a consolidation rather than a
- * plain spend: a Liquid-side leg feeding a different network, or a leg the
- * source data already describes as one.
+ * Whether the outgoing leg of a swap reads as a consolidation rather than a plain
+ * spend: a leg the source data already describes as one, or a Liquid-side leg
+ * whose counterpart sits on a different network.
+ *
+ * `kind` is the route kind the caller already settled (from the daemon's
+ * `routeKind` where available), never a per-leg kind — re-deriving it here would
+ * let a leg labelled "consolidation" classify as a non-swap and suppress its own
+ * signal. A peg is a swap but not a consolidation, so the Liquid-cross rule stays
+ * gated on the kind naming a swap, exactly as the pair fallback required before
+ * these two heuristics were merged.
  */
 export function classifyRouteOutRole({
   kind,
-  policy,
   description,
-  outAsset,
-  inAsset,
-  outWallet,
-  inWallet,
+  outNetwork,
+  inNetwork,
 }: {
   kind?: string | null;
-  policy?: string | null;
   description?: string | null;
-  outAsset?: string | null;
-  inAsset?: string | null;
-  outWallet?: string | null;
-  inWallet?: string | null;
+  outNetwork?: string | null;
+  inNetwork?: string | null;
 }): "consolidation" | "spend" {
-  if (classifyRouteKind({ kind, policy, outAsset, inAsset }) !== "swap") return "spend";
-  if (lowerJoin([kind, description]).includes("consolidat")) return "consolidation";
-  const outNetwork = routeNetworkLabel(outAsset, outWallet);
-  const inNetwork = routeNetworkLabel(inAsset, inWallet);
-  return outNetwork === "Liquid" && outNetwork !== inNetwork ? "consolidation" : "spend";
+  const text = lowerJoin([kind, description]);
+  if (text.includes("consolidat")) return "consolidation";
+  if (!text.includes("swap")) return "spend";
+  const out = routeNetworkLabel(outNetwork);
+  const into = routeNetworkLabel(inNetwork);
+  return out === "Liquid" && Boolean(into) && out !== into ? "consolidation" : "spend";
 }
 
 export type TransactionSwapRouteLegKey = "out" | "in";

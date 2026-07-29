@@ -923,7 +923,10 @@ function AnnotationStrip({
   const { t } = useTranslation("transactions");
   // Group ids used to be concatenated into the badge text, which put a raw
   // internal identifier on screen. Collapse repeats of the same annotation into
-  // one badge with a count instead; the pairing itself lives in the Linked tab.
+  // one badge with a count instead. This does drop the ability to tell two
+  // custody decisions apart from the strip; nothing else in the UI renders
+  // `groupId`, so if that correlation is wanted it needs a real surface rather
+  // than a uuid in a badge.
   const badges = new Map<string, { label: string; severity?: string; count: number }>();
   for (const annotation of annotations ?? []) {
     const label = graphCodeText(t, "annotations", annotation.code, annotation.label);
@@ -1070,11 +1073,10 @@ function swapRouteOutLooksLikeConsolidation(route: TransactionSwapRoute) {
   if (route.out.role === "spend") return false;
   return (
     classifyRouteOutRole({
-      kind: route.out.kind || route.kind,
-      policy: route.policy,
-      description: route.out.description,
-      outAsset: route.out.network || route.out.asset,
-      inAsset: route.in.network || route.in.asset,
+      kind: route.kind,
+      description: `${route.out.kind || ""} ${route.out.description || ""}`,
+      outNetwork: route.out.network || route.out.asset,
+      inNetwork: route.in.network || route.in.asset,
     }) === "consolidation"
   );
 }

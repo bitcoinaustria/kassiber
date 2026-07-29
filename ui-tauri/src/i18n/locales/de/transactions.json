@@ -757,6 +757,9 @@
     },
     "warnings": {
       "bitcoin_reference_lookup_failed": "Die Bitcoin-Transaktions-Referenzen konnten von keinem konfigurierten Backend abgerufen werden.",
+      "bitcoin_reference_lookup_failed_bitcoinrpc": "Die Bitcoin-Transaktions-Referenzen konnten nicht vom konfigurierten Bitcoin-Core-Backend abgerufen werden.",
+      "bitcoin_reference_lookup_failed_electrum": "Die Bitcoin-Transaktions-Referenzen konnten nicht vom konfigurierten Electrum-Backend abgerufen werden.",
+      "bitcoin_reference_lookup_failed_explorer": "Die Bitcoin-Transaktions-Referenzen konnten nicht vom konfigurierten Explorer-Backend abgerufen werden.",
       "bitcoin_reference_lookup_incomplete": "Der Bitcoin-Referenz-Abruf hat nicht alle Referenzen für einen vollständigen Graph geliefert.",
       "bitcoin_reference_lookup_invalid": "Ein konfiguriertes Bitcoin-Backend hat eine ungültige Transaktions-Antwort geliefert.",
       "bitcoin_reference_lookup_mismatch": "Der Bitcoin-Referenz-Abruf hat eine andere Transaktion geliefert.",
@@ -768,6 +771,8 @@
       "input_prevout_values_missing": "Input-Beträge stammen aus den ausgegebenen vorherigen Outputs, die lokal nicht gespeichert sind. Referenzen und Outputs werden trotzdem gezeichnet; Gebühr und Gebührenrate brauchen diese Beträge.",
       "liquid_reference_graph_not_local": "Lokal liegt nur die importierte Liquid-Zeile. Füge ein Liquid-Explorer-Backend hinzu, um öffentliche Referenzen zu sehen; vertrauliche Beträge bleiben verborgen.",
       "liquid_reference_lookup_failed": "Die Liquid-Transaktions-Referenzen konnten von keinem konfigurierten Backend abgerufen werden.",
+      "liquid_reference_lookup_failed_electrum": "Die Liquid-Transaktions-Referenzen konnten nicht vom konfigurierten Electrum-Backend abgerufen werden.",
+      "liquid_reference_lookup_failed_explorer": "Die Liquid-Transaktions-Referenzen konnten nicht vom konfigurierten Explorer-Backend abgerufen werden.",
       "liquid_reference_lookup_incomplete": "Der Liquid-Referenz-Abruf hat keine öffentlichen Input/Output-Referenzen geliefert.",
       "liquid_reference_lookup_invalid": "Ein konfiguriertes Liquid-Backend hat eine ungültige Transaktions-Antwort geliefert.",
       "liquid_reference_lookup_mismatch": "Der Liquid-Referenz-Abruf hat eine andere Transaktion geliefert.",

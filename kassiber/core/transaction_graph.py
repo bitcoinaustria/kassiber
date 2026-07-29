@@ -540,82 +540,46 @@ def _local_wallet_outpoint_amounts(
             outpoints.add(f"{txid.lower()}:{n}")
     if not outpoints:
         return {}
-    # Use the row's own chain/network, exactly as the ownership annotation pass
-    # does. Defaulting to Liquid here silently filtered the inventory to
-    # chain='liquid' for every wallet whose config carries no chain material
-    # (BTCPay stores, CSV/exchange imports, Lightning nodes), so locally known
-    # Bitcoin prevout amounts were dropped and the graph degraded to "partial".
-    chain, network = _row_chain_network(row)
+    # Resolve the row's chain the same way the lookup does, promoting to Liquid on
+    # the confidential/Liquid signal. A flat Liquid default used to filter the
+    # inventory to chain='liquid' for every wallet whose config carries no chain
+    # material (BTCPay stores, CSV/exchange imports, Lightning nodes), so locally
+    # known Bitcoin prevout amounts were dropped and the graph degraded to
+    # "partial"; a flat Bitcoin default would do the same to a Liquid row whose
+    # asset is a bare asset id rather than an LBTC alias.
+    wanted = (
+        _row_chain_network(row, default_chain="liquid", default_network="liquidv1")
+        if _looks_liquid_or_confidential(row, raw)
+        else _row_chain_network(row)
+    )
     placeholders = ", ".join("?" for _ in outpoints)
     rows = conn.execute(
         f"""
-        SELECT lower(outpoint) AS outpoint, amount
+        SELECT lower(outpoint) AS outpoint, amount, chain, network
         FROM wallet_utxos
         WHERE profile_id = ?
-          AND lower(chain) = ?
-          AND lower(network) = ?
           AND lower(outpoint) IN ({placeholders})
         """,
-        (profile_id, chain.lower(), network.lower(), *sorted(outpoints)),
+        (profile_id, *sorted(outpoints)),
     ).fetchall()
     amounts: dict[str, int] = {}
     for amount_row in rows:
+        # Normalize BOTH sides, as core.ownership does when it seeds the owned
+        # index: the transactions side is canonical ('main') while the inventory
+        # column keeps whatever the writer stored ('mainnet' on the Wasabi import
+        # path), and comparing the raw strings silently matched nothing.
+        if (
+            _norm_chain_network(
+                _row_get(amount_row, "chain"), _row_get(amount_row, "network")
+            )
+            != wanted
+        ):
+            continue
         outpoint = _string_or_none(_row_get(amount_row, "outpoint"))
         amount_msat = _int_or_none(_row_get(amount_row, "amount"))
         if outpoint is not None and amount_msat is not None and amount_msat >= 0:
             amounts[outpoint.lower()] = amount_msat // SATS_TO_MSAT
     return amounts
-
-
-def _local_transaction_graphs(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    txids: Sequence[str],
-    chain: str,
-    network: str,
-) -> dict[str, dict[str, Any]]:
-    """Public graphs kassiber already stores locally for these txids.
-
-    Only rows on the same chain/network count, and only their outputs are used —
-    that is all a previous output needs. Output indexes follow the same
-    convention ``_parse_graph`` already applies to stored rows: an explicit ``n``
-    when present, list position otherwise (Esplora payloads carry no ``n``).
-    Sanitizing on the way into the cache stamps the index explicitly.
-    """
-    normalized = sorted({str(txid).strip().lower() for txid in txids if txid})
-    if not normalized:
-        return {}
-    placeholders = ", ".join("?" for _ in normalized)
-    rows = conn.execute(
-        f"""
-        SELECT
-            lower(t.external_id) AS graph_txid,
-            t.raw_json,
-            t.asset,
-            w.kind AS wallet_kind,
-            w.config_json AS wallet_config_json
-        FROM transactions t
-        JOIN wallets w ON w.id = t.wallet_id
-        WHERE t.profile_id = ?
-          AND lower(t.external_id) IN ({placeholders})
-        """,
-        (profile_id, *normalized),
-    ).fetchall()
-    found: dict[str, dict[str, Any]] = {}
-    wanted = _norm_chain_network(chain, network)
-    for row in rows:
-        txid = _string_or_none(_row_get(row, "graph_txid"))
-        if txid is None or txid in found:
-            continue
-        if _row_chain_network(row) != wanted:
-            continue
-        graph = _json_obj(_row_get(row, "raw_json"))
-        vout = graph.get("vout")
-        if not isinstance(vout, list) or not vout:
-            continue
-        graph.setdefault("txid", txid)
-        found[txid] = graph
-    return found
 
 
 def _local_outpoint_sats(
@@ -885,7 +849,6 @@ def _enrich_reference_graph_raw(
             str(txid),
             raw,
             liquid=liquid,
-            profile_id=_string_or_none(_row_get(row, "profile_id")),
         )
         if fetched.get("_graphLookupWarning"):
             fallback = fetched
@@ -907,7 +870,6 @@ def _fetch_reference_graph_from_backend(
     raw: Mapping[str, Any],
     *,
     liquid: bool,
-    profile_id: str | None = None,
 ) -> Mapping[str, Any]:
     label, prefix = ("Liquid", "liquid") if liquid else ("Bitcoin", "bitcoin")
     kind = normalize_backend_kind(backend.get("kind"))
@@ -918,12 +880,14 @@ def _fetch_reference_graph_from_backend(
                     conn, backend, chain, network, txid
                 )
             return _fetch_bitcoin_electrum_graph_raw(
-                conn, backend, chain, network, txid, profile_id=profile_id
+                conn, backend, chain, network, txid
             )
         except Exception:
             return _with_graph_lookup_warning(
                 raw,
-                f"{prefix}_reference_lookup_failed",
+                # The code names the backend kind: with several configured, "a
+                # backend failed" does not tell the user where to look.
+                f"{prefix}_reference_lookup_failed_electrum",
                 f"Could not fetch public {label} transaction references from a"
                 " configured Electrum backend.",
             )
@@ -935,12 +899,11 @@ def _fetch_reference_graph_from_backend(
                 chain,
                 network,
                 txid,
-                profile_id=profile_id,
             )
         except Exception:
             return _with_graph_lookup_warning(
                 raw,
-                "bitcoin_reference_lookup_failed",
+                "bitcoin_reference_lookup_failed_bitcoinrpc",
                 "Could not fetch public Bitcoin transaction references from a"
                 " configured Bitcoin Core backend.",
             )
@@ -949,7 +912,7 @@ def _fetch_reference_graph_from_backend(
     except Exception:
         return _with_graph_lookup_warning(
             raw,
-            f"{prefix}_reference_lookup_failed",
+            f"{prefix}_reference_lookup_failed_explorer",
             f"Could not fetch public {label} transaction references from a"
             " configured explorer backend.",
         )
@@ -1030,8 +993,6 @@ def _fetch_bitcoinrpc_transaction_graph(
     chain: str,
     network: str,
     txid: str,
-    *,
-    profile_id: str | None = None,
 ) -> Mapping[str, Any]:
     decoded = bitcoinrpc_call(
         dict(backend),
@@ -1049,7 +1010,6 @@ def _fetch_bitcoinrpc_transaction_graph(
         raw,
         fetch_missing=lambda missing: _bitcoinrpc_missing_prevout_graphs(backend, missing),
         source_label="Bitcoin Core",
-        profile_id=profile_id,
     )
     if not _bitcoin_current_graph_has_required_prevouts(raw):
         if raw.get("_graphLookupWarning"):
@@ -1106,18 +1066,23 @@ def _attach_bitcoin_prevouts(
     *,
     fetch_missing,
     source_label: str,
-    profile_id: str | None = None,
 ) -> dict[str, Any]:
     """Resolve the spent previous outputs a Bitcoin graph is still missing.
 
     Shared by the Electrum and Bitcoin Core lookups. Each distinct previous txid
-    is resolved at most once, from the cheapest source that has it — the durable
-    graph cache, then the profile's own stored transaction graphs, then the
-    backend — and the number of uncached lookups is capped so a many-input
-    transaction (a consolidation, a CoinJoin) cannot fan out into an unbounded run
-    of requests against the user's backend. ``fetch_missing`` maps the remaining
-    txids to normalized graph payloads; it may return fewer than asked for, in
-    which case the graph stays incomplete and the caller warns.
+    is resolved at most once, the durable graph cache is consulted and populated,
+    and the number of uncached lookups is capped so a many-input transaction (a
+    consolidation, a CoinJoin) cannot fan out into an unbounded run of requests
+    against the user's backend. ``fetch_missing`` maps the remaining txids to
+    normalized graph payloads; it may return fewer than asked for, in which case
+    the graph stays incomplete and the caller warns.
+
+    Deliberately does NOT read previous outputs out of the profile's own stored
+    transaction rows: a stored row's vout list is not guaranteed to be the
+    transaction's complete, in-order output set (a silent-payment scanner payload
+    or an imported raw_json may hold only the matched outputs), so its output
+    index cannot be trusted to identify the spent output, and a wrong prevout
+    would be committed to the shared per-txid cache.
     """
     enriched = dict(raw)
     vin = [dict(entry) for entry in enriched.get("vin", []) if isinstance(entry, Mapping)]
@@ -1143,30 +1108,14 @@ def _attach_bitcoin_prevouts(
         else:
             missing.append(normalized)
 
-    if missing and profile_id:
-        # A missing previous output is often the body of another transaction in
-        # this profile that sync already fetched in full. Reading those rows keeps
-        # a fan-in lookup off the network entirely, which matters on shared public
-        # infrastructure.
-        for prev_txid, prev_raw in _local_transaction_graphs(
-            conn, profile_id, missing, chain, network
-        ).items():
-            cached_prev[prev_txid] = _store_graph_lookup_cache(
-                conn,
-                chain,
-                network,
-                prev_txid,
-                prev_raw,
-            )
-        missing = [prev_txid for prev_txid in missing if prev_txid not in cached_prev]
-
     if len(missing) > MAX_GRAPH_PREVTX_LOOKUPS:
         _attach_bitcoin_prevouts_from_cached_graphs(enriched, cached_prev)
         return _with_graph_lookup_warning(
             enriched,
             "bitcoin_reference_lookup_prevout_limit",
             f"{source_label} graph lookup needs too many uncached previous"
-            " transactions; Kassiber capped the request to avoid flooding it.",
+            f" transactions; Kassiber capped the request to avoid flooding the"
+            f" {source_label} backend.",
         )
 
     if missing:
@@ -1631,8 +1580,6 @@ def _fetch_bitcoin_electrum_graph_raw(
     chain: str,
     network: str,
     txid: str,
-    *,
-    profile_id: str | None = None,
 ) -> Mapping[str, Any]:
     client_backend = _graph_backend_with_timeout_cap(backend)
     with ElectrumClient(client_backend) as client:
@@ -1648,7 +1595,6 @@ def _fetch_bitcoin_electrum_graph_raw(
                 client, client_backend, missing
             ),
             source_label="Bitcoin Electrum",
-            profile_id=profile_id,
         )
     if not _bitcoin_current_graph_has_required_prevouts(raw):
         if raw.get("_graphLookupWarning"):
@@ -1827,6 +1773,12 @@ def _liquid_electrum_decoded_to_graph_raw(
         "vout": [],
     }
     if raw_hex:
+        # Byte size only. Elements puts its witness flag at offset 4, so the
+        # Bitcoin walker used to read a witness-bearing Liquid transaction as
+        # legacy and returned vsize == size / weight == 4 * size — plausible
+        # numbers that were simply wrong. A real Elements vsize needs an Elements
+        # parser; until then the payload reports no vsize (and so no fee rate)
+        # rather than a fabricated one.
         raw.update(_raw_hex_byte_size(raw_hex))
     for vin in getattr(decoded, "vin", []) or []:
         try:
@@ -2582,16 +2534,22 @@ def _size_metadata_from_raw_hex(raw_hex: str) -> dict[str, int]:
     carrying a second varint walker here. Elements/Liquid uses a different
     serialization, so Liquid callers must derive the byte size themselves rather
     than routing their hex through this.
+
+    Hex that is well-formed but not a decodable Bitcoin transaction still yields
+    its byte size, which is all the previous implementation recovered for it.
     """
     try:
         decoded = decode_raw_transaction(raw_hex)
     except (IndexError, ValueError):
-        return {}
-    return {
+        return _raw_hex_byte_size(raw_hex)
+    metadata = {
         key: value
         for key in ("size", "vsize", "weight")
         if (value := _int_or_none(decoded.get(key))) is not None
     }
+    # The decoder withholds sizes when the walk did not consume the payload
+    # exactly; the byte count is still trustworthy.
+    return metadata or _raw_hex_byte_size(raw_hex)
 
 
 def _raw_hex_byte_size(raw_hex: str) -> dict[str, int]:

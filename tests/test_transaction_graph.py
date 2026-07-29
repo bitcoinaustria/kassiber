@@ -391,6 +391,110 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["inputs"][0]["valueState"], "known")
         self.assertEqual(payload["fee"]["valueSats"], 100_000)
 
+    def test_local_inventory_amounts_match_non_canonical_network_spellings(self):
+        # The Wasabi import path writes network='mainnet' while the transactions
+        # side canonicalizes to 'main'; comparing the raw strings matched nothing.
+        prev_txid = "77" * 32
+        txid = "78" * 32
+        self._utxo(
+            "wallet-a",
+            ADDR_A,
+            prev_txid,
+            0,
+            amount=600_000,
+            chain="Bitcoin",
+            network="mainnet",
+        )
+        raw = {
+            "txid": txid,
+            "vin": [{"txid": prev_txid, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 500_000}],
+        }
+        self._tx("mainnet-spelling-row", "wallet-a", "outbound", 500_000_000, txid, raw)
+
+        payload = self._graph("mainnet-spelling-row")
+
+        self.assertEqual(payload["supportLevel"], "full")
+        self.assertEqual(payload["inputs"][0]["valueSats"], 600_000)
+        self.assertEqual(payload["fee"]["valueSats"], 100_000)
+
+    def test_local_inventory_amounts_reach_a_bare_asset_id_liquid_row(self):
+        # A non-policy Liquid asset stores the bare 64-hex asset id, and no wallet
+        # kind contains "liquid", so the row is only recognizable as Liquid from
+        # its confidential legs. It must still read the Liquid inventory.
+        prev_txid = "79" * 32
+        txid = "7a" * 32
+        asset_id = "ab" * 32
+        self._utxo(
+            "wallet-a",
+            ADDR_A,
+            prev_txid,
+            0,
+            amount=13_000_000,
+            chain="liquid",
+            network="liquidv1",
+            asset=asset_id,
+        )
+        raw = {
+            "txid": txid,
+            "vin": [
+                {
+                    "txid": prev_txid,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "valuecommitment": "09" + "aa" * 32},
+                }
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 12_900_000}],
+        }
+        self._tx(
+            "bare-asset-liquid-row",
+            "wallet-a",
+            "outbound",
+            12_900_000_000,
+            txid,
+            raw,
+            asset=asset_id,
+        )
+
+        payload = self._graph("bare-asset-liquid-row")
+
+        self.assertEqual(payload["inputs"][0]["valueSats"], 13_000_000)
+        self.assertEqual(payload["inputs"][0]["valueState"], "known")
+
+    def test_malformed_raw_hex_yields_no_fabricated_size_metadata(self):
+        # Slicing truncates instead of raising, so a bad hex can walk to the wrong
+        # offset. Sizes must be withheld rather than reported as negative numbers,
+        # and the byte count must survive.
+        valid = (
+            "01000000"
+            "01"
+            f"{'11' * 32}"
+            "00000000"
+            "00"
+            "ffffffff"
+            "01"
+            "40420f0000000000"
+            "00"
+            "00000000"
+        )
+        self.assertEqual(
+            tg._size_metadata_from_raw_hex(valid),
+            {"size": 60, "vsize": 60, "weight": 240},
+        )
+        for label, raw_hex in (
+            ("trailing bytes", valid + "deadbeef"),
+            ("truncated", valid[:-8]),
+            ("not a transaction", "ab" * 40),
+        ):
+            with self.subTest(label):
+                metadata = tg._size_metadata_from_raw_hex(raw_hex)
+                self.assertEqual(
+                    metadata,
+                    {"size": len(bytes.fromhex(raw_hex))},
+                    f"{label} must report byte size only",
+                )
+        self.assertEqual(tg._size_metadata_from_raw_hex("not-hex"), {})
+
     def test_bitcoin_missing_input_prevout_values_are_explained_precisely(self):
         raw = {
             "txid": "prevout-missing-tx",
@@ -2068,58 +2172,125 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["outputs"][0]["valueSats"], 600_000)
         self.assertEqual(payload["fee"]["valueSats"], 100_000)
 
-    def test_bitcoin_prevout_is_read_from_a_local_transaction_graph(self):
-        txid = "73" * 32
-        prev_txid = "74" * 32
+    def test_stored_local_row_never_substitutes_for_a_prevout_lookup(self):
+        # A stored row's vout list is not guaranteed to be the transaction's
+        # complete, in-order output set, so its output index cannot identify the
+        # spent output. Reading prevouts from local rows would both suppress the
+        # backend fetch and attach the wrong amount.
+        txid = "7b" * 32
+        prev_txid = "7c" * 32
         create_db_backend(
             self.conn,
-            "graph-fulcrum",
-            "electrum",
-            "ssl://fulcrum.example:50002",
+            "graph-core",
+            "bitcoinrpc",
+            "http://node.example",
             chain="bitcoin",
             network="main",
-            timeout=60,
+            timeout=5,
             commit=False,
         )
-        # wallet-b already synced the previous transaction in full. Its stored
-        # shape is the Esplora one, which carries no explicit "n".
+        # Only the wallet's own output, no "n", really at index 1.
         self._tx(
-            "local-prev-row",
+            "partial-local-prev-row",
             "wallet-b",
             "inbound",
-            700_000_000,
+            70_000_000,
             prev_txid,
-            {
+            {"txid": prev_txid, "vin": [], "vout": [{"scriptpubkey": SCRIPT_A, "value": 70_000}]},
+        )
+        self._tx("prev-lookup-row", "wallet-a", "outbound", 500_000_000, txid, "{}")
+        requested: list[str] = []
+
+        def fake_rpc(backend, method, params, **kwargs):
+            requested.append(params[0])
+            if params[0] == txid:
+                return {
+                    "txid": txid,
+                    "version": 2,
+                    "locktime": 0,
+                    "vin": [{"txid": prev_txid, "vout": 0}],
+                    "vout": [
+                        {
+                            "n": 0,
+                            "value": 0.005,
+                            "scriptPubKey": {"hex": SCRIPT_B, "type": "witness_v0_keyhash"},
+                        }
+                    ],
+                }
+            return {
                 "txid": prev_txid,
+                "version": 2,
+                "locktime": 0,
                 "vin": [],
-                "vout": [{"scriptpubkey": SCRIPT_A, "value": 700_000}],
-            },
-        )
-        self._tx("local-prev-spend-row", "wallet-a", "outbound", 600_000_000, txid, "{}")
-        decoded_current = {
-            "version": 2,
-            "locktime": 0,
-            "vin": [{"txid": prev_txid, "vout": 0}],
-            "vout": [{"n": 0, "script_hex": SCRIPT_B, "value_sats": 600_000}],
-        }
-        _FakeElectrumClient.calls = []
-        _FakeElectrumClient.backends = []
-        _FakeElectrumClient.responses = {txid: "current-raw"}
+                "vout": [
+                    {
+                        "n": 0,
+                        "value": 0.006,
+                        "scriptPubKey": {"hex": SCRIPT_A, "type": "witness_v0_keyhash"},
+                    },
+                    {
+                        "n": 1,
+                        "value": 0.0007,
+                        "scriptPubKey": {"hex": SCRIPT_A, "type": "witness_v0_keyhash"},
+                    },
+                ],
+            }
 
-        with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
-            "kassiber.core.transaction_graph.decode_raw_transaction",
-            return_value=decoded_current,
+        with patch(
+            "kassiber.core.transaction_graph.bitcoinrpc_call", side_effect=fake_rpc
         ):
-            payload = self._graph("local-prev-spend-row", allow_public_lookup=True)
+            payload = self._graph("prev-lookup-row", allow_public_lookup=True)
 
-        # Only the focused transaction went to the backend; the prevout was local.
-        self.assertEqual(
-            _FakeElectrumClient.calls,
-            [("blockchain.transaction.get", (txid,))],
-        )
+        self.assertIn(prev_txid, requested)
         self.assertEqual(payload["supportLevel"], "full")
-        self.assertEqual(payload["inputs"][0]["valueSats"], 700_000)
+        self.assertEqual(payload["inputs"][0]["valueSats"], 600_000)
         self.assertEqual(payload["fee"]["valueSats"], 100_000)
+        cached = self._cached_graph_raw(prev_txid)
+        self.assertEqual(
+            [entry.get("value") for entry in cached["vout"]], [600_000, 70_000]
+        )
+
+    def test_malformed_raw_hex_does_not_reach_the_payload_as_a_fee_rate(self):
+        segwit = (
+            "02000000"
+            "0001"
+            "01"
+            f"{'22' * 32}"
+            "01000000"
+            "00"
+            "ffffffff"
+            "01"
+            "e803000000000000"
+            "160014"
+            f"{'33' * 20}"
+            "02"
+            "47"
+            f"{'44' * 71}"
+            "21"
+            f"{'55' * 33}"
+            "00000000"
+        )
+        bad_hex = segwit.replace("0247", "02fc", 1)
+        raw = {
+            "txid": "7d" * 32,
+            "raw_hex": bad_hex,
+            "vin": [
+                {
+                    "txid": "7e" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value": 600_000},
+                }
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 500_000}],
+        }
+        self._tx("bad-hex-row", "wallet-a", "outbound", 500_000_000, "7d" * 32, raw)
+
+        meta = self._graph("bad-hex-row")["transaction"]
+
+        self.assertEqual(meta["size"], len(bytes.fromhex(bad_hex)))
+        self.assertIsNone(meta["vsize"])
+        self.assertIsNone(meta["weight"])
+        self.assertIsNone(meta["feeRateSatVb"])
 
     def test_failed_lookup_keeps_the_partial_local_graph(self):
         txid = "75" * 32
@@ -2150,8 +2321,9 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["supportLevel"], "partial")
         self.assertEqual(payload["unsupportedReason"], "input_prevout_values_missing")
         self.assertEqual(payload["outputs"][0]["valueSats"], 500_000)
+        # The code names the backend kind that failed, not just "a backend".
         self.assertIn(
-            "bitcoin_reference_lookup_failed",
+            "bitcoin_reference_lookup_failed_explorer",
             {warning["code"] for warning in payload["warnings"]},
         )
 

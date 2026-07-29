@@ -124,9 +124,9 @@ function pairRouteArgs(pair: PairRow) {
 
 function fallbackSwapOutRole(pair: PairRow) {
   return classifyRouteOutRole({
-    ...pairRouteArgs(pair),
-    outWallet: pair.outWallet,
-    inWallet: pair.inWallet,
+    kind: pair.kind || pair.type,
+    outNetwork: routeNetworkLabel(pair.outAsset, pair.outWallet),
+    inNetwork: routeNetworkLabel(pair.inAsset, pair.inWallet),
   });
 }
 

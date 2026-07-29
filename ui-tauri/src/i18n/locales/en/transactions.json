@@ -738,6 +738,9 @@
     },
     "warnings": {
       "bitcoin_reference_lookup_failed": "Could not fetch Bitcoin transaction references from a configured backend.",
+      "bitcoin_reference_lookup_failed_bitcoinrpc": "Could not fetch Bitcoin transaction references from the configured Bitcoin Core backend.",
+      "bitcoin_reference_lookup_failed_electrum": "Could not fetch Bitcoin transaction references from the configured Electrum backend.",
+      "bitcoin_reference_lookup_failed_explorer": "Could not fetch Bitcoin transaction references from the configured explorer backend.",
       "bitcoin_reference_lookup_incomplete": "The Bitcoin reference lookup did not return every reference needed for a complete graph.",
       "bitcoin_reference_lookup_invalid": "A configured Bitcoin backend returned an invalid transaction response.",
       "bitcoin_reference_lookup_mismatch": "The Bitcoin reference lookup returned a different transaction.",
@@ -749,6 +752,8 @@
       "input_prevout_values_missing": "Input amounts come from the spent previous outputs, which are not stored locally. References and outputs still draw; fee and fee rate need those amounts.",
       "liquid_reference_graph_not_local": "Only the imported Liquid row is stored locally. Add a Liquid explorer backend to inspect public references; confidential amounts stay hidden.",
       "liquid_reference_lookup_failed": "Could not fetch Liquid transaction references from a configured backend.",
+      "liquid_reference_lookup_failed_electrum": "Could not fetch Liquid transaction references from the configured Electrum backend.",
+      "liquid_reference_lookup_failed_explorer": "Could not fetch Liquid transaction references from the configured explorer backend.",
       "liquid_reference_lookup_incomplete": "The Liquid reference lookup did not return public input/output references.",
       "liquid_reference_lookup_invalid": "A configured Liquid backend returned an invalid transaction response.",
       "liquid_reference_lookup_mismatch": "The Liquid reference lookup returned a different transaction.",
