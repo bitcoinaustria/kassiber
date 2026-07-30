@@ -119,7 +119,11 @@ import {
   type BareXpubScriptType,
   detectWalletMaterial,
 } from "@/lib/walletMaterialFormat";
-import { devLockProps, isDevLockedRoute } from "@/components/kb/devMode";
+import {
+  DEV_LOCK_CLASS,
+  devLockProps,
+  isDevLockedRoute,
+} from "@/components/kb/devMode";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useConnectionRefreshState } from "@/hooks/useConnectionRefreshState";
@@ -583,13 +587,8 @@ function ConnectionDetailView({
   // bounce this link to Overview, so it advertises the feature without opening
   // it until the switch is on.
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
-  const sourceOfFundsLock = devLockProps(
-    !developerToolsEnabled && isDevLockedRoute("/source-of-funds"),
-    t("nav:devLocked"),
-    // Kill this row's hover tint and press-scale, or a locked row still feels
-    // clickable under the cursor.
-    "hover:bg-transparent! active:scale-100!",
-  );
+  const sourceOfFundsLocked =
+    !developerToolsEnabled && isDevLockedRoute("/source-of-funds");
   const addNotification = useUiStore((state) => state.addNotification);
   const updateNotification = useUiStore((state) => state.updateNotification);
   const identity = useUiStore((state) => state.identity);
@@ -2126,8 +2125,19 @@ function ConnectionDetailView({
                     side nav gives the early-stage rows. */}
                 <Link
                   to="/source-of-funds"
-                  className={relatedViewLinkClass}
-                  {...sourceOfFundsLock}
+                  {...devLockProps(
+                    sourceOfFundsLocked,
+                    `${t("detail.relatedViews.sourceOfFunds")} — ${t("nav:devLocked")}`,
+                  )}
+                  className={cn(
+                    relatedViewLinkClass,
+                    sourceOfFundsLocked && [
+                      DEV_LOCK_CLASS,
+                      // Kill this row's hover tint and press-scale, or a locked
+                      // row still feels clickable under the cursor.
+                      "hover:bg-transparent! active:scale-100!",
+                    ],
+                  )}
                 >
                   <span className={relatedViewIconClass} aria-hidden="true">
                     <ShieldCheck className="size-4" />

@@ -33,5 +33,5 @@
     "fallbackBook": "Ausgewähltes Buch",
     "fallbackPage": "Seite"
   },
-  "devLocked": "Funktion im Aufbau. Schalte sie in Einstellungen → Entwicklerwerkzeuge ein."
+  "devLocked": "Funktion im Aufbau. Schalte sie in Einstellungen → Desktop → Entwicklerwerkzeuge ein."
 }

@@ -33,5 +33,5 @@
     "fallbackBook": "Selected book",
     "fallbackPage": "page"
   },
-  "devLocked": "Early-stage feature. Turn it on in Settings → Developer tools."
+  "devLocked": "Early-stage feature. Turn it on in Settings → Desktop → Developer tools."
 }

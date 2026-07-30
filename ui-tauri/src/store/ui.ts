@@ -452,7 +452,9 @@ export function migrateUiState(
   const restored = persisted as Partial<UiState>;
   return {
     ...restored,
-    ...(version < 1 ? { developerToolsEnabled: false } : {}),
+    // `!(version >= 1)` rather than `version < 1`, so a blob with no numeric
+    // version is treated as pre-v1 instead of slipping through.
+    ...(version >= 1 ? {} : { developerToolsEnabled: false }),
   } as ReturnType<typeof uiStatePartialForStorage>;
 }
 

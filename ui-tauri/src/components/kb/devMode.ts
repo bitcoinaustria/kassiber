@@ -33,9 +33,22 @@ const DEV_ONLY_ROUTES = new Set<string>([
 
 const DEV_LOCKED_ROUTE_SET = new Set<string>(DEV_LOCKED_ROUTES);
 
+export type DevLockProps = {
+  "aria-disabled"?: true;
+  title?: string;
+  onClick?: (event: { preventDefault: () => void }) => void;
+};
+
+/** Classes that grey a locked row out. Merge into the row's own `className`. */
+export const DEV_LOCK_CLASS = "cursor-not-allowed opacity-50";
+
 /**
  * Props that turn a link into an early-stage signpost: still visible (that is
- * the point — it is a sneak peek), greyed out, and inert.
+ * the point — it is a sneak peek), inert, and able to say why.
+ *
+ * Deliberately carries no `className`: these get spread onto an element that
+ * already has its own classes, and a spread landing after `className` would
+ * silently drop them. Merge `DEV_LOCK_CLASS` yourself instead.
  *
  * `aria-disabled` is what screen readers announce as unavailable and what the
  * shadcn recipes style; the click guard is what actually stops navigation,
@@ -44,17 +57,10 @@ const DEV_LOCKED_ROUTE_SET = new Set<string>(DEV_LOCKED_ROUTES);
  * announce itself either. The event is typed structurally so this module stays
  * React-free.
  */
-export function devLockProps(
-  locked: boolean,
-  hint: string,
-  className?: string,
-) {
+export function devLockProps(locked: boolean, hint: string): DevLockProps {
   if (!locked) return {};
   return {
-    "aria-disabled": true as const,
-    className: ["cursor-not-allowed opacity-50", className]
-      .filter(Boolean)
-      .join(" "),
+    "aria-disabled": true,
     title: hint,
     onClick: (event: { preventDefault: () => void }) => event.preventDefault(),
   };
@@ -65,9 +71,6 @@ export function isDevLockedRoute(route: string): boolean {
   return DEV_LOCKED_ROUTE_SET.has(route);
 }
 
-export function isDevHiddenRoute(route: string): boolean {
-  return DEV_HIDDEN_ROUTES.includes(route as (typeof DEV_HIDDEN_ROUTES)[number]);
-}
 
 /** Settings sections (see `SettingsSectionId`) hidden while dev mode is off. */
 const DEV_ONLY_SETTINGS_SECTIONS = new Set<string>(["data-sync"]);

@@ -17,6 +17,9 @@ const EARLY_STAGE_NOTIFICATION = {
   title: "Early-stage feature",
   body: "Turn on early-stage features in Settings to open this page.",
   tone: "info",
+  // Every gated route shares one slot: the menu items carry accelerators
+  // (Cmd+6 among them), and a held key must not fill the notification list.
+  dedupeKey: "early-stage-feature",
 } as const;
 
 export type AppRoutePath =
@@ -109,6 +112,7 @@ export interface MenuIntentNotification {
   title: string;
   body: string;
   tone: "info" | "warning" | "success" | "error";
+  dedupeKey?: string;
 }
 
 export interface MenuIntentDeps {

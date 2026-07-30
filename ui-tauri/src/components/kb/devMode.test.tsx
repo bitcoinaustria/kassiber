@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import i18n from "@/i18n";
 import { buildAppSearchResults } from "./search";
-import { DEV_HIDDEN_ROUTES, DEV_LOCKED_ROUTES } from "./devMode";
+import { renderToStaticMarkup } from "react-dom/server";
+
+import {
+  DEV_HIDDEN_ROUTES,
+  DEV_LOCK_CLASS,
+  DEV_LOCKED_ROUTES,
+  devLockProps,
+} from "./devMode";
 import {
   migrateUiState,
   useUiStore,
@@ -20,6 +27,62 @@ const devOnly = [...DEV_LOCKED_ROUTES, ...DEV_HIDDEN_ROUTES];
 describe("pre-release dev mode", () => {
   it("ships off, so a fresh install never lands on an unfinished page", () => {
     expect(useUiStore.getState().developerToolsEnabled).toBe(false);
+  });
+
+  // Spelled out rather than derived: every other test in this file iterates
+  // these arrays, so dropping a route would shrink the loops and stay green
+  // while the surface silently went live.
+  it("gates exactly the agreed surfaces", () => {
+    expect([...DEV_LOCKED_ROUTES]).toEqual([
+      "/activity",
+      "/custody-gaps",
+      "/exit-tax",
+      "/privacy-mirror",
+      "/source-of-funds",
+    ]);
+    expect([...DEV_HIDDEN_ROUTES]).toEqual([
+      "/egress",
+      "/logs",
+      "/settings/sync",
+    ]);
+  });
+
+  describe("devLockProps", () => {
+    const hint = "Early-stage feature.";
+
+    it("renders a visible, inert, self-explaining row", () => {
+      const lock = devLockProps(true, hint);
+      // Spread last, as a caller naturally would: the props must not carry a
+      // `className` of their own, or they would drop the row's own layout.
+      expect(lock).not.toHaveProperty("className");
+      const html = renderToStaticMarkup(
+        <a href="/x" className={`base-layout ${DEV_LOCK_CLASS}`} {...lock}>
+          row
+        </a>,
+      );
+      expect(html).toContain("base-layout");
+      expect(html).toContain("opacity-50");
+      expect(html).toContain("cursor-not-allowed");
+      expect(html).toContain('aria-disabled="true"');
+      expect(html).toContain(hint);
+      // Still reachable by keyboard: a row nobody can focus cannot announce
+      // itself as unavailable either.
+      expect(html).not.toContain("tabindex");
+    });
+
+    it("blocks activation, including the keyboard's synthesized click", () => {
+      let defaultPrevented = false;
+      devLockProps(true, hint).onClick?.({
+        preventDefault: () => {
+          defaultPrevented = true;
+        },
+      });
+      expect(defaultPrevented).toBe(true);
+    });
+
+    it("is inert when unlocked", () => {
+      expect(devLockProps(false, hint)).toEqual({});
+    });
   });
 
   it("guards every gated route in the router, not just the nav", () => {

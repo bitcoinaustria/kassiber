@@ -195,7 +195,11 @@ import {
   type AppRoutePath,
   type NativeMenuPayload,
 } from "./menuIntent";
-import { devLockProps, isDevLockedRoute } from "./devMode";
+import {
+  DEV_LOCK_CLASS,
+  devLockProps,
+  isDevLockedRoute,
+} from "./devMode";
 import {
   notificationTarget,
   type NotificationTarget,
@@ -325,19 +329,20 @@ const navRowClassName =
 const navSubRowClassName =
   "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground data-[active=true]:bg-sidebar-row-active data-[active=true]:text-sidebar-foreground";
 
-/**
- * `devLockProps` with the sidebar's own overrides: its recipe kills pointer
+/*
+ * `DEV_LOCK_CLASS` plus the sidebar's own overrides. The recipe kills pointer
  * events on aria-disabled rows, which also kills the hover that would explain
- * the greying, so take the events back (the click guard blocks navigation) and
- * suppress the hover fill and text lift, or the row reads as live.
+ * the greying, so take the events back (the click guard is what blocks
+ * navigation) and suppress the hover *and* press states, or the row reads as
+ * live under the cursor.
+ *
+ * Locked rows drop their Radix tooltip and put the label in the native `title`
+ * instead: collapsed to the rail the two would fire together and overlap.
  */
-function navLockProps(locked: boolean, hint: string) {
-  return devLockProps(
-    locked,
-    hint,
-    "pointer-events-auto! hover:bg-transparent! hover:text-sidebar-muted-foreground!",
-  );
-}
+const navLockClassName = cn(
+  DEV_LOCK_CLASS,
+  "pointer-events-auto! hover:bg-transparent! hover:text-sidebar-muted-foreground! active:bg-transparent! active:text-sidebar-muted-foreground!",
+);
 
 /**
  * Click handler for a submenu row's trigger, for the collapsed rail.
@@ -2356,11 +2361,11 @@ function SidebarActions({
   // Controlled, so a click on the collapsed rail can force them open while it
   // expands the nav (see `useRailSubmenuTrigger`).
   // devMode.ts stays the single source of truth for which rows are inert.
-  const lockRow = (route: string) =>
-    navLockProps(
-      !developerToolsEnabled && isDevLockedRoute(route),
-      t("nav:devLocked"),
-    );
+  const rowLocked = (route: string) =>
+    !developerToolsEnabled && isDevLockedRoute(route);
+  const lockRow = (route: string, label: string) =>
+    devLockProps(rowLocked(route), `${label} — ${t("nav:devLocked")}`);
+  const activityLocked = rowLocked("/activity");
   const [supportOpen, setSupportOpen] = React.useState(supportActive);
   const [extrasOpen, setExtrasOpen] = React.useState(false);
   const onSupportClick = useRailSubmenuTrigger(setSupportOpen);
@@ -2372,10 +2377,13 @@ function SidebarActions({
         <SidebarMenuButton
           asChild
           isActive={pathname === "/activity"}
-          tooltip={t("nav:book.activity")}
-          className={navRowClassName}
+          tooltip={activityLocked ? undefined : t("nav:book.activity")}
+          className={cn(navRowClassName, activityLocked && navLockClassName)}
         >
-          <Link to="/activity" {...lockRow("/activity")}>
+          <Link
+            to="/activity"
+            {...lockRow("/activity", t("nav:book.activity"))}
+          >
             <History className="size-4" aria-hidden="true" />
             <span>{t("nav:book.activity")}</span>
           </Link>
@@ -2482,10 +2490,13 @@ function SidebarActions({
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton
                     asChild
-                    className={navSubRowClassName}
+                    className={cn(
+                      navSubRowClassName,
+                      rowLocked("/exit-tax") && navLockClassName,
+                    )}
                     isActive={pathname === "/exit-tax"}
                   >
-                    <Link to="/exit-tax" {...lockRow("/exit-tax")}>
+                    <Link to="/exit-tax" {...lockRow("/exit-tax", t("shell.extras.exitCalculator"))}>
                       <LogOut className="size-3.5" aria-hidden="true" />
                       <span>{t("shell.extras.exitCalculator")}</span>
                     </Link>
@@ -2494,10 +2505,13 @@ function SidebarActions({
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton
                     asChild
-                    className={navSubRowClassName}
+                    className={cn(
+                      navSubRowClassName,
+                      rowLocked("/privacy-mirror") && navLockClassName,
+                    )}
                     isActive={pathname === "/privacy-mirror"}
                   >
-                    <Link to="/privacy-mirror" {...lockRow("/privacy-mirror")}>
+                    <Link to="/privacy-mirror" {...lockRow("/privacy-mirror", t("shell.extras.privacyMirror"))}>
                       <Eye className="size-3.5" aria-hidden="true" />
                       <span>{t("shell.extras.privacyMirror")}</span>
                     </Link>
@@ -2617,10 +2631,16 @@ function NavMenuItem({
         <SidebarMenuButton
           asChild
           isActive={active}
-          tooltip={t(item.labelKey as never) /* dynamic key */}
-          className={navRowClassName}
+          tooltip={locked ? undefined : (t(item.labelKey as never) /* dynamic key */)}
+          className={cn(navRowClassName, locked && navLockClassName)}
         >
-          <Link to={item.href} {...navLockProps(locked, t("devLocked"))}>
+          <Link
+            to={item.href}
+            {...devLockProps(
+              locked,
+              `${t(item.labelKey as never) /* dynamic key */} — ${t("devLocked")}`,
+            )}
+          >
             <Icon className="size-4" aria-hidden="true" />
             <span>{t(item.labelKey as never) /* dynamic key */}</span>
           </Link>
