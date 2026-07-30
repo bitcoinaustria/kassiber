@@ -72,7 +72,10 @@ function ChartContainer({
         <ChartStyle id={chartId} config={config} />
         <RechartsPrimitive.ResponsiveContainer
           initialDimension={initialDimension}
-          debounce={200}
+          // Recharts calls this "debounce", but implements it as a throttle.
+          // Pace resize work to one 60 Hz frame so animated containers stay
+          // responsive without triggering multiple full chart layouts per frame.
+          debounce={16}
         >
           {children}
         </RechartsPrimitive.ResponsiveContainer>
