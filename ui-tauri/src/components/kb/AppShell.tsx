@@ -195,6 +195,7 @@ import {
   type AppRoutePath,
   type NativeMenuPayload,
 } from "./menuIntent";
+import { isDevLockedRoute } from "./devMode";
 import { notificationTarget } from "./notificationRouting";
 import { shouldHideNotificationProgressLabel } from "./notificationDisplay";
 import { planHeaderRefresh } from "./headerRefresh";
@@ -205,8 +206,6 @@ type NavItem = {
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   href: AppRoutePath;
   children?: NavItem[];
-  /** One of `DEV_LOCKED_ROUTES`: greyed out until dev mode is on. */
-  devLocked?: boolean;
 };
 
 // `titleKey` indexes the `nav` namespace (section.*).
@@ -327,15 +326,15 @@ const navSubRowClassName =
  * Props that turn a nav row into a greyed-out signpost (see `devMode.ts`).
  *
  * `aria-disabled` is what the sidebar's own recipe styles (`aria-disabled:
- * opacity-50 aria-disabled:pointer-events-none`), and both the click guard and
- * `tabIndex: -1` are needed because the row is still an `<a>` underneath:
- * pointer-events alone would leave it keyboard-navigable.
+ * opacity-50 aria-disabled:pointer-events-none`) and what a screen reader reads
+ * as unavailable — so the row stays focusable rather than vanishing from the
+ * tab order. The click guard is what actually stops navigation: the row is
+ * still an `<a>`, and keyboard activation goes through a click event too.
  */
 function navLockProps(locked: boolean) {
   if (!locked) return {};
   return {
     "aria-disabled": true,
-    tabIndex: -1,
     onClick: (event: React.MouseEvent) => event.preventDefault(),
   };
 }
@@ -405,12 +404,7 @@ const NAV_GROUPS: NavGroup[] = [
       { labelKey: "book.quarantine", icon: ShieldAlert, href: "/quarantine" },
       { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
       { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
-      {
-        labelKey: "book.custodyGaps",
-        icon: Route,
-        href: "/custody-gaps",
-        devLocked: true,
-      },
+      { labelKey: "book.custodyGaps", icon: Route, href: "/custody-gaps" },
       { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
       { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
     ],
@@ -1573,6 +1567,7 @@ export function AppShell() {
             {
               hasWorkspace: store.identity !== null,
               aiFeaturesEnabled: store.aiFeaturesEnabled,
+              developerToolsEnabled: store.developerToolsEnabled,
               hideSensitive: store.hideSensitive,
               navigate: ({ to, hash }) => {
                 void navigate({ to, hash: hash ?? undefined });
@@ -1690,6 +1685,7 @@ export function AppShell() {
         if (disposed) return;
         return invoke("set_menu_state", {
           aiFeaturesEnabled,
+          developerToolsEnabled,
           hasWorkspace,
           locked,
         });
@@ -1700,7 +1696,7 @@ export function AppShell() {
     return () => {
       disposed = true;
     };
-  }, [aiFeaturesEnabled, identity, locked]);
+  }, [aiFeaturesEnabled, developerToolsEnabled, identity, locked]);
 
   React.useEffect(() => {
     if (aiFeaturesEnabled || !isAssistantRoute) return;
@@ -2102,7 +2098,7 @@ function AppSidebar({
                         pathname={pathname}
                         badge={navBadges[item.href]}
                         locked={
-                          Boolean(item.devLocked) && !developerToolsEnabled
+                          !developerToolsEnabled && isDevLockedRoute(item.href)
                         }
                       />
                     ))}
@@ -2359,6 +2355,9 @@ function SidebarActions({
   const supportActive = pathname === "/diagnostics";
   // Controlled, so a click on the collapsed rail can force them open while it
   // expands the nav (see `useRailSubmenuTrigger`).
+  // devMode.ts stays the single source of truth for which rows are inert.
+  const lockRow = (route: string) =>
+    navLockProps(!developerToolsEnabled && isDevLockedRoute(route));
   const [supportOpen, setSupportOpen] = React.useState(supportActive);
   const [extrasOpen, setExtrasOpen] = React.useState(false);
   const onSupportClick = useRailSubmenuTrigger(setSupportOpen);
@@ -2373,7 +2372,7 @@ function SidebarActions({
           tooltip={t("nav:book.activity")}
           className={navRowClassName}
         >
-          <Link to="/activity" {...navLockProps(!developerToolsEnabled)}>
+          <Link to="/activity" {...lockRow("/activity")}>
             <History className="size-4" aria-hidden="true" />
             <span>{t("nav:book.activity")}</span>
           </Link>
@@ -2483,10 +2482,7 @@ function SidebarActions({
                     className={navSubRowClassName}
                     isActive={pathname === "/exit-tax"}
                   >
-                    <Link
-                      to="/exit-tax"
-                      {...navLockProps(!developerToolsEnabled)}
-                    >
+                    <Link to="/exit-tax" {...lockRow("/exit-tax")}>
                       <LogOut className="size-3.5" aria-hidden="true" />
                       <span>{t("shell.extras.exitCalculator")}</span>
                     </Link>
@@ -2498,10 +2494,7 @@ function SidebarActions({
                     className={navSubRowClassName}
                     isActive={pathname === "/privacy-mirror"}
                   >
-                    <Link
-                      to="/privacy-mirror"
-                      {...navLockProps(!developerToolsEnabled)}
-                    >
+                    <Link to="/privacy-mirror" {...lockRow("/privacy-mirror")}>
                       <Eye className="size-3.5" aria-hidden="true" />
                       <span>{t("shell.extras.privacyMirror")}</span>
                     </Link>

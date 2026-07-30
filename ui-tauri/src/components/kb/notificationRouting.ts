@@ -45,8 +45,8 @@ export function notificationRouteFor(title: string): AppRoutePath | undefined {
 // Resolve the click target for a header notification, accounting for the fact
 // that /logs is developer-tools-gated: its route guard bounces to /overview
 // when developer tools are off. A failure notification that routed straight to
-// /logs would therefore dead-end. Send those users to /settings (where the
-// developer-tools toggle lives) instead — for both the title router's /logs
+// /logs would therefore dead-end. Send those users to Settings instead (its rail
+// carries the Developer tools section that holds the switch) — for both the title router's /logs
 // result and the error-tone fallback. Mirrors the search guard in appSearch.ts.
 export function notificationTarget(
   title: string,

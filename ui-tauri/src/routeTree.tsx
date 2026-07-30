@@ -106,9 +106,9 @@ const Assistant = lazyRouteComponent(
   "Assistant",
 );
 
-// Guard for the `DEV_HIDDEN_ROUTES` in `devMode.ts`: nothing in the UI links
-// there while dev mode is off, so a deep link or a stale URL lands on Overview
-// instead of an unfinished page.
+// Guard for every route in `devMode.ts`, locked and hidden alike: the greyed-out
+// nav row is a signpost, not the barrier, so a deep link, a stale URL, or a Back
+// press after the switch was turned off lands on Overview all the same.
 function requireDeveloperTools() {
   if (!useUiStore.getState().developerToolsEnabled) {
     throw redirect({ to: "/overview" });
@@ -175,6 +175,7 @@ const transactionsRoute = createRoute({
 const activityRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/activity",
+  beforeLoad: requireDeveloperTools,
   component: Activity,
 });
 
@@ -187,12 +188,14 @@ const reportsRoute = createRoute({
 const privacyMirrorRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/privacy-mirror",
+  beforeLoad: requireDeveloperTools,
   component: PrivacyMirror,
 });
 
 const exitTaxRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/exit-tax",
+  beforeLoad: requireDeveloperTools,
   component: ExitTax,
 });
 
@@ -225,6 +228,7 @@ const swapMatchingRoute = createRoute({
 const custodyGapsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/custody-gaps",
+  beforeLoad: requireDeveloperTools,
   component: CustodyGaps,
 });
 

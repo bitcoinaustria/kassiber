@@ -100,7 +100,7 @@
       },
       "developer": {
         "label": "Entwicklerwerkzeuge",
-        "description": "Unfertige Funktionen, die integrierte Logs-Ansicht und ihr Speicherpuffer."
+        "description": "Funktionen im Aufbau, die integrierte Logs-Ansicht und ihr Speicherpuffer."
       }
     },
     "back": "Zurück"
@@ -563,10 +563,10 @@
     "clearStored": "Gespeicherte Chats löschen"
   },
   "developer": {
-    "intro": "Der Entwicklermodus zeigt die unfertigen Teile von Kassiber: die typisierte Logs-Ansicht, den Netzwerkmonitor, die Gerätesynchronisierung und die Berichte, die noch gebaut werden. Standardmäßig aus; deine Wahl bleibt über Updates erhalten.",
-    "enableLabel": "Entwicklermodus aktivieren",
-    "enableOn": "Logs, Netzwerkmonitor, Gerätesynchronisierung, Aktivität, Custody-Lücken, Exit-Rechner und Privacy Mirror sind verfügbar.",
-    "enableOff": "Unfertige Seiten sind ausgeblendet oder ausgegraut, direkte Navigation dorthin leitet zur Übersicht um.",
+    "intro": "Kassiber bringt Funktionen mit, die noch im Aufbau sind. Sie halten sich raus, bis du sie anforderst, und deine Wahl bleibt über Updates erhalten.",
+    "enableLabel": "Funktionen im Aufbau anzeigen",
+    "enableOn": "Seiten im Aufbau sind in der Seitenleiste, in den Einstellungen und in der Suche sichtbar.",
+    "enableOff": "Seiten im Aufbau sind ausgeblendet oder ausgegraut, Navigation dorthin landet auf der Übersicht.",
     "alphaBannerLabel": "Alpha-Warnbanner anzeigen",
     "alphaBannerDescription": "Der rote Streifen am oberen Fensterrand. Ausblenden macht die Software nicht weniger Alpha.",
     "openLogs": "Logs öffnen",

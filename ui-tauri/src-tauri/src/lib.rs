@@ -536,6 +536,10 @@ enum TerminalCommandHelperAction {
 
 struct AppMenuHandles {
     assistant: MenuItem<tauri::Wry>,
+    // Logs is an early-stage surface: gated behind the developer-tools switch
+    // as well as an unlocked workspace, so it needs its own handle rather than
+    // riding along in `workspace_gated`.
+    logs: MenuItem<tauri::Wry>,
     // Menu items that only make sense once the user has unlocked a workspace
     // (`identity` is set). React notifies us via `set_menu_state` so the
     // corresponding native menu items grey out instead of bouncing the user
@@ -3182,8 +3186,9 @@ fn build_app_menu(
         workflow_data_item.clone(),
         // View-menu navigation items: clicking these from the Welcome screen
         // would redirect right back via the identity-guard effect, so grey
-        // them out instead. Logs is gated behind an unlocked workspace and
-        // Developer tools; Settings has its own no-identity render.
+        // them out instead. Logs carries the same gate plus the developer-tools
+        // switch, so it lives on its own handle; Settings has its own
+        // no-identity render.
         overview_item.clone(),
         transactions_item.clone(),
         connections_item.clone(),
@@ -3192,11 +3197,11 @@ fn build_app_menu(
         source_funds_item.clone(),
         journals_item.clone(),
         quarantine_item.clone(),
-        logs_item.clone(),
     ];
 
     let handles = AppMenuHandles {
         assistant: assistant_item,
+        logs: logs_item,
         workspace_gated,
     };
 
@@ -3208,6 +3213,7 @@ fn set_menu_state(
     handles: tauri::State<'_, AppMenuHandles>,
     runtime: tauri::State<'_, AppRuntimeState>,
     ai_features_enabled: bool,
+    developer_tools_enabled: bool,
     has_workspace: bool,
     locked: bool,
 ) -> Result<(), String> {
@@ -3220,6 +3226,10 @@ fn set_menu_state(
     handles
         .assistant
         .set_enabled(assistant_enabled)
+        .map_err(|error| error.to_string())?;
+    handles
+        .logs
+        .set_enabled(developer_tools_enabled && workflows_enabled)
         .map_err(|error| error.to_string())?;
     for item in &handles.workspace_gated {
         item.set_enabled(workflows_enabled)

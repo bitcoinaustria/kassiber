@@ -10,6 +10,9 @@ function makeDeps(overrides: Partial<MenuIntentDeps> = {}): MenuIntentDeps {
   return {
     hasWorkspace: true,
     aiFeaturesEnabled: true,
+    // Existing cases navigate to finished routes; the early-stage gate has its
+    // own describe block below, which flips this off.
+    developerToolsEnabled: true,
     hideSensitive: false,
     navigate: vi.fn(),
     lockApp: vi.fn(),
@@ -115,6 +118,48 @@ describe("dispatchMenuIntent — AI route fallback", () => {
       deps,
     );
     expect(deps.navigate).toHaveBeenCalledWith({ to: "/assistant" });
+    expect(deps.addNotification).not.toHaveBeenCalled();
+  });
+});
+
+describe("dispatchMenuIntent — early-stage gate", () => {
+  // Same contract as the AI fallback above: the router would bounce these to
+  // Overview, which reads as a broken menu item / dead deep link.
+  it.each(["/logs", "/egress", "/exit-tax", "/custody-gaps"] as const)(
+    "diverts %s to Settings → Developer tools when early-stage features are off",
+    (route) => {
+      const deps = makeDeps({ developerToolsEnabled: false });
+      dispatchMenuIntent({ action: "navigate", route }, deps);
+      expect(deps.addNotification).toHaveBeenCalledWith(
+        expect.objectContaining({ tone: "info" }),
+      );
+      expect(deps.navigate).toHaveBeenCalledWith({
+        to: "/settings",
+        hash: "developer",
+      });
+    },
+  );
+
+  it("diverts the sync/replication settings aliases too", () => {
+    for (const section of ["sync", "replication"] as const) {
+      const deps = makeDeps({ developerToolsEnabled: false });
+      dispatchMenuIntent({ action: "open-settings", section }, deps);
+      expect(deps.navigate).toHaveBeenCalledWith({
+        to: "/settings",
+        hash: "developer",
+      });
+    }
+  });
+
+  it("leaves finished routes and other settings sections alone", () => {
+    const deps = makeDeps({ developerToolsEnabled: false });
+    dispatchMenuIntent({ action: "navigate", route: "/reports" }, deps);
+    dispatchMenuIntent({ action: "open-settings", section: "bitcoin" }, deps);
+    expect(deps.navigate).toHaveBeenNthCalledWith(1, { to: "/reports" });
+    expect(deps.navigate).toHaveBeenNthCalledWith(2, {
+      to: "/settings",
+      hash: "bitcoin",
+    });
     expect(deps.addNotification).not.toHaveBeenCalled();
   });
 });

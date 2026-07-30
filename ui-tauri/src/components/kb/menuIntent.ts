@@ -9,6 +9,16 @@
 // covers the consumer-side decision tree: workspace gating, the AI-route
 // fallback, and the settings-section side-effect event.
 
+import { isDevOnlyRoute, isDevOnlySettingsSlug } from "./devMode";
+
+// English like the other dispatcher notifications: these are produced outside
+// React, where no `t` instance is threaded through.
+const EARLY_STAGE_NOTIFICATION = {
+  title: "Early-stage feature",
+  body: "Turn on early-stage features in Settings to open this page.",
+  tone: "info",
+} as const;
+
 export type AppRoutePath =
   | "/overview"
   | "/transactions"
@@ -50,6 +60,7 @@ export type SettingsMenuSection =
   | "lock"
   | "backends"
   | "sync"
+  | "replication"
   | "rates"
   | "ai"
   | "assistant"
@@ -103,6 +114,7 @@ export interface MenuIntentNotification {
 export interface MenuIntentDeps {
   hasWorkspace: boolean;
   aiFeaturesEnabled: boolean;
+  developerToolsEnabled: boolean;
   hideSensitive: boolean;
   navigate: (opts: { to: string; hash?: string }) => void;
   lockApp: () => void;
@@ -202,6 +214,17 @@ export function dispatchMenuIntent(
       return;
 
     case "open-settings":
+      // `sync`/`replication` resolve to a section the router hides while
+      // early-stage features are off; say so instead of bouncing to Overview.
+      if (
+        !deps.developerToolsEnabled &&
+        isDevOnlySettingsSlug(payload.section)
+      ) {
+        deps.addNotification(EARLY_STAGE_NOTIFICATION);
+        deps.navigate({ to: "/settings", hash: "developer" });
+        deps.emitSettingsSection("developer");
+        return;
+      }
       deps.navigate({
         to: "/settings",
         hash: payload.section ?? undefined,
@@ -220,6 +243,14 @@ export function dispatchMenuIntent(
           tone: "info",
         });
         deps.navigate({ to: "/settings", hash: "ai" });
+        return;
+      }
+      // Same for the early-stage routes: the router would redirect them to
+      // Overview, which reads as a broken menu item. Point at the switch.
+      if (!deps.developerToolsEnabled && isDevOnlyRoute(payload.route)) {
+        deps.addNotification(EARLY_STAGE_NOTIFICATION);
+        deps.navigate({ to: "/settings", hash: "developer" });
+        deps.emitSettingsSection("developer");
         return;
       }
       // Welcome-screen users would be bounced straight back to `/` by the

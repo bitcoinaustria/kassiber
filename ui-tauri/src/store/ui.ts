@@ -430,6 +430,27 @@ export function uiStatePartialForStorage(state: UiState) {
   };
 }
 
+export const UI_STATE_VERSION = 1;
+
+/**
+ * v1: `developerToolsEnabled` stopped meaning "show the Logs page" and became
+ * the switch for every early-stage surface (see `components/kb/devMode.ts`).
+ * Every pre-v1 install carries the old `true` default, which was never an
+ * opt-in — so drop it once. Later opt-ins persist normally, because zustand
+ * only runs this when the stored version is older than `UI_STATE_VERSION`.
+ *
+ * `merge` fills in whatever else the stored blob is missing, so this only has
+ * to state the difference.
+ */
+export function migrateUiState(
+  persisted: unknown,
+): ReturnType<typeof uiStatePartialForStorage> {
+  return {
+    ...(persisted as Partial<UiState>),
+    developerToolsEnabled: false,
+  } as ReturnType<typeof uiStatePartialForStorage>;
+}
+
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
@@ -445,8 +466,8 @@ export const useUiStore = create<UiState>()(
       appLockPolicy: DEFAULT_APP_LOCK_POLICY,
       identity: null,
       aiFeaturesEnabled: true,
-      // Off until asked for: it reveals the unfinished pre-release surfaces
-      // (see `devMode.ts`). Restored from `kb.ui`, so it survives updates.
+      // Off until asked for: it reveals the early-stage surfaces (see
+      // `devMode.ts`). Restored from `kb.ui`, so it survives updates.
       developerToolsEnabled: false,
       preAlphaBannerVisible: true,
       automaticUpdateChecks: false,
@@ -650,17 +671,8 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "kb.ui",
-      // v1: `developerToolsEnabled` stopped meaning "show the Logs page" and
-      // became the pre-release dev-mode switch (see `devMode.ts`). Every
-      // pre-v1 install carries the old `true` default, which was never an
-      // opt-in, so drop it once. Later opt-ins persist normally.
-      version: 1,
-      migrate: (persisted) =>
-        ({
-          ...(persisted as Partial<UiState>),
-          developerToolsEnabled: false,
-          // `merge` below fills in whatever else the stored blob is missing.
-        }) as ReturnType<typeof uiStatePartialForStorage>,
+      version: UI_STATE_VERSION,
+      migrate: migrateUiState,
       partialize: uiStatePartialForStorage,
       merge: (persisted, current) => {
         const restored = persisted as Partial<UiState>;

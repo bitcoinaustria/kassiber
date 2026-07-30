@@ -211,14 +211,17 @@ back explicitly to `sqlcipher_inline` when no desktop secret service, D-Bus
 session, or unlocked collection is available. There is no
 plaintext fallback and no remember-unlock behavior.
 
-Settings -> Desktop -> Developer tools carries the developer-mode switch, which
-is off by default and gates the surfaces that are not finished yet. With it off,
-Network Monitor, Logs, and Settings -> Device sync are hidden and direct
-navigation to them redirects to Overview, while Activity, Custody Gaps, Exit
-Calculator, and Privacy Mirror stay in the side nav as greyed-out, inert rows.
-The app search offers none of them. The choice is stored per profile in the
-desktop's local UI state, so it survives updates. `ui-tauri/src/components/kb/devMode.ts`
-holds the two route lists.
+Settings -> Desktop -> Developer tools carries the early-stage-features switch,
+which is off by default and gates the surfaces that are not finished yet. With
+it off, Network Monitor, Logs, and Settings -> Device sync disappear from the
+side nav, the settings rail, and app search, while Activity, Custody Gaps, Exit
+Calculator, and Privacy Mirror stay in the nav as greyed-out, inert rows. The
+nav treatment is a signpost, not the barrier: every one of those routes carries
+a guard that redirects to Overview, the native menu's Logs item is disabled, and
+a native-menu or `kassiber://` intent for any of them lands on Settings ->
+Developer tools with an explanatory notification instead of a silent bounce. The
+choice is stored in the desktop's local UI state, so it survives updates;
+`ui-tauri/src/components/kb/devMode.ts` holds the route lists.
 
 Settings -> Desktop -> Terminal command can install a user-local `kassiber`
 launcher without administrator privileges. It writes a small managed launcher
