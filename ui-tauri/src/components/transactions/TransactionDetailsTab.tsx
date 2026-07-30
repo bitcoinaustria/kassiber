@@ -15,6 +15,7 @@ import {
   type PrivacyMirrorPayload,
 } from "@/lib/privacyMirror";
 import { cn } from "@/lib/utils";
+import { isDevLockedRoute } from "@/components/kb/devMode";
 import { useUiStore } from "@/store/ui";
 
 import {
@@ -291,7 +292,17 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     ),
     { enabled: Boolean(swapInGraphArgs.transaction) },
   );
-  const privacyMirrorQuery = useDaemon<PrivacyMirrorPayload>("ui.reports.privacy_mirror");
+  // The embedded Privacy Mirror panel is the same early-stage feature as the
+  // /privacy-mirror page (see devMode.ts) — don't render it, and don't ask the
+  // daemon for the report either, while the switch is off.
+  const privacyMirrorAvailable =
+    useUiStore((state) => state.developerToolsEnabled) ||
+    !isDevLockedRoute("/privacy-mirror");
+  const privacyMirrorQuery = useDaemon<PrivacyMirrorPayload>(
+    "ui.reports.privacy_mirror",
+    undefined,
+    { enabled: privacyMirrorAvailable },
+  );
   const activeSwapGraphQuery =
     activeSwapLeg === "out"
       ? swapOutGraphQuery
@@ -537,12 +548,14 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         />
                       </div>
                     </div>
-                    <TransactionPrivacyMirrorPanel
-                      payload={privacyMirrorQuery.data?.data}
-                      loading={privacyMirrorQuery.isLoading}
-                      errorMessage={privacyMirrorError}
-                      transactionRefs={currentGraphReferences}
-                    />
+                    {privacyMirrorAvailable ? (
+                      <TransactionPrivacyMirrorPanel
+                        payload={privacyMirrorQuery.data?.data}
+                        loading={privacyMirrorQuery.isLoading}
+                        errorMessage={privacyMirrorError}
+                        transactionRefs={currentGraphReferences}
+                      />
+                    ) : null}
                     {technicalRows.length ? (
                       <div className="overflow-hidden rounded-md border">
                         <div className="border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">

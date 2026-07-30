@@ -119,6 +119,7 @@ import {
   type BareXpubScriptType,
   detectWalletMaterial,
 } from "@/lib/walletMaterialFormat";
+import { isDevLockedRoute } from "@/components/kb/devMode";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useConnectionRefreshState } from "@/hooks/useConnectionRefreshState";
@@ -578,6 +579,11 @@ function ConnectionDetailView({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const dataMode = useUiStore((state) => state.dataMode);
+  // Source of Funds is early-stage (see devMode.ts), and its route guard would
+  // bounce this link to Overview.
+  const sourceOfFundsAvailable =
+    useUiStore((state) => state.developerToolsEnabled) ||
+    !isDevLockedRoute("/source-of-funds");
   const addNotification = useUiStore((state) => state.addNotification);
   const updateNotification = useUiStore((state) => state.updateNotification);
   const identity = useUiStore((state) => state.identity);
@@ -2110,6 +2116,9 @@ function ConnectionDetailView({
                   </span>
                   <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
                 </Link>
+                {/* Hidden rather than greyed: an inert row in a list of
+                    "where to go next" links is just a dead end. */}
+                {sourceOfFundsAvailable ? (
                 <Link to="/source-of-funds" className={relatedViewLinkClass}>
                   <span className={relatedViewIconClass} aria-hidden="true">
                     <ShieldCheck className="size-4" />
@@ -2124,6 +2133,7 @@ function ConnectionDetailView({
                   </span>
                   <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
                 </Link>
+                ) : null}
               </div>
             </CardContent>
           </Card>
