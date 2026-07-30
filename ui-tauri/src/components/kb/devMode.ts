@@ -33,6 +33,33 @@ const DEV_ONLY_ROUTES = new Set<string>([
 
 const DEV_LOCKED_ROUTE_SET = new Set<string>(DEV_LOCKED_ROUTES);
 
+/**
+ * Props that turn a link into an early-stage signpost: still visible (that is
+ * the point — it is a sneak peek), greyed out, and inert.
+ *
+ * `aria-disabled` is what screen readers announce as unavailable and what the
+ * shadcn recipes style; the click guard is what actually stops navigation,
+ * since the row is still an `<a>` and keyboard activation fires a click too.
+ * Deliberately NOT `tabIndex: -1`: a row a keyboard user cannot reach cannot
+ * announce itself either. The event is typed structurally so this module stays
+ * React-free.
+ */
+export function devLockProps(
+  locked: boolean,
+  hint: string,
+  className?: string,
+) {
+  if (!locked) return {};
+  return {
+    "aria-disabled": true as const,
+    className: ["cursor-not-allowed opacity-50", className]
+      .filter(Boolean)
+      .join(" "),
+    title: hint,
+    onClick: (event: { preventDefault: () => void }) => event.preventDefault(),
+  };
+}
+
 /** True for a nav row that should render greyed out and inert. */
 export function isDevLockedRoute(route: string): boolean {
   return DEV_LOCKED_ROUTE_SET.has(route);

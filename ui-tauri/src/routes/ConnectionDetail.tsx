@@ -119,7 +119,7 @@ import {
   type BareXpubScriptType,
   detectWalletMaterial,
 } from "@/lib/walletMaterialFormat";
-import { isDevLockedRoute } from "@/components/kb/devMode";
+import { devLockProps, isDevLockedRoute } from "@/components/kb/devMode";
 import { useUiStore } from "@/store/ui";
 import { useSyncProgressNotice } from "@/hooks/useSyncProgressNotice";
 import { useConnectionRefreshState } from "@/hooks/useConnectionRefreshState";
@@ -575,15 +575,21 @@ function ConnectionDetailView({
   txs,
   hideSensitive,
 }: ConnectionDetailViewProps) {
-  const { t } = useTranslation(["connections", "common"]);
+  const { t } = useTranslation(["connections", "common", "nav"]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const dataMode = useUiStore((state) => state.dataMode);
-  // Source of Funds is early-stage (see devMode.ts), and its route guard would
-  // bounce this link to Overview.
-  const sourceOfFundsAvailable =
-    useUiStore((state) => state.developerToolsEnabled) ||
-    !isDevLockedRoute("/source-of-funds");
+  // Source of Funds is early-stage (see devMode.ts) and its route guard would
+  // bounce this link to Overview, so it advertises the feature without opening
+  // it until the switch is on.
+  const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
+  const sourceOfFundsLock = devLockProps(
+    !developerToolsEnabled && isDevLockedRoute("/source-of-funds"),
+    t("nav:devLocked"),
+    // Kill this row's hover tint and press-scale, or a locked row still feels
+    // clickable under the cursor.
+    "hover:bg-transparent! active:scale-100!",
+  );
   const addNotification = useUiStore((state) => state.addNotification);
   const updateNotification = useUiStore((state) => state.updateNotification);
   const identity = useUiStore((state) => state.identity);
@@ -2116,10 +2122,13 @@ function ConnectionDetailView({
                   </span>
                   <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
                 </Link>
-                {/* Hidden rather than greyed: an inert row in a list of
-                    "where to go next" links is just a dead end. */}
-                {sourceOfFundsAvailable ? (
-                <Link to="/source-of-funds" className={relatedViewLinkClass}>
+                {/* Visible even when locked — same sneak-peek treatment the
+                    side nav gives the early-stage rows. */}
+                <Link
+                  to="/source-of-funds"
+                  className={relatedViewLinkClass}
+                  {...sourceOfFundsLock}
+                >
                   <span className={relatedViewIconClass} aria-hidden="true">
                     <ShieldCheck className="size-4" />
                   </span>
@@ -2133,7 +2142,6 @@ function ConnectionDetailView({
                   </span>
                   <ArrowRight className={relatedViewArrowClass} aria-hidden="true" />
                 </Link>
-                ) : null}
               </div>
             </CardContent>
           </Card>

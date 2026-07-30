@@ -195,7 +195,7 @@ import {
   type AppRoutePath,
   type NativeMenuPayload,
 } from "./menuIntent";
-import { isDevLockedRoute } from "./devMode";
+import { devLockProps, isDevLockedRoute } from "./devMode";
 import {
   notificationTarget,
   type NotificationTarget,
@@ -326,27 +326,17 @@ const navSubRowClassName =
   "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground data-[active=true]:bg-sidebar-row-active data-[active=true]:text-sidebar-foreground";
 
 /**
- * Props that turn a nav row into a greyed-out signpost (see `devMode.ts`).
- *
- * `aria-disabled` is what the sidebar's own recipe styles (`aria-disabled:
- * opacity-50 aria-disabled:pointer-events-none`) and what a screen reader reads
- * as unavailable — so the row stays focusable rather than vanishing from the
- * tab order. The click guard is what actually stops navigation: the row is
- * still an `<a>`, and keyboard activation goes through a click event too.
+ * `devLockProps` with the sidebar's own overrides: its recipe kills pointer
+ * events on aria-disabled rows, which also kills the hover that would explain
+ * the greying, so take the events back (the click guard blocks navigation) and
+ * suppress the hover fill and text lift, or the row reads as live.
  */
 function navLockProps(locked: boolean, hint: string) {
-  if (!locked) return {};
-  return {
-    "aria-disabled": true,
-    // The sidebar recipe kills pointer events on aria-disabled rows, which also
-    // kills the hover that would explain the greying. Take the events back and
-    // block the navigation in the handler instead, so `title` can do its job —
-    // then suppress the hover fill and text lift, or the row reads as live.
-    className:
-      "pointer-events-auto! cursor-not-allowed hover:bg-transparent! hover:text-sidebar-muted-foreground!",
-    title: hint,
-    onClick: (event: React.MouseEvent) => event.preventDefault(),
-  };
+  return devLockProps(
+    locked,
+    hint,
+    "pointer-events-auto! hover:bg-transparent! hover:text-sidebar-muted-foreground!",
+  );
 }
 
 /**
