@@ -265,6 +265,60 @@ preview shows it and points you back at the template); the dry-run/preview
 returns `confident: false` with the detected columns instead of raising. Template
 files are unaffected — they still take the native path.
 
+Row values are matched in English and German (`Kauf`/`Verkauf`,
+`Einzahlung`/`Auszahlung`, `Eingang`/`Ausgang`, `Empfangen`, `Gesendet`), so an
+Austrian export usually needs no mapping at all. Deliberately *not* mapped:
+`Überweisung`/`Transfer`, which does not state a direction — an unrecognized
+`Type` is rejected with a row-numbered problem rather than guessed.
+
+### Mapping the columns yourself (`--column-map`)
+
+When auto-detection can't recognize a file — an exchange with no predefined
+importer, unusual headers, or a non-English label vocabulary — supply the plan
+explicitly instead of retyping the data into the template:
+
+```
+kassiber wallets analyze-file --file export.csv            # headers + inferred plan, no DB, no network
+kassiber wallets import-ledger ... --file export.csv --column-map '{"date":"Ausfuehrung","amount":"Stueck"}' --dry-run
+kassiber wallets import-ledger ... --file export.csv --column-map @plan.json
+```
+
+`analyze-file` needs no database and makes no AI call: it reports the file kind,
+the header row, the plan `infer_ledger_columns` guessed, how many rows would
+import, and which rows would be rejected and why. `@path` reads the JSON from a
+file. The daemon kinds are `ui.wallets.analyze_file` (read-only) and
+`column_map` on `ui.wallets.ledger_preview` / `ui.wallets.import_file`.
+
+A plan maps ledger fields to the file's **own** header values. Fields are the
+keys of `infer_ledger_columns`' plan (`date`, `type`, `direction`, `amount`,
+`received`, `sent`, `fee`, `fiat_currency`, `fiat_value`, `fiat_rate`, `note`,
+`txid`, `counterparty`, …), plus:
+
+- `type_map` — translate the file's `Type` values onto canonical ledger Types,
+  e.g. `{"ACQ-MKT": "Buy", "LIQ-MKT": "Sell"}`. Targets must already be
+  recognized Types, so a mapping can rename vocabulary but never invent a tax
+  kind. **It can still name the wrong one.** Mapping `Kauf → Sell` is accepted:
+  the Type is real, and on an amount-only file the direction is derived *from*
+  the mapped Type, so there is no cash-leg sign to contradict it. This is the one
+  place where a mapping decides a tax kind rather than just a column name —
+  check a `type_map` in the preview before importing.
+- `*_header_asset` (`amount_header_asset`, `fee_header_asset`, …) — state what a
+  numeric column is denominated in when its header does *not* say (e.g. a plain
+  `Amount` column that is really L-BTC). A hint that contradicts a header which
+  already states an asset is rejected — relabelling a `BTC Amount` column as
+  `SATS` would import every row 1e8 too small with no rejected row to notice.
+  These fields cannot be set from chat at all: an asset is a value, not a name.
+
+A plan is validated against the file's real headers before anything is read as
+money: an unknown field, a column the file does not have, one column claimed by
+two fields, or a `type_map` target that is not a real Type is rejected. A minimum
+usable plan is a date column plus one amount column.
+
+**A plan maps names, not values.** Every amount, date, and asset is still read
+from the file by the same normalizer, which is what keeps an import auditable —
+so a wrong plan produces a rejected row, not a wrong number. This is also why
+the AI-assisted path (below) is allowed to propose a plan at all.
+
 ### Columns
 
 | Column | Meaning |
@@ -373,6 +427,100 @@ idempotent, while desktop success payloads omit source and managed-storage paths
 Off-device AI providers are hard-disabled for this path even if they are
 configured for chat. URLs are also rejected: open Google Drive/Docs links in
 the logged-in browser, download the PDF/image, and import the local file.
+
+## Import runs and rolling one back
+
+Every file import is recorded as a run (`import_batches`), so an import that
+mapped columns wrongly can be undone without deleting the connection:
+
+```bash
+kassiber imports list --workspace W --profile P
+kassiber imports rollback --batch <id>            # reports the plan, deletes nothing
+kassiber imports rollback --batch <id> --confirm   # deletes
+```
+
+Daemon kinds are `ui.imports.list` and `ui.imports.rollback` (`dry_run` for the
+plan, then `confirm: "DELETE"`); the desktop shows the runs on the connection's
+detail screen with a rollback action.
+
+What a rollback does and does not remove:
+
+- **Only rows the run created.** An import that *enriched* an existing
+  transaction (added pricing, a note, a label) touched a row that predates the
+  run, so that row stays. An import that inserted nothing records no run at all.
+- **Everything attached to the deleted rows goes with them** — tags,
+  attachments, metadata history, pairs, custody components — via the schema's
+  `ON DELETE CASCADE`. The plan reports those counts first, which is why
+  rollback is two steps.
+- **A row inserted by run A and later enriched by run B is removed when A is
+  rolled back.** It would not exist without A.
+- Journals are invalidated, so reports do not stay on pre-rollback numbers.
+
+The run also stores the confirmed `column_map`, so a recurring export from the
+same platform can be re-imported with the same plan.
+
+Deleting the whole connection (`wallets delete --cascade`, or the desktop
+connection's delete action) remains the blunt option when the wallet itself was
+a mistake.
+
+## Onboarding an unsupported exchange with the assistant
+
+For an exchange, broker, or platform with no predefined importer, the assistant
+can work out the column plan from the file and hand it to the deterministic
+importer. Attach the export to a chat and say what it is:
+
+```bash
+kassiber chat --file export.csv --file-context "2024 export from exchange XYZ, custodial account"
+```
+
+In the desktop Assistant, use the composer's attach button (**+**) and describe
+the file in your message. The assistant then calls the read-only
+`ui.wallets.analyze_file` tool, proposes a `column_map` (and a `type_map` when
+the labels are not English), previews it, asks about anything genuinely
+ambiguous, and imports once you approve — the import itself is a consent-gated
+tool call like any other write. Resolving the resulting quarantine, filling
+pricing gaps, and spotting holes in the history are the assistant's existing
+tools (`ui.journals.quarantine`, `ui.rates.coverage`, `ui.report.blockers`,
+`ui.custody.gaps.list`); this path only gets the records in.
+
+Two rules define what leaves the device:
+
+- **The assistant maps names, never values.** It sees column headers and label
+  vocabulary and returns a plan; every amount, date, and asset is read from the
+  file by the same normalizer as a manual `--column-map` import. A wrong column
+  mapping produces a rejected row, not a wrong number, and asset hints are
+  refused outright from chat. The one judgement it does make is `type_map`: a
+  mapped Type is guaranteed to *exist*, not to be *right*, so review a proposed
+  `type_map` before importing.
+- **Header-only for off-device models.** Proposing a plan needs the header row,
+  not the rows, so when the AI provider does not run on this machine the
+  analysis carries no cell values at all — no amounts, dates, counterparties,
+  txids, filename, or local path — and is marked `cell_values_withheld`.
+  Rejected-row messages quote offending cells, so they are reduced to a count.
+  Only a loopback provider (the strict test: `kind = local` *and* a loopback
+  host, the same rule as OCR above) may see sample rows.
+
+  A "header" is only disclosed when the file actually has one. Kassiber reads the
+  first non-empty row, which for a bank-style preamble or a headerless export is
+  *data* — so the row is checked as a whole, and if any cell looks like an amount,
+  date, hash, IBAN or email the entire row is withheld (`headers_withheld`
+  reports how many). Its text cells go too: a counterparty name is
+  indistinguishable from a column name in isolation.
+
+The file reaches the daemon as an opaque staging grant minted by the native file
+picker, never as a path: the assistant cannot point the tool at another file, and
+the tool takes no file argument. Grants are scoped to the workspace/profile that
+staged them and expire on the daemon's staging TTL; a new chat drops the grant.
+
+CSV/TSV/XLSX go through the generic ledger importer as above. A PDF or photo is
+reported as routing to the loopback-only OCR path instead, since extracting
+those genuinely requires a model to read values — which is why that path is
+hard-local and quarantines by confidence.
+
+`analyze-file` is also the CLI-only path: an external coding agent that already
+has the file can run `kassiber wallets analyze-file` and
+`import-ledger --column-map` directly, with no AI provider configured in
+Kassiber at all.
 
 ## Privacy-hop evidence
 

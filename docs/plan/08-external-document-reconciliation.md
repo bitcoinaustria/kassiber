@@ -119,8 +119,14 @@ models. Any remote model use must be explicit opt-in.
    reviewed commercial links to transaction pricing/kind before journal
    processing.
 6. [x] Add accountant-facing export.
-7. [ ] Add optional local AI extraction/tie-breaking only after deterministic
-   matching is solid.
+7. [x] Add optional local AI extraction/tie-breaking only after deterministic
+   matching is solid. Shipped as two distinct paths, deliberately kept apart:
+   loopback-only vision OCR for photos/PDFs (a model must read values, so it
+   quarantines by confidence), and column-plan proposal for tabular exports from
+   platforms with no predefined importer (the model maps header names and label
+   vocabulary; the deterministic importer still reads every value, so an
+   off-device provider only ever sees headers and counts). See
+   [docs/reference/imports.md](docs/reference/imports.md).
 
 ## One-Line Restatement
 
