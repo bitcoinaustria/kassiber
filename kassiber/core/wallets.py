@@ -76,6 +76,13 @@ BULLBITCOIN_WALLET_NETWORK_CONFIG_KEY = "bullbitcoin_wallet_network"
 BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY = "bullbitcoin_wallet_exports"
 BULLBITCOIN_WALLET_NETWORKS = ("bitcoin", "liquid", "lightning")
 WALLET_DEPRECATED_CONFIG_KEY = "deprecated"
+# Whether a third party holds the keys. Kassiber cannot derive this: an exchange
+# ledger and a self-custody export can be the same CSV shape, and a wallet with
+# owned scripts is only evidence of watching, not of custody. So it is the user's
+# declaration, stored as their answer rather than inferred — it changes what
+# transfer detection and source-of-funds may claim, and `null` honestly means
+# "not stated" rather than defaulting either way.
+CUSTODIAL_CONFIG_KEY = "custodial"
 OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY = "ownership_scan_to_index"
 MAX_OWNERSHIP_SCAN_TO_INDEX = 20_000
 WALLET_SAFE_CONFIG_FIELDS = (
@@ -100,6 +107,7 @@ WALLET_SAFE_CONFIG_FIELDS = (
     OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY,
     "synthesize_change",
     "script_types",
+    CUSTODIAL_CONFIG_KEY,
     *silent_payments.SAFE_CONFIG_FIELDS,
     WALLET_DEPRECATED_CONFIG_KEY,
 )

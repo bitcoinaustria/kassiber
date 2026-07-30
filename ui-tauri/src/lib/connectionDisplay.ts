@@ -198,6 +198,7 @@ export type ConnectionAssetInput = Pick<Connection, "kind"> &
       | "syncMode"
       | "syncSource"
       | "label"
+      | "observedAssets"
     >
   >;
 
@@ -224,6 +225,31 @@ function hasSignal(values: Array<string | null | undefined>, signals: string[]) 
   });
 }
 
+/**
+ * Fallback for connections whose config states no rail.
+ *
+ * A file import declares no chain, so a `custom` wallet holding L-BTC rows would
+ * otherwise read as BTC. Only consulted *after* the config signals, because
+ * Lightning rows are stored as `asset: "BTC"` and would mask a Lightning kind.
+ * Mixed imports take the most common asset (the daemon orders `observedAssets`
+ * by row count) rather than whichever sorts first.
+ */
+function observedAssetLabel(
+  observed: readonly string[] | null | undefined,
+): ConnectionAssetLabel | null {
+  for (const raw of observed ?? []) {
+    switch (raw.trim().toUpperCase()) {
+      case "LBTC":
+      case "L-BTC":
+        return "LBTC";
+      case "BTC":
+      case "SATS":
+        return "BTC";
+    }
+  }
+  return null;
+}
+
 export function connectionAssetLabel(
   connection: ConnectionAssetInput,
 ): ConnectionAssetLabel {
@@ -241,7 +267,10 @@ export function connectionAssetLabel(
   if (hasSignal(signals, liquidSignals)) return "LBTC";
   if (lightningConnectionKinds.has(connection.kind)) return "LN-BTC";
   if (hasSignal(signals, lightningSignals)) return "LN-BTC";
-  return "BTC";
+  // Only once config says nothing: Lightning transactions are stored as
+  // `asset: "BTC"`, so consulting observed assets any earlier would relabel
+  // every Lightning connection with rows as plain BTC.
+  return observedAssetLabel(connection.observedAssets) ?? "BTC";
 }
 
 export function connectionAssetIconKind(asset: ConnectionAssetLabel) {

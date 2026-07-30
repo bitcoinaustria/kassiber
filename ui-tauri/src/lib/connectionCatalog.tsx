@@ -798,6 +798,29 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     ],
   },
   {
+    // Same importer as "Generic ledger", different job: that one is a blank
+    // template you fill in, this one takes an export as it came out of a
+    // platform Kassiber has no importer for. Users looking for "my exchange
+    // isn't listed" do not think "generic ledger", so it needs its own card.
+    id: "custom-import",
+    title: "Other exchange or broker",
+    description: "Import an export from a platform Kassiber doesn't list yet.",
+    category: "files",
+    image: sourceIcon("CSV", "#f2a900", "#1a1a1a"),
+    icon: FileSpreadsheet,
+    status: "ready",
+    pathLabel: "Custom import",
+    formatLabel: "CSV, TSV or Excel export",
+    setupKind: "file-wallet",
+    walletKind: "custom",
+    sourceFormat: "generic_ledger",
+    details: [
+      "Kassiber reads the file's own column names — no reshaping needed",
+      "Unrecognized columns? Map them yourself, or let the assistant propose a mapping",
+      "Every import is recorded as a run you can roll back if the mapping was wrong",
+    ],
+  },
+  {
     id: "csv",
     title: "CSV import",
     description: "One-shot import from a local file.",

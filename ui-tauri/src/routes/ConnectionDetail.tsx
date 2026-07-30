@@ -92,6 +92,7 @@ import {
   useDaemonStreamMutation,
   retryRetryableDaemonError,
 } from "@/daemon/client";
+import { ImportRunsPanel } from "@/components/connections/ImportRunsPanel";
 import { connectionKindLabels } from "@/lib/connectionDisplay";
 import {
   pageHeaderActionClassName,
@@ -1628,6 +1629,8 @@ function ConnectionDetailView({
         onRefresh={onSync}
         onOpenTransaction={openUtxoTransaction}
       />
+
+      <ImportRunsPanel walletId={connection.id} />
 
       {samouraiMetadata ? (
         <Card>

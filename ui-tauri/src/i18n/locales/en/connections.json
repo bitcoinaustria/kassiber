@@ -301,6 +301,23 @@
       "couldNotResolve": "Kassiber could not resolve this UTXO transaction.",
       "notFoundTitle": "Transaction not found",
       "notFoundBody": "This UTXO has no matching imported Kassiber transaction yet."
+    },
+    "imports": {
+      "title": "Imports",
+      "description": "File imports that landed in this connection.",
+      "summary_one": "{{count}} transaction · {{date}}",
+      "summary_other": "{{count}} transactions · {{date}}",
+      "mapped": "Mapped columns",
+      "rollback": "Roll back",
+      "rolledBackTitle": "Import rolled back",
+      "rolledBackBody_one": "Removed {{count}} transaction from {{file}}.",
+      "rolledBackBody_other": "Removed {{count}} transactions from {{file}}.",
+      "confirmTitle": "Roll back this import?",
+      "confirmBody_one": "This deletes the {{count}} transaction that {{file}} created. Rows it only enriched are kept, and the connection itself stays.",
+      "confirmBody_other": "This deletes the {{count}} transactions that {{file}} created. Rows it only enriched are kept, and the connection itself stays.",
+      "alsoRemoved": "Also removed: {{items}}.",
+      "cancel": "Cancel",
+      "confirmAction": "Delete transactions"
     }
   },
   "node": {

@@ -659,9 +659,19 @@ def _scoped_lightning_conn(
     conn.execute(
         "CREATE TABLE transactions ("
         " id TEXT PRIMARY KEY,"
+        " profile_id TEXT,"
         " wallet_id TEXT NOT NULL,"
+        " asset TEXT,"
         " excluded INTEGER NOT NULL DEFAULT 0,"
         " occurred_at TEXT)"
+    )
+    conn.execute(
+        "CREATE TABLE import_batches ("
+        " id TEXT PRIMARY KEY,"
+        " profile_id TEXT NOT NULL,"
+        " wallet_id TEXT,"
+        " source_format TEXT NOT NULL,"
+        " imported_at TEXT NOT NULL)"
     )
     conn.execute(
         "CREATE TABLE backends ("

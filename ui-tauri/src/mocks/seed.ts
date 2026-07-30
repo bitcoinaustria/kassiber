@@ -49,6 +49,15 @@ export interface Connection {
   network?: string | null;
   policyAsset?: string | null;
   paymentMethodId?: string | null;
+  /**
+   * Assets actually present in this connection's transactions, ordered by row
+   * count. Observed truth rather than configured intent — a file import declares
+   * no chain, so this is what the asset badge should follow.
+   */
+  observedAssets?: string[];
+  /** How many file-import runs landed here, and when the newest one was. */
+  importBatchCount?: number;
+  lastImportAt?: string | null;
   /** balance in BTC (float) */
   balance: number;
   balanceSource?: "chain" | "books" | "transactions";

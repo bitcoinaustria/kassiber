@@ -794,6 +794,7 @@ _SYNC_WALLET_CONFIG_FIELDS = frozenset(
         "change_descriptor",
         "xpub",
         "deprecated",
+        "custodial",
     }
 )
 _WATCH_POLICY_FIELDS = frozenset(
