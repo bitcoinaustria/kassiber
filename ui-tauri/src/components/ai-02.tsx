@@ -33,6 +33,7 @@ interface Ai02Props {
   prompts?: PromptOption[];
   selection: { provider: string; model: string } | null;
   onSelectionChange: (next: { provider: string; model: string } | null) => void;
+  onComposerOverlayOpenChange?: (open: boolean) => void;
   /** Controlled composer text; pair with onValueChange to persist drafts. */
   value?: string;
   onValueChange?: (value: string) => void;
@@ -62,6 +63,7 @@ export default function Ai02({
   prompts,
   selection,
   onSelectionChange,
+  onComposerOverlayOpenChange,
   value,
   onValueChange,
   onSubmit,
@@ -256,6 +258,7 @@ export default function Ai02({
             <ProviderModelPicker
               value={selection}
               onChange={onSelectionChange}
+              onOverlayOpenChange={onComposerOverlayOpenChange}
               enabled={modelPickerEnabled}
               thinkingEffort={thinkingEffort}
               onThinkingEffortChange={

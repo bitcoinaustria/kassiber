@@ -43,6 +43,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore, type AssistantDockPosition } from "@/store/ui";
+import { assistantDockIsCompact } from "./assistantDockLayout";
 
 interface AssistantDockProps {
   className?: string;
@@ -83,6 +84,8 @@ export function AssistantDock({
 }: AssistantDockProps) {
   const { t } = useTranslation("assistant");
   const [isInteracting, setIsInteracting] = React.useState(false);
+  const [isComposerOverlayOpen, setIsComposerOverlayOpen] =
+    React.useState(false);
   const [isThreadCollapsed, setIsThreadCollapsed] = React.useState(false);
   const [isRevealed, setIsRevealed] = React.useState(false);
   const parkTimeoutRef = React.useRef<number | null>(null);
@@ -170,7 +173,10 @@ export function AssistantDock({
   // Focus / consent / error pin the idle dock open; streaming alone does not
   // — minimized chats stay collapsed with a Working chip instead.
   const pinned =
-    isInteracting || Boolean(error) || Boolean(pendingConsent);
+    isInteracting ||
+    isComposerOverlayOpen ||
+    Boolean(error) ||
+    Boolean(pendingConsent);
   const parked = effectiveAutoHide && !pinned && !isRevealed;
   const minimized = hasThread && isMinimized;
   const showWorkingSurface = minimized && isStreaming;
@@ -178,9 +184,15 @@ export function AssistantDock({
   const showCollapsedChrome =
     parked || showMinimizedChip || showWorkingSurface;
 
-  const compact = effectiveAutoHide
-    ? false
-    : collapsed && !hasThread && !isInteracting && dockDiscovered;
+  const compact =
+    !effectiveAutoHide &&
+    assistantDockIsCompact({
+      collapsed,
+      hasThread,
+      isInteracting,
+      dockDiscovered,
+      overlayOpen: isComposerOverlayOpen,
+    });
   const showThread = hasThread && !isThreadCollapsed && !minimized;
   const modelPickerEnabled =
     !compact || hasThread || isStreaming || showComposerPeek;
@@ -482,6 +494,7 @@ export function AssistantDock({
                 compact={compact || showComposerPeek}
                 selection={selection}
                 onSelectionChange={setSelection}
+                onComposerOverlayOpenChange={setIsComposerOverlayOpen}
                 value={assistantDraft}
                 onValueChange={setAssistantDraft}
                 onSubmit={handleSubmit}

@@ -1,6 +1,23 @@
 import { describe, expect, it } from "vitest";
 
-import { nextAssistantDockCollapsed } from "./assistantDockLayout";
+import {
+  assistantDockIsCompact,
+  nextAssistantDockCollapsed,
+} from "./assistantDockLayout";
+
+describe("assistantDockIsCompact", () => {
+  it("keeps the dock expanded while a portalled composer overlay is open", () => {
+    expect(
+      assistantDockIsCompact({
+        collapsed: true,
+        hasThread: false,
+        isInteracting: false,
+        dockDiscovered: true,
+        overlayOpen: true,
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("nextAssistantDockCollapsed", () => {
   it("does not collapse when removing dock padding would erase the scroll range", () => {

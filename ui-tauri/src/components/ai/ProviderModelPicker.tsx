@@ -69,6 +69,7 @@ import { PROVIDER_BRAND_ICON_BY_RUNTIME } from "./providerBrandIcons";
 interface ProviderModelPickerProps {
   value: { provider: string; model: string } | null;
   onChange: (next: { provider: string; model: string } | null) => void;
+  onOverlayOpenChange?: (open: boolean) => void;
   enabled?: boolean;
   onActiveProviderKindChange?: (kind: AiProviderKind | null) => void;
   /** When supported, render a separate reasoning-effort menu beside the picker. */
@@ -140,6 +141,7 @@ async function fetchProviderModels(
 export function ProviderModelPicker({
   value,
   onChange,
+  onOverlayOpenChange,
   enabled = true,
   onActiveProviderKindChange,
   thinkingEffort = "auto",
@@ -150,6 +152,7 @@ export function ProviderModelPicker({
   const dataMode = useUiStore((state) => state.dataMode);
   const daemonSession = useUiStore((state) => state.daemonSession);
   const [open, setOpen] = React.useState(false);
+  const [thinkingOpen, setThinkingOpen] = React.useState(false);
   const [activeProviderName, setActiveProviderName] = React.useState<
     string | null
   >(null);
@@ -462,7 +465,13 @@ export function ProviderModelPicker({
     }
     onChange({ provider: provider.name, model });
     setOpen(false);
+    onOverlayOpenChange?.(thinkingOpen);
   };
+
+  React.useEffect(
+    () => () => onOverlayOpenChange?.(false),
+    [onOverlayOpenChange],
+  );
 
   return (
     <>
@@ -470,6 +479,7 @@ export function ProviderModelPicker({
         open={open}
         onOpenChange={(next) => {
           setOpen(next);
+          onOverlayOpenChange?.(next || thinkingOpen);
           if (next) {
             void runtimeQuery.refetch();
             providers.forEach((provider, index) => {
@@ -727,7 +737,13 @@ export function ProviderModelPicker({
             className="mx-1 hidden h-4 w-px shrink-0 bg-border sm:block"
             aria-hidden="true"
           />
-          <DropdownMenu>
+          <DropdownMenu
+            open={thinkingOpen}
+            onOpenChange={(next) => {
+              setThinkingOpen(next);
+              onOverlayOpenChange?.(open || next);
+            }}
+          >
             <DropdownMenuTrigger asChild disabled={!enabled}>
               <button
                 type="button"

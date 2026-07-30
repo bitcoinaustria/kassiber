@@ -16,6 +16,28 @@ export type AssistantDockScrollState = {
   clientHeight: number;
 };
 
+export function assistantDockIsCompact({
+  collapsed,
+  hasThread,
+  isInteracting,
+  dockDiscovered,
+  overlayOpen,
+}: {
+  collapsed: boolean;
+  hasThread: boolean;
+  isInteracting: boolean;
+  dockDiscovered: boolean;
+  overlayOpen: boolean;
+}) {
+  return (
+    collapsed &&
+    !hasThread &&
+    !isInteracting &&
+    !overlayOpen &&
+    dockDiscovered
+  );
+}
+
 export function nextAssistantDockCollapsed({
   collapsed,
   scrollTop,
