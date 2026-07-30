@@ -12,6 +12,10 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { TabsContent } from "@/components/ui/tabs";
+import {
+  transactionKindOptions,
+  UNCLASSIFIED_KIND,
+} from "@/lib/transactionTypeLabel";
 
 import { DirtyDot, InfoHint, LedgerRow } from "./TransactionDetailSheetParts";
 import {
@@ -89,6 +93,46 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                         </div>
                       </div>
                     ) : null}
+                    <div className="rounded-md border bg-background p-3">
+                      <div className="min-w-0 space-y-1.5">
+                        <Label
+                          htmlFor="tx-tax-kind"
+                          className="flex items-center gap-1.5"
+                        >
+                          {t("tax.kind")}
+                          <DirtyDot active={Boolean(dirty.kind)} />
+                          <InfoHint label={t("tax.kind")}>
+                            {t("tax.kindHint")}
+                          </InfoHint>
+                        </Label>
+                        <Select
+                          value={localDraft.kind ?? UNCLASSIFIED_KIND}
+                          onValueChange={(value) =>
+                            updateDraft(
+                              "kind",
+                              value === UNCLASSIFIED_KIND ? null : value,
+                            )
+                          }
+                        >
+                          <SelectTrigger id="tx-tax-kind" className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={UNCLASSIFIED_KIND}>
+                              {t("tax.kindUnclassified")}
+                            </SelectItem>
+                            {transactionKindOptions(
+                              transaction.direction !== "Send",
+                            ).map((option) => (
+                              <SelectItem key={option.kind} value={option.kind}>
+                                {/* dynamic key */}
+                                {t(option.labelKey as ParseKeys<["transactions"]>)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
                     <div className="rounded-md border bg-background p-3">
                       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
                         <div className="min-w-0 space-y-1.5">

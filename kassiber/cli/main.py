@@ -2065,6 +2065,30 @@ def build_parser() -> argparse.ArgumentParser:
     re_clear.add_argument("--transaction", required=True)
     re_clear.add_argument("--reason")
 
+    records_kind = records_sub.add_parser(
+        "kind",
+        help=(
+            "Classify a transaction's tax character (income vs plain acquisition). "
+            "Unlike tags, this drives the tax engine."
+        ),
+    )
+    records_kind_sub = records_kind.add_subparsers(dest="records_kind_command", required=True)
+    rk_set = records_kind_sub.add_parser("set")
+    rk_set.add_argument("--workspace")
+    rk_set.add_argument("--profile")
+    rk_set.add_argument("--transaction", required=True)
+    rk_set.add_argument(
+        "--kind",
+        required=True,
+        choices=sorted(core_metadata.SUPPORTED_TRANSACTION_KINDS),
+    )
+    rk_set.add_argument("--reason")
+    rk_clear = records_kind_sub.add_parser("clear")
+    rk_clear.add_argument("--workspace")
+    rk_clear.add_argument("--profile")
+    rk_clear.add_argument("--transaction", required=True)
+    rk_clear.add_argument("--reason")
+
     history = records_sub.add_parser("history")
     history_sub = history.add_subparsers(dest="history_command", required=True)
     history_list = history_sub.add_parser("list")
@@ -4211,6 +4235,20 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                             reason=args.reason,
                         ),
                     )
+            if args.records_command == "kind":
+                return emit(
+                    args,
+                    core_metadata.update_transaction_metadata(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.transaction,
+                        metadata_hooks,
+                        kind=args.kind if args.records_kind_command == "set" else None,
+                        kind_set=True,
+                        reason=args.reason,
+                    ),
+                )
             if args.records_command == "excluded":
                 if args.records_excluded_command == "set":
                     return emit(

@@ -27,6 +27,24 @@ function txWithTags(tags: string[]): Transaction {
   };
 }
 
+describe("draftForTransaction kind", () => {
+  it("never invents a tax kind for an unclassified row", () => {
+    // A "Receive" row is an acquisition to the engine until the user says
+    // otherwise. Defaulting here would declare income on the next save of an
+    // unrelated field.
+    expect(draftForTransaction(txWithTags([])).kind).toBeNull();
+    expect(
+      draftForTransaction({ ...txWithTags([]), tag: "Income", tags: [] }).kind,
+    ).toBeNull();
+  });
+
+  it("round-trips a stored kind so saving does not clear it", () => {
+    const draft = draftForTransaction({ ...txWithTags([]), kind: "mining" });
+
+    expect(draft.kind).toBe("mining");
+  });
+});
+
 describe("draftForTransaction", () => {
   it("preserves additional label-like tags outside the selected classification", () => {
     const draft = draftForTransaction(txWithTags(["Income", "Review", "Fee"]));

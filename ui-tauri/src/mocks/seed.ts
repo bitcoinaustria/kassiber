@@ -259,6 +259,8 @@ export interface Tx {
   date: string;
   occurredAt?: string;
   type: TxType;
+  /** stored classification code behind `type`; null = unclassified */
+  kind?: string | null;
   asset?: string | null;
   chain?: string | null;
   network?: string | null;

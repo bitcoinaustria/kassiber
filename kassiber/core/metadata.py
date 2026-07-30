@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
 from ..errors import AppError
-from ..importers import load_bip329_file
+from ..importers import GENERIC_LEDGER_KIND_DIRECTIONS, load_bip329_file
 from ..msat import dec, msat_to_btc
 from . import pricing
 from . import ownership
@@ -29,6 +29,12 @@ SUPPORTED_PRICING_QUALITIES = {
     pricing.QUALITY_MISSING,
 }
 SUPPORTED_REVIEW_STATUSES = {"completed", "pending", "failed", "review"}
+# Kinds a user may assign to classify a transaction's tax character. Unlike
+# tags (cosmetic) this drives the engine: an income kind becomes an RP2 earn
+# transaction type and emits an `income` journal entry, where a plain
+# acquisition emits only `acquisition`. Setting it to None clears the
+# classification back to whatever the import recorded.
+SUPPORTED_TRANSACTION_KINDS = GENERIC_LEDGER_KIND_DIRECTIONS
 SUPPORTED_AT_REGIME_OVERRIDES = {"alt", "neu", "outside"}
 SUPPORTED_AT_CATEGORY_OVERRIDES = {
     "income_general",
@@ -497,6 +503,8 @@ def update_transaction_metadata(
     at_regime_set=False,
     at_category=None,
     at_category_set=False,
+    kind=None,
+    kind_set=False,
     source="cli",
     reason=None,
     commit=True,
@@ -526,6 +534,24 @@ def update_transaction_metadata(
         if at_category_set and at_category is not None
         else None
     )
+    clean_kind = (
+        _clean_optional_choice(kind, "kind", set(SUPPORTED_TRANSACTION_KINDS))
+        if kind_set and kind is not None
+        else None
+    )
+    if clean_kind is not None:
+        required = SUPPORTED_TRANSACTION_KINDS[clean_kind]
+        if tx["direction"] != required:
+            raise AppError(
+                f"kind '{clean_kind}' can only be applied to {required} transactions",
+                code="validation",
+                hint=(
+                    "Income kinds classify what arrived; disposal kinds classify "
+                    "what left. Check the transaction's direction."
+                ),
+                details={"kind": clean_kind, "direction": tx["direction"]},
+                retryable=False,
+            )
     clean_pricing = None
     if pricing_update is not None:
         if not isinstance(pricing_update, Mapping):
@@ -559,6 +585,10 @@ def update_transaction_metadata(
     if at_category_set:
         tx_updates["at_category_override"] = clean_at_category
         state_updates["at_category"] = clean_at_category
+
+    if kind_set:
+        tx_updates["kind"] = clean_kind
+        state_updates["kind"] = clean_kind
 
     if clean_pricing is not None:
         tx_updates.update(

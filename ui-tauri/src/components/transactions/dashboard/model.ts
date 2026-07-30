@@ -335,6 +335,7 @@ function toDashboardTransaction(
       (t ? t("transactions:fallback.unassignedWallet") : "Unassigned wallet"),
     tag,
     sourceType: tx.type,
+    kind: tx.kind ?? null,
     paymentMethod,
     date: tx.date,
     status: tag.toLowerCase().includes("review") ? "review" : status,

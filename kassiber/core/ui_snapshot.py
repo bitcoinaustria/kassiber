@@ -2324,6 +2324,9 @@ def _transaction_row_to_ui(
         "explorerId": _public_explorer_id(external_id),
         "date": (occurred_at or "")[:16].replace("T", " "),
         "type": type_label,
+        # The stored kind behind `type`. `type` is a display label; this is the
+        # machine code the tax engine reads and the classification control writes.
+        "kind": row["kind"] if "kind" in row_keys else None,
         "asset": row["asset"] if "asset" in row_keys else None,
         "chain": chain,
         "network": network,

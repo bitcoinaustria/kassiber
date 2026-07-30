@@ -83,6 +83,7 @@ export type Transaction = {
   wallet?: string;
   tag?: string;
   sourceType?: Tx["type"];
+  kind?: string | null;
   paymentMethod: "On-chain" | "Exchange" | "Lightning" | "Liquid";
   date: string;
   status: TransactionStatus;
@@ -104,6 +105,7 @@ export type TransactionEditDraft = {
   reviewStatus: TransactionStatus;
   taxable: boolean;
   excluded: boolean;
+  kind: string | null;
 };
 
 export type PricingSourceKind =
@@ -675,6 +677,10 @@ export function draftForTransaction(txn: Transaction): TransactionEditDraft {
     reviewStatus: txn.reviewStatus ?? txn.status,
     taxable: txn.taxable ?? defaultTaxClassification.taxable,
     excluded: Boolean(txn.excluded),
+    // Never defaulted: an unclassified row must stay unclassified until the
+    // user says otherwise, or saving an unrelated field would silently declare
+    // a tax character the book never recorded.
+    kind: txn.kind ?? null,
   };
 }
 

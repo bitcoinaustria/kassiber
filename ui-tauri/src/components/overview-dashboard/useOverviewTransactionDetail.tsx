@@ -183,6 +183,10 @@ export function useOverviewTransactionDetail({
           draft.atRegime !== baseline.atRegime ||
           draft.atCategory !== baseline.atCategory
         : false;
+      // Sent separately: `kind` rewrites the row's tax character, so it only
+      // goes when the user actually changed it — never as a side effect of
+      // saving a note or a price.
+      const kindDirty = baseline ? draft.kind !== baseline.kind : false;
       const manualPrice = parseManualDecimal(draft.manualPrice);
       const manualValue = parseManualDecimal(draft.manualValue);
       await metadataUpdate.mutateAsync({
@@ -198,6 +202,7 @@ export function useOverviewTransactionDetail({
               at_category: draft.atCategory,
             }
           : {}),
+        ...(kindDirty ? { kind: draft.kind } : {}),
         ...(pricingDirty
           ? {
               pricing_source_kind: draft.pricingSourceKind,

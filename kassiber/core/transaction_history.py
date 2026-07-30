@@ -218,6 +218,7 @@ def transaction_state(
         else bool(_row_get(tx, "taxability_override")),
         "at_regime": _row_get(tx, "at_regime_override"),
         "at_category": _row_get(tx, "at_category_override"),
+        "kind": _row_get(tx, "kind"),
         "fiat_currency": _row_get(tx, "fiat_currency"),
         "fiat_rate": _exact_or_float(tx, "fiat_rate_exact", "fiat_rate"),
         "fiat_value": _exact_or_float(tx, "fiat_value_exact", "fiat_value"),

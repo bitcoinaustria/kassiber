@@ -951,7 +951,10 @@
       "to": "an",
       "from": "von",
       "sentence": "Du hast am {{date}} {{amount}} {{direction}} {{counterparty}} {{action}}, {{fiat}}. {{treatment}}."
-    }
+    },
+    "kind": "Erfasst als",
+    "kindHint": "Was diese Transaktion steuerlich ist. Einkunftsarten erklären Einnahmen zum Marktwert, eine reine Anschaffung erfasst nur die Anschaffungskosten. Anders als Tags wirkt das direkt auf den Steuerbericht.",
+    "kindUnclassified": "Nicht klassifiziert"
   },
   "classify": {
     "label": "Label",

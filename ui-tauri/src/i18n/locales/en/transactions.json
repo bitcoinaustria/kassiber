@@ -932,7 +932,10 @@
       "to": "to",
       "from": "from",
       "sentence": "You {{action}} {{amount}} {{direction}} {{counterparty}} on {{date}}, {{fiat}}. {{treatment}}."
-    }
+    },
+    "kind": "Recorded as",
+    "kindHint": "What this transaction is for tax purposes. Income kinds declare earnings at market value; a plain acquisition only records cost basis. Unlike tags, this drives the tax report.",
+    "kindUnclassified": "Unclassified"
   },
   "classify": {
     "label": "Label",

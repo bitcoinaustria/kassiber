@@ -2649,6 +2649,13 @@ GENERIC_LEDGER_TYPE_GROUPS = (
     ("Earn", ("Income", "Mining", "Staking", "Interest", "Airdrop", "Fork")),
     ("Outflow (review)", ("Gift sent", "Donation", "Lost", "Stolen")),
 )
+# kind -> the direction it is only valid on. This is the tax-meaningful
+# classification vocabulary: every kind the tax engine recognizes, and the one
+# direction it can legitimately appear on. Derived from the table above so the
+# importer, the manual-classification path and the engine cannot drift.
+GENERIC_LEDGER_KIND_DIRECTIONS = {
+    kind: direction for direction, kind in _GENERIC_LEDGER_TYPES.values() if kind
+}
 GENERIC_LEDGER_DISPLAY_TYPES = tuple(
     label for _group, labels in GENERIC_LEDGER_TYPE_GROUPS for label in labels
 )
