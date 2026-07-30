@@ -14,6 +14,7 @@ import {
   MISSING_FIAT_LABEL,
   type Currency,
 } from "@/lib/currency";
+import { transactionTypeLabel } from "@/lib/transactionTypeLabel";
 import { cn } from "@/lib/utils";
 
 import {
@@ -54,6 +55,7 @@ export const RecentTransactionsTable = ({
   onOpenTransaction?: (transaction: Transaction) => void;
 }) => {
   const { t } = useTranslation("overview");
+  const { t: tTransactions } = useTranslation("transactions");
   const resolvedTitle = title ?? t("recentTx.title");
   const resolvedShowAllLabel = showAllLabel ?? t("recentTx.showAll");
   const [visibleCount, setVisibleCount] = React.useState(RECENT_TX_REVEAL_STEP);
@@ -146,7 +148,11 @@ export const RecentTransactionsTable = ({
                     ? "text-red-700 dark:text-red-300"
                     : "text-muted-foreground";
               const flowLabel = t(overviewFlowLabelKeys[flow]);
-              const primaryTag = tx.tags[0] ?? flowLabel;
+              // A real metadata tag wins over the derived type; both arrive as
+              // raw strings, so translate only the ones we recognize.
+              const primaryTag = tx.tags[0]
+                ? transactionTypeLabel(tTransactions, tx.tags[0])
+                : flowLabel;
               const extraTags = Math.max(0, tx.tags.length - 1);
               const rowClassName =
                 "group flex min-w-0 items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-4";

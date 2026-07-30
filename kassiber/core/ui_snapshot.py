@@ -1912,6 +1912,54 @@ def _activity_transactions(
     ]
 
 
+# Display labels keyed on the stored kind, gated by direction so an inbound row
+# can never borrow an outbound label (or the reverse). "Income" is
+# tax-meaningful — income kinds map to RP2 earn transaction types and emit a
+# second `income` journal entry, see core/engines/rp2.py — so labeling every
+# inbound row "Income" told users a buy or a plain deposit was declarable
+# earnings. Kinds are the ones importers write (`_GENERIC_LEDGER_TYPES` in
+# importers.py). These stay English: the daemon speaks display-stable labels and
+# the UI maps them to translated copy (docs/reference/i18n.md).
+_INBOUND_KIND_LABELS = {
+    "buy": "Buy",
+    "deposit": "Deposit",
+    "income": "Income",
+    "routing_income": "Income",
+    "wages": "Wages",
+    "mining": "Mining",
+    "mining_reward": "Mining",
+    "staking": "Staking",
+    "interest": "Interest",
+    "lending_interest": "Interest",
+    "airdrop": "Airdrop",
+    "hardfork": "Hard fork",
+    "hard_fork": "Hard fork",
+    # Lightning + channel lifecycle. These name the mechanism, not a tax
+    # character: an invoice receipt may be revenue or a plain acquisition, and
+    # the engine books it BUY until something says otherwise.
+    "lnd_invoice": "LN invoice",
+    "cln_invoice": "LN invoice",
+    "channel_close": "Channel close",
+}
+_OUTBOUND_KIND_LABELS = {
+    "sell": "Sell",
+    "withdrawal": "Withdrawal",
+    "spend": "Spend",
+    "gift": "Gift",
+    "donation": "Donation",
+    "lost": "Lost",
+    "stolen": "Stolen",
+    "lnd_pay": "LN payment",
+    "cln_pay": "LN payment",
+    "channel_open": "Channel open",
+}
+# An inbound row with no recognized kind is an ordinary acquisition, not income:
+# rp2 books it `…get(kind, "BUY")` and the journal emits `acquisition` with no
+# `income` entry. "Acquired" states exactly that without claiming a purchase
+# that may not have happened (a received gift stores kind NULL by design).
+_UNKNOWN_INBOUND_LABEL = "Acquired"
+
+
 def _transaction_type(kind: str, direction: str, quarantine_reason: str | None) -> str:
     normalized = (kind or "").lower()
     if "transfer" in normalized and direction != "inbound":
@@ -1931,8 +1979,10 @@ def _transaction_type(kind: str, direction: str, quarantine_reason: str | None) 
         ):
             return "Transfer"
     if direction == "inbound":
-        return "Income"
-    return "Expense"
+        return _INBOUND_KIND_LABELS.get(normalized, _UNKNOWN_INBOUND_LABEL)
+    # Unrecognized outbound kinds keep "Expense", which `display_tags` falls
+    # back from to the raw kind rather than asserting a disposal treatment.
+    return _OUTBOUND_KIND_LABELS.get(normalized, "Expense")
 
 
 def _transaction_row_chain_network(row: sqlite3.Row | dict[str, Any]) -> tuple[str, str]:

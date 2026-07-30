@@ -2,6 +2,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { formatBtc } from "@/lib/currency";
+import { transactionTypeLabel } from "@/lib/transactionTypeLabel";
 import { cn } from "@/lib/utils";
 
 import {
@@ -56,6 +57,7 @@ export function TreasuryTooltip({
   fiatSeriesEnabled = true,
 }: TreasuryTooltipProps) {
   const { t } = useTranslation("overview");
+  const { t: tTransactions } = useTranslation("transactions");
   const flowColors = useActivityFlowColors();
   const activityPointOverride = useHoveredActivityPoint(hoveredPointStore);
   if ((!active || !payload?.length) && !activityPointOverride) return null;
@@ -140,7 +142,7 @@ export function TreasuryTooltip({
               )}
               {point.eventType && (
                 <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-2xs text-muted-foreground">
-                  {point.eventType}
+                  {transactionTypeLabel(tTransactions, point.eventType)}
                 </span>
               )}
             </div>

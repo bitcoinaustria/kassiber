@@ -58,6 +58,7 @@ from kassiber.core.ui_snapshot import (
     MAX_UI_DASHBOARD_CANDIDATES,
     _tax_free_wallet_summaries,
     _transaction_pair_display_meta,
+    _transaction_type,
     build_capital_gains_snapshot,
     build_journal_events_list_snapshot,
     build_journals_snapshot,
@@ -725,6 +726,41 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertAlmostEqual(portfolio_rows["BTC"]["market_value"], 27_727.625)
         self.assertAlmostEqual(portfolio_rows["LBTC"]["market_value"], 13_863.8125)
 
+    def test_inbound_transaction_type_labels_follow_the_stored_kind(self):
+        # "Income" is tax-meaningful (RP2 earn types); an acquisition or a plain
+        # deposit must not borrow it just for being inbound.
+        self.assertEqual(_transaction_type("buy", "inbound", None), "Buy")
+        self.assertEqual(_transaction_type("deposit", "inbound", None), "Deposit")
+        self.assertEqual(_transaction_type("mining", "inbound", None), "Mining")
+        self.assertEqual(_transaction_type("income", "inbound", None), "Income")
+        self.assertEqual(_transaction_type("sell", "outbound", None), "Sell")
+        self.assertEqual(
+            _transaction_type("withdrawal", "outbound", None), "Withdrawal"
+        )
+        # An unrecognized inbound kind is an ordinary acquisition, not income:
+        # rp2 books it BUY and the journal emits `acquisition` with no `income`
+        # entry. A received gift stores kind NULL by importer design.
+        self.assertEqual(_transaction_type("", "inbound", None), "Acquired")
+        self.assertEqual(_transaction_type(None, "inbound", None), "Acquired")
+        # Unrecognized outbound kinds keep "Expense" so `display_tags` can fall
+        # back to the raw kind rather than asserting a disposal treatment.
+        self.assertEqual(_transaction_type("mystery", "outbound", None), "Expense")
+        # Lightning kinds name the mechanism; the tax character stays open.
+        self.assertEqual(_transaction_type("lnd_invoice", "inbound", None), "LN invoice")
+        self.assertEqual(_transaction_type("cln_pay", "outbound", None), "LN payment")
+        self.assertEqual(
+            _transaction_type("channel_open", "outbound", None), "Channel open"
+        )
+        # Labels never cross directions.
+        self.assertEqual(_transaction_type("buy", "outbound", None), "Expense")
+        self.assertEqual(_transaction_type("sell", "inbound", None), "Acquired")
+        # Pair/fee/quarantine branches still win over the kind lookup.
+        self.assertEqual(_transaction_type("swap_buy", "inbound", None), "Swap")
+        self.assertEqual(
+            _transaction_type("buy", "inbound", "transfer_pair_unresolved"),
+            "Transfer",
+        )
+
     def test_ui_snapshots_use_populated_profile_rows(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
@@ -994,7 +1030,10 @@ class ReviewRegressionTest(unittest.TestCase):
         transactions = build_transactions_snapshot(conn, {"limit": 10})
         self.assertEqual(transactions["year"], 2026)
         self.assertEqual([row["id"] for row in transactions["txs"]], ["tx-ui-spend", "tx-ui-in"])
-        self.assertEqual(transactions["txs"][1]["type"], "Income")
+        # kind="transfer" but inbound and unpaired: the guard above refuses to
+        # claim "Transfer" without a matched pair, and rp2 books an unpaired
+        # inbound leg as BUY — so it reads as an acquisition, not as earnings.
+        self.assertEqual(transactions["txs"][1]["type"], "Acquired")
         self.assertEqual(transactions["txs"][1]["tag"], "Review")
         self.assertEqual(transactions["txs"][1]["externalId"], "a" * 64)
         self.assertEqual(transactions["txs"][1]["explorerId"], "a" * 64)

@@ -14,6 +14,7 @@ import {
   type EvidenceLevel,
   type PrivacyMirrorPayload,
 } from "@/lib/privacyMirror";
+import { transactionTypeLabel } from "@/lib/transactionTypeLabel";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
@@ -412,9 +413,10 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         </div>
                         <LedgerRow
                           label={t("details.type")}
-                          value={
-                            transaction.sourceType ?? transaction.direction
-                          }
+                          value={transactionTypeLabel(
+                            t,
+                            transaction.sourceType ?? transaction.direction,
+                          )}
                         />
                         <LedgerRow
                           label={t("details.network")}

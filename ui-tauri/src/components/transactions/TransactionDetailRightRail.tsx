@@ -10,6 +10,7 @@ import type {
   TransactionHistoryEvent,
   TransactionHistoryStaleSummary,
 } from "@/lib/transactionHistory";
+import { transactionTypeLabel } from "@/lib/transactionTypeLabel";
 
 import { TransactionEditHistoryPanel } from "./TransactionEditHistoryPanel";
 import { AttachmentsPanel } from "./TransactionDetailAttachmentsPanel";
@@ -106,7 +107,7 @@ export function TransactionDetailRightRail({
               />
             }
             label={t("sourceRecord.source")}
-            value={`${sourceName} · ${sourceType}`}
+            value={`${sourceName} · ${transactionTypeLabel(t, sourceType)}`}
             hidden={hideSensitive}
           />
           <SourceRecordRow
