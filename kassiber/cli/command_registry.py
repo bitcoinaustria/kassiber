@@ -44,6 +44,7 @@ _COMMAND_PATH_ONLY_SUBCOMMAND_ATTRS = (
     "projects_command",
     "records_tag_command",
     "records_excluded_command",
+    "records_kind_command",
     "filed_snapshots_command",
 )
 

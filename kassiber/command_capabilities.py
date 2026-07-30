@@ -109,7 +109,8 @@ CLI_OPERATOR_PATHS = _paths(
 CLI_ACCOUNTING_DECISION_PATHS = _paths(
     """
     profiles.set metadata.exclude metadata.include metadata.records.excluded.set
-    metadata.records.excluded.clear metadata.records.history.revert
+    metadata.records.excluded.clear metadata.records.kind.set
+    metadata.records.kind.clear metadata.records.history.revert
     journals.quarantine.clear journals.quarantine.resolve.price-override
     journals.quarantine.resolve.exclude loans.mark loans.unmark loans.link
     transfers.pair transfers.unpair transfers.update transfers.gaps.review
