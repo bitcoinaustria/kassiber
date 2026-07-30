@@ -100,7 +100,7 @@
       },
       "developer": {
         "label": "Developer tools",
-        "description": "The in-app Logs view and its in-memory buffer."
+        "description": "Unfinished features, the in-app Logs view, and its in-memory buffer."
       }
     },
     "back": "Back"
@@ -563,10 +563,10 @@
     "clearStored": "Clear stored chats"
   },
   "developer": {
-    "intro": "Show the typed Logs view after the local books are unlocked. Logs are local-only, kept in RAM, and written to disk only when you export them.",
-    "enableLabel": "Enable Logs page",
-    "enableOn": "Logs is visible in Support and route navigation.",
-    "enableOff": "Logs is hidden and direct navigation redirects to Overview.",
+    "intro": "Developer mode reveals the unfinished parts of Kassiber: the typed Logs view, the network monitor, device sync, and the reports that are still being built. Off by default; your choice is remembered across updates.",
+    "enableLabel": "Enable developer mode",
+    "enableOn": "Logs, Network Monitor, Device sync, Activity, Custody Gaps, Exit Calculator, and Privacy Mirror are available.",
+    "enableOff": "Unfinished pages are hidden or greyed out, and direct navigation to them redirects to Overview.",
     "alphaBannerLabel": "Show the alpha warning banner",
     "alphaBannerDescription": "The red strip across the top of the window. Hiding it does not make the software any less alpha.",
     "openLogs": "Open Logs",

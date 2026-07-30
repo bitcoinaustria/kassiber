@@ -445,7 +445,9 @@ export const useUiStore = create<UiState>()(
       appLockPolicy: DEFAULT_APP_LOCK_POLICY,
       identity: null,
       aiFeaturesEnabled: true,
-      developerToolsEnabled: true,
+      // Off until asked for: it reveals the unfinished pre-release surfaces
+      // (see `devMode.ts`). Restored from `kb.ui`, so it survives updates.
+      developerToolsEnabled: false,
       preAlphaBannerVisible: true,
       automaticUpdateChecks: false,
       appUpdate: null,
@@ -648,6 +650,17 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "kb.ui",
+      // v1: `developerToolsEnabled` stopped meaning "show the Logs page" and
+      // became the pre-release dev-mode switch (see `devMode.ts`). Every
+      // pre-v1 install carries the old `true` default, which was never an
+      // opt-in, so drop it once. Later opt-ins persist normally.
+      version: 1,
+      migrate: (persisted) =>
+        ({
+          ...(persisted as Partial<UiState>),
+          developerToolsEnabled: false,
+          // `merge` below fills in whatever else the stored blob is missing.
+        }) as ReturnType<typeof uiStatePartialForStorage>,
       partialize: uiStatePartialForStorage,
       merge: (persisted, current) => {
         const restored = persisted as Partial<UiState>;

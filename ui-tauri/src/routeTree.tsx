@@ -106,6 +106,15 @@ const Assistant = lazyRouteComponent(
   "Assistant",
 );
 
+// Guard for the `DEV_HIDDEN_ROUTES` in `devMode.ts`: nothing in the UI links
+// there while dev mode is off, so a deep link or a stale URL lands on Overview
+// instead of an unfinished page.
+function requireDeveloperTools() {
+  if (!useUiStore.getState().developerToolsEnabled) {
+    throw redirect({ to: "/overview" });
+  }
+}
+
 const rootRoute = createRootRoute({
   component: () => (
     <>
@@ -242,17 +251,14 @@ const reconcileRoute = createRoute({
 const egressRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/egress",
+  beforeLoad: requireDeveloperTools,
   component: Egress,
 });
 
 const logsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/logs",
-  beforeLoad: () => {
-    if (!useUiStore.getState().developerToolsEnabled) {
-      throw redirect({ to: "/overview" });
-    }
-  },
+  beforeLoad: requireDeveloperTools,
   component: Logs,
 });
 
@@ -260,9 +266,7 @@ const diagnosticsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/diagnostics",
   beforeLoad: () => {
-    if (!useUiStore.getState().developerToolsEnabled) {
-      throw redirect({ to: "/overview" });
-    }
+    requireDeveloperTools();
     throw redirect({ to: "/logs" });
   },
 });
@@ -382,6 +386,7 @@ const settingsAiRoute = createRoute({
 const settingsSyncRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/settings/sync",
+  beforeLoad: requireDeveloperTools,
   component: () => <Settings section="data-sync" />,
 });
 

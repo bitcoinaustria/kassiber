@@ -100,7 +100,7 @@
       },
       "developer": {
         "label": "Entwicklerwerkzeuge",
-        "description": "Die integrierte Logs-Ansicht und ihr Speicherpuffer."
+        "description": "Unfertige Funktionen, die integrierte Logs-Ansicht und ihr Speicherpuffer."
       }
     },
     "back": "Zurück"
@@ -563,10 +563,10 @@
     "clearStored": "Gespeicherte Chats löschen"
   },
   "developer": {
-    "intro": "Zeige die typisierte Logs-Ansicht, sobald die lokalen Bücher entsperrt sind. Logs sind nur lokal, werden im RAM gehalten und nur dann auf die Festplatte geschrieben, wenn du sie exportierst.",
-    "enableLabel": "Logs-Seite aktivieren",
-    "enableOn": "Logs ist in Support und Routennavigation sichtbar.",
-    "enableOff": "Logs ist ausgeblendet und direkte Navigation leitet zur Übersicht um.",
+    "intro": "Der Entwicklermodus zeigt die unfertigen Teile von Kassiber: die typisierte Logs-Ansicht, den Netzwerkmonitor, die Gerätesynchronisierung und die Berichte, die noch gebaut werden. Standardmäßig aus; deine Wahl bleibt über Updates erhalten.",
+    "enableLabel": "Entwicklermodus aktivieren",
+    "enableOn": "Logs, Netzwerkmonitor, Gerätesynchronisierung, Aktivität, Custody-Lücken, Exit-Rechner und Privacy Mirror sind verfügbar.",
+    "enableOff": "Unfertige Seiten sind ausgeblendet oder ausgegraut, direkte Navigation dorthin leitet zur Übersicht um.",
     "alphaBannerLabel": "Alpha-Warnbanner anzeigen",
     "alphaBannerDescription": "Der rote Streifen am oberen Fensterrand. Ausblenden macht die Software nicht weniger Alpha.",
     "openLogs": "Logs öffnen",

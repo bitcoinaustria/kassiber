@@ -27,6 +27,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import { useUiStore } from "@/store/ui";
+import { isDevOnlySettingsSection } from "../devMode";
 import {
   settingsSectionRoutePath,
   type SettingsSectionId,
@@ -242,6 +244,7 @@ export function SettingsSidebarNav({
 }) {
   const { t } = useTranslation("settings");
   const { isMobile, setOpenMobile } = useSidebar();
+  const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const closeMobileNav = () => {
     if (isMobile) setOpenMobile(false);
   };
@@ -259,7 +262,9 @@ export function SettingsSidebarNav({
         </SidebarGroup>
         {SETTINGS_GROUP_ORDER.map((group) => {
           const items = SETTINGS_SECTIONS.filter(
-            (section) => section.group === group,
+            (section) =>
+              section.group === group &&
+              (developerToolsEnabled || !isDevOnlySettingsSection(section.id)),
           );
           if (items.length === 0) return null;
           return (

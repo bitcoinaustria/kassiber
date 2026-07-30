@@ -205,6 +205,8 @@ type NavItem = {
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   href: AppRoutePath;
   children?: NavItem[];
+  /** One of `DEV_LOCKED_ROUTES`: greyed out until dev mode is on. */
+  devLocked?: boolean;
 };
 
 // `titleKey` indexes the `nav` namespace (section.*).
@@ -322,6 +324,23 @@ const navSubRowClassName =
   "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground data-[active=true]:bg-sidebar-row-active data-[active=true]:text-sidebar-foreground";
 
 /**
+ * Props that turn a nav row into a greyed-out signpost (see `devMode.ts`).
+ *
+ * `aria-disabled` is what the sidebar's own recipe styles (`aria-disabled:
+ * opacity-50 aria-disabled:pointer-events-none`), and both the click guard and
+ * `tabIndex: -1` are needed because the row is still an `<a>` underneath:
+ * pointer-events alone would leave it keyboard-navigable.
+ */
+function navLockProps(locked: boolean) {
+  if (!locked) return {};
+  return {
+    "aria-disabled": true,
+    tabIndex: -1,
+    onClick: (event: React.MouseEvent) => event.preventDefault(),
+  };
+}
+
+/**
  * Click handler for a submenu row's trigger, for the collapsed rail.
  *
  * Collapsed, `SidebarMenuSub` is `hidden`, so a submenu row had nowhere to put
@@ -386,7 +405,12 @@ const NAV_GROUPS: NavGroup[] = [
       { labelKey: "book.quarantine", icon: ShieldAlert, href: "/quarantine" },
       { labelKey: "book.reconcile", icon: Fingerprint, href: "/reconcile" },
       { labelKey: "book.sourceFunds", icon: BadgeCheck, href: "/source-of-funds" },
-      { labelKey: "book.custodyGaps", icon: Route, href: "/custody-gaps" },
+      {
+        labelKey: "book.custodyGaps",
+        icon: Route,
+        href: "/custody-gaps",
+        devLocked: true,
+      },
       { labelKey: "book.swaps", icon: ArrowLeftRight, href: "/swaps" },
       { labelKey: "book.ledger", icon: BookOpen, href: "/journals" },
     ],
@@ -2077,6 +2101,9 @@ function AppSidebar({
                         item={item}
                         pathname={pathname}
                         badge={navBadges[item.href]}
+                        locked={
+                          Boolean(item.devLocked) && !developerToolsEnabled
+                        }
                       />
                     ))}
                   </SidebarMenu>
@@ -2346,7 +2373,7 @@ function SidebarActions({
           tooltip={t("nav:book.activity")}
           className={navRowClassName}
         >
-          <Link to="/activity">
+          <Link to="/activity" {...navLockProps(!developerToolsEnabled)}>
             <History className="size-4" aria-hidden="true" />
             <span>{t("nav:book.activity")}</span>
           </Link>
@@ -2456,7 +2483,10 @@ function SidebarActions({
                     className={navSubRowClassName}
                     isActive={pathname === "/exit-tax"}
                   >
-                    <Link to="/exit-tax">
+                    <Link
+                      to="/exit-tax"
+                      {...navLockProps(!developerToolsEnabled)}
+                    >
                       <LogOut className="size-3.5" aria-hidden="true" />
                       <span>{t("shell.extras.exitCalculator")}</span>
                     </Link>
@@ -2468,24 +2498,29 @@ function SidebarActions({
                     className={navSubRowClassName}
                     isActive={pathname === "/privacy-mirror"}
                   >
-                    <Link to="/privacy-mirror">
+                    <Link
+                      to="/privacy-mirror"
+                      {...navLockProps(!developerToolsEnabled)}
+                    >
                       <Eye className="size-3.5" aria-hidden="true" />
                       <span>{t("shell.extras.privacyMirror")}</span>
                     </Link>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
-                <SidebarMenuSubItem>
-                  <SidebarMenuSubButton
-                    asChild
-                    className={navSubRowClassName}
-                    isActive={pathname === "/egress"}
-                  >
-                    <Link to="/egress">
-                      <Plane className="size-3.5" aria-hidden="true" />
-                      <span>{t("shell.extras.egress")}</span>
-                    </Link>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
+                {developerToolsEnabled ? (
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton
+                      asChild
+                      className={navSubRowClassName}
+                      isActive={pathname === "/egress"}
+                    >
+                      <Link to="/egress">
+                        <Plane className="size-3.5" aria-hidden="true" />
+                        <span>{t("shell.extras.egress")}</span>
+                      </Link>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                ) : null}
               </SidebarMenuSub>
             </CollapsibleContent>
           </div>
@@ -2557,10 +2592,12 @@ function NavMenuItem({
   item,
   pathname,
   badge,
+  locked = false,
 }: {
   item: NavItem;
   pathname: string;
   badge?: NavBadge;
+  locked?: boolean;
 }) {
   const { t } = useTranslation("nav");
   const Icon = item.icon;
@@ -2587,7 +2624,7 @@ function NavMenuItem({
           tooltip={t(item.labelKey as never) /* dynamic key */}
           className={navRowClassName}
         >
-          <Link to={item.href}>
+          <Link to={item.href} {...navLockProps(locked)}>
             <Icon className="size-4" aria-hidden="true" />
             <span>{t(item.labelKey as never) /* dynamic key */}</span>
           </Link>
