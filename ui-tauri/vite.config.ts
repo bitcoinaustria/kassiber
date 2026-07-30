@@ -242,6 +242,8 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.wallets.document_import.import",
   "ui.wallets.import_samourai",
   "ui.wallets.ledger_preview",
+  "ui.imports.list",
+  "ui.imports.rollback",
   "ui.wallets.preview_descriptor",
   "ui.wallets.detect_script_types",
   "ui.wallets.identify",
@@ -892,15 +894,37 @@ async function handleBridgeFilePicker(
     return;
   }
 
+  const stagingPurpose =
+    request.purpose === "document_import" ||
+    request.purpose === "chat_attachment";
   try {
-    if (request.purpose === "document_import") {
+    if (stagingPurpose) {
+      const forChat = request.purpose === "chat_attachment";
       const paths = await pickFileViaNativeBridge({
-        title: "Choose a receipt or statement",
+        title: forChat
+          ? "Choose an export, statement or image"
+          : "Choose a receipt or statement",
         filters: [
-          {
-            name: "Images and PDF",
-            extensions: ["png", "jpg", "jpeg", "webp", "gif", "pdf"],
-          },
+          forChat
+            ? {
+                name: "Exports, statements and images",
+                extensions: [
+                  "csv",
+                  "tsv",
+                  "xlsx",
+                  "xlsm",
+                  "png",
+                  "jpg",
+                  "jpeg",
+                  "webp",
+                  "gif",
+                  "pdf",
+                ],
+              }
+            : {
+                name: "Images and PDF",
+                extensions: ["png", "jpg", "jpeg", "webp", "gif", "pdf"],
+              },
         ],
         multiple: false,
       });
@@ -950,7 +974,7 @@ async function handleBridgeFilePicker(
       writeJson(
         res,
         200,
-        request.purpose === "document_import"
+        stagingPurpose
           ? { documentImportSource: null }
           : request.multiple === true
             ? { paths: [] }
@@ -960,7 +984,7 @@ async function handleBridgeFilePicker(
       writeJson(
         res,
         200,
-        request.purpose === "document_import"
+        stagingPurpose
           ? { documentImportSource: null, error: message }
           : request.multiple === true
             ? { paths: [], error: message }

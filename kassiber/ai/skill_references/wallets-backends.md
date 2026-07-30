@@ -327,10 +327,42 @@ Amounts are in BTC (or whole sats when the asset is `SATS`); fiat columns must
 match the book currency; gift/donation/lost/stolen rows are quarantined for
 review. Full column + Type reference: [imports.md](../../../docs/reference/imports.md#generic-ledger-import).
 
-Adding a provider Kassiber does not support yet is outside this CLI-navigation
-reference. For one-off imports, reshape the export into the generic ledger
-columns and use `wallets import-ledger`; for a dedicated importer, work from the
-Kassiber source repo docs and code review process.
+### A provider with no predefined importer
+
+Do not tell the user to retype or reshape their export. Any CSV/TSV/XLSX can go
+through the generic ledger importer by mapping its columns:
+
+```bash
+kassiber wallets analyze-file --file export.csv   # headers + inferred plan + dry-run; no DB, no network
+kassiber wallets import-ledger --wallet wallet-name --file export.csv \
+  --column-map '{"date":"Trade Date","type":"Action","amount":"Qty","fiat_value":"Total"}'
+```
+
+`analyze-file` first. If it reports `confident: false`, or rejects rows for an
+unrecognized `Type`, build the plan **from the headers it returned** and analyze
+again with `--column-map` until `next_step.action` is `import`. Add `type_map`
+inside the plan when the file labels rows in another language or house style
+(`{"type_map": {"ACQ-MKT": "Buy"}}`); German values are already recognized.
+
+In chat, the equivalent is the `ui.wallets.analyze_file` tool over the file the
+user attached — same loop, same `column_map`.
+
+You are mapping column names and label vocabulary. Never transcribe, re-type, or
+compute an amount, date, or total yourself: the importer reads every value from
+the file, which is what makes the import auditable. Asset hints
+(`amount_header_asset` and friends) are refused from chat — if a numeric column
+does not say which rail it holds, ask the user rather than declaring one. A
+`type_map` is the one mapping that decides a tax kind, so state the mapping you
+propose ("Kauf → Buy") and let the user confirm it.
+
+If the provider is not running on the user's machine you will not be shown cell
+values at all (`cell_values_withheld`), and the headers are all you need. When
+`headers_withheld` is non-zero the file has no real header row (a preamble line,
+or a headerless export) — ask the user what the columns are instead of guessing
+from `[withheld]`.
+
+A dedicated first-class importer is still a source-repo change; this path is the
+stop-gap that makes the export usable today.
 
 Do not create a second wallet for a BTCPay or Phoenix export when it belongs to a wallet already tracked in Kassiber.
 Do not create one Kassiber wallet per BTCPay store if multiple stores share the same underlying wallet balance.

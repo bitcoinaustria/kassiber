@@ -8,9 +8,11 @@ import {
   AlertTriangle,
   ArrowUp,
   FileSpreadsheet,
+  Paperclip,
   Plus,
   RefreshCw,
   Square,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -44,6 +46,11 @@ interface Ai02Props {
   onThinkingEffortChange?: (effort: AssistantThinkingEffort) => void;
   showThinkingEffort?: boolean;
   modelPickerEnabled?: boolean;
+  /** Open the native picker to attach a file. Omit to disable the button. */
+  onAttach?: () => void;
+  /** Filename of the currently attached file, shown as a removable chip. */
+  attachedFilename?: string | null;
+  onClearAttachment?: () => void;
 }
 
 const DEFAULT_PROMPT_KEYS = [
@@ -73,6 +80,9 @@ export default function Ai02({
   onThinkingEffortChange,
   showThinkingEffort = false,
   modelPickerEnabled = true,
+  onAttach,
+  attachedFilename,
+  onClearAttachment,
 }: Ai02Props) {
   const { t } = useTranslation("assistant");
   const [internalValue, setInternalValue] = useState("");
@@ -179,6 +189,25 @@ export default function Ai02({
           inputRef.current?.focus();
         }}
       >
+        {attachedFilename ? (
+          <div className="relative z-10 flex items-center gap-1.5 px-4 pt-3">
+            <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+              <Paperclip className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className="truncate">{attachedFilename}</span>
+              {onClearAttachment ? (
+                <button
+                  type="button"
+                  onClick={onClearAttachment}
+                  aria-label={t("composer.removeAttachment")}
+                  title={t("composer.removeAttachment")}
+                  className="shrink-0 rounded-full p-0.5 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <X className="h-3 w-3" aria-hidden="true" />
+                </button>
+              ) : null}
+            </span>
+          </div>
+        ) : null}
         <div className="relative z-10 min-h-0 flex-1">
           <Textarea
             ref={inputRef}
@@ -242,11 +271,12 @@ export default function Ai02({
               : "min-h-[42px] pb-2",
           )}
         >
-          {/* Attachment entry point. Mock for now — no upload wired yet. */}
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
+            disabled={!onAttach}
+            onClick={onAttach}
             className="size-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
             aria-label={t("composer.attach")}
             title={t("composer.attach")}
