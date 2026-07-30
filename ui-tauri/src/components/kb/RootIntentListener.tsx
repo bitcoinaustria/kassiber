@@ -45,6 +45,7 @@ export function RootIntentListener() {
             {
               hasWorkspace: store.identity !== null,
               aiFeaturesEnabled: store.aiFeaturesEnabled,
+              developerToolsEnabled: store.developerToolsEnabled,
               hideSensitive: store.hideSensitive,
               navigate: ({ to, hash }) => {
                 void navigate({ to, hash: hash ?? undefined });

@@ -100,7 +100,7 @@
       },
       "developer": {
         "label": "Entwicklerwerkzeuge",
-        "description": "Die integrierte Logs-Ansicht und ihr Speicherpuffer."
+        "description": "Funktionen im Aufbau, die integrierte Logs-Ansicht und ihr Speicherpuffer."
       }
     },
     "back": "Zurück"
@@ -563,10 +563,10 @@
     "clearStored": "Gespeicherte Chats löschen"
   },
   "developer": {
-    "intro": "Zeige die typisierte Logs-Ansicht, sobald die lokalen Bücher entsperrt sind. Logs sind nur lokal, werden im RAM gehalten und nur dann auf die Festplatte geschrieben, wenn du sie exportierst.",
-    "enableLabel": "Logs-Seite aktivieren",
-    "enableOn": "Logs ist in Support und Routennavigation sichtbar.",
-    "enableOff": "Logs ist ausgeblendet und direkte Navigation leitet zur Übersicht um.",
+    "intro": "Kassiber bringt Funktionen mit, die noch im Aufbau sind. Sie halten sich raus, bis du sie anforderst, und deine Wahl bleibt über Updates erhalten. Logs sind nur lokal, werden im RAM gehalten und nur dann auf die Festplatte geschrieben, wenn du sie exportierst.",
+    "enableLabel": "Funktionen im Aufbau anzeigen",
+    "enableOn": "Seiten im Aufbau sind in der Seitenleiste, in den Einstellungen und in der Suche sichtbar.",
+    "enableOff": "Seiten im Aufbau sind ausgeblendet oder ausgegraut; wer sie trotzdem öffnet, landet wieder auf der Übersicht.",
     "alphaBannerLabel": "Alpha-Warnbanner anzeigen",
     "alphaBannerDescription": "Der rote Streifen am oberen Fensterrand. Ausblenden macht die Software nicht weniger Alpha.",
     "openLogs": "Logs öffnen",

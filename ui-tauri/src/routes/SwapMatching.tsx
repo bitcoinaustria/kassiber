@@ -142,6 +142,7 @@ import {
   currentUiLocale,
   formatCount,
 } from "@/lib/localeFormat";
+import { isDevLockedRoute } from "@/components/kb/devMode";
 import { useUiStore } from "@/store/ui";
 import {
   formatPairHistoryAssetTotals,
@@ -557,6 +558,12 @@ export function SwapMatching() {
     method?: "ownership_graph";
   };
   const [activeTab, setActiveTab] = useState<PairingReviewTab>("transfers");
+  // "Close gaps" is the custody-gaps feature under another door, so it follows
+  // the same early-stage gate as the /custody-gaps nav row (see devMode.ts):
+  // visible, disabled, and never the active tab while the switch is off.
+  const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
+  const componentsLocked =
+    !developerToolsEnabled && isDevLockedRoute("/custody-gaps");
   // Swaps/Transfers is the only tab strip. The settled "History" list isn't a
   // second tab — it opens from a History card in the review-queue metrics and
   // returns via a back control. The view is shared across both tabs.
@@ -575,7 +582,9 @@ export function SwapMatching() {
           <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
             <TabsTrigger value="transfers">{t("swap.tabs.transfers")}</TabsTrigger>
             <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
-            <TabsTrigger value="components">{t("swap.tabs.components")}</TabsTrigger>
+            <TabsTrigger value="components" disabled={componentsLocked}>
+              {t("swap.tabs.components")}
+            </TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="transfers" className="mt-0">
@@ -602,7 +611,9 @@ export function SwapMatching() {
           ) : null}
         </TabsContent>
         <TabsContent value="components" className="mt-0">
-          {activeTab === "components" ? <CustodyComponentResolver /> : null}
+          {activeTab === "components" && !componentsLocked ? (
+            <CustodyComponentResolver />
+          ) : null}
         </TabsContent>
       </Tabs>
     </div>

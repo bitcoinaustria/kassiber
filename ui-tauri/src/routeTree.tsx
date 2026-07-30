@@ -106,6 +106,15 @@ const Assistant = lazyRouteComponent(
   "Assistant",
 );
 
+// Guard for every route in `devMode.ts`, locked and hidden alike: the greyed-out
+// nav row is a signpost, not the barrier, so a deep link, a stale URL, or a Back
+// press after the switch was turned off lands on Overview all the same.
+export function requireDeveloperTools() {
+  if (!useUiStore.getState().developerToolsEnabled) {
+    throw redirect({ to: "/overview" });
+  }
+}
+
 const rootRoute = createRootRoute({
   component: () => (
     <>
@@ -166,6 +175,7 @@ const transactionsRoute = createRoute({
 const activityRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/activity",
+  beforeLoad: requireDeveloperTools,
   component: Activity,
 });
 
@@ -178,18 +188,21 @@ const reportsRoute = createRoute({
 const privacyMirrorRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/privacy-mirror",
+  beforeLoad: requireDeveloperTools,
   component: PrivacyMirror,
 });
 
 const exitTaxRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/exit-tax",
+  beforeLoad: requireDeveloperTools,
   component: ExitTax,
 });
 
 const sourceFundsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/source-of-funds",
+  beforeLoad: requireDeveloperTools,
   component: SourceFunds,
 });
 
@@ -216,6 +229,7 @@ const swapMatchingRoute = createRoute({
 const custodyGapsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/custody-gaps",
+  beforeLoad: requireDeveloperTools,
   component: CustodyGaps,
 });
 
@@ -242,17 +256,14 @@ const reconcileRoute = createRoute({
 const egressRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/egress",
+  beforeLoad: requireDeveloperTools,
   component: Egress,
 });
 
 const logsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/logs",
-  beforeLoad: () => {
-    if (!useUiStore.getState().developerToolsEnabled) {
-      throw redirect({ to: "/overview" });
-    }
-  },
+  beforeLoad: requireDeveloperTools,
   component: Logs,
 });
 
@@ -260,9 +271,7 @@ const diagnosticsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/diagnostics",
   beforeLoad: () => {
-    if (!useUiStore.getState().developerToolsEnabled) {
-      throw redirect({ to: "/overview" });
-    }
+    requireDeveloperTools();
     throw redirect({ to: "/logs" });
   },
 });
@@ -382,6 +391,7 @@ const settingsAiRoute = createRoute({
 const settingsSyncRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/settings/sync",
+  beforeLoad: requireDeveloperTools,
   component: () => <Settings section="data-sync" />,
 });
 

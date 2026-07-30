@@ -9,6 +9,19 @@
 // covers the consumer-side decision tree: workspace gating, the AI-route
 // fallback, and the settings-section side-effect event.
 
+import { isDevOnlyRoute, isDevOnlySettingsSlug } from "./devMode";
+
+// English like the other dispatcher notifications: these are produced outside
+// React, where no `t` instance is threaded through.
+const EARLY_STAGE_NOTIFICATION = {
+  title: "Early-stage feature",
+  body: "Turn on early-stage features in Settings to open this page.",
+  tone: "info",
+  // Every gated route shares one slot: the menu items carry accelerators
+  // (Cmd+6 among them), and a held key must not fill the notification list.
+  dedupeKey: "early-stage-feature",
+} as const;
+
 export type AppRoutePath =
   | "/overview"
   | "/transactions"
@@ -31,8 +44,8 @@ export type AppRoutePath =
   | "/assistant";
 
 // Mirrors the Rust `DEEP_LINK_SETTINGS_SECTIONS` allowlist. Aliases
-// (`sync` → backends, `assistant` → ai) round-trip from deep links and the
-// native menu — drop them from this union and Rust would emit strings the
+// (`sync`/`replication` → data-sync, `assistant` → ai) round-trip from deep
+// links and the native menu — drop them from this union and Rust would emit strings the
 // type system says are impossible.
 export type SettingsMenuSection =
   | "appearance"
@@ -50,6 +63,7 @@ export type SettingsMenuSection =
   | "lock"
   | "backends"
   | "sync"
+  | "replication"
   | "rates"
   | "ai"
   | "assistant"
@@ -98,11 +112,13 @@ export interface MenuIntentNotification {
   title: string;
   body: string;
   tone: "info" | "warning" | "success" | "error";
+  dedupeKey?: string;
 }
 
 export interface MenuIntentDeps {
   hasWorkspace: boolean;
   aiFeaturesEnabled: boolean;
+  developerToolsEnabled: boolean;
   hideSensitive: boolean;
   navigate: (opts: { to: string; hash?: string }) => void;
   lockApp: () => void;
@@ -202,6 +218,19 @@ export function dispatchMenuIntent(
       return;
 
     case "open-settings":
+      // `sync`/`replication` resolve to a section the router hides while
+      // early-stage features are off; say so instead of bouncing to Overview.
+      if (
+        !deps.developerToolsEnabled &&
+        isDevOnlySettingsSlug(payload.section)
+      ) {
+        deps.addNotification(EARLY_STAGE_NOTIFICATION);
+        deps.navigate({ to: "/settings", hash: "developer" });
+        deps.emitSettingsSection("developer");
+        return;
+      }
+      // (The section event is re-fired here, unlike the navigate case above,
+      // because Settings may already be mounted on another section.)
       deps.navigate({
         to: "/settings",
         hash: payload.section ?? undefined,
@@ -223,8 +252,18 @@ export function dispatchMenuIntent(
         return;
       }
       // Welcome-screen users would be bounced straight back to `/` by the
-      // identity-guard effect, flashing the wrong route mid-transition.
+      // identity-guard effect, flashing the wrong route mid-transition. This
+      // stays above the early-stage branch below: with no book open there is
+      // nowhere to land, and a notification would surface after the unlock as
+      // a phantom complaint about something the user did before it.
       if (!deps.hasWorkspace) return;
+      // Same shape as the AI branch: the router would send these to Overview,
+      // which reads as a broken menu item. Point at the switch instead.
+      if (!deps.developerToolsEnabled && isDevOnlyRoute(payload.route)) {
+        deps.addNotification(EARLY_STAGE_NOTIFICATION);
+        deps.navigate({ to: "/settings", hash: "developer" });
+        return;
+      }
       deps.navigate({ to: payload.route });
       return;
     }

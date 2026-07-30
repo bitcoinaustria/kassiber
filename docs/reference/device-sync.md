@@ -5,6 +5,11 @@ account or trusted server. Sync is strictly opt-in and requires an unlocked
 SQLCipher database. A book that never enables it has no sync identities, keys,
 poller, or listener.
 
+The desktop's Settings -> Device sync section sits behind the early-stage
+features switch (Settings -> Desktop -> Developer tools, off by default), so
+turn that on to reach the GUI panel; the `kassiber sync` CLI is unaffected. See
+[Desktop](desktop.md).
+
 The replicated unit is the signed authored-event layer, not the SQLite file.
 Journals, reports, rates, UTXO/freshness caches, BDK/LWK observer state and
 coverage, backend rows and credentials,

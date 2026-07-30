@@ -100,7 +100,7 @@
       },
       "developer": {
         "label": "Developer tools",
-        "description": "The in-app Logs view and its in-memory buffer."
+        "description": "Early-stage features, the in-app Logs view, and its in-memory buffer."
       }
     },
     "back": "Back"
@@ -563,10 +563,10 @@
     "clearStored": "Clear stored chats"
   },
   "developer": {
-    "intro": "Show the typed Logs view after the local books are unlocked. Logs are local-only, kept in RAM, and written to disk only when you export them.",
-    "enableLabel": "Enable Logs page",
-    "enableOn": "Logs is visible in Support and route navigation.",
-    "enableOff": "Logs is hidden and direct navigation redirects to Overview.",
+    "intro": "Kassiber ships with features that are still being built. They stay out of the way until you ask for them, and your choice is remembered across updates. Logs are local-only, kept in RAM, and written to disk only when you export them.",
+    "enableLabel": "Show early-stage features",
+    "enableOn": "Early-stage pages are visible in the side nav, in Settings, and in search.",
+    "enableOff": "Early-stage pages are hidden or greyed out, and opening one anyway lands you back on Overview.",
     "alphaBannerLabel": "Show the alpha warning banner",
     "alphaBannerDescription": "The red strip across the top of the window. Hiding it does not make the software any less alpha.",
     "openLogs": "Open Logs",

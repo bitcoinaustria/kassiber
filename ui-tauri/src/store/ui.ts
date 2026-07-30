@@ -421,6 +421,34 @@ export function uiStatePartialForStorage(state: UiState) {
   };
 }
 
+export const UI_STATE_VERSION = 1;
+
+/**
+ * v1: `developerToolsEnabled` stopped meaning "show the Logs page" and became
+ * the switch for every early-stage surface (see `components/kb/devMode.ts`).
+ * Every pre-v1 install carries the old `true` default, which was never an
+ * opt-in — so drop it once.
+ *
+ * Keyed on the stored version, not on "this ran at all": zustand calls
+ * `migrate` on any version *mismatch*, so an unguarded reset here would wipe a
+ * deliberate opt-in again at the next version bump.
+ *
+ * `merge` fills in whatever else the stored blob is missing, so this only has
+ * to state the difference.
+ */
+export function migrateUiState(
+  persisted: unknown,
+  version: number,
+): ReturnType<typeof uiStatePartialForStorage> {
+  const restored = persisted as Partial<UiState>;
+  return {
+    ...restored,
+    // `!(version >= 1)` rather than `version < 1`, so a blob with no numeric
+    // version is treated as pre-v1 instead of slipping through.
+    ...(version >= 1 ? {} : { developerToolsEnabled: false }),
+  } as ReturnType<typeof uiStatePartialForStorage>;
+}
+
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
@@ -435,7 +463,9 @@ export const useUiStore = create<UiState>()(
       appLockPolicy: DEFAULT_APP_LOCK_POLICY,
       identity: null,
       aiFeaturesEnabled: true,
-      developerToolsEnabled: true,
+      // Off until asked for: it reveals the early-stage surfaces (see
+      // `devMode.ts`). Restored from `kb.ui`, so it survives updates.
+      developerToolsEnabled: false,
       preAlphaBannerVisible: true,
       automaticUpdateChecks: false,
       appUpdate: null,
@@ -637,6 +667,8 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "kb.ui",
+      version: UI_STATE_VERSION,
+      migrate: migrateUiState,
       partialize: uiStatePartialForStorage,
       merge: (persisted, current) => {
         const restored = persisted as Partial<UiState>;

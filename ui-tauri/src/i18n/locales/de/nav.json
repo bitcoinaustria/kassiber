@@ -32,5 +32,6 @@
     "body": "{{book}} ist jetzt aktiv. {{page}} wird geöffnet.",
     "fallbackBook": "Ausgewähltes Buch",
     "fallbackPage": "Seite"
-  }
+  },
+  "devLocked": "Funktion im Aufbau. Schalte sie in Einstellungen → Desktop → Entwicklerwerkzeuge ein."
 }

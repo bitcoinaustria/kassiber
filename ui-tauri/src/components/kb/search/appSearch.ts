@@ -1,5 +1,9 @@
 import type { OverviewSnapshot, Tx } from "@/mocks/seed";
 import { SETTINGS_SECTIONS } from "@/components/kb/settings/SettingsNavigation";
+import {
+  isDevOnlyRoute,
+  isDevOnlySettingsSection,
+} from "@/components/kb/devMode";
 import type { SettingsMenuSection } from "@/components/kb/menuIntent";
 
 import {
@@ -349,14 +353,18 @@ export function buildAppSearchResults({
     ...resolvedTransactionResults(resolvedTransaction, query),
     ...PAGE_RESULTS.filter((result) => {
       if (!aiFeaturesEnabled && result.route?.to === "/assistant") return false;
-      if (!developerToolsEnabled && result.route?.to === "/logs") return false;
+      // Unfinished pre-release surfaces: no point offering a jump to a page the
+      // nav has greyed out or hidden (see `devMode.ts`).
+      if (!developerToolsEnabled && isDevOnlyRoute(result.route?.to))
+        return false;
       return true;
     }).map((result) => localizePageResult(result, t)),
     ...ACTION_RESULTS.filter((result) => {
-      if (!developerToolsEnabled && result.id === "action:open-logs") return false;
+      if (!developerToolsEnabled && isDevOnlyRoute(result.route?.to))
+        return false;
       return true;
     }).map((result) => localizeActionResult(result, t)),
-    ...settingsResults(t),
+    ...settingsResults(t, developerToolsEnabled),
     ...snapshotResults(snapshot, query, t),
   ];
 
@@ -593,9 +601,14 @@ function localizeActionResult(
   };
 }
 
-function settingsResults(t: AppTranslate): SearchResult[] {
+function settingsResults(
+  t: AppTranslate,
+  developerToolsEnabled: boolean,
+): SearchResult[] {
   const groupPrefix = translatedString(t, "search:settings.groupPrefix");
-  return SETTINGS_SECTIONS.map((section) => {
+  return SETTINGS_SECTIONS.filter(
+    (section) => developerToolsEnabled || !isDevOnlySettingsSection(section.id),
+  ).map((section) => {
     const title = translatedString(t, `settings:${section.labelKey}`);
     const descKey = section.labelKey.replace(/\.label$/, ".description");
     const description = translatedString(t, `settings:${descKey}`);

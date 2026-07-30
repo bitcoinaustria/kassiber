@@ -195,7 +195,15 @@ import {
   type AppRoutePath,
   type NativeMenuPayload,
 } from "./menuIntent";
-import { notificationTarget } from "./notificationRouting";
+import {
+  DEV_LOCK_CLASS,
+  devLockProps,
+  isDevLockedRoute,
+} from "./devMode";
+import {
+  notificationTarget,
+  type NotificationTarget,
+} from "./notificationRouting";
 import { shouldHideNotificationProgressLabel } from "./notificationDisplay";
 import { planHeaderRefresh } from "./headerRefresh";
 
@@ -289,7 +297,7 @@ type RouteMeta = {
 
 type NotificationItem = Omit<AppNotification, "createdAt"> & {
   createdAt?: string;
-  to?: AppRoutePath;
+  to?: NotificationTarget;
   action?: "process-journals";
   actionLabel?: string;
 };
@@ -320,6 +328,21 @@ const navRowClassName =
   "h-8 gap-2 rounded-md text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground data-[active=true]:bg-sidebar-row-active data-[active=true]:text-sidebar-foreground";
 const navSubRowClassName =
   "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground data-[active=true]:bg-sidebar-row-active data-[active=true]:text-sidebar-foreground";
+
+/*
+ * `DEV_LOCK_CLASS` plus the sidebar's own overrides. The recipe kills pointer
+ * events on aria-disabled rows, which also kills the hover that would explain
+ * the greying, so take the events back (the click guard is what blocks
+ * navigation) and suppress the hover *and* press states, or the row reads as
+ * live under the cursor.
+ *
+ * Locked rows drop their Radix tooltip and put the label in the native `title`
+ * instead: collapsed to the rail the two would fire together and overlap.
+ */
+const navLockClassName = cn(
+  DEV_LOCK_CLASS,
+  "pointer-events-auto! hover:bg-transparent! hover:text-sidebar-muted-foreground! active:bg-transparent! active:text-sidebar-muted-foreground!",
+);
 
 /**
  * Click handler for a submenu row's trigger, for the collapsed rail.
@@ -1549,6 +1572,7 @@ export function AppShell() {
             {
               hasWorkspace: store.identity !== null,
               aiFeaturesEnabled: store.aiFeaturesEnabled,
+              developerToolsEnabled: store.developerToolsEnabled,
               hideSensitive: store.hideSensitive,
               navigate: ({ to, hash }) => {
                 void navigate({ to, hash: hash ?? undefined });
@@ -1666,6 +1690,7 @@ export function AppShell() {
         if (disposed) return;
         return invoke("set_menu_state", {
           aiFeaturesEnabled,
+          developerToolsEnabled,
           hasWorkspace,
           locked,
         });
@@ -1676,7 +1701,7 @@ export function AppShell() {
     return () => {
       disposed = true;
     };
-  }, [aiFeaturesEnabled, identity, locked]);
+  }, [aiFeaturesEnabled, developerToolsEnabled, identity, locked]);
 
   React.useEffect(() => {
     if (aiFeaturesEnabled || !isAssistantRoute) return;
@@ -2077,6 +2102,9 @@ function AppSidebar({
                         item={item}
                         pathname={pathname}
                         badge={navBadges[item.href]}
+                        locked={
+                          !developerToolsEnabled && isDevLockedRoute(item.href)
+                        }
                       />
                     ))}
                   </SidebarMenu>
@@ -2332,6 +2360,12 @@ function SidebarActions({
   const supportActive = pathname === "/diagnostics";
   // Controlled, so a click on the collapsed rail can force them open while it
   // expands the nav (see `useRailSubmenuTrigger`).
+  // devMode.ts stays the single source of truth for which rows are inert.
+  const rowLocked = (route: string) =>
+    !developerToolsEnabled && isDevLockedRoute(route);
+  const lockRow = (route: string, label: string) =>
+    devLockProps(rowLocked(route), `${label} — ${t("nav:devLocked")}`);
+  const activityLocked = rowLocked("/activity");
   const [supportOpen, setSupportOpen] = React.useState(supportActive);
   const [extrasOpen, setExtrasOpen] = React.useState(false);
   const onSupportClick = useRailSubmenuTrigger(setSupportOpen);
@@ -2343,10 +2377,13 @@ function SidebarActions({
         <SidebarMenuButton
           asChild
           isActive={pathname === "/activity"}
-          tooltip={t("nav:book.activity")}
-          className={navRowClassName}
+          tooltip={activityLocked ? undefined : t("nav:book.activity")}
+          className={cn(navRowClassName, activityLocked && navLockClassName)}
         >
-          <Link to="/activity">
+          <Link
+            to="/activity"
+            {...lockRow("/activity", t("nav:book.activity"))}
+          >
             <History className="size-4" aria-hidden="true" />
             <span>{t("nav:book.activity")}</span>
           </Link>
@@ -2453,10 +2490,13 @@ function SidebarActions({
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton
                     asChild
-                    className={navSubRowClassName}
+                    className={cn(
+                      navSubRowClassName,
+                      rowLocked("/exit-tax") && navLockClassName,
+                    )}
                     isActive={pathname === "/exit-tax"}
                   >
-                    <Link to="/exit-tax">
+                    <Link to="/exit-tax" {...lockRow("/exit-tax", t("shell.extras.exitCalculator"))}>
                       <LogOut className="size-3.5" aria-hidden="true" />
                       <span>{t("shell.extras.exitCalculator")}</span>
                     </Link>
@@ -2465,27 +2505,32 @@ function SidebarActions({
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton
                     asChild
-                    className={navSubRowClassName}
+                    className={cn(
+                      navSubRowClassName,
+                      rowLocked("/privacy-mirror") && navLockClassName,
+                    )}
                     isActive={pathname === "/privacy-mirror"}
                   >
-                    <Link to="/privacy-mirror">
+                    <Link to="/privacy-mirror" {...lockRow("/privacy-mirror", t("shell.extras.privacyMirror"))}>
                       <Eye className="size-3.5" aria-hidden="true" />
                       <span>{t("shell.extras.privacyMirror")}</span>
                     </Link>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
-                <SidebarMenuSubItem>
-                  <SidebarMenuSubButton
-                    asChild
-                    className={navSubRowClassName}
-                    isActive={pathname === "/egress"}
-                  >
-                    <Link to="/egress">
-                      <Plane className="size-3.5" aria-hidden="true" />
-                      <span>{t("shell.extras.egress")}</span>
-                    </Link>
-                  </SidebarMenuSubButton>
-                </SidebarMenuSubItem>
+                {developerToolsEnabled ? (
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton
+                      asChild
+                      className={navSubRowClassName}
+                      isActive={pathname === "/egress"}
+                    >
+                      <Link to="/egress">
+                        <Plane className="size-3.5" aria-hidden="true" />
+                        <span>{t("shell.extras.egress")}</span>
+                      </Link>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                ) : null}
               </SidebarMenuSub>
             </CollapsibleContent>
           </div>
@@ -2557,10 +2602,12 @@ function NavMenuItem({
   item,
   pathname,
   badge,
+  locked = false,
 }: {
   item: NavItem;
   pathname: string;
   badge?: NavBadge;
+  locked?: boolean;
 }) {
   const { t } = useTranslation("nav");
   const Icon = item.icon;
@@ -2584,10 +2631,16 @@ function NavMenuItem({
         <SidebarMenuButton
           asChild
           isActive={active}
-          tooltip={t(item.labelKey as never) /* dynamic key */}
-          className={navRowClassName}
+          tooltip={locked ? undefined : (t(item.labelKey as never) /* dynamic key */)}
+          className={cn(navRowClassName, locked && navLockClassName)}
         >
-          <Link to={item.href}>
+          <Link
+            to={item.href}
+            {...devLockProps(
+              locked,
+              `${t(item.labelKey as never) /* dynamic key */} — ${t("devLocked")}`,
+            )}
+          >
             <Icon className="size-4" aria-hidden="true" />
             <span>{t(item.labelKey as never) /* dynamic key */}</span>
           </Link>
