@@ -26,7 +26,8 @@ export function PreAlphaBanner({
       aria-label={muted ? undefined : t("preAlpha.label")}
       // The traffic lights land on this strip: pad both sides to keep the message
       // centred and clear of them, and let a drag on the strip move the window.
-      data-tauri-drag-region={macTitleBarInset ? "" : undefined}
+      // "deep": the warning text sits in the strip, so a drag has to start on it too.
+      data-tauri-drag-region={macTitleBarInset ? "deep" : undefined}
       className={cn(
         "flex h-[28px] w-full items-center justify-center gap-1.5 px-3 text-center text-xs font-medium",
         muted ? "bg-sidebar" : "bg-[#E3000F] text-white",
