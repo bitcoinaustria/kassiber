@@ -80,6 +80,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "loans_command",
     "payouts_command",
     "transfers_rules_command",
+    "imports_command",
     "views_command",
     "chats_command",
     "secrets_command",

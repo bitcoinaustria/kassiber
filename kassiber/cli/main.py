@@ -103,6 +103,7 @@ from .handlers import (
     process_journals,
     read_text_argument,
     resolve_scope,
+    invalidate_journals,
     resolve_transaction,
     resolve_wallet,
     resolve_quarantine_exclude,
@@ -123,6 +124,8 @@ from ..core import custody_component_planner as core_custody_component_planner
 from ..core import custody_filed_reports as core_custody_filed_reports
 from ..core import custody_gaps as core_custody_gaps
 from ..core import custody_gap_reviews as core_custody_gap_reviews
+from ..core import file_analysis as core_file_analysis
+from ..core import import_batches as core_import_batches
 from ..core import lightning as core_lightning
 from ..core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registers the LND adapter on import.
 from ..core import metadata as core_metadata
@@ -295,6 +298,47 @@ def _normalized_backend_clear_fields(values: Sequence[str] | None) -> list[str]:
         seen.add(normalized)
         cleared.append(normalized)
     return cleared
+
+
+def _column_map_arg(value: str | None) -> dict[str, Any] | None:
+    """Parse `--column-map` JSON, or read it from a file with `@path`.
+
+    A real column plan is long enough to be awkward on a command line, so an
+    agent or a user can point at a file instead. The plan's own validation runs
+    inside the importer against the file's actual headers.
+    """
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    if raw.startswith("@"):
+        path = os.path.expanduser(raw[1:])
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                raw = handle.read()
+        except OSError as exc:
+            raise AppError(
+                f"Could not read column map file: {path}",
+                code="not_found",
+                hint="Pass inline JSON, or check the @path.",
+                retryable=False,
+            ) from exc
+    try:
+        parsed = json.loads(raw)
+    except ValueError as exc:
+        raise AppError(
+            "column map must be valid JSON",
+            code="validation",
+            hint='Example: \'{"date":"Ausfuehrung","amount":"Stueck"}\'',
+            retryable=False,
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise AppError(
+            "column map must be a JSON object",
+            code="validation",
+            hint=f"Known fields: {', '.join(sorted(core_file_analysis.PLAN_FIELDS))}.",
+            retryable=False,
+        )
+    return parsed
 
 
 def _add_workspace_profile_args(parser: argparse.ArgumentParser) -> None:
@@ -1015,6 +1059,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="One-shot prompt; pass '-' to read it from stdin. Omit for REPL mode.",
     )
     chat.add_argument("--prompt", dest="prompt_text", help="One-shot prompt text.")
+    chat.add_argument(
+        "--file",
+        metavar="PATH",
+        help=(
+            "Attach a local export (CSV/XLSX/PDF/image) to this chat so the "
+            "assistant can analyze it — use for an exchange with no dedicated "
+            "importer. For a CSV the assistant sees the column headers and row "
+            "counts; cell values stay on this device unless the AI provider also "
+            "runs here. PDFs and photos require a loopback local vision model."
+        ),
+    )
+    chat.add_argument(
+        "--file-context",
+        metavar="TEXT",
+        help=(
+            "Tell the assistant what the attached file is, e.g. \"2024 export "
+            "from exchange XYZ, custodial account\". Context for the assistant, "
+            "not a claim Kassiber books: values still come from the file."
+        ),
+    )
     chat.add_argument("--provider", help="Provider name (defaults to the stored default)")
     chat.add_argument("--model", help="Model id (defaults to the provider's default_model)")
     chat.add_argument(
@@ -1645,6 +1709,42 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit",
         type=int,
         help="Limit the number of preview rows returned with --dry-run",
+    )
+    wallets_import_ledger.add_argument(
+        "--column-map",
+        metavar="JSON",
+        help=(
+            "Explicit column plan as JSON when this file's headers are not "
+            'recognized, e.g. \'{"date":"Ausfuehrung","type":"Richtung",'
+            '"amount":"Stueck"}\'. Run wallets analyze-file for the header list '
+            "and the inferred plan. @path reads the JSON from a file."
+        ),
+    )
+    wallets_analyze_file = wallets_sub.add_parser(
+        "analyze-file",
+        help="Report what an arbitrary exchange/broker export contains and whether it can be imported",
+        description=(
+            "Inspect an export from a platform Kassiber has no predefined "
+            "importer for. Reports the header, the inferred column plan, and a "
+            "dry-run of what would import, so an unsupported exchange can still "
+            "be onboarded through the generic ledger importer. Local only: no "
+            "AI call and no network access."
+        ),
+    )
+    wallets_analyze_file.add_argument("--file", required=True)
+    wallets_analyze_file.add_argument(
+        "--column-map",
+        metavar="JSON",
+        help="Analyze with this explicit column plan instead of the inferred one; @path reads it from a file",
+    )
+    wallets_analyze_file.add_argument(
+        "--sample-rows",
+        type=int,
+        default=core_file_analysis.DEFAULT_SAMPLE_ROWS,
+        help=(
+            "How many normalized rows to include in the preview "
+            f"(max {core_file_analysis.MAX_SAMPLE_ROWS})"
+        ),
     )
     wallets_ledger_template = wallets_sub.add_parser(
         "ledger-template",
@@ -2588,6 +2688,40 @@ def build_parser() -> argparse.ArgumentParser:
     views_delete.add_argument("--workspace")
     views_delete.add_argument("--profile")
     views_delete.add_argument("--view-id", required=True, dest="view_id")
+
+    imports = sub.add_parser(
+        "imports",
+        help="File import runs, and rolling one back",
+        description=(
+            "Every file import is recorded as a run, so an import that mapped "
+            "columns wrongly can be undone without deleting the whole wallet. "
+            "Only the transactions a run created are removed — rows it merely "
+            "enriched predate it and stay."
+        ),
+    )
+    imports_sub = imports.add_subparsers(dest="imports_command", required=True)
+    imports_list = imports_sub.add_parser("list", help="List this book's import runs")
+    imports_list.add_argument("--workspace")
+    imports_list.add_argument("--profile")
+    imports_list.add_argument("--wallet", help="Only runs that landed in this wallet")
+    imports_list.add_argument("--limit", type=int, default=50)
+    imports_rollback = imports_sub.add_parser(
+        "rollback",
+        help="Delete the transactions one import run created",
+    )
+    imports_rollback.add_argument("--workspace")
+    imports_rollback.add_argument("--profile")
+    imports_rollback.add_argument("--batch", required=True, help="Import run id from `imports list`")
+    imports_rollback.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report what would be removed without deleting anything",
+    )
+    imports_rollback.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Required to actually delete; without it the command reports the plan",
+    )
 
     btcpay = sub.add_parser("btcpay")
     btcpay_sub = btcpay.add_subparsers(dest="btcpay_command", required=True)
@@ -3678,12 +3812,25 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 expected_backend_kind=expected_kind,
             )
             return emit(args, payload)
+        if args.wallets_command == "analyze-file":
+            return emit(
+                args,
+                core_file_analysis.analyze_file(
+                    args.file,
+                    column_map=_column_map_arg(args.column_map),
+                    sample_rows=args.sample_rows,
+                ),
+                kind="wallets.file_analysis",
+            )
         if args.wallets_command == "import-ledger":
+            column_map = _column_map_arg(args.column_map)
             if args.dry_run:
                 return emit(
                     args,
                     preview_generic_ledger_records(
-                        args.file, limit=args.limit if args.limit is not None else 200
+                        args.file,
+                        limit=args.limit if args.limit is not None else 200,
+                        column_map=column_map,
                     ),
                 )
             return emit(
@@ -3695,6 +3842,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.wallet,
                     args.file,
                     "generic_ledger",
+                    column_map=column_map,
                 ),
             )
         if args.wallets_command == "ledger-template":
@@ -4724,6 +4872,44 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
         if args.loans_command == "list":
             return emit(args, loans_list(conn, args.workspace, args.profile))
+
+    if args.command == "imports":
+        _, profile = resolve_scope(conn, args.workspace, args.profile)
+        if args.imports_command == "list":
+            wallet_id = None
+            if args.wallet:
+                wallet_id = str(resolve_wallet(conn, profile["id"], args.wallet)["id"])
+            return emit(
+                args,
+                {
+                    "batches": core_import_batches.list_batches(
+                        conn, profile["id"], wallet_id=wallet_id, limit=args.limit
+                    )
+                },
+                kind="imports.list",
+            )
+        if args.imports_command == "rollback":
+            plan = core_import_batches.plan_rollback(conn, profile["id"], args.batch)
+            if args.dry_run or not args.confirm:
+                return emit(
+                    args,
+                    {
+                        **plan,
+                        "applied": False,
+                        "hint": "Re-run with --confirm to delete these transactions.",
+                    },
+                    kind="imports.rollback.plan",
+                )
+            return emit(
+                args,
+                core_import_batches.rollback_batch(
+                    conn,
+                    profile,
+                    args.batch,
+                    invalidate_journals=invalidate_journals,
+                ),
+                kind="imports.rollback",
+            )
 
     if args.command == "views":
         if args.views_command == "list":

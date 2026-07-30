@@ -30,6 +30,7 @@ _NO_BOOTSTRAP_DATABASE_PATHS = {
     "daemon",
     "wallets.kinds",
     "wallets.ledger-template",
+    "wallets.analyze-file",
 }
 _SECRET_DEST_FRAGMENTS = (
     "api_key",

@@ -48,10 +48,12 @@ CLI_READ_PATHS = _paths(
     backends.list backends.kinds backends.get context.show context.current
     workspaces.list profiles.list profiles.get accounts.list wallets.list
     wallets.kinds wallets.get wallets.preview-document wallets.identify
+    wallets.analyze-file
     transactions.list attachments.list attachments.verify metadata.tags.list
     metadata.bip329.preview metadata.bip329.list metadata.records.list
     metadata.records.get metadata.records.history.list
     metadata.records.history.activity metadata.records.history.stale
+    imports.list
     journals.list journals.quarantined journals.transfers.list
     journals.events.list journals.events.get journals.quarantine.show loans.list
     transfers.list transfers.gaps.list transfers.gaps.history transfers.gaps.plan
@@ -134,7 +136,7 @@ CLI_ADMIN_PATHS = _paths(
     sync.lan.connect sync.lan.discover sync.tor.listen sync.tor.connect
     sync.gc.run sync.join-request sync.invite sync.join sync.push sync.pull
     sync.members.revoke sync.devices.revoke sync.conflicts.resolve
-    backends.delete backends.reveal-token wallets.delete
+    backends.delete backends.reveal-token wallets.delete imports.rollback
     wallets.reveal-descriptor ai.providers.create ai.providers.update
     ai.providers.delete ai.providers.set-default ai.providers.clear-default
     """
@@ -174,7 +176,8 @@ DAEMON_READ_KINDS = _paths(
     ui.sync.status ui.sync.transports.list ui.sync.members.list
     ui.sync.devices.list ui.sync.conflicts.list ui.freshness.status
     ui.workspace.health ui.projects.list ui.next_actions ui.review.badges
-    ui.wallets.ledger_preview ui.wallets.preview_descriptor
+    ui.wallets.ledger_preview ui.wallets.analyze_file ui.wallets.preview_descriptor
+    ui.imports.list
     ui.wallets.detect_script_types ui.connections.sources
     ui.connections.node.snapshot ui.reports.lightning_profitability
     ui.metadata.bip329.preview ai.providers.list ai.providers.get
@@ -248,7 +251,7 @@ DAEMON_ADMIN_KINDS = _paths(
     ui.sync.members.revoke ui.sync.devices.revoke ui.sync.conflicts.resolve
     ui.workspace.delete ui.profiles.reset_data ui.projects.create
     ui.projects.select ui.secrets.init ui.secrets.change_passphrase
-    ui.secrets.forget_cli_unlock ui.wallets.delete daemon.lock daemon.unlock
+    ui.secrets.forget_cli_unlock ui.wallets.delete ui.imports.rollback daemon.lock daemon.unlock
     ai.providers.create ai.providers.update ai.providers.set_api_key
     ai.providers.move_api_key ai.providers.delete ai.providers.set_default
     ai.providers.clear_default ai.providers.acknowledge ai.test_connection

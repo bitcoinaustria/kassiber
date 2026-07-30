@@ -39,6 +39,7 @@ from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..transfers import canonical_txid
 from ..util import str_or_none
 from ..wallet_descriptors import normalize_asset_code
+from . import import_batches
 from . import output_inventory as core_output_inventory
 from . import wallets as core_wallets
 from .privacy_hops import privacy_boundary_from_import_record
@@ -1967,7 +1968,7 @@ def import_file_into_profile(
             f"file:{input_format}",
             hooks,
             input_format=input_format,
-            commit=commit,
+            commit=False,
         )
     else:
         outcome = enrich_profile_records(
@@ -1977,9 +1978,26 @@ def import_file_into_profile(
             f"file:{input_format}",
             hooks,
             report_updates=True,
-            commit=commit,
+            commit=False,
         )
         outcome["mode"] = mode
+    # Profile-scoped imports insert transactions too (full mode), so they must be
+    # rollback-able like wallet-scoped ones — otherwise "every file import is
+    # recorded as a run" would be false. Enrichment-only modes insert nothing and
+    # `record_batch` returns None, so no empty run appears.
+    batch_id = import_batches.record_batch(
+        conn,
+        profile,
+        wallet_id=str(wallet["id"]) if wallet else None,
+        source_format=input_format,
+        source_filename=os.path.basename(file_path),
+        column_map=None,
+        outcome=outcome,
+    )
+    if batch_id:
+        outcome["import_batch_id"] = batch_id
+    if commit:
+        conn.commit()
     outcome[exchange_evidence_rows_key(input_format)] = len(records)
     outcome["input_format"] = input_format
     outcome["file"] = os.path.abspath(file_path)
@@ -2307,6 +2325,7 @@ def import_file_into_wallet(
     hooks: ImportCoordinatorHooks,
     *,
     commit: bool = True,
+    column_map: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     if is_wasabi_format(input_format):
         outcome = import_wasabi_bundle_into_wallet(
@@ -2322,7 +2341,7 @@ def import_file_into_wallet(
         if commit:
             conn.commit()
         return outcome
-    records = load_import_records(file_path, input_format)
+    records = load_import_records(file_path, input_format, column_map)
     bullbitcoin_wallet_rows_total = len(records) if is_bullbitcoin_wallet_format(input_format) else None
     bullbitcoin_wallet_network = None
     if is_bullbitcoin_wallet_format(input_format):
@@ -2356,6 +2375,21 @@ def import_file_into_wallet(
                 input_format,
             )
         )
+    # Record the run before committing, so a wrongly-mapped import can be rolled
+    # back without deleting the whole wallet. Only rows this run created are
+    # linked (see core.import_batches), so enrichment of pre-existing rows is
+    # never undone.
+    batch_id = import_batches.record_batch(
+        conn,
+        profile,
+        wallet_id=str(wallet["id"]),
+        source_format=input_format,
+        source_filename=os.path.basename(file_path),
+        column_map=column_map,
+        outcome=outcome,
+    )
+    if batch_id:
+        outcome["import_batch_id"] = batch_id
     if commit:
         conn.commit()
     if is_exchange_evidence_format(input_format):
