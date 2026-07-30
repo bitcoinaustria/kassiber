@@ -116,7 +116,6 @@ export function SettingsScreen({
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
   const appScale = useUiStore((s) => s.appScale);
-  const appAutoScale = useUiStore((s) => s.appAutoScale);
   const increaseAppScale = useUiStore((s) => s.increaseAppScale);
   const decreaseAppScale = useUiStore((s) => s.decreaseAppScale);
   const resetAppScale = useUiStore((s) => s.resetAppScale);
@@ -967,7 +966,6 @@ export function SettingsScreen({
             theme={theme}
             setTheme={setTheme}
             appScale={appScale}
-            appAutoScale={appAutoScale}
             increaseAppScale={increaseAppScale}
             decreaseAppScale={decreaseAppScale}
             resetAppScale={resetAppScale}

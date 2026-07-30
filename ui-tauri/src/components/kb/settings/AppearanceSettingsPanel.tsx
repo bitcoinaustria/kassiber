@@ -29,7 +29,6 @@ export function AppearanceSettingsPanel({
   theme,
   setTheme,
   appScale,
-  appAutoScale,
   increaseAppScale,
   decreaseAppScale,
   resetAppScale,
@@ -41,7 +40,6 @@ export function AppearanceSettingsPanel({
   theme: ThemePreference;
   setTheme: (theme: ThemePreference) => void;
   appScale: number;
-  appAutoScale: number;
   increaseAppScale: () => void;
   decreaseAppScale: () => void;
   resetAppScale: () => void;
@@ -60,9 +58,7 @@ export function AppearanceSettingsPanel({
   const setAssistantDockPosition = useUiStore(
     (s) => s.setAssistantDockPosition,
   );
-  // The number the user actually perceives is the effective root scale
-  // (automatic screen-fit × manual nudge), not the manual nudge alone.
-  const scalePercent = Math.round(appAutoScale * appScale * 100);
+  const scalePercent = Math.round(appScale * 100);
   return (
     <div className="space-y-6">
       <section className="space-y-2">

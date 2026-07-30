@@ -1,6 +1,5 @@
 import * as React from "react";
 
-import { computeAutoScale } from "@/lib/appAutoScale";
 import { appScaleHotkeyAction } from "@/lib/appScaleHotkeys";
 import { useUiStore } from "@/store/ui";
 
@@ -31,7 +30,6 @@ export function ThemeController() {
 
 export function AppScaleController() {
   const appScale = useUiStore((state) => state.appScale);
-  const setAppAutoScale = useUiStore((state) => state.setAppAutoScale);
   const decreaseAppScale = useUiStore((state) => state.decreaseAppScale);
   const increaseAppScale = useUiStore((state) => state.increaseAppScale);
   const resetAppScale = useUiStore((state) => state.resetAppScale);
@@ -43,34 +41,6 @@ export function AppScaleController() {
       String(appScale),
     );
   }, [appScale]);
-
-  // Automatic screen-fit: derive the base density from the window size so the
-  // UI keeps a consistent information density across a laptop and a large
-  // monitor, and recompute on resize (rAF-coalesced). Written to the CSS var
-  // (drives the root font-size, before first paint via the layout effect) and
-  // mirrored into the store so Settings can show the effective scale.
-  React.useLayoutEffect(() => {
-    let frame = 0;
-    const apply = () => {
-      frame = 0;
-      const scale = computeAutoScale(window.innerWidth, window.innerHeight);
-      document.documentElement.style.setProperty(
-        "--app-auto-scale",
-        String(scale),
-      );
-      setAppAutoScale(scale);
-    };
-    apply();
-    const handleResize = () => {
-      if (frame) return;
-      frame = window.requestAnimationFrame(apply);
-    };
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      if (frame) window.cancelAnimationFrame(frame);
-    };
-  }, [setAppAutoScale]);
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
