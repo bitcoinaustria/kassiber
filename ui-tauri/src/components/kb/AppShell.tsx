@@ -196,7 +196,10 @@ import {
   type NativeMenuPayload,
 } from "./menuIntent";
 import { isDevLockedRoute } from "./devMode";
-import { notificationTarget } from "./notificationRouting";
+import {
+  notificationTarget,
+  type NotificationTarget,
+} from "./notificationRouting";
 import { shouldHideNotificationProgressLabel } from "./notificationDisplay";
 import { planHeaderRefresh } from "./headerRefresh";
 
@@ -290,7 +293,7 @@ type RouteMeta = {
 
 type NotificationItem = Omit<AppNotification, "createdAt"> & {
   createdAt?: string;
-  to?: AppRoutePath;
+  to?: NotificationTarget;
   action?: "process-journals";
   actionLabel?: string;
 };
@@ -331,10 +334,17 @@ const navSubRowClassName =
  * tab order. The click guard is what actually stops navigation: the row is
  * still an `<a>`, and keyboard activation goes through a click event too.
  */
-function navLockProps(locked: boolean) {
+function navLockProps(locked: boolean, hint: string) {
   if (!locked) return {};
   return {
     "aria-disabled": true,
+    // The sidebar recipe kills pointer events on aria-disabled rows, which also
+    // kills the hover that would explain the greying. Take the events back and
+    // block the navigation in the handler instead, so `title` can do its job —
+    // then suppress the hover fill and text lift, or the row reads as live.
+    className:
+      "pointer-events-auto! cursor-not-allowed hover:bg-transparent! hover:text-sidebar-muted-foreground!",
+    title: hint,
     onClick: (event: React.MouseEvent) => event.preventDefault(),
   };
 }
@@ -2357,7 +2367,10 @@ function SidebarActions({
   // expands the nav (see `useRailSubmenuTrigger`).
   // devMode.ts stays the single source of truth for which rows are inert.
   const lockRow = (route: string) =>
-    navLockProps(!developerToolsEnabled && isDevLockedRoute(route));
+    navLockProps(
+      !developerToolsEnabled && isDevLockedRoute(route),
+      t("nav:devLocked"),
+    );
   const [supportOpen, setSupportOpen] = React.useState(supportActive);
   const [extrasOpen, setExtrasOpen] = React.useState(false);
   const onSupportClick = useRailSubmenuTrigger(setSupportOpen);
@@ -2617,7 +2630,7 @@ function NavMenuItem({
           tooltip={t(item.labelKey as never) /* dynamic key */}
           className={navRowClassName}
         >
-          <Link to={item.href} {...navLockProps(locked)}>
+          <Link to={item.href} {...navLockProps(locked, t("devLocked"))}>
             <Icon className="size-4" aria-hidden="true" />
             <span>{t(item.labelKey as never) /* dynamic key */}</span>
           </Link>

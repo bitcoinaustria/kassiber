@@ -360,7 +360,8 @@ export function buildAppSearchResults({
       return true;
     }).map((result) => localizePageResult(result, t)),
     ...ACTION_RESULTS.filter((result) => {
-      if (!developerToolsEnabled && result.id === "action:open-logs") return false;
+      if (!developerToolsEnabled && isDevOnlyRoute(result.route?.to))
+        return false;
       return true;
     }).map((result) => localizeActionResult(result, t)),
     ...settingsResults(t, developerToolsEnabled),

@@ -436,18 +436,23 @@ export const UI_STATE_VERSION = 1;
  * v1: `developerToolsEnabled` stopped meaning "show the Logs page" and became
  * the switch for every early-stage surface (see `components/kb/devMode.ts`).
  * Every pre-v1 install carries the old `true` default, which was never an
- * opt-in — so drop it once. Later opt-ins persist normally, because zustand
- * only runs this when the stored version is older than `UI_STATE_VERSION`.
+ * opt-in — so drop it once.
+ *
+ * Keyed on the stored version, not on "this ran at all": zustand calls
+ * `migrate` on any version *mismatch*, so an unguarded reset here would wipe a
+ * deliberate opt-in again at the next version bump.
  *
  * `merge` fills in whatever else the stored blob is missing, so this only has
  * to state the difference.
  */
 export function migrateUiState(
   persisted: unknown,
+  version: number,
 ): ReturnType<typeof uiStatePartialForStorage> {
+  const restored = persisted as Partial<UiState>;
   return {
-    ...(persisted as Partial<UiState>),
-    developerToolsEnabled: false,
+    ...restored,
+    ...(version < 1 ? { developerToolsEnabled: false } : {}),
   } as ReturnType<typeof uiStatePartialForStorage>;
 }
 

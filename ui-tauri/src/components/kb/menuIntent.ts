@@ -41,8 +41,8 @@ export type AppRoutePath =
   | "/assistant";
 
 // Mirrors the Rust `DEEP_LINK_SETTINGS_SECTIONS` allowlist. Aliases
-// (`sync` → backends, `assistant` → ai) round-trip from deep links and the
-// native menu — drop them from this union and Rust would emit strings the
+// (`sync`/`replication` → data-sync, `assistant` → ai) round-trip from deep
+// links and the native menu — drop them from this union and Rust would emit strings the
 // type system says are impossible.
 export type SettingsMenuSection =
   | "appearance"
@@ -225,6 +225,8 @@ export function dispatchMenuIntent(
         deps.emitSettingsSection("developer");
         return;
       }
+      // (The section event is re-fired here, unlike the navigate case above,
+      // because Settings may already be mounted on another section.)
       deps.navigate({
         to: "/settings",
         hash: payload.section ?? undefined,
@@ -245,17 +247,19 @@ export function dispatchMenuIntent(
         deps.navigate({ to: "/settings", hash: "ai" });
         return;
       }
-      // Same for the early-stage routes: the router would redirect them to
-      // Overview, which reads as a broken menu item. Point at the switch.
+      // Welcome-screen users would be bounced straight back to `/` by the
+      // identity-guard effect, flashing the wrong route mid-transition. This
+      // stays above the early-stage branch below: with no book open there is
+      // nowhere to land, and a notification would surface after the unlock as
+      // a phantom complaint about something the user did before it.
+      if (!deps.hasWorkspace) return;
+      // Same shape as the AI branch: the router would send these to Overview,
+      // which reads as a broken menu item. Point at the switch instead.
       if (!deps.developerToolsEnabled && isDevOnlyRoute(payload.route)) {
         deps.addNotification(EARLY_STAGE_NOTIFICATION);
         deps.navigate({ to: "/settings", hash: "developer" });
-        deps.emitSettingsSection("developer");
         return;
       }
-      // Welcome-screen users would be bounced straight back to `/` by the
-      // identity-guard effect, flashing the wrong route mid-transition.
-      if (!deps.hasWorkspace) return;
       deps.navigate({ to: payload.route });
       return;
     }

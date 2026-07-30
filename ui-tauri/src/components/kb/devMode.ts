@@ -16,6 +16,7 @@ export const DEV_LOCKED_ROUTES = [
   "/custody-gaps",
   "/exit-tax",
   "/privacy-mirror",
+  "/source-of-funds",
 ] as const;
 
 /** Routes that vanish entirely while dev mode is off. */

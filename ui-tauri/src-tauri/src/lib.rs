@@ -140,8 +140,8 @@ const DEEP_LINK_ROUTE_HOSTS: &[(&str, &str)] = &[
 ];
 
 // Mirrors the React `settingsSectionForHash` map in
-// `ui-tauri/src/components/kb/settingsSections.ts`. Aliases (`sync` →
-// bitcoin, `assistant` → ai) are accepted at the deep-link boundary so the
+// `ui-tauri/src/components/kb/settingsSections.ts`. Aliases (`sync`/
+// `replication` → data-sync, `assistant` → ai) are accepted at the deep-link boundary so the
 // Rust allowlist matches the section-resolution logic on the React side; the
 // React helper does the final hash → section-id lookup.
 const DEEP_LINK_SETTINGS_SECTIONS: &[&str] = &[
@@ -3184,11 +3184,11 @@ fn build_app_menu(
         open_reports_item.clone(),
         workflow_connections_item.clone(),
         workflow_data_item.clone(),
-        // View-menu navigation items: clicking these from the Welcome screen
-        // would redirect right back via the identity-guard effect, so grey
-        // them out instead. Logs carries the same gate plus the developer-tools
-        // switch, so it lives on its own handle; Settings has its own
-        // no-identity render.
+        // Navigation items: clicking these from the Welcome screen would
+        // redirect right back via the identity-guard effect, so grey them out
+        // instead. Help's Logs item carries the same gate plus the
+        // developer-tools switch, so it lives on its own handle; Settings has
+        // its own no-identity render.
         overview_item.clone(),
         transactions_item.clone(),
         connections_item.clone(),

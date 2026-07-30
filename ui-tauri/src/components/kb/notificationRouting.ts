@@ -42,24 +42,31 @@ export function notificationRouteFor(title: string): AppRoutePath | undefined {
   return undefined;
 }
 
+/**
+ * A route the notification bell may open. Wider than `AppRoutePath` because the
+ * developer-tools fallback needs a settings *section*: plain `/settings`
+ * resolves to Appearance, which explains nothing about a failed sync.
+ */
+export type NotificationTarget = AppRoutePath | "/settings/developer";
+
 // Resolve the click target for a header notification, accounting for the fact
 // that /logs is developer-tools-gated: its route guard bounces to /overview
 // when developer tools are off. A failure notification that routed straight to
-// /logs would therefore dead-end. Send those users to Settings instead (its rail
-// carries the Developer tools section that holds the switch) — for both the title router's /logs
-// result and the error-tone fallback. Mirrors the search guard in appSearch.ts.
+// /logs would therefore dead-end. Send those users to Settings -> Developer
+// tools instead, where the switch is — for both the title router's /logs result
+// and the error-tone fallback. Mirrors the search guard in appSearch.ts.
 export function notificationTarget(
   title: string,
   tone: string | undefined,
   developerToolsEnabled: boolean,
   explicitTarget?: string,
-): AppRoutePath | undefined {
-  const logsOrSettings: AppRoutePath = developerToolsEnabled
+): NotificationTarget | undefined {
+  const logsOrSettings: NotificationTarget = developerToolsEnabled
     ? "/logs"
-    : "/settings";
+    : "/settings/developer";
   // An explicit, language-independent target set by the notification's producer
   // takes precedence over title keyword-matching (which only works in English).
-  // It still flows through the /logs → /settings developer-tools guard below.
+  // It still flows through the /logs developer-tools guard below.
   const target = asRoutePath(explicitTarget) ?? notificationRouteFor(title);
   if (target === "/logs") return logsOrSettings;
   if (target) return target;

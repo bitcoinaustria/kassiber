@@ -25,15 +25,15 @@ describe("notificationTarget", () => {
     );
   });
 
-  it("reroutes /logs failures to /settings when developer tools are OFF", () => {
+  it("reroutes /logs failures to the developer-tools section when it is OFF", () => {
     // /logs is developer-tools-gated; its route guard bounces to /overview, so
     // a failure notification must not dead-end there when dev tools are off.
     expect(notificationTarget("Book refresh failed", "error", false)).toBe(
-      "/settings",
+      "/settings/developer",
     );
     expect(
       notificationTarget("Book refresh needs attention", "warning", false),
-    ).toBe("/settings");
+    ).toBe("/settings/developer");
   });
 
   it("routes non-/logs titles to their screen regardless of dev tools", () => {
@@ -53,7 +53,7 @@ describe("notificationTarget", () => {
       "/logs",
     );
     expect(notificationTarget("Something odd happened", "error", false)).toBe(
-      "/settings",
+      "/settings/developer",
     );
   });
 
@@ -72,7 +72,7 @@ describe("notificationTarget", () => {
     // The explicit /logs target still flows through the dev-tools guard.
     expect(
       notificationTarget(germanAttention, "warning", false, "/logs"),
-    ).toBe("/settings");
+    ).toBe("/settings/developer");
     expect(
       notificationTarget(germanAttention, "warning", false, "/quarantine"),
     ).toBe("/quarantine");

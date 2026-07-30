@@ -109,7 +109,7 @@ const Assistant = lazyRouteComponent(
 // Guard for every route in `devMode.ts`, locked and hidden alike: the greyed-out
 // nav row is a signpost, not the barrier, so a deep link, a stale URL, or a Back
 // press after the switch was turned off lands on Overview all the same.
-function requireDeveloperTools() {
+export function requireDeveloperTools() {
   if (!useUiStore.getState().developerToolsEnabled) {
     throw redirect({ to: "/overview" });
   }
@@ -202,6 +202,7 @@ const exitTaxRoute = createRoute({
 const sourceFundsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/source-of-funds",
+  beforeLoad: requireDeveloperTools,
   component: SourceFunds,
 });
 

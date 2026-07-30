@@ -8,7 +8,7 @@ import {
   useUiStore,
   UI_STATE_VERSION,
 } from "@/store/ui";
-import { router } from "@/routeTree";
+import { requireDeveloperTools, router } from "@/routeTree";
 
 const fixedT = i18n.getFixedT("en", null);
 const t = (key: string, options?: Record<string, unknown>) =>
@@ -28,10 +28,11 @@ describe("pre-release dev mode", () => {
     for (const route of devOnly) {
       const match = router.routesByPath[route as "/overview"];
       expect(match, `no route registered for ${route}`).toBeDefined();
-      expect(
-        typeof match.options.beforeLoad,
-        `${route} has no beforeLoad guard`,
-      ).toBe("function");
+      // Identity, not just "has a beforeLoad" — plenty of routes carry an
+      // unrelated redirect guard.
+      expect(match.options.beforeLoad, `${route} is not dev-gated`).toBe(
+        requireDeveloperTools,
+      );
     }
   });
 
@@ -42,8 +43,12 @@ describe("pre-release dev mode", () => {
   it("drops a pre-v1 stored opt-in exactly once", () => {
     expect(UI_STATE_VERSION).toBe(1);
     expect(
-      migrateUiState({ developerToolsEnabled: true, theme: "light" }),
+      migrateUiState({ developerToolsEnabled: true, theme: "light" }, 0),
     ).toMatchObject({ developerToolsEnabled: false, theme: "light" });
+    // A deliberate opt-in must survive the next version bump.
+    expect(
+      migrateUiState({ developerToolsEnabled: true }, 1),
+    ).toMatchObject({ developerToolsEnabled: true });
   });
 
   it("keeps dev-only pages and device sync out of the app search", () => {
