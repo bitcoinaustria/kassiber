@@ -31,12 +31,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { TFunction } from "i18next";
 import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
+  ChevronRight,
   Eye,
   History as HistoryIcon,
   Loader2,
@@ -114,22 +115,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
-  DaemonRequestError,
-  useDaemon,
-  useDaemonMutation,
-} from "@/daemon/client";
-import {
-  buildCustodyRevisionDocument,
-  buildCustodyBulkRequest,
-  CUSTODY_COMPONENT_EXAMPLE,
   formatCustodyExactInteger,
-  previewCustodyComponentBatch,
-  type CustodyBatchPreview,
   type CustodyExactInteger,
-  type CustodyPreviewIssue,
-  type CustodyPreviewIssueCode,
 } from "@/lib/custodyComponentBulk";
 import { useKeymap, type Keybinding } from "@/lib/keymap";
 import {
@@ -150,6 +139,18 @@ import {
   pairHistoryExactInteger,
   pairHistoryFeePercent,
 } from "./swapPairHistoryModel";
+import { CustodyGapsContent } from "./CustodyGaps";
+import {
+  custodyBackendIssueText,
+  custodyMutationError,
+  custodyRoleLabel,
+  type CustodyValidationIssue,
+} from "./transfers-custody/custodyComponentIssues";
+import { GuidedComponentForm } from "./transfers-custody/GuidedComponentForm";
+import {
+  componentToFormState,
+  isGuidedEditableComponentType,
+} from "./transfers-custody/guidedComponentModel";
 
 const PAIR_KIND_OPTIONS = [
   "manual",
@@ -469,6 +470,9 @@ function pairSourceLabelKey(source: string | null) {
 }
 
 const UNDO_WINDOW_MS = 20_000;
+// Default number of candidate rows rendered before "Load more"; the queue can
+// return hundreds, so the default view stays scannable instead of dumping all.
+const REVIEW_PAGE_SIZE = 25;
 
 type PairingReviewMode = "swaps" | "transfers";
 
@@ -547,59 +551,117 @@ function railForLeg(
   return "onchain";
 }
 
-type PairingReviewTab = "swaps" | "transfers" | "components";
+type CustodySurfaceTab = "review" | "gaps" | "components";
 type PairingView = "review" | "paired";
 
+/**
+ * Transfers & Custody — the single custody surface.
+ *
+ * Merges the former standalone `/swaps` and `/custody-gaps` screens into three
+ * tabs: **Review** (the pairing candidate queue for Bitcoin moves and asset
+ * swaps, plus its settled History), **Custody gaps** (the guided missing-wallet
+ * bridge/residual workflow), and **Components** (versioned custody
+ * interpretations). The old top-level Bitcoin-moves/Swaps split is now a
+ * segmented control inside the Review tab so there is one queue, not two.
+ */
 export function SwapMatching() {
   const { t } = useTranslation("review");
   const search = useSearch({ strict: false }) as {
     focus?: string;
     method?: "ownership_graph";
+    tab?: string;
   };
-  const [activeTab, setActiveTab] = useState<PairingReviewTab>("transfers");
-  // Swaps/Transfers is the only tab strip. The settled "History" list isn't a
-  // second tab — it opens from a History card in the review-queue metrics and
-  // returns via a back control. The view is shared across both tabs.
+  // A `focus`/`method` deep link always targets the pairing queue; otherwise an
+  // explicit `?tab=` hint (used by the /custody-gaps redirect) selects the tab.
+  const deepLinkToReview = Boolean(search.focus || search.method);
+  const initialTab: CustodySurfaceTab = deepLinkToReview
+    ? "review"
+    : search.tab === "gaps"
+      ? "gaps"
+      : search.tab === "components"
+        ? "components"
+        : "review";
+  const [activeTab, setActiveTab] = useState<CustodySurfaceTab>(initialTab);
+  // Within Review, transfers vs swaps is a segmented control rather than a
+  // top-level tab. The settled "History" list isn't a tab either — it opens
+  // from a History card in the review-queue metrics and returns via a back
+  // control. The view is shared across both modes.
+  const [reviewMode, setReviewMode] = useState<PairingReviewMode>("transfers");
   const [view, setView] = useState<PairingView>("review");
   const showHistory = () => setView("paired");
   const showReview = () => setView("review");
+
+  // Re-sync the active tab when the URL search changes while already mounted —
+  // e.g. the /custody-gaps → /swaps?tab=gaps redirect fired with this screen
+  // already on /swaps (the initial useState above only reads search at mount).
+  // A manual tab click does not change search, so it is never overridden.
+  useEffect(() => {
+    if (search.focus || search.method) {
+      setActiveTab("review");
+    } else if (
+      search.tab === "gaps" ||
+      search.tab === "components" ||
+      search.tab === "review"
+    ) {
+      setActiveTab(search.tab);
+    }
+  }, [search.tab, search.focus, search.method]);
 
   return (
     <div className={screenShellClassName}>
       <Tabs
         value={activeTab}
-        onValueChange={(value) => setActiveTab(value as PairingReviewTab)}
+        onValueChange={(value) => setActiveTab(value as CustodySurfaceTab)}
         className="space-y-3"
       >
         <div className={pageHeaderClassName}>
           <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
-            <TabsTrigger value="transfers">{t("swap.tabs.transfers")}</TabsTrigger>
-            <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
+            <TabsTrigger value="review">{t("swap.tabs.review")}</TabsTrigger>
+            <TabsTrigger value="gaps">{t("swap.tabs.gaps")}</TabsTrigger>
             <TabsTrigger value="components">{t("swap.tabs.components")}</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="transfers" className="mt-0">
-          {activeTab === "transfers" ? (
-            view === "review" ? (
-              <PairingReview
-                mode="transfers"
-                onShowHistory={showHistory}
-                focusTransactionId={search.focus}
-                initialMethod={search.method}
-              />
-            ) : (
-              <PairedSwaps mode="transfers" onBackToReview={showReview} />
-            )
+        <TabsContent value="review" className="mt-0 space-y-3">
+          {activeTab === "review" ? (
+            <>
+              <Tabs
+                value={reviewMode}
+                onValueChange={(value) => {
+                  setReviewMode(value as PairingReviewMode);
+                  setView("review");
+                }}
+              >
+                <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
+                  <TabsTrigger value="transfers">
+                    {t("swap.tabs.transfers")}
+                  </TabsTrigger>
+                  <TabsTrigger value="swaps">{t("swap.tabs.swaps")}</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              {view === "review" ? (
+                <PairingReview
+                  key={reviewMode}
+                  mode={reviewMode}
+                  onShowHistory={showHistory}
+                  focusTransactionId={
+                    reviewMode === "transfers" ? search.focus : undefined
+                  }
+                  initialMethod={
+                    reviewMode === "transfers" ? search.method : undefined
+                  }
+                />
+              ) : (
+                <PairedSwaps
+                  key={reviewMode}
+                  mode={reviewMode}
+                  onBackToReview={showReview}
+                />
+              )}
+            </>
           ) : null}
         </TabsContent>
-        <TabsContent value="swaps" className="mt-0">
-          {activeTab === "swaps" ? (
-            view === "review" ? (
-              <PairingReview mode="swaps" onShowHistory={showHistory} />
-            ) : (
-              <PairedSwaps mode="swaps" onBackToReview={showReview} />
-            )
-          ) : null}
+        <TabsContent value="gaps" className="mt-0">
+          {activeTab === "gaps" ? <CustodyGapsContent /> : null}
         </TabsContent>
         <TabsContent value="components" className="mt-0">
           {activeTab === "components" ? <CustodyComponentResolver /> : null}
@@ -638,12 +700,6 @@ interface CustodyComponentAllocation {
   sink_amount_msat: CustodyExactInteger;
 }
 
-interface CustodyValidationIssue {
-  code?: string;
-  message?: string;
-  [key: string]: unknown;
-}
-
 interface CustodyComponent {
   id: string;
   lineage_id: string;
@@ -675,13 +731,6 @@ type CustodyComponentListEnvelope = {
   limit?: number;
 };
 
-interface CustodyBulkResolveResult {
-  input_version: number;
-  components: CustodyComponent[];
-  summary: { count: number; active: number; draft: number };
-  dry_run?: boolean;
-}
-
 interface CustodyComponentMutationResult {
   input_version: number;
   component: CustodyComponent;
@@ -692,277 +741,26 @@ function custodyComponentsFromEnvelope(data: CustodyComponentListEnvelope | unde
   return data?.components ?? [];
 }
 
-const CUSTODY_LOCAL_ISSUE_KEYS = {
-  jsonInvalid: "swap.components.localIssue.jsonInvalid",
-  documentRequired: "swap.components.localIssue.documentRequired",
-  componentObjectRequired: "swap.components.localIssue.componentObjectRequired",
-  componentTypeUnsupported: "swap.components.localIssue.componentTypeUnsupported",
-  conservationModeUnsupported:
-    "swap.components.localIssue.conservationModeUnsupported",
-  legsRequired: "swap.components.localIssue.legsRequired",
-  legObjectRequired: "swap.components.localIssue.legObjectRequired",
-  roleUnsupported: "swap.components.localIssue.roleUnsupported",
-  legIdDuplicate: "swap.components.localIssue.legIdDuplicate",
-  amountInvalid: "swap.components.localIssue.amountInvalid",
-  transactionlessWalletRequired:
-    "swap.components.localIssue.transactionlessWalletRequired",
-  transactionlessTimeRequired:
-    "swap.components.localIssue.transactionlessTimeRequired",
-  valuationPairRequired: "swap.components.localIssue.valuationPairRequired",
-  valuationAmountInvalid: "swap.components.localIssue.valuationAmountInvalid",
-  valuationTokenInvalid: "swap.components.localIssue.valuationTokenInvalid",
-  conversionPolicyInvalid: "swap.components.localIssue.conversionPolicyInvalid",
-  conversionReviewedInvalid:
-    "swap.components.localIssue.conversionReviewedInvalid",
-  conversionValuationRequired:
-    "swap.components.localIssue.conversionValuationRequired",
-  sourceRequired: "swap.components.localIssue.sourceRequired",
-  ownedDestinationRequired: "swap.components.localIssue.ownedDestinationRequired",
-  anchorRequired: "swap.components.localIssue.anchorRequired",
-  suspenseReviewRequired:
-    "swap.components.localIssue.suspenseReviewRequired",
-  suspenseQuantityModeRequired:
-    "swap.components.localIssue.suspenseQuantityModeRequired",
-  suspenseLocationInvalid:
-    "swap.components.localIssue.suspenseLocationInvalid",
-  suspenseTimeRequired: "swap.components.localIssue.suspenseTimeRequired",
-  suspenseAllocationRequired:
-    "swap.components.localIssue.suspenseAllocationRequired",
-  suspenseObservedSourceRequired:
-    "swap.components.localIssue.suspenseObservedSourceRequired",
-  suspenseAssetMismatch:
-    "swap.components.localIssue.suspenseAssetMismatch",
-  suspenseTimeMismatch: "swap.components.localIssue.suspenseTimeMismatch",
-  quantityUnbalanced: "swap.components.localIssue.quantityUnbalanced",
-  conversionReviewRequired: "swap.components.localIssue.conversionReviewRequired",
-  conversionValuationUnbalanced:
-    "swap.components.localIssue.conversionValuationUnbalanced",
-  conversionTopologyUnsupported:
-    "swap.components.localIssue.conversionTopologyUnsupported",
-  allocationsInvalid: "swap.components.localIssue.allocationsInvalid",
-  allocationsRequired: "swap.components.localIssue.allocationsRequired",
-  allocationObjectRequired: "swap.components.localIssue.allocationObjectRequired",
-  allocationSourceInvalid: "swap.components.localIssue.allocationSourceInvalid",
-  allocationSinkInvalid: "swap.components.localIssue.allocationSinkInvalid",
-  allocationAmountInvalid: "swap.components.localIssue.allocationAmountInvalid",
-  allocationEdgeDuplicate: "swap.components.localIssue.allocationEdgeDuplicate",
-  allocationQuantityMismatch:
-    "swap.components.localIssue.allocationQuantityMismatch",
-  allocationSourceCoverage: "swap.components.localIssue.allocationSourceCoverage",
-  allocationSinkCoverage: "swap.components.localIssue.allocationSinkCoverage",
-} as const satisfies Record<CustodyPreviewIssueCode, string>;
-
-const CUSTODY_BACKEND_ISSUE_KEYS = {
-  active_lineage_conflict: "swap.components.backendIssue.active_lineage_conflict",
-  active_transaction_membership_conflict:
-    "swap.components.backendIssue.active_transaction_membership_conflict",
-  allocation_leg_invalid: "swap.components.backendIssue.allocation_leg_invalid",
-  allocation_network_mismatch:
-    "swap.components.backendIssue.allocation_network_mismatch",
-  allocation_network_scope_invalid:
-    "swap.components.backendIssue.allocation_network_scope_invalid",
-  allocation_quantity_mismatch:
-    "swap.components.backendIssue.allocation_quantity_mismatch",
-  allocation_required: "swap.components.backendIssue.allocation_required",
-  allocation_sink_coverage_mismatch:
-    "swap.components.backendIssue.allocation_sink_coverage_mismatch",
-  allocation_source_coverage_mismatch:
-    "swap.components.backendIssue.allocation_source_coverage_mismatch",
-  anchor_asset_mismatch: "swap.components.backendIssue.anchor_asset_mismatch",
-  anchor_chain_mismatch: "swap.components.backendIssue.anchor_chain_mismatch",
-  anchor_coverage_mismatch: "swap.components.backendIssue.anchor_coverage_mismatch",
-  anchor_network_mismatch: "swap.components.backendIssue.anchor_network_mismatch",
-  anchor_occurred_at_mismatch:
-    "swap.components.backendIssue.anchor_occurred_at_mismatch",
-  anchor_rail_mismatch: "swap.components.backendIssue.anchor_rail_mismatch",
-  anchor_transaction_identity_mismatch:
-    "swap.components.backendIssue.anchor_transaction_identity_mismatch",
-  anchor_transaction_missing:
-    "swap.components.backendIssue.anchor_transaction_missing",
-  anchor_transaction_excluded:
-    "swap.components.backendIssue.anchor_transaction_excluded",
-  anchor_transaction_retracted:
-    "swap.components.backendIssue.anchor_transaction_retracted",
-  anchor_wallet_mismatch: "swap.components.backendIssue.anchor_wallet_mismatch",
-  component_allocation_count_mismatch:
-    "swap.components.backendIssue.component_allocation_count_mismatch",
-  component_content_commitment_missing:
-    "swap.components.backendIssue.component_content_commitment_missing",
-  component_leg_count_mismatch:
-    "swap.components.backendIssue.component_leg_count_mismatch",
-  conversion_not_reviewed: "swap.components.backendIssue.conversion_not_reviewed",
-  conversion_fee_quantity_mismatch:
-    "swap.components.backendIssue.conversion_fee_quantity_mismatch",
-  conversion_fee_valuation_mismatch:
-    "swap.components.backendIssue.conversion_fee_valuation_mismatch",
-  conversion_policy_missing:
-    "swap.components.backendIssue.conversion_policy_missing",
-  conversion_topology_unsupported:
-    "swap.components.backendIssue.conversion_topology_unsupported",
-  conversion_valuation_missing:
-    "swap.components.backendIssue.conversion_valuation_missing",
-  custody_component_value_only_loss_unsupported:
-    "swap.components.backendIssue.custody_component_value_only_loss_unsupported",
-  custody_component_fee_orphaned:
-    "swap.components.backendIssue.custody_component_fee_orphaned",
-  custody_location_continuity_mismatch:
-    "swap.components.backendIssue.custody_location_continuity_mismatch",
-  destination_anchor_direction_mismatch:
-    "swap.components.backendIssue.destination_anchor_direction_mismatch",
-  fee_source_asset_mismatch:
-    "swap.components.backendIssue.fee_source_asset_mismatch",
-  fee_source_scope_mismatch:
-    "swap.components.backendIssue.fee_source_scope_mismatch",
-  fee_source_wallet_mismatch:
-    "swap.components.backendIssue.fee_source_wallet_mismatch",
-  leg_occurred_at_invalid: "swap.components.backendIssue.leg_occurred_at_invalid",
-  leg_occurred_at_missing: "swap.components.backendIssue.leg_occurred_at_missing",
-  loss_anchor_direction_mismatch:
-    "swap.components.backendIssue.loss_anchor_direction_mismatch",
-  missing_owned_destination:
-    "swap.components.backendIssue.missing_owned_destination",
-  missing_source: "swap.components.backendIssue.missing_source",
-  no_legs: "swap.components.backendIssue.no_legs",
-  owned_leg_wallet_missing:
-    "swap.components.backendIssue.owned_leg_wallet_missing",
-  revision_link_invalid: "swap.components.backendIssue.revision_link_invalid",
-  revision_link_missing: "swap.components.backendIssue.revision_link_missing",
-  source_anchor_direction_mismatch:
-    "swap.components.backendIssue.source_anchor_direction_mismatch",
-  transaction_anchor_missing:
-    "swap.components.backendIssue.transaction_anchor_missing",
-  transactionless_leg_wallet_missing:
-    "swap.components.backendIssue.transactionless_leg_wallet_missing",
-  unbalanced_conversion_valuation:
-    "swap.components.backendIssue.unbalanced_conversion_valuation",
-  unbalanced_quantity: "swap.components.backendIssue.unbalanced_quantity",
-  unresolved_value: "swap.components.backendIssue.unresolved_value",
-} as const;
-
-const CUSTODY_BACKEND_ERROR_KEYS = {
-  custody_component_anchor_time_mismatch:
-    "swap.components.backendError.custody_component_anchor_time_mismatch",
-  custody_component_draft_exists:
-    "swap.components.backendError.custody_component_draft_exists",
-  custody_component_incomplete:
-    "swap.components.backendError.custody_component_incomplete",
-  custody_component_lineage_exists:
-    "swap.components.backendError.custody_component_lineage_exists",
-  custody_component_membership_conflict:
-    "swap.components.backendError.custody_component_membership_conflict",
-  custody_component_not_superseded:
-    "swap.components.backendError.custody_component_not_superseded",
-  custody_component_scope_mismatch:
-    "swap.components.backendError.custody_component_scope_mismatch",
-  custody_component_state_conflict:
-    "swap.components.backendError.custody_component_state_conflict",
-  custody_component_superseded:
-    "swap.components.backendError.custody_component_superseded",
-  custody_component_validation:
-    "swap.components.backendError.custody_component_validation",
-  conflict: "swap.components.backendError.conflict",
-  not_found: "swap.components.backendError.not_found",
-  validation: "swap.components.backendError.validation",
-} as const;
-
-function custodyPreviewIssueText(
-  t: TFunction<"review">,
-  issue: CustodyPreviewIssue,
-) {
-  return t(CUSTODY_LOCAL_ISSUE_KEYS[issue.code], issue.values ?? {});
-}
-
-function custodyBackendIssueText(
-  t: TFunction<"review">,
-  issue: CustodyValidationIssue,
-) {
-  const code = issue.code ?? "";
-  const key = CUSTODY_BACKEND_ISSUE_KEYS[
-    code as keyof typeof CUSTODY_BACKEND_ISSUE_KEYS
-  ];
-  return key
-    ? t(key)
-    : t("swap.components.backendIssue.unknown", {
-        code: code || t("swap.components.unknownIssue"),
-      });
-}
-
-function isUnknownRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function validationIssuesFromDetails(details: unknown): CustodyValidationIssue[] {
-  if (!isUnknownRecord(details)) return [];
-  const validation = details.validation;
-  if (!isUnknownRecord(validation) || !Array.isArray(validation.issues)) return [];
-  return validation.issues.filter(isUnknownRecord) as CustodyValidationIssue[];
-}
-
-function custodyMutationError(t: TFunction<"review">, error: unknown) {
-  if (error instanceof DaemonRequestError) {
-    const code = error.envelope.error?.code ?? "";
-    const key = CUSTODY_BACKEND_ERROR_KEYS[
-      code as keyof typeof CUSTODY_BACKEND_ERROR_KEYS
-    ];
-    const base = key
-      ? t(key)
-      : t("swap.components.backendError.unknown", {
-          code: code || t("swap.components.unknownIssue"),
-        });
-    const issues = validationIssuesFromDetails(error.envelope.error?.details);
-    return [base, ...issues.map((issue) => custodyBackendIssueText(t, issue))].join(
-      "\n",
-    );
-  }
-  return t("swap.components.backendError.unexpected");
-}
-
-function custodyRoleLabel(t: TFunction<"review">, role: string) {
-  const labels: Record<string, string> = {
-    source: t("swap.components.role.source"),
-    destination: t("swap.components.role.destination"),
-    fee: t("swap.components.role.fee"),
-    external: t("swap.components.role.external"),
-    retained: t("swap.components.role.retained"),
-    unresolved: t("swap.components.role.unresolved"),
-  };
-  return labels[role] ?? t("swap.components.role.unknown", { role });
-}
-
 function formatCustodyInteger(value: CustodyExactInteger) {
   return formatCustodyExactInteger(value, currentUiLocale());
 }
 
 function CustodyComponentResolver() {
   const { t } = useTranslation("review");
-  const [document, setDocument] = useState(CUSTODY_COMPONENT_EXAMPLE);
-  const [preview, setPreview] = useState<CustodyBatchPreview | null>(null);
-  const [serverPreview, setServerPreview] =
-    useState<CustodyBulkResolveResult | null>(null);
-  const [serverPreviewActivates, setServerPreviewActivates] = useState(false);
-  const [serverPreviewError, setServerPreviewError] = useState<string | null>(null);
-  const [result, setResult] = useState<CustodyBulkResolveResult["summary"] | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingComponentId, setPendingComponentId] = useState<string | null>(null);
   const [editingComponent, setEditingComponent] = useState<CustodyComponent | null>(
     null,
   );
-  const [revisionDocument, setRevisionDocument] = useState("");
-  const [revisionPreview, setRevisionPreview] =
-    useState<CustodyBatchPreview | null>(null);
-  const [revisionError, setRevisionError] = useState<string | null>(null);
+  // The embedded guided form submits through its own mutation observers, so
+  // `mutationPending` below cannot see its in-flight state; track it explicitly
+  // to keep the revise dialog from being dismissed mid-submit.
+  const [editorBusy, setEditorBusy] = useState(false);
 
   const componentQuery = useDaemon<CustodyComponentListEnvelope>(
     "ui.transfers.components.list",
     { limit: 1000 },
   );
-  const previewMutation =
-    useDaemonMutation<CustodyBulkResolveResult>(
-      "ui.transfers.components.plan",
-      { invalidateQueries: false },
-    );
-  const bulkMutation =
-    useDaemonMutation<CustodyBulkResolveResult>("ui.transfers.components.apply");
   const componentPlanMutation = useDaemonMutation<CustodyComponentMutationResult>(
     "ui.transfers.components.plan",
     { invalidateQueries: false },
@@ -977,141 +775,31 @@ function CustodyComponentResolver() {
     [componentQuery.data?.data],
   );
   const mutationPending =
-    previewMutation.isPending ||
-    bulkMutation.isPending ||
-    componentPlanMutation.isPending ||
-    componentApplyMutation.isPending;
-  const batchPending = previewMutation.isPending || bulkMutation.isPending;
+    componentPlanMutation.isPending || componentApplyMutation.isPending;
 
-  const handleDocumentChange = (value: string) => {
-    setDocument(value);
-    setPreview(null);
-    setServerPreview(null);
-    setServerPreviewError(null);
-    setResult(null);
-    setActionError(null);
-  };
-
-  const runAuthoritativePreview = async (
-    nextPreview: CustodyBatchPreview,
-    activate: boolean,
-  ) => {
-    setServerPreview(null);
-    setServerPreviewActivates(activate);
-    setServerPreviewError(null);
-    try {
-      const response = await previewMutation.mutateAsync(
-        buildCustodyBulkRequest(nextPreview, { activate }),
-      );
-      if (!response.data) {
-        setServerPreviewError(t("swap.components.backendError.unexpected"));
-        return null;
-      }
-      setServerPreview(response.data);
-      return response.data;
-    } catch (error) {
-      setServerPreviewError(custodyMutationError(t, error));
-      return null;
-    }
-  };
-
-  const handlePreview = async () => {
-    const nextPreview = previewCustodyComponentBatch(document);
-    setPreview(nextPreview);
-    setResult(null);
-    setActionError(null);
-    if (nextPreview.structuralErrors.length > 0) {
-      setServerPreview(null);
-      setServerPreviewError(null);
-      return;
-    }
-    await runAuthoritativePreview(
-      nextPreview,
-      nextPreview.activationErrors.length === 0,
-    );
-  };
-
-  const submitBatch = async (activate: boolean) => {
-    const nextPreview = previewCustodyComponentBatch(document);
-    setPreview(nextPreview);
-    setServerPreview(null);
-    setServerPreviewError(null);
-    setResult(null);
-    setActionError(null);
-    if (nextPreview.structuralErrors.length > 0) return;
-    if (activate && nextPreview.activationErrors.length > 0) return;
-    const verified = await runAuthoritativePreview(nextPreview, activate);
-    if (!verified) return;
-    try {
-      const response = await bulkMutation.mutateAsync(
-        buildCustodyBulkRequest(nextPreview, {
-          activate,
-          expectedInputVersion: verified.input_version,
-        }),
-      );
-      if (response.data) setResult(response.data.summary);
-    } catch (error) {
-      setActionError(custodyMutationError(t, error));
-    }
-  };
+  // The list can hold many components; render a capped window of compact rows
+  // and expand a row's legs/allocations/audit only on demand.
+  const [componentVisibleCount, setComponentVisibleCount] =
+    useState(REVIEW_PAGE_SIZE);
+  const [expandedComponents, setExpandedComponents] = useState<Set<string>>(
+    new Set(),
+  );
+  const toggleComponentExpanded = (id: string) =>
+    setExpandedComponents((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const visibleComponents = components.slice(0, componentVisibleCount);
+  const hasMoreComponents = components.length > visibleComponents.length;
 
   const openRevisionEditor = (component: CustodyComponent) => {
     setEditingComponent(component);
-    setRevisionDocument(buildCustodyRevisionDocument(component));
-    setRevisionPreview(null);
-    setRevisionError(null);
   };
 
   const closeRevisionEditor = () => {
     setEditingComponent(null);
-    setRevisionDocument("");
-    setRevisionPreview(null);
-    setRevisionError(null);
-  };
-
-  const handleRevisionDocumentChange = (value: string) => {
-    setRevisionDocument(value);
-    setRevisionPreview(null);
-    setRevisionError(null);
-  };
-
-  const previewRevisionDocument = () => {
-    setRevisionPreview(previewCustodyComponentBatch(revisionDocument));
-    setRevisionError(null);
-  };
-
-  const saveRevision = async (activate: boolean) => {
-    if (!editingComponent) return;
-    const nextPreview = previewCustodyComponentBatch(revisionDocument);
-    setRevisionPreview(nextPreview);
-    setRevisionError(null);
-    if (nextPreview.structuralErrors.length > 0) return;
-    if (nextPreview.components.length !== 1) {
-      setRevisionError(t("swap.components.revisionSingleRequired"));
-      return;
-    }
-    if (activate && nextPreview.activationErrors.length > 0) return;
-    const [spec] = buildCustodyBulkRequest(nextPreview, { activate: false }).components;
-    if (!spec) return;
-    try {
-      const planArgs = {
-        action: "revise",
-        component_id: editingComponent.id,
-        spec,
-        activate,
-      };
-      const previewResponse = await componentPlanMutation.mutateAsync(planArgs);
-      if (previewResponse.data?.input_version === undefined) {
-        throw new Error(t("swap.components.backendError.unexpected"));
-      }
-      await componentApplyMutation.mutateAsync({
-        ...planArgs,
-        expected_input_version: previewResponse.data.input_version,
-      });
-      closeRevisionEditor();
-    } catch (error) {
-      setRevisionError(custodyMutationError(t, error));
-    }
   };
 
   const mutateComponent = async (
@@ -1154,7 +842,12 @@ function CustodyComponentResolver() {
           ...planArgs,
           expected_input_version: previewResponse.data.input_version,
         });
-        if (response.data) openRevisionEditor(response.data.component);
+        if (
+          response.data &&
+          isGuidedEditableComponentType(response.data.component.component_type)
+        ) {
+          openRevisionEditor(response.data.component);
+        }
       }
     } catch (error) {
       setActionError(custodyMutationError(t, error));
@@ -1172,102 +865,13 @@ function CustodyComponentResolver() {
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("swap.components.bulkTitle")}</CardTitle>
-          <CardDescription>{t("swap.components.bulkDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950 dark:border-blue-400/30 dark:bg-blue-950/30 dark:text-blue-100">
-            {t("swap.components.atomicHint")}
-          </div>
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Label htmlFor="custody-component-json">
-                {t("swap.components.jsonLabel")}
-              </Label>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={batchPending}
-                onClick={() => handleDocumentChange(CUSTODY_COMPONENT_EXAMPLE)}
-              >
-                {t("swap.components.loadExample")}
-              </Button>
-            </div>
-            <Textarea
-              id="custody-component-json"
-              value={document}
-              onChange={(event) => handleDocumentChange(event.target.value)}
-              disabled={batchPending}
-              spellCheck={false}
-              aria-invalid={Boolean(preview?.structuralErrors.length)}
-              className="min-h-80 resize-y font-mono text-xs leading-5"
-            />
-            <p className="text-xs text-muted-foreground">
-              {t("swap.components.referenceHint")}
-            </p>
-          </div>
+      <GuidedComponentForm />
 
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={batchPending}
-              onClick={() => void handlePreview()}
-            >
-              {previewMutation.isPending ? (
-                <Loader2 className="animate-spin" />
-              ) : (
-                <Eye />
-              )}
-              {t("swap.components.preview")}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={batchPending}
-              onClick={() => void submitBatch(false)}
-            >
-              {batchPending ? <Loader2 className="animate-spin" /> : <Plus />}
-              {t("swap.components.saveDrafts")}
-            </Button>
-            <Button
-              type="button"
-              disabled={batchPending}
-              onClick={() => void submitBatch(true)}
-            >
-              {batchPending ? <Loader2 className="animate-spin" /> : <Check />}
-              {t("swap.components.activateAll")}
-            </Button>
-          </div>
-
-          {preview ? <CustodyBatchPreviewPanel preview={preview} /> : null}
-          {serverPreview ? (
-            <CustodyServerPreviewPanel
-              result={serverPreview}
-              activates={serverPreviewActivates}
-            />
-          ) : null}
-          {serverPreviewError ? (
-            <div className="whitespace-pre-wrap rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-              <div className="font-medium">{t("swap.components.serverPreviewFailed")}</div>
-              <div className="mt-1">{serverPreviewError}</div>
-            </div>
-          ) : null}
-          {result ? (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950 dark:border-emerald-400/30 dark:bg-emerald-950/30 dark:text-emerald-100">
-              {t("swap.components.savedSummary", result)}
-            </div>
-          ) : null}
-          {actionError ? (
-            <div className="whitespace-pre-wrap rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-              {actionError}
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+      {actionError ? (
+        <div className="whitespace-pre-wrap rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          {actionError}
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -1299,9 +903,10 @@ function CustodyComponentResolver() {
             </p>
           ) : (
             <div className="space-y-3">
-              {components.map((component) => {
+              {visibleComponents.map((component) => {
                 const issues = component.validation?.issues ?? [];
                 const pending = mutationPending && pendingComponentId === component.id;
+                const isExpanded = expandedComponents.has(component.id);
                 const legsById = new Map(
                   component.legs.map((leg) => [leg.id, leg] as const),
                 );
@@ -1333,6 +938,22 @@ function CustodyComponentResolver() {
                         <div className="mt-1 font-mono text-xs text-muted-foreground">
                           {compactRecordId(component.id)}
                         </div>
+                        <button
+                          type="button"
+                          className="mt-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => toggleComponentExpanded(component.id)}
+                          aria-expanded={isExpanded}
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="size-3.5" />
+                          ) : (
+                            <ChevronRight className="size-3.5" />
+                          )}
+                          {t("swap.components.legCount", {
+                            count: component.legs.length,
+                          })}
+                        </button>
+                        {isExpanded ? (
                         <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
                           <Badge variant="outline">
                             {t("swap.components.audit.mode", {
@@ -1380,12 +1001,15 @@ function CustodyComponentResolver() {
                             </>
                           ) : null}
                         </div>
+                        ) : null}
                         {component.notes ? (
                           <p className="mt-2 text-sm text-muted-foreground">{component.notes}</p>
                         ) : null}
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {component.state === "draft" || component.state === "active" ? (
+                        {(component.state === "draft" ||
+                          component.state === "active") &&
+                        isGuidedEditableComponentType(component.component_type) ? (
                           <Button
                             type="button"
                             size="sm"
@@ -1456,6 +1080,8 @@ function CustodyComponentResolver() {
                       </div>
                     </div>
 
+                    {isExpanded ? (
+                    <>
                     <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                       {component.legs.map((leg) => (
                         <div key={leg.id} className="rounded-md bg-muted/50 p-2 text-xs">
@@ -1536,9 +1162,25 @@ function CustodyComponentResolver() {
                         </ul>
                       </div>
                     ) : null}
+                    </>
+                    ) : null}
                   </div>
                 );
               })}
+              {hasMoreComponents ? (
+                <div className="flex justify-center pt-1">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setComponentVisibleCount((count) => count + REVIEW_PAGE_SIZE)
+                    }
+                  >
+                    {t("swap.loadMore")}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           )}
         </CardContent>
@@ -1547,7 +1189,7 @@ function CustodyComponentResolver() {
       <Dialog
         open={editingComponent !== null}
         onOpenChange={(open) => {
-          if (!open && !mutationPending) closeRevisionEditor();
+          if (!open && !mutationPending && !editorBusy) closeRevisionEditor();
         }}
       >
         <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
@@ -1561,205 +1203,21 @@ function CustodyComponentResolver() {
               {t("swap.components.revisionDialog.description")}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <Label htmlFor="custody-component-revision-json">
-              {t("swap.components.revisionDialog.jsonLabel")}
-            </Label>
-            <Textarea
-              id="custody-component-revision-json"
-              value={revisionDocument}
-              onChange={(event) => handleRevisionDocumentChange(event.target.value)}
-              disabled={mutationPending}
-              spellCheck={false}
-              aria-invalid={Boolean(revisionPreview?.structuralErrors.length)}
-              className="min-h-80 resize-y font-mono text-xs leading-5"
+          {editingComponent ? (
+            <GuidedComponentForm
+              key={editingComponent.id}
+              variant="embedded"
+              edit={{
+                componentId: editingComponent.id,
+                state: editingComponent.state === "active" ? "active" : "draft",
+              }}
+              initialForm={componentToFormState(editingComponent)}
+              onDone={closeRevisionEditor}
+              onBusyChange={setEditorBusy}
             />
-            <p className="text-xs text-muted-foreground">
-              {t("swap.components.revisionDialog.safetyHint")}
-            </p>
-            {revisionPreview ? (
-              <CustodyBatchPreviewPanel preview={revisionPreview} />
-            ) : null}
-            {revisionError ? (
-              <div className="whitespace-pre-wrap rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-                {revisionError}
-              </div>
-            ) : null}
-          </div>
-          <DialogFooter className="flex-wrap sm:justify-between">
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={mutationPending}
-              onClick={closeRevisionEditor}
-            >
-              {t("swap.components.revisionDialog.cancel")}
-            </Button>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={mutationPending}
-                onClick={previewRevisionDocument}
-              >
-                <Eye />
-                {t("swap.components.preview")}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={mutationPending}
-                onClick={() => void saveRevision(false)}
-              >
-                {mutationPending ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <Plus />
-                )}
-                {t("swap.components.revisionDialog.saveDraft")}
-              </Button>
-              <Button
-                type="button"
-                disabled={mutationPending}
-                onClick={() => void saveRevision(true)}
-              >
-                {mutationPending ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <Check />
-                )}
-                {t("swap.components.revisionDialog.saveActivate")}
-              </Button>
-            </div>
-          </DialogFooter>
+          ) : null}
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function CustodyBatchPreviewPanel({ preview }: { preview: CustodyBatchPreview }) {
-  const { t } = useTranslation("review");
-  const activationReady =
-    preview.structuralErrors.length === 0 && preview.activationErrors.length === 0;
-  return (
-    <div className="space-y-3 rounded-lg border p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-medium">{t("swap.components.previewTitle")}</div>
-        <Badge variant={activationReady ? "default" : "secondary"}>
-          {activationReady
-            ? t("swap.components.readyToActivate")
-            : preview.structuralErrors.length > 0
-              ? t("swap.components.needsCorrection")
-              : t("swap.components.draftOnly")}
-        </Badge>
-      </div>
-      <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:grid-cols-6">
-        {(
-          [
-            ["components", preview.summary.components],
-            ["legs", preview.summary.legs],
-            ["sources", preview.summary.sources],
-            ["destinations", preview.summary.destinations],
-            ["anchors", preview.summary.transactionAnchors],
-            ["untracked", preview.summary.untrackedLegs],
-          ] as const
-        ).map(([label, value]) => (
-          <div key={label} className="rounded-md bg-muted/50 p-2">
-            <div className="text-lg font-semibold tabular-nums">{value}</div>
-            <div className="text-xs text-muted-foreground">
-              {t(`swap.components.summary.${label}`)}
-            </div>
-          </div>
-        ))}
-      </div>
-      {preview.structuralErrors.length > 0 ? (
-        <CustodyErrorList
-          title={t("swap.components.structuralErrors")}
-          issues={preview.structuralErrors}
-          destructive
-        />
-      ) : null}
-      {preview.activationErrors.length > 0 ? (
-        <CustodyErrorList
-          title={t("swap.components.activationErrors")}
-          issues={preview.activationErrors}
-        />
-      ) : null}
-      {activationReady ? (
-        <p className="text-sm text-emerald-700 dark:text-emerald-300">
-          {t("swap.components.previewReadyHint")}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function CustodyServerPreviewPanel({
-  result,
-  activates,
-}: {
-  result: CustodyBulkResolveResult;
-  activates: boolean;
-}) {
-  const { t } = useTranslation("review");
-  const issues = result.components.flatMap(
-    (component) => component.validation?.issues ?? [],
-  );
-  return (
-    <div className="space-y-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950 dark:border-emerald-400/30 dark:bg-emerald-950/30 dark:text-emerald-100">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-medium">{t("swap.components.serverPreviewTitle")}</div>
-        <Badge variant="outline">{t("swap.components.serverPreviewVerified")}</Badge>
-      </div>
-      <p>
-        {activates
-          ? t("swap.components.serverPreviewActivates", result.summary)
-          : t("swap.components.serverPreviewDrafts", result.summary)}
-      </p>
-      {issues.length > 0 ? (
-        <div>
-          <div className="font-medium">{t("swap.components.validationIssues")}</div>
-          <ul className="mt-1 list-disc space-y-1 pl-5">
-            {issues.map((issue, index) => (
-              <li key={`${issue.code ?? "issue"}:${index}`}>
-                {custodyBackendIssueText(t, issue)}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function CustodyErrorList({
-  title,
-  issues,
-  destructive = false,
-}: {
-  title: string;
-  issues: CustodyPreviewIssue[];
-  destructive?: boolean;
-}) {
-  const { t } = useTranslation("review");
-  return (
-    <div
-      className={cn(
-        "rounded-md border p-3 text-sm",
-        destructive
-          ? "border-destructive/40 bg-destructive/10 text-destructive"
-          : "border-amber-300/60 bg-amber-50 text-amber-950 dark:border-amber-400/30 dark:bg-amber-950/30 dark:text-amber-100",
-      )}
-    >
-      <div className="font-medium">{title}</div>
-      <ul className="mt-1 list-disc space-y-1 pl-5">
-        {issues.map((issue, index) => (
-          <li key={`${index}:${issue.code}`}>
-            {custodyPreviewIssueText(t, issue)}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
@@ -2436,14 +1894,15 @@ function PairingReview({
   const [saveViewOpen, setSaveViewOpen] = useState(false);
   const [saveViewName, setSaveViewName] = useState("");
   const [createRuleOpen, setCreateRuleOpen] = useState(false);
-  const [rulesExpanded, setRulesExpanded] = useState(false);
+  // "Advanced" disclosure: reveals the rules engine and enables multi-select
+  // bulk pairing. Off by default so the queue is a clean filter → scan → act.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [cursorIndex, setCursorIndex] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [detailCandidate, setDetailCandidate] = useState<SwapCandidate | null>(null);
   const consumedFocusRef = useRef<string | null>(null);
   const savedViews = savedViewsQuery.data?.data?.views ?? [];
   const rules = rulesQuery.data?.data?.rules ?? [];
-  const enabledRuleCount = rules.filter((rule) => rule.enabled).length;
 
   const filterIsDirty =
     confidence !== "all" ||
@@ -2507,6 +1966,12 @@ function PairingReview({
     [data?.data?.candidates],
   );
   const counts = data?.data?.counts ?? { total: 0, exact: 0, strong: 0, conflicts: 0 };
+  const [visibleCount, setVisibleCount] = useState(REVIEW_PAGE_SIZE);
+  // Reset the visible window whenever the filters change so a narrowed queue
+  // starts from the top rather than keeping a large expanded count.
+  useEffect(() => {
+    setVisibleCount(REVIEW_PAGE_SIZE);
+  }, [confidence, method, routePair]);
 
   // Count of cluster members visible under the current filters/tab.
   // conflict_size is stamped server-side over the full candidate set, so
@@ -2757,6 +2222,12 @@ function PairingReview({
   const cursorCandidate = candidates[cursorIndex];
   const cursorKey = cursorCandidate ? candidateKey(cursorCandidate) : null;
 
+  // Render a capped window of the queue; always include the keyboard cursor row
+  // so navigation past the fold stays visible.
+  const renderCount = Math.max(visibleCount, cursorIndex + 1);
+  const visibleCandidates = candidates.slice(0, renderCount);
+  const hasMoreCandidates = candidates.length > visibleCandidates.length;
+
   const bindings = useMemo<Keybinding[]>(() => {
     return [
       {
@@ -2875,7 +2346,13 @@ function PairingReview({
 
   return (
     <div className="min-w-0">
-      <Collapsible open={rulesExpanded} onOpenChange={setRulesExpanded}>
+      <Collapsible
+        open={advancedOpen}
+        onOpenChange={(open) => {
+          setAdvancedOpen(open);
+          if (!open) setSelected(new Set());
+        }}
+      >
         <div className="overflow-hidden rounded-lg border bg-card">
           <header className="flex flex-col gap-2.5 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
             <div className="min-w-0">
@@ -2939,68 +2416,62 @@ function PairingReview({
                 <span className="ml-1">{t("common:actions.refresh")}</span>
               </Button>
               <CollapsibleTrigger asChild>
-                <Button variant="outline" size="sm" className={pageHeaderActionClassName}>
+                <Button
+                  variant={advancedOpen ? "secondary" : "outline"}
+                  size="sm"
+                  className={pageHeaderActionClassName}
+                >
                   <SettingsIcon className="size-3.5" />
-                  <span>{t("swap.header.rules", { enabled: enabledRuleCount, total: rules.length })}</span>
+                  <span>{t("swap.header.advanced")}</span>
                 </Button>
               </CollapsibleTrigger>
             </div>
           </header>
 
-          <div className="grid grid-cols-2 divide-x-0 divide-y divide-border border-t sm:grid-cols-5 sm:divide-x sm:divide-y-0">
-            <SwapQueueMetric
-              label={t("swap.metric.candidates")}
-              ariaLabel={t("swap.metric.showAllAria", { label: t("swap.metric.candidates") })}
-              value={counts.total}
-              tone={counts.total ? "neutral" : "good"}
-              active={!filterIsDirty}
-              onClick={() => {
-                setConfidence("all");
-                setMethod("all");
-                if (routeFilterEnabled) setRoutePair("all");
-              }}
-            />
-            <SwapQueueMetric
-              label={t("swap.metric.exact")}
-              ariaLabel={t("swap.metric.filterAria", { label: t("swap.metric.exact") })}
-              value={counts.exact}
-              tone={counts.exact ? "good" : "neutral"}
-              active={confidence === "exact"}
-              onClick={() => setConfidence(confidence === "exact" ? "all" : "exact")}
-            />
-            <SwapQueueMetric
-              label={t("swap.metric.strong")}
-              ariaLabel={t("swap.metric.filterAria", { label: t("swap.metric.strong") })}
-              value={counts.strong}
-              tone={counts.strong ? "warning" : "neutral"}
-              active={confidence === "strong"}
-              onClick={() => setConfidence(confidence === "strong" ? "all" : "strong")}
-            />
-            <SwapQueueMetric
-              label={t("swap.metric.conflicts")}
-              value={counts.conflicts}
-              tone={counts.conflicts ? "alert" : "neutral"}
-            />
-            <SwapQueueMetric
-              label={t("swap.metric.history")}
-              ariaLabel={t("swap.metric.historyAria")}
-              value={historyCount}
-              icon={<HistoryIcon className="size-3.5" aria-hidden="true" />}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t px-3 py-2 text-xs text-muted-foreground sm:px-6">
+            <span>
+              <span className="font-semibold text-foreground tabular-nums">
+                {formatCount(counts.total)}
+              </span>{" "}
+              {t("swap.metric.candidates")}
+            </span>
+            <span className="tabular-nums">
+              {formatCount(counts.exact)} {t("swap.metric.exact")}
+            </span>
+            <span className="tabular-nums">
+              {formatCount(counts.strong)} {t("swap.metric.strong")}
+            </span>
+            {counts.conflicts > 0 ? (
+              <span className="tabular-nums text-rose-600 dark:text-rose-400">
+                {formatCount(counts.conflicts)} {t("swap.metric.conflicts")}
+              </span>
+            ) : null}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto h-7 px-2"
               onClick={onShowHistory}
-            />
+            >
+              <HistoryIcon className="size-3.5" aria-hidden="true" />
+              <span>
+                {t("swap.metric.history")} ({formatCount(historyCount)})
+              </span>
+            </Button>
           </div>
 
           <div className="grid gap-2 border-t px-2 py-3 text-sm xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <label className="flex shrink-0 items-center gap-2">
-                <Checkbox
-                  checked={selectedCandidateCount > 0}
-                  onCheckedChange={handleSelectAll}
-                />
-                <span className="text-xs text-muted-foreground">
-                  {t("swap.filters.select")}
-                </span>
-              </label>
+              {advancedOpen ? (
+                <label className="flex shrink-0 items-center gap-2">
+                  <Checkbox
+                    checked={selectedCandidateCount > 0}
+                    onCheckedChange={handleSelectAll}
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {t("swap.filters.select")}
+                  </span>
+                </label>
+              ) : null}
               <span className="shrink-0 text-xs text-muted-foreground">
                 {t("swap.filters.visible", { count: candidates.length })}
               </span>
@@ -3161,7 +2632,9 @@ function PairingReview({
               <Table className="min-w-[1180px] w-full table-fixed">
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableHead className="w-[42px]"></TableHead>
+                    {advancedOpen ? (
+                      <TableHead className="w-[42px]"></TableHead>
+                    ) : null}
                     <TableHead className="w-[140px] text-xs font-medium text-muted-foreground">
                       {t("swap.table.status")}
                     </TableHead>
@@ -3179,7 +2652,7 @@ function PairingReview({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {candidates.map((candidate) => {
+                  {visibleCandidates.map((candidate) => {
                     const key = candidateKey(candidate);
                     const conflicted = candidate.conflict_size > 1;
                     const selectable = canSelectCandidate(candidate);
@@ -3196,15 +2669,17 @@ function PairingReview({
                         )}
                         onClick={() => setDetailCandidate(candidate)}
                       >
-                        <TableCell>
-                          <Checkbox
-                            aria-label={t("swap.table.selectAria")}
-                            disabled={!selectable}
-                            checked={selectable && selected.has(key)}
-                            onClick={(event) => event.stopPropagation()}
-                            onCheckedChange={() => toggleSelected(key)}
-                          />
-                        </TableCell>
+                        {advancedOpen ? (
+                          <TableCell>
+                            <Checkbox
+                              aria-label={t("swap.table.selectAria")}
+                              disabled={!selectable}
+                              checked={selectable && selected.has(key)}
+                              onClick={(event) => event.stopPropagation()}
+                              onCheckedChange={() => toggleSelected(key)}
+                            />
+                          </TableCell>
+                        ) : null}
                         <TableCell className="whitespace-normal">
                           <SwapStatusCell
                             candidate={candidate}
@@ -3260,7 +2735,7 @@ function PairingReview({
             </div>
           )}
 
-          {selectedCandidateCount > 0 ? (
+          {advancedOpen && selectedCandidateCount > 0 ? (
             <div className="flex flex-wrap items-center gap-3 border-t bg-muted/25 px-3 py-3 text-sm sm:px-6">
               <span className="shrink-0 text-xs font-medium text-foreground">
                 {t("swap.bulk.selected", { count: selectedCandidateCount })}
@@ -3314,14 +2789,27 @@ function PairingReview({
             </div>
           ) : null}
 
-          <div className="flex items-center border-t px-3 py-3 text-xs text-muted-foreground sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t px-3 py-3 text-xs text-muted-foreground sm:px-6">
             <span>
               {t("swap.showing", {
-                from: candidates.length === 0 ? 0 : 1,
-                to: candidates.length,
+                from: visibleCandidates.length === 0 ? 0 : 1,
+                to: visibleCandidates.length,
                 total: counts.total,
               })}
             </span>
+            {hasMoreCandidates ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() =>
+                  setVisibleCount((count) => count + REVIEW_PAGE_SIZE)
+                }
+              >
+                {t("swap.loadMore")}
+              </Button>
+            ) : null}
           </div>
         </div>
       </Collapsible>
@@ -3497,62 +2985,6 @@ function PairingReview({
         </div>
       ) : null}
     </div>
-  );
-}
-
-function SwapQueueMetric({
-  label,
-  ariaLabel,
-  value,
-  tone = "neutral",
-  active = false,
-  onClick,
-  icon,
-}: {
-  label: string;
-  ariaLabel?: string;
-  value: number;
-  tone?: "neutral" | "good" | "warning" | "alert";
-  active?: boolean;
-  onClick?: () => void;
-  icon?: ReactNode;
-}) {
-  const toneClass = {
-    neutral: "text-muted-foreground",
-    good: "text-emerald-700 dark:text-emerald-300",
-    warning: "text-amber-700 dark:text-amber-300",
-    alert: "text-rose-700 dark:text-rose-300",
-  }[tone];
-  const className = cn(
-    "min-w-0 space-y-2 p-3 text-left sm:p-4",
-    onClick &&
-      "relative w-full cursor-pointer transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-    active && "bg-primary/5 ring-1 ring-primary/30 ring-inset",
-  );
-  const content = (
-    <>
-      <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-        {icon}
-        {label}
-      </p>
-      <p className={cn("text-xl font-semibold tabular-nums", active ? "text-primary" : toneClass)}>
-        {formatCount(value)}
-      </p>
-    </>
-  );
-  if (!onClick) {
-    return <div className={className}>{content}</div>;
-  }
-  return (
-    <button
-      type="button"
-      className={className}
-      onClick={onClick}
-      aria-pressed={active}
-      aria-label={ariaLabel ?? label}
-    >
-      {content}
-    </button>
   );
 }
 

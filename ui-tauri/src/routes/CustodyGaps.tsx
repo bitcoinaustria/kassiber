@@ -1170,7 +1170,7 @@ function CustodyGapCard({ gap }: { gap: CustodyGap }) {
   );
 }
 
-export function CustodyGaps() {
+function CustodyGapsContent() {
   const { t } = useTranslation("custodyGaps");
   const hideSensitive = useUiStore((state) => state.hideSensitive);
   const coverageQuery = useDaemon<CustodyCoverageSnapshot>(
@@ -1229,7 +1229,7 @@ export function CustodyGaps() {
   const canShowClear = canShowNoKnownCustodyGaps(snapshot, reviewGaps.length);
 
   return (
-    <div className={screenShellClassName}>
+    <div className="space-y-3 sm:space-y-4">
       <div className={pageHeaderClassName}>
         <div>
           <div className="flex items-center gap-2">
@@ -1455,6 +1455,22 @@ export function CustodyGaps() {
           </Button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+export { CustodyGapsContent };
+
+/**
+ * Standalone Custody Gaps screen wrapper. The merged "Transfers & Custody"
+ * surface renders {@link CustodyGapsContent} directly inside a tab (which
+ * already sits inside the shared screen shell), so the shell padding lives here
+ * for any standalone use rather than in the content component.
+ */
+export function CustodyGaps() {
+  return (
+    <div className={screenShellClassName}>
+      <CustodyGapsContent />
     </div>
   );
 }
