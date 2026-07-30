@@ -336,6 +336,7 @@ function toDashboardTransaction(
     tag,
     sourceType: tx.type,
     kind: tx.kind ?? null,
+    kindOverride: tx.kindOverride ?? null,
     paymentMethod,
     date: tx.date,
     status: tag.toLowerCase().includes("review") ? "review" : status,

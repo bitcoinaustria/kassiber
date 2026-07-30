@@ -1770,6 +1770,7 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
             t.taxability_override,
             t.at_regime_override,
             t.at_category_override,
+            t.kind_override,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
@@ -1825,6 +1826,7 @@ def _activity_transactions(
             t.taxability_override,
             t.at_regime_override,
             t.at_category_override,
+            t.kind_override,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
@@ -1958,6 +1960,15 @@ _OUTBOUND_KIND_LABELS = {
 # `income` entry. "Acquired" states exactly that without claiming a purchase
 # that may not have happened (a received gift stores kind NULL by design).
 _UNKNOWN_INBOUND_LABEL = "Acquired"
+
+
+def _effective_transaction_kind(row: sqlite3.Row | dict[str, Any]) -> str:
+    """The kind the tax engine will act on: user classification, else provenance."""
+    keys = row.keys() if hasattr(row, "keys") else ()
+    override = row["kind_override"] if "kind_override" in keys else None
+    if override:
+        return str(override)
+    return str(row["kind"] or "") if "kind" in keys else ""
 
 
 def _transaction_type(kind: str, direction: str, quarantine_reason: str | None) -> str:
@@ -2268,8 +2279,10 @@ def _transaction_row_to_ui(
         fiat_value = (
             sign * abs(raw_fiat_value) if raw_fiat_value is not None else None
         )
+        # The user's classification wins over the importer's provenance kind,
+        # matching what the tax engine reads (`_normalized_event_kind`).
         type_label = _transaction_type(
-            row["kind"],
+            _effective_transaction_kind(row),
             row["direction"],
             row["quarantine_reason"],
         )
@@ -2324,9 +2337,11 @@ def _transaction_row_to_ui(
         "explorerId": _public_explorer_id(external_id),
         "date": (occurred_at or "")[:16].replace("T", " "),
         "type": type_label,
-        # The stored kind behind `type`. `type` is a display label; this is the
-        # machine code the tax engine reads and the classification control writes.
+        # `type` is a display label; these are the machine codes behind it.
+        # `kind` is the importer's provenance (read-only); `kindOverride` is the
+        # user's classification and what the Tax tab control writes.
         "kind": row["kind"] if "kind" in row_keys else None,
+        "kindOverride": row["kind_override"] if "kind_override" in row_keys else None,
         "asset": row["asset"] if "asset" in row_keys else None,
         "chain": chain,
         "network": network,
@@ -3989,6 +4004,7 @@ def _build_transactions_page_snapshot(
             t.taxability_override,
             t.at_regime_override,
             t.at_category_override,
+            t.kind_override,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
@@ -4408,7 +4424,7 @@ def build_transactions_dashboard_snapshot(
                t.pricing_provider, t.pricing_pair, t.pricing_timestamp,
                t.pricing_fetched_at, t.pricing_granularity, t.pricing_method,
                t.review_status, t.taxability_override, t.at_regime_override,
-               t.at_category_override, COALESCE(t.kind, '') AS kind,
+               t.at_category_override, t.kind_override, COALESCE(t.kind, '') AS kind,
                COALESCE(t.description, '') AS description,
                COALESCE(t.counterparty, '') AS counterparty,
                COALESCE(t.note, '') AS note, t.excluded,
@@ -4714,6 +4730,7 @@ def build_transactions_resolve_snapshot(
             t.taxability_override,
             t.at_regime_override,
             t.at_category_override,
+            t.kind_override,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,

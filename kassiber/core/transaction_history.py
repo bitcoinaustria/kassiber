@@ -32,7 +32,7 @@ PRICING_FIELDS = {
     "pricing_external_ref",
     "pricing_quality",
 }
-TAX_FIELDS = {"review_status", "taxable", "at_regime", "at_category"}
+TAX_FIELDS = {"review_status", "taxable", "at_regime", "at_category", "kind"}
 METADATA_FIELDS = {"note", "tags", "excluded"}
 SUPPORTED_FIELDS = METADATA_FIELDS | TAX_FIELDS | PRICING_FIELDS
 
@@ -51,6 +51,7 @@ FIELD_LABELS = {
     "taxable": "Taxable",
     "at_regime": "Austrian regime",
     "at_category": "Austrian category",
+    "kind": "Recorded as",
     "fiat_currency": "Fiat currency",
     "fiat_rate": "Price per BTC",
     "fiat_value": "Fiat value",
@@ -123,6 +124,7 @@ _FIELD_SORT_ORDER = [
     "taxable",
     "at_regime",
     "at_category",
+    "kind",
     "fiat_currency",
     "fiat_rate",
     "fiat_value",
@@ -218,7 +220,7 @@ def transaction_state(
         else bool(_row_get(tx, "taxability_override")),
         "at_regime": _row_get(tx, "at_regime_override"),
         "at_category": _row_get(tx, "at_category_override"),
-        "kind": _row_get(tx, "kind"),
+        "kind": _row_get(tx, "kind_override"),
         "fiat_currency": _row_get(tx, "fiat_currency"),
         "fiat_rate": _exact_or_float(tx, "fiat_rate_exact", "fiat_rate"),
         "fiat_value": _exact_or_float(tx, "fiat_value_exact", "fiat_value"),

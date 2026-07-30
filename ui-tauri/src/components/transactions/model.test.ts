@@ -38,10 +38,25 @@ describe("draftForTransaction kind", () => {
     ).toBeNull();
   });
 
-  it("round-trips a stored kind so saving does not clear it", () => {
-    const draft = draftForTransaction({ ...txWithTags([]), kind: "mining" });
+  it("round-trips the override so saving does not clear it", () => {
+    const draft = draftForTransaction({
+      ...txWithTags([]),
+      kindOverride: "mining",
+    });
 
     expect(draft.kind).toBe("mining");
+  });
+
+  it("does not adopt the importer's provenance kind as a classification", () => {
+    // `kind` is what the source said. Seeding the draft from it would re-save
+    // provenance as a user classification — and `lnd_invoice` is not even a
+    // kind the daemon accepts.
+    const draft = draftForTransaction({
+      ...txWithTags([]),
+      kind: "lnd_invoice",
+    });
+
+    expect(draft.kind).toBeNull();
   });
 });
 

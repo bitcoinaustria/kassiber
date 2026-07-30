@@ -93,6 +93,10 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                         </div>
                       </div>
                     ) : null}
+                    {/* Paired transfer/swap legs route through the pair path,
+                        which never reads `kind` — offering the control there
+                        would be a no-op the user cannot tell apart. */}
+                    {transaction.direction === "Transfer" ? null : (
                     <div className="rounded-md border bg-background p-3">
                       <div className="min-w-0 space-y-1.5">
                         <Label
@@ -122,7 +126,7 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                               {t("tax.kindUnclassified")}
                             </SelectItem>
                             {transactionKindOptions(
-                              transaction.direction !== "Send",
+                              transaction.direction === "Receive",
                             ).map((option) => (
                               <SelectItem key={option.kind} value={option.kind}>
                                 {/* dynamic key */}
@@ -133,6 +137,7 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                         </Select>
                       </div>
                     </div>
+                    )}
                     <div className="rounded-md border bg-background p-3">
                       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
                         <div className="min-w-0 space-y-1.5">

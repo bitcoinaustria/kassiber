@@ -84,6 +84,7 @@ export type Transaction = {
   tag?: string;
   sourceType?: Tx["type"];
   kind?: string | null;
+  kindOverride?: string | null;
   paymentMethod: "On-chain" | "Exchange" | "Lightning" | "Liquid";
   date: string;
   status: TransactionStatus;
@@ -677,10 +678,10 @@ export function draftForTransaction(txn: Transaction): TransactionEditDraft {
     reviewStatus: txn.reviewStatus ?? txn.status,
     taxable: txn.taxable ?? defaultTaxClassification.taxable,
     excluded: Boolean(txn.excluded),
-    // Never defaulted: an unclassified row must stay unclassified until the
-    // user says otherwise, or saving an unrelated field would silently declare
-    // a tax character the book never recorded.
-    kind: txn.kind ?? null,
+    // The override, not the importer's provenance kind: clearing must restore
+    // what the source recorded rather than blank it. Never defaulted, or saving
+    // an unrelated field would declare a tax character the book never recorded.
+    kind: txn.kindOverride ?? null,
   };
 }
 

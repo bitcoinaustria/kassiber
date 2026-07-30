@@ -259,8 +259,10 @@ export interface Tx {
   date: string;
   occurredAt?: string;
   type: TxType;
-  /** stored classification code behind `type`; null = unclassified */
+  /** importer provenance behind `type` (read-only; gates trust checks) */
   kind?: string | null;
+  /** user-assigned tax classification; null = unclassified */
+  kindOverride?: string | null;
   asset?: string | null;
   chain?: string | null;
   network?: string | null;

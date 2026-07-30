@@ -32,8 +32,10 @@ SUPPORTED_REVIEW_STATUSES = {"completed", "pending", "failed", "review"}
 # Kinds a user may assign to classify a transaction's tax character. Unlike
 # tags (cosmetic) this drives the engine: an income kind becomes an RP2 earn
 # transaction type and emits an `income` journal entry, where a plain
-# acquisition emits only `acquisition`. Setting it to None clears the
-# classification back to whatever the import recorded.
+# acquisition emits only `acquisition`. It is stored as an override so the
+# importer's `kind` survives untouched — clearing restores exactly what the
+# source recorded, and provenance-gated logic (the Lightning payment-hash
+# trust check in transfers.py) keeps working on a reclassified row.
 SUPPORTED_TRANSACTION_KINDS = GENERIC_LEDGER_KIND_DIRECTIONS
 SUPPORTED_AT_REGIME_OVERRIDES = {"alt", "neu", "outside"}
 SUPPORTED_AT_CATEGORY_OVERRIDES = {
@@ -587,7 +589,7 @@ def update_transaction_metadata(
         state_updates["at_category"] = clean_at_category
 
     if kind_set:
-        tx_updates["kind"] = clean_kind
+        tx_updates["kind_override"] = clean_kind
         state_updates["kind"] = clean_kind
 
     if clean_pricing is not None:
@@ -1038,6 +1040,8 @@ def _tx_updates_for_revert_field(field, before_value):
         return {
             "taxability_override": None if before_value is None else (1 if before_value else 0)
         }, {"taxable": before_value}
+    if field == "kind":
+        return {"kind_override": before_value}, {"kind": before_value}
     if field == "at_regime":
         return {"at_regime_override": before_value}, {"at_regime": before_value}
     if field == "at_category":
