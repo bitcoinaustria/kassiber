@@ -485,9 +485,16 @@ kassiber chat --file export.csv --file-context "2024 export from exchange XYZ, c
 In the desktop Assistant, use the composer's attach button (**+**) and describe
 the file in your message. The assistant then calls the read-only
 `ui.wallets.analyze_file` tool, proposes a `column_map` (and a `type_map` when
-the labels are not English), previews it, asks about anything genuinely
-ambiguous, and imports once you approve — the import itself is a consent-gated
-tool call like any other write. Resolving the resulting quarantine, filling
+the labels are not English), previews it against the real normalizer, and asks
+about anything genuinely ambiguous.
+
+**The assistant proposes the plan; you run the import.** There is deliberately no
+import tool in the chat catalog and no way to import a chat attachment: the file
+reaches the daemon as a staging grant, and the import path takes a real file. So
+the assistant's output is a finished `column_map` you pass to
+`wallets import-ledger --column-map` (the desktop ships the CLI), and the run it
+creates is rolled back from the connection's Import-runs panel, not from chat.
+Resolving the resulting quarantine, filling
 pricing gaps, and spotting holes in the history are the assistant's existing
 tools (`ui.journals.quarantine`, `ui.rates.coverage`, `ui.report.blockers`,
 `ui.custody.gaps.list`); this path only gets the records in.
