@@ -29,28 +29,51 @@ guessed, and the implementation checklist makes sure no touchpoint is missed.
 Two things to settle first — they decide whether this is a five-minute job or a
 code change.
 
-- **No-code path (works today, no PR).** If the user can reshape their export
-  into Kassiber's generic columns (the field list under "Generic transaction
-  imports" in [docs/reference/imports.md](../../../docs/reference/imports.md)),
-  `kassiber wallets import-csv` / `import-json` imports it now — no parser, no
-  catalog entry, no merge. This is the right answer for a one-off or personal
-  book. Build a dedicated `import-<slug>` importer only when you want
-  *repeatable* imports of the raw provider export, exact execution pricing
-  applied automatically, and a shareable connection in the desktop modal.
+- **No-code path (works today, no PR). Try this first — do not ask the user to
+  retype or reshape anything.** The generic ledger importer reads an export *as
+  the platform wrote it* by mapping its column names:
+
+  ```bash
+  kassiber wallets analyze-file --file export.csv   # headers, inferred plan, dry-run; no DB, no network, no AI
+  kassiber wallets import-ledger --wallet <wallet> --file export.csv \
+    --column-map '{"date":"Trade Date","type":"Action","amount":"Qty","fiat_value":"Total"}'
+  ```
+
+  Work the plan out from the headers `analyze-file` returns and re-run it until
+  `next_step.action` is `import`. Add `type_map` when the file labels rows in
+  another language or house style (`{"type_map": {"ACQ-MKT": "Buy"}}`); German
+  column names and values are already recognized. **Check
+  `row_kinds_from_amount_sign`** — true means no Type or direction column was
+  recognized, so every row would import as a plain transfer picked by the
+  amount's sign and a sale would book as a deposit with nothing rejected.
+  You are mapping names, never values: every amount, date, and asset is still
+  read from the file by the same normalizer, so a wrong mapping yields a
+  rejected row rather than a wrong number. Full reference:
+  ["Mapping the columns yourself"](../../../docs/reference/imports.md#mapping-the-columns-yourself---column-map).
+
+  Each import is recorded as a run, so a wrong plan is recoverable:
+  `kassiber imports list` then `kassiber imports rollback --batch <id> --confirm`
+  removes exactly the transactions that run created.
+
+  `wallets import-csv` / `import-json` remain the path for data the user is
+  generating themselves rather than exporting. Build a dedicated `import-<slug>`
+  importer only when you want *repeatable* imports of the raw provider export,
+  exact execution pricing applied automatically, and a shareable connection in
+  the desktop modal.
 - **Scope: Kassiber is the BTC-side subledger.** Only `BTC` / `LBTC` rows are
   imported. On a multi-asset exchange (ETH, USDT, altcoins), the non-BTC legs
   are **out of scope** — skip them, or keep them as excluded evidence; never
   model a full multi-asset ledger here. A BTC↔fiat trade is in scope; a
   BTC↔ETH trade is a disposal on the BTC side only and needs care (often
   quarantine). Capture this in the spec.
-- **Export format.** CSV is the supported shape. **XLSX** → have the user
-  save-as / export the relevant sheet to CSV; the bundled `XlsxWriter` is
-  **write-only** and there is no XLSX *reader* in the project, so reading `.xlsx`
-  would mean a new reader dependency (e.g. `openpyxl`) — get owner approval
-  before reaching for that, and prefer Save-As-CSV. **JSON** → use the generic
-  `import-json` path or a JSON parser. **PDF statements are not
-  machine-importable** — ask for a CSV/XLSX/API export instead; do not scrape a
-  PDF.
+- **Export format.** CSV is the supported shape for a dedicated importer.
+  **XLSX/XLSM** → readable as-is on the generic-ledger path (`openpyxl` is a
+  dependency); a *dedicated* importer still parses CSV, so ask for Save-As-CSV
+  when you are writing one. **JSON** → use the generic `import-json` path or a
+  JSON parser. **PDF/photo statements** → not parseable as data, but importable
+  through the local-AI OCR draft path (`wallets preview-document` /
+  `import-document`), which is loopback-only and quarantines by per-cell
+  confidence. Never scrape a PDF by hand into numbers.
 
 ---
 

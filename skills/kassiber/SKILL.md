@@ -26,6 +26,8 @@ Use these without opening extra references when the request clearly matches:
 | Largest outbound transactions | `kassiber --machine transactions list --direction outbound --sort amount --order desc --limit 10` |
 | Smallest inbound transactions | `kassiber --machine transactions list --direction inbound --sort amount --order asc --limit 10` |
 | Smallest outbound transactions | `kassiber --machine transactions list --direction outbound --sort amount --order asc --limit 10` |
+| Import an export from a platform Kassiber doesn't list | `kassiber --machine wallets analyze-file --file <export>` |
+| Undo an import that mapped columns wrongly | `kassiber imports list` then `imports rollback --batch <id> --confirm` |
 | Ask the in-product assistant with tools | `kassiber chat "<question>"` |
 | Run the fast local regtest harness | `./scripts/integration-harness.sh fast` |
 | Run the live Bitcoin Core smoke harness | `./scripts/integration-harness.sh bitcoin-core` |
@@ -125,7 +127,7 @@ Related notes:
 - For fragile CLI command shapes and safe invocation patterns, read [references/command-templates.md](references/command-templates.md).
 - For first-run setup, roots, context, and books creation, read [references/onboarding.md](references/onboarding.md).
 - For wallet kinds, descriptor setup, backend selection, and imports, read [references/wallets-backends.md](references/wallets-backends.md).
-- For onboarding a brand-new exchange / broker / custodial platform Kassiber does not support yet (the structured intake interview plus the importer implementation checklist), read [references/add-exchange.md](references/add-exchange.md). The user-facing entry point is the `/add-exchange` command.
+- For onboarding a brand-new exchange / broker / custodial platform Kassiber does not support yet (the structured intake interview plus the importer implementation checklist), read [references/add-exchange.md](references/add-exchange.md). The user-facing entry point is the `/add-exchange` command. Most requests do not need an importer at all: `kassiber wallets analyze-file --file <export>` then `wallets import-ledger --column-map` reads the export as the platform wrote it, and `imports rollback` undoes a wrong mapping. Try that before proposing code.
 - For researching, drafting, and publishing a Kassiber GitHub feature request, read [references/feature-request.md](references/feature-request.md). The user-facing entry point is the `/feature-request` command.
 - For journal processing, quarantine handling, and transfer pairing, read [references/journal-processing.md](references/journal-processing.md).
 - For swap-candidate matching (Lightning ↔ Liquid, BTC ↔ LBTC peg, Boltz submarine swaps), the auto-pair rules engine, and saved review-queue views, read [references/swap-matching.md](references/swap-matching.md).

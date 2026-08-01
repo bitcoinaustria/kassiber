@@ -350,7 +350,12 @@ sign — a sale would book as a deposit with nothing rejected. Map the file's ow
 Type column, or confirm with the user that the export really is transfers only.
 
 In chat, the equivalent is the `ui.wallets.analyze_file` tool over the file the
-user attached — same loop, same `column_map`.
+user attached — same loop, same `column_map`, with one difference that matters:
+**you propose the plan, the user runs the import.** There is no import tool in
+chat, so once the analysis reaches `next_step.action = import`, give the user the
+`wallets import-ledger --column-map '<plan>'` command and say the run is undoable
+(`imports list` / `imports rollback --batch <id> --confirm`). Never say you
+imported anything.
 
 You are mapping column names and label vocabulary. Never transcribe, re-type, or
 compute an amount, date, or total yourself: the importer reads every value from
