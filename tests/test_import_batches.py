@@ -7,10 +7,13 @@ alone, and invalidates journals so reports are not silently stale afterwards.
 
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import unittest
+
+from kassiber.core import import_batches
 
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -154,6 +157,89 @@ class ImportRollbackCliTests(unittest.TestCase):
         self.assertEqual(repeat["imported"], 0)
         self.assertNotIn("import_batch_id", repeat)
         self.assertEqual(len(self.batches()), 1)
+
+
+class RollbackScaleTests(unittest.TestCase):
+    """A run's ids are bound parameters, and an exchange export is not small."""
+
+    def build(self, row_count):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.executescript(
+            """
+            PRAGMA foreign_keys = ON;
+            CREATE TABLE workspaces(id TEXT PRIMARY KEY);
+            CREATE TABLE profiles(id TEXT PRIMARY KEY);
+            CREATE TABLE transactions(id TEXT PRIMARY KEY, profile_id TEXT);
+            CREATE TABLE import_batches(
+                id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                wallet_id TEXT,
+                source_format TEXT NOT NULL,
+                source_filename TEXT,
+                column_map_json TEXT,
+                imported_at TEXT NOT NULL,
+                rows_inserted INTEGER NOT NULL DEFAULT 0,
+                rows_updated INTEGER NOT NULL DEFAULT 0,
+                rows_skipped INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE import_batch_transactions(
+                batch_id TEXT NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
+                transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+                PRIMARY KEY (batch_id, transaction_id)
+            );
+            CREATE TABLE transaction_tags(
+                transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+                tag TEXT
+            );
+            INSERT INTO workspaces VALUES('w');
+            INSERT INTO profiles VALUES('p');
+            """
+        )
+        ids = [f"tx-{index}" for index in range(row_count)]
+        conn.executemany("INSERT INTO transactions VALUES(?, 'p')", [(i,) for i in ids])
+        conn.executemany("INSERT INTO transaction_tags VALUES(?, 'reviewed')", [(i,) for i in ids])
+        profile = {"id": "p", "workspace_id": "w"}
+        batch_id = import_batches.record_batch(
+            conn,
+            profile,
+            wallet_id=None,
+            source_format="generic_ledger",
+            source_filename="big-export.csv",
+            column_map=None,
+            outcome={"inserted_records": [{"transaction_id": i} for i in ids]},
+        )
+        return conn, profile, batch_id
+
+    @unittest.skipUnless(
+        hasattr(sqlite3.Connection, "setlimit"), "needs Python 3.11 setlimit"
+    )
+    def test_a_run_larger_than_sqlites_parameter_limit_still_rolls_back(self):
+        # A years-long export exceeds SQLITE_MAX_VARIABLE_NUMBER, so a single
+        # `IN (...)` over every id raises "too many SQL variables" and the user
+        # cannot undo the very import they most want to undo. The real limit is
+        # 32766; lowering it keeps the test fast without changing what it proves.
+        conn, profile, batch_id = self.build(1200)
+        conn.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 600)
+
+        plan = import_batches.plan_rollback(conn, "p", batch_id)
+        self.assertEqual(plan["transactions_to_delete"], 1200)
+        self.assertEqual(plan["also_removed"].get("transaction_tags"), 1200)
+
+        result = import_batches.rollback_batch(
+            conn, profile, batch_id, invalidate_journals=lambda *_: None
+        )
+        self.assertEqual(result["transactions_deleted"], 1200)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0], 0)
+
+    def test_the_runs_own_link_rows_are_not_reported_as_collateral(self):
+        # "Also removed: 1200 import_batch_transactions" is bookkeeping for the
+        # thing being deleted, not user work the user should weigh.
+        conn, _, batch_id = self.build(3)
+        plan = import_batches.plan_rollback(conn, "p", batch_id)
+        self.assertNotIn("import_batch_transactions", plan["also_removed"])
+        self.assertEqual(plan["also_removed"], {"transaction_tags": 3})
 
 
 if __name__ == "__main__":

@@ -344,6 +344,11 @@ again with `--column-map` until `next_step.action` is `import`. Add `type_map`
 inside the plan when the file labels rows in another language or house style
 (`{"type_map": {"ACQ-MKT": "Buy"}}`); German values are already recognized.
 
+When `row_kinds_from_amount_sign` is true, no Type or direction column was
+recognized and every row would import as a plain transfer picked by the amount's
+sign — a sale would book as a deposit with nothing rejected. Map the file's own
+Type column, or confirm with the user that the export really is transfers only.
+
 In chat, the equivalent is the `ui.wallets.analyze_file` tool over the file the
 user attached — same loop, same `column_map`.
 

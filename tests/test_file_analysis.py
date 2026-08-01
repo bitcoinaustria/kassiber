@@ -274,6 +274,62 @@ class AnalyzeFileTests(unittest.TestCase):
                     "unknown direction", analysis["problems"][0]["message"]
                 )
 
+    def test_a_german_type_column_is_recognized_so_a_sale_is_not_a_deposit(self):
+        # Regression: "Typ" was missing from the Type aliases while German row
+        # *values* were recognized, so an Austrian export half-worked in the
+        # worst possible way — with no Type column the direction came from the
+        # amount's sign alone, and an all-positive export booked "Verkauf" as an
+        # inbound Deposit. Nothing was rejected: holdings doubled and a taxable
+        # disposal disappeared.
+        csv_text = (
+            "Datum,Typ,Menge,Währung,Wert\n"
+            "2024-03-01T10:00:00Z,Kauf,0.5,EUR,21000\n"
+            "2024-04-02T10:00:00Z,Verkauf,0.25,EUR,12000\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            analysis = file_analysis.analyze_file(_write(tmp, "typ.csv", csv_text))
+        self.assertEqual(analysis["errors"], 0, analysis["problems"])
+        self.assertEqual(
+            [(row["kind"], row["direction"]) for row in analysis["preview"]],
+            [("buy", "inbound"), ("sell", "outbound")],
+        )
+
+    def test_a_file_with_no_type_or_direction_column_says_so(self):
+        # With neither column every row's kind is the amount's sign, which for a
+        # positive-only export means "everything is a deposit" with nothing
+        # rejected. The file may genuinely be transfers only, so this is
+        # reported rather than refused — but it must never read as "import".
+        csv_text = (
+            "Datum,Menge,Währung,Wert\n"
+            "2024-03-01T10:00:00Z,0.5,EUR,21000\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            analysis = file_analysis.analyze_file(_write(tmp, "flat.csv", csv_text))
+        self.assertTrue(analysis["row_kinds_from_amount_sign"])
+        self.assertEqual(analysis["next_step"]["action"], "map_row_kinds")
+
+    def test_a_mapped_type_column_clears_the_amount_sign_warning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            analysis = file_analysis.analyze_file(
+                _write(tmp, "opaque.csv", OPAQUE_CSV), column_map=OPAQUE_PLAN
+            )
+        self.assertFalse(analysis["row_kinds_from_amount_sign"])
+        self.assertEqual(analysis["next_step"]["action"], "import")
+
+    def test_an_empty_direction_cell_is_refused_as_a_direction(self):
+        # Regression: a blank cell in a mapped direction column skipped the
+        # unreadable-direction check and was rejected downstream as a Type
+        # mismatch ("Type 'Withdrawal' is outbound but the leg is inbound"),
+        # sending the user after a Type the file never had.
+        csv_text = "Datum,Richtung,Betrag\n2024-03-01T10:00:00Z,,0.5\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            analysis = file_analysis.analyze_file(
+                _write(tmp, "blank.csv", csv_text),
+                column_map={"date": "Datum", "direction": "Richtung", "amount": "Betrag"},
+            )
+        self.assertEqual(analysis["mapped"], 0)
+        self.assertIn("direction", analysis["problems"][0]["message"])
+
     def test_photos_and_pdfs_route_to_the_on_device_document_importer(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "statement.pdf"

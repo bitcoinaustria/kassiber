@@ -101,9 +101,11 @@ export function AssistantSessionProvider({
           sessionId: activeSession,
           persist: incognito && activeSession === null ? false : "auto",
           seedHistory,
-          attachment: attachment
-            ? { token: attachment.token, label: attachment.filename }
-            : undefined,
+          // Token only. `label` is the user's own words about the file (the
+          // CLI's --file-context); sending the filename there would have the
+          // daemon tell the model "the user describes it as: export.csv", and
+          // the daemon already names the file from the staging grant.
+          attachment: attachment ? { token: attachment.token } : undefined,
           screenContext: currentAssistantScreenContext(screenContext),
         },
         prompt,

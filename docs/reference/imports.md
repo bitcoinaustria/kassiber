@@ -265,11 +265,20 @@ preview shows it and points you back at the template); the dry-run/preview
 returns `confident: false` with the detected columns instead of raising. Template
 files are unaffected — they still take the native path.
 
-Row values are matched in English and German (`Kauf`/`Verkauf`,
-`Einzahlung`/`Auszahlung`, `Eingang`/`Ausgang`, `Empfangen`, `Gesendet`), so an
-Austrian export usually needs no mapping at all. Deliberately *not* mapped:
-`Überweisung`/`Transfer`, which does not state a direction — an unrecognized
-`Type` is rejected with a row-numbered problem rather than guessed.
+Column names and row values are both matched in English and German (`Typ`/`Art`,
+`Richtung`, `Menge`/`Betrag`; `Kauf`/`Verkauf`, `Einzahlung`/`Auszahlung`,
+`Eingang`/`Ausgang`, `Empfangen`, `Gesendet`), so an Austrian export usually
+needs no mapping at all. Deliberately *not* mapped: `Überweisung`/`Transfer`,
+which does not state a direction — an unrecognized `Type` is rejected with a
+row-numbered problem rather than guessed.
+
+**Check that the Type column was recognized.** With no `Type` and no direction
+column, each row's direction is the amount's sign alone, so an export whose
+amounts are all positive imports every row — sales included — as an inbound
+`Deposit`, and nothing is rejected. `analyze-file` reports this as
+`row_kinds_from_amount_sign: true` with `next_step.action = map_row_kinds`; map
+the file's own Type column (with `type_map` for its vocabulary) unless the export
+really is transfers only.
 
 ### Mapping the columns yourself (`--column-map`)
 

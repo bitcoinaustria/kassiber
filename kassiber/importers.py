@@ -3130,7 +3130,19 @@ def _generic_ledger_rows_to_records(rows):
 # unchanged.
 # --------------------------------------------------------------------------- #
 _BYO_DATE = {_normalized_column_key(n) for n in ("Date", "Time", "Timestamp", "Datetime", "Date Time", "Datum", "Zeitpunkt", "Executed At", "Trade Date")}
-_BYO_TYPE = {_normalized_column_key(n) for n in ("Type", "Transaction Type", "Tx Type", "Side", "Category", "Action", "Art")}
+# A file whose Type column is not recognized keeps every row's kind: with no
+# type and no direction column, direction falls back to the amount's sign, so an
+# all-positive export books every row — sales included — as a plain Deposit, with
+# nothing rejected. German headers matter here because German row *values* are
+# recognized: "Typ" + "Verkauf" must not half-work.
+_BYO_TYPE = {
+    _normalized_column_key(n)
+    for n in (
+        "Type", "Transaction Type", "Tx Type", "Side", "Category", "Action",
+        "Operation", "Art", "Typ", "Transaktionstyp", "Transaktionsart",
+        "Art der Transaktion", "Buchungsart", "Vorgang", "Vorgangsart",
+    )
+}
 _BYO_DIRECTION = {_normalized_column_key(n) for n in ("Direction", "In/Out", "Flow", "Richtung")}
 _BYO_RECEIVED = {_normalized_column_key(n) for n in ("Received Amount", "Received", "Received BTC", "Buy Amount", "Incoming", "Amount Received", "Deposit Amount", "Credit", "Eingang", "Erhalten")}
 _BYO_SENT = {_normalized_column_key(n) for n in ("Sent Amount", "Sent", "Sent BTC", "Sell Amount", "Outgoing", "Amount Sent", "Withdrawal Amount", "Debit", "Ausgang", "Gesendet")}
@@ -3327,7 +3339,10 @@ def infer_ledger_columns(header):
     fiat_currency = take(_BYO_FIAT_CURRENCY, "fiat_currency")
     fiat_value = take(_BYO_FIAT_VALUE, "fiat_value")
     fiat_rate = take(_BYO_FIAT_RATE, "fiat_rate")
-    note = take(_BYO_NOTE, "description")
+    # "note", not "description": `detected` is what a user or the assistant
+    # copies into a `column_map`, and `note` is the plan's own field name — a
+    # plan naming `description` is rejected as an unsupported field.
+    note = take(_BYO_NOTE, "note")
     txid = take(_BYO_TXID, "txid")
     payment_hash = take(_BYO_PAYMENT_HASH, "payment_hash")
     payment_hash_source = take(_BYO_PAYMENT_HASH_SOURCE, "payment_hash_source")
@@ -3614,14 +3629,16 @@ def _remap_byo_row_to_ledger(row, plan):
             raw_direction = cell(plan["direction"])
             direction = _byo_direction_value(raw_direction)
             btc_cell = format(abs(number), "f") if number is not None else raw
-            if direction is None and raw_direction is not None:
+            if direction is None:
                 # A mapped direction column whose value means nothing to us must
                 # be rejected, not fall through to the "Deposit if inbound else
                 # Withdrawal" default below — that default silently booked every
                 # such row as a Withdrawal. Flagged as a *direction* failure so a
                 # value that happens to name a Type ("Income", "Mining") cannot
-                # be booked as that tax kind.
-                unrecognized_direction = raw_direction
+                # be booked as that tax kind. An empty cell is the same failure:
+                # otherwise the row is rejected later for a Type the file never
+                # had ("Type 'Withdrawal' is outbound but the leg is inbound").
+                unrecognized_direction = raw_direction or "(empty)"
         elif number is not None:
             direction = "outbound" if number < 0 else "inbound"
             btc_cell = format(abs(number), "f")

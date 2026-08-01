@@ -157,18 +157,25 @@ def analyze_file(
     # One read: the preview reports the header row it used, so the plan can be
     # validated against the same headers the importer actually saw.
     bound = max(0, min(int(sample_rows or 0), MAX_SAMPLE_ROWS))
-    plan = normalize_column_map(column_map)
     preview = importers_module.preview_generic_ledger_records(
-        path, limit=bound, column_map=plan
+        path, limit=bound, column_map=column_map
     )
     headers = list(preview.get("headers") or [])[:MAX_HEADER_COLUMNS]
     native = bool(preview.get("template"))
-    # Re-validate now that the real headers are known, so a plan naming a column
-    # the file does not have is rejected here rather than silently ignored.
+    # Validated against the real headers, so a plan naming a column the file does
+    # not have is rejected rather than silently ignored.
     plan = normalize_column_map(column_map, headers)
     inferred = importers_module.infer_ledger_columns(headers)
 
     confident = bool(preview.get("confident", True))
+    # No Type and no direction column means every row's kind comes from the
+    # amount's sign alone, so an all-positive export books sales as deposits with
+    # nothing rejected. The file may genuinely have neither (a deposit-only
+    # export), so this is reported, not refused.
+    effective_plan = plan or inferred["plan"]
+    kinds_from_sign = not native and not (
+        effective_plan.get("type") or effective_plan.get("direction")
+    )
     return {
         "source": source,
         "route": "generic_ledger",
@@ -188,11 +195,23 @@ def analyze_file(
         "problems": preview.get("problems", []),
         "preview": preview.get("preview", []),
         "truncated": bool(preview.get("truncated")),
-        "next_step": _next_step(native=native, confident=confident, preview=preview),
+        "row_kinds_from_amount_sign": kinds_from_sign,
+        "next_step": _next_step(
+            native=native,
+            confident=confident,
+            preview=preview,
+            kinds_from_sign=kinds_from_sign,
+        ),
     }
 
 
-def _next_step(*, native: bool, confident: bool, preview: Mapping[str, Any]) -> dict[str, str]:
+def _next_step(
+    *,
+    native: bool,
+    confident: bool,
+    preview: Mapping[str, Any],
+    kinds_from_sign: bool = False,
+) -> dict[str, str]:
     if not confident:
         return {
             "action": "supply_column_map",
@@ -206,6 +225,17 @@ def _next_step(*, native: bool, confident: bool, preview: Mapping[str, Any]) -> 
         return {
             "action": "fix_rows",
             "reason": "The columns were recognized but no row could be normalized.",
+        }
+    if kinds_from_sign:
+        return {
+            "action": "map_row_kinds",
+            "reason": (
+                "No Type or direction column was recognized, so every row would "
+                "import as a plain transfer (Deposit/Withdrawal) chosen by the "
+                "amount's sign — a sale would book as a deposit. Map the file's "
+                "own Type column with column_map.type (plus type_map for its "
+                "vocabulary), or confirm the file really is transfers only."
+            ),
         }
     if preview.get("errors"):
         return {

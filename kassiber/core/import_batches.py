@@ -32,6 +32,16 @@ from ..time_utils import now_iso
 
 
 MAX_LISTED_BATCHES = 200
+# SQLite caps bound parameters per statement (32766 on modern builds, 999 on
+# older ones). A multi-year exchange export easily exceeds that, so every
+# `IN (...)` over a run's transaction ids is chunked, like the retraction path in
+# `core.imports`.
+_ID_CHUNK = 500
+
+
+def _id_chunks(transaction_ids: Sequence[str]):
+    for start in range(0, len(transaction_ids), _ID_CHUNK):
+        yield tuple(transaction_ids[start : start + _ID_CHUNK])
 
 
 def record_batch(
@@ -186,7 +196,10 @@ def _cascading_references(conn: sqlite3.Connection) -> list[tuple[str, str]]:
         ).fetchall()
     ]
     for table in tables:
-        if table == "transactions":
+        # The run's own link rows are bookkeeping for the thing being deleted,
+        # not collateral: reporting "also removed: 3 import_batch_transactions"
+        # to a user weighing a rollback is noise.
+        if table in {"transactions", "import_batch_transactions"}:
             continue
         for fk in conn.execute(f'PRAGMA foreign_key_list("{table}")').fetchall():
             if str(fk["table"]) != "transactions":
@@ -208,16 +221,17 @@ def _collateral_counts(
     """
     if not transaction_ids:
         return {}
-    placeholders = ",".join("?" for _ in transaction_ids)
     counts: dict[str, int] = {}
     for table, column in _cascading_references(conn):
-        row = conn.execute(
-            f'SELECT COUNT(*) AS n FROM "{table}" '  # noqa: S608 - identifiers from schema
-            f'WHERE "{column}" IN ({placeholders})',
-            tuple(transaction_ids),
-        ).fetchone()
-        if row and int(row["n"] or 0):
-            counts[table] = counts.get(table, 0) + int(row["n"])
+        for chunk in _id_chunks(transaction_ids):
+            placeholders = ",".join("?" for _ in chunk)
+            row = conn.execute(
+                f'SELECT COUNT(*) AS n FROM "{table}" '  # noqa: S608 - identifiers from schema
+                f'WHERE "{column}" IN ({placeholders})',
+                chunk,
+            ).fetchone()
+            if row and int(row["n"] or 0):
+                counts[table] = counts.get(table, 0) + int(row["n"])
     return counts
 
 
@@ -253,11 +267,11 @@ def rollback_batch(
     row = _batch_row(conn, profile["id"], batch_ref)
     transaction_ids = _linked_transaction_ids(conn, row["id"])
     also_removed = _collateral_counts(conn, transaction_ids)
-    if transaction_ids:
-        placeholders = ",".join("?" for _ in transaction_ids)
+    for chunk in _id_chunks(transaction_ids):
+        placeholders = ",".join("?" for _ in chunk)
         conn.execute(
             f"DELETE FROM transactions WHERE id IN ({placeholders})",  # noqa: S608 - placeholders only
-            tuple(transaction_ids),
+            chunk,
         )
     conn.execute("DELETE FROM import_batches WHERE id = ?", (row["id"],))
     if transaction_ids:
