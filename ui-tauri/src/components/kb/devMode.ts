@@ -23,6 +23,7 @@ export const DEV_LOCKED_ROUTES = [
 export const DEV_HIDDEN_ROUTES = [
   "/egress",
   "/logs",
+  "/settings/lightning",
   "/settings/sync",
 ] as const;
 
@@ -73,7 +74,22 @@ export function isDevLockedRoute(route: string): boolean {
 
 
 /** Settings sections (see `SettingsSectionId`) hidden while dev mode is off. */
-const DEV_ONLY_SETTINGS_SECTIONS = new Set<string>(["data-sync"]);
+const DEV_ONLY_SETTINGS_SECTIONS = new Set<string>([
+  "data-sync",
+  "network-lightning",
+]);
+
+/**
+ * Connection-catalog ids (see `CONNECTION_SOURCES`) hidden while dev mode is
+ * off. Attaching your own Lightning node is unfinished, and its setup flow
+ * lands in Settings → Lightning, which is hidden too — so the cards have to go
+ * with it or they dead-end.
+ */
+const DEV_ONLY_CONNECTION_SOURCES = new Set<string>(["core-ln", "lnd"]);
+
+export function isDevOnlyConnectionSource(id: string): boolean {
+  return DEV_ONLY_CONNECTION_SOURCES.has(id);
+}
 
 /**
  * Same question for a settings *slug* — what the native menu and the

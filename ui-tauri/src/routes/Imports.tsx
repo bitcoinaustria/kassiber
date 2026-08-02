@@ -13,6 +13,7 @@ import {
   type IntegrationItem,
 } from "@/components/shadcnblocks/settings-integrations4";
 import { Button } from "@/components/ui/button";
+import { isDevOnlyConnectionSource } from "@/components/kb/devMode";
 import {
   CONNECTION_SOURCES,
   connectionCategoryLabel,
@@ -22,6 +23,7 @@ import {
   pageHeaderClassName,
   screenShellClassName,
 } from "@/lib/screen-layout";
+import { useUiStore } from "@/store/ui";
 
 export function Imports() {
   const { t } = useTranslation("review");
@@ -30,9 +32,14 @@ export function Imports() {
   const [dialogSourceId, setDialogSourceId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
+
   const importItems = useMemo<IntegrationItem[]>(
     () =>
-      CONNECTION_SOURCES.map((source) => ({
+      CONNECTION_SOURCES.filter(
+        (source) =>
+          developerToolsEnabled || !isDevOnlyConnectionSource(source.id),
+      ).map((source) => ({
         id: source.id,
         title: source.title,
         description: source.description,
@@ -48,7 +55,7 @@ export function Imports() {
               : t("imports.actionSetup")
             : t("imports.actionPlanned"),
       })),
-    [t],
+    [developerToolsEnabled, t],
   );
 
   return (

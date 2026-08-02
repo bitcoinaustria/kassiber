@@ -361,6 +361,7 @@ const settingsBitcoinRoute = createRoute({
 const settingsLightningRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/settings/lightning",
+  beforeLoad: requireDeveloperTools,
   component: () => <Settings section="network-lightning" />,
 });
 

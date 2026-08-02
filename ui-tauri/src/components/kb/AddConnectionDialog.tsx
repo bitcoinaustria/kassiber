@@ -36,6 +36,7 @@ import {
   type ConnectionSource,
   type ConnectionSourceFormat,
 } from "@/lib/connectionCatalog";
+import { isDevOnlyConnectionSource } from "@/components/kb/devMode";
 import { GenericLedgerPreview } from "@/components/kb/GenericLedgerPreview";
 import { saveDaemonExport } from "@/lib/exportFile";
 import { parseAddressList, stripKeyMaterial } from "@/lib/addressList";
@@ -885,6 +886,9 @@ export function AddConnectionDialog({
   const setDeferredConnectionSetup = useUiStore(
     (state) => state.setDeferredConnectionSetup,
   );
+  const developerToolsEnabled = useUiStore(
+    (state) => state.developerToolsEnabled,
+  );
   const backendOptions = useDaemon<BackendOptionsData>("ui.backends.options");
   const backendSettingsQuery = useDaemon<BackendSettingsData>(
     "ui.backends.settings.list",
@@ -1080,13 +1084,15 @@ export function AddConnectionDialog({
     const query = sourceQuery.trim().toLowerCase();
     const isSearching = query.length > 0;
     return CONNECTION_SOURCES.filter((source) => {
+      if (!developerToolsEnabled && isDevOnlyConnectionSource(source.id))
+        return false;
       if (isSearching) {
         const haystack = `${source.title} ${source.description} ${source.id}`.toLowerCase();
         return haystack.includes(query);
       }
       return source.category === activeCategory;
     });
-  }, [activeCategory, sourceQuery]);
+  }, [activeCategory, developerToolsEnabled, sourceQuery]);
   const selected =
     CONNECTION_SOURCES.find((source) => source.id === selectedId) ??
     CONNECTION_SOURCES[0];

@@ -9,7 +9,10 @@ import {
   DEV_LOCK_CLASS,
   DEV_LOCKED_ROUTES,
   devLockProps,
+  isDevOnlyConnectionSource,
+  isDevOnlySettingsSlug,
 } from "./devMode";
+import { CONNECTION_SOURCES } from "@/lib/connectionCatalog";
 import {
   migrateUiState,
   useUiStore,
@@ -43,8 +46,18 @@ describe("pre-release dev mode", () => {
     expect([...DEV_HIDDEN_ROUTES]).toEqual([
       "/egress",
       "/logs",
+      "/settings/lightning",
       "/settings/sync",
     ]);
+  });
+
+  // Attaching a Lightning node is the settings section plus the two catalog
+  // cards that lead into it; hiding one without the other leaves a dead end.
+  it("hides the Lightning node connections with their settings section", () => {
+    expect(CONNECTION_SOURCES.filter((s) => isDevOnlyConnectionSource(s.id)).map(
+      (s) => s.id,
+    )).toEqual(["core-ln", "lnd"]);
+    expect(isDevOnlySettingsSlug("lightning")).toBe(true);
   });
 
   describe("devLockProps", () => {
