@@ -199,7 +199,11 @@ export function ImportRunsPanel({ walletId }: { walletId: string }) {
             <Button
               type="button"
               variant="ghost"
-              onClick={() => setPending(null)}
+              onClick={() => {
+                setPending(null);
+                setPlan(null);
+                setError(null);
+              }}
             >
               {t("detail.imports.cancel")}
             </Button>
@@ -207,9 +211,15 @@ export function ImportRunsPanel({ walletId }: { walletId: string }) {
               type="button"
               variant="destructive"
               onClick={() => void confirmRollback()}
-              disabled={rollback.isPending}
+              // The plan is the disclosure: it is what says which reviewed work
+              // cascades away with these rows. Deleting before it arrives — or
+              // after it failed — would be confirming against a count the
+              // daemon never returned.
+              disabled={rollback.isPending || rollbackPlan.isPending || !plan}
             >
-              {t("detail.imports.confirmAction")}
+              {rollbackPlan.isPending
+                ? t("detail.imports.loadingPlan")
+                : t("detail.imports.confirmAction")}
             </Button>
           </DialogFooter>
         </DialogContent>

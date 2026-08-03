@@ -25,23 +25,22 @@ Two deliberate scoping rules:
 import json
 import sqlite3
 import uuid
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 from ..errors import AppError
 from ..time_utils import now_iso
 
 
 MAX_LISTED_BATCHES = 200
-# SQLite caps bound parameters per statement (32766 on modern builds, 999 on
-# older ones). A multi-year exchange export easily exceeds that, so every
-# `IN (...)` over a run's transaction ids is chunked, like the retraction path in
-# `core.imports`.
-_ID_CHUNK = 500
-
-
-def _id_chunks(transaction_ids: Sequence[str]):
-    for start in range(0, len(transaction_ids), _ID_CHUNK):
-        yield tuple(transaction_ids[start : start + _ID_CHUNK])
+# The run's transaction ids are staged in a temp table rather than bound as
+# parameters. A multi-year exchange export exceeds SQLite's parameter cap
+# (32766), and chunking around that would break the collateral count: a row
+# referencing two of the run's transactions in different chunks would be counted
+# once per chunk. One staged set is both exact and unbounded.
+_STAGED_IDS = "_import_rollback_ids"
+# Cascade discovery walks the FK graph, so a cycle or a pathological schema
+# cannot spin forever. Nothing in the schema is near this.
+_MAX_CASCADE_DEPTH = 6
 
 
 def record_batch(
@@ -169,70 +168,116 @@ def list_batches(
     ]
 
 
-def _linked_transaction_ids(conn: sqlite3.Connection, batch_id: str) -> list[str]:
-    return [
-        str(row["transaction_id"])
-        for row in conn.execute(
-            "SELECT transaction_id FROM import_batch_transactions WHERE batch_id = ?",
-            (batch_id,),
-        ).fetchall()
+def _stage_batch_ids(conn: sqlite3.Connection, batch_id: str) -> int:
+    """Stage this run's transaction ids in a temp table. Returns how many."""
+    conn.execute(f"DROP TABLE IF EXISTS temp.{_STAGED_IDS}")
+    conn.execute(f"CREATE TEMP TABLE {_STAGED_IDS}(id TEXT PRIMARY KEY)")
+    conn.execute(
+        f"INSERT OR IGNORE INTO temp.{_STAGED_IDS}(id) "
+        "SELECT transaction_id FROM import_batch_transactions WHERE batch_id = ?",
+        (batch_id,),
+    )
+    return int(
+        conn.execute(f"SELECT COUNT(*) AS n FROM temp.{_STAGED_IDS}").fetchone()["n"]
+    )
+
+
+def _primary_key(conn: sqlite3.Connection, table: str) -> str | None:
+    keys = [
+        str(row["name"])
+        for row in conn.execute(f'PRAGMA table_info("{table}")').fetchall()
+        if int(row["pk"] or 0)
     ]
+    return keys[0] if len(keys) == 1 else None
 
 
-def _cascading_references(conn: sqlite3.Connection) -> list[tuple[str, str]]:
-    """Every (table, column) that CASCADE-deletes when a transaction is deleted.
+def _cascade_predicates(conn: sqlite3.Connection) -> list[tuple[str, str]]:
+    """Every (table, predicate) whose matching rows die with the staged ids.
 
     Discovered from the schema with `PRAGMA foreign_key_list` rather than a
-    hand-written list: ~20 tables reference `transactions`, several holding
-    reviewed decisions and authored evidence, and a maintained list would drift
-    silently — under-reporting exactly the user work a rollback is about to
-    destroy.
+    hand-written list: 17 tables reference `transactions` directly, several
+    holding reviewed decisions and authored evidence, and a maintained list would
+    drift silently — under-reporting exactly the user work a rollback destroys.
+
+    The walk continues past those tables, because a cascade is transitive: an
+    attachment linked to a source-of-funds link dies when the link dies when the
+    transaction dies. Each table gets ONE predicate OR-ing all its paths, so a
+    row reachable twice (`transaction_pairs` names two transactions, and a run
+    usually creates both sides of a pair) counts once, not twice.
     """
-    references: list[tuple[str, str]] = []
     tables = [
         str(row["name"])
         for row in conn.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
         ).fetchall()
     ]
+    # child table -> [(child column, parent table, parent column)]
+    edges: dict[str, list[tuple[str, str, str]]] = {}
     for table in tables:
-        # The run's own link rows are bookkeeping for the thing being deleted,
-        # not collateral: reporting "also removed: 3 import_batch_transactions"
-        # to a user weighing a rollback is noise.
-        if table in {"transactions", "import_batch_transactions"}:
-            continue
         for fk in conn.execute(f'PRAGMA foreign_key_list("{table}")').fetchall():
-            if str(fk["table"]) != "transactions":
-                continue
             if str(fk["on_delete"]).upper() != "CASCADE":
                 continue  # SET NULL keeps the row; it is not lost work
-            references.append((table, str(fk["from"])))
-    return references
+            parent = str(fk["table"])
+            parent_key = fk["to"] or _primary_key(conn, parent)
+            if not parent_key:
+                continue
+            edges.setdefault(table, []).append(
+                (str(fk["from"]), parent, str(parent_key))
+            )
+
+    resolved: dict[str, str] = {
+        "transactions": f"id IN (SELECT id FROM temp.{_STAGED_IDS})"
+    }
+    # Fixpoint: a row dies if *any* cascade parent row dies, so each round
+    # rebuilds every table's predicate from whatever is resolved so far. A table
+    # whose parent gains a path in a later round is rebuilt with it; a parent
+    # that is never reachable from `transactions` simply contributes nothing.
+    for _ in range(_MAX_CASCADE_DEPTH):
+        changed = False
+        for table, links in edges.items():
+            # The run's own link rows are bookkeeping for the thing being
+            # deleted, not collateral: reporting "also removed: 3
+            # import_batch_transactions" to a user weighing a rollback is noise.
+            if table in {"transactions", "import_batch_transactions"}:
+                continue
+            usable = [link for link in links if link[1] in resolved and link[1] != table]
+            if not usable:
+                continue
+            predicate = " OR ".join(
+                f'"{column}" IN (SELECT "{parent_key}" FROM "{parent}" WHERE {resolved[parent]})'
+                for column, parent, parent_key in usable
+            )
+            if resolved.get(table) != predicate:
+                resolved[table] = predicate
+                changed = True
+        if not changed:
+            break
+    return [(table, predicate) for table, predicate in resolved.items() if table != "transactions"]
 
 
-def _collateral_counts(
-    conn: sqlite3.Connection, transaction_ids: Sequence[str]
-) -> dict[str, int]:
-    """Count rows that cascade away with these transactions, by table.
+def _collateral_counts(conn: sqlite3.Connection, staged: int) -> dict[str, int]:
+    """Count rows that cascade away with the staged transactions, by table.
 
     Surfaced so a rollback is an informed decision: much of this is user work
     (reviewed pairs, custody components, source-of-funds links, attachments,
-    tags, metadata history), not import output.
+    tags, metadata history), not import output. One COUNT per reachable table
+    over the staged id set, so each row is counted once however many of the
+    run's transactions it references.
     """
-    if not transaction_ids:
+    if not staged:
         return {}
     counts: dict[str, int] = {}
-    for table, column in _cascading_references(conn):
-        for chunk in _id_chunks(transaction_ids):
-            placeholders = ",".join("?" for _ in chunk)
-            row = conn.execute(
-                f'SELECT COUNT(*) AS n FROM "{table}" '  # noqa: S608 - identifiers from schema
-                f'WHERE "{column}" IN ({placeholders})',
-                chunk,
-            ).fetchone()
-            if row and int(row["n"] or 0):
-                counts[table] = counts.get(table, 0) + int(row["n"])
+    for table, predicate in _cascade_predicates(conn):
+        row = conn.execute(
+            f'SELECT COUNT(*) AS n FROM "{table}" WHERE {predicate}'  # noqa: S608 - identifiers from schema
+        ).fetchone()
+        if row and int(row["n"] or 0):
+            counts[table] = int(row["n"])
     return counts
+
+
+def _drop_staged(conn: sqlite3.Connection) -> None:
+    conn.execute(f"DROP TABLE IF EXISTS temp.{_STAGED_IDS}")
 
 
 def plan_rollback(
@@ -242,12 +287,16 @@ def plan_rollback(
 ) -> dict[str, Any]:
     """Report exactly what rolling this batch back would remove. Pure."""
     row = _batch_row(conn, profile_id, batch_ref)
-    transaction_ids = _linked_transaction_ids(conn, row["id"])
+    try:
+        staged = _stage_batch_ids(conn, row["id"])
+        also_removed = _collateral_counts(conn, staged)
+    finally:
+        _drop_staged(conn)
     return {
-        "batch": _batch_payload(row, remaining=len(transaction_ids)),
-        "transactions_to_delete": len(transaction_ids),
-        "also_removed": _collateral_counts(conn, transaction_ids),
-        "journals_invalidated": bool(transaction_ids),
+        "batch": _batch_payload(row, remaining=staged),
+        "transactions_to_delete": staged,
+        "also_removed": also_removed,
+        "journals_invalidated": bool(staged),
     }
 
 
@@ -265,16 +314,16 @@ def rollback_batch(
     them goes too (see `plan_rollback`).
     """
     row = _batch_row(conn, profile["id"], batch_ref)
-    transaction_ids = _linked_transaction_ids(conn, row["id"])
-    also_removed = _collateral_counts(conn, transaction_ids)
-    for chunk in _id_chunks(transaction_ids):
-        placeholders = ",".join("?" for _ in chunk)
+    try:
+        staged = _stage_batch_ids(conn, row["id"])
+        also_removed = _collateral_counts(conn, staged)
         conn.execute(
-            f"DELETE FROM transactions WHERE id IN ({placeholders})",  # noqa: S608 - placeholders only
-            chunk,
+            f"DELETE FROM transactions WHERE id IN (SELECT id FROM temp.{_STAGED_IDS})"
         )
+    finally:
+        _drop_staged(conn)
     conn.execute("DELETE FROM import_batches WHERE id = ?", (row["id"],))
-    if transaction_ids:
+    if staged:
         invalidate_journals(conn, profile["id"])
     if commit:
         conn.commit()
@@ -284,9 +333,9 @@ def rollback_batch(
         "source_filename": row["source_filename"],
         "wallet_id": row["wallet_id"],
         "rolled_back": True,
-        "transactions_deleted": len(transaction_ids),
+        "transactions_deleted": staged,
         "also_removed": also_removed,
-        "journals_invalidated": bool(transaction_ids),
+        "journals_invalidated": bool(staged),
     }
 
 
@@ -370,9 +419,24 @@ def demo() -> None:
             transaction_id TEXT REFERENCES transactions(id) ON DELETE SET NULL,
             note TEXT
         );
+        -- Names TWO transactions, like transaction_pairs / source_funds_links.
+        -- A run usually creates both sides, and the row dies once.
+        CREATE TABLE transaction_pairs(
+            id TEXT PRIMARY KEY,
+            in_transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,
+            out_transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE
+        );
+        -- Cascades off the pair, not off the transaction: a transitive death
+        -- the walk has to follow or the plan under-reports authored evidence.
+        CREATE TABLE pair_attachments(
+            pair_id TEXT NOT NULL REFERENCES transaction_pairs(id) ON DELETE CASCADE,
+            filename TEXT
+        );
         INSERT INTO transaction_tags VALUES('new1','reviewed');
         INSERT INTO transaction_tags VALUES('new2','reviewed');
         INSERT INTO loose_notes VALUES('new1','keep me');
+        INSERT INTO transaction_pairs VALUES('pair1','new1','new2');
+        INSERT INTO pair_attachments VALUES('pair1','receipt.pdf');
         """
     )
     profile = {"id": "p", "workspace_id": "w"}
@@ -409,6 +473,11 @@ def demo() -> None:
     assert plan["also_removed"].get("transaction_tags") == 2, plan
     # ...while a SET NULL reference is not "removed" and must not be listed.
     assert "loose_notes" not in plan["also_removed"], plan
+    # A row naming two of the run's transactions dies once, so it counts once.
+    assert plan["also_removed"].get("transaction_pairs") == 1, plan
+    # ...and what dies with *that* row is disclosed too, or the plan claims less
+    # than the rollback destroys.
+    assert plan["also_removed"].get("pair_attachments") == 1, plan
 
     invalidated = []
     result = rollback_batch(

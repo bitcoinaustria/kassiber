@@ -3146,7 +3146,10 @@ _BYO_TYPE = {
 _BYO_DIRECTION = {_normalized_column_key(n) for n in ("Direction", "In/Out", "Flow", "Richtung")}
 _BYO_RECEIVED = {_normalized_column_key(n) for n in ("Received Amount", "Received", "Received BTC", "Buy Amount", "Incoming", "Amount Received", "Deposit Amount", "Credit", "Eingang", "Erhalten")}
 _BYO_SENT = {_normalized_column_key(n) for n in ("Sent Amount", "Sent", "Sent BTC", "Sell Amount", "Outgoing", "Amount Sent", "Withdrawal Amount", "Debit", "Ausgang", "Gesendet")}
-_BYO_AMOUNT = {_normalized_column_key(n) for n in ("Amount", "BTC", "Amount BTC", "BTC Amount", "Quantity", "Qty", "Net Amount", "Betrag", "Menge")}
+# A sats-denominated column belongs here even though "Amount" would not match
+# it: the header states the unit (`_byo_asset_from_header` reads SATS off it), so
+# recognizing it is what keeps 100000 from importing as 100,000 BTC.
+_BYO_AMOUNT = {_normalized_column_key(n) for n in ("Amount", "BTC", "Amount BTC", "BTC Amount", "SATS", "Sats Amount", "Amount Sats", "Quantity", "Qty", "Net Amount", "Betrag", "Menge")}
 _BYO_RECEIVED_ASSET = {_normalized_column_key(n) for n in ("Received Asset", "Received Currency", "Buy Asset", "Buy Currency", "Incoming Asset", "Credit Asset")}
 _BYO_SENT_ASSET = {_normalized_column_key(n) for n in ("Sent Asset", "Sent Currency", "Sell Asset", "Sell Currency", "Outgoing Asset", "Debit Asset")}
 _BYO_FEE_ASSET = {_normalized_column_key(n) for n in ("Fee Asset", "Fee Currency", "Fee Cur.", "Fee Coin")}
@@ -3811,6 +3814,34 @@ def _generic_ledger_preview_row(record):
     }
 
 
+def _header_row_is_preamble(rows, header_row):
+    """Whether the first non-empty row is a preamble line rather than a header.
+
+    A bank-style export opens with "Kontoinhaber,Max Mustermann" or a date range
+    before the real header. That row is *data*, and the importer would take it as
+    the header, so callers need to know: the columns cannot be mapped, and the
+    row must not be disclosed to an off-device model as if it were column names
+    (its cells are a person's name and an account number).
+
+    The signal is shape, not content: a real header names every column, so it is
+    never narrower than the rows beneath it. Compared against the most common
+    data width so one ragged or trailing row does not decide it.
+    """
+    if header_row is None:
+        return False
+    def width(row):
+        return sum(1 for cell in row if str_or_none(cell))
+    widths = {}
+    for raw in rows[rows.index(header_row) + 1 :]:
+        size = width(raw)
+        if size:
+            widths[size] = widths.get(size, 0) + 1
+    if not widths:
+        return False
+    common = max(widths.items(), key=lambda item: (item[1], item[0]))[0]
+    return width(header_row) < common
+
+
 def preview_generic_ledger_records(file_path, *, limit=200, column_map=None):
     """Report what a generic-ledger file would import, without persisting.
 
@@ -3829,6 +3860,7 @@ def preview_generic_ledger_records(file_path, *, limit=200, column_map=None):
     header_row = next((row for row in rows if any(str_or_none(cell) for cell in row)), None)
     detected = None
     native = column_map is None and header_row is not None and _is_native_ledger(header_row)
+    header_is_preamble = _header_row_is_preamble(rows, header_row)
     if not native:
         header = [str(cell).strip() if cell is not None else "" for cell in (header_row or [])]
         if column_map is not None:
@@ -3845,6 +3877,7 @@ def preview_generic_ledger_records(file_path, *, limit=200, column_map=None):
                 "confident": False,
                 "detected": detected,
                 "headers": header,
+                "header_is_preamble": header_is_preamble,
                 "template": False,
                 "rows_read": len(data_rows),
                 "mapped": 0,
@@ -3867,6 +3900,15 @@ def preview_generic_ledger_records(file_path, *, limit=200, column_map=None):
         "headers": [
             str(cell).strip() if cell is not None else "" for cell in (header_row or [])
         ],
+        # A preamble line was taken as the header, so these "column names" are
+        # somebody's name and account number, not columns.
+        "header_is_preamble": header_is_preamble,
+        # The largest magnitude that would import, so a caller can sanity-check
+        # the units of a file that never says what its amounts are denominated
+        # in. A count/extreme like `errors` or `rows_read`, not a cell value.
+        "amount_max": (
+            format(max((abs(record["amount"]) for record in normalized if record.get("amount") is not None), default=0), "f")
+        ),
         "template": native,
         "rows_read": len(records),
         "mapped": len(normalized),

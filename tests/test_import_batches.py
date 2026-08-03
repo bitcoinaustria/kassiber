@@ -193,6 +193,15 @@ class RollbackScaleTests(unittest.TestCase):
                 transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
                 tag TEXT
             );
+            CREATE TABLE transaction_pairs(
+                id TEXT PRIMARY KEY,
+                in_transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE,
+                out_transaction_id TEXT REFERENCES transactions(id) ON DELETE CASCADE
+            );
+            CREATE TABLE pair_attachments(
+                pair_id TEXT NOT NULL REFERENCES transaction_pairs(id) ON DELETE CASCADE,
+                filename TEXT
+            );
             INSERT INTO workspaces VALUES('w');
             INSERT INTO profiles VALUES('p');
             """
@@ -200,6 +209,15 @@ class RollbackScaleTests(unittest.TestCase):
         ids = [f"tx-{index}" for index in range(row_count)]
         conn.executemany("INSERT INTO transactions VALUES(?, 'p')", [(i,) for i in ids])
         conn.executemany("INSERT INTO transaction_tags VALUES(?, 'reviewed')", [(i,) for i in ids])
+        # One pair row per two transactions, both sides created by this run.
+        conn.executemany(
+            "INSERT INTO transaction_pairs VALUES(?, ?, ?)",
+            [(f"pair-{n}", ids[n], ids[n + 1]) for n in range(0, len(ids) - 1, 2)],
+        )
+        conn.executemany(
+            "INSERT INTO pair_attachments VALUES(?, 'receipt.pdf')",
+            [(f"pair-{n}",) for n in range(0, len(ids) - 1, 2)],
+        )
         profile = {"id": "p", "workspace_id": "w"}
         batch_id = import_batches.record_batch(
             conn,
@@ -216,10 +234,11 @@ class RollbackScaleTests(unittest.TestCase):
         hasattr(sqlite3.Connection, "setlimit"), "needs Python 3.11 setlimit"
     )
     def test_a_run_larger_than_sqlites_parameter_limit_still_rolls_back(self):
-        # A years-long export exceeds SQLITE_MAX_VARIABLE_NUMBER, so a single
-        # `IN (...)` over every id raises "too many SQL variables" and the user
-        # cannot undo the very import they most want to undo. The real limit is
-        # 32766; lowering it keeps the test fast without changing what it proves.
+        # A years-long export exceeds SQLITE_MAX_VARIABLE_NUMBER, so binding one
+        # parameter per id raises "too many SQL variables" and the user cannot
+        # undo the very import they most want to undo. The ids are staged in a
+        # temp table instead. The real limit is 32766; lowering it keeps the test
+        # fast without changing what it proves.
         conn, profile, batch_id = self.build(1200)
         conn.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 600)
 
@@ -236,10 +255,21 @@ class RollbackScaleTests(unittest.TestCase):
     def test_the_runs_own_link_rows_are_not_reported_as_collateral(self):
         # "Also removed: 1200 import_batch_transactions" is bookkeeping for the
         # thing being deleted, not user work the user should weigh.
-        conn, _, batch_id = self.build(3)
+        conn, _, batch_id = self.build(4)
         plan = import_batches.plan_rollback(conn, "p", batch_id)
         self.assertNotIn("import_batch_transactions", plan["also_removed"])
-        self.assertEqual(plan["also_removed"], {"transaction_tags": 3})
+
+    def test_collateral_counts_rows_once_and_follows_transitive_cascades(self):
+        # Two failures in one count. A pair row names two transactions and a run
+        # usually creates both sides, so counting per foreign key reported it
+        # twice; and a row that dies with the *pair* rather than with the
+        # transaction was not counted at all, under-reporting authored evidence
+        # the rollback destroys — which is the one thing the plan exists to say.
+        conn, _, batch_id = self.build(4)
+        plan = import_batches.plan_rollback(conn, "p", batch_id)
+        self.assertEqual(plan["also_removed"]["transaction_tags"], 4)
+        self.assertEqual(plan["also_removed"]["transaction_pairs"], 2)
+        self.assertEqual(plan["also_removed"]["pair_attachments"], 2)
 
 
 if __name__ == "__main__":

@@ -280,6 +280,22 @@ amounts are all positive imports every row — sales included — as an inbound
 the file's own Type column (with `type_map` for its vocabulary) unless the export
 really is transfers only.
 
+**Check the units.** An amount column whose header does not name an asset
+(`Amount`, `Menge`) is read as BTC. When the file states nothing *and* the
+amounts are too large to be BTC, `analyze-file` reports
+`amount_units_unconfirmed: true` with `next_step.action = confirm_amount_units`
+rather than importing a satoshi column 1e8 too high. Headers that do name the
+unit (`BTC Amount`, `Sats Amount`, `L-BTC Amount`) are believed and converted;
+otherwise map an asset column or pass `amount_header_asset`.
+
+**A file that opens with a preamble cannot be mapped.** Kassiber takes the first
+non-empty row as the header, so a bank-style export whose first line is the
+account holder or a date range has its columns misread. `analyze-file` detects
+this structurally (the row is narrower than the rows below it), reports
+`header_is_preamble: true` with `next_step.action = strip_preamble`, and withholds
+that row from an off-device model — its cells are a person's name and an account
+number, not column names. Delete the lines above the real header and re-run.
+
 ### Mapping the columns yourself (`--column-map`)
 
 When auto-detection can't recognize a file — an exchange with no predefined

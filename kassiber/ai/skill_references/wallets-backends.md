@@ -349,6 +349,13 @@ recognized and every row would import as a plain transfer picked by the amount's
 sign — a sale would book as a deposit with nothing rejected. Map the file's own
 Type column, or confirm with the user that the export really is transfers only.
 
+When `amount_units_unconfirmed` is true, nothing in the file says what the
+amounts are denominated in and they are too large to be BTC — almost certainly
+satoshis. Ask the user which rail it is; never assume. When `header_is_preamble`
+is true the first row is an account-holder/date-range line rather than column
+names, so no mapping can work: ask the user to delete the lines above the real
+header and re-export.
+
 In chat, the equivalent is the `ui.wallets.analyze_file` tool over the file the
 user attached — same loop, same `column_map`, with one difference that matters:
 **you propose the plan, the user runs the import.** There is no import tool in

@@ -192,6 +192,10 @@ export function AssistantSessionProvider({
         .map((message) => ({ role: message.role, content: message.content }));
       setQueuedPrompts([]);
       setIncognito(false);
+      // The grant belongs to the conversation that asked for it. Loading a
+      // different saved chat must not carry the previous chat's file into it —
+      // the next turn would analyze a file this conversation never mentioned.
+      setAttachment(null);
       // Drop any half-typed draft before binding the resumed (persisted)
       // session — otherwise text typed while Incognito would ride into the
       // loaded chat and be stored on the next submit.

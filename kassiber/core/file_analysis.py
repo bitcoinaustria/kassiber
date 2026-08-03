@@ -25,6 +25,7 @@ Two hard rules shape the payload:
 import csv
 import os
 import re
+from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping, Sequence
 
 from .. import importers as importers_module
@@ -176,6 +177,17 @@ def analyze_file(
     kinds_from_sign = not native and not (
         effective_plan.get("type") or effective_plan.get("direction")
     )
+    # Nothing in the file says what the amount column is denominated in, so the
+    # importer falls back to BTC — and a column of "100000" becomes 100,000 BTC
+    # rather than 0.001, a 1e8 error with no rejected row. Most silent files are
+    # fine ("0.5" is BTC-shaped), so this only escalates when the magnitudes
+    # cannot plausibly be BTC. What crosses to an off-device model is one derived
+    # bit, like the `errors` / `problem_rows` counts already reported.
+    units_unconfirmed = (
+        not native
+        and not any(effective_plan.get(field) for field in _ASSET_STATING_FIELDS)
+        and _implausible_as_btc(preview.get("amount_max"))
+    )
     return {
         "source": source,
         "route": "generic_ledger",
@@ -196,13 +208,41 @@ def analyze_file(
         "preview": preview.get("preview", []),
         "truncated": bool(preview.get("truncated")),
         "row_kinds_from_amount_sign": kinds_from_sign,
+        "amount_units_unconfirmed": units_unconfirmed,
+        "header_is_preamble": bool(preview.get("header_is_preamble")),
         "next_step": _next_step(
             native=native,
             confident=confident,
             preview=preview,
             kinds_from_sign=kinds_from_sign,
+            units_unconfirmed=units_unconfirmed,
         ),
     }
+
+
+# Any one of these means the file itself states the asset for a numeric column,
+# either as a column of asset codes or in the column's own header.
+_ASSET_STATING_FIELDS = (
+    "asset",
+    "received_asset",
+    "sent_asset",
+    "amount_header_asset",
+    "received_header_asset",
+    "sent_header_asset",
+)
+
+
+# A single BTC row above this is possible but rare; a column of integers this
+# large is far more likely to be satoshis. Deliberately a magnitude test, not a
+# unit guess: Kassiber asks rather than converting anything.
+_IMPLAUSIBLE_BTC_AMOUNT = Decimal(1000)
+
+
+def _implausible_as_btc(amount_max: Any) -> bool:
+    try:
+        return Decimal(str(amount_max)) >= _IMPLAUSIBLE_BTC_AMOUNT
+    except (InvalidOperation, TypeError, ValueError):
+        return False
 
 
 def _next_step(
@@ -211,7 +251,19 @@ def _next_step(
     confident: bool,
     preview: Mapping[str, Any],
     kinds_from_sign: bool = False,
+    units_unconfirmed: bool = False,
 ) -> dict[str, str]:
+    if preview.get("header_is_preamble"):
+        return {
+            "action": "strip_preamble",
+            "reason": (
+                "The first row of this file is a preamble (account holder, IBAN, "
+                "date range), not a header — it is narrower than the rows below "
+                "it. Kassiber read it as the column names, so no mapping can "
+                "work. Delete the lines above the real header row, or re-export "
+                "without them."
+            ),
+        }
     if not confident:
         return {
             "action": "supply_column_map",
@@ -225,6 +277,17 @@ def _next_step(
         return {
             "action": "fix_rows",
             "reason": "The columns were recognized but no row could be normalized.",
+        }
+    if units_unconfirmed:
+        return {
+            "action": "confirm_amount_units",
+            "reason": (
+                "Nothing in this file says what the amounts are denominated in, "
+                "and they are too large to be BTC — this export is probably in "
+                "satoshis. Importing as-is would be off by 1e8 with nothing "
+                "rejected. Ask the user which rail it is, then map an asset "
+                "column or pass amount_header_asset with --column-map."
+            ),
         }
     if kinds_from_sign:
         return {
@@ -296,7 +359,9 @@ def _header_is_safe_to_disclose(value: str) -> bool:
     )
 
 
-def redact_headers_for_egress(headers: Sequence[str]) -> list[str]:
+def redact_headers_for_egress(
+    headers: Sequence[str], *, is_preamble: bool = False
+) -> list[str]:
     """Disclose a header row only if it is actually a header row.
 
     Judged for the row as a whole, not cell by cell. A genuine header contains no
@@ -304,9 +369,14 @@ def redact_headers_for_egress(headers: Sequence[str]) -> list[str]:
     data row — and then its *text* cells are data too. Withholding them
     individually would still leak a counterparty name, which is indistinguishable
     from a column name in isolation.
+
+    Content alone cannot catch an all-text preamble: "Account holder,Max
+    Mustermann" is two plausible column names and one real person. `is_preamble`
+    carries the structural verdict (the row is narrower than the rows below it),
+    which is the only thing that separates those two cases.
     """
     cells = [str(header) for header in headers]
-    if all(_header_is_safe_to_disclose(cell) for cell in cells):
+    if not is_preamble and all(_header_is_safe_to_disclose(cell) for cell in cells):
         return cells
     return [WITHHELD_HEADER if cell.strip() else cell for cell in cells]
 
@@ -332,10 +402,11 @@ def redact_for_egress(analysis: Mapping[str, Any]) -> dict[str, Any]:
         }
         filename = str(source.get("filename") or "")
         safe["source"]["extension"] = os.path.splitext(filename)[1].lower() or None
+    is_preamble = bool(analysis.get("header_is_preamble"))
     if isinstance(safe.get("headers"), Sequence) and not isinstance(
         safe.get("headers"), str
     ):
-        headers = redact_headers_for_egress(safe["headers"])
+        headers = redact_headers_for_egress(safe["headers"], is_preamble=is_preamble)
         safe["headers"] = headers
         # A file whose "header" row was withheld has no usable header at all, so
         # say so rather than letting the model treat [withheld] as a column name.
@@ -348,7 +419,7 @@ def redact_for_egress(analysis: Mapping[str, Any]) -> dict[str, Any]:
                 field: (
                     value
                     if not isinstance(value, str)
-                    or _header_is_safe_to_disclose(value)
+                    or (not is_preamble and _header_is_safe_to_disclose(value))
                     else WITHHELD_HEADER
                 )
                 for field, value in plan.items()
@@ -360,7 +431,8 @@ def redact_for_egress(analysis: Mapping[str, Any]) -> dict[str, Any]:
                 **entry,
                 "column": (
                     entry.get("column")
-                    if _header_is_safe_to_disclose(str(entry.get("column") or ""))
+                    if not is_preamble
+                    and _header_is_safe_to_disclose(str(entry.get("column") or ""))
                     else WITHHELD_HEADER
                 ),
             }

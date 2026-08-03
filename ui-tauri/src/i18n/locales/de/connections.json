@@ -317,7 +317,8 @@
       "confirmBody_other": "Das löscht die {{count}} Transaktionen, die {{file}} erstellt hat. Zeilen, die nur ergänzt wurden, bleiben erhalten — und die Verbindung selbst auch.",
       "alsoRemoved": "Ebenfalls gelöscht: {{items}}.",
       "cancel": "Abbrechen",
-      "confirmAction": "Transaktionen löschen"
+      "confirmAction": "Transaktionen löschen",
+      "loadingPlan": "Wird geprüft …"
     }
   },
   "node": {

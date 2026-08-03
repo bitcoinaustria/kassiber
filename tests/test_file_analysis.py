@@ -330,6 +330,34 @@ class AnalyzeFileTests(unittest.TestCase):
         self.assertEqual(analysis["mapped"], 0)
         self.assertIn("direction", analysis["problems"][0]["message"])
 
+    def test_amounts_too_large_to_be_btc_are_not_imported_as_btc(self):
+        # Nothing in this file says what "Amount" holds, so the importer falls
+        # back to BTC and 100000 becomes 100,000 BTC instead of 0.001 — a 1e8
+        # error with no rejected row, since every value is individually valid.
+        csv_text = "Date,Type,Amount\n2024-01-01T10:00:00Z,Buy,100000\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            analysis = file_analysis.analyze_file(_write(tmp, "sats.csv", csv_text))
+        self.assertTrue(analysis["amount_units_unconfirmed"])
+        self.assertEqual(analysis["next_step"]["action"], "confirm_amount_units")
+
+    def test_btc_shaped_amounts_do_not_ask_about_units(self):
+        # The signal has to stay quiet on the normal case, or it is ignored:
+        # a silent header with fractional amounts is unambiguously BTC-shaped.
+        csv_text = "Date,Type,Amount\n2024-01-01T10:00:00Z,Buy,0.5\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            analysis = file_analysis.analyze_file(_write(tmp, "btc.csv", csv_text))
+        self.assertFalse(analysis["amount_units_unconfirmed"])
+        self.assertEqual(analysis["next_step"]["action"], "import")
+
+    def test_a_column_that_states_its_asset_is_believed(self):
+        csv_text = "Date,Type,SATS Amount\n2024-01-01T10:00:00Z,Buy,100000\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            analysis = file_analysis.analyze_file(_write(tmp, "sats.csv", csv_text))
+        self.assertFalse(analysis["amount_units_unconfirmed"])
+        self.assertEqual(analysis["preview"][0]["asset"], "BTC")
+        # 100000 sats, not 100000 BTC.
+        self.assertEqual(analysis["preview"][0]["amount"], "0.001")
+
     def test_photos_and_pdfs_route_to_the_on_device_document_importer(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "statement.pdf"
@@ -420,6 +448,22 @@ class HeaderEgressTests(unittest.TestCase):
         for leaked in ("Mustermann", "AT611904300234573201", "01.01.2024"):
             self.assertNotIn(leaked, flattened)
         self.assertEqual(redacted["headers_withheld"], 1)
+
+    def test_an_all_text_preamble_is_withheld_too(self):
+        # Regression: the content heuristic only fires on a cell that *looks
+        # like* a value, so "Account holder,Max Mustermann" read as two
+        # plausible column names and a real person's name was sent off-device.
+        # Nothing in the text separates it from a header — the shape does: a
+        # header names every column, so it is never narrower than its rows.
+        redacted = self._redacted_headers(
+            "Account holder,Max Mustermann\n"
+            "Date,Type,Amount,Currency\n"
+            "2024-03-01,Buy,0.5,EUR\n"
+        )
+        self.assertNotIn("Mustermann", repr(redacted))
+        self.assertEqual(redacted["headers_withheld"], 2)
+        # ...and the user is told why the file cannot be mapped as it stands.
+        self.assertEqual(redacted["next_step"]["action"], "strip_preamble")
 
     def test_a_headerless_export_discloses_no_cell(self):
         redacted = self._redacted_headers(
@@ -585,6 +629,38 @@ class ProviderLocalityTests(unittest.TestCase):
             _provider_is_on_device(
                 {"kind": "anthropic", "base_url": "http://localhost:11434/v1"}
             )
+        )
+
+
+class AttachmentTurnNoteTests(unittest.TestCase):
+    """The note announcing the attachment is prompt text, so it is egress too."""
+
+    def _note(self, *, on_device):
+        from kassiber.daemon import _attachment_context_for_model
+
+        return _attachment_context_for_model(
+            {
+                "attachment_filename": "Umsatzliste_Max.Mustermann_AT61.csv",
+                "attachment_label": "2024 export",
+                "provider_on_device": on_device,
+            }
+        )
+
+    def test_a_remote_model_is_not_told_the_filename(self):
+        # Regression: `redact_for_egress` drops `filename` from the tool result
+        # because it is routinely personal — and the turn note handed the very
+        # same string to the provider on every attached turn, off-device
+        # included. The extension is the only part a column plan needs.
+        note = self._note(on_device=False)
+        self.assertNotIn("Mustermann", note)
+        self.assertNotIn("AT61", note)
+        self.assertIn(".csv", note)
+        # The user's own description is theirs to send; it stays.
+        self.assertIn("2024 export", note)
+
+    def test_an_on_device_model_may_be_told_the_filename(self):
+        self.assertIn(
+            "Umsatzliste_Max.Mustermann_AT61.csv", self._note(on_device=True)
         )
 
 
