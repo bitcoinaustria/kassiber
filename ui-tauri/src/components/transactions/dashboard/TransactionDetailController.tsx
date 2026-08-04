@@ -22,8 +22,8 @@ import {
   TransactionDetailSheet,
   TransactionEvidenceReuseDialog,
   draftForTransaction,
+  metadataUpdateArgs,
   explorerForTransaction,
-  parseManualDecimal,
   type CommercialContextData,
   type Transaction,
   type TransactionEditDraft,
@@ -305,57 +305,14 @@ export function TransactionDetailController({
       const baseline = sourceTransaction
         ? drafts[transactionId] ?? draftForTransaction(sourceTransaction)
         : null;
-      const persistedTagCodes = new Set(
-        (sourceTransaction?.tags ?? []).map((tag) => tag.toLowerCase()),
+      await metadataUpdate.mutateAsync(
+        metadataUpdateArgs({
+          transactionId,
+          draft,
+          baseline,
+          sourceTags: sourceTransaction?.tags ?? [],
+        }),
       );
-      const shouldPersistLabel =
-        draft.label &&
-        draft.label !== "Unlabeled" &&
-        (persistedTagCodes.has(draft.label.toLowerCase()) ||
-          draft.label !== baseline?.label);
-      const tags = [shouldPersistLabel ? draft.label : "", ...draft.tags].filter(
-        Boolean,
-      );
-      const pricingDirty = baseline
-        ? draft.pricingSourceKind !== baseline.pricingSourceKind ||
-          draft.pricingQuality !== baseline.pricingQuality ||
-          draft.manualCurrency !== baseline.manualCurrency ||
-          draft.manualPrice !== baseline.manualPrice ||
-          draft.manualValue !== baseline.manualValue ||
-          draft.manualSource !== baseline.manualSource
-        : false;
-      const reviewTaxDirty = baseline
-        ? draft.reviewStatus !== baseline.reviewStatus ||
-          draft.taxable !== baseline.taxable ||
-          draft.atRegime !== baseline.atRegime ||
-          draft.atCategory !== baseline.atCategory
-        : false;
-      const manualPrice = parseManualDecimal(draft.manualPrice);
-      const manualValue = parseManualDecimal(draft.manualValue);
-      await metadataUpdate.mutateAsync({
-        transaction: transactionId,
-        note: draft.note.trim() ? draft.note : null,
-        tags: Array.from(new Set(tags)),
-        excluded: draft.excluded,
-        ...(reviewTaxDirty
-          ? {
-              review_status: draft.reviewStatus,
-              taxable: draft.taxable,
-              at_regime: draft.atRegime,
-              at_category: draft.atCategory,
-            }
-          : {}),
-        ...(pricingDirty
-          ? {
-              pricing_source_kind: draft.pricingSourceKind,
-              pricing_quality: draft.pricingQuality,
-              fiat_currency: draft.manualCurrency.trim().toUpperCase(),
-              fiat_rate: manualPrice === null ? null : draft.manualPrice,
-              fiat_value: manualValue === null ? null : draft.manualValue,
-              pricing_external_ref: draft.manualSource.trim() || null,
-            }
-          : {}),
-      });
       setDrafts((current) => ({ ...current, [transactionId]: draft }));
     },
     [drafts, metadataUpdate, navList, workingTransaction],

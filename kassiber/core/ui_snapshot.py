@@ -1815,6 +1815,7 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
             t.taxability_override,
             t.at_regime_override,
             t.at_category_override,
+            t.kind_override,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
@@ -1870,6 +1871,7 @@ def _activity_transactions(
             t.taxability_override,
             t.at_regime_override,
             t.at_category_override,
+            t.kind_override,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
@@ -1957,6 +1959,63 @@ def _activity_transactions(
     ]
 
 
+# Display labels keyed on the stored kind, gated by direction so an inbound row
+# can never borrow an outbound label (or the reverse). "Income" is
+# tax-meaningful — income kinds map to RP2 earn transaction types and emit a
+# second `income` journal entry, see core/engines/rp2.py — so labeling every
+# inbound row "Income" told users a buy or a plain deposit was declarable
+# earnings. Kinds are the ones importers write (`_GENERIC_LEDGER_TYPES` in
+# importers.py). These stay English: the daemon speaks display-stable labels and
+# the UI maps them to translated copy (docs/reference/i18n.md).
+_INBOUND_KIND_LABELS = {
+    "buy": "Buy",
+    "deposit": "Deposit",
+    "income": "Income",
+    "routing_income": "Income",
+    "wages": "Wages",
+    "mining": "Mining",
+    "mining_reward": "Mining",
+    "staking": "Staking",
+    "interest": "Interest",
+    "lending_interest": "Interest",
+    "airdrop": "Airdrop",
+    "hardfork": "Hard fork",
+    "hard_fork": "Hard fork",
+    # Lightning + channel lifecycle. These name the mechanism, not a tax
+    # character: an invoice receipt may be revenue or a plain acquisition, and
+    # the engine books it BUY until something says otherwise.
+    "lnd_invoice": "LN invoice",
+    "cln_invoice": "LN invoice",
+    "channel_close": "Channel close",
+}
+_OUTBOUND_KIND_LABELS = {
+    "sell": "Sell",
+    "withdrawal": "Withdrawal",
+    "spend": "Spend",
+    "gift": "Gift",
+    "donation": "Donation",
+    "lost": "Lost",
+    "stolen": "Stolen",
+    "lnd_pay": "LN payment",
+    "cln_pay": "LN payment",
+    "channel_open": "Channel open",
+}
+# An inbound row with no recognized kind is an ordinary acquisition, not income:
+# rp2 books it `…get(kind, "BUY")` and the journal emits `acquisition` with no
+# `income` entry. "Acquired" states exactly that without claiming a purchase
+# that may not have happened (a received gift stores kind NULL by design).
+_UNKNOWN_INBOUND_LABEL = "Acquired"
+
+
+def _effective_transaction_kind(row: sqlite3.Row | dict[str, Any]) -> str:
+    """The kind the tax engine will act on: user classification, else provenance."""
+    keys = row.keys() if hasattr(row, "keys") else ()
+    override = row["kind_override"] if "kind_override" in keys else None
+    if override:
+        return str(override)
+    return str(row["kind"] or "") if "kind" in keys else ""
+
+
 def _transaction_type(kind: str, direction: str, quarantine_reason: str | None) -> str:
     normalized = (kind or "").lower()
     if "transfer" in normalized and direction != "inbound":
@@ -1976,8 +2035,10 @@ def _transaction_type(kind: str, direction: str, quarantine_reason: str | None) 
         ):
             return "Transfer"
     if direction == "inbound":
-        return "Income"
-    return "Expense"
+        return _INBOUND_KIND_LABELS.get(normalized, _UNKNOWN_INBOUND_LABEL)
+    # Unrecognized outbound kinds keep "Expense", which `display_tags` falls
+    # back from to the raw kind rather than asserting a disposal treatment.
+    return _OUTBOUND_KIND_LABELS.get(normalized, "Expense")
 
 
 def _transaction_row_chain_network(row: sqlite3.Row | dict[str, Any]) -> tuple[str, str]:
@@ -2263,8 +2324,10 @@ def _transaction_row_to_ui(
         fiat_value = (
             sign * abs(raw_fiat_value) if raw_fiat_value is not None else None
         )
+        # The user's classification wins over the importer's provenance kind,
+        # matching what the tax engine reads (`_normalized_event_kind`).
         type_label = _transaction_type(
-            row["kind"],
+            _effective_transaction_kind(row),
             row["direction"],
             row["quarantine_reason"],
         )
@@ -2319,6 +2382,11 @@ def _transaction_row_to_ui(
         "explorerId": _public_explorer_id(external_id),
         "date": (occurred_at or "")[:16].replace("T", " "),
         "type": type_label,
+        # `type` is a display label; these are the machine codes behind it.
+        # `kind` is the importer's provenance (read-only); `kindOverride` is the
+        # user's classification and what the Tax tab control writes.
+        "kind": row["kind"] if "kind" in row_keys else None,
+        "kindOverride": row["kind_override"] if "kind_override" in row_keys else None,
         "asset": row["asset"] if "asset" in row_keys else None,
         "chain": chain,
         "network": network,
@@ -3981,6 +4049,7 @@ def _build_transactions_page_snapshot(
             t.taxability_override,
             t.at_regime_override,
             t.at_category_override,
+            t.kind_override,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,
@@ -4400,7 +4469,7 @@ def build_transactions_dashboard_snapshot(
                t.pricing_provider, t.pricing_pair, t.pricing_timestamp,
                t.pricing_fetched_at, t.pricing_granularity, t.pricing_method,
                t.review_status, t.taxability_override, t.at_regime_override,
-               t.at_category_override, COALESCE(t.kind, '') AS kind,
+               t.at_category_override, t.kind_override, COALESCE(t.kind, '') AS kind,
                COALESCE(t.description, '') AS description,
                COALESCE(t.counterparty, '') AS counterparty,
                COALESCE(t.note, '') AS note, t.excluded,
@@ -4706,6 +4775,7 @@ def build_transactions_resolve_snapshot(
             t.taxability_override,
             t.at_regime_override,
             t.at_category_override,
+            t.kind_override,
             COALESCE(t.kind, '') AS kind,
             COALESCE(t.description, '') AS description,
             COALESCE(t.counterparty, '') AS counterparty,

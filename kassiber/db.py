@@ -341,6 +341,11 @@ CREATE TABLE IF NOT EXISTS transactions (
     taxability_override INTEGER,
     at_regime_override TEXT,
     at_category_override TEXT,
+    -- User-assigned tax classification. Kept separate from `kind` so the
+    -- importer's provenance survives: `kind` records what the source said
+    -- (and gates trust checks like the Lightning payment-hash pairing in
+    -- transfers.py), while this records what the user declares it to be.
+    kind_override TEXT,
     privacy_boundary TEXT,
     kind TEXT,
     description TEXT,
@@ -4595,6 +4600,7 @@ def ensure_schema_compat(conn):
     # Added after the msat rebuild, whose fixed column list would otherwise drop
     # it on a legacy REAL-typed database.
     ensure_column(conn, "transactions", "amount_includes_fee", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "transactions", "kind_override", "TEXT")
     ensure_column(
         conn,
         "transactions",

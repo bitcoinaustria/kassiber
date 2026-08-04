@@ -327,6 +327,10 @@ def _transaction_summary(row: Mapping[str, Any], tags: Sequence[str] | None = No
         "pricing_provider": row["pricing_provider"] or "",
         "pricing_quality": row["pricing_quality"] or "",
         "kind": row["kind"] or "",
+        # What the user declared the row to be, where `kind` is what the source
+        # said. The engine acts on the override, so an auditor reconciling the
+        # numbers needs it alongside the provenance rather than instead of it.
+        "kind_override": row["kind_override"] or "",
         "description": row["description"] or "",
         "counterparty": row["counterparty"] or "",
         "note": row["note"] or "",

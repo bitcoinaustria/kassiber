@@ -83,6 +83,8 @@ export type Transaction = {
   wallet?: string;
   tag?: string;
   sourceType?: Tx["type"];
+  kind?: string | null;
+  kindOverride?: string | null;
   paymentMethod: "On-chain" | "Exchange" | "Lightning" | "Liquid";
   date: string;
   status: TransactionStatus;
@@ -104,6 +106,7 @@ export type TransactionEditDraft = {
   reviewStatus: TransactionStatus;
   taxable: boolean;
   excluded: boolean;
+  kind: string | null;
 };
 
 export type PricingSourceKind =
@@ -675,6 +678,10 @@ export function draftForTransaction(txn: Transaction): TransactionEditDraft {
     reviewStatus: txn.reviewStatus ?? txn.status,
     taxable: txn.taxable ?? defaultTaxClassification.taxable,
     excluded: Boolean(txn.excluded),
+    // The override, not the importer's provenance kind: clearing must restore
+    // what the source recorded rather than blank it. Never defaulted, or saving
+    // an unrelated field would declare a tax character the book never recorded.
+    kind: txn.kindOverride ?? null,
   };
 }
 
@@ -687,6 +694,81 @@ export function splitDraftTags(tags: string) {
 
 export function uniqueTags(tags: string[]) {
   return Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean)));
+}
+
+/** Arguments for `ui.transactions.metadata.update` from an edited draft.
+ *
+ * Every surface that hosts the detail sheet (transactions table + its detail
+ * controller, the overview sheet, the quarantine queue) sends the same payload,
+ * so it is built once here: four hand-kept copies drifted, and the copy that
+ * missed a field failed silently — the save succeeded, the field never left the
+ * browser, and the local draft still displayed it.
+ *
+ * Fields the daemon treats as tax-relevant travel only when the user actually
+ * changed them, never as a side effect of saving a note or a price.
+ */
+export function metadataUpdateArgs({
+  transactionId,
+  draft,
+  baseline,
+  sourceTags,
+}: {
+  transactionId: string;
+  draft: TransactionEditDraft;
+  baseline: TransactionEditDraft | null;
+  sourceTags: string[];
+}) {
+  const persistedTagCodes = new Set(sourceTags.map((tag) => tag.toLowerCase()));
+  const shouldPersistLabel =
+    draft.label &&
+    draft.label !== "Unlabeled" &&
+    (persistedTagCodes.has(draft.label.toLowerCase()) ||
+      draft.label !== baseline?.label);
+  const tags = [shouldPersistLabel ? draft.label : "", ...draft.tags].filter(
+    Boolean,
+  );
+  const pricingDirty = baseline
+    ? draft.pricingSourceKind !== baseline.pricingSourceKind ||
+      draft.pricingQuality !== baseline.pricingQuality ||
+      draft.manualCurrency !== baseline.manualCurrency ||
+      draft.manualPrice !== baseline.manualPrice ||
+      draft.manualValue !== baseline.manualValue ||
+      draft.manualSource !== baseline.manualSource
+    : false;
+  const reviewTaxDirty = baseline
+    ? draft.reviewStatus !== baseline.reviewStatus ||
+      draft.taxable !== baseline.taxable ||
+      draft.atRegime !== baseline.atRegime ||
+      draft.atCategory !== baseline.atCategory
+    : false;
+  const kindDirty = baseline ? draft.kind !== baseline.kind : false;
+  const manualPrice = parseManualDecimal(draft.manualPrice);
+  const manualValue = parseManualDecimal(draft.manualValue);
+  return {
+    transaction: transactionId,
+    note: draft.note.trim() ? draft.note : null,
+    tags: Array.from(new Set(tags)),
+    excluded: draft.excluded,
+    ...(reviewTaxDirty
+      ? {
+          review_status: draft.reviewStatus,
+          taxable: draft.taxable,
+          at_regime: draft.atRegime,
+          at_category: draft.atCategory,
+        }
+      : {}),
+    ...(kindDirty ? { kind: draft.kind } : {}),
+    ...(pricingDirty
+      ? {
+          pricing_source_kind: draft.pricingSourceKind,
+          pricing_quality: draft.pricingQuality,
+          fiat_currency: draft.manualCurrency.trim().toUpperCase(),
+          fiat_rate: manualPrice === null ? null : draft.manualPrice,
+          fiat_value: manualValue === null ? null : draft.manualValue,
+          pricing_external_ref: draft.manualSource.trim() || null,
+        }
+      : {}),
+  };
 }
 
 export function pricingSelectionValue(
@@ -878,7 +960,10 @@ export function createNewTransactionDraft(): NewTransactionDraft {
     pricePerBtc: "",
     totalValue: "",
     movementId: "",
-    label: "Income",
+    // Derived, not literal: the dialog opens on `incoming` and only calls
+    // `nextLabelForFlow` when the user *changes* the flow, so a literal here
+    // silently outlives any fix to that function.
+    label: nextLabelForFlow("incoming"),
     atRegime: "neu",
     atCategory: "income_general",
     tags: "",
@@ -921,7 +1006,12 @@ export function nextTaxClassificationForFlow(flow: TransactionFlow) {
 }
 
 export function nextLabelForFlow(flow: TransactionFlow) {
-  if (flow === "incoming") return "Income";
+  // Not "Income": this label persists as a tag, and a tag outranks the derived
+  // type on the chip (`display_tags` in core/ui_snapshot.py). Auto-applying it
+  // would make a manually added receipt read "Income" while the engine books a
+  // plain acquisition — the contradiction the kind-derived label exists to end.
+  // Declaring income is the Tax tab's "Recorded as", which the engine reads.
+  if (flow === "incoming") return "Unlabeled";
   if (flow === "transfer") return "Transfer";
   if (flow === "swap") return "Swap";
   if (flow === "layer-transition") return "Transfer";
