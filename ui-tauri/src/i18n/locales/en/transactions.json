@@ -934,7 +934,7 @@
       "sentence": "You {{action}} {{amount}} {{direction}} {{counterparty}} on {{date}}, {{fiat}}. {{treatment}}."
     },
     "kind": "Recorded as",
-    "kindHint": "What this transaction is for tax purposes. Income kinds declare earnings at market value; a plain acquisition only records cost basis. Unlike tags, this drives the tax report.",
+    "kindHint": "What this transaction is for tax purposes. Income kinds declare earnings at market value; a plain acquisition only records cost basis. Unlike tags, this drives the tax report. Gift, donation, lost and stolen are dispositions but not sales, so they are held for review instead of booked at market value.",
     "kindUnclassified": "Unclassified"
   },
   "classify": {

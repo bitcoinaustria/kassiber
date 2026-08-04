@@ -953,7 +953,7 @@
       "sentence": "Du hast am {{date}} {{amount}} {{direction}} {{counterparty}} {{action}}, {{fiat}}. {{treatment}}."
     },
     "kind": "Erfasst als",
-    "kindHint": "Was diese Transaktion steuerlich ist. Einkunftsarten erklären Einnahmen zum Marktwert, eine reine Anschaffung erfasst nur die Anschaffungskosten. Anders als Tags wirkt das direkt auf den Steuerbericht.",
+    "kindHint": "Was diese Transaktion steuerlich ist. Einkunftsarten erklären Einnahmen zum Marktwert, eine reine Anschaffung erfasst nur die Anschaffungskosten. Anders als Tags wirkt das direkt auf den Steuerbericht. Geschenk, Spende, Verloren und Gestohlen sind Abgänge, aber keine Verkäufe — sie werden zur Prüfung zurückgehalten statt zum Marktwert verbucht.",
     "kindUnclassified": "Nicht klassifiziert"
   },
   "classify": {

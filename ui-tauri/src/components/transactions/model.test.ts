@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createNewTransactionDraft,
   draftForTransaction,
+  metadataUpdateArgs,
   nextLabelForFlow,
   formatCounterDisplayMoney,
   formatDisplayMoney,
@@ -28,8 +30,37 @@ function txWithTags(tags: string[]): Transaction {
   };
 }
 
+describe("metadataUpdateArgs", () => {
+  const args = (
+    draft: ReturnType<typeof draftForTransaction>,
+    baseline: ReturnType<typeof draftForTransaction>,
+  ) =>
+    metadataUpdateArgs({
+      transactionId: "tx-1",
+      draft,
+      baseline,
+      sourceTags: [],
+    });
+
+  it("sends the classification only when the user changed it", () => {
+    const baseline = draftForTransaction(txWithTags([]));
+
+    expect(args({ ...baseline, note: "just a note" }, baseline)).not.toHaveProperty(
+      "kind",
+    );
+    expect(args({ ...baseline, kind: "income" }, baseline)).toMatchObject({
+      kind: "income",
+    });
+    // Clearing is a real change, not an omission.
+    expect(
+      args({ ...baseline, kind: null }, { ...baseline, kind: "income" }),
+    ).toMatchObject({ kind: null });
+  });
+});
+
 describe("nextLabelForFlow", () => {
   it("does not sticker a new receipt as Income", () => {
+    expect(createNewTransactionDraft().label).toBe("Unlabeled");
     // The label persists as a tag and a tag outranks the derived type on the
     // chip, so auto-applying "Income" reproduces the exact contradiction the
     // kind-derived label removes: chip says earnings, engine books a buy.

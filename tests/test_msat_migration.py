@@ -113,6 +113,11 @@ class MsatMigrationTests(unittest.TestCase):
             self.assertEqual(row["at_regime_override"], "new")
             self.assertEqual(row["at_category_override"], "capital")
             self.assertEqual(row["privacy_boundary"], "coinjoin")
+            # Columns added after the msat rebuild must survive the same open
+            # that performs it — the rebuild's fixed column list drops anything
+            # ensured before it, and the first session then runs against a
+            # table the UI and tax-summary queries reference.
+            self.assertIn("kind_override", row.keys())
             self.assertIsNotNone(
                 conn.execute(
                     """

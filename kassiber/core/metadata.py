@@ -799,6 +799,11 @@ def get_transaction_record(conn, workspace_ref, profile_ref, tx_ref, hooks: Meta
         "taxable": None if tx["taxability_override"] is None else bool(tx["taxability_override"]),
         "at_regime": tx["at_regime_override"],
         "at_category": tx["at_category_override"],
+        # `kind` is the importer's provenance, `kind_override` the user's
+        # classification. Both, so `records kind set` can be read back and a
+        # caller can tell a declared income from an imported one.
+        "kind": tx["kind"],
+        "kind_override": tx["kind_override"],
         "tags": _tags_for_transaction(conn, tx["id"]),
     }
 

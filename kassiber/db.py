@@ -4499,7 +4499,6 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "transactions", "taxability_override", "INTEGER")
     ensure_column(conn, "transactions", "at_regime_override", "TEXT")
     ensure_column(conn, "transactions", "at_category_override", "TEXT")
-    ensure_column(conn, "transactions", "kind_override", "TEXT")
     ensure_column(conn, "transactions", "privacy_boundary", "TEXT")
     ensure_column(conn, "transaction_edit_events", "sync_event_id", "TEXT")
     ensure_column(conn, "transaction_edit_events", "sync_replica_id", "TEXT")
@@ -4568,6 +4567,7 @@ def ensure_schema_compat(conn):
     # Added after the msat rebuild, whose fixed column list would otherwise drop
     # it on a legacy REAL-typed database.
     ensure_column(conn, "transactions", "amount_includes_fee", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(conn, "transactions", "kind_override", "TEXT")
     ensure_column(
         conn,
         "transactions",
