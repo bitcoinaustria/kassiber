@@ -43,7 +43,7 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
 - **Privacy First** — no telemetry or analytics; installed desktop and
   interactive CLI builds make a minimal GitHub release check and never
   download or install an update. Every outbound request is enumerated in
-  [SECURITY.md](SECURITY.md).
+  [Privacy & security](docs/reference/privacy-and-security.md).
 - **No remote honeypot** — there is no Kassiber server holding your
   addresses, balances, and identity. Crypto tax SaaS providers have been
   breached; the dumps become targeting lists for phishing and physical
@@ -57,7 +57,7 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   unreadable. Attachments, exports, the project catalog, and a couple of
   config files sit outside the SQLCipher boundary, so pair with full-disk
   encryption for the full picture; the caveats are in
-  [SECURITY.md](SECURITY.md). The
+  [Privacy & security](docs/reference/privacy-and-security.md). The
   [jlopp/physical-bitcoin-attacks](https://github.com/jlopp/physical-bitcoin-attacks)
   catalog covers the threats this addresses.
 - **Local AI Chat** — assistant ships with local
@@ -317,7 +317,7 @@ manual until password re-enrollment; status reports only categorical
 `binding_state`. Desktop and CLI use separate credential entries and lifecycle
 controls, so neither surface silently enrolls or revokes the other. CLI
 credential reads are not biometric-gated; see
-[SECURITY.md](SECURITY.md) for the platform trust model. Headless machines and
+[Privacy & security](docs/reference/privacy-and-security.md) for the platform trust model. Headless machines and
 automation without an unlocked credential service can continue using
 `--db-passphrase-fd` in manual mode.
 `kassiber secrets status` reports the stable `access_policy` code for the
@@ -432,11 +432,12 @@ overview.
   [Secret management](docs/plan/10-secret-management.md)
 - **Contributor** · [AGENTS.md](AGENTS.md) ·
   [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) ·
+  [Privacy & security](docs/reference/privacy-and-security.md) ·
   [TODO.md](TODO.md) · [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)
 
 ## Security & privacy
 
-Before pointing Kassiber at real wallets, read [SECURITY.md](SECURITY.md) —
+Before pointing Kassiber at real wallets, read [Privacy & security](docs/reference/privacy-and-security.md) —
 it covers built-in backend trust, the SQLCipher boundary, AI provider
 tiers, and the incomplete Tor story.
 The desktop Privacy & security panel also includes local privacy tells for
@@ -453,8 +454,8 @@ redacted AI provenance for local troubleshooting. Support bundles default to
 High-signal for trusted maintainer debugging and offer Public-safe mode for
 public posting; both modes always strip wallet and credential material such as
 descriptors, private keys, recovery phrases, API keys, passwords, and bearer
-tokens. Report security-impacting issues to the maintainer privately, not in
-the public tracker.
+tokens. Report security-impacting issues privately, not in the public tracker —
+see [SECURITY.md](SECURITY.md).
 
 For the north-star local privacy view, open Privacy Mirror or run
 `kassiber reports privacy-mirror`. It shows what is linkable, who can infer it,

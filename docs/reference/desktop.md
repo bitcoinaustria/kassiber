@@ -115,7 +115,7 @@ startup and never restores consent from its own local storage; every check
 re-reads the file before using its result, so a revocation made from the CLI
 while the desktop is running still suppresses the result and turns the toggle
 off. Consent writes are atomic and take effect immediately. See
-[../../SECURITY.md](../../SECURITY.md) for the outbound-request disclosure.
+[Privacy & security](privacy-and-security.md) for the outbound-request disclosure.
 The update announcement remains unsigned and relies on HTTPS plus control of
 the Kassiber GitHub repository. Release builds include a versioned SHA-256
 manifest; future signed releases will attach its OpenPGP signature after the

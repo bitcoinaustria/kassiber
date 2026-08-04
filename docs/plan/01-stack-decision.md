@@ -38,7 +38,7 @@ Adopt the following stack:
   announcement. Builds carry a versioned SHA-256 manifest; the Sparrow-style
   OpenPGP signature becomes authoritative only after the permanent release key
   and fingerprint are published. The complete disclosure lives in
-  [SECURITY.md](../../SECURITY.md).
+  [Privacy & security](../reference/privacy-and-security.md).
 
 Rust scope stays small: process supervision, stdin/stdout framing, OS path
 resolution, and Tauri command bindings. **No** tax, accounting, or storage
@@ -141,7 +141,7 @@ before the first public release.
 ## References
 
 - [04-desktop-ui.md](04-desktop-ui.md) — implementation plan
-- [SECURITY.md](../../SECURITY.md) — local-first / network policy / secrets
+- [Privacy & security](../reference/privacy-and-security.md) — local-first / network policy / secrets
 - Tauri 2: https://v2.tauri.app/
 - Tauri capabilities: https://v2.tauri.app/security/capabilities/
 - python-build-standalone: https://github.com/astral-sh/python-build-standalone

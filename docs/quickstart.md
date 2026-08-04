@@ -76,7 +76,7 @@ To encrypt the local SQLite database at rest:
 python3 -m kassiber secrets init
 ```
 
-See [SECURITY.md](../SECURITY.md) for the SQLCipher boundary and recovery
+See [Privacy & security](reference/privacy-and-security.md) for the SQLCipher boundary and recovery
 caveats. To produce a single-file portable backup:
 
 ```bash
@@ -96,7 +96,7 @@ python3 -m kassiber wallets sync --wallet donations
 Descriptor, BSMS, and xpub wallets work the same way — `wallets kinds` lists
 the supported kinds. See [reference/backends.md](reference/backends.md) for
 configuring sync backends (the built-in defaults are listed in
-[SECURITY.md](../SECURITY.md#the-big-gotcha-not-running-your-own-node)).
+[Privacy & security](reference/privacy-and-security.md#the-big-gotcha-not-running-your-own-node)).
 
 For CSV / JSON imports (BTCPay, Phoenix, River, Bull Bitcoin, Coinfinity,
 21bitcoin, Pocket Bitcoin, generic), see

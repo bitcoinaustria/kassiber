@@ -131,7 +131,7 @@ If behavior changes, check whether these also need updates:
 - `kassiber/ai/skill_references/` and the external CLI Agent Skill at
   `bitcoinaustria/kassiber-skill`
 - `docs/reference/i18n.md` + `docs/reference/i18n-glossary.md` when UI strings or German terminology change
-- `SECURITY.md` when privacy or external I/O changes
+- `docs/reference/privacy-and-security.md` when privacy or external I/O changes
 
 ## Testing philosophy
 

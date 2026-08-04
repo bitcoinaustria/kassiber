@@ -1002,4 +1002,4 @@ These are directionally in scope, but should remain optional and review-gated:
 - [`../../ui-tauri/provider-broker/`](../../ui-tauri/provider-broker/)
 - [`../../kassiber/ai/contracts.py`](../../kassiber/ai/contracts.py)
 - [`../plan/08-external-document-reconciliation.md`](../plan/08-external-document-reconciliation.md)
-- [`../../SECURITY.md`](../../SECURITY.md)
+- [Privacy & security](privacy-and-security.md)

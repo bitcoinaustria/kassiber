@@ -526,4 +526,4 @@ For Liquid:
   (URLs and other addressing fields stay in the dotenv)
 - `backends get` / `list` are safe-to-record only for secret-bearing config values; other metadata may still be sensitive
 
-See [SECURITY.md](../../SECURITY.md) for the current privacy model and outbound request inventory.
+See [Privacy & security](privacy-and-security.md) for the current privacy model and outbound request inventory.

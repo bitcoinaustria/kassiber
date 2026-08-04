@@ -33,7 +33,7 @@ aspirations.
   makes zero outbound HTTP. Accounting/network requests go through Rust →
   Python daemon → existing sync code paths. The sole shell-owned exception is
   the preference-controlled, fixed-origin GitHub release notifier documented
-  completely in [SECURITY.md](../../SECURITY.md).
+  completely in [Privacy & security](../reference/privacy-and-security.md).
 - **No telemetry-style polling.** No `analytics`, `crashlytics`, error reporter,
   license check, or identifying `phone-home` in any layer. The release notifier
   sends only the exact app version in its User-Agent plus ordinary IP/timing
@@ -107,7 +107,7 @@ do not block the main thread. The conventions that follow from this:
 ### Secrets stay out of stdout
 
 Today secrets enter via CLI args (warned in
-[SECURITY.md](../../SECURITY.md) as a shell-history risk). The daemon model
+[Privacy & security](../reference/privacy-and-security.md) as a shell-history risk). The daemon model
 shifts the risk surface:
 
 - **Daemon does not log raw request args** — only `kind`, `request_id`,
@@ -702,7 +702,7 @@ column stores the ref ID, not the raw value.
 ### 5.4 Update model
 
 Per [01-stack-decision.md](01-stack-decision.md) and
-[SECURITY.md](../../SECURITY.md): **release notification is not auto-update.**
+[Privacy & security](../reference/privacy-and-security.md): **release notification is not auto-update.**
 
 - The Rust shell may query a fixed GitHub releases endpoint ten seconds after
   launch and daily while open only after setup persists the shared update-check
@@ -795,8 +795,8 @@ when:
 | 1 | New `docs/reference/daemon.md`, [README.md](../../README.md) architecture paragraph, [AGENTS.md](../../AGENTS.md) "Current architecture", `TODO.md` |
 | 2 | [docs/reference/desktop.md](../reference/desktop.md), [01-stack-decision.md](01-stack-decision.md) verification numbers updated, this file |
 | 3 | [docs/reference/desktop.md](../reference/desktop.md) per-screen, `TODO.md` desktop items mapped 1:1 |
-| 4 | [SECURITY.md](../../SECURITY.md) secret-entry flow update, [docs/reference/desktop.md](../reference/desktop.md) mutation patterns |
-| 5 | New `docs/reference/packaging.md`, [README.md](../../README.md) install section (now offers a download link), [SECURITY.md](../../SECURITY.md) update-policy paragraph |
+| 4 | [Privacy & security](../reference/privacy-and-security.md) secret-entry flow update, [docs/reference/desktop.md](../reference/desktop.md) mutation patterns |
+| 5 | New `docs/reference/packaging.md`, [README.md](../../README.md) install section (now offers a download link), [Privacy & security](../reference/privacy-and-security.md) update-policy paragraph |
 
 ## Open risks
 
@@ -843,7 +843,7 @@ These should be tracked at the project level, not silently accepted.
 - [00-overview.md](00-overview.md) — product invariants and track status
 - [03-storage-conventions.md](03-storage-conventions.md) — storage direction
 - [06-austrian-tax-engine.md](06-austrian-tax-engine.md) — RP2 boundary
-- [SECURITY.md](../../SECURITY.md) — local-first / network policy / secrets
+- [Privacy & security](../reference/privacy-and-security.md) — local-first / network policy / secrets
 - [AGENTS.md](../../AGENTS.md) — architecture and verification
 - [pyproject.toml](../../pyproject.toml) — current dep set
 - [kassiber/envelope.py](../../kassiber/envelope.py) — envelope contract

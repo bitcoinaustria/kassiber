@@ -200,7 +200,7 @@ PRAGMA defaults
 `cipher_page_size = 4096`) are deliberate so a stranded user can recover
 with the upstream `sqlcipher` binary alone. The passphrase is the
 perimeter; there is no recovery path if it is lost. See
-[../../SECURITY.md](../../SECURITY.md) for the full at-rest boundary
+[Privacy & security](../reference/privacy-and-security.md) for the full at-rest boundary
 including what stays plaintext (attachments, exports, the dotenv
 addressing rows, the `*.pre-encryption.sqlite3.bak` rollback file).
 
