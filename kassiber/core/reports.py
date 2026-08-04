@@ -99,6 +99,11 @@ AUSTRIAN_E1KV_CATEGORY_LABELS = {
     "alt_spekulation": "Altbestand innerhalb Spekulationsfrist",
     "alt_taxfree": "Altbestand ausserhalb Spekulationsfrist",
 }
+# Sub-type of an `income` journal entry. Keyed on the *effective* kind
+# (`COALESCE(kind_override, kind)`), the same value `_normalized_event_kind`
+# feeds RP2 — otherwise a user-classified receipt emits the income entry but
+# falls back to the generic "income" bucket because the lookup misses on the
+# importer's provenance kind (`lnd_invoice`, …).
 _TAX_SUMMARY_INCOME_TRANSACTION_TYPE_BY_KIND = {
     "airdrop": "airdrop",
     "hard_fork": "hardfork",
@@ -4197,7 +4202,7 @@ def _non_reportable_tax_summary_adjustments(conn, profile_id, *, use_vienna_year
         SELECT je.occurred_at,
                je.asset,
                je.entry_type,
-               t.kind AS transaction_kind,
+               COALESCE(t.kind_override, t.kind) AS transaction_kind,
                COALESCE(je.capital_gains_type, '') AS capital_gains_type,
                ABS(je.quantity) AS quantity_msat,
                COALESCE(je.proceeds, 0) AS proceeds,
@@ -4323,7 +4328,7 @@ def _tax_summary_from_journal_entries(conn, profile_id, *, use_vienna_year=False
         SELECT je.occurred_at,
                je.asset,
                je.entry_type,
-               t.kind AS transaction_kind,
+               COALESCE(t.kind_override, t.kind) AS transaction_kind,
                COALESCE(je.capital_gains_type, '') AS capital_gains_type,
                ABS(je.quantity) AS quantity_msat,
                COALESCE(je.proceeds, 0) AS proceeds,
@@ -4769,7 +4774,7 @@ def _austrian_e1kv_rows(conn, profile, tax_year):
             je.at_kennzahl,
             w.label AS wallet,
             t.external_id AS transaction_external_id,
-            t.kind AS transaction_kind,
+            COALESCE(t.kind_override, t.kind) AS transaction_kind,
             t.note AS transaction_note
         FROM journal_entries je
         JOIN wallets w ON w.id = je.wallet_id

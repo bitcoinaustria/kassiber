@@ -928,7 +928,12 @@ export function nextTaxClassificationForFlow(flow: TransactionFlow) {
 }
 
 export function nextLabelForFlow(flow: TransactionFlow) {
-  if (flow === "incoming") return "Income";
+  // Not "Income": this label persists as a tag, and a tag outranks the derived
+  // type on the chip (`display_tags` in core/ui_snapshot.py). Auto-applying it
+  // would make a manually added receipt read "Income" while the engine books a
+  // plain acquisition — the contradiction the kind-derived label exists to end.
+  // Declaring income is the Tax tab's "Recorded as", which the engine reads.
+  if (flow === "incoming") return "Unlabeled";
   if (flow === "transfer") return "Transfer";
   if (flow === "swap") return "Swap";
   if (flow === "layer-transition") return "Transfer";

@@ -5,7 +5,10 @@ from __future__ import annotations
 import sqlite3
 import unittest
 
-from kassiber.core.reports import _exclude_non_reportable_tax_summary_rows
+from kassiber.core.reports import (
+    _exclude_non_reportable_tax_summary_rows,
+    _tax_summary_from_journal_entries,
+)
 
 
 def _conn_with_non_reportable_disposal(*, journal_cgt: str | None = "short"):
@@ -17,7 +20,8 @@ def _conn_with_non_reportable_disposal(*, journal_cgt: str | None = "short"):
           id TEXT PRIMARY KEY,
           profile_id TEXT,
           taxability_override INTEGER,
-          kind TEXT
+          kind TEXT,
+          kind_override TEXT
         );
         CREATE TABLE journal_entries (
           id TEXT PRIMARY KEY,
@@ -36,8 +40,8 @@ def _conn_with_non_reportable_disposal(*, journal_cgt: str | None = "short"):
         """
     )
     conn.execute(
-        "INSERT INTO transactions VALUES (?, ?, ?, ?)",
-        ("t1", "p1", 0, "sell"),
+        "INSERT INTO transactions VALUES (?, ?, ?, ?, ?)",
+        ("t1", "p1", 0, "sell", None),
     )
     conn.execute(
         "INSERT INTO journal_entries VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -113,6 +117,68 @@ class TaxSummaryExclusionTests(unittest.TestCase):
         ]
         out = _exclude_non_reportable_tax_summary_rows(conn, "p1", summary_rows)
         self.assertEqual(out, [])
+
+
+class TaxSummaryIncomeKindTests(unittest.TestCase):
+    """The income sub-type follows the effective kind, not the import's."""
+
+    def _conn_with_income_entry(self, *, kind, kind_override):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.executescript(
+            """
+            CREATE TABLE transactions (
+              id TEXT PRIMARY KEY,
+              profile_id TEXT,
+              taxability_override INTEGER,
+              kind TEXT,
+              kind_override TEXT
+            );
+            CREATE TABLE journal_entries (
+              id TEXT PRIMARY KEY,
+              profile_id TEXT,
+              transaction_id TEXT,
+              entry_type TEXT,
+              asset TEXT,
+              quantity INTEGER,
+              proceeds REAL,
+              cost_basis REAL,
+              gain_loss REAL,
+              capital_gains_type TEXT,
+              occurred_at TEXT,
+              at_category TEXT
+            );
+            """
+        )
+        conn.execute(
+            "INSERT INTO transactions VALUES (?, ?, ?, ?, ?)",
+            ("t1", "p1", None, kind, kind_override),
+        )
+        conn.execute(
+            "INSERT INTO journal_entries VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "j1", "p1", "t1", "income", "BTC", 100_000_000_000,
+                100.0, 100.0, 0.0, "", "2026-03-01T00:00:00Z", None,
+            ),
+        )
+        return conn
+
+    def test_classified_receipt_reports_the_classified_income_type(self):
+        # An LN receipt the user recorded as mining: the engine emits the
+        # income entry off `kind_override`, so the summary must bucket it the
+        # same way. Reading `kind` alone missed and fell back to "income".
+        conn = self._conn_with_income_entry(
+            kind="lnd_invoice", kind_override="mining",
+        )
+        rows = _tax_summary_from_journal_entries(conn, "p1")
+        self.assertEqual([row["transaction_type"] for row in rows], ["mining"])
+
+    def test_unclassified_receipt_keeps_the_generic_income_type(self):
+        conn = self._conn_with_income_entry(
+            kind="lnd_invoice", kind_override=None,
+        )
+        rows = _tax_summary_from_journal_entries(conn, "p1")
+        self.assertEqual([row["transaction_type"] for row in rows], ["income"])
 
 
 if __name__ == "__main__":

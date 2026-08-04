@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   draftForTransaction,
+  nextLabelForFlow,
   formatCounterDisplayMoney,
   formatDisplayMoney,
   formatSignedDisplayMoney,
@@ -26,6 +27,17 @@ function txWithTags(tags: string[]): Transaction {
     tags,
   };
 }
+
+describe("nextLabelForFlow", () => {
+  it("does not sticker a new receipt as Income", () => {
+    // The label persists as a tag and a tag outranks the derived type on the
+    // chip, so auto-applying "Income" reproduces the exact contradiction the
+    // kind-derived label removes: chip says earnings, engine books a buy.
+    expect(nextLabelForFlow("incoming")).toBe("Unlabeled");
+    expect(nextLabelForFlow("transfer")).toBe("Transfer");
+    expect(nextLabelForFlow("outgoing")).toBe("Expense");
+  });
+});
 
 describe("draftForTransaction kind", () => {
   it("never invents a tax kind for an unclassified row", () => {
