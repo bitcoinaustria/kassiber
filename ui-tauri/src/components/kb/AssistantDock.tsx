@@ -148,6 +148,9 @@ export function AssistantDock({
     sendPrompt,
     reset,
     branchFromMessage,
+    attachment,
+    attachFile,
+    clearAttachment,
   } = useAssistantSession();
 
   const hasThread = messages.length > 0;
@@ -508,6 +511,9 @@ export function AssistantDock({
                 modelPickerEnabled={
                   modelPickerEnabled || Boolean(selection?.provider)
                 }
+                onAttach={attachFile}
+                attachedFilename={attachment?.filename ?? null}
+                onClearAttachment={clearAttachment}
                 {...(hasThread || showComposerPeek ? { prompts: [] } : {})}
               />
             </div>

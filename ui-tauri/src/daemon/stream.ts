@@ -140,6 +140,14 @@ export interface AiChatRequest {
    * a fork — a null session id alone must not backfill detached history.
    */
   seedHistory?: boolean;
+  /**
+   * One file the user attached to this chat, as an opaque staging grant minted
+   * by the native picker. A token and never a path: the renderer does not learn
+   * where the file is, and the model cannot point the analysis tool elsewhere.
+   * File contents are not sent here — the daemon reads the file locally, and
+   * only sends an off-device model the column headers.
+   */
+  attachment?: { token: string; label?: string | null };
   /** Typed, ephemeral UI state. Never includes descriptors, file content, or secrets. */
   screenContext?: {
     route?: string;
@@ -178,6 +186,12 @@ export function buildAiChatStreamArgs(
     session_id: request.sessionId ?? undefined,
     persist: request.persist,
     seed_history: request.seedHistory ? true : undefined,
+    attachment: request.attachment
+      ? {
+          token: request.attachment.token,
+          label: request.attachment.label ?? undefined,
+        }
+      : undefined,
     screen_context: request.screenContext
       ? {
           route: request.screenContext.route,

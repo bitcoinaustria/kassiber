@@ -36,6 +36,7 @@ from ..wallet_descriptors import (
     normalize_chain,
     normalize_network,
 )
+from . import import_batches as core_import_batches
 from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
 from . import freshness as core_freshness
@@ -1658,6 +1659,34 @@ def _chain_duplicate_outpoint_adjustment_btc(
     return float(msat_to_btc(duplicate_msat))
 
 
+def _import_summary_by_wallet(
+    conn: sqlite3.Connection, profile_id: str
+) -> dict[str, dict[str, Any]]:
+    """Per-wallet file-import provenance: how many runs, and the most recent."""
+    # One pass, ordered oldest-first per wallet, so the last row seen for a wallet
+    # is its newest run. Avoids a per-wallet follow-up query inside the caller's
+    # loop, which is on the hot connections-snapshot path.
+    rows = conn.execute(
+        """
+        SELECT wallet_id, source_format, imported_at
+        FROM import_batches
+        WHERE profile_id = ? AND wallet_id IS NOT NULL
+        ORDER BY wallet_id ASC, imported_at ASC, id ASC
+        """,
+        (profile_id,),
+    ).fetchall()
+    summary: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        entry = summary.setdefault(
+            str(row["wallet_id"]),
+            {"batch_count": 0, "imported_at": None, "source_format": ""},
+        )
+        entry["batch_count"] += 1
+        entry["imported_at"] = row["imported_at"]
+        entry["source_format"] = str(row["source_format"] or "")
+    return summary
+
+
 def _connections(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1681,6 +1710,11 @@ def _connections(
         """,
         (profile_id,),
     ).fetchall()
+    # Assets actually imported, per wallet. Wallet config states an intended
+    # chain at setup; a file import states nothing, so the rows are the only
+    # honest answer for the UI's asset badge.
+    assets_by_wallet = core_import_batches.observed_assets(conn, profile_id)
+    imports_by_wallet = _import_summary_by_wallet(conn, profile_id)
     output = []
     for row in rows:
         tx_count = int(row["tx_count"] or 0)
@@ -1718,7 +1752,18 @@ def _connections(
             "transactionCount": tx_count,
             "syncMode": backend_summary["sync_mode"],
             "syncSource": sync_source,
-            "sourceFormat": source_format,
+            # A wallet created without --source-format still describes itself
+            # honestly once a file has been imported into it.
+            "sourceFormat": source_format or imports_by_wallet.get(
+                str(row["id"]), {}
+            ).get("source_format", ""),
+            "observedAssets": assets_by_wallet.get(str(row["id"]), []),
+            "importBatchCount": imports_by_wallet.get(str(row["id"]), {}).get(
+                "batch_count", 0
+            ),
+            "lastImportAt": imports_by_wallet.get(str(row["id"]), {}).get(
+                "imported_at"
+            ),
             "deprecated": wallet_is_deprecated(config),
             "chain": chain or wallet_chain,
             "network": network or None,

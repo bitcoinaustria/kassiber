@@ -412,6 +412,39 @@ CREATE TABLE IF NOT EXISTS transaction_tags (
     PRIMARY KEY (transaction_id, tag_id)
 );
 
+-- One file import run, so a run that mapped columns wrongly can be rolled back
+-- without deleting the whole wallet. `column_map_json` is the confirmed plan, so
+-- a recurring export from the same platform can reuse it.
+--
+-- Local provenance about *this device's* import history, deliberately outside
+-- replication (like fetched BTCPay provenance): the imported transactions
+-- themselves replicate, the record of which local file produced them does not.
+CREATE TABLE IF NOT EXISTS import_batches (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    wallet_id TEXT REFERENCES wallets(id) ON DELETE CASCADE,
+    source_format TEXT NOT NULL,
+    source_filename TEXT,
+    column_map_json TEXT,
+    imported_at TEXT NOT NULL,
+    rows_inserted INTEGER NOT NULL DEFAULT 0,
+    rows_updated INTEGER NOT NULL DEFAULT 0,
+    rows_skipped INTEGER NOT NULL DEFAULT 0
+);
+
+-- Only rows a batch actually *created*. Enrichment updates to pre-existing
+-- transactions are deliberately not linked: those rows predate the batch, so a
+-- rollback must not delete them.
+CREATE TABLE IF NOT EXISTS import_batch_transactions (
+    batch_id TEXT NOT NULL REFERENCES import_batches(id) ON DELETE CASCADE,
+    transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    PRIMARY KEY (batch_id, transaction_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_batches_profile_time
+    ON import_batches(profile_id, imported_at DESC, id);
+
 CREATE INDEX IF NOT EXISTS idx_transactions_profile_external_id
     ON transactions(profile_id, external_id) WHERE external_id IS NOT NULL;
 

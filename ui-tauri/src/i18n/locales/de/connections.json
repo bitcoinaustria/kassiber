@@ -301,6 +301,24 @@
       "couldNotResolve": "Kassiber konnte diese UTXO-Transaktion nicht auflösen.",
       "notFoundTitle": "Transaktion nicht gefunden",
       "notFoundBody": "Für diesen UTXO gibt es noch keine passende importierte Kassiber-Transaktion."
+    },
+    "imports": {
+      "title": "Importe",
+      "description": "Datei-Importe, die in dieser Verbindung gelandet sind.",
+      "summary_one": "{{count}} Transaktion · {{date}}",
+      "summary_other": "{{count}} Transaktionen · {{date}}",
+      "mapped": "Spalten zugeordnet",
+      "rollback": "Zurücknehmen",
+      "rolledBackTitle": "Import zurückgenommen",
+      "rolledBackBody_one": "{{count}} Transaktion aus {{file}} gelöscht.",
+      "rolledBackBody_other": "{{count}} Transaktionen aus {{file}} gelöscht.",
+      "confirmTitle": "Diesen Import zurücknehmen?",
+      "confirmBody_one": "Das löscht die {{count}} Transaktion, die {{file}} erstellt hat. Zeilen, die nur ergänzt wurden, bleiben erhalten — und die Verbindung selbst auch.",
+      "confirmBody_other": "Das löscht die {{count}} Transaktionen, die {{file}} erstellt hat. Zeilen, die nur ergänzt wurden, bleiben erhalten — und die Verbindung selbst auch.",
+      "alsoRemoved": "Ebenfalls gelöscht: {{items}}.",
+      "cancel": "Abbrechen",
+      "confirmAction": "Transaktionen löschen",
+      "loadingPlan": "Wird geprüft …"
     }
   },
   "node": {

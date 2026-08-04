@@ -173,6 +173,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_wallets_list",
             "ui_wallets_utxos",
             "ui_wallets_identify",
+            "ui_wallets_analyze_file",
             "ui_backends_list",
             "ui_profiles_snapshot",
             "ui_reports_capital_gains",

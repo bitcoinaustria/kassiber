@@ -82,13 +82,17 @@ from .wallet_descriptors import normalize_asset_code
 # -- generic coordinator -----------------------------------------------------
 
 
-def load_import_records(file_path, input_format):
+def load_import_records(file_path, input_format, column_map=None):
     """Dispatch on `input_format` to the matching loader.
 
     Returns a list of dicts with a format-appropriate shape. Generic
     JSON / CSV pass through raw rows; BTCPay and Phoenix loaders
     return already-normalized records ready for
     `normalize_import_record`.
+
+    `column_map` is an explicit generic-ledger column plan (see
+    `infer_ledger_columns`) used when a file's own headers cannot be recognized;
+    it is ignored by every other format.
     """
     if not os.path.exists(file_path):
         raise AppError(
@@ -134,7 +138,7 @@ def load_import_records(file_path, input_format):
     if input_format == "wasabi_bundle":
         return load_wasabi_bundle_records(file_path)
     if input_format == GENERIC_LEDGER_FORMAT:
-        return load_generic_ledger_records(file_path)
+        return load_generic_ledger_records(file_path, column_map)
     raise AppError(f"Unsupported input format '{input_format}'")
 
 
@@ -2604,6 +2608,9 @@ GENERIC_LEDGER_COLUMNS = (
 # leg. Anything else in an asset cell is treated as a fiat/cash currency (the
 # pricing leg). `SATS`/`SAT` mark an amount denominated in whole satoshis.
 _GENERIC_LEDGER_SATS_ASSETS = {"SATS", "SAT"}
+# Internal marker column: set by the BYO remapper when a mapped direction
+# column holds a value it cannot read. Never a user-facing ledger column.
+LEDGER_UNREADABLE_DIRECTION_KEY = "__unreadable_direction"
 _GENERIC_LEDGER_CRYPTO_ASSETS = BITCOIN_FAMILY_ASSETS | _GENERIC_LEDGER_SATS_ASSETS
 
 # Type -> (direction, kind). `kind` is None for a plain acquisition/disposal.
@@ -2798,6 +2805,22 @@ def normalize_generic_ledger_record(record, index=0):
     """
     sanitized = {str(key).strip(): value for key, value in record.items() if key is not None}
     row_label = f"Ledger row {index}" if index else "Ledger row"
+
+    # A mapped direction column whose value we cannot read must be rejected as a
+    # *direction*. Routing it through Type instead would book any value that
+    # happens to name a Type ("Income", "Mining", "Airdrop") as that tax kind on
+    # nothing but a guess, and would misdescribe every other failure.
+    unreadable_direction = str_or_none(sanitized.get(LEDGER_UNREADABLE_DIRECTION_KEY))
+    if unreadable_direction:
+        raise AppError(
+            f"{row_label}: unknown direction '{unreadable_direction}'",
+            code="validation",
+            hint=(
+                "Kassiber could not tell whether this row is incoming or outgoing. "
+                "Map the direction column's values with column_map.type_map, or map "
+                "a Type column instead."
+            ),
+        )
 
     type_text = str_or_none(_get_cell(sanitized, "Type", "Transaction Type", "Kind"))
     if not type_text:
@@ -3107,11 +3130,26 @@ def _generic_ledger_rows_to_records(rows):
 # unchanged.
 # --------------------------------------------------------------------------- #
 _BYO_DATE = {_normalized_column_key(n) for n in ("Date", "Time", "Timestamp", "Datetime", "Date Time", "Datum", "Zeitpunkt", "Executed At", "Trade Date")}
-_BYO_TYPE = {_normalized_column_key(n) for n in ("Type", "Transaction Type", "Tx Type", "Side", "Category", "Action", "Art")}
+# A file whose Type column is not recognized keeps every row's kind: with no
+# type and no direction column, direction falls back to the amount's sign, so an
+# all-positive export books every row — sales included — as a plain Deposit, with
+# nothing rejected. German headers matter here because German row *values* are
+# recognized: "Typ" + "Verkauf" must not half-work.
+_BYO_TYPE = {
+    _normalized_column_key(n)
+    for n in (
+        "Type", "Transaction Type", "Tx Type", "Side", "Category", "Action",
+        "Operation", "Art", "Typ", "Transaktionstyp", "Transaktionsart",
+        "Art der Transaktion", "Buchungsart", "Vorgang", "Vorgangsart",
+    )
+}
 _BYO_DIRECTION = {_normalized_column_key(n) for n in ("Direction", "In/Out", "Flow", "Richtung")}
 _BYO_RECEIVED = {_normalized_column_key(n) for n in ("Received Amount", "Received", "Received BTC", "Buy Amount", "Incoming", "Amount Received", "Deposit Amount", "Credit", "Eingang", "Erhalten")}
 _BYO_SENT = {_normalized_column_key(n) for n in ("Sent Amount", "Sent", "Sent BTC", "Sell Amount", "Outgoing", "Amount Sent", "Withdrawal Amount", "Debit", "Ausgang", "Gesendet")}
-_BYO_AMOUNT = {_normalized_column_key(n) for n in ("Amount", "BTC", "Amount BTC", "BTC Amount", "Quantity", "Qty", "Net Amount", "Betrag", "Menge")}
+# A sats-denominated column belongs here even though "Amount" would not match
+# it: the header states the unit (`_byo_asset_from_header` reads SATS off it), so
+# recognizing it is what keeps 100000 from importing as 100,000 BTC.
+_BYO_AMOUNT = {_normalized_column_key(n) for n in ("Amount", "BTC", "Amount BTC", "BTC Amount", "SATS", "Sats Amount", "Amount Sats", "Quantity", "Qty", "Net Amount", "Betrag", "Menge")}
 _BYO_RECEIVED_ASSET = {_normalized_column_key(n) for n in ("Received Asset", "Received Currency", "Buy Asset", "Buy Currency", "Incoming Asset", "Credit Asset")}
 _BYO_SENT_ASSET = {_normalized_column_key(n) for n in ("Sent Asset", "Sent Currency", "Sell Asset", "Sell Currency", "Outgoing Asset", "Debit Asset")}
 _BYO_FEE_ASSET = {_normalized_column_key(n) for n in ("Fee Asset", "Fee Currency", "Fee Cur.", "Fee Coin")}
@@ -3151,9 +3189,24 @@ _BYO_TYPE_VALUE_MAP = {
     "in": "Deposit", "incoming": "Deposit", "received": "Deposit", "receive": "Deposit",
     "credit": "Deposit", "out": "Withdrawal", "outgoing": "Withdrawal", "sent": "Withdrawal",
     "send": "Withdrawal", "debit": "Withdrawal",
+    # German row values, matching the German column-name aliases above. Only
+    # unambiguous ones: "Überweisung"/"Transfer" does not state a direction, so
+    # it stays unknown and quarantines rather than being guessed. Anything else
+    # (another language, a house style) is handled by an explicit
+    # `column_map.type_map` instead of growing this table per exchange.
+    "kauf": "Buy", "ankauf": "Buy", "einzahlung": "Deposit", "eingang": "Deposit",
+    "empfangen": "Deposit", "erhalten": "Deposit",
+    "verkauf": "Sell", "auszahlung": "Withdrawal", "ausgang": "Withdrawal",
+    "gesendet": "Withdrawal",
 }
-_BYO_INBOUND_VALUES = {"in", "inbound", "received", "receive", "incoming", "credit", "deposit", "buy"}
-_BYO_OUTBOUND_VALUES = {"out", "outbound", "sent", "send", "outgoing", "debit", "withdrawal", "sell"}
+_BYO_INBOUND_VALUES = {
+    "in", "inbound", "received", "receive", "incoming", "credit", "deposit", "buy",
+    "eingang", "einzahlung", "empfangen", "erhalten", "kauf", "ankauf",
+}
+_BYO_OUTBOUND_VALUES = {
+    "out", "outbound", "sent", "send", "outgoing", "debit", "withdrawal", "sell",
+    "ausgang", "auszahlung", "gesendet", "verkauf",
+}
 _BYO_RECEIVED_HEADER_TOKENS = {"received", "receive", "incoming", "credit", "deposit", "buy", "bought", "erhalten", "eingang"}
 _BYO_SENT_HEADER_TOKENS = {"sent", "send", "outgoing", "debit", "withdrawal", "withdraw", "sell", "sold", "ausgang", "gesendet"}
 _BYO_HEADER_ASSET_ALIASES = {
@@ -3218,16 +3271,19 @@ def _byo_leg_role_from_header(value):
     return None
 
 
-def _byo_type_value(type_value, direction, *, has_cash_counterleg=False):
+def _byo_type_value(type_value, direction, *, has_cash_counterleg=False, type_map=None):
     if type_value:
-        return _BYO_TYPE_VALUE_MAP.get(_normalized_column_key(type_value), type_value)
+        key = _normalized_column_key(type_value)
+        if type_map and key in type_map:
+            return type_map[key]
+        return _BYO_TYPE_VALUE_MAP.get(key, type_value)
     if has_cash_counterleg:
         return "Buy" if direction == "inbound" else "Sell"
     return "Deposit" if direction == "inbound" else "Withdrawal"
 
 
-def _byo_type_direction(type_value):
-    mapped = _byo_type_value(type_value, None)
+def _byo_type_direction(type_value, type_map=None):
+    mapped = _byo_type_value(type_value, None, type_map=type_map)
     entry = _GENERIC_LEDGER_TYPES.get(" ".join(str(mapped).strip().lower().split()))
     return entry[0] if entry else None
 
@@ -3286,7 +3342,10 @@ def infer_ledger_columns(header):
     fiat_currency = take(_BYO_FIAT_CURRENCY, "fiat_currency")
     fiat_value = take(_BYO_FIAT_VALUE, "fiat_value")
     fiat_rate = take(_BYO_FIAT_RATE, "fiat_rate")
-    note = take(_BYO_NOTE, "description")
+    # "note", not "description": `detected` is what a user or the assistant
+    # copies into a `column_map`, and `note` is the plan's own field name — a
+    # plan naming `description` is rejected as an unsupported field.
+    note = take(_BYO_NOTE, "note")
     txid = take(_BYO_TXID, "txid")
     payment_hash = take(_BYO_PAYMENT_HASH, "payment_hash")
     payment_hash_source = take(_BYO_PAYMENT_HASH_SOURCE, "payment_hash_source")
@@ -3319,6 +3378,200 @@ def _ledger_plan_usable(plan):
     )
 
 
+# Plan keys naming a source column, as produced by `infer_ledger_columns`.
+LEDGER_COLUMN_PLAN_FIELDS = (
+    "date", "type", "direction", "received", "sent", "amount",
+    "received_asset", "sent_asset", "asset", "fee", "fee_asset",
+    "fiat_currency", "fiat_value", "fiat_rate", "note", "txid", "counterparty",
+    "payment_hash", "payment_hash_source",
+    "swap_refund_funding_txid", "swap_refund_funding_vout",
+)
+# Plan keys naming a literal asset code, for numeric columns whose own header
+# does not say what they are denominated in.
+LEDGER_ASSET_HINT_FIELDS = (
+    "received_header_asset", "sent_header_asset",
+    "amount_header_asset", "fee_header_asset",
+)
+# A vocabulary map from this file's own Type values onto canonical ledger Types,
+# for exports that label rows in another language or house style ("Kauf" -> "Buy").
+# Values must already be recognized ledger Types, so mapping vocabulary can never
+# invent a tax kind the engine does not have.
+LEDGER_TYPE_MAP_FIELD = "type_map"
+LEDGER_PLAN_FIELDS = frozenset(
+    LEDGER_COLUMN_PLAN_FIELDS + LEDGER_ASSET_HINT_FIELDS + (LEDGER_TYPE_MAP_FIELD,)
+)
+
+
+def _ledger_type_map(raw):
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise AppError(
+            "column_map.type_map must be an object mapping this file's Type values to ledger Types",
+            code="validation",
+            hint='Example: {"Kauf": "Buy", "Verkauf": "Sell"}.',
+            retryable=False,
+        )
+    mapped = {}
+    for source, target in raw.items():
+        key = _normalized_column_key(source)
+        label = str_or_none(target)
+        if not key or label is None:
+            raise AppError(
+                "column_map.type_map entries must both be non-empty strings",
+                code="validation",
+                details={"entry": {str(source): target}},
+                retryable=False,
+            )
+        canonical = " ".join(str(label).strip().lower().split())
+        if canonical not in _GENERIC_LEDGER_TYPES:
+            raise AppError(
+                f"column_map.type_map maps '{source}' to unknown ledger Type '{label}'",
+                code="validation",
+                hint=(
+                    "Map onto a Type the tax engine recognizes: "
+                    f"{', '.join(sorted(_GENERIC_LEDGER_TYPES))}."
+                ),
+                details={"source": str(source), "target": label},
+                retryable=False,
+            )
+        mapped[key] = label
+    return mapped or None
+# The codes header inference can produce. Accepting exactly this set keeps an
+# explicit hint and a header-derived one interchangeable, with no second table
+# to drift: Bitcoin rails plus the fiat currencies the importer prices in.
+LEDGER_ASSET_HINT_CODES = frozenset(_BYO_HEADER_ASSET_ALIASES.values())
+
+
+def _ledger_asset_hint(value, field):
+    code = str_or_none(value)
+    if code is None:
+        return None
+    normalized = (normalize_asset_code(code) or code).upper()
+    if normalized not in LEDGER_ASSET_HINT_CODES:
+        raise AppError(
+            f"column_map.{field} is not an asset Kassiber can denominate a column in",
+            code="validation",
+            hint="Use a Bitcoin rail (BTC, LBTC, SATS) or a fiat currency code.",
+            details={
+                "field": field,
+                "value": code,
+                "supported": sorted(LEDGER_ASSET_HINT_CODES),
+            },
+            retryable=False,
+        )
+    return normalized
+
+
+def normalize_column_map(raw, headers=None):
+    """Validate an externally supplied ledger column plan.
+
+    The plan decides which column is an amount and which is a fee, so a wrong or
+    smuggled key silently mis-books money. Unknown keys, columns absent from the
+    file, and one column claimed by two fields are rejected rather than quietly
+    dropped. Called from `_ledger_source_records`, so no import path can consume
+    an unvalidated plan — including one proposed by an AI model.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise AppError(
+            "column_map must be an object mapping ledger fields to column names",
+            code="validation",
+            hint=f"Known fields: {', '.join(sorted(LEDGER_PLAN_FIELDS))}.",
+            retryable=False,
+        )
+
+    unknown = sorted(str(key) for key in raw if str(key) not in LEDGER_PLAN_FIELDS)
+    if unknown:
+        raise AppError(
+            "column_map contains unsupported fields",
+            code="validation",
+            hint=f"Known fields: {', '.join(sorted(LEDGER_PLAN_FIELDS))}.",
+            details={"unsupported": unknown},
+            retryable=False,
+        )
+
+    plan = {}
+    for field in LEDGER_ASSET_HINT_FIELDS:
+        if field in raw:
+            plan[field] = _ledger_asset_hint(raw[field], field)
+    if LEDGER_TYPE_MAP_FIELD in raw:
+        plan[LEDGER_TYPE_MAP_FIELD] = _ledger_type_map(raw[LEDGER_TYPE_MAP_FIELD])
+
+    known_headers = [h for h in (headers or []) if h]
+    claimed = {}
+    for field in LEDGER_COLUMN_PLAN_FIELDS:
+        if field not in raw:
+            continue
+        column = str_or_none(raw[field])
+        if column is None:
+            plan[field] = None
+            continue
+        if known_headers and column not in known_headers:
+            raise AppError(
+                f"column_map.{field} names a column that is not in this file",
+                code="validation",
+                hint="Use one of the file's own header values.",
+                details={"field": field, "column": column, "headers": known_headers},
+                retryable=False,
+            )
+        if column in claimed:
+            raise AppError(
+                "column_map maps one column to two different fields",
+                code="validation",
+                hint="Each source column may fill only one ledger field.",
+                details={"column": column, "fields": [claimed[column], field]},
+                retryable=False,
+            )
+        claimed[column] = field
+        plan[field] = column
+
+    # Derive the asset hints the row remapper expects from the chosen column
+    # names, so a caller that supplied only columns still gets header assets.
+    #
+    # An explicit hint may only *fill in* an asset the header does not state — it
+    # may never contradict one that does. Without this, a plan could relabel a
+    # column the file itself calls "BTC Amount" as SATS and import every row
+    # 1e8 too small, or as LBTC and book a different asset, with no rejected row
+    # to notice. That would break the rule that a plan maps names, not values.
+    for field, source in (
+        ("received_header_asset", "received"),
+        ("sent_header_asset", "sent"),
+        ("amount_header_asset", "amount"),
+        ("fee_header_asset", "fee"),
+    ):
+        from_header = _byo_asset_from_header(plan.get(source))
+        if field not in plan:
+            plan[field] = from_header
+        elif from_header and plan[field] != from_header:
+            raise AppError(
+                f"column_map.{field} contradicts the column's own header",
+                code="validation",
+                hint=(
+                    f"Column {plan.get(source)!r} already states {from_header}. "
+                    "Drop the hint, or map a separate asset column instead."
+                ),
+                details={
+                    "field": field,
+                    "column": plan.get(source),
+                    "header_asset": from_header,
+                    "supplied": plan[field],
+                },
+                retryable=False,
+            )
+
+    if not _ledger_plan_usable(plan):
+        raise AppError(
+            "column_map needs at least a date column and one amount column",
+            code="validation",
+            hint="Map 'date' plus one of 'amount', or 'received' / 'sent'.",
+            details={"mapped": sorted(k for k, v in plan.items() if v)},
+            retryable=False,
+        )
+    return plan
+
+
 def _remap_byo_row_to_ledger(row, plan):
     """Remap one arbitrary row into a #244-shaped ledger record (string cells).
 
@@ -3349,6 +3602,7 @@ def _remap_byo_row_to_ledger(row, plan):
     btc_cell = None
     has_cash_counterleg = False
     both_amounts_present = False
+    unrecognized_direction = None
     if plan.get("received") or plan.get("sent"):
         received_num = _byo_number(row.get(plan.get("received"))) if plan.get("received") else None
         sent_num = _byo_number(row.get(plan.get("sent"))) if plan.get("sent") else None
@@ -3372,11 +3626,22 @@ def _remap_byo_row_to_ledger(row, plan):
         raw = cell(plan["amount"])
         number = _byo_number(row.get(plan["amount"]))
         if type_value:
-            direction = _byo_type_direction(type_value)
+            direction = _byo_type_direction(type_value, plan.get("type_map"))
             btc_cell = format(abs(number), "f") if (number is not None and direction) else raw
         elif plan.get("direction"):
-            direction = _byo_direction_value(cell(plan["direction"]))
+            raw_direction = cell(plan["direction"])
+            direction = _byo_direction_value(raw_direction)
             btc_cell = format(abs(number), "f") if number is not None else raw
+            if direction is None:
+                # A mapped direction column whose value means nothing to us must
+                # be rejected, not fall through to the "Deposit if inbound else
+                # Withdrawal" default below — that default silently booked every
+                # such row as a Withdrawal. Flagged as a *direction* failure so a
+                # value that happens to name a Type ("Income", "Mining") cannot
+                # be booked as that tax kind. An empty cell is the same failure:
+                # otherwise the row is rejected later for a Type the file never
+                # had ("Type 'Withdrawal' is outbound but the leg is inbound").
+                unrecognized_direction = raw_direction or "(empty)"
         elif number is not None:
             direction = "outbound" if number < 0 else "inbound"
             btc_cell = format(abs(number), "f")
@@ -3388,6 +3653,7 @@ def _remap_byo_row_to_ledger(row, plan):
             type_value,
             direction,
             has_cash_counterleg=has_cash_counterleg,
+            type_map=plan.get("type_map"),
         )
         if plan.get("received"):
             out["Received Asset"], out["Received Amount"] = received_asset, cell(plan["received"])
@@ -3407,7 +3673,9 @@ def _remap_byo_row_to_ledger(row, plan):
     elif plan.get("sent") and direction == "outbound":
         asset = sent_asset
 
-    out["Type"] = _byo_type_value(type_value, direction)
+    if unrecognized_direction is not None:
+        out[LEDGER_UNREADABLE_DIRECTION_KEY] = unrecognized_direction
+    out["Type"] = _byo_type_value(type_value, direction, type_map=plan.get("type_map"))
 
     fiat_currency = cell(plan.get("fiat_currency"))
     fiat_value = cell(plan.get("fiat_value"))
@@ -3486,7 +3754,7 @@ def _ledger_source_records(rows, column_map=None):
 
     header = [str(cell).strip() if cell is not None else "" for cell in (header_row or [])]
     if column_map is not None:
-        plan, detected = column_map, None
+        plan, detected = normalize_column_map(column_map, header), None
     else:
         inferred = infer_ledger_columns(header)
         plan, detected = inferred["plan"], inferred["detected"]
@@ -3494,7 +3762,7 @@ def _ledger_source_records(rows, column_map=None):
         raise AppError(
             "Could not recognize the columns in this file.",
             code="ledger_unrecognized",
-            hint="Download the import template (it already has the right columns), fill it in, and import that — or map the columns yourself.",
+            hint="Download the import template (it already has the right columns), fill it in, and import that — or map the columns yourself with column_map.",
             details={"headers": header},
         )
     header_index = rows.index(header_row)
@@ -3546,6 +3814,34 @@ def _generic_ledger_preview_row(record):
     }
 
 
+def _header_row_is_preamble(rows, header_row):
+    """Whether the first non-empty row is a preamble line rather than a header.
+
+    A bank-style export opens with "Kontoinhaber,Max Mustermann" or a date range
+    before the real header. That row is *data*, and the importer would take it as
+    the header, so callers need to know: the columns cannot be mapped, and the
+    row must not be disclosed to an off-device model as if it were column names
+    (its cells are a person's name and an account number).
+
+    The signal is shape, not content: a real header names every column, so it is
+    never narrower than the rows beneath it. Compared against the most common
+    data width so one ragged or trailing row does not decide it.
+    """
+    if header_row is None:
+        return False
+    def width(row):
+        return sum(1 for cell in row if str_or_none(cell))
+    widths = {}
+    for raw in rows[rows.index(header_row) + 1 :]:
+        size = width(raw)
+        if size:
+            widths[size] = widths.get(size, 0) + 1
+    if not widths:
+        return False
+    common = max(widths.items(), key=lambda item: (item[1], item[0]))[0]
+    return width(header_row) < common
+
+
 def preview_generic_ledger_records(file_path, *, limit=200, column_map=None):
     """Report what a generic-ledger file would import, without persisting.
 
@@ -3564,10 +3860,11 @@ def preview_generic_ledger_records(file_path, *, limit=200, column_map=None):
     header_row = next((row for row in rows if any(str_or_none(cell) for cell in row)), None)
     detected = None
     native = column_map is None and header_row is not None and _is_native_ledger(header_row)
+    header_is_preamble = _header_row_is_preamble(rows, header_row)
     if not native:
         header = [str(cell).strip() if cell is not None else "" for cell in (header_row or [])]
         if column_map is not None:
-            plan, detected = column_map, None
+            plan, detected = normalize_column_map(column_map, header), None
         else:
             inferred = infer_ledger_columns(header)
             plan, detected = inferred["plan"], inferred["detected"]
@@ -3580,6 +3877,8 @@ def preview_generic_ledger_records(file_path, *, limit=200, column_map=None):
                 "confident": False,
                 "detected": detected,
                 "headers": header,
+                "header_is_preamble": header_is_preamble,
+                "template": False,
                 "rows_read": len(data_rows),
                 "mapped": 0,
                 "errors": 0,
@@ -3596,12 +3895,30 @@ def preview_generic_ledger_records(file_path, *, limit=200, column_map=None):
         except AppError as exc:
             problems.append({"row": index, "message": str(exc)})
     return {
+        # Reported on every path so a caller that needs the header row (to build
+        # or correct a column plan) does not have to read the file a second time.
+        "headers": [
+            str(cell).strip() if cell is not None else "" for cell in (header_row or [])
+        ],
+        # A preamble line was taken as the header, so these "column names" are
+        # somebody's name and account number, not columns.
+        "header_is_preamble": header_is_preamble,
+        # The largest magnitude that would import, so a caller can sanity-check
+        # the units of a file that never says what its amounts are denominated
+        # in. A count/extreme like `errors` or `rows_read`, not a cell value.
+        "amount_max": (
+            format(max((abs(record["amount"]) for record in normalized if record.get("amount") is not None), default=0), "f")
+        ),
+        "template": native,
         "rows_read": len(records),
         "mapped": len(normalized),
         "errors": len(problems),
-        "problems": problems[:bound] if bound else problems,
+        # A limit of 0 means zero rows, not "unbounded" — the counts above
+        # already report the totals, and an unbounded problem list is one
+        # message per bad row.
+        "problems": problems[:bound],
         "preview": [_generic_ledger_preview_row(record) for record in normalized[:bound]],
-        "truncated": bound > 0 and len(normalized) > bound,
+        "truncated": len(normalized) > bound,
         "confident": True,
         "detected": detected,
     }

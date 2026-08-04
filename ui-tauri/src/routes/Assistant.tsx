@@ -42,6 +42,9 @@ export function Assistant() {
     incognito,
     setIncognito,
     sessionId,
+    attachment,
+    attachFile,
+    clearAttachment,
   } = useAssistantSession();
   const assistantDraft = useAssistantDraftStore((s) => s.draft);
   const setAssistantDraft = useAssistantDraftStore((s) => s.setDraft);
@@ -87,6 +90,9 @@ export function Assistant() {
         supportsThinkingEffort ? setThinkingEffort : undefined
       }
       showThinkingEffort={supportsThinkingEffort}
+      onAttach={attachFile}
+      attachedFilename={attachment?.filename ?? null}
+      onClearAttachment={clearAttachment}
       {...(hasMessages ? { prompts: [] } : {})}
     />
   );

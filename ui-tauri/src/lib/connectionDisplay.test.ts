@@ -90,3 +90,74 @@ describe("connection display", () => {
     ]);
   });
 });
+
+describe("connectionAssetLabel observed assets", () => {
+  it("prefers what was actually imported over configured intent", () => {
+    // A file import declares no chain, so a `custom` wallet holding L-BTC rows
+    // would otherwise read as BTC and show the wrong icon.
+    expect(
+      connectionAssetLabel({
+        kind: "custom",
+        sourceFormat: "generic_ledger",
+        observedAssets: ["LBTC"],
+      }),
+    ).toBe("LBTC");
+  });
+
+  it("takes the most common asset in a mixed import", () => {
+    // The daemon orders observedAssets by row count, so the badge follows the
+    // bulk of the rows rather than whichever asset sorts first.
+    expect(
+      connectionAssetLabel({
+        kind: "custom",
+        observedAssets: ["BTC", "LBTC"],
+      }),
+    ).toBe("BTC");
+  });
+
+  it("treats a SATS-denominated import as BTC", () => {
+    expect(
+      connectionAssetLabel({ kind: "custom", observedAssets: ["SATS"] }),
+    ).toBe("BTC");
+  });
+
+  it("does not relabel a Lightning connection as plain BTC", () => {
+    // Lightning transactions are stored with asset "BTC", so observed assets
+    // must never outrank a Lightning kind.
+    for (const kind of ["phoenix", "lnd", "core-ln", "nwc"] as const) {
+      expect(
+        connectionAssetLabel({ kind, observedAssets: ["BTC"] }),
+      ).toBe("LN-BTC");
+    }
+  });
+
+  it("does not relabel a Liquid-configured wallet from its BTC rows", () => {
+    expect(
+      connectionAssetLabel({
+        kind: "descriptor",
+        chain: "liquid",
+        observedAssets: ["BTC"],
+      }),
+    ).toBe("LBTC");
+  });
+
+  it("falls back to config signals when nothing was imported yet", () => {
+    expect(
+      connectionAssetLabel({
+        kind: "custom",
+        chain: "liquid",
+        observedAssets: [],
+      }),
+    ).toBe("LBTC");
+  });
+
+  it("ignores assets it does not recognize rather than guessing", () => {
+    expect(
+      connectionAssetLabel({
+        kind: "descriptor",
+        chain: "liquid",
+        observedAssets: ["SOMETHINGELSE"],
+      }),
+    ).toBe("LBTC");
+  });
+});

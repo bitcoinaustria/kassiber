@@ -124,6 +124,27 @@ export async function pickDocumentImportSource(): Promise<DocumentImportSourceSe
   );
 }
 
+/**
+ * Pick a file for the assistant to analyze, returning only a staging token.
+ *
+ * Same contract as `pickDocumentImportSource` — the renderer never learns the
+ * path, and only the native picker can mint the grant — with a wider filter,
+ * since an assistant attachment is usually a CSV/XLSX export from an exchange
+ * that has no dedicated importer.
+ */
+export async function pickChatAttachmentSource(): Promise<DocumentImportSourceSelection | null> {
+  if (!isFilePickerAvailable) return null;
+  if (isBridgeRuntime) {
+    const payload = await callFilePickerBridge({ purpose: "chat_attachment" });
+    if (payload.error) throw new Error(String(payload.error));
+    return documentImportSourceSelection(payload.documentImportSource);
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return documentImportSourceSelection(
+    await invoke<unknown>("pick_chat_attachment_source"),
+  );
+}
+
 async function pickFileViaDevBridge(
   options: FilePickerOptions,
 ): Promise<string | null> {

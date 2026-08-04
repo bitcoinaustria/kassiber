@@ -381,6 +381,9 @@ def _build_chat_args(
         "persist": False if getattr(args, "incognito", False) else "auto",
         "session_id": session_id,
     }
+    attachment = getattr(args, "chat_attachment", None)
+    if attachment:
+        payload["attachment"] = attachment
     system = getattr(args, "system", None)
     if system:
         payload["system_prompt_kind"] = "raw"
@@ -488,6 +491,50 @@ def _resolve_continuation(
         if message.get("role") in {"user", "assistant"} and message.get("content")
     ]
     return requested, messages, session
+
+
+def _stage_chat_attachment(
+    client: _DaemonChatClient,
+    args: Any,
+) -> dict[str, Any] | None:
+    """Stage `--file` with the daemon and return the chat attachment grant.
+
+    Staged rather than passed as a path so the CLI and the desktop reach the
+    assistant's file tool the same way, and so the model only ever holds an
+    opaque token it cannot point at another file.
+    """
+    source_file = getattr(args, "file", None)
+    if not source_file:
+        return None
+    path = Path(str(source_file)).expanduser().resolve()
+    if not path.is_file():
+        raise AppError(
+            f"Attachment not found: {path}",
+            code="not_found",
+            hint="Pass an existing export file with --file.",
+            retryable=False,
+        )
+    request_id = f"chat-attach-{uuid.uuid4().hex}"
+    client.send(
+        {
+            "request_id": request_id,
+            "kind": "internal.document_import.stage",
+            "args": {"source_file": str(path)},
+        }
+    )
+    response = _read_control_response(client, request_id)
+    data = response.get("data") if isinstance(response.get("data"), dict) else {}
+    token = data.get("token")
+    if not isinstance(token, str) or not token:
+        raise AppError(
+            "could not attach the file to this chat",
+            code="ai_attachment_failed",
+            retryable=False,
+        )
+    return {
+        "token": token,
+        "label": (getattr(args, "file_context", None) or "").strip() or None,
+    }
 
 
 def _resolve_default_model(client: _DaemonChatClient, args: Any) -> None:
@@ -1098,6 +1145,10 @@ def run_chat_command(
         raise
     try:
         _resolve_default_model(client, args)
+        # Staged once for the whole session, so a REPL can keep discussing the
+        # same file across turns. The grant expires with the daemon's staging
+        # TTL; the analysis tool then reports that rather than reading a stale path.
+        args.chat_attachment = _stage_chat_attachment(client, args)
         session = ChatSessionResult(
             provider=getattr(args, "provider", None),
             model=args.model,

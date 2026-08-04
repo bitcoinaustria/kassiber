@@ -1559,6 +1559,7 @@ def import_into_wallet(
     file_path,
     input_format,
     import_mode=None,
+    column_map=None,
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     if input_format in {"21bitcoin_csv", "strike_csv"}:
@@ -1604,7 +1605,9 @@ def import_into_wallet(
             import_mode=mode,
         )
     wallet = resolve_wallet(conn, profile["id"], wallet_ref)
-    return _import_file_for_sync(conn, profile, wallet, file_path, input_format)
+    return _import_file_for_sync(
+        conn, profile, wallet, file_path, input_format, column_map=column_map
+    )
 
 
 def import_into_profile(
@@ -1702,7 +1705,9 @@ def _import_coordinator_hooks():
     )
 
 
-def _import_file_for_sync(conn, profile, wallet, file_path, input_format, *, commit=True):
+def _import_file_for_sync(
+    conn, profile, wallet, file_path, input_format, *, commit=True, column_map=None
+):
     if input_format in {"21bitcoin_csv", "strike_csv"}:
         return core_imports.import_file_into_wallet(
             conn,
@@ -1733,6 +1738,7 @@ def _import_file_for_sync(conn, profile, wallet, file_path, input_format, *, com
         input_format,
         _import_coordinator_hooks(),
         commit=commit,
+        column_map=column_map,
     )
 
 

@@ -89,6 +89,10 @@ SKILL_REFERENCE_NAMES = (
 
 TOOL_PROFILE_NAMES = ("core", "full")
 
+# Kept in step with core.file_analysis.MAX_SAMPLE_ROWS without importing it here
+# (kassiber.ai must not depend on kassiber.core); the daemon clamps regardless.
+MAX_FILE_ANALYSIS_SAMPLE_ROWS = 25
+
 CORE_TOOL_NAMES = frozenset(
     {
         "status", "ui.overview.snapshot", "ui.transactions.list",
@@ -118,6 +122,10 @@ CORE_TOOL_NAMES = frozenset(
         # discover that the dismissal exists — while the matcher silently stops
         # offering the pair. Add it once a read path exists.
         "ui.transfers.pair",
+        # Onboarding an unsupported exchange is a common first task, and the tool
+        # is inert without an attachment, so it belongs in the default profile
+        # rather than behind `full`.
+        "ui.wallets.analyze_file",
         "ui.custody.coverage.snapshot",
         "ui.custody.lineage.snapshot",
         "ui.custody.gaps.list", "ui.custody.gaps.review_context",
@@ -694,6 +702,77 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_wallets_identify",
         daemon_kind="ui.wallets.identify",
         summary_template="Identify owners",
+    ),
+    ToolEntry(
+        name="ui.wallets.analyze_file",
+        description=(
+            "Inspect the file the user attached to THIS chat and report whether "
+            "Kassiber's generic ledger importer can read it. Use this for an "
+            "export from an exchange, broker, or platform that has no dedicated "
+            "importer. Returns the file's column headers, the column plan "
+            "Kassiber inferred from them, how many rows would import, and which "
+            "rows would be rejected and why. There is no file argument: it always "
+            "reads the attachment, and you cannot point it at another file.\n\n"
+            "How to use the result: if `confident` is false, or rows are rejected "
+            "because a Type value is not recognized, work out the mapping FROM THE "
+            "HEADERS and call this tool again with `column_map`. Map `date` plus "
+            "one amount column at minimum; add `type_map` when the file labels "
+            "rows in another language or house style (e.g. {\"Kauf\": \"Buy\"}). "
+            "When it reports `next_step.action = import`, hand the finished plan "
+            "to the user to run — there is no import tool here, so give them the "
+            "exact command (`kassiber wallets import-ledger --wallet <wallet> "
+            "--file <path> --column-map '<the plan as JSON>'`) and never claim "
+            "you imported anything.\n\n"
+            "If `row_kinds_from_amount_sign` is true, no Type or direction "
+            "column was recognized, so every row would import as a plain "
+            "transfer chosen by the amount's sign — a sale would book as a "
+            "deposit, with nothing rejected. Map the file's own Type column "
+            "before importing, or confirm with the user that the export really "
+            "is transfers only.\n\n"
+            "You are mapping column names and label vocabulary only. Never "
+            "transcribe, re-type, or compute amounts, dates, or totals yourself "
+            "and never pass them to an import — the importer reads every value "
+            "from the file, which is what makes the result auditable. When the "
+            "provider is not running on this device, cell values are withheld "
+            "from you by design (`cell_values_withheld`) and the headers are all "
+            "you need. Photos and PDFs are not handled here and route to the "
+            "on-device document importer instead."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "column_map": {
+                    "type": "object",
+                    "additionalProperties": True,
+                    "description": (
+                        "Explicit column plan mapping ledger fields to this "
+                        "file's own header values, e.g. {\"date\": \"Trade Date\", "
+                        "\"amount\": \"Qty\", \"fiat_value\": \"Total\"}. Use "
+                        "`type_map` inside it to translate Type values onto "
+                        "canonical ledger Types. A column that is not in the file, "
+                        "or a Type that is not a real ledger Type, is rejected. "
+                        "Asset hints (`amount_header_asset` and friends) are "
+                        "refused here — an asset is a value, not a name; if a "
+                        "numeric column does not say which rail it holds, ask the "
+                        "user rather than declaring one."
+                    ),
+                },
+                "sample_rows": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": MAX_FILE_ANALYSIS_SAMPLE_ROWS,
+                    "description": (
+                        "How many normalized rows to include, when the provider "
+                        "runs on this device. Ignored otherwise."
+                    ),
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_wallets_analyze_file",
+        daemon_kind="ui.wallets.analyze_file",
+        summary_template="Analyze attached file",
     ),
     ToolEntry(
         name="ui.backends.list",
@@ -3246,7 +3325,14 @@ def select_tool_capabilities(
         ),
         "transactions": ("transaction", "txid", "note", "tag", "metadata", "evidence", "attachment", "quarantine", "edit"),
         "reports": ("report", "summary", "total", "journal", "tax", "gain", "balance", "portfolio", "price", "rate", "export", "steuer", "e1kv", "exit tax"),
-        "wallets": ("wallet", "backend", "sync", "source", "utxo", "connection"),
+        "wallets": (
+            "wallet", "backend", "sync", "source", "utxo", "connection",
+            # Onboarding an unlisted exchange from a file: the attachment
+            # itself also forces this pack (see the daemon), but a user who
+            # asks before attaching should still reach the tool.
+            "csv", "xlsx", "export", "import", "spreadsheet", "exchange",
+            "broker", "datei", "tabelle", "börse", "boerse",
+        ),
         "loans": ("loan", "collateral", "borrowed", "principal", "liquidation", "darlehen", "kredit"),
         "privacy": ("privacy", "linkable", "egress", "outbound", "psbt"),
         "source_funds": ("source of funds", "source-of-funds", "provenance", "audit package", "proof of funds"),

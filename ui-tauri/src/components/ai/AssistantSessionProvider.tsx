@@ -2,9 +2,11 @@ import * as React from "react";
 
 import {
   AssistantSessionContext,
+  type AssistantAttachment,
   type AssistantScreenContext,
   type AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
+import { pickChatAttachmentSource } from "@/lib/filePicker";
 import { currentAssistantScreenContext } from "@/components/ai/assistantScreenContext";
 import {
   type AiChatMessage,
@@ -54,6 +56,8 @@ export function AssistantSessionProvider({
   const setAssistantDraft = useAssistantDraftStore((state) => state.setDraft);
   const [queuedPrompts, setQueuedPrompts] = React.useState<string[]>([]);
   const [incognito, setIncognito] = React.useState(false);
+  const [attachment, setAttachment] =
+    React.useState<AssistantAttachment | null>(null);
   // Set by branch/edit; consumed on the next send so the daemon persists the
   // seeded prefix for that fork only. A bare detached conversation (history
   // toggled, session deleted) never carries it, so its prior turns are not
@@ -97,12 +101,17 @@ export function AssistantSessionProvider({
           sessionId: activeSession,
           persist: incognito && activeSession === null ? false : "auto",
           seedHistory,
+          // Token only. `label` is the user's own words about the file (the
+          // CLI's --file-context); sending the filename there would have the
+          // daemon tell the model "the user describes it as: export.csv", and
+          // the daemon already names the file from the staging grant.
+          attachment: attachment ? { token: attachment.token } : undefined,
           screenContext: currentAssistantScreenContext(screenContext),
         },
         prompt,
       );
     },
-    [incognito, screenContext, selection, send, thinkingEffort],
+    [attachment, incognito, screenContext, selection, send, thinkingEffort],
   );
 
   const dispatchPrompt = React.useCallback(
@@ -141,8 +150,24 @@ export function AssistantSessionProvider({
   const clearChat = React.useCallback(() => {
     setQueuedPrompts([]);
     seedHistoryPendingRef.current = false;
+    // The grant belongs to the conversation that asked for it; a new chat must
+    // not silently keep analyzing the previous chat's file.
+    setAttachment(null);
     reset();
   }, [reset]);
+
+  const attachFile = React.useCallback(async () => {
+    const selected = await pickChatAttachmentSource();
+    if (!selected) return; // cancelled, or no picker in this runtime
+    setAttachment({
+      token: selected.document_token,
+      filename: selected.source.filename,
+      kind: selected.source.kind,
+      sizeBytes: selected.source.size_bytes,
+    });
+  }, []);
+
+  const clearAttachment = React.useCallback(() => setAttachment(null), []);
 
   const resumeSession = React.useCallback(
     async (targetSessionId: string) => {
@@ -167,6 +192,10 @@ export function AssistantSessionProvider({
         .map((message) => ({ role: message.role, content: message.content }));
       setQueuedPrompts([]);
       setIncognito(false);
+      // The grant belongs to the conversation that asked for it. Loading a
+      // different saved chat must not carry the previous chat's file into it —
+      // the next turn would analyze a file this conversation never mentioned.
+      setAttachment(null);
       // Drop any half-typed draft before binding the resumed (persisted)
       // session — otherwise text typed while Incognito would ride into the
       // loaded chat and be stored on the next submit.
@@ -275,9 +304,12 @@ export function AssistantSessionProvider({
       returnPath: screenContext.route,
       sessionId,
       incognito,
+      attachment,
       setSelection,
       setThinkingEffort,
       setIncognito,
+      attachFile,
+      clearAttachment,
       sendPrompt,
       sendConsent: typedSendConsent,
       abort,
@@ -289,7 +321,10 @@ export function AssistantSessionProvider({
     }),
     [
       abort,
+      attachFile,
+      attachment,
       branchFromMessage,
+      clearAttachment,
       editUserMessage,
       clearChat,
       error,

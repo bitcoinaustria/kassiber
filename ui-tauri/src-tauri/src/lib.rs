@@ -320,6 +320,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.wallets.document_import.import",
     "ui.wallets.import_samourai",
     "ui.wallets.ledger_preview",
+    "ui.imports.list",
+    "ui.imports.rollback",
     "ui.wallets.preview_descriptor",
     "ui.wallets.detect_script_types",
     "ui.wallets.identify",
@@ -672,6 +674,33 @@ async fn pick_document_import_source(
     app: tauri::AppHandle,
     state: State<'_, Arc<DaemonSupervisor>>,
 ) -> Result<Option<Value>, String> {
+    pick_staged_source(app, state, "Images and PDF", DOCUMENT_IMPORT_EXTENSIONS).await
+}
+
+/// Stage a file the user picked for the AI assistant to analyze.
+///
+/// Same native-picker-only rule as document OCR, with a wider filter: an
+/// assistant attachment is usually a CSV/XLSX export from an exchange with no
+/// dedicated importer, and may also be a PDF/photo statement.
+#[tauri::command]
+async fn pick_chat_attachment_source(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<DaemonSupervisor>>,
+) -> Result<Option<Value>, String> {
+    let extensions: Vec<&str> = LEDGER_PREVIEW_EXTENSIONS
+        .iter()
+        .chain(DOCUMENT_IMPORT_EXTENSIONS.iter())
+        .copied()
+        .collect();
+    pick_staged_source(app, state, "Exports, statements and images", &extensions).await
+}
+
+async fn pick_staged_source(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<DaemonSupervisor>>,
+    filter_label: &str,
+    extensions: &[&str],
+) -> Result<Option<Value>, String> {
     // This command deliberately accepts no path or filter arguments from the
     // webview. Only the native picker may mint the daemon's opaque document
     // session, so a compromised renderer cannot turn OCR into a local-file
@@ -679,7 +708,7 @@ async fn pick_document_import_source(
     let selection = app
         .dialog()
         .file()
-        .add_filter("Images and PDF", DOCUMENT_IMPORT_EXTENSIONS)
+        .add_filter(filter_label, extensions)
         .blocking_pick_file();
     let Some(selection) = selection else {
         return Ok(None);
@@ -2863,6 +2892,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             daemon_invoke,
             pick_document_import_source,
+            pick_chat_attachment_source,
             daemon_lifecycle_snapshot,
             open_exported_file,
             open_attachment_file,

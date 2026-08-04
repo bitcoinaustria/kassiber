@@ -68,6 +68,14 @@ export type AssistantThinkingEffort =
   | "max"
   | "ultra";
 
+export interface AssistantAttachment {
+  /** Opaque daemon staging grant; expires with the daemon's staging TTL. */
+  token: string;
+  filename: string;
+  kind?: string;
+  sizeBytes?: number;
+}
+
 export interface AssistantSessionContextValue {
   messages: AiChatMessage[];
   isStreaming: boolean;
@@ -81,9 +89,18 @@ export interface AssistantSessionContextValue {
   sessionId: string | null;
   /** When true, turns are sent with persist=false (nothing stored). */
   incognito: boolean;
+  /**
+   * File attached to this conversation, for the assistant's file-analysis tool.
+   * Holds a staging token and the display filename — never a path, and never
+   * the file's contents.
+   */
+  attachment: AssistantAttachment | null;
   setSelection: (next: AssistantModelSelection | null) => void;
   setThinkingEffort: (next: AssistantThinkingEffort) => void;
   setIncognito: (next: boolean) => void;
+  /** Open the native picker and attach the chosen file to this conversation. */
+  attachFile: () => Promise<void>;
+  clearAttachment: () => void;
   sendPrompt: (prompt: string) => void;
   sendConsent: (decision: AiToolConsentDecision) => Promise<void>;
   abort: () => void;

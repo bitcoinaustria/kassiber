@@ -327,10 +327,59 @@ Amounts are in BTC (or whole sats when the asset is `SATS`); fiat columns must
 match the book currency; gift/donation/lost/stolen rows are quarantined for
 review. Full column + Type reference: [imports.md](../../../docs/reference/imports.md#generic-ledger-import).
 
-Adding a provider Kassiber does not support yet is outside this CLI-navigation
-reference. For one-off imports, reshape the export into the generic ledger
-columns and use `wallets import-ledger`; for a dedicated importer, work from the
-Kassiber source repo docs and code review process.
+### A provider with no predefined importer
+
+Do not tell the user to retype or reshape their export. Any CSV/TSV/XLSX can go
+through the generic ledger importer by mapping its columns:
+
+```bash
+kassiber wallets analyze-file --file export.csv   # headers + inferred plan + dry-run; no DB, no network
+kassiber wallets import-ledger --wallet wallet-name --file export.csv \
+  --column-map '{"date":"Trade Date","type":"Action","amount":"Qty","fiat_value":"Total"}'
+```
+
+`analyze-file` first. If it reports `confident: false`, or rejects rows for an
+unrecognized `Type`, build the plan **from the headers it returned** and analyze
+again with `--column-map` until `next_step.action` is `import`. Add `type_map`
+inside the plan when the file labels rows in another language or house style
+(`{"type_map": {"ACQ-MKT": "Buy"}}`); German values are already recognized.
+
+When `row_kinds_from_amount_sign` is true, no Type or direction column was
+recognized and every row would import as a plain transfer picked by the amount's
+sign — a sale would book as a deposit with nothing rejected. Map the file's own
+Type column, or confirm with the user that the export really is transfers only.
+
+When `amount_units_unconfirmed` is true, nothing in the file says what the
+amounts are denominated in and they are too large to be BTC — almost certainly
+satoshis. Ask the user which rail it is; never assume. When `header_is_preamble`
+is true the first row is an account-holder/date-range line rather than column
+names, so no mapping can work: ask the user to delete the lines above the real
+header and re-export.
+
+In chat, the equivalent is the `ui.wallets.analyze_file` tool over the file the
+user attached — same loop, same `column_map`, with one difference that matters:
+**you propose the plan, the user runs the import.** There is no import tool in
+chat, so once the analysis reaches `next_step.action = import`, give the user the
+`wallets import-ledger --column-map '<plan>'` command and say the run is undoable
+(`imports list` / `imports rollback --batch <id> --confirm`). Never say you
+imported anything.
+
+You are mapping column names and label vocabulary. Never transcribe, re-type, or
+compute an amount, date, or total yourself: the importer reads every value from
+the file, which is what makes the import auditable. Asset hints
+(`amount_header_asset` and friends) are refused from chat — if a numeric column
+does not say which rail it holds, ask the user rather than declaring one. A
+`type_map` is the one mapping that decides a tax kind, so state the mapping you
+propose ("Kauf → Buy") and let the user confirm it.
+
+If the provider is not running on the user's machine you will not be shown cell
+values at all (`cell_values_withheld`), and the headers are all you need. When
+`headers_withheld` is non-zero the file has no real header row (a preamble line,
+or a headerless export) — ask the user what the columns are instead of guessing
+from `[withheld]`.
+
+A dedicated first-class importer is still a source-repo change; this path is the
+stop-gap that makes the export usable today.
 
 Do not create a second wallet for a BTCPay or Phoenix export when it belongs to a wallet already tracked in Kassiber.
 Do not create one Kassiber wallet per BTCPay store if multiple stores share the same underlying wallet balance.

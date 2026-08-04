@@ -570,6 +570,25 @@ top of the monolith.
   source-file SHA-256, and attach the source document as managed evidence.
   Source-funds-specific extraction polish remains future
   feedback-driven work.
+- [x] Add a stop-gap path for exchanges/brokers with no predefined importer:
+  `wallets analyze-file` plus `--column-map` (with `type_map`) on
+  `import-ledger`, the read-only `ui.wallets.analyze_file` daemon kind, an
+  `ai.chat` file attachment (staging grant, never a path) exposed as
+  `kassiber chat --file` and the desktop composer attach button, and the
+  `ui.wallets.analyze_file` AI tool. The model maps column names and label
+  vocabulary only; the deterministic importer still reads every value, and an
+  off-device provider gets headers/counts with no cell values. See
+  [docs/reference/imports.md](docs/reference/imports.md).
+  - [x] Record each import as a rollback-able run (`import_batches` +
+    `import_batch_transactions`, `imports {list,rollback}`,
+    `ui.imports.{list,rollback}`, desktop Import-runs panel on the connection
+    detail). Stores the confirmed `column_map`; only rows a run created are
+    removed, so enrichment of pre-existing rows is never undone. The
+    Connections screen gained an "Other exchange or broker" card and derives
+    the asset badge from observed assets.
+  - [ ] Offer a stored run's `column_map` as the default when the same platform
+    is imported again (it is persisted, but the next import still has to pass
+    it). Worth doing once real users have repeat exports.
 
 ## Phase 1 - Desktop UI
 
