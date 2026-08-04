@@ -550,6 +550,45 @@ class SyncIdentityAndCaptureTests(unittest.TestCase):
 
         self.assertEqual(actual["swap_refund_funding_vout"], 7)
 
+    def test_tax_classification_replicates_and_survives_an_older_peer(self):
+        # `kind_override` decides whether a receipt books an `income` journal
+        # entry. Left off the allowlist, two devices would file different tax
+        # reports from the same book — silently, since nothing else diverges.
+        self._enable()
+        _, tx_id, _ = self._insert_wallet_and_transaction()
+        self.conn.execute(
+            "UPDATE transactions SET kind_override = 'income' WHERE id = ?",
+            (tx_id,),
+        )
+        spec = SYNC_TABLE_MAP["transactions"]
+        self.assertIn("kind_override", spec.columns)
+        self.assertIn("kind_override", spec.high_stakes_fields)
+        row = self.conn.execute(
+            "SELECT * FROM transactions WHERE id = ?", (tx_id,)
+        ).fetchone()
+        book = self.conn.execute(
+            "SELECT * FROM sync_books WHERE profile_id = ?",
+            (self.profile["id"],),
+        ).fetchone()
+        wire_row = serialize_row(spec, row, hmac_key_b64=book["hmac_key_b64"])
+        self.assertEqual(wire_row["kind_override"], "income")
+
+        # A peer on a pre-#517 build omits the column entirely. That is an
+        # absent additive field, not a rewrite to NULL, so the local
+        # classification must survive the merge rather than be cleared.
+        wire_row.pop("kind_override")
+        actual, _ = _prepare_actual_row(
+            self.conn,
+            book=book,
+            spec=spec,
+            wire_row=wire_row,
+            blobs={},
+            attachments_root=None,
+            created_files=[],
+        )
+
+        self.assertEqual(actual["kind_override"], "income")
+
 
 if __name__ == "__main__":
     unittest.main()

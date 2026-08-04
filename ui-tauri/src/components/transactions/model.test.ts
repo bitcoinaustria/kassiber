@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createNewTransactionDraft,
   draftForTransaction,
+  metadataUpdateArgs,
+  nextLabelForFlow,
   formatCounterDisplayMoney,
   formatDisplayMoney,
   formatSignedDisplayMoney,
@@ -26,6 +29,79 @@ function txWithTags(tags: string[]): Transaction {
     tags,
   };
 }
+
+describe("metadataUpdateArgs", () => {
+  const args = (
+    draft: ReturnType<typeof draftForTransaction>,
+    baseline: ReturnType<typeof draftForTransaction>,
+  ) =>
+    metadataUpdateArgs({
+      transactionId: "tx-1",
+      draft,
+      baseline,
+      sourceTags: [],
+    });
+
+  it("sends the classification only when the user changed it", () => {
+    const baseline = draftForTransaction(txWithTags([]));
+
+    expect(args({ ...baseline, note: "just a note" }, baseline)).not.toHaveProperty(
+      "kind",
+    );
+    expect(args({ ...baseline, kind: "income" }, baseline)).toMatchObject({
+      kind: "income",
+    });
+    // Clearing is a real change, not an omission.
+    expect(
+      args({ ...baseline, kind: null }, { ...baseline, kind: "income" }),
+    ).toMatchObject({ kind: null });
+  });
+});
+
+describe("nextLabelForFlow", () => {
+  it("does not sticker a new receipt as Income", () => {
+    expect(createNewTransactionDraft().label).toBe("Unlabeled");
+    // The label persists as a tag and a tag outranks the derived type on the
+    // chip, so auto-applying "Income" reproduces the exact contradiction the
+    // kind-derived label removes: chip says earnings, engine books a buy.
+    expect(nextLabelForFlow("incoming")).toBe("Unlabeled");
+    expect(nextLabelForFlow("transfer")).toBe("Transfer");
+    expect(nextLabelForFlow("outgoing")).toBe("Expense");
+  });
+});
+
+describe("draftForTransaction kind", () => {
+  it("never invents a tax kind for an unclassified row", () => {
+    // A "Receive" row is an acquisition to the engine until the user says
+    // otherwise. Defaulting here would declare income on the next save of an
+    // unrelated field.
+    expect(draftForTransaction(txWithTags([])).kind).toBeNull();
+    expect(
+      draftForTransaction({ ...txWithTags([]), tag: "Income", tags: [] }).kind,
+    ).toBeNull();
+  });
+
+  it("round-trips the override so saving does not clear it", () => {
+    const draft = draftForTransaction({
+      ...txWithTags([]),
+      kindOverride: "mining",
+    });
+
+    expect(draft.kind).toBe("mining");
+  });
+
+  it("does not adopt the importer's provenance kind as a classification", () => {
+    // `kind` is what the source said. Seeding the draft from it would re-save
+    // provenance as a user classification — and `lnd_invoice` is not even a
+    // kind the daemon accepts.
+    const draft = draftForTransaction({
+      ...txWithTags([]),
+      kind: "lnd_invoice",
+    });
+
+    expect(draft.kind).toBeNull();
+  });
+});
 
 describe("draftForTransaction", () => {
   it("preserves additional label-like tags outside the selected classification", () => {

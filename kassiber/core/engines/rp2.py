@@ -337,7 +337,13 @@ def _rp2_config_token(value: Any, field: str) -> str:
 
 def _normalized_event_kind(event: Any) -> str:
     raw_row = getattr(event, "raw_row", None) or {}
-    kind = raw_row["kind"] if hasattr(raw_row, "keys") and "kind" in raw_row.keys() else None
+    keys = raw_row.keys() if hasattr(raw_row, "keys") else ()
+    # A user-assigned classification wins over the importer's provenance kind.
+    # `kind` still records what the source said, so trust checks that key off it
+    # (the Lightning payment-hash pairing in transfers.py) keep working.
+    kind = raw_row["kind_override"] if "kind_override" in keys else None
+    if kind in (None, ""):
+        kind = raw_row["kind"] if "kind" in keys else None
     if kind is None:
         return ""
     return str(kind).strip().lower().replace("-", "_").replace(" ", "_")

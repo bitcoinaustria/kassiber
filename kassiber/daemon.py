@@ -12172,7 +12172,7 @@ def _transaction_metadata_update_payload(
         "pricing_quality",
         "pricing_external_ref",
     }
-    review_tax_fields = {"review_status", "taxable", "at_regime", "at_category"}
+    review_tax_fields = {"review_status", "taxable", "at_regime", "at_category", "kind"}
     allowed = {"transaction", "note", "tags", "excluded", "source", "reason"} | pricing_fields | review_tax_fields
     unknown = sorted(set(args) - allowed)
     if unknown:
@@ -12215,6 +12215,8 @@ def _transaction_metadata_update_payload(
         at_regime_set="at_regime" in args,
         at_category=args.get("at_category") if "at_category" in args else None,
         at_category_set="at_category" in args,
+        kind=args.get("kind") if "kind" in args else None,
+        kind_set="kind" in args,
         source=source,
         reason=reason,
     )

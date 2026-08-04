@@ -63,6 +63,33 @@
     "review": "Review",
     "other": "Other"
   },
+  "type": {
+    "acquired": "Acquired",
+    "airdrop": "Airdrop",
+    "buy": "Buy",
+    "channelClose": "Channel close",
+    "channelOpen": "Channel open",
+    "deposit": "Deposit",
+    "donation": "Donation",
+    "expense": "Expense",
+    "fee": "Fee",
+    "gift": "Gift",
+    "hardFork": "Hard fork",
+    "income": "Income",
+    "interest": "Interest",
+    "lnInvoice": "LN invoice",
+    "lnPayment": "LN payment",
+    "lost": "Lost",
+    "mining": "Mining",
+    "sell": "Sell",
+    "spend": "Spend",
+    "staking": "Staking",
+    "stolen": "Stolen",
+    "swap": "Swap",
+    "transfer": "Transfer",
+    "wages": "Wages",
+    "withdrawal": "Withdrawal"
+  },
   "pricingOption": {
     "sourcePrice": {
       "label": "Source price",
@@ -905,7 +932,10 @@
       "to": "to",
       "from": "from",
       "sentence": "You {{action}} {{amount}} {{direction}} {{counterparty}} on {{date}}, {{fiat}}. {{treatment}}."
-    }
+    },
+    "kind": "Recorded as",
+    "kindHint": "What this transaction is for tax purposes. Income kinds declare earnings at market value; a plain acquisition only records cost basis. Unlike tags, this drives the tax report. Gift, donation, lost and stolen are dispositions but not sales, so they are held for review instead of booked at market value.",
+    "kindUnclassified": "Unclassified"
   },
   "classify": {
     "label": "Label",

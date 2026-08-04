@@ -2798,7 +2798,11 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.transactions.metadata.update",
         description=(
             "Update reviewed transaction metadata after explicit consent. Supports notes, tags, exclusion, "
-            "review/tax state, Austrian overrides, and explicit pricing provenance. Invalidates journals."
+            "review/tax state, Austrian overrides, and explicit pricing provenance. Invalidates journals. "
+            "`kind` declares the tax character of a receipt or disposal the importer could not classify "
+            "(income, mining, staking, interest, wages, airdrop, hardfork, buy, deposit inbound; "
+            "sell, withdrawal, spend, gift, donation, lost, stolen outbound; null clears it). "
+            "Unlike tags it drives the tax engine, and it is rejected on the wrong direction."
         ),
         parameters={
             "type": "object",
@@ -2813,6 +2817,7 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "taxable": {"type": ["boolean", "null"]},
                 "at_regime": {"type": ["string", "null"]},
                 "at_category": {"type": ["string", "null"]},
+                "kind": {"type": ["string", "null"]},
                 "fiat_currency": {"type": ["string", "null"]},
                 "fiat_rate": {"type": ["string", "number", "null"]},
                 "fiat_value": {"type": ["string", "number", "null"]},

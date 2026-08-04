@@ -227,9 +227,32 @@ export interface NodeSnapshot {
   forwards?: NodeForward[];
 }
 
+// Derived display labels from the daemon (`_transaction_type` in
+// core/ui_snapshot.py) — inbound rows carry their stored kind, so "Income"
+// means declarable earnings rather than "arrived in a wallet".
 export type TxType =
   | "Income"
+  | "Buy"
+  | "Deposit"
+  | "Wages"
+  | "Mining"
+  | "Staking"
+  | "Interest"
+  | "Airdrop"
+  | "Hard fork"
+  | "Acquired"
+  | "LN invoice"
+  | "Channel close"
   | "Expense"
+  | "LN payment"
+  | "Channel open"
+  | "Sell"
+  | "Withdrawal"
+  | "Spend"
+  | "Gift"
+  | "Donation"
+  | "Lost"
+  | "Stolen"
   | "Transfer"
   | "Fee"
   | "Swap"
@@ -245,6 +268,10 @@ export interface Tx {
   date: string;
   occurredAt?: string;
   type: TxType;
+  /** importer provenance behind `type` (read-only; gates trust checks) */
+  kind?: string | null;
+  /** user-assigned tax classification; null = unclassified */
+  kindOverride?: string | null;
   asset?: string | null;
   chain?: string | null;
   network?: string | null;

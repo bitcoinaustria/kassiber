@@ -209,6 +209,7 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
             "taxability_override",
             "at_regime_override",
             "at_category_override",
+            "kind_override",
             "privacy_boundary",
             "kind",
             "description",
@@ -229,13 +230,20 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
                 "taxability_override",
                 "at_regime_override",
                 "at_category_override",
+                # The user's tax classification: it decides whether a receipt
+                # books an `income` journal entry, so it must not silently lose
+                # a merge the way a cosmetic field may.
+                "kind_override",
                 "excluded",
             }
         )
         | _TRANSACTION_PRICING_FIELDS,
         add_win_fields=frozenset({"note"}),
+        # `kind_override` is additive: a peer on a pre-#517 build emits rows
+        # without it, and an absent additive field must retain the local value
+        # rather than be read as a rewrite to NULL (or reject the bundle).
         optional_columns=frozenset(
-            {"external_id_kind", "swap_refund_funding_vout"}
+            {"external_id_kind", "swap_refund_funding_vout", "kind_override"}
         ),
     ),
     TableSpec(

@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -17,7 +18,10 @@ from kassiber.core import audit_package
 from kassiber.core import metadata as core_metadata
 from kassiber.core.ui_snapshot import build_report_blockers_snapshot
 from kassiber.db import open_db
-from kassiber.daemon import _quarantine_resolution_payload
+from kassiber.daemon import (
+    _quarantine_resolution_payload,
+    _transaction_metadata_update_payload,
+)
 from kassiber.errors import AppError
 from kassiber.time_utils import now_iso
 
@@ -485,6 +489,158 @@ class TransactionEditHistoryTest(unittest.TestCase):
         included_manifest = json.loads(Path(included["manifest"]).read_text(encoding="utf-8"))
         self.assertTrue(included_manifest["summary"]["edit_history_included"])
         self.assertEqual(len(included_manifest["transactions"][0]["edit_history"]), 1)
+
+    def test_kind_classification_is_auditable_and_direction_guarded(self):
+        # Tags are cosmetic; `kind` is what the tax engine reads. Without this
+        # path a Lightning/third-party receipt could never be declared as
+        # income — it stayed an unclassified inbound and rp2 booked it BUY.
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        hooks = _metadata_hooks()
+
+        record = core_metadata.update_transaction_metadata(
+            conn, None, None, "seed-inbound-1", hooks,
+            kind="income", kind_set=True,
+            source="gui", reason="freelance invoice paid over LN",
+        )
+        self.assertTrue(record["updated"])
+        stored = resolve_transaction(conn, resolve_scope(conn, None, None)[1]["id"], "seed-inbound-1")
+        self.assertEqual(stored["kind_override"], "income")
+
+        history = self._run_json(
+            "metadata", "records", "history", "list", "--transaction", "seed-inbound-1",
+        )["data"]["events"]
+        kind_fields = [
+            field
+            for event in history
+            for field in event["fields"]
+            if field["field"] == "kind"
+        ]
+        self.assertEqual(len(kind_fields), 1)
+        self.assertIsNone(kind_fields[0]["before_value"])
+        self.assertEqual(kind_fields[0]["after_value"], "income")
+
+        # Clearing returns it to unclassified rather than to a guessed kind.
+        core_metadata.update_transaction_metadata(
+            conn, None, None, "seed-inbound-1", hooks, kind=None, kind_set=True,
+        )
+        stored = resolve_transaction(conn, resolve_scope(conn, None, None)[1]["id"], "seed-inbound-1")
+        self.assertIsNone(stored["kind_override"])
+
+        # A disposal kind on an inbound row is a classification error, not a
+        # silent write: income kinds describe what arrived.
+        with self.assertRaises(AppError) as ctx:
+            core_metadata.update_transaction_metadata(
+                conn, None, None, "seed-inbound-1", hooks, kind="sell", kind_set=True,
+            )
+        self.assertEqual(ctx.exception.code, "validation")
+
+        with self.assertRaises(AppError):
+            core_metadata.update_transaction_metadata(
+                conn, None, None, "seed-inbound-1", hooks,
+                kind="not-a-kind", kind_set=True,
+            )
+
+    def test_kind_override_is_revertable_and_leaves_provenance_intact(self):
+        # The classification is an override: `kind` keeps the importer's
+        # provenance (trust checks such as the Lightning payment-hash pairing
+        # in transfers.py key off it), so clearing restores the source value
+        # instead of blanking the row.
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        hooks = _metadata_hooks()
+        profile_id = resolve_scope(conn, None, None)[1]["id"]
+        conn.execute(
+            "UPDATE transactions SET kind = 'lnd_invoice' WHERE external_id = 'seed-inbound-1'"
+        )
+        conn.commit()
+
+        # One save carrying an unrelated field plus the classification, as the
+        # desktop detail sheet does.
+        core_metadata.update_transaction_metadata(
+            conn, None, None, "seed-inbound-1", hooks,
+            note="combined edit", note_set=True,
+            kind="income", kind_set=True, source="gui",
+        )
+        row = resolve_transaction(conn, profile_id, "seed-inbound-1")
+        self.assertEqual(row["kind"], "lnd_invoice")
+        self.assertEqual(row["kind_override"], "income")
+
+        event = core_metadata.list_transaction_history(
+            conn, None, None, "seed-inbound-1", hooks,
+        )["events"][0]
+        kind_field = next(f for f in event["fields"] if f["field"] == "kind")
+        self.assertEqual(kind_field["label"], "Recorded as")
+
+        # Reverting the whole event must not choke on the tax field and take
+        # the note down with it.
+        core_metadata.revert_transaction_edit(
+            conn, None, None, "seed-inbound-1", hooks, event_id=event["id"],
+        )
+        row = resolve_transaction(conn, profile_id, "seed-inbound-1")
+        self.assertIsNone(row["kind_override"])
+        self.assertIsNone(row["note"])
+        self.assertEqual(row["kind"], "lnd_invoice")
+
+    def test_cli_and_daemon_can_set_the_classification(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        profile_id = resolve_scope(conn, None, None)[1]["id"]
+
+        self._run_json(
+            "metadata", "records", "kind", "set",
+            "--transaction", "seed-inbound-2", "--kind", "mining",
+        )
+        self.assertEqual(
+            resolve_transaction(conn, profile_id, "seed-inbound-2")["kind_override"],
+            "mining",
+        )
+
+        payload = _transaction_metadata_update_payload(
+            conn,
+            {"transaction": "seed-inbound-2", "kind": "staking"},
+            default_source="gui",
+        )
+        self.assertTrue(payload["updated"])
+        self.assertEqual(
+            resolve_transaction(conn, profile_id, "seed-inbound-2")["kind_override"],
+            "staking",
+        )
+
+        # The daemon path is not a validation bypass.
+        with self.assertRaises(AppError):
+            _transaction_metadata_update_payload(
+                conn,
+                {"transaction": "seed-inbound-2", "kind": "sell"},
+                default_source="gui",
+            )
+
+        self._run_json(
+            "metadata", "records", "kind", "clear", "--transaction", "seed-inbound-2",
+        )
+        self.assertIsNone(
+            resolve_transaction(conn, profile_id, "seed-inbound-2")["kind_override"],
+        )
+
+    def test_desktop_kind_vocabulary_matches_the_python_one(self):
+        # `TRANSACTION_KIND_OPTIONS` is a hand-written mirror of the Python
+        # vocabulary; without this it drifts silently and the UI offers kinds
+        # the daemon rejects (or hides ones it accepts).
+        source = (ROOT / "ui-tauri/src/lib/transactionTypeLabel.ts").read_text(
+            encoding="utf-8",
+        )
+        block = source.split("TRANSACTION_KIND_OPTIONS = [", 1)[1].split("] as const", 1)[0]
+        ts_kinds = {
+            (match.group(1), match.group(2) == "true")
+            for match in re.finditer(
+                r'\{\s*kind:\s*"([a-z_]+)",\s*inbound:\s*(true|false)', block,
+            )
+        }
+        py_kinds = {
+            (kind, direction == "inbound")
+            for kind, direction in core_metadata.SUPPORTED_TRANSACTION_KINDS.items()
+        }
+        self.assertEqual(ts_kinds, py_kinds)
 
 
 if __name__ == "__main__":

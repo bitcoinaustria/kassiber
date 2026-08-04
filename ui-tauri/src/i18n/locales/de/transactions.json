@@ -63,6 +63,33 @@
     "review": "Prüfung",
     "other": "Sonstiges"
   },
+  "type": {
+    "acquired": "Anschaffung",
+    "airdrop": "Airdrop",
+    "buy": "Kauf",
+    "channelClose": "Channel-Schließung",
+    "channelOpen": "Channel-Eröffnung",
+    "deposit": "Einzahlung",
+    "donation": "Spende",
+    "expense": "Ausgabe",
+    "fee": "Gebühr",
+    "gift": "Geschenk",
+    "hardFork": "Hard Fork",
+    "income": "Einnahme",
+    "interest": "Zinsen",
+    "lnInvoice": "LN-Rechnung",
+    "lnPayment": "LN-Zahlung",
+    "lost": "Verloren",
+    "mining": "Mining",
+    "sell": "Verkauf",
+    "spend": "Zahlung",
+    "staking": "Staking",
+    "stolen": "Gestohlen",
+    "swap": "Swap",
+    "transfer": "Übertragung",
+    "wages": "Lohn",
+    "withdrawal": "Auszahlung"
+  },
   "pricingOption": {
     "sourcePrice": {
       "label": "Quellpreis",
@@ -924,7 +951,10 @@
       "to": "an",
       "from": "von",
       "sentence": "Du hast am {{date}} {{amount}} {{direction}} {{counterparty}} {{action}}, {{fiat}}. {{treatment}}."
-    }
+    },
+    "kind": "Erfasst als",
+    "kindHint": "Was diese Transaktion steuerlich ist. Einkunftsarten erklären Einnahmen zum Marktwert, eine reine Anschaffung erfasst nur die Anschaffungskosten. Anders als Tags wirkt das direkt auf den Steuerbericht. Geschenk, Spende, Verloren und Gestohlen sind Abgänge, aber keine Verkäufe — sie werden zur Prüfung zurückgehalten statt zum Marktwert verbucht.",
+    "kindUnclassified": "Nicht klassifiziert"
   },
   "classify": {
     "label": "Label",

@@ -385,6 +385,28 @@ fair-market value you enter (`Fiat Value`), the same as a `Buy` without a cost.
 | Earn | Income, Mining, Staking, Interest, Airdrop, Fork | inbound |
 | Outflow (review) | Gift sent, Donation, Lost, Stolen | outbound |
 
+A transaction that arrives from anywhere else — a Lightning invoice you were
+paid, a synced deposit, a gift — has no `Type` to carry, so it stays
+**unclassified** and the engine books it as a plain acquisition: cost basis
+recorded, no income declared. That is the safe default, not a verdict. Classify
+it yourself when it was actually earnings:
+
+```bash
+kassiber metadata records kind set --transaction <txid> --kind income
+```
+
+The same control is the desktop UI's **Recorded as** field on a transaction's
+Tax tab. Kinds are direction-checked (an income kind only applies to an inbound
+row) and the change is recorded in the transaction's edit history, where it can
+be reverted.
+
+It is stored as an *override*, next to the kind the import recorded rather than
+on top of it. So re-importing never overwrites your classification, clearing it
+restores exactly what the source said, and provenance the rest of Kassiber
+relies on — such as the Lightning payment-hash check that pairs a self-transfer
+— keeps working on a reclassified row. Tags are *not* a substitute: they are
+cosmetic and the tax engine never reads them.
+
 To record moving Bitcoin between two of your own wallets, import a `Withdrawal`
 into the source wallet and a `Deposit` into the destination wallet with the same
 `Tx-ID`; transfer matching pairs them into a non-taxable move.

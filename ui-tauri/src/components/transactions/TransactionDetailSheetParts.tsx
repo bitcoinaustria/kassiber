@@ -60,6 +60,7 @@ export function diffDraft(
   if (current.reviewStatus !== original.reviewStatus) out.reviewStatus = true;
   if (current.taxable !== original.taxable) out.taxable = true;
   if (current.excluded !== original.excluded) out.excluded = true;
+  if (current.kind !== original.kind) out.kind = true;
   return out;
 }
 
