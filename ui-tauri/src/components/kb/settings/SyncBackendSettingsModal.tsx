@@ -485,6 +485,11 @@ export function SyncBackendSettingsModal({
     logs: string[];
     status?: number;
   }>("ui.backends.http.test");
+  const testBitcoinRpc = useDaemonMutation<{
+    reachable: boolean;
+    status?: string;
+    error?: { message?: string };
+  }>("ui.backends.bitcoinrpc.test");
   const [typeId, setTypeId] = React.useState<SyncBackendNetwork["id"]>("bitcoin");
   const [backendSource, setBackendSource] =
     React.useState<BackendSourceMode>("preset");
@@ -574,6 +579,19 @@ export function SyncBackendSettingsModal({
   const selectedKindIsExplorerApi =
     selectedBackendKind === "esplora" ||
     selectedBackendKind === "liquid-esplora";
+  const isBitcoinRpc = selectedBackendKind === "bitcoinrpc";
+  // Editing always runs in "custom" mode, so the source alone does not say
+  // whether this endpoint is one of Kassiber's public presets. Those have
+  // publicly trusted certificates and no business offering a trust override.
+  const isPublicPresetEndpoint = publicPresets.some(
+    (candidate) =>
+      candidate.url.trim().toLowerCase() === effectiveUrl.trim().toLowerCase(),
+  );
+  const showHttpTlsSettings =
+    backendSource === "custom" &&
+    !isPublicPresetEndpoint &&
+    effectiveUrl.toLowerCase().startsWith("https://") &&
+    (selectedKindIsExplorerApi || selectedBackendKind === "bitcoinrpc");
   const proxyCapable =
     type.net !== "LN" &&
     [
@@ -601,7 +619,9 @@ export function SyncBackendSettingsModal({
   );
   const ConnectionTrustIcon = connectionTrust.icon;
   const showAdvancedConnectionSettings =
-    (showElectrumEndpointParts && backendSource === "custom") || proxyCapable;
+    (showElectrumEndpointParts && backendSource === "custom") ||
+    showHttpTlsSettings ||
+    proxyCapable;
 
   React.useEffect(() => {
     if (!open || !onionEndpoint) return;
@@ -789,6 +809,8 @@ export function SyncBackendSettingsModal({
     setLightningCli("");
     setLightningDir("");
     setRpcFile("");
+    setTrustSsl(false);
+    setCertificate("");
     setSilentPayments(false);
     setSilentPaymentScanFile("");
     setSilentPaymentScanPath("");
@@ -841,10 +863,54 @@ export function SyncBackendSettingsModal({
         return false;
       }
     }
+    if (isBitcoinRpc) {
+      try {
+        const config: Record<string, unknown> = {
+          insecure: showHttpTlsSettings && trustSsl,
+        };
+        if (showHttpTlsSettings && !trustSsl) {
+          config.certificate = certificate.trim();
+        }
+        if (auth === "basic" && authVal.trim()) {
+          config.username = authVal.trim();
+        }
+        if (auth === "basic" && authVal2.trim()) {
+          config.password = authVal2.trim();
+        }
+        const envelope = await testBitcoinRpc.mutateAsync({
+          ...(initial ? { backend: initial.id } : {}),
+          url: effectiveUrl,
+          proxy: proxyValue,
+          network: type.net === "BTC" ? "main" : type.net.toLowerCase(),
+          config,
+        });
+        const data = envelope.data;
+        setTestState(data?.reachable ? "ok" : "fail");
+        setTestLog(
+          data?.reachable
+            ? data.status ?? t("backendModal.healthJustChecked")
+            : data?.error?.message ?? t("backendModal.httpTestFailed"),
+        );
+        return Boolean(data?.reachable);
+      } catch (error) {
+        setTestState("fail");
+        setTestLog(
+          error instanceof Error
+            ? error.message
+            : t("backendModal.httpTestFailed"),
+        );
+        return false;
+      }
+    }
     try {
       const envelope = await testHttp.mutateAsync({
         url: effectiveUrl,
         proxy: proxyValue,
+        insecure: showHttpTlsSettings && trustSsl,
+        certificate:
+          showHttpTlsSettings && !trustSsl && certificate.trim()
+            ? certificate.trim()
+            : undefined,
       });
       const data = envelope.data;
       setTestState(data?.ok ? "ok" : "fail");
@@ -957,12 +1023,16 @@ export function SyncBackendSettingsModal({
           isCoreLightning && lightningDir.trim() ? lightningDir.trim() : undefined,
         rpcFile: isCoreLightning && rpcFile.trim() ? rpcFile.trim() : undefined,
         trustSsl:
-          (showElectrumEndpointParts && electrumUseSsl) || isLnd
+          (showElectrumEndpointParts && electrumUseSsl) ||
+          showHttpTlsSettings ||
+          isLnd
             ? trustSsl
             : undefined,
         infrastructureOwner: effectiveInfrastructureOwner,
         certificate:
-          ((showElectrumEndpointParts && electrumUseSsl && !trustSsl) || isLnd) &&
+          ((showElectrumEndpointParts && electrumUseSsl && !trustSsl) ||
+            (showHttpTlsSettings && !trustSsl) ||
+            isLnd) &&
           certificate.trim()
             ? certificate.trim()
             : undefined,
@@ -1529,6 +1599,49 @@ export function SyncBackendSettingsModal({
                           disabled={!electrumUseSsl || trustSsl}
                         />
                         {electrumUseSsl && trustSsl ? (
+                          <p className="text-xs text-muted-foreground">
+                            {t("backendModal.certificateIgnored")}
+                          </p>
+                        ) : null}
+                      </div>
+                    </>
+                  )}
+                  {showHttpTlsSettings && (
+                    <>
+                      <label className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 text-sm sm:col-span-2">
+                        <span>
+                          <span className="block font-medium">
+                            {t("backendModal.trustSelfSignedLabel")}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {t("backendModal.trustSelfSignedHint")}
+                          </span>
+                        </span>
+                        <Switch
+                          checked={trustSsl}
+                          onCheckedChange={(checked) => {
+                            setTrustSsl(checked);
+                            setTestState("idle");
+                            setTestLog("");
+                          }}
+                        />
+                      </label>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="backend-http-certificate">
+                          {t("backendModal.certificateLabel")}
+                        </Label>
+                        <Input
+                          id="backend-http-certificate"
+                          value={certificate}
+                          onChange={(event) => {
+                            setCertificate(event.target.value);
+                            setTestState("idle");
+                            setTestLog("");
+                          }}
+                          placeholder={t("backendModal.certificatePlaceholder")}
+                          disabled={trustSsl}
+                        />
+                        {trustSsl ? (
                           <p className="text-xs text-muted-foreground">
                             {t("backendModal.certificateIgnored")}
                           </p>

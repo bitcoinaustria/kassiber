@@ -109,6 +109,70 @@ def test_urlopen_with_proxy_rejects_onion_without_proxy():
     direct.assert_not_called()
 
 
+def test_urlopen_with_proxy_forwards_explicit_tls_context_directly():
+    from kassiber.proxy import urlopen_with_proxy
+
+    request = urlrequest.Request("https://core.example/")
+    context = object()
+    with patch("kassiber.proxy.urlrequest.urlopen", return_value=_FakeHttpResponse()) as direct:
+        urlopen_with_proxy(request, timeout=5, ssl_context=context)
+    assert direct.call_args.kwargs["context"] is context
+
+
+def test_http_proxy_opener_receives_explicit_tls_context():
+    from kassiber.proxy import urlopen_with_proxy
+
+    request = urlrequest.Request("https://core.example/")
+    context = object()
+    with patch("kassiber.proxy.urlrequest.build_opener") as opener:
+        urlopen_with_proxy(
+            request,
+            timeout=5,
+            proxy_url="http://127.0.0.1:8080",
+            ssl_context=context,
+        )
+    handlers = opener.call_args.args
+    assert any(getattr(handler, "_context", None) is context for handler in handlers)
+
+
+def test_socks_https_uses_explicit_tls_context():
+    class Context:
+        def wrap_socket(self, raw_socket, server_hostname=None):
+            return raw_socket
+
+    context = Context()
+    class WrappedSocket:
+        def close(self):
+            pass
+
+    wrapped = WrappedSocket()
+
+    def connect_for_request(connection, *_args, **_kwargs):
+        connection.connect()
+
+    with patch("kassiber.proxy._connect_via_socks5", return_value=object()), patch.object(
+        context,
+        "wrap_socket",
+        return_value=wrapped,
+        create=True,
+    ) as wrap_socket, patch(
+        "kassiber.proxy.http.client.HTTPSConnection.request",
+        connect_for_request,
+    ), patch(
+        "kassiber.proxy.http.client.HTTPSConnection.getresponse",
+        return_value=_FakeHttpResponse(),
+    ):
+        with SocksUrlResponse(
+            "https://core.example/",
+            "socks5h://127.0.0.1:9050",
+            5,
+            {},
+            ssl_context=context,
+        ):
+            pass
+    wrap_socket.assert_called_once()
+
+
 def test_onion_proxy_failure_hints_suggests_tor_browser_port():
     hints = onion_proxy_failure_hints(
         "tcp://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion:50001",

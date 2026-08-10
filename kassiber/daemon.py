@@ -185,6 +185,7 @@ from .core.ui_snapshot import (
 from .core.transaction_graph import build_transaction_graph_snapshot
 from .core.sync_backends import (
     ElectrumClient,
+    _backend_ssl_context,
     bitcoinrpc_call,
     bitcoinrpc_prune_coverage,
     detect_active_script_types,
@@ -9590,6 +9591,21 @@ def _backend_settings_list_payload(ctx: "DaemonContext") -> dict[str, Any]:
             backend["is_default"] = name == default_backend
             backend["wallet_refs"] = wallet_backend_references(ctx.conn, name)
         kind = str(backend.get("kind") or "")
+        if kind in {
+            "electrum",
+            "esplora",
+            "liquid-esplora",
+            "bitcoinrpc",
+        } and isinstance(name, str):
+            certificate = backend_value(
+                ctx.runtime_config.get("backends", {}).get(name, {}),
+                "certificate",
+            )
+            if certificate:
+                # This desktop-only settings kind needs the local CA path for
+                # faithful edit/test round-trips. AI/backend list kinds retain
+                # presence-only redaction.
+                backend["certificate"] = certificate
         if kind in core_lightning.LIGHTNING_ADAPTER_KINDS:
             backend["lightningCapabilities"] = (
                 core_lightning.registered_capabilities(kind).to_wire_dict()
@@ -12757,6 +12773,8 @@ def _test_electrum_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
 def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
     url = _required_str_arg(args, "url", "HTTP backend URL")
     proxy = _optional_str_arg(args, "proxy")
+    certificate = _optional_str_arg(args, "certificate")
+    insecure = parse_bool(args.get("insecure"), default=False)
     timeout = args.get("timeout")
     if not isinstance(timeout, int) or timeout <= 0:
         timeout = 10
@@ -12774,6 +12792,21 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
         logs.append(f"Proxy: {proxy}.")
     else:
         logs.append("Proxy: disabled.")
+    if insecure:
+        logs.append(
+            "TLS certificate verification: disabled for this backend test."
+        )
+    elif certificate:
+        logs.append("TLS certificate verification: custom CA bundle.")
+    else:
+        logs.append("TLS certificate verification: system trust store.")
+    try:
+        ssl_context = _backend_ssl_context(
+            {"certificate": certificate, "insecure": insecure}
+        )
+    except AppError as exc:
+        logs.append(f"TLS configuration failed: {exc}")
+        return {"ok": False, "url": url, "logs": logs}
     request = urlrequest.Request(
         url,
         headers={
@@ -12788,6 +12821,7 @@ def _test_http_backend_payload(args: dict[str, Any]) -> dict[str, Any]:
             timeout,
             proxy_url=proxy,
             source_label="backend",
+            ssl_context=ssl_context,
         ) as response:
             status = int(response.status)
             reason = response.reason or ""
@@ -13128,6 +13162,42 @@ def _is_loopback_http_url(url: str) -> bool:
         return False
 
 
+_BITCOINRPC_PROBE_CREDENTIAL_FIELDS = (
+    "username",
+    "rpcuser",
+    "rpc_user",
+    "password",
+    "rpcpassword",
+    "rpc_password",
+    "cookiefile",
+    "cookie_file",
+    "auth_header",
+    "token",
+)
+
+
+def _same_rpc_origin(saved_url: str, candidate_url: str) -> bool:
+    """Return whether two RPC URLs address the same scheme/host/port."""
+
+    def origin(value: str) -> tuple[str, str, int | None] | None:
+        try:
+            parsed = urlparse.urlsplit(value)
+        except ValueError:
+            return None
+        try:
+            port = parsed.port
+        except ValueError:
+            return None
+        return (
+            parsed.scheme.strip().lower(),
+            (parsed.hostname or "").strip().lower(),
+            port,
+        )
+
+    saved = origin(saved_url)
+    return saved is not None and saved == origin(candidate_url)
+
+
 def _is_default_core_cookiefile_path(cookiefile: str) -> bool:
     path = Path(cookiefile).expanduser()
     try:
@@ -13211,6 +13281,9 @@ def _inline_bitcoinrpc_backend(args: dict[str, Any]) -> dict[str, Any]:
         "timeout": timeout,
     }
     backend.update(config)
+    proxy = _optional_str_arg(args, "proxy") or _optional_str_arg(args, "tor_proxy")
+    if proxy is not None:
+        backend["tor_proxy"] = proxy
     _validate_desktop_bitcoinrpc_cookiefile("bitcoinrpc", url, backend)
     return backend
 
@@ -13274,6 +13347,20 @@ def _bitcoinrpc_backend_for_probe(
             hint="Choose a backend whose kind is bitcoinrpc.",
             retryable=False,
         )
+    url = _optional_str_arg(args, "url")
+    if url is not None:
+        if not _same_rpc_origin(str(backend.get("url") or ""), url):
+            # Credentials are saved for one endpoint. A renderer-supplied URL
+            # pointing somewhere else must not carry them along, so the caller
+            # re-supplies auth for the host it wants to reach -- the same rule
+            # cookie-file probes already enforce through loopback validation.
+            for field in _BITCOINRPC_PROBE_CREDENTIAL_FIELDS:
+                backend.pop(field, None)
+        backend["url"] = url
+    backend.update(_backend_config_arg(args) or {})
+    proxy = _optional_str_arg(args, "proxy") or _optional_str_arg(args, "tor_proxy")
+    if proxy is not None:
+        backend["tor_proxy"] = proxy
     _validate_desktop_bitcoinrpc_cookiefile(
         "bitcoinrpc",
         str(backend.get("url") or ""),
