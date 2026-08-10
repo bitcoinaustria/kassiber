@@ -10018,7 +10018,39 @@ def _update_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
 
 def _delete_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[str, Any]:
     name = _required_str_arg(args, "name", "Backend name")
-    payload = core_accounts.delete_backend(ctx.conn, name)
+    normalized_name = name.strip().lower()
+    if normalized_name == str(ctx.runtime_config.get("default_backend") or "").strip().lower():
+        raise AppError(
+            f"Backend '{name}' is the active default",
+            code="conflict",
+            hint="Choose another default backend before deleting this one.",
+        )
+    if normalized_name in (ctx.runtime_config.get("dotenv_backends") or ()):
+        # Not promotable: the definition lives in the env file, so a SQLite
+        # tombstone would be resurrected on the next load. Say that instead of
+        # letting the delete fail as a bare "not found in the database".
+        if not ctx.conn.execute(
+            "SELECT 1 FROM backends WHERE name = ?",
+            (normalized_name,),
+        ).fetchone():
+            raise AppError(
+                f"Backend '{name}' is defined in your env file",
+                code="conflict",
+                hint=(
+                    "Remove its KASSIBER_BACKEND_... entries from the env file "
+                    "and restart, then delete any leftover saved copy."
+                ),
+                retryable=False,
+            )
+        promoted = False
+    else:
+        promoted = _promote_bootstrap_backend_for_desktop_mutation(ctx, name)
+    try:
+        payload = core_accounts.delete_backend(ctx.conn, name)
+    except Exception:
+        if promoted:
+            ctx.conn.rollback()
+        raise
     merge_db_backends(ctx.conn, ctx.runtime_config)
     return payload
 

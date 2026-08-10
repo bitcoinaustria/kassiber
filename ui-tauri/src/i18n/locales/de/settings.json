@@ -258,7 +258,12 @@
   "deleteBackend": {
     "confirm": "Backend '{{name}}' löschen?",
     "blockedTitle": "Backend wird noch verwendet",
-    "walletWarning": "Weise diesen Wallets vor dem Löschen ein anderes Backend zu:\n- {{wallets}}"
+    "walletWarning": "Weise diesen Wallets vor dem Löschen ein anderes Backend zu:\n- {{wallets}}",
+    "defaultWarning": "Wähle ein anderes Standard-Backend, bevor du {{name}} löschst.",
+    "failedTitle": "Backend wurde nicht gelöscht",
+    "failedBody": "Kassiber konnte das Backend nicht löschen.",
+    "refreshFailedTitle": "Backend gelöscht; Einstellungen nicht aktualisiert",
+    "refreshFailedBody": "Lade die Einstellungen neu, um die Backend-Liste zu aktualisieren."
   },
   "defaultBackend": {
     "updatedTitle": "Standard-Backend aktualisiert",

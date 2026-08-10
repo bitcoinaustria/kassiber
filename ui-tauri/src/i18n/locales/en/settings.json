@@ -258,7 +258,12 @@
   "deleteBackend": {
     "confirm": "Delete backend '{{name}}'?",
     "blockedTitle": "Backend is still in use",
-    "walletWarning": "Reassign these wallets to another backend before deleting it:\n- {{wallets}}"
+    "walletWarning": "Reassign these wallets to another backend before deleting it:\n- {{wallets}}",
+    "defaultWarning": "Choose another default backend before deleting {{name}}.",
+    "failedTitle": "Backend was not deleted",
+    "failedBody": "Kassiber could not delete the backend.",
+    "refreshFailedTitle": "Backend deleted; settings not refreshed",
+    "refreshFailedBody": "Reload Settings to refresh the backend list."
   },
   "defaultBackend": {
     "updatedTitle": "Default backend updated",
