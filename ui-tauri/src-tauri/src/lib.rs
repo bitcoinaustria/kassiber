@@ -2792,9 +2792,14 @@ fn should_disable_linux_appimage_dmabuf_renderer(
     wayland_display: Option<&std::ffi::OsStr>,
     configured_renderer: Option<&std::ffi::OsStr>,
 ) -> bool {
+    // An empty value counts as unset for all three, matching WebKit, which
+    // reads its own variable as a boolean and treats "" as false. Otherwise
+    // `WEBKIT_DISABLE_DMABUF_RENDERER=` would suppress our fallback without
+    // disabling the renderer, leaving exactly the blank window this avoids.
+    let explicitly_configured = configured_renderer.is_some_and(|value| !value.is_empty());
     appimage.is_some_and(|value| !value.is_empty())
         && wayland_display.is_some_and(|value| !value.is_empty())
-        && configured_renderer.is_none()
+        && !explicitly_configured
 }
 
 #[cfg(target_os = "linux")]
@@ -2806,7 +2811,9 @@ fn configure_linux_webview_environment() {
     ) {
         // AppImages bundle WebKitGTK/Wayland libraries that can disagree with
         // newer host EGL stacks. WebKit's supported fallback avoids the blank
-        // window while preserving an explicit user override.
+        // window while preserving an explicit user override. Deliberately
+        // AppImage-only: the .deb/.rpm desktop packages link the host WebKitGTK
+        // and Wayland stack, so they cannot hit that version mismatch.
         env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
 }
@@ -4267,6 +4274,18 @@ mod tests {
         assert!(!super::should_disable_linux_appimage_dmabuf_renderer(
             Some(OsStr::new("/home/alice/Downloads/Kassiber.AppImage")),
             None,
+            None,
+        ));
+        // An empty renderer variable is not a user override: WebKit reads it as
+        // false, so the fallback still has to apply.
+        assert!(super::should_disable_linux_appimage_dmabuf_renderer(
+            Some(OsStr::new("/home/alice/Downloads/Kassiber.AppImage")),
+            Some(OsStr::new("wayland-0")),
+            Some(OsStr::new("")),
+        ));
+        assert!(!super::should_disable_linux_appimage_dmabuf_renderer(
+            Some(OsStr::new("")),
+            Some(OsStr::new("wayland-0")),
             None,
         ));
     }
