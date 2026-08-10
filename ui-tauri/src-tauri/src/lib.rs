@@ -2786,6 +2786,31 @@ fn default_browser_command(url: &str) -> Command {
     command
 }
 
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn should_disable_linux_appimage_dmabuf_renderer(
+    appimage: Option<&std::ffi::OsStr>,
+    wayland_display: Option<&std::ffi::OsStr>,
+    configured_renderer: Option<&std::ffi::OsStr>,
+) -> bool {
+    appimage.is_some_and(|value| !value.is_empty())
+        && wayland_display.is_some_and(|value| !value.is_empty())
+        && configured_renderer.is_none()
+}
+
+#[cfg(target_os = "linux")]
+fn configure_linux_webview_environment() {
+    if should_disable_linux_appimage_dmabuf_renderer(
+        env::var_os("APPIMAGE").as_deref(),
+        env::var_os("WAYLAND_DISPLAY").as_deref(),
+        env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").as_deref(),
+    ) {
+        // AppImages bundle WebKitGTK/Wayland libraries that can disagree with
+        // newer host EGL stacks. WebKit's supported fallback avoids the blank
+        // window while preserving an explicit user override.
+        env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+}
+
 pub fn run() {
     if let Some(code) = run_operator_native_auth_helper() {
         std::process::exit(code);
@@ -2800,6 +2825,8 @@ pub fn run() {
         // the webview or desktop daemon.
         std::process::exit(supervisor::run_cli(None, args));
     }
+    #[cfg(target_os = "linux")]
+    configure_linux_webview_environment();
     let mut builder = tauri::Builder::default();
 
     // Single-instance must come before the deep-link plugin so GUI/deep-link
@@ -4216,6 +4243,32 @@ mod tests {
             target,
             PathBuf::from("/home/alice/Downloads/Kassiber.AppImage")
         );
+    }
+
+    #[test]
+    fn wayland_appimage_disables_dmabuf_unless_user_configured_it() {
+        use std::ffi::OsStr;
+
+        assert!(super::should_disable_linux_appimage_dmabuf_renderer(
+            Some(OsStr::new("/home/alice/Downloads/Kassiber.AppImage")),
+            Some(OsStr::new("wayland-0")),
+            None,
+        ));
+        assert!(!super::should_disable_linux_appimage_dmabuf_renderer(
+            Some(OsStr::new("/home/alice/Downloads/Kassiber.AppImage")),
+            Some(OsStr::new("wayland-0")),
+            Some(OsStr::new("0")),
+        ));
+        assert!(!super::should_disable_linux_appimage_dmabuf_renderer(
+            None,
+            Some(OsStr::new("wayland-0")),
+            None,
+        ));
+        assert!(!super::should_disable_linux_appimage_dmabuf_renderer(
+            Some(OsStr::new("/home/alice/Downloads/Kassiber.AppImage")),
+            None,
+            None,
+        ));
     }
 
     #[cfg(not(target_os = "windows"))]
