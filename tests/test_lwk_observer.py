@@ -285,22 +285,52 @@ class LwkDescriptorContractTest(unittest.TestCase):
             },
         )
 
-    def test_esplora_custom_ca_fails_closed_before_compatibility(self):
+    def test_esplora_custom_ca_routes_to_compatible_verified_transport(self):
         plan = load_descriptor_plan(
             {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
         )
         state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
         with patch(
             "kassiber.core.chain_observer.lwk.require_lwk",
-            side_effect=AssertionError("dependency check ran before custom-CA guard"),
-        ) as dependency, self.assertRaises(AppError) as raised:
-            lwk_compatibility_reason(
+            side_effect=AssertionError("dependency check ran before custom-CA routing"),
+        ) as dependency:
+            reason = lwk_compatibility_reason(
                 {"kind": "esplora", "url": "https://host", "certificate": "ca.pem"},
                 state,
             )
         dependency.assert_not_called()
-        self.assertEqual(raised.exception.code, "observer_capability_unsupported")
-        self.assertEqual(raised.exception.details["capability"], "esplora_custom_ca")
+        self.assertEqual(reason, "custom_ca")
+
+    def test_esplora_disabled_verification_stays_on_compatibility(self):
+        plan = load_descriptor_plan(
+            {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
+        )
+        state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
+        self.assertEqual(
+            lwk_compatibility_reason(
+                {"kind": "esplora", "url": "https://host", "insecure": True},
+                state,
+            ),
+            "insecure_tls",
+        )
+
+    def test_insecure_reason_wins_when_custom_ca_is_also_configured(self):
+        plan = load_descriptor_plan(
+            {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
+        )
+        state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
+        self.assertEqual(
+            lwk_compatibility_reason(
+                {
+                    "kind": "esplora",
+                    "url": "https://node.example",
+                    "certificate": "/private/ca.pem",
+                    "insecure": True,
+                },
+                state,
+            ),
+            "insecure_tls",
+        )
 
     def test_frozen_host_ca_routes_custom_esplora_to_python_transport(self):
         plan = load_descriptor_plan(
@@ -320,24 +350,36 @@ class LwkDescriptorContractTest(unittest.TestCase):
                 "system_ca_trust",
             )
 
-    def test_frozen_host_ca_does_not_bypass_custom_ca_rejection(self):
+    def test_frozen_host_ca_keeps_the_per_backend_trust_reason(self):
         plan = load_descriptor_plan(
             {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
         )
         state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
-        with patch.dict(
-            os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}
-        ), self.assertRaises(AppError) as raised:
-            lwk_compatibility_reason(
-                {
-                    "name": "private-node",
-                    "kind": "esplora",
-                    "url": "https://node.example",
-                    "certificate": "/private/ca.pem",
-                },
-                state,
+        with patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}):
+            self.assertEqual(
+                lwk_compatibility_reason(
+                    {
+                        "name": "private-node",
+                        "kind": "esplora",
+                        "url": "https://node.example",
+                        "certificate": "/private/ca.pem",
+                    },
+                    state,
+                ),
+                "custom_ca",
             )
-        self.assertEqual(raised.exception.code, "observer_capability_unsupported")
+            self.assertEqual(
+                lwk_compatibility_reason(
+                    {
+                        "name": "private-node",
+                        "kind": "esplora",
+                        "url": "https://node.example",
+                        "insecure": True,
+                    },
+                    state,
+                ),
+                "insecure_tls",
+            )
 
     def test_frozen_host_ca_does_not_exempt_replaced_builtin_name(self):
         plan = load_descriptor_plan(

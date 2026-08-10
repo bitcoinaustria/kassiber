@@ -144,14 +144,22 @@ excludes authored transaction rows.
 Capability selection occurs before network access; a dependency failure is
 never retried silently through compatibility code.
 
+The "Observer" column names which client speaks the protocol. In recorded
+metadata, every row below that is not the pinned dependency reports
+`observer_route: compatibility` — including the script-protocol rows, where the
+compatibility adapter *is* the explicit Electrum client — except address-list
+Bitcoin wallets, which report `bitcoin_script`, and Silent Payments, which
+report `silent_payments`. `observer_compatibility_reason` is what distinguishes
+them (`custom_ca`, `insecure_tls`, `proxy_transport`, `custom_timeout`, ...).
+
 | Chain/source | Configuration | Observer | Status |
 | --- | --- | --- | --- |
 | Bitcoin Esplora | supported watch-only descriptor, normal platform trust | BDK | enabled; BDK owns scan, canonical transaction, chain-position and output state |
 | Bitcoin Electrum | supported watch-only descriptor over TCP or normal TLS | BDK | enabled; live descriptor restart/no-op coverage runs in the regtest observer lane |
 | Bitcoin Esplora/Electrum | SOCKS proxy configured or `.onion` endpoint | named compatibility observer | BDK accepts only `socks5://`; Kassiber does not downgrade `socks5h://` and leak DNS outside Tor |
-| Bitcoin Esplora | frozen Linux host CA bundle with a non-built-in HTTPS endpoint | named compatibility observer | BDK's Rustls/WebPKI client does not consume `SSL_CERT_FILE`; exact built-in public endpoints retain the native route |
 | Bitcoin Electrum | custom CA unsupported by BDK | Bitcoin script-protocol observer | the explicit Electrum client loads the configured CA; selected before connect |
-| Bitcoin Esplora | custom CA unsupported by BDK and the compatibility HTTP client | none | fails before egress with `observer_capability_unsupported`; remove only after a dependency client can load the configured trust root |
+| Bitcoin Esplora | custom CA or explicit insecure TLS opt-in unsupported by BDK | named compatibility observer | the explicit HTTP client applies the per-backend SSL context before connect; custom CA keeps verification enabled while insecure mode is restricted to an explicit unsafe opt-in |
+| Bitcoin Esplora | frozen Linux host CA bundle with a non-built-in HTTPS endpoint | named compatibility observer | BDK's Rustls/WebPKI client does not consume `SSL_CERT_FILE`; exact built-in public endpoints retain the native route |
 | Bitcoin Esplora | custom HTTP authorization unsupported by the binding | named compatibility observer | selected before connect; never a runtime fallback |
 | Bitcoin Esplora | non-default caller timeout unsupported by the binding | named compatibility observer | selected before connect so the configured timeout remains enforceable |
 | Bitcoin Esplora/Electrum | finite source-overlap exclusion would require a partial descriptor scan | named compatibility observer | selected after local overlap policy and before connect |
@@ -167,9 +175,9 @@ never retried silently through compatibility code.
 | Liquid | structurally equivalent separate `/0/*` receive + `/1/*` change descriptors | LWK 0.18.0 | canonicalized to `<0;1>` only when every ranged key has the same blinding policy, script, origins, keys, order and wildcard geometry |
 | Liquid | genuinely different change policy or noncanonical multipath | named compatibility observer | retained because accepting a constructed descriptor is not proof of equivalent ownership |
 | Liquid Esplora/Electrum | SOCKS proxy configured or `.onion` endpoint | named compatibility observer | LWK 0.18.0 Python transport cannot carry Kassiber's proxy policy; compatibility preserves it until the binding exposes proxy configuration |
-| Liquid Esplora | frozen Linux host CA bundle with an HTTPS endpoint | named compatibility observer | LWK's Rustls/WebPKI client does not consume `SSL_CERT_FILE`; the compatibility route enforces the selected host roots |
 | Liquid Electrum | custom CA unsupported by LWK | named script-protocol observer | the explicit Electrum client loads the configured CA; selected before connect |
-| Liquid Esplora | custom CA unsupported by LWK and the compatibility HTTP client | none | fails before egress with `observer_capability_unsupported` rather than ignoring the requested trust root |
+| Liquid Esplora | custom CA or explicit insecure TLS opt-in unsupported by LWK | named compatibility observer | the explicit HTTP client applies the per-backend SSL context before connect; custom CA keeps verification enabled while insecure mode is restricted to an explicit unsafe opt-in |
+| Liquid Esplora | frozen Linux host CA bundle with an HTTPS endpoint | named compatibility observer | LWK's Rustls/WebPKI client does not consume `SSL_CERT_FILE`; the compatibility route enforces the selected host roots |
 | Liquid Esplora | bearer header or static token | LWK 0.18.0 | passed through `EsploraClientBuilder.headers` / `token_provider`; credentials remain inside SQLCipher and redacted errors |
 | Liquid Electrum | platform-trusted TLS | LWK 0.18.0 | uses the explicit TLS/domain-validation constructor with validation enabled |
 | Liquid Electrum | explicit `insecure` TLS opt-in | named script-protocol observer | retained because LWK 0.18.0 pins rust-electrum-client 0.21.0, whose Rustls no-verification implementation advertises no signature schemes and fails a real TLS handshake; remove after the packaged binding includes the upstream verifier fix and the local dependency-direct probe passes |

@@ -391,7 +391,11 @@ default `~/.bitcoin/**/.cookie` paths and loopback RPC URLs. Users who want to
 save basic auth still enter it explicitly. `ui.backends.bitcoinrpc.test` probes
 a saved or inline Core RPC backend with `getblockchaininfo`, `getnetworkinfo`,
 wallet RPC, and `getblockfilter`; it reports reachability, peer/sync state,
-pruning/IBD, wallet-RPC availability, and BIP158 filter-index availability.
+pruning/IBD, wallet-RPC availability, and BIP158 filter-index availability. A
+saved backend can be probed with an unsaved `url` so an edited endpoint is
+testable before saving, but credentials stored for the saved endpoint are
+dropped when that URL addresses a different scheme/host/port: the caller
+re-supplies auth for the host it wants to reach.
 Both endpoints are desktop mutating kinds because they touch local RPC/cookie
 state and are not AI tools.
 

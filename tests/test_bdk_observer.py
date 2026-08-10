@@ -802,14 +802,14 @@ class BdkDependencyContractTest(TestCase):
             bdk_compatibility_reason({"kind": "electrum"}, address_state), "address_list"
         )
 
-    def test_esplora_custom_ca_fails_closed_instead_of_ignoring_trust(self):
+    def test_esplora_custom_ca_routes_to_compatible_verified_transport(self):
         _wallet, plan = _descriptor_wallet()
         state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
         with mock.patch(
             "kassiber.core.chain_observer.bdk.require_bdk",
-            side_effect=AssertionError("dependency check ran before custom-CA guard"),
-        ) as dependency, self.assertRaises(AppError) as raised:
-            bdk_compatibility_reason(
+            side_effect=AssertionError("dependency check ran before custom-CA routing"),
+        ) as dependency:
+            reason = bdk_compatibility_reason(
                 {
                     "kind": "esplora",
                     "url": "https://node.example",
@@ -818,8 +818,38 @@ class BdkDependencyContractTest(TestCase):
                 state,
             )
         dependency.assert_not_called()
-        self.assertEqual(raised.exception.code, "observer_capability_unsupported")
-        self.assertEqual(raised.exception.details["capability"], "esplora_custom_ca")
+        self.assertEqual(reason, "custom_ca")
+
+    def test_esplora_disabled_verification_routes_to_compatibility(self):
+        _wallet, plan = _descriptor_wallet()
+        state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
+        self.assertEqual(
+            bdk_compatibility_reason(
+                {
+                    "kind": "esplora",
+                    "url": "https://node.example",
+                    "insecure": True,
+                },
+                state,
+            ),
+            "insecure_tls",
+        )
+
+    def test_insecure_reason_wins_when_custom_ca_is_also_configured(self):
+        _wallet, plan = _descriptor_wallet()
+        state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
+        self.assertEqual(
+            bdk_compatibility_reason(
+                {
+                    "kind": "esplora",
+                    "url": "https://node.example",
+                    "certificate": "/private/ca.pem",
+                    "insecure": True,
+                },
+                state,
+            ),
+            "insecure_tls",
+        )
 
     def test_frozen_host_ca_routes_custom_esplora_to_python_transport(self):
         _wallet, plan = _descriptor_wallet()
@@ -837,22 +867,34 @@ class BdkDependencyContractTest(TestCase):
                 "system_ca_trust",
             )
 
-    def test_frozen_host_ca_does_not_bypass_custom_ca_rejection(self):
+    def test_frozen_host_ca_keeps_the_per_backend_trust_reason(self):
         _wallet, plan = _descriptor_wallet()
         state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
-        with mock.patch.dict(
-            os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}
-        ), self.assertRaises(AppError) as raised:
-            bdk_compatibility_reason(
-                {
-                    "name": "private-node",
-                    "kind": "esplora",
-                    "url": "https://node.example",
-                    "certificate": "/private/ca.pem",
-                },
-                state,
+        with mock.patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}):
+            self.assertEqual(
+                bdk_compatibility_reason(
+                    {
+                        "name": "private-node",
+                        "kind": "esplora",
+                        "url": "https://node.example",
+                        "certificate": "/private/ca.pem",
+                    },
+                    state,
+                ),
+                "custom_ca",
             )
-        self.assertEqual(raised.exception.code, "observer_capability_unsupported")
+            self.assertEqual(
+                bdk_compatibility_reason(
+                    {
+                        "name": "private-node",
+                        "kind": "esplora",
+                        "url": "https://node.example",
+                        "insecure": True,
+                    },
+                    state,
+                ),
+                "insecure_tls",
+            )
 
     def test_frozen_host_ca_does_not_exempt_replaced_builtin_name(self):
         _wallet, plan = _descriptor_wallet()
