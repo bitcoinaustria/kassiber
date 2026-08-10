@@ -395,6 +395,12 @@ Use this for mempool-compatible HTTP APIs.
 - good for address and descriptor refresh
 - leaks queried scripts to the remote server
 - easiest option when you are not running your own node
+- an HTTPS endpoint whose certificate chains to a root outside the public web
+  PKI — a private or organizational CA, even one already installed in your system
+  trust store — needs `CERTIFICATE` pointed at that root (or at the host bundle
+  itself). The native Rustls-based observer ships its own root set and does not
+  read the system store, so setting `CERTIFICATE` is also what moves this one
+  backend onto the transport that enforces it
 
 ### Electrum
 

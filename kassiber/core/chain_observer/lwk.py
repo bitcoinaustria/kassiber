@@ -20,6 +20,7 @@ from ...util import parse_bool
 from ...wallet_descriptors import liquid_asset_code
 from ..sync import emit_sync_progress, normalize_backend_kind
 from .contract import ChainFacts, ObserverApplication, ObserverPrepareRequest
+from .host_trust import operator_ca_override
 from .identity import ObserverIdentity
 from .lwk_persistence import SqlCipherForeignStore, require_lwk
 from .store import CoveragePoint, StoredObserverState
@@ -48,6 +49,16 @@ def lwk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
         return "insecure_tls"
     if kind == "esplora" and backend_value(backend, "certificate"):
         return "custom_ca"
+    if (
+        kind == "esplora"
+        and operator_ca_override()
+        and urlparse.urlsplit(str(backend.get("url") or "")).scheme.lower() == "https"
+    ):
+        # LWK's Reqwest/Rustls client ships WebPKI roots and does not consume
+        # Python/OpenSSL's SSL_CERT_FILE, so an operator-pinned trust set would
+        # be ignored on the native route. Runs after the per-backend TLS reasons
+        # so those keep their own labels.
+        return "system_ca_trust"
     try:
         require_lwk()
     except AppError as exc:

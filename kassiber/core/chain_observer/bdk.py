@@ -7,6 +7,7 @@ import os
 import struct
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
+from urllib import parse as urlparse
 
 from ...backends import backend_batch_size, backend_timeout, backend_value
 from ...egress_ledger import endpoint_from_url, get_egress_ledger
@@ -18,6 +19,7 @@ from ...wallet_descriptors import branch_descriptor
 from ..sync import emit_sync_progress, normalize_backend_kind
 from .bdk_persistence import SqlCipherBdkPersistence, deserialize_changeset
 from .contract import ChainFacts, ObserverApplication, ObserverPrepareRequest
+from .host_trust import operator_ca_override
 from .identity import ObserverIdentity
 from .store import CoveragePoint, StoredObserverState
 
@@ -96,6 +98,16 @@ def bdk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
         return "insecure_tls"
     if kind == "esplora" and backend_value(backend, "certificate"):
         return "custom_ca"
+    if (
+        kind == "esplora"
+        and operator_ca_override()
+        and urlparse.urlsplit(str(backend.get("url") or "")).scheme.lower() == "https"
+    ):
+        # bdk_esplora uses Rustls/WebPKI and does not consume Python/OpenSSL's
+        # SSL_CERT_FILE, so an operator-pinned trust set would be ignored on the
+        # native route. Runs after the per-backend TLS reasons so those keep
+        # their own labels.
+        return "system_ca_trust"
     try:
         require_bdk()
     except AppError as exc:
