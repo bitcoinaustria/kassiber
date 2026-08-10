@@ -969,15 +969,11 @@ def _esplora_auth_headers(backend):
     return None
 
 
-def _esplora_call_kwargs(
-    *, timeout, headers=None, proxy_url=None, backend=None, ssl_context=None, **extra
-):
+def _esplora_call_kwargs(*, timeout, headers=None, proxy_url=None, ssl_context=None, **extra):
     """Keep unauthenticated compatibility calls on their historical shape."""
     kwargs = {"timeout": timeout, "proxy_url": proxy_url, **extra}
     if headers is not None:
         kwargs["headers"] = headers
-    if ssl_context is None and backend is not None:
-        ssl_context = _backend_ssl_context(backend)
     if ssl_context is not None:
         kwargs["ssl_context"] = ssl_context
     return kwargs
@@ -1821,7 +1817,7 @@ def fetch_transaction_legs(backend, txid, chain=None, *, client=None):
                 timeout=timeout,
                 headers=_esplora_auth_headers(backend),
                 proxy_url=_backend_proxy_url(backend),
-                backend=backend,
+                ssl_context=_backend_ssl_context(backend),
             ),
         )
         return _legs_from_esplora_tx(tx, normalized_chain)
