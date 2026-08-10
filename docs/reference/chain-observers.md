@@ -144,6 +144,14 @@ excludes authored transaction rows.
 Capability selection occurs before network access; a dependency failure is
 never retried silently through compatibility code.
 
+The "Observer" column names which client speaks the protocol. In recorded
+metadata, every row below that is not the pinned dependency reports
+`observer_route: compatibility` — including the script-protocol rows, where the
+compatibility adapter *is* the explicit Electrum client — except address-list
+Bitcoin wallets, which report `bitcoin_script`, and Silent Payments, which
+report `silent_payments`. `observer_compatibility_reason` is what distinguishes
+them (`custom_ca`, `insecure_tls`, `proxy_transport`, `custom_timeout`, ...).
+
 | Chain/source | Configuration | Observer | Status |
 | --- | --- | --- | --- |
 | Bitcoin Esplora | supported watch-only descriptor, normal platform trust | BDK | enabled; BDK owns scan, canonical transaction, chain-position and output state |
