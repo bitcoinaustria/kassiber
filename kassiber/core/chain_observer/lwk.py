@@ -20,6 +20,7 @@ from ...util import parse_bool
 from ...wallet_descriptors import liquid_asset_code
 from ..sync import emit_sync_progress, normalize_backend_kind
 from .contract import ChainFacts, ObserverApplication, ObserverPrepareRequest
+from .host_trust import operator_ca_override
 from .identity import ObserverIdentity
 from .lwk_persistence import SqlCipherForeignStore, require_lwk
 from .store import CoveragePoint, StoredObserverState
@@ -31,13 +32,6 @@ _LIQUID_BRANCH_STEP_RE = re.compile(r"/(?P<branch>[01])/\*")
 
 def _truthy_env(name: str) -> bool:
     return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _host_ca_mode() -> str:
-    value = str(os.environ.get("KASSIBER_HOST_CA_BUNDLE") or "").strip().lower()
-    if value == "explicit":
-        return value
-    return "host" if value in {"1", "true", "yes", "on"} else ""
 
 
 def lwk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str | None:
@@ -57,12 +51,13 @@ def lwk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
         return "custom_ca"
     if (
         kind == "esplora"
-        and _host_ca_mode()
+        and operator_ca_override()
         and urlparse.urlsplit(str(backend.get("url") or "")).scheme.lower() == "https"
     ):
         # LWK's Reqwest/Rustls client ships WebPKI roots and does not consume
-        # Python/OpenSSL's SSL_CERT_FILE. Use the compatibility HTTP transport.
-        # Runs after the per-backend TLS reasons so those keep their own labels.
+        # Python/OpenSSL's SSL_CERT_FILE, so an operator-pinned trust set would
+        # be ignored on the native route. Runs after the per-backend TLS reasons
+        # so those keep their own labels.
         return "system_ca_trust"
     try:
         require_lwk()

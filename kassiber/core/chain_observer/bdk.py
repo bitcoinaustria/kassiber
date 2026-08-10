@@ -9,12 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 from urllib import parse as urlparse
 
-from ...backends import (
-    DEFAULT_BACKENDS,
-    backend_batch_size,
-    backend_timeout,
-    backend_value,
-)
+from ...backends import backend_batch_size, backend_timeout, backend_value
 from ...egress_ledger import endpoint_from_url, get_egress_ledger
 from ...errors import AppError
 from ...proxy import is_onion_endpoint
@@ -24,6 +19,7 @@ from ...wallet_descriptors import branch_descriptor
 from ..sync import emit_sync_progress, normalize_backend_kind
 from .bdk_persistence import SqlCipherBdkPersistence, deserialize_changeset
 from .contract import ChainFacts, ObserverApplication, ObserverPrepareRequest
+from .host_trust import operator_ca_override
 from .identity import ObserverIdentity
 from .store import CoveragePoint, StoredObserverState
 
@@ -50,25 +46,6 @@ def require_bdk() -> Any:
 
 def _truthy_env(name: str) -> bool:
     return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _host_ca_mode() -> str:
-    value = str(os.environ.get("KASSIBER_HOST_CA_BUNDLE") or "").strip().lower()
-    if value == "explicit":
-        return value
-    return "host" if value in {"1", "true", "yes", "on"} else ""
-
-
-def _is_builtin_esplora_backend(backend: Mapping[str, Any], kind: str) -> bool:
-    expected = DEFAULT_BACKENDS.get(str(backend.get("name") or "").strip().lower())
-    return bool(
-        expected
-        and normalize_backend_kind(expected.get("kind")) == kind
-        and str(expected.get("url") or "").strip().rstrip("/")
-        == str(backend.get("url") or "").strip().rstrip("/")
-        and str(backend_value(backend, "infrastructure_owner") or "").lower()
-        != "self"
-    )
 
 
 def _network(value: str) -> Any:
@@ -121,19 +98,15 @@ def bdk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
         return "insecure_tls"
     if kind == "esplora" and backend_value(backend, "certificate"):
         return "custom_ca"
-    host_ca_mode = _host_ca_mode()
     if (
         kind == "esplora"
-        and host_ca_mode
+        and operator_ca_override()
         and urlparse.urlsplit(str(backend.get("url") or "")).scheme.lower() == "https"
-        and (
-            host_ca_mode == "explicit"
-            or not _is_builtin_esplora_backend(backend, kind)
-        )
     ):
         # bdk_esplora uses Rustls/WebPKI and does not consume Python/OpenSSL's
-        # SSL_CERT_FILE. Keep frozen custom backends on the transport that does.
-        # Runs after the per-backend TLS reasons so those keep their own labels.
+        # SSL_CERT_FILE, so an operator-pinned trust set would be ignored on the
+        # native route. Runs after the per-backend TLS reasons so those keep
+        # their own labels.
         return "system_ca_trust"
     try:
         require_bdk()

@@ -18,11 +18,20 @@ for built-in endpoints; minimal images without a host bundle fall back to
 Kassiber's bundled certifi roots for Python/OpenSSL transports.
 
 Native BDK/LWK Esplora clients use Rustls roots and do not consume Python's
-`SSL_CERT_FILE`. In a frozen Linux build using host or operator CA trust,
-custom/self-owned Esplora backends therefore use Kassiber's Python compatibility
-transport so the selected system roots are actually enforced. Exact built-in
-public Bitcoin Esplora endpoints keep the native observer route for auto-detected
-host trust; an explicit operator override remains authoritative.
+`SSL_CERT_FILE`, so a trust set Kassiber selected for OpenSSL is not enforced on
+the native observer route. When the operator pinned `SSL_CERT_FILE` themselves,
+HTTPS Esplora backends therefore move to Kassiber's Python compatibility
+transport, where the pinned roots are actually enforced — built-in endpoints
+included, because an explicit override is authoritative everywhere.
+
+An auto-discovered host bundle does **not** reroute anything. Those bundles exist
+on essentially every Linux install, so treating one as a routing signal would
+take every HTTPS Esplora backend off the native observer to serve the few
+endpoints whose certificate chains to a root outside WebPKI. Those endpoints set
+a per-backend `CERTIFICATE` instead (see
+[backends.md](backends.md)), which keeps verification on and reroutes that one
+backend. `KASSIBER_HOST_CA_BUNDLE` carries this decision between the frozen entry
+point and the observers; it is internal and not a supported knob.
 
 ## Release gates
 

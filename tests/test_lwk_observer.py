@@ -332,12 +332,29 @@ class LwkDescriptorContractTest(unittest.TestCase):
             "insecure_tls",
         )
 
-    def test_frozen_host_ca_routes_custom_esplora_to_python_transport(self):
+    def test_discovered_host_ca_keeps_custom_esplora_native(self):
         plan = load_descriptor_plan(
             {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
         )
         state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
         with patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}):
+            self.assertIsNone(
+                lwk_compatibility_reason(
+                    {
+                        "name": "private-node",
+                        "kind": "esplora",
+                        "url": "https://node.example",
+                    },
+                    state,
+                )
+            )
+
+    def test_operator_ca_override_routes_custom_esplora_to_python_transport(self):
+        plan = load_descriptor_plan(
+            {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
+        )
+        state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
+        with patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "explicit"}):
             self.assertEqual(
                 lwk_compatibility_reason(
                     {
@@ -350,12 +367,12 @@ class LwkDescriptorContractTest(unittest.TestCase):
                 "system_ca_trust",
             )
 
-    def test_frozen_host_ca_keeps_the_per_backend_trust_reason(self):
+    def test_ca_override_keeps_the_per_backend_trust_reason(self):
         plan = load_descriptor_plan(
             {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
         )
         state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
-        with patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}):
+        with patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "explicit"}):
             self.assertEqual(
                 lwk_compatibility_reason(
                     {
@@ -381,30 +398,12 @@ class LwkDescriptorContractTest(unittest.TestCase):
                 "insecure_tls",
             )
 
-    def test_frozen_host_ca_does_not_exempt_replaced_builtin_name(self):
+    def test_operator_ca_override_keeps_plain_http_esplora_native(self):
         plan = load_descriptor_plan(
             {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
         )
         state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
-        with patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}):
-            self.assertEqual(
-                lwk_compatibility_reason(
-                    {
-                        "name": "mempool",
-                        "kind": "esplora",
-                        "url": "https://private.example/api",
-                    },
-                    state,
-                ),
-                "system_ca_trust",
-            )
-
-    def test_frozen_host_ca_keeps_plain_http_esplora_native(self):
-        plan = load_descriptor_plan(
-            {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
-        )
-        state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
-        with patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}):
+        with patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "explicit"}):
             self.assertIsNone(
                 lwk_compatibility_reason(
                     {
