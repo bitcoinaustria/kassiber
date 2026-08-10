@@ -90,17 +90,12 @@ def bdk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
     if getattr(plan, "kind", None) == "silent-payment":
         return "silent_payment"
     kind = normalize_backend_kind(backend.get("kind"))
+    if kind == "esplora" and parse_bool(
+        backend_value(backend, "insecure"), default=False
+    ):
+        return "insecure_tls"
     if kind == "esplora" and backend_value(backend, "certificate"):
-        # The compatibility HTTP transport cannot load a per-backend trust
-        # root either, so this must fail before optional BDK availability can
-        # redirect the wallet onto that route.
-        raise AppError(
-            "BDK Esplora does not support a configured custom trust root",
-            code="observer_capability_unsupported",
-            hint="Use platform trust or an Electrum backend until BDK exposes per-client custom CA support.",
-            details={"capability": "esplora_custom_ca", "observer": "bdk"},
-            retryable=False,
-        )
+        return "custom_ca"
     try:
         require_bdk()
     except AppError as exc:

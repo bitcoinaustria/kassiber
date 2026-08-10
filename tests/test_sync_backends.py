@@ -2762,6 +2762,7 @@ class SyncBackendsTest(unittest.TestCase):
             branches=(DescriptorBranch(0, "receive", FakeDescriptor()),),
         )
         used_indices = {0, 3, 6}
+        tls_context = object()
 
         def fake_derive(plan, branch_index=None, start=0, end=0):
             del plan
@@ -2789,7 +2790,10 @@ class SyncBackendsTest(unittest.TestCase):
             "kassiber.core.sync_backends.esplora_scripthash_has_history",
             side_effect=lambda _url, script, **_kwargs: int(script, 16)
             in used_indices,
-        ) as has_history:
+        ) as has_history, patch(
+            "kassiber.core.sync_backends._backend_ssl_context",
+            return_value=tls_context,
+        ):
             discovery = discover_compatibility_descriptor_targets(
                 {
                     "name": "compatibility",
@@ -2811,6 +2815,12 @@ class SyncBackendsTest(unittest.TestCase):
             all(
                 item.kwargs["headers"]
                 == {"Authorization": "Bearer discovery-secret"}
+                for item in has_history.call_args_list
+            )
+        )
+        self.assertTrue(
+            all(
+                item.kwargs["ssl_context"] is tls_context
                 for item in has_history.call_args_list
             )
         )
@@ -3858,6 +3868,68 @@ class HttpRetryAndLimiterTest(unittest.TestCase):
         self.assertEqual(opener.call_args.kwargs["proxy_url"], "127.0.0.1:9050")
         self.assertEqual(opener.call_args.kwargs["source_label"], "backend")
 
+    def test_http_get_json_passes_explicit_tls_context_to_shared_opener(self):
+        context = object()
+        with patch(
+            "kassiber.core.sync_backends.urlopen_with_proxy",
+            return_value=_FakeHttpResponse('{"ok": true}'),
+        ) as opener:
+            result = sb.http_get_json(
+                "https://esplora.example/x",
+                ssl_context=context,
+            )
+        self.assertEqual(result, {"ok": True})
+        self.assertIs(opener.call_args.kwargs["ssl_context"], context)
+
+    def test_esplora_backend_insecure_tls_is_explicit_and_scoped(self):
+        backend = {
+            "name": "private-esplora",
+            "kind": "esplora",
+            "url": "https://esplora.example",
+            "insecure": True,
+        }
+        with patch(
+            "kassiber.core.sync_backends.urlopen_with_proxy",
+            return_value=_FakeHttpResponse('{"vin": [], "vout": []}'),
+        ) as opener:
+            sb.fetch_transaction_legs(backend, "11" * 32, chain="bitcoin")
+        context = opener.call_args.kwargs["ssl_context"]
+        self.assertFalse(context.check_hostname)
+        self.assertEqual(context.verify_mode, sb.ssl.CERT_NONE)
+
+    def test_http_backend_verification_stays_enabled_by_default(self):
+        self.assertIsNone(sb._backend_ssl_context({}))
+        self.assertIsNone(sb._backend_ssl_context({"insecure": "false"}))
+
+    def test_invalid_custom_ca_bundle_is_a_typed_configuration_error(self):
+        with patch.object(
+            sb.ssl,
+            "create_default_context",
+            side_effect=FileNotFoundError("missing"),
+        ):
+            with self.assertRaises(AppError) as raised:
+                sb._backend_ssl_context({"certificate": "/missing/private-ca.pem"})
+        self.assertEqual(raised.exception.code, "backend_tls_config_invalid")
+        self.assertFalse(raised.exception.retryable)
+
+    def test_bitcoinrpc_custom_ca_is_loaded_without_disabling_verification(self):
+        backend = {
+            "name": "private-core",
+            "kind": "bitcoinrpc",
+            "url": "https://core.example",
+            "username": "rpc",
+            "password": "secret",
+            "certificate": "/private/core-ca.pem",
+        }
+        context = object()
+        with patch.object(sb.ssl, "create_default_context", return_value=context) as create, patch(
+            "kassiber.core.sync_backends.urlopen_with_proxy",
+            return_value=_FakeHttpResponse('{"result": 42, "error": null}'),
+        ) as opener:
+            self.assertEqual(sb.bitcoinrpc_call(backend, "getblockcount"), 42)
+        create.assert_called_once_with(cafile="/private/core-ca.pem")
+        self.assertIs(opener.call_args.kwargs["ssl_context"], context)
+
     def test_http_get_helpers_forward_explicit_authorization_header(self):
         auth = {"Authorization": "Bearer observer-secret"}
         with patch(
@@ -4023,6 +4095,8 @@ class HttpRetryAndLimiterTest(unittest.TestCase):
 
 class EsploraUtxoParallelTest(unittest.TestCase):
     def test_utxos_preserve_target_order_under_parallel_fetch(self):
+        tls_context = object()
+        seen_tls_contexts = []
         targets = [
             {"address": f"bc1qaddr{index}", "script_pubkey": "0014" + f"{index:02x}" * 20}
             for index in range(5)
@@ -4043,8 +4117,10 @@ class EsploraUtxoParallelTest(unittest.TestCase):
             timeout=30,
             headers=None,
             proxy_url=None,
+            ssl_context=None,
         ):
             del base_url, timeout, headers, proxy_url
+            seen_tls_contexts.append(ssl_context)
             # Encode the target's position in the UTXO value so the output order
             # is verifiable independent of which worker finishes first.
             index = next(i for i, t in enumerate(targets) if t["script_pubkey"] == script_pubkey_hex)
@@ -4055,6 +4131,9 @@ class EsploraUtxoParallelTest(unittest.TestCase):
         ), patch(
             "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
             side_effect=fake_utxos,
+        ), patch(
+            "kassiber.core.sync_backends._backend_ssl_context",
+            return_value=tls_context,
         ):
             outputs = compatibility_esplora_utxos_for_wallet(
                 {"name": "esplora", "kind": "esplora", "url": "https://esplora.example", "batch_size": 8},
@@ -4065,6 +4144,7 @@ class EsploraUtxoParallelTest(unittest.TestCase):
             [o["address"] for o in outputs],
             [t["address"] for t in targets],
         )
+        self.assertEqual(seen_tls_contexts, [tls_context] * len(targets))
 
 
 def _backend_sync_wallet(wallet_id, label, address):

@@ -46,7 +46,137 @@ class DaemonElectrumProbeTest(unittest.TestCase):
         self.assertIn("Server banner: Fulcrum mainnet server", payload["logs"])
 
 
+class DaemonHttpProbeTest(unittest.TestCase):
+    def test_http_probe_scopes_disabled_verification_to_request(self):
+        class Response:
+            status = 200
+            reason = "OK"
+            headers = {"content-type": "application/json"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self, _limit):
+                return b"{}"
+
+        with patch(
+            "kassiber.daemon.urlopen_with_proxy",
+            return_value=Response(),
+        ) as opener:
+            payload = daemon._test_http_backend_payload(
+                {"url": "https://core.example", "insecure": True}
+            )
+        self.assertTrue(payload["ok"])
+        context = opener.call_args.kwargs["ssl_context"]
+        self.assertFalse(context.check_hostname)
+        self.assertIn(
+            "TLS certificate verification: disabled for this backend test.",
+            payload["logs"],
+        )
+
+    def test_http_probe_reports_invalid_custom_ca_bundle(self):
+        with patch(
+            "kassiber.core.sync_backends.ssl.create_default_context",
+            side_effect=FileNotFoundError("missing"),
+        ):
+            payload = daemon._test_http_backend_payload(
+                {
+                    "url": "https://core.example",
+                    "certificate": "/missing/private-ca.pem",
+                }
+            )
+        self.assertFalse(payload["ok"])
+        self.assertIn(
+            "TLS configuration failed: Could not load the custom CA bundle",
+            payload["logs"],
+        )
+
+    def test_backend_settings_round_trip_http_custom_ca_path(self):
+        ctx = SimpleNamespace(
+            conn=object(),
+            runtime_config={
+                "default_backend": "private-core",
+                "backends": {
+                    "private-core": {
+                        "kind": "bitcoinrpc",
+                        "certificate": "/private/core-ca.pem",
+                    }
+                },
+            },
+        )
+        with patch.object(
+            daemon.core_accounts,
+            "list_backends",
+            return_value=[{"name": "private-core", "kind": "bitcoinrpc"}],
+        ), patch.object(daemon, "wallet_backend_references", return_value=[]):
+            payload = daemon._backend_settings_list_payload(ctx)
+
+        self.assertEqual(
+            payload["backends"][0]["certificate"],
+            "/private/core-ca.pem",
+        )
+
+
 class DaemonBitcoinRpcProbeTest(unittest.TestCase):
+    def test_saved_backend_probe_keeps_auth_and_applies_unsaved_tls_overrides(self):
+        ctx = SimpleNamespace(
+            runtime_config={
+                "backends": {
+                    "core": {
+                        "name": "core",
+                        "kind": "bitcoinrpc",
+                        "url": "https://core.example",
+                        "username": "rpcuser",
+                        "password": "rpcpass",
+                        "tor_proxy": "socks5h://127.0.0.1:9050",
+                    }
+                }
+            }
+        )
+
+        backend = daemon._bitcoinrpc_backend_for_probe(
+            ctx,
+            {
+                "backend": "core",
+                "url": "https://new-core.example",
+                "proxy": "socks5h://127.0.0.1:9150",
+                "config": {
+                    "certificate": "/private/core-ca.pem",
+                    "insecure": False,
+                },
+            },
+        )
+
+        self.assertEqual(backend["username"], "rpcuser")
+        self.assertEqual(backend["password"], "rpcpass")
+        self.assertEqual(backend["url"], "https://new-core.example")
+        self.assertEqual(backend["certificate"], "/private/core-ca.pem")
+        self.assertFalse(backend["insecure"])
+        self.assertEqual(backend["tor_proxy"], "socks5h://127.0.0.1:9150")
+
+    def test_inline_backend_probe_accepts_pending_proxy_override(self):
+        ctx = SimpleNamespace(runtime_config={})
+
+        backend = daemon._bitcoinrpc_backend_for_probe(
+            ctx,
+            {
+                "url": "https://new-core.example",
+                "proxy": "http://127.0.0.1:8080",
+                "config": {
+                    "username": "rpcuser",
+                    "password": "rpcpass",
+                },
+            },
+        )
+
+        self.assertEqual(backend["url"], "https://new-core.example")
+        self.assertEqual(backend["tor_proxy"], "http://127.0.0.1:8080")
+        self.assertEqual(backend["username"], "rpcuser")
+        self.assertEqual(backend["password"], "rpcpass")
+
     def test_bitcoinrpc_probe_success(self):
         ctx = SimpleNamespace(runtime_config={})
         calls = []

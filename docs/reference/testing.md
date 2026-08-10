@@ -147,9 +147,10 @@ fallback, and records that `.onion` endpoints may not connect directly.
 The transport oracle also drives the pinned clients themselves: BDK crosses
 plain Electrum, Esplora, insecure test TLS and SOCKS5h; LWK crosses plain
 Electrum, Esplora, explicit insecure test TLS and an authentication-enforcing
-Esplora reverse proxy. Custom-CA rows use Kassiber's manual Electrum client
-because neither pinned dependency accepts a per-client trust root; configured
-Esplora custom trust fails before egress rather than being silently ignored.
+Esplora reverse proxy. Focused routing and SSL-context tests cover custom-CA and
+explicitly insecure Esplora rows through Kassiber's compatibility HTTP transport
+because neither pinned dependency accepts a per-client trust root; the selected
+TLS policy is exercised instead of being silently ignored.
 
 Pull requests and main-branch pushes expose a required
 `Chain observers (Linux Docker)` job in `.github/workflows/ci.yml`. It runs the

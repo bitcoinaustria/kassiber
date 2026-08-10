@@ -1,4 +1,5 @@
 import json
+import ssl
 import tempfile
 import unittest
 from pathlib import Path
@@ -2412,6 +2413,47 @@ class TransactionGraphTest(unittest.TestCase):
             timeout=5,
             proxy_url="socks5h://127.0.0.1:9050",
         )
+        self.assertEqual(payload["supportLevel"], "full")
+
+    def test_http_graph_lookup_preserves_auth_and_tls_policy(self):
+        txid = "2a" * 32
+        runtime_config = {
+            "default_backend": "private-esplora",
+            "backends": {
+                "private-esplora": {
+                    "kind": "esplora",
+                    "chain": "bitcoin",
+                    "network": "main",
+                    "url": "https://private.example/api",
+                    "timeout": 60,
+                    "auth_header": "Bearer private-token",
+                    "insecure": True,
+                }
+            },
+        }
+        fetched = {
+            "txid": txid,
+            "vin": [],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 8}],
+        }
+        self._tx("private-http-row", "wallet-a", "outbound", 8_000, txid, "{}")
+
+        with patch(
+            "kassiber.core.transaction_graph.fetch_esplora_transaction",
+            return_value=fetched,
+        ) as fetch:
+            payload = self._graph(
+                "private-http-row",
+                allow_public_lookup=True,
+                runtime_config=runtime_config,
+            )
+
+        kwargs = fetch.call_args.kwargs
+        self.assertEqual(fetch.call_args.args, ("https://private.example/api", txid))
+        self.assertEqual(kwargs["timeout"], 5)
+        self.assertEqual(kwargs["headers"], {"Authorization": "Bearer private-token"})
+        self.assertFalse(kwargs["ssl_context"].check_hostname)
+        self.assertEqual(kwargs["ssl_context"].verify_mode, ssl.CERT_NONE)
         self.assertEqual(payload["supportLevel"], "full")
 
     def test_bitcoin_lookup_prefers_default_electrum_before_http_backend(self):

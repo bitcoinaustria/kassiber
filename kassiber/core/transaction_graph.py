@@ -40,6 +40,9 @@ from .repo import current_context_snapshot
 from .sync import normalize_backend_kind
 from .sync_backends import (
     ElectrumClient,
+    _backend_proxy_url,
+    _backend_ssl_context,
+    _esplora_auth_headers,
     bitcoinrpc_call,
     decode_liquid_transaction,
     decode_raw_transaction,
@@ -1374,9 +1377,15 @@ def _graph_backend_with_timeout_cap(backend: Mapping[str, Any]) -> dict[str, Any
 
 def _fetch_graph_esplora_transaction(backend: Mapping[str, Any], txid: str) -> Any:
     kwargs: dict[str, Any] = {"timeout": _graph_lookup_timeout(backend)}
-    proxy_url = _string_or_none(backend.get("tor_proxy"))
+    proxy_url = _string_or_none(_backend_proxy_url(backend))
     if proxy_url is not None:
         kwargs["proxy_url"] = proxy_url
+    headers = _esplora_auth_headers(backend)
+    if headers is not None:
+        kwargs["headers"] = headers
+    ssl_context = _backend_ssl_context(backend)
+    if ssl_context is not None:
+        kwargs["ssl_context"] = ssl_context
     return fetch_esplora_transaction(str(backend["url"]), txid, **kwargs)
 
 
@@ -1792,6 +1801,8 @@ def _graph_backend_from_mapping(name: str, backend: Mapping[str, Any]) -> dict[s
         "timeout": backend.get("timeout"),
         "batch_size": backend.get("batch_size"),
         "tor_proxy": backend.get("tor_proxy") or backend.get("proxy"),
+        "auth_header": backend.get("auth_header"),
+        "token": backend.get("token"),
         "certificate": backend.get("certificate"),
         "insecure": backend.get("insecure"),
     }
