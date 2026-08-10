@@ -1248,10 +1248,16 @@ def build_parser() -> argparse.ArgumentParser:
             "socks5h://HOST:PORT, socks5h://USER:PASS@HOST:PORT, or http(s)://."
         ),
     )
-    backends_create.add_argument("--insecure")
+    backends_create.add_argument(
+        "--insecure",
+        help=(
+            "Disable TLS certificate verification for this backend "
+            "(unsafe; private endpoints only)."
+        ),
+    )
     backends_create.add_argument(
         "--certificate",
-        help="Path to tls.cert or PEM contents (LND).",
+        help="CA bundle path for HTTPS/Electrum, or tls.cert path/PEM contents for LND.",
     )
     backends_create.add_argument("--cookiefile")
     backends_create.add_argument("--lightning-cli", dest="lightning_cli")
@@ -1313,10 +1319,16 @@ def build_parser() -> argparse.ArgumentParser:
             "socks5h://HOST:PORT, socks5h://USER:PASS@HOST:PORT, or http(s)://."
         ),
     )
-    backends_update.add_argument("--insecure")
+    backends_update.add_argument(
+        "--insecure",
+        help=(
+            "Disable TLS certificate verification for this backend "
+            "(unsafe; private endpoints only)."
+        ),
+    )
     backends_update.add_argument(
         "--certificate",
-        help="Path to tls.cert or PEM contents (LND).",
+        help="CA bundle path for HTTPS/Electrum, or tls.cert path/PEM contents for LND.",
     )
     backends_update.add_argument("--cookiefile")
     backends_update.add_argument("--lightning-cli", dest="lightning_cli")

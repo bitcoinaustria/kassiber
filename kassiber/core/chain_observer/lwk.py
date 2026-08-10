@@ -42,17 +42,12 @@ def lwk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
     if plan is None:
         return "address_list"
     kind = normalize_backend_kind(backend.get("kind"))
+    if kind == "esplora" and parse_bool(
+        backend_value(backend, "insecure"), default=False
+    ):
+        return "insecure_tls"
     if kind == "esplora" and backend_value(backend, "certificate"):
-        # The compatibility HTTP transport cannot load a per-backend trust
-        # root either, so reject this before missing LWK wheels can redirect
-        # the wallet to an unsafe compatibility route.
-        raise AppError(
-            "LWK Esplora does not support a configured custom trust root",
-            code="observer_capability_unsupported",
-            hint="Use platform trust or an Electrum backend until LWK exposes per-client custom CA support.",
-            details={"capability": "esplora_custom_ca", "observer": "lwk"},
-            retryable=False,
-        )
+        return "custom_ca"
     try:
         require_lwk()
     except AppError as exc:

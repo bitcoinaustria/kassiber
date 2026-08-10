@@ -46,6 +46,35 @@ describe("backend settings model", () => {
     expect(backend.urlSafeForHttpProbe).toBe(true);
   });
 
+  it("round-trips an explicit HTTP backend TLS policy", () => {
+    const backend = backendRowToSettingsBackend({
+      name: "private-core",
+      display_name: "Private Core",
+      kind: "bitcoinrpc",
+      chain: "bitcoin",
+      network: "main",
+      url: "https://core.example",
+      has_url: true,
+      certificate: "/private/core-ca.pem",
+      insecure: true,
+    });
+
+    expect(backend.trustSsl).toBe(true);
+    expect(backend.certificate).toBe("/private/core-ca.pem");
+    expect(backendPayload(backend).config).toMatchObject({ insecure: true });
+
+    expect(
+      backendPayload({
+        ...backend,
+        trustSsl: false,
+        certificate: "/private/core-ca.pem",
+      }).config,
+    ).toMatchObject({
+      insecure: false,
+      certificate: "/private/core-ca.pem",
+    });
+  });
+
   it("serializes Silent Payments capability and scanner replacements", () => {
     const backend = backendRowToSettingsBackend({
       name: "sp-local",
@@ -109,7 +138,68 @@ describe("backend settings model", () => {
     expect(payload.name).toBe("liquid");
     expect(payload.config).toMatchObject({
       display_name: "Desk Liquid indexer",
+      insecure: false,
     });
+    expect(payload.clear).toContain("certificate");
+  });
+
+  it("clears a stored custom CA when verification is explicitly disabled", () => {
+    const payload = backendPayload({
+      id: "private-esplora",
+      name: "Private Esplora",
+      url: "https://esplora.example",
+      net: "BTC",
+      kind: "esplora",
+      chain: "bitcoin",
+      network: "main",
+      health: "configured",
+      on: true,
+      auth: "none",
+      trustSsl: true,
+    } satisfies Backend);
+
+    expect(payload.config).toMatchObject({ insecure: true });
+    expect(payload.clear).toContain("certificate");
+  });
+
+  it("clears a stored HTTP custom CA when the path is removed", () => {
+    const payload = backendPayload({
+      id: "private-core",
+      name: "Private Core",
+      url: "https://core.example",
+      net: "BTC",
+      kind: "bitcoinrpc",
+      chain: "bitcoin",
+      network: "main",
+      health: "configured",
+      on: true,
+      auth: "basic",
+      trustSsl: false,
+      certificate: "",
+    } satisfies Backend);
+
+    expect(payload.config).toMatchObject({ insecure: false });
+    expect(payload.clear).toContain("certificate");
+  });
+
+  it("never sets and clears the custom CA in one update", () => {
+    const payload = backendPayload({
+      id: "private-esplora",
+      name: "Private Esplora",
+      url: "https://esplora.example",
+      net: "BTC",
+      kind: "esplora",
+      chain: "bitcoin",
+      network: "main",
+      health: "configured",
+      on: true,
+      auth: "none",
+      trustSsl: true,
+      certificate: "/private/esplora-ca.pem",
+    } satisfies Backend);
+
+    expect(payload.clear).toContain("certificate");
+    expect(payload.config).not.toHaveProperty("certificate");
   });
 
   it("keeps a stored BTCPay API key when the edit field is left blank", () => {

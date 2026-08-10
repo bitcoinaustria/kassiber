@@ -9,7 +9,7 @@ Backends are stored canonically in SQLite.
 - `~/.kassiber/projects/<project>/config/backends.env` or your chosen
   `--env-file` is still accepted as a project-local bootstrap / compatibility
   input for non-secret addressing fields (`KIND`, `URL`, `CHAIN`, `NETWORK`,
-  `BATCH_SIZE`, `TIMEOUT`, `INSECURE`, `WALLETPREFIX`, `COOKIEFILE`,
+  `BATCH_SIZE`, `TIMEOUT`, `INSECURE`, `CERTIFICATE`, `WALLETPREFIX`, `COOKIEFILE`,
   `KASSIBER_DEFAULT_BACKEND`)
 - the `backends` table in SQLite is the long-term source of truth, and
   it is the only place secret-bearing fields (`TOKEN`, `PASSWORD`,
@@ -287,6 +287,8 @@ for operator visibility; descriptor sync does not require `blockfilterindex=1`.
 The backend CLI now accepts the common backend-specific knobs directly:
 
 - `--insecure` for Electrum TLS bypass testing against servers you control
+- `--certificate` for a verified custom CA bundle on HTTPS/Electrum backends;
+  LND also accepts its `tls.cert` path or PEM contents
 - `--cookiefile` or `--username` / `--password` for Bitcoin Core RPC auth
 - `--wallet-prefix` for Bitcoin Core watch-only wallet naming
 - `--lightning-cli`, `--lightning-dir`, `--rpc-file`, and
@@ -403,7 +405,10 @@ Use this for Electrum/Fulcrum-style servers.
 - accepts clearnet hosts and `.onion` hosts, for example
   `tcp://abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcd.onion:50001`
   or `ssl://...onion:50002` when the server's TLS setup matches
-- `INSECURE=1` disables TLS verification and should only be used against servers you control
+- `CERTIFICATE=/path/to/ca.pem` uses that verified CA bundle as this backend's
+  trust store
+- `INSECURE=1` disables all certificate and hostname verification; it does not
+  pin a self-signed certificate and should only be used against servers you control
 
 ### Tor / `.onion` backends
 
@@ -439,6 +444,8 @@ Use this when you run your own node.
   support, pruning, IBD, and BIP158 filter-index availability
 - this keeps refresh state isolated instead of mixing unrelated watch-only imports together
 - plain `http://` is only safe on localhost or over a trusted tunnel
+- HTTPS uses the host trust store by default; `CERTIFICATE` selects a custom CA
+  bundle, while `INSECURE=1` disables verification for that backend only
 
 ## Descriptor and Liquid notes
 
