@@ -13162,6 +13162,42 @@ def _is_loopback_http_url(url: str) -> bool:
         return False
 
 
+_BITCOINRPC_PROBE_CREDENTIAL_FIELDS = (
+    "username",
+    "rpcuser",
+    "rpc_user",
+    "password",
+    "rpcpassword",
+    "rpc_password",
+    "cookiefile",
+    "cookie_file",
+    "auth_header",
+    "token",
+)
+
+
+def _same_rpc_origin(saved_url: str, candidate_url: str) -> bool:
+    """Return whether two RPC URLs address the same scheme/host/port."""
+
+    def origin(value: str) -> tuple[str, str, int | None] | None:
+        try:
+            parsed = urlparse.urlsplit(value)
+        except ValueError:
+            return None
+        try:
+            port = parsed.port
+        except ValueError:
+            return None
+        return (
+            parsed.scheme.strip().lower(),
+            (parsed.hostname or "").strip().lower(),
+            port,
+        )
+
+    saved = origin(saved_url)
+    return saved is not None and saved == origin(candidate_url)
+
+
 def _is_default_core_cookiefile_path(cookiefile: str) -> bool:
     path = Path(cookiefile).expanduser()
     try:
@@ -13313,6 +13349,13 @@ def _bitcoinrpc_backend_for_probe(
         )
     url = _optional_str_arg(args, "url")
     if url is not None:
+        if not _same_rpc_origin(str(backend.get("url") or ""), url):
+            # Credentials are saved for one endpoint. A renderer-supplied URL
+            # pointing somewhere else must not carry them along, so the caller
+            # re-supplies auth for the host it wants to reach -- the same rule
+            # cookie-file probes already enforce through loopback validation.
+            for field in _BITCOINRPC_PROBE_CREDENTIAL_FIELDS:
+                backend.pop(field, None)
         backend["url"] = url
     backend.update(_backend_config_arg(args) or {})
     proxy = _optional_str_arg(args, "proxy") or _optional_str_arg(args, "tor_proxy")

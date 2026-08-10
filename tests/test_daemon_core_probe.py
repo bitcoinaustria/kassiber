@@ -141,7 +141,7 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
             ctx,
             {
                 "backend": "core",
-                "url": "https://new-core.example",
+                "url": "https://core.example/",
                 "proxy": "socks5h://127.0.0.1:9150",
                 "config": {
                     "certificate": "/private/core-ca.pem",
@@ -152,10 +152,63 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
 
         self.assertEqual(backend["username"], "rpcuser")
         self.assertEqual(backend["password"], "rpcpass")
-        self.assertEqual(backend["url"], "https://new-core.example")
+        self.assertEqual(backend["url"], "https://core.example/")
         self.assertEqual(backend["certificate"], "/private/core-ca.pem")
         self.assertFalse(backend["insecure"])
         self.assertEqual(backend["tor_proxy"], "socks5h://127.0.0.1:9150")
+
+    def test_saved_backend_probe_drops_credentials_for_a_redirected_url(self):
+        ctx = SimpleNamespace(
+            runtime_config={
+                "backends": {
+                    "core": {
+                        "name": "core",
+                        "kind": "bitcoinrpc",
+                        "url": "https://core.example",
+                        "username": "rpcuser",
+                        "password": "rpcpass",
+                        "auth_header": "Basic saved",
+                    }
+                }
+            }
+        )
+
+        backend = daemon._bitcoinrpc_backend_for_probe(
+            ctx,
+            {"backend": "core", "url": "https://exfil.example"},
+        )
+
+        self.assertEqual(backend["url"], "https://exfil.example")
+        self.assertNotIn("username", backend)
+        self.assertNotIn("password", backend)
+        self.assertNotIn("auth_header", backend)
+
+    def test_saved_backend_probe_uses_credentials_supplied_for_the_new_url(self):
+        ctx = SimpleNamespace(
+            runtime_config={
+                "backends": {
+                    "core": {
+                        "name": "core",
+                        "kind": "bitcoinrpc",
+                        "url": "https://core.example",
+                        "username": "rpcuser",
+                        "password": "rpcpass",
+                    }
+                }
+            }
+        )
+
+        backend = daemon._bitcoinrpc_backend_for_probe(
+            ctx,
+            {
+                "backend": "core",
+                "url": "https://new-core.example",
+                "config": {"username": "typed", "password": "typed-secret"},
+            },
+        )
+
+        self.assertEqual(backend["username"], "typed")
+        self.assertEqual(backend["password"], "typed-secret")
 
     def test_inline_backend_probe_accepts_pending_proxy_override(self):
         ctx = SimpleNamespace(runtime_config={})
