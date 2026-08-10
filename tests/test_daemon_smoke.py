@@ -66,16 +66,19 @@ ROOT = Path(__file__).resolve().parent.parent
 _DAEMON_STDOUT_EOF = object()
 
 
-def _start_daemon(data_root):
+def _start_daemon(data_root, *, env_file=None):
+    args = [
+        sys.executable,
+        "-m",
+        "kassiber",
+        "--data-root",
+        str(data_root),
+    ]
+    if env_file is not None:
+        args.extend(["--env-file", str(env_file)])
+    args.append("daemon")
     return subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "kassiber",
-            "--data-root",
-            str(data_root),
-            "daemon",
-        ],
+        args,
         cwd=ROOT,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -1603,6 +1606,172 @@ class DaemonSmokeTest(unittest.TestCase):
                         self.assertEqual(config["infrastructure_owner"], "self")
                     finally:
                         conn.close()
+
+    def test_daemon_backend_delete_promotes_bootstrap_backend(self):
+        backend_name = "liquid-blockstream"
+        with tempfile.TemporaryDirectory(
+            prefix="kassiber-daemon-backend-delete-promote-"
+        ) as tmp:
+            data_root = Path(tmp) / "data"
+            _run_cli(data_root, "init")
+            conn = open_db(data_root)
+            try:
+                conn.execute("DELETE FROM backends WHERE name = ?", (backend_name,))
+                conn.commit()
+            finally:
+                conn.close()
+
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "delete-bootstrap",
+                        "kind": "ui.backends.delete",
+                        "args": {"name": backend_name},
+                    },
+                )
+                deleted = _read_payload_timeout(proc)
+                self.assertEqual(deleted["kind"], "ui.backends.delete")
+                self.assertEqual(
+                    deleted["data"],
+                    {"name": backend_name, "deleted": True},
+                )
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
+
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "backend-settings-after-delete",
+                        "kind": "ui.backends.settings.list",
+                    },
+                )
+                after = _read_payload_timeout(proc)
+                self.assertNotIn(
+                    backend_name,
+                    {row["name"] for row in after["data"]["backends"]},
+                )
+
+                _write_payload(
+                    proc,
+                    {"request_id": "shutdown-1", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
+
+    def test_daemon_backend_delete_does_not_promote_dotenv_backend(self):
+        with tempfile.TemporaryDirectory(
+            prefix="kassiber-daemon-backend-delete-dotenv-"
+        ) as tmp:
+            data_root = Path(tmp) / "data"
+            env_file = Path(tmp) / "backends.env"
+            env_file.write_text(
+                "KASSIBER_BACKEND_ALPHA_KIND=electrum\n"
+                "KASSIBER_BACKEND_ALPHA_URL=ssl://alpha.example:50002\n",
+                encoding="utf-8",
+            )
+            _run_cli(data_root, "init")
+
+            proc = _start_daemon(data_root, env_file=env_file)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "delete-dotenv",
+                        "kind": "ui.backends.delete",
+                        "args": {"name": "alpha"},
+                    },
+                )
+                refused = _read_payload_timeout(proc)
+                self.assertEqual(refused["kind"], "error")
+                self.assertEqual(refused["error"]["code"], "not_found")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "backend-settings-after-refusal",
+                        "kind": "ui.backends.settings.list",
+                    },
+                )
+                after = _read_payload_timeout(proc)
+                self.assertIn(
+                    "alpha",
+                    {row["name"] for row in after["data"]["backends"]},
+                )
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
+
+            conn = open_db(data_root)
+            try:
+                self.assertIsNone(
+                    conn.execute(
+                        "SELECT 1 FROM backends WHERE name = 'alpha'"
+                    ).fetchone()
+                )
+            finally:
+                conn.close()
+
+    def test_daemon_backend_delete_rejects_process_default_before_mutation(self):
+        backend_name = "liquid-blockstream"
+        with tempfile.TemporaryDirectory(
+            prefix="kassiber-daemon-backend-delete-runtime-default-"
+        ) as tmp:
+            data_root = Path(tmp) / "data"
+            _run_cli(data_root, "init")
+
+            with mock.patch.dict(
+                os.environ,
+                {"KASSIBER_DEFAULT_BACKEND": backend_name},
+            ):
+                proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "delete-runtime-default",
+                        "kind": "ui.backends.delete",
+                        "args": {"name": backend_name},
+                    },
+                )
+                refused = _read_payload_timeout(proc)
+                self.assertEqual(refused["kind"], "error")
+                self.assertEqual(refused["error"]["code"], "conflict")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
+
+            conn = open_db(data_root)
+            try:
+                self.assertIsNotNone(
+                    conn.execute(
+                        "SELECT 1 FROM backends WHERE name = ?",
+                        (backend_name,),
+                    ).fetchone()
+                )
+            finally:
+                conn.close()
 
     def test_daemon_backend_set_default_promotes_bootstrap_default(self):
         for backend_name in DEFAULT_BACKENDS:

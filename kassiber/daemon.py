@@ -10002,7 +10002,20 @@ def _update_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
 
 def _delete_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[str, Any]:
     name = _required_str_arg(args, "name", "Backend name")
-    payload = core_accounts.delete_backend(ctx.conn, name)
+    normalized_name = name.strip().lower()
+    if normalized_name == str(ctx.runtime_config.get("default_backend") or "").strip().lower():
+        raise AppError(
+            f"Backend '{name}' is the active default",
+            code="conflict",
+            hint="Choose another default backend before deleting this one.",
+        )
+    if normalized_name not in (ctx.runtime_config.get("dotenv_backends") or ()):
+        _promote_bootstrap_backend_for_desktop_mutation(ctx, name)
+    try:
+        payload = core_accounts.delete_backend(ctx.conn, name)
+    except Exception:
+        ctx.conn.rollback()
+        raise
     merge_db_backends(ctx.conn, ctx.runtime_config)
     return payload
 

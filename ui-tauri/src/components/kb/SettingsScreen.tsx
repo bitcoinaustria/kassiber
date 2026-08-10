@@ -596,6 +596,14 @@ export function SettingsScreen({
   };
 
   const onDeleteBackend = async (backend: Backend) => {
+    if (backend.isDefault) {
+      addNotification({
+        title: t("deleteBackend.blockedTitle"),
+        body: t("deleteBackend.defaultWarning", { name: backend.name }),
+        tone: "error",
+      });
+      return;
+    }
     const affectedWallets = backend.walletRefs ?? [];
     if (affectedWallets.length > 0) {
       addNotification({
@@ -609,15 +617,41 @@ export function SettingsScreen({
     }
     const ok = await confirmAction(t("deleteBackend.confirm", { name: backend.name }));
     if (!ok) return;
-    await deleteBackend.mutateAsync({ name: backend.id });
-    const refreshed = await backendSettingsQuery.refetch();
-    const refreshedBackends = (refreshed.data?.data?.backends ?? []).map(
-      backendRowToSettingsBackend,
-    );
-    setExplorerSettings(deriveExplorerSettings(refreshedBackends));
-    setBackendDialogOpen(false);
-    setEditingBackendId(null);
-    setInitialBackendTypeId(null);
+    let deleted = false;
+    try {
+      await deleteBackend.mutateAsync({ name: backend.id });
+      deleted = true;
+      const refreshed = await backendSettingsQuery.refetch({ throwOnError: true });
+      const refreshedBackends = (refreshed.data?.data?.backends ?? []).map(
+        backendRowToSettingsBackend,
+      );
+      setExplorerSettings(deriveExplorerSettings(refreshedBackends));
+      setBackendDialogOpen(false);
+      setEditingBackendId(null);
+      setInitialBackendTypeId(null);
+    } catch (error) {
+      if (deleted) {
+        setBackendDialogOpen(false);
+        setEditingBackendId(null);
+        setInitialBackendTypeId(null);
+      }
+      addNotification({
+        title: t(
+          deleted
+            ? "deleteBackend.refreshFailedTitle"
+            : "deleteBackend.failedTitle",
+        ),
+        body:
+          error instanceof Error
+            ? error.message
+            : t(
+                deleted
+                  ? "deleteBackend.refreshFailedBody"
+                  : "deleteBackend.failedBody",
+              ),
+        tone: "error",
+      });
+    }
   };
 
   const onSetDefaultBackend = async (backend: Backend) => {
