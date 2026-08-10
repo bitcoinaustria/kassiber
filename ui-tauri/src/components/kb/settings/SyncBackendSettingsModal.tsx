@@ -580,8 +580,16 @@ export function SyncBackendSettingsModal({
     selectedBackendKind === "esplora" ||
     selectedBackendKind === "liquid-esplora";
   const isBitcoinRpc = selectedBackendKind === "bitcoinrpc";
+  // Editing always runs in "custom" mode, so the source alone does not say
+  // whether this endpoint is one of Kassiber's public presets. Those have
+  // publicly trusted certificates and no business offering a trust override.
+  const isPublicPresetEndpoint = publicPresets.some(
+    (candidate) =>
+      candidate.url.trim().toLowerCase() === effectiveUrl.trim().toLowerCase(),
+  );
   const showHttpTlsSettings =
     backendSource === "custom" &&
+    !isPublicPresetEndpoint &&
     effectiveUrl.toLowerCase().startsWith("https://") &&
     (selectedKindIsExplorerApi || selectedBackendKind === "bitcoinrpc");
   const proxyCapable =
