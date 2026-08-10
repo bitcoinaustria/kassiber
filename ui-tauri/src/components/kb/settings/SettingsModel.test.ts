@@ -182,6 +182,26 @@ describe("backend settings model", () => {
     expect(payload.clear).toContain("certificate");
   });
 
+  it("never sets and clears the custom CA in one update", () => {
+    const payload = backendPayload({
+      id: "private-esplora",
+      name: "Private Esplora",
+      url: "https://esplora.example",
+      net: "BTC",
+      kind: "esplora",
+      chain: "bitcoin",
+      network: "main",
+      health: "configured",
+      on: true,
+      auth: "none",
+      trustSsl: true,
+      certificate: "/private/esplora-ca.pem",
+    } satisfies Backend);
+
+    expect(payload.clear).toContain("certificate");
+    expect(payload.config).not.toHaveProperty("certificate");
+  });
+
   it("keeps a stored BTCPay API key when the edit field is left blank", () => {
     const payload = backendPayload({
       id: "shop-btcpay",

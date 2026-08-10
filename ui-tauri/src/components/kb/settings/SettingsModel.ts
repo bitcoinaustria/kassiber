@@ -585,6 +585,11 @@ export function backendPayload(backend: Backend): Record<string, unknown> {
   } else if (httpTlsBackend && !backend.certificate?.trim()) {
     clear.add("certificate");
   }
+  if (clear.has("certificate")) {
+    // The daemon rejects setting and clearing the same config field, so a
+    // cleared field must not also be sent as a value.
+    delete config.certificate;
+  }
   if (auth === "none") {
     clear.add("auth_header");
     clear.add("token");
