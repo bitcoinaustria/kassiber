@@ -1702,7 +1702,8 @@ class DaemonSmokeTest(unittest.TestCase):
                 )
                 refused = _read_payload_timeout(proc)
                 self.assertEqual(refused["kind"], "error")
-                self.assertEqual(refused["error"]["code"], "not_found")
+                self.assertEqual(refused["error"]["code"], "conflict")
+                self.assertIn("env file", refused["error"]["message"])
 
                 _write_payload(
                     proc,
