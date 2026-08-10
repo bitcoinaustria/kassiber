@@ -9,6 +9,21 @@ corresponding repository is live and its candidate can be verified.
 This document records the packaging boundary and rollout order. `TODO.md`
 remains the execution backlog.
 
+## Frozen TLS trust
+
+The Linux PyInstaller CLI and AppImage sidecar use the host's installed CA
+bundle when one is available, including Fedora's `/etc/pki` and Debian's
+`/etc/ssl` layouts. An explicit `SSL_CERT_FILE` remains authoritative, including
+for built-in endpoints; minimal images without a host bundle fall back to
+Kassiber's bundled certifi roots for Python/OpenSSL transports.
+
+Native BDK/LWK Esplora clients use Rustls roots and do not consume Python's
+`SSL_CERT_FILE`. In a frozen Linux build using host or operator CA trust,
+custom/self-owned Esplora backends therefore use Kassiber's Python compatibility
+transport so the selected system roots are actually enforced. Exact built-in
+public Bitcoin Esplora endpoints keep the native observer route for auto-detected
+host trust; an explicit operator override remains authoritative.
+
 ## Release gates
 
 Every package-manager channel must fail closed unless all of these checks pass:

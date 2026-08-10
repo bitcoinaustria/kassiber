@@ -33,6 +33,13 @@ def _truthy_env(name: str) -> bool:
     return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _host_ca_mode() -> str:
+    value = str(os.environ.get("KASSIBER_HOST_CA_BUNDLE") or "").strip().lower()
+    if value == "explicit":
+        return value
+    return "host" if value in {"1", "true", "yes", "on"} else ""
+
+
 def lwk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str | None:
     """Preflight configurations the Python binding cannot safely represent."""
 
@@ -42,6 +49,17 @@ def lwk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
     if plan is None:
         return "address_list"
     kind = normalize_backend_kind(backend.get("kind"))
+    host_ca_mode = _host_ca_mode()
+    if (
+        kind == "esplora"
+        and host_ca_mode
+        and not backend_value(backend, "certificate")
+        and urlparse.urlsplit(str(backend.get("url") or "")).scheme.lower()
+        == "https"
+    ):
+        # LWK's Reqwest/Rustls client ships WebPKI roots and does not consume
+        # Python/OpenSSL's SSL_CERT_FILE. Use the compatibility HTTP transport.
+        return "system_ca_trust"
     if kind == "esplora" and backend_value(backend, "certificate"):
         # The compatibility HTTP transport cannot load a per-backend trust
         # root either, so reject this before missing LWK wheels can redirect

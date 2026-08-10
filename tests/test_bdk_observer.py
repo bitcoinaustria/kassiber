@@ -821,6 +821,103 @@ class BdkDependencyContractTest(TestCase):
         self.assertEqual(raised.exception.code, "observer_capability_unsupported")
         self.assertEqual(raised.exception.details["capability"], "esplora_custom_ca")
 
+    def test_frozen_host_ca_routes_custom_esplora_to_python_transport(self):
+        _wallet, plan = _descriptor_wallet()
+        state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
+        with mock.patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}):
+            self.assertEqual(
+                bdk_compatibility_reason(
+                    {
+                        "name": "private-node",
+                        "kind": "esplora",
+                        "url": "https://node.example",
+                    },
+                    state,
+                ),
+                "system_ca_trust",
+            )
+
+    def test_frozen_host_ca_does_not_bypass_custom_ca_rejection(self):
+        _wallet, plan = _descriptor_wallet()
+        state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
+        with mock.patch.dict(
+            os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}
+        ), self.assertRaises(AppError) as raised:
+            bdk_compatibility_reason(
+                {
+                    "name": "private-node",
+                    "kind": "esplora",
+                    "url": "https://node.example",
+                    "certificate": "/private/ca.pem",
+                },
+                state,
+            )
+        self.assertEqual(raised.exception.code, "observer_capability_unsupported")
+
+    def test_frozen_host_ca_does_not_exempt_replaced_builtin_name(self):
+        _wallet, plan = _descriptor_wallet()
+        state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
+        with mock.patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}):
+            self.assertEqual(
+                bdk_compatibility_reason(
+                    {
+                        "name": "mempool",
+                        "kind": "esplora",
+                        "url": "https://private.example/api",
+                    },
+                    state,
+                ),
+                "system_ca_trust",
+            )
+
+    def test_frozen_host_ca_keeps_plain_http_esplora_native(self):
+        _wallet, plan = _descriptor_wallet()
+        state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
+        with mock.patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}):
+            self.assertIsNone(
+                bdk_compatibility_reason(
+                    {
+                        "name": "local-esplora",
+                        "kind": "esplora",
+                        "url": "http://127.0.0.1:3002",
+                    },
+                    state,
+                )
+            )
+
+    def test_frozen_host_ca_keeps_exact_builtin_esplora_native(self):
+        _wallet, plan = _descriptor_wallet()
+        state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
+        with mock.patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}):
+            self.assertIsNone(
+                bdk_compatibility_reason(
+                    {
+                        "name": "mempool",
+                        "kind": "esplora",
+                        "url": "https://mempool.bitcoin-austria.at/api",
+                    },
+                    state,
+                )
+            )
+
+    def test_explicit_ca_override_routes_exact_builtin_to_python_transport(self):
+        _wallet, plan = _descriptor_wallet()
+        state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
+        with mock.patch.dict(
+            os.environ, {"KASSIBER_HOST_CA_BUNDLE": "explicit"}
+        ):
+            self.assertEqual(
+                bdk_compatibility_reason(
+                    {
+                        "name": "mempool",
+                        "kind": "esplora",
+                        "url": "https://mempool.bitcoin-austria.at/api",
+                    },
+                    state,
+                ),
+                "system_ca_trust",
+            )
+
     def test_mempool_backend_alias_selects_bdk(self):
         _wallet, plan = _descriptor_wallet()
         state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
