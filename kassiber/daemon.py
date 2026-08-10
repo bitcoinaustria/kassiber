@@ -10042,12 +10042,14 @@ def _delete_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
                 ),
                 retryable=False,
             )
+        promoted = False
     else:
-        _promote_bootstrap_backend_for_desktop_mutation(ctx, name)
+        promoted = _promote_bootstrap_backend_for_desktop_mutation(ctx, name)
     try:
         payload = core_accounts.delete_backend(ctx.conn, name)
     except Exception:
-        ctx.conn.rollback()
+        if promoted:
+            ctx.conn.rollback()
         raise
     merge_db_backends(ctx.conn, ctx.runtime_config)
     return payload
