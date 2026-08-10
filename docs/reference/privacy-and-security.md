@@ -384,6 +384,12 @@ safe-to-record contract for secret-bearing config values:
   suppressed, while callers should rely on state flags such as `descriptor`,
   `change_descriptor`, `descriptor_state`, and `silent_payment` instead
 - backend URLs shown in output drop embedded credentials and query strings
+- one deliberate exception: the desktop-only `ui.backends.settings.list` kind
+  returns the raw `certificate` value for Electrum/Esplora/Liquid Esplora/Core
+  RPC backends, because Settings has to round-trip the configured CA bundle
+  through the edit form instead of silently clearing it. A CA certificate is
+  public material, but the value can be a local filesystem path, so this stays
+  off the CLI and AI surfaces, which keep `has_certificate` presence only
 
 This contract is intentionally narrow. It does **not** mean every CLI surface
 is safe to paste into a hosted model, issue tracker, or shared log. Addresses,
