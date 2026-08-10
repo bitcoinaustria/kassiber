@@ -263,6 +263,7 @@ def urlopen_with_proxy(
     proxy_url=None,
     *,
     source_label="backend",
+    ssl_context=None,
 ):
     proxy = str(proxy_url or "").strip()
     target_url = url or request.full_url
@@ -289,15 +290,21 @@ def urlopen_with_proxy(
                     "connect to .onion hosts directly."
                 ),
             )
-        return urlrequest.urlopen(request, timeout=timeout)
+        kwargs = {"timeout": timeout}
+        if ssl_context is not None:
+            kwargs["context"] = ssl_context
+        return urlrequest.urlopen(request, **kwargs)
     normalized_proxy = _with_default_proxy_scheme(proxy)
     scheme = urlparse.urlsplit(normalized_proxy).scheme.lower()
     if scheme in {"http", "https"}:
-        opener = urlrequest.build_opener(
+        handlers = [
             urlrequest.ProxyHandler(
                 {"http": normalized_proxy, "https": normalized_proxy}
             )
-        )
+        ]
+        if ssl_context is not None:
+            handlers.append(urlrequest.HTTPSHandler(context=ssl_context))
+        opener = urlrequest.build_opener(*handlers)
         return opener.open(request, timeout=timeout)
     if scheme not in {"socks5", "socks5h"}:
         raise AppError(
@@ -315,17 +322,29 @@ def urlopen_with_proxy(
         dict(request.header_items()),
         method=request.get_method(),
         data=getattr(request, "data", None),
+        ssl_context=ssl_context,
     )
 
 
 class SocksUrlResponse:
-    def __init__(self, url, proxy_url, timeout, headers, *, method="GET", data=None):
+    def __init__(
+        self,
+        url,
+        proxy_url,
+        timeout,
+        headers,
+        *,
+        method="GET",
+        data=None,
+        ssl_context=None,
+    ):
         self._url = url
         self._proxy_url = proxy_url
         self._timeout = timeout
         self._headers = headers
         self._method = method
         self._data = data
+        self._ssl_context = ssl_context
         self._connection = None
         self._response = None
 
@@ -340,6 +359,7 @@ class SocksUrlResponse:
         target = urlparse.urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
         proxy_url = self._proxy_url
         timeout = self._timeout
+        ssl_context = self._ssl_context
 
         class SocksHTTPConnection(http.client.HTTPConnection):
             def connect(self):
@@ -358,7 +378,7 @@ class SocksUrlResponse:
                     port,
                     timeout,
                 )
-                context = ssl.create_default_context()
+                context = ssl_context or ssl.create_default_context()
                 self.sock = context.wrap_socket(
                     raw_sock,
                     server_hostname=parsed.hostname,

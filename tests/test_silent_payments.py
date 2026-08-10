@@ -681,6 +681,7 @@ class SilentPaymentsTests(unittest.TestCase):
         backend = runtime["backends"]["sp-local"]
         backend["url"] = "https://sp.example.test"
         backend["silent_payment_scan_path"] = "/silent-payments/scan"
+        backend["certificate"] = "/private/sp-ca.pem"
         config = _sp_config(
             sp_scan_mode="server-assisted",
             sp_acknowledge_server_warning=True,
@@ -699,15 +700,18 @@ class SilentPaymentsTests(unittest.TestCase):
                 "utxos": [],
             }
 
-        original_post_json = sync_backends.http_post_json
-        sync_backends.http_post_json = fake_post_json
-        self.addCleanup(lambda: setattr(sync_backends, "http_post_json", original_post_json))
-
-        payload = sync_backends._silent_payment_scan_payload(backend, wallet, plan)
+        tls_context = object()
+        with patch.object(
+            sync_backends, "http_post_json", side_effect=fake_post_json
+        ), patch.object(
+            sync_backends, "_backend_ssl_context", return_value=tls_context
+        ):
+            payload = sync_backends._silent_payment_scan_payload(backend, wallet, plan)
 
         self.assertTrue(payload["complete"])
         self.assertEqual(calls[0][0], "https://sp.example.test/silent-payments/scan")
         self.assertEqual(calls[0][1]["descriptor"], SP_DESCRIPTOR)
+        self.assertIs(calls[0][2]["ssl_context"], tls_context)
 
     def test_scan_range_must_cover_wallet_birthday(self):
         plan = silent_payments.build_plan(_sp_config(sp_scan_start_height=850_000))

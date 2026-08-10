@@ -73,6 +73,7 @@ export interface BackendSettingsRow {
   has_cookiefile?: boolean;
   has_username?: boolean;
   has_password?: boolean;
+  certificate?: string;
   has_commando_peer_id?: boolean;
   has_lightning_dir?: boolean;
   has_rpc_file?: boolean;
@@ -512,6 +513,7 @@ export function backendRowToSettingsBackend(row: BackendSettingsRow): Backend {
       ? CLN_PRESENCE_SENTINEL_LIGHTNING_DIR
       : undefined,
     rpcFile: row.has_rpc_file ? CLN_PRESENCE_SENTINEL_RPC_FILE : undefined,
+    certificate: row.certificate,
     trustSsl: row.insecure,
     urlSafeForHttpProbe: row.url_safe_for_http_probe === true,
     proxy: parseProxyEndpoint(row.tor_proxy),
@@ -571,6 +573,18 @@ export function backendPayload(backend: Backend): Record<string, unknown> {
     config.rpc_file = backend.rpcFile;
   }
   const clear = new Set<string>();
+  const kind = String(payload.kind).toLowerCase();
+  const httpTlsBackend = ["esplora", "liquid-esplora", "bitcoinrpc"].includes(
+    kind,
+  );
+  if (httpTlsBackend && backend.trustSsl === undefined) {
+    config.insecure = false;
+    clear.add("certificate");
+  } else if (httpTlsBackend && backend.trustSsl === true) {
+    clear.add("certificate");
+  } else if (httpTlsBackend && !backend.certificate?.trim()) {
+    clear.add("certificate");
+  }
   if (auth === "none") {
     clear.add("auth_header");
     clear.add("token");

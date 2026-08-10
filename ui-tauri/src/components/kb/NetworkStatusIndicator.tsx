@@ -27,14 +27,10 @@ import {
   abbreviateEndpointMiddle,
   canRunConnectionHealthChecks,
   connectionHealthTone,
-  connectionProbeKind,
-  endpointWithPort,
   nextConnectionHealthCheckDelayMs,
-  settingsHashForConnection,
   shouldRunImmediateConnectionHealthCheck,
   type ConnectionHealthStatus,
   type ConnectionIndicatorTone,
-  type ConnectionProbeKind,
 } from "@/lib/connectionHealth";
 import { isOnionEndpoint } from "@/lib/backendTrust";
 import { cn } from "@/lib/utils";
@@ -47,25 +43,14 @@ import {
 import { PENDING_SETTINGS_BACKEND_EDIT_KEY } from "./settingsSections";
 import { visibleConnectionBackends } from "./backendConnectionRows";
 import {
-  backendProtocolLabel,
   backendRowToSettingsBackend,
-  type Backend,
   type BackendSettingsData,
 } from "./settings/SettingsModel";
-
-type ConnectionHealthRow = {
-  id: string;
-  backendId?: string;
-  name: string;
-  endpoint: string;
-  fingerprint: string;
-  rawUrl: string;
-  protocol: string;
-  probeKind: ConnectionProbeKind;
-  settingsHash: string;
-  proxy?: string;
-  trustSelfSigned?: boolean;
-};
+import {
+  connectionProbeRequest,
+  connectionRowFromBackend,
+  type ConnectionHealthRow,
+} from "./NetworkStatusIndicatorModel";
 
 type ConnectionHealthRecord = {
   status: ConnectionHealthStatus;
@@ -162,7 +147,7 @@ function bitcoinRpcHealth(
 }
 
 function connectionRowsFromBackends(
-  savedBackends: Backend[],
+  savedBackends: ReturnType<typeof backendRowToSettingsBackend>[],
 ): ConnectionHealthRow[] {
   const rows = visibleConnectionBackends(savedBackends)
     .filter((backend) => backend.on && backend.url.trim())
@@ -176,37 +161,6 @@ function connectionRowsFromBackends(
     seen.add(key);
     return true;
   });
-}
-
-function connectionRowFromBackend(
-  backend: Backend,
-  id: string,
-  backendId?: string,
-): ConnectionHealthRow {
-  return {
-    id,
-    backendId,
-    name: backend.name,
-    endpoint: endpointWithPort(backend.url),
-    fingerprint: [
-      backend.url,
-      backend.proxy ? `${backend.proxy.host}:${backend.proxy.port}` : "",
-      backend.trustSsl ? "trust-self-signed" : "",
-      backend.kind,
-    ].join("|"),
-    rawUrl: backend.url,
-    protocol: backendProtocolLabel(backend),
-    probeKind: connectionProbeKind({
-      ...backend,
-      allowDisplayHttpProbe:
-        backendId === undefined || backend.urlSafeForHttpProbe === true,
-    }),
-    settingsHash: settingsHashForConnection(backend),
-    proxy: backend.proxy
-      ? `${backend.proxy.host}:${backend.proxy.port}`
-      : undefined,
-    trustSelfSigned: Boolean(backend.trustSsl),
-  };
 }
 
 function rowHealthStatus(
@@ -491,35 +445,17 @@ export function NetworkStatusIndicator({
         break;
       }
       try {
+        const request = connectionProbeRequest(row);
         const envelope =
-          row.probeKind === "electrum"
-            ? await testElectrum.mutateAsync({
-                url: row.rawUrl,
-                trust_self_signed: row.trustSelfSigned,
-                proxy: row.proxy,
-                timeout: 5,
-              })
-            : row.probeKind === "bitcoinrpc"
-              ? await testBitcoinRpc.mutateAsync({
-                  backend: row.backendId,
-                  url: row.backendId ? undefined : row.rawUrl,
-                  timeout: 5,
-                })
-              : row.probeKind === "lightning"
-                ? await testLightning.mutateAsync({
-                    backend: row.backendId,
-                    timeout: 5,
-                  })
-                : row.probeKind === "btcpay"
-                  ? await testBtcpay.mutateAsync({
-                      backend: row.backendId,
-                      timeout: 5,
-                    })
-                  : await testHttp.mutateAsync({
-                      url: row.rawUrl,
-                      proxy: row.proxy,
-                      timeout: 5,
-                    });
+          request.kind === "electrum"
+            ? await testElectrum.mutateAsync(request.args)
+            : request.kind === "bitcoinrpc"
+              ? await testBitcoinRpc.mutateAsync(request.args)
+              : request.kind === "lightning"
+                ? await testLightning.mutateAsync(request.args)
+                : request.kind === "btcpay"
+                  ? await testBtcpay.mutateAsync(request.args)
+                  : await testHttp.mutateAsync(request.args);
         const payload = envelope.data;
         const coreHealth =
           row.probeKind === "bitcoinrpc"

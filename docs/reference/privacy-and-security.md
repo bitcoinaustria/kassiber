@@ -444,8 +444,10 @@ rows, and stack locals. `--save` writes the artifact under
 - **Generic tax output is not tax advice.** It is accounting software
   output built on local wallet history and available pricing, not a
   substitute for jurisdiction-specific review.
-- **Electrum `INSECURE=1` disables TLS verification.** Only against
-  servers you fully control — never against a public Electrum server.
+- **Backend `INSECURE=1` disables all TLS certificate and hostname
+  verification.** It applies only to that Electrum or HTTPS backend and should
+  be used only against a local/private endpoint you fully control — never a
+  public server. Prefer the host trust store or a configured custom CA bundle.
 - **Plain HTTP to Bitcoin Core is only safe on localhost.** Kassiber
   will send RPC credentials over `http://` to whatever URL you
   configure. Tunnel remote nodes over SSH / VPN / TLS proxy.

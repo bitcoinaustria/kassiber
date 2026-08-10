@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  connectionProbeRequest,
+  connectionRowFromBackend,
+} from "./NetworkStatusIndicatorModel";
+import {
   regtestBackendConnections,
   visibleConnectionBackends,
 } from "./backendConnectionRows";
@@ -107,5 +111,62 @@ describe("visibleConnectionBackends", () => {
     ]);
 
     expect(rows.map((row) => row.id)).toEqual(["mempool", "liquid"]);
+  });
+
+  it("keeps saved HTTP TLS settings on background health probes", () => {
+    const row = connectionRowFromBackend(
+      backend({
+        id: "private-esplora",
+        name: "Private Esplora",
+        kind: "esplora",
+        url: "https://private.example/api",
+        urlSafeForHttpProbe: true,
+        certificate: "/private/esplora-ca.pem",
+        trustSsl: false,
+      }),
+      "backend:private-esplora",
+      "private-esplora",
+    );
+
+    expect(connectionProbeRequest(row)).toEqual({
+      kind: "http",
+      args: {
+        url: "https://private.example/api",
+        proxy: undefined,
+        insecure: false,
+        certificate: "/private/esplora-ca.pem",
+        timeout: 5,
+      },
+    });
+  });
+
+  it("passes saved Core proxy and TLS settings to the health probe", () => {
+    const row = connectionRowFromBackend(
+      backend({
+        id: "private-core",
+        name: "Private Core",
+        kind: "bitcoinrpc",
+        url: "https://core.example",
+        proxy: { host: "127.0.0.1", port: "9050" },
+        certificate: "/private/core-ca.pem",
+        trustSsl: false,
+      }),
+      "backend:private-core",
+      "private-core",
+    );
+
+    expect(connectionProbeRequest(row)).toEqual({
+      kind: "bitcoinrpc",
+      args: {
+        backend: "private-core",
+        url: undefined,
+        proxy: "127.0.0.1:9050",
+        timeout: 5,
+        config: {
+          insecure: false,
+          certificate: "/private/core-ca.pem",
+        },
+      },
+    });
   });
 });
