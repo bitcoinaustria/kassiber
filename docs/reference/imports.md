@@ -1285,9 +1285,9 @@ Kassiber supports 21bitcoin transaction CSV exports as a custodial platform
 ledger. BTC trade rows are active custodial balance activity, not L1 wallet
 transactions. Fiat-only cash deposit rows are skipped because Kassiber remains
 the BTC-side subledger. The provider row id is stored as the pricing external
-reference. Trade rows use a provider-scoped transaction id (`21bitcoin:<id>`).
-Withdrawal rows use `linked_transaction` as the transaction id when the CSV
-provides it, so they can pair with the receiving on-chain wallet row.
+reference. Every BTC-side row uses the stable provider-scoped transaction id
+`21bitcoin:<id>`. Current exports do not provide an on-chain txid or address,
+so Kassiber never treats a broker reference as physical chain identity.
 
 Import directly:
 
@@ -1296,26 +1296,17 @@ python3 -m kassiber wallets import-21bitcoin \
   --file /path/to/21bitcoin-transactions.csv
 ```
 
-The default `--mode full` imports every normalized BTC-side row into the
-selected custodial wallet, or into a default `21bitcoin` wallet when no wallet
-is supplied. Imported rows are included in accounting. Buy/sell rows carry the
-exact execution price from the CSV. Withdrawal rows intentionally do not invent
-a sell price; pair them with the receiving wallet transaction so RP2 carries
-the original basis out of the custodial wallet. If only part of the 21bitcoin
-balance is withdrawn, the tax engine consumes only the withdrawn lots according
-to the book's accounting method and leaves the remaining custodial balance with
-its original basis.
-
-`--mode relevant` is still available when the CSV should only act as evidence
-against an already-imported wallet. In relevant mode, only L1 withdrawal rows
-that uniquely match existing transactions anywhere in the active profile are
-enriched. Internal trade rows are skipped.
-
-```bash
-python3 -m kassiber wallets import-21bitcoin \
-  --mode relevant \
-  --file /path/to/21bitcoin-transactions.csv
-```
+The import loads every normalized BTC-side row into the selected custodial
+wallet, or into a default `21bitcoin` wallet when no wallet is supplied.
+Imported rows are included in accounting. Buy/sell rows carry the exact
+execution value from the CSV. BTC deposits and withdrawals intentionally do
+not invent a fiat price. Kassiber proposes nearby opposite-direction wallet
+movements with compatible amounts as `strong` custody-transfer candidates;
+they require review because amount and time are not physical identity. Once a
+pair is confirmed, RP2 carries the original basis between the custodial and
+self-custody wallets. If only part of the 21bitcoin balance is withdrawn, the
+tax engine consumes only the withdrawn lots according to the book's accounting
+method and leaves the remaining custodial balance with its original basis.
 
 Behavior:
 
@@ -1323,11 +1314,14 @@ Behavior:
 - BTC -> fiat trade rows become outbound `sell` transactions
 - BTC L1 withdrawal rows become outbound `withdrawal` transactions with BTC
   fees
+- BTC deposit rows become inbound custodial `deposit` transactions
 - EUR fees on buy trades are included in the exact acquisition value
+- EUR sell proceeds are already net of the separately exported fee and are not
+  reduced a second time
 - fiat proceeds and costs are stored as exact `exchange_execution` pricing from
   provider `21bitcoin`
-- relevant imports are match-existing-only and never create standalone
-  transactions; full imports create active custodial ledger rows
+- custody movements retain no fiat execution price and require reviewed pairing
+  when the export has no txid
 
 ## Pocket Bitcoin
 

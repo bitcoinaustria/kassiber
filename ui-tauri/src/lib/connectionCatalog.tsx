@@ -702,7 +702,7 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     details: [
       "BTC trade rows become active custodial balance activity",
       "Buy/sell rows store exact 21bitcoin execution pricing from the CSV",
-      "L1 withdrawal rows can be paired to your receiving wallet so basis carries out",
+      "Deposits and withdrawals without txids become reviewed custody-transfer candidates",
     ],
   },
   {

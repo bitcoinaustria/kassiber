@@ -33,9 +33,9 @@ Import format families live here:
   - Coinfinity (`coinfinity_csv`) — order export CSV. BTC/EUR broker rows
     are normalized as exact exchange execution evidence, with fiat fees
     folded into the taxable buy/sell value.
-  - 21bitcoin (`21bitcoin_csv`) — transaction CSV export. BTC-side trades
-    and withdrawals are normalized as a custodial platform ledger; fiat-only
-    cash rows are skipped.
+  - 21bitcoin (`21bitcoin_csv`) — transaction CSV export. BTC-side trades,
+    deposits, and withdrawals are normalized as a custodial platform ledger;
+    fiat-only cash rows are skipped.
   - Pocket Bitcoin (`pocketbitcoin_csv`) — account CSV export. Exchange rows
     are normalized as exact execution evidence and paired with adjacent BTC
     withdrawal rows when the export records the on-chain payout separately.
@@ -82,6 +82,14 @@ from .wallet_descriptors import normalize_asset_code
 # -- generic coordinator -----------------------------------------------------
 
 
+def _read_csv_rows(file_path, *, encoding="utf-8", skip_blank=False):
+    with open(file_path, "r", encoding=encoding, newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    if skip_blank:
+        return [row for row in rows if any(str_or_none(value) for value in row.values())]
+    return rows
+
+
 def load_import_records(file_path, input_format, column_map=None):
     """Dispatch on `input_format` to the matching loader.
 
@@ -109,8 +117,7 @@ def load_import_records(file_path, input_format, column_map=None):
             raise AppError("JSON import must be a list of transaction objects")
         return payload
     if input_format == "csv":
-        with open(file_path, "r", encoding="utf-8", newline="") as handle:
-            return list(csv.DictReader(handle))
+        return _read_csv_rows(file_path)
     if input_format == "btcpay_json":
         return load_btcpay_export_records(file_path, "json")
     if input_format == "btcpay_csv":
@@ -723,8 +730,7 @@ def load_btcpay_export_records(file_path, input_format):
             raise AppError("BTCPay JSON export must be a list of transaction objects")
         rows = payload
     elif input_format == "csv":
-        with open(file_path, "r", encoding="utf-8", newline="") as handle:
-            rows = list(csv.DictReader(handle))
+        rows = _read_csv_rows(file_path)
     else:
         raise AppError(f"Unsupported BTCPay input format '{input_format}'")
     return [normalize_btcpay_record(row) for row in rows]
@@ -894,8 +900,7 @@ def load_phoenix_csv_records(file_path):
     Validates the 4 required columns up-front so the user gets one
     error envelope rather than a cascade of row-level failures.
     """
-    with open(file_path, "r", encoding="utf-8", newline="") as handle:
-        rows = list(csv.DictReader(handle))
+    rows = _read_csv_rows(file_path)
     if not rows:
         return []
     header = rows[0].keys()
@@ -1096,8 +1101,7 @@ def normalize_bullbitcoin_record(record):
 
 def load_bullbitcoin_csv_records(file_path):
     """Load Bull Bitcoin order-export CSV rows."""
-    with open(file_path, "r", encoding="utf-8", newline="") as handle:
-        rows = list(csv.DictReader(handle))
+    rows = _read_csv_rows(file_path)
     if not rows:
         return []
     header = {_normalized_column_key(column) for column in rows[0].keys()}
@@ -1293,8 +1297,7 @@ def normalize_bullbitcoin_wallet_record(record, index=0):
 
 def load_bullbitcoin_wallet_csv_records(file_path):
     """Load Bull Bitcoin unified wallet-history CSV rows."""
-    with open(file_path, "r", encoding="utf-8", newline="") as handle:
-        rows = list(csv.DictReader(handle))
+    rows = _read_csv_rows(file_path)
     if not rows:
         return []
     header = {_normalized_column_key(column) for column in rows[0].keys()}
@@ -1435,8 +1438,7 @@ def normalize_coinfinity_record(record, index=0):
 
 def load_coinfinity_csv_records(file_path):
     """Load Coinfinity order-export CSV rows."""
-    with open(file_path, "r", encoding="utf-8-sig", newline="") as handle:
-        rows = list(csv.DictReader(handle))
+    rows = _read_csv_rows(file_path, encoding="utf-8-sig")
     if not rows:
         return []
     header = {_normalized_column_key(column) for column in rows[0].keys()}
@@ -1637,8 +1639,7 @@ def normalize_pocketbitcoin_record(record, withdrawal=None, index=0):
 
 def load_pocketbitcoin_csv_records(file_path):
     """Load Pocket Bitcoin account CSV rows."""
-    with open(file_path, "r", encoding="utf-8", newline="") as handle:
-        rows = list(csv.DictReader(handle))
+    rows = _read_csv_rows(file_path)
     if not rows:
         return []
     header = {_normalized_column_key(column) for column in rows[0].keys()}
@@ -1740,9 +1741,6 @@ def normalize_twentyonebitcoin_record(record):
     fee_is_crypto = fee_currency in _TWENTYONEBITCOIN_CRYPTO_CURRENCIES
     fee_is_fiat = fee_currency is not None and not fee_is_crypto
     transaction_type = str_or_none(_get_cell(sanitized, "transaction_type")) or "transaction"
-    transaction_type_key = transaction_type.strip().lower()
-    is_l1_withdrawal = transaction_type_key == "withdrawal"
-
     fiat_currency = None
     fiat_value = None
     fiat_rate = None
@@ -1768,7 +1766,10 @@ def normalize_twentyonebitcoin_record(record):
         fee = fee_amount if fee_currency == asset else Decimal("0")
         if buy_amount is not None and buy_currency:
             fiat_currency = buy_currency
-            fiat_value = max(Decimal("0"), abs(buy_amount) - (fee_amount if fee_is_fiat else Decimal("0")))
+            # 21bitcoin exports BTC-sale ``buy_amount`` as net fiat proceeds;
+            # the separate fiat fee is informational and must not be deducted
+            # a second time.
+            fiat_value = abs(buy_amount)
             kind = "sell"
         else:
             kind = _twentyonebitcoin_kind(transaction_type, direction)
@@ -1785,10 +1786,11 @@ def normalize_twentyonebitcoin_record(record):
     description_parts = [part for part in (transaction_type, note, depot) if part]
     description = " - ".join(description_parts) or "Imported from 21bitcoin"
     provider_ref = f"21bitcoin:{row_id}"
-    linked_transaction = str_or_none(_get_cell(sanitized, "linked_transaction"))
-    external_ref = linked_transaction if is_l1_withdrawal and linked_transaction else provider_ref
     return {
-        "txid": external_ref,
+        # Current 21bitcoin exports do not provide an on-chain txid. Keep the
+        # immutable provider row id as identity and let custody review relate a
+        # withdrawal/deposit to independently observed wallet evidence.
+        "txid": provider_ref,
         "occurred_at": _twentyonebitcoin_datetime(_get_cell(sanitized, "transaction_date")),
         "direction": direction,
         "asset": asset,
@@ -1806,8 +1808,6 @@ def normalize_twentyonebitcoin_record(record):
         "kind": kind,
         "description": description,
         "counterparty": str_or_none(_get_cell(sanitized, "exchange_name")) or "21bitcoin",
-        "_exchange_evidence_matchable": is_l1_withdrawal,
-        "_21bitcoin_l1_withdrawal": is_l1_withdrawal,
         "raw_json": json.dumps(json_ready(sanitized), sort_keys=True),
     }
 
@@ -1824,8 +1824,7 @@ def _twentyonebitcoin_kind(transaction_type, direction):
 
 def load_twentyonebitcoin_csv_records(file_path):
     """Load 21bitcoin transaction-export CSV rows."""
-    with open(file_path, "r", encoding="utf-8", newline="") as handle:
-        rows = list(csv.DictReader(handle))
+    rows = _read_csv_rows(file_path, skip_blank=True)
     if not rows:
         return []
     header = {_normalized_column_key(column) for column in rows[0].keys()}
@@ -2049,8 +2048,7 @@ def normalize_strike_record(record):
 
 def load_strike_csv_records(file_path):
     """Load Strike transaction-history CSV rows."""
-    with open(file_path, "r", encoding="utf-8", newline="") as handle:
-        rows = list(csv.DictReader(handle))
+    rows = _read_csv_rows(file_path)
     if not rows:
         return []
     header = {_normalized_column_key(column) for column in rows[0].keys()}
@@ -2162,8 +2160,7 @@ def load_ledgerlive_csv_records(file_path):
     Ledger's fiat countervalues are intentionally ignored because the export
     labels them informational, not accounting-grade.
     """
-    with open(file_path, "r", encoding="utf-8-sig", newline="") as handle:
-        rows = list(csv.DictReader(handle))
+    rows = _read_csv_rows(file_path, encoding="utf-8-sig")
     if not rows:
         return []
     header = {_normalized_column_key(column) for column in rows[0].keys()}
@@ -2347,8 +2344,7 @@ def normalize_binance_supplemental_dividend_record(record, index=0):
 
 def load_binance_supplemental_csv_records(file_path):
     """Load BTC-relevant Binance supplemental CSV rows."""
-    with open(file_path, "r", encoding="utf-8-sig", newline="") as handle:
-        rows = list(csv.DictReader(handle))
+    rows = _read_csv_rows(file_path, encoding="utf-8-sig")
     if not rows:
         return []
     header = {_normalized_column_key(column) for column in rows[0].keys()}
@@ -2390,7 +2386,6 @@ def is_exchange_evidence_format(input_format):
     return input_format in {
         "bullbitcoin_csv",
         "coinfinity_csv",
-        "21bitcoin_csv",
         "pocketbitcoin_csv",
         "binance_supplemental_csv",
     }
@@ -2554,8 +2549,7 @@ def normalize_river_record(record):
 
 def load_river_csv_records(file_path):
     """Load River Bitcoin Activity or Account Activity CSV rows."""
-    with open(file_path, "r", encoding="utf-8", newline="") as handle:
-        rows = list(csv.DictReader(handle))
+    rows = _read_csv_rows(file_path)
     if not rows:
         return []
     header = {_normalized_column_key(column) for column in rows[0].keys()}

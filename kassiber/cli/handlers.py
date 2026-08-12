@@ -1307,120 +1307,6 @@ def parse_wallet_config(args):
     return config
 
 
-WALLET_KIND_CATALOG = {
-    "descriptor": {
-        "summary": "Output-descriptor wallet with optional change branch; supports on-chain sync via mempool/esplora.",
-        "config_fields": ["descriptor", "change_descriptor", "gap_limit", "backend", "chain", "network", "policy_asset"],
-        "requires": ["descriptor"],
-    },
-    "xpub": {
-        "summary": "Extended-public-key wallet: derives one or more script types (pinned with --script-type) to an address set; on-chain sync via mempool/esplora.",
-        "config_fields": ["descriptor", "xpub", "script_types", "gap_limit", "backend", "chain", "network"],
-        "requires": ["descriptor|script_types"],
-    },
-    "address": {
-        "summary": "Bare-address list wallet; useful for receive-only tracking or imports.",
-        "config_fields": ["addresses", "backend", "chain", "network", "source_file", "source_format"],
-        "requires": ["addresses|source_file"],
-    },
-    "untracked": {
-        "summary": "Owned historical custody with no connected source; used only by reviewed custody components to bridge missing wallets or nodes.",
-        "config_fields": [],
-        "requires": [],
-    },
-    "coreln": {
-        "summary": "Core Lightning node wallet; read-only live sync through a coreln backend.",
-        "config_fields": ["backend"],
-        "requires": ["backend"],
-    },
-    "lnd": {
-        "summary": "LND CSV-derived wallet (deposits/withdrawals from node exports).",
-        "config_fields": ["source_file", "source_format"],
-        "requires": [],
-    },
-    "nwc": {
-        "summary": "Nostr Wallet Connect wallet fed by CSV exports.",
-        "config_fields": ["source_file", "source_format"],
-        "requires": [],
-    },
-    "phoenix": {
-        "summary": "Phoenix Wallet CSV importer.",
-        "config_fields": ["source_file", "source_format"],
-        "requires": [],
-    },
-    "river": {
-        "summary": "River Bitcoin Activity or Account Activity CSV importer.",
-        "config_fields": ["source_file", "source_format"],
-        "requires": [],
-    },
-    "bullbitcoin": {
-        "summary": "Bull Bitcoin order evidence and unified wallet CSV importer.",
-        "config_fields": ["source_file", "source_format"],
-        "requires": [],
-    },
-    "coinfinity": {
-        "summary": "Coinfinity order CSV importer for exact buy/sell execution pricing.",
-        "config_fields": ["source_file", "source_format"],
-        "requires": [],
-    },
-    "21bitcoin": {
-        "summary": "21bitcoin custodial platform CSV importer with exact trade pricing.",
-        "config_fields": ["source_file", "source_format"],
-        "requires": [],
-    },
-    "pocketbitcoin": {
-        "summary": "Pocket Bitcoin account CSV importer for exact buy/sell execution pricing.",
-        "config_fields": ["source_file", "source_format"],
-        "requires": [],
-    },
-    "strike": {
-        "summary": "Strike custodial platform CSV importer for exchange, Bitcoin, and Lightning rows.",
-        "config_fields": ["source_file", "source_format"],
-        "requires": [],
-    },
-    "ledgerlive": {
-        "summary": "Ledger Live CSV importer for BTC/LBTC wallet movement only.",
-        "config_fields": ["source_file", "source_format"],
-        "requires": [],
-    },
-    "cointracking": {
-        "summary": "CoinTracking transaction CSV migration source, scoped to BTC/LBTC rows.",
-        "config_fields": ["source_file", "source_format"],
-        "requires": [],
-    },
-    "blockpit": {
-        "summary": "Blockpit transaction CSV migration source, scoped to BTC/LBTC rows.",
-        "config_fields": ["source_file", "source_format"],
-        "requires": [],
-    },
-    "kraken": {
-        "summary": "Kraken exchange import wallet for API or CSV execution evidence.",
-        "config_fields": ["backend", "source_file", "source_format"],
-        "requires": [],
-    },
-    "coinbase": {
-        "summary": "Coinbase exchange import wallet for API execution and wallet movement evidence.",
-        "config_fields": ["backend", "source_file", "source_format"],
-        "requires": [],
-    },
-    "binance": {
-        "summary": "Binance exchange import wallet for API rows and BTC supplemental CSVs.",
-        "config_fields": ["backend", "source_file", "source_format"],
-        "requires": [],
-    },
-    "wasabi": {
-        "summary": "Wasabi Wallet sanitized RPC/export bundle importer with CoinJoin and anonymity evidence.",
-        "config_fields": ["source_file", "source_format", "wasabi_metadata"],
-        "requires": [],
-    },
-    "custom": {
-        "summary": "Custom CSV/JSON source; use with --config/--config-file to describe field mapping.",
-        "config_fields": ["source_file", "source_format", "config"],
-        "requires": ["source_file"],
-    },
-}
-
-
 DEFAULT_BULLBITCOIN_WALLET_LABEL = "Bull Bitcoin"
 DEFAULT_COINFINITY_WALLET_LABEL = "Coinfinity"
 DEFAULT_TWENTYONEBITCOIN_WALLET_LABEL = "21bitcoin"
@@ -1430,28 +1316,23 @@ DEFAULT_BINANCE_WALLET_LABEL = "Binance"
 DEFAULT_KRAKEN_WALLET_LABEL = "Kraken"
 DEFAULT_COINBASE_WALLET_LABEL = "Coinbase"
 
+ACTIVE_CUSTODIAL_LEDGER_FORMATS = {"21bitcoin_csv", "strike_csv"}
+PROVIDER_IMPORT_WALLETS = {
+    "21bitcoin_csv": (DEFAULT_TWENTYONEBITCOIN_WALLET_LABEL, "21bitcoin"),
+    "coinfinity_csv": (DEFAULT_COINFINITY_WALLET_LABEL, "coinfinity"),
+    "pocketbitcoin_csv": (DEFAULT_POCKETBITCOIN_WALLET_LABEL, "pocketbitcoin"),
+    "strike_csv": (DEFAULT_STRIKE_WALLET_LABEL, "strike"),
+    "binance_supplemental_csv": (DEFAULT_BINANCE_WALLET_LABEL, "binance"),
+}
+
 
 def _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_ref=None):
     if wallet_ref:
         return resolve_wallet(conn, profile["id"], wallet_ref)
-    if input_format == "21bitcoin_csv":
-        default_label = DEFAULT_TWENTYONEBITCOIN_WALLET_LABEL
-        wallet_kind = "21bitcoin"
-    elif input_format == "coinfinity_csv":
-        default_label = DEFAULT_COINFINITY_WALLET_LABEL
-        wallet_kind = "coinfinity"
-    elif input_format == "pocketbitcoin_csv":
-        default_label = DEFAULT_POCKETBITCOIN_WALLET_LABEL
-        wallet_kind = "pocketbitcoin"
-    elif input_format == "strike_csv":
-        default_label = DEFAULT_STRIKE_WALLET_LABEL
-        wallet_kind = "strike"
-    elif input_format == "binance_supplemental_csv":
-        default_label = DEFAULT_BINANCE_WALLET_LABEL
-        wallet_kind = "binance"
-    else:
-        default_label = DEFAULT_BULLBITCOIN_WALLET_LABEL
-        wallet_kind = "bullbitcoin"
+    default_label, wallet_kind = PROVIDER_IMPORT_WALLETS.get(
+        input_format,
+        (DEFAULT_BULLBITCOIN_WALLET_LABEL, "bullbitcoin"),
+    )
     existing = conn.execute(
         """
         SELECT w.*, a.code AS account_code, a.label AS account_label
@@ -1572,22 +1453,16 @@ def import_into_wallet(
     column_map=None,
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    if input_format in {"21bitcoin_csv", "strike_csv"}:
-        default_mode = (
-            core_imports.BULLBITCOIN_IMPORT_MODE_FULL
-            if input_format == "strike_csv"
-            else None
+    if input_format in ACTIVE_CUSTODIAL_LEDGER_FORMATS:
+        mode = core_imports.normalize_bullbitcoin_import_mode(
+            import_mode or core_imports.BULLBITCOIN_IMPORT_MODE_FULL
         )
-        mode = core_imports.normalize_bullbitcoin_import_mode(import_mode or default_mode)
-        if input_format == "21bitcoin_csv" and mode == core_imports.BULLBITCOIN_IMPORT_MODE_RELEVANT:
-            if wallet_ref:
-                resolve_wallet(conn, profile["id"], wallet_ref)
-            return _import_file_for_profile(
-                conn,
-                profile,
-                file_path,
-                input_format,
-                import_mode=mode,
+        if mode != core_imports.BULLBITCOIN_IMPORT_MODE_FULL:
+            raise AppError(
+                f"{input_format} is an active custodial ledger import",
+                code="validation",
+                hint="Import the complete platform ledger, then review custody-transfer candidates.",
+                retryable=False,
             )
         wallet = _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_ref)
         outcome = _import_file_for_sync(conn, profile, wallet, file_path, input_format)
@@ -1630,12 +1505,22 @@ def import_into_profile(
     wallet_ref=None,
 ):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
-    mode = core_imports.normalize_bullbitcoin_import_mode(import_mode)
-    if input_format == "21bitcoin_csv" and mode == core_imports.BULLBITCOIN_IMPORT_MODE_FULL:
+    if input_format in ACTIVE_CUSTODIAL_LEDGER_FORMATS:
+        mode = core_imports.normalize_bullbitcoin_import_mode(
+            import_mode or core_imports.BULLBITCOIN_IMPORT_MODE_FULL
+        )
+        if mode != core_imports.BULLBITCOIN_IMPORT_MODE_FULL:
+            raise AppError(
+                f"{input_format} is an active custodial ledger import",
+                code="validation",
+                hint="Import the complete platform ledger, then review custody-transfer candidates.",
+                retryable=False,
+            )
         wallet = _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_ref)
         outcome = _import_file_for_sync(conn, profile, wallet, file_path, input_format)
         outcome["mode"] = mode
         return outcome
+    mode = core_imports.normalize_bullbitcoin_import_mode(import_mode)
     wallet = None
     if core_imports.is_exchange_evidence_format(input_format) and mode == core_imports.BULLBITCOIN_IMPORT_MODE_FULL:
         wallet = _get_or_create_provider_import_wallet(conn, profile, input_format, wallet_ref)
@@ -1718,7 +1603,7 @@ def _import_coordinator_hooks():
 def _import_file_for_sync(
     conn, profile, wallet, file_path, input_format, *, commit=True, column_map=None
 ):
-    if input_format in {"21bitcoin_csv", "strike_csv"}:
+    if input_format in ACTIVE_CUSTODIAL_LEDGER_FORMATS:
         return core_imports.import_file_into_wallet(
             conn,
             profile,

@@ -178,6 +178,7 @@ import {
 import { isTypingTarget } from "@/lib/keymap";
 import { FirstSyncCard } from "./FirstSyncCard";
 import { AssistantDock } from "./AssistantDock";
+import { ExternalBrowserLink } from "./ExternalBrowserLink";
 import { PreAlphaBanner } from "./PreAlphaBanner";
 import { nextAssistantDockCollapsed } from "./assistantDockLayout";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
@@ -206,6 +207,11 @@ import {
 } from "./notificationRouting";
 import { shouldHideNotificationProgressLabel } from "./notificationDisplay";
 import { planHeaderRefresh } from "./headerRefresh";
+
+const BUG_REPORT_URL =
+  "https://github.com/bitcoinaustria/kassiber/issues/new?template=bug_report.yml";
+const DISCUSSIONS_URL =
+  "https://github.com/bitcoinaustria/kassiber/discussions";
 
 // `labelKey` indexes the `nav` namespace (book.*); keep `href` as the stable id.
 type NavItem = {
@@ -2439,26 +2445,26 @@ function SidebarActions({
               <SidebarMenuSub>
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton asChild className={navSubRowClassName}>
-                    <a
-                      href="https://github.com/bitcoinaustria/kassiber/issues"
+                    <ExternalBrowserLink
+                      href={BUG_REPORT_URL}
                       target="_blank"
                       rel="noreferrer"
                     >
                       <Bug className="size-3.5" aria-hidden="true" />
                       <span>{t("shell.support.bugReport")}</span>
-                    </a>
+                    </ExternalBrowserLink>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
                 <SidebarMenuSubItem>
                   <SidebarMenuSubButton asChild className={navSubRowClassName}>
-                    <a
-                      href="https://github.com/bitcoinaustria/kassiber/discussions"
+                    <ExternalBrowserLink
+                      href={DISCUSSIONS_URL}
                       target="_blank"
                       rel="noreferrer"
                     >
                       <Heart className="size-3.5" aria-hidden="true" />
                       <span>{t("shell.support.discussions")}</span>
-                    </a>
+                    </ExternalBrowserLink>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
               </SidebarMenuSub>

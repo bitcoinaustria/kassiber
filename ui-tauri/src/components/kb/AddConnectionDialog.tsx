@@ -534,7 +534,6 @@ function isExchangeEvidenceFormat(sourceFormat?: string) {
     sourceFormat === "bullbitcoin_csv" ||
     sourceFormat === "coinfinity_csv" ||
     sourceFormat === "pocketbitcoin_csv" ||
-    sourceFormat === "21bitcoin_csv" ||
     sourceFormat === "binance_supplemental_csv"
   );
 }
@@ -4124,8 +4123,6 @@ export function AddConnectionDialog({
                   ? t("add.enrichment.importModeHelperFull", {
                       title: selected.title,
                     })
-                  : selected.sourceFormat === "21bitcoin_csv"
-                  ? t("add.enrichment.importModeHelper21bitcoin")
                   : t("add.enrichment.importModeHelperRelevant", {
                       title: selected.title,
                     })

@@ -1,0 +1,66 @@
+name: Bug report
+description: Report a reproducible problem in Kassiber
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Kassiber.
+
+        **Privacy:** Do not include wallet addresses, transaction IDs, amounts, labels, backend URLs, file paths, screenshots, database or backup files, recovery phrases, private keys, descriptors, xpubs, API keys, passwords, cookies, or raw logs unless you have reviewed them and intentionally want to share them publicly.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you were trying to do.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Use a minimal example with sensitive values replaced by placeholders.
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. See ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Kassiber version
+      placeholder: For example, 0.22.71
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system
+      placeholder: For example, macOS 15.6, Windows 11, or Ubuntu 24.04
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Optional reviewed diagnostics
+      description: If useful, export a Public-safe support bundle from Logs, review it, and attach it here. Do not attach a High-signal bundle to a public issue unless you have reviewed and intentionally chosen to disclose its contents.
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I reviewed this report and any attachments for private or sensitive data.
+          required: true
