@@ -575,6 +575,18 @@ function fileWalletSourceField(
       helper: t("add.exportFile.btcpayHelper"),
     };
   }
+  if (source.sourceFormat === "cointracking_csv") {
+    return {
+      label: t("add.exportFile.cointrackingLabel"),
+      helper: t("add.exportFile.cointrackingHelper"),
+    };
+  }
+  if (source.sourceFormat === "blockpit_csv") {
+    return {
+      label: t("add.exportFile.blockpitLabel"),
+      helper: t("add.exportFile.blockpitHelper"),
+    };
+  }
   return {
     label: t("add.exportFile.label"),
     helper: undefined,

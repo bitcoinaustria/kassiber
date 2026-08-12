@@ -854,12 +854,12 @@ WALLET_KIND_CATALOG = {
         "requires": [],
     },
     "cointracking": {
-        "summary": "CoinTracking full-history CSV migration source, scoped to BTC/LBTC rows.",
+        "summary": "CoinTracking transaction CSV migration source, scoped to BTC/LBTC rows.",
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },
     "blockpit": {
-        "summary": "Blockpit full-history CSV migration source, scoped to BTC/LBTC rows.",
+        "summary": "Blockpit transaction CSV migration source, scoped to BTC/LBTC rows.",
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },

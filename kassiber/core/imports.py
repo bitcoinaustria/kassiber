@@ -84,16 +84,32 @@ BINANCE_RECONCILIATION_TAGS = {
     "unmatched": ("binance-wallet-gap", "Binance wallet gap"),
     "ambiguous": ("binance-ambiguous", "Binance ambiguous"),
 }
+COINTRACKING_RECONCILIATION_TAGS = {
+    "matched": ("cointracking-matched", "CoinTracking matched"),
+    "ambiguous": ("cointracking-ambiguous", "CoinTracking ambiguous"),
+}
+BLOCKPIT_RECONCILIATION_TAGS = {
+    "matched": ("blockpit-matched", "Blockpit matched"),
+    "ambiguous": ("blockpit-ambiguous", "Blockpit ambiguous"),
+}
 EXCHANGE_EVIDENCE_RECONCILIATION_TAGS = {
     "bullbitcoin_csv": BULLBITCOIN_RECONCILIATION_TAGS,
     "binance_supplemental_csv": BINANCE_RECONCILIATION_TAGS,
     "coinfinity_csv": COINFINITY_RECONCILIATION_TAGS,
     "21bitcoin_csv": TWENTYONEBITCOIN_RECONCILIATION_TAGS,
     "pocketbitcoin_csv": POCKETBITCOIN_RECONCILIATION_TAGS,
+    "cointracking_csv": COINTRACKING_RECONCILIATION_TAGS,
+    "blockpit_csv": BLOCKPIT_RECONCILIATION_TAGS,
 }
+TAX_PLATFORM_FORMAT_BY_WALLET_KIND = {
+    "cointracking": "cointracking_csv",
+    "blockpit": "blockpit_csv",
+}
+_TAX_PLATFORM_AUTHORITATIVE_WALLET_KINDS = ("descriptor", "silent-payment", "xpub")
 
 
 ProgressCallback = Callable[[Mapping[str, Any]], None]
+
 
 @dataclass(frozen=True)
 class ImportCoordinatorHooks:
@@ -695,11 +711,14 @@ def _transaction_merge_updates(
             else None
         )
     )
-    if (
+    native_txid_added = (
         normalized.get("external_id_kind") == "txid"
         and existing_external_id_kind != "txid"
-    ):
+    )
+    if native_txid_added:
         updates["external_id_kind"] = "txid"
+        if existing["external_id"] != normalized["external_id"]:
+            updates["external_id"] = normalized["external_id"]
     authoritative_amount_changed = False
     if authoritative_chain_observer:
         incoming_amount = btc_to_msat(normalized["amount"])
@@ -960,6 +979,25 @@ def _reconciliation_tags(input_format: str) -> Mapping[str, tuple[str, str]]:
     )
 
 
+def _ensure_reconciliation_tag_rows(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    hooks: ImportCoordinatorHooks,
+    input_format: str,
+) -> dict[str, TagRow]:
+    tag_rows: dict[str, TagRow] = {}
+    for status, (code, label) in _reconciliation_tags(input_format).items():
+        tag, _created = hooks.ensure_tag_row(
+            conn,
+            profile["workspace_id"],
+            profile["id"],
+            code,
+            label,
+        )
+        tag_rows[status] = tag
+    return tag_rows
+
+
 def _find_imported_wallet_transaction(
     conn: sqlite3.Connection,
     wallet_id: str,
@@ -999,24 +1037,23 @@ def _find_imported_wallet_transaction(
     ).fetchone()
 
 
-def _apply_bullbitcoin_reconciliation_flag(
+def _apply_exchange_reconciliation_flag(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],
     tx_id: str,
     status: str,
     hooks: ImportCoordinatorHooks,
     input_format: str = "bullbitcoin_csv",
+    tag_rows: Mapping[str, TagRow] | None = None,
+    exclude: bool = True,
 ) -> bool:
-    tag_rows: dict[str, sqlite3.Row] = {}
-    for tag_status, (code, label) in _reconciliation_tags(input_format).items():
-        tag, created = hooks.ensure_tag_row(
+    if tag_rows is None:
+        tag_rows = _ensure_reconciliation_tag_rows(
             conn,
-            profile["workspace_id"],
-            profile["id"],
-            code,
-            label,
+            profile,
+            hooks,
+            input_format,
         )
-        tag_rows[tag_status] = tag
     conn.executemany(
         "DELETE FROM transaction_tags WHERE transaction_id = ? AND tag_id = ?",
         [(tx_id, tag["id"]) for tag in tag_rows.values()],
@@ -1025,14 +1062,87 @@ def _apply_bullbitcoin_reconciliation_flag(
         "INSERT OR IGNORE INTO transaction_tags(transaction_id, tag_id) VALUES(?, ?)",
         (tx_id, tag_rows[status]["id"]),
     )
-    # In full mode a provider account can be shared across multiple books, so
-    # an unmatched row is only a review signal until the user assigns it here.
-    exclude = True
     conn.execute(
         "UPDATE transactions SET excluded = ? WHERE id = ?",
         (1 if exclude else 0, tx_id),
     )
     return exclude
+
+
+def _clear_exchange_reconciliation_flag(
+    conn: sqlite3.Connection,
+    tx_id: str,
+    tag_ids: Sequence[str],
+    *,
+    reactivate: bool = True,
+) -> tuple[bool, bool]:
+    if not tag_ids:
+        return False, False
+    placeholders = ", ".join("?" for _ in tag_ids)
+    tagged = conn.execute(
+        f"""
+        SELECT 1
+        FROM transaction_tags
+        WHERE transaction_id = ?
+          AND tag_id IN ({placeholders})
+        LIMIT 1
+        """,
+        (tx_id, *tag_ids),
+    ).fetchone()
+    if not tagged:
+        return False, False
+    conn.execute(
+        f"""
+        DELETE FROM transaction_tags
+        WHERE transaction_id = ?
+          AND tag_id IN ({placeholders})
+        """,
+        (tx_id, *tag_ids),
+    )
+    current = conn.execute(
+        "SELECT excluded FROM transactions WHERE id = ?",
+        (tx_id,),
+    ).fetchone()
+    reactivated = bool(reactivate and current and current["excluded"])
+    if reactivated:
+        conn.execute(
+            "UPDATE transactions SET excluded = 0 WHERE id = ?",
+            (tx_id,),
+        )
+    return True, reactivated
+
+
+def _authored_exclusions_for_wallet(
+    conn: sqlite3.Connection,
+    wallet_id: str,
+) -> dict[str, bool]:
+    """Return each row's latest audited report-inclusion choice."""
+    rows = conn.execute(
+        """
+        SELECT e.transaction_id, f.after_value
+        FROM transaction_edit_events e
+        JOIN transaction_edit_fields f ON f.event_id = e.id
+        JOIN transactions t ON t.id = e.transaction_id
+        WHERE t.wallet_id = ? AND f.field = 'excluded'
+        ORDER BY e.transaction_id, e.journal_input_version_after DESC,
+                 e.changed_at DESC, e.id DESC, f.id DESC
+        """,
+        (wallet_id,),
+    ).fetchall()
+    choices: dict[str, bool] = {}
+    seen: set[str] = set()
+    for row in rows:
+        tx_id = str(row["transaction_id"])
+        if tx_id in seen:
+            continue
+        seen.add(tx_id)
+        try:
+            value = json.loads(row["after_value"])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if isinstance(value, bool):
+            choices[tx_id] = value
+    return choices
 
 
 def _bullbitcoin_reconciliation_record(
@@ -1067,13 +1177,12 @@ def _clear_exchange_reconciliation_flags(
         return {}
     placeholders = ", ".join("?" for _ in tag_codes)
     tag_rows = conn.execute(
-        f"SELECT id FROM tags WHERE code IN ({placeholders})",
-        tuple(tag_codes),
+        f"SELECT id FROM tags WHERE profile_id = ? AND code IN ({placeholders})",
+        (wallet["profile_id"], *tag_codes),
     ).fetchall()
     tag_ids = [tag["id"] for tag in tag_rows]
     if not tag_ids:
         return {}
-    tag_placeholders = ", ".join("?" for _ in tag_ids)
     cleared = 0
     reactivated = 0
     for record in records:
@@ -1081,37 +1190,13 @@ def _clear_exchange_reconciliation_flags(
         imported = _find_imported_wallet_transaction(conn, wallet["id"], normalized)
         if not imported:
             continue
-        tagged = conn.execute(
-            f"""
-            SELECT 1
-            FROM transaction_tags
-            WHERE transaction_id = ?
-              AND tag_id IN ({tag_placeholders})
-            LIMIT 1
-            """,
-            (imported["id"], *tag_ids),
-        ).fetchone()
-        if not tagged:
-            continue
-        conn.execute(
-            f"""
-            DELETE FROM transaction_tags
-            WHERE transaction_id = ?
-              AND tag_id IN ({tag_placeholders})
-            """,
-            (imported["id"], *tag_ids),
+        row_cleared, row_reactivated = _clear_exchange_reconciliation_flag(
+            conn,
+            str(imported["id"]),
+            tag_ids,
         )
-        cleared += 1
-        current = conn.execute(
-            "SELECT excluded FROM transactions WHERE id = ?",
-            (imported["id"],),
-        ).fetchone()
-        if current and current["excluded"]:
-            conn.execute(
-                "UPDATE transactions SET excluded = 0 WHERE id = ?",
-                (imported["id"],),
-            )
-            reactivated += 1
+        cleared += int(row_cleared)
+        reactivated += int(row_reactivated)
     outcome: dict[str, int] = {}
     if cleared:
         outcome["reconciliation_flags_cleared"] = cleared
@@ -1405,9 +1490,15 @@ def insert_wallet_records(
             if external_id is not None:
                 normalized["external_id"] = external_id
                 normalized["external_id_kind"] = "txid"
+        tax_platform_row_identity = str_or_none(
+            record.get("_tax_platform_row_identity")
+        )
+        fingerprint_identity = (
+            normalized["external_id"] or tax_platform_row_identity
+        )
         fingerprint = make_transaction_fingerprint(
             wallet["id"],
-            normalized["external_id"],
+            fingerprint_identity,
             normalized["occurred_at"],
             normalized["direction"],
             normalized["asset"],
@@ -1421,6 +1512,28 @@ def insert_wallet_records(
             fingerprint,
             authoritative_chain_observer=authoritative_chain_observer,
         )
+        if (
+            existing is None
+            and tax_platform_row_identity
+            and normalized.get("external_id_kind") == "txid"
+        ):
+            idless_fingerprint = make_transaction_fingerprint(
+                wallet["id"],
+                tax_platform_row_identity,
+                normalized["occurred_at"],
+                normalized["direction"],
+                normalized["asset"],
+                normalized["amount"],
+                normalized["fee"],
+            )
+            existing = conn.execute(
+                f"""
+                SELECT {_EXISTING_TRANSACTION_COLUMNS}
+                FROM transactions
+                WHERE fingerprint = ? AND external_id IS NULL
+                """,
+                (idless_fingerprint,),
+            ).fetchone()
         if existing:
             if authoritative_chain_observer:
                 observer_resolved_records.append(
@@ -1844,7 +1957,7 @@ def import_bullbitcoin_records_full(
         imported = _find_imported_wallet_transaction(conn, wallet["id"], normalized)
         if not imported:
             continue
-        row_excluded = _apply_bullbitcoin_reconciliation_flag(
+        row_excluded = _apply_exchange_reconciliation_flag(
             conn,
             profile,
             imported["id"],
@@ -1926,6 +2039,21 @@ def import_records_into_wallet(
     if apply_river:
         outcome.update(apply_river_metadata(conn, profile, wallet, records, hooks, commit=False))
     _invalidate_journals_for_metadata_changes(conn, profile, outcome, hooks)
+    if authoritative_chain_observer:
+        journal_invalidated = bool(outcome.get("journal_invalidated"))
+        reconciliation = reconcile_tax_platform_history(
+            conn,
+            profile,
+            hooks,
+            invalidate_journals=not journal_invalidated,
+            commit=False,
+        )
+        if reconciliation["reconciliation_rows"]:
+            outcome.update(reconciliation)
+            outcome["journal_invalidated"] = (
+                journal_invalidated
+                or bool(reconciliation["journal_invalidated"])
+            )
     if commit:
         conn.commit()
     return outcome
@@ -2316,35 +2444,65 @@ def apply_wasabi_metadata(
     }
 
 
-def _raise_for_tax_platform_history_overlap(
+def _tax_platform_reconciliation_status(
+    row: Mapping[str, Any],
+    by_txid: Mapping[tuple[str, str, str], Sequence[Mapping[str, Any]]],
+    by_economics: Mapping[tuple[str, str, str, int], Sequence[Mapping[str, Any]]],
+    *,
+    source_collision: bool = False,
+) -> str:
+    chain_id = canonical_txid(row["external_id"])
+    txid_matches = (
+        by_txid.get((chain_id, row["direction"], row["asset"]), ())
+        if chain_id
+        else ()
+    )
+    if txid_matches:
+        return "matched" if len(txid_matches) == 1 else "ambiguous"
+    if source_collision:
+        return "ambiguous"
+    economics_matches = by_economics.get(
+        (row["occurred_at"], row["direction"], row["asset"], int(row["amount"])),
+        (),
+    )
+    # Exact economics without a shared chain id is a collision, not proof of
+    # identity. Hold it for review instead of silently collapsing the rows.
+    return "ambiguous" if economics_matches else "unmatched"
+
+
+def reconcile_tax_platform_history(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],
-    wallet: Mapping[str, Any],
-    records: Sequence[ImportRow],
+    hooks: ImportCoordinatorHooks,
     *,
-    source_label: str,
-) -> None:
-    """Fail before import when provider history duplicates another wallet.
+    wallet_id: str | None = None,
+    transaction_ids: set[str] | None = None,
+    invalidate_journals: bool = True,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Reconcile CoinTracking/Blockpit history against authoritative wallets.
 
-    Exact chain ids are strongest. Some provider exports omit them, so an exact
-    timestamp/direction/asset/amount match is also surfaced for review instead
-    of silently double-booking the same economic event.
+    This pass is deliberately order-independent and idempotent: it can run
+    after either a provider import or a descriptor sync. Exact canonical txids
+    are deduplicated; exact economics without that identity are held for review;
+    provider-only history stays active.
     """
-    existing_rows = conn.execute(
-        """
+    authoritative_kinds = _TAX_PLATFORM_AUTHORITATIVE_WALLET_KINDS
+    authoritative_placeholders = ", ".join("?" for _ in authoritative_kinds)
+    authoritative_rows = conn.execute(
+        f"""
         SELECT t.external_id, t.occurred_at, t.direction, t.asset, t.amount,
                t.wallet_id, w.label AS wallet_label
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
-        WHERE t.profile_id = ? AND t.wallet_id != ? AND t.excluded = 0
+        WHERE t.profile_id = ?
+          AND w.kind IN ({authoritative_placeholders})
         """,
-        (profile["id"], wallet["id"]),
+        (profile["id"], *authoritative_kinds),
     ).fetchall()
-    if not existing_rows:
-        return
     by_txid: dict[tuple[str, str, str], list[Mapping[str, Any]]] = {}
     by_economics: dict[tuple[str, str, str, int], list[Mapping[str, Any]]] = {}
-    for row in existing_rows:
+    for row in authoritative_rows:
         chain_id = canonical_txid(row["external_id"])
         if chain_id:
             by_txid.setdefault((chain_id, row["direction"], row["asset"]), []).append(row)
@@ -2353,49 +2511,157 @@ def _raise_for_tax_platform_history_overlap(
             [],
         ).append(row)
 
-    conflicts = []
-    for index, record in enumerate(records, start=1):
-        normalized = normalize_import_record(record, source_label)
-        chain_id = canonical_txid(normalized["external_id"])
-        matches = (
-            by_txid.get((chain_id, normalized["direction"], normalized["asset"]), [])
-            if chain_id
-            else []
-        )
-        evidence = "txid"
-        if not matches:
-            matches = by_economics.get(
+    counts = {"matched": 0, "ambiguous": 0, "unmatched": 0}
+    excluded = 0
+    changed = 0
+    flags_cleared = 0
+    reactivated = 0
+    reconciliation_rows = 0
+    provider_kinds = sorted(TAX_PLATFORM_FORMAT_BY_WALLET_KIND)
+    placeholders = ", ".join("?" for _ in provider_kinds)
+    wallet_filter = "AND id = ?" if wallet_id else ""
+    provider_wallets = conn.execute(
+        f"""
+        SELECT id, kind
+        FROM wallets
+        WHERE profile_id = ? AND kind IN ({placeholders}) {wallet_filter}
+        """,
+        (profile["id"], *provider_kinds, *((wallet_id,) if wallet_id else ())),
+    ).fetchall()
+    for provider_wallet in provider_wallets:
+        input_format = TAX_PLATFORM_FORMAT_BY_WALLET_KIND[provider_wallet["kind"]]
+        tag_specs = _reconciliation_tags(input_format)
+        tag_codes = [code for code, _label in tag_specs.values()]
+        tag_placeholders = ", ".join("?" for _ in tag_codes)
+        rows = conn.execute(
+            f"""
+            SELECT t.id, t.external_id, t.occurred_at, t.direction, t.asset,
+                   t.amount, t.fee, t.excluded,
+                   GROUP_CONCAT(tags.code) AS reconciliation_codes
+            FROM transactions t
+            LEFT JOIN transaction_tags tt ON tt.transaction_id = t.id
+            LEFT JOIN tags ON tags.id = tt.tag_id
+                              AND tags.profile_id = ?
+                              AND tags.code IN ({tag_placeholders})
+            WHERE t.wallet_id = ?
+            GROUP BY t.id
+            ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
+            """,
+            (profile["id"], *tag_codes, provider_wallet["id"]),
+        ).fetchall()
+        source_collision_counts: dict[tuple[str, str, str, int, int], int] = {}
+        for row in rows:
+            if str_or_none(row["external_id"]):
+                continue
+            key = (
+                row["occurred_at"],
+                row["direction"],
+                row["asset"],
+                int(row["amount"]),
+                int(row["fee"]),
+            )
+            source_collision_counts[key] = source_collision_counts.get(key, 0) + 1
+        source_collision_ids = {
+            str(row["id"])
+            for row in rows
+            if not str_or_none(row["external_id"])
+            and source_collision_counts.get(
                 (
-                    normalized["occurred_at"],
-                    normalized["direction"],
-                    normalized["asset"],
-                    btc_to_msat(normalized["amount"]),
+                    row["occurred_at"],
+                    row["direction"],
+                    row["asset"],
+                    int(row["amount"]),
+                    int(row["fee"]),
                 ),
-                [],
+                0,
             )
-            evidence = "exact_economics"
-        if matches:
-            conflicts.append(
-                {
-                    "row": index,
-                    "evidence": evidence,
-                    "external_id": normalized["external_id"] or None,
-                    "wallets": sorted({str(match["wallet_label"]) for match in matches}),
-                }
-            )
-            if len(conflicts) >= 20:
-                break
-    if conflicts:
-        raise AppError(
-            "Tax-platform history overlaps transactions already in this book",
-            code="migration_source_overlap",
-            hint=(
-                "Keep descriptor/on-chain wallets authoritative. Filter these rows out of the "
-                "provider export, then retry the migration."
-            ),
-            details={"conflicts": conflicts, "limited": len(conflicts) >= 20},
-            retryable=False,
+            > 1
+        }
+        if transaction_ids is not None:
+            rows = [row for row in rows if str(row["id"]) in transaction_ids]
+        reconciliation_rows += len(rows)
+        codes_by_status = {status: code for status, (code, _label) in tag_specs.items()}
+        existing_tags = conn.execute(
+            f"""
+            SELECT id, code
+            FROM tags
+            WHERE profile_id = ? AND code IN ({tag_placeholders})
+            """,
+            (profile["id"], *tag_codes),
+        ).fetchall()
+        tag_ids = [str(tag["id"]) for tag in existing_tags]
+        authored_exclusions = _authored_exclusions_for_wallet(
+            conn,
+            str(provider_wallet["id"]),
         )
+        tag_rows: Mapping[str, TagRow] | None = None
+        for row in rows:
+            tx_id = str(row["id"])
+            status = _tax_platform_reconciliation_status(
+                row,
+                by_txid,
+                by_economics,
+                source_collision=tx_id in source_collision_ids,
+            )
+            counts[status] += 1
+            current_codes = set(str(row["reconciliation_codes"] or "").split(",")) - {""}
+            authored_exclusion = authored_exclusions.get(tx_id)
+            if status == "unmatched":
+                row_cleared, row_reactivated = _clear_exchange_reconciliation_flag(
+                    conn,
+                    tx_id,
+                    tag_ids,
+                    reactivate=authored_exclusion is not True,
+                )
+                changed += int(row_cleared)
+                flags_cleared += int(row_cleared)
+                reactivated += int(row_reactivated)
+                continue
+            desired_code = codes_by_status[status]
+            desired_excluded = (
+                authored_exclusion
+                if authored_exclusion is not None
+                else True
+            )
+            if current_codes == {desired_code} and bool(row["excluded"]) == desired_excluded:
+                excluded += int(desired_excluded)
+                continue
+            if tag_rows is None:
+                tag_rows = _ensure_reconciliation_tag_rows(
+                    conn,
+                    profile,
+                    hooks,
+                    input_format,
+                )
+            _apply_exchange_reconciliation_flag(
+                conn,
+                profile,
+                tx_id,
+                status,
+                hooks,
+                input_format=input_format,
+                tag_rows=tag_rows,
+                exclude=desired_excluded,
+            )
+            excluded += int(desired_excluded)
+            changed += 1
+
+    if changed and invalidate_journals:
+        hooks.invalidate_journals(conn, profile["id"])
+    if commit:
+        conn.commit()
+    outcome: dict[str, Any] = {
+        **counts,
+        "excluded": excluded,
+        "reconciliation_rows": reconciliation_rows,
+        "reconciliation_changed": changed,
+        "journal_invalidated": bool(changed),
+    }
+    if flags_cleared:
+        outcome["reconciliation_flags_cleared"] = flags_cleared
+    if reactivated:
+        outcome["reactivated"] = reactivated
+    return outcome
 
 
 def import_file_into_wallet(
@@ -2423,10 +2689,14 @@ def import_file_into_wallet(
         if commit:
             conn.commit()
         return outcome
-    migration_wallet_kind = {
-        "cointracking_csv": "cointracking",
-        "blockpit_csv": "blockpit",
-    }.get(input_format)
+    migration_wallet_kind = next(
+        (
+            kind
+            for kind, source_format in TAX_PLATFORM_FORMAT_BY_WALLET_KIND.items()
+            if source_format == input_format
+        ),
+        None,
+    )
     if migration_wallet_kind and wallet["kind"] != migration_wallet_kind:
         raise AppError(
             f"{input_format} requires a dedicated {migration_wallet_kind} wallet",
@@ -2439,14 +2709,6 @@ def import_file_into_wallet(
             retryable=False,
         )
     records = load_import_records(file_path, input_format, column_map)
-    if migration_wallet_kind:
-        _raise_for_tax_platform_history_overlap(
-            conn,
-            profile,
-            wallet,
-            records,
-            source_label=f"file:{input_format}",
-        )
     bullbitcoin_wallet_rows_total = len(records) if is_bullbitcoin_wallet_format(input_format) else None
     bullbitcoin_wallet_network = None
     if is_bullbitcoin_wallet_format(input_format):
@@ -2470,6 +2732,31 @@ def import_file_into_wallet(
         report_updates=is_exchange_evidence_format(input_format) or is_strike_format(input_format),
         commit=False,
     )
+    if migration_wallet_kind:
+        journal_invalidated = bool(outcome.get("journal_invalidated"))
+        affected_records = [
+            *outcome.get("inserted_records", ()),
+            *outcome.get("updated_records", ()),
+        ]
+        affected_ids = {
+            str(record["transaction_id"])
+            for record in affected_records
+            if record.get("transaction_id")
+        }
+        outcome.update(
+            reconcile_tax_platform_history(
+                conn,
+                profile,
+                hooks,
+                wallet_id=str(wallet["id"]),
+                transaction_ids=affected_ids,
+                invalidate_journals=not journal_invalidated,
+                commit=False,
+            )
+        )
+        outcome["journal_invalidated"] = (
+            journal_invalidated or bool(outcome.get("journal_invalidated"))
+        )
     if is_twentyonebitcoin_format(input_format):
         outcome.update(
             _clear_exchange_reconciliation_flags(
@@ -2614,5 +2901,6 @@ __all__ = [
     "make_transaction_fingerprint",
     "normalize_import_direction",
     "normalize_import_record",
+    "reconcile_tax_platform_history",
     "retract_wallet_records",
 ]

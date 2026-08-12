@@ -67,6 +67,39 @@ describe("syncResults", () => {
     );
   });
 
+  it("surfaces migration reconciliation performed by descriptor sync", () => {
+    expect(
+      describeWalletSyncResult(
+        {
+          wallet: "Descriptor",
+          status: "synced",
+          reconciliation_rows: 4,
+          reconciliation_changed: 3,
+          matched: 2,
+          ambiguous: 1,
+          journal_invalidated: true,
+        },
+        "Descriptor",
+      ),
+    ).toBe(
+      "Descriptor refreshed: 2 migration overlaps matched · 1 migration overlaps need review · journals marked stale.",
+    );
+    expect(
+      describeWalletSyncResult(
+        {
+          wallet: "Descriptor",
+          status: "synced",
+          reconciliation_rows: 4,
+          reconciliation_changed: 0,
+          matched: 2,
+          ambiguous: 1,
+          journal_invalidated: false,
+        },
+        "Descriptor",
+      ),
+    ).toBe("Descriptor refreshed: journals unchanged.");
+  });
+
   it("marks force-full rescans in refresh summaries", () => {
     expect(
       describeWalletSyncResult(

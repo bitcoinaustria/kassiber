@@ -306,6 +306,21 @@ transactions anywhere in the current book and do not create standalone rows.
 Use `--mode full` only when the shared provider export itself should be kept as
 excluded evidence with matched / wallet-gap / ambiguous reconciliation tags.
 
+CoinTracking / Blockpit migration history:
+
+```bash
+kassiber wallets import-cointracking --wallet cointracking --file /path/to/cointracking.csv
+kassiber wallets import-blockpit --wallet blockpit --file /path/to/blockpit.csv
+kassiber documents import-report --file /path/to/prior-tax-report.pdf --provider cointracking
+```
+
+Use a dedicated wallet of kind `cointracking` or `blockpit`. The provider CSV
+and descriptor wallets may be added in either order: authoritative wallet sync
+excludes exact transaction-id matches, holds id-less economic collisions for
+review, and leaves provider-only history active. CoinTracking needs an English
+Transactions CSV; Blockpit needs an unfiltered Transactions CSV. A prior report
+is archived evidence only and does not create transactions.
+
 Generic files:
 
 ```bash

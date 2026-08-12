@@ -2858,11 +2858,7 @@ def normalize_cointracking_record(record, index=0):
 def load_cointracking_csv_records(file_path):
     header, rows = _platform_csv_rows(file_path)
     _require_platform_columns(header, _COINTRACKING_REQUIRED_COLUMNS, "CoinTracking")
-    return [
-        normalized
-        for index, row in enumerate(rows, start=1)
-        if (normalized := normalize_cointracking_record(row, index=index)) is not None
-    ]
+    return _tax_platform_records(rows, normalize_cointracking_record, "cointracking")
 
 
 def normalize_blockpit_record(record, index=0):
@@ -2885,14 +2881,41 @@ def normalize_blockpit_record(record, index=0):
     )
 
 
+def _tax_platform_records(rows, normalizer, provider):
+    """Attach a stable, private row identity without inventing a chain id.
+
+    Some provider exports omit their optional transaction id.  The normal
+    wallet fingerprint would collapse two otherwise-identical source rows.  A
+    stable economic hash plus occurrence number preserves both rows while
+    keeping repeat imports idempotent.  The real provider id remains separate
+    so it can still be promoted later when a richer export supplies it. Mutable
+    comments and provider labels deliberately do not participate in identity.
+    """
+    normalized_rows = []
+    occurrence_by_digest: dict[str, int] = {}
+    for index, row in enumerate(rows, start=1):
+        normalized = normalizer(row, index=index)
+        if normalized is None:
+            continue
+        identity_payload = {
+            key: normalized.get(key)
+            for key in ("occurred_at", "direction", "asset", "amount", "fee")
+        }
+        digest = hashlib.sha256(
+            json.dumps(json_ready(identity_payload), sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        occurrence_by_digest[digest] = occurrence_by_digest.get(digest, 0) + 1
+        normalized["_tax_platform_row_identity"] = (
+            f"{provider.casefold()}:{digest}:{occurrence_by_digest[digest]}"
+        )
+        normalized_rows.append(normalized)
+    return normalized_rows
+
+
 def load_blockpit_csv_records(file_path):
     header, rows = _platform_csv_rows(file_path)
     _require_platform_columns(header, _BLOCKPIT_REQUIRED_COLUMNS, "Blockpit")
-    return [
-        normalized
-        for index, row in enumerate(rows, start=1)
-        if (normalized := normalize_blockpit_record(row, index=index)) is not None
-    ]
+    return _tax_platform_records(rows, normalize_blockpit_record, "blockpit")
 
 
 # -- Generic ledger (manual / generic tabular import) ------------------------
