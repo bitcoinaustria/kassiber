@@ -1666,7 +1666,6 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_21bitcoin.add_argument("--profile")
     wallets_import_21bitcoin.add_argument("--wallet")
     wallets_import_21bitcoin.add_argument("--file", required=True)
-    wallets_import_21bitcoin.add_argument("--mode", choices=["relevant", "full"], default="full")
     wallets_import_pocket = wallets_sub.add_parser("import-pocket", aliases=["import-pocketbitcoin"])
     wallets_import_pocket.add_argument("--workspace")
     wallets_import_pocket.add_argument("--profile")
@@ -3782,7 +3781,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.wallet,
                     args.file,
                     "21bitcoin_csv",
-                    args.mode,
                 ),
             )
         if args.wallets_command in {"import-pocket", "import-pocketbitcoin"}:

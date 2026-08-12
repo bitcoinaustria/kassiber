@@ -2362,7 +2362,11 @@ def import_file_into_wallet(
             or is_coinfinity_format(input_format)
             or is_pocketbitcoin_format(input_format)
         ),
-        report_updates=is_exchange_evidence_format(input_format) or is_strike_format(input_format),
+        report_updates=(
+            is_exchange_evidence_format(input_format)
+            or is_strike_format(input_format)
+            or is_twentyonebitcoin_format(input_format)
+        ),
         commit=False,
     )
     if is_twentyonebitcoin_format(input_format):
@@ -2394,6 +2398,8 @@ def import_file_into_wallet(
         conn.commit()
     if is_exchange_evidence_format(input_format):
         outcome[exchange_evidence_rows_key(input_format)] = len(records)
+    if is_twentyonebitcoin_format(input_format):
+        outcome["twentyonebitcoin_rows"] = len(records)
     if is_strike_format(input_format):
         outcome["strike_rows"] = len(records)
     if is_bullbitcoin_wallet_format(input_format):
