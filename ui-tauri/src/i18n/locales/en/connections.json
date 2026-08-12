@@ -983,7 +983,6 @@
     "enrichment": {
       "importMode": "Import mode",
       "importModeHelperFull": "Imports every {{title}} row as excluded evidence and flags matched, missing, or ambiguous wallet evidence for this book.",
-      "importModeHelper21bitcoin": "Only enriches 21bitcoin L1 withdrawal rows that uniquely match existing transactions anywhere in this book.",
       "importModeHelperRelevant": "Only enriches {{title}} rows that uniquely match existing transactions anywhere in this book.",
       "relevantOnly": "Relevant only",
       "fullImport": "Full import with flags",

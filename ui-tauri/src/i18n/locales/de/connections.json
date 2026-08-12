@@ -983,7 +983,6 @@
     "enrichment": {
       "importMode": "Importmodus",
       "importModeHelperFull": "Importiert jede {{title}}-Zeile als ausgeschlossenen Nachweis und markiert passende, fehlende oder mehrdeutige Wallet-Nachweise für dieses Buch.",
-      "importModeHelper21bitcoin": "Reichert nur 21bitcoin-L1-Auszahlungszeilen an, die eindeutig zu vorhandenen Transaktionen irgendwo in diesem Buch passen.",
       "importModeHelperRelevant": "Reichert nur {{title}}-Zeilen an, die eindeutig zu vorhandenen Transaktionen irgendwo in diesem Buch passen.",
       "relevantOnly": "Nur relevante",
       "fullImport": "Vollständiger Import mit Markierungen",

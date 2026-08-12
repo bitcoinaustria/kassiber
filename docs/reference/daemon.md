@@ -458,10 +458,11 @@ stored. Wallet config may include `bullbitcoin_wallet_network` (`bitcoin`,
 `liquid`, or `lightning`) to split one unified export into separate source
 wallets; filtered results also include `bullbitcoin_wallet_rows_total` and
 `bullbitcoin_wallet_network`. Coinfinity imports return `coinfinity_rows`. For
-`source_format="21bitcoin_csv"`, the default `mode="full"` imports active
-custodial ledger rows into the selected or default `21bitcoin` wallet; explicit
-`mode="relevant"` keeps the evidence-only matching behavior for L1 withdrawal
-rows. `source_format="pocketbitcoin_csv"` follows the Bull Bitcoin mode
+`source_format="21bitcoin_csv"` imports active custodial ledger rows into the
+selected or default `21bitcoin` wallet. Its BTC deposits and withdrawals keep
+stable provider row ids because the export has no txid; independently observed
+wallet movements may be reviewed as custody-transfer candidates.
+`source_format="pocketbitcoin_csv"` follows the Bull Bitcoin mode
 contract, uses a default `Pocket Bitcoin` wallet in full mode, and returns
 `pocketbitcoin_rows`. Because Pocket's CSV does not expose the blockchain txid,
 relevant-mode matching uses the net BTC amount, direction, asset, and nearby
