@@ -426,6 +426,7 @@ SUPPORTED_KINDS = (
     "ui.documents.list",
     "ui.documents.create",
     "ui.documents.attach",
+    "ui.documents.import_report",
     "ui.journals.snapshot",
     "ui.journals.events.list",
     "ui.journals.quarantine",
@@ -2630,6 +2631,18 @@ def _ui_commercial_payload_from_conn(
             url=args.get("url"),
             label=args.get("label"),
             media_type=args.get("media_type"),
+        )
+    if kind == "ui.documents.import_report":
+        return core_commercial.import_prior_tax_report(
+            conn,
+            data_root,
+            None,
+            None,
+            hooks,
+            provider=args.get("provider"),
+            file_path=args.get("file_path") or args.get("file"),
+            tax_year=args.get("tax_year"),
+            label=args.get("label"),
         )
     raise AppError(f"Unsupported commercial daemon kind '{kind}'", code="validation")
 
@@ -9439,6 +9452,8 @@ _UI_WALLET_SOURCE_FORMATS = {
     "strike_csv",
     "ledgerlive_csv",
     "binance_supplemental_csv",
+    "cointracking_csv",
+    "blockpit_csv",
     "wasabi_bundle",
     "generic_ledger",
 }
@@ -10265,8 +10280,6 @@ def _ledger_template_payload(
 
 
 _LEDGER_PREVIEW_EXTENSIONS = {".csv", ".tsv", ".xlsx", ".xlsm"}
-
-
 def _ledger_preview_extension(filename: str) -> str:
     extension = Path(filename).suffix.lower()
     if extension not in _LEDGER_PREVIEW_EXTENSIONS:
@@ -15433,6 +15446,7 @@ def handle_request(
         "ui.documents.list",
         "ui.documents.create",
         "ui.documents.attach",
+        "ui.documents.import_report",
     }:
         return (
             _with_request_id(

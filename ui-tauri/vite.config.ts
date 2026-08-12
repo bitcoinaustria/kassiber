@@ -323,6 +323,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.documents.list",
   "ui.documents.create",
   "ui.documents.attach",
+  "ui.documents.import_report",
 ]);
 /**
  * Kinds the bridge accepts on the stream endpoint. AI chat is here because

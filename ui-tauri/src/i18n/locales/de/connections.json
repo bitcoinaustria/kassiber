@@ -672,6 +672,7 @@
       "createConnections": "Verbindungen erstellen",
       "importTransactions": "Transaktionen importieren",
       "importPricing": "Bewertung importieren",
+      "archiveReport": "Report archivieren",
       "createAndScan": "Erstellen & scannen",
       "createConnection": "Verbindung erstellen",
       "setupBtcpayAccount": "BTCPay-Account einrichten"
@@ -845,12 +846,28 @@
       "twentyonebitcoinCsv": "21bitcoin CSV",
       "strikeCsv": "Strike CSV",
       "ledgerliveCsv": "Ledger Live CSV",
+      "cointrackingCsv": "CoinTracking-Gesamthistorie (CSV)",
+      "blockpitCsv": "Blockpit-Gesamthistorie (CSV)",
       "binanceSupplementalCsv": "Binance Supplemental CSV",
       "btcpayCsv": "BTCPay CSV",
       "wasabiBundle": "Wasabi-JSON-Bundle",
       "samouraiSourceSet": "Samourai-Descriptor-Source-Set",
       "csvOrJson": "CSV oder JSON",
-      "genericLedger": "Excel- oder CSV-Journal"
+      "genericLedger": "Excel- oder CSV-Journal",
+      "priorTaxReport": "Früherer Steuerreport"
+    },
+    "priorReport": {
+      "provider": "Report-Anbieter",
+      "providerPlaceholder": "CoinTracking oder Blockpit",
+      "taxYear": "Steuerjahr",
+      "taxYearHelper": "Optional. Das sind Nachweis-Metadaten, kein importiertes Steuerergebnis.",
+      "fileLabel": "Pfad zur Steuerreport-Datei",
+      "fileHelper": "Kassiber kopiert das Original in den verwalteten Anhangsspeicher und übernimmt weder Summen noch Lot-Zuordnungen.",
+      "errorProvider": "Gib den Report-Anbieter ein.",
+      "errorFile": "Wähle die Datei des früheren Steuerreports.",
+      "errorYear": "Das Steuerjahr muss vierstellig sein.",
+      "archivedTitle": "Früherer Report archiviert",
+      "archivedBody": "{{label}} wurde als lokaler Nachweis gespeichert."
     },
     "genericLedger": {
       "templateHint": "Neu hier? Lade die Vorlage herunter, trag deine Transaktionen ein und importier die Datei.",

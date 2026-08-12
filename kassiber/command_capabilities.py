@@ -82,6 +82,7 @@ CLI_OPERATOR_PATHS = _paths(
     wallets.import-bull wallets.import-bullbitcoin wallets.import-coinfinity
     wallets.import-21bitcoin wallets.import-pocket wallets.import-pocketbitcoin
     wallets.import-strike wallets.import-ledger-live
+    wallets.import-cointracking wallets.import-blockpit
     wallets.import-binance-supplemental wallets.sync-kraken
     wallets.sync-coinbase wallets.sync-binance wallets.import-ledger
     wallets.ledger-template wallets.import-document wallets.import-samourai
@@ -93,7 +94,8 @@ CLI_OPERATOR_PATHS = _paths(
     metadata.records.note.set metadata.records.note.clear
     metadata.records.tag.add metadata.records.tag.remove journals.process
     btcpay.provenance.sync btcpay.provenance.suggest documents.create
-    documents.attach source-funds.sources.create source-funds.sources.attach
+    documents.attach documents.import-report source-funds.sources.create
+    source-funds.sources.attach
     source-funds.links.create source-funds.links.attach source-funds.suggest
     source-funds.assemble source-funds.recipients.create
     source-funds.recipients.update source-funds.recipients.delete
@@ -212,7 +214,8 @@ DAEMON_OPERATOR_KINDS = _paths(
     ui.source_funds.export_bundle ui.source_funds.recipients.create
     ui.source_funds.recipients.update ui.source_funds.recipients.delete
     ui.btcpay.provenance.sync ui.btcpay.provenance.suggest
-    ui.documents.create ui.documents.attach ui.journals.process
+    ui.documents.create ui.documents.attach ui.documents.import_report
+    ui.journals.process
     ui.saved_views.create ui.saved_views.delete ui.onboarding.complete
     ui.profiles.create ui.profiles.rename
     ui.profiles.switch ui.rates.kraken_csv.import ui.rates.rebuild

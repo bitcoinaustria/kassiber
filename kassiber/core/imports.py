@@ -2316,6 +2316,88 @@ def apply_wasabi_metadata(
     }
 
 
+def _raise_for_tax_platform_history_overlap(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    wallet: Mapping[str, Any],
+    records: Sequence[ImportRow],
+    *,
+    source_label: str,
+) -> None:
+    """Fail before import when provider history duplicates another wallet.
+
+    Exact chain ids are strongest. Some provider exports omit them, so an exact
+    timestamp/direction/asset/amount match is also surfaced for review instead
+    of silently double-booking the same economic event.
+    """
+    existing_rows = conn.execute(
+        """
+        SELECT t.external_id, t.occurred_at, t.direction, t.asset, t.amount,
+               t.wallet_id, w.label AS wallet_label
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE t.profile_id = ? AND t.wallet_id != ? AND t.excluded = 0
+        """,
+        (profile["id"], wallet["id"]),
+    ).fetchall()
+    if not existing_rows:
+        return
+    by_txid: dict[tuple[str, str, str], list[Mapping[str, Any]]] = {}
+    by_economics: dict[tuple[str, str, str, int], list[Mapping[str, Any]]] = {}
+    for row in existing_rows:
+        chain_id = canonical_txid(row["external_id"])
+        if chain_id:
+            by_txid.setdefault((chain_id, row["direction"], row["asset"]), []).append(row)
+        by_economics.setdefault(
+            (row["occurred_at"], row["direction"], row["asset"], int(row["amount"])),
+            [],
+        ).append(row)
+
+    conflicts = []
+    for index, record in enumerate(records, start=1):
+        normalized = normalize_import_record(record, source_label)
+        chain_id = canonical_txid(normalized["external_id"])
+        matches = (
+            by_txid.get((chain_id, normalized["direction"], normalized["asset"]), [])
+            if chain_id
+            else []
+        )
+        evidence = "txid"
+        if not matches:
+            matches = by_economics.get(
+                (
+                    normalized["occurred_at"],
+                    normalized["direction"],
+                    normalized["asset"],
+                    btc_to_msat(normalized["amount"]),
+                ),
+                [],
+            )
+            evidence = "exact_economics"
+        if matches:
+            conflicts.append(
+                {
+                    "row": index,
+                    "evidence": evidence,
+                    "external_id": normalized["external_id"] or None,
+                    "wallets": sorted({str(match["wallet_label"]) for match in matches}),
+                }
+            )
+            if len(conflicts) >= 20:
+                break
+    if conflicts:
+        raise AppError(
+            "Tax-platform history overlaps transactions already in this book",
+            code="migration_source_overlap",
+            hint=(
+                "Keep descriptor/on-chain wallets authoritative. Filter these rows out of the "
+                "provider export, then retry the migration."
+            ),
+            details={"conflicts": conflicts, "limited": len(conflicts) >= 20},
+            retryable=False,
+        )
+
+
 def import_file_into_wallet(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],
@@ -2341,7 +2423,30 @@ def import_file_into_wallet(
         if commit:
             conn.commit()
         return outcome
+    migration_wallet_kind = {
+        "cointracking_csv": "cointracking",
+        "blockpit_csv": "blockpit",
+    }.get(input_format)
+    if migration_wallet_kind and wallet["kind"] != migration_wallet_kind:
+        raise AppError(
+            f"{input_format} requires a dedicated {migration_wallet_kind} wallet",
+            code="migration_wallet_kind_required",
+            hint=(
+                "Create the provider migration wallet first. Do not import provider history "
+                "into a descriptor or other authoritative wallet."
+            ),
+            details={"wallet": wallet["label"], "wallet_kind": wallet["kind"]},
+            retryable=False,
+        )
     records = load_import_records(file_path, input_format, column_map)
+    if migration_wallet_kind:
+        _raise_for_tax_platform_history_overlap(
+            conn,
+            profile,
+            wallet,
+            records,
+            source_label=f"file:{input_format}",
+        )
     bullbitcoin_wallet_rows_total = len(records) if is_bullbitcoin_wallet_format(input_format) else None
     bullbitcoin_wallet_network = None
     if is_bullbitcoin_wallet_format(input_format):

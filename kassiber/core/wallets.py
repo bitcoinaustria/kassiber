@@ -60,6 +60,8 @@ WALLET_KINDS = [
     "pocketbitcoin",
     "strike",
     "ledgerlive",
+    "cointracking",
+    "blockpit",
     "kraken",
     "coinbase",
     "binance",
@@ -848,6 +850,16 @@ WALLET_KIND_CATALOG = {
     },
     "ledgerlive": {
         "summary": "Ledger Live CSV importer for BTC/LBTC wallet movement only.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "cointracking": {
+        "summary": "CoinTracking full-history CSV migration source, scoped to BTC/LBTC rows.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "blockpit": {
+        "summary": "Blockpit full-history CSV migration source, scoped to BTC/LBTC rows.",
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },

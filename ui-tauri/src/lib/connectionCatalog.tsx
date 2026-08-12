@@ -55,6 +55,7 @@ export type SetupKind =
   | "silent-payment"
   | "file-wallet"
   | "file-enrichment"
+  | "prior-report"
   | "samourai"
   | "btcpay"
   | "bullbitcoin-wallet"
@@ -77,6 +78,8 @@ export type ConnectionSourceFormat =
   | "strike_csv"
   | "ledgerlive_csv"
   | "binance_supplemental_csv"
+  | "cointracking_csv"
+  | "blockpit_csv"
   | "wasabi_bundle"
   | "generic_ledger";
 
@@ -776,6 +779,66 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     details: [
       "BTC autoinvest rows funded by fiat preserve exact execution value",
       "BTC dividend/mining rows import as income without guessing fiat price",
+    ],
+  },
+  {
+    id: "prior-tax-report",
+    title: "Prior tax report",
+    description: "Preserve a CoinTracking, Blockpit, or other prior report as evidence.",
+    category: "files",
+    image: sourceIcon("DOC", "#7f1d1d", "#ffffff"),
+    icon: FileInput,
+    status: "ready",
+    pathLabel: "Evidence archive",
+    formatLabel: "Report file",
+    setupKind: "prior-report",
+    details: [
+      "Copies the original report into Kassiber's managed attachment store",
+      "Records the provider and tax year without trusting imported totals",
+      "Use the transaction-history migration cards to rebuild auditable Kassiber reports",
+    ],
+  },
+  {
+    id: "cointracking",
+    title: "CoinTracking",
+    description: "Move your Bitcoin transaction history into Kassiber.",
+    category: "files",
+    image: sourceIcon("CT", "#2f78c4", "#ffffff"),
+    status: "ready",
+    pathLabel: "Tax-platform migration",
+    formatLabel: "CoinTracking full-history CSV",
+    docsHref: "https://cointracking.info/import/import_csv/",
+    setupKind: "file-wallet",
+    walletKind: "cointracking",
+    sourceFormat: "cointracking_csv",
+    details: [
+      "Imports BTC/LBTC trades, transfers, income, mining, staking, gifts, and losses",
+      "Skips non-Bitcoin rows and preserves the original row as audit evidence",
+      "Advanced loan, derivative, liquidity, and non-taxable types stop for explicit review",
+      "Add and sync descriptor wallets first; overlapping rows are rejected",
+      "Imports are transactional and can be rolled back",
+    ],
+  },
+  {
+    id: "blockpit",
+    title: "Blockpit",
+    description: "Move your Bitcoin transaction history into Kassiber.",
+    category: "files",
+    image: sourceIcon("BP", "#111827", "#ffffff"),
+    status: "ready",
+    pathLabel: "Tax-platform migration",
+    formatLabel: "Blockpit full-history CSV",
+    docsHref:
+      "https://help.blockpit.io/hc/en-us/articles/4410179893906-How-to-export-my-transactions-as-a-CSV-file",
+    setupKind: "file-wallet",
+    walletKind: "blockpit",
+    sourceFormat: "blockpit_csv",
+    details: [
+      "Imports BTC/LBTC incoming/outgoing legs, trades, fees, income, gifts, and losses",
+      "Keeps integration names, comments, source names, and transaction ids",
+      "Skips non-Bitcoin rows; ambiguous tax labels stop for explicit review",
+      "Add and sync descriptor wallets first; overlapping rows are rejected",
+      "Imports are transactional and can be rolled back",
     ],
   },
   {

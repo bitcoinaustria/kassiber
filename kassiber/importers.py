@@ -135,6 +135,10 @@ def load_import_records(file_path, input_format, column_map=None):
         return load_ledgerlive_csv_records(file_path)
     if input_format == "binance_supplemental_csv":
         return load_binance_supplemental_csv_records(file_path)
+    if input_format == "cointracking_csv":
+        return load_cointracking_csv_records(file_path)
+    if input_format == "blockpit_csv":
+        return load_blockpit_csv_records(file_path)
     if input_format == "wasabi_bundle":
         return load_wasabi_bundle_records(file_path)
     if input_format == GENERIC_LEDGER_FORMAT:
@@ -2572,6 +2576,323 @@ def load_river_csv_records(file_path):
 
 def is_river_format(input_format):
     return input_format == "river_csv"
+
+
+# -- Tax-platform migration exports ----------------------------------------
+
+_COINTRACKING_REQUIRED_COLUMNS = (
+    "Type",
+    "Buy Amount",
+    "Buy Currency",
+    "Sell Amount",
+    "Sell Currency",
+    "Date",
+)
+
+_BLOCKPIT_REQUIRED_COLUMNS = (
+    "Date (UTC)",
+    "Integration Name",
+    "Label",
+    "Outgoing Asset",
+    "Outgoing Amount",
+    "Incoming Asset",
+    "Incoming Amount",
+)
+
+_COINTRACKING_TYPES = {
+    "deposit": "Deposit",
+    "income": "Income",
+    "gift / tip": "Gift received",
+    "gift/tip(in)": "Gift received",
+    "reward / bonus": "Income",
+    "mining": "Mining",
+    "airdrop": "Airdrop",
+    "staking": "Staking",
+    "masternode": "Income",
+    "minting": "Income",
+    "mining (commercial)": "Mining",
+    "dividends income": "Income",
+    "lending income": "Lending Interest",
+    "interest income": "Interest",
+    "lp rewards": "Income",
+    "other income": "Income",
+    # CoinTracking marks these receipts as non-taxable at receipt. Import them
+    # as ordinary acquisitions (not earn events); the original type remains in
+    # raw_json for audit.
+    "income (non taxable)": "Gift received",
+    "other income (non taxable)": "Gift received",
+    "airdrop (non taxable)": "Gift received",
+    "withdrawal": "Withdrawal",
+    "spend": "Spend",
+    "donation": "Donation",
+    "gift": "Gift sent",
+    "gift(out)": "Gift sent",
+    "stolen": "Stolen",
+    "stolen / hacked / fraud": "Stolen",
+    "lost": "Lost",
+    "other fee": "Spend",
+    "other expense": "Spend",
+    # The RP2 boundary cannot safely book a tax-free outflow as a sale. It is
+    # imported, then identified below with a dedicated non-sale kind so journal
+    # processing sends it to explicit review.
+    "expense (non taxable)": "Gift sent",
+}
+
+_BLOCKPIT_TYPES = {
+    "unlabeled deposit": "Deposit",
+    "unlabeled incoming": "Deposit",
+    "deposit": "Deposit",
+    "airdrop": "Airdrop",
+    "bounty": "Income",
+    "staking": "Staking",
+    "interest": "Interest",
+    "gift (incoming)": "Gift received",
+    "cashback": "Income",
+    "income": "Income",
+    "hard fork": "Fork",
+    "mining": "Mining",
+    "masternode": "Income",
+    "security token income": "Income",
+    "unlabeled withdrawal": "Withdrawal",
+    "unlabeled outgoing": "Withdrawal",
+    "withdrawal": "Withdrawal",
+    "payment": "Spend",
+    "fee": "Spend",
+    "gift (outgoing)": "Gift sent",
+    "lost": "Lost",
+}
+
+
+def _platform_csv_rows(file_path):
+    rows = _read_generic_ledger_csv(file_path)
+    header_index = next(
+        (index for index, row in enumerate(rows) if any(str_or_none(cell) for cell in row)),
+        None,
+    )
+    if header_index is None:
+        return [], []
+    header = [str(cell).strip() if cell is not None else "" for cell in rows[header_index]]
+    records = []
+    for raw in rows[header_index + 1 :]:
+        if not any(str_or_none(cell) for cell in raw):
+            continue
+        records.append(
+            {name: (raw[index] if index < len(raw) else "") for index, name in enumerate(header) if name}
+        )
+    return header, records
+
+
+def _require_platform_columns(header, required, provider):
+    available = {_normalized_column_key(column) for column in header}
+    missing = [
+        column for column in required if _normalized_column_key(column) not in available
+    ]
+    if missing:
+        raise AppError(
+            f"{provider} CSV is missing required columns: {', '.join(missing)}",
+            code="validation",
+            hint=f"Export the full transaction history from {provider}, not a summary or tax-form CSV.",
+        )
+
+
+def _platform_type(provider, raw_type, direction):
+    text = str_or_none(raw_type)
+    if not text:
+        raise AppError(f"{provider} row is missing its transaction type", code="validation")
+    key = " ".join(text.casefold().split())
+    if key == "trade":
+        return "Buy" if direction == "inbound" else "Sell"
+    if key == "transfer":
+        return "Deposit" if direction == "inbound" else "Withdrawal"
+    mapping = _COINTRACKING_TYPES if provider == "CoinTracking" else _BLOCKPIT_TYPES
+    mapped = mapping.get(key)
+    if mapped:
+        return mapped
+    raise AppError(
+        f"{provider} transaction type '{text}' needs review before import",
+        code="validation",
+        hint=(
+            "This type has tax semantics Kassiber cannot safely infer. Filter it into a separate "
+            "export or convert the reviewed row with the Generic ledger template."
+        ),
+    )
+
+
+def _platform_note(*parts):
+    return " · ".join(str(part).strip() for part in parts if str_or_none(part)) or None
+
+
+def _normalize_tax_platform_record(
+    record,
+    *,
+    provider,
+    incoming_amount,
+    incoming_asset,
+    outgoing_amount,
+    outgoing_asset,
+    fee_amount,
+    fee_asset,
+    occurred_at,
+    row_type,
+    counterparty,
+    txid,
+    note,
+    index,
+):
+    incoming_code = _currency_cell(incoming_asset)
+    outgoing_code = _currency_cell(outgoing_asset)
+    incoming_btc = canonical_bitcoin_asset(incoming_code)
+    outgoing_btc = canonical_bitcoin_asset(outgoing_code)
+    if incoming_btc and outgoing_btc:
+        raise AppError(
+            f"{provider} row {index} has Bitcoin on both sides",
+            code="validation",
+            hint="Review BTC/LBTC swaps explicitly instead of importing them as a fiat trade.",
+        )
+    fee_code = _currency_cell(fee_asset)
+    fee_value = _generic_ledger_decimal_cell(
+        fee_amount, "Fee Amount", f"{provider} row {index}"
+    )
+    standalone_btc_fee = (
+        not incoming_btc
+        and not outgoing_btc
+        and bool(canonical_bitcoin_asset(fee_code))
+    )
+    if standalone_btc_fee:
+        # Blockpit emits standalone Fee rows with the only Bitcoin leg in the
+        # fee columns. Treat that amount as the outbound spend itself; passing
+        # it as both amount and fee would double-count it.
+        outgoing_code = fee_code
+        outgoing_amount = fee_amount
+        outgoing_btc = canonical_bitcoin_asset(fee_code)
+        fee_amount = None
+        fee_code = None
+        fee_value = None
+    if not incoming_btc and not outgoing_btc:
+        return None
+
+    opposing_code = outgoing_code if incoming_btc else incoming_code
+    if opposing_code and opposing_code not in FIAT_CURRENCIES:
+        raise AppError(
+            f"{provider} row {index} trades Bitcoin against unsupported asset {opposing_code}",
+            code="validation",
+            hint=(
+                "The provider CSV does not identify the currency behind its account-currency "
+                "value columns. Review this cross-asset row with the Generic ledger and enter "
+                "an explicit fiat currency and value."
+            ),
+        )
+
+    direction = "inbound" if incoming_btc else "outbound"
+    row = {
+        "Type": (
+            "Spend"
+            if standalone_btc_fee
+            else _platform_type(provider, row_type, direction)
+        ),
+        "Date": occurred_at,
+        "Counterparty": counterparty,
+        "Note": note,
+        "Tx-ID": txid,
+    }
+    if incoming_btc:
+        row["Received Amount"] = incoming_amount
+        row["Received Asset"] = incoming_code
+        if outgoing_code in FIAT_CURRENCIES:
+            row["Sent Amount"] = outgoing_amount
+            row["Sent Asset"] = outgoing_code
+    else:
+        row["Sent Amount"] = outgoing_amount
+        row["Sent Asset"] = outgoing_code
+        if incoming_code in FIAT_CURRENCIES:
+            row["Received Amount"] = incoming_amount
+            row["Received Asset"] = incoming_code
+
+    fiat_code = outgoing_code if incoming_btc else incoming_code
+    if canonical_bitcoin_asset(fee_code) or (
+        fee_code in FIAT_CURRENCIES and fee_code == fiat_code
+    ):
+        row["Fee Amount"] = fee_amount
+        row["Fee Asset"] = fee_code
+    elif fee_value is not None and abs(fee_value) > 0:
+        raise AppError(
+            f"{provider} row {index} has a fee in unsupported asset {fee_code or fee_asset}",
+            code="validation",
+            hint=(
+                "Kassiber cannot safely convert a third-asset fee into the Bitcoin or fiat leg. "
+                "Review this row with the Generic ledger template."
+            ),
+        )
+
+    normalized = normalize_generic_ledger_record(row, index=index)
+    if (
+        provider == "CoinTracking"
+        and " ".join(str(row_type or "").casefold().split()) == "expense (non taxable)"
+    ):
+        normalized["kind"] = "expense_non_taxable"
+    normalized["pricing_method"] = f"{provider.casefold()}_csv".replace(" ", "")
+    normalized["raw_json"] = json.dumps(json_ready(record), sort_keys=True)
+    return normalized
+
+
+def normalize_cointracking_record(record, index=0):
+    exchange = str_or_none(_get_cell(record, "Exchange")) or "CoinTracking"
+    return _normalize_tax_platform_record(
+        record,
+        provider="CoinTracking",
+        incoming_amount=_get_cell(record, "Buy Amount"),
+        incoming_asset=_get_cell(record, "Buy Currency"),
+        outgoing_amount=_get_cell(record, "Sell Amount"),
+        outgoing_asset=_get_cell(record, "Sell Currency"),
+        fee_amount=_get_cell(record, "Fee", "Fee Amount"),
+        fee_asset=_get_cell(record, "Fee Currency", "Fee Cur."),
+        occurred_at=_get_cell(record, "Date"),
+        row_type=_get_cell(record, "Type"),
+        counterparty=exchange,
+        txid=_get_cell(record, "Tx-ID (optional)", "Tx-ID", "Trade ID"),
+        note=_platform_note(_get_cell(record, "Trade-Group"), _get_cell(record, "Comment")),
+        index=index,
+    )
+
+
+def load_cointracking_csv_records(file_path):
+    header, rows = _platform_csv_rows(file_path)
+    _require_platform_columns(header, _COINTRACKING_REQUIRED_COLUMNS, "CoinTracking")
+    return [
+        normalized
+        for index, row in enumerate(rows, start=1)
+        if (normalized := normalize_cointracking_record(row, index=index)) is not None
+    ]
+
+
+def normalize_blockpit_record(record, index=0):
+    integration = str_or_none(_get_cell(record, "Integration Name")) or "Blockpit"
+    return _normalize_tax_platform_record(
+        record,
+        provider="Blockpit",
+        incoming_amount=_get_cell(record, "Incoming Amount"),
+        incoming_asset=_get_cell(record, "Incoming Asset"),
+        outgoing_amount=_get_cell(record, "Outgoing Amount"),
+        outgoing_asset=_get_cell(record, "Outgoing Asset"),
+        fee_amount=_get_cell(record, "Fee Amount"),
+        fee_asset=_get_cell(record, "Fee Asset"),
+        occurred_at=_get_cell(record, "Date (UTC)", "Date"),
+        row_type=_get_cell(record, "Label"),
+        counterparty=integration,
+        txid=_get_cell(record, "Trx. ID", "Transaction ID"),
+        note=_platform_note(_get_cell(record, "Comments"), _get_cell(record, "Source Name")),
+        index=index,
+    )
+
+
+def load_blockpit_csv_records(file_path):
+    header, rows = _platform_csv_rows(file_path)
+    _require_platform_columns(header, _BLOCKPIT_REQUIRED_COLUMNS, "Blockpit")
+    return [
+        normalized
+        for index, row in enumerate(rows, start=1)
+        if (normalized := normalize_blockpit_record(row, index=index)) is not None
+    ]
 
 
 # -- Generic ledger (manual / generic tabular import) ------------------------

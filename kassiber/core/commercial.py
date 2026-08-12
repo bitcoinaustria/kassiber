@@ -15,12 +15,13 @@ from ..envelope import json_ready
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
+from ..util import str_or_none
 from . import attachments as core_attachments
 from . import freshness as core_freshness
 from . import pricing
 
 
-DOCUMENT_TYPES = ("invoice", "receipt", "contract", "statement", "other")
+DOCUMENT_TYPES = ("invoice", "receipt", "contract", "statement", "tax_report", "other")
 LINK_STATES = ("suggested", "reviewed", "rejected")
 CONFIDENCE_LEVELS = ("exact", "strong", "weak", "unknown")
 RECONCILIATION_STATES = ("unreviewed", "matched", "mismatch", "ignored")
@@ -570,6 +571,7 @@ def create_document(
     fiat_value=None,
     notes=None,
     raw_json=None,
+    commit=True,
 ):
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     doc_type = _normalize_choice(document_type, DOCUMENT_TYPES, label="document type")
@@ -616,7 +618,8 @@ def create_document(
             now,
         ),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
     return get_document(conn, profile["id"], document_id)
 
 
@@ -675,6 +678,7 @@ def attach_document_evidence(
     url=None,
     label=None,
     media_type=None,
+    commit=True,
 ):
     if bool(file_path) == bool(url):
         raise AppError("Provide exactly one of --file or --url", code="validation")
@@ -739,7 +743,8 @@ def attach_document_evidence(
             """,
             (document["id"], attachment_id, created_at),
         )
-        conn.commit()
+        if commit:
+            conn.commit()
     except Exception:
         if destination is not None:
             try:
@@ -749,6 +754,65 @@ def attach_document_evidence(
                 pass
         raise
     return {"document_id": document["id"], "attachment_id": attachment_id, "label": label}
+
+
+def import_prior_tax_report(
+    conn,
+    data_root,
+    workspace_ref,
+    profile_ref,
+    hooks: CommercialHooks,
+    *,
+    provider,
+    file_path,
+    tax_year=None,
+    label=None,
+):
+    provider_name = str_or_none(provider)
+    if not provider_name:
+        raise AppError("A prior report provider is required", code="validation")
+    source = Path(str(file_path or "")).expanduser()
+    if not source.is_file():
+        raise AppError(f"Prior tax report '{file_path}' not found", code="not_found")
+    year = str(tax_year).strip() if tax_year not in (None, "") else None
+    if year and (len(year) != 4 or not year.isdigit()):
+        raise AppError("Tax year must be four digits", code="validation")
+    report_label = str_or_none(label) or " ".join(
+        part for part in (provider_name, year, "tax report") if part
+    )
+    try:
+        document = create_document(
+            conn,
+            workspace_ref,
+            profile_ref,
+            hooks,
+            document_type="tax_report",
+            label=report_label,
+            issuer=provider_name,
+            issued_at=f"{year}-12-31" if year else None,
+            notes=(
+                "Imported prior tax report. Preserved as evidence only; Kassiber does not "
+                "treat another calculator's totals or lot assignments as ledger facts."
+            ),
+            raw_json={"provider": provider_name, "tax_year": year},
+            commit=False,
+        )
+        attachment = attach_document_evidence(
+            conn,
+            data_root,
+            workspace_ref,
+            profile_ref,
+            document["id"],
+            hooks,
+            file_path=str(source),
+            label=source.name,
+            commit=False,
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return {"document": document, "attachment": attachment, "tax_year": year}
 
 
 def _matching_transactions_for_record(conn, profile_id, record):
@@ -1780,6 +1844,7 @@ __all__ = [
     "delete_btcpay_account_routes_for_backend",
     "export_reviewed_subledger_csv",
     "get_transaction_commercial_context",
+    "import_prior_tax_report",
     "list_btcpay_account_routes",
     "list_btcpay_records",
     "list_documents",

@@ -105,6 +105,8 @@ interface BtcpayRouteChoice {
 
 interface SetupFormState {
   label: string;
+  reportProvider: string;
+  taxYear: string;
   backend: string;
   birthday: string;
   coreRpcUrl: string;
@@ -194,6 +196,10 @@ type GenericLedgerPreviewSource = {
   sourceBytesBase64: string;
   importable: boolean;
 };
+
+function isPreviewableLedgerFormat(sourceFormat?: ConnectionSourceFormat) {
+  return sourceFormat === "generic_ledger";
+}
 
 interface BackendOption {
   name: string;
@@ -551,6 +557,12 @@ function fileWalletSourceField(
   source: ConnectionSource,
   t: TFunction<"connections">,
 ) {
+  if (source.setupKind === "prior-report") {
+    return {
+      label: t("add.priorReport.fileLabel"),
+      helper: t("add.priorReport.fileHelper"),
+    };
+  }
   if (source.sourceFormat === "wasabi_bundle") {
     return {
       label: t("add.exportFile.wasabiLabel"),
@@ -604,6 +616,12 @@ function sourceFileFilters(
   if (source.sourceFormat === "ledgerlive_csv") {
     return [{ name: t("add.fileFilter.ledgerliveCsv"), extensions: ["csv"] }];
   }
+  if (source.sourceFormat === "cointracking_csv") {
+    return [{ name: t("add.fileFilter.cointrackingCsv"), extensions: ["csv"] }];
+  }
+  if (source.sourceFormat === "blockpit_csv") {
+    return [{ name: t("add.fileFilter.blockpitCsv"), extensions: ["csv"] }];
+  }
   if (source.sourceFormat === "binance_supplemental_csv") {
     return [{ name: t("add.fileFilter.binanceSupplementalCsv"), extensions: ["csv"] }];
   }
@@ -626,6 +644,14 @@ function sourceFileFilters(
       },
     ];
   }
+  if (source.setupKind === "prior-report") {
+    return [
+      {
+        name: t("add.fileFilter.priorTaxReport"),
+        extensions: ["pdf", "xlsx", "csv"],
+      },
+    ];
+  }
   if (source.id === "csv") {
     return [{ name: t("add.fileFilter.csvOrJson"), extensions: ["csv", "json"] }];
   }
@@ -644,6 +670,8 @@ const formDefaultsFor = (
         : source.title;
   return {
     label: defaultLabel,
+    reportProvider: "",
+    taxYear: "",
     backend: "",
     birthday: "",
     coreRpcUrl: CORE_DEFAULT_RPC_URLS.main,
@@ -901,6 +929,11 @@ export function AddConnectionDialog({
   );
   const importFile =
     useDaemonMutation<ImportFileResult>("ui.wallets.import_file");
+  const importPriorReport = useDaemonMutation<{
+    document: { id: string; label: string };
+    attachment: { attachment_id: string };
+    tax_year?: string | null;
+  }>("ui.documents.import_report");
   const ledgerTemplate = useDaemonMutation<{
     file: string;
     filename: string;
@@ -1334,6 +1367,7 @@ export function AddConnectionDialog({
   const isSubmitting =
     createWallet.isPending ||
     importFile.isPending ||
+    importPriorReport.isPending ||
     importSamourai.isPending ||
     createBackend.isPending ||
     createBtcpay.isPending ||
@@ -1385,6 +1419,8 @@ export function AddConnectionDialog({
                 ? t("add.submit.importTransactions")
               : setupKind === "file-enrichment"
                 ? t("add.submit.importPricing")
+              : setupKind === "prior-report"
+                ? t("add.submit.archiveReport")
               : t("add.submit.createConnection");
   const canContinue =
     selected.status === "ready" && (setupKind !== "planned" || !!forwardTarget);
@@ -1586,7 +1622,7 @@ export function AddConnectionDialog({
     value: SetupFormState[Key],
   ) => {
     setForm((current) => ({ ...current, [key]: value }));
-    if (key === "sourceFile" && selected.sourceFormat === "generic_ledger") {
+    if (key === "sourceFile" && isPreviewableLedgerFormat(selected.sourceFormat)) {
       setGenericLedgerPreviewBlocksSubmit(String(value ?? "").trim().length > 0);
       setGenericLedgerPreviewSource(null);
     }
@@ -1789,6 +1825,7 @@ export function AddConnectionDialog({
       setupKind === "samourai" ||
       setupKind === "btcpay" ||
       setupKind === "bullbitcoin-wallet" ||
+      setupKind === "prior-report" ||
       (setupKind === "backend-settings" && selected.id === "bitcoin-core")
     ) {
       if (!form.label.trim()) {
@@ -1968,7 +2005,7 @@ export function AddConnectionDialog({
       } else if (!form.sourceFile.trim()) {
         errors.sourceFile = t("add.enrichment.errorPickExportFile");
       } else if (
-        selected.sourceFormat === "generic_ledger" &&
+        isPreviewableLedgerFormat(selected.sourceFormat) &&
         genericLedgerPreviewBlocksSubmit
       ) {
         errors.sourceFile = t("add.genericLedger.preview.submitBlocked");
@@ -1990,6 +2027,17 @@ export function AddConnectionDialog({
       }
       if (!form.sourceFile.trim()) {
         errors.sourceFile = t("add.enrichment.errorPickExportFile");
+      }
+    }
+    if (setupKind === "prior-report") {
+      if (!form.reportProvider.trim()) {
+        errors.reportProvider = t("add.priorReport.errorProvider");
+      }
+      if (!form.sourceFile.trim()) {
+        errors.sourceFile = t("add.priorReport.errorFile");
+      }
+      if (form.taxYear && !/^\d{4}$/.test(form.taxYear)) {
+        errors.taxYear = t("add.priorReport.errorYear");
       }
     }
     if (setupKind === "bullbitcoin-wallet") {
@@ -2374,6 +2422,20 @@ export function AddConnectionDialog({
               : form.targetWallet,
             updated: formatCount(importResult?.updated ?? 0),
             skipped: formatCount(importResult?.skipped ?? 0),
+          }),
+          tone: "success",
+        });
+      } else if (setupKind === "prior-report") {
+        const report = await importPriorReport.mutateAsync({
+          provider: form.reportProvider.trim(),
+          file_path: form.sourceFile.trim(),
+          tax_year: form.taxYear.trim() || undefined,
+          label: label === selected.title ? undefined : label,
+        });
+        addNotification({
+          title: t("add.priorReport.archivedTitle"),
+          body: t("add.priorReport.archivedBody", {
+            label: report.data?.document.label ?? label,
           }),
           tone: "success",
         });
@@ -2970,10 +3032,10 @@ export function AddConnectionDialog({
               id="connection-source-file"
               value={form.sourceFile}
               onChange={(event) => updateForm("sourceFile", event.target.value)}
-              readOnly={selected.sourceFormat === "generic_ledger"}
+              readOnly={isPreviewableLedgerFormat(selected.sourceFormat)}
               required
             />
-            {selected.sourceFormat === "generic_ledger" && !isFilePickerAvailable ? (
+            {isPreviewableLedgerFormat(selected.sourceFormat) && !isFilePickerAvailable ? (
               <Input
                 aria-label={sourceFileField.label}
                 type="file"
@@ -2997,7 +3059,7 @@ export function AddConnectionDialog({
                 variant="outline"
                 onClick={async () => {
                   const picked =
-                    selected.sourceFormat === "generic_ledger"
+                    isPreviewableLedgerFormat(selected.sourceFormat)
                       ? await pickFileWithContentsBase64({
                           title: t("add.field.selectExportFileTitle", {
                             title: selected.title,
@@ -3058,7 +3120,7 @@ export function AddConnectionDialog({
             </div>
           </div>
         ) : null}
-        {selected.sourceFormat === "generic_ledger" && genericLedgerPreviewSource ? (
+        {isPreviewableLedgerFormat(selected.sourceFormat) && genericLedgerPreviewSource ? (
           <GenericLedgerPreview
             source={genericLedgerPreviewSource}
             onBlockSubmitChange={setGenericLedgerPreviewBlocksSubmit}
@@ -3834,6 +3896,43 @@ export function AddConnectionDialog({
             </SetupField>
           ) : null}
           {renderSourceFileSetup(t("add.fileWallet.importAfter"))}
+        </>
+      );
+    }
+
+    if (setupKind === "prior-report") {
+      return (
+        <>
+          {renderConnectionLabelField()}
+          <SetupField
+            id="connection-report-provider"
+            label={t("add.priorReport.provider")}
+            error={fieldErrors.reportProvider}
+          >
+            <Input
+              id="connection-report-provider"
+              value={form.reportProvider}
+              placeholder={t("add.priorReport.providerPlaceholder")}
+              onChange={(event) => updateForm("reportProvider", event.target.value)}
+              required
+            />
+          </SetupField>
+          <SetupField
+            id="connection-report-year"
+            label={t("add.priorReport.taxYear")}
+            error={fieldErrors.taxYear}
+            helper={t("add.priorReport.taxYearHelper")}
+          >
+            <Input
+              id="connection-report-year"
+              inputMode="numeric"
+              maxLength={4}
+              value={form.taxYear}
+              placeholder="2025"
+              onChange={(event) => updateForm("taxYear", event.target.value)}
+            />
+          </SetupField>
+          {renderSourceFileSetup()}
         </>
       );
     }
@@ -5760,7 +5859,7 @@ export function AddConnectionDialog({
                     isSubmitting ||
                     setupKind === "planned" ||
                     missingBackend ||
-                    (selected.sourceFormat === "generic_ledger" &&
+                    (isPreviewableLedgerFormat(selected.sourceFormat) &&
                       genericLedgerPreviewBlocksSubmit)
                   }
                 >

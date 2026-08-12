@@ -1383,6 +1383,16 @@ WALLET_KIND_CATALOG = {
         "config_fields": ["source_file", "source_format"],
         "requires": [],
     },
+    "cointracking": {
+        "summary": "CoinTracking full-history CSV migration source, scoped to BTC/LBTC rows.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
+    "blockpit": {
+        "summary": "Blockpit full-history CSV migration source, scoped to BTC/LBTC rows.",
+        "config_fields": ["source_file", "source_format"],
+        "requires": [],
+    },
     "kraken": {
         "summary": "Kraken exchange import wallet for API or CSV execution evidence.",
         "config_fields": ["backend", "source_file", "source_format"],

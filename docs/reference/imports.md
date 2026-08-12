@@ -24,6 +24,9 @@ written.
 - 21bitcoin transaction CSV exports
 - Pocket Bitcoin account CSV exports
 - Strike CSV exports
+- CoinTracking full-history CSV exports (Bitcoin rows)
+- Blockpit full-transaction CSV exports (Bitcoin rows)
+- prior tax-report files preserved as external evidence
 - Samourai/Whirlpool descriptor and account-xpub source sets
 - Silent Payments watch-only receiving sources (`silent-payment` wallets)
 - BIP329 JSONL labels
@@ -39,6 +42,10 @@ Format references used by the dedicated importers:
 - 21bitcoin transaction CSV export from the 21bitcoin app
 - Pocket Bitcoin account CSV export
 - Strike CSV export from Strike transaction history
+- CoinTracking full-history CSV: <https://cointracking.info/import/import_csv/>
+- CoinTracking transaction types: <https://cointracking.freshdesk.com/en/support/solutions/articles/29000042783>
+- Blockpit transaction CSV export: <https://help.blockpit.io/hc/en-us/articles/4410179893906-How-to-export-my-transactions-as-a-CSV-file>
+- Blockpit transaction labels: <https://help.blockpit.io/hc/en-us/articles/360011893759-How-to-label-transactions>
 - Samourai Whirlpool account docs: <https://samourai.kayako.com/article/82-understanding-deposit-premix-and-postmix-accounts>
 - Samourai Whirlpool pool-fee docs: <https://samourai.kayako.com/article/81-understanding-pools-and-pool-fees>
 - Samourai BIP44/BIP49/BIP84 docs: <https://samourai.kayako.com/article/65-bip-44-bip-49-and-bip84>
@@ -219,6 +226,81 @@ For inbound transactions, explicit earn-like `kind` values such as `income`,
 `lending_interest`, and `routing_income` are preserved and later promoted into
 RP2 earn-like receipts during journal processing. Unlabeled inbound rows stay
 conservative and process as acquisitions.
+
+## Moving from CoinTracking or Blockpit
+
+The desktop migration flow lives under **Add connection -> Files**. It offers
+three separate sources:
+
+- **CoinTracking** imports the provider's full-history CSV into a dedicated
+  historical wallet.
+- **Blockpit** imports the provider's full-transaction CSV into a dedicated
+  historical wallet.
+- **Prior tax report** copies a PDF or other report file into Kassiber's managed
+  evidence store, records its provider and tax year, and never treats the
+  report's totals or lot assignments as transaction facts.
+
+The two CSV paths create ordinary rollback-capable import runs and preserve
+each original provider row in `transactions.raw_json` for audit. They are
+Bitcoin-scoped: BTC and L-BTC legs import, while unrelated
+asset-only rows are skipped. Straightforward trades, deposits, withdrawals,
+income, mining, staking, interest, gifts, fees, and losses map to Kassiber's
+existing transaction taxonomy. Complex loans, derivatives, liquidity-pool
+events, collateral movements, and other labels whose tax meaning cannot be
+inferred safely fail closed. Review those rows and enter the resulting Bitcoin
+facts through the Generic ledger rather than relabeling them automatically.
+CoinTracking's non-taxable receipt variants import as acquisitions rather than
+income. Its non-taxable expense variant is retained as an outflow but goes to
+the existing non-sale-disposal review gate instead of being taxed as a sale.
+BTC/altcoin trades stop for explicit review: CoinTracking supplies account-
+currency values but not the currency code, so Kassiber will not guess that the
+source account currency matches the active profile's fiat currency.
+
+Command-line equivalents:
+
+```bash
+kassiber wallets import-cointracking \
+  --workspace W --profile P --wallet "CoinTracking history" \
+  --file cointracking-full-history.csv
+
+kassiber wallets import-blockpit \
+  --workspace W --profile P --wallet "Blockpit history" \
+  --file blockpit-transactions.csv
+
+kassiber documents import-report \
+  --workspace W --profile P --provider CoinTracking --tax-year 2025 \
+  --file CoinTracking_Tax_Report_2025.pdf
+```
+
+These wallet imports require the target wallet to exist; the desktop flow
+creates it automatically. The CLI rejects a provider CSV aimed at any other
+wallet kind, especially a descriptor wallet, so imported provider metadata can
+never overwrite the authoritative observation. A prior tax report is supporting
+evidence for the migration and later review, not a substitute for transaction
+history.
+
+### Avoiding overlap with descriptor wallets
+
+Descriptor/xpub wallets remain the authoritative, watch-only source for the
+on-chain history they observe. Do not import the same on-chain history into a
+provider-history wallet as well: that would represent the same economic event
+twice. Add and sync descriptor wallets first. Before importing provider history,
+Kassiber rejects rows that match another wallet by canonical transaction id or
+by exact timestamp, direction, asset, and amount. The error identifies the
+conflicting rows and wallets so they can be filtered from the export.
+
+This check deliberately fails closed on exact matches, but it cannot prove that
+an export with missing or altered identifiers and timestamps is globally
+non-overlapping. When combining both migration paths, limit the provider export
+to older, custodial, Lightning, exchange, or otherwise off-chain history that
+the descriptor source cannot observe. If the provider cannot make that split,
+import to a temporary profile first, reconcile the overlap, and only then use
+the reviewed rows in the live book.
+
+Blockpit exports reduce linked transfers to their underlying deposit and
+withdrawal rows. Kassiber therefore imports those rows conservatively; run the
+normal transfer-matching and review workflow after import instead of assuming
+the former Blockpit link proves ownership.
 
 ## Generic ledger import
 
