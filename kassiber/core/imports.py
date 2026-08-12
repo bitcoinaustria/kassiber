@@ -1493,9 +1493,9 @@ def insert_wallet_records(
         tax_platform_row_identity = str_or_none(
             record.get("_tax_platform_row_identity")
         )
-        fingerprint_identity = (
-            normalized["external_id"] or tax_platform_row_identity
-        )
+        fingerprint_identity = normalized["external_id"]
+        if not fingerprint_identity and tax_platform_row_identity:
+            fingerprint_identity = tax_platform_row_identity
         fingerprint = make_transaction_fingerprint(
             wallet["id"],
             fingerprint_identity,
