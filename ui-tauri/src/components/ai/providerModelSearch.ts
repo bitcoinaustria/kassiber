@@ -3,10 +3,7 @@ import type {
   AiProviderRow,
   AiProviderRuntimeStatus,
 } from "@/lib/aiCapabilities";
-import {
-  isNativeAiProviderLocator,
-  nativeAiProviderRuntime,
-} from "@/lib/aiCapabilities";
+import { nativeAiProviderRuntime } from "@/lib/aiCapabilities";
 
 export function dedupeProviderRows(
   providers: AiProviderRow[],
@@ -52,13 +49,6 @@ export function filterModelRows(
       .toLowerCase();
     return tokens.every((token) => haystack.includes(token));
   });
-}
-
-export function shouldPollProviderModels(provider: AiProviderRow): boolean {
-  return (
-    provider.kind === "local" &&
-    !isNativeAiProviderLocator(provider.base_url)
-  );
 }
 
 export function modelPrivacyPosture(

@@ -2,9 +2,14 @@
 
 Kassiber is local-first. The database and all computation stay on your
 machine. There is no telemetry, crash reporter, license check, or analytics.
+Shipping, displaying, or preconfiguring a backend is not network consent.
+Kassiber does not probe configured backends on launch or on a timer; a sync,
+connection test, refresh, or narrowly enabled background feature must be
+explicitly requested by the user.
+
 Installed desktop and interactive CLI builds make a minimal GitHub release
-check only after the app-wide permission is enabled; they do not download or install
-updates. Outbound traffic is limited to the requests listed below.
+check only after the app-wide permission is enabled; they do not download or
+install updates. Outbound traffic is limited to the requests listed below.
 
 Kassiber is pre-release (`0.1.x`) — treat this as a description of
 current behavior, not a long-term contract.
@@ -62,6 +67,7 @@ configurable.
 
 | Trigger | Destination | Transport | What the other side learns |
 | --- | --- | --- | --- |
+| Clicking **Check connections** in the desktop connection indicator or an explicit connection-test action during setup | each configured backend selected by that action | that backend's configured HTTP(S), Electrum, RPC, Lightning, or BTCPay transport | IP, request timing, and the minimum health/status request for that backend; no check runs merely because the backend is configured or displayed |
 | Desktop launch after 10 seconds and every 24 hours while open when the setup / **Settings → Privacy → Allow GitHub update checks** permission is enabled; macOS **Check for Updates…** and clicking the sidebar version line check only under the same permission | stable builds: `https://api.github.com/repos/bitcoinaustria/kassiber/releases/latest`; prerelease builds: `https://api.github.com/repos/bitcoinaustria/kassiber/releases?per_page=20` (GitHub, one page) | unauthenticated HTTPS GET; redirects refused | IP, User-Agent, request timing, and that a Kassiber release check occurred; no project, wallet, book, build hash, hostname, device, or installation identifier is sent |
 | Explicit `kassiber update` while the same permission is enabled | matching stable/prerelease GitHub endpoint above | foreground unauthenticated HTTPS GET; redirects refused | same release-check metadata as above. No other CLI command contacts GitHub: the update banner shown by ordinary commands only reads the local cache an explicit check or the desktop wrote, and nothing refreshes it in the background |
 | `wallets sync` against the built-in `mempool` default | `https://mempool.bitcoin-austria.at/api` (Bitcoin Austria) | Esplora over HTTPS | IP, User-Agent, scripthashes, query timing, descriptor scan shape |
@@ -73,9 +79,13 @@ configurable.
 | `wallets sync` against a `bitcoinrpc` backend | your configured URL | HTTP(S) POST with Basic auth | nothing leaves your machine if the node is local |
 | `wallets sync` for a `silent-payment` wallet with a local scanner file | local filesystem path configured by you | local file read | no network request by Kassiber; scanner output and detected Taproot outputs stay local; on POSIX the scanner file must be user-owned and `0600` |
 | `wallets sync` for a `silent-payment` wallet in server-assisted mode | your explicitly configured HTTP(S) SP-capable backend URL/path | HTTP(S) POST through that backend's proxy setting, if any | IP, User-Agent, scan request timing, scan birthday/range, the watch-only `sp()` scan material needed by that backend, and scan completeness depends on that backend not omitting candidates |
-| `rates sync` (only) | configured provider (`mempool` backend, Coinbase Exchange, or CoinGecko) | unauthenticated HTTP(S) GET | IP, User-Agent, which fiat pair and window |
-| `ai models`, `chat`, `ai.test_connection` against a configured remote/TEE provider | your configured provider URL or CLI provider | OpenAI Responses-compatible HTTP(S) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider |
-| consented mutating AI tools inside `chat` or the desktop Assistant (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row |
+| Explicit CLI `rates sync`; desktop **Refresh BTC price** / **Rebuild pricing cache** after **Settings → Market data → Allow live minute-rate lookups** is enabled; or background freshness after that same narrowly scoped setting enables it | configured provider (`mempool` backend, Coinbase Exchange, or CoinGecko) | unauthenticated HTTP(S) GET | IP, User-Agent, which fiat pair and window. Dashboard display, report generation, and cached-rate reads never fetch a rate |
+| Explicit exchange API import/sync after configuring that exchange connection | the configured Kraken, Coinbase, or Binance API | authenticated HTTPS | IP, account/API-key identity, request timing, and the account-history range requested |
+| Explicit BTCPay, Lightning, or other configured service sync; or background freshness after its matching source class is enabled in Settings | the configured service | its configured HTTP(S), RPC, or proxy transport | IP, request timing, and the service/account identifiers required by that integration |
+| `ai models`, `chat`, or `ai.test_connection` against a configured remote/TEE provider after setup/settings acknowledgement | your configured provider URL or CLI provider | OpenAI Responses-compatible HTTP(S) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider. The model picker does not auto-poll providers or run a timer; remote model discovery fails closed until acknowledgement on both the desktop and the CLI (`kassiber ai providers update <name> --acknowledge`) |
+| Explicit cross-device sync/pairing after configuring and enabling replication | the configured folder, WebDAV, S3, LAN peer, or Tor onion transport | local filesystem, HTTPS/S3, authenticated LAN TCP, or Tor | transport endpoint sees encrypted mailbox objects and request timing; replication remains disabled by default |
+| Clicking an external documentation, explorer, release, or evidence link | the selected URL in the system browser | browser HTTP(S) | normal browser IP, cookies, referrer policy, and request metadata; Kassiber never preloads those pages |
+| consented AI tools inside `chat` or the desktop Assistant: those that mutate the book (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`, `ui.rates.latest`) and those that only read but do so off-machine (`ui.connections.node.snapshot`, `ui.reports.lightning_profitability`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row. A tool that leaves the machine always prompts, even when it changes nothing, and is never chosen by the assistant's automatic context reads |
 
 The app-wide consent at `~/.kassiber/config/update-checks.json` is owner-only
 and contains only a schema version and boolean. Missing, malformed, symlinked,
@@ -137,10 +147,11 @@ timing and may receive proxy credentials from its own configuration. Per-backend
 link is explicit and hands control to the default browser, including that
 browser's normal GitHub cookies and privacy context.
 
-No other Kassiber-owned path makes network calls. `rates set`, `rates latest`,
-`rates range`, `rates pairs`, journal processing, metadata CRUD, and all
-reports are fully offline unless the user explicitly invokes an AI provider
-that itself contacts a remote service.
+No other Kassiber-owned path makes network calls. CLI `rates set`, `rates
+latest`, `rates range`, and `rates pairs`; journal processing; metadata CRUD;
+and reports are fully offline. The desktop daemon kind `ui.rates.latest` is a
+different, explicitly live refresh operation and is rejected unless the
+per-book market-rate permission is enabled.
 
 Backend `tor_proxy` values are a deliberate per-backend routing choice. They
 are honored by Electrum sockets, Esplora / Explorer-API HTTP reads (Bitcoin and

@@ -17,6 +17,8 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from kassiber.backends import (
+    create_db_backend,
+    delete_db_backend,
     redact_backend_for_output,
     redact_backend_text,
     redact_backend_value,
@@ -72,7 +74,7 @@ from kassiber.core.ui_snapshot import (
     build_transactions_dashboard_snapshot,
     build_transactions_snapshot,
 )
-from kassiber.db import open_db, set_setting
+from kassiber.db import get_setting, open_db, set_setting
 from kassiber.errors import AppError
 from kassiber.importers import normalize_river_record
 from kassiber.msat import btc_to_msat
@@ -416,6 +418,152 @@ class ReviewRegressionTest(unittest.TestCase):
     def _assert_ok(self, payload, result, kind):
         self.assertEqual(result.returncode, 0, msg=f"{payload!r}")
         self.assertEqual(payload.get("kind"), kind)
+
+    def test_delete_default_can_use_runtime_only_custom_backend(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        create_db_backend(conn, "stored", "electrum", "ssl://stored.test:50002")
+        set_setting(conn, "default_backend", "stored")
+        conn.commit()
+
+        payload = delete_db_backend(
+            conn,
+            "stored",
+            {
+                "backends": {
+                    "env-node": {
+                        "kind": "electrum",
+                        "url": "ssl://env.test:50002",
+                    }
+                },
+                "dotenv_backends": ["env-node"],
+                "process_env_overrides": {
+                    "backends": {},
+                    "default_backend": False,
+                },
+            },
+        )
+
+        self.assertEqual(payload["default_backend"], "env-node")
+
+    def test_delete_default_keeps_the_replacement_on_the_same_chain(self):
+        # A Liquid Electrum server answers Bitcoin scripthash queries with an
+        # empty history instead of an error, so promoting one to the global
+        # default would give Bitcoin wallets a silent zero balance. Only
+        # Bitcoin wallets may omit an explicit backend, so the default has to
+        # stay Bitcoin even though `aqua` sorts first among user-created rows.
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        create_db_backend(
+            conn,
+            "aqua",
+            "electrum",
+            "ssl://liquid.test:995",
+            chain="liquid",
+            network="liquidv1",
+        )
+        create_db_backend(
+            conn,
+            "fulcrum",
+            "electrum",
+            "ssl://index.test:50002",
+            chain="bitcoin",
+            network="main",
+        )
+        create_db_backend(
+            conn,
+            "mempool",
+            "esplora",
+            "https://mempool.test/api",
+            chain="bitcoin",
+            network="main",
+        )
+        set_setting(conn, "default_backend", "fulcrum")
+        conn.commit()
+
+        payload = delete_db_backend(conn, "fulcrum")
+
+        self.assertEqual(payload["default_backend"], "mempool")
+
+    def test_delete_default_skips_backends_wallets_cannot_sync_against(self):
+        # `btcpay` and the exchange kinds carry chain=bitcoin but have no sync
+        # adapter, so falling back to one trades a working default for a
+        # "source refresh is not implemented" failure on the next sync.
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        create_db_backend(
+            conn,
+            "acme-btcpay",
+            "btcpay",
+            "https://pay.test",
+            chain="bitcoin",
+            network="main",
+        )
+        create_db_backend(
+            conn,
+            "beta-node",
+            "electrum",
+            "ssl://node.test:50002",
+            chain="bitcoin",
+            network="main",
+        )
+        create_db_backend(
+            conn,
+            "zzz-current",
+            "electrum",
+            "ssl://current.test:50002",
+            chain="bitcoin",
+            network="main",
+        )
+        set_setting(conn, "default_backend", "zzz-current")
+        conn.commit()
+
+        payload = delete_db_backend(conn, "zzz-current")
+
+        # `acme-btcpay` sorts first among the user-created rows and would win
+        # on name alone; the syncable kind is what decides it.
+        self.assertEqual(payload["default_backend"], "beta-node")
+
+    def test_delete_default_refuses_without_a_compatible_replacement(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        create_db_backend(
+            conn,
+            "bitcoin-current",
+            "electrum",
+            "ssl://bitcoin.test:50002",
+            chain="bitcoin",
+            network="main",
+        )
+        create_db_backend(
+            conn,
+            "liquid-only",
+            "electrum",
+            "ssl://liquid.test:995",
+            chain="liquid",
+            network="liquidv1",
+        )
+        create_db_backend(
+            conn,
+            "pay-only",
+            "btcpay",
+            "https://pay.test",
+            chain="bitcoin",
+            network="main",
+        )
+        set_setting(conn, "default_backend", "bitcoin-current")
+        conn.commit()
+
+        with self.assertRaises(AppError) as raised:
+            delete_db_backend(conn, "bitcoin-current")
+
+        self.assertEqual(raised.exception.code, "conflict")
+        self.assertEqual(get_setting(conn, "default_backend"), "bitcoin-current")
+        self.assertIsNotNone(
+            conn.execute(
+                "SELECT 1 FROM backends WHERE name = 'bitcoin-current'"
+            ).fetchone()
+        )
 
     def test_latest_transaction_rates_are_shared_between_reports_and_ledger_rebuild(self):
         conn = sqlite3.connect(":memory:")
@@ -5853,9 +6001,8 @@ class ReviewRegressionTest(unittest.TestCase):
             "--env-file", str(env_file),
             "backends", "delete", "benchdb",
         )
-        self.assertEqual(result.returncode, 1, msg=payload)
-        self.assertEqual(payload.get("kind"), "error")
-        self.assertEqual(payload["error"]["code"], "conflict")
+        self._assert_ok(payload, result, "backends.delete")
+        self.assertEqual(payload["data"]["default_backend"], "alpha")
 
         payload, result = self._run_json(
             "--env-file", str(env_file),
@@ -5984,7 +6131,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(payload.get("kind"), "error")
         self.assertEqual(payload["error"]["code"], "not_found")
 
-    def test_current_dotenv_backend_restores_deleted_name(self):
+    def test_current_dotenv_backend_cannot_be_deleted(self):
         env_file = self.case_dir / "restore-alpha.env"
         env_file.write_text(
             "\n".join(
@@ -6005,23 +6152,23 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "backends.set-default")
 
         payload, result = self._run_json("--env-file", str(env_file), "backends", "delete", "alpha")
-        self._assert_ok(payload, result, "backends.delete")
-        self.assertTrue(payload["data"]["deleted"])
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload["error"]["code"], "conflict")
 
         db_path = self.data_root / "kassiber.sqlite3"
         conn = sqlite3.connect(db_path)
         row = conn.execute("SELECT name FROM backends WHERE name = 'alpha'").fetchone()
         conn.close()
-        self.assertIsNone(row)
+        self.assertIsNotNone(row)
 
         payload, result = self._run_json("--env-file", str(env_file), "backends", "get", "alpha")
         self._assert_ok(payload, result, "backends.get")
-        self.assertEqual(payload["data"]["source"], str(env_file))
+        self.assertEqual(payload["data"]["source"], "database")
 
         conn = sqlite3.connect(db_path)
         row = conn.execute("SELECT name FROM backends WHERE name = 'alpha'").fetchone()
         conn.close()
-        self.assertIsNone(row)
+        self.assertIsNotNone(row)
 
         payload, result = self._run_json("--env-file", str(env_file), "init")
         self._assert_ok(payload, result, "init")
@@ -6055,6 +6202,10 @@ class ReviewRegressionTest(unittest.TestCase):
         self._assert_ok(payload, result, "backends.get")
         self.assertEqual(payload["data"]["url"], "https://env.example/api")
         self.assertEqual(payload["data"]["source"], "environment")
+
+        payload, result = self._run_json("backends", "delete", "mempool", env=env)
+        self.assertEqual(result.returncode, 1, msg=payload)
+        self.assertEqual(payload["error"]["code"], "conflict")
 
         with patch.dict(
             os.environ,

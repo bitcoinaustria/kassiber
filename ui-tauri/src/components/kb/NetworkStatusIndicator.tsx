@@ -27,8 +27,6 @@ import {
   abbreviateEndpointMiddle,
   canRunConnectionHealthChecks,
   connectionHealthTone,
-  nextConnectionHealthCheckDelayMs,
-  shouldRunImmediateConnectionHealthCheck,
   type ConnectionHealthStatus,
   type ConnectionIndicatorTone,
 } from "@/lib/connectionHealth";
@@ -397,9 +395,6 @@ export function NetworkStatusIndicator({
     .filter((value): value is string => Boolean(value))
     .sort()
     .at(-1);
-  const hasUncheckedConnection = checkableRows.some(
-    (row) => healthRecords[row.id]?.fingerprint !== row.fingerprint,
-  );
   const canCheckConnections = canRunConnectionHealthChecks({
     checking,
     checkableConnectionCount: checkableRows.length,
@@ -407,11 +402,6 @@ export function NetworkStatusIndicator({
     documentVisible,
     maintenanceActive,
     networkStatus: status,
-  });
-  const shouldRunImmediateCheck = shouldRunImmediateConnectionHealthCheck({
-    canCheckConnections,
-    hasUncheckedConnection,
-    lastCheckedAt,
   });
 
   React.useEffect(() => {
@@ -430,9 +420,12 @@ export function NetworkStatusIndicator({
     };
   }, []);
 
+  // Only the refresh button calls this. There is no timer and no mount
+  // effect, which is what keeps the indicator offline until asked -- not a
+  // flag, which would just be a second place to get it wrong.
   const runConnectionChecks = React.useCallback(async () => {
-    const now = new Date().toISOString();
     if (!canCheckConnections) return;
+    const now = new Date().toISOString();
     setChecking(true);
     const results: Array<[string, ConnectionHealthRecord]> = [];
     // The Python daemon currently executes foreground requests serially. Send
@@ -508,22 +501,6 @@ export function NetworkStatusIndicator({
     testHttp,
     testLightning,
   ]);
-
-  React.useEffect(() => {
-    if (!shouldRunImmediateCheck) return;
-    void runConnectionChecks();
-  }, [runConnectionChecks, shouldRunImmediateCheck]);
-
-  React.useEffect(() => {
-    if (!canCheckConnections || !lastCheckedAt) return undefined;
-    const timeout = window.setTimeout(() => {
-      void runConnectionChecks();
-    }, nextConnectionHealthCheckDelayMs());
-
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [canCheckConnections, lastCheckedAt, runConnectionChecks]);
 
   const openSettingsConnection = React.useCallback(
     (row: ConnectionHealthRow) => {

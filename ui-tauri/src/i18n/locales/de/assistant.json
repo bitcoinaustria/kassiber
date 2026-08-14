@@ -296,6 +296,8 @@
     "noProviders": "Keine AI-Provider konfiguriert",
     "noModels": "Keine Modelle gefunden",
     "noMatchingModels": "Keine passenden Modelle",
+    "checkModels": "Modelle prüfen",
+    "checkingModels": "Wird geprüft…",
     "searchModels": "Modelle suchen…",
     "checkingProvider": "Status des lokalen Providers wird geprüft…",
     "staleModels": "Letzte bekannte Modelle werden angezeigt · {{error}}",
@@ -303,6 +305,7 @@
     "allModels": "Alle",
     "localModels": "Lokal",
     "remoteConfirm": "{{provider}} für den Chat verwenden? Die vorhandene lokale CLI-Anmeldung/-Konfiguration wird wiederverwendet, Prompts können dieses Gerät aber verlassen. Provider-eigene Tools und Kassibers typisierte Tools sind für diesen Provider nicht verfügbar.",
+    "remoteDiscoveryConfirm": "Modelle von {{provider}} prüfen? Dadurch wird der Provider jetzt kontaktiert.",
     "cliChatOnly": "Lokaler CLI-Broker · nur Chat · native Tools deaktiviert"
   }
 }

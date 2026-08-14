@@ -101,6 +101,18 @@ BACKEND_KINDS = {
     "lnd",
     "mempool",
 }
+# Kinds a wallet can actually sync against, so a replacement default backend is
+# never an exchange/commerce/Lightning integration. Mirrors the aliases folded
+# into `SYNC_BACKEND_ADAPTERS` by `core.sync.normalize_backend_kind`; kept here
+# as plain data because `core.sync_backends` imports this module.
+CHAIN_SYNC_BACKEND_KINDS = {
+    "bitcoinrpc",
+    "custom",
+    "electrum",
+    "esplora",
+    "liquid-esplora",
+    "mempool",
+}
 DEFAULT_ENV_FILENAME = "backends.env"
 DEFAULT_BACKEND_SETTING = "default_backend"
 BOOTSTRAP_DEFAULT_BACKEND_SETTING = "bootstrap_default_backend"
@@ -679,20 +691,55 @@ def _process_env_default_backend_override(runtime_config):
     return bool(runtime_config.get("process_env_overrides", {}).get("default_backend"))
 
 
-def _fallback_backend_name(names):
-    if names:
-        user_created = sorted(name for name in names if name not in DEFAULT_BACKENDS)
-        if user_created:
-            return user_created[0]
-    if "mempool" in names:
+def _backend_shapes(conn, runtime_config=None):
+    """Map backend name -> (chain, kind) across SQLite and the merged runtime view."""
+    shapes = {}
+    for row in conn.execute("SELECT name, chain, kind FROM backends").fetchall():
+        shapes[row["name"]] = (row["chain"], row["kind"])
+    for name, backend in (runtime_config or {}).get("backends", {}).items():
+        shapes[name] = (backend.get("chain"), backend.get("kind"))
+    return shapes
+
+
+def _fallback_backend_name(names, shapes=None, prefer_chain="bitcoin"):
+    """Pick a replacement default backend, preferring `prefer_chain` and a syncable kind.
+
+    The stored default is what `resolve_backend` hands to wallets that carry no
+    explicit backend of their own, and only Bitcoin wallets may omit one --
+    `create_wallet` requires an explicit `--backend` for Liquid because "no
+    public Liquid default is built in". Choosing across chains would therefore
+    point Bitcoin wallets at a Liquid server, which answers Bitcoin scripthash
+    queries with an empty history rather than an error: a silent zero balance.
+    """
+    if not names:
+        raise AppError(
+            "No backends are configured",
+            code="config_error",
+            hint="Create a backend with `kassiber backends create`, or seed one through your dotenv bootstrap config.",
+        )
+    candidates = names
+    if shapes:
+        suitable = {
+            name
+            for name in names
+            if (shapes.get(name, (None, None))[0] or "bitcoin") == prefer_chain
+            and str(shapes.get(name, (None, None))[1] or "").lower()
+            in CHAIN_SYNC_BACKEND_KINDS
+        }
+        if not suitable:
+            raise AppError(
+                f"No {prefer_chain} backend that wallets can sync against is configured",
+                code="conflict",
+                hint=f"Create a {prefer_chain} backend that supports wallet sync first.",
+                retryable=False,
+            )
+        candidates = suitable
+    user_created = sorted(name for name in candidates if name not in DEFAULT_BACKENDS)
+    if user_created:
+        return user_created[0]
+    if "mempool" in candidates:
         return "mempool"
-    if names:
-        return sorted(names)[0]
-    raise AppError(
-        "No backends are configured",
-        code="config_error",
-        hint="Create a backend with `kassiber backends create`, or seed one through your dotenv bootstrap config.",
-    )
+    return sorted(candidates)[0]
 
 
 def _http_url_base(url, *, api: bool) -> str | None:
@@ -921,7 +968,9 @@ def seed_db_backends(conn, runtime_config):
         if not bootstrap_default:
             candidate = runtime_config["bootstrap_default_backend"]
             if candidate not in existing_names:
-                candidate = _fallback_backend_name(existing_names)
+                candidate = _fallback_backend_name(
+                    existing_names, _backend_shapes(conn, runtime_config)
+                )
             set_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING, candidate)
             bootstrap_default = candidate
             changed = True
@@ -1228,20 +1277,40 @@ def update_db_backend(conn, name, updates):
     return get_db_backend(conn, name)
 
 
-def delete_db_backend(conn, name):
-    """Delete a DB-backed backend, refusing if it is the active stored default."""
+def delete_db_backend(conn, name, runtime_config=None):
+    """Delete a DB-backed backend, moving the stored default when necessary."""
     name = name.strip().lower()
+    if runtime_config is not None:
+        if name in _dotenv_backend_names(runtime_config):
+            raise AppError(
+                f"Backend '{name}' is defined in your env file",
+                code="conflict",
+                hint="Remove its KASSIBER_BACKEND_... entries from the env file and restart.",
+                retryable=False,
+            )
+        if _process_env_backend_fields(runtime_config, name):
+            raise AppError(
+                f"Backend '{name}' is overridden by the process environment",
+                code="conflict",
+                hint="Remove its KASSIBER_BACKEND_... process variables and restart.",
+                retryable=False,
+            )
+        if (
+            name == str(runtime_config.get("default_backend") or "").strip().lower()
+            and _process_env_default_backend_override(runtime_config)
+        ):
+            raise AppError(
+                f"Backend '{name}' is forced as the default by the process environment",
+                code="conflict",
+                hint="Remove KASSIBER_DEFAULT_BACKEND and restart.",
+                retryable=False,
+            )
     row = conn.execute("SELECT name FROM backends WHERE name = ?", (name,)).fetchone()
     if not row:
         raise AppError(
             f"Backend '{name}' not found in the database",
             code="not_found",
             hint="Only DB-backed backends can be deleted; env-sourced backends are removed from your .env file instead.",
-        )
-    if get_setting(conn, DEFAULT_BACKEND_SETTING) == name:
-        raise AppError(
-            f"Backend '{name}' is the stored default; clear it with `kassiber backends clear-default` first",
-            code="conflict",
         )
     wallet_refs = _wallet_backend_references(conn, name)
     if wallet_refs:
@@ -1251,15 +1320,47 @@ def delete_db_backend(conn, name):
             hint="Reassign the listed wallets to another backend before deleting this one.",
             details={"wallet_refs": wallet_refs},
         )
+    default_backend = get_setting(conn, DEFAULT_BACKEND_SETTING)
+    replacement_default = None
+    if default_backend == name:
+        remaining = {
+            item["name"]
+            for item in conn.execute(
+                "SELECT name FROM backends WHERE name != ?",
+                (name,),
+            ).fetchall()
+        }
+        if runtime_config is not None:
+            remaining.update(
+                candidate
+                for candidate in runtime_config.get("backends", {})
+                if candidate != name
+            )
+        if not remaining:
+            raise AppError(
+                f"Backend '{name}' has no persistable replacement backend",
+                code="conflict",
+                hint="Create another backend before deleting this one.",
+            )
+        shapes = _backend_shapes(conn, runtime_config)
+        replacement_default = _fallback_backend_name(
+            remaining,
+            shapes,
+            prefer_chain=(shapes.get(name, (None, None))[0] or "bitcoin"),
+        )
+        set_setting(conn, DEFAULT_BACKEND_SETTING, replacement_default)
     conn.execute("DELETE FROM backends WHERE name = ?", (name,))
     tombstones = _load_bootstrap_backend_tombstones(conn)
     tombstones.add(name)
     _save_bootstrap_backend_tombstones(conn, tombstones)
     conn.commit()
-    return {
+    payload = {
         "name": name,
         "deleted": True,
     }
+    if replacement_default:
+        payload["default_backend"] = replacement_default
+    return payload
 
 
 def set_default_backend(conn, runtime_config, name, commit=True):
@@ -1293,7 +1394,9 @@ def clear_default_backend(conn, runtime_config):
     notice = None
     if default_name not in available_names:
         missing_default = default_name
-        default_name = _fallback_backend_name(available_names)
+        default_name = _fallback_backend_name(
+            available_names, _backend_shapes(conn, runtime_config)
+        )
         set_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING, default_name)
         notice = {
             "code": "default_backend_fallback",

@@ -87,10 +87,16 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   exact-kind terminal record (or an error) resolves only the matching request.
   `ai.chat.status` is a progress hint for loading/thinking phases, not
   chain-of-thought content.
-  Mutating tools may emit `ai.chat.tool_call` twice for the same `call_id`:
-  first with `needs_consent: true`, then after approval with
+  Consent-gated tools may emit `ai.chat.tool_call` twice for the same
+  `call_id`: first with `needs_consent: true`, then after approval with
   `needs_consent: false` to mark that same call as running. Clients should
   upsert tool cards by `call_id` instead of rendering duplicate cards.
+  A tool is consent-gated when it mutates the book (`kind_class: "mutating"`)
+  **or** when it leaves the machine (`egresses: true`) — those are separate
+  axes, and a read that contacts a node or provider prompts like a mutation
+  while still executing on the read-only path that carries its redaction.
+  Egressing tools are also excluded from the assistant's automatic context
+  reads, which run without a prompt.
   `ai.chat.cancel` and `ai.tool_call.consent` take
   `args.target_request_id` so the control request keeps its own routing
   `request_id`; cancelled chats finish with `finish_reason: "cancelled"`.
@@ -236,6 +242,13 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   blocking report-readiness state. Do not expose raw shell, raw filesystem,
   arbitrary CLI execution, descriptors, xpub material, secrets, env files,
   wallet config JSON, or raw wallet files through AI tools.
+- External network invariant: launch, route mount, read-only display,
+  onboarding, health/status UI, idle timers, and background work must not
+  initiate DNS, socket, HTTP, RPC, provider, update, or sync traffic — including
+  loopback service/provider probes — unless the user explicitly triggered that
+  exact action or enabled that narrowly scoped feature. A shipped, seeded,
+  saved, or visible backend/provider is configuration, not consent. Every new
+  egress path needs documentation and a no-egress-before-consent regression.
 - Browser dev mode can exercise the real daemon over the Vite loopback bridge:
   `pnpm --dir ui-tauri run dev:bridge` serves the React app at
   `http://127.0.0.1:5173`, forwards invokes through `/__kassiber__/daemon`,
@@ -392,7 +405,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - Per-asset pooling is intentional so RP2 `IntraTransaction` works across wallets; per-wallet output remains via `BalanceSet`. Do not regress to per-wallet RP2 calls without thinking through the transfer story first.
 - RP2 owns tax primitives and computation; do not push invoice, ERP, or broader business-workflow concepts into RP2 unless the tax math itself truly requires them.
 - Austrian tax semantics live on the rp2 side (plugin: `rp2.plugin.country.at`). Kassiber emits typed markers, feeds reviewed pairs into rp2's native carry path, and maps rp2's disposal categories onto current Austrian report buckets / Kennzahlen; it does not re-implement Alt/Neu classification, cross-asset carry, or moving-average math beyond the documented marker/quarantine contract in [docs/austrian-handoff.md](docs/austrian-handoff.md).
-- Preserve the default `mempool.space` Esplora backend unless there is a strong reason to change it.
+- Built-in backends are user-removable configuration and must never be treated as network consent.
 - Prefer additive schema changes that work with `CREATE TABLE IF NOT EXISTS`.
 - Prefer lightweight compatibility migrations for existing SQLite databases when adding profile fields.
 - When a `TODO.md` item is completed or materially reshaped, update

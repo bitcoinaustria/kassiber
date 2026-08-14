@@ -773,6 +773,7 @@
       "pegOut": "Peg-out"
     },
     "sectionTitle": "Transaction flow",
+    "lookupOnChain": "Look up on-chain",
     "size": "Size",
     "swapRouteAsset": "Asset",
     "swapRouteConsolidation": "Consolidation leg",

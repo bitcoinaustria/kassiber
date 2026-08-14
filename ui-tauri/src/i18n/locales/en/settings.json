@@ -256,10 +256,9 @@
     "confirm": "Reset Welcome state?\n\nThis clears your local identity and returns you to the Welcome screen. Encrypted data on disk is not touched."
   },
   "deleteBackend": {
-    "confirm": "Delete backend '{{name}}'?",
+    "confirm": "Delete backend '{{name}}'? If it is the default, another configured backend will become the default.",
     "blockedTitle": "Backend is still in use",
     "walletWarning": "Reassign these wallets to another backend before deleting it:\n- {{wallets}}",
-    "defaultWarning": "Choose another default backend before deleting {{name}}.",
     "failedTitle": "Backend was not deleted",
     "failedBody": "Kassiber could not delete the backend.",
     "refreshFailedTitle": "Backend deleted; settings not refreshed",

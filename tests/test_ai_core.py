@@ -515,6 +515,31 @@ class ToolCatalogPromptTest(unittest.TestCase):
             ["coinbase-exchange", "coingecko"],
         )
 
+    def test_tools_that_leave_the_machine_require_consent(self):
+        """Consent follows egress, not just book mutation.
+
+        The Lightning tools read the node live over its configured RPC. They
+        are read-only with respect to the book, and consent used to be decided
+        by `kind_class` alone, so the assistant contacted the node with
+        `needs_consent: False`. `ui.rates.latest` is the comparison case: it
+        also egresses and was already `mutating`.
+        """
+        for wire_name in (
+            "ui_connections_node_snapshot",
+            "ui_reports_lightning_profitability",
+        ):
+            tool = get_tool(wire_name)
+            self.assertTrue(tool.egresses, wire_name)
+            self.assertTrue(tool.requires_consent, wire_name)
+            # Execution must stay on the read-only path, which is where the
+            # Lightning opsec redaction lives.
+            self.assertEqual(tool.kind_class, "read_only", wire_name)
+
+        self.assertTrue(get_tool("ui_rates_latest").requires_consent)
+        # A genuinely local read stays promptless.
+        self.assertFalse(get_tool("ui_overview_snapshot").requires_consent)
+        self.assertFalse(get_tool("ui_overview_snapshot").egresses)
+
     def test_review_worklist_commercial_section_reads_instead_of_suggesting(self):
         """ui.review.worklist is read_only, so no section may write to the book.
 
@@ -751,6 +776,32 @@ class ToolCatalogPromptTest(unittest.TestCase):
             ),
             "Exclude tx-1 from accounting",
         )
+        # A consent prompt has to describe the change it is asking about.
+        # `background_enabled` fell through to the report-read branch and
+        # rendered "Disable freshness refresh before report reads" for a call
+        # that switched standing background refresh on.
+        maintenance_tool = get_tool("ui.maintenance.configure")
+        self.assertEqual(
+            summarize_tool_call(maintenance_tool, {"background_enabled": True}),
+            "Change freshness policy: enable daemon-owned background refresh",
+        )
+        self.assertEqual(
+            summarize_tool_call(maintenance_tool, {"report_read_sync": True}),
+            "Change freshness policy: enable freshness refresh before report reads",
+        )
+        self.assertEqual(
+            summarize_tool_call(
+                maintenance_tool,
+                {"source_classes": {"onchain": True, "rates": False}},
+            ),
+            "Change freshness policy: enable refresh for onchain; "
+            "disable refresh for rates",
+        )
+        self.assertEqual(
+            summarize_tool_call(maintenance_tool, {"market_rate_provider": "coingecko"}),
+            "Change freshness policy: set the market-rate provider to coingecko",
+        )
+
         components_tool = get_tool("ui.transfers.components.plan")
         component_properties = components_tool.parameters["properties"]["components"][
             "items"
@@ -779,14 +830,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
                 configure_tool,
                 {"auto_sync_before_report_reads": True},
             ),
-            "Enable freshness refresh before report reads",
-        )
-        self.assertEqual(
-            summarize_tool_call(
-                configure_tool,
-                {"market_rate_provider": "coingecko"},
-            ),
-            "Set market-rate provider to coingecko",
+            "Change freshness policy: enable freshness refresh before report reads",
         )
 
     def test_read_skill_reference_allowlist(self):
@@ -1767,6 +1811,32 @@ class DaemonAiTestConnectionTest(unittest.TestCase):
                 self.assertEqual(captured["base_url"], "http://127.0.0.1:8000/v1")
                 self.assertEqual(captured["api_key"], "sk-unsaved-local")
                 self.assertEqual(captured["timeout"], 10.0)
+            finally:
+                conn.close()
+
+    def test_model_discovery_requires_remote_provider_acknowledgement(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-model-consent-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                create_db_ai_provider(
+                    conn,
+                    "unconfirmed",
+                    "https://example.test/v1",
+                    kind="remote",
+                )
+                with patch("kassiber.daemon.ai_client_for_locator") as client_factory:
+                    with self.assertRaises(AppError) as ctx:
+                        daemon_runtime.handle_request(
+                            self._ctx(conn),
+                            {
+                                "kind": "ai.list_models",
+                                "request_id": "models-1",
+                                "args": {"provider": "unconfirmed"},
+                            },
+                            out=None,
+                        )
+                self.assertEqual(ctx.exception.code, "ai_remote_ack_required")
+                client_factory.assert_not_called()
             finally:
                 conn.close()
 

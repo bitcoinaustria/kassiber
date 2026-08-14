@@ -42,7 +42,10 @@ export function useReasoningEffortSupport(
     "ai.list_models",
     selectedProvider ? { provider: selectedProvider.name } : undefined,
     {
-      enabled: enabled && Boolean(selectedProvider),
+      // Model discovery may contact the configured provider. Read an existing
+      // query-cache snapshot, but never start discovery just because chat UI
+      // mounted.
+      enabled: false,
       staleTime: 5 * 60 * 1000,
       meta: { shellProgress: false },
     },
@@ -61,12 +64,19 @@ export function useReasoningEffortSupport(
     providers,
     models,
   });
+  // `resolved` gates the auto-reset in `useSupportedReasoningEffort`, so it
+  // must stay false while support is merely unknown. Only CLI providers
+  // advertise `supports_reasoning_effort` on the provider row; for local
+  // Ollama/oMLX and remote OpenAI-compatible providers it lives on the model,
+  // and `models` is empty until the user runs a check. Resolving on the
+  // provider response alone therefore read "unsupported" and silently reset
+  // the user's chosen effort to auto on every mount.
   const resolved =
     !selection ||
     providerSupported ||
     providersQuery.isError ||
     (Boolean(hasProvidersResponse) &&
-      (!selectedProvider || modelsQuery.isError || Boolean(hasModelsResponse)));
+      (!selectedProvider || modelsQuery.isError || hasModelsResponse));
 
   return { supported, resolved };
 }

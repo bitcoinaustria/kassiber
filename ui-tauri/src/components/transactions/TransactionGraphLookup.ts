@@ -47,11 +47,14 @@ export function preloadableSwapLegGraphLookupArgs(
   route: TransactionSwapRoute | null | undefined,
   leg: TransactionSwapRouteLegKey,
   currentReferences: Array<string | null | undefined>,
+  allowPublicLookup = false,
 ) {
   const transaction = preloadableSwapLegGraphReference(route, leg, currentReferences);
   return {
     transaction: transaction ?? "",
-    allowPublicLookup: Boolean(transaction && swapRouteLegHasLocalRow(route, leg)),
+    allowPublicLookup: Boolean(
+      allowPublicLookup && transaction && swapRouteLegHasLocalRow(route, leg),
+    ),
   };
 }
 
@@ -69,19 +72,31 @@ function graphLookupChain(
   return null;
 }
 
-function hasPublicGraphLookupReference(
+/** Whether an on-chain lookup for this row is even possible — not whether to run one. */
+export function hasPublicGraphLookupReference(
   transaction: TransactionDetailTabContext["transaction"] | null | undefined,
 ) {
   if (!transaction || !looksLikeTxid(transaction.explorerId)) return false;
   return graphLookupChain(transaction) !== null;
 }
 
+export function isPublicGraphLookupApproved(
+  approvedTransactionId: string | null,
+  transaction: TransactionDetailTabContext["transaction"] | null | undefined,
+) {
+  return Boolean(transaction?.id && approvedTransactionId === transaction.id);
+}
+
 export function transactionGraphLookupArgs(
   transaction: TransactionDetailTabContext["transaction"] | null | undefined,
+  // Opt-in. Having a txid means a lookup is *possible*; it is not a request
+  // to send that txid to a backend because a detail sheet opened.
+  allowPublicLookup = false,
 ) {
   return {
     transaction: transaction?.id ?? "",
-    allowPublicLookup: hasPublicGraphLookupReference(transaction),
+    allowPublicLookup:
+      allowPublicLookup && hasPublicGraphLookupReference(transaction),
   };
 }
 

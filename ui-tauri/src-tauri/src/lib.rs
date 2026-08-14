@@ -117,12 +117,13 @@ const DEEP_LINK_SCHEME: &str = "kassiber";
 //   kassiber://settings                       opens Settings (no section)
 //   kassiber://settings/<section>             opens Settings, focuses panel
 //   kassiber://workflow/add-wallet            opens wallet-source setup
-//   kassiber://workflow/sync-all              triggers wallet sync
 //   kassiber://workflow/process-journals      rebuilds journal state
 //   kassiber://lock                           locks the workspace
 //
 // Restricting hosts and sections to fixed allowlists keeps a malicious URL
-// from deep-linking the user into an unintended route or section.
+// from deep-linking the user into an unintended route or section. Nothing
+// here may reach the network: the allowlist bounds *where the app goes*, not
+// what it does, so an action that egresses does not belong in it at all.
 
 const DEEP_LINK_ROUTE_HOSTS: &[(&str, &str)] = &[
     ("overview", "/overview"),
@@ -2981,9 +2982,13 @@ fn menu_action_for_deep_link(url: &Url) -> Option<MenuActionPayload> {
             let section = first_segment.and_then(deep_link_settings_section);
             Some(open_settings_action(section))
         }
+        // No `sync-all` / `sync` arm: a wallet sync is the largest egress
+        // event in the app, and a deep link is a link -- a page, a mail, or a
+        // chat message can hand the OS one, and the cold-start replay below
+        // would run it before the window is even interactive. `add-wallet`
+        // opens a dialog and `process-journals` is local, so both stay.
         "workflow" => match first_segment {
             Some("add-wallet") => Some(menu_action("add-wallet")),
-            Some("sync-all") | Some("sync") => Some(menu_action("sync-all-wallets")),
             Some("process-journals") => Some(menu_action("process-journals")),
             _ => None,
         },
@@ -4705,14 +4710,24 @@ mod tests {
             Some(menu_action("add-wallet"))
         );
         assert_eq!(
-            parse("kassiber://workflow/sync-all"),
-            Some(menu_action("sync-all-wallets"))
-        );
-        assert_eq!(
             parse("kassiber://workflow/process-journals"),
             Some(menu_action("process-journals"))
         );
         assert_eq!(parse("kassiber://lock"), Some(menu_action("lock-app")));
+    }
+
+    #[test]
+    fn deep_links_never_trigger_a_wallet_sync() {
+        // A deep link is a link: a web page, a mail, or a chat message can
+        // hand one to the OS, and a launch URL is replayed shortly after
+        // startup before the window is interactive. A wallet sync contacts
+        // every configured backend, so it is not something an unread link may
+        // start on the user's behalf.
+        let parse = |s: &str| menu_action_for_deep_link(&Url::parse(s).unwrap());
+
+        assert_eq!(parse("kassiber://workflow/sync"), None);
+        assert_eq!(parse("kassiber://workflow/sync-all"), None);
+        assert_eq!(parse("kassiber://workflow/Sync-All"), None);
     }
 
     #[test]
@@ -4729,12 +4744,12 @@ mod tests {
             Some(open_settings_action(Some("privacy")))
         );
         assert_eq!(
-            parse("kassiber://workflow/Sync-All"),
-            Some(menu_action("sync-all-wallets"))
-        );
-        assert_eq!(
             parse("kassiber://workflow/PROCESS-JOURNALS"),
             Some(menu_action("process-journals"))
+        );
+        assert_eq!(
+            parse("kassiber://workflow/Add-Wallet"),
+            Some(menu_action("add-wallet"))
         );
     }
 

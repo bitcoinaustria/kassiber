@@ -436,14 +436,6 @@ const assistantTypoRoute = createRoute({
   },
 });
 
-const importsAliasRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/Imports",
-  beforeLoad: () => {
-    throw redirect({ to: "/connections" });
-  },
-});
-
 const proofFundsAliasRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/proof-funds",
@@ -464,7 +456,6 @@ const notFoundRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   assistantTypoRoute,
-  importsAliasRoute,
   proofFundsAliasRoute,
   appLayoutRoute.addChildren([
     overviewRoute,

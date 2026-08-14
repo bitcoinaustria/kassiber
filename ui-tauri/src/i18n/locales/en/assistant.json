@@ -296,6 +296,8 @@
     "noProviders": "No AI providers configured",
     "noModels": "No models found",
     "noMatchingModels": "No matching models",
+    "checkModels": "Check models",
+    "checkingModels": "Checking…",
     "searchModels": "Search models…",
     "checkingProvider": "Checking local provider status…",
     "staleModels": "Showing last known models · {{error}}",
@@ -303,6 +305,7 @@
     "allModels": "All",
     "localModels": "Local",
     "remoteConfirm": "Use {{provider}} for chat? It reuses the provider's existing local CLI login/configuration, but prompts may leave this device. Provider-native tools and Kassiber typed tools are unavailable for this provider.",
+    "remoteDiscoveryConfirm": "Check models from {{provider}}? This contacts the provider now.",
     "cliChatOnly": "Local CLI broker · chat only · native tools disabled"
   }
 }

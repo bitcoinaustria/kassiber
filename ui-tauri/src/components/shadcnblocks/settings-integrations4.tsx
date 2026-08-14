@@ -126,7 +126,7 @@ interface SettingsIntegrations4Props {
   className?: string;
   heading?: string;
   subHeading?: string;
-  integrations?: IntegrationItem[];
+  integrations: IntegrationItem[];
   selectedId?: string;
   onSelect?: (integration: IntegrationItem) => void;
   onToggleIntegration?: (integration: IntegrationItem) => void;
@@ -137,91 +137,10 @@ const SettingsIntegrations4 = ({
   className,
   heading = "Integrations",
   subHeading = "Connect your favorite tools and services to streamline your workflow.",
-  integrations: initialIntegrations = [
-    {
-      image:
-        "https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/slack-icon.svg",
-      title: "Slack",
-      description: "Send notifications and updates to your team channels.",
-      isConnected: true,
-      category: "communication",
-    },
-    {
-      image:
-        "https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/discord-icon.svg",
-      title: "Discord",
-      description: "Connect your Discord server for real-time alerts.",
-      category: "communication",
-    },
-    {
-      image:
-        "https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/microsoft-teams-icon.svg",
-      title: "Microsoft Teams",
-      description: "Integrate with Teams for seamless collaboration.",
-      category: "communication",
-    },
-    {
-      image:
-        "https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/google-icon.svg",
-      title: "Google Drive",
-      description: "Access and sync files from your Google Drive.",
-      isConnected: true,
-      category: "storage",
-    },
-    {
-      image:
-        "https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/dropbox-icon.svg",
-      title: "Dropbox",
-      description: "Store and share files securely in the cloud.",
-      category: "storage",
-    },
-    {
-      image:
-        "https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/microsoft-onedrive-icon.svg",
-      title: "OneDrive",
-      description: "Sync your Microsoft OneDrive files and folders.",
-      category: "storage",
-    },
-    {
-      image:
-        "https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/github-icon.svg",
-      title: "GitHub",
-      description: "Connect repositories and automate workflows.",
-      isConnected: true,
-      category: "development",
-      className: "dark:invert",
-    },
-    {
-      image:
-        "https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/gitlab-icon.svg",
-      title: "GitLab",
-      description: "Integrate with GitLab for CI/CD pipelines.",
-      category: "development",
-    },
-    {
-      image:
-        "https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/vercel-icon.svg",
-      title: "Vercel",
-      description: "Deploy and preview your web applications.",
-      category: "development",
-      className: "dark:invert",
-    },
-    {
-      image:
-        "https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/stripe-icon.svg",
-      title: "Stripe",
-      description: "Process payments and manage subscriptions.",
-      isConnected: true,
-      category: "payments",
-    },
-    {
-      image:
-        "https://deifkwefumgah.cloudfront.net/shadcnblocks/block/logos/paypal-icon.svg",
-      title: "PayPal",
-      description: "Accept PayPal payments from customers.",
-      category: "payments",
-    },
-  ],
+  // No default: the only consumer (routes/Imports.tsx) always passes this.
+  // The upstream block shipped a demo list of CDN-hosted logos here, which
+  // would have been remote image loads in a local-first app.
+  integrations: initialIntegrations,
   selectedId,
   onSelect,
   onToggleIntegration,

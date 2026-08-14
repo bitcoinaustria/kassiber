@@ -7,7 +7,6 @@ import {
   modelPrivacyPosture,
   providerRuntimeSelectable,
   providerRuntimeTone,
-  shouldPollProviderModels,
   sortModelRowsByPosture,
 } from "./providerModelSearch";
 import {
@@ -131,34 +130,6 @@ describe("provider runtime selector state", () => {
     expect(providerRuntimeTone(runtime("ready"))).toBe("ready");
     expect(providerRuntimeTone(runtime("authentication_required"))).toBe("attention");
     expect(providerRuntimeTone(runtime("error"))).toBe("unavailable");
-  });
-});
-
-describe("provider discovery scheduling", () => {
-  const provider = {
-    name: "provider",
-    base_url: "http://127.0.0.1:8000/v1",
-    kind: "local" as const,
-    has_api_key: false,
-    is_default: false,
-  };
-
-  it("polls only proven-local HTTP providers", () => {
-    expect(shouldPollProviderModels(provider)).toBe(true);
-    expect(
-      shouldPollProviderModels({
-        ...provider,
-        base_url: "https://example.test/v1",
-        kind: "remote",
-      }),
-    ).toBe(false);
-    expect(
-      shouldPollProviderModels({
-        ...provider,
-        base_url: "opencode-cli://default",
-        kind: "remote",
-      }),
-    ).toBe(false);
   });
 });
 

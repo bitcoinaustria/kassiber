@@ -205,6 +205,7 @@ export function SettingsScreen({
   const deleteBackend = useDaemonMutation<{
     name: string;
     deleted: boolean;
+    default_backend?: string;
   }>("ui.backends.delete");
   const [settingDefaultBackendId, setSettingDefaultBackendId] =
     React.useState<string | null>(null);
@@ -596,14 +597,6 @@ export function SettingsScreen({
   };
 
   const onDeleteBackend = async (backend: Backend) => {
-    if (backend.isDefault) {
-      addNotification({
-        title: t("deleteBackend.blockedTitle"),
-        body: t("deleteBackend.defaultWarning", { name: backend.name }),
-        tone: "error",
-      });
-      return;
-    }
     const affectedWallets = backend.walletRefs ?? [];
     if (affectedWallets.length > 0) {
       addNotification({

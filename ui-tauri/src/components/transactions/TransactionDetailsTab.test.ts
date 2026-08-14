@@ -2,34 +2,56 @@ import { describe, expect, it } from "vitest";
 
 import type { TransactionSwapRoute } from "./TransactionGraphModel";
 import {
+  isPublicGraphLookupApproved,
   preloadableSwapLegGraphLookupArgs,
   preloadableSwapLegGraphReference,
   transactionGraphLookupArgs,
   transactionGraphLookupReferenceArgs,
 } from "./TransactionGraphLookup";
 
+it("does not carry public lookup approval to another transaction", () => {
+  const approved = { id: "row-a" } as Parameters<
+    typeof isPublicGraphLookupApproved
+  >[1];
+  const next = { id: "row-b" } as Parameters<
+    typeof isPublicGraphLookupApproved
+  >[1];
+
+  expect(isPublicGraphLookupApproved("row-a", approved)).toBe(true);
+  expect(isPublicGraphLookupApproved("row-a", next)).toBe(false);
+});
+
 describe("transactionGraphLookupArgs", () => {
-  it("opts on-chain rows with explorer txids into configured public lookup", () => {
-    expect(
-      transactionGraphLookupArgs({
-        id: "row-1",
-        explorerId: "a".repeat(64),
-        paymentMethod: "On-chain",
-      } as Parameters<typeof transactionGraphLookupArgs>[0]),
-    ).toEqual({
+  it("keeps on-chain rows local until the user asks for a lookup", () => {
+    // Having an explorer txid means a lookup is possible, not requested.
+    // Opening a detail sheet must not send that txid to a backend.
+    const row = {
+      id: "row-1",
+      explorerId: "a".repeat(64),
+      paymentMethod: "On-chain",
+    } as Parameters<typeof transactionGraphLookupArgs>[0];
+
+    expect(transactionGraphLookupArgs(row)).toEqual({
+      transaction: "row-1",
+      allowPublicLookup: false,
+    });
+    expect(transactionGraphLookupArgs(row, true)).toEqual({
       transaction: "row-1",
       allowPublicLookup: true,
     });
   });
 
-  it("opts chain-backed rows into configured public lookup even when the payment label is generic", () => {
+  it("allows a requested lookup for chain-backed rows with a generic payment label", () => {
     expect(
-      transactionGraphLookupArgs({
-        id: "row-mining",
-        explorerId: "c".repeat(64),
-        paymentMethod: "Exchange",
-        chain: "bitcoin",
-      } as Parameters<typeof transactionGraphLookupArgs>[0]),
+      transactionGraphLookupArgs(
+        {
+          id: "row-mining",
+          explorerId: "c".repeat(64),
+          paymentMethod: "Exchange",
+          chain: "bitcoin",
+        } as Parameters<typeof transactionGraphLookupArgs>[0],
+        true,
+      ),
     ).toEqual({
       transaction: "row-mining",
       allowPublicLookup: true,
@@ -38,11 +60,14 @@ describe("transactionGraphLookupArgs", () => {
 
   it("does not public-lookup source ids without a verified explorer txid", () => {
     expect(
-      transactionGraphLookupArgs({
-        id: "row-2",
-        txnId: "b".repeat(64),
-        paymentMethod: "Exchange",
-      } as Parameters<typeof transactionGraphLookupArgs>[0]),
+      transactionGraphLookupArgs(
+        {
+          id: "row-2",
+          txnId: "b".repeat(64),
+          paymentMethod: "Exchange",
+        } as Parameters<typeof transactionGraphLookupArgs>[0],
+        true,
+      ),
     ).toEqual({
       transaction: "row-2",
       allowPublicLookup: false,
@@ -122,7 +147,15 @@ describe("preloadableSwapLegGraphReference", () => {
       },
     };
 
+    // Preloading both legs of a swap would turn one unrequested lookup into
+    // three, so the legs follow the sheet's own opt-in.
     expect(preloadableSwapLegGraphLookupArgs(route, "in", ["out-row"])).toEqual({
+      transaction: "in-row",
+      allowPublicLookup: false,
+    });
+    expect(
+      preloadableSwapLegGraphLookupArgs(route, "in", ["out-row"], true),
+    ).toEqual({
       transaction: "in-row",
       allowPublicLookup: true,
     });
@@ -140,7 +173,9 @@ describe("preloadableSwapLegGraphReference", () => {
       },
     };
 
-    expect(preloadableSwapLegGraphLookupArgs(route, "out", ["afec51d0bc49779e"])).toEqual({
+    expect(
+      preloadableSwapLegGraphLookupArgs(route, "out", ["afec51d0bc49779e"], true),
+    ).toEqual({
       transaction: "A152E23BFB6646B3",
       allowPublicLookup: false,
     });

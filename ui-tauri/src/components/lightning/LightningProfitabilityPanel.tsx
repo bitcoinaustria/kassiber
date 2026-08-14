@@ -6,9 +6,9 @@
  * routing summary tiles plus the per-channel covers-open-cost table.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { TrendingUp, Zap } from "lucide-react";
+import { RefreshCw, TrendingUp, Zap } from "lucide-react";
 
 import { useDaemon, retryRetryableDaemonError } from "@/daemon/client";
 import {
@@ -18,6 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   Table,
@@ -154,16 +155,42 @@ function LightningProfitabilityBody({
   connectionId: string;
 }) {
   const { t } = useTranslation("connections");
+  // Reads the node live over its configured RPC. `/reports` renders this
+  // panel unconditionally and auto-selects the first connection, so leaving
+  // the query enabled meant opening the Reports page contacted the node.
   const profitability = useDaemon<LightningProfitabilityReport>(
     "ui.reports.lightning_profitability",
     { connection: connectionId },
-    { retry: retryRetryableDaemonError },
+    { enabled: false, retry: retryRetryableDaemonError },
   );
-  if (profitability.isLoading) {
-    return (
+  const runReport = (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      disabled={profitability.isFetching}
+      onClick={() => void profitability.refetch()}
+    >
+      <RefreshCw
+        className={cn("size-3.5", profitability.isFetching && "animate-spin")}
+        aria-hidden="true"
+      />
+      {profitability.isFetching
+        ? t("node.profitabilityReport.loading")
+        : t("node.profitabilityReport.run")}
+    </Button>
+  );
+  const withRunAction = (content: ReactNode) => (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">{runReport}</div>
+      {content}
+    </div>
+  );
+  if (profitability.isFetching) {
+    return withRunAction(
       <div className="text-sm text-muted-foreground">
         {t("node.profitabilityReport.loading")}
-      </div>
+      </div>,
     );
   }
   if (profitability.isError || profitability.data?.error) {
@@ -172,18 +199,20 @@ function LightningProfitabilityBody({
         ? profitability.error.message
         : profitability.data?.error?.message ??
           t("node.profitabilityReport.errorFallback");
-    return (
+    return withRunAction(
       <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
         {message}
-      </div>
+      </div>,
     );
   }
   const report = profitability.data?.data;
   if (!report) {
-    return (
+    return withRunAction(
       <div className="text-sm text-muted-foreground">
-        {t("node.profitabilityReport.empty")}
-      </div>
+        {profitability.isFetched
+          ? t("node.profitabilityReport.empty")
+          : t("node.profitabilityReport.idle")}
+      </div>,
     );
   }
   const { summary, channels, windowLabel } = report;
@@ -193,7 +222,7 @@ function LightningProfitabilityBody({
       : summary.netProfitSat < 0
         ? "text-red-700 dark:text-red-300"
         : "text-muted-foreground";
-  return (
+  return withRunAction(
     <div className="space-y-4">
       <div className="text-xs text-muted-foreground">
         {t("node.profitabilityReport.windowSummary", {

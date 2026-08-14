@@ -77,6 +77,8 @@ import {
   TransactionLinkedTab,
   TransactionPricingTab,
   TransactionTaxTab,
+  hasPublicGraphLookupReference,
+  isPublicGraphLookupApproved,
   transactionGraphLookupArgs,
   type TransactionGraphPayload,
   type TransactionDetailTabContext,
@@ -203,9 +205,18 @@ export function TransactionDetailSheet({
   const [balanceCurrency, setBalanceCurrency] =
     React.useState<Currency>(currency);
   const manualPriceRef = React.useRef<HTMLInputElement | null>(null);
+  // Opening a transaction is a local read. Enriching its graph sends the txid
+  // to a configured backend, so it waits for an explicit ask and resets for
+  // every row -- otherwise one lookup would silently enable the next.
+  const [publicGraphLookupTransactionId, setPublicGraphLookupTransactionId] =
+    React.useState<string | null>(null);
+  const publicGraphLookup = isPublicGraphLookupApproved(
+    publicGraphLookupTransactionId,
+    transaction,
+  );
   const graphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
-    transactionGraphLookupArgs(transaction),
+    transactionGraphLookupArgs(transaction, publicGraphLookup),
     { enabled: Boolean(transaction) },
   );
   React.useEffect(() => {
@@ -818,6 +829,10 @@ export function TransactionDetailSheet({
     netImpactEur,
     graphData,
     onOpenTransaction,
+    publicGraphLookup,
+    canPublicGraphLookup: hasPublicGraphLookupReference(transaction),
+    enablePublicGraphLookup: () =>
+      setPublicGraphLookupTransactionId(transaction?.id ?? null),
     graphLoading: graphQuery.isLoading || (graphQuery.isFetching && !graphData),
     graphError:
       graphQuery.error instanceof Error

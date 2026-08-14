@@ -520,8 +520,8 @@ def update_backend(conn, name, updates):
     return redact_backend_for_output(backend)
 
 
-def delete_backend(conn, name):
-    payload = _delete_db_backend(conn, name)
+def delete_backend(conn, name, runtime_config=None):
+    payload = _delete_db_backend(conn, name, runtime_config)
     removed_account_routes = core_commercial.delete_btcpay_account_routes_for_backend(
         conn,
         payload["name"],

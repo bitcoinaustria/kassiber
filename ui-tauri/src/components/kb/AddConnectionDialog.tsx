@@ -1471,73 +1471,83 @@ export function AddConnectionDialog({
     });
   }, [defaultBackendName, selectedBackendOptionKey, setupKind]);
 
+  const walletCoreCoverageAvailable =
+    (setupKind === "descriptor" || setupKind === "address-list") &&
+    selectedBackend?.kind === "bitcoinrpc" &&
+    Boolean(selectedBackend.name);
+
+  // Only clears stale results. Probing the node used to happen here on a
+  // 250ms timer, and since the backend is auto-filled from the default,
+  // merely choosing a wallet type was enough to make an RPC call to the
+  // user's node. A birthday change invalidates a previous answer, so the
+  // result is dropped rather than left to describe different inputs.
+  // Bumped whenever the inputs change, so a probe still in flight cannot
+  // write its answer over the reset -- the old effect used a `cancelled`
+  // closure flag for the same reason. Without it, editing the birthday
+  // mid-check leaves a coverage verdict describing the previous one, and
+  // that verdict gates wallet creation against a pruned node.
+  const coverageRequestRef = React.useRef(0);
   React.useEffect(() => {
-    if (
-      (setupKind !== "descriptor" && setupKind !== "address-list") ||
-      selectedBackend?.kind !== "bitcoinrpc" ||
-      !selectedBackend.name
-    ) {
-      setWalletCoreCoverage({ status: "idle" });
-      return;
-    }
-
-    let cancelled = false;
-    setWalletCoreCoverage({ status: "checking" });
-    const timer = window.setTimeout(() => {
-      void probeWalletCore({
-        backend: selectedBackend.name,
-        ...(form.birthday ? { birthday: form.birthday } : {}),
-      })
-        .then((envelope) => {
-          if (cancelled) return;
-          const probe = envelope.data;
-          if (!probe?.reachable) {
-            setWalletCoreCoverage({
-              status: "error",
-              message:
-                probe?.error?.message ?? t("add.core.coverageProbeFailed"),
-            });
-          } else if (probe.pruned && !form.birthday) {
-            setWalletCoreCoverage({ status: "birthday_required", probe });
-          } else if (probe.pruned && probe.rescan_possible !== true) {
-            setWalletCoreCoverage({ status: "verification_required", probe });
-          } else {
-            setWalletCoreCoverage({ status: "available", probe });
-          }
-        })
-        .catch((error: unknown) => {
-          if (cancelled) return;
-          const code =
-            error instanceof DaemonRequestError
-              ? error.envelope.error?.code
-              : undefined;
-          setWalletCoreCoverage({
-            status:
-              code === "bitcoinrpc_pruned_below_birthday" ||
-              code === "bitcoinrpc_birthday_required"
-                ? "blocked"
-                : "error",
-            message:
-              error instanceof Error
-                ? error.message
-                : t("add.core.coverageProbeFailed"),
-            code,
-            details: daemonErrorDetails(error),
-          });
-        });
-    }, 250);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
+    coverageRequestRef.current += 1;
+    setWalletCoreCoverage({ status: "idle" });
   }, [
+    walletCoreCoverageAvailable,
     form.birthday,
     selectedBackend?.kind,
     selectedBackend?.name,
     setupKind,
-    t,
+  ]);
+
+  const checkWalletCoreCoverage = React.useCallback(async () => {
+    if (!walletCoreCoverageAvailable || !selectedBackend?.name) return;
+    const requestId = coverageRequestRef.current;
+    const stale = () => coverageRequestRef.current !== requestId;
+    setWalletCoreCoverage({ status: "checking" });
+    try {
+      const envelope = await probeWalletCore({
+        backend: selectedBackend.name,
+        ...(form.birthday ? { birthday: form.birthday } : {}),
+      });
+      if (stale()) return;
+      const probe = envelope.data;
+      if (!probe?.reachable) {
+        setWalletCoreCoverage({
+          status: "error",
+          message: probe?.error?.message ?? t("add.core.coverageProbeFailed"),
+        });
+      } else if (probe.pruned && !form.birthday) {
+        setWalletCoreCoverage({ status: "birthday_required", probe });
+      } else if (probe.pruned && probe.rescan_possible !== true) {
+        setWalletCoreCoverage({ status: "verification_required", probe });
+      } else {
+        setWalletCoreCoverage({ status: "available", probe });
+      }
+    } catch (error: unknown) {
+      if (stale()) return;
+      const code =
+        error instanceof DaemonRequestError
+          ? error.envelope.error?.code
+          : undefined;
+      setWalletCoreCoverage({
+        status:
+          code === "bitcoinrpc_pruned_below_birthday" ||
+          code === "bitcoinrpc_birthday_required"
+            ? "blocked"
+            : "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : t("add.core.coverageProbeFailed"),
+        code,
+        details: daemonErrorDetails(error),
+      });
+    }
+  }, [
+    form.birthday,
     probeWalletCore,
+    selectedBackend?.name,
+    t,
+    walletCoreCoverageAvailable,
   ]);
 
   React.useEffect(() => {
@@ -2645,7 +2655,22 @@ export function AddConnectionDialog({
 
   const renderWalletCoreCoverage = () => {
     if (selectedBackend?.kind !== "bitcoinrpc") return null;
-    if (walletCoreCoverage.status === "idle") return null;
+    if (walletCoreCoverage.status === "idle") {
+      if (!walletCoreCoverageAvailable) return null;
+      return (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+          <span>{t("add.core.coverageIdle")}</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => void checkWalletCoreCoverage()}
+          >
+            {t("add.core.coverageCheck")}
+          </Button>
+        </div>
+      );
+    }
     if (walletCoreCoverage.status === "checking") {
       return (
         <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
