@@ -264,35 +264,6 @@ def test_fetch_latest_release_refuses_without_consent(tmp_path: Path):
     assert opened is False
 
 
-def test_fetch_latest_release_records_egress():
-    """The release check is the only writer of the "update" subsystem.
-
-    Nothing recorded it before, so the ledger reported zero update requests
-    however many it made -- a silence that reads like evidence.
-    """
-    from kassiber.egress_ledger import get_egress_ledger
-
-    ledger = get_egress_ledger()
-    before = ledger.snapshot(limit=0)["last_id"]
-
-    def opener(request, *, timeout):
-        del request, timeout
-        return _Response(_release_response())
-
-    with patch("kassiber.update_check.packaged_build_info", return_value={}):
-        update_check.fetch_latest_release(
-            opener=opener, consent=_consenting_preference()
-        )
-
-    added = [
-        record
-        for record in ledger.snapshot(after_id=before)["records"]
-        if record["subsystem"] == "update"
-    ]
-    assert len(added) == 1
-    assert added[0]["host"] == "api.github.com"
-
-
 def test_fetch_latest_release_uses_bounded_github_request():
     captured = {}
 

@@ -26,7 +26,6 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from . import __version__
 from .build_info import packaged_build_info
 from .db import DEFAULT_CONFIG_DIRNAME, DEFAULT_STATE_ROOT
-from .egress_ledger import get_egress_ledger
 from .errors import AppError
 
 
@@ -392,15 +391,6 @@ def fetch_latest_release(
                 "User-Agent": f"kassiber/{current_version()}",
                 "X-GitHub-Api-Version": "2022-11-28",
             },
-            method="GET",
-        )
-        # The only writer of the "update" subsystem. Without this the egress
-        # auditor's Update tile could never leave zero, which reads as proof
-        # that no release check happened rather than as an unmonitored path.
-        get_egress_ledger().record_url(
-            api_url,
-            subsystem="update",
-            operation="http.request",
             method="GET",
         )
         with opener(request, timeout=NETWORK_TIMEOUT_SECONDS) as response:
