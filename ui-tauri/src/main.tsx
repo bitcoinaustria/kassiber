@@ -19,7 +19,12 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5 * 60 * 1000,
+      // Neither focus nor reconnect may start a request the user did not
+      // ask for. react-query defaults `refetchOnReconnect` to true, so every
+      // mounted query that reaches a backend would refire on each network
+      // reconnect -- the same class of unrequested traffic as a timer.
       refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
     },
   },
 });
