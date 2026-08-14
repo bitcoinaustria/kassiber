@@ -760,6 +760,8 @@
       "prunedWarningWithDate": "This node is pruned and retains blocks from approximately {{retained}}. Wallet-specific coverage is checked before scanning.",
       "coverageProbeFailed": "Could not check Bitcoin Core history coverage.",
       "coverageChecking": "Checking whether Bitcoin Core retains this wallet's history…",
+      "coverageIdle": "Kassiber has not contacted this node.",
+      "coverageCheck": "Check node coverage",
       "birthdayRequiredForPruned": "Enter the wallet's real first-use date; this Bitcoin Core node is pruned.",
       "coverageBirthdayRequired": "This node is pruned and retains blocks from approximately {{retained}}. Enter the wallet's real first-use date to verify complete history.",
       "coverageVerificationRequired": "This node is pruned and retains blocks from approximately {{retained}}. Core will verify the birthday {{birthday}} during the scan; Kassiber records coverage only after that rescan succeeds.",
