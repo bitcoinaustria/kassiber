@@ -1,6 +1,6 @@
 {
   "name": "kassiber-ui",
-  "version": "0.22.71",
+  "version": "0.22.73",
   "private": true,
   "description": "Kassiber desktop UI \u2014 Tauri 2 + React 19 frontend with a Python daemon transport.",
   "type": "module",
