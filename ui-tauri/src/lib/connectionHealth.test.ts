@@ -190,7 +190,10 @@ describe("connection health model", () => {
     expect(connectionHealthTone("offline", [healthy])).toBe("error");
   });
 
-  it("requires an explicit user action before checking connections", () => {
+  it("blocks a requested check that cannot run right now", () => {
+    // This gate does not decide *whether the user asked* -- the only caller
+    // is the refresh button's click handler. It decides whether a check the
+    // user did ask for can run.
     const ready = {
       checking: false,
       checkableConnectionCount: 1,
@@ -198,13 +201,9 @@ describe("connection health model", () => {
       documentVisible: true,
       maintenanceActive: false,
       networkStatus: "online" as const,
-      userInitiated: true,
     };
 
     expect(canRunConnectionHealthChecks(ready)).toBe(true);
-    expect(
-      canRunConnectionHealthChecks({ ...ready, userInitiated: false }),
-    ).toBe(false);
     expect(
       canRunConnectionHealthChecks({ ...ready, checking: true }),
     ).toBe(false);

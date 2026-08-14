@@ -402,7 +402,6 @@ export function NetworkStatusIndicator({
     documentVisible,
     maintenanceActive,
     networkStatus: status,
-    userInitiated: true,
   });
 
   React.useEffect(() => {
@@ -421,8 +420,11 @@ export function NetworkStatusIndicator({
     };
   }, []);
 
-  const runConnectionChecks = React.useCallback(async (userInitiated: boolean) => {
-    if (!userInitiated || !canCheckConnections) return;
+  // Only the refresh button calls this. There is no timer and no mount
+  // effect, which is what keeps the indicator offline until asked -- not a
+  // flag, which would just be a second place to get it wrong.
+  const runConnectionChecks = React.useCallback(async () => {
+    if (!canCheckConnections) return;
     const now = new Date().toISOString();
     setChecking(true);
     const results: Array<[string, ConnectionHealthRecord]> = [];
@@ -559,7 +561,7 @@ export function NetworkStatusIndicator({
             title={t("network.checkConnections")}
             onClick={(event) => {
               event.preventDefault();
-              void runConnectionChecks(true);
+              void runConnectionChecks();
             }}
           >
             <RefreshCw

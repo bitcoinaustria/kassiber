@@ -36,7 +36,6 @@ export interface ConnectionHealthCheckGateInput {
   documentVisible: boolean;
   maintenanceActive: boolean;
   networkStatus: NetworkStatus;
-  userInitiated: boolean;
 }
 
 export function endpointWithPort(raw: string): string {
@@ -155,10 +154,11 @@ export function canRunConnectionHealthChecks({
   documentVisible,
   maintenanceActive,
   networkStatus,
-  userInitiated,
 }: ConnectionHealthCheckGateInput): boolean {
+  // Whether the user asked is not a field here: the caller is a click
+  // handler, and there is no other caller. This answers the narrower
+  // question of whether a check the user *did* ask for can run right now.
   return (
-    userInitiated &&
     daemonEnabled &&
     documentVisible &&
     networkStatus === "online" &&
