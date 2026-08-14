@@ -189,4 +189,27 @@ describe("ProviderModelPicker network consent", () => {
     });
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
+
+  it("leaves reasoning support unresolved until models are actually known", () => {
+    // Not discovering models is the point, but it must not be read as
+    // "this model has no reasoning effort". `useSupportedReasoningEffort`
+    // resets the user's chosen effort to auto once `resolved` is true, and
+    // only CLI providers advertise support on the provider row -- for local
+    // Ollama/oMLX and remote OpenAI-compatible providers it lives on the
+    // model, which is empty until an explicit check.
+    let support: ReturnType<typeof useReasoningEffortSupport> | null = null;
+    function Probe() {
+      support = useReasoningEffortSupport({
+        provider: "custom",
+        model: "configured-model",
+      });
+      return null;
+    }
+
+    renderToStaticMarkup(<Probe />);
+
+    expect(support).not.toBeNull();
+    expect(support!.resolved).toBe(false);
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
 });

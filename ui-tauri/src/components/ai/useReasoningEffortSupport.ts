@@ -52,6 +52,7 @@ export function useReasoningEffortSupport(
   );
   const modelsData =
     modelsQuery.data?.kind === "ai.list_models" ? modelsQuery.data.data : null;
+  const hasModelsResponse = Boolean(modelsData);
   const models = React.useMemo(
     () => modelsData?.models ?? [],
     [modelsData],
@@ -63,11 +64,19 @@ export function useReasoningEffortSupport(
     providers,
     models,
   });
+  // `resolved` gates the auto-reset in `useSupportedReasoningEffort`, so it
+  // must stay false while support is merely unknown. Only CLI providers
+  // advertise `supports_reasoning_effort` on the provider row; for local
+  // Ollama/oMLX and remote OpenAI-compatible providers it lives on the model,
+  // and `models` is empty until the user runs a check. Resolving on the
+  // provider response alone therefore read "unsupported" and silently reset
+  // the user's chosen effort to auto on every mount.
   const resolved =
     !selection ||
     providerSupported ||
     providersQuery.isError ||
-    Boolean(hasProvidersResponse);
+    (Boolean(hasProvidersResponse) &&
+      (!selectedProvider || modelsQuery.isError || hasModelsResponse));
 
   return { supported, resolved };
 }
