@@ -84,10 +84,29 @@ def test_guard_allows_loopback():
 
 
 def test_guard_uninstalls_itself_on_exit():
-    original = socket.getaddrinfo
+    socket_names = ["connect", "connect_ex", "sendto"]
+    if hasattr(socket.socket, "sendmsg"):
+        socket_names.append("sendmsg")
+    dns_names = [
+        "getaddrinfo",
+        "gethostbyaddr",
+        "gethostbyname",
+        "gethostbyname_ex",
+        "getnameinfo",
+    ]
+    original_socket = {name: getattr(socket.socket, name) for name in socket_names}
+    original_dns = {name: getattr(socket, name) for name in dns_names}
     with no_egress_guard(enabled=True):
-        assert socket.getaddrinfo is not original
-    assert socket.getaddrinfo is original
+        assert all(
+            getattr(socket.socket, name) is not value
+            for name, value in original_socket.items()
+        )
+        assert all(getattr(socket, name) is not value for name, value in original_dns.items())
+    assert all(
+        getattr(socket.socket, name) is value
+        for name, value in original_socket.items()
+    )
+    assert all(getattr(socket, name) is value for name, value in original_dns.items())
 
 
 def test_guard_is_not_an_exception_subclass():
