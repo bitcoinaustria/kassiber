@@ -743,6 +743,12 @@ mode.
 
 ## Guardrails
 
+- `KASSIBER_TEST_NO_EGRESS=1` arms the socket guard only; `tests/conftest.py`
+  sets it for every non-integration run, and a `sitecustomize` on `PYTHONPATH`
+  carries it into spawned Python children. `KASSIBER_NO_EGRESS=1` arms the same
+  guard *and* tells the BDK/LWK observers to refuse chain observation outright,
+  destination-blind — which is what the fast lane wants and what a suite-wide
+  setting must not do, since it also refuses loopback fakes
 - `KASSIBER_NO_EGRESS=1` blocks non-loopback `socket.connect` calls inside fast
   harness tests so replay fixtures cannot accidentally reach live exchanges or
   public backends.

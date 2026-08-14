@@ -57,13 +57,26 @@ def no_egress_guard(*, enabled: bool | None = None) -> Iterator[None]:
     behavior. Loopback is allowed so daemon bridges, Docker-published regtest
     services, and local SQLite-adjacent helpers can still run.
 
+    Two variables reach this, deliberately kept apart:
+
+    - `KASSIBER_TEST_NO_EGRESS` arms only this socket guard. It is what the
+      suite sets, because it says nothing to product code.
+    - `KASSIBER_NO_EGRESS` is a product kill switch that the BDK and LWK
+      observers read directly and honor destination-blind -- it refuses a
+      loopback server too. It also arms this guard, so the integration
+      harness keeps working by setting one variable.
+
     Blind spots worth knowing: sockets opened inside native libraries (bdkpython,
     lwk) are invisible to a Python patch -- those honor `KASSIBER_NO_EGRESS`
     themselves -- and non-Python children (the Node AI broker, `lightning-cli`)
     inherit the variable but nothing enforces it for them.
     """
 
-    active = env_flag("KASSIBER_NO_EGRESS") if enabled is None else bool(enabled)
+    active = (
+        (env_flag("KASSIBER_TEST_NO_EGRESS") or env_flag("KASSIBER_NO_EGRESS"))
+        if enabled is None
+        else bool(enabled)
+    )
     if not active:
         yield
         return
@@ -82,13 +95,15 @@ def no_egress_guard(*, enabled: bool | None = None) -> Iterator[None]:
     def guarded_connect(self: socket.socket, address: Any):
         host = _blocked_address(address)
         if host is not None:
-            raise EgressBlocked(f"KASSIBER_NO_EGRESS blocked socket.connect to {host}")
+            raise EgressBlocked(f"no-egress guard blocked socket.connect to {host}")
         return original_connect(self, address)
 
     def guarded_connect_ex(self: socket.socket, address: Any):
         host = _blocked_address(address)
         if host is not None:
-            raise EgressBlocked(f"KASSIBER_NO_EGRESS blocked socket.connect_ex to {host}")
+            raise EgressBlocked(
+                f"no-egress guard blocked socket.connect_ex to {host}"
+            )
         return original_connect_ex(self, address)
 
     def guarded_getaddrinfo(host: Any, *args: Any, **kwargs: Any):
@@ -96,7 +111,7 @@ def no_egress_guard(*, enabled: bool | None = None) -> Iterator[None]:
         # first thing most egress paths do -- so blocking it here names the
         # offending host instead of failing later with a connect error.
         if host is not None and not _is_loopback(str(host)):
-            raise EgressBlocked(f"KASSIBER_NO_EGRESS blocked DNS lookup for {host}")
+            raise EgressBlocked(f"no-egress guard blocked DNS lookup for {host}")
         return original_getaddrinfo(host, *args, **kwargs)
 
     socket.socket.connect = guarded_connect

@@ -5,9 +5,9 @@ that runs under it reports a clean result it never actually earned. These pin
 what it blocks, that it reaches spawned Python children, and that it cannot be
 swallowed by a broad `except Exception`.
 
-The guard is opt-in per module (`no_egress_guard(enabled=True)`) rather than
-armed for the whole session -- see `docs/reference/privacy-and-security.md` for
-why the suite-wide version is still blocked on the daemon smoke interaction.
+`tests/conftest.py` arms it for every non-integration session via
+`KASSIBER_TEST_NO_EGRESS`; these tests install it explicitly so they assert the
+guard's own behavior rather than the session fixture's.
 """
 
 from __future__ import annotations
@@ -69,12 +69,12 @@ def test_guard_reaches_spawned_python_children():
     """`sitecustomize` carries the guard into Python children.
 
     An in-process monkeypatch cannot reach a subprocess. A child that inherits
-    KASSIBER_NO_EGRESS imports `tests/_egress_guard/sitecustomize.py` through
-    `site` before anything else runs, which is what makes the guard usable for
-    the integration harness's daemon children.
+    the guard variable imports `tests/_egress_guard/sitecustomize.py` through
+    `site` before anything else runs, which is what makes the guard reach the
+    daemon children the smoke tests spawn.
     """
     env = dict(os.environ)
-    env["KASSIBER_NO_EGRESS"] = "1"
+    env["KASSIBER_TEST_NO_EGRESS"] = "1"
     env["PYTHONPATH"] = os.pathsep.join(
         [str(ROOT / "tests" / "_egress_guard"), str(ROOT)]
     )
@@ -88,4 +88,4 @@ def test_guard_reaches_spawned_python_children():
     )
 
     assert completed.returncode != 0
-    assert "KASSIBER_NO_EGRESS" in completed.stderr
+    assert "no-egress guard blocked" in completed.stderr

@@ -31,9 +31,14 @@ def _block_egress():
     the ledger entirely, which is how the release check went unrecorded.
 
     `PYTHONPATH` carries it into the daemon subprocess the smoke tests spawn:
-    `Popen` runs without `env=`, so the child inherits `KASSIBER_NO_EGRESS`
-    and `site` imports `tests/_egress_guard/sitecustomize.py` before the
-    daemon starts.
+    `Popen` runs without `env=`, so the child inherits the variable and `site`
+    imports `tests/_egress_guard/sitecustomize.py` before the daemon starts.
+
+    It sets `KASSIBER_TEST_NO_EGRESS`, not `KASSIBER_NO_EGRESS`. The latter is
+    a product kill switch that the BDK and LWK observers honor
+    destination-blind -- setting it here would make them refuse the loopback
+    fakes the smoke tests serve, which is a different thing than "do not leave
+    the machine".
 
     Loopback stays allowed: ~36 daemon smoke tests bind local
     `ThreadingHTTPServer` fakes. So the invariant's "including loopback
@@ -46,7 +51,7 @@ def _block_egress():
 
     root = Path(__file__).resolve().parent.parent
     previous_path = os.environ.get("PYTHONPATH")
-    os.environ["KASSIBER_NO_EGRESS"] = "1"
+    os.environ["KASSIBER_TEST_NO_EGRESS"] = "1"
     os.environ["PYTHONPATH"] = os.pathsep.join(
         [
             str(root / "tests" / "_egress_guard"),
@@ -58,7 +63,7 @@ def _block_egress():
         with no_egress_guard(enabled=True):
             yield
     finally:
-        os.environ.pop("KASSIBER_NO_EGRESS", None)
+        os.environ.pop("KASSIBER_TEST_NO_EGRESS", None)
         if previous_path is None:
             os.environ.pop("PYTHONPATH", None)
         else:

@@ -1157,14 +1157,7 @@ class BdkDependencyContractTest(TestCase):
             branches=bdk_branches_for_identity(plan, identity),
             gap_limit=20,
         )
-        # `_client()` fails closed under KASSIBER_NO_EGRESS, which the suite
-        # arms for every run. This test never reaches the network -- the BDK
-        # client is mocked -- and is only about how the insecure flag is
-        # translated, so it opts out of the env guard explicitly.
-        with mock.patch.dict(os.environ, {}, clear=False), mock.patch.object(
-            bdk, "ElectrumClient"
-        ) as client:
-            os.environ.pop("KASSIBER_NO_EGRESS", None)
+        with mock.patch.object(bdk, "ElectrumClient") as client:
             for value, validate_domain in (
                 (False, True),
                 ("false", True),
