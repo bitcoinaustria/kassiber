@@ -572,6 +572,7 @@
   "egress": {
     "title": "Network Monitor",
     "subtitle": "Live RAM-only outbound ledger",
+    "notMonitored": "This page records requests Kassiber makes in the daemon process. Work Kassiber hands to a separate program — the release check, the AI CLI broker, and lightning-cli — is not listed here, because that traffic leaves from a process this ledger cannot see.",
     "refresh": "Refresh",
     "loadFailed": "Failed to load egress ledger: {{error}}",
     "empty": "No outbound egress recorded",
@@ -580,7 +581,6 @@
     "metric": {
       "total": "Recorded",
       "unexpected": "Unexpected",
-      "update": "Update",
       "dbHeader": "DB header"
     },
     "db": {

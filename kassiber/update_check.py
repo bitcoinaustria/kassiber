@@ -369,7 +369,13 @@ def _release_from_response(payload: Any) -> dict[str, Any]:
 def fetch_latest_release(
     *,
     opener: Callable[..., BinaryIO] = _open_without_redirects,
+    consent: Path | None = None,
 ) -> dict[str, Any]:
+    # The guard lives here, at the function that opens the socket, rather than
+    # only in `check_for_update`. A second caller would otherwise have to
+    # remember to bring its own consent check, and would reach GitHub if it
+    # forgot.
+    require_update_checks_enabled(consent)
     # Stable builds ask for the latest-stable object so a run of prereleases
     # cannot hide a stable update; that endpoint already excludes drafts and
     # prereleases and returns one release. Prerelease builds read the listing,
@@ -520,7 +526,7 @@ def check_for_update(
     consent = preference or preference_path()
     require_update_checks_enabled(consent)
     result = _result_from_release(
-        fetch_latest_release(opener=opener),
+        fetch_latest_release(opener=opener, consent=consent),
         checked_at=now or _utc_now(),
     )
     write_cache(result, path)

@@ -5,6 +5,19 @@ connection metadata needed to make "never phones home" falsifiable: host, port,
 subsystem, operation, and outbound byte count. Paths, query strings, request
 bodies, headers, tokens, descriptors, and provider prompts are intentionally
 discarded before insert.
+
+Scope, so the ledger is not read as more than it is:
+
+- It is per-process. Work Kassiber hands to a separate program leaves from a
+  process this ledger never sees -- the desktop's `kassiber update` sidecar,
+  the Node AI broker and the provider CLIs it spawns, and `lightning-cli`.
+  Those are deliberately not recorded rather than recorded with a fabricated
+  endpoint, because a row here is meant to name a real host.
+- Records are written at the call site, not intercepted at the socket, so a
+  new egress path is invisible until it records. The `KASSIBER_NO_EGRESS`
+  socket guard in the test suite is what catches the ones that forget.
+- The BDK and LWK observers record once per client construction; the Rust
+  client then makes its own requests, so a wide rescan appears as one row.
 """
 
 from __future__ import annotations

@@ -3211,7 +3211,14 @@ def build_parser() -> argparse.ArgumentParser:
     rates_pairs.set_defaults(rates_command="pairs")
     _ = rates_pairs
 
-    rates_sync = rates_sub.add_parser("sync")
+    rates_sync = rates_sub.add_parser(
+        "sync",
+        help=(
+            "Fetch missing rates from --source. When the requested window "
+            "already has everything, it still fetches one latest quote to warm "
+            "the cache, so this is never a no-op on the wire."
+        ),
+    )
     rates_sync.add_argument("--pair")
     rates_sync.add_argument("--days", type=int, default=30)
     rates_sync.add_argument(
@@ -3224,7 +3231,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Local Kraken OHLCVT .csv, .zip, or extracted directory for --source kraken-csv",
     )
 
-    rates_rebuild = rates_sub.add_parser("rebuild")
+    rates_rebuild = rates_sub.add_parser(
+        "rebuild",
+        help=(
+            "Re-fetch the rate cache from --source and rewrite it. "
+            "This contacts the provider; it is not a local recompute."
+        ),
+    )
     rates_rebuild.add_argument("--pair")
     rates_rebuild.add_argument("--days", type=int, default=30)
     rates_rebuild.add_argument(

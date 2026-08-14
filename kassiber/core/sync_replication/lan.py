@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 from spake2 import SPAKE2_A, SPAKE2_B
 
+from ...egress_ledger import get_egress_ledger
 from ...errors import AppError
 from .bundle import MAX_BUNDLE_BYTES, build_bundle
 from .crypto import (
@@ -305,6 +306,15 @@ class MdnsAdvertisement:
     def __init__(self, *, instance_name: str, address: str, port: int, pairing_id: str) -> None:
         from zeroconf import ServiceInfo, Zeroconf
 
+        # mDNS is multicast: every host on the LAN sees the announcement, so
+        # it belongs in the ledger even though no single peer is contacted.
+        get_egress_ledger().record(
+            subsystem="sync",
+            host="224.0.0.251",
+            port=5353,
+            scheme="mdns",
+            operation="mdns.announce",
+        )
         self._zeroconf = Zeroconf()
         self.info = ServiceInfo(
             LAN_SERVICE_TYPE,
@@ -345,6 +355,13 @@ def discover_lan_services(*, timeout_seconds: float = 1.5) -> list[dict[str, Any
         def remove_service(self, _zc, _service_type, name):
             results.pop(name, None)
 
+    get_egress_ledger().record(
+        subsystem="sync",
+        host="224.0.0.251",
+        port=5353,
+        scheme="mdns",
+        operation="mdns.browse",
+    )
     zc = Zeroconf()
     browser = ServiceBrowser(zc, LAN_SERVICE_TYPE, Listener())
     try:
@@ -499,6 +516,15 @@ class LanSyncServer:
         )
         key = _session_key(shared, transcript)
         local_device = _local_device(conn, book)
+        peer_address = peer_socket.getpeername()
+        if isinstance(peer_address, tuple) and len(peer_address) >= 2:
+            get_egress_ledger().record(
+                subsystem="sync",
+                host=peer_address[0],
+                port=peer_address[1],
+                scheme="lan",
+                operation="lan.pair.accept",
+            )
         _send_json(
             peer_socket,
             {
@@ -603,6 +629,13 @@ def connect_lan(
             conn,
             profile_id=profile_id,
             attachments_root=attachments_root,
+        )
+        get_egress_ledger().record(
+            subsystem="sync",
+            host=offer.host,
+            port=offer.port,
+            scheme="lan",
+            operation="lan.pair",
         )
         connection = (
             connector(offer.host, offer.port, timeout_seconds)
