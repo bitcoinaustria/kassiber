@@ -629,6 +629,43 @@ jobs:
         working-directory: ui-tauri
         run: pnpm tauri build ${{ matrix.tauri_args }} --bundles ${{ matrix.bundles }} --ci
 
+      - name: Use the host Wayland client in the AppImage
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' -t appdirs < <(
+            find ui-tauri/src-tauri/target -path '*/release/bundle/appimage/*.AppDir' -type d -print0
+          )
+          mapfile -d '' -t appimages < <(
+            find ui-tauri/src-tauri/target -path '*/release/bundle/appimage/*.AppImage' -type f -print0
+          )
+          test "${#appdirs[@]}" -eq 1
+          test "${#appimages[@]}" -eq 1
+
+          appdir="$(realpath "${appdirs[0]}")"
+          appimage="$(realpath "${appimages[0]}")"
+          wayland_client="$appdir/usr/lib/libwayland-client.so.0"
+          plugin="$HOME/.cache/tauri/linuxdeploy-plugin-appimage.AppImage"
+          test -f "$wayland_client"
+          test -x "$plugin"
+
+          rm "$wayland_client"
+          APPIMAGE_EXTRACT_AND_RUN=1 LDAI_OUTPUT="$appimage" ARCH=x86_64 \
+            "$plugin" --appimage-extract-and-run --appdir="$appdir"
+
+          inspection="$(mktemp -d)"
+          trap 'rm -rf "$inspection"' EXIT
+          (
+            cd "$inspection"
+            "$appimage" --appimage-extract 'usr/lib/libwayland-client.so*' >/dev/null
+          )
+          test -z "$(find "$inspection" -name 'libwayland-client.so*' -print -quit)"
+          mapfile -d '' -t sealed_appimages < <(
+            find "$(dirname "$appimage")" -maxdepth 1 -type f -name '*.AppImage' -print0
+          )
+          test "${#sealed_appimages[@]}" -eq 1
+
       - name: Smoke desktop terminal forwarding
         shell: bash
         run: |
