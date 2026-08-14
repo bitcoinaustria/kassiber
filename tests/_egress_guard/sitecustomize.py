@@ -23,13 +23,19 @@ import os
 # itself -- leaving a process that looks armed and blocks nothing.
 _GUARD = None
 
-if os.environ.get("KASSIBER_TEST_NO_EGRESS") or os.environ.get(
+_MODE = os.environ.get("KASSIBER_TEST_NO_EGRESS") or os.environ.get(
     "KASSIBER_NO_EGRESS"
-):
+)
+
+if _MODE:
     try:
         from tests.integration.env import no_egress_guard
 
-        _GUARD = no_egress_guard(enabled=True)
+        # `strict` also blocks loopback, for the launch-path regression that
+        # pins the invariant's "including loopback probes" clause.
+        _GUARD = no_egress_guard(
+            enabled=True, allow_loopback=_MODE.strip().lower() != "strict"
+        )
         _GUARD.__enter__()
     except Exception:
         # A child that cannot arm the guard must still start; the parent

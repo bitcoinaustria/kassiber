@@ -49,8 +49,10 @@ class EgressBlocked(BaseException):
 
 
 @contextlib.contextmanager
-def no_egress_guard(*, enabled: bool | None = None) -> Iterator[None]:
-    """Block non-loopback socket connects and DNS inside a test process.
+def no_egress_guard(
+    *, enabled: bool | None = None, allow_loopback: bool = True
+) -> Iterator[None]:
+    """Block socket connects and DNS inside a test process.
 
     The guard is intentionally test-local: it proves fast/medium fixtures do not
     reach live exchanges or public backends without changing product runtime
@@ -65,6 +67,12 @@ def no_egress_guard(*, enabled: bool | None = None) -> Iterator[None]:
       observers read directly and honor destination-blind -- it refuses a
       loopback server too. It also arms this guard, so the integration
       harness keeps working by setting one variable.
+
+    `allow_loopback=False` covers the invariant's "including loopback
+    service/provider probes" clause, which the default cannot: the smoke tests
+    serve local HTTP fakes, so a suite-wide loopback block would fail the tests
+    that need one. Set `KASSIBER_TEST_NO_EGRESS=strict` to get it in a child
+    process.
 
     Blind spots worth knowing: sockets opened inside native libraries (bdkpython,
     lwk) are invisible to a Python patch -- those honor `KASSIBER_NO_EGRESS`
@@ -88,7 +96,7 @@ def no_egress_guard(*, enabled: bool | None = None) -> Iterator[None]:
     def _blocked_address(address: Any) -> str | None:
         if isinstance(address, tuple) and address:
             host = str(address[0])
-            if not _is_loopback(host):
+            if not allow_loopback or not _is_loopback(host):
                 return host
         return None
 
@@ -110,7 +118,7 @@ def no_egress_guard(*, enabled: bool | None = None) -> Iterator[None]:
         # Resolving a name is already a request to a nameserver, and it is the
         # first thing most egress paths do -- so blocking it here names the
         # offending host instead of failing later with a connect error.
-        if host is not None and not _is_loopback(str(host)):
+        if host is not None and (not allow_loopback or not _is_loopback(str(host))):
             raise EgressBlocked(f"no-egress guard blocked DNS lookup for {host}")
         return original_getaddrinfo(host, *args, **kwargs)
 
