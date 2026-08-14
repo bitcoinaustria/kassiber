@@ -1481,7 +1481,14 @@ export function AddConnectionDialog({
   // merely choosing a wallet type was enough to make an RPC call to the
   // user's node. A birthday change invalidates a previous answer, so the
   // result is dropped rather than left to describe different inputs.
+  // Bumped whenever the inputs change, so a probe still in flight cannot
+  // write its answer over the reset -- the old effect used a `cancelled`
+  // closure flag for the same reason. Without it, editing the birthday
+  // mid-check leaves a coverage verdict describing the previous one, and
+  // that verdict gates wallet creation against a pruned node.
+  const coverageRequestRef = React.useRef(0);
   React.useEffect(() => {
+    coverageRequestRef.current += 1;
     setWalletCoreCoverage({ status: "idle" });
   }, [
     walletCoreCoverageAvailable,
@@ -1493,12 +1500,15 @@ export function AddConnectionDialog({
 
   const checkWalletCoreCoverage = React.useCallback(async () => {
     if (!walletCoreCoverageAvailable || !selectedBackend?.name) return;
+    const requestId = coverageRequestRef.current;
+    const stale = () => coverageRequestRef.current !== requestId;
     setWalletCoreCoverage({ status: "checking" });
     try {
       const envelope = await probeWalletCore({
         backend: selectedBackend.name,
         ...(form.birthday ? { birthday: form.birthday } : {}),
       });
+      if (stale()) return;
       const probe = envelope.data;
       if (!probe?.reachable) {
         setWalletCoreCoverage({
@@ -1513,6 +1523,7 @@ export function AddConnectionDialog({
         setWalletCoreCoverage({ status: "available", probe });
       }
     } catch (error: unknown) {
+      if (stale()) return;
       const code =
         error instanceof DaemonRequestError
           ? error.envelope.error?.code
