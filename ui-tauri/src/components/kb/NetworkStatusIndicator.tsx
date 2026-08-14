@@ -27,8 +27,6 @@ import {
   abbreviateEndpointMiddle,
   canRunConnectionHealthChecks,
   connectionHealthTone,
-  nextConnectionHealthCheckDelayMs,
-  shouldRunImmediateConnectionHealthCheck,
   type ConnectionHealthStatus,
   type ConnectionIndicatorTone,
 } from "@/lib/connectionHealth";
@@ -397,9 +395,6 @@ export function NetworkStatusIndicator({
     .filter((value): value is string => Boolean(value))
     .sort()
     .at(-1);
-  const hasUncheckedConnection = checkableRows.some(
-    (row) => healthRecords[row.id]?.fingerprint !== row.fingerprint,
-  );
   const canCheckConnections = canRunConnectionHealthChecks({
     checking,
     checkableConnectionCount: checkableRows.length,
@@ -407,11 +402,7 @@ export function NetworkStatusIndicator({
     documentVisible,
     maintenanceActive,
     networkStatus: status,
-  });
-  const shouldRunImmediateCheck = shouldRunImmediateConnectionHealthCheck({
-    canCheckConnections,
-    hasUncheckedConnection,
-    lastCheckedAt,
+    userInitiated: true,
   });
 
   React.useEffect(() => {
@@ -430,9 +421,9 @@ export function NetworkStatusIndicator({
     };
   }, []);
 
-  const runConnectionChecks = React.useCallback(async () => {
+  const runConnectionChecks = React.useCallback(async (userInitiated: boolean) => {
+    if (!userInitiated || !canCheckConnections) return;
     const now = new Date().toISOString();
-    if (!canCheckConnections) return;
     setChecking(true);
     const results: Array<[string, ConnectionHealthRecord]> = [];
     // The Python daemon currently executes foreground requests serially. Send
@@ -509,22 +500,6 @@ export function NetworkStatusIndicator({
     testLightning,
   ]);
 
-  React.useEffect(() => {
-    if (!shouldRunImmediateCheck) return;
-    void runConnectionChecks();
-  }, [runConnectionChecks, shouldRunImmediateCheck]);
-
-  React.useEffect(() => {
-    if (!canCheckConnections || !lastCheckedAt) return undefined;
-    const timeout = window.setTimeout(() => {
-      void runConnectionChecks();
-    }, nextConnectionHealthCheckDelayMs());
-
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [canCheckConnections, lastCheckedAt, runConnectionChecks]);
-
   const openSettingsConnection = React.useCallback(
     (row: ConnectionHealthRow) => {
       if (row.backendId) {
@@ -584,7 +559,7 @@ export function NetworkStatusIndicator({
             title={t("network.checkConnections")}
             onClick={(event) => {
               event.preventDefault();
-              void runConnectionChecks();
+              void runConnectionChecks(true);
             }}
           >
             <RefreshCw

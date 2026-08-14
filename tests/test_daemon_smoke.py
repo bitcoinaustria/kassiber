@@ -1676,6 +1676,142 @@ class DaemonSmokeTest(unittest.TestCase):
                     proc.kill()
                     _close_daemon(proc)
 
+    def test_daemon_backend_delete_moves_default_to_user_backend(self):
+        with tempfile.TemporaryDirectory(
+            prefix="kassiber-daemon-backend-delete-default-"
+        ) as tmp:
+            data_root = Path(tmp) / "data"
+            _run_cli(data_root, "init")
+
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "create-user-backend",
+                        "kind": "ui.backends.create",
+                        "args": {
+                            "name": "my-node",
+                            "kind": "electrum",
+                            "url": "ssl://node.example:50002",
+                            "chain": "bitcoin",
+                            "network": "main",
+                        },
+                    },
+                )
+                self.assertEqual(
+                    _read_payload_timeout(proc)["kind"],
+                    "ui.backends.create",
+                )
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
+
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "delete-active-default",
+                        "kind": "ui.backends.delete",
+                        "args": {"name": "fulcrum"},
+                    },
+                )
+                deleted = _read_payload_timeout(proc)
+                self.assertEqual(deleted["kind"], "ui.backends.delete")
+                self.assertEqual(deleted["data"]["name"], "fulcrum")
+                self.assertTrue(deleted["data"]["deleted"])
+                self.assertEqual(deleted["data"]["default_backend"], "my-node")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
+
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "backend-settings-after-default-delete",
+                        "kind": "ui.backends.settings.list",
+                    },
+                )
+                after = _read_payload_timeout(proc)
+                self.assertEqual(after["data"]["summary"]["default_backend"], "my-node")
+                rows = {row["name"]: row for row in after["data"]["backends"]}
+                self.assertNotIn("fulcrum", rows)
+                self.assertTrue(rows["my-node"]["is_default"])
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
+
+    def test_daemon_backend_delete_moves_legacy_default_to_runtime_builtin(self):
+        with tempfile.TemporaryDirectory(
+            prefix="kassiber-daemon-backend-delete-legacy-default-"
+        ) as tmp:
+            data_root = Path(tmp) / "data"
+            _run_cli(data_root, "init")
+            conn = open_db(data_root)
+            try:
+                conn.execute("DELETE FROM backends WHERE name != 'fulcrum'")
+                conn.commit()
+            finally:
+                conn.close()
+
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "delete-legacy-active-default",
+                        "kind": "ui.backends.delete",
+                        "args": {"name": "fulcrum"},
+                    },
+                )
+                deleted = _read_payload_timeout(proc)
+                self.assertEqual(deleted["kind"], "ui.backends.delete")
+                self.assertEqual(deleted["data"]["default_backend"], "mempool")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
+
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "legacy-settings-after-default-delete",
+                        "kind": "ui.backends.settings.list",
+                    },
+                )
+                after = _read_payload_timeout(proc)
+                self.assertEqual(after["data"]["summary"]["default_backend"], "mempool")
+                self.assertNotIn(
+                    "fulcrum",
+                    {row["name"] for row in after["data"]["backends"]},
+                )
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
+
     def test_daemon_backend_delete_does_not_promote_dotenv_backend(self):
         with tempfile.TemporaryDirectory(
             prefix="kassiber-daemon-backend-delete-dotenv-"

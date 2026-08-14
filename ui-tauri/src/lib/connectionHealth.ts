@@ -16,9 +16,6 @@ export type ConnectionHealthStatus =
   | "unavailable";
 export type ConnectionIndicatorTone = "neutral" | "online" | "warning" | "error";
 
-export const CONNECTION_HEALTH_CHECK_INTERVAL_MS = 60_000;
-export const CONNECTION_HEALTH_CHECK_JITTER_MS = 5_000;
-
 export interface ConnectionHealthInput {
   id: string;
   name: string;
@@ -39,13 +36,7 @@ export interface ConnectionHealthCheckGateInput {
   documentVisible: boolean;
   maintenanceActive: boolean;
   networkStatus: NetworkStatus;
-}
-
-export interface ImmediateConnectionHealthCheckInput {
-  canCheckConnections: boolean;
-  hasUncheckedConnection: boolean;
-  lastCheckedAt?: string;
-  nowMs?: number;
+  userInitiated: boolean;
 }
 
 export function endpointWithPort(raw: string): string {
@@ -164,45 +155,15 @@ export function canRunConnectionHealthChecks({
   documentVisible,
   maintenanceActive,
   networkStatus,
+  userInitiated,
 }: ConnectionHealthCheckGateInput): boolean {
   return (
+    userInitiated &&
     daemonEnabled &&
     documentVisible &&
     networkStatus === "online" &&
     !maintenanceActive &&
     !checking &&
     checkableConnectionCount > 0
-  );
-}
-
-export function nextConnectionHealthCheckDelayMs(
-  random: () => number = Math.random,
-): number {
-  const jitter =
-    Math.round(random() * CONNECTION_HEALTH_CHECK_JITTER_MS * 2) -
-    CONNECTION_HEALTH_CHECK_JITTER_MS;
-  return CONNECTION_HEALTH_CHECK_INTERVAL_MS + jitter;
-}
-
-export function isConnectionHealthStale(
-  checkedAt: string | undefined,
-  nowMs: number = Date.now(),
-): boolean {
-  if (!checkedAt) return true;
-  const checkedAtMs = Date.parse(checkedAt);
-  if (Number.isNaN(checkedAtMs)) return true;
-  return nowMs - checkedAtMs >= CONNECTION_HEALTH_CHECK_INTERVAL_MS;
-}
-
-export function shouldRunImmediateConnectionHealthCheck({
-  canCheckConnections,
-  hasUncheckedConnection,
-  lastCheckedAt,
-  nowMs,
-}: ImmediateConnectionHealthCheckInput): boolean {
-  if (!canCheckConnections) return false;
-  return (
-    hasUncheckedConnection ||
-    isConnectionHealthStale(lastCheckedAt, nowMs)
   );
 }

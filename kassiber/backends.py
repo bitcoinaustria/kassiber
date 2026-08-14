@@ -1228,20 +1228,40 @@ def update_db_backend(conn, name, updates):
     return get_db_backend(conn, name)
 
 
-def delete_db_backend(conn, name):
-    """Delete a DB-backed backend, refusing if it is the active stored default."""
+def delete_db_backend(conn, name, runtime_config=None):
+    """Delete a DB-backed backend, moving the stored default when necessary."""
     name = name.strip().lower()
+    if runtime_config is not None:
+        if name in _dotenv_backend_names(runtime_config):
+            raise AppError(
+                f"Backend '{name}' is defined in your env file",
+                code="conflict",
+                hint="Remove its KASSIBER_BACKEND_... entries from the env file and restart.",
+                retryable=False,
+            )
+        if _process_env_backend_fields(runtime_config, name):
+            raise AppError(
+                f"Backend '{name}' is overridden by the process environment",
+                code="conflict",
+                hint="Remove its KASSIBER_BACKEND_... process variables and restart.",
+                retryable=False,
+            )
+        if (
+            name == str(runtime_config.get("default_backend") or "").strip().lower()
+            and _process_env_default_backend_override(runtime_config)
+        ):
+            raise AppError(
+                f"Backend '{name}' is forced as the default by the process environment",
+                code="conflict",
+                hint="Remove KASSIBER_DEFAULT_BACKEND and restart.",
+                retryable=False,
+            )
     row = conn.execute("SELECT name FROM backends WHERE name = ?", (name,)).fetchone()
     if not row:
         raise AppError(
             f"Backend '{name}' not found in the database",
             code="not_found",
             hint="Only DB-backed backends can be deleted; env-sourced backends are removed from your .env file instead.",
-        )
-    if get_setting(conn, DEFAULT_BACKEND_SETTING) == name:
-        raise AppError(
-            f"Backend '{name}' is the stored default; clear it with `kassiber backends clear-default` first",
-            code="conflict",
         )
     wallet_refs = _wallet_backend_references(conn, name)
     if wallet_refs:
@@ -1251,15 +1271,42 @@ def delete_db_backend(conn, name):
             hint="Reassign the listed wallets to another backend before deleting this one.",
             details={"wallet_refs": wallet_refs},
         )
+    default_backend = get_setting(conn, DEFAULT_BACKEND_SETTING)
+    replacement_default = None
+    if default_backend == name:
+        remaining = {
+            item["name"]
+            for item in conn.execute(
+                "SELECT name FROM backends WHERE name != ?",
+                (name,),
+            ).fetchall()
+        }
+        if runtime_config is not None:
+            remaining.update(
+                candidate
+                for candidate in runtime_config.get("backends", {})
+                if candidate != name
+            )
+        if not remaining:
+            raise AppError(
+                f"Backend '{name}' has no persistable replacement backend",
+                code="conflict",
+                hint="Create another backend before deleting this one.",
+            )
+        replacement_default = _fallback_backend_name(remaining)
+        set_setting(conn, DEFAULT_BACKEND_SETTING, replacement_default)
     conn.execute("DELETE FROM backends WHERE name = ?", (name,))
     tombstones = _load_bootstrap_backend_tombstones(conn)
     tombstones.add(name)
     _save_bootstrap_backend_tombstones(conn, tombstones)
     conn.commit()
-    return {
+    payload = {
         "name": name,
         "deleted": True,
     }
+    if replacement_default:
+        payload["default_backend"] = replacement_default
+    return payload
 
 
 def set_default_backend(conn, runtime_config, name, commit=True):

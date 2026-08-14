@@ -8,7 +8,6 @@ import { Switch } from "@/components/ui/switch";
 import { AiProviderForm, type ExistingAiProvider } from "@/components/kb/AiProviderForm";
 import { ChatHistorySettingsCard } from "@/components/kb/settings/ChatHistorySettingsCard";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
-import type { AiModelsListData } from "@/lib/aiCapabilities";
 import { confirmAction } from "@/lib/confirmAction";
 import { cn } from "@/lib/utils";
 import {
@@ -16,40 +15,8 @@ import {
   aiProviderDisplayName,
   aiSecretStateLabel,
   aiSecretStoreLabel,
-  formatModelSummary,
-  isCliAiProvider,
-  type AiProviderRow,
   type AiProvidersListData,
 } from "./SettingsModel";
-
-function AiProviderModelSummary({ row }: { row: AiProviderRow }) {
-  const { t } = useTranslation("settings");
-  const isCli = isCliAiProvider(row);
-  const modelsQuery = useDaemon<AiModelsListData>(
-    "ai.list_models",
-    { provider: row.name },
-    {
-      enabled: isCli,
-      refetchOnMount: "always",
-      staleTime: 5 * 60 * 1000,
-    },
-  );
-
-  if (!isCli) return <>{row.default_model ?? "-"}</>;
-
-  const models =
-    modelsQuery.data?.kind === "ai.list_models" && modelsQuery.data.data
-      ? modelsQuery.data.data.models
-      : [];
-  const summary = formatModelSummary(models);
-  if (summary) return <>{summary}</>;
-  if (modelsQuery.isFetching) {
-    return (
-      <span className="text-muted-foreground">{t("ai.loadingModels")}</span>
-    );
-  }
-  return <>{row.default_model ?? "-"}</>;
-}
 
 export function AiProvidersSettingsPanel({
   aiFeaturesEnabled,
@@ -231,7 +198,7 @@ export function AiProvidersSettingsPanel({
                       {t("ai.defaultModel")}
                     </p>
                     <p className="break-words font-mono">
-                      <AiProviderModelSummary row={row} />
+                      {row.default_model ?? "-"}
                     </p>
                   </div>
                   <div className="space-y-0.5">

@@ -1,17 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  CONNECTION_HEALTH_CHECK_INTERVAL_MS,
-  CONNECTION_HEALTH_CHECK_JITTER_MS,
   abbreviateEndpointMiddle,
   canRunConnectionHealthChecks,
   connectionHealthTone,
   connectionProbeKind,
   endpointWithPort,
-  isConnectionHealthStale,
-  nextConnectionHealthCheckDelayMs,
   settingsHashForConnection,
-  shouldRunImmediateConnectionHealthCheck,
   type ConnectionHealthSnapshot,
 } from "./connectionHealth";
 
@@ -195,7 +190,7 @@ describe("connection health model", () => {
     expect(connectionHealthTone("offline", [healthy])).toBe("error");
   });
 
-  it("gates automatic checks to unlocked, online, visible, idle app state", () => {
+  it("requires an explicit user action before checking connections", () => {
     const ready = {
       checking: false,
       checkableConnectionCount: 1,
@@ -203,9 +198,13 @@ describe("connection health model", () => {
       documentVisible: true,
       maintenanceActive: false,
       networkStatus: "online" as const,
+      userInitiated: true,
     };
 
     expect(canRunConnectionHealthChecks(ready)).toBe(true);
+    expect(
+      canRunConnectionHealthChecks({ ...ready, userInitiated: false }),
+    ).toBe(false);
     expect(
       canRunConnectionHealthChecks({ ...ready, checking: true }),
     ).toBe(false);
@@ -226,65 +225,4 @@ describe("connection health model", () => {
     ).toBe(false);
   });
 
-  it("adds bounded jitter to the 60 second refresh cadence", () => {
-    expect(nextConnectionHealthCheckDelayMs(() => 0)).toBe(
-      CONNECTION_HEALTH_CHECK_INTERVAL_MS - CONNECTION_HEALTH_CHECK_JITTER_MS,
-    );
-    expect(nextConnectionHealthCheckDelayMs(() => 0.5)).toBe(
-      CONNECTION_HEALTH_CHECK_INTERVAL_MS,
-    );
-    expect(nextConnectionHealthCheckDelayMs(() => 1)).toBe(
-      CONNECTION_HEALTH_CHECK_INTERVAL_MS + CONNECTION_HEALTH_CHECK_JITTER_MS,
-    );
-  });
-
-  it("treats missing, invalid, and old checks as stale", () => {
-    const now = Date.parse("2026-06-09T12:00:00.000Z");
-
-    expect(isConnectionHealthStale(undefined, now)).toBe(true);
-    expect(isConnectionHealthStale("not-a-date", now)).toBe(true);
-    expect(isConnectionHealthStale("2026-06-09T11:59:01.000Z", now)).toBe(
-      false,
-    );
-    expect(isConnectionHealthStale("2026-06-09T11:59:00.000Z", now)).toBe(
-      true,
-    );
-  });
-
-  it("collapses immediate refresh reasons into one run decision", () => {
-    const now = Date.parse("2026-06-09T12:00:00.000Z");
-
-    expect(
-      shouldRunImmediateConnectionHealthCheck({
-        canCheckConnections: false,
-        hasUncheckedConnection: true,
-        lastCheckedAt: "2026-06-09T11:59:00.000Z",
-        nowMs: now,
-      }),
-    ).toBe(false);
-    expect(
-      shouldRunImmediateConnectionHealthCheck({
-        canCheckConnections: true,
-        hasUncheckedConnection: true,
-        lastCheckedAt: "2026-06-09T11:59:59.000Z",
-        nowMs: now,
-      }),
-    ).toBe(true);
-    expect(
-      shouldRunImmediateConnectionHealthCheck({
-        canCheckConnections: true,
-        hasUncheckedConnection: false,
-        lastCheckedAt: "2026-06-09T11:59:00.000Z",
-        nowMs: now,
-      }),
-    ).toBe(true);
-    expect(
-      shouldRunImmediateConnectionHealthCheck({
-        canCheckConnections: true,
-        hasUncheckedConnection: false,
-        lastCheckedAt: "2026-06-09T11:59:01.000Z",
-        nowMs: now,
-      }),
-    ).toBe(false);
-  });
 });

@@ -3497,7 +3497,10 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             }
             return emit(args, core_accounts.update_backend(conn, args.name, updates))
         if args.backends_command == "delete":
-            return emit(args, core_accounts.delete_backend(conn, args.name))
+            return emit(
+                args,
+                core_accounts.delete_backend(conn, args.name, args.runtime_config),
+            )
         if args.backends_command == "set-default":
             return emit(
                 args,

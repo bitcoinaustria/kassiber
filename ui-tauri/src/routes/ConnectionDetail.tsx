@@ -496,7 +496,7 @@ function NodeConnectionContainer({
   const nodeSnapshotQuery = useDaemon<NodeSnapshot>(
     "ui.connections.node.snapshot",
     { connection: connection.id },
-    { retry: retryRetryableDaemonError },
+    { enabled: false, retry: retryRetryableDaemonError },
   );
   const liveSnapshot = nodeSnapshotQuery.data?.data;
   const resolvedConnection = liveSnapshot

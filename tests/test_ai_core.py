@@ -1770,6 +1770,32 @@ class DaemonAiTestConnectionTest(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_model_discovery_requires_remote_provider_acknowledgement(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-model-consent-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                create_db_ai_provider(
+                    conn,
+                    "unconfirmed",
+                    "https://example.test/v1",
+                    kind="remote",
+                )
+                with patch("kassiber.daemon.ai_client_for_locator") as client_factory:
+                    with self.assertRaises(AppError) as ctx:
+                        daemon_runtime.handle_request(
+                            self._ctx(conn),
+                            {
+                                "kind": "ai.list_models",
+                                "request_id": "models-1",
+                                "args": {"provider": "unconfirmed"},
+                            },
+                            out=None,
+                        )
+                self.assertEqual(ctx.exception.code, "ai_remote_ack_required")
+                client_factory.assert_not_called()
+            finally:
+                conn.close()
+
     def test_model_discovery_returns_freshness_and_last_good_data(self):
         calls = 0
 

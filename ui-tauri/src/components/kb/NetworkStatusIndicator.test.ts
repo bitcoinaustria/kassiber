@@ -113,7 +113,7 @@ describe("visibleConnectionBackends", () => {
     expect(rows.map((row) => row.id)).toEqual(["mempool", "liquid"]);
   });
 
-  it("keeps saved HTTP TLS settings on background health probes", () => {
+  it("keeps saved HTTP TLS settings on manual health checks", () => {
     const row = connectionRowFromBackend(
       backend({
         id: "private-esplora",

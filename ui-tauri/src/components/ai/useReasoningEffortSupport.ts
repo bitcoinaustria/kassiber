@@ -42,14 +42,16 @@ export function useReasoningEffortSupport(
     "ai.list_models",
     selectedProvider ? { provider: selectedProvider.name } : undefined,
     {
-      enabled: enabled && Boolean(selectedProvider),
+      // Model discovery may contact the configured provider. Read an existing
+      // query-cache snapshot, but never start discovery just because chat UI
+      // mounted.
+      enabled: false,
       staleTime: 5 * 60 * 1000,
       meta: { shellProgress: false },
     },
   );
   const modelsData =
     modelsQuery.data?.kind === "ai.list_models" ? modelsQuery.data.data : null;
-  const hasModelsResponse = Boolean(modelsData);
   const models = React.useMemo(
     () => modelsData?.models ?? [],
     [modelsData],
@@ -65,8 +67,7 @@ export function useReasoningEffortSupport(
     !selection ||
     providerSupported ||
     providersQuery.isError ||
-    (Boolean(hasProvidersResponse) &&
-      (!selectedProvider || modelsQuery.isError || Boolean(hasModelsResponse)));
+    Boolean(hasProvidersResponse);
 
   return { supported, resolved };
 }

@@ -14,8 +14,8 @@ import {
 } from "./constants";
 
 describe("onboarding update privacy", () => {
-  it("records an explicit update-check choice in the setup form", () => {
-    expect(DEFAULT_FORM.updateChecksEnabled).toBe(true);
+  it("requires users to opt in to update checks", () => {
+    expect(DEFAULT_FORM.updateChecksEnabled).toBe(false);
   });
 });
 

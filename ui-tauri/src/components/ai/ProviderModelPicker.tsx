@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Cloud,
   Cpu,
+  RefreshCw,
   Search,
   ShieldCheck,
   type LucideIcon,
@@ -28,6 +29,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -62,7 +64,6 @@ import {
   modelPrivacyPosture,
   providerRuntimeSelectable,
   providerRuntimeTone,
-  shouldPollProviderModels,
 } from "./providerModelSearch";
 import { PROVIDER_BRAND_ICON_BY_RUNTIME } from "./providerBrandIcons";
 
@@ -90,8 +91,6 @@ const KNOWN_EFFORTS: AssistantThinkingEffort[] = [
   "max",
   "ultra",
 ];
-
-const LOCAL_MODEL_REFRESH_MS = 5 * 60 * 1000;
 
 const KIND_ICON: Record<AiProviderKind, LucideIcon> = {
   local: Cpu,
@@ -228,12 +227,9 @@ export function ProviderModelPicker({
         { provider: provider.name },
       ),
       queryFn: () => fetchProviderModels(provider.name),
-      enabled: enabled && shouldPollProviderModels(provider),
-      refetchInterval: shouldPollProviderModels(provider)
-        ? LOCAL_MODEL_REFRESH_MS
-        : false,
+      enabled: false,
       refetchOnMount: false,
-      staleTime: LOCAL_MODEL_REFRESH_MS,
+      staleTime: 5 * 60 * 1000,
       gcTime: 60 * 60 * 1000,
       meta: { shellProgress: false },
     })),
@@ -251,21 +247,17 @@ export function ProviderModelPicker({
   const modelsByProvider = React.useMemo(() => {
     const next = new Map<string, AiModelsListData["models"]>();
     providers.forEach((provider, index) => {
-      const runtime = runtimeProviderName(provider);
-      if (runtime) {
-        next.set(
-          provider.name,
-          runtimeByProvider.get(runtime)?.models ?? [],
-        );
+      const result = modelQueries[index];
+      if (result?.data?.kind === "ai.list_models" && result.data.data) {
+        next.set(provider.name, result.data.data.models);
         return;
       }
-      const result = modelQueries[index];
-      next.set(
-        provider.name,
-        result?.data?.kind === "ai.list_models" && result.data.data
-          ? result.data.data.models
-          : [],
-      );
+      const runtime = runtimeProviderName(provider);
+      if (runtime) {
+        next.set(provider.name, runtimeByProvider.get(runtime)?.models ?? []);
+        return;
+      }
+      next.set(provider.name, []);
     });
     return next;
   }, [providers, modelQueries, runtimeByProvider]);
@@ -438,10 +430,17 @@ export function ProviderModelPicker({
       ? runtimeQuery.data.data
       : undefined;
   const activeDiscovery = activeRuntimeName
-    ? runtimeSnapshot
+    ? activeGroup
+      ? modelSnapshotsByProvider.get(activeGroup.provider.name) ?? runtimeSnapshot
+      : runtimeSnapshot
     : activeGroup
       ? modelSnapshotsByProvider.get(activeGroup.provider.name)
       : undefined;
+  const activeModelQuery = activeGroup
+    ? modelQueries[
+        providers.findIndex((provider) => provider.name === activeGroup.provider.name)
+      ]
+    : undefined;
   const filteredModels = activeGroup
     ? sortModelRowsByPosture(
         activeGroup.provider,
@@ -468,6 +467,25 @@ export function ProviderModelPicker({
     onOverlayOpenChange?.(thinkingOpen);
   };
 
+  const checkActiveModels = async () => {
+    if (!activeGroup || !activeModelQuery) return;
+    const provider = activeGroup.provider;
+    if (provider.kind !== "local" && !provider.acknowledged_at) {
+      if (
+        !window.confirm(
+          t("modelPicker.remoteDiscoveryConfirm", {
+            provider: providerDisplayName(provider),
+          }),
+        )
+      ) {
+        return;
+      }
+      await acknowledgeProvider.mutateAsync({ name: provider.name });
+      await providersQuery.refetch();
+    }
+    await activeModelQuery.refetch();
+  };
+
   React.useEffect(
     () => () => onOverlayOpenChange?.(false),
     [onOverlayOpenChange],
@@ -480,14 +498,6 @@ export function ProviderModelPicker({
         onOpenChange={(next) => {
           setOpen(next);
           onOverlayOpenChange?.(next || thinkingOpen);
-          if (next) {
-            void runtimeQuery.refetch();
-            providers.forEach((provider, index) => {
-              if (!isCliProvider(provider)) {
-                void modelQueries[index]?.refetch();
-              }
-            });
-          }
           if (!next) {
             setSearch("");
             acknowledgeProvider.reset();
@@ -601,6 +611,30 @@ export function ProviderModelPicker({
                     ) : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
+                    {activeGroup ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        data-model-picker-check
+                        disabled={
+                          acknowledgeProvider.isPending ||
+                          activeModelQuery?.isFetching
+                        }
+                        onClick={() => void checkActiveModels()}
+                      >
+                        <RefreshCw
+                          className={cn(
+                            "size-3.5",
+                            activeModelQuery?.isFetching && "animate-spin",
+                          )}
+                          aria-hidden="true"
+                        />
+                        {activeModelQuery?.isFetching
+                          ? t("modelPicker.checkingModels")
+                          : t("modelPicker.checkModels")}
+                      </Button>
+                    ) : null}
                     <div
                       className="inline-flex rounded-md bg-muted p-0.5 text-2xs"
                       role="group"
@@ -657,9 +691,13 @@ export function ProviderModelPicker({
                   <p className="p-3 text-sm text-muted-foreground">
                     {activeRuntime && activeRuntime.state !== "ready"
                       ? activeRuntime.message
-                      : search
-                        ? t("modelPicker.noMatchingModels")
-                        : t("modelPicker.noModels")}
+                      : activeModelQuery?.isFetching
+                        ? t("modelPicker.checkingModels")
+                        : activeModelQuery?.error instanceof Error
+                          ? activeModelQuery.error.message
+                          : search
+                            ? t("modelPicker.noMatchingModels")
+                            : t("modelPicker.noModels")}
                   </p>
                 ) : (
                   filteredModels.map((model) => {
