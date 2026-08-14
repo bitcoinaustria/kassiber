@@ -5,9 +5,11 @@ machine. There is no telemetry, crash reporter, license check, or analytics.
 Shipping, displaying, or preconfiguring a backend is not network consent.
 Kassiber does not probe configured backends on launch or on a timer; a sync,
 connection test, refresh, or narrowly enabled background feature must be
-explicitly requested by the user. Installed desktop and interactive CLI builds make a minimal GitHub release
-check only after the app-wide permission is enabled; they do not download or install
-updates. Outbound traffic is limited to the requests listed below.
+explicitly requested by the user.
+
+Installed desktop and interactive CLI builds make a minimal GitHub release
+check only after the app-wide permission is enabled; they do not download or
+install updates. Outbound traffic is limited to the requests listed below.
 
 Kassiber is pre-release (`0.1.x`) — treat this as a description of
 current behavior, not a long-term contract.

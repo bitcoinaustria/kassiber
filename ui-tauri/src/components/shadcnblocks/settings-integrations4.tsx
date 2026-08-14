@@ -126,7 +126,7 @@ interface SettingsIntegrations4Props {
   className?: string;
   heading?: string;
   subHeading?: string;
-  integrations?: IntegrationItem[];
+  integrations: IntegrationItem[];
   selectedId?: string;
   onSelect?: (integration: IntegrationItem) => void;
   onToggleIntegration?: (integration: IntegrationItem) => void;
@@ -137,7 +137,10 @@ const SettingsIntegrations4 = ({
   className,
   heading = "Integrations",
   subHeading = "Connect your favorite tools and services to streamline your workflow.",
-  integrations: initialIntegrations = [],
+  // No default: the only consumer (routes/Imports.tsx) always passes this.
+  // The upstream block shipped a demo list of CDN-hosted logos here, which
+  // would have been remote image loads in a local-first app.
+  integrations: initialIntegrations,
   selectedId,
   onSelect,
   onToggleIntegration,
