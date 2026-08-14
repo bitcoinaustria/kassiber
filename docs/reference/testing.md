@@ -744,14 +744,12 @@ mode.
 ## Guardrails
 
 - `KASSIBER_TEST_NO_EGRESS=1` arms the socket guard only; `tests/conftest.py`
-  sets it for every non-integration run, and a `sitecustomize` on `PYTHONPATH`
-  carries it into spawned Python children. `KASSIBER_NO_EGRESS=1` arms the same
-  guard *and* tells the BDK/LWK observers to refuse chain observation outright,
-  destination-blind — which is what the fast lane wants and what a suite-wide
-  setting must not do, since it also refuses loopback fakes
-- `KASSIBER_NO_EGRESS=1` blocks non-loopback `socket.connect` calls inside fast
-  harness tests so replay fixtures cannot accidentally reach live exchanges or
-  public backends.
+  sets it before collection for every non-integration run. It blocks Python
+  DNS, TCP connects, and UDP sends to non-loopback hosts. A `sitecustomize` on
+  `PYTHONPATH` carries it into spawned Python children and stops a child if the
+  guard cannot start. `KASSIBER_NO_EGRESS=1` also tells BDK/LWK observers to
+  refuse chain observation outright, including loopback, so it is not used
+  suite-wide.
 - Tapes must include provenance (`backend_kind`, network, regtest anchor, and
   issue number) and fail closed: an adapter request absent from the tape raises
   `TapeMiss`, while unused recorded interactions fail the replay test.

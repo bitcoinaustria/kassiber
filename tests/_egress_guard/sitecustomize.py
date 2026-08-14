@@ -17,6 +17,7 @@ inherit the variable but nothing enforces it for them.
 from __future__ import annotations
 
 import os
+import sys
 
 # Module-global on purpose. Without a live reference the context manager is
 # garbage-collected, its `finally` runs, and the guard silently uninstalls
@@ -37,7 +38,6 @@ if _MODE:
             enabled=True, allow_loopback=_MODE.strip().lower() != "strict"
         )
         _GUARD.__enter__()
-    except Exception:
-        # A child that cannot arm the guard must still start; the parent
-        # process guard remains the primary check.
-        _GUARD = None
+    except Exception as exc:
+        print("Kassiber test no-egress guard could not start", file=sys.stderr)
+        raise SystemExit(78) from exc

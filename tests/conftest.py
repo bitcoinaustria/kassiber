@@ -11,6 +11,7 @@ its exclusion.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import time
 from pathlib import Path
@@ -21,8 +22,12 @@ from kassiber.operator import project as project_module
 from tests.integration.env import env_flag, no_egress_guard
 
 
-@pytest.fixture(autouse=True, scope="session")
-def _block_egress():
+_EGRESS_STACK: contextlib.ExitStack | None = None
+_PREVIOUS_TEST_NO_EGRESS: str | None = None
+_PREVIOUS_PYTHONPATH: str | None = None
+
+
+def pytest_configure(config: pytest.Config) -> None:
     """Fail any test that tries to leave the machine.
 
     The suite's other no-network tests assert `not_called()` on one patched
@@ -45,29 +50,42 @@ def _block_egress():
     service/provider probes" clause is *not* covered here -- a test that
     needs that asserts it directly.
     """
-    if env_flag("KASSIBER_INTEGRATION") or env_flag("KASSIBER_MEDIUM"):
-        yield
+    if env_flag("KASSIBER_INTEGRATION"):
+        return
+
+    global _EGRESS_STACK, _PREVIOUS_TEST_NO_EGRESS, _PREVIOUS_PYTHONPATH
+    if _EGRESS_STACK is not None:
         return
 
     root = Path(__file__).resolve().parent.parent
-    previous_path = os.environ.get("PYTHONPATH")
+    _PREVIOUS_TEST_NO_EGRESS = os.environ.get("KASSIBER_TEST_NO_EGRESS")
+    _PREVIOUS_PYTHONPATH = os.environ.get("PYTHONPATH")
     os.environ["KASSIBER_TEST_NO_EGRESS"] = "1"
     os.environ["PYTHONPATH"] = os.pathsep.join(
         [
             str(root / "tests" / "_egress_guard"),
             str(root),
-            *([previous_path] if previous_path else []),
+            *([_PREVIOUS_PYTHONPATH] if _PREVIOUS_PYTHONPATH else []),
         ]
     )
-    try:
-        with no_egress_guard(enabled=True):
-            yield
-    finally:
+    _EGRESS_STACK = contextlib.ExitStack()
+    _EGRESS_STACK.enter_context(no_egress_guard(enabled=True))
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    global _EGRESS_STACK
+    if _EGRESS_STACK is None:
+        return
+    _EGRESS_STACK.close()
+    _EGRESS_STACK = None
+    if _PREVIOUS_TEST_NO_EGRESS is None:
         os.environ.pop("KASSIBER_TEST_NO_EGRESS", None)
-        if previous_path is None:
-            os.environ.pop("PYTHONPATH", None)
-        else:
-            os.environ["PYTHONPATH"] = previous_path
+    else:
+        os.environ["KASSIBER_TEST_NO_EGRESS"] = _PREVIOUS_TEST_NO_EGRESS
+    if _PREVIOUS_PYTHONPATH is None:
+        os.environ.pop("PYTHONPATH", None)
+    else:
+        os.environ["PYTHONPATH"] = _PREVIOUS_PYTHONPATH
 
 
 @pytest.fixture(autouse=True, scope="session")

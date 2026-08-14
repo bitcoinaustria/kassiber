@@ -251,9 +251,11 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   egress path needs documentation and a no-egress-before-consent regression.
   The suite enforces this: `tests/conftest.py` arms `no_egress_guard` for every
   non-integration run via `KASSIBER_TEST_NO_EGRESS` and carries it into spawned
-  Python children through a `sitecustomize` on `PYTHONPATH`, so a connect or DNS
-  lookup to a non-loopback host fails the test that caused it. Loopback stays
-  allowed (the smoke tests bind local HTTP fakes), and sockets opened inside
+  Python children through a `sitecustomize` on `PYTHONPATH`, so a connect,
+  datagram, or DNS lookup to a non-loopback host fails the test that caused it.
+  The guard starts before test collection and child startup fails if the guard
+  cannot arm. Loopback stays allowed (the smoke tests bind local HTTP fakes),
+  and sockets opened inside
   native libraries or non-Python children are outside its reach. Keep that
   variable distinct from `KASSIBER_NO_EGRESS`, which is a product kill switch
   the BDK and LWK observers read directly and honor destination-blind — it

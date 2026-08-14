@@ -52,7 +52,7 @@ class EgressBlocked(BaseException):
 def no_egress_guard(
     *, enabled: bool | None = None, allow_loopback: bool = True
 ) -> Iterator[None]:
-    """Block socket connects and DNS inside a test process.
+    """Block socket connects, datagrams, and DNS inside a test process.
 
     The guard is intentionally test-local: it proves fast/medium fixtures do not
     reach live exchanges or public backends without changing product runtime
@@ -91,6 +91,7 @@ def no_egress_guard(
 
     original_connect = socket.socket.connect
     original_connect_ex = socket.socket.connect_ex
+    original_sendto = socket.socket.sendto
     original_getaddrinfo = socket.getaddrinfo
 
     def _blocked_address(address: Any) -> str | None:
@@ -114,6 +115,13 @@ def no_egress_guard(
             )
         return original_connect_ex(self, address)
 
+    def guarded_sendto(self: socket.socket, data: Any, *args: Any):
+        address = args[-1] if args else None
+        host = _blocked_address(address)
+        if host is not None:
+            raise EgressBlocked(f"no-egress guard blocked socket.sendto to {host}")
+        return original_sendto(self, data, *args)
+
     def guarded_getaddrinfo(host: Any, *args: Any, **kwargs: Any):
         # Resolving a name is already a request to a nameserver, and it is the
         # first thing most egress paths do -- so blocking it here names the
@@ -124,12 +132,14 @@ def no_egress_guard(
 
     socket.socket.connect = guarded_connect
     socket.socket.connect_ex = guarded_connect_ex
+    socket.socket.sendto = guarded_sendto
     socket.getaddrinfo = guarded_getaddrinfo
     try:
         yield
     finally:
         socket.socket.connect = original_connect
         socket.socket.connect_ex = original_connect_ex
+        socket.socket.sendto = original_sendto
         socket.getaddrinfo = original_getaddrinfo
 
 

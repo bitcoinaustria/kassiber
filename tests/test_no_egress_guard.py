@@ -5,9 +5,9 @@ that runs under it reports a clean result it never actually earned. These pin
 what it blocks, that it reaches spawned Python children, and that it cannot be
 swallowed by a broad `except Exception`.
 
-`tests/conftest.py` arms it for every non-integration session via
+`tests/conftest.py` arms it for every non-integration run via
 `KASSIBER_TEST_NO_EGRESS`; these tests install it explicitly so they assert the
-guard's own behavior rather than the session fixture's.
+guard's own behavior rather than the suite hook's.
 """
 
 from __future__ import annotations
@@ -37,6 +37,16 @@ def test_guard_blocks_connect():
         with no_egress_guard(enabled=True):
             with pytest.raises(EgressBlocked):
                 probe.connect(("93.184.216.34", 80))
+    finally:
+        probe.close()
+
+
+def test_guard_blocks_udp_sendto():
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        with no_egress_guard(enabled=True):
+            with pytest.raises(EgressBlocked):
+                probe.sendto(b"probe", ("192.0.2.1", 9))
     finally:
         probe.close()
 
@@ -89,3 +99,28 @@ def test_guard_reaches_spawned_python_children():
 
     assert completed.returncode != 0
     assert "no-egress guard blocked" in completed.stderr
+
+
+def test_child_exits_if_guard_cannot_start(tmp_path: Path):
+    """A broken child guard must not produce a false-green launch test."""
+    shadow = tmp_path / "shadow"
+    shadow.mkdir()
+    (shadow / "tests.py").write_text("# blocks the real tests package\n")
+    env = dict(os.environ)
+    env["KASSIBER_TEST_NO_EGRESS"] = "1"
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(ROOT / "tests" / "_egress_guard"), str(shadow)]
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", "print('unguarded child ran')"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=tmp_path,
+        env=env,
+    )
+
+    assert completed.returncode != 0
+    assert "unguarded child ran" not in completed.stdout
+    assert "Kassiber test no-egress guard could not start" in completed.stderr
