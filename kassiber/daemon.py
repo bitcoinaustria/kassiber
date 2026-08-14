@@ -7800,6 +7800,10 @@ def _run_auto_read_tools(
         entry = get_tool(call.name)
         if entry is None or entry.kind_class != "read_only":
             continue
+        # Auto-reads run with `needs_consent: False`, so they must stay inside
+        # the machine. An egressing read is a request the user never made.
+        if entry.egresses:
+            continue
         if entry.provider_name not in advertised:
             continue
         out.write(
@@ -8332,7 +8336,7 @@ def _run_ai_chat_tool_loop(
                 entry is not None
                 and advertised
                 and not duplicate_call_id
-                and entry.kind_class == "mutating"
+                and entry.requires_consent
                 and not call.argument_error
                 and not active_chat.consent.has_session_allow(tool_session_name)
             )
@@ -8358,7 +8362,7 @@ def _run_ai_chat_tool_loop(
                     entry is not None
                     and advertised
                     and not duplicate_call_id
-                    and entry.kind_class == "mutating"
+                    and entry.requires_consent
                     and not call.argument_error
                 ):
                     cancelled_at = now_iso()
@@ -8379,7 +8383,7 @@ def _run_ai_chat_tool_loop(
                 result = _tool_result_denied("duplicate_tool_call_id")
             elif entry is not None and not advertised:
                 result = _tool_result_denied("tool_not_advertised")
-            elif entry is not None and entry.kind_class == "mutating" and not call.argument_error:
+            elif entry is not None and entry.requires_consent and not call.argument_error:
                 consent_requested_at = proposal_seen_at
                 if needs_consent:
                     out.write(
@@ -8459,18 +8463,27 @@ def _run_ai_chat_tool_loop(
                             request_id,
                         )
                     )
-                    result = _execute_mutating_ai_tool(
-                        call,
-                        runtime,
-                        custody_audit=CustodyAiConsentAudit(
-                            provider_kind=str(
-                                provider_snapshot.get("kind") or "unknown"
+                    # Consent is keyed to `requires_consent`, execution stays
+                    # keyed to `kind_class`: a read-only tool that egresses
+                    # still runs through the read-only executor, which is
+                    # where its per-tool redaction lives (see the Lightning
+                    # opsec branches in `_execute_read_only_ai_tool`).
+                    result = (
+                        _execute_mutating_ai_tool(
+                            call,
+                            runtime,
+                            custody_audit=CustodyAiConsentAudit(
+                                provider_kind=str(
+                                    provider_snapshot.get("kind") or "unknown"
+                                ),
+                                model=validated["model"],
+                                consent_decision=decision,
+                                consent_requested_at=consent_requested_at,
+                                consent_decided_at=consent_decided_at,
                             ),
-                            model=validated["model"],
-                            consent_decision=decision,
-                            consent_requested_at=consent_requested_at,
-                            consent_decided_at=consent_decided_at,
-                        ),
+                        )
+                        if entry.kind_class == "mutating"
+                        else _execute_read_only_ai_tool(call, runtime)
                     )
             else:
                 result = _execute_read_only_ai_tool(call, runtime)

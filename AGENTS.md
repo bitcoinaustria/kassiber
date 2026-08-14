@@ -87,10 +87,16 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   exact-kind terminal record (or an error) resolves only the matching request.
   `ai.chat.status` is a progress hint for loading/thinking phases, not
   chain-of-thought content.
-  Mutating tools may emit `ai.chat.tool_call` twice for the same `call_id`:
-  first with `needs_consent: true`, then after approval with
+  Consent-gated tools may emit `ai.chat.tool_call` twice for the same
+  `call_id`: first with `needs_consent: true`, then after approval with
   `needs_consent: false` to mark that same call as running. Clients should
   upsert tool cards by `call_id` instead of rendering duplicate cards.
+  A tool is consent-gated when it mutates the book (`kind_class: "mutating"`)
+  **or** when it leaves the machine (`egresses: true`) — those are separate
+  axes, and a read that contacts a node or provider prompts like a mutation
+  while still executing on the read-only path that carries its redaction.
+  Egressing tools are also excluded from the assistant's automatic context
+  reads, which run without a prompt.
   `ai.chat.cancel` and `ai.tool_call.consent` take
   `args.target_request_id` so the control request keeps its own routing
   `request_id`; cancelled chats finish with `finish_reason: "cancelled"`.

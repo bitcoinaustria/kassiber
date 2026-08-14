@@ -56,10 +56,18 @@ class ToolEntry:
     wire_name: str | None = None
     daemon_kind: str | None = None
     summary_template: str | None = None
+    # `kind_class` answers "does this change the book?"; `egresses` answers
+    # "does this leave the machine?". They are independent: a tool can read
+    # nothing but a live node and still owe the user a consent prompt.
+    egresses: bool = False
 
     @property
     def provider_name(self) -> str:
         return self.wire_name or self.name
+
+    @property
+    def requires_consent(self) -> bool:
+        return self.kind_class == "mutating" or self.egresses
 
     def to_responses_tool(self) -> dict[str, Any]:
         return {
@@ -888,6 +896,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             },
         },
         kind_class="read_only",
+        egresses=True,
         wire_name="ui_reports_lightning_profitability",
         daemon_kind="ui.reports.lightning_profitability",
         summary_template="Read Lightning profitability",
@@ -925,6 +934,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             },
         },
         kind_class="read_only",
+        egresses=True,
         wire_name="ui_connections_node_snapshot",
         daemon_kind="ui.connections.node.snapshot",
         summary_template="Read Lightning node snapshot",

@@ -515,6 +515,31 @@ class ToolCatalogPromptTest(unittest.TestCase):
             ["coinbase-exchange", "coingecko"],
         )
 
+    def test_tools_that_leave_the_machine_require_consent(self):
+        """Consent follows egress, not just book mutation.
+
+        The Lightning tools read the node live over its configured RPC. They
+        are read-only with respect to the book, and consent used to be decided
+        by `kind_class` alone, so the assistant contacted the node with
+        `needs_consent: False`. `ui.rates.latest` is the comparison case: it
+        also egresses and was already `mutating`.
+        """
+        for wire_name in (
+            "ui_connections_node_snapshot",
+            "ui_reports_lightning_profitability",
+        ):
+            tool = get_tool(wire_name)
+            self.assertTrue(tool.egresses, wire_name)
+            self.assertTrue(tool.requires_consent, wire_name)
+            # Execution must stay on the read-only path, which is where the
+            # Lightning opsec redaction lives.
+            self.assertEqual(tool.kind_class, "read_only", wire_name)
+
+        self.assertTrue(get_tool("ui_rates_latest").requires_consent)
+        # A genuinely local read stays promptless.
+        self.assertFalse(get_tool("ui_overview_snapshot").requires_consent)
+        self.assertFalse(get_tool("ui_overview_snapshot").egresses)
+
     def test_review_worklist_commercial_section_reads_instead_of_suggesting(self):
         """ui.review.worklist is read_only, so no section may write to the book.
 
