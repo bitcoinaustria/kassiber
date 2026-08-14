@@ -359,6 +359,15 @@ class _ToolChatHandler(BaseHTTPRequestHandler):
         return
 
 
+class _ParallelEsploraServer(ThreadingHTTPServer):
+    # BDK issues up to 8 parallel Esplora requests (`parallel_requests` in
+    # `chain_observer/bdk.py`). socketserver's default backlog of 5 lets the
+    # overflow be reset before `accept()` drains the queue, which surfaced as
+    # an intermittent "Connection reset by peer" from BDK rather than as
+    # anything identifying the fake server as the cause.
+    request_queue_size = 64
+
+
 class _EsploraSyncHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.server.paths.append(self.path)  # type: ignore[attr-defined]
@@ -2749,7 +2758,7 @@ class DaemonSmokeTest(unittest.TestCase):
                     "block_time": 1_700_000_000,
                 },
             }
-            server = ThreadingHTTPServer(("127.0.0.1", 0), _EsploraSyncHandler)
+            server = _ParallelEsploraServer(("127.0.0.1", 0), _EsploraSyncHandler)
             server.paths = []  # type: ignore[attr-defined]
             server.target_scripthash = target_scripthash  # type: ignore[attr-defined]
             server.target_esplora_scripthash = bytes.fromhex(target_scripthash)[  # type: ignore[attr-defined]
