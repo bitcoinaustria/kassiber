@@ -4,6 +4,7 @@ import { ShieldAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { TabsContent } from "@/components/ui/tabs";
 import { useDaemon } from "@/daemon/client";
 import {
@@ -243,6 +244,9 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     graphLoading,
     graphError,
     onOpenTransaction,
+    publicGraphLookup = false,
+    canPublicGraphLookup = false,
+    enablePublicGraphLookup,
   } = ctx;
   const displayGraphData = graphWithPairFallbackRoute(graphData, transaction);
   const swapRoute = displayGraphData?.swapRoute ?? null;
@@ -269,13 +273,27 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
       transaction.txnId,
     ],
   );
+  // The swap legs follow the sheet's own opt-in: preloading both legs of a
+  // swap would otherwise multiply one unrequested lookup into three.
   const swapOutGraphArgs = useMemo(
-    () => preloadableSwapLegGraphLookupArgs(swapRoute, "out", currentGraphReferences),
-    [currentGraphReferences, swapRoute],
+    () =>
+      preloadableSwapLegGraphLookupArgs(
+        swapRoute,
+        "out",
+        currentGraphReferences,
+        publicGraphLookup,
+      ),
+    [currentGraphReferences, publicGraphLookup, swapRoute],
   );
   const swapInGraphArgs = useMemo(
-    () => preloadableSwapLegGraphLookupArgs(swapRoute, "in", currentGraphReferences),
-    [currentGraphReferences, swapRoute],
+    () =>
+      preloadableSwapLegGraphLookupArgs(
+        swapRoute,
+        "in",
+        currentGraphReferences,
+        publicGraphLookup,
+      ),
+    [currentGraphReferences, publicGraphLookup, swapRoute],
   );
   const swapOutGraphQuery = useDaemon<TransactionGraphPayload>(
     "ui.transactions.graph",
@@ -534,8 +552,19 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                       </div>
                     </div>
                     <div className="overflow-hidden rounded-md border">
-                      <div className="border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {t("graph.sectionTitle")}
+                        {canPublicGraphLookup && !publicGraphLookup ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-2xs normal-case"
+                            onClick={() => enablePublicGraphLookup?.()}
+                          >
+                            {t("graph.lookupOnChain")}
+                          </Button>
+                        ) : null}
                       </div>
                       <div className="p-3">
                         <TransactionGraphPanel

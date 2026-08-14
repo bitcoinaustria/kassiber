@@ -103,6 +103,11 @@ export type TransactionDetailTabContext = {
   graphData?: TransactionGraphPayload;
   graphLoading?: boolean;
   graphError?: string | null;
+  /** True once the user asked for an on-chain graph lookup for this row. */
+  publicGraphLookup?: boolean;
+  /** True when this row has a txid a lookup could use at all. */
+  canPublicGraphLookup?: boolean;
+  enablePublicGraphLookup?: () => void;
   /** Opens another transaction in this book by id, when the host supports it. */
   onOpenTransaction?: (transactionId: string) => void;
 };
