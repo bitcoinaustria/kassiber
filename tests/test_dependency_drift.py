@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -81,10 +82,38 @@ def _rp2_pin_from_license_notes() -> str:
     raise AssertionError("THIRD_PARTY_LICENSES.md does not mention the pinned rp2 commit")
 
 
+def _tracked_paths() -> set[Path] | None:
+    """Files git tracks, or None when this is not a git checkout.
+
+    Returning None makes the caller scan everything, so an exported source
+    tree keeps the rule rather than silently losing it.
+    """
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(_ROOT), "ls-files", "-z"],
+            capture_output=True,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return {
+        _ROOT / name
+        for name in completed.stdout.decode("utf-8").split("\0")
+        if name
+    }
+
+
 def _locked_uv_surface_paths() -> list[Path]:
     paths = {_ROOT / name for name in _LOCKED_UV_ROOT_FILES}
     for pattern in _LOCKED_UV_SURFACE_GLOBS:
         paths.update(_ROOT.glob(pattern))
+    # Only files the repo actually ships. `.claude/**/*.json` otherwise picks
+    # up each developer's gitignored `settings.local.json`, so the rule failed
+    # on a file the repo does not own and CI never sees -- a red gate that
+    # says nothing about the branch under test.
+    tracked = _tracked_paths()
+    if tracked is not None:
+        paths &= tracked
     return sorted(path for path in paths if path.is_file())
 
 
