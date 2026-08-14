@@ -483,7 +483,15 @@ export function ProviderModelPicker({
       await acknowledgeProvider.mutateAsync({ name: provider.name });
       await providersQuery.refetch();
     }
-    await activeModelQuery.refetch();
+    // CLI providers report "not installed" / "authentication required"
+    // through the runtime status, not through the model list. Nothing else
+    // refetches it now that opening the picker doesn't, so without this the
+    // check reports "no models found" for a provider that simply isn't
+    // logged in.
+    await Promise.all([
+      activeModelQuery.refetch(),
+      ...(isCliProvider(provider) ? [runtimeQuery.refetch()] : []),
+    ]);
   };
 
   React.useEffect(

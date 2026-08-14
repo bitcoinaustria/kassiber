@@ -160,6 +160,10 @@ describe("ProviderModelPicker network consent", () => {
       kind: "ai.list_models",
       args: { provider: "codex", refresh: true },
     });
+    // codex is a CLI provider, and its "not installed" / "needs login" state
+    // arrives via the runtime status rather than the model list. Opening the
+    // picker no longer refetches it, so the explicit check has to.
+    expect(mocks.runtimeRefetch).toHaveBeenCalled();
   });
 
   it("does not list provider models when Settings mounts", () => {
