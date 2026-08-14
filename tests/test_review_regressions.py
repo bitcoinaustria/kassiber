@@ -5920,6 +5920,53 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(details["descriptor_state"], "invalid")
         self.assertTrue(details["descriptor"])
 
+    def test_xpub_without_script_types_is_rejected_and_never_breaks_listing(self):
+        from kassiber.core import wallets as core_wallets
+
+        xpub = (
+            "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2"
+            "cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz"
+        )
+        self._bootstrap_profile()
+        payload, result = self._run_json(
+            "wallets",
+            "create",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--label",
+            "Bare",
+            "--kind",
+            "xpub",
+            "--config",
+            json.dumps({"xpub": xpub}),
+        )
+        self.assertEqual(payload["error"]["code"], "validation", msg=result.stdout)
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        self.assertEqual(core_wallets.list_wallets(conn, "Main", "Default"), [])
+
+        # A book that already holds such a row must still list and inspect.
+        wallet = core_wallets.create_wallet(
+            conn,
+            "Main",
+            "Default",
+            "Bare",
+            "xpub",
+            config={"xpub": xpub, "script_types": ["p2wpkh"]},
+        )
+        conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = ?",
+            (json.dumps({"xpub": xpub}), wallet["id"]),
+        )
+        conn.commit()
+        rows = core_wallets.list_wallets(conn, "Main", "Default")
+        self.assertEqual([row["label"] for row in rows], ["Bare"])
+        self.assertEqual(rows[0]["descriptor"], "")
+        details = core_wallets.get_wallet_details(conn, "Main", "Default", "Bare")
+        self.assertEqual(details["descriptor_state"], "")
+
     def test_custom_env_file_backend_bootstrap_persists_into_db(self):
         env_file = self.case_dir / "custom-backends.env"
         env_file.write_text(

@@ -639,10 +639,17 @@ def _validated_wallet_config(normalized_kind, config):
             "Address wallets require at least one --address or a file-based source",
             code="validation",
         )
-    if normalized_kind == "descriptor" and descriptor_plan is None and not config.get("source_file"):
+    if (
+        normalized_kind in {"descriptor", "xpub"}
+        and descriptor_plan is None
+        and not config.get("source_file")
+    ):
+        # A raw --config carrying only an xpub would otherwise persist a wallet
+        # that cannot derive anything; reject it before the row is written.
         raise AppError(
-            "Descriptor wallets require a descriptor, an xpub with script types, or a file-based source",
+            "Descriptor and xpub wallets require a descriptor, an xpub with script types, or a file-based source",
             code="validation",
+            hint="Pass --script-type with a bare xpub, or set config script_types.",
         )
     if normalized_kind == "coreln" and not config.get("backend"):
         raise AppError(
@@ -702,9 +709,13 @@ def _wallet_descriptor_state(config):
     if config.get("descriptor") or config.get("xpub"):
         try:
             descriptor_plan = load_descriptor_plan(config)
-            descriptor_state = f"{descriptor_plan.chain}:{descriptor_plan.network}"
-            chain = descriptor_plan.chain
-            network = descriptor_plan.network
+            # A stored xpub without script types has no derivable branches, so
+            # the plan is None. Leave the descriptor column empty instead of
+            # letting one malformed wallet break the whole listing.
+            if descriptor_plan is not None:
+                descriptor_state = f"{descriptor_plan.chain}:{descriptor_plan.network}"
+                chain = descriptor_plan.chain
+                network = descriptor_plan.network
         except ValueError:
             descriptor_state = "invalid"
         except AppError as exc:
