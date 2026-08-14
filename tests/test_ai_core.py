@@ -776,6 +776,32 @@ class ToolCatalogPromptTest(unittest.TestCase):
             ),
             "Exclude tx-1 from accounting",
         )
+        # A consent prompt has to describe the change it is asking about.
+        # `background_enabled` fell through to the report-read branch and
+        # rendered "Disable freshness refresh before report reads" for a call
+        # that switched standing background refresh on.
+        maintenance_tool = get_tool("ui.maintenance.configure")
+        self.assertEqual(
+            summarize_tool_call(maintenance_tool, {"background_enabled": True}),
+            "Change freshness policy: enable daemon-owned background refresh",
+        )
+        self.assertEqual(
+            summarize_tool_call(maintenance_tool, {"report_read_sync": True}),
+            "Change freshness policy: enable freshness refresh before report reads",
+        )
+        self.assertEqual(
+            summarize_tool_call(
+                maintenance_tool,
+                {"source_classes": {"onchain": True, "rates": False}},
+            ),
+            "Change freshness policy: enable refresh for onchain; "
+            "disable refresh for rates",
+        )
+        self.assertEqual(
+            summarize_tool_call(maintenance_tool, {"market_rate_provider": "coingecko"}),
+            "Change freshness policy: set the market-rate provider to coingecko",
+        )
+
         components_tool = get_tool("ui.transfers.components.plan")
         component_properties = components_tool.parameters["properties"]["components"][
             "items"
@@ -804,14 +830,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
                 configure_tool,
                 {"auto_sync_before_report_reads": True},
             ),
-            "Enable freshness refresh before report reads",
-        )
-        self.assertEqual(
-            summarize_tool_call(
-                configure_tool,
-                {"market_rate_provider": "coingecko"},
-            ),
-            "Set market-rate provider to coingecko",
+            "Change freshness policy: enable freshness refresh before report reads",
         )
 
     def test_read_skill_reference_allowlist(self):

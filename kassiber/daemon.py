@@ -697,6 +697,9 @@ AI_TOOL_ONCE_ONLY_CONSENT = frozenset(
         "ui.journals.quarantine.resolve",
         "ui.transfers.components.apply",
         "ui.custody.review.apply",
+        # Changes standing egress policy, so one "allow for this chat" must not
+        # become permission to keep re-flipping it.
+        "ui.maintenance.configure",
     }
 )
 PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"

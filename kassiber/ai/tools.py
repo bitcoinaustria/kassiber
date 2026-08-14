@@ -3462,6 +3462,10 @@ def redact_ai_tool_result(value: Any) -> Any:
     return scrub_locations(secret_safe)
 
 
+def _toggle_verb(enabled: bool) -> str:
+    return "enable" if enabled else "disable"
+
+
 def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
     """Build a short, non-secret consent summary for an allowlisted tool."""
     if tool.name == "ui.wallets.sync":
@@ -3494,15 +3498,40 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
             return f"Fetch latest {target} rate from {source.strip()}"
         return f"Fetch latest {target} market rate"
     if tool.name == "ui.maintenance.configure":
-        enabled = arguments.get("report_read_sync", arguments.get("auto_sync_before_report_reads"))
-        provider = arguments.get("market_rate_provider")
-        if enabled is None and isinstance(provider, str) and provider.strip():
-            return f"Set market-rate provider to {provider.strip()}"
-        return (
-            "Enable freshness refresh before report reads"
-            if enabled is True
-            else "Disable freshness refresh before report reads"
+        # Every accepted argument has to appear here. This used to summarize
+        # only the report-read flag, so `{"background_enabled": true}` fell
+        # through to "Disable freshness refresh before report reads" -- the
+        # user approved a prompt that described the opposite of the standing
+        # background refresh they were about to switch on.
+        parts = []
+        report_read = arguments.get(
+            "report_read_sync", arguments.get("auto_sync_before_report_reads")
         )
+        if isinstance(report_read, bool):
+            parts.append(
+                f"{_toggle_verb(report_read)} freshness refresh before report reads"
+            )
+        for key, label in (
+            ("background_enabled", "daemon-owned background refresh"),
+            (
+                "bitcoin_rail_carrying_value",
+                "the carrying-value default for BTC/L-BTC rail changes",
+            ),
+        ):
+            if isinstance(arguments.get(key), bool):
+                parts.append(f"{_toggle_verb(arguments[key])} {label}")
+        source_classes = arguments.get("source_classes")
+        if isinstance(source_classes, dict):
+            parts.extend(
+                f"{_toggle_verb(bool(value))} refresh for {name}"
+                for name, value in sorted(source_classes.items())
+            )
+        provider = arguments.get("market_rate_provider")
+        if isinstance(provider, str) and provider.strip():
+            parts.append(f"set the market-rate provider to {provider.strip()}")
+        if not parts:
+            return "Change freshness policy"
+        return "Change freshness policy: " + "; ".join(parts)
     if tool.name == "ui.maintenance.run":
         sync_mode = arguments.get("sync", "if_enabled")
         if sync_mode == "always":
