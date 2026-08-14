@@ -5,10 +5,6 @@ import {
   type InfrastructureOwnership,
 } from "@/lib/backendTrust";
 import {
-  isNativeAiProviderLocator,
-  type AiModelRow,
-} from "@/lib/aiCapabilities";
-import {
   CLN_PRESENCE_SENTINEL_COMMANDO_PEER,
   CLN_PRESENCE_SENTINEL_LIGHTNING_DIR,
   CLN_PRESENCE_SENTINEL_RPC_FILE,
@@ -305,10 +301,6 @@ export const AI_KIND_BADGE: Record<AiProviderRow["kind"], string> = {
   tee: "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300",
 };
 
-export function isCliAiProvider(row: AiProviderRow): boolean {
-  return isNativeAiProviderLocator(row.base_url);
-}
-
 export function aiSecretStoreLabel(storeId: AiSecretStoreId | undefined): string {
   switch (storeId) {
     case "macos_keychain":
@@ -335,14 +327,6 @@ export function aiSecretStateLabel(state: AiSecretState | undefined): string {
     default:
       return "missing";
   }
-}
-
-export function formatModelSummary(models: AiModelRow[]): string {
-  const ids = models
-    .map((model) => model.id)
-    .filter((id, index, values) => id && values.indexOf(id) === index);
-  if (ids.length <= 3) return ids.join(", ");
-  return `${ids.slice(0, 3).join(", ")} +${ids.length - 3}`;
 }
 
 function isHttpEndpoint(url: string) {
