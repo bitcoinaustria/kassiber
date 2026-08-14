@@ -249,6 +249,15 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   exact action or enabled that narrowly scoped feature. A shipped, seeded,
   saved, or visible backend/provider is configuration, not consent. Every new
   egress path needs documentation and a no-egress-before-consent regression.
+  The suite enforces this: `tests/conftest.py` arms `no_egress_guard` for every
+  non-integration run and carries it into spawned Python children through a
+  `sitecustomize` on `PYTHONPATH`, so a connect or DNS lookup to a non-loopback
+  host fails the test that caused it. Loopback stays allowed (the smoke tests
+  bind local HTTP fakes), and sockets opened inside native libraries or
+  non-Python children are outside its reach — `bdkpython`/`lwk` honor
+  `KASSIBER_NO_EGRESS` themselves instead. On the UI side `vitest.setup.ts`
+  makes `fetch` throw. Consent for AI tools follows the same rule but a second
+  axis: see `ToolEntry.egresses` above.
 - Browser dev mode can exercise the real daemon over the Vite loopback bridge:
   `pnpm --dir ui-tauri run dev:bridge` serves the React app at
   `http://127.0.0.1:5173`, forwards invokes through `/__kassiber__/daemon`,

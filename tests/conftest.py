@@ -13,10 +13,56 @@ from __future__ import annotations
 
 import os
 import time
+from pathlib import Path
 
 import pytest
 
 from kassiber.operator import project as project_module
+from tests.integration.env import env_flag, no_egress_guard
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _block_egress():
+    """Fail any test that tries to leave the machine.
+
+    The suite's other no-network tests assert `not_called()` on one patched
+    function each, so they only notice the path they were written for. This
+    catches the ones nobody wrote a test for -- including egress that skips
+    the ledger entirely, which is how the release check went unrecorded.
+
+    `PYTHONPATH` carries it into the daemon subprocess the smoke tests spawn:
+    `Popen` runs without `env=`, so the child inherits `KASSIBER_NO_EGRESS`
+    and `site` imports `tests/_egress_guard/sitecustomize.py` before the
+    daemon starts.
+
+    Loopback stays allowed: ~36 daemon smoke tests bind local
+    `ThreadingHTTPServer` fakes. So the invariant's "including loopback
+    service/provider probes" clause is *not* covered here -- a test that
+    needs that asserts it directly.
+    """
+    if env_flag("KASSIBER_INTEGRATION") or env_flag("KASSIBER_MEDIUM"):
+        yield
+        return
+
+    root = Path(__file__).resolve().parent.parent
+    previous_path = os.environ.get("PYTHONPATH")
+    os.environ["KASSIBER_NO_EGRESS"] = "1"
+    os.environ["PYTHONPATH"] = os.pathsep.join(
+        [
+            str(root / "tests" / "_egress_guard"),
+            str(root),
+            *([previous_path] if previous_path else []),
+        ]
+    )
+    try:
+        with no_egress_guard(enabled=True):
+            yield
+    finally:
+        os.environ.pop("KASSIBER_NO_EGRESS", None)
+        if previous_path is None:
+            os.environ.pop("PYTHONPATH", None)
+        else:
+            os.environ["PYTHONPATH"] = previous_path
 
 
 @pytest.fixture(autouse=True, scope="session")
