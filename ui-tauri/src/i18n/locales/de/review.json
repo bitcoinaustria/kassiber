@@ -572,6 +572,7 @@
   "egress": {
     "title": "Network Monitor",
     "subtitle": "Live-RAM-Ledger für ausgehende Verbindungen",
+    "notMonitored": "Diese Seite erfasst Anfragen, die Kassiber im Daemon-Prozess stellt. Was Kassiber an ein separates Programm übergibt — die Release-Prüfung, den AI-CLI-Broker und lightning-cli — steht hier nicht, weil dieser Verkehr aus einem Prozess stammt, den dieses Protokoll nicht sehen kann.",
     "refresh": "Aktualisieren",
     "loadFailed": "Egress-Ledger konnte nicht geladen werden: {{error}}",
     "empty": "Kein ausgehender Egress erfasst",
@@ -580,7 +581,6 @@
     "metric": {
       "total": "Erfasst",
       "unexpected": "Unerwartet",
-      "update": "Update",
       "dbHeader": "DB-Header"
     },
     "db": {

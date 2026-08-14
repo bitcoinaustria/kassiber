@@ -146,7 +146,14 @@ export function Egress() {
         </div>
       ) : null}
 
-      <section className="grid gap-3 md:grid-cols-4">
+      {/*
+        No "Update" tile: the desktop runs its release check as a separate
+        `kassiber update` process, and the ledger is per-process, so that
+        count could only ever read 0 here. A metric that cannot leave zero
+        reads as proof rather than as a path this page does not watch --
+        egress.notMonitored below says so instead.
+      */}
+      <section className="grid gap-3 md:grid-cols-3">
         <Metric
           label={t("egress.metric.total")}
           value={String(snapshot?.summary.total_records ?? 0)}
@@ -158,16 +165,13 @@ export function Egress() {
           tone={(snapshot?.summary.unexpected ?? 0) > 0 ? "bad" : "good"}
         />
         <Metric
-          label={t("egress.metric.update")}
-          value={String(snapshot?.summary.update ?? 0)}
-          tone={(snapshot?.summary.update ?? 0) > 0 ? "bad" : "good"}
-        />
-        <Metric
           label={t("egress.metric.dbHeader")}
           value={dbHeaderLabel(db, translateReview)}
           tone={dbTone}
         />
       </section>
+
+      <p className="text-xs text-muted-foreground">{t("egress.notMonitored")}</p>
 
       <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
         <div className="rounded-md border bg-background">
