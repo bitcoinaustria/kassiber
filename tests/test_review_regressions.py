@@ -446,6 +446,84 @@ class ReviewRegressionTest(unittest.TestCase):
 
         self.assertEqual(payload["default_backend"], "env-node")
 
+    def test_delete_default_keeps_the_replacement_on_the_same_chain(self):
+        # A Liquid Electrum server answers Bitcoin scripthash queries with an
+        # empty history instead of an error, so promoting one to the global
+        # default would give Bitcoin wallets a silent zero balance. Only
+        # Bitcoin wallets may omit an explicit backend, so the default has to
+        # stay Bitcoin even though `aqua` sorts first among user-created rows.
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        create_db_backend(
+            conn,
+            "aqua",
+            "electrum",
+            "ssl://liquid.test:995",
+            chain="liquid",
+            network="liquidv1",
+        )
+        create_db_backend(
+            conn,
+            "fulcrum",
+            "electrum",
+            "ssl://index.test:50002",
+            chain="bitcoin",
+            network="main",
+        )
+        create_db_backend(
+            conn,
+            "mempool",
+            "esplora",
+            "https://mempool.test/api",
+            chain="bitcoin",
+            network="main",
+        )
+        set_setting(conn, "default_backend", "fulcrum")
+        conn.commit()
+
+        payload = delete_db_backend(conn, "fulcrum")
+
+        self.assertEqual(payload["default_backend"], "mempool")
+
+    def test_delete_default_skips_backends_wallets_cannot_sync_against(self):
+        # `btcpay` and the exchange kinds carry chain=bitcoin but have no sync
+        # adapter, so falling back to one trades a working default for a
+        # "source refresh is not implemented" failure on the next sync.
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        create_db_backend(
+            conn,
+            "acme-btcpay",
+            "btcpay",
+            "https://pay.test",
+            chain="bitcoin",
+            network="main",
+        )
+        create_db_backend(
+            conn,
+            "beta-node",
+            "electrum",
+            "ssl://node.test:50002",
+            chain="bitcoin",
+            network="main",
+        )
+        create_db_backend(
+            conn,
+            "zzz-current",
+            "electrum",
+            "ssl://current.test:50002",
+            chain="bitcoin",
+            network="main",
+        )
+        set_setting(conn, "default_backend", "zzz-current")
+        conn.commit()
+
+        payload = delete_db_backend(conn, "zzz-current")
+
+        # `acme-btcpay` sorts first among the user-created rows and would win
+        # on name alone; the syncable kind is what decides it.
+        self.assertEqual(payload["default_backend"], "beta-node")
+
     def test_latest_transaction_rates_are_shared_between_reports_and_ledger_rebuild(self):
         conn = sqlite3.connect(":memory:")
         self.addCleanup(conn.close)

@@ -122,7 +122,7 @@ Important runtime rules:
 
 - read-only commands like `status`, `backends list`, and `backends get` do not import bootstrap-backed config into SQLite; `kassiber init` and backend mutation commands that need canonical bootstrap rows are the explicit bootstrap-import flows
 - deleting a bootstrap-backed backend suppresses the built-in/default bootstrap copy; backends forced by `backends.env` or process variables must be removed there and the process restarted first
-- deleting the active stored default atomically selects a remaining backend, preferring a user-created one; the only backend cannot be deleted
+- deleting the active stored default atomically selects a remaining backend on the same chain that wallets can actually sync against, preferring a user-created one; the only backend cannot be deleted
 - `backends delete` refuses backends still referenced by wallets; reassign those wallets first
 - `--display-name` changes the user-facing label without changing the stable backend name that wallets reference
 - process-level `KASSIBER_BACKEND_*` overrides still win for the current process even when a backend has already been imported into SQLite

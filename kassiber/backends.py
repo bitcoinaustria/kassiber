@@ -101,6 +101,18 @@ BACKEND_KINDS = {
     "lnd",
     "mempool",
 }
+# Kinds a wallet can actually sync against, so a replacement default backend is
+# never an exchange/commerce/Lightning integration. Mirrors the aliases folded
+# into `SYNC_BACKEND_ADAPTERS` by `core.sync.normalize_backend_kind`; kept here
+# as plain data because `core.sync_backends` imports this module.
+CHAIN_SYNC_BACKEND_KINDS = {
+    "bitcoinrpc",
+    "custom",
+    "electrum",
+    "esplora",
+    "liquid-esplora",
+    "mempool",
+}
 DEFAULT_ENV_FILENAME = "backends.env"
 DEFAULT_BACKEND_SETTING = "default_backend"
 BOOTSTRAP_DEFAULT_BACKEND_SETTING = "bootstrap_default_backend"
@@ -679,20 +691,49 @@ def _process_env_default_backend_override(runtime_config):
     return bool(runtime_config.get("process_env_overrides", {}).get("default_backend"))
 
 
-def _fallback_backend_name(names):
-    if names:
-        user_created = sorted(name for name in names if name not in DEFAULT_BACKENDS)
-        if user_created:
-            return user_created[0]
-    if "mempool" in names:
+def _backend_shapes(conn, runtime_config=None):
+    """Map backend name -> (chain, kind) across SQLite and the merged runtime view."""
+    shapes = {}
+    for row in conn.execute("SELECT name, chain, kind FROM backends").fetchall():
+        shapes[row["name"]] = (row["chain"], row["kind"])
+    for name, backend in (runtime_config or {}).get("backends", {}).items():
+        shapes[name] = (backend.get("chain"), backend.get("kind"))
+    return shapes
+
+
+def _fallback_backend_name(names, shapes=None, prefer_chain="bitcoin"):
+    """Pick a replacement default backend, preferring `prefer_chain` and a syncable kind.
+
+    The stored default is what `resolve_backend` hands to wallets that carry no
+    explicit backend of their own, and only Bitcoin wallets may omit one --
+    `create_wallet` requires an explicit `--backend` for Liquid because "no
+    public Liquid default is built in". Choosing across chains would therefore
+    point Bitcoin wallets at a Liquid server, which answers Bitcoin scripthash
+    queries with an empty history rather than an error: a silent zero balance.
+    """
+    if not names:
+        raise AppError(
+            "No backends are configured",
+            code="config_error",
+            hint="Create a backend with `kassiber backends create`, or seed one through your dotenv bootstrap config.",
+        )
+    candidates = names
+    if shapes:
+        suitable = {
+            name
+            for name in names
+            if (shapes.get(name, (None, None))[0] or "bitcoin") == prefer_chain
+            and str(shapes.get(name, (None, None))[1] or "").lower()
+            in CHAIN_SYNC_BACKEND_KINDS
+        }
+        if suitable:
+            candidates = suitable
+    user_created = sorted(name for name in candidates if name not in DEFAULT_BACKENDS)
+    if user_created:
+        return user_created[0]
+    if "mempool" in candidates:
         return "mempool"
-    if names:
-        return sorted(names)[0]
-    raise AppError(
-        "No backends are configured",
-        code="config_error",
-        hint="Create a backend with `kassiber backends create`, or seed one through your dotenv bootstrap config.",
-    )
+    return sorted(candidates)[0]
 
 
 def _http_url_base(url, *, api: bool) -> str | None:
@@ -921,7 +962,9 @@ def seed_db_backends(conn, runtime_config):
         if not bootstrap_default:
             candidate = runtime_config["bootstrap_default_backend"]
             if candidate not in existing_names:
-                candidate = _fallback_backend_name(existing_names)
+                candidate = _fallback_backend_name(
+                    existing_names, _backend_shapes(conn, runtime_config)
+                )
             set_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING, candidate)
             bootstrap_default = candidate
             changed = True
@@ -1293,7 +1336,12 @@ def delete_db_backend(conn, name, runtime_config=None):
                 code="conflict",
                 hint="Create another backend before deleting this one.",
             )
-        replacement_default = _fallback_backend_name(remaining)
+        shapes = _backend_shapes(conn, runtime_config)
+        replacement_default = _fallback_backend_name(
+            remaining,
+            shapes,
+            prefer_chain=(shapes.get(name, (None, None))[0] or "bitcoin"),
+        )
         set_setting(conn, DEFAULT_BACKEND_SETTING, replacement_default)
     conn.execute("DELETE FROM backends WHERE name = ?", (name,))
     tombstones = _load_bootstrap_backend_tombstones(conn)
@@ -1340,7 +1388,9 @@ def clear_default_backend(conn, runtime_config):
     notice = None
     if default_name not in available_names:
         missing_default = default_name
-        default_name = _fallback_backend_name(available_names)
+        default_name = _fallback_backend_name(
+            available_names, _backend_shapes(conn, runtime_config)
+        )
         set_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING, default_name)
         notice = {
             "code": "default_backend_fallback",
