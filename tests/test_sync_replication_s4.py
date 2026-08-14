@@ -18,6 +18,7 @@ from kassiber.core.sync_replication.membership import (
 )
 from kassiber.core.sync_replication.merge import import_bundle
 from kassiber.db import open_db
+from kassiber.egress_ledger import get_egress_ledger
 from kassiber.errors import AppError
 from kassiber.secrets.sqlcipher import sqlcipher_available
 
@@ -74,6 +75,8 @@ class LanSyncFastPathTests(unittest.TestCase):
             conn.close()
 
     def test_two_devices_converge_over_pake_and_pinned_keys(self):
+        ledger = get_egress_ledger()
+        egress_cursor = ledger.snapshot()["last_id"]
         self.owner.execute(
             "UPDATE workspaces SET label = 'Org from owner' WHERE id = ?",
             (self.workspace_id,),
@@ -124,6 +127,11 @@ class LanSyncFastPathTests(unittest.TestCase):
         finally:
             owner_check.close()
         self.assertFalse(server.listening)
+        records = ledger.snapshot(after_id=egress_cursor)["records"]
+        self.assertEqual(
+            {record["operation"] for record in records},
+            {"lan.pair", "lan.pair.accept"},
+        )
 
     def test_offer_pin_change_is_refused_after_successful_pake(self):
         server = LanSyncServer(

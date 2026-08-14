@@ -516,6 +516,15 @@ class LanSyncServer:
         )
         key = _session_key(shared, transcript)
         local_device = _local_device(conn, book)
+        peer_address = peer_socket.getpeername()
+        if isinstance(peer_address, tuple) and len(peer_address) >= 2:
+            get_egress_ledger().record(
+                subsystem="sync",
+                host=peer_address[0],
+                port=peer_address[1],
+                scheme="lan",
+                operation="lan.pair.accept",
+            )
         _send_json(
             peer_socket,
             {
