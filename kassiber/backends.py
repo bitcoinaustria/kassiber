@@ -726,8 +726,14 @@ def _fallback_backend_name(names, shapes=None, prefer_chain="bitcoin"):
             and str(shapes.get(name, (None, None))[1] or "").lower()
             in CHAIN_SYNC_BACKEND_KINDS
         }
-        if suitable:
-            candidates = suitable
+        if not suitable:
+            raise AppError(
+                f"No {prefer_chain} backend that wallets can sync against is configured",
+                code="conflict",
+                hint=f"Create a {prefer_chain} backend that supports wallet sync first.",
+                retryable=False,
+            )
+        candidates = suitable
     user_created = sorted(name for name in candidates if name not in DEFAULT_BACKENDS)
     if user_created:
         return user_created[0]

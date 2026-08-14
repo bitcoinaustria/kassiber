@@ -2,11 +2,24 @@ import { describe, expect, it } from "vitest";
 
 import type { TransactionSwapRoute } from "./TransactionGraphModel";
 import {
+  isPublicGraphLookupApproved,
   preloadableSwapLegGraphLookupArgs,
   preloadableSwapLegGraphReference,
   transactionGraphLookupArgs,
   transactionGraphLookupReferenceArgs,
 } from "./TransactionGraphLookup";
+
+it("does not carry public lookup approval to another transaction", () => {
+  const approved = { id: "row-a" } as Parameters<
+    typeof isPublicGraphLookupApproved
+  >[1];
+  const next = { id: "row-b" } as Parameters<
+    typeof isPublicGraphLookupApproved
+  >[1];
+
+  expect(isPublicGraphLookupApproved("row-a", approved)).toBe(true);
+  expect(isPublicGraphLookupApproved("row-a", next)).toBe(false);
+});
 
 describe("transactionGraphLookupArgs", () => {
   it("keeps on-chain rows local until the user asks for a lookup", () => {

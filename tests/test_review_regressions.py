@@ -74,7 +74,7 @@ from kassiber.core.ui_snapshot import (
     build_transactions_dashboard_snapshot,
     build_transactions_snapshot,
 )
-from kassiber.db import open_db, set_setting
+from kassiber.db import get_setting, open_db, set_setting
 from kassiber.errors import AppError
 from kassiber.importers import normalize_river_record
 from kassiber.msat import btc_to_msat
@@ -523,6 +523,47 @@ class ReviewRegressionTest(unittest.TestCase):
         # `acme-btcpay` sorts first among the user-created rows and would win
         # on name alone; the syncable kind is what decides it.
         self.assertEqual(payload["default_backend"], "beta-node")
+
+    def test_delete_default_refuses_without_a_compatible_replacement(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        create_db_backend(
+            conn,
+            "bitcoin-current",
+            "electrum",
+            "ssl://bitcoin.test:50002",
+            chain="bitcoin",
+            network="main",
+        )
+        create_db_backend(
+            conn,
+            "liquid-only",
+            "electrum",
+            "ssl://liquid.test:995",
+            chain="liquid",
+            network="liquidv1",
+        )
+        create_db_backend(
+            conn,
+            "pay-only",
+            "btcpay",
+            "https://pay.test",
+            chain="bitcoin",
+            network="main",
+        )
+        set_setting(conn, "default_backend", "bitcoin-current")
+        conn.commit()
+
+        with self.assertRaises(AppError) as raised:
+            delete_db_backend(conn, "bitcoin-current")
+
+        self.assertEqual(raised.exception.code, "conflict")
+        self.assertEqual(get_setting(conn, "default_backend"), "bitcoin-current")
+        self.assertIsNotNone(
+            conn.execute(
+                "SELECT 1 FROM backends WHERE name = 'bitcoin-current'"
+            ).fetchone()
+        )
 
     def test_latest_transaction_rates_are_shared_between_reports_and_ledger_rebuild(self):
         conn = sqlite3.connect(":memory:")

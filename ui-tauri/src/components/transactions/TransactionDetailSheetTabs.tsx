@@ -4,6 +4,7 @@ export type {
 } from "./TransactionDetailTabContext";
 export {
   hasPublicGraphLookupReference,
+  isPublicGraphLookupApproved,
   transactionGraphLookupArgs,
 } from "./TransactionGraphLookup";
 export { TransactionDetailsTab } from "./TransactionDetailsTab";

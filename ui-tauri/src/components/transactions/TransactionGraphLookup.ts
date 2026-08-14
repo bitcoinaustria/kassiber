@@ -80,6 +80,13 @@ export function hasPublicGraphLookupReference(
   return graphLookupChain(transaction) !== null;
 }
 
+export function isPublicGraphLookupApproved(
+  approvedTransactionId: string | null,
+  transaction: TransactionDetailTabContext["transaction"] | null | undefined,
+) {
+  return Boolean(transaction?.id && approvedTransactionId === transaction.id);
+}
+
 export function transactionGraphLookupArgs(
   transaction: TransactionDetailTabContext["transaction"] | null | undefined,
   // Opt-in. Having a txid means a lookup is *possible*; it is not a request
