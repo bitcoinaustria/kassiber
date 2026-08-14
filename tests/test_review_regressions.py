@@ -13730,7 +13730,8 @@ class ReviewRegressionTest(unittest.TestCase):
         env = {
             key: value
             for key, value in os.environ.items()
-            if not key.startswith(("KASSIBER_", "SATBOOKS_"))
+            if key == "KASSIBER_TEST_NO_EGRESS"
+            or not key.startswith(("KASSIBER_", "SATBOOKS_"))
         }
         env["HOME"] = str(home_dir)
         env["PYTHONPATH"] = str(ROOT) if not env.get("PYTHONPATH") else f"{ROOT}{os.pathsep}{env['PYTHONPATH']}"

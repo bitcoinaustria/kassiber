@@ -66,7 +66,14 @@ ROOT = Path(__file__).resolve().parent.parent
 _DAEMON_STDOUT_EOF = object()
 
 
-def _start_daemon(data_root, *, env_file=None):
+def _start_daemon(data_root, *, env_file=None, egress_mode=None):
+    """Spawn a daemon child.
+
+    `egress_mode="strict"` makes the child's guard block loopback too, which
+    is how the launch-path regression pins the invariant's "including loopback
+    service/provider probes" clause. The suite default allows loopback because
+    most smoke tests serve local HTTP fakes.
+    """
     args = [
         sys.executable,
         "-m",
@@ -77,6 +84,10 @@ def _start_daemon(data_root, *, env_file=None):
     if env_file is not None:
         args.extend(["--env-file", str(env_file)])
     args.append("daemon")
+    env = None
+    if egress_mode is not None:
+        env = dict(os.environ)
+        env["KASSIBER_TEST_NO_EGRESS"] = egress_mode
     return subprocess.Popen(
         args,
         cwd=ROOT,
@@ -84,6 +95,7 @@ def _start_daemon(data_root, *, env_file=None):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env=env,
     )
 
 
@@ -1679,6 +1691,34 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
                 code, stderr = _close_daemon(proc)
                 self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
+
+    def test_daemon_launch_makes_no_connection_at_all(self):
+        """Launch reaches ready without touching the network, loopback included.
+
+        This is the reported symptom from #520 -- "even without any existing
+        books it already tries to connect" -- and the one clause of the
+        external-network invariant the suite-wide guard cannot cover, because
+        most smoke tests serve their own loopback fakes.
+
+        A seeded book with configured backends is the interesting case: those
+        rows are configuration, and configuration is not consent.
+        """
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-launch-quiet-") as tmp:
+            data_root = Path(tmp) / "data"
+            _run_cli(data_root, "init")
+
+            proc = _start_daemon(data_root, egress_mode="strict")
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                # A blocked connect surfaces as EgressBlocked on the way out.
+                self.assertNotIn("EgressBlocked", stderr)
                 self.assertEqual(stderr, "")
             finally:
                 if proc.poll() is None:

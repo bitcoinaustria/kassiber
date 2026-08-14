@@ -11,12 +11,81 @@ its exclusion.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import time
+from pathlib import Path
 
 import pytest
 
 from kassiber.operator import project as project_module
+from tests.integration.env import env_flag, no_egress_guard
+
+
+_EGRESS_STACK: contextlib.ExitStack | None = None
+_PREVIOUS_TEST_NO_EGRESS: str | None = None
+_PREVIOUS_PYTHONPATH: str | None = None
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Fail any test that tries to leave the machine.
+
+    The suite's other no-network tests assert `not_called()` on one patched
+    function each, so they only notice the path they were written for. This
+    catches the ones nobody wrote a test for -- including egress that skips
+    the ledger entirely, which is how the release check went unrecorded.
+
+    `PYTHONPATH` carries it into the daemon subprocess the smoke tests spawn:
+    `Popen` runs without `env=`, so the child inherits the variable and `site`
+    imports `tests/_egress_guard/sitecustomize.py` before the daemon starts.
+
+    It sets `KASSIBER_TEST_NO_EGRESS`, not `KASSIBER_NO_EGRESS`. The latter is
+    a product kill switch that the BDK and LWK observers honor
+    destination-blind -- setting it here would make them refuse the loopback
+    fakes the smoke tests serve, which is a different thing than "do not leave
+    the machine".
+
+    Loopback stays allowed: ~36 daemon smoke tests bind local
+    `ThreadingHTTPServer` fakes. So the invariant's "including loopback
+    service/provider probes" clause is *not* covered here -- a test that
+    needs that asserts it directly.
+    """
+    if env_flag("KASSIBER_INTEGRATION"):
+        return
+
+    global _EGRESS_STACK, _PREVIOUS_TEST_NO_EGRESS, _PREVIOUS_PYTHONPATH
+    if _EGRESS_STACK is not None:
+        return
+
+    root = Path(__file__).resolve().parent.parent
+    _PREVIOUS_TEST_NO_EGRESS = os.environ.get("KASSIBER_TEST_NO_EGRESS")
+    _PREVIOUS_PYTHONPATH = os.environ.get("PYTHONPATH")
+    os.environ["KASSIBER_TEST_NO_EGRESS"] = "1"
+    os.environ["PYTHONPATH"] = os.pathsep.join(
+        [
+            str(root / "tests" / "_egress_guard"),
+            str(root),
+            *([_PREVIOUS_PYTHONPATH] if _PREVIOUS_PYTHONPATH else []),
+        ]
+    )
+    _EGRESS_STACK = contextlib.ExitStack()
+    _EGRESS_STACK.enter_context(no_egress_guard(enabled=True))
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    global _EGRESS_STACK
+    if _EGRESS_STACK is None:
+        return
+    _EGRESS_STACK.close()
+    _EGRESS_STACK = None
+    if _PREVIOUS_TEST_NO_EGRESS is None:
+        os.environ.pop("KASSIBER_TEST_NO_EGRESS", None)
+    else:
+        os.environ["KASSIBER_TEST_NO_EGRESS"] = _PREVIOUS_TEST_NO_EGRESS
+    if _PREVIOUS_PYTHONPATH is None:
+        os.environ.pop("PYTHONPATH", None)
+    else:
+        os.environ["PYTHONPATH"] = _PREVIOUS_PYTHONPATH
 
 
 @pytest.fixture(autouse=True, scope="session")

@@ -891,7 +891,12 @@ class SyncBackendsTest(unittest.TestCase):
         ), patch(
             "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
             return_value=[],
-        ) as fetch_utxos:
+        ) as fetch_utxos, patch(
+            # Unmocked, this reached the real resolver for `esplora.example`
+            # on every run. The no-egress guard surfaced it.
+            "kassiber.core.sync_backends._esplora_tip_height",
+            return_value=800_000,
+        ):
             sync_state = WalletSyncState(
                 chain="bitcoin",
                 network="bitcoin",
@@ -1004,6 +1009,11 @@ class SyncBackendsTest(unittest.TestCase):
         ), patch(
             "kassiber.core.sync_backends.fetch_esplora_scripthash_utxos",
             return_value=[],
+        ), patch(
+            # Unmocked, this reached the real resolver for `esplora.example`
+            # on every run. The no-egress guard surfaced it.
+            "kassiber.core.sync_backends._esplora_tip_height",
+            return_value=800_000,
         ):
             records1, meta1 = compatibility_esplora_sync_adapter(backend, wallet, make_state())
             records2, meta2 = compatibility_esplora_sync_adapter(

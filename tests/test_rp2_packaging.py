@@ -43,7 +43,10 @@ class Rp2ReadOnlyCwdImportTest(unittest.TestCase):
                 print("ok")
                 """
             ).strip()
-            env = {**os.environ, "PYTHONPATH": str(_ROOT)}
+            env = os.environ.copy()
+            env["PYTHONPATH"] = os.pathsep.join(
+                path for path in (str(_ROOT), env.get("PYTHONPATH")) if path
+            )
             result = subprocess.run(
                 [sys.executable, "-c", script],
                 cwd=scratch,
@@ -91,7 +94,10 @@ class Rp2ReadOnlyCwdImportTest(unittest.TestCase):
                 print("ok")
                 """
             ).strip()
-            env = {**os.environ, "PYTHONPATH": str(_ROOT)}
+            env = os.environ.copy()
+            env["PYTHONPATH"] = os.pathsep.join(
+                path for path in (str(_ROOT), env.get("PYTHONPATH")) if path
+            )
             result = subprocess.run(
                 [sys.executable, "-c", script],
                 env=env,
