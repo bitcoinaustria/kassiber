@@ -26,7 +26,7 @@ from kassiber.cli.handlers import _report_hooks as cli_report_hooks
 from kassiber.cli.handlers import process_journals
 from kassiber.db import open_db
 
-from tests.integration.env import no_egress_guard
+from tests.integration.env import EgressBlocked, no_egress_guard
 from tests.integration import regtest_demo
 from tests.integration.chain_observer_oracle import (
     BITCOIN_TRANSITIONS,
@@ -261,7 +261,11 @@ class RegtestHarnessTest(unittest.TestCase):
             fake_connect_ex,
         ):
             with no_egress_guard(enabled=True):
-                with self.assertRaises(AssertionError):
+                # `EgressBlocked`, not `AssertionError`: it subclasses
+                # BaseException so the `except Exception` wrapping in several
+                # product paths cannot turn a blocked request into a plausible
+                # "backend unreachable" result.
+                with self.assertRaises(EgressBlocked):
                     socket.socket.connect(object(), ("198.51.100.1", 443))
                 socket.socket.connect(object(), ("127.0.0.1", 18443))
                 socket.socket.connect_ex(object(), ("localhost", 18443))

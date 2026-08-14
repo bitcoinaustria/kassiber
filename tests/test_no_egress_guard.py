@@ -1,9 +1,13 @@
-"""Meta-tests for the suite-wide no-egress guard.
+"""Meta-tests for the no-egress guard.
 
-A guard that silently fails to install is worse than none, because every test
-that follows it reports a clean run it never actually earned. These assert the
-guard is armed in this process and in the Python children the daemon tests
-spawn.
+A guard that silently fails to install is worse than none, because everything
+that runs under it reports a clean result it never actually earned. These pin
+what it blocks, that it reaches spawned Python children, and that it cannot be
+swallowed by a broad `except Exception`.
+
+The guard is opt-in per module (`no_egress_guard(enabled=True)`) rather than
+armed for the whole session -- see `docs/reference/privacy-and-security.md` for
+why the suite-wide version is still blocked on the daemon smoke interaction.
 """
 
 from __future__ import annotations
@@ -12,29 +16,42 @@ import os
 import socket
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
-from tests.integration.env import EgressBlocked
+from tests.integration.env import EgressBlocked, no_egress_guard
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
-def test_guard_blocks_dns_in_this_process():
-    with pytest.raises(EgressBlocked):
-        socket.getaddrinfo("api.github.com", 443)
+def test_guard_blocks_dns():
+    with no_egress_guard(enabled=True):
+        with pytest.raises(EgressBlocked):
+            socket.getaddrinfo("api.github.com", 443)
 
 
-def test_guard_blocks_connect_in_this_process():
+def test_guard_blocks_connect():
     probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        with pytest.raises(EgressBlocked):
-            probe.connect(("93.184.216.34", 80))
+        with no_egress_guard(enabled=True):
+            with pytest.raises(EgressBlocked):
+                probe.connect(("93.184.216.34", 80))
     finally:
         probe.close()
 
 
-def test_guard_does_not_block_loopback():
+def test_guard_allows_loopback():
     # Daemon bridges and the local HTTP fakes in the smoke tests depend on this.
-    assert socket.getaddrinfo("127.0.0.1", 0)
+    with no_egress_guard(enabled=True):
+        assert socket.getaddrinfo("127.0.0.1", 0)
+
+
+def test_guard_uninstalls_itself_on_exit():
+    original = socket.getaddrinfo
+    with no_egress_guard(enabled=True):
+        assert socket.getaddrinfo is not original
+    assert socket.getaddrinfo is original
 
 
 def test_guard_is_not_an_exception_subclass():
@@ -42,30 +59,32 @@ def test_guard_is_not_an_exception_subclass():
 
     Several product paths turn any `Exception` into an `AppError` envelope,
     which would render a blocked request as a plausible "backend unreachable"
-    result and let the test pass.
+    result and let the caller carry on.
     """
     assert issubclass(EgressBlocked, BaseException)
     assert not issubclass(EgressBlocked, Exception)
 
 
 def test_guard_reaches_spawned_python_children():
-    """The daemon smoke tests spawn a real `python -m kassiber daemon`.
+    """`sitecustomize` carries the guard into Python children.
 
-    An in-process monkeypatch cannot reach it. `Popen` runs without `env=`, so
-    the child inherits KASSIBER_NO_EGRESS and `site` imports our
-    `sitecustomize` before anything else runs.
+    An in-process monkeypatch cannot reach a subprocess. A child that inherits
+    KASSIBER_NO_EGRESS imports `tests/_egress_guard/sitecustomize.py` through
+    `site` before anything else runs, which is what makes the guard usable for
+    the integration harness's daemon children.
     """
-    assert os.environ.get("KASSIBER_NO_EGRESS")
+    env = dict(os.environ)
+    env["KASSIBER_NO_EGRESS"] = "1"
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(ROOT / "tests" / "_egress_guard"), str(ROOT)]
+    )
 
     completed = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import socket; socket.getaddrinfo('api.github.com', 443)",
-        ],
+        [sys.executable, "-c", "import socket; socket.getaddrinfo('api.github.com', 443)"],
         capture_output=True,
         text=True,
         timeout=60,
+        env=env,
     )
 
     assert completed.returncode != 0

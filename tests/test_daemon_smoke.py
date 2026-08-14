@@ -66,7 +66,16 @@ ROOT = Path(__file__).resolve().parent.parent
 _DAEMON_STDOUT_EOF = object()
 
 
-def _start_daemon(data_root, *, env_file=None):
+def _start_daemon(data_root, *, env_file=None, allow_chain_observation=False):
+    """Spawn a daemon child.
+
+    The child inherits KASSIBER_NO_EGRESS from the suite guard, which the BDK
+    and LWK observers honor as a blanket refusal -- destination-blind, so it
+    also refuses a loopback fake. A test that deliberately syncs against its
+    own local server passes `allow_chain_observation=True` to drop just that
+    variable; the socket guard in the child stays armed, so anything aimed
+    off-machine still fails.
+    """
     args = [
         sys.executable,
         "-m",
@@ -77,6 +86,10 @@ def _start_daemon(data_root, *, env_file=None):
     if env_file is not None:
         args.extend(["--env-file", str(env_file)])
     args.append("daemon")
+    env = None
+    if allow_chain_observation:
+        env = dict(os.environ)
+        env.pop("KASSIBER_NO_EGRESS", None)
     return subprocess.Popen(
         args,
         cwd=ROOT,
@@ -84,6 +97,7 @@ def _start_daemon(data_root, *, env_file=None):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env=env,
     )
 
 
@@ -2920,7 +2934,7 @@ class DaemonSmokeTest(unittest.TestCase):
                     "main",
                 )
 
-                proc = _start_daemon(data_root)
+                proc = _start_daemon(data_root, allow_chain_observation=True)
                 self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
 
                 _write_payload(
