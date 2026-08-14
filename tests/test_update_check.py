@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import tempfile
 import threading
 import time
 from argparse import Namespace
@@ -20,6 +21,20 @@ _SEMVER_CASES = json.loads(
         encoding="utf-8"
     )
 )
+
+
+def _consenting_preference() -> Path:
+    """An enabled update-check preference file for tests that exercise the fetch.
+
+    `fetch_latest_release` refuses without consent, which is the point of the
+    guard. These tests are about the request shape, not the policy, so they
+    supply consent explicitly rather than inheriting whatever the machine
+    running them happens to have configured.
+    """
+    directory = Path(tempfile.mkdtemp(prefix="kassiber-update-consent-"))
+    path = directory / "update-checks.json"
+    path.write_text(json.dumps({"schema_version": 1, "enabled": True}), encoding="utf-8")
+    return path
 
 
 class _Response(io.BytesIO):
@@ -224,6 +239,31 @@ def test_default_redirect_handler_refuses_cross_origin_redirects():
     )
 
 
+def test_fetch_latest_release_refuses_without_consent(tmp_path: Path):
+    """The guard sits at the socket, not one level up.
+
+    `check_for_update` checked consent and then called this; a second caller
+    would have reached GitHub by simply not knowing to ask.
+    """
+    preference = tmp_path / "update-checks.json"
+    update_check.set_update_checks_enabled(False, preference)
+    opened = False
+
+    def opener(request, *, timeout):
+        del request, timeout
+        nonlocal opened
+        opened = True
+        return _Response(_release_response())
+
+    try:
+        update_check.fetch_latest_release(opener=opener, consent=preference)
+    except update_check.AppError as error:
+        assert error.code == "update_checks_disabled"
+    else:
+        raise AssertionError("fetch without consent unexpectedly succeeded")
+    assert opened is False
+
+
 def test_fetch_latest_release_records_egress():
     """The release check is the only writer of the "update" subsystem.
 
@@ -240,7 +280,9 @@ def test_fetch_latest_release_records_egress():
         return _Response(_release_response())
 
     with patch("kassiber.update_check.packaged_build_info", return_value={}):
-        update_check.fetch_latest_release(opener=opener)
+        update_check.fetch_latest_release(
+            opener=opener, consent=_consenting_preference()
+        )
 
     added = [
         record
@@ -261,7 +303,9 @@ def test_fetch_latest_release_uses_bounded_github_request():
         return _Response(_release_response())
 
     with patch("kassiber.update_check.packaged_build_info", return_value={}):
-        release = update_check.fetch_latest_release(opener=opener)
+        release = update_check.fetch_latest_release(
+            opener=opener, consent=_consenting_preference()
+        )
 
     assert captured["url"] == update_check.GITHUB_RELEASES_API_URL
     assert captured["timeout"] == update_check.NETWORK_TIMEOUT_SECONDS
@@ -294,7 +338,9 @@ def test_prerelease_check_reads_one_page_and_picks_the_highest_semver():
         return _Response(json.dumps(page).encode())
 
     with patch("kassiber.update_check.packaged_build_info", return_value={}):
-        release = update_check.fetch_latest_release(opener=opener)
+        release = update_check.fetch_latest_release(
+            opener=opener, consent=_consenting_preference()
+        )
 
     assert captured_urls == [update_check.GITHUB_RELEASES_API_URL]
     assert f"per_page={update_check._RELEASES_PER_PAGE}" in captured_urls[0]
@@ -328,6 +374,7 @@ def test_fetch_latest_release_accepts_an_asset_heavy_listing_page():
     with patch("kassiber.update_check.packaged_build_info", return_value={}):
         release = update_check.fetch_latest_release(
             opener=lambda request, *, timeout: _Response(body),
+            consent=_consenting_preference(),
         )
 
     assert release["latest_version"] == "0.22.19"
@@ -340,6 +387,7 @@ def test_oversized_release_response_is_refused_not_truncated():
         try:
             update_check.fetch_latest_release(
                 opener=lambda request, *, timeout: _Response(body),
+                consent=_consenting_preference(),
             )
         except update_check.AppError as error:
             assert error.code == "update_check_failed"
@@ -367,7 +415,9 @@ def test_fetch_latest_stable_release_uses_latest_object_endpoint():
         "kassiber.update_check.packaged_build_info",
         return_value={"channel": "release", "version": "1.0.0"},
     ):
-        release = update_check.fetch_latest_release(opener=opener)
+        release = update_check.fetch_latest_release(
+            opener=opener, consent=_consenting_preference()
+        )
 
     assert captured == {
         "url": update_check.GITHUB_LATEST_RELEASE_API_URL,
