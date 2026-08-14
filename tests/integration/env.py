@@ -92,14 +92,28 @@ def no_egress_guard(
     original_connect = socket.socket.connect
     original_connect_ex = socket.socket.connect_ex
     original_sendto = socket.socket.sendto
+    original_sendmsg = getattr(socket.socket, "sendmsg", None)
     original_getaddrinfo = socket.getaddrinfo
+    original_gethostbyaddr = socket.gethostbyaddr
+    original_gethostbyname = socket.gethostbyname
+    original_gethostbyname_ex = socket.gethostbyname_ex
+    original_getnameinfo = socket.getnameinfo
+
+    def _blocked_host(host: Any) -> str | None:
+        value = str(host)
+        if not allow_loopback or not _is_loopback(value):
+            return value
+        return None
 
     def _blocked_address(address: Any) -> str | None:
         if isinstance(address, tuple) and address:
-            host = str(address[0])
-            if not allow_loopback or not _is_loopback(host):
-                return host
+            return _blocked_host(address[0])
         return None
+
+    def _guard_dns_host(host: Any) -> None:
+        blocked = _blocked_host(host)
+        if blocked is not None:
+            raise EgressBlocked(f"no-egress guard blocked DNS lookup for {blocked}")
 
     def guarded_connect(self: socket.socket, address: Any):
         host = _blocked_address(address)
@@ -122,25 +136,62 @@ def no_egress_guard(
             raise EgressBlocked(f"no-egress guard blocked socket.sendto to {host}")
         return original_sendto(self, data, *args)
 
+    def guarded_sendmsg(self: socket.socket, buffers: Any, *args: Any):
+        address = args[-1] if args and isinstance(args[-1], tuple) else None
+        host = _blocked_address(address)
+        if host is not None:
+            raise EgressBlocked(f"no-egress guard blocked socket.sendmsg to {host}")
+        assert original_sendmsg is not None
+        return original_sendmsg(self, buffers, *args)
+
     def guarded_getaddrinfo(host: Any, *args: Any, **kwargs: Any):
         # Resolving a name is already a request to a nameserver, and it is the
         # first thing most egress paths do -- so blocking it here names the
         # offending host instead of failing later with a connect error.
-        if host is not None and (not allow_loopback or not _is_loopback(str(host))):
-            raise EgressBlocked(f"no-egress guard blocked DNS lookup for {host}")
+        if host is not None:
+            _guard_dns_host(host)
         return original_getaddrinfo(host, *args, **kwargs)
+
+    def guarded_gethostbyaddr(host: Any):
+        _guard_dns_host(host)
+        return original_gethostbyaddr(host)
+
+    def guarded_gethostbyname(host: Any):
+        _guard_dns_host(host)
+        return original_gethostbyname(host)
+
+    def guarded_gethostbyname_ex(host: Any):
+        _guard_dns_host(host)
+        return original_gethostbyname_ex(host)
+
+    def guarded_getnameinfo(sockaddr: Any, flags: int):
+        if isinstance(sockaddr, tuple) and sockaddr:
+            _guard_dns_host(sockaddr[0])
+        return original_getnameinfo(sockaddr, flags)
 
     socket.socket.connect = guarded_connect
     socket.socket.connect_ex = guarded_connect_ex
     socket.socket.sendto = guarded_sendto
+    if original_sendmsg is not None:
+        socket.socket.sendmsg = guarded_sendmsg
     socket.getaddrinfo = guarded_getaddrinfo
+    socket.gethostbyaddr = guarded_gethostbyaddr
+    socket.gethostbyname = guarded_gethostbyname
+    socket.gethostbyname_ex = guarded_gethostbyname_ex
+    socket.getnameinfo = guarded_getnameinfo
     try:
         yield
     finally:
         socket.socket.connect = original_connect
         socket.socket.connect_ex = original_connect_ex
         socket.socket.sendto = original_sendto
+        if original_sendmsg is not None:
+            socket.socket.sendmsg = original_sendmsg
         socket.getaddrinfo = original_getaddrinfo
+        socket.gethostbyaddr = original_gethostbyaddr
+        socket.gethostbyname = original_gethostbyname
+        socket.gethostbyname_ex = original_gethostbyname_ex
+        socket.getnameinfo = original_getnameinfo
 
 
 __all__ = [

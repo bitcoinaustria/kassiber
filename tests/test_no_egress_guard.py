@@ -31,6 +31,21 @@ def test_guard_blocks_dns():
             socket.getaddrinfo("api.github.com", 443)
 
 
+@pytest.mark.parametrize(
+    ("name", "args"),
+    [
+        ("gethostbyname", ("api.github.com",)),
+        ("gethostbyname_ex", ("api.github.com",)),
+        ("gethostbyaddr", ("93.184.216.34",)),
+        ("getnameinfo", (("93.184.216.34", 443), 0)),
+    ],
+)
+def test_guard_blocks_other_dns_apis(name: str, args: tuple):
+    with no_egress_guard(enabled=True):
+        with pytest.raises(EgressBlocked):
+            getattr(socket, name)(*args)
+
+
 def test_guard_blocks_connect():
     probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -47,6 +62,17 @@ def test_guard_blocks_udp_sendto():
         with no_egress_guard(enabled=True):
             with pytest.raises(EgressBlocked):
                 probe.sendto(b"probe", ("192.0.2.1", 9))
+    finally:
+        probe.close()
+
+
+@pytest.mark.skipif(not hasattr(socket.socket, "sendmsg"), reason="sendmsg unavailable")
+def test_guard_blocks_udp_sendmsg():
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        with no_egress_guard(enabled=True):
+            with pytest.raises(EgressBlocked):
+                probe.sendmsg([b"probe"], [], 0, ("192.0.2.1", 9))
     finally:
         probe.close()
 

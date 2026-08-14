@@ -33,7 +33,9 @@ def _run_cli(data_root: Path, *args: str, machine: bool = True) -> dict | str:
         cmd.append("--machine")
     cmd.extend(args)
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(ROOT)
+    env["PYTHONPATH"] = os.pathsep.join(
+        path for path in (str(ROOT), env.get("PYTHONPATH")) if path
+    )
     result = subprocess.run(
         cmd,
         cwd=ROOT,
