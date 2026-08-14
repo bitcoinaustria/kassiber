@@ -688,6 +688,17 @@ class CliSmokeTest(unittest.TestCase):
         self.assertNotEqual(code, 0)
         self.assertEqual(error_payload["error"]["code"], "ai_remote_ack_required")
 
+        # Model discovery contacts the provider and sends its stored API key,
+        # so it is gated exactly like chat. The daemon's `ai.list_models`
+        # already required this; the CLI used to reach the provider anyway.
+        error_payload, code = _run(
+            self.data_root,
+            "ai", "models",
+            "--provider", "smoke-remote",
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(error_payload["error"]["code"], "ai_remote_ack_required")
+
         payload = self._cli("ai", "providers", "get", "smoke-remote")
         self.assertIsNone(payload["data"].get("acknowledged_at"))
 

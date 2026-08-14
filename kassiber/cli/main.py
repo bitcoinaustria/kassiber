@@ -20,6 +20,7 @@ from ..ai import (
     get_db_ai_provider,
     get_ai_provider_api_key_for_use,
     redact_ai_provider_for_output,
+    require_ai_provider_acknowledged,
     resolve_ai_provider,
     set_default_ai_provider,
     update_db_ai_provider,
@@ -5857,6 +5858,11 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 return emit(args, clear_default_ai_provider(conn))
         if args.ai_command == "models":
             provider = resolve_ai_provider(conn, args.provider)
+            # Listing models contacts the provider and sends its stored API
+            # key, so it needs the same acknowledgement the daemon's
+            # `ai.list_models` requires. Configuring a provider is not consent
+            # to reach it.
+            require_ai_provider_acknowledged(provider)
             client = _ai_client_for(provider)
             return emit(args, {"provider": provider["name"], "models": client.list_models()})
     raise AppError("Unknown command")
