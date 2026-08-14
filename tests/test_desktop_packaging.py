@@ -98,6 +98,22 @@ class DesktopPackagingTest(unittest.TestCase):
         self.assertIn("--machine operator unlock", workflow)
         self.assertIn("Smoke desktop terminal forwarding", workflow)
 
+    def test_appimage_uses_the_host_wayland_client(self):
+        workflow = (
+            ROOT / ".github/workflows/prerelease-binaries.yml"
+        ).read_text(encoding="utf-8")
+
+        reseal = workflow.index("- name: Use the host Wayland client in the AppImage")
+        self.assertLess(
+            workflow.index("- name: Build unsigned desktop preview"), reseal
+        )
+        self.assertLess(
+            reseal, workflow.index("- name: Smoke desktop terminal forwarding")
+        )
+        self.assertIn('test -f "$wayland_client"', workflow)
+        self.assertIn('LDAI_OUTPUT="$appimage"', workflow)
+        self.assertIn("--appimage-extract 'usr/lib/libwayland-client.so*'", workflow)
+
     def test_windows_bundle_stages_a_native_cli_executable(self):
         workflow = (
             ROOT / ".github/workflows/prerelease-binaries.yml"

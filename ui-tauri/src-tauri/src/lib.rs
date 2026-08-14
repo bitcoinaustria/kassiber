@@ -2809,11 +2809,11 @@ fn configure_linux_webview_environment() {
         env::var_os("WAYLAND_DISPLAY").as_deref(),
         env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").as_deref(),
     ) {
-        // AppImages bundle WebKitGTK/Wayland libraries that can disagree with
-        // newer host EGL stacks. WebKit's supported fallback avoids the blank
-        // window while preserving an explicit user override. Deliberately
+        // Some WebKitGTK versions can render a blank AppImage window through
+        // the DMA-BUF path on Wayland. WebKit's supported fallback preserves
+        // an explicit user override. Deliberately
         // AppImage-only: the .deb/.rpm desktop packages link the host WebKitGTK
-        // and Wayland stack, so they cannot hit that version mismatch.
+        // stack.
         env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
 }
