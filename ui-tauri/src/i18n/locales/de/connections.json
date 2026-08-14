@@ -414,6 +414,8 @@
       "description": "Routing-Einnahmen abzüglich Zahlungs-, Rebalance- und On-chain-Kosten pro Lightning-Verbindung. Die Spalte pro Channel zeigt, ob das verdiente Routing eine grobe Standardannahme von {{cost}} sat Öffnungskosten deckt; Adapter mit exakter Funding-Gebühr können den Schwellenwert verfeinern.",
       "unsupported": "Keine konfigurierte Lightning-Verbindung meldet Unterstützung für Routing-Rentabilität.",
       "connection": "Verbindung",
+      "run": "Bericht ausführen",
+      "idle": "Noch nicht ausgeführt. Dies kontaktiert die Node.",
       "loading": "Routing-Rentabilität wird gelesen...",
       "errorFallback": "Routing-Rentabilität ist für diese Verbindung noch nicht verfügbar.",
       "empty": "Keine Routing-Daten verfügbar.",
