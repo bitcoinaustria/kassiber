@@ -710,7 +710,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   };
 
   return (
-    <section className="relative min-h-screen bg-paper px-4 py-6 text-ink sm:px-8 lg:px-10">
+    <section className="relative h-full overflow-y-auto bg-paper px-4 py-6 text-ink sm:px-8 lg:px-10">
       {/* Same ledger page as the app chrome, so setup and the app it sets up
           look like one product. Fades into `--color-paper` (this screen's
           surface) rather than the shell's `--card`. */}

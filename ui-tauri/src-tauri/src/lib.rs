@@ -2819,6 +2819,41 @@ fn configure_linux_webview_environment() {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn install_native_titlebar_drag_region(
+    window: &tauri::WebviewWindow<tauri::Wry>,
+) -> Result<(), String> {
+    use objc2::{MainThreadMarker, MainThreadOnly};
+    use objc2_app_kit::{NSAutoresizingMaskOptions, NSView, NSWindow};
+    use objc2_foundation::{NSPoint, NSRect, NSSize};
+
+    // Keep in sync with NATIVE_TITLEBAR_HEIGHT in WindowFrame.tsx.
+    const TITLEBAR_HEIGHT: f64 = 28.0;
+
+    let marker = MainThreadMarker::new().ok_or("window setup must run on the main thread")?;
+    let ns_window = window.ns_window().map_err(|error| error.to_string())? as *const NSWindow;
+    let ns_window = unsafe { ns_window.as_ref() }.ok_or("native window is unavailable")?;
+    let content_view = ns_window
+        .contentView()
+        .ok_or("native content view is unavailable")?;
+    let bounds = content_view.bounds();
+    let frame = NSRect::new(
+        NSPoint::new(0.0, bounds.size.height - TITLEBAR_HEIGHT),
+        NSSize::new(bounds.size.width, TITLEBAR_HEIGHT),
+    );
+    let drag_region = NSView::initWithFrame(NSView::alloc(marker), frame);
+    drag_region.setAutoresizingMask(
+        NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewMinYMargin,
+    );
+
+    // A transparent NSView reports `mouseDownCanMoveWindow = true`. Keeping
+    // this small native view above the WKWebView gives AppKit ownership of the
+    // title-bar gesture, including while a portalled chart/dialog is open.
+    content_view.addSubview(&drag_region);
+    ns_window.setMovableByWindowBackground(true);
+    Ok(())
+}
+
 pub fn run() {
     if let Some(code) = run_operator_native_auth_helper() {
         std::process::exit(code);
@@ -2861,6 +2896,14 @@ pub fn run() {
             app.set_menu(menu)?;
             app.manage(menu_handles);
             app.manage(AppRuntimeState::new());
+
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("main") {
+                if let Err(error) = install_native_titlebar_drag_region(&window) {
+                    eprintln!("kassiber: failed to install native title bar: {error}");
+                }
+            }
+
             let supervisor = Arc::new(DaemonSupervisor::new(resource_dir));
             // Unsolicited daemon events (`event: true`, no request_id) —
             // e.g. background freshness records — fan out to the webview

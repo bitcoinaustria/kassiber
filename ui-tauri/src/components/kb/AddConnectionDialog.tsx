@@ -5809,7 +5809,7 @@ export function AddConnectionDialog({
       {scannerOpen ? (
         <React.Suspense
           fallback={
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80">
+            <div className="fixed inset-x-0 top-[var(--kb-window-top-inset)] bottom-0 z-50 flex items-center justify-center bg-background/80">
               <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm shadow-sm">
                 <Loader2 className="size-4 animate-spin" />
                 <span>{t("add.openingScanner")}</span>

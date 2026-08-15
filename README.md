@@ -118,7 +118,8 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   processes intentionally share the lease, while admin operations re-authenticate.
 - **Two surfaces, one daemon** — desktop GUI (Tauri 2 + React) for
   day-to-day work; CLI with deterministic JSON envelopes for scripting,
-  automation, and power users; both backed by the same Python daemon.
+  automation, and power users; both backed by the same Python daemon. On macOS,
+  the desktop shell uses AppKit for its native title-bar controls and drag area.
 - **Localized desktop UI** — English and German, switchable in Settings or the
   header, with the i18n layer built to expand to more languages.
 
