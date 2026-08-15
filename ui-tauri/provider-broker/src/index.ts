@@ -1,25 +1,36 @@
 import { stdin } from "node:process";
+import { createInterface } from "node:readline";
 import { codexChat, codexStatus } from "./codex.js";
 import { claudeChat, claudeStatus } from "./claude.js";
+import { NativeToolBridge, runMcpServer } from "./native-tools.js";
 import { openCodeChat, openCodeStatus } from "./opencode.js";
-import type { BrokerRequest, ProviderId, ProviderStatus } from "./protocol.js";
+import type {
+  BrokerRequest,
+  BrokerToolResult,
+  ChatRequest,
+  ProviderId,
+  ProviderStatus,
+} from "./protocol.js";
 import { safeErrorMessage, writeEvent } from "./protocol.js";
 import { withWorkingDirectory } from "./working-directory.js";
 
-const PROVIDERS: ProviderId[] = ["codex", "claude", "opencode"];
+type ProviderAdapter = {
+  status: (cwd: string) => Promise<ProviderStatus>;
+  chat: (
+    request: ChatRequest,
+    cwd: string,
+    bridge?: NativeToolBridge,
+  ) => Promise<void>;
+};
 
-async function readRequest(): Promise<BrokerRequest> {
-  let body = "";
-  for await (const chunk of stdin) body += String(chunk);
-  return JSON.parse(body) as BrokerRequest;
-}
+const PROVIDERS = {
+  codex: { status: codexStatus, chat: codexChat },
+  claude: { status: () => claudeStatus(), chat: claudeChat },
+  opencode: { status: openCodeStatus, chat: openCodeChat },
+} satisfies Record<ProviderId, ProviderAdapter>;
 
 async function status(provider: ProviderId): Promise<ProviderStatus> {
-  return withWorkingDirectory(provider, async (cwd) => {
-    if (provider === "codex") return codexStatus(cwd);
-    if (provider === "claude") return claudeStatus();
-    return openCodeStatus(cwd);
-  });
+  return withWorkingDirectory(provider, (cwd) => PROVIDERS[provider].status(cwd));
 }
 
 function errorCode(message: string) {
@@ -29,11 +40,15 @@ function errorCode(message: string) {
 }
 
 async function main(): Promise<void> {
-  const request = await readRequest();
+  const lines = createInterface({ input: stdin });
+  const input = lines[Symbol.asyncIterator]();
+  const first = await input.next();
+  if (first.done) throw new Error("Kassiber provider broker received no request.");
+  const request = JSON.parse(first.value) as BrokerRequest;
   if (request.command === "status") {
     writeEvent({
       type: "result",
-      data: await Promise.all(PROVIDERS.map(status)),
+      data: await Promise.all((Object.keys(PROVIDERS) as ProviderId[]).map(status)),
     });
     return;
   }
@@ -42,14 +57,45 @@ async function main(): Promise<void> {
     writeEvent({ type: "result", data: snapshot.models });
     return;
   }
-  await withWorkingDirectory(request.provider, async (cwd) => {
-    if (request.provider === "codex") await codexChat(request, cwd);
-    else if (request.provider === "claude") await claudeChat(request, cwd);
-    else await openCodeChat(request, cwd);
-  });
+  const tools = request.tools ?? [];
+  const bridge = tools.length ? await NativeToolBridge.start(tools) : undefined;
+  const replies = bridge
+    ? (async () => {
+        for await (const line of input) {
+          let message: { command?: string; results?: BrokerToolResult[] };
+          try {
+            message = JSON.parse(line) as typeof message;
+          } catch {
+            continue;
+          }
+          if (message.command === "tool_results" && Array.isArray(message.results)) {
+            bridge.resolve(message.results);
+          }
+        }
+      })()
+    : undefined;
+  try {
+    await withWorkingDirectory(request.provider, async (cwd) => {
+      await PROVIDERS[request.provider].chat(request, cwd, bridge);
+    });
+  } finally {
+    await bridge?.close();
+    lines.close();
+    await replies;
+  }
 }
 
-main().catch((error) => {
+const work =
+  process.argv[2] === "mcp"
+    ? runMcpServer(process.argv.slice(3))
+    : main();
+
+work.catch((error) => {
+  if (process.argv[2] === "mcp") {
+    process.stderr.write(`${safeErrorMessage(error)}\n`);
+    process.exitCode = 1;
+    return;
+  }
   const message = safeErrorMessage(error);
   const code = errorCode(message);
   writeEvent({

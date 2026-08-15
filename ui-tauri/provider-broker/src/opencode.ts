@@ -2,13 +2,14 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createServer } from "node:net";
 import { createInterface } from "node:readline";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2";
+import { mcpCommand, type NativeToolBridge } from "./native-tools.js";
 import type { BrokerModel, ChatRequest, ProviderStatus } from "./protocol.js";
 import {
   providerEnvironment,
   resolveExecutable,
   runProvider,
 } from "./executables.js";
-import { CHAT_ONLY_INSTRUCTIONS, promptFromMessages } from "./prompt.js";
+import { promptFromMessages, systemInstructions } from "./prompt.js";
 import {
   providerStatus,
   safeErrorMessage,
@@ -17,22 +18,17 @@ import {
 } from "./protocol.js";
 
 export const DENY_ALL = [{ permission: "*", pattern: "*", action: "deny" as const }];
-export const DISABLED_TOOLS = Object.fromEntries(
-  [
-    "bash",
-    "edit",
-    "write",
-    "read",
-    "glob",
-    "grep",
-    "webfetch",
-    "websearch",
-    "codesearch",
-    "task",
-    "todowrite",
-    "question",
-  ].map((name) => [name, false]),
-);
+
+export function permissionsFor(request: ChatRequest) {
+  return [
+    ...DENY_ALL,
+    ...(request.tools ?? []).map((tool) => ({
+      permission: `kassiber_${tool.name}`,
+      pattern: "*",
+      action: "allow" as const,
+    })),
+  ];
+}
 
 function splitModel(model: string): { providerID: string; modelID: string } {
   const separator = model.indexOf("/");
@@ -266,7 +262,11 @@ export async function openCodeStatus(cwd: string): Promise<ProviderStatus> {
   }
 }
 
-export async function openCodeChat(request: ChatRequest, cwd: string): Promise<void> {
+export async function openCodeChat(
+  request: ChatRequest,
+  cwd: string,
+  toolBridge?: NativeToolBridge,
+): Promise<void> {
   const executable = await resolveExecutable("opencode");
   if (!executable) throw new Error("OpenCode is not installed.");
   writeEvent({ type: "status", phase: "connecting", message: "Starting OpenCode server" });
@@ -277,6 +277,20 @@ export async function openCodeChat(request: ChatRequest, cwd: string): Promise<v
       directory: cwd,
       throwOnError: true,
     });
+    if (toolBridge && request.tools?.length) {
+      await client.mcp.add({
+        name: "kassiber",
+        config: {
+          type: "local",
+          command: await mcpCommand(cwd, request.tools, toolBridge),
+          enabled: true,
+        },
+      });
+    }
+    const permissions = permissionsFor(request);
+    const allowedToolNames = new Set(
+      (request.tools ?? []).map((tool) => `kassiber_${tool.name}`),
+    );
     const resumeId = safeSessionCursor(request.options?.provider_session_id);
     let session: { id: string } | undefined;
     let resumed = false;
@@ -284,7 +298,7 @@ export async function openCodeChat(request: ChatRequest, cwd: string): Promise<v
       try {
         const existing = await client.session.get({ sessionID: resumeId });
         if (existing.data) {
-          await client.session.update({ sessionID: resumeId, permission: DENY_ALL });
+          await client.session.update({ sessionID: resumeId, permission: permissions });
           session = existing.data;
           resumed = true;
         }
@@ -293,7 +307,7 @@ export async function openCodeChat(request: ChatRequest, cwd: string): Promise<v
       }
     }
     if (!session) {
-      const created = await client.session.create({ permission: DENY_ALL });
+      const created = await client.session.create({ permission: permissions });
       session = created.data;
     }
     if (!session) throw new Error("OpenCode did not create a chat session.");
@@ -314,12 +328,15 @@ export async function openCodeChat(request: ChatRequest, cwd: string): Promise<v
           roles.set(event.properties.info.id, event.properties.info.role);
         } else if (event.type === "message.part.updated") {
           const part = event.properties.part;
-          if (roles.get(part.messageID) !== "assistant") continue;
           if (part.type === "tool") {
-            throw new Error(
-              "OpenCode attempted to use a provider-native tool; Kassiber stopped it.",
-            );
+            if (!allowedToolNames.has(part.tool)) {
+              throw new Error(
+                "OpenCode attempted to use a provider-native tool; Kassiber stopped it.",
+              );
+            }
+            continue;
           }
+          if (roles.get(part.messageID) !== "assistant") continue;
           if (
             (part.type === "text" || part.type === "reasoning") &&
             typeof part.text === "string"
@@ -366,8 +383,7 @@ export async function openCodeChat(request: ChatRequest, cwd: string): Promise<v
     await failFast(client.session.promptAsync({
       sessionID: session.id,
       model,
-      system: CHAT_ONLY_INSTRUCTIONS,
-      tools: DISABLED_TOOLS,
+      system: systemInstructions(request),
       ...(request.options?.reasoning_effort &&
       request.options.reasoning_effort !== "auto"
         ? { variant: request.options.reasoning_effort }

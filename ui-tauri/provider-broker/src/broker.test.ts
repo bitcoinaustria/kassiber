@@ -12,9 +12,9 @@ import {
 } from "./executables.js";
 import {
   DENY_ALL,
-  DISABLED_TOOLS,
   isLoopbackEndpoint,
   parseOpenCodeModels,
+  permissionsFor,
 } from "./opencode.js";
 import { promptFromMessages } from "./prompt.js";
 import {
@@ -108,7 +108,7 @@ describe("provider broker safety boundary", () => {
     await expect(access(second)).rejects.toThrow();
   });
 
-  it("removes native tools for Claude and denies every OpenCode permission", () => {
+  it("removes native tools and grants OpenCode only the advertised Kassiber tool", () => {
     expect(CODEX_NON_TOOL_ITEM_TYPES.has("userMessage")).toBe(true);
     expect(CODEX_NON_TOOL_ITEM_TYPES.has("commandExecution")).toBe(false);
     expect(CODEX_NON_TOOL_ITEM_TYPES.has("fileChange")).toBe(false);
@@ -117,7 +117,25 @@ describe("provider broker safety boundary", () => {
     expect(DENY_ALL).toEqual([
       { permission: "*", pattern: "*", action: "deny" },
     ]);
-    expect(Object.values(DISABLED_TOOLS).every((enabled) => enabled === false)).toBe(true);
+    expect(
+      permissionsFor({
+        command: "chat",
+        request_id: "test",
+        provider: "opencode",
+        model: "provider/model",
+        messages: [],
+        tools: [
+          { name: "ui_reports_summary", description: "Summary", parameters: {} },
+        ],
+      }),
+    ).toEqual([
+      { permission: "*", pattern: "*", action: "deny" },
+      {
+        permission: "kassiber_ui_reports_summary",
+        pattern: "*",
+        action: "allow",
+      },
+    ]);
   });
 
   it("sends only the latest user message when resuming a native session", () => {

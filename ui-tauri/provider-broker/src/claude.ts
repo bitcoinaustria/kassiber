@@ -1,12 +1,13 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
+import { mcpCommand, type NativeToolBridge } from "./native-tools.js";
 import type { BrokerModel, ChatRequest, ProviderStatus } from "./protocol.js";
 import {
   providerEnvironment,
   resolveExecutable,
   runProvider,
 } from "./executables.js";
-import { CHAT_ONLY_INSTRUCTIONS, promptFromMessages } from "./prompt.js";
+import { promptFromMessages, systemInstructions } from "./prompt.js";
 import {
   providerStatus,
   safeErrorMessage,
@@ -132,7 +133,7 @@ type ClaudeStreamLine = {
   event?: {
     type?: string;
     delta?: { type?: string; text?: string; thinking?: string };
-    content_block?: { type?: string };
+    content_block?: { type?: string; name?: string };
   };
 };
 
@@ -141,18 +142,22 @@ type ClaudeStreamLine = {
  *
  * Tool denial is layered, because a coding CLI can otherwise read and write the
  * user's disk from a chat box:
- *   --strict-mcp-config with no --mcp-config, loads no MCP servers
+ *   --setting-sources  loads no user/project/local settings
+ *   --strict-mcp-config loads only Kassiber's ephemeral MCP server
  *   --permission-mode   dontAsk, so nothing escalates by prompting
  *   --disallowed-tools  the file/exec/network tools by name
- *   --safe-mode         no hooks, plugins, skills, MCP or custom agents
- * and the reader below still hard-fails on any `tool_use` block that appears.
+ *   --disable-slash-commands removes the remaining skill command surface
+ * and the reader below still hard-fails on any non-Kassiber `tool_use` block.
  *
- * ponytail: `--bare` would also drop hooks/LSP/plugins, but it silently
- * suppresses every `stream_event` line — the reply then arrives only in the
- * terminal `result`, so the answer lands in one lump instead of streaming.
- * Revisit if the CLI ever streams under `--bare`.
+ * `--safe-mode` cannot be used here: it disables even an explicitly supplied
+ * MCP server. `--bare` would preserve explicit MCP, but deliberately skips the
+ * OAuth/keychain login users already configured and suppresses stream events.
  */
-function chatArgs(request: ChatRequest): string[] {
+async function chatArgs(
+  request: ChatRequest,
+  cwd: string,
+  toolBridge?: NativeToolBridge,
+): Promise<string[]> {
   const args = [
     "--print",
     "--output-format",
@@ -160,17 +165,33 @@ function chatArgs(request: ChatRequest): string[] {
     // stream-json refuses to emit under --print without --verbose.
     "--verbose",
     "--include-partial-messages",
-    // Customizations are arbitrary local code that runs before any tool_use
-    // block exists: a SessionStart hook alone can read or write the disk. Safe
-    // mode disables hooks, plugins, skills, MCP servers, custom commands and
-    // agents. Unlike --bare it keeps stream_event output, so streaming survives.
-    "--safe-mode",
+    // The broker runs in a fresh empty directory; loading no filesystem setting
+    // sources additionally removes user hooks, plugins and custom agents while
+    // preserving the user's existing OAuth/keychain authentication.
+    "--setting-sources",
+    "",
+    "--disable-slash-commands",
     "--strict-mcp-config",
     "--permission-mode",
     "dontAsk",
     "--system-prompt",
-    CHAT_ONLY_INSTRUCTIONS,
+    systemInstructions(request),
+    "--tools",
+    "",
   ];
+  if (toolBridge && request.tools?.length) {
+    const [command, ...commandArgs] = await mcpCommand(cwd, request.tools, toolBridge);
+    args.push(
+      "--mcp-config",
+      JSON.stringify({
+        mcpServers: {
+          kassiber: { command, args: commandArgs },
+        },
+      }),
+      "--allowedTools",
+      "mcp__kassiber__*",
+    );
+  }
   if (request.model !== "default") args.push("--model", request.model);
   const sessionId = safeSessionCursor(request.options?.provider_session_id);
   // `--resume=<id>`, never `--resume <id>`: the attached form cannot be
@@ -183,12 +204,16 @@ function chatArgs(request: ChatRequest): string[] {
   return args;
 }
 
-export async function claudeChat(request: ChatRequest, cwd: string): Promise<void> {
+export async function claudeChat(
+  request: ChatRequest,
+  cwd: string,
+  toolBridge?: NativeToolBridge,
+): Promise<void> {
   const executable = await resolveExecutable("claude");
   if (!executable) throw new Error("Claude is not installed.");
   const resumed = safeSessionCursor(request.options?.provider_session_id) !== undefined;
 
-  const child = spawn(executable, chatArgs(request), {
+  const child = spawn(executable, await chatArgs(request, cwd, toolBridge), {
     cwd,
     env: providerEnvironment("claude"),
     stdio: ["pipe", "pipe", "pipe"],
@@ -239,7 +264,12 @@ export async function claudeChat(request: ChatRequest, cwd: string): Promise<voi
           event.type === "content_block_start" &&
           event.content_block?.type === "tool_use"
         ) {
-          throw new Error("Claude attempted to use a provider-native tool; Kassiber stopped it.");
+          const allowedTools = new Set(
+            (request.tools ?? []).map((tool) => `mcp__kassiber__${tool.name}`),
+          );
+          if (!event.content_block.name || !allowedTools.has(event.content_block.name)) {
+            throw new Error("Claude attempted to use a provider-native tool; Kassiber stopped it.");
+          }
         }
       }
 

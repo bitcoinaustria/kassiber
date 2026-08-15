@@ -10,20 +10,27 @@ from pathlib import Path
 from unittest.mock import patch
 
 from kassiber.ai.broker_client import BrokerAIClient
-from kassiber.ai.contracts import cli_provider_for_locator
+from kassiber.ai.contracts import ResponsesRequestContext, cli_provider_for_locator
 from kassiber.daemon import ActiveAiChats
 from kassiber.errors import AppError
 
 
 FAKE_BROKER = """
 import json, sys, time
-request = json.loads(sys.stdin.read())
+request = json.loads(sys.stdin.readline())
 if request["command"] == "status":
     print(json.dumps({"type":"result","data":[{"provider":"codex","state":"ready","models":[]}]}), flush=True)
 elif request["command"] == "models":
     print(json.dumps({"type":"result","data":[{"id":"model-a"}]}), flush=True)
 elif request.get("model") == "wait":
     time.sleep(30)
+elif request.get("model") == "tool-call":
+    print(json.dumps({"type":"tool_call","call_id":"native-call-1","name":"ui_reports_tax_summary","arguments":{}}), flush=True)
+    reply = json.loads(sys.stdin.readline())
+    assert reply["command"] == "tool_results"
+    assert reply["results"][0]["call_id"] == "native-call-1"
+    print(json.dumps({"type":"delta","content":"report ready"}), flush=True)
+    print(json.dumps({"type":"done","finish_reason":"stop","provider_session_id":"native-session-1"}), flush=True)
 else:
     print(json.dumps({"type":"delta","content":"hello "}), flush=True)
     print(json.dumps({"type":"delta","content":"world"}), flush=True)
@@ -84,17 +91,74 @@ class BrokerClientTest(unittest.TestCase):
                 self.assertEqual(client.last_provider_session_id, "native-session-1")
                 self.assertEqual(chunks[-1].finish_reason, "stop")
 
-    def test_native_provider_tools_fail_closed(self):
-        client = BrokerAIClient(locator="claude-cli://default")
-        with self.assertRaises(AppError) as raised:
-            list(
-                client.stream_chat(
-                    messages=[{"role": "user", "content": "hi"}],
-                    model="default",
-                    tools=[{"type": "function", "name": "unsafe"}],
+    def test_kassiber_typed_tools_cross_the_chat_only_broker(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-broker-test-") as tmp:
+            script = self._fake_broker(Path(tmp))
+            with patch.dict(
+                "os.environ",
+                {
+                    "KASSIBER_AI_BROKER_NODE": sys.executable,
+                    "KASSIBER_AI_PROVIDER_BROKER": str(script),
+                },
+            ):
+                client = BrokerAIClient(locator="codex-cli://default")
+                chunks = list(
+                    client.stream_chat(
+                        model="tool-call",
+                        tools=[
+                            {
+                                "type": "function",
+                                "name": "ui_reports_tax_summary",
+                                "description": "Read the tax summary",
+                                "parameters": {"type": "object", "properties": {}},
+                            }
+                        ],
+                        tool_choice="auto",
+                        context=ResponsesRequestContext(
+                            instructions="You are Kassiber's assistant.",
+                            input_items=[
+                                {
+                                    "type": "message",
+                                    "role": "user",
+                                    "content": "Generate my report",
+                                }
+                            ],
+                        ),
+                    )
                 )
-            )
-        self.assertEqual(raised.exception.code, "ai_cli_tools_disabled")
+
+                call = chunks[-1].delta["tool_calls"][0]
+                continued = list(
+                    client.stream_chat(
+                        model="tool-call",
+                        tools=[
+                            {
+                                "type": "function",
+                                "name": "ui_reports_tax_summary",
+                                "description": "Read the tax summary",
+                                "parameters": {"type": "object", "properties": {}},
+                            }
+                        ],
+                        context=ResponsesRequestContext(
+                            instructions="You are Kassiber's assistant.",
+                            input_items=[
+                                {
+                                    "type": "function_call_output",
+                                    "call_id": call["id"],
+                                    "output": '{"ok":true}',
+                                }
+                            ],
+                        ),
+                    )
+                )
+
+        self.assertEqual(call["function"]["name"], "ui_reports_tax_summary")
+        self.assertEqual(chunks[-1].finish_reason, "tool_calls")
+        self.assertEqual(
+            "".join(chunk.delta.get("content", "") for chunk in continued),
+            "report ready",
+        )
+        self.assertEqual(continued[-1].finish_reason, "stop")
 
     def test_cancel_terminates_active_broker_process_group(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-broker-test-") as tmp:
