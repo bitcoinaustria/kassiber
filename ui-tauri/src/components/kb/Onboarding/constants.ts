@@ -46,7 +46,6 @@ export const DEFAULT_FORM: OnboardingForm = {
   backendUseProxy: false,
   backendProxyHost: "",
   backendProxyPort: "",
-  skipBackendsAcknowledged: false,
   aiSetupMode: "local",
   aiProviderKind: "local",
   aiProviderName: DEFAULT_AI_PROVIDER_NAME,

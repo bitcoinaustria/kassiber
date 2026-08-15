@@ -5052,6 +5052,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         "args": {
                             "workspace_label": "Windows Smoke",
                             "profile_label": "Private",
+                            "backend_setup_mode": "default",
                             "tax_country": "generic",
                             "fiat_currency": "USD",
                             "tax_long_term_days": 365,
@@ -5065,6 +5066,8 @@ class DaemonSmokeTest(unittest.TestCase):
                 self.assertEqual(completed["data"]["profile"]["name"], "Private")
                 self.assertEqual(completed["data"]["defaults"]["fiat_currency"], "USD")
                 self.assertEqual(completed["data"]["defaults"]["tax_country"], "generic")
+                self.assertEqual(completed["data"]["backend_setup_mode"], "default")
+                self.assertEqual(completed["data"]["default_backend"], "fulcrum")
 
                 _write_payload(
                     proc,
@@ -5114,6 +5117,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         "args": {
                             "workspace_label": "Existing Books",
                             "profile_label": "Existing Profile",
+                            "backend_setup_mode": "custom",
                             "backend": {
                                 "name": "trusted-electrum",
                                 "kind": "electrum",
@@ -5134,6 +5138,7 @@ class DaemonSmokeTest(unittest.TestCase):
                         "args": {
                             "workspace_label": "Attacker Books",
                             "profile_label": "Attacker Profile",
+                            "backend_setup_mode": "custom",
                             "backend": {
                                 "name": "attacker-electrum",
                                 "kind": "electrum",
@@ -5170,8 +5175,8 @@ class DaemonSmokeTest(unittest.TestCase):
                     "trusted-electrum",
                 )
                 names = {row["name"] for row in backends["data"]["backends"]}
-                self.assertIn("trusted-electrum", names)
-                self.assertNotIn("attacker-electrum", names)
+                self.assertEqual(names, {"trusted-electrum"})
+                self.assertEqual(backends["data"]["summary"]["bootstrap_mode"], "manual")
 
                 _write_payload(
                     proc,
@@ -5184,6 +5189,137 @@ class DaemonSmokeTest(unittest.TestCase):
             finally:
                 if proc.poll() is None:
                     proc.kill()
+
+    def test_ui_onboarding_offline_can_add_and_remove_first_backend(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-offline-") as tmp:
+            data_root = Path(tmp) / "data"
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "onboarding-offline",
+                        "kind": "ui.onboarding.complete",
+                        "args": {
+                            "workspace_label": "Offline Books",
+                            "profile_label": "Private",
+                            "backend_setup_mode": "skip",
+                        },
+                    },
+                )
+                completed = _read_payload_timeout(proc)
+                self.assertEqual(completed["kind"], "ui.onboarding.complete")
+                self.assertEqual(completed["data"]["backend_setup_mode"], "skip")
+                self.assertIsNone(completed["data"]["default_backend"])
+
+                _write_payload(
+                    proc,
+                    {"request_id": "offline-empty", "kind": "ui.backends.settings.list"},
+                )
+                empty = _read_payload_timeout(proc)["data"]
+                self.assertEqual(empty["backends"], [])
+                self.assertEqual(
+                    empty["summary"],
+                    {
+                        "count": 0,
+                        "default_backend": None,
+                        "bootstrap_mode": "manual",
+                    },
+                )
+
+                _write_payload(
+                    proc,
+                    {"request_id": "offline-egress", "kind": "ui.egress.snapshot"},
+                )
+                egress = _read_payload_timeout(proc)["data"]
+                self.assertFalse(
+                    any(
+                        row["label"].startswith("backend:")
+                        for row in egress["allowlist"]
+                    )
+                )
+
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "offline-add",
+                        "kind": "ui.backends.create",
+                        "args": {
+                            "name": "home-node",
+                            "kind": "electrum",
+                            "url": "ssl://node.example:50002",
+                            "chain": "bitcoin",
+                            "network": "main",
+                        },
+                    },
+                )
+                self.assertEqual(
+                    _read_payload_timeout(proc)["kind"],
+                    "ui.backends.create",
+                )
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
+
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {"request_id": "offline-added", "kind": "ui.backends.settings.list"},
+                )
+                added = _read_payload_timeout(proc)["data"]
+                self.assertEqual(
+                    [row["name"] for row in added["backends"]],
+                    ["home-node"],
+                )
+                self.assertEqual(added["summary"]["default_backend"], "home-node")
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": "offline-delete",
+                        "kind": "ui.backends.delete",
+                        "args": {"name": "home-node"},
+                    },
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "ui.backends.delete")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
+
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {"request_id": "offline-restart", "kind": "ui.backends.settings.list"},
+                )
+                restarted = _read_payload_timeout(proc)["data"]
+                self.assertEqual(restarted["backends"], [])
+                self.assertIsNone(restarted["summary"]["default_backend"])
+                self.assertEqual(restarted["summary"]["bootstrap_mode"], "manual")
+                _write_payload(
+                    proc,
+                    {"request_id": "offline-stop", "kind": "daemon.shutdown"},
+                )
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                code, stderr = _close_daemon(proc)
+                self.assertEqual(code, 0, stderr)
+                self.assertEqual(stderr, "")
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    _close_daemon(proc)
 
     def test_ui_onboarding_complete_rolls_back_books_on_backend_error(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-rollback-") as tmp:

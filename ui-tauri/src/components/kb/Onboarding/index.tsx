@@ -311,6 +311,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         fiat_currency: form.fiatCurrency,
         tax_long_term_days: taxLongTermDays,
         gains_algorithm: gainsAlgorithm,
+        backend_setup_mode: form.backendSetupMode,
         ...(form.backendSetupMode === "custom"
           ? {
               backend: {

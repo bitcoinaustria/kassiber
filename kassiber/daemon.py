@@ -193,12 +193,16 @@ from .core.sync_backends import (
 from .backends import (
     BACKEND_KINDS,
     BACKEND_RESERVED_FIELDS,
+    BACKEND_BOOTSTRAP_MANUAL,
+    BACKEND_BOOTSTRAP_PUBLIC,
+    backend_bootstrap_mode,
     backend_value,
     load_runtime_config,
     merge_db_backends,
     redact_backend_url,
     resolve_backend,
     resolve_effective_env_file,
+    set_backend_bootstrap_mode,
     wallet_backend_references,
 )
 from .db import (
@@ -9237,6 +9241,24 @@ def _onboarding_complete_payload(
     backend: dict[str, Any] | None = None
     default_backend: str | None = None
     backend_args = args.get("backend")
+    requested_backend_setup_mode = _optional_string_arg(args, "backend_setup_mode")
+    backend_setup_mode = requested_backend_setup_mode or (
+        "custom" if backend_args is not None else "default"
+    )
+    if backend_setup_mode not in {"default", "custom", "skip"}:
+        raise AppError(
+            "backend_setup_mode must be default, custom, or skip",
+            code="validation",
+            retryable=False,
+        )
+    if requested_backend_setup_mode is not None and (
+        (backend_setup_mode == "custom") != (backend_args is not None)
+    ):
+        raise AppError(
+            "Custom backend setup requires one backend; other modes must not include one",
+            code="validation",
+            retryable=False,
+        )
     backend_name: str | None = None
     backend_kind: str | None = None
     backend_url: str | None = None
@@ -9275,6 +9297,14 @@ def _onboarding_complete_payload(
                     hint="Choose a different backend name.",
                     retryable=False,
                 )
+    if backend_setup_mode == "custom" and not (
+        backend_name and backend_kind and backend_url
+    ):
+        raise AppError(
+            "Custom backend setup requires name, kind, and url",
+            code="validation",
+            retryable=False,
+        )
 
     pending_runtime_config = copy.deepcopy(ctx.runtime_config)
     try:
@@ -9292,6 +9322,14 @@ def _onboarding_complete_payload(
             gains_algorithm,
             tax_country,
             tax_long_term_days,
+            commit=False,
+        )
+
+        set_backend_bootstrap_mode(
+            ctx.conn,
+            BACKEND_BOOTSTRAP_PUBLIC
+            if backend_setup_mode == "default"
+            else BACKEND_BOOTSTRAP_MANUAL,
             commit=False,
         )
 
@@ -9325,6 +9363,12 @@ def _onboarding_complete_payload(
                     backend_name,
                     commit=False,
                 )["default_backend"]
+        else:
+            pending_runtime_config = merge_db_backends(
+                ctx.conn,
+                pending_runtime_config,
+            )
+            default_backend = str(pending_runtime_config.get("default_backend") or "") or None
         ctx.conn.commit()
     except Exception:
         ctx.conn.rollback()
@@ -9349,6 +9393,7 @@ def _onboarding_complete_payload(
         },
         "backend": backend,
         "default_backend": default_backend,
+        "backend_setup_mode": backend_setup_mode,
         "profiles": snapshot,
     }
 
@@ -9539,6 +9584,7 @@ def _backend_options_payload(ctx: "DaemonContext") -> dict[str, Any]:
         "summary": {
             "count": len(rows),
             "default_backend": default_backend or None,
+            "bootstrap_mode": backend_bootstrap_mode(ctx.conn),
         },
         "suggestions": [
             {
@@ -9631,6 +9677,7 @@ def _backend_settings_list_payload(ctx: "DaemonContext") -> dict[str, Any]:
         "summary": {
             "count": len(ctx.runtime_config.get("backends", {})),
             "default_backend": default_backend or None,
+            "bootstrap_mode": backend_bootstrap_mode(ctx.conn),
         },
     }
 
@@ -9949,14 +9996,22 @@ def _create_backend_payload(ctx: "DaemonContext", args: dict[str, Any]) -> dict[
     )
     common.pop("clear", None)
     _validate_desktop_bitcoinrpc_cookiefile(kind, url, common.get("config"))
-    payload = core_accounts.create_backend(
-        ctx.conn,
-        name,
-        kind,
-        url,
-        **common,
-    )
-    merge_db_backends(ctx.conn, ctx.runtime_config)
+    pending_runtime_config = copy.deepcopy(ctx.runtime_config)
+    try:
+        payload = core_accounts.create_backend(
+            ctx.conn,
+            name,
+            kind,
+            url,
+            commit=False,
+            **common,
+        )
+        merge_db_backends(ctx.conn, pending_runtime_config)
+        ctx.conn.commit()
+    except Exception:
+        ctx.conn.rollback()
+        raise
+    ctx.runtime_config = pending_runtime_config
     return payload
 
 

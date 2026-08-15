@@ -256,7 +256,7 @@
     "confirm": "Willkommens-Status zurücksetzen?\n\nDies löscht deine lokale Identität und bringt dich zurück zum Willkommensbildschirm. Verschlüsselte Daten auf der Festplatte werden nicht angetastet."
   },
   "deleteBackend": {
-    "confirm": "Backend '{{name}}' löschen? Falls es das Standard-Backend ist, wird ein anderes konfiguriertes Backend zum Standard.",
+    "confirm": "Backend '{{name}}' löschen? Wallet-Aktualisierungen damit werden beendet. Falls ein anderes kompatibles Backend vorhanden ist, wird es zum Standard.",
     "blockedTitle": "Backend wird noch verwendet",
     "walletWarning": "Weise diesen Wallets vor dem Löschen ein anderes Backend zu:\n- {{wallets}}",
     "failedTitle": "Backend wurde nicht gelöscht",

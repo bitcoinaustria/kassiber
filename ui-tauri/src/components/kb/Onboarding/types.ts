@@ -53,7 +53,6 @@ export interface OnboardingForm {
   backendUseProxy: boolean;
   backendProxyHost: string;
   backendProxyPort: string;
-  skipBackendsAcknowledged: boolean;
   aiSetupMode: AiSetupMode;
   aiProviderKind: AiProviderKind;
   aiProviderName: string;

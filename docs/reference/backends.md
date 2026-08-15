@@ -41,6 +41,16 @@ built-in Esplora backend and the public explorer-link fallback. `liquid`
 is the preferred built-in Liquid sync backend, while `liquid-blockstream`
 is available as an alternate public Liquid Electrum endpoint.
 
+Desktop setup offers three choices:
+
+- **Built-in public backends** enables the four presets above.
+- **Custom sync backend** saves only the backend entered during setup.
+- **Work offline** starts with no backends and no public explorer links.
+
+Custom and offline books stay in manual mode. Adding a backend later in
+Settings does not restore the public presets. The first compatible Bitcoin
+sync backend added to an offline book becomes its default.
+
 ## Useful commands
 
 Inspect the merged backend view:
@@ -122,7 +132,7 @@ Important runtime rules:
 
 - read-only commands like `status`, `backends list`, and `backends get` do not import bootstrap-backed config into SQLite; `kassiber init` and backend mutation commands that need canonical bootstrap rows are the explicit bootstrap-import flows
 - deleting a bootstrap-backed backend suppresses the built-in/default bootstrap copy; backends forced by `backends.env` or process variables must be removed there and the process restarted first
-- deleting the active stored default atomically selects a remaining backend on the same chain that wallets can actually sync against, preferring a user-created one; the only backend cannot be deleted
+- deleting the active stored default atomically selects a remaining backend on the same chain that wallets can actually sync against, preferring a user-created one; manual mode may return to zero backends, while built-in mode keeps at least one
 - `backends delete` refuses backends still referenced by wallets; reassign those wallets first
 - `--display-name` changes the user-facing label without changing the stable backend name that wallets reference
 - process-level `KASSIBER_BACKEND_*` overrides still win for the current process even when a backend has already been imported into SQLite

@@ -427,10 +427,19 @@ export function SettingsScreen({
       ),
     ];
   }, [backendSettingsQuery.data, maintenanceSettingsQuery.data]);
+  const publicExplorerFallbacks = deriveExplorerSettings(
+    backends,
+    backendSettingsQuery.data?.data?.summary.bootstrap_mode,
+  ).publicFallbacks;
 
   React.useEffect(() => {
     if (!backendSettingsQuery.data?.data?.backends) return;
-    setExplorerSettings(deriveExplorerSettings(backends));
+    setExplorerSettings(
+      deriveExplorerSettings(
+        backends,
+        backendSettingsQuery.data.data.summary.bootstrap_mode,
+      ),
+    );
   }, [backendSettingsQuery.data, backends, setExplorerSettings]);
 
   const editingBackend = React.useMemo(
@@ -590,7 +599,12 @@ export function SettingsScreen({
     const refreshedBackends = (refreshed.data?.data?.backends ?? []).map(
       backendRowToSettingsBackend,
     );
-    setExplorerSettings(deriveExplorerSettings(refreshedBackends));
+    setExplorerSettings(
+      deriveExplorerSettings(
+        refreshedBackends,
+        refreshed.data?.data?.summary.bootstrap_mode,
+      ),
+    );
     setBackendDialogOpen(false);
     setEditingBackendId(null);
     setInitialBackendTypeId(null);
@@ -618,7 +632,12 @@ export function SettingsScreen({
       const refreshedBackends = (refreshed.data?.data?.backends ?? []).map(
         backendRowToSettingsBackend,
       );
-      setExplorerSettings(deriveExplorerSettings(refreshedBackends));
+      setExplorerSettings(
+        deriveExplorerSettings(
+          refreshedBackends,
+          refreshed.data?.data?.summary.bootstrap_mode,
+        ),
+      );
       setBackendDialogOpen(false);
       setEditingBackendId(null);
       setInitialBackendTypeId(null);
@@ -655,7 +674,12 @@ export function SettingsScreen({
       const refreshedBackends = (refreshed.data?.data?.backends ?? []).map(
         backendRowToSettingsBackend,
       );
-      setExplorerSettings(deriveExplorerSettings(refreshedBackends));
+      setExplorerSettings(
+        deriveExplorerSettings(
+          refreshedBackends,
+          refreshed.data?.data?.summary.bootstrap_mode,
+        ),
+      );
       addNotification({
         title: t("defaultBackend.updatedTitle"),
         body: t("defaultBackend.updatedBody", { name: backend.name }),
@@ -1007,6 +1031,7 @@ export function SettingsScreen({
           <NetworkLayerSettingsPanel
             layer="bitcoin"
             backends={backends}
+            publicFallbacks={publicExplorerFallbacks}
             onAdd={() => openAddBackend("bitcoin")}
             onEdit={openEditBackend}
             onSetDefault={onSetDefaultBackend}
@@ -1029,6 +1054,7 @@ export function SettingsScreen({
           <NetworkLayerSettingsPanel
             layer="liquid"
             backends={backends}
+            publicFallbacks={publicExplorerFallbacks}
             onAdd={() => openAddBackend("liquid")}
             onEdit={openEditBackend}
             onSetDefault={onSetDefaultBackend}

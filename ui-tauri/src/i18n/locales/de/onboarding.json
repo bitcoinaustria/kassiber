@@ -202,8 +202,8 @@
       "description": "Richte Kassiber auf eine Clearnet- oder .onion-Explorer API (Esplora/mempool), Electrum / Fulcrum, Bitcoin Core RPC oder einen Liquid-Endpunkt."
     },
     "skip": {
-      "title": "Verbindungen vorerst überspringen",
-      "description": "Mach mit reinen manuellen Importen weiter. Die Watch-only-Aktualisierung lässt sich später in den Einstellungen konfigurieren."
+      "title": "Offline arbeiten",
+      "description": "Starte ohne Sync-Backends. Manuelle Importe und Berichte funktionieren weiterhin; ein Backend kannst du später hinzufügen."
     },
     "protocolLabel": "Sync-Protokoll",
     "protocolDescription": "Payment-Provider und Datei-Importe werden später unter Verbindungen konfiguriert.",
@@ -211,7 +211,7 @@
     "displayNamePlaceholder": "home-node",
     "displayNameDescription": "Eine kurze Bezeichnung, die in den Einstellungen und bei der Verbindungsaktualisierung angezeigt wird.",
     "host": "Host",
-    "hostPlaceholder": "index.bitcoin-austria.at",
+    "hostPlaceholder": "electrum.example",
     "port": "Port",
     "useSsl": "SSL verwenden",
     "useSslDescription": "Nutze TLS für die Electrum-Verbindung; gängige Server lauschen auf 50002.",
@@ -238,10 +238,8 @@
     "endpointUrl": "Endpunkt-URL",
     "endpointUrlPlaceholder": "https://… oder http://abc…onion/api",
     "credentialsWarning": "Füge hier keine API-Tokens, RPC-Passwörter, Cookies oder Bearer-Header ein. Zugangsdaten sollten erst hinzugefügt werden, nachdem die verschlüsselte Datenbank geöffnet ist.",
-    "skipWarningTitle": "Die Watch-only-Aktualisierung ist noch nicht bereit.",
-    "skipWarningBody": "Du kannst weiterhin Dateien importieren, aber Adress-Discovery, Wallet-Aktualisierung und Node-gestützte Historie bleiben deaktiviert, bis ein Backend konfiguriert ist.",
-    "skipAck": "Mir ist klar, dass Sync später ein Backend benötigt.",
-    "skipAckDescription": "Die Einstellungen können nach dem Onboarding Bitcoin- oder Liquid-Sync-Backends hinzufügen."
+    "skipWarningTitle": "Kassiber startet ohne Sync-Backends.",
+    "skipWarningBody": "Manuelle Importe und Berichte funktionieren weiterhin. Adress-Discovery und Wallet-Aktualisierung bleiben aus, bis du ein Backend hinzufügst."
   },
   "ai": {
     "local": {
@@ -388,7 +386,7 @@
       "noteGeneric": "{{days}} Tage langfristige Behaltedauer."
     },
     "sync": {
-      "valueManual": "Nur manuelle Importe",
+      "valueManual": "Offline — keine Sync-Backends",
       "valueDefault": "Eingebaute öffentliche Backends",
       "valueCustom": "{{name}} ({{detail}})",
       "customFallbackName": "Eigenes Backend",

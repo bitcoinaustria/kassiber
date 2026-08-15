@@ -16,16 +16,20 @@ current behavior, not a long-term contract.
 
 ## The big gotcha: not running your own node
 
-Out of the box, Kassiber ships four built-in named backends:
+When **Built-in public backends** is selected during setup, Kassiber enables
+four named backends:
 
-- `mempool` → `esplora` → `https://mempool.bitcoin-austria.at/api` — the
-  default for Bitcoin wallets, operated by Bitcoin Austria.
+- `mempool` → `esplora` → `https://mempool.bitcoin-austria.at/api` — a
+  Bitcoin Austria Explorer API.
 - `fulcrum` → `electrum` → `ssl://index.bitcoin-austria.at:50002` —
   Bitcoin-Austria-operated Electrum/Fulcrum indexer.
 - `liquid` → `electrum` → `ssl://les.bullbitcoin.com:995` — a
   third-party Liquid Electrum endpoint operated by BullBitcoin.
 - `liquid-blockstream` → `electrum` → `ssl://blockstream.info:995` —
   a third-party Liquid Electrum endpoint operated by Blockstream.
+
+**Custom sync backend** and **Work offline** do not enable these presets or
+public explorer links. Offline books can still use manual imports and reports.
 
 Every `wallets sync` against any of these sends your addresses (or
 scripthashes, or gap-limit-scanned descriptor scripts) to whoever
@@ -70,7 +74,7 @@ configurable.
 | Clicking **Check connections** in the desktop connection indicator or an explicit connection-test action during setup | each configured backend selected by that action | that backend's configured HTTP(S), Electrum, RPC, Lightning, or BTCPay transport | IP, request timing, and the minimum health/status request for that backend; no check runs merely because the backend is configured or displayed |
 | Desktop launch after 10 seconds and every 24 hours while open when the setup / **Settings → Privacy → Allow GitHub update checks** permission is enabled; macOS **Check for Updates…** and clicking the sidebar version line check only under the same permission | stable builds: `https://api.github.com/repos/bitcoinaustria/kassiber/releases/latest`; prerelease builds: `https://api.github.com/repos/bitcoinaustria/kassiber/releases?per_page=20` (GitHub, one page) | unauthenticated HTTPS GET; redirects refused | IP, User-Agent, request timing, and that a Kassiber release check occurred; no project, wallet, book, build hash, hostname, device, or installation identifier is sent |
 | Explicit `kassiber update` while the same permission is enabled | matching stable/prerelease GitHub endpoint above | foreground unauthenticated HTTPS GET; redirects refused | same release-check metadata as above. No other CLI command contacts GitHub: the update banner shown by ordinary commands only reads the local cache an explicit check or the desktop wrote, and nothing refreshes it in the background |
-| `wallets sync` against the built-in `mempool` default | `https://mempool.bitcoin-austria.at/api` (Bitcoin Austria) | Esplora over HTTPS | IP, User-Agent, scripthashes, query timing, descriptor scan shape |
+| `wallets sync` against the built-in `mempool` backend | `https://mempool.bitcoin-austria.at/api` (Bitcoin Austria) | Esplora over HTTPS | IP, User-Agent, scripthashes, query timing, descriptor scan shape |
 | `wallets sync` against the built-in `fulcrum` default | `ssl://index.bitcoin-austria.at:50002` (Bitcoin Austria) | Electrum JSON-RPC over TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against the built-in `liquid` default | `ssl://les.bullbitcoin.com:995` (BullBitcoin) | Electrum JSON-RPC over TLS | IP, queried Liquid scripthashes, query timing |
 | `wallets sync` against the built-in `liquid-blockstream` default | `ssl://blockstream.info:995` (Blockstream) | Electrum JSON-RPC over TLS | IP, queried Liquid scripthashes, query timing |

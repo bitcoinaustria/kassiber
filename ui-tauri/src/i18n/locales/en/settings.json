@@ -256,7 +256,7 @@
     "confirm": "Reset Welcome state?\n\nThis clears your local identity and returns you to the Welcome screen. Encrypted data on disk is not touched."
   },
   "deleteBackend": {
-    "confirm": "Delete backend '{{name}}'? If it is the default, another configured backend will become the default.",
+    "confirm": "Delete backend '{{name}}'? Wallet refresh using it will stop. If another compatible backend exists, it becomes the default.",
     "blockedTitle": "Backend is still in use",
     "walletWarning": "Reassign these wallets to another backend before deleting it:\n- {{wallets}}",
     "failedTitle": "Backend was not deleted",

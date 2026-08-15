@@ -2308,6 +2308,8 @@ function SidebarActions({
   );
   const defaultBackendName =
     backendSettingsQuery.data?.data?.summary.default_backend ?? null;
+  const backendBootstrapMode =
+    backendSettingsQuery.data?.data?.summary.bootstrap_mode ?? "public";
   const defaultBackend =
     backendSettingsQuery.data?.data?.backends.find(
       (backend) => backend.name === defaultBackendName || backend.is_default,
@@ -2330,20 +2332,18 @@ function SidebarActions({
     }
   }, [backendSettingsLoaded, dataMode, normalizedDataMode, setDataMode]);
 
-  // Keep public-explorer fallbacks disabled whenever a regtest/elementsregtest
-  // book is active, without waiting for the Settings screen to mount. Otherwise
-  // the store default (publicFallbacks: true) leaves a freshly-launched or
-  // onboarding-opened regtest book handing regtest txids to a public explorer
-  // until Settings is visited. Mirrors deriveExplorerSettings' publicFallbacks
-  // rule so the two writers never disagree; base URLs stay owned by Settings.
+  // Keep public links off for manual/offline and regtest setups without waiting
+  // for Settings to mount. Configured explorer base URLs stay owned by Settings.
   React.useEffect(() => {
     if (!backendSettingsLoaded) return;
-    const allowPublicFallbacks = !activeRegtestBackend;
+    const allowPublicFallbacks =
+      backendBootstrapMode === "public" && !activeRegtestBackend;
     if (explorerPublicFallbacks !== allowPublicFallbacks) {
       setExplorerSettings({ publicFallbacks: allowPublicFallbacks });
     }
   }, [
     backendSettingsLoaded,
+    backendBootstrapMode,
     activeRegtestBackend,
     explorerPublicFallbacks,
     setExplorerSettings,

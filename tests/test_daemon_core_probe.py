@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from kassiber import daemon
 from kassiber.errors import AppError
@@ -111,7 +111,11 @@ class DaemonHttpProbeTest(unittest.TestCase):
             daemon.core_accounts,
             "list_backends",
             return_value=[{"name": "private-core", "kind": "bitcoinrpc"}],
-        ), patch.object(daemon, "wallet_backend_references", return_value=[]):
+        ), patch.object(
+            daemon, "wallet_backend_references", return_value=[]
+        ), patch.object(
+            daemon, "backend_bootstrap_mode", return_value="manual"
+        ):
             payload = daemon._backend_settings_list_payload(ctx)
 
         self.assertEqual(
@@ -708,7 +712,10 @@ class DaemonBitcoinRpcProbeTest(unittest.TestCase):
         self.assertEqual(seen_backend["password"], "correct horse battery staple")
 
     def test_backend_create_uses_detected_basic_credential_ref(self):
-        ctx = SimpleNamespace(conn=object(), runtime_config={})
+        ctx = SimpleNamespace(
+            conn=Mock(),
+            runtime_config={},
+        )
         detected = {
             "name": "local-core-main",
             "kind": "bitcoinrpc",

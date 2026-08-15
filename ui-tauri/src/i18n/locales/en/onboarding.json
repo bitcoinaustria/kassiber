@@ -202,8 +202,8 @@
       "description": "Point Kassiber at a clearnet or .onion Explorer API (Esplora/mempool), Electrum / Fulcrum, Bitcoin Core RPC, or Liquid endpoint."
     },
     "skip": {
-      "title": "Skip connections for now",
-      "description": "Continue with manual imports only. Watch-only refresh can be configured from Settings later."
+      "title": "Work offline",
+      "description": "Start with no sync backends. Manual imports and reports still work, and you can add a backend later."
     },
     "protocolLabel": "Sync protocol",
     "protocolDescription": "Payment providers and file imports are configured later from Connections.",
@@ -211,7 +211,7 @@
     "displayNamePlaceholder": "home-node",
     "displayNameDescription": "A short label shown in Settings and connection refresh screens.",
     "host": "Host",
-    "hostPlaceholder": "index.bitcoin-austria.at",
+    "hostPlaceholder": "electrum.example",
     "port": "Port",
     "useSsl": "Use SSL",
     "useSslDescription": "Use TLS on the Electrum connection; common servers listen on 50002.",
@@ -238,10 +238,8 @@
     "endpointUrl": "Endpoint URL",
     "endpointUrlPlaceholder": "https://… or http://abc…onion/api",
     "credentialsWarning": "Do not paste API tokens, RPC passwords, cookies, or bearer headers here. Credentials should be added only after the encrypted database is open.",
-    "skipWarningTitle": "Watch-only refresh will not be ready.",
-    "skipWarningBody": "You can still import files, but address discovery, wallet refresh, and node-backed history remain disabled until a backend is configured.",
-    "skipAck": "I understand sync needs a backend later.",
-    "skipAckDescription": "Settings can add Bitcoin or Liquid sync backends after onboarding."
+    "skipWarningTitle": "Kassiber will start with no sync backends.",
+    "skipWarningBody": "Manual imports and reports still work. Address discovery and wallet refresh stay off until you add a backend."
   },
   "ai": {
     "local": {
@@ -388,7 +386,7 @@
       "noteGeneric": "{{days}} long-term holding days."
     },
     "sync": {
-      "valueManual": "Manual imports only",
+      "valueManual": "Offline — no sync backends",
       "valueDefault": "Built-in public backends",
       "valueCustom": "{{name}} ({{detail}})",
       "customFallbackName": "Custom backend",
