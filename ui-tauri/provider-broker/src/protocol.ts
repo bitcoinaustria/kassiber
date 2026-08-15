@@ -57,7 +57,22 @@ export type ChatRequest = {
   provider: ProviderId;
   model: string;
   messages: Array<{ role: string; content: string }>;
+  instructions?: string;
+  tools?: BrokerToolDefinition[];
   options?: { reasoning_effort?: string; provider_session_id?: string };
+};
+
+export type BrokerToolDefinition = {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  read_only?: boolean;
+  destructive?: boolean;
+};
+
+export type BrokerToolResult = {
+  call_id: string;
+  output: string;
 };
 
 export type BrokerRequest =
@@ -68,6 +83,7 @@ export type BrokerRequest =
 export type BrokerEvent =
   | { type: "status"; phase: string; message: string }
   | { type: "delta"; content?: string; reasoning?: string }
+  | { type: "tool_call"; call_id: string; name: string; arguments: Record<string, unknown> }
   | { type: "done"; finish_reason: string; provider_session_id?: string }
   | {
       type: "error";

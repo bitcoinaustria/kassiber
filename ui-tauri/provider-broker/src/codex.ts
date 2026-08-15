@@ -1,6 +1,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createInterface } from "node:readline";
 import type { BrokerModel, ChatRequest, ProviderStatus } from "./protocol.js";
+import type { NativeToolBridge } from "./native-tools.js";
 import {
   providerStatus,
   safeErrorMessage,
@@ -8,12 +10,13 @@ import {
   writeEvent,
 } from "./protocol.js";
 import { providerEnvironment, resolveExecutable } from "./executables.js";
-import { CHAT_ONLY_INSTRUCTIONS, promptFromMessages } from "./prompt.js";
+import { promptFromMessages, systemInstructions } from "./prompt.js";
 
 export const CODEX_NON_TOOL_ITEM_TYPES = new Set([
   "userMessage",
   "agentMessage",
   "reasoning",
+  "dynamicToolCall",
 ]);
 
 type JsonRpc = {
@@ -41,7 +44,7 @@ class CodexConnection {
   readonly closed: Promise<never>;
   private closedReject!: (error: Error) => void;
 
-  constructor(executable: string, cwd: string) {
+  constructor(executable: string, cwd: string, toolBridge?: NativeToolBridge) {
     this.closed = new Promise<never>((_, reject) => {
       this.closedReject = reject;
     });
@@ -60,6 +63,36 @@ class CodexConnection {
         return;
       }
       if (message.id !== undefined && message.method) {
+        if (message.method === "item/tool/call" && toolBridge) {
+          const params = message.params;
+          const name = typeof params?.tool === "string" ? params.tool : "";
+          const callId = typeof params?.callId === "string" ? params.callId : "";
+          const args =
+            typeof params?.arguments === "object" && params.arguments !== null
+              ? (params.arguments as Record<string, unknown>)
+              : {};
+          toolBridge
+            .request(name, args, callId)
+            .then((output) =>
+              this.send({
+                id: message.id,
+                result: {
+                  contentItems: [{ type: "inputText", text: output }],
+                  success: true,
+                },
+              }),
+            )
+            .catch(() =>
+              this.send({
+                id: message.id,
+                result: {
+                  contentItems: [{ type: "inputText", text: "Kassiber denied the tool call." }],
+                  success: false,
+                },
+              }),
+            );
+          return;
+        }
         this.send({
           id: message.id,
           error: {
@@ -198,13 +231,25 @@ export async function codexStatus(cwd: string): Promise<ProviderStatus> {
   }
 }
 
-export async function codexChat(request: ChatRequest, cwd: string): Promise<void> {
+function toolFingerprint(request: ChatRequest): string {
+  return createHash("sha256")
+    .update(JSON.stringify(request.tools ?? []))
+    .digest("hex")
+    .slice(0, 16);
+}
+
+export async function codexChat(
+  request: ChatRequest,
+  cwd: string,
+  toolBridge?: NativeToolBridge,
+): Promise<void> {
   const executable = await resolveExecutable("codex");
   if (!executable) throw new Error("Codex is not installed.");
-  const connection = new CodexConnection(executable, cwd);
+  const connection = new CodexConnection(executable, cwd, toolBridge);
   try {
     writeEvent({ type: "status", phase: "connecting", message: "Starting Codex app-server" });
     await initialize(connection);
+    const instructions = systemInstructions(request);
     const common = {
       cwd,
       model: request.model === "default" ? undefined : request.model,
@@ -212,15 +257,21 @@ export async function codexChat(request: ChatRequest, cwd: string): Promise<void
       approvalsReviewer: "user",
       sandbox: "read-only",
       ephemeral: false,
-      baseInstructions: CHAT_ONLY_INSTRUCTIONS,
-      developerInstructions: CHAT_ONLY_INSTRUCTIONS,
+      baseInstructions: instructions,
+      developerInstructions: instructions,
       config: {
         web_search: "disabled",
         mcp_servers: {},
-        multi_agent_mode: "explicitRequestOnly",
       },
     };
-    const resumeId = safeSessionCursor(request.options?.provider_session_id);
+    const fingerprint = toolFingerprint(request);
+    const cursorPrefix = `kdt-${fingerprint}:`;
+    const rawResumeId = safeSessionCursor(request.options?.provider_session_id);
+    const resumeId = rawResumeId?.startsWith(cursorPrefix)
+      ? rawResumeId.slice(cursorPrefix.length)
+      : request.tools?.length
+        ? undefined
+        : rawResumeId;
     let opened: { thread: { id: string } };
     let resumed = false;
     try {
@@ -233,14 +284,30 @@ export async function codexChat(request: ChatRequest, cwd: string): Promise<void
       } else {
         opened = await connection.request<{ thread: { id: string } }>(
           "thread/start",
-          common,
+          {
+            ...common,
+            dynamicTools: (request.tools ?? []).map((tool) => ({
+              type: "function",
+              name: tool.name,
+              description: tool.description,
+              inputSchema: tool.parameters,
+            })),
+          },
         );
       }
     } catch (error) {
       if (!resumeId || !/not found|missing|unknown/i.test(safeErrorMessage(error))) throw error;
       opened = await connection.request<{ thread: { id: string } }>(
         "thread/start",
-        common,
+        {
+          ...common,
+          dynamicTools: (request.tools ?? []).map((tool) => ({
+            type: "function",
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.parameters,
+          })),
+        },
       );
     }
     const threadId = String(opened.thread.id);
@@ -251,11 +318,31 @@ export async function codexChat(request: ChatRequest, cwd: string): Promise<void
     // non-text item — but a local read can begin before that abort lands. With
     // the network off, its content can only surface through assistant text on a
     // turn we are already failing. Revisit if Codex ships a tool-free mode.
+    const streamedAgentText = new Map<string, string>();
     const completion = new Promise<{ status: string; error?: unknown }>((resolve, reject) => {
       connection.onNotification((message) => {
         if (message.method === "item/agentMessage/delta") {
           const delta = message.params?.delta;
-          if (typeof delta === "string" && delta) writeEvent({ type: "delta", content: delta });
+          const itemId = message.params?.itemId;
+          if (typeof delta === "string" && delta) {
+            if (typeof itemId === "string") {
+              streamedAgentText.set(itemId, (streamedAgentText.get(itemId) ?? "") + delta);
+            }
+            writeEvent({ type: "delta", content: delta });
+          }
+        } else if (
+          message.method === "item/completed" &&
+          typeof message.params?.item === "object" &&
+          message.params.item !== null &&
+          (message.params.item as { type?: string }).type === "agentMessage"
+        ) {
+          const item = message.params.item as { id?: string; text?: string };
+          const streamed = typeof item.id === "string" ? streamedAgentText.get(item.id) ?? "" : "";
+          const remainder =
+            typeof item.text === "string" && item.text.startsWith(streamed)
+              ? item.text.slice(streamed.length)
+              : "";
+          if (remainder) writeEvent({ type: "delta", content: remainder });
         } else if (
           message.method === "item/started" &&
           typeof message.params?.item === "object" &&
@@ -285,7 +372,11 @@ export async function codexChat(request: ChatRequest, cwd: string): Promise<void
     });
     const result = await Promise.race([completion, connection.closed]);
     if (result.status !== "completed") throw new Error("Codex did not complete the response.");
-    writeEvent({ type: "done", finish_reason: "stop", provider_session_id: threadId });
+    writeEvent({
+      type: "done",
+      finish_reason: "stop",
+      provider_session_id: `${cursorPrefix}${threadId}`,
+    });
   } finally {
     connection.close();
   }

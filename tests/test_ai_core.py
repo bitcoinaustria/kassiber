@@ -45,6 +45,10 @@ from kassiber.ai.client import (
     _http_error_app_error,
     _network_error_app_error,
 )
+from kassiber.ai.broker_client import (
+    _broker_messages_for_context,
+    _broker_tool_definitions,
+)
 from kassiber.ai.contracts import ResponsesRequestContext
 from kassiber.ai.prompt import (
     DEFAULT_KASSIBER_SYSTEM_PROMPT,
@@ -1114,6 +1118,50 @@ class HttpErrorMappingTest(unittest.TestCase):
         app_err = _network_error_app_error(ConnectionRefusedError("nope"))
         self.assertEqual(app_err.code, "ai_unavailable")
         self.assertTrue(app_err.retryable)
+
+
+class BrokerToolProtocolTest(unittest.TestCase):
+    def test_context_messages_exclude_responses_protocol_items(self):
+        context = ResponsesRequestContext(
+            instructions="You are Kassiber's accounting assistant.",
+            input_items=[
+                {"type": "message", "role": "user", "content": "Generate my tax report"},
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_1",
+                    "output": '{"ok":true}',
+                },
+            ],
+        )
+        messages = _broker_messages_for_context(context)
+
+        self.assertEqual(
+            messages,
+            [{"role": "user", "content": "Generate my tax report"}],
+        )
+
+    def test_tool_definitions_keep_the_typed_schema(self):
+        tools = [
+            {
+                "type": "function",
+                "name": "ui.reports.tax_summary",
+                "description": "Read the tax summary",
+                "parameters": {"type": "object", "properties": {}},
+            }
+        ]
+
+        self.assertEqual(
+            _broker_tool_definitions(tools),
+            [
+                {
+                    "name": "ui.reports.tax_summary",
+                    "description": "Read the tax summary",
+                    "parameters": {"type": "object", "properties": {}},
+                    "read_only": True,
+                    "destructive": False,
+                }
+            ],
+        )
 
 
 class ClientDefaultsTest(unittest.TestCase):
