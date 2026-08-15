@@ -238,8 +238,8 @@
     "endpointUrl": "Endpunkt-URL",
     "endpointUrlPlaceholder": "https://… oder http://abc…onion/api",
     "credentialsWarning": "Füge hier keine API-Tokens, RPC-Passwörter, Cookies oder Bearer-Header ein. Zugangsdaten sollten erst hinzugefügt werden, nachdem die verschlüsselte Datenbank geöffnet ist.",
-    "skipWarningTitle": "Kassiber startet ohne Sync-Backends.",
-    "skipWarningBody": "Manuelle Importe und Berichte funktionieren weiterhin. Adress-Discovery und Wallet-Aktualisierung bleiben aus, bis du ein Backend hinzufügst."
+    "skipWarningTitle": "Offline bedeutet: Wallet-Sync ist aus.",
+    "skipWarningBody": "Kassiber fügt kein Backend hinzu. Wallets können erst aktualisiert werden, nachdem du eines in den Einstellungen hinzugefügt hast. Manuelle Importe und Berichte funktionieren weiterhin."
   },
   "ai": {
     "local": {
@@ -391,7 +391,7 @@
       "valueDefault": "Eingebaute öffentliche Backends",
       "valueCustom": "{{name}} ({{detail}})",
       "customFallbackName": "Eigenes Backend",
-      "noteSkip": "Keine Adress-Discovery oder Watch-only-Aktualisierung, bis die Einstellungen ein Backend hinzufügen.",
+      "noteSkip": "Kassiber fügt kein Backend hinzu. Wallet-Sync bleibt aus, bis du eines in den Einstellungen hinzufügst.",
       "noteDefaultLoading": "Backend-Adressen werden von Kassiber geladen.",
       "noteDefault": "Öffentliche Betreiber können deine Adressabfragen sehen. Nutze Tor oder einen eigenen Node, falls dir das wichtig ist.",
       "noteCustomProxy": "Eigenes Backend nur über seinen konfigurierten Proxy geleitet.",

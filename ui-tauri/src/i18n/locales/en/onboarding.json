@@ -238,8 +238,8 @@
     "endpointUrl": "Endpoint URL",
     "endpointUrlPlaceholder": "https://… or http://abc…onion/api",
     "credentialsWarning": "Do not paste API tokens, RPC passwords, cookies, or bearer headers here. Credentials should be added only after the encrypted database is open.",
-    "skipWarningTitle": "Kassiber will start with no sync backends.",
-    "skipWarningBody": "Manual imports and reports still work. Address discovery and wallet refresh stay off until you add a backend."
+    "skipWarningTitle": "Offline means wallet sync is off.",
+    "skipWarningBody": "Kassiber will not add a backend. Wallets cannot refresh until you add one in Settings. Manual imports and reports still work."
   },
   "ai": {
     "local": {
@@ -391,7 +391,7 @@
       "valueDefault": "Built-in public backends",
       "valueCustom": "{{name}} ({{detail}})",
       "customFallbackName": "Custom backend",
-      "noteSkip": "No address discovery or watch-only refresh until Settings adds a backend.",
+      "noteSkip": "Kassiber will not add a backend. Wallet sync stays off until you add one in Settings.",
       "noteDefaultLoading": "Backend addresses are loading from Kassiber.",
       "noteDefault": "Public operators can see your address queries. Use Tor or your own node if that matters.",
       "noteCustomProxy": "Custom backend routed through its configured proxy only.",

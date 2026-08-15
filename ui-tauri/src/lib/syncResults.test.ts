@@ -7,6 +7,7 @@ import {
   freshnessRunTransferReviewCount,
   describeWalletSyncResult,
   freshnessRunNeedsAttention,
+  freshnessRunNeedsBackend,
   summarizeFreshnessRun,
   summarizeSyncResults,
   syncResultsAreTrustedForReports,
@@ -156,6 +157,28 @@ describe("syncResults", () => {
       "3 completed, 1 cooling down: BTCPay provenance: Retry after 90 seconds.",
     );
     expect(freshnessRunNeedsAttention(payload)).toBe(false);
+  });
+
+  it("points an offline wallet refresh to backend setup", () => {
+    const payload = {
+      completed: [
+        {
+          job_type: "onchain_wallet_history",
+          source_label: "Cold",
+          status: "error",
+          error: {
+            code: "backend_not_configured",
+            message: "No sync backend is configured",
+            hint: "Add a backend in Settings before refreshing this wallet.",
+          },
+        },
+      ],
+    };
+
+    expect(freshnessRunNeedsBackend(payload)).toBe(true);
+    expect(summarizeFreshnessRun(payload)).toBe(
+      "1 needs attention: Cold: No sync backend is configured Add a backend in Settings before refreshing this wallet.",
+    );
   });
 
   it("surfaces journal quarantines in combined book refresh summaries", () => {

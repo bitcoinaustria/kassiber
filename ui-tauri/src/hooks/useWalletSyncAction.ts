@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { daemonMutationKey, useDaemonStreamMutation } from "@/daemon/client";
 import {
   freshnessRunNeedsAttention,
+  freshnessRunNeedsBackend,
   freshnessRunQuarantineCount,
   freshnessRunTransferReviewCount,
   summarizeFreshnessRun,
@@ -157,13 +158,22 @@ export function useWalletSyncAction() {
           onSuccess: (envelope) => {
             const body = summarizeFreshnessRun(envelope.data);
             const needsAttention = freshnessRunNeedsAttention(envelope.data);
+            const needsBackend = freshnessRunNeedsBackend(envelope.data);
             const quarantineCount = freshnessRunQuarantineCount(envelope.data);
             const transferReviewCount = freshnessRunTransferReviewCount(envelope.data);
             const blocksFirstSync = needsAttention || quarantineCount > 0;
             const needsReview = blocksFirstSync || transferReviewCount > 0;
             let title = t("bookRefresh.finishedTitle");
-            let target: "/logs" | "/quarantine" | "/swaps" | undefined;
-            if (needsAttention) {
+            let target:
+              | "/logs"
+              | "/quarantine"
+              | "/swaps"
+              | "/settings/bitcoin"
+              | undefined;
+            if (needsBackend) {
+              title = t("bookRefresh.backendRequiredTitle");
+              target = "/settings/bitcoin";
+            } else if (needsAttention) {
               title = t("bookRefresh.needsAttentionTitle");
               target = "/logs";
             } else if (quarantineCount > 0) {

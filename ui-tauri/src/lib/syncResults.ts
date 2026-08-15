@@ -219,6 +219,19 @@ export function freshnessRunNeedsAttention(data: FreshnessRunData | null | undef
   );
 }
 
+export function freshnessRunNeedsBackend(
+  data: FreshnessRunData | null | undefined,
+): boolean {
+  return (
+    (data?.results ?? []).some(
+      (result) => result.code === "backend_not_configured",
+    ) ||
+    (data?.completed ?? []).some(
+      (job) => job.error?.code === "backend_not_configured",
+    )
+  );
+}
+
 function positiveInteger(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return 0;
   return Math.floor(value);
@@ -306,7 +319,9 @@ export function summarizeFreshnessRun(data: FreshnessRunData | null | undefined)
   const autoPairDetail = autoPairProblem
     ? autoPairSummary(autoPairProblem)?.error?.message
     : null;
-  const detail = firstProblem?.error?.message || firstProblem?.error?.hint;
+  const detail = [firstProblem?.error?.message, firstProblem?.error?.hint]
+    .filter(Boolean)
+    .join(" ");
   return firstProblem && detail
     ? `${summary}: ${firstProblem.source_label ?? "Source"}: ${detail}`
     : autoPairDetail

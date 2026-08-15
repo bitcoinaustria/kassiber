@@ -35,6 +35,7 @@ import {
   Scale,
   ShieldCheck,
   Trash2,
+  WifiOff,
 } from "lucide-react";
 
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
@@ -648,6 +649,21 @@ function ConnectionDetailView({
       (wallet.id && wallet.id === connection.id) ||
       wallet.label === connection.label,
   );
+  const walletChain = (
+    walletDetail?.chain ||
+    connection.chain ||
+    "bitcoin"
+  ).toLowerCase();
+  const canEditLiveBackend = isWalletLiveBackendSource(
+    connection,
+    walletDetail,
+  );
+  const backendRequired =
+    walletsListQuery.isSuccess &&
+    canEditLiveBackend &&
+    !walletDetail?.backend?.name;
+  const backendSettingsRoute =
+    walletChain === "liquid" ? "/settings/liquid" : "/settings/bitcoin";
   const isDeprecatedWallet = Boolean(
     walletDetail?.deprecated ?? connection.deprecated,
   );
@@ -805,6 +821,18 @@ function ConnectionDetailView({
     : t("detail.refresh");
 
   const onSync = async (options?: { forceFull?: boolean }) => {
+    if (backendRequired) {
+      const message = t("detail.sync.backendRequiredBody");
+      setSyncErrorMessage(message);
+      addNotification({
+        title: t("detail.sync.backendRequiredTitle"),
+        body: message,
+        tone: "error",
+        dedupeKey: "wallet-sync",
+        target: backendSettingsRoute,
+      });
+      return;
+    }
     if (
       syncWallet.isPending ||
       queryClient.isMutating({ mutationKey: walletSyncMutationKey }) > 0
@@ -993,8 +1021,6 @@ function ConnectionDetailView({
   const btcpayBackendOptions = allBackendOptions.filter(
     (backend) => backend.kind === "btcpay",
   );
-  const walletChain = (walletDetail?.chain || "bitcoin").toLowerCase();
-  const canEditLiveBackend = isWalletLiveBackendSource(connection, walletDetail);
   const liveBackendOptions = allBackendOptions.filter((backend) => {
     const kind = backend.kind.trim().toLowerCase();
     if (kind === "btcpay" || kind === "coreln" || kind === "lnd") return false;
@@ -1539,6 +1565,31 @@ function ConnectionDetailView({
           </div>
         </div>
       </section>
+
+      {backendRequired ? (
+        <div
+          className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200 sm:flex-row sm:items-center"
+          role="status"
+        >
+          <div className="flex flex-1 items-start gap-3">
+            <WifiOff className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <div>
+              <p className="m-0 font-medium">
+                {t("detail.sync.backendRequiredTitle")}
+              </p>
+              <p className="m-0 mt-1 text-xs leading-5">
+                {t("detail.sync.backendRequiredBody")}
+              </p>
+            </div>
+          </div>
+          <Button asChild size="sm" variant="outline" className="shrink-0">
+            <Link to={backendSettingsRoute}>
+              <Plus className="size-4" aria-hidden="true" />
+              {t("detail.sync.addBackend")}
+            </Link>
+          </Button>
+        </div>
+      ) : null}
 
       {syncErrorMessage && (
         <div
