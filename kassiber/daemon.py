@@ -69,7 +69,6 @@ from .ai.providers import (
     acknowledge_remote_use,
     ai_provider_secret_ref_namespace,
     get_default_ai_provider_name,
-    is_cli_provider_locator,
     list_db_ai_providers,
     list_with_default as list_ai_providers_with_default,
     normalize_base_url,
@@ -77,6 +76,7 @@ from .ai.providers import (
 from .ai.tools import (
     TOOL_CAPABILITY_NAMES,
     TOOL_PROFILE_NAMES,
+    external_read_tool_entries,
     get_tool,
     read_skill_reference,
     redact_ai_tool_result,
@@ -541,6 +541,7 @@ SUPPORTED_KINDS = (
     "ai.provider_runtime.status",
     "ai.list_models",
     "ai.test_connection",
+    "ai.tool.read",
     "ai.chat",
     "ai.chat.cancel",
     "ai.tool_call.consent",
@@ -5784,11 +5785,14 @@ def _execute_read_only_ai_tool(
 
         def _read(conn: sqlite3.Connection) -> dict[str, Any]:
             maintenance_metadata: dict[str, Any] = {}
-            if call.name in _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES:
+            if entry.name in _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES:
                 maintenance_metadata = _auto_maintain_for_read(
                     conn,
                     runtime.runtime_config,
                     state=runtime.maintenance_state,
+                    sync_if_enabled=not bool(
+                        runtime.maintenance_state.get("external_no_egress")
+                    ),
                 )
             if entry.daemon_kind == "status":
                 payload = _status_payload_from_parts(
@@ -7872,9 +7876,8 @@ def _effective_ai_chat_tools_enabled(
     provider_snapshot: dict[str, Any],
     validated: dict[str, Any],
 ) -> bool:
-    if not validated["tools_enabled"]:
-        return False
-    return not is_cli_provider_locator(provider_snapshot.get("base_url"))
+    del provider_snapshot
+    return bool(validated["tools_enabled"])
 
 
 def _effective_ai_chat_system_prompt_kind(
@@ -7882,10 +7885,8 @@ def _effective_ai_chat_system_prompt_kind(
     *,
     tools_enabled: bool,
 ) -> str | None:
-    system_prompt_kind = validated["system_prompt_kind"]
-    if not tools_enabled and system_prompt_kind == "kassiber":
-        return None
-    return system_prompt_kind
+    del tools_enabled
+    return validated["system_prompt_kind"]
 
 
 def _provider_session_history_fingerprint(messages: list[dict[str, Any]]) -> str:
@@ -8687,6 +8688,27 @@ def _run_ai_chat_stream(
     finally:
         active_ai_chats.set_cancel_handler(active_chat, None)
         active_ai_chats.unregister(registry_key, active_chat)
+
+
+def _run_external_ai_read(
+    request_id: object,
+    call: ParsedAiToolCall,
+    out: _OutputChannel,
+    runtime: AiToolRuntime,
+) -> None:
+    """Execute one external read through the same scoped AI tool dispatcher."""
+
+    current_request_id.set(_request_id_registry_key(request_id))
+    result = redact_ai_tool_result(_execute_read_only_ai_tool(call, runtime))
+    out.write(
+        _with_request_id(
+            build_envelope(
+                "ai.tool.read",
+                {"tool": call.name, "result": result},
+            ),
+            request_id,
+        )
+    )
 
 
 def _ai_provider_redacted(ctx: DaemonContext, provider: dict) -> dict:
@@ -16907,6 +16929,70 @@ def handle_request(
             ),
             False,
         )
+
+    if kind == "ai.tool.read":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        unknown = sorted(set(args) - {"name", "arguments"})
+        if unknown:
+            raise AppError(
+                "ai.tool.read received unsupported fields",
+                code="validation",
+                details={"unknown": unknown},
+                retryable=False,
+            )
+        name = args.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise AppError(
+                "ai.tool.read requires a non-empty tool name",
+                code="validation",
+                retryable=False,
+            )
+        arguments = args.get("arguments", {})
+        if not isinstance(arguments, dict):
+            raise AppError(
+                "ai.tool.read arguments must be an object",
+                code="validation",
+                retryable=False,
+            )
+        allowed_entries = external_read_tool_entries()
+        allowed_names = frozenset(entry.provider_name for entry in allowed_entries)
+        entry = get_tool(name.strip())
+        if entry is None or entry.provider_name not in allowed_names:
+            raise AppError(
+                "tool is not available through the external read-only adapter",
+                code="tool_not_allowed",
+                details={"tool": name.strip()},
+                retryable=False,
+            )
+
+        conn = _require_conn(ctx)
+        scope = current_context_snapshot(conn)
+        runtime = AiToolRuntime(
+            data_root=ctx.data_root,
+            runtime_config=dict(ctx.runtime_config),
+            main_thread_tasks=ctx.main_thread_tasks,
+            maintenance_state={
+                "provider_kind": "external",
+                "provider_on_device": False,
+                "external_no_egress": True,
+                "cross_book_read_allowed": True,
+                "scope_workspace_id": scope.get("workspace_id"),
+                "scope_profile_id": scope.get("profile_id"),
+                "advertised_tools": sorted(allowed_names),
+            },
+        )
+        call = ParsedAiToolCall(
+            call_id=f"external-{request_id}",
+            name=entry.provider_name,
+            arguments=arguments,
+        )
+        threading.Thread(
+            target=_run_external_ai_read,
+            args=(request_id, call, out, runtime),
+            daemon=True,
+            name="kassiber-ai-tool-read",
+        ).start()
+        return (None, False)
 
     if kind == "ai.chat":
         # Validate eagerly so syntax errors surface synchronously.

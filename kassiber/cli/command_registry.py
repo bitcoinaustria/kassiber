@@ -28,6 +28,7 @@ _NO_BOOTSTRAP_DATABASE_PATHS = {
     "backends.kinds",
     "chat",
     "daemon",
+    "mcp",
     "wallets.kinds",
     "wallets.ledger-template",
     "wallets.analyze-file",
@@ -74,7 +75,7 @@ def command_needs_database(args: argparse.Namespace) -> bool:
 
 def _effect_for_path(path: str) -> str:
     capability = cli_capability(path)
-    if path in {"chat", "daemon"}:
+    if path in {"chat", "daemon", "mcp"}:
         return "interactive"
     return "read_only" if capability is Capability.READ else "mutating"
 

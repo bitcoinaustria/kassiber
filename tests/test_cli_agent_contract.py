@@ -99,6 +99,25 @@ class CliAgentContractTests(unittest.TestCase):
             self.assertIn("wallet", command["scope_flags"])
             self.assertFalse((data_root / "kassiber.sqlite3").exists())
 
+    def test_mcp_command_is_interactive_and_database_free(self):
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            payload, code, _stderr = _run(
+                "--data-root",
+                str(data_root),
+                "--machine",
+                "commands",
+                "describe",
+                "mcp",
+            )
+
+            self.assertEqual(code, 0, payload)
+            command = payload["data"]["commands"][0]
+            self.assertEqual(command["command"], "mcp")
+            self.assertEqual(command["effect"], "interactive")
+            self.assertFalse(command["needs_database"])
+            self.assertFalse((data_root / "kassiber.sqlite3").exists())
+
     def test_preview_document_command_is_catalogued_as_read_only(self):
         with tempfile.TemporaryDirectory() as root:
             data_root = Path(root) / "data"

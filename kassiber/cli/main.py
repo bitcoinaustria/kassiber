@@ -1182,6 +1182,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Continue a specific persisted chat session (see `kassiber chats list`).",
     )
 
+    mcp = sub.add_parser(
+        "mcp",
+        description=(
+            "Serve Kassiber's redacted read-only AI tools over the Model "
+            "Context Protocol stdio transport."
+        ),
+    )
+    mcp.add_argument(
+        "--tool-profile",
+        choices=("core", "full"),
+        default="core",
+        help="Expose the compact common tool set or the complete safe read catalog.",
+    )
+    mcp.add_argument(
+        "--timeout",
+        dest="timeout_seconds",
+        type=float,
+        default=120.0,
+        metavar="SECONDS",
+        help="Maximum seconds to wait for daemon startup or a tool result.",
+    )
+
     chats = sub.add_parser(
         "chats",
         description=(
@@ -3359,6 +3381,10 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         return emit(args, dispatch_operator(args))
     if args.command == "daemon":
         return daemon_runtime.run(conn, args)
+    if args.command == "mcp":
+        from .mcp_server import run_mcp_server
+
+        return run_mcp_server(args)
     if args.command == "chat":
         result = run_chat_command(args)
         if getattr(args, "stream_json", False):

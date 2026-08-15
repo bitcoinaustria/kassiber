@@ -76,7 +76,7 @@ class ChatSessionResult:
         }
 
 
-class _DaemonChatClient:
+class DaemonClient:
     def __init__(self, args: Any, *, transcript: TextIO | None = None) -> None:
         self._transcript = transcript
         self._bootstrap_passphrase: str | None = None
@@ -298,6 +298,10 @@ class _DaemonChatClient:
             self._stderr_thread.join(timeout=1)
         if self._stdout_thread is not None:
             self._stdout_thread.join(timeout=1)
+
+
+# Compatibility for tests and callers that used the original private name.
+_DaemonChatClient = DaemonClient
 
 
 def _split_tool_names(values: Iterable[str] | None) -> set[str]:

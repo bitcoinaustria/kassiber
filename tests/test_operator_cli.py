@@ -111,6 +111,24 @@ class OperatorCliTest(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, "operator_chat_not_supported")
 
+    def test_brokered_mcp_fails_before_direct_database_open(self) -> None:
+        args = mock.Mock(
+            command="mcp",
+            data_root="/project",
+            env_file=None,
+            project=None,
+        )
+        with mock.patch(
+            "kassiber.operator.cli._selected_data_root",
+            return_value="/canonical-project",
+        ), mock.patch(
+            "kassiber.operator.cli.effective_unlock_mode",
+            return_value="brokered",
+        ), self.assertRaises(AppError) as raised:
+            route_brokered_command(args, ["mcp"])
+
+        self.assertEqual(raised.exception.code, "operator_mcp_not_supported")
+
     def test_brokered_mode_does_not_bypass_queue_for_passphrase_fd(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             read_fd, write_fd = os.pipe()

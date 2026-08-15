@@ -1490,6 +1490,55 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(code, 0, stderr)
             self.assertEqual(stderr, "")
 
+    def test_external_ai_read_reuses_scoped_tool_dispatcher(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-ai-read-") as tmp:
+            data_root = Path(tmp) / "data"
+            _run_cli(data_root, "init")
+            proc = _start_daemon(data_root)
+
+            ready = _read_payload_timeout(proc)
+            self.assertIn("ai.tool.read", ready["data"]["supported_kinds"])
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "read-1",
+                    "kind": "ai.tool.read",
+                    "args": {"name": "status", "arguments": {}},
+                },
+            )
+            result = _read_until_kind(proc, "ai.tool.read")
+            self.assertEqual(result["request_id"], "read-1")
+            self.assertTrue(result["data"]["result"]["ok"])
+            self.assertEqual(
+                result["data"]["result"]["envelope"]["kind"],
+                "status",
+            )
+
+            for name in (
+                "ui_wallets_sync",
+                "ui_connections_node_snapshot",
+                "ui_wallets_analyze_file",
+                "ui_custody_lineage_snapshot",
+            ):
+                _write_payload(
+                    proc,
+                    {
+                        "request_id": f"deny-{name}",
+                        "kind": "ai.tool.read",
+                        "args": {"name": name, "arguments": {}},
+                    },
+                )
+                denied = _read_payload_timeout(proc)
+                self.assertEqual(denied["kind"], "error")
+                self.assertEqual(denied["error"]["code"], "tool_not_allowed")
+
+            _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_until_kind(proc, "daemon.shutdown")["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            self.assertEqual(stderr, "")
+
     def test_daemon_backend_settings_can_set_default(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-backend-default-") as tmp:
             data_root = Path(tmp) / "data"
@@ -10713,7 +10762,7 @@ class DaemonSmokeTest(unittest.TestCase):
             ],
         )
 
-    def test_ai_chat_cli_provider_auto_disables_tool_loop(self):
+    def test_ai_chat_cli_provider_keeps_kassiber_tool_loop_and_prompt(self):
         validated = {
             "tools_enabled": True,
             "system_prompt_kind": "kassiber",
@@ -10722,12 +10771,13 @@ class DaemonSmokeTest(unittest.TestCase):
 
         effective_tools = _effective_ai_chat_tools_enabled(provider_snapshot, validated)
 
-        self.assertFalse(effective_tools)
-        self.assertIsNone(
+        self.assertTrue(effective_tools)
+        self.assertEqual(
             _effective_ai_chat_system_prompt_kind(
                 validated,
                 tools_enabled=effective_tools,
-            )
+            ),
+            "kassiber",
         )
 
     def test_ai_chat_http_provider_keeps_tool_loop(self):

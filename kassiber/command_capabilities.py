@@ -41,7 +41,7 @@ def _paths(value: str) -> frozenset[str]:
 
 CLI_READ_PATHS = _paths(
     """
-    status update verify-download health next-actions commands.describe projects.list projects.show
+    status update verify-download health next-actions mcp commands.describe projects.list projects.show
     operator.status operator.operation.status operator.touch-id.status
     chats.list chats.show secrets.status sync.status sync.transport.list
     sync.gc.status sync.members.list sync.devices.list sync.conflicts.list
@@ -146,7 +146,7 @@ CLI_ADMIN_PATHS = _paths(
 
 DAEMON_READ_KINDS = _paths(
     """
-    status ui.logs.snapshot ui.egress.snapshot ui.overview.snapshot
+    status ai.tool.read ui.logs.snapshot ui.egress.snapshot ui.overview.snapshot
     ui.workspace.overview.snapshot ui.transactions.list
     ui.transactions.dashboard ui.transactions.extremes ui.transactions.resolve
     ui.transactions.graph

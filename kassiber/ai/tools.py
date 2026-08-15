@@ -3232,6 +3232,35 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
 
 TOOL_CATALOG: tuple[ToolEntry, ...] = (*_BASE_TOOL_CATALOG, *_EXPANDED_TOOL_CATALOG)
 
+# A standalone MCP host may forward tool results to a model Kassiber cannot
+# classify as on-device. Keep this list narrower than the in-app catalog: no
+# writes, no network-egressing reads, no attachment grant, and no custody data
+# reserved for a provider proven local by the desktop daemon.
+_EXTERNAL_READ_EXCLUDED_TOOL_NAMES = frozenset(
+    {
+        "ui.wallets.analyze_file",
+        "ui.custody.coverage.snapshot",
+        "ui.custody.lineage.snapshot",
+        "ui.custody.gaps.list",
+        "ui.custody.gaps.review_context",
+        "ui.custody.gaps.history",
+        "ui.custody.review.plan",
+    }
+)
+
+
+def external_read_tool_entries() -> tuple[ToolEntry, ...]:
+    """Return the tools safe to advertise through an external local adapter."""
+
+    return tuple(
+        tool
+        for tool in TOOL_CATALOG
+        if tool.kind_class == "read_only"
+        and not tool.requires_consent
+        and tool.name not in _EXTERNAL_READ_EXCLUDED_TOOL_NAMES
+    )
+
+
 TOOL_CAPABILITY_NAMES = (
     "core",
     "workspace",

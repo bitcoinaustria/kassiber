@@ -84,9 +84,11 @@ The implementation keeps those invariants in one request builder. Prepared
 tool-loop context is an explicit typed input and cannot be combined with the
 legacy message input accidentally. HTTP transport remains in
 `kassiber.ai.client`. Fixed external CLI locators route through the bundled
-chat-only Node/TypeScript broker in `ui-tauri/provider-broker`; Python
-supervises that JSONL process through `kassiber.ai.broker_client`. Shared
-delta/request contracts remain isolated in `kassiber.ai.contracts`.
+chat-only Node/TypeScript broker in `ui-tauri/provider-broker`; its typed
+provider-adapter registry keeps provider-specific session/event handling behind
+one broker contract. Python supervises the bidirectional JSONL process through
+`kassiber.ai.broker_client`. Shared delta/request contracts remain isolated in
+`kassiber.ai.contracts`.
 
 ### Building the broker from a source checkout
 
@@ -127,9 +129,16 @@ If in doubt, keep inference local.
 
 Codex, Claude, and OpenCode CLI providers are supported for convenience, but
 they are not a local-privacy guarantee. The broker denies provider-native tools
-in layers — Claude runs in safe mode with no hooks, plugins, skills or MCP;
-OpenCode serves with `--pure` and a deny-all session permission; Codex runs a
-read-only sandbox with network access off — and any tool item aborts the turn.
+in layers — Claude loads no user/project/local settings, disables built-ins and
+slash commands, and accepts only its temporary Kassiber MCP server; OpenCode
+serves with `--pure` and a deny-all session permission plus exact Kassiber MCP
+allows; Codex runs a read-only sandbox with network access off. Any unexpected
+tool item aborts the turn. Kassiber's capability-scoped schemas cross through
+the providers' native typed-tool protocols: Codex `dynamicTools`, and ephemeral
+MCP for Claude and OpenCode. Redacted results return over a private loopback
+bridge for MCP (or directly inside the Codex adapter) to the daemon's existing
+allowlist, consent, execution, and audit loop.
+Provider-native coding tools remain disabled throughout.
 Codex exposes no tool-free profile, so a local read there can begin before the
 abort lands; with its network disabled that content can only surface through
 assistant text on a turn Kassiber is already failing. Kassiber reuses their normal local
@@ -217,9 +226,9 @@ No Settings row or API-token entry is required. The broker discovers installed
 executables, reports `ready`, `missing executable`, or `authentication
 required`, and tells the user to run the provider's normal login command
 outside Kassiber when necessary. It uses Codex `app-server`, the Claude
-executable's `--output-format stream-json` event stream, and an ephemeral
-loopback OpenCode server/API. A local Node.js 20+ executable is currently
-required to run the bundled broker.
+executable's `--output-format stream-json` event stream with strict MCP config,
+and the OpenCode SDK v2 against an ephemeral loopback OpenCode server. A local
+Node.js 20+ executable is currently required to run the bundled broker.
 
 Model and reasoning-effort selection are forwarded through each provider's
 native protocol.
@@ -277,14 +286,16 @@ Each broker probe or chat runs from a fresh Kassiber-owned empty temporary
 directory that is removed afterward. Provider subprocesses receive only their
 own authentication/configuration environment plus the shared network/runtime
 minimum; unrelated provider and Kassiber secrets are excluded. Claude gets an
-empty built-in tool set plus an explicit deny callback; OpenCode gets a
-deny-all permission ruleset and disabled tool map; Codex runs
-read-only/untrusted and every app-server tool request is rejected. Any native
-tool lifecycle event aborts the turn. The broker receives no repository,
-database, attachment, wallet, browser, MCP, terminal, or source-control
-capability. Kassiber's typed tools stay daemon-owned; they deliberately fail
-closed as unavailable for these providers until a separately audited typed-tool
-bridge exists.
+empty built-in tool set, no filesystem setting sources, strict MCP config, and
+an explicit deny callback; OpenCode gets a deny-all permission ruleset with
+exact allows for the temporary Kassiber MCP tools; Codex runs read-only and
+untrusted with network access disabled and capability-scoped `dynamicTools`.
+Any tool outside the advertised catalog aborts the turn. The broker receives no
+repository, database, attachment, wallet, browser, terminal, or source-control
+capability. Kassiber's typed tools stay daemon-owned: only their schemas and
+already-redacted results traverse the native provider bridge, while the Python
+daemon remains the authority for capability selection, validation, consent,
+execution, and the privacy receipt.
 
 For browser-driven development, the Vite dev server also exposes a loopback-only
 daemon bridge. Run:
@@ -507,6 +518,47 @@ Streaming is demuxed by `request_id`: the Tauri supervisor keeps one daemon
 process and one stdout reader, but routes each JSON envelope to the matching
 request. While a chat is streaming, unrelated daemon calls can complete
 independently.
+
+## External MCP server
+
+`kassiber mcp` lets Codex, Claude, OpenCode, and other MCP hosts read Kassiber
+through the same typed catalog, scoped daemon dispatcher, argument validation,
+and result redaction as the desktop Assistant. It is an additional stdio
+adapter; the GUI keeps its native provider integrations and does not connect
+through this process.
+
+Example host configuration:
+
+```json
+{
+  "mcpServers": {
+    "kassiber": {
+      "command": "kassiber",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Use `args: ["--data-root", "/path/to/data", "mcp"]` for a non-default data
+root. The default `core` profile exposes the common accounting and report
+tools; `kassiber mcp --tool-profile full` adds specialist safe reads. Both
+profiles include `read_skill_reference`, and the MCP server sends the same
+compact Kassiber workflow guidance used by the in-app assistant.
+
+This first MCP surface is deliberately read-only. It does not advertise or
+execute book mutations, network-egressing reads, attachment analysis, local
+custody-only reads, generic daemon dispatch, shell, filesystem, database, or
+secret access. The daemon repeats the policy check at execution, so manually
+calling a hidden tool name does not bypass it. Tool results are still accounting
+data that the MCP host may forward to its selected model; use a local host/model
+when that data must remain on the device.
+
+The stdio stream cannot safely double as a passphrase prompt. An encrypted
+project therefore needs an already available CLI unlock, such as the opt-in
+native credential-store flow configured with `kassiber secrets remember-unlock`,
+or an MCP launcher that supplies the existing global `--db-passphrase-fd`
+mechanism. No MCP credential field or environment secret is added.
 
 Before the first token arrives, `ai.chat` may emit `ai.chat.status` records
 with phases such as `preparing`, `connecting`, and `waiting_for_model`. These

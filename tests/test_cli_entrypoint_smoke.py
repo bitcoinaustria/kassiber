@@ -51,6 +51,7 @@ HELP_PATHS = (
     ("rates",),
     ("diagnostics", "collect"),
     ("chat",),
+    ("mcp",),
     ("update",),
     ("verify-download",),
     ("chats",),

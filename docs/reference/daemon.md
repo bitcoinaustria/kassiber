@@ -134,6 +134,7 @@ daemon for the exact current allowlist:
       "ai.providers.acknowledge",
       "ai.list_models",
       "ai.test_connection",
+      "ai.tool.read",
       "ai.chat",
       "ai.chat.cancel",
       "ai.tool_call.consent",
@@ -165,6 +166,12 @@ treat this list (not the docs) as the source of truth for what the supervisor
 will pass through. Reveal kinds (see below) are included in the list but still
 require their own passphrase round-trip before the daemon returns raw secret
 material.
+
+`ai.tool.read` is the generic external-adapter seam used by `kassiber mcp`.
+It accepts only `{name, arguments}`, freezes the active workspace/profile,
+and executes asynchronously through the existing redacted AI read dispatcher.
+The daemon independently rejects tools outside the non-egressing external read
+catalog even if a client bypasses MCP discovery and sends the kind directly.
 
 The `ui.sync.*` family backs Settings → Device sync and is never registered as
 an AI tool. It operates only on the active encrypted profile. Mailbox push/pull

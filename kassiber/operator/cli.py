@@ -25,7 +25,7 @@ from .service import _wipe
 
 
 _DIRECT_COMMANDS = frozenset(
-    {"commands", "daemon", "chat", "operator", "projects", "update", "verify-download"}
+    {"commands", "daemon", "chat", "mcp", "operator", "projects", "update", "verify-download"}
 )
 
 
@@ -164,15 +164,20 @@ def route_brokered_command(
 
     if os.environ.get("KASSIBER_OPERATOR_DIRECT") == "1":
         return None
-    if args.command == "chat":
+    if args.command in {"chat", "mcp"}:
         data_root = _selected_data_root(args)
         if effective_unlock_mode(data_root) == "brokered":
+            command = str(args.command)
             raise AppError(
-                "CLI chat is not available while this project is in brokered mode",
-                code="operator_chat_not_supported",
+                f"CLI {command} is not available while this project is in brokered mode",
+                code=(
+                    "operator_chat_not_supported"
+                    if command == "chat"
+                    else "operator_mcp_not_supported"
+                ),
                 hint=(
                     "Use brokered CLI commands directly, or lock the broker and "
-                    "select manual mode before starting `kassiber chat`."
+                    f"select manual mode before starting `kassiber {command}`."
                 ),
                 retryable=False,
             )

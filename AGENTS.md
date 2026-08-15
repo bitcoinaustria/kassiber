@@ -157,6 +157,12 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
   canonical route/entity/filter allowlists, and provider-requested tools are
   checked against both the advertised set and their JSON schema at execution.
   Capability-discovery calls may still request the full catalog.
+  The standalone `kassiber mcp` stdio server is a thin external adapter over
+  daemon kind `ai.tool.read`; it reuses this catalog and dispatcher and exposes
+  only non-egressing read tools. The external catalog also excludes attachment
+  analysis and custody reads reserved for providers proven on-device. Both the
+  MCP adapter and daemon re-check that policy; do not add a parallel report or
+  database execution path to the MCP layer.
   `ui.transactions.review_context` is AI-only and
   composes safe local transaction, graph, journal, evidence, commercial,
   source-funds, transfer/direct-payout, loan, and privacy state without public
