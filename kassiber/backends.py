@@ -117,6 +117,9 @@ DEFAULT_ENV_FILENAME = "backends.env"
 DEFAULT_BACKEND_SETTING = "default_backend"
 BOOTSTRAP_DEFAULT_BACKEND_SETTING = "bootstrap_default_backend"
 BOOTSTRAP_BACKEND_TOMBSTONES_SETTING = "bootstrap_backend_tombstones"
+BACKEND_BOOTSTRAP_MODE_SETTING = "backend_bootstrap_mode"
+BACKEND_BOOTSTRAP_PUBLIC = "public"
+BACKEND_BOOTSTRAP_MANUAL = "manual"
 BACKEND_DB_FIELDS = {
     "name",
     "kind",
@@ -420,7 +423,15 @@ def backend_batch_size(backend, default=100):
 
 def resolve_backend(runtime_config, name=None):
     """Look up a backend by name in `runtime_config`, defaulting to the active one."""
-    backend_name = (name or runtime_config["default_backend"]).strip().lower()
+    backend_name = str_or_none(name) or str_or_none(runtime_config.get("default_backend"))
+    if backend_name is None:
+        raise AppError(
+            "No sync backend is configured",
+            code="backend_not_configured",
+            hint="Add a backend in Settings before refreshing this wallet.",
+            retryable=False,
+        )
+    backend_name = backend_name.strip().lower()
     backend = runtime_config["backends"].get(backend_name)
     if not backend:
         raise AppError(f"Backend '{backend_name}' is not configured in {runtime_config['env_file']}")
@@ -691,6 +702,39 @@ def _process_env_default_backend_override(runtime_config):
     return bool(runtime_config.get("process_env_overrides", {}).get("default_backend"))
 
 
+def backend_bootstrap_mode(conn):
+    """Return whether bundled public backends participate in this project."""
+    mode = get_setting(conn, BACKEND_BOOTSTRAP_MODE_SETTING)
+    if mode is None:
+        return BACKEND_BOOTSTRAP_PUBLIC
+    if mode not in {BACKEND_BOOTSTRAP_PUBLIC, BACKEND_BOOTSTRAP_MANUAL}:
+        raise AppError(
+            "Stored backend setup mode is invalid",
+            code="config_error",
+            hint="Choose built-in, custom, or offline backend setup again.",
+            retryable=False,
+        )
+    return mode
+
+
+def set_backend_bootstrap_mode(conn, mode, *, commit=True):
+    """Persist the project policy for bundled public backend presets."""
+    if mode not in {BACKEND_BOOTSTRAP_PUBLIC, BACKEND_BOOTSTRAP_MANUAL}:
+        raise AppError("Unsupported backend setup mode", code="validation", retryable=False)
+    set_setting(conn, BACKEND_BOOTSTRAP_MODE_SETTING, mode)
+    if mode == BACKEND_BOOTSTRAP_MANUAL:
+        tombstones = _load_bootstrap_backend_tombstones(conn)
+        tombstones.update(DEFAULT_BACKENDS)
+        _save_bootstrap_backend_tombstones(conn, tombstones)
+        conn.execute(
+            "DELETE FROM settings WHERE key IN (?, ?)",
+            (DEFAULT_BACKEND_SETTING, BOOTSTRAP_DEFAULT_BACKEND_SETTING),
+        )
+    if commit:
+        conn.commit()
+    return mode
+
+
 def _backend_shapes(conn, runtime_config=None):
     """Map backend name -> (chain, kind) across SQLite and the merged runtime view."""
     shapes = {}
@@ -947,14 +991,22 @@ def seed_db_backends(conn, runtime_config):
     try:
         conn.execute("BEGIN IMMEDIATE")
         changed = False
+        bootstrap_mode = backend_bootstrap_mode(conn)
         tombstones = _load_bootstrap_backend_tombstones(conn)
-        resurrected = tombstones & _dotenv_backend_names(runtime_config)
+        dotenv_names = _dotenv_backend_names(runtime_config)
+        resurrected = tombstones & dotenv_names
         if resurrected:
             tombstones -= resurrected
             _save_bootstrap_backend_tombstones(conn, tombstones)
             changed = True
 
         for name, backend in sorted(runtime_config["bootstrap_backends"].items()):
+            if (
+                bootstrap_mode == BACKEND_BOOTSTRAP_MANUAL
+                and name in DEFAULT_BACKENDS
+                and name not in dotenv_names
+            ):
+                continue
             if name in tombstones:
                 continue
             payload = _seedable_runtime_backend(name, backend)
@@ -965,18 +1017,24 @@ def seed_db_backends(conn, runtime_config):
 
         existing_names = _available_backend_names(conn)
         bootstrap_default = get_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING)
-        if not bootstrap_default:
+        if not bootstrap_default and existing_names:
             candidate = runtime_config["bootstrap_default_backend"]
             if candidate not in existing_names:
-                candidate = _fallback_backend_name(
-                    existing_names, _backend_shapes(conn, runtime_config)
-                )
-            set_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING, candidate)
-            bootstrap_default = candidate
-            changed = True
+                try:
+                    candidate = _fallback_backend_name(
+                        existing_names, _backend_shapes(conn, runtime_config)
+                    )
+                except AppError as exc:
+                    if bootstrap_mode != BACKEND_BOOTSTRAP_MANUAL or exc.code != "conflict":
+                        raise
+                    candidate = None
+            if candidate:
+                set_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING, candidate)
+                bootstrap_default = candidate
+                changed = True
 
         stored_default = get_setting(conn, DEFAULT_BACKEND_SETTING)
-        if not stored_default:
+        if not stored_default and bootstrap_default:
             set_setting(conn, DEFAULT_BACKEND_SETTING, bootstrap_default)
             changed = True
         conn.commit()
@@ -1033,15 +1091,22 @@ def merge_db_backends(conn, runtime_config):
     present, also overrides the bootstrap default — and raises if it names a
     backend that is not available in the merged runtime view.
     """
-    tombstones = _load_bootstrap_backend_tombstones(conn) - _dotenv_backend_names(runtime_config)
+    bootstrap_mode = backend_bootstrap_mode(conn)
+    dotenv_names = _dotenv_backend_names(runtime_config)
+    tombstones = _load_bootstrap_backend_tombstones(conn) - dotenv_names
     for name in list(runtime_config["backends"]):
-        if name in tombstones and not _process_env_backend_fields(runtime_config, name):
+        if (
+            name in tombstones
+            and not _process_env_backend_fields(runtime_config, name)
+        ):
             runtime_config["backends"].pop(name, None)
     rows = conn.execute("SELECT * FROM backends").fetchall()
     for row in rows:
         name = row["name"].lower()
         db_backend = _backend_row_to_dict(row)
         env_fields = _process_env_backend_fields(runtime_config, name)
+        if name in tombstones and not env_fields:
+            continue
         if not env_fields:
             runtime_config["backends"][name] = db_backend
             continue
@@ -1053,6 +1118,12 @@ def merge_db_backends(conn, runtime_config):
         runtime_config["backends"][name] = merged
     if _process_env_default_backend_override(runtime_config):
         if runtime_config["default_backend"] not in runtime_config["backends"]:
+            if (
+                bootstrap_mode == BACKEND_BOOTSTRAP_MANUAL
+                and runtime_config["default_backend"] in tombstones
+            ):
+                runtime_config["default_backend"] = ""
+                return runtime_config
             raise AppError(
                 f"Environment default backend '{runtime_config['default_backend']}' is not configured",
                 code="config_error",
@@ -1068,6 +1139,11 @@ def merge_db_backends(conn, runtime_config):
                 hint="Run `kassiber backends set-default <name>` with a valid backend, or `backends clear-default` to fall back to the env default.",
             )
         runtime_config["default_backend"] = override
+    elif (
+        bootstrap_mode == BACKEND_BOOTSTRAP_MANUAL
+        and runtime_config.get("default_backend") not in runtime_config["backends"]
+    ):
+        runtime_config["default_backend"] = ""
     return runtime_config
 
 
@@ -1147,6 +1223,13 @@ def create_db_backend(
     if name in tombstones:
         tombstones.remove(name)
         _save_bootstrap_backend_tombstones(conn, tombstones)
+    if (
+        backend_bootstrap_mode(conn) == BACKEND_BOOTSTRAP_MANUAL
+        and not get_setting(conn, DEFAULT_BACKEND_SETTING)
+        and kind in CHAIN_SYNC_BACKEND_KINDS
+        and (chain or "bitcoin") == "bitcoin"
+    ):
+        set_setting(conn, DEFAULT_BACKEND_SETTING, name)
     if commit:
         conn.commit()
     return get_db_backend(conn, name)
@@ -1337,18 +1420,24 @@ def delete_db_backend(conn, name, runtime_config=None):
                 if candidate != name
             )
         if not remaining:
-            raise AppError(
-                f"Backend '{name}' has no persistable replacement backend",
-                code="conflict",
-                hint="Create another backend before deleting this one.",
+            if backend_bootstrap_mode(conn) != BACKEND_BOOTSTRAP_MANUAL:
+                raise AppError(
+                    f"Backend '{name}' has no persistable replacement backend",
+                    code="conflict",
+                    hint="Create another backend before deleting this one.",
+                )
+            conn.execute(
+                "DELETE FROM settings WHERE key IN (?, ?)",
+                (DEFAULT_BACKEND_SETTING, BOOTSTRAP_DEFAULT_BACKEND_SETTING),
             )
-        shapes = _backend_shapes(conn, runtime_config)
-        replacement_default = _fallback_backend_name(
-            remaining,
-            shapes,
-            prefer_chain=(shapes.get(name, (None, None))[0] or "bitcoin"),
-        )
-        set_setting(conn, DEFAULT_BACKEND_SETTING, replacement_default)
+        else:
+            shapes = _backend_shapes(conn, runtime_config)
+            replacement_default = _fallback_backend_name(
+                remaining,
+                shapes,
+                prefer_chain=(shapes.get(name, (None, None))[0] or "bitcoin"),
+            )
+            set_setting(conn, DEFAULT_BACKEND_SETTING, replacement_default)
     conn.execute("DELETE FROM backends WHERE name = ?", (name,))
     tombstones = _load_bootstrap_backend_tombstones(conn)
     tombstones.add(name)
@@ -1389,6 +1478,14 @@ def set_default_backend(conn, runtime_config, name, commit=True):
 def clear_default_backend(conn, runtime_config):
     """Reset the stored default to the bootstrap SQLite default."""
     available_names = _available_backend_names(conn)
+    if not available_names and backend_bootstrap_mode(conn) == BACKEND_BOOTSTRAP_MANUAL:
+        conn.execute(
+            "DELETE FROM settings WHERE key IN (?, ?)",
+            (DEFAULT_BACKEND_SETTING, BOOTSTRAP_DEFAULT_BACKEND_SETTING),
+        )
+        conn.commit()
+        runtime_config["default_backend"] = ""
+        return {"default_backend": None, "cleared": True}
     previous_default = get_setting(conn, DEFAULT_BACKEND_SETTING)
     default_name = get_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING)
     notice = None

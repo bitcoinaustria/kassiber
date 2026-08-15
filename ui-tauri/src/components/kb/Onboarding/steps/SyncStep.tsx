@@ -48,6 +48,7 @@ export const SyncStep = ({
               <CheckRow
                 id="allow-update-checks"
                 checked={form.updateChecksEnabled}
+                disabled={form.backendSetupMode === "skip"}
                 onCheckedChange={(checked) =>
                   update("updateChecksEnabled", checked)
                 }

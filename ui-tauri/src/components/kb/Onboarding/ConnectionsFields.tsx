@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  AlertTriangle,
   CheckCircle2,
   CircleHelp,
   KeyRound,
@@ -17,6 +16,7 @@ import {
   BACKEND_KIND_LABELS,
   DEFAULT_BACKEND_NAME,
   DEFAULT_BACKEND_URL,
+  DEFAULT_ELECTRUM_HOST,
   DEFAULT_ELECTRUM_SSL_PORT,
   DEFAULT_ELECTRUM_TCP_PORT,
   backendEndpointDescription,
@@ -200,6 +200,9 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
             update("backendKind", "electrum");
             update("backendName", DEFAULT_BACKEND_NAME);
             update("backendUrl", DEFAULT_BACKEND_URL);
+            update("backendHost", DEFAULT_ELECTRUM_HOST);
+            update("backendPort", DEFAULT_ELECTRUM_SSL_PORT);
+            update("backendUseSsl", true);
             resetTest();
           }}
         />
@@ -209,13 +212,12 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
           description={t("connections.custom.description")}
           onClick={() => {
             update("backendSetupMode", "custom");
-            if (
-              form.backendName === DEFAULT_BACKEND_NAME &&
-              form.backendUrl === DEFAULT_BACKEND_URL
-            ) {
+            if (form.backendName === DEFAULT_BACKEND_NAME)
               update("backendName", "");
+            if (form.backendUrl === DEFAULT_BACKEND_URL)
               update("backendUrl", "");
-            }
+            if (form.backendHost === DEFAULT_ELECTRUM_HOST)
+              update("backendHost", "");
             resetTest();
           }}
         />
@@ -226,6 +228,8 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
           tone="warning"
           onClick={() => {
             update("backendSetupMode", "skip");
+            update("aiSetupMode", "disabled");
+            update("updateChecksEnabled", false);
             resetTest();
           }}
         />
@@ -414,9 +418,8 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
       )}
 
       {skipSelected && (
-        <div className="space-y-3 rounded-lg border border-[var(--kb-accent)] bg-[rgba(227,0,15,0.04)] p-4">
+        <div className="rounded-lg border border-line bg-paper-2 p-4">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 size-5 shrink-0 text-[var(--kb-accent)]" />
             <div>
               <p className="m-0 font-semibold text-ink">
                 {t("connections.skipWarningTitle")}
@@ -426,15 +429,6 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
               </p>
             </div>
           </div>
-          <CheckRow
-            id="skip-backends-ack"
-            checked={form.skipBackendsAcknowledged}
-            onCheckedChange={(checked) =>
-              update("skipBackendsAcknowledged", checked)
-            }
-            label={t("connections.skipAck")}
-            description={t("connections.skipAckDescription")}
-          />
         </div>
       )}
     </div>

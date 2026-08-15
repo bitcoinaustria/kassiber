@@ -17,11 +17,19 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from kassiber.backends import (
+    BACKEND_BOOTSTRAP_MANUAL,
+    BOOTSTRAP_DEFAULT_BACKEND_SETTING,
+    DEFAULT_BACKEND_SETTING,
     create_db_backend,
     delete_db_backend,
+    load_runtime_config,
+    merge_db_backends,
     redact_backend_for_output,
     redact_backend_text,
     redact_backend_value,
+    resolve_backend,
+    seed_db_backends,
+    set_backend_bootstrap_mode,
 )
 from kassiber.cli.main import command_needs_db
 from kassiber.cli.handlers import (
@@ -418,6 +426,173 @@ class ReviewRegressionTest(unittest.TestCase):
     def _assert_ok(self, payload, result, kind):
         self.assertEqual(result.returncode, 0, msg=f"{payload!r}")
         self.assertEqual(payload.get("kind"), kind)
+
+    def test_backend_resolution_explains_an_offline_book(self):
+        with self.assertRaises(AppError) as raised:
+            resolve_backend({"backends": {}, "default_backend": ""})
+        self.assertEqual(raised.exception.code, "backend_not_configured")
+
+    def test_manual_backend_mode_hides_previously_seeded_public_backends(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        runtime_config = load_runtime_config(self.case_dir / "missing.env")
+        seed_db_backends(conn, runtime_config)
+
+        set_backend_bootstrap_mode(conn, BACKEND_BOOTSTRAP_MANUAL)
+        merged = merge_db_backends(
+            conn,
+            load_runtime_config(self.case_dir / "missing.env"),
+        )
+
+        self.assertEqual(merged["backends"], {})
+        self.assertEqual(merged["default_backend"], "")
+        self.assertIsNone(get_setting(conn, DEFAULT_BACKEND_SETTING))
+        self.assertIsNone(get_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING))
+
+    def test_manual_backend_can_return_to_zero_and_survive_bootstrap_seeding(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        set_backend_bootstrap_mode(conn, BACKEND_BOOTSTRAP_MANUAL)
+        runtime_config = load_runtime_config(self.case_dir / "missing.env")
+        merge_db_backends(conn, runtime_config)
+
+        create_db_backend(
+            conn,
+            "home-node",
+            "electrum",
+            "ssl://node.example:50002",
+            chain="bitcoin",
+            network="main",
+        )
+        self.assertEqual(get_setting(conn, DEFAULT_BACKEND_SETTING), "home-node")
+
+        merge_db_backends(conn, runtime_config)
+        delete_db_backend(conn, "home-node", runtime_config)
+        self.assertIsNone(get_setting(conn, DEFAULT_BACKEND_SETTING))
+        self.assertIsNone(get_setting(conn, BOOTSTRAP_DEFAULT_BACKEND_SETTING))
+
+        seed_db_backends(
+            conn,
+            load_runtime_config(self.case_dir / "missing.env"),
+        )
+        merged = merge_db_backends(
+            conn,
+            load_runtime_config(self.case_dir / "missing.env"),
+        )
+        self.assertEqual(merged["backends"], {})
+        self.assertEqual(merged["default_backend"], "")
+
+    def test_cli_can_add_and_delete_the_only_manual_backend(self):
+        conn = open_db(self.data_root)
+        set_backend_bootstrap_mode(conn, BACKEND_BOOTSTRAP_MANUAL)
+        conn.close()
+
+        created, result = self._run_json(
+            "backends",
+            "create",
+            "home-node",
+            "--kind",
+            "electrum",
+            "--url",
+            "ssl://node.example:50002",
+            "--chain",
+            "bitcoin",
+            "--network",
+            "main",
+        )
+        self._assert_ok(created, result, "backends.create")
+
+        listed, result = self._run_json("backends", "list")
+        self._assert_ok(listed, result, "backends.list")
+        self.assertEqual(
+            [(row["name"], row["default"]) for row in listed["data"]],
+            [("home-node", "yes")],
+        )
+
+        deleted, result = self._run_json("backends", "delete", "home-node")
+        self._assert_ok(deleted, result, "backends.delete")
+        listed, result = self._run_json("backends", "list")
+        self._assert_ok(listed, result, "backends.list")
+        self.assertEqual(listed["data"], [])
+
+    def test_manual_backend_mode_keeps_an_explicit_dotenv_default(self):
+        env_file = self.case_dir / "manual.env"
+        env_file.write_text(
+            "\n".join(
+                [
+                    "KASSIBER_BACKEND_ALPHA_KIND=esplora",
+                    "KASSIBER_BACKEND_ALPHA_URL=https://alpha.example/api",
+                    "KASSIBER_DEFAULT_BACKEND=alpha",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        set_backend_bootstrap_mode(conn, BACKEND_BOOTSTRAP_MANUAL)
+        runtime_config = load_runtime_config(env_file)
+        seed_db_backends(conn, runtime_config)
+        merge_db_backends(conn, runtime_config)
+
+        self.assertEqual(set(runtime_config["backends"]), {"alpha"})
+        self.assertEqual(runtime_config["default_backend"], "alpha")
+
+    def test_manual_backend_mode_clears_a_tombstoned_dotenv_default(self):
+        env_file = self.case_dir / "manual-default.env"
+        env_file.write_text(
+            "KASSIBER_DEFAULT_BACKEND=fulcrum\n",
+            encoding="utf-8",
+        )
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        seed_db_backends(conn, load_runtime_config(env_file))
+        set_backend_bootstrap_mode(conn, BACKEND_BOOTSTRAP_MANUAL)
+
+        runtime_config = load_runtime_config(env_file)
+        merge_db_backends(conn, runtime_config)
+
+        self.assertEqual(runtime_config["backends"], {})
+        self.assertEqual(runtime_config["default_backend"], "")
+        with self.assertRaises(AppError) as raised:
+            resolve_backend(runtime_config)
+        self.assertEqual(raised.exception.code, "backend_not_configured")
+
+    def test_manual_backend_mode_ignores_a_process_default_for_a_public_preset(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        seed_db_backends(conn, load_runtime_config(self.case_dir / "missing.env"))
+        set_backend_bootstrap_mode(conn, BACKEND_BOOTSTRAP_MANUAL)
+
+        with patch.dict(
+            os.environ,
+            {"KASSIBER_DEFAULT_BACKEND": "fulcrum"},
+            clear=False,
+        ):
+            runtime_config = load_runtime_config(self.case_dir / "missing.env")
+            merge_db_backends(conn, runtime_config)
+
+        self.assertEqual(runtime_config["backends"], {})
+        self.assertEqual(runtime_config["default_backend"], "")
+
+    def test_manual_non_sync_connection_does_not_become_wallet_default(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        set_backend_bootstrap_mode(conn, BACKEND_BOOTSTRAP_MANUAL)
+        create_db_backend(
+            conn,
+            "shop",
+            "btcpay",
+            "https://pay.example",
+            chain="bitcoin",
+            network="main",
+        )
+        runtime_config = load_runtime_config(self.case_dir / "missing.env")
+        seed_db_backends(conn, runtime_config)
+        merge_db_backends(conn, runtime_config)
+
+        self.assertEqual(set(runtime_config["backends"]), {"shop"})
+        self.assertEqual(runtime_config["default_backend"], "")
 
     def test_delete_default_can_use_runtime_only_custom_backend(self):
         conn = open_db(self.data_root)

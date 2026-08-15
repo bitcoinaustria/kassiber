@@ -92,6 +92,7 @@
     "journalsIncluded": "Journals included",
     "autoPairIncluded": "Safe auto-pairing included",
     "needsAttentionTitle": "Book refresh needs attention",
+    "backendRequiredTitle": "Add a backend to sync wallets",
     "quarantineTitle_one": "Review {{count}} quarantined transaction",
     "quarantineTitle_other": "Review {{count}} quarantined transactions",
     "transferReviewTitle_one": "Review {{count}} swap/transfer candidate",

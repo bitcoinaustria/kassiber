@@ -389,6 +389,14 @@ describe("backend settings model", () => {
     });
   });
 
+  it("disables public explorer fallbacks in manual backend mode", () => {
+    expect(deriveExplorerSettings([], "manual")).toEqual({
+      bitcoinBaseUrl: "",
+      liquidBaseUrl: "",
+      publicFallbacks: false,
+    });
+  });
+
   it("disables public explorer fallbacks when the active backend is elementsregtest", () => {
     const settings = deriveExplorerSettings([
       backendRowToSettingsBackend({

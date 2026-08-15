@@ -242,6 +242,8 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   };
 
   const finish = async () => {
+    const offlineMode = form.backendSetupMode === "skip";
+    const aiSetupMode = offlineMode ? "disabled" : form.aiSetupMode;
     // Step gates already enforce these — clamp defensively in case state
     // arrives via an injected `customSteps` override (used by tests).
     const allowedAlgorithms = gainsAlgorithmsFor(form.taxCountry);
@@ -255,7 +257,9 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     // Apply the app-wide network choice before setup creates or mutates any
     // durable book state. If the owner-only preference cannot be written, the
     // native boundary remains fail-closed and onboarding can be retried safely.
-    await setAppUpdateChecksEnabled(form.updateChecksEnabled);
+    await setAppUpdateChecksEnabled(
+      offlineMode ? false : form.updateChecksEnabled,
+    );
     if (form.databaseMode === "sqlcipher") {
       const envelope = await getTransport().invoke({
         kind: "ui.secrets.init",
@@ -311,6 +315,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         fiat_currency: form.fiatCurrency,
         tax_long_term_days: taxLongTermDays,
         gains_algorithm: gainsAlgorithm,
+        backend_setup_mode: form.backendSetupMode,
         ...(form.backendSetupMode === "custom"
           ? {
               backend: {
@@ -347,7 +352,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     // Persist and select the AI provider the assistant step configured.
     // The default seeded provider can already exist, so onboarding treats
     // create as "create or update" and then selects the entered provider.
-    if (form.aiSetupMode !== "disabled" && form.aiBaseUrl.trim()) {
+    if (aiSetupMode !== "disabled" && form.aiBaseUrl.trim()) {
       const providerName = form.aiProviderName.trim() || form.aiProviderKind;
       const providerArgs = {
         name: providerName,
@@ -428,15 +433,15 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
               port: form.backendProxyPort.trim(),
             }
           : undefined,
-      aiSetupMode: form.aiSetupMode,
+      aiSetupMode,
       aiProviderKind:
-        form.aiSetupMode === "disabled" ? undefined : form.aiProviderKind,
+        aiSetupMode === "disabled" ? undefined : form.aiProviderKind,
       aiProviderName:
-        form.aiSetupMode === "disabled"
+        aiSetupMode === "disabled"
           ? undefined
           : form.aiProviderName.trim() || DEFAULT_AI_PROVIDER_NAME,
       aiBaseUrl:
-        form.aiSetupMode === "disabled"
+        aiSetupMode === "disabled"
           ? undefined
           : form.aiBaseUrl.trim() || DEFAULT_AI_BASE_URL,
     };

@@ -57,17 +57,8 @@ describe("syncStepComplete", () => {
     ).toBe(false);
   });
 
-  it("requires the acknowledgement when skipping", () => {
-    expect(
-      syncStepComplete(
-        form({ backendSetupMode: "skip", skipBackendsAcknowledged: false }),
-      ),
-    ).toBe(false);
-    expect(
-      syncStepComplete(
-        form({ backendSetupMode: "skip", skipBackendsAcknowledged: true }),
-      ),
-    ).toBe(true);
+  it("allows setup with no backend", () => {
+    expect(syncStepComplete(form({ backendSetupMode: "skip" }))).toBe(true);
   });
 });
 

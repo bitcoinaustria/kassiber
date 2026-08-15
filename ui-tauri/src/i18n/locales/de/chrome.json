@@ -271,7 +271,8 @@
     "checkConnections": "Verbindungen prüfen",
     "loading": "Verbindungen werden geladen…",
     "loadError": "Die konfigurierten Verbindungen konnten nicht geladen werden.",
-    "noneConfigured": "Keine ausgehenden Verbindungen konfiguriert.",
+    "noneConfigured": "Nichts ist verbunden.",
+    "addConnection": "Verbindung hinzufügen",
     "columnState": "Status",
     "columnConnection": "Verbindung",
     "columnEndpoint": "Endpunkt",
@@ -287,7 +288,8 @@
       "errors": "Verbindungsfehler",
       "warning": "Verbindungsproblem",
       "online": "Verbindungen online",
-      "neutral": "Verbindungen nicht geprüft"
+      "neutral": "Verbindungen nicht geprüft",
+      "none": "Nichts verbunden"
     },
     "health": {
       "healthy": "In Ordnung",

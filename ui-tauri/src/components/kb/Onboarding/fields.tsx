@@ -213,12 +213,14 @@ export const ChoiceCard = ({
 export const CheckRow = ({
   id,
   checked,
+  disabled = false,
   onCheckedChange,
   label,
   description,
 }: {
   id: string;
   checked: boolean;
+  disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
   label: string;
   description: string;
@@ -228,6 +230,7 @@ export const CheckRow = ({
       <Checkbox
         id={id}
         checked={checked}
+        disabled={disabled}
         onCheckedChange={(value) => onCheckedChange(value === true)}
         className="mt-0.5"
       />

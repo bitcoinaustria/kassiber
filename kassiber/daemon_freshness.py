@@ -2099,7 +2099,7 @@ def _auto_sync_wallets_if_enabled(
                 return payload
             _AUTO_SYNC_PROFILE_LAST_ATTEMPT[profile["id"]] = now
     try:
-        if "default_backend" not in runtime_config and not runtime_config.get("backends"):
+        if not runtime_config.get("default_backend") and not runtime_config.get("backends"):
             payload = _wallets_sync_payload(
                 conn,
                 runtime_config,

@@ -86,6 +86,7 @@ export interface BackendSettingsData {
   summary: {
     count: number;
     default_backend: string | null;
+    bootstrap_mode?: "public" | "manual";
   };
 }
 
@@ -734,7 +735,10 @@ export function backendExplorerBaseUrl(backend: Backend): string | null {
 // truth: recompute it from the full backend list after any add/edit/delete.
 // Non-regtest books may fall back to public explorers (see `@/lib/explorer`);
 // regtest books must only expose configured local/private explorer endpoints.
-export function deriveExplorerSettings(backends: Backend[]): ExplorerSettings {
+export function deriveExplorerSettings(
+  backends: Backend[],
+  bootstrapMode: "public" | "manual" = "public",
+): ExplorerSettings {
   const baseForNet = (net: Net) =>
     backends
       .filter((backend) => backend.net === net)
@@ -750,7 +754,8 @@ export function deriveExplorerSettings(backends: Backend[]): ExplorerSettings {
   return {
     bitcoinBaseUrl: baseForNet("BTC"),
     liquidBaseUrl: baseForNet("LIQUID"),
-    publicFallbacks: !activeRegtestBackend,
+    publicFallbacks:
+      bootstrapMode === "public" && !activeRegtestBackend,
   };
 }
 

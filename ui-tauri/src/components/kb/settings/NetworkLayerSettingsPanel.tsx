@@ -46,6 +46,7 @@ export function NetworkLayerSettingsPanel({
   onEdit,
   onSetDefault,
   settingDefaultBackendId,
+  publicFallbacks = true,
 }: {
   layer: NetworkLayer;
   backends: Backend[];
@@ -53,6 +54,7 @@ export function NetworkLayerSettingsPanel({
   onEdit: (backend: Backend) => void;
   onSetDefault: (backend: Backend) => void;
   settingDefaultBackendId?: string | null;
+  publicFallbacks?: boolean;
 }) {
   const meta = NETWORK_LAYER_META[layer];
   const layerBackends = backendsForLayer(backends, layer);
@@ -109,11 +111,13 @@ export function NetworkLayerSettingsPanel({
             ? `Transaction links open on ${explorerHostLabel(
                 explorerLinkBase,
               )}; this is derived from the Explorer API backend.`
-            : `Transaction links use the public ${
+            : publicFallbacks
+              ? `Transaction links use the public ${
                 layer === "bitcoin"
                   ? "mempool.bitcoin-austria.at"
                   : "Liquid Network"
-              } default until you add an Explorer API backend. Electrum / Fulcrum backends are sync-only.`}
+                } default until you add an Explorer API backend. Electrum / Fulcrum backends are sync-only.`
+              : "No public explorer links are enabled. Add an Explorer API backend to create transaction links."}
         </p>
       ) : null}
     </section>

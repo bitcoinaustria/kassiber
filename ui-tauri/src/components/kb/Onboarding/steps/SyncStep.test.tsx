@@ -34,4 +34,23 @@ describe("SyncStep update privacy", () => {
     expect(html).toContain("GitHub sees your IP address");
     expect(html).toContain('id="allow-update-checks"');
   });
+
+  it("disables update checks in offline setup", () => {
+    const html = renderToStaticMarkup(
+      <SyncStep
+        form={{
+          ...DEFAULT_FORM,
+          backendSetupMode: "skip",
+          updateChecksEnabled: false,
+        }}
+        update={vi.fn()}
+        onSubmit={vi.fn()}
+        goBack={vi.fn()}
+        currentStep={2}
+        totalSteps={5}
+      />,
+    );
+
+    expect(html).toMatch(/disabled=""[^>]*id="allow-update-checks"/);
+  });
 });

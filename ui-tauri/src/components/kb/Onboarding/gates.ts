@@ -20,7 +20,7 @@ export const accountingComplete = (form: OnboardingForm): boolean =>
 /** The (optional) sync-backend choice is internally consistent. */
 export const connectionsComplete = (form: OnboardingForm): boolean => {
   if (form.backendSetupMode === "skip") {
-    return form.skipBackendsAcknowledged;
+    return true;
   }
   if (form.backendSetupMode === "custom") {
     const backendUrl =
