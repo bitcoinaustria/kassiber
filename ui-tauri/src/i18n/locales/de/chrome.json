@@ -264,7 +264,7 @@
   },
   "preAlpha": {
     "label": "Warnung: Alpha-Software",
-    "message": "Alpha-Software: bestenfalls unzuverlässig. Prüfe alles, bevor du dich auf Berichte oder Exporte verlässt."
+    "message": "Alpha-Software: bestenfalls unzuverlässig. Prüfe alles. Dieses Banner lässt sich in den Einstellungen ausblenden."
   },
   "network": {
     "outboundConnections": "Ausgehende Verbindungen",

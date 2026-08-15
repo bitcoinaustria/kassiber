@@ -31,6 +31,7 @@ apple-native-keyring-store = { version = "1.0.0", features = ["keychain"] }
 block2 = "0.6.2"
 core-foundation = "0.10.1"
 objc2 = "0.6.4"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSView", "NSWindow"] }
 objc2-foundation = "0.3.2"
 security-framework = { version = "3.7", features = ["OSX_10_15"] }
 security-framework-sys = "2.17.0"

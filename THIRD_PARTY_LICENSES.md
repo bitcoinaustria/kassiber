@@ -45,7 +45,7 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `keyring-core` | `1.0.0` | Rust trait layer for desktop AI-provider secret storage | MIT OR Apache-2.0 |
 | `apple-native-keyring-store` | `1.0.0` | macOS Keychain backend for AI provider API keys and opt-in database passphrase remember-unlock | MIT OR Apache-2.0 |
 | `block2` | `0.6.2` | Objective-C block bridge for the macOS Touch ID LocalAuthentication callback | MIT |
-| `objc2` / `objc2-foundation` | `0.6.4` / `0.3.2` | Rust Objective-C bridge used for macOS LocalAuthentication Touch ID prompts | MIT |
+| `objc2` / `objc2-foundation` / `objc2-app-kit` | `0.6.4` / `0.3.2` / `0.3.2` | Rust Objective-C bridge used for macOS Touch ID prompts and the native title-bar drag area | MIT |
 | `windows-native-keyring-store` | `1.0.0` | Windows user-scope credential backend for AI provider API keys | MIT OR Apache-2.0 |
 | `zbus-secret-service-keyring-store` | `1.0.0` | Linux Secret Service backend for AI provider API keys | MIT OR Apache-2.0 |
 

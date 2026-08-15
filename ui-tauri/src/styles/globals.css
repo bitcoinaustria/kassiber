@@ -74,6 +74,16 @@
    * window reveals more content instead of enlarging the interface.
    */
   --app-ui-scale: 0.9;
+  /* The native macOS title bar overlays this themed spacer. Other platforms
+     keep it at zero and use their normal decorated window frame. */
+  --kb-native-titlebar-height: 0px;
+  --kb-native-titlebar-background: var(--background);
+  /* Optional warning row beneath the native desktop title bar. Root-scoped so
+     portalled full-screen surfaces reserve the same space as routed screens. */
+  --kb-warning-bar-height: 0px;
+  --kb-window-top-inset: calc(
+    var(--kb-native-titlebar-height) + var(--kb-warning-bar-height)
+  );
   /*
    * Frosted-glass tuning, ported from T3Code. Every frosted surface
    * (`.kb-glass-*`, the assistant composer) reads these so light and dark keep
@@ -758,6 +768,8 @@
   --kb-accent: #ff3341;
   /* Already 4.95:1 on dark mode's chip, so small red text needs no separate value. */
   --kb-accent-text: #ff3341;
+  /* Match the non-native macOS chrome treatment exactly (RGB 18 18 18). */
+  --kb-native-titlebar-background: #121212;
 
   --background: oklch(0.145 0 0);
   --app-chrome: oklch(0.18 0 0);

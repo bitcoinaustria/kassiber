@@ -9,6 +9,7 @@ import {
   AppScaleController,
   ThemeController,
 } from "@/components/kb/ThemeController";
+import { WindowFrame } from "@/components/kb/WindowFrame";
 import i18n from "@/i18n";
 import { installLanguageBridge } from "@/i18n/languageBridge";
 import { installGlobalErrorCapture } from "@/lib/globalErrorCapture";
@@ -39,9 +40,11 @@ createRoot(document.getElementById("root")!).render(
       <QueryClientProvider client={queryClient}>
         <ThemeController />
         <AppScaleController />
-        <AppErrorBoundary>
-          <RouterProvider router={router} />
-        </AppErrorBoundary>
+        <WindowFrame>
+          <AppErrorBoundary>
+            <RouterProvider router={router} />
+          </AppErrorBoundary>
+        </WindowFrame>
       </QueryClientProvider>
     </I18nextProvider>
   </StrictMode>,

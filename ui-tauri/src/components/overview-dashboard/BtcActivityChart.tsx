@@ -32,7 +32,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { formatBtc, type Currency } from "@/lib/currency";
-import { macTitleBarInset } from "@/lib/titleBarInset";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
@@ -837,17 +836,9 @@ export const BtcActivityChart = ({
           onGroupActivityDotsChange={setGroupActivityDots}
           hideSensitive={hideSensitive}
         />
-        <div
-          data-tauri-drag-region={
-            expanded && macTitleBarInset ? "deep" : undefined
-          }
-          className="flex flex-wrap items-start justify-between gap-2"
-        >
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <div
-            className={cn(
-              "min-w-[220px]",
-              expanded && macTitleBarInset && "ml-[72px]",
-            )}
+            className="min-w-[220px]"
             aria-label={t("treasury.chartLabel")}
           >
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -994,12 +985,7 @@ export const BtcActivityChart = ({
 
         {hasChartData ? (
           <>
-            <div
-              className={cn(
-                "flex select-none flex-wrap items-center justify-start gap-x-2 gap-y-1 text-xs text-muted-foreground sm:text-xs",
-                expanded && macTitleBarInset && "ml-[72px]",
-              )}
-            >
+            <div className="flex select-none flex-wrap items-center justify-start gap-x-2 gap-y-1 text-xs text-muted-foreground sm:text-xs">
               {legendItems.map((item) => (
                 <button
                   key={item.key}
@@ -1544,7 +1530,7 @@ export const BtcActivityChart = ({
         // centred modal. On a full-screen surface it scales the whole chart up
         // from 95% around the viewport centre, which reads as the chart sliding
         // sideways as it settles. Full screen fades, it does not zoom.
-        className="top-0 left-0 h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:max-w-none"
+        className="top-[var(--kb-window-top-inset)] left-0 h-[calc(100dvh-var(--kb-window-top-inset))] w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:max-w-none"
       >
         <DialogTitle className="sr-only">
           {t("treasury.expandedTitle")}

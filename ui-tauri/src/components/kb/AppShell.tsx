@@ -179,7 +179,6 @@ import { isTypingTarget } from "@/lib/keymap";
 import { FirstSyncCard } from "./FirstSyncCard";
 import { AssistantDock } from "./AssistantDock";
 import { ExternalBrowserLink } from "./ExternalBrowserLink";
-import { PreAlphaBanner } from "./PreAlphaBanner";
 import { nextAssistantDockCollapsed } from "./assistantDockLayout";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
@@ -638,7 +637,6 @@ export function AppShell() {
   const assistantDockMinimized = useUiStore((s) => s.assistantDockMinimized);
   const assistantDockExpanded = useUiStore((s) => s.assistantDockExpanded);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
-  const preAlphaBannerVisible = useUiStore((s) => s.preAlphaBannerVisible);
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
   const activeMaintenanceProgress = useUiStore(
     (s) => s.activeMaintenanceProgress,
@@ -1751,16 +1749,7 @@ export function AppShell() {
 
   return (
     <TooltipProvider>
-      {/* The top strip is always there — red while the pre-alpha warning is on,
-          plain window background once it is dismissed — so the macOS traffic
-          lights always have their own row and nothing below has to dodge them.
-          The sidebar is `fixed`, so it reads the strip's height off this
-          variable to sit under it. */}
-      <div
-        className="flex h-svh flex-col overflow-hidden bg-sidebar"
-        style={{ "--kb-banner-height": "28px" } as React.CSSProperties}
-      >
-        <PreAlphaBanner className="shrink-0" muted={!preAlphaBannerVisible} />
+      <div className="flex h-full flex-col overflow-hidden bg-sidebar">
         {/*
           The shell is a two-column frame: the side nav owns all navigation
           (brand, book switcher, search, pages, settings), and the content panel
@@ -2063,7 +2052,7 @@ function AppSidebar({
          seam gap comes from the content panel's own `pl-3` instead. Narrowing it
          here would eat the collapsed rail, which is only 3rem wide to begin
          with. */
-      className="kb-glass-panel top-[calc(var(--kb-banner-height,0px)+(--spacing(1.5)))] left-1.5 h-[calc(100svh-var(--kb-banner-height,0px)-(--spacing(3)))] overflow-hidden rounded-xl border border-sidebar-border/70"
+      className="kb-glass-panel top-[calc(var(--kb-window-top-inset,0px)+(--spacing(1.5)))] left-1.5 h-[calc(100svh-var(--kb-window-top-inset,0px)-(--spacing(3)))] overflow-hidden rounded-xl border border-sidebar-border/70"
     >
       {/* Header stays mounted across both nav modes, so the wordmark and the ⌘K
           palette are reachable from settings too. `relative` + the children's
@@ -3490,7 +3479,7 @@ function LockScreen({
   }, [autoTouchIdPrompt, canUseTouchId, submitTouchId]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-background px-4 text-foreground">
+    <div className="fixed inset-x-0 top-[var(--kb-window-top-inset)] bottom-0 z-50 flex items-center justify-center overflow-hidden bg-background px-4 text-foreground">
       {/*
        * The nav's ledger page, run across the lock screen: the same stock the
        * chrome is made of, so a locked window still looks like the app rather
@@ -3653,7 +3642,7 @@ function ImportRootRestoreScreen({
 }) {
   const { t } = useTranslation("chrome");
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background px-4 text-foreground">
+    <div className="fixed inset-x-0 top-[var(--kb-window-top-inset)] bottom-0 z-50 flex items-center justify-center bg-background px-4 text-foreground">
       <div className="w-full max-w-sm rounded-lg border border-border bg-card p-5 text-card-foreground shadow-xl ring-1 ring-border/60">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">

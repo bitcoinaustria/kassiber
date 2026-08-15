@@ -264,7 +264,7 @@
   },
   "preAlpha": {
     "label": "Alpha software warning",
-    "message": "Alpha software: unreliable at best. Review everything before relying on reports or exports."
+    "message": "Alpha software: unreliable at best. Review everything. You can disable this banner in Settings."
   },
   "network": {
     "outboundConnections": "Outbound connections",

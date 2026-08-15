@@ -24,7 +24,7 @@ import { useUiStore } from "./store/ui";
 
 function RoutePending() {
   return (
-    <div className="grid min-h-dvh place-items-center bg-background text-sm text-muted-foreground">
+    <div className="grid h-full place-items-center bg-background text-sm text-muted-foreground">
       Loading...
     </div>
   );
