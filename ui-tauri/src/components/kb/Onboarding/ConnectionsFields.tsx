@@ -228,6 +228,8 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
           tone="warning"
           onClick={() => {
             update("backendSetupMode", "skip");
+            update("aiSetupMode", "disabled");
+            update("updateChecksEnabled", false);
             resetTest();
           }}
         />

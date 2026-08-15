@@ -1,4 +1,4 @@
-import { RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { Plus, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
@@ -385,11 +385,15 @@ export function NetworkStatusIndicator({
     [connectionRows, healthRecords],
   );
   const indicatorTone = connectionHealthTone(status, healthSnapshots);
+  const nothingConnected =
+    backendSettingsQuery.isSuccess && connectionRows.length === 0;
   const label =
     status === "offline"
       ? networkStatusLabel(status)
-      : connectionIndicatorLabel(indicatorTone, t);
-  const Icon = status === "offline" ? WifiOff : Wifi;
+      : nothingConnected
+        ? t("network.indicator.none")
+        : connectionIndicatorLabel(indicatorTone, t);
+  const Icon = status === "offline" || nothingConnected ? WifiOff : Wifi;
   const lastCheckedAt = Object.values(healthRecords)
     .map((record) => record.checkedAt)
     .filter((value): value is string => Boolean(value))
@@ -527,6 +531,11 @@ export function NetworkStatusIndicator({
     [navigate],
   );
 
+  const openConnectionSettings = React.useCallback(() => {
+    void navigate({ to: "/settings/bitcoin" });
+    setOpen(false);
+  }, [navigate]);
+
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
@@ -581,8 +590,19 @@ export function NetworkStatusIndicator({
               {t("network.loadError")}
             </div>
           ) : connectionRows.length === 0 ? (
-            <div className="px-2 py-4 text-sm text-muted-foreground">
-              {t("network.noneConfigured")}
+            <div className="space-y-3 px-2 py-4">
+              <p className="m-0 text-sm text-muted-foreground">
+                {t("network.noneConfigured")}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={openConnectionSettings}
+              >
+                <Plus className="size-3.5" aria-hidden="true" />
+                {t("network.addConnection")}
+              </Button>
             </div>
           ) : (
             <div className="overflow-x-auto">

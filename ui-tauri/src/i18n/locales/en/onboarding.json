@@ -203,7 +203,7 @@
     },
     "skip": {
       "title": "Work offline",
-      "description": "Start with no sync backends. Manual imports and reports still work, and you can add a backend later."
+      "description": "Start with no sync backends, AI, or update checks. Manual imports and reports still work."
     },
     "protocolLabel": "Sync protocol",
     "protocolDescription": "Payment providers and file imports are configured later from Connections.",
@@ -265,7 +265,8 @@
     "baseUrlDescription": "Use an OpenAI Responses API-compatible /v1 endpoint or a supported CLI locator.",
     "remoteAck": "I understand prompts may leave this device.",
     "remoteAckDescription": "Accounting context, labels, notes, backend hostnames, and report details can be sensitive.",
-    "disabledNote": "This hides the Assistant screen and floating chat after onboarding. You can enable AI features later in Settings."
+    "disabledNote": "This hides the Assistant screen and floating chat after onboarding. You can enable AI features later in Settings.",
+    "offlineNote": "Offline setup turns AI off. You can enable it later in Settings."
   },
   "explainer": {
     "whyThisMatters": "Why this matters",

@@ -203,7 +203,7 @@
     },
     "skip": {
       "title": "Offline arbeiten",
-      "description": "Starte ohne Sync-Backends. Manuelle Importe und Berichte funktionieren weiterhin; ein Backend kannst du später hinzufügen."
+      "description": "Starte ohne Sync-Backends, AI und Update-Prüfungen. Manuelle Importe und Berichte funktionieren weiterhin."
     },
     "protocolLabel": "Sync-Protokoll",
     "protocolDescription": "Payment-Provider und Datei-Importe werden später unter Verbindungen konfiguriert.",
@@ -265,7 +265,8 @@
     "baseUrlDescription": "Verwende einen /v1-Endpunkt mit kompatibler OpenAI Responses API oder einen unterstützten CLI-Locator.",
     "remoteAck": "Mir ist klar, dass Prompts dieses Gerät verlassen können.",
     "remoteAckDescription": "Buchhaltungskontext, Labels, Notizen, Backend-Hostnamen und Berichtsdetails können sensibel sein.",
-    "disabledNote": "Dies blendet den Assistenten-Bildschirm und den schwebenden Chat nach dem Onboarding aus. Du kannst AI-Funktionen später in den Einstellungen aktivieren."
+    "disabledNote": "Dies blendet den Assistenten-Bildschirm und den schwebenden Chat nach dem Onboarding aus. Du kannst AI-Funktionen später in den Einstellungen aktivieren.",
+    "offlineNote": "Das Offline-Setup deaktiviert AI. Du kannst sie später in den Einstellungen aktivieren."
   },
   "explainer": {
     "whyThisMatters": "Warum das wichtig ist",

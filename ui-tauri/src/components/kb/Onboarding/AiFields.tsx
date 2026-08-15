@@ -27,6 +27,14 @@ interface AiFieldsProps {
  */
 export const AiFields = ({ form, update }: AiFieldsProps) => {
   const { t } = useTranslation("onboarding");
+  if (form.backendSetupMode === "skip") {
+    return (
+      <div className="flex items-start gap-3 rounded-lg border border-[var(--kb-accent)] bg-[rgba(227,0,15,0.04)] p-4 text-xs leading-5 text-ink-2">
+        <Sparkles className="mt-0.5 size-4 shrink-0 text-[var(--kb-accent)]" />
+        <p className="m-0">{t("ai.offlineNote")}</p>
+      </div>
+    );
+  }
   const localSelected = form.aiSetupMode === "local";
   const remoteSelected = form.aiSetupMode === "remote";
   const disabledSelected = form.aiSetupMode === "disabled";
