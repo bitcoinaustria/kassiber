@@ -104,7 +104,10 @@ import { cn } from "@/lib/utils";
 import { formatShortDate } from "@/lib/date";
 import { connectionSupportsLightningCapability } from "@/lib/lightning";
 import { isFilePickerAvailable, pickFile } from "@/lib/filePicker";
-import { editConfigKindForConnection } from "@/lib/connectionEditKind";
+import {
+  editConfigKindForConnection,
+  walletSyncNeedsBackend,
+} from "@/lib/connectionEditKind";
 import { describeWalletSyncResult, type SyncResult } from "@/lib/syncResults";
 import { transactionBelongsToConnection } from "@/lib/connectionTransactions";
 import { buildBalanceReconciliation } from "@/lib/walletBalanceReconcile";
@@ -660,8 +663,10 @@ function ConnectionDetailView({
   );
   const backendRequired =
     walletsListQuery.isSuccess &&
-    canEditLiveBackend &&
-    !walletDetail?.backend?.name;
+    walletSyncNeedsBackend(
+      walletDetail?.sync_mode || connection.syncMode,
+      walletDetail?.backend?.name,
+    );
   const backendSettingsRoute =
     walletChain === "liquid" ? "/settings/liquid" : "/settings/bitcoin";
   const isDeprecatedWallet = Boolean(

@@ -427,10 +427,12 @@ export function SettingsScreen({
       ),
     ];
   }, [backendSettingsQuery.data, maintenanceSettingsQuery.data]);
-  const publicExplorerFallbacks = deriveExplorerSettings(
-    backends,
-    backendSettingsQuery.data?.data?.summary.bootstrap_mode,
-  ).publicFallbacks;
+  const publicExplorerFallbacks =
+    backendSettingsQuery.isSuccess &&
+    deriveExplorerSettings(
+      backends,
+      backendSettingsQuery.data?.data?.summary.bootstrap_mode,
+    ).publicFallbacks;
 
   React.useEffect(() => {
     if (!backendSettingsQuery.data?.data?.backends) return;

@@ -538,6 +538,43 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(set(runtime_config["backends"]), {"alpha"})
         self.assertEqual(runtime_config["default_backend"], "alpha")
 
+    def test_manual_backend_mode_clears_a_tombstoned_dotenv_default(self):
+        env_file = self.case_dir / "manual-default.env"
+        env_file.write_text(
+            "KASSIBER_DEFAULT_BACKEND=fulcrum\n",
+            encoding="utf-8",
+        )
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        seed_db_backends(conn, load_runtime_config(env_file))
+        set_backend_bootstrap_mode(conn, BACKEND_BOOTSTRAP_MANUAL)
+
+        runtime_config = load_runtime_config(env_file)
+        merge_db_backends(conn, runtime_config)
+
+        self.assertEqual(runtime_config["backends"], {})
+        self.assertEqual(runtime_config["default_backend"], "")
+        with self.assertRaises(AppError) as raised:
+            resolve_backend(runtime_config)
+        self.assertEqual(raised.exception.code, "backend_not_configured")
+
+    def test_manual_backend_mode_ignores_a_process_default_for_a_public_preset(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        seed_db_backends(conn, load_runtime_config(self.case_dir / "missing.env"))
+        set_backend_bootstrap_mode(conn, BACKEND_BOOTSTRAP_MANUAL)
+
+        with patch.dict(
+            os.environ,
+            {"KASSIBER_DEFAULT_BACKEND": "fulcrum"},
+            clear=False,
+        ):
+            runtime_config = load_runtime_config(self.case_dir / "missing.env")
+            merge_db_backends(conn, runtime_config)
+
+        self.assertEqual(runtime_config["backends"], {})
+        self.assertEqual(runtime_config["default_backend"], "")
+
     def test_manual_non_sync_connection_does_not_become_wallet_default(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)

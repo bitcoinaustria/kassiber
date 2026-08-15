@@ -1095,14 +1095,9 @@ def merge_db_backends(conn, runtime_config):
     dotenv_names = _dotenv_backend_names(runtime_config)
     tombstones = _load_bootstrap_backend_tombstones(conn) - dotenv_names
     for name in list(runtime_config["backends"]):
-        forced_default = (
-            _process_env_default_backend_override(runtime_config)
-            and name == runtime_config.get("default_backend")
-        )
         if (
             name in tombstones
             and not _process_env_backend_fields(runtime_config, name)
-            and not forced_default
         ):
             runtime_config["backends"].pop(name, None)
     rows = conn.execute("SELECT * FROM backends").fetchall()
@@ -1123,6 +1118,12 @@ def merge_db_backends(conn, runtime_config):
         runtime_config["backends"][name] = merged
     if _process_env_default_backend_override(runtime_config):
         if runtime_config["default_backend"] not in runtime_config["backends"]:
+            if (
+                bootstrap_mode == BACKEND_BOOTSTRAP_MANUAL
+                and runtime_config["default_backend"] in tombstones
+            ):
+                runtime_config["default_backend"] = ""
+                return runtime_config
             raise AppError(
                 f"Environment default backend '{runtime_config['default_backend']}' is not configured",
                 code="config_error",
@@ -1140,7 +1141,7 @@ def merge_db_backends(conn, runtime_config):
         runtime_config["default_backend"] = override
     elif (
         bootstrap_mode == BACKEND_BOOTSTRAP_MANUAL
-        and runtime_config.get("default_backend_source") == "built-in default"
+        and runtime_config.get("default_backend") not in runtime_config["backends"]
     ):
         runtime_config["default_backend"] = ""
     return runtime_config

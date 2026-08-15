@@ -2,6 +2,13 @@ import type { Connection } from "@/mocks/seed";
 
 export type ConnectionEditKind = "descriptor" | "btcpay" | "file-wallet" | null;
 
+export function walletSyncNeedsBackend(
+  syncMode: string | undefined,
+  backendName: string | undefined,
+) {
+  return Boolean(syncMode?.startsWith("backend_") && !backendName);
+}
+
 export function editConfigKindForConnection(
   connection: Pick<
     Connection,

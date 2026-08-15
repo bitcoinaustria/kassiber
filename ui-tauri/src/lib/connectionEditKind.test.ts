@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { editConfigKindForConnection } from "./connectionEditKind";
+import {
+  editConfigKindForConnection,
+  walletSyncNeedsBackend,
+} from "./connectionEditKind";
 
 describe("editConfigKindForConnection", () => {
+  it("does not require a backend for file-import refreshes", () => {
+    expect(walletSyncNeedsBackend("file_import", undefined)).toBe(false);
+    expect(walletSyncNeedsBackend("backend_descriptor", undefined)).toBe(true);
+  });
+
   it("keeps generic custom file imports on the file editor path", () => {
     expect(
       editConfigKindForConnection({
