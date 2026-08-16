@@ -33,6 +33,7 @@ from kassiber.daemon import (
 )
 from kassiber import daemon as daemon_module
 from kassiber.ai import tools as ai_tools
+from kassiber.ai.prompt import build_responses_tools
 from kassiber.ai.providers import ai_provider_secret_service_id
 from kassiber.core import attachments as core_attachments
 from kassiber.core import commercial as core_commercial
@@ -6113,6 +6114,34 @@ class DaemonSmokeTest(unittest.TestCase):
             )
             self.assertEqual(decision, "allow_once")
             self.assertFalse(consent.has_session_allow(tool_name))
+
+    def test_ai_chat_omitted_tool_profile_is_scoped_not_full(self):
+        # The desktop Assistant never sent `tool_profile`, so it silently got
+        # `full`: 113 schemas and ~20k tokens on every turn, with capability
+        # scoping skipped entirely. Local models could not work under that.
+        base = {
+            "model": "local-model",
+            "messages": [{"role": "user", "content": "What is my balance?"}],
+            "tools_enabled": True,
+        }
+
+        self.assertEqual(_ai_chat_args(base)["tool_profile"], "scoped")
+        self.assertEqual(
+            _ai_chat_args({**base, "tool_profile": "full"})["tool_profile"],
+            "full",
+        )
+
+        scoped = build_responses_tools(
+            base["messages"],
+            screen_context={"route": "/"},
+            profile="scoped",
+        )
+        full = build_responses_tools(
+            base["messages"],
+            screen_context={"route": "/"},
+            profile="full",
+        )
+        self.assertLess(len(scoped), len(full) // 2)
 
     def test_ai_chat_accepts_typed_screen_context_and_rejects_sensitive_filters(self):
         base = {

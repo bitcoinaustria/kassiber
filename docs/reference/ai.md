@@ -412,7 +412,16 @@ embedded in prompts or tool output.
 
 Test the assistant/tool path through the CLI, not only through the desktop GUI:
 `tests/test_cli_chat.py` pins the daemon-backed chat loop, consent behavior,
-locked-database handling, timeout controls, and `core`/`full` tool profiles.
+locked-database handling, timeout controls, and the tool profiles.
+
+`ai.chat` takes a `tool_profile`: `core` intersects the capability packs with
+the small common catalog (the CLI default, and the right choice for small local
+models), `scoped` keeps the packs but reaches the specialist tools behind the
+current screen, and `full` advertises all 113 schemas — roughly 20k tokens per
+turn, with capability scoping skipped. **A caller that omits the field gets
+`scoped`.** The desktop Assistant omitted it while the default was `full`,
+which is why local models on Ollama/oMLX had neither working tool selection nor
+room left for the conversation.
 Live backend checks should also be CLI-first, with explicit user-approved
 endpoints and a fresh temporary data root.
 

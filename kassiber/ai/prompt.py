@@ -94,9 +94,14 @@ def build_responses_tools(
     The no-argument form intentionally returns the full catalog for callers
     that inspect capabilities. Live chat supplies messages and typed screen
     context so smaller local models do not have to choose among every schema.
+
+    `core` intersects the capability packs with the small common catalog and
+    suits local models on the CLI; `scoped` keeps the packs but reaches the
+    specialist tools behind the current screen; `full` advertises all 113
+    schemas — roughly 20k tokens per turn — and is a deliberate opt-in.
     """
 
-    if profile not in {None, "core", "full"}:
+    if profile not in {None, "core", "scoped", "full"}:
         raise AppError("unknown AI tool profile", code="validation")
     selected_messages = [] if profile == "core" and messages is None else messages
     return responses_tool_definitions(

@@ -95,7 +95,7 @@ SKILL_REFERENCE_NAMES = (
     "wallets-backends",
 )
 
-TOOL_PROFILE_NAMES = ("core", "full")
+TOOL_PROFILE_NAMES = ("core", "scoped", "full")
 
 # Kept in step with core.file_analysis.MAX_SAMPLE_ROWS without importing it here
 # (kassiber.ai must not depend on kassiber.core); the daemon clamps regardless.

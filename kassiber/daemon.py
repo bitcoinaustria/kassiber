@@ -4646,10 +4646,13 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             "ai.chat tools_enabled must be a boolean",
             code="validation",
         )
-    tool_profile = args.get("tool_profile", "full")
+    # `full` is 113 schemas / ~20k tokens on every turn and skips capability
+    # scoping entirely. It stays available, but a caller that omits the field
+    # — the desktop Assistant did — must not silently get it.
+    tool_profile = args.get("tool_profile", "scoped")
     if not isinstance(tool_profile, str) or tool_profile not in TOOL_PROFILE_NAMES:
         raise AppError(
-            "ai.chat tool_profile must be core or full",
+            "ai.chat tool_profile must be core, scoped, or full",
             code="validation",
             details={
                 "tool_profile": tool_profile,
@@ -8256,11 +8259,21 @@ def _run_ai_chat_tool_loop(
         screen_context=screen_context if isinstance(screen_context, dict) else None,
         profile=validated["tool_profile"],
     )
-    runtime.maintenance_state["advertised_tools"] = [
+    advertised = [
         function["name"]
         for function in tools
         if isinstance(function, dict) and isinstance(function.get("name"), str)
     ]
+    # The capability packs and the auto-read planner answer "what is this question
+    # about?" from different angles, and the planner is the more specific one. A
+    # tool it selected still has to clear the read-only/non-egressing checks in
+    # `_run_auto_read_tools`, but a narrow profile must not silently drop the
+    # local context the user's question plainly needs.
+    for planned_call in _planned_auto_read_tools(validated):
+        entry = get_tool(planned_call.name)
+        if entry is not None and entry.provider_name not in advertised:
+            advertised.append(entry.provider_name)
+    runtime.maintenance_state["advertised_tools"] = advertised
     latest_question = _latest_user_message_content(validated["messages"]).lower()
     runtime.maintenance_state["cross_book_read_allowed"] = _message_has_any(
         latest_question,
