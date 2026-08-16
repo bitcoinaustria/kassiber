@@ -27,7 +27,6 @@ from kassiber.daemon import (
     _execute_mutating_ai_tool,
     _execute_read_only_ai_tool,
     _effective_ai_chat_system_prompt_kind,
-    _effective_ai_chat_tools_enabled,
     _planned_auto_read_tools,
     _reports_tax_summary_payload,
     _validate_ai_custody_conversion_boundary,
@@ -10849,39 +10848,30 @@ class DaemonSmokeTest(unittest.TestCase):
             ],
         )
 
-    def test_ai_chat_cli_provider_auto_disables_tool_loop(self):
+    def test_ai_chat_keeps_kassiber_prompt_when_tools_are_enabled(self):
+        # CLI-locator providers used to lose both the tool loop and the product
+        # prompt here; they now reach the same daemon-owned loop through the
+        # broker's typed-tool bridge.
         validated = {
             "tools_enabled": True,
             "system_prompt_kind": "kassiber",
         }
-        provider_snapshot = {"base_url": "codex-cli://default"}
 
-        effective_tools = _effective_ai_chat_tools_enabled(provider_snapshot, validated)
-
-        self.assertFalse(effective_tools)
-        self.assertIsNone(
-            _effective_ai_chat_system_prompt_kind(
-                validated,
-                tools_enabled=effective_tools,
-            )
+        self.assertEqual(
+            _effective_ai_chat_system_prompt_kind(validated, tools_enabled=True),
+            "kassiber",
         )
 
-    def test_ai_chat_http_provider_keeps_tool_loop(self):
+    def test_ai_chat_drops_kassiber_prompt_without_tools(self):
+        # The Kassiber prompt describes tools, so serving it tool-less misleads
+        # the model about what it can do.
         validated = {
-            "tools_enabled": True,
+            "tools_enabled": False,
             "system_prompt_kind": "kassiber",
         }
-        provider_snapshot = {"base_url": "http://127.0.0.1:11434/v1"}
 
-        effective_tools = _effective_ai_chat_tools_enabled(provider_snapshot, validated)
-
-        self.assertTrue(effective_tools)
-        self.assertEqual(
-            _effective_ai_chat_system_prompt_kind(
-                validated,
-                tools_enabled=effective_tools,
-            ),
-            "kassiber",
+        self.assertIsNone(
+            _effective_ai_chat_system_prompt_kind(validated, tools_enabled=False)
         )
 
     def test_ai_chat_cancel_cooperatively_finishes_cancelled(self):

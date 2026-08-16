@@ -262,7 +262,17 @@ export async function codexChat(
       config: {
         web_search: "disabled",
         mcp_servers: {},
+        multi_agent_mode: "explicitRequestOnly",
       },
+    };
+    const startParams = {
+      ...common,
+      dynamicTools: (request.tools ?? []).map((tool) => ({
+        type: "function",
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.parameters,
+      })),
     };
     const fingerprint = toolFingerprint(request);
     const cursorPrefix = `kdt-${fingerprint}:`;
@@ -284,30 +294,14 @@ export async function codexChat(
       } else {
         opened = await connection.request<{ thread: { id: string } }>(
           "thread/start",
-          {
-            ...common,
-            dynamicTools: (request.tools ?? []).map((tool) => ({
-              type: "function",
-              name: tool.name,
-              description: tool.description,
-              inputSchema: tool.parameters,
-            })),
-          },
+          startParams,
         );
       }
     } catch (error) {
       if (!resumeId || !/not found|missing|unknown/i.test(safeErrorMessage(error))) throw error;
       opened = await connection.request<{ thread: { id: string } }>(
         "thread/start",
-        {
-          ...common,
-          dynamicTools: (request.tools ?? []).map((tool) => ({
-            type: "function",
-            name: tool.name,
-            description: tool.description,
-            inputSchema: tool.parameters,
-          })),
-        },
+        startParams,
       );
     }
     const threadId = String(opened.thread.id);

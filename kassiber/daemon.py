@@ -69,7 +69,6 @@ from .ai.providers import (
     acknowledge_remote_use,
     ai_provider_secret_ref_namespace,
     get_default_ai_provider_name,
-    is_cli_provider_locator,
     list_db_ai_providers,
     list_with_default as list_ai_providers_with_default,
     normalize_base_url,
@@ -7872,15 +7871,6 @@ def _write_ai_chat_status(
     )
 
 
-def _effective_ai_chat_tools_enabled(
-    provider_snapshot: dict[str, Any],
-    validated: dict[str, Any],
-) -> bool:
-    if not validated["tools_enabled"]:
-        return False
-    return not is_cli_provider_locator(provider_snapshot.get("base_url"))
-
-
 def _effective_ai_chat_system_prompt_kind(
     validated: dict[str, Any],
     *,
@@ -8574,10 +8564,10 @@ def _run_ai_chat_stream(
                 phase="connecting",
                 label="Connecting",
             )
-            effective_tools_enabled = _effective_ai_chat_tools_enabled(
-                provider_snapshot,
-                validated,
-            )
+            # Tool support follows the request, not the transport. CLI-locator
+            # providers reach the same daemon-owned tool loop through the
+            # broker's native typed-tool bridge.
+            effective_tools_enabled = bool(validated["tools_enabled"])
             effective_system_prompt_kind = _effective_ai_chat_system_prompt_kind(
                 validated,
                 tools_enabled=effective_tools_enabled,

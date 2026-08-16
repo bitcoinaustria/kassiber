@@ -142,10 +142,12 @@ type ClaudeStreamLine = {
  *
  * Tool denial is layered, because a coding CLI can otherwise read and write the
  * user's disk from a chat box:
- *   --setting-sources  loads no user/project/local settings
- *   --strict-mcp-config loads only Kassiber's ephemeral MCP server
- *   --permission-mode   dontAsk, so nothing escalates by prompting
- *   --disallowed-tools  the file/exec/network tools by name
+ *   --setting-sources ""  loads no user/project/local settings, so no user
+ *                         hooks, plugins or custom agents run
+ *   --tools ""            empties the built-in tool set (file/exec/network)
+ *   --strict-mcp-config   loads only Kassiber's ephemeral MCP server
+ *   --allowedTools        only the `mcp__kassiber__*` names we just advertised
+ *   --permission-mode     dontAsk, so nothing escalates by prompting
  *   --disable-slash-commands removes the remaining skill command surface
  * and the reader below still hard-fails on any non-Kassiber `tool_use` block.
  *

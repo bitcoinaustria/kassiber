@@ -127,9 +127,22 @@ If in doubt, keep inference local.
 
 Codex, Claude, and OpenCode CLI providers are supported for convenience, but
 they are not a local-privacy guarantee. The broker denies provider-native tools
-in layers — Claude runs in safe mode with no hooks, plugins, skills or MCP;
-OpenCode serves with `--pure` and a deny-all session permission; Codex runs a
-read-only sandbox with network access off — and any tool item aborts the turn.
+in layers — Claude loads no user/project/local settings, empties its built-in
+tool set, disables slash commands, and accepts only its temporary Kassiber MCP
+server; OpenCode serves with `--pure` and a deny-all session permission plus
+exact Kassiber MCP allows; Codex runs a read-only sandbox with network access
+off — and any tool outside the advertised Kassiber catalog aborts the turn.
+
+Kassiber's own capability-scoped schemas do cross into these providers, through
+their native typed-tool protocols: Codex `dynamicTools`, and an ephemeral MCP
+server for Claude and OpenCode. Only the schemas and already-redacted results
+traverse that bridge, over a unix socket inside a private 0700 directory; the
+Python daemon stays the authority for capability selection, argument
+validation, consent, execution, and the privacy receipt. Provider-native coding
+tools remain disabled throughout. Because these providers route to their own
+models, that is the point at which accounting data can leave the device —
+choose them deliberately.
+
 Codex exposes no tool-free profile, so a local read there can begin before the
 abort lands; with its network disabled that content can only surface through
 assistant text on a turn Kassiber is already failing. Kassiber reuses their normal local
@@ -217,9 +230,9 @@ No Settings row or API-token entry is required. The broker discovers installed
 executables, reports `ready`, `missing executable`, or `authentication
 required`, and tells the user to run the provider's normal login command
 outside Kassiber when necessary. It uses Codex `app-server`, the Claude
-executable's `--output-format stream-json` event stream, and an ephemeral
-loopback OpenCode server/API. A local Node.js 20+ executable is currently
-required to run the bundled broker.
+executable's `--output-format stream-json` event stream with strict MCP config,
+and the OpenCode SDK v2 against an ephemeral loopback OpenCode server. A local
+Node.js 20+ executable is currently required to run the bundled broker.
 
 Model and reasoning-effort selection are forwarded through each provider's
 native protocol.
@@ -277,14 +290,20 @@ Each broker probe or chat runs from a fresh Kassiber-owned empty temporary
 directory that is removed afterward. Provider subprocesses receive only their
 own authentication/configuration environment plus the shared network/runtime
 minimum; unrelated provider and Kassiber secrets are excluded. Claude gets an
-empty built-in tool set plus an explicit deny callback; OpenCode gets a
-deny-all permission ruleset and disabled tool map; Codex runs
-read-only/untrusted and every app-server tool request is rejected. Any native
-tool lifecycle event aborts the turn. The broker receives no repository,
-database, attachment, wallet, browser, MCP, terminal, or source-control
-capability. Kassiber's typed tools stay daemon-owned; they deliberately fail
-closed as unavailable for these providers until a separately audited typed-tool
-bridge exists.
+empty built-in tool set, no filesystem setting sources, strict MCP config, and
+an explicit deny callback; OpenCode gets a deny-all permission ruleset with
+exact allows for the temporary Kassiber MCP tools; Codex runs read-only and
+untrusted with network access disabled and capability-scoped `dynamicTools`.
+Any tool request outside the advertised Kassiber catalog is rejected and aborts
+the turn. The broker receives no repository, database, attachment, wallet,
+browser, terminal, or source-control capability, and no ability to widen its
+own catalog: it forwards a tool call to the daemon and waits.
+
+The bridge carrying those calls is a unix socket (a named pipe on Windows)
+inside a private 0700 directory removed with the turn. A loopback TCP port
+would be reachable by every local process and would need a shared secret; the
+only place to hand one to the child MCP process is `argv`, which is world-
+readable on Linux. Filesystem permissions replace the secret.
 
 For browser-driven development, the Vite dev server also exposes a loopback-only
 daemon bridge. Run:

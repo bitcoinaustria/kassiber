@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createConnection, createServer, type Server as NetServer } from "node:net";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -11,11 +12,21 @@ import { writeEvent } from "./protocol.js";
 const MAX_BRIDGE_MESSAGE_BYTES = 2_000_000;
 
 type BridgeRequest = {
-  nonce: string;
   call_id: string;
   name: string;
   arguments: Record<string, unknown>;
 };
+
+// A loopback TCP port is reachable by every local process, so it would need a
+// shared secret — and the only place to hand one to the child MCP process is
+// argv, which is world-readable on Linux. The socket lives in a 0700 directory
+// instead, so the operating system enforces the boundary and there is no
+// secret to leak. Windows gets a named pipe with an unguessable name.
+function bridgeSocketPath(directory: string): string {
+  return process.platform === "win32"
+    ? `\\\\.\\pipe\\kassiber-tool-bridge-${randomUUID()}`
+    : join(directory, "bridge.sock");
+}
 
 type PendingTool = {
   resolve: (output: string) => void;
@@ -27,15 +38,16 @@ export class NativeToolBridge {
   private readonly allowedNames: Set<string>;
   private constructor(
     private readonly server: NetServer,
-    readonly port: number,
-    readonly nonce: string,
+    private readonly directory: string,
+    readonly socketPath: string,
     tools: BrokerToolDefinition[],
   ) {
     this.allowedNames = new Set(tools.map((tool) => tool.name));
   }
 
   static async start(tools: BrokerToolDefinition[]): Promise<NativeToolBridge> {
-    const nonce = randomUUID();
+    const directory = await mkdtemp(join(tmpdir(), "kassiber-ai-bridge-"));
+    const socketPath = bridgeSocketPath(directory);
     const server = createServer((socket) => {
       let body = "";
       socket.setEncoding("utf8");
@@ -56,10 +68,6 @@ export class NativeToolBridge {
           socket.destroy();
           return;
         }
-        if (request.nonce !== nonce) {
-          socket.destroy();
-          return;
-        }
         bridge
           .request(request.name, request.arguments, request.call_id)
           .then((output) => socket.end(`${JSON.stringify({ output })}\n`))
@@ -70,14 +78,9 @@ export class NativeToolBridge {
     });
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
-      server.listen(0, "127.0.0.1", resolve);
+      server.listen(socketPath, resolve);
     });
-    const address = server.address();
-    if (!address || typeof address === "string") {
-      server.close();
-      throw new Error("Kassiber tool bridge did not bind a loopback port.");
-    }
-    const bridge = new NativeToolBridge(server, address.port, nonce, tools);
+    const bridge = new NativeToolBridge(server, directory, socketPath, tools);
     return bridge;
   }
 
@@ -113,6 +116,7 @@ export class NativeToolBridge {
     }
     this.pending.clear();
     await new Promise<void>((resolve) => this.server.close(() => resolve()));
+    await rm(this.directory, { recursive: true, force: true });
   }
 }
 
@@ -125,29 +129,21 @@ export async function mcpCommand(
   await writeFile(manifest, JSON.stringify(tools), { mode: 0o600 });
   const script = process.argv[1];
   if (!script) throw new Error("Kassiber broker script path is unavailable.");
-  return [
-    process.execPath,
-    script,
-    "mcp",
-    String(bridge.port),
-    bridge.nonce,
-    manifest,
-  ];
+  return [process.execPath, script, "mcp", bridge.socketPath, manifest];
 }
 
 async function forwardToolCall(
-  port: number,
-  nonce: string,
+  socketPath: string,
   name: string,
   args: Record<string, unknown>,
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
-    const socket = createConnection({ host: "127.0.0.1", port });
+    const socket = createConnection({ path: socketPath });
     let body = "";
     socket.setEncoding("utf8");
     socket.once("connect", () => {
       socket.write(
-        `${JSON.stringify({ nonce, call_id: randomUUID(), name, arguments: args })}\n`,
+        `${JSON.stringify({ call_id: randomUUID(), name, arguments: args })}\n`,
       );
     });
     socket.on("data", (chunk) => {
@@ -178,10 +174,9 @@ async function forwardToolCall(
 }
 
 export async function runMcpServer(args: string[]): Promise<void> {
-  const port = Number(args[0]);
-  const nonce = args[1];
-  const manifest = args[2];
-  if (!Number.isInteger(port) || port < 1 || !nonce || !manifest) {
+  const socketPath = args[0];
+  const manifest = args[1];
+  if (!socketPath || !manifest) {
     throw new Error("Invalid Kassiber MCP bridge arguments.");
   }
   const tools = JSON.parse(await readFile(manifest, "utf8")) as BrokerToolDefinition[];
@@ -206,8 +201,7 @@ export async function runMcpServer(args: string[]): Promise<void> {
           {
             type: "text" as const,
             text: await forwardToolCall(
-              port,
-              nonce,
+              socketPath,
               tool.name,
               toolArgs as Record<string, unknown>,
             ),
