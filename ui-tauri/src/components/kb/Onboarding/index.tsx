@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { Wordmark } from "@/components/kb/Wordmark";
-import { LedgerStageBand } from "@/components/kb/shell/SidebarStageBackdrop";
+import { BlockDeckBand } from "@/components/kb/shell/BlockDeckBackdrop";
 import { dispatchDaemonAuthRequired, useDaemon } from "@/daemon/client";
 import {
   canImportProjects,
@@ -715,21 +715,20 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   };
 
   return (
-    <section className="relative h-full overflow-y-auto bg-paper px-4 py-6 text-ink sm:px-8 lg:px-10">
-      {/* Same ledger page as the app chrome, so setup and the app it sets up
-          look like one product. Fades into `--color-paper` (this screen's
-          surface) rather than the shell's `--card`. */}
-      {/* `fitPages`, like the lock screen: a fixed page count left this band's
-          ruling at 0.73 against the nav's 0.45, so the same paper looked coarser
-          here than anywhere else in the app. */}
-      <LedgerStageBand
-        className="h-[34rem]"
-        fade="var(--color-paper)"
-        fitPages
-      />
+    <section className="relative h-full overflow-hidden bg-paper text-ink">
+      {/* The same unmasked block field as the lock screen: setup and the locked
+          window are the two surfaces you see before there are any books, so they
+          share a backdrop.
+
+          The scroll moved off this section and onto the div below it, which is
+          what lets the field go unmasked. Left on the section, the art scrolls
+          with the steps, and a tall step scrolls its bottom edge into view —
+          which is what the old fade was hiding. Now the art holds still and the
+          fields move over it. */}
+      <BlockDeckBand className="h-full" />
       <div
         className={cn(
-          "relative z-10 mx-auto flex max-w-7xl flex-col items-center gap-8",
+          "relative z-10 mx-auto flex h-full max-w-7xl flex-col items-center gap-8 overflow-y-auto px-4 py-6 sm:px-8 lg:px-10",
           className,
         )}
       >

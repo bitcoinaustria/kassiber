@@ -421,7 +421,8 @@
 }
 
 /*
- * Ledger-paper palette, in the Bitcoin Austria Markenfarben.
+ * Stage-art palette, in the Bitcoin Austria Markenfarben — the paper the block
+ * field is printed on (see BlockDeckBackdrop.tsx).
  *
  * One page for every build — the art does not vary by release channel (the nav
  * footer's version line already says which build this is). Light and dark are
@@ -435,20 +436,38 @@
  *   vanish; going lighter makes it a sheet laid on top. There the header text is
  *   relit to white (`.dark .kb-stage-header-content`).
  *
- * `--stage-glow` is the light falling across the page; `--stage-rule` and
- * `--stage-column` are the ruled writing and column lines; `--stage-ink` is the
- * bookkeeping marks.
+ * `--stage-glow` is the light falling across the page and `--stage-ink` is what
+ * every square is drawn in — the art is greyscale, so these two and the paper
+ * stops are the whole palette.
  */
-.kb-stage-ledger {
+.kb-stage-blocks {
   --stage-paper-top: #f3f1ec;
   --stage-paper-mid: #eae7e0;
   --stage-paper-bottom: #dedad1;
   --stage-glow: #ffffff;
   --stage-glow-peak: 0.42;
   --stage-glow-soft: 0.14;
-  --stage-rule: rgb(34 34 34 / 20%);
-  --stage-column: rgb(34 34 34 / 11%);
   --stage-ink: #222222;
+}
+
+/*
+ * The field drifts, because the chain does — slowly enough to be something you
+ * notice only if you stop and look, which is the right amount for chrome behind
+ * a passphrase prompt. `--kb-deck-w` is the pattern's period, handed in by the
+ * component, so travelling exactly that far and starting over is invisible.
+ *
+ * Motion preference is honoured by the global `prefers-reduced-motion` rule at
+ * the end of this file, which zeroes every animation on the page including this
+ * one; it needs no override of its own.
+ */
+@keyframes kb-stage-drift {
+  to {
+    transform: translateX(calc(var(--kb-deck-w) * -1));
+  }
+}
+
+.kb-stage-blocks-field {
+  animation: kb-stage-drift 300s linear infinite;
 }
 
 /*
@@ -463,15 +482,13 @@
  * lifts those to 5.3:1 and 3.7:1 while keeping the sheet plainly lighter than
  * the near-black nav it is laid on, which is the whole point of the dark page.
  */
-.dark .kb-stage-ledger {
+.dark .kb-stage-blocks {
   --stage-paper-top: #3e3e44;
   --stage-paper-mid: #32323a;
   --stage-paper-bottom: #26262c;
   --stage-glow: #bec2c7;
   --stage-glow-peak: 0.34;
   --stage-glow-soft: 0.11;
-  --stage-rule: rgb(255 255 255 / 24%);
-  --stage-column: rgb(255 255 255 / 13%);
   --stage-ink: #e8e8ea;
 }
 

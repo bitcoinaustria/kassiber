@@ -149,9 +149,9 @@ import {
 } from "@/components/kb/settingsSections";
 import { ShellSearch } from "@/components/kb/shell/ShellSearch";
 import {
-  LedgerStageBand,
+  BlockDeckBand,
   SidebarStageBackdrop,
-} from "@/components/kb/shell/SidebarStageBackdrop";
+} from "@/components/kb/shell/BlockDeckBackdrop";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantScreenContext } from "@/components/ai/assistantSession";
 import { assistantScreenContextFor } from "@/components/ai/assistantScreenContext";
@@ -3481,18 +3481,16 @@ function LockScreen({
   return (
     <div className="fixed inset-x-0 top-[var(--kb-window-top-inset)] bottom-0 z-50 flex items-center justify-center overflow-hidden bg-background px-4 text-foreground">
       {/*
-       * The nav's ledger page, run across the lock screen: the same stock the
-       * chrome is made of, so a locked window still looks like the app rather
-       * than a bare dialog on a flat field. It fades into `--background`
-       * because that is what this overlay paints.
+       * Blocks of confirmed transactions, run across the whole lock screen, so a
+       * locked window looks like the app rather than a dialog on a flat field.
        *
-       * Full height with `fitPages`, so the card can sit centred — where a lock
-       * prompt belongs — and still have art behind it for its frost to blur.
-       * `fitPages` is what makes that safe: it derives the page count from the
-       * measured height, holding the ruling at one scale instead of letting it
-       * coarsen with window height.
+       * Full height and unmasked: the field is this screen's backdrop and has
+       * nothing to dissolve into, unlike the nav's accent strip. That also puts
+       * art behind the centred card — where a lock prompt belongs — for its
+       * frost to blur. The band measures itself, which is what keeps the block
+       * size put instead of magnifying with window height.
        */}
-      <LedgerStageBand className="h-full" fade="var(--background)" fitPages />
+      <BlockDeckBand className="h-full" />
       <form
         className="kb-glass-dialog relative z-10 w-full max-w-md rounded-lg border p-5 text-card-foreground"
         onSubmit={(event) => {
