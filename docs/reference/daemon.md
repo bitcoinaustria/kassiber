@@ -166,6 +166,13 @@ will pass through. Reveal kinds (see below) are included in the list but still
 require their own passphrase round-trip before the daemon returns raw secret
 material.
 
+`ai.chat` takes an optional `tool_profile` of `core`, `scoped`, or `full`,
+controlling how much of the typed catalog is advertised for the turn. **A
+request that omits the field gets `scoped`**, which selects capability packs
+from the question and screen context. `full` advertises all 113 schemas and
+skips that scoping; it costs roughly 20k tokens per turn and should be an
+explicit choice, not a default.
+
 The `ui.sync.*` family backs Settings → Device sync and is never registered as
 an AI tool. It operates only on the active encrypted profile. Mailbox push/pull
 can emit unsolicited `ui.sync.progress` records through

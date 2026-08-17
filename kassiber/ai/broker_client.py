@@ -1,4 +1,4 @@
-"""Supervise the bundled chat-only Node provider broker."""
+"""Supervise the bundled Node provider broker."""
 
 from __future__ import annotations
 

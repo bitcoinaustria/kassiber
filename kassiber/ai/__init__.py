@@ -11,7 +11,7 @@ Provider configuration and execution are split by responsibility:
 - `kassiber.ai.client` — OpenAI Responses-compatible HTTP transport and the
   provider-client factory. HTTP providers speak `/v1/models` and
   `/v1/responses`.
-- `kassiber.ai.broker_client` — supervisor for the bundled chat-only
+- `kassiber.ai.broker_client` — supervisor for the bundled
   Codex/Claude/OpenCode Node broker. CLI locators are treated as off-device
   unless explicitly acknowledged.
 - `kassiber.ai.contracts` / `kassiber.ai.model_metadata` — small shared client

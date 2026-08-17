@@ -17,7 +17,7 @@ Two surfaces ship today:
   [bitcoinaustria/kassiber-skill](https://github.com/bitcoinaustria/kassiber-skill) for AI
   coding and terminal assistants.
 - An **in-app assistant** in the desktop UI that streams chat from an
-  OpenAI Responses-compatible endpoint or the chat-only Codex, Claude, and
+  OpenAI Responses-compatible endpoint or the Codex, Claude, and
   OpenCode provider broker, plus a
   parallel CLI surface (`kassiber chat`, `kassiber ai providers …`,
   `kassiber ai models`) that reuses the same provider config.
@@ -84,7 +84,7 @@ The implementation keeps those invariants in one request builder. Prepared
 tool-loop context is an explicit typed input and cannot be combined with the
 legacy message input accidentally. HTTP transport remains in
 `kassiber.ai.client`. Fixed external CLI locators route through the bundled
-chat-only Node/TypeScript broker in `ui-tauri/provider-broker`; Python
+Node/TypeScript broker in `ui-tauri/provider-broker`; Python
 supervises that JSONL process through `kassiber.ai.broker_client`. Shared
 delta/request contracts remain isolated in `kassiber.ai.contracts`.
 
@@ -290,20 +290,35 @@ Each broker probe or chat runs from a fresh Kassiber-owned empty temporary
 directory that is removed afterward. Provider subprocesses receive only their
 own authentication/configuration environment plus the shared network/runtime
 minimum; unrelated provider and Kassiber secrets are excluded. Claude gets an
-empty built-in tool set, no filesystem setting sources, strict MCP config, and
-an explicit deny callback; OpenCode gets a deny-all permission ruleset with
-exact allows for the temporary Kassiber MCP tools; Codex runs read-only and
-untrusted with network access disabled and capability-scoped `dynamicTools`.
-Any tool request outside the advertised Kassiber catalog is rejected and aborts
-the turn. The broker receives no repository, database, attachment, wallet,
+empty built-in tool set, no filesystem setting sources, the file/exec/network
+tools named in `--disallowed-tools`, strict MCP config, and an allow-list of
+only the advertised `mcp__kassiber__*` names; OpenCode gets a deny-all
+permission ruleset with exact allows for the temporary Kassiber MCP tools;
+Codex runs read-only and untrusted with network access disabled and
+capability-scoped `dynamicTools`. A tool request outside the advertised
+Kassiber catalog aborts the turn for Claude and OpenCode; Codex returns a
+failed tool result instead, so its turn continues without the tool. The broker receives no repository, database, attachment, wallet,
 browser, terminal, or source-control capability, and no ability to widen its
 own catalog: it forwards a tool call to the daemon and waits.
 
-The bridge carrying those calls is a unix socket (a named pipe on Windows)
-inside a private 0700 directory removed with the turn. A loopback TCP port
-would be reachable by every local process and would need a shared secret; the
-only place to hand one to the child MCP process is `argv`, which is world-
-readable on Linux. Filesystem permissions replace the secret.
+Claude and OpenCode reach Kassiber through a child MCP process, and the bridge
+carrying its calls is a unix socket inside a private 0700 directory removed
+with the turn. A loopback TCP port would be reachable by every local process
+and would need a shared secret; the only place to hand one to the child is
+`argv`, which is world-readable on Linux, so filesystem permissions replace the
+secret. Codex needs no child process — its adapter answers `item/tool/call`
+in-process and never touches the socket. On Windows the bridge is a named pipe
+with an unguessable name in the global pipe namespace rather than a file in the
+private directory, so it is protected by the default per-logon pipe security
+descriptor, not by directory permissions. In every case the boundary is other
+operating-system accounts; a process already running as the desktop user can
+reach Kassiber's data by many other routes and is not defended against here.
+
+Tool results that reach these providers also land in their own session stores —
+Codex threads, Claude sessions, OpenCode sessions — which Kassiber neither
+encrypts nor prunes. Resuming a chat depends on those stores, so the accounting
+context of a tool-enabled turn persists outside SQLCipher until the provider's
+own retention removes it. Local providers avoid this entirely.
 
 For browser-driven development, the Vite dev server also exposes a loopback-only
 daemon bridge. Run:
@@ -347,10 +362,12 @@ were auto-refreshed — the same provenance the desktop Assistant records.
 
 CLI chat defaults to `--tool-profile core`, a reduced schema for small local
 models that covers common accounting, wallet, transaction, report, journal,
-rate, readiness, and read-only swap-review workflows. Use
-`--tool-profile full` when the model needs the specialist catalog, such as
-source-of-funds editing, Lightning node snapshots, saved views, or advanced
-swap mutations.
+rate, readiness, and read-only swap-review workflows. `--tool-profile scoped`
+keeps that per-question scoping but also reaches the specialist catalog behind
+the question — source-of-funds editing, Lightning node snapshots, saved views,
+advanced swap mutations — and is what the daemon uses when a caller omits the
+field. Use `--tool-profile full` to advertise every schema regardless of the
+question; it is the largest prompt and skips scoping entirely.
 
 Use `--timeout SECONDS` for harnesses or local models that need a shorter or
 longer wait. It caps daemon startup and provider stream inactivity (default

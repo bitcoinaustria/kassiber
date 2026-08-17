@@ -77,7 +77,7 @@ DEFAULT_BOOTSTRAP_PROVIDERS = (
         "api_key": None,
         "default_model": "default",
         "kind": "remote",
-        "notes": "Chat-only broker using the installed Codex app-server and existing login.",
+        "notes": "Broker using the installed Codex app-server and existing login. Kassiber's typed tools are available; native coding tools are not.",
     },
     {
         "name": "claude",
@@ -86,7 +86,7 @@ DEFAULT_BOOTSTRAP_PROVIDERS = (
         "api_key": None,
         "default_model": "default",
         "kind": "remote",
-        "notes": "Chat-only broker using the installed Claude CLI and existing login.",
+        "notes": "Broker using the installed Claude CLI and existing login. Kassiber's typed tools are available; native coding tools are not.",
     },
     {
         "name": "opencode",
@@ -95,7 +95,7 @@ DEFAULT_BOOTSTRAP_PROVIDERS = (
         "api_key": None,
         "default_model": None,
         "kind": "remote",
-        "notes": "Chat-only broker using the installed OpenCode server and existing configuration.",
+        "notes": "Broker using the installed OpenCode server and existing configuration. Kassiber's typed tools are available; native coding tools are not.",
     },
 )
 AI_PROVIDER_SAFE_OUTPUT_FIELDS = (

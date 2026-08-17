@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 from contextlib import nullcontext
 from types import SimpleNamespace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -12745,3 +12746,114 @@ class ErrorEnvelopeRedactionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AiChatToolLoopProviderSessionTest(unittest.TestCase):
+    """Native provider sessions must survive the tool loop.
+
+    CLI-locator providers only started reaching this loop once tool support
+    stopped following the transport, and the loop returns before the non-tool
+    path's session bookkeeping. Without this the Codex/Claude/OpenCode cursor is
+    never stored, so every tool-enabled turn opens a fresh native thread and
+    loses the prior tool results.
+    """
+
+    _MESSAGES = [{"role": "user", "content": "What is my balance?"}]
+    _REPLY = "Your balance is in the report."
+
+    def _validated(self):
+        return {
+            "messages": list(self._MESSAGES),
+            "model": "default",
+            "options": {},
+            "session_id": "chat-1",
+            "system_prompt_kind": "kassiber",
+            "system_prompt": None,
+            "tools_enabled": True,
+            "tool_profile": "scoped",
+            "tool_loop_max_iterations": 2,
+            "screen_context": None,
+            "attachment": None,
+        }
+
+    def _run(self, active_ai_chats, client, seen_options):
+        def fake_turn(_request_id, _client, validated, _context, _tools, _out, _cancel):
+            seen_options.append(dict(validated["options"]))
+            return daemon_module.AiToolTurnResult(
+                tool_calls=[],
+                content=self._REPLY,
+                reasoning="",
+                finish_reason="stop",
+                response_output=[],
+            )
+
+        runtime = daemon_module.AiToolRuntime(
+            data_root="/tmp/kassiber-session-test",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={},
+        )
+        _key, active_chat = active_ai_chats.register("req-1")
+        with patch.object(
+            daemon_module, "_stream_ai_chat_tool_turn", fake_turn
+        ), patch.object(
+            daemon_module, "_run_auto_read_tools", lambda **_kwargs: None
+        ), patch.object(
+            daemon_module, "_write_ai_chat_terminal", lambda *a, **k: None
+        ):
+            daemon_module._run_ai_chat_tool_loop(
+                "req-1",
+                client,
+                {"name": "codex", "base_url": "codex-cli://default"},
+                self._validated(),
+                daemon_module._OutputChannel(io.StringIO()),
+                active_chat,
+                runtime,
+                active_ai_chats,
+            )
+
+    def test_tool_loop_stores_the_native_cursor(self):
+        active_ai_chats = daemon_module.ActiveAiChats()
+        seen_options = []
+
+        self._run(
+            active_ai_chats,
+            SimpleNamespace(last_provider_session_id="kdt-abc:thread-1"),
+            seen_options,
+        )
+
+        self.assertIsNone(seen_options[-1].get("provider_session_id"))
+        self.assertEqual(
+            active_ai_chats.provider_session(
+                chat_session_id="chat-1",
+                provider_name="codex",
+                history_fingerprint=(
+                    daemon_module._provider_session_history_fingerprint(
+                        [*self._MESSAGES, {"role": "assistant", "content": self._REPLY}]
+                    )
+                ),
+            ),
+            "kdt-abc:thread-1",
+        )
+
+    def test_tool_loop_resumes_a_stored_native_cursor(self):
+        active_ai_chats = daemon_module.ActiveAiChats()
+        active_ai_chats.remember_provider_session(
+            chat_session_id="chat-1",
+            provider_name="codex",
+            provider_session_id="kdt-abc:thread-1",
+            history_fingerprint=daemon_module._provider_session_history_fingerprint(
+                self._MESSAGES
+            ),
+        )
+        seen_options = []
+
+        self._run(
+            active_ai_chats,
+            SimpleNamespace(last_provider_session_id="kdt-abc:thread-1"),
+            seen_options,
+        )
+
+        self.assertEqual(
+            seen_options[-1].get("provider_session_id"), "kdt-abc:thread-1"
+        )
