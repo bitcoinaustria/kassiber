@@ -12,10 +12,11 @@ import {
 } from "./executables.js";
 import {
   DENY_ALL,
-  DISABLED_TOOLS,
   isLoopbackEndpoint,
   parseOpenCodeModels,
+  permissionsFor,
 } from "./opencode.js";
+import { NativeToolBridge } from "./native-tools.js";
 import { promptFromMessages } from "./prompt.js";
 import {
   providerStatus,
@@ -108,7 +109,7 @@ describe("provider broker safety boundary", () => {
     await expect(access(second)).rejects.toThrow();
   });
 
-  it("removes native tools for Claude and denies every OpenCode permission", () => {
+  it("removes native tools and grants OpenCode only the advertised Kassiber tool", () => {
     expect(CODEX_NON_TOOL_ITEM_TYPES.has("userMessage")).toBe(true);
     expect(CODEX_NON_TOOL_ITEM_TYPES.has("commandExecution")).toBe(false);
     expect(CODEX_NON_TOOL_ITEM_TYPES.has("fileChange")).toBe(false);
@@ -117,7 +118,25 @@ describe("provider broker safety boundary", () => {
     expect(DENY_ALL).toEqual([
       { permission: "*", pattern: "*", action: "deny" },
     ]);
-    expect(Object.values(DISABLED_TOOLS).every((enabled) => enabled === false)).toBe(true);
+    expect(
+      permissionsFor({
+        command: "chat",
+        request_id: "test",
+        provider: "opencode",
+        model: "provider/model",
+        messages: [],
+        tools: [
+          { name: "ui_reports_summary", description: "Summary", parameters: {} },
+        ],
+      }),
+    ).toEqual([
+      { permission: "*", pattern: "*", action: "deny" },
+      {
+        permission: "kassiber_ui_reports_summary",
+        pattern: "*",
+        action: "allow",
+      },
+    ]);
   });
 
   it("sends only the latest user message when resuming a native session", () => {
@@ -254,5 +273,58 @@ describe("provider broker safety boundary", () => {
       "openrouter/anthropic/claude-x",
     ]);
     expect(models[0]?.source_provider).toBe("openrouter");
+  });
+});
+
+describe("native tool bridge", () => {
+  const TOOLS = [
+    { name: "ui_reports_summary", description: "Read the summary", parameters: {} },
+  ];
+
+  async function ask(socketPath: string, name: string): Promise<string> {
+    const { createConnection } = await import("node:net");
+    return new Promise<string>((resolve, reject) => {
+      const socket = createConnection({ path: socketPath });
+      let body = "";
+      socket.setEncoding("utf8");
+      socket.once("connect", () => {
+        socket.write(`${JSON.stringify({ call_id: "call-1", name, arguments: {} })}\n`);
+      });
+      socket.on("data", (chunk) => {
+        body += chunk;
+        if (!body.includes("\n")) return;
+        resolve(body.slice(0, body.indexOf("\n")));
+        socket.destroy();
+      });
+      socket.once("error", reject);
+    });
+  }
+
+  it("round-trips an advertised call over a private socket and cleans up", async () => {
+    const bridge = await NativeToolBridge.start(TOOLS);
+    // No TCP port and no shared secret: the socket path is the whole boundary.
+    expect(bridge.socketPath).not.toMatch(/^\d+$/);
+
+    const reply = ask(bridge.socketPath, "ui_reports_summary");
+    // The daemon answers out of band, exactly as the broker's stdin loop does.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    bridge.resolve([{ call_id: "call-1", output: '{"ok":true}' }]);
+    expect(JSON.parse(await reply)).toEqual({ output: '{"ok":true}' });
+
+    await bridge.close();
+    if (process.platform !== "win32") {
+      await expect(access(bridge.socketPath)).rejects.toThrow();
+    }
+  });
+
+  it("refuses a tool outside the advertised catalog", async () => {
+    const bridge = await NativeToolBridge.start(TOOLS);
+    try {
+      const reply = JSON.parse(await ask(bridge.socketPath, "ui_wallets_sync"));
+      expect(reply.output).toBeUndefined();
+      expect(String(reply.error)).toContain("outside the advertised catalog");
+    } finally {
+      await bridge.close();
+    }
   });
 });

@@ -54,8 +54,10 @@ tools for the chat session. `--machine` emits a single final `chat` envelope;
 `--stream-json` emits the raw daemon stream records as NDJSON (both one-shot
 only); `chat -` reads the one-shot prompt from stdin. CLI chat defaults to
 `--tool-profile core`, which keeps common accounting/report/readiness tools
-small for local models; use `--tool-profile full` for specialist source-funds,
-Lightning, saved-view, or advanced swap flows. `--timeout SECONDS` caps daemon
+small for local models; `--tool-profile scoped` also reaches the specialist
+tools behind the question (source-funds, Lightning, saved views, advanced
+swaps), and `--tool-profile full` advertises the whole catalog regardless of
+the question. `scoped` is the daemon default when the field is omitted. `--timeout SECONDS` caps daemon
 startup and provider stream inactivity without adding the value to prompts,
 tool output, or transcripts. Neither machine mode ever prompts for consent;
 unapproved mutating tool requests are denied and fed back to the model. On a

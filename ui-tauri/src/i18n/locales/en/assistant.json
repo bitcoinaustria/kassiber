@@ -304,8 +304,8 @@
     "privacyFilter": "Model privacy filter",
     "allModels": "All",
     "localModels": "Local",
-    "remoteConfirm": "Use {{provider}} for chat? It reuses the provider's existing local CLI login/configuration, but prompts may leave this device. Provider-native tools and Kassiber typed tools are unavailable for this provider.",
+    "remoteConfirm": "Use {{provider}} for chat? It reuses the provider's existing local CLI login/configuration, but prompts and selected Kassiber data may leave this device. Kassiber's typed tools stay capability-scoped; mutations and network access require consent. Provider-native coding tools are disabled.",
     "remoteDiscoveryConfirm": "Check models from {{provider}}? This contacts the provider now.",
-    "cliChatOnly": "Local CLI broker · chat only · native tools disabled"
+    "cliChatOnly": "Local CLI broker · Kassiber tools available · native coding tools disabled"
   }
 }

@@ -1113,11 +1113,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     chat.add_argument(
         "--tool-profile",
-        choices=("core", "full"),
+        choices=("core", "scoped", "full"),
         default="core",
         help=(
             "Tool schema to expose to the model: core keeps common accounting "
-            "tools small for local models; full exposes the complete specialist catalog."
+            "tools small for local models; scoped adds the specialist tools "
+            "behind the current question; full exposes the complete catalog."
         ),
     )
     chat.add_argument(

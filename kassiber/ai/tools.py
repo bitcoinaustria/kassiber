@@ -95,7 +95,7 @@ SKILL_REFERENCE_NAMES = (
     "wallets-backends",
 )
 
-TOOL_PROFILE_NAMES = ("core", "full")
+TOOL_PROFILE_NAMES = ("core", "scoped", "full")
 
 # Kept in step with core.file_analysis.MAX_SAMPLE_ROWS without importing it here
 # (kassiber.ai must not depend on kassiber.core); the daemon clamps regardless.
@@ -3339,7 +3339,7 @@ def select_tool_capabilities(
             "gesamtvermögen", "gesamtvermoegen",
         ),
         "transactions": ("transaction", "txid", "note", "tag", "metadata", "evidence", "attachment", "quarantine", "edit"),
-        "reports": ("report", "summary", "total", "journal", "tax", "gain", "balance", "portfolio", "price", "rate", "export", "steuer", "e1kv", "exit tax"),
+        "reports": ("report", "summary", "total", "journal", "tax", "gain", "balance", "portfolio", "price", "rate", "export", "steuer", "e1kv", "exit tax", "lightning", "routing", "profitable", "profitability"),
         "wallets": (
             "wallet", "backend", "sync", "source", "utxo", "connection",
             # Onboarding an unlisted exchange from a file: the attachment
@@ -3347,6 +3347,9 @@ def select_tool_capabilities(
             # asks before attaching should still reach the tool.
             "csv", "xlsx", "export", "import", "spreadsheet", "exchange",
             "broker", "datei", "tabelle", "börse", "boerse",
+            # A node question is a connection question; without these the node
+            # snapshot is only offered when the user says "connection".
+            "node", "channel",
         ),
         "loans": ("loan", "collateral", "borrowed", "principal", "liquidation", "darlehen", "kredit"),
         "privacy": ("privacy", "linkable", "egress", "outbound", "psbt"),
@@ -3366,6 +3369,8 @@ def select_tool_capabilities(
             "wallet roll",
             "samourai",
             "basis continuity",
+            # Saved views live in this pack, so they need its keywords too.
+            "saved view", "saved views", "saved filter", "gespeicherte ansicht",
         ),
         "operations": ("health", "pending", "next", "ready", "stale", "maintenance", "diagnose", "broken", "failed", "review", "worklist", "unresolved", "to do", "todo"),
     }

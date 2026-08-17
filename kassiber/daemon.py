@@ -69,7 +69,6 @@ from .ai.providers import (
     acknowledge_remote_use,
     ai_provider_secret_ref_namespace,
     get_default_ai_provider_name,
-    is_cli_provider_locator,
     list_db_ai_providers,
     list_with_default as list_ai_providers_with_default,
     normalize_base_url,
@@ -4647,10 +4646,13 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             "ai.chat tools_enabled must be a boolean",
             code="validation",
         )
-    tool_profile = args.get("tool_profile", "full")
+    # `full` is 113 schemas / ~20k tokens on every turn and skips capability
+    # scoping entirely. It stays available, but a caller that omits the field
+    # — the desktop Assistant did — must not silently get it.
+    tool_profile = args.get("tool_profile", "scoped")
     if not isinstance(tool_profile, str) or tool_profile not in TOOL_PROFILE_NAMES:
         raise AppError(
-            "ai.chat tool_profile must be core or full",
+            "ai.chat tool_profile must be core, scoped, or full",
             code="validation",
             details={
                 "tool_profile": tool_profile,
@@ -7872,15 +7874,6 @@ def _write_ai_chat_status(
     )
 
 
-def _effective_ai_chat_tools_enabled(
-    provider_snapshot: dict[str, Any],
-    validated: dict[str, Any],
-) -> bool:
-    if not validated["tools_enabled"]:
-        return False
-    return not is_cli_provider_locator(provider_snapshot.get("base_url"))
-
-
 def _effective_ai_chat_system_prompt_kind(
     validated: dict[str, Any],
     *,
@@ -8224,8 +8217,28 @@ def _run_ai_chat_tool_loop(
     out: _OutputChannel,
     active_chat: ActiveAiChat,
     runtime: AiToolRuntime,
+    active_ai_chats: ActiveAiChats,
 ) -> None:
     cancel_event = active_chat.cancel_event
+    # Native provider sessions are carried by the same cursor the non-tool path
+    # uses. The broker already fingerprints its cursor with the advertised tool
+    # set, so a turn whose catalog changed starts a fresh native thread instead
+    # of resuming one that never saw these schemas.
+    resumed_provider_session = active_ai_chats.provider_session(
+        chat_session_id=validated["session_id"],
+        provider_name=provider_snapshot["name"],
+        history_fingerprint=_provider_session_history_fingerprint(
+            validated["messages"]
+        ),
+    )
+    if resumed_provider_session:
+        validated = {
+            **validated,
+            "options": {
+                **validated["options"],
+                "provider_session_id": resumed_provider_session,
+            },
+        }
     messages = build_chat_messages(
         validated["messages"],
         system_prompt_kind=validated["system_prompt_kind"],
@@ -8266,6 +8279,23 @@ def _run_ai_chat_tool_loop(
         screen_context=screen_context if isinstance(screen_context, dict) else None,
         profile=validated["tool_profile"],
     )
+    # The capability packs and the auto-read planner answer "what is this question
+    # about?" from different angles, and the planner is the more specific one, so a
+    # narrow profile must not silently drop the local context a question plainly
+    # needs. Add the schema, not just the name: `advertised_tools` is both the
+    # daemon's authorization set and the privacy receipt's count, so a name that
+    # was never offered to the model would authorize a call the model never saw
+    # and over-report what the turn exposed.
+    offered = {
+        function["name"]
+        for function in tools
+        if isinstance(function, dict) and isinstance(function.get("name"), str)
+    }
+    for planned_call in _planned_auto_read_tools(validated):
+        entry = get_tool(planned_call.name)
+        if entry is not None and entry.provider_name not in offered:
+            offered.add(entry.provider_name)
+            tools.append(entry.to_responses_tool())
     runtime.maintenance_state["advertised_tools"] = [
         function["name"]
         for function in tools
@@ -8526,6 +8556,18 @@ def _run_ai_chat_tool_loop(
 
     if cancel_event.is_set():
         finish_reason = "cancelled"
+    if finish_reason != "cancelled":
+        active_ai_chats.remember_provider_session(
+            chat_session_id=validated["session_id"],
+            provider_name=provider_snapshot["name"],
+            provider_session_id=getattr(client, "last_provider_session_id", None),
+            history_fingerprint=_provider_session_history_fingerprint(
+                [
+                    *validated["messages"],
+                    {"role": "assistant", "content": content or ""},
+                ]
+            ),
+        )
     _write_ai_chat_terminal(
         out,
         request_id,
@@ -8574,10 +8616,10 @@ def _run_ai_chat_stream(
                 phase="connecting",
                 label="Connecting",
             )
-            effective_tools_enabled = _effective_ai_chat_tools_enabled(
-                provider_snapshot,
-                validated,
-            )
+            # Tool support follows the request, not the transport. CLI-locator
+            # providers reach the same daemon-owned tool loop through the
+            # broker's native typed-tool bridge.
+            effective_tools_enabled = bool(validated["tools_enabled"])
             effective_system_prompt_kind = _effective_ai_chat_system_prompt_kind(
                 validated,
                 tools_enabled=effective_tools_enabled,
@@ -8591,6 +8633,7 @@ def _run_ai_chat_stream(
                     out,
                     active_chat,
                     runtime,
+                    active_ai_chats,
                 )
                 return
             stream_messages = build_chat_messages(

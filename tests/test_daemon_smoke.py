@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 from contextlib import nullcontext
 from types import SimpleNamespace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,13 +28,13 @@ from kassiber.daemon import (
     _execute_mutating_ai_tool,
     _execute_read_only_ai_tool,
     _effective_ai_chat_system_prompt_kind,
-    _effective_ai_chat_tools_enabled,
     _planned_auto_read_tools,
     _reports_tax_summary_payload,
     _validate_ai_custody_conversion_boundary,
 )
 from kassiber import daemon as daemon_module
 from kassiber.ai import tools as ai_tools
+from kassiber.ai.prompt import build_responses_tools
 from kassiber.ai.providers import ai_provider_secret_service_id
 from kassiber.core import attachments as core_attachments
 from kassiber.core import commercial as core_commercial
@@ -6115,6 +6116,34 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(decision, "allow_once")
             self.assertFalse(consent.has_session_allow(tool_name))
 
+    def test_ai_chat_omitted_tool_profile_is_scoped_not_full(self):
+        # The desktop Assistant never sent `tool_profile`, so it silently got
+        # `full`: 113 schemas and ~20k tokens on every turn, with capability
+        # scoping skipped entirely. Local models could not work under that.
+        base = {
+            "model": "local-model",
+            "messages": [{"role": "user", "content": "What is my balance?"}],
+            "tools_enabled": True,
+        }
+
+        self.assertEqual(_ai_chat_args(base)["tool_profile"], "scoped")
+        self.assertEqual(
+            _ai_chat_args({**base, "tool_profile": "full"})["tool_profile"],
+            "full",
+        )
+
+        scoped = build_responses_tools(
+            base["messages"],
+            screen_context={"route": "/"},
+            profile="scoped",
+        )
+        full = build_responses_tools(
+            base["messages"],
+            screen_context={"route": "/"},
+            profile="full",
+        )
+        self.assertLess(len(scoped), len(full) // 2)
+
     def test_ai_chat_accepts_typed_screen_context_and_rejects_sensitive_filters(self):
         base = {
             "model": "local-model",
@@ -10849,39 +10878,30 @@ class DaemonSmokeTest(unittest.TestCase):
             ],
         )
 
-    def test_ai_chat_cli_provider_auto_disables_tool_loop(self):
+    def test_ai_chat_keeps_kassiber_prompt_when_tools_are_enabled(self):
+        # CLI-locator providers used to lose both the tool loop and the product
+        # prompt here; they now reach the same daemon-owned loop through the
+        # broker's typed-tool bridge.
         validated = {
             "tools_enabled": True,
             "system_prompt_kind": "kassiber",
         }
-        provider_snapshot = {"base_url": "codex-cli://default"}
 
-        effective_tools = _effective_ai_chat_tools_enabled(provider_snapshot, validated)
-
-        self.assertFalse(effective_tools)
-        self.assertIsNone(
-            _effective_ai_chat_system_prompt_kind(
-                validated,
-                tools_enabled=effective_tools,
-            )
+        self.assertEqual(
+            _effective_ai_chat_system_prompt_kind(validated, tools_enabled=True),
+            "kassiber",
         )
 
-    def test_ai_chat_http_provider_keeps_tool_loop(self):
+    def test_ai_chat_drops_kassiber_prompt_without_tools(self):
+        # The Kassiber prompt describes tools, so serving it tool-less misleads
+        # the model about what it can do.
         validated = {
-            "tools_enabled": True,
+            "tools_enabled": False,
             "system_prompt_kind": "kassiber",
         }
-        provider_snapshot = {"base_url": "http://127.0.0.1:11434/v1"}
 
-        effective_tools = _effective_ai_chat_tools_enabled(provider_snapshot, validated)
-
-        self.assertTrue(effective_tools)
-        self.assertEqual(
-            _effective_ai_chat_system_prompt_kind(
-                validated,
-                tools_enabled=effective_tools,
-            ),
-            "kassiber",
+        self.assertIsNone(
+            _effective_ai_chat_system_prompt_kind(validated, tools_enabled=False)
         )
 
     def test_ai_chat_cancel_cooperatively_finishes_cancelled(self):
@@ -12726,3 +12746,114 @@ class ErrorEnvelopeRedactionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AiChatToolLoopProviderSessionTest(unittest.TestCase):
+    """Native provider sessions must survive the tool loop.
+
+    CLI-locator providers only started reaching this loop once tool support
+    stopped following the transport, and the loop returns before the non-tool
+    path's session bookkeeping. Without this the Codex/Claude/OpenCode cursor is
+    never stored, so every tool-enabled turn opens a fresh native thread and
+    loses the prior tool results.
+    """
+
+    _MESSAGES = [{"role": "user", "content": "What is my balance?"}]
+    _REPLY = "Your balance is in the report."
+
+    def _validated(self):
+        return {
+            "messages": list(self._MESSAGES),
+            "model": "default",
+            "options": {},
+            "session_id": "chat-1",
+            "system_prompt_kind": "kassiber",
+            "system_prompt": None,
+            "tools_enabled": True,
+            "tool_profile": "scoped",
+            "tool_loop_max_iterations": 2,
+            "screen_context": None,
+            "attachment": None,
+        }
+
+    def _run(self, active_ai_chats, client, seen_options):
+        def fake_turn(_request_id, _client, validated, _context, _tools, _out, _cancel):
+            seen_options.append(dict(validated["options"]))
+            return daemon_module.AiToolTurnResult(
+                tool_calls=[],
+                content=self._REPLY,
+                reasoning="",
+                finish_reason="stop",
+                response_output=[],
+            )
+
+        runtime = daemon_module.AiToolRuntime(
+            data_root="/tmp/kassiber-session-test",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={},
+        )
+        _key, active_chat = active_ai_chats.register("req-1")
+        with patch.object(
+            daemon_module, "_stream_ai_chat_tool_turn", fake_turn
+        ), patch.object(
+            daemon_module, "_run_auto_read_tools", lambda **_kwargs: None
+        ), patch.object(
+            daemon_module, "_write_ai_chat_terminal", lambda *a, **k: None
+        ):
+            daemon_module._run_ai_chat_tool_loop(
+                "req-1",
+                client,
+                {"name": "codex", "base_url": "codex-cli://default"},
+                self._validated(),
+                daemon_module._OutputChannel(io.StringIO()),
+                active_chat,
+                runtime,
+                active_ai_chats,
+            )
+
+    def test_tool_loop_stores_the_native_cursor(self):
+        active_ai_chats = daemon_module.ActiveAiChats()
+        seen_options = []
+
+        self._run(
+            active_ai_chats,
+            SimpleNamespace(last_provider_session_id="kdt-abc:thread-1"),
+            seen_options,
+        )
+
+        self.assertIsNone(seen_options[-1].get("provider_session_id"))
+        self.assertEqual(
+            active_ai_chats.provider_session(
+                chat_session_id="chat-1",
+                provider_name="codex",
+                history_fingerprint=(
+                    daemon_module._provider_session_history_fingerprint(
+                        [*self._MESSAGES, {"role": "assistant", "content": self._REPLY}]
+                    )
+                ),
+            ),
+            "kdt-abc:thread-1",
+        )
+
+    def test_tool_loop_resumes_a_stored_native_cursor(self):
+        active_ai_chats = daemon_module.ActiveAiChats()
+        active_ai_chats.remember_provider_session(
+            chat_session_id="chat-1",
+            provider_name="codex",
+            provider_session_id="kdt-abc:thread-1",
+            history_fingerprint=daemon_module._provider_session_history_fingerprint(
+                self._MESSAGES
+            ),
+        )
+        seen_options = []
+
+        self._run(
+            active_ai_chats,
+            SimpleNamespace(last_provider_session_id="kdt-abc:thread-1"),
+            seen_options,
+        )
+
+        self.assertEqual(
+            seen_options[-1].get("provider_session_id"), "kdt-abc:thread-1"
+        )
