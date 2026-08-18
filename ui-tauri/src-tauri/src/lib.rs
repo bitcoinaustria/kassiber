@@ -1862,8 +1862,10 @@ fn migrated_legacy_touch_id_account_for_platform(
 ) -> Option<PathBuf> {
     let native =
         native_state_root_for_platform(platform, Some(home), xdg_data_home, local_app_data)?;
-    let selected = fs::canonicalize(selected).unwrap_or_else(|_| selected.to_path_buf());
-    let native = fs::canonicalize(&native).unwrap_or(native);
+    let (selected, native) = match (fs::canonicalize(selected), fs::canonicalize(&native)) {
+        (Ok(selected), Ok(native)) => (selected, native),
+        _ => (selected.to_path_buf(), native),
+    };
     let relative = selected.strip_prefix(&native).ok()?;
     let mut components = relative.components();
     if components.next()?.as_os_str() != DEFAULT_PROJECTS_DIR
