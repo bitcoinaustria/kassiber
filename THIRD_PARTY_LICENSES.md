@@ -44,6 +44,7 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `@modelcontextprotocol/sdk` | `^1.30.0` | Ephemeral local MCP server that carries Kassiber's typed tool schemas into the Claude and OpenCode CLIs | MIT |
 | `zod` | `4.4.3` (exact) | JSON-Schema-to-validator conversion for the tool schemas that MCP server advertises | MIT |
 | `fs2` | `0.4.3` | Cross-platform exclusive advisory lock for update-check consent and in-flight GitHub requests | MIT OR Apache-2.0 |
+| `dirs` | `6.0.0` | Resolves an absolute per-user home directory before the Tauri app handle exists | MIT OR Apache-2.0 |
 | `keyring-core` | `1.0.0` | Rust trait layer for desktop AI-provider secret storage | MIT OR Apache-2.0 |
 | `apple-native-keyring-store` | `1.0.0` | macOS Keychain backend for AI provider API keys and opt-in database passphrase remember-unlock | MIT OR Apache-2.0 |
 | `block2` | `0.6.2` | Objective-C block bridge for the macOS Touch ID LocalAuthentication callback | MIT |

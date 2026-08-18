@@ -46,6 +46,7 @@ const NATIVE_STATE_DIR: &str = "at.bitcoinaustria.kassiber";
 const DEFAULT_PROJECTS_DIR: &str = "projects";
 const DEFAULT_PROJECT_ID: &str = "default";
 const DEFAULT_DATA_DIR: &str = "data";
+const STATE_ROOT_MIGRATION_FILENAME: &str = ".state-root-migration.json";
 const CLI_LEGACY_UNLOCK_QUARANTINED_SETTING: &str = "cli_legacy_unlock_quarantined";
 const DESKTOP_BIOMETRIC_STALE_SETTING: &str = "desktop_biometric_stale";
 const DB_FILENAMES: &[&str] = &["kassiber.sqlite3", "satbooks.sqlite3"];
@@ -1148,18 +1149,35 @@ async fn touch_id_unlock_passphrase_command(
             false,
         ));
     }
-    let Some(passphrase_secret) = touch_id_get_passphrase(&scope.account, cli_owns_legacy)? else {
-        return Ok(error_envelope(
-            "touch_id_passphrase_not_found",
-            "No Touch ID passphrase was found for these books.",
-            Some("Unlock once with the passphrase to save it again."),
-            None,
-            None,
-            false,
-        ));
-    };
+    let mut migrated_legacy_account = None;
+    let passphrase_secret =
+        if let Some(secret) = touch_id_get_passphrase(&scope.account, cli_owns_legacy)? {
+            secret
+        } else if let Some(legacy_account) = scope.legacy_account.as_deref() {
+            let Some(secret) = touch_id_get_passphrase(legacy_account, cli_owns_legacy)? else {
+                return Ok(error_envelope(
+                    "touch_id_passphrase_not_found",
+                    "No Touch ID passphrase was found for these books.",
+                    Some("Unlock once with the passphrase to save it again."),
+                    None,
+                    None,
+                    false,
+                ));
+            };
+            migrated_legacy_account = Some(legacy_account.to_string());
+            secret
+        } else {
+            return Ok(error_envelope(
+                "touch_id_passphrase_not_found",
+                "No Touch ID passphrase was found for these books.",
+                Some("Unlock once with the passphrase to save it again."),
+                None,
+                None,
+                false,
+            ));
+        };
     let mut args = json!({
-        "auth_response": { "passphrase_secret": passphrase_secret },
+        "auth_response": { "passphrase_secret": passphrase_secret.clone() },
         "require_existing_project": require_existing_project.unwrap_or(false),
     });
     let kind = if let Some(project_id) = project_id.filter(|value| !value.trim().is_empty()) {
@@ -1168,10 +1186,30 @@ async fn touch_id_unlock_passphrase_command(
     } else {
         "daemon.unlock"
     };
+    let current_account = scope.account;
     let supervisor = Arc::clone(state.inner());
     tauri::async_runtime::spawn_blocking(move || {
         match supervisor.invoke(kind, Some(args), &app, false, None) {
             Ok(mut response) => {
+                if response.get("kind").and_then(Value::as_str) != Some("error") {
+                    if let Some(legacy_account) = migrated_legacy_account {
+                        match touch_id_store_passphrase(&current_account, &passphrase_secret) {
+                            Ok(()) => {
+                                if let Err(error) = touch_id_delete_passphrase(
+                                    &legacy_account,
+                                    cli_owns_legacy,
+                                ) {
+                                    eprintln!(
+                                        "kassiber: migrated Touch ID credential cleanup failed: {error}"
+                                    );
+                                }
+                            }
+                            Err(error) => eprintln!(
+                                "kassiber: Touch ID credential could not follow the migrated books: {error}"
+                            ),
+                        }
+                    }
+                }
                 attach_secret_store_policy_status(&mut response);
                 serde_json::from_value(response).map_err(|error| {
                     format!("Python daemon response did not match the envelope contract: {error}")
@@ -1193,6 +1231,9 @@ fn touch_id_forget_passphrase_command(
     let _lifecycle = touch_id_credential_lifecycle_lock()?;
     let (cli_owns_legacy, _stale_generation) = touch_id_managed_unlock_state(&scope.data_root)?;
     touch_id_delete_passphrase(&scope.account, cli_owns_legacy)?;
+    if let Some(legacy_account) = scope.legacy_account.as_deref() {
+        touch_id_delete_passphrase(legacy_account, cli_owns_legacy)?;
+    }
     clear_desktop_biometric_stale_guard(&scope.data_root)?;
     touch_id_passphrase_status_with_managed_guard(&scope)
 }
@@ -1218,6 +1259,7 @@ fn terminal_command_remove_command() -> Result<TerminalCommandStatus, String> {
 struct TouchIdScope {
     account: String,
     data_root: String,
+    legacy_account: Option<String>,
 }
 
 fn touch_id_scope_for_selected(selected: PathBuf) -> TouchIdScope {
@@ -1225,6 +1267,7 @@ fn touch_id_scope_for_selected(selected: PathBuf) -> TouchIdScope {
     TouchIdScope {
         account: normalized.to_string_lossy().into_owned(),
         data_root: selected.to_string_lossy().into_owned(),
+        legacy_account: migrated_legacy_touch_id_account(&selected),
     }
 }
 
@@ -1308,6 +1351,14 @@ fn touch_id_passphrase_status_with_managed_guard(
 ) -> Result<TouchIdPassphraseStatus, String> {
     let (cli_owns_legacy, stale_generation) = touch_id_managed_unlock_state(&scope.data_root)?;
     let mut status = touch_id_passphrase_status(&scope.account, cli_owns_legacy);
+    if !status.configured && !status.stale {
+        if let Some(legacy_account) = scope.legacy_account.as_deref() {
+            let legacy_status = touch_id_passphrase_status(legacy_account, cli_owns_legacy);
+            if legacy_status.configured {
+                status = legacy_status;
+            }
+        }
+    }
     let Some(generation) = stale_generation else {
         return Ok(status);
     };
@@ -1751,7 +1802,8 @@ fn home_dir() -> Option<PathBuf> {
     let home = env::var_os("HOME");
 
     home.map(PathBuf::from)
-        .filter(|path| !path.as_os_str().is_empty())
+        .filter(|path| path.is_absolute())
+        .or_else(|| dirs::home_dir().filter(|path| path.is_absolute()))
 }
 
 fn default_import_picker_root() -> PathBuf {
@@ -1763,25 +1815,17 @@ fn default_import_picker_root() -> PathBuf {
     }
 }
 
-fn state_root_installation_rank(path: &Path) -> u8 {
-    let has_database = DB_FILENAMES
-        .iter()
-        .any(|filename| path.join(DEFAULT_DATA_DIR).join(filename).is_file())
-        || path
-            .join(DEFAULT_PROJECTS_DIR)
-            .read_dir()
-            .ok()
-            .is_some_and(|entries| {
-                entries.flatten().any(|entry| {
-                    DB_FILENAMES.iter().any(|filename| {
-                        entry.path().join(DEFAULT_DATA_DIR).join(filename).is_file()
-                    })
-                })
-            });
-    if has_database {
-        2
-    } else {
-        u8::from(path.join("config").join("projects.json").is_file())
+fn state_root_has_user_state(path: &Path) -> bool {
+    match path.read_dir() {
+        Ok(mut entries) => entries.any(|entry| match entry {
+            Ok(entry) => match entry.file_name().to_str() {
+                Some("bin" | "run") => false,
+                Some(name) if name == STATE_ROOT_MIGRATION_FILENAME => false,
+                _ => true,
+            },
+            Err(_) => true,
+        }),
+        Err(error) => error.kind() != std::io::ErrorKind::NotFound,
     }
 }
 
@@ -1809,11 +1853,70 @@ fn native_state_root_for_platform(
     }
 }
 
-fn state_root_migration_marker(preferred: &Path) -> Option<PathBuf> {
-    Some(preferred.parent()?.join(format!(
-        ".{}-state-migration.json",
-        preferred.file_name()?.to_string_lossy()
-    )))
+fn migrated_legacy_touch_id_account_for_platform(
+    selected: &Path,
+    platform: &str,
+    home: &Path,
+    xdg_data_home: Option<&Path>,
+    local_app_data: Option<&Path>,
+) -> Option<PathBuf> {
+    let native =
+        native_state_root_for_platform(platform, Some(home), xdg_data_home, local_app_data)?;
+    let selected = fs::canonicalize(selected).unwrap_or_else(|_| selected.to_path_buf());
+    let native = fs::canonicalize(&native).unwrap_or(native);
+    let relative = selected.strip_prefix(&native).ok()?;
+    let mut components = relative.components();
+    if components.next()?.as_os_str() != DEFAULT_PROJECTS_DIR
+        || !matches!(components.next()?, std::path::Component::Normal(_))
+        || components.next()?.as_os_str() != DEFAULT_DATA_DIR
+        || components.next().is_some()
+    {
+        return None;
+    }
+
+    let legacy = home.join(DEFAULT_STATE_DIR);
+    let marker = native.join(STATE_ROOT_MIGRATION_FILENAME);
+    if !fs::symlink_metadata(&marker)
+        .ok()
+        .is_some_and(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
+    {
+        return None;
+    }
+    let payload: Value = serde_json::from_slice(&fs::read(marker).ok()?).ok()?;
+    if payload.get("schema_version").and_then(Value::as_u64) != Some(1)
+        || payload
+            .get("migrated_from_hidden_home")
+            .and_then(Value::as_bool)
+            != Some(true)
+    {
+        return None;
+    }
+    Some(legacy.join(relative))
+}
+
+fn migrated_legacy_touch_id_account(selected: &Path) -> Option<String> {
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    let home = home_dir()?;
+    #[cfg(target_os = "linux")]
+    let platform = "linux";
+    #[cfg(target_os = "macos")]
+    let platform = "macos";
+    #[cfg(target_os = "windows")]
+    let platform = "windows";
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    let platform = "other";
+    let xdg_data_home = env::var_os("XDG_DATA_HOME").map(PathBuf::from);
+    let local_app_data = env::var_os("LOCALAPPDATA").map(PathBuf::from);
+    migrated_legacy_touch_id_account_for_platform(
+        selected,
+        platform,
+        &home,
+        xdg_data_home.as_deref(),
+        local_app_data.as_deref(),
+    )
+    .map(|path| path.to_string_lossy().into_owned())
 }
 
 fn state_root_for_platform(
@@ -1824,15 +1927,8 @@ fn state_root_for_platform(
 ) -> Option<PathBuf> {
     let preferred = native_state_root_for_platform(platform, home, xdg_data_home, local_app_data)?;
     if let Some(legacy) = home.map(|path| path.join(DEFAULT_STATE_DIR)) {
-        if preferred != legacy {
-            let legacy_rank = state_root_installation_rank(&legacy);
-            let migration_in_progress = state_root_migration_marker(&preferred)
-                .is_some_and(|path| fs::symlink_metadata(path).is_ok());
-            if legacy_rank > 0
-                && (migration_in_progress || legacy_rank > state_root_installation_rank(&preferred))
-            {
-                return Some(legacy);
-            }
+        if preferred != legacy && state_root_has_user_state(&legacy) {
+            return Some(legacy);
         }
     }
     Some(preferred)
@@ -1857,7 +1953,7 @@ pub(crate) fn default_state_root() -> PathBuf {
         xdg_data_home.as_deref(),
         local_app_data.as_deref(),
     )
-    .unwrap_or_else(|| PathBuf::from(DEFAULT_STATE_DIR))
+    .expect("Kassiber could not locate an absolute per-user app-data directory")
 }
 
 fn default_state_data_root() -> PathBuf {
@@ -2984,9 +3080,10 @@ pub fn run() {
                 vec!["--migrate-default-state-root".to_string()],
             );
             if migration_status != 0 {
-                eprintln!(
-                    "kassiber: default state-root migration failed with status {migration_status}; continuing with the safe existing root"
-                );
+                return Err(format!(
+                    "default state-root migration failed with status {migration_status}"
+                )
+                .into());
             }
             let (menu, menu_handles) = build_app_menu(app.handle())?;
             app.set_menu(menu)?;
@@ -3985,10 +4082,11 @@ mod tests {
         inspect_terminal_command, is_managed_report_export_path, is_supported_audit_package_dir,
         is_supported_austrian_csv_bundle_dir, is_supported_export_file,
         is_supported_report_export_target, managed_settings_path, menu_action,
-        menu_action_for_deep_link, menu_action_for_id, native_state_root_for_platform,
+        menu_action_for_deep_link, menu_action_for_id,
+        migrated_legacy_touch_id_account_for_platform, native_state_root_for_platform,
         navigate_action, open_settings_action, path_is_on_path, read_operator_native_auth_secret,
         require_approved_import_project_data_root, state_root_for_platform,
-        state_root_migration_marker, terminal_command_contents, terminal_command_path_hint,
+        terminal_command_contents, terminal_command_path_hint,
         terminal_command_target_is_transient, touch_id_managed_unlock_state,
         touch_id_scope_for_selected, validated_attachment_file_path, validated_external_url,
         validated_report_export_target, TerminalCommandFileState, TerminalCommandPaths,
@@ -3999,20 +4097,14 @@ mod tests {
         MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE,
         MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET, MENU_WORKFLOW_ADD_WALLET,
         MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
-        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
+        MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, STATE_ROOT_MIGRATION_FILENAME,
+        TERMINAL_COMMAND_MARKER,
     };
     use std::fs;
     use std::io::Cursor;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
     use tauri::Url;
-
-    fn test_default_project_database(root: &Path) -> PathBuf {
-        root.join("projects")
-            .join("default")
-            .join("data")
-            .join("kassiber.sqlite3")
-    }
 
     #[test]
     fn operator_native_auth_pipe_preserves_normalized_secret_bytes() {
@@ -4033,6 +4125,10 @@ mod tests {
             Some(xdg_data_home.join("kassiber"))
         );
         assert_eq!(
+            native_state_root_for_platform("linux", None, Some(&xdg_data_home), None),
+            Some(xdg_data_home.join("kassiber"))
+        );
+        assert_eq!(
             native_state_root_for_platform("linux", Some(&home), Some(Path::new("relative")), None,),
             Some(home.join(".local").join("share").join("kassiber"))
         );
@@ -4046,6 +4142,10 @@ mod tests {
         );
         assert_eq!(
             native_state_root_for_platform("windows", Some(&home), None, Some(&local_app_data),),
+            Some(local_app_data.join("at.bitcoinaustria.kassiber"))
+        );
+        assert_eq!(
+            native_state_root_for_platform("windows", None, None, Some(&local_app_data)),
             Some(local_app_data.join("at.bitcoinaustria.kassiber"))
         );
         assert_eq!(
@@ -4078,58 +4178,106 @@ mod tests {
         );
         assert!(legacy.join("bin").join("kassiber").is_file());
         assert!(!native.exists());
-        let migration_marker = state_root_migration_marker(&native).unwrap();
-        assert_eq!(
-            migration_marker,
-            native
-                .parent()
-                .unwrap()
-                .join(".kassiber-state-migration.json")
-        );
-        fs::create_dir_all(migration_marker.parent().unwrap()).unwrap();
-        fs::write(&migration_marker, b"{}\n").unwrap();
+        fs::write(legacy.join(STATE_ROOT_MIGRATION_FILENAME), b"{}\n").unwrap();
         assert_eq!(
             state_root_for_platform("linux", Some(&home), None, None),
             Some(native.clone())
         );
-        fs::remove_file(&migration_marker).unwrap();
 
-        let legacy_database = legacy
-            .join("projects")
-            .join("default")
-            .join("data")
-            .join("kassiber.sqlite3");
-        fs::create_dir_all(legacy_database.parent().unwrap()).unwrap();
-        fs::write(&legacy_database, []).unwrap();
-        assert_eq!(
-            state_root_for_platform("linux", Some(&home), None, None),
-            Some(legacy.clone())
-        );
-        assert!(legacy_database.is_file());
-        assert!(!native.exists());
-
-        let native_catalog = native.join("config").join("projects.json");
-        fs::create_dir_all(native_catalog.parent().unwrap()).unwrap();
-        fs::write(native_catalog, b"{}\n").unwrap();
+        let legacy_config = legacy.join("config").join("backends.env");
+        fs::create_dir_all(legacy_config.parent().unwrap()).unwrap();
+        fs::write(&legacy_config, b"# local config\n").unwrap();
         assert_eq!(
             state_root_for_platform("linux", Some(&home), None, None),
             Some(legacy.clone())
         );
 
-        let native_database = test_default_project_database(&native);
-        fs::create_dir_all(native_database.parent().unwrap()).unwrap();
-        fs::write(&native_database, []).unwrap();
-        assert_eq!(
-            state_root_for_platform("linux", Some(&home), None, None),
-            Some(native.clone())
-        );
-        fs::write(&migration_marker, b"{}\n").unwrap();
+        fs::create_dir_all(&native).unwrap();
+        fs::write(native.join("kassiber.sqlite3"), []).unwrap();
         assert_eq!(
             state_root_for_platform("linux", Some(&home), None, None),
             Some(legacy.clone())
         );
-        assert!(legacy_database.is_file());
-        assert!(native_database.is_file());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn migrated_default_root_can_find_its_legacy_touch_id_account() {
+        let root = unique_temp_dir("touch-id-migrated-root");
+        let home = root.join("home");
+        let native = home
+            .join("Library")
+            .join("Application Support")
+            .join("at.bitcoinaustria.kassiber");
+        let data_root = native.join("projects").join("default").join("data");
+        fs::create_dir_all(&data_root).unwrap();
+        fs::write(
+            native.join(".state-root-migration.json"),
+            b"{\"schema_version\":1,\"migrated_from_hidden_home\":true}\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            migrated_legacy_touch_id_account_for_platform(&data_root, "macos", &home, None, None,),
+            Some(
+                home.join(".kassiber")
+                    .join("projects")
+                    .join("default")
+                    .join("data")
+            )
+        );
+        assert_eq!(
+            migrated_legacy_touch_id_account_for_platform(
+                &native.join("projects").join("other").join("outside"),
+                "macos",
+                &home,
+                None,
+                None,
+            ),
+            None
+        );
+        assert_eq!(
+            migrated_legacy_touch_id_account_for_platform(
+                &native.join("projects").join("other").join("data"),
+                "macos",
+                &home,
+                None,
+                None,
+            ),
+            Some(
+                home.join(".kassiber")
+                    .join("projects")
+                    .join("other")
+                    .join("data")
+            )
+        );
+
+        fs::write(
+            native.join(".state-root-migration.json"),
+            b"{\"schema_version\":1,\"migrated_from_hidden_home\":false}\n",
+        )
+        .unwrap();
+        assert_eq!(
+            migrated_legacy_touch_id_account_for_platform(&data_root, "macos", &home, None, None,),
+            None
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn flat_native_database_is_selected_when_legacy_only_has_fixed_state() {
+        let root = unique_temp_dir("state-root-flat-database");
+        let home = root.join("home");
+        let legacy = home.join(".kassiber");
+        let native = home.join(".local").join("share").join("kassiber");
+        fs::create_dir_all(legacy.join("run")).unwrap();
+        fs::create_dir_all(&native).unwrap();
+        fs::write(native.join("kassiber.sqlite3"), []).unwrap();
+
+        assert_eq!(
+            state_root_for_platform("linux", Some(&home), None, None),
+            Some(native)
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

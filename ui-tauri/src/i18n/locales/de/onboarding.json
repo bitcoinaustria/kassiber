@@ -2,7 +2,7 @@
   "shell": {
     "footer": {
       "privateKeys": "Private Keys gelangen nie in Kassiber.",
-      "stateLocation": "Die Daten bleiben im privaten App-Datenordner des Systems, sofern nicht anders festgelegt.",
+      "stateLocation": "Die Daten bleiben im benutzerspezifischen App-Datenordner des Systems, sofern nicht anders festgelegt.",
       "noSaas": "Umgehe die SaaS-Honeypots."
     },
     "finishError": "Onboarding konnte nicht abgeschlossen werden.",
@@ -159,7 +159,7 @@
     "highlights": {
       "localDatabase": {
         "title": "Eine lokale Datenbank",
-        "body": "Standardmäßig im privaten App-Datenordner des Systems oder in einem importierten Kassiber-Ordner."
+        "body": "Standardmäßig im benutzerspezifischen App-Datenordner des Systems oder in einem importierten Kassiber-Ordner."
       },
       "encrypted": {
         "title": "Standardmäßig verschlüsselt",

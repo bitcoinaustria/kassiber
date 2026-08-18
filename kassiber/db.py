@@ -20,10 +20,10 @@ Call sites should never embed their own `CREATE TABLE` or `ALTER TABLE`
 DDL — add it to `SCHEMA` or `ensure_schema_compat` here instead.
 """
 
+import errno
 import hashlib
 import json
 import os
-import shutil
 import sqlite3
 import stat
 import sys
@@ -56,7 +56,7 @@ DEFAULT_ATTACHMENTS_DIRNAME = "attachments"
 DEFAULT_SETTINGS_FILENAME = "settings.json"
 DATABASE_INSTANCE_ID_SETTING = "database_instance_id"
 STATE_ROOT_MIGRATION_VERSION = 1
-STATE_ROOT_MIGRATION_COMPLETE_FILENAME = ".state-root-migration-complete.json"
+STATE_ROOT_MIGRATION_FILENAME = ".state-root-migration.json"
 
 
 def native_state_root(*, platform=None, environ=None, home=None):
@@ -79,17 +79,21 @@ def native_state_root(*, platform=None, environ=None, home=None):
     return base / APP_NAME
 
 
-def _state_root_installation_rank(state_root):
-    root = Path(state_root).expanduser()
-    for filename in (f"{APP_NAME}.sqlite3", f"{LEGACY_APP_NAME}.sqlite3"):
-        if (root / DEFAULT_DATA_DIRNAME / filename).is_file():
-            return 2
-        if any(
-            (project / DEFAULT_DATA_DIRNAME / filename).is_file()
-            for project in (root / "projects").glob("*")
-        ):
-            return 2
-    return int((root / DEFAULT_CONFIG_DIRNAME / "projects.json").is_file())
+def _state_root_has_movable_state(root: Path) -> bool:
+    """Return whether a root contains user state beyond bin/run/proof files."""
+
+    try:
+        with os.scandir(root) as entries:
+            return any(
+                entry.name
+                not in {"bin", "run", STATE_ROOT_MIGRATION_FILENAME}
+                for entry in entries
+            )
+    except FileNotFoundError:
+        return False
+    except OSError:
+        # Fail closed: unreadable state must never be mistaken for an empty install.
+        return root.exists() or root.is_symlink()
 
 
 def default_state_root(*, platform=None, environ=None, home=None):
@@ -98,17 +102,7 @@ def default_state_root(*, platform=None, environ=None, home=None):
     home = Path.home() if home is None else Path(home)
     preferred = native_state_root(platform=platform, environ=environ, home=home)
     legacy = _legacy_state_root(home)
-    marker = _state_root_migration_marker_path(preferred)
-    if (
-        _state_root_installation_rank(legacy)
-        and (marker.exists() or marker.is_symlink())
-    ):
-        return legacy
-    if _state_root_installation_rank(legacy) > _state_root_installation_rank(
-        preferred
-    ):
-        return legacy
-    return preferred
+    return legacy if _state_root_has_movable_state(legacy) else preferred
 
 
 def _legacy_state_root(home=None):
@@ -116,19 +110,8 @@ def _legacy_state_root(home=None):
     return home / f".{APP_NAME}"
 
 
-def _state_root_migration_marker_path(preferred: Path) -> Path:
-    return preferred.parent / f".{preferred.name}-state-migration.json"
-
-
 def _state_root_migration_lock_path(preferred: Path) -> Path:
     return preferred.parent / f".{preferred.name}-state-migration"
-
-
-def _remove_path(path: Path) -> None:
-    if path.is_symlink() or path.is_file():
-        path.unlink()
-    elif path.exists():
-        shutil.rmtree(path)
 
 
 def _fsync_directory(path: Path) -> None:
@@ -157,16 +140,9 @@ def _write_migration_json(
         os.replace(temporary_name, path)
         _fsync_directory(path.parent)
     finally:
-        try:
+        with suppress(OSError):
             os.close(fd)
-        except OSError:
-            pass
         Path(temporary_name).unlink(missing_ok=True)
-
-
-def _clear_migration_marker(path: Path) -> None:
-    path.unlink()
-    _fsync_directory(path.parent)
 
 
 def _read_migration_json(path: Path) -> dict[str, object]:
@@ -192,168 +168,23 @@ def _read_migration_json(path: Path) -> dict[str, object]:
     return payload
 
 
-def _migration_payload(preferred: Path, legacy: Path) -> dict[str, object]:
-    token = uuid.uuid4().hex
-    return {
+def _migration_proof_matches(root: Path) -> bool:
+    try:
+        payload = _read_migration_json(
+            root / STATE_ROOT_MIGRATION_FILENAME
+        )
+    except AppError:
+        return False
+    return payload == {
         "schema_version": STATE_ROOT_MIGRATION_VERSION,
-        "token": token,
-        "source": str(legacy),
-        "target": str(preferred),
-        "staging": str(
-            preferred.parent / f".{preferred.name}-state-migration-{token}"
-        ),
-        "backup": str(legacy.parent / f".{APP_NAME}-state-migration-{token}"),
-        "source_digest": None,
-        "phase": "copying",
+        "migrated_from_hidden_home": True,
     }
 
 
-def _validate_migration_payload(
-    payload: dict[str, object], preferred: Path, legacy: Path
-) -> tuple[str, Path, Path]:
-    token = payload.get("token")
-    if not (
-        payload.get("schema_version") == STATE_ROOT_MIGRATION_VERSION
-        and isinstance(token, str)
-        and len(token) == 32
-        and all(character in "0123456789abcdef" for character in token)
-        and payload.get("source") == str(legacy)
-        and payload.get("target") == str(preferred)
-    ):
-        raise AppError(
-            "default state migration marker does not match this installation",
-            code="state_root_migration_failed",
-            retryable=True,
-        )
-    staging = preferred.parent / f".{preferred.name}-state-migration-{token}"
-    backup = legacy.parent / f".{APP_NAME}-state-migration-{token}"
-    digest = payload.get("source_digest")
-    if (
-        payload.get("staging") != str(staging)
-        or payload.get("backup") != str(backup)
-        or payload.get("phase") not in {"copying", "finalizing"}
-        or not (
-            digest is None
-            or (
-                isinstance(digest, str)
-                and len(digest) == 64
-                and all(character in "0123456789abcdef" for character in digest)
-            )
-        )
-    ):
-        raise AppError(
-            "default state migration paths or digest are invalid",
-            code="state_root_migration_failed",
-            retryable=True,
-        )
-    return token, staging, backup
-
-
-def _completion_matches(root: Path, payload: dict[str, object]) -> bool:
-    completion = root / STATE_ROOT_MIGRATION_COMPLETE_FILENAME
-    if not (completion.exists() or completion.is_symlink()):
-        return False
-    try:
-        loaded = _read_migration_json(completion)
-    except AppError:
-        return False
-    return all(
-        loaded.get(key) == payload.get(key)
-        for key in (
-            "schema_version",
-            "token",
-            "source",
-            "target",
-            "staging",
-            "backup",
-            "source_digest",
-        )
-    )
-
-
-def _digest_snapshot_field(digest, kind: str, relative: Path, value: object) -> None:
-    encoded = json.dumps(
-        [kind, relative.as_posix(), value],
-        ensure_ascii=False,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    digest.update(len(encoded).to_bytes(8, "big"))
-    digest.update(encoded)
-
-
-def _source_snapshot_digest(legacy: Path) -> str:
-    """Hash all copyable state while excluding fixed/runtime-only objects."""
-
-    digest = hashlib.sha256()
-
-    def visit(directory: Path, relative: Path) -> None:
-        try:
-            with os.scandir(directory) as iterator:
-                entries = sorted(iterator, key=lambda entry: entry.name)
-        except OSError as exc:
-            raise AppError(
-                "default state migration could not snapshot legacy state",
-                code="state_root_migration_failed",
-                details={"path": str(directory)},
-                retryable=True,
-            ) from exc
-        for entry in entries:
-            if not relative.parts and entry.name in {"bin", "run"}:
-                continue
-            path = Path(entry.path)
-            child_relative = relative / entry.name
-            try:
-                info = entry.stat(follow_symlinks=False)
-                mode = stat.S_IMODE(info.st_mode)
-                if stat.S_ISLNK(info.st_mode):
-                    _digest_snapshot_field(
-                        digest, "symlink", child_relative, [mode, os.readlink(path)]
-                    )
-                elif stat.S_ISDIR(info.st_mode):
-                    _digest_snapshot_field(digest, "directory", child_relative, mode)
-                    visit(path, child_relative)
-                elif stat.S_ISREG(info.st_mode):
-                    file_digest = hashlib.sha256()
-                    with path.open("rb") as handle:
-                        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                            file_digest.update(chunk)
-                    after = path.stat(follow_symlinks=False)
-                    if (
-                        info.st_dev,
-                        info.st_ino,
-                        info.st_size,
-                        info.st_mtime_ns,
-                    ) != (
-                        after.st_dev,
-                        after.st_ino,
-                        after.st_size,
-                        after.st_mtime_ns,
-                    ):
-                        raise OSError("file changed while snapshotting")
-                    _digest_snapshot_field(
-                        digest,
-                        "file",
-                        child_relative,
-                        [mode, info.st_size, file_digest.hexdigest()],
-                    )
-            except AppError:
-                raise
-            except OSError as exc:
-                raise AppError(
-                    "default state migration could not snapshot legacy state",
-                    code="state_root_migration_failed",
-                    details={"path": str(path)},
-                    retryable=True,
-                ) from exc
-
-    visit(legacy, Path())
-    return digest.hexdigest()
-
-
-def _rebase_staged_project_catalog(
-    staging: Path, legacy: Path, preferred: Path
+def _rebase_moved_project_catalog(
+    moved_root: Path, legacy: Path, preferred: Path
 ) -> None:
-    catalog = staging / DEFAULT_CONFIG_DIRNAME / "projects.json"
+    catalog = moved_root / DEFAULT_CONFIG_DIRNAME / "projects.json"
     if not catalog.is_file():
         return
     try:
@@ -390,113 +221,27 @@ def _rebase_staged_project_catalog(
         _write_migration_json(catalog, payload, mode=mode)
 
 
-def _ignore_uncopyable_entries(
-    directory: str, names: list[str], *, legacy: Path
-) -> list[str]:
-    ignored = []
-    for name in names:
-        path = Path(directory) / name
-        if (Path(directory) == legacy and name in {"bin", "run"}) or not (
-            path.is_symlink() or path.is_file() or path.is_dir()
-        ):
-            ignored.append(name)
-    return ignored
-
-
-def _copy_legacy_state_to_staging(
-    legacy: Path,
-    preferred: Path,
-    staging: Path,
-    payload: dict[str, object],
-) -> None:
-    _remove_path(staging)
-    staging.mkdir(mode=0o700)
+def _restore_fixed_state_paths(moved_root: Path, legacy: Path) -> None:
     try:
-        shutil.copytree(
-            legacy,
-            staging,
-            dirs_exist_ok=True,
-            symlinks=True,
-            copy_function=shutil.copy2,
-            ignore=lambda directory, names: _ignore_uncopyable_entries(
-                directory, names, legacy=legacy
-            ),
-        )
-        staging.chmod(0o700)
-        _rebase_staged_project_catalog(staging, legacy, preferred)
-        _write_migration_json(
-            staging / STATE_ROOT_MIGRATION_COMPLETE_FILENAME, payload
-        )
-    except AppError:
-        raise
-    except OSError as exc:
-        raise AppError(
-            "default state migration could not copy legacy state",
-            code="state_root_migration_failed",
-            details={"source": str(legacy), "staging": str(staging)},
-            retryable=True,
-        ) from exc
-
-
-def _restore_fixed_state_paths(backup: Path, legacy: Path) -> None:
-    try:
-        legacy.mkdir(parents=True, exist_ok=True)
+        if legacy.is_symlink() or (legacy.exists() and not legacy.is_dir()):
+            raise OSError("fixed legacy root is not a real directory")
+        legacy.mkdir(parents=True, mode=0o700, exist_ok=True)
+        legacy.chmod(0o700)
         for dirname in ("bin", "run"):
-            source = backup / dirname
+            source = moved_root / dirname
             target = legacy / dirname
             if not (source.exists() or source.is_symlink()):
                 continue
             if target.exists() or target.is_symlink():
-                _remove_path(source)
-                continue
+                raise OSError(f"fixed legacy path already exists: {target}")
             source.rename(target)
     except OSError as exc:
         raise AppError(
             "default state migration could not restore fixed runtime paths",
             code="state_root_migration_failed",
-            details={"source": str(backup), "target": str(legacy)},
+            details={"source": str(moved_root), "target": str(legacy)},
             retryable=True,
         ) from exc
-
-
-def _discard_owned_published_copy(
-    preferred: Path, staging: Path, payload: dict[str, object]
-) -> None:
-    _remove_path(staging)
-    if not (preferred.exists() or preferred.is_symlink()):
-        return
-    if preferred.is_symlink() or not _completion_matches(preferred, payload):
-        raise AppError(
-            "default state migration target is not the staged Kassiber copy",
-            code="state_root_migration_failed",
-            details={"target": str(preferred)},
-            retryable=True,
-        )
-    _remove_path(preferred)
-    _fsync_directory(preferred.parent)
-
-
-def _restart_after_source_change(
-    marker_path: Path,
-    preferred: Path,
-    staging: Path,
-    payload: dict[str, object],
-) -> None:
-    _discard_owned_published_copy(preferred, staging, payload)
-    _clear_migration_marker(marker_path)
-    raise AppError(
-        "legacy state changed during default state migration",
-        code="state_root_migration_source_changed",
-        hint="Retry after other Kassiber processes have stopped.",
-        retryable=True,
-    )
-
-
-def _mark_migration_finalizing(
-    marker_path: Path, payload: dict[str, object]
-) -> None:
-    payload["phase"] = "finalizing"
-    _write_migration_json(marker_path, payload)
 
 
 def _legacy_owner_lock_is_active(lock_path: Path) -> bool:
@@ -594,11 +339,56 @@ def _hold_legacy_operator_locks(legacy: Path):
             handle.close()
 
 
-def migrate_hidden_home_state_root_if_needed(*, platform=None, environ=None, home=None):
-    """Move meaningful `~/.kassiber` state to the native root once.
+def _reject_unsafe_migration_symlinks(root: Path) -> None:
+    """Fail closed when rename semantics could redirect state outside the root."""
 
-    This is an explicit startup step. Call it only for ordinary default-root
-    CLI/daemon launches, never at module import time.
+    try:
+        if root.is_symlink() or not root.is_dir():
+            raise OSError("legacy state root is not a real directory")
+
+        def fail_walk(error):
+            raise error
+
+        for directory, names, filenames in os.walk(
+            root, followlinks=False, onerror=fail_walk
+        ):
+            current = Path(directory)
+            if current == root:
+                names[:] = [name for name in names if name not in {"bin", "run"}]
+                filenames = [
+                    name for name in filenames if name not in {"bin", "run"}
+                ]
+            for name in (*names, *filenames):
+                if (current / name).is_symlink():
+                    raise OSError("legacy state contains a symbolic link")
+    except OSError as exc:
+        raise AppError(
+            "default state migration cannot safely move this legacy layout",
+            code="state_root_migration_failed",
+            details={"path": str(root)},
+            retryable=False,
+        ) from exc
+
+
+def _raise_state_root_conflict(legacy: Path, preferred: Path) -> None:
+    raise AppError(
+        "both legacy and native default state roots contain Kassiber state",
+        code="state_root_conflict",
+        hint=(
+            "Use --data-root to inspect and choose a root, then reconcile or move "
+            "one root before retrying."
+        ),
+        details={"legacy": str(legacy), "native": str(preferred)},
+        retryable=True,
+    )
+
+
+def migrate_hidden_home_state_root_if_needed(*, platform=None, environ=None, home=None):
+    """Atomically rename meaningful legacy state to the native root once.
+
+    The move deliberately has no copy fallback: preserving database inodes and
+    avoiding a partial cross-filesystem migration are security/data-safety
+    properties, not optimizations.
     """
 
     home = Path.home() if home is None else Path(home)
@@ -606,166 +396,86 @@ def migrate_hidden_home_state_root_if_needed(*, platform=None, environ=None, hom
     legacy = _legacy_state_root(home)
     if preferred == legacy:
         return preferred
-    marker_path = _state_root_migration_marker_path(preferred)
+    proof_name = STATE_ROOT_MIGRATION_FILENAME
+    proof_payload = {
+        "schema_version": STATE_ROOT_MIGRATION_VERSION,
+        "migrated_from_hidden_home": True,
+    }
+    moved = False
     try:
         preferred.parent.mkdir(parents=True, exist_ok=True)
         with _managed_settings_lock(_state_root_migration_lock_path(preferred)):
-            if marker_path.exists() or marker_path.is_symlink():
-                payload = _read_migration_json(marker_path)
-                token, staging, backup = _validate_migration_payload(
-                    payload, preferred, legacy
-                )
+            legacy_proof = legacy / proof_name
+            preferred_proof = preferred / proof_name
+            legacy_has_state = _state_root_has_movable_state(legacy)
+            preferred_has_proof = _migration_proof_matches(preferred)
+            moved = preferred_has_proof
+            legacy_has_proof = _migration_proof_matches(legacy)
+            legacy_proof_exists = legacy_proof.exists() or legacy_proof.is_symlink()
+
+            if preferred.exists() or preferred.is_symlink():
+                if preferred.is_symlink():
+                    return (
+                        legacy
+                        if legacy_has_state or legacy_proof_exists
+                        else preferred
+                    )
+                if preferred_has_proof:
+                    if legacy_has_state or legacy_proof_exists:
+                        _raise_state_root_conflict(legacy, preferred)
+                else:
+                    return (
+                        legacy
+                        if legacy_has_state or legacy_proof_exists
+                        else preferred
+                    )
             else:
-                if _state_root_installation_rank(legacy) == 0:
-                    return default_state_root(
-                        platform=platform, environ=environ, home=home
-                    )
-                if preferred.exists() or preferred.is_symlink():
-                    return default_state_root(
-                        platform=platform, environ=environ, home=home
-                    )
-                payload = _migration_payload(preferred, legacy)
-                token, staging, backup = _validate_migration_payload(
-                    payload, preferred, legacy
-                )
-                _write_migration_json(marker_path, payload)
-
-            if payload.get("phase") == "finalizing" and not (
-                backup.exists() or backup.is_symlink()
-            ):
-                if not _completion_matches(preferred, payload):
-                    raise AppError(
-                        "default state migration target is not the staged Kassiber copy",
-                        code="state_root_migration_failed",
-                        details={"target": str(preferred)},
-                        retryable=True,
-                    )
-                if (
-                    legacy.exists()
-                    and _source_snapshot_digest(legacy)
-                    != hashlib.sha256().hexdigest()
-                ):
-                    raise AppError(
-                        "new legacy state appeared after migration cutover",
-                        code="state_root_migration_source_changed",
-                        retryable=True,
-                    )
-                _remove_path(staging)
-                _clear_migration_marker(marker_path)
-                return preferred
-
-            if backup.exists() or backup.is_symlink():
-                if backup.is_symlink() or not backup.is_dir():
-                    raise AppError(
-                        "default state migration backup is unsafe",
-                        code="state_root_migration_failed",
-                        details={"backup": str(backup)},
-                        retryable=False,
-                    )
-                if not _completion_matches(preferred, payload):
-                    raise AppError(
-                        "default state migration target is not the staged Kassiber copy",
-                        code="state_root_migration_failed",
-                        details={"target": str(preferred)},
-                        retryable=True,
-                    )
-                _remove_path(staging)
-                expected_digest = payload.get("source_digest")
-                if not isinstance(expected_digest, str) or (
-                    _source_snapshot_digest(backup) != expected_digest
-                ):
-                    raise AppError(
-                        "default state migration backup does not match the source snapshot",
-                        code="state_root_migration_failed",
-                        details={"backup": str(backup)},
-                        retryable=True,
-                    )
-                if (
-                    legacy.exists()
-                    and _source_snapshot_digest(legacy)
-                    != hashlib.sha256().hexdigest()
-                ):
-                    raise AppError(
-                        "new legacy state appeared after migration cutover",
-                        code="state_root_migration_source_changed",
-                        hint="Move or reconcile the new legacy state before retrying.",
-                        retryable=True,
-                    )
-                with _hold_legacy_operator_locks(backup):
-                    _restore_fixed_state_paths(backup, legacy)
-                    _mark_migration_finalizing(marker_path, payload)
-                    _remove_path(backup)
+                if not legacy_has_state:
+                    return preferred
+                if legacy_proof_exists and not legacy_has_proof:
+                    return legacy
+                try:
+                    _reject_unsafe_migration_symlinks(legacy)
+                    if legacy.stat().st_dev != preferred.parent.stat().st_dev:
+                        if legacy_has_proof:
+                            legacy_proof.unlink()
+                            _fsync_directory(legacy)
+                        return legacy
+                    with _hold_legacy_operator_locks(legacy):
+                        if preferred.exists() or preferred.is_symlink():
+                            return legacy
+                        if not legacy_has_proof:
+                            _write_migration_json(legacy_proof, proof_payload)
+                        legacy.rename(preferred)
+                        moved = True
+                except AppError:
+                    return legacy
+                except OSError as exc:
+                    if exc.errno == errno.EXDEV and legacy_proof.exists():
+                        legacy_proof.unlink()
+                        _fsync_directory(legacy)
+                    return legacy
                 _fsync_directory(legacy.parent)
-                _clear_migration_marker(marker_path)
-                return preferred
+                _fsync_directory(preferred.parent)
 
-            with _hold_legacy_operator_locks(legacy):
-                expected_digest = payload.get("source_digest")
-                current_digest = _source_snapshot_digest(legacy)
-                if expected_digest is None:
-                    payload["source_digest"] = current_digest
-                    expected_digest = current_digest
-                    _write_migration_json(marker_path, payload)
-                elif current_digest != expected_digest:
-                    _restart_after_source_change(
-                        marker_path, preferred, staging, payload
-                    )
-
-                if preferred.exists() or preferred.is_symlink():
-                    if preferred.is_symlink() or not _completion_matches(
-                        preferred, payload
-                    ):
-                        raise AppError(
-                            "default state migration target is not the staged Kassiber copy",
-                            code="state_root_migration_failed",
-                            details={"target": str(preferred)},
-                            retryable=True,
-                        )
-                    _remove_path(staging)
-
-                if staging.exists() or staging.is_symlink():
-                    if staging.is_symlink() or not _completion_matches(
-                        staging, payload
-                    ):
-                        _remove_path(staging)
-                if not preferred.exists() and not staging.exists():
-                    _copy_legacy_state_to_staging(
-                        legacy, preferred, staging, payload
-                    )
-                    if _source_snapshot_digest(legacy) != expected_digest:
-                        _restart_after_source_change(
-                            marker_path, preferred, staging, payload
-                        )
-                if not preferred.exists():
-                    staging.rename(preferred)
-                    _fsync_directory(preferred.parent)
-
-                if backup.exists() or backup.is_symlink():
-                    raise AppError(
-                        "default state migration backup already exists",
-                        code="state_root_migration_failed",
-                        details={"backup": str(backup)},
-                        retryable=True,
-                    )
-                if _source_snapshot_digest(legacy) != expected_digest:
-                    _restart_after_source_change(
-                        marker_path, preferred, staging, payload
-                    )
-                legacy.rename(backup)
-                _fsync_directory(legacy.parent)
-                _restore_fixed_state_paths(backup, legacy)
-                _mark_migration_finalizing(marker_path, payload)
-                _remove_path(backup)
-                _fsync_directory(legacy.parent)
-            _clear_migration_marker(marker_path)
+            preferred.chmod(0o700)
+            _restore_fixed_state_paths(preferred, legacy)
+            if _state_root_has_movable_state(legacy):
+                _raise_state_root_conflict(legacy, preferred)
+            _rebase_moved_project_catalog(preferred, legacy, preferred)
+            _fsync_directory(preferred)
+            if legacy.exists():
+                _fsync_directory(legacy)
+            return preferred
     except OSError as exc:
+        if not moved and _state_root_has_movable_state(legacy):
+            return legacy
         raise AppError(
             "default state migration failed",
             code="state_root_migration_failed",
             details={"source": str(legacy), "target": str(preferred)},
             retryable=True,
         ) from exc
-    return preferred
 
 
 DEFAULT_STATE_ROOT = os.fspath(default_state_root())

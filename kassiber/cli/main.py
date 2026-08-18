@@ -6025,7 +6025,11 @@ def _maybe_migrate_default_state_root(args: argparse.Namespace) -> None:
         return
     if getattr(args, "env_file", None) is not None:
         return
-    if getattr(args, "command", None) in {"commands", "operator", "verify-download"}:
+    if getattr(args, "command", None) in {"commands", "verify-download"}:
+        return
+    if getattr(args, "command", None) == "operator" and getattr(
+        args, "operator_command", None
+    ) in {"status", "lock", "operation"}:
         return
     if (
         getattr(args, "command", None) == "backup"

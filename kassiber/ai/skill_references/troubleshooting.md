@@ -113,10 +113,11 @@ kassiber status
 
 ## Path confusion
 
-Kassiber normally uses the platform app-data directory and moves meaningful
-`~/.kassiber` state there once when the native target is absent. Existing
-native roots, failed moves, and explicit/older roots can change the effective
-path. Do not assume. Read:
+Kassiber normally uses the platform app-data directory and atomically renames
+safe same-filesystem `~/.kassiber` state there when the native target is absent.
+Cross-filesystem or symlink-managed state stays legacy; two populated roots are
+a conflict and are never merged. Explicit and older roots can also change the
+effective path. Do not assume. Read:
 
 ```bash
 kassiber status
@@ -124,8 +125,9 @@ kassiber status
 
 and trust the reported `state_root`, `data_root`, and `database` fields.
 
-If migration reports `state_root_migration_in_use`, close the legacy desktop
-or stop the operator broker process, then retry the original command.
+If the legacy desktop or operator broker still owns the books, migration is
+deferred and the command continues on the legacy root. Close that process so a
+later default launch can retry the move.
 
 If you are using the Kassiber Agent Skill, remember that bundled references
 live under `<skill-dir>/references/`, not repo-root `references/`.

@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from kassiber import __version__
+import kassiber.cli.main as cli_main
 from kassiber.cli.main import build_parser
 
 
@@ -192,6 +193,27 @@ def test_backup_import_does_not_migrate_hidden_home_state(tmp_path):
     assert result.returncode != 0
     assert legacy_catalog.is_file()
     assert not (tmp_path / ".local" / "share" / "kassiber").exists()
+
+
+@pytest.mark.parametrize(
+    ("argv", "migrates"),
+    (
+        (("operator", "unlock"), True),
+        (("operator", "mode", "manual"), True),
+        (("operator", "status"), False),
+        (("operator", "lock"), False),
+    ),
+)
+def test_operator_startup_migrates_before_creating_a_lease(monkeypatch, argv, migrates):
+    calls = []
+    monkeypatch.delenv("KASSIBER_SKIP_DEFAULT_STATE_ROOT_MIGRATION", raising=False)
+    monkeypatch.setattr(
+        cli_main, "migrate_hidden_home_state_root_if_needed", lambda: calls.append(True)
+    )
+
+    cli_main._maybe_migrate_default_state_root(build_parser().parse_args(argv))
+
+    assert bool(calls) is migrates
 
 
 def test_hidden_migration_helper_moves_default_state(tmp_path):

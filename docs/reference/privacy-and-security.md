@@ -176,18 +176,26 @@ Fresh installs use `$XDG_DATA_HOME/kassiber` on Linux (falling back to
 `~/.local/share/kassiber`),
 `~/Library/Application Support/at.bitcoinaustria.kassiber` on macOS, and
 `%LOCALAPPDATA%\\at.bitcoinaustria.kassiber` on Windows. The paths below call
-that directory `<state-root>`. On first default launch, meaningful book state
-under `~/.kassiber` moves there when the native target does not exist. Kassiber
-never merges or overwrites an existing native root; `~/.kassiber/{bin,run}`
-stay fixed. An active legacy desktop or operator owner blocks migration until
-the desktop or broker process is stopped. `kassiber status` reports the
-effective root.
+that directory `<state-root>`. On first default launch, safe same-filesystem
+state under `~/.kassiber` moves there with an atomic rename when the native
+target is absent. Any top-level entry except `bin` or `run` counts as state.
+Kassiber never copies then deletes accounting data, merges roots, or overwrites
+an existing native root; cross-filesystem, symlink-managed, and conflicting
+layouts stay legacy, while `~/.kassiber/{bin,run}` stay fixed. An active legacy
+desktop or operator owner defers migration; startup keeps using the legacy root
+until that process stops. `kassiber status` reports the effective root.
 
 - `<state-root>/config/projects.json` — global project catalog. Contains only
   project id/name/path/encrypted status/last-opened metadata. It must never
   contain passphrases, verifier hashes, wrapped keys, descriptors, xpubs,
   backend tokens, accounting rows, or chat content. Project ids/names and
   last-opened timestamps are still local metadata: choose labels accordingly.
+- `<state-root>/.state-root-migration.json` — owner-only migration marker. It is
+  prepared inside the legacy root and travels with the atomic rename; its
+  location under the native root proves cutover completed. It contains only a
+  schema version and boolean, allowing macOS to find and retire the old
+  path-scoped Touch ID item; it contains no paths, file hashes, book metadata,
+  or secrets.
   Kassiber writes the catalog with best-effort owner-only permissions.
 - `<state-root>/projects/<project>/data/kassiber.sqlite3` — project SQLite DB.
   Contains the books/profiles in that project: descriptors, xpubs, addresses,
@@ -486,12 +494,12 @@ rows, and stack locals. `--save` writes the artifact under
   configure. Tunnel remote nodes over SSH / VPN / TLS proxy.
 - **Fixed, identifying `User-Agent`.** Every outbound HTTP request
   advertises `kassiber/<version>`.
-- **Legacy data-root continuity.** Kassiber moves meaningful modern
-  `~/.kassiber` state to an absent native root on first default launch and still
-  discovers older flat XDG and Satbooks databases. It never merges into an
-  existing native root. A `~/.kassiber` directory containing only the optional
-  CLI launcher or operator rendezvous is not treated as book state. `kassiber
-  status` shows the effective path.
+- **Legacy data-root continuity.** Kassiber atomically renames safe modern
+  `~/.kassiber` state to an absent same-filesystem native root on first default
+  launch and still discovers older flat XDG and Satbooks databases. It never
+  copies then deletes state or merges roots. Unknown top-level entries count as
+  state; only `bin` and `run` are excluded and remain fixed. Unsupported or
+  conflicting layouts stay legacy. `kassiber status` shows the effective path.
 - **Lightning node wallet kinds.** `coreln` can sync through read-only
   Core Lightning RPC methods. Prefer a commando rune restricted to list,
   get, and `bkpr-list*` methods with a rate cap (e.g.
