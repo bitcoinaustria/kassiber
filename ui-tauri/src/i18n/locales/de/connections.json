@@ -836,7 +836,7 @@
       "cointrackingLabel": "CoinTracking-CSV-Export",
       "cointrackingHelper": "Stelle CoinTracking auf Englisch und wähle Transaktionen → Export → CSV. Exportiere die gesamte Historie.",
       "blockpitLabel": "Blockpit-Transaktions-CSV",
-      "blockpitHelper": "Entferne in Blockpit alle Transaktionsfilter und lade dann die CSV herunter. In Blockpit ausgeschlossene Einträge fehlen im Export.",
+      "blockpitHelper": "Entferne in Blockpit alle Transaktionsfilter und lade dann die CSV herunter. Englische und deutsche Labels werden akzeptiert; in Blockpit ausgeschlossene Einträge fehlen im Export.",
       "wasabiLabel": "Pfad zum Wasabi-JSON-Bundle",
       "wasabiHelper": "Wähle ein bereinigtes lokales Bundle mit Wasabi gethistory sowie listcoins/listunspentcoins-Daten. Kassiber importiert es als Watch-only-Buchhaltungsnachweis."
     },

@@ -80,6 +80,34 @@ class TaxPlatformParserTests(unittest.TestCase):
         self.assertEqual(rows[0]["fiat_value"], 502)
         self.assertEqual(rows[0]["pricing_method"], "blockpit_csv")
 
+    def test_blockpit_current_english_and_german_labels(self):
+        cases = (
+            ("Unlabeled (In)", "inbound", "Deposit"),
+            ("Unlabeled Incoming (Deposit)", "inbound", "Deposit"),
+            ("Gift (In)", "inbound", "Gift received"),
+            ("Other Income", "inbound", "Income"),
+            ("Unlabeled (Out)", "outbound", "Withdrawal"),
+            ("Unlabeled Outgoing (Withdrawal)", "outbound", "Withdrawal"),
+            ("Gift (Out)", "outbound", "Gift sent"),
+            ("Fehlendes Label (Ein)", "inbound", "Deposit"),
+            ("Zinsen", "inbound", "Interest"),
+            ("Geschenk (Ein)", "inbound", "Gift received"),
+            ("Sonstiger Ertrag", "inbound", "Income"),
+            ("Hardfork", "inbound", "Fork"),
+            ("Security-Token-Ertrag", "inbound", "Income"),
+            ("Fehlendes Label (Aus)", "outbound", "Withdrawal"),
+            ("Zahlung", "outbound", "Spend"),
+            ("Gebühr", "outbound", "Spend"),
+            ("Geschenk (Aus)", "outbound", "Gift sent"),
+            ("Verloren", "outbound", "Lost"),
+        )
+        for label, direction, expected in cases:
+            with self.subTest(label=label):
+                self.assertEqual(
+                    importers._platform_type("Blockpit", label, direction),
+                    expected,
+                )
+
     def test_ambiguous_platform_types_fail_closed(self):
         body = COINTRACKING_CSV.replace("Staking,", "Receive Loan,")
         with tempfile.TemporaryDirectory() as tmp:

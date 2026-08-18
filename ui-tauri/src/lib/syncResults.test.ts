@@ -98,6 +98,21 @@ describe("syncResults", () => {
         "Descriptor",
       ),
     ).toBe("Descriptor refreshed: journals unchanged.");
+    expect(
+      describeWalletSyncResult(
+        {
+          wallet: "Descriptor",
+          status: "synced",
+          reconciliation_rows: 1,
+          reconciliation_changed: 1,
+          reactivated: 1,
+          journal_invalidated: true,
+        },
+        "Descriptor",
+      ),
+    ).toBe(
+      "Descriptor refreshed: 1 migration row reactivated · journals marked stale.",
+    );
   });
 
   it("marks force-full rescans in refresh summaries", () => {

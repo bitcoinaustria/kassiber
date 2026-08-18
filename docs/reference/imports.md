@@ -45,7 +45,8 @@ Format references used by the dedicated importers:
 - CoinTracking transaction CSV export: <https://cointracking.freshdesk.com/en/support/solutions/articles/29000031008-create-backup-restore-or-export-your-account-data>
 - CoinTracking transaction types: <https://cointracking.freshdesk.com/en/support/solutions/articles/29000042783>
 - Blockpit transaction CSV export: <https://intercom.help/blockpit/en/articles/12137149-how-to-export-my-blockpit-transactions-as-a-csv-file>
-- Blockpit transaction labels: <https://help.blockpit.io/hc/en-us/articles/360011893759-How-to-label-transactions>
+- Blockpit transaction labels (English): <https://intercom.help/blockpit/en/articles/12137143-basics-on-labeling-and-merging-of-transactions>
+- Blockpit transaction labels (German): <https://intercom.help/blockpit/de/articles/12137143-basiswissen-fur-das-labeling-und-merging-von-transaktionen>
 - Samourai Whirlpool account docs: <https://samourai.kayako.com/article/82-understanding-deposit-premix-and-postmix-accounts>
 - Samourai Whirlpool pool-fee docs: <https://samourai.kayako.com/article/81-understanding-pools-and-pool-fees>
 - Samourai BIP44/BIP49/BIP84 docs: <https://samourai.kayako.com/article/65-bip-44-bip-49-and-bip84>
@@ -249,6 +250,11 @@ existing transaction taxonomy. Complex loans, derivatives, liquidity-pool
 events, collateral movements, and other labels whose tax meaning cannot be
 inferred safely fail closed. Review those rows and enter the resulting Bitcoin
 facts through the Generic ledger rather than relabeling them automatically.
+Blockpit documents one export schema with English columns, while label values
+follow the account language; Kassiber accepts the documented English and
+German labels for the transaction kinds above. Country selection changes
+Blockpit's tax calculation and report configuration; Kassiber does not branch
+this transaction parser by tax country.
 CoinTracking's non-taxable receipt variants import as acquisitions rather than
 income. Its non-taxable expense variant is retained as an outflow but goes to
 the existing non-sale-disposal review gate instead of being taxed as a sale.

@@ -21,6 +21,7 @@ export interface SyncResult {
   ambiguous?: number;
   reconciliation_rows?: number;
   reconciliation_changed?: number;
+  reactivated?: number;
   utxos_skipped_unchanged?: boolean;
   utxos_refreshed?: boolean;
   force_full?: boolean;
@@ -150,6 +151,11 @@ function syncResultObservability(result: SyncResult | undefined): string | null 
     }
     if (result.ambiguous) {
       parts.push(`${formatNumber(result.ambiguous)} migration overlaps need review`);
+    }
+    if (result.reactivated) {
+      parts.push(
+        `${formatNumber(result.reactivated)} migration row${result.reactivated === 1 ? "" : "s"} reactivated`,
+      );
     }
   }
   if (result.utxos_skipped_unchanged) {
