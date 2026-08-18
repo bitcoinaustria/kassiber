@@ -74,8 +74,9 @@ are not automatic counterpart destinations.
 
 ## Paths
 
-Fresh installs use the platform app-data directory; existing `~/.kassiber`
-books remain in place. Always verify the effective root with:
+Fresh installs use the platform app-data directory. First default launch moves
+meaningful `~/.kassiber` state there when the native target does not exist;
+`~/.kassiber/{bin,run}` stay fixed. Always verify the effective root with:
 
 ```bash
 kassiber status

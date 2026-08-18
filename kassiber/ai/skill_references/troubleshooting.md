@@ -113,14 +113,19 @@ kassiber status
 
 ## Path confusion
 
-Kassiber may use the platform app-data directory, an existing `~/.kassiber`
-installation, or an explicit/legacy root. Do not assume. Read:
+Kassiber normally uses the platform app-data directory and moves meaningful
+`~/.kassiber` state there once when the native target is absent. Existing
+native roots, failed moves, and explicit/older roots can change the effective
+path. Do not assume. Read:
 
 ```bash
 kassiber status
 ```
 
 and trust the reported `state_root`, `data_root`, and `database` fields.
+
+If migration reports `state_root_migration_in_use`, close the legacy desktop
+or stop the operator broker process, then retry the original command.
 
 If you are using the Kassiber Agent Skill, remember that bundled references
 live under `<skill-dir>/references/`, not repo-root `references/`.

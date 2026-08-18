@@ -103,6 +103,9 @@ def test_version_is_database_free(cli_parser):
 def _run_cli(home: Path, *args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["HOME"] = str(home)
+    env.pop("XDG_DATA_HOME", None)
+    if os.name == "nt":
+        env["USERPROFILE"] = str(home)
     env["PYTHONPYCACHEPREFIX"] = str(home / "pycache")
     return subprocess.run(
         [sys.executable, "-m", "kassiber", *args],
@@ -127,10 +130,86 @@ def test_machine_entrypoints_are_real_subprocesses(tmp_path, command):
 
 
 def test_version_entrypoint_is_a_real_subprocess(tmp_path):
+    legacy_catalog = tmp_path / ".kassiber" / "config" / "projects.json"
+    legacy_catalog.parent.mkdir(parents=True)
+    legacy_catalog.write_text("{}\n", encoding="utf-8")
     result = _run_cli(tmp_path, "--version")
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == f"Kassiber {__version__}"
-    assert not (tmp_path / ".kassiber").exists()
+    assert legacy_catalog.is_file()
+
+
+def test_explicit_data_root_does_not_migrate_hidden_home_state(tmp_path):
+    legacy_catalog = tmp_path / ".kassiber" / "config" / "projects.json"
+    legacy_catalog.parent.mkdir(parents=True)
+    legacy_catalog.write_text("{}\n", encoding="utf-8")
+
+    result = _run_cli(
+        tmp_path,
+        "--machine",
+        "--data-root",
+        str(tmp_path / "explicit" / "data"),
+        "init",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert legacy_catalog.is_file()
+
+
+def test_explicit_env_file_does_not_migrate_hidden_home_state(tmp_path):
+    legacy_catalog = tmp_path / ".kassiber" / "config" / "projects.json"
+    legacy_catalog.parent.mkdir(parents=True)
+    legacy_catalog.write_text("{}\n", encoding="utf-8")
+    env_file = tmp_path / "backends.env"
+    env_file.write_text("", encoding="utf-8")
+
+    result = _run_cli(
+        tmp_path,
+        "--machine",
+        "--env-file",
+        str(env_file),
+        "init",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert legacy_catalog.is_file()
+    assert not (tmp_path / ".local" / "share" / "kassiber").exists()
+
+
+def test_backup_import_does_not_migrate_hidden_home_state(tmp_path):
+    legacy_catalog = tmp_path / ".kassiber" / "config" / "projects.json"
+    legacy_catalog.parent.mkdir(parents=True)
+    legacy_catalog.write_text("{}\n", encoding="utf-8")
+
+    result = _run_cli(
+        tmp_path,
+        "--machine",
+        "backup",
+        "import",
+        str(tmp_path / "missing.kassiber"),
+    )
+
+    assert result.returncode != 0
+    assert legacy_catalog.is_file()
+    assert not (tmp_path / ".local" / "share" / "kassiber").exists()
+
+
+def test_hidden_migration_helper_moves_default_state(tmp_path):
+    legacy_catalog = tmp_path / ".kassiber" / "config" / "projects.json"
+    legacy_catalog.parent.mkdir(parents=True)
+    legacy_catalog.write_text("{}\n", encoding="utf-8")
+
+    result = _run_cli(tmp_path, "--migrate-default-state-root")
+
+    native_catalog = (
+        tmp_path / ".local" / "share" / "kassiber" / "config" / "projects.json"
+    )
+    assert result.returncode == 0, result.stderr
+    assert not (tmp_path / ".kassiber" / "config").exists()
+    assert (
+        tmp_path / ".kassiber" / "run" / "operator-v1.start.lock"
+    ).is_file()
+    assert native_catalog.is_file()
 
 
 def test_command_catalog_entrypoint_is_a_real_subprocess(tmp_path):

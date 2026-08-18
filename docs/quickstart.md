@@ -27,7 +27,8 @@ wallets -> transactions -> journals -> reports
 
 - **books file** / **local state** — the local Kassiber data root for one
   person, business, or client. Fresh installs use the platform app-data
-  directory; existing `~/.kassiber` installations remain in place.
+  directory; first default launch moves meaningful `~/.kassiber` state there
+  when the native target does not exist.
 - **book** — one separate accounting and tax scope inside that local state.
 - **wallet** — a transaction source that Kassiber syncs or imports.
 - **account** — a wallet/reporting bucket that wallets can belong to.
@@ -44,6 +45,11 @@ to `~/.local/share/kassiber`),
 `~/Library/Application Support/at.bitcoinaustria.kassiber` on macOS, and
 `%LOCALAPPDATA%\\at.bitcoinaustria.kassiber` on Windows. `kassiber status`
 reports the effective path, including legacy or explicit roots.
+
+The automatic move never merges or overwrites an existing native root. The
+fixed `~/.kassiber/bin` launcher and `~/.kassiber/run` operator rendezvous stay
+in place. If the legacy state is active in a desktop or operator broker,
+Kassiber refuses the move until the desktop or broker process is stopped.
 
 Transactions flow in from wallets, journals process those transactions into
 tax and accounting state, and reports read from the processed journal state.

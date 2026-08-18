@@ -1809,6 +1809,13 @@ fn native_state_root_for_platform(
     }
 }
 
+fn state_root_migration_marker(preferred: &Path) -> Option<PathBuf> {
+    Some(preferred.parent()?.join(format!(
+        ".{}-state-migration.json",
+        preferred.file_name()?.to_string_lossy()
+    )))
+}
+
 fn state_root_for_platform(
     platform: &str,
     home: Option<&Path>,
@@ -1817,10 +1824,15 @@ fn state_root_for_platform(
 ) -> Option<PathBuf> {
     let preferred = native_state_root_for_platform(platform, home, xdg_data_home, local_app_data)?;
     if let Some(legacy) = home.map(|path| path.join(DEFAULT_STATE_DIR)) {
-        if preferred != legacy
-            && state_root_installation_rank(&legacy) > state_root_installation_rank(&preferred)
-        {
-            return Some(legacy);
+        if preferred != legacy {
+            let legacy_rank = state_root_installation_rank(&legacy);
+            let migration_in_progress = state_root_migration_marker(&preferred)
+                .is_some_and(|path| fs::symlink_metadata(path).is_ok());
+            if legacy_rank > 0
+                && (migration_in_progress || legacy_rank > state_root_installation_rank(&preferred))
+            {
+                return Some(legacy);
+            }
         }
     }
     Some(preferred)
@@ -2967,6 +2979,15 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .setup(move |app| {
             let resource_dir = app.path().resource_dir().ok();
+            let migration_status = supervisor::run_cli(
+                resource_dir.as_deref(),
+                vec!["--migrate-default-state-root".to_string()],
+            );
+            if migration_status != 0 {
+                eprintln!(
+                    "kassiber: default state-root migration failed with status {migration_status}; continuing with the safe existing root"
+                );
+            }
             let (menu, menu_handles) = build_app_menu(app.handle())?;
             app.set_menu(menu)?;
             app.manage(menu_handles);
@@ -3967,7 +3988,7 @@ mod tests {
         menu_action_for_deep_link, menu_action_for_id, native_state_root_for_platform,
         navigate_action, open_settings_action, path_is_on_path, read_operator_native_auth_secret,
         require_approved_import_project_data_root, state_root_for_platform,
-        terminal_command_contents, terminal_command_path_hint,
+        state_root_migration_marker, terminal_command_contents, terminal_command_path_hint,
         terminal_command_target_is_transient, touch_id_managed_unlock_state,
         touch_id_scope_for_selected, validated_attachment_file_path, validated_external_url,
         validated_report_export_target, TerminalCommandFileState, TerminalCommandPaths,
@@ -3985,6 +4006,13 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
     use tauri::Url;
+
+    fn test_default_project_database(root: &Path) -> PathBuf {
+        root.join("projects")
+            .join("default")
+            .join("data")
+            .join("kassiber.sqlite3")
+    }
 
     #[test]
     fn operator_native_auth_pipe_preserves_normalized_secret_bytes() {
@@ -4036,17 +4064,35 @@ mod tests {
     }
 
     #[test]
-    fn legacy_state_root_requires_real_data_and_yields_to_native_data() {
+    fn state_root_precedence_is_pure_and_ignores_bin_only_legacy() {
         let root = unique_temp_dir("state-root-selection");
         let home = root.join("home");
         let legacy = home.join(".kassiber");
         let native = home.join(".local").join("share").join("kassiber");
 
         fs::create_dir_all(legacy.join("bin")).unwrap();
+        fs::write(legacy.join("bin").join("kassiber"), b"launcher\n").unwrap();
         assert_eq!(
             state_root_for_platform("linux", Some(&home), None, None),
             Some(native.clone())
         );
+        assert!(legacy.join("bin").join("kassiber").is_file());
+        assert!(!native.exists());
+        let migration_marker = state_root_migration_marker(&native).unwrap();
+        assert_eq!(
+            migration_marker,
+            native
+                .parent()
+                .unwrap()
+                .join(".kassiber-state-migration.json")
+        );
+        fs::create_dir_all(migration_marker.parent().unwrap()).unwrap();
+        fs::write(&migration_marker, b"{}\n").unwrap();
+        assert_eq!(
+            state_root_for_platform("linux", Some(&home), None, None),
+            Some(native.clone())
+        );
+        fs::remove_file(&migration_marker).unwrap();
 
         let legacy_database = legacy
             .join("projects")
@@ -4059,6 +4105,8 @@ mod tests {
             state_root_for_platform("linux", Some(&home), None, None),
             Some(legacy.clone())
         );
+        assert!(legacy_database.is_file());
+        assert!(!native.exists());
 
         let native_catalog = native.join("config").join("projects.json");
         fs::create_dir_all(native_catalog.parent().unwrap()).unwrap();
@@ -4068,17 +4116,20 @@ mod tests {
             Some(legacy.clone())
         );
 
-        let native_database = native
-            .join("projects")
-            .join("default")
-            .join("data")
-            .join("kassiber.sqlite3");
+        let native_database = test_default_project_database(&native);
         fs::create_dir_all(native_database.parent().unwrap()).unwrap();
-        fs::write(native_database, []).unwrap();
+        fs::write(&native_database, []).unwrap();
         assert_eq!(
             state_root_for_platform("linux", Some(&home), None, None),
-            Some(native)
+            Some(native.clone())
         );
+        fs::write(&migration_marker, b"{}\n").unwrap();
+        assert_eq!(
+            state_root_for_platform("linux", Some(&home), None, None),
+            Some(legacy.clone())
+        );
+        assert!(legacy_database.is_file());
+        assert!(native_database.is_file());
         fs::remove_dir_all(root).unwrap();
     }
 

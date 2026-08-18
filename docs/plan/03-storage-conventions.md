@@ -77,10 +77,13 @@ Fresh installs select one state root per platform:
 | macOS | `~/Library/Application Support/at.bitcoinaustria.kassiber` |
 | Windows | `%LOCALAPPDATA%\\at.bitcoinaustria.kassiber` |
 
-Existing installations with a real project catalog or database under
-`~/.kassiber` keep using that root. Kassiber does not silently move financial
-data. A directory containing only the optional `~/.kassiber/bin` CLI launcher
-does not count as existing book state.
+On first default launch, an installation with a real project catalog or
+database under `~/.kassiber` moves to the native root when that target does not
+exist. Kassiber never merges or overwrites an existing native root. The fixed
+`~/.kassiber/bin` CLI launcher and `~/.kassiber/run` operator rendezvous stay in
+place, and a directory containing only either of them does not count as book
+state. Migration refuses while a legacy desktop or operator owner is active;
+close the desktop or stop the broker process and retry.
 
 The state-root layout is:
 

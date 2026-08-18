@@ -171,6 +171,7 @@ from ..projects import (
     set_selected_project,
 )
 from ..log_ring import sanitize_traceback_text
+from ..db import migrate_hidden_home_state_root_if_needed
 from ..secrets.migration import create_empty_encrypted_database
 from ..secrets.cli import add_secrets_parser, dispatch_secrets
 from ..core.sync_replication.cli import add_sync_parser, dispatch_sync
@@ -5930,6 +5931,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         from ..operator.server import main as operator_server_main
 
         return operator_server_main()
+    if raw_argv == ["--migrate-default-state-root"]:
+        try:
+            migrate_hidden_home_state_root_if_needed()
+        except AppError as exc:
+            sys.stderr.write(f"{exc.code}: {exc}\n")
+            return 1
+        return 0
     parser = build_parser()
     args = parser.parse_args(raw_argv)
     args.non_interactive = bool(args.non_interactive or args.machine)
@@ -5944,21 +5952,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     try:
-        show_cached_update(args)
-    except Exception:
-        logging.getLogger(__name__).debug(
-            "automatic update check failed",
-            exc_info=True,
-        )
-
-    try:
+        _verify_operator_child_project(args)
+        _maybe_migrate_default_state_root(args)
+        try:
+            show_cached_update(args)
+        except Exception:
+            logging.getLogger(__name__).debug(
+                "automatic update check failed",
+                exc_info=True,
+            )
         if args.command in {"projects", "operator"}:
             dispatch(None, args)
             return 0
         brokered_exit = route_brokered_command(args, raw_argv)
         if brokered_exit is not None:
             return brokered_exit
-        _verify_operator_child_project(args)
         operator_child = os.environ.get("KASSIBER_OPERATOR_CHILD") == "1"
         if operator_child:
             prime_db_passphrase(args)
@@ -6010,6 +6018,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     finally:
         if runtime is not None:
             close_runtime(runtime)
+
+
+def _maybe_migrate_default_state_root(args: argparse.Namespace) -> None:
+    if getattr(args, "data_root", None) is not None:
+        return
+    if getattr(args, "env_file", None) is not None:
+        return
+    if getattr(args, "command", None) in {"commands", "operator", "verify-download"}:
+        return
+    if (
+        getattr(args, "command", None) == "backup"
+        and getattr(args, "backup_command", None) == "import"
+    ):
+        return
+    migrate_hidden_home_state_root_if_needed()
 
 
 def _verify_operator_child_project(args: argparse.Namespace) -> None:

@@ -25,7 +25,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from . import __version__
 from .build_info import packaged_build_info
-from .db import DEFAULT_CONFIG_DIRNAME, DEFAULT_STATE_ROOT
+from .db import DEFAULT_CONFIG_DIRNAME, default_state_root
 from .errors import AppError
 
 
@@ -235,18 +235,14 @@ def cache_path() -> Path:
     override = os.environ.get(UPDATE_CACHE_ENV)
     if override:
         return Path(override).expanduser()
-    return Path(DEFAULT_STATE_ROOT).expanduser() / DEFAULT_CONFIG_DIRNAME / CACHE_FILENAME
+    return default_state_root() / DEFAULT_CONFIG_DIRNAME / CACHE_FILENAME
 
 
 def preference_path() -> Path:
     override = os.environ.get(UPDATE_PREFERENCE_ENV)
     if override:
         return Path(override).expanduser()
-    return (
-        Path(DEFAULT_STATE_ROOT).expanduser()
-        / DEFAULT_CONFIG_DIRNAME
-        / PREFERENCE_FILENAME
-    )
+    return default_state_root() / DEFAULT_CONFIG_DIRNAME / PREFERENCE_FILENAME
 
 
 def _environment_disables_update_checks(

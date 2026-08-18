@@ -176,9 +176,12 @@ Fresh installs use `$XDG_DATA_HOME/kassiber` on Linux (falling back to
 `~/.local/share/kassiber`),
 `~/Library/Application Support/at.bitcoinaustria.kassiber` on macOS, and
 `%LOCALAPPDATA%\\at.bitcoinaustria.kassiber` on Windows. The paths below call
-that directory `<state-root>`. Existing installations with real book state
-under `~/.kassiber` continue using it; Kassiber never silently relocates the
-database or attachments. `kassiber status` reports the effective root.
+that directory `<state-root>`. On first default launch, meaningful book state
+under `~/.kassiber` moves there when the native target does not exist. Kassiber
+never merges or overwrites an existing native root; `~/.kassiber/{bin,run}`
+stay fixed. An active legacy desktop or operator owner blocks migration until
+the desktop or broker process is stopped. `kassiber status` reports the
+effective root.
 
 - `<state-root>/config/projects.json` — global project catalog. Contains only
   project id/name/path/encrypted status/last-opened metadata. It must never
@@ -483,11 +486,12 @@ rows, and stack locals. `--save` writes the artifact under
   configure. Tunnel remote nodes over SSH / VPN / TLS proxy.
 - **Fixed, identifying `User-Agent`.** Every outbound HTTP request
   advertises `kassiber/<version>`.
-- **Legacy data-root continuity.** Kassiber keeps an existing modern
-  `~/.kassiber` installation in place and still discovers older flat XDG and
-  Satbooks databases. A `~/.kassiber` directory containing only the optional
-  CLI launcher is not treated as book state. `kassiber status` shows the
-  effective path.
+- **Legacy data-root continuity.** Kassiber moves meaningful modern
+  `~/.kassiber` state to an absent native root on first default launch and still
+  discovers older flat XDG and Satbooks databases. It never merges into an
+  existing native root. A `~/.kassiber` directory containing only the optional
+  CLI launcher or operator rendezvous is not treated as book state. `kassiber
+  status` shows the effective path.
 - **Lightning node wallet kinds.** `coreln` can sync through read-only
   Core Lightning RPC methods. Prefer a commando rune restricted to list,
   get, and `bkpr-list*` methods with a rate cap (e.g.
