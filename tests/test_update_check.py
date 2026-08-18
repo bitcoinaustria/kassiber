@@ -723,6 +723,7 @@ def test_machine_update_command_returns_clean_structured_information():
     stderr = io.StringIO()
     with (
         patch("kassiber.cli.main.check_for_update", return_value=result),
+        patch("kassiber.cli.main.migrate_hidden_home_state_root_if_needed"),
         patch("kassiber.cli.main._configure_cli_logging"),
         patch("sys.stdout", stdout),
         patch("sys.stderr", stderr),
@@ -747,6 +748,7 @@ def test_cli_can_disable_and_inspect_update_checks_without_network(tmp_path: Pat
             clear=False,
         ),
         patch("kassiber.cli.main._configure_cli_logging"),
+        patch("kassiber.cli.main.migrate_hidden_home_state_root_if_needed"),
         patch("kassiber.cli.main.check_for_update") as check,
         patch("sys.stdout", stdout),
         patch("sys.stderr", stderr),
@@ -782,6 +784,7 @@ def test_cli_can_enable_consent_and_check_immediately(tmp_path: Path):
             clear=False,
         ),
         patch("kassiber.cli.main._configure_cli_logging"),
+        patch("kassiber.cli.main.migrate_hidden_home_state_root_if_needed"),
         patch("kassiber.cli.main.check_for_update", return_value=result) as check,
         patch("sys.stdout", stdout),
     ):

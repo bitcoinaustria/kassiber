@@ -20,11 +20,13 @@ Call sites should never embed their own `CREATE TABLE` or `ALTER TABLE`
 DDL — add it to `SCHEMA` or `ensure_schema_compat` here instead.
 """
 
+import errno
 import hashlib
 import json
 import os
 import sqlite3
 import stat
+import sys
 import tempfile
 import uuid
 from contextlib import contextmanager, suppress
@@ -45,14 +47,437 @@ from .wallet_descriptors import (
 
 
 APP_NAME = "kassiber"
+APP_IDENTIFIER = "at.bitcoinaustria.kassiber"
 LEGACY_APP_NAME = "satbooks"
-DEFAULT_STATE_ROOT = os.path.expanduser(f"~/.{APP_NAME}")
 DEFAULT_DATA_DIRNAME = "data"
 DEFAULT_CONFIG_DIRNAME = "config"
 DEFAULT_EXPORTS_DIRNAME = "exports"
 DEFAULT_ATTACHMENTS_DIRNAME = "attachments"
 DEFAULT_SETTINGS_FILENAME = "settings.json"
 DATABASE_INSTANCE_ID_SETTING = "database_instance_id"
+STATE_ROOT_MIGRATION_VERSION = 1
+STATE_ROOT_MIGRATION_FILENAME = ".state-root-migration.json"
+
+
+def native_state_root(*, platform=None, environ=None, home=None):
+    """Return the OS-native root for a fresh Kassiber installation."""
+
+    platform = sys.platform if platform is None else platform
+    environ = os.environ if environ is None else environ
+    home = Path.home() if home is None else Path(home)
+    if platform == "darwin":
+        return home / "Library" / "Application Support" / APP_IDENTIFIER
+    if platform == "win32":
+        base = Path(str(environ.get("LOCALAPPDATA") or ""))
+        if not base.is_absolute():
+            base = home / "AppData" / "Local"
+        return base / APP_IDENTIFIER
+    xdg_data_home = str(environ.get("XDG_DATA_HOME") or "")
+    base = Path(xdg_data_home) if Path(xdg_data_home).is_absolute() else (
+        home / ".local" / "share"
+    )
+    return base / APP_NAME
+
+
+def _state_root_has_movable_state(root: Path) -> bool:
+    """Return whether a root contains user state beyond bin/run/proof files."""
+
+    try:
+        with os.scandir(root) as entries:
+            return any(
+                entry.name
+                not in {"bin", "run", STATE_ROOT_MIGRATION_FILENAME}
+                for entry in entries
+            )
+    except FileNotFoundError:
+        return False
+    except OSError:
+        # Fail closed: unreadable state must never be mistaken for an empty install.
+        return root.exists() or root.is_symlink()
+
+
+def default_state_root(*, platform=None, environ=None, home=None):
+    """Select a state root without changing the filesystem."""
+
+    home = Path.home() if home is None else Path(home)
+    preferred = native_state_root(platform=platform, environ=environ, home=home)
+    legacy = _legacy_state_root(home)
+    return legacy if _state_root_has_movable_state(legacy) else preferred
+
+
+def _legacy_state_root(home=None):
+    home = Path.home() if home is None else Path(home)
+    return home / f".{APP_NAME}"
+
+
+def _state_root_migration_lock_path(preferred: Path) -> Path:
+    return preferred.parent / f".{preferred.name}-state-migration"
+
+
+def _fsync_directory(path: Path) -> None:
+    if os.name == "nt":
+        return
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    fd = os.open(path, flags)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _write_migration_json(
+    path: Path, payload: dict[str, object], *, mode: int = 0o600
+) -> None:
+    fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, mode)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_name, path)
+        _fsync_directory(path.parent)
+    finally:
+        with suppress(OSError):
+            os.close(fd)
+        Path(temporary_name).unlink(missing_ok=True)
+
+
+def _read_migration_json(path: Path) -> dict[str, object]:
+    try:
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode):
+            raise OSError("migration marker is not a regular file")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise AppError(
+            "default state migration marker is invalid",
+            code="state_root_migration_failed",
+            details={"path": str(path)},
+            retryable=True,
+        ) from exc
+    if not isinstance(payload, dict):
+        raise AppError(
+            "default state migration marker is invalid",
+            code="state_root_migration_failed",
+            details={"path": str(path)},
+            retryable=True,
+        )
+    return payload
+
+
+def _migration_proof_matches(root: Path) -> bool:
+    try:
+        payload = _read_migration_json(
+            root / STATE_ROOT_MIGRATION_FILENAME
+        )
+    except AppError:
+        return False
+    return payload == {
+        "schema_version": STATE_ROOT_MIGRATION_VERSION,
+        "migrated_from_hidden_home": True,
+    }
+
+
+def _rebase_moved_project_catalog(
+    moved_root: Path, legacy: Path, preferred: Path
+) -> None:
+    catalog = moved_root / DEFAULT_CONFIG_DIRNAME / "projects.json"
+    if not catalog.is_file():
+        return
+    try:
+        payload = json.loads(catalog.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise AppError(
+            "default state migration could not read the project catalog",
+            code="state_root_migration_failed",
+            details={"path": str(catalog)},
+            retryable=True,
+        ) from exc
+    if not isinstance(payload, dict):
+        raise AppError(
+            "default state migration project catalog is invalid",
+            code="state_root_migration_failed",
+            details={"path": str(catalog)},
+            retryable=True,
+        )
+    changed = False
+    for entry in payload.get("projects") or []:
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+            continue
+        path = Path(os.path.normpath(entry["path"]))
+        if not path.is_absolute():
+            continue
+        try:
+            relative = path.relative_to(legacy)
+        except ValueError:
+            continue
+        entry["path"] = str(preferred / relative)
+        changed = True
+    if changed:
+        mode = stat.S_IMODE(catalog.stat().st_mode)
+        _write_migration_json(catalog, payload, mode=mode)
+
+
+def _restore_fixed_state_paths(moved_root: Path, legacy: Path) -> None:
+    try:
+        if legacy.is_symlink() or (legacy.exists() and not legacy.is_dir()):
+            raise OSError("fixed legacy root is not a real directory")
+        legacy.mkdir(parents=True, mode=0o700, exist_ok=True)
+        legacy.chmod(0o700)
+        for dirname in ("bin", "run"):
+            source = moved_root / dirname
+            target = legacy / dirname
+            if not (source.exists() or source.is_symlink()):
+                continue
+            if target.exists() or target.is_symlink():
+                raise OSError(f"fixed legacy path already exists: {target}")
+            source.rename(target)
+    except OSError as exc:
+        raise AppError(
+            "default state migration could not restore fixed runtime paths",
+            code="state_root_migration_failed",
+            details={"source": str(moved_root), "target": str(legacy)},
+            retryable=True,
+        ) from exc
+
+
+def _legacy_owner_lock_is_active(lock_path: Path) -> bool:
+    from .operator.project import _active_owner_record
+
+    return _active_owner_record(lock_path, str(lock_path)) is not None
+
+
+@contextmanager
+def _hold_legacy_operator_locks(legacy: Path):
+    """Refuse migration while a long-lived legacy owner is active."""
+
+    if os.name == "nt":
+        try:
+            for lock_path in legacy.rglob(".operator-owner.lock"):
+                if _legacy_owner_lock_is_active(lock_path):
+                    raise AppError(
+                        "default state migration requires exclusive access",
+                        code="state_root_migration_in_use",
+                        hint=(
+                            "Stop the operator broker process and close the desktop "
+                            "app, then retry."
+                        ),
+                        retryable=True,
+                    )
+        except AppError:
+            raise
+        except OSError as exc:
+            raise AppError(
+                "default state migration could not inspect an operator lock",
+                code="state_root_migration_failed",
+                details={"path": str(legacy)},
+                retryable=True,
+            ) from exc
+        yield
+        return
+    import fcntl
+
+    handles = []
+
+    def acquire(lock_path: Path, *, create: bool = False) -> None:
+        flags = os.O_RDWR | (os.O_CREAT if create else 0)
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        try:
+            fd = os.open(lock_path, flags, 0o600)
+            handle = os.fdopen(fd, "r+b", buffering=0)
+        except FileNotFoundError:
+            return
+        except OSError as exc:
+            raise AppError(
+                "default state migration could not inspect an operator lock",
+                code="state_root_migration_failed",
+                details={"path": str(lock_path)},
+                retryable=True,
+            ) from exc
+        try:
+            info = os.fstat(handle.fileno())
+            if not stat.S_ISREG(info.st_mode):
+                raise OSError("operator lock is not a regular file")
+            if hasattr(os, "getuid") and info.st_uid != os.getuid():
+                raise OSError("operator lock belongs to another OS user")
+            os.fchmod(handle.fileno(), 0o600)
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            handle.close()
+            raise AppError(
+                "default state migration requires exclusive access",
+                code="state_root_migration_in_use",
+                hint=(
+                    "Stop the operator broker process and close the desktop "
+                    "app, then retry."
+                ),
+                retryable=True,
+            ) from exc
+        except OSError as exc:
+            handle.close()
+            raise AppError(
+                "default state migration could not inspect an operator lock",
+                code="state_root_migration_failed",
+                details={"path": str(lock_path)},
+                retryable=True,
+            ) from exc
+        handles.append(handle)
+
+    try:
+        startup_lock = legacy / "run" / "operator-v1.start.lock"
+        startup_lock.parent.mkdir(parents=True, exist_ok=True)
+        acquire(startup_lock, create=True)
+        for lock_path in legacy.rglob(".operator-owner.lock"):
+            acquire(lock_path)
+        yield
+    finally:
+        for handle in handles:
+            handle.close()
+
+
+def _reject_unsafe_migration_symlinks(root: Path) -> None:
+    """Fail closed when rename semantics could redirect state outside the root."""
+
+    try:
+        if root.is_symlink() or not root.is_dir():
+            raise OSError("legacy state root is not a real directory")
+
+        def fail_walk(error):
+            raise error
+
+        for directory, names, filenames in os.walk(
+            root, followlinks=False, onerror=fail_walk
+        ):
+            current = Path(directory)
+            if current == root:
+                names[:] = [name for name in names if name not in {"bin", "run"}]
+                filenames = [
+                    name for name in filenames if name not in {"bin", "run"}
+                ]
+            for name in (*names, *filenames):
+                if (current / name).is_symlink():
+                    raise OSError("legacy state contains a symbolic link")
+    except OSError as exc:
+        raise AppError(
+            "default state migration cannot safely move this legacy layout",
+            code="state_root_migration_failed",
+            details={"path": str(root)},
+            retryable=False,
+        ) from exc
+
+
+def _raise_state_root_conflict(legacy: Path, preferred: Path) -> None:
+    raise AppError(
+        "both legacy and native default state roots contain Kassiber state",
+        code="state_root_conflict",
+        hint=(
+            "Use --data-root to inspect and choose a root, then reconcile or move "
+            "one root before retrying."
+        ),
+        details={"legacy": str(legacy), "native": str(preferred)},
+        retryable=True,
+    )
+
+
+def migrate_hidden_home_state_root_if_needed(*, platform=None, environ=None, home=None):
+    """Atomically rename meaningful legacy state to the native root once.
+
+    The move deliberately has no copy fallback: preserving database inodes and
+    avoiding a partial cross-filesystem migration are security/data-safety
+    properties, not optimizations.
+    """
+
+    home = Path.home() if home is None else Path(home)
+    preferred = native_state_root(platform=platform, environ=environ, home=home)
+    legacy = _legacy_state_root(home)
+    if preferred == legacy:
+        return preferred
+    proof_name = STATE_ROOT_MIGRATION_FILENAME
+    proof_payload = {
+        "schema_version": STATE_ROOT_MIGRATION_VERSION,
+        "migrated_from_hidden_home": True,
+    }
+    moved = False
+    try:
+        preferred.parent.mkdir(parents=True, exist_ok=True)
+        with _managed_settings_lock(_state_root_migration_lock_path(preferred)):
+            legacy_proof = legacy / proof_name
+            legacy_has_state = _state_root_has_movable_state(legacy)
+            preferred_has_proof = _migration_proof_matches(preferred)
+            moved = preferred_has_proof
+            legacy_has_proof = _migration_proof_matches(legacy)
+            legacy_proof_exists = legacy_proof.exists() or legacy_proof.is_symlink()
+
+            if preferred.exists() or preferred.is_symlink():
+                if preferred.is_symlink():
+                    return (
+                        legacy
+                        if legacy_has_state or legacy_proof_exists
+                        else preferred
+                    )
+                if preferred_has_proof:
+                    if legacy_has_state or legacy_proof_exists:
+                        _raise_state_root_conflict(legacy, preferred)
+                else:
+                    return (
+                        legacy
+                        if legacy_has_state or legacy_proof_exists
+                        else preferred
+                    )
+            else:
+                if not legacy_has_state:
+                    return preferred
+                if legacy_proof_exists and not legacy_has_proof:
+                    return legacy
+                try:
+                    _reject_unsafe_migration_symlinks(legacy)
+                    if legacy.stat().st_dev != preferred.parent.stat().st_dev:
+                        if legacy_has_proof:
+                            legacy_proof.unlink()
+                            _fsync_directory(legacy)
+                        return legacy
+                    with _hold_legacy_operator_locks(legacy):
+                        if preferred.exists() or preferred.is_symlink():
+                            return legacy
+                        if not legacy_has_proof:
+                            _write_migration_json(legacy_proof, proof_payload)
+                        legacy.rename(preferred)
+                        moved = True
+                except AppError:
+                    return legacy
+                except OSError as exc:
+                    if exc.errno == errno.EXDEV and legacy_proof.exists():
+                        legacy_proof.unlink()
+                        _fsync_directory(legacy)
+                    return legacy
+                _fsync_directory(legacy.parent)
+                _fsync_directory(preferred.parent)
+
+            preferred.chmod(0o700)
+            _restore_fixed_state_paths(preferred, legacy)
+            if _state_root_has_movable_state(legacy):
+                _raise_state_root_conflict(legacy, preferred)
+            _rebase_moved_project_catalog(preferred, legacy, preferred)
+            _fsync_directory(preferred)
+            if legacy.exists():
+                _fsync_directory(legacy)
+            return preferred
+    except OSError as exc:
+        if not moved and _state_root_has_movable_state(legacy):
+            return legacy
+        raise AppError(
+            "default state migration failed",
+            code="state_root_migration_failed",
+            details={"source": str(legacy), "target": str(preferred)},
+            retryable=True,
+        ) from exc
+
+
+DEFAULT_STATE_ROOT = os.fspath(default_state_root())
 DEFAULT_DATA_ROOT = os.path.join(DEFAULT_STATE_ROOT, DEFAULT_DATA_DIRNAME)
 LEGACY_XDG_DATA_ROOT = os.path.expanduser(f"~/.local/share/{APP_NAME}")
 
@@ -2547,20 +2972,17 @@ def ensure_data_root(data_root):
 
 
 def resolve_effective_data_root(data_root):
-    """Resolve the active data root, honoring older home/XDG locations.
-
-    Kassiber now prefers a single hidden home folder (`~/.kassiber`) so
-    repo checkouts stay stateless by default. Existing users keep working:
-    when the caller requested the default hidden-home path and it does not
-    exist yet, fall back to the older XDG-style locations.
-    """
+    """Resolve the active data root, honoring older flat XDG locations."""
     requested = Path(data_root).expanduser()
     if requested == Path(DEFAULT_DATA_ROOT).expanduser():
         for legacy in (
             Path(LEGACY_XDG_DATA_ROOT).expanduser(),
             Path(LEGACY_DATA_ROOT).expanduser(),
         ):
-            if not requested.exists() and legacy.exists():
+            if not requested.exists() and any(
+                (legacy / filename).is_file()
+                for filename in (DEFAULT_DB_FILENAME, LEGACY_DB_FILENAME)
+            ):
                 return legacy
     return requested
 

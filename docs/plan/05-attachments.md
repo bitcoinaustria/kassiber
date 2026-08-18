@@ -60,7 +60,7 @@ If copied project-local files become central to backups, keep them under the
 project directory, for example:
 
 ```text
-~/.kassiber/projects/<project>/blobs/attachments/
+<state-root>/projects/<project>/blobs/attachments/
 ```
 
 ## UI Direction

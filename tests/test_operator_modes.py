@@ -17,6 +17,7 @@ from kassiber.operator.modes import (
 from kassiber.operator.project import canonical_project
 from kassiber.secrets.unlock_store import (
     enable_remembered_unlock_authenticated,
+    remembered_unlock_account,
     set_cli_remembered_unlock_enabled,
 )
 
@@ -156,6 +157,37 @@ class OperatorModeTest(unittest.TestCase):
             self.assertEqual(status["binding_state"], "mismatch")
             self.assertEqual(effective_unlock_mode(destination), "manual")
             self.assertFalse(remembered_unlock_allowed(destination))
+
+    def test_whole_root_rename_preserves_unattended_policy_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as parent:
+            legacy = Path(parent) / ".kassiber"
+            data_root = legacy / "projects" / "default" / "data"
+            data_root.mkdir(parents=True)
+            (data_root / "kassiber.sqlite3").write_bytes(b"database")
+            lock_root = Path(parent) / "owner-locks"
+            lock_root.mkdir()
+            with mock.patch(
+                "kassiber.operator.project._owner_lock_root", return_value=lock_root
+            ):
+                enable_remembered_unlock_authenticated(
+                    data_root,
+                    database_identity=TEST_DATABASE_IDENTITY,
+                    enrollment_id=TEST_ENROLLMENT_ID,
+                    expected_project_identity=canonical_project(data_root).identity,
+                )
+                credential_account = remembered_unlock_account(data_root)
+
+                native = Path(parent) / "native"
+                legacy.rename(native)
+                renamed_data_root = native / "projects" / "default" / "data"
+
+                status = unlock_mode_status(renamed_data_root)
+                self.assertEqual(status["binding_state"], "valid")
+                self.assertEqual(status["effective"], "unattended")
+                self.assertTrue(remembered_unlock_allowed(renamed_data_root))
+                self.assertEqual(
+                    remembered_unlock_account(renamed_data_root), credential_account
+                )
 
     @mock.patch("kassiber.core.runtime.load_remembered_passphrase")
     def test_manual_runtime_does_not_read_credential_store(self, load) -> None:

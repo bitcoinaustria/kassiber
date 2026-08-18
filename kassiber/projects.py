@@ -30,6 +30,7 @@ from .db import (
     LEGACY_DATA_ROOT,
     LEGACY_DB_FILENAME,
     LEGACY_XDG_DATA_ROOT,
+    default_state_root as resolve_default_state_root,
     resolve_database_path,
     resolve_effective_state_root,
 )
@@ -45,6 +46,7 @@ PROJECT_CATALOG_FILENAME = "projects.json"
 PROJECT_MIGRATION_MARKER = "legacy-project-migration.json"
 MIGRATION_REPORTS_DIRNAME = "migration-reports"
 LEGACY_MIGRATION_BACKUP_PREFIX = "pre-project-migration-"
+_IMPORTED_DEFAULT_STATE_ROOT = DEFAULT_STATE_ROOT
 
 
 WORKSPACE_SPLIT_POLICY: dict[str, Any] = {
@@ -193,7 +195,9 @@ def _chmod_best_effort(path: Path, mode: int) -> None:
 
 
 def default_state_root() -> Path:
-    return Path(DEFAULT_STATE_ROOT).expanduser()
+    if DEFAULT_STATE_ROOT != _IMPORTED_DEFAULT_STATE_ROOT:
+        return Path(DEFAULT_STATE_ROOT).expanduser()
+    return resolve_default_state_root()
 
 
 def projects_root(state_root: str | Path | None = None) -> Path:
@@ -603,7 +607,7 @@ def project_metadata_for_data_root(data_root: str | Path) -> dict[str, Any] | No
 
 def _legacy_layout() -> LegacyLayout | None:
     candidate_data_roots = (
-        Path(DEFAULT_DATA_ROOT).expanduser(),
+        default_state_root() / DEFAULT_DATA_DIRNAME,
         Path(LEGACY_XDG_DATA_ROOT).expanduser(),
         Path(LEGACY_DATA_ROOT).expanduser(),
     )
@@ -875,7 +879,9 @@ def validate_project_migration_after_unlock(data_root: str | Path, conn: sqlite3
     if not marker.get("requires_single_workspace_validation"):
         return
     workspace_count = int(conn.execute("SELECT COUNT(*) FROM workspaces").fetchone()[0])
-    source_state = Path(marker.get("source_state_root") or DEFAULT_STATE_ROOT).expanduser()
+    source_state = Path(
+        marker.get("source_state_root") or default_state_root()
+    ).expanduser()
     source_db_raw = marker.get("source_database")
     source_db = Path(source_db_raw).expanduser() if isinstance(source_db_raw, str) else None
     if workspace_count > 1:

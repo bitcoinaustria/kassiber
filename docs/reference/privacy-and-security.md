@@ -91,7 +91,7 @@ configurable.
 | Clicking an external documentation, explorer, release, or evidence link | the selected URL in the system browser | browser HTTP(S) | normal browser IP, cookies, referrer policy, and request metadata; Kassiber never preloads those pages |
 | consented AI tools inside `chat` or the desktop Assistant: those that mutate the book (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`, `ui.rates.latest`) and those that only read but do so off-machine (`ui.connections.node.snapshot`, `ui.reports.lightning_profitability`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row. A tool that leaves the machine always prompts, even when it changes nothing, and is never chosen by the assistant's automatic context reads |
 
-The app-wide consent at `~/.kassiber/config/update-checks.json` is owner-only
+The app-wide consent at `<state-root>/config/update-checks.json` is owner-only
 and contains only a schema version and boolean. Missing, malformed, symlinked,
 or explicitly disabled consent fails closed in both the native desktop command
 and packaged CLI. The renderer reads this file through the native boundary and
@@ -107,7 +107,7 @@ the cache in the background.
 CLI-only users manage it locally with `kassiber update --enable-checks`,
 `--disable-checks`, or `--status`; the latter two never contact GitHub.
 
-The CLI cache at `~/.kassiber/config/update-check.json` contains only the public
+The CLI cache at `<state-root>/config/update-check.json` contains only the public
 release version, URL, prerelease flag, and check time; it is written mode `0600`
 where supported. A sibling owner-only `.attempt` file contains only the last
 automatic-attempt time so an unavailable GitHub endpoint cannot turn every CLI
@@ -172,13 +172,32 @@ start or bundle Tor, so the user still needs an existing Tor service.
 
 ## Local storage
 
-- `~/.kassiber/config/projects.json` — global project catalog. Contains only
+Fresh installs use `$XDG_DATA_HOME/kassiber` on Linux (falling back to
+`~/.local/share/kassiber`),
+`~/Library/Application Support/at.bitcoinaustria.kassiber` on macOS, and
+`%LOCALAPPDATA%\\at.bitcoinaustria.kassiber` on Windows. The paths below call
+that directory `<state-root>`. On first default launch, safe same-filesystem
+state under `~/.kassiber` moves there with an atomic rename when the native
+target is absent. Any top-level entry except `bin` or `run` counts as state.
+Kassiber never copies then deletes accounting data, merges roots, or overwrites
+an existing native root; cross-filesystem, symlink-managed, and conflicting
+layouts stay legacy, while `~/.kassiber/{bin,run}` stay fixed. An active legacy
+desktop or operator owner defers migration; startup keeps using the legacy root
+until that process stops. `kassiber status` reports the effective root.
+
+- `<state-root>/config/projects.json` — global project catalog. Contains only
   project id/name/path/encrypted status/last-opened metadata. It must never
   contain passphrases, verifier hashes, wrapped keys, descriptors, xpubs,
   backend tokens, accounting rows, or chat content. Project ids/names and
   last-opened timestamps are still local metadata: choose labels accordingly.
+- `<state-root>/.state-root-migration.json` — owner-only migration marker. It is
+  prepared inside the legacy root and travels with the atomic rename; its
+  location under the native root proves cutover completed. It contains only a
+  schema version and boolean, allowing macOS to find and retire the old
+  path-scoped Touch ID item; it contains no paths, file hashes, book metadata,
+  or secrets.
   Kassiber writes the catalog with best-effort owner-only permissions.
-- `~/.kassiber/projects/<project>/data/kassiber.sqlite3` — project SQLite DB.
+- `<state-root>/projects/<project>/data/kassiber.sqlite3` — project SQLite DB.
   Contains the books/profiles in that project: descriptors, xpubs, addresses,
   transactions, metadata, rates cache, backend definitions/defaults, and any
   stored backend credentials. Versioned BDK/LWK observer state and opaque LWK
@@ -195,18 +214,18 @@ start or bundle Tor, so the user still needs an existing Tor service.
   packages do not include chat content. The opt-in `kassiber chat
   --transcript <path>` file is the one plaintext chat artifact, written only
   where the user points it.
-- `~/.kassiber/projects/<project>/config/backends.env` — project-local backend
+- `<state-root>/projects/<project>/config/backends.env` — project-local backend
   bootstrap file. It is plaintext. It may contain Bitcoin Core RPC credentials
   and backend tokens until `kassiber secrets migrate-credentials` lifts them
   into the encrypted project DB.
-- `~/.kassiber/projects/<project>/config/settings.json` — managed state
+- `<state-root>/projects/<project>/config/settings.json` — managed state
   manifest for the project path layout. Not secret by itself, but it reveals
   where the rest of that project lives.
-- `~/.kassiber/projects/<project>/attachments/` — managed attachment store for
+- `<state-root>/projects/<project>/attachments/` — managed attachment store for
   copied local files. URL attachments are stored as literal references in the
   database and are not fetched. Attachment files are plaintext unless the user
   protects the project directory with OS or volume encryption.
-- `~/.kassiber/projects/<project>/exports/` — generated reports and handoff
+- `<state-root>/projects/<project>/exports/` — generated reports and handoff
   artifacts. These are plaintext user outputs and are outside SQLCipher.
 - Liquid descriptor wallets embed **private SLIP77 blinding keys** in
   `wallets.config_json`. Anyone who can read the DB can unblind your
@@ -220,8 +239,9 @@ start or bundle Tor, so the user still needs an existing Tor service.
   OS permissions and keep it out of shared or cloud-synced folders. On POSIX,
   Kassiber refuses scanner files that are not regular files owned by the current
   user or that grant any group/other permissions.
-- Older installs may still resolve to `~/.local/share/kassiber`,
-  `~/.local/share/satbooks`, or a legacy `<data-root>/.env`; run
+- Older installs may still resolve to `~/.kassiber`, a flat
+  `~/.local/share/kassiber`, `~/.local/share/satbooks`, or a legacy
+  `<data-root>/.env`; run
   `kassiber status` to see the active paths.
 - Keep backend config out of version control. Prefer `COOKIEFILE` over inline
   `USERNAME` / `PASSWORD`.
@@ -236,7 +256,7 @@ operator lease, and `unattended` opts into the separate CLI remembered-unlock
 credential. Brokered mode never falls through to remembered unlock. Unlocking
 one project does not unlock another.
 
-- `~/.kassiber/projects/<project>/data/kassiber.sqlite3` — when encrypted, contents are
+- `<state-root>/projects/<project>/data/kassiber.sqlite3` — when encrypted, contents are
   protected by SQLCipher 4 with stock PBKDF2-HMAC-SHA512
   (`kdf_iter = 256000`). Recoverable with the upstream `sqlcipher`
   binary using only the passphrase.
@@ -474,10 +494,12 @@ rows, and stack locals. `--save` writes the artifact under
   configure. Tunnel remote nodes over SSH / VPN / TLS proxy.
 - **Fixed, identifying `User-Agent`.** Every outbound HTTP request
   advertises `kassiber/<version>`.
-- **Legacy data-root fallback.** If `~/.kassiber` does not exist yet but
-  `~/.local/share/kassiber` or `~/.local/share/satbooks` does, Kassiber
-  keeps using the older directory. `kassiber status` shows the effective
-  path.
+- **Legacy data-root continuity.** Kassiber atomically renames safe modern
+  `~/.kassiber` state to an absent same-filesystem native root on first default
+  launch and still discovers older flat XDG and Satbooks databases. It never
+  copies then deletes state or merges roots. Unknown top-level entries count as
+  state; only `bin` and `run` are excluded and remain fixed. Unsupported or
+  conflicting layouts stay legacy. `kassiber status` shows the effective path.
 - **Lightning node wallet kinds.** `coreln` can sync through read-only
   Core Lightning RPC methods. Prefer a commando rune restricted to list,
   get, and `bkpr-list*` methods with a rate cap (e.g.

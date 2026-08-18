@@ -2,7 +2,7 @@
   "shell": {
     "footer": {
       "privateKeys": "Private keys never enter Kassiber.",
-      "stateLocation": "State stays under ~/.kassiber unless overridden.",
+      "stateLocation": "State stays in your system's per-user app-data folder unless overridden.",
       "noSaas": "Dodge the SaaS honeypots."
     },
     "finishError": "Could not finish onboarding.",
@@ -144,7 +144,7 @@
     "openExisting": {
       "titleOpening": "Opening books…",
       "title": "Open existing books",
-      "body": "Open a Kassiber state root or data folder and choose local books.",
+      "body": "Open a Kassiber project folder or data folder and choose local books.",
       "desktopOnly": "desktop app only",
       "tooltipAvailable": "Open existing local Kassiber books",
       "tooltipUnavailable": "Opening existing books is available in the desktop app"
@@ -159,7 +159,7 @@
     "highlights": {
       "localDatabase": {
         "title": "One local database",
-        "body": "~/.kassiber by default, or an imported Kassiber folder."
+        "body": "Your system's per-user app-data folder by default, or an imported Kassiber folder."
       },
       "encrypted": {
         "title": "Encrypted by default",

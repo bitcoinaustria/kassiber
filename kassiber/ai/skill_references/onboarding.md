@@ -74,7 +74,11 @@ are not automatic counterpart destinations.
 
 ## Paths
 
-Default state root is usually `~/.kassiber`, but older machines may resolve to a legacy XDG path. Always verify with:
+Fresh installs use the platform app-data directory. First default launch uses
+an atomic same-filesystem rename for safe `~/.kassiber` state when the native
+target is absent; any top-level entry except `bin` or `run` counts as state.
+Unsupported or conflicting layouts stay legacy and `bin`/`run` stay fixed.
+Always verify the effective root with:
 
 ```bash
 kassiber status
