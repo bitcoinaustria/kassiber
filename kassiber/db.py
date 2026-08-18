@@ -406,7 +406,6 @@ def migrate_hidden_home_state_root_if_needed(*, platform=None, environ=None, hom
         preferred.parent.mkdir(parents=True, exist_ok=True)
         with _managed_settings_lock(_state_root_migration_lock_path(preferred)):
             legacy_proof = legacy / proof_name
-            preferred_proof = preferred / proof_name
             legacy_has_state = _state_root_has_movable_state(legacy)
             preferred_has_proof = _migration_proof_matches(preferred)
             moved = preferred_has_proof

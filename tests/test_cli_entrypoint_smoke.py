@@ -10,9 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from kassiber import __version__
 import kassiber.cli.main as cli_main
-from kassiber.cli.main import build_parser
+from kassiber import __version__
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -81,7 +80,7 @@ HELP_PATHS = (
 
 @pytest.fixture(scope="module")
 def cli_parser():
-    return build_parser()
+    return cli_main.build_parser()
 
 
 @pytest.mark.parametrize("command_path", HELP_PATHS)
@@ -211,7 +210,7 @@ def test_operator_startup_migrates_before_creating_a_lease(monkeypatch, argv, mi
         cli_main, "migrate_hidden_home_state_root_if_needed", lambda: calls.append(True)
     )
 
-    cli_main._maybe_migrate_default_state_root(build_parser().parse_args(argv))
+    cli_main._maybe_migrate_default_state_root(cli_main.build_parser().parse_args(argv))
 
     assert bool(calls) is migrates
 
