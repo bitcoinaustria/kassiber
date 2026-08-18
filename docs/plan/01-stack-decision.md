@@ -86,7 +86,7 @@ Python.
 │                                  └─────────────┬────────────┘ │
 └────────────────────────────────────────────────┼─────────────┘
                                                  ▼
-                                ~/.kassiber/ (SQLite, attachments)
+                                <state-root>/ (SQLite, attachments)
 ```
 
 The webview never speaks to the Python child directly. Every call routes

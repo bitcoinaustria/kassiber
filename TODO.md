@@ -605,7 +605,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [ ] Centralize the safe-view contract in `kassiber/core/api/safe_views.py`
   so every consumer sees the same redaction
 - [x] Local log inspection & export (RAM-only by design). The original
-  "`~/.kassiber/logs/` with rotation + `diagnostics collect` folds all logs"
+  "`<state-root>/logs/` with rotation + `diagnostics collect` folds all logs"
   plan is **retired**: an always-on on-disk log file is an explicitly rejected
   design (see [docs/reference/logging.md](docs/reference/logging.md)) and
   `collect_public_diagnostics` deliberately folds no logs. The log-export need
@@ -1152,7 +1152,7 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   CLI and daemon, and a `tar | age` single-file backup format.
 - [x] Introduce first-class project/book-set containers with per-project
   SQLCipher boundaries: the default runtime resolves to
-  `~/.kassiber/projects/<project>/data/kassiber.sqlite3`, the global
+  `<state-root>/projects/<project>/data/kassiber.sqlite3`, the global
   `projects.json` catalog stores only non-secret routing metadata, CLI/daemon
   project create/list/select flows close the active DB before switching, and
   backups are scoped to the selected project container. Legacy app-wide installs

@@ -34,8 +34,9 @@ Out of scope unless a future design says otherwise:
 - remaining CLI helper surface: `kassiber/cli/handlers.py`
 - shared runtime/core: `kassiber/core/`
 - desktop shell: `ui-tauri/` (under construction per [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md))
-- storage: SQLite under current app-wide `~/.kassiber/` state root
-- target storage direction: one DB per project under `~/.kassiber/projects/`
+- storage: SQLite under the OS-native per-user app-data root, with existing
+  `~/.kassiber` installations retained in place
+- storage shape: one DB per project under `<state-root>/projects/`
 - tax engine: RP2 fork at `bitcoinaustria/rp2`
 - machine envelope: `{kind, schema_version, data}` for success, structured
   `error` envelope for failure

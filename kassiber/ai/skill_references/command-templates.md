@@ -265,7 +265,7 @@ kassiber backup export --file /tmp/snap.kassiber --recipient "age1..."   # recip
 
 kassiber backup import /tmp/snap.kassiber --backup-passphrase-fd 4 4< /tmp/outer
 kassiber backup import /tmp/snap.kassiber --backup-passphrase-fd 4 \
-  --install --target-data-root ~/.kassiber/data 4< /tmp/outer
+  --install --target-data-root /custom/kassiber/data 4< /tmp/outer
 ```
 
 `--install` snapshots any pre-existing live data into a sibling

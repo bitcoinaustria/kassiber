@@ -113,8 +113,8 @@ kassiber secrets status
 
 After a successful migration:
 
-- `~/.kassiber/data/kassiber.sqlite3` is the encrypted file.
-- `~/.kassiber/data/kassiber.pre-encryption.sqlite3.bak` is the original
+- `<data-root>/kassiber.sqlite3` is the encrypted file.
+- `<data-root>/kassiber.pre-encryption.sqlite3.bak` is the original
   plaintext file, preserved so a manual rollback is one `mv` away.
 - Kassiber refuses to overwrite an existing `.pre-encryption.sqlite3.bak`;
   inspect, move, or delete the old rollback file before retrying.
@@ -144,7 +144,7 @@ If an update is rejected, that enrollment is disabled rather than left stale.
 The SQLCipher boundary covers `kassiber.sqlite3` only. Everything else under
 the data root remains plaintext on disk:
 
-- `~/.kassiber/config/backends.env` — backend bootstrap dotenv. URLs,
+- `<project-root>/config/backends.env` — backend bootstrap dotenv. URLs,
   `KIND`, chain, network, batch sizes, and other addressing metadata
   may stay here in plaintext. Tokens, passwords, auth headers, and
   basic-auth usernames must NOT — those are secret-shaped fields that
@@ -152,11 +152,11 @@ the data root remains plaintext on disk:
   / `--token-fd FD` so they go straight into the DB, and run
   `kassiber secrets migrate-credentials` once to lift any pre-existing
   secret entries out of the file (see "Migrating credentials" below).
-- `~/.kassiber/config/settings.json` — path layout manifest. Not secret, but
+- `<project-root>/config/settings.json` — path layout manifest. Not secret, but
   it discloses where the rest of the local state lives.
-- `~/.kassiber/attachments/` — copied attachment files for transactions.
+- `<project-root>/attachments/` — copied attachment files for transactions.
   Treat the directory as user data.
-- `~/.kassiber/exports/` — generated reports (PDF/CSV/XLSX) and saved
+- `<project-root>/exports/` — generated reports (PDF/CSV/XLSX) and saved
   diagnostics. Reports contain full transaction detail; diagnostics are
   designed to be public-safe.
 - `kassiber.pre-encryption.sqlite3.bak` — pre-migration plaintext snapshot.
@@ -296,7 +296,7 @@ kassiber backup import /tmp/snap.kassiber --backup-passphrase-fd 4 4< /tmp/outer
 
 # install over the active data root (creates a pre-restore snapshot first)
 kassiber backup import /tmp/snap.kassiber --backup-passphrase-fd 4 \
-  --install --target-data-root ~/.kassiber/data 4< /tmp/outer
+  --install --target-data-root /custom/kassiber/data 4< /tmp/outer
 ```
 
 `--install` moves any pre-existing live data into a sibling

@@ -42,8 +42,9 @@ Current development modes:
   host and no embedded credentials before handing them to the system default
   browser.
   The Welcome screen can also open existing local books: the native
-  folder picker opens at `~/.kassiber`, accepts either the state root or the
-  `data/` folder, restarts the sidecar daemon with that `--data-root`, and then
+  folder picker opens near the effective platform app-data root, accepts either
+  a project folder or its `data/` folder, restarts the sidecar daemon with that
+  `--data-root`, and then
   lists local books grouped by books set. SQLCipher databases must be unlocked
   before book names can be read because the internal workspace/profile rows live
   inside the encrypted database. macOS uses the system folder picker, Windows
@@ -107,7 +108,7 @@ no separate update settings panel.
 Kassiber never selects an asset, downloads a file, installs an update, or
 restarts itself; automatic failures stay silent so they cannot interfere with
 startup. The native shell independently
-reads the same owner-only `~/.kassiber/config/update-checks.json` consent used
+reads the same owner-only `<state-root>/config/update-checks.json` consent used
 by the packaged CLI before spawning anything, fails closed when it is absent,
 malformed, or disabled, and rejects any release URL that leaves the official
 repository. The renderer hydrates from that canonical native preference at

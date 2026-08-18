@@ -1,9 +1,8 @@
 # Storage Conventions
 
-**Status:** Project-container implementation in progress. New default runtime
-resolution uses `~/.kassiber/projects/<project>/...`; `--data-root` remains an
-explicit escape hatch for tests, scripts, and manually chosen project data
-roots.
+**Status:** Project-container implementation in progress. Fresh default runtime
+resolution uses the OS-native app-data root; `--data-root` remains an explicit
+escape hatch for tests, scripts, and manually chosen project data roots.
 **Current source of truth:** `kassiber/db.py`, `kassiber/core/runtime.py`,
 README, and TODO.md.
 
@@ -12,7 +11,7 @@ README, and TODO.md.
 Move toward one project bundle per bookkeeping scope:
 
 ```text
-~/.kassiber/
+<state-root>/
   config/projects.json       # non-secret project catalog
   projects/
     <project>/
@@ -70,10 +69,23 @@ different sensitivity class.
 
 ## Current Layout
 
-Current default state is:
+Fresh installs select one state root per platform:
+
+| Platform | State root |
+| --- | --- |
+| Linux | `$XDG_DATA_HOME/kassiber`, or `~/.local/share/kassiber` when unset, empty, or relative |
+| macOS | `~/Library/Application Support/at.bitcoinaustria.kassiber` |
+| Windows | `%LOCALAPPDATA%\\at.bitcoinaustria.kassiber` |
+
+Existing installations with a real project catalog or database under
+`~/.kassiber` keep using that root. Kassiber does not silently move financial
+data. A directory containing only the optional `~/.kassiber/bin` CLI launcher
+does not count as existing book state.
+
+The state-root layout is:
 
 ```text
-~/.kassiber/
+<state-root>/
   config/projects.json
   projects/default/
     data/kassiber.sqlite3
@@ -146,9 +158,9 @@ Rules:
 ## Legacy App-Wide Migration
 
 On first default startup without a project catalog, Kassiber discovers legacy
-databases in the old hidden-home and XDG locations (`~/.kassiber/data/`,
+databases in the old hidden-home and flat XDG locations (`~/.kassiber/data/`,
 `~/.local/share/kassiber/`, `~/.local/share/satbooks/`) and stages a copy into
-`~/.kassiber/projects/default/`. After the staged project is in place, the old
+`<state-root>/projects/default/`. After the staged project is in place, the old
 plaintext database, `config/backends.env`, `config/settings.json`,
 `attachments/`, and `exports/` artifacts are moved aside under
 `pre-project-migration-<timestamp>/` at the legacy source root. This preserves a
@@ -192,7 +204,7 @@ inspection. There is no hot in-place restore.
 ## Secrets
 
 Each project database at
-`~/.kassiber/projects/<project>/data/kassiber.sqlite3` may be encrypted at rest
+`<state-root>/projects/<project>/data/kassiber.sqlite3` may be encrypted at rest
 under that project's own SQLCipher passphrase (`kassiber secrets init` while
 that project is selected, or `--data-root` for explicit roots). Stock SQLCipher
 PRAGMA defaults

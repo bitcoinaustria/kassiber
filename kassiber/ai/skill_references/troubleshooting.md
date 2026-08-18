@@ -113,7 +113,8 @@ kassiber status
 
 ## Path confusion
 
-Kassiber may use `~/.kassiber` or a legacy XDG location depending on existing state. Do not assume. Read:
+Kassiber may use the platform app-data directory, an existing `~/.kassiber`
+installation, or an explicit/legacy root. Do not assume. Read:
 
 ```bash
 kassiber status

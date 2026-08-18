@@ -762,7 +762,7 @@ green before merging the phase's PRs.
 - [ ] Platform code-signing identities use protected CI/HSM integrations and
       never live in the repo; the OpenPGP release private key remains offline.
 - [ ] Bundled Python tree is read-only at runtime; user-writable state
-      stays under `~/.kassiber/`.
+      stays under the effective OS-native or retained legacy state root.
 - [ ] Bundled Python and Rust crates have a documented refresh cadence:
       rebuild releases when CPython or any shipped wheel issues a
       security advisory above a defined severity threshold; rerun
@@ -827,7 +827,7 @@ These should be tracked at the project level, not silently accepted.
    for a notarization-only first cycle in Phase 5; capture the
    entitlements pattern as a sticky CI step.
 7. **Project-bundle storage migration collision.** Moving to per-project
-   `~/.kassiber/projects/<name>/` per
+   `<state-root>/projects/<name>/` per
    [03-storage-conventions.md](03-storage-conventions.md) is a separate
    migration. Don't couple. Mitigation: Tauri shell honors
    `--data-root` and the existing settings manifest; project-bundle

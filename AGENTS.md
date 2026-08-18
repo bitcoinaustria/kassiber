@@ -64,7 +64,7 @@ Kassiber is currently in **dev mode**: renaming commands, breaking flags, and re
 ## Current architecture
 
 - Data lives in a local SQLite database (system of record).
-- Default user state lives under `~/.kassiber/{data,config,exports,attachments}` unless `--data-root` / `--env-file` overrides it; the managed layout manifest lives at `~/.kassiber/config/settings.json`.
+- Fresh installs use the OS-native per-user app-data root (`$XDG_DATA_HOME/kassiber` on Linux, `~/Library/Application Support/at.bitcoinaustria.kassiber` on macOS, and `%LOCALAPPDATA%\\at.bitcoinaustria.kassiber` on Windows). Existing `~/.kassiber` installations remain in place; `--data-root` / `--env-file` still override selection.
 - The CLI model is:
   - backend (canonical SQLite rows in the `backends` table plus optional dotenv bootstrap)
   - workspace

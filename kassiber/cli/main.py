@@ -901,7 +901,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--env-file",
         default=None,
-        help=f"Path to a dotenv file that defines named sync backends (managed default: ~/.kassiber/config/{DEFAULT_ENV_FILENAME})",
+        help=f"Path to a dotenv file that defines named sync backends (managed default: selected project config/{DEFAULT_ENV_FILENAME})",
     )
     parser.add_argument(
         "--format",
@@ -1035,7 +1035,7 @@ def build_parser() -> argparse.ArgumentParser:
     projects_create = projects_sub.add_parser("create")
     projects_create.add_argument("name")
     projects_create.add_argument("--project-id", default=None)
-    projects_create.add_argument("--path", default=None, help="Project root path; defaults to ~/.kassiber/projects/<id>")
+    projects_create.add_argument("--path", default=None, help="Project root path; defaults under the platform app-data directory")
     projects_create.add_argument("--no-select", action="store_true", help="Create without making it the selected project")
     projects_create.add_argument(
         "--new-passphrase-fd",

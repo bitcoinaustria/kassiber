@@ -177,19 +177,9 @@ fn environment_disables_update_checks() -> bool {
 }
 
 fn preference_path() -> Result<PathBuf, String> {
-    #[cfg(target_os = "windows")]
-    let home = env::var_os("USERPROFILE").or_else(|| env::var_os("HOME"));
-    #[cfg(not(target_os = "windows"))]
-    let home = env::var_os("HOME");
-
-    home.filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .map(|home| {
-            home.join(".kassiber")
-                .join("config")
-                .join(PREFERENCE_FILENAME)
-        })
-        .ok_or_else(|| "Could not locate the user update-check preference.".to_string())
+    Ok(crate::default_state_root()
+        .join("config")
+        .join(PREFERENCE_FILENAME))
 }
 
 fn update_checks_enabled_at(path: &Path) -> bool {

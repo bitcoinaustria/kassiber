@@ -6,7 +6,7 @@ transactions and balances.
 
 Backends are stored canonically in SQLite.
 
-- `~/.kassiber/projects/<project>/config/backends.env` or your chosen
+- `<state-root>/projects/<project>/config/backends.env` or your chosen
   `--env-file` is still accepted as a project-local bootstrap / compatibility
   input for non-secret addressing fields (`KIND`, `URL`, `CHAIN`, `NETWORK`,
   `BATCH_SIZE`, `TIMEOUT`, `INSECURE`, `CERTIFICATE`, `WALLETPREFIX`, `COOKIEFILE`,

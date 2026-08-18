@@ -74,7 +74,8 @@ are not automatic counterpart destinations.
 
 ## Paths
 
-Default state root is usually `~/.kassiber`, but older machines may resolve to a legacy XDG path. Always verify with:
+Fresh installs use the platform app-data directory; existing `~/.kassiber`
+books remain in place. Always verify the effective root with:
 
 ```bash
 kassiber status

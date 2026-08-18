@@ -26,7 +26,8 @@ wallets -> transactions -> journals -> reports
 ```
 
 - **books file** / **local state** — the local Kassiber data root for one
-  person, business, or client (default `~/.kassiber/`).
+  person, business, or client. Fresh installs use the platform app-data
+  directory; existing `~/.kassiber` installations remain in place.
 - **book** — one separate accounting and tax scope inside that local state.
 - **wallet** — a transaction source that Kassiber syncs or imports.
 - **account** — a wallet/reporting bucket that wallets can belong to.
@@ -37,6 +38,12 @@ set, and a profile is a book. "My Books" might contain `private` and
 `business` books; a company or client should usually live in its own state
 root with one main set of BTC books plus buckets such as `events`,
 `memberships`, and `store`.
+
+Fresh default state roots are `$XDG_DATA_HOME/kassiber` on Linux (falling back
+to `~/.local/share/kassiber`),
+`~/Library/Application Support/at.bitcoinaustria.kassiber` on macOS, and
+`%LOCALAPPDATA%\\at.bitcoinaustria.kassiber` on Windows. `kassiber status`
+reports the effective path, including legacy or explicit roots.
 
 Transactions flow in from wallets, journals process those transactions into
 tax and accounting state, and reports read from the processed journal state.

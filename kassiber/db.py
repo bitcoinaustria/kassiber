@@ -25,6 +25,7 @@ import json
 import os
 import sqlite3
 import stat
+import sys
 import tempfile
 import uuid
 from contextlib import contextmanager, suppress
@@ -45,14 +46,64 @@ from .wallet_descriptors import (
 
 
 APP_NAME = "kassiber"
+APP_IDENTIFIER = "at.bitcoinaustria.kassiber"
 LEGACY_APP_NAME = "satbooks"
-DEFAULT_STATE_ROOT = os.path.expanduser(f"~/.{APP_NAME}")
 DEFAULT_DATA_DIRNAME = "data"
 DEFAULT_CONFIG_DIRNAME = "config"
 DEFAULT_EXPORTS_DIRNAME = "exports"
 DEFAULT_ATTACHMENTS_DIRNAME = "attachments"
 DEFAULT_SETTINGS_FILENAME = "settings.json"
 DATABASE_INSTANCE_ID_SETTING = "database_instance_id"
+
+
+def native_state_root(*, platform=None, environ=None, home=None):
+    """Return the OS-native root for a fresh Kassiber installation."""
+
+    platform = sys.platform if platform is None else platform
+    environ = os.environ if environ is None else environ
+    home = Path.home() if home is None else Path(home)
+    if platform == "darwin":
+        return home / "Library" / "Application Support" / APP_IDENTIFIER
+    if platform == "win32":
+        base = Path(str(environ.get("LOCALAPPDATA") or ""))
+        if not base.is_absolute():
+            base = home / "AppData" / "Local"
+        return base / APP_IDENTIFIER
+    xdg_data_home = str(environ.get("XDG_DATA_HOME") or "")
+    base = Path(xdg_data_home) if Path(xdg_data_home).is_absolute() else (
+        home / ".local" / "share"
+    )
+    return base / APP_NAME
+
+
+def _state_root_installation_rank(state_root):
+    root = Path(state_root).expanduser()
+    for filename in (f"{APP_NAME}.sqlite3", f"{LEGACY_APP_NAME}.sqlite3"):
+        if (root / DEFAULT_DATA_DIRNAME / filename).is_file():
+            return 2
+        if any(
+            (project / DEFAULT_DATA_DIRNAME / filename).is_file()
+            for project in (root / "projects").glob("*")
+        ):
+            return 2
+    return int((root / DEFAULT_CONFIG_DIRNAME / "projects.json").is_file())
+
+
+def default_state_root(*, platform=None, environ=None, home=None):
+    """Return the native root, preserving an existing hidden-home install."""
+
+    home = Path.home() if home is None else Path(home)
+    preferred = native_state_root(platform=platform, environ=environ, home=home)
+    legacy = home / f".{APP_NAME}"
+    if preferred != legacy and (
+        _state_root_installation_rank(legacy)
+        > _state_root_installation_rank(preferred)
+    ):
+        return legacy
+    return preferred
+
+
+DEFAULT_STATE_ROOT = os.fspath(default_state_root())
 DEFAULT_DATA_ROOT = os.path.join(DEFAULT_STATE_ROOT, DEFAULT_DATA_DIRNAME)
 LEGACY_XDG_DATA_ROOT = os.path.expanduser(f"~/.local/share/{APP_NAME}")
 
@@ -2547,20 +2598,17 @@ def ensure_data_root(data_root):
 
 
 def resolve_effective_data_root(data_root):
-    """Resolve the active data root, honoring older home/XDG locations.
-
-    Kassiber now prefers a single hidden home folder (`~/.kassiber`) so
-    repo checkouts stay stateless by default. Existing users keep working:
-    when the caller requested the default hidden-home path and it does not
-    exist yet, fall back to the older XDG-style locations.
-    """
+    """Resolve the active data root, honoring older flat XDG locations."""
     requested = Path(data_root).expanduser()
     if requested == Path(DEFAULT_DATA_ROOT).expanduser():
         for legacy in (
             Path(LEGACY_XDG_DATA_ROOT).expanduser(),
             Path(LEGACY_DATA_ROOT).expanduser(),
         ):
-            if not requested.exists() and legacy.exists():
+            if not requested.exists() and any(
+                (legacy / filename).is_file()
+                for filename in (DEFAULT_DB_FILENAME, LEGACY_DB_FILENAME)
+            ):
                 return legacy
     return requested
 

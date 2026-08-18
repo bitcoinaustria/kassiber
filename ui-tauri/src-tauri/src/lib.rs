@@ -42,6 +42,7 @@ use tauri_plugin_dialog::DialogExt;
 
 const SCHEMA_VERSION: u8 = 1;
 const DEFAULT_STATE_DIR: &str = ".kassiber";
+const NATIVE_STATE_DIR: &str = "at.bitcoinaustria.kassiber";
 const DEFAULT_PROJECTS_DIR: &str = "projects";
 const DEFAULT_PROJECT_ID: &str = "default";
 const DEFAULT_DATA_DIR: &str = "data";
@@ -1585,7 +1586,7 @@ fn resolve_import_data_root(path: &Path) -> Result<Option<(PathBuf, PathBuf, boo
     }
 }
 
-// A managed Kassiber state root looks like `<...>/.kassiber/{config,data}/...`,
+// A managed Kassiber state root looks like `<...>/{config,data}/...`,
 // so it always has a sibling `data/kassiber.sqlite3` *and* may carry a legacy
 // `kassiber.sqlite3` at the top level from earlier daemon versions. The strict
 // "ambiguous selection" error is meant for ad-hoc folders the user assembled
@@ -1754,9 +1755,7 @@ fn home_dir() -> Option<PathBuf> {
 }
 
 fn default_import_picker_root() -> PathBuf {
-    let state_root = home_dir()
-        .map(|home| home.join(DEFAULT_STATE_DIR))
-        .unwrap_or_else(|| PathBuf::from(DEFAULT_STATE_DIR));
+    let state_root = default_state_root();
     if state_root.exists() {
         state_root
     } else {
@@ -1764,20 +1763,96 @@ fn default_import_picker_root() -> PathBuf {
     }
 }
 
+fn state_root_installation_rank(path: &Path) -> u8 {
+    let has_database = DB_FILENAMES
+        .iter()
+        .any(|filename| path.join(DEFAULT_DATA_DIR).join(filename).is_file())
+        || path
+            .join(DEFAULT_PROJECTS_DIR)
+            .read_dir()
+            .ok()
+            .is_some_and(|entries| {
+                entries.flatten().any(|entry| {
+                    DB_FILENAMES.iter().any(|filename| {
+                        entry.path().join(DEFAULT_DATA_DIR).join(filename).is_file()
+                    })
+                })
+            });
+    if has_database {
+        2
+    } else {
+        u8::from(path.join("config").join("projects.json").is_file())
+    }
+}
+
+fn native_state_root_for_platform(
+    platform: &str,
+    home: Option<&Path>,
+    xdg_data_home: Option<&Path>,
+    local_app_data: Option<&Path>,
+) -> Option<PathBuf> {
+    match platform {
+        "linux" => xdg_data_home
+            .filter(|path| path.is_absolute())
+            .map(|path| path.join("kassiber"))
+            .or_else(|| home.map(|path| path.join(".local").join("share").join("kassiber"))),
+        "macos" => home.map(|path| {
+            path.join("Library")
+                .join("Application Support")
+                .join(NATIVE_STATE_DIR)
+        }),
+        "windows" => local_app_data
+            .filter(|path| path.is_absolute())
+            .map(|path| path.join(NATIVE_STATE_DIR))
+            .or_else(|| home.map(|path| path.join("AppData").join("Local").join(NATIVE_STATE_DIR))),
+        _ => home.map(|path| path.join(DEFAULT_STATE_DIR)),
+    }
+}
+
+fn state_root_for_platform(
+    platform: &str,
+    home: Option<&Path>,
+    xdg_data_home: Option<&Path>,
+    local_app_data: Option<&Path>,
+) -> Option<PathBuf> {
+    let preferred = native_state_root_for_platform(platform, home, xdg_data_home, local_app_data)?;
+    if let Some(legacy) = home.map(|path| path.join(DEFAULT_STATE_DIR)) {
+        if preferred != legacy
+            && state_root_installation_rank(&legacy) > state_root_installation_rank(&preferred)
+        {
+            return Some(legacy);
+        }
+    }
+    Some(preferred)
+}
+
+pub(crate) fn default_state_root() -> PathBuf {
+    let home = home_dir();
+    #[cfg(target_os = "linux")]
+    let platform = "linux";
+    #[cfg(target_os = "macos")]
+    let platform = "macos";
+    #[cfg(target_os = "windows")]
+    let platform = "windows";
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    let platform = "other";
+
+    let xdg_data_home = env::var_os("XDG_DATA_HOME").map(PathBuf::from);
+    let local_app_data = env::var_os("LOCALAPPDATA").map(PathBuf::from);
+    state_root_for_platform(
+        platform,
+        home.as_deref(),
+        xdg_data_home.as_deref(),
+        local_app_data.as_deref(),
+    )
+    .unwrap_or_else(|| PathBuf::from(DEFAULT_STATE_DIR))
+}
+
 fn default_state_data_root() -> PathBuf {
-    home_dir()
-        .map(|home| {
-            home.join(DEFAULT_STATE_DIR)
-                .join(DEFAULT_PROJECTS_DIR)
-                .join(DEFAULT_PROJECT_ID)
-                .join(DEFAULT_DATA_DIR)
-        })
-        .unwrap_or_else(|| {
-            PathBuf::from(DEFAULT_STATE_DIR)
-                .join(DEFAULT_PROJECTS_DIR)
-                .join(DEFAULT_PROJECT_ID)
-                .join(DEFAULT_DATA_DIR)
-        })
+    default_state_root()
+        .join(DEFAULT_PROJECTS_DIR)
+        .join(DEFAULT_PROJECT_ID)
+        .join(DEFAULT_DATA_DIR)
 }
 
 fn terminal_command_paths() -> Result<TerminalCommandPaths, String> {
@@ -3889,19 +3964,20 @@ mod tests {
         inspect_terminal_command, is_managed_report_export_path, is_supported_audit_package_dir,
         is_supported_austrian_csv_bundle_dir, is_supported_export_file,
         is_supported_report_export_target, managed_settings_path, menu_action,
-        menu_action_for_deep_link, menu_action_for_id, navigate_action, open_settings_action,
-        path_is_on_path, read_operator_native_auth_secret,
-        require_approved_import_project_data_root, terminal_command_contents,
-        terminal_command_path_hint, terminal_command_target_is_transient,
-        touch_id_managed_unlock_state, touch_id_scope_for_selected, validated_attachment_file_path,
-        validated_external_url, validated_report_export_target, TerminalCommandFileState,
-        TerminalCommandPaths, ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS,
-        DOCUMENT_IMPORT_STAGE_KIND, MENU_CHECK_UPDATES, MENU_HELP_DOCS, MENU_LOCK_APP,
-        MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_OPEN_SETTINGS, MENU_SETTINGS_AI,
-        MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL,
-        MENU_SETTINGS_PRIVACY, MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN,
-        MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET,
-        MENU_WORKFLOW_ADD_WALLET, MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
+        menu_action_for_deep_link, menu_action_for_id, native_state_root_for_platform,
+        navigate_action, open_settings_action, path_is_on_path, read_operator_native_auth_secret,
+        require_approved_import_project_data_root, state_root_for_platform,
+        terminal_command_contents, terminal_command_path_hint,
+        terminal_command_target_is_transient, touch_id_managed_unlock_state,
+        touch_id_scope_for_selected, validated_attachment_file_path, validated_external_url,
+        validated_report_export_target, TerminalCommandFileState, TerminalCommandPaths,
+        ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS, DOCUMENT_IMPORT_STAGE_KIND,
+        MENU_CHECK_UPDATES, MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS,
+        MENU_OPEN_SETTINGS, MENU_SETTINGS_AI, MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA,
+        MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL, MENU_SETTINGS_PRIVACY,
+        MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE,
+        MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET, MENU_WORKFLOW_ADD_WALLET,
+        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
         MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, TERMINAL_COMMAND_MARKER,
     };
     use std::fs;
@@ -3917,6 +3993,93 @@ mod tests {
             read_operator_native_auth_secret(Cursor::new(secret)).unwrap(),
             secret,
         );
+    }
+
+    #[test]
+    fn native_state_roots_follow_each_platform_convention() {
+        let home = std::env::temp_dir().join("kassiber-state-root-test-home");
+        let xdg_data_home = home.join("xdg-data");
+        let local_app_data = home.join("local-app-data");
+        assert_eq!(
+            native_state_root_for_platform("linux", Some(&home), Some(&xdg_data_home), None,),
+            Some(xdg_data_home.join("kassiber"))
+        );
+        assert_eq!(
+            native_state_root_for_platform("linux", Some(&home), Some(Path::new("relative")), None,),
+            Some(home.join(".local").join("share").join("kassiber"))
+        );
+        assert_eq!(
+            native_state_root_for_platform("macos", Some(&home), None, None),
+            Some(
+                home.join("Library")
+                    .join("Application Support")
+                    .join("at.bitcoinaustria.kassiber")
+            )
+        );
+        assert_eq!(
+            native_state_root_for_platform("windows", Some(&home), None, Some(&local_app_data),),
+            Some(local_app_data.join("at.bitcoinaustria.kassiber"))
+        );
+        assert_eq!(
+            native_state_root_for_platform(
+                "windows",
+                Some(&home),
+                None,
+                Some(Path::new("relative")),
+            ),
+            Some(
+                home.join("AppData")
+                    .join("Local")
+                    .join("at.bitcoinaustria.kassiber")
+            )
+        );
+    }
+
+    #[test]
+    fn legacy_state_root_requires_real_data_and_yields_to_native_data() {
+        let root = unique_temp_dir("state-root-selection");
+        let home = root.join("home");
+        let legacy = home.join(".kassiber");
+        let native = home.join(".local").join("share").join("kassiber");
+
+        fs::create_dir_all(legacy.join("bin")).unwrap();
+        assert_eq!(
+            state_root_for_platform("linux", Some(&home), None, None),
+            Some(native.clone())
+        );
+
+        let legacy_database = legacy
+            .join("projects")
+            .join("default")
+            .join("data")
+            .join("kassiber.sqlite3");
+        fs::create_dir_all(legacy_database.parent().unwrap()).unwrap();
+        fs::write(&legacy_database, []).unwrap();
+        assert_eq!(
+            state_root_for_platform("linux", Some(&home), None, None),
+            Some(legacy.clone())
+        );
+
+        let native_catalog = native.join("config").join("projects.json");
+        fs::create_dir_all(native_catalog.parent().unwrap()).unwrap();
+        fs::write(native_catalog, b"{}\n").unwrap();
+        assert_eq!(
+            state_root_for_platform("linux", Some(&home), None, None),
+            Some(legacy.clone())
+        );
+
+        let native_database = native
+            .join("projects")
+            .join("default")
+            .join("data")
+            .join("kassiber.sqlite3");
+        fs::create_dir_all(native_database.parent().unwrap()).unwrap();
+        fs::write(native_database, []).unwrap();
+        assert_eq!(
+            state_root_for_platform("linux", Some(&home), None, None),
+            Some(native)
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

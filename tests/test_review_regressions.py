@@ -82,7 +82,7 @@ from kassiber.core.ui_snapshot import (
     build_transactions_dashboard_snapshot,
     build_transactions_snapshot,
 )
-from kassiber.db import get_setting, open_db, set_setting
+from kassiber.db import get_setting, native_state_root, open_db, set_setting
 from kassiber.errors import AppError
 from kassiber.importers import normalize_river_record
 from kassiber.msat import btc_to_msat
@@ -13956,6 +13956,8 @@ class ReviewRegressionTest(unittest.TestCase):
             or not key.startswith(("KASSIBER_", "SATBOOKS_"))
         }
         env["HOME"] = str(home_dir)
+        if os.name == "nt":
+            env["USERPROFILE"] = str(home_dir)
         env["PYTHONPATH"] = str(ROOT) if not env.get("PYTHONPATH") else f"{ROOT}{os.pathsep}{env['PYTHONPATH']}"
 
         payload, result = self._run_json(
@@ -13965,7 +13967,7 @@ class ReviewRegressionTest(unittest.TestCase):
             cwd=repo_dir,
         )
         self._assert_ok(payload, result, "init")
-        app_root = home_dir / ".kassiber"
+        app_root = native_state_root(environ=env, home=home_dir)
         expected_root = app_root / "projects" / "default"
         self.assertEqual(payload["data"]["project_id"], "default")
         self.assertEqual(payload["data"]["project_root"], str(expected_root))

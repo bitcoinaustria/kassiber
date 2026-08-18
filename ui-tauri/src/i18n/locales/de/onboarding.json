@@ -2,7 +2,7 @@
   "shell": {
     "footer": {
       "privateKeys": "Private Keys gelangen nie in Kassiber.",
-      "stateLocation": "Der Zustand bleibt unter ~/.kassiber, sofern nicht anders festgelegt.",
+      "stateLocation": "Die Daten bleiben im privaten App-Datenordner des Systems, sofern nicht anders festgelegt.",
       "noSaas": "Umgehe die SaaS-Honeypots."
     },
     "finishError": "Onboarding konnte nicht abgeschlossen werden.",
@@ -144,7 +144,7 @@
     "openExisting": {
       "titleOpening": "Bücher werden geöffnet…",
       "title": "Bestehende Bücher öffnen",
-      "body": "Öffne einen Kassiber-State-Root oder Datenordner und wähle lokale Bücher.",
+      "body": "Öffne einen Kassiber-Projektordner oder Datenordner und wähle lokale Bücher.",
       "desktopOnly": "nur Desktop-App",
       "tooltipAvailable": "Bestehende lokale Kassiber-Bücher öffnen",
       "tooltipUnavailable": "Bestehende Bücher öffnen ist in der Desktop-App verfügbar"
@@ -159,7 +159,7 @@
     "highlights": {
       "localDatabase": {
         "title": "Eine lokale Datenbank",
-        "body": "Standardmäßig ~/.kassiber oder ein importierter Kassiber-Ordner."
+        "body": "Standardmäßig im privaten App-Datenordner des Systems oder in einem importierten Kassiber-Ordner."
       },
       "encrypted": {
         "title": "Standardmäßig verschlüsselt",
