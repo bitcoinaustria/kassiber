@@ -1552,13 +1552,20 @@ def normalize_tax_asset_inputs(
     source_rows = tuple(rows)
     source_intra_pairs = tuple(intra_pairs)
     quarantines: list[dict[str, Any]] = []
+    fee_check_rows = list(rows)
+    for pair in intra_pairs:
+        for row in (pair["out"], pair["in"], *_pair_group_block_rows(pair)):
+            fee_check_rows.append(row)
 
     # Production rows already pass through QuantityObservation's non-negative
     # fee invariant. Keep this lower boundary fail-closed too: direct/internal
     # callers must not let a corrupt fee alter transfer arithmetic or reach RP2.
-    invalid_fee_anchor_ids = {
-        _row_anchor_id(row) for row in rows if _row_msat(row, "fee") < 0
-    }
+    invalid_fee_rows_by_anchor: dict[str, Mapping[str, Any]] = {}
+    for row in fee_check_rows:
+        if _row_msat(row, "fee") >= 0:
+            continue
+        invalid_fee_rows_by_anchor.setdefault(_row_anchor_id(row), row)
+    invalid_fee_anchor_ids = set(invalid_fee_rows_by_anchor)
     if invalid_fee_anchor_ids:
         related_groups: list[set[str]] = []
         for pair in intra_pairs:
@@ -1574,11 +1581,11 @@ def normalize_tax_asset_inputs(
             )
         related_groups.extend(
             {_row_anchor_id(row) for row, _config in group}
-            for group in _samourai_internal_privacy_groups(rows)
+            for group in _samourai_internal_privacy_groups(fee_check_rows)
         )
         for group_key in (_custody_component_id, onchain_transfer_scope):
             grouped: dict[Any, set[str]] = {}
-            for row in rows:
+            for row in fee_check_rows:
                 key = group_key(row)
                 if key is not None:
                     grouped.setdefault(key, set()).add(_row_anchor_id(row))
@@ -1593,29 +1600,36 @@ def normalize_tax_asset_inputs(
                     blocked_fee_anchor_ids.update(group)
                     changed = True
 
-        for row in rows:
-            row_id = _row_anchor_id(row)
-            if row_id not in blocked_fee_anchor_ids:
-                continue
-            invalid = row_id in invalid_fee_anchor_ids
+        for row in invalid_fee_rows_by_anchor.values():
             quarantines.append(
                 build_tax_quarantine(
                     profile,
                     row,
-                    (
-                        "invalid_transaction_fee"
-                        if invalid
-                        else "derived_transfer_group_blocked"
-                    ),
+                    "invalid_transaction_fee",
                     {
                         "asset": asset,
                         "direction": _row_get(row, "direction"),
                         "required_for": "non_negative_transaction_fee",
-                        **(
-                            {"fee_msat": _row_msat(row, "fee")}
-                            if invalid
-                            else {"blocked_by_reason": "invalid_transaction_fee"}
-                        ),
+                        "fee_msat": _row_msat(row, "fee"),
+                    },
+                )
+            )
+        emitted_anchors = set(invalid_fee_anchor_ids)
+        for row in fee_check_rows:
+            row_id = _row_anchor_id(row)
+            if row_id not in blocked_fee_anchor_ids or row_id in emitted_anchors:
+                continue
+            emitted_anchors.add(row_id)
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    "derived_transfer_group_blocked",
+                    {
+                        "asset": asset,
+                        "direction": _row_get(row, "direction"),
+                        "required_for": "non_negative_transaction_fee",
+                        "blocked_by_reason": "invalid_transaction_fee",
                     },
                 )
             )

@@ -249,6 +249,97 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
             },
         )
 
+    def test_negative_fee_in_pair_group_block_rows_blocks_pair(self):
+        out_row = _row(
+            "pair-out",
+            "wallet-a",
+            "outbound",
+            100_000,
+            fee=1_000,
+            fiat_rate=60_000,
+        )
+        in_row = _row("pair-in", "wallet-b", "inbound", 99_000, fiat_rate=60_000)
+        blocked_row = _row(
+            "blocked-leg",
+            "wallet-a",
+            "outbound",
+            1_000,
+            fee=-500,
+            fiat_rate=60_000,
+        )
+
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_row],
+            self.wallet_refs_by_id,
+            [
+                {
+                    "out": out_row,
+                    "in": in_row,
+                    "pair_id": "pair-1",
+                    "group_block_rows": [blocked_row],
+                }
+            ],
+        )
+
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(
+            {item["transaction_id"]: item["reason"] for item in inputs.quarantines},
+            {
+                "blocked-leg": "invalid_transaction_fee",
+                "pair-out": "derived_transfer_group_blocked",
+                "pair-in": "derived_transfer_group_blocked",
+            },
+        )
+
+    def test_negative_fee_shared_anchor_keeps_negative_evidence(self):
+        sibling = _row(
+            "shadow-leg",
+            "wallet-a",
+            "outbound",
+            10_000,
+            fee=0,
+            fiat_rate=60_000,
+        )
+        sibling["journal_transaction_id"] = "shared-anchor"
+        invalid = _row(
+            "negative-fee",
+            "wallet-a",
+            "outbound",
+            100_000,
+            fee=-50_000,
+            fiat_rate=60_000,
+        )
+        invalid["journal_transaction_id"] = "shared-anchor"
+        valid = _row(
+            "valid-inbound",
+            "wallet-b",
+            "inbound",
+            100_000,
+            fiat_rate=60_000,
+        )
+
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [sibling, invalid, valid],
+            self.wallet_refs_by_id,
+            [],
+        )
+
+        self.assertEqual(
+            [event.transaction_id for event in inputs.events], ["valid-inbound"]
+        )
+        shared = [
+            item for item in inputs.quarantines if item["transaction_id"] == "shared-anchor"
+        ]
+        self.assertEqual(len(shared), 1)
+        self.assertEqual(shared[0]["reason"], "invalid_transaction_fee")
+        detail = json.loads(shared[0]["detail_json"])
+        self.assertEqual(detail["fee_msat"], -50_000)
+
     def test_explicit_mempool_outbound_is_quarantined_not_disposed(self):
         txid = "c" * 64
         row = _row(
