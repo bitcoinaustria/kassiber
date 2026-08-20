@@ -96,6 +96,7 @@ _NON_SALE_DISPOSAL_KIND_TOKENS = (
     "lost",
     "stolen",
     "theft",
+    "non_taxable",
 )
 _RP2_CONFIG_FORBIDDEN_CHARACTERS = frozenset(
     {",", "\n", "\r", "[", "]", "=", ":", "#", ";"}

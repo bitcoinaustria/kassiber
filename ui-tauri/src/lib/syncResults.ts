@@ -17,6 +17,11 @@ export interface SyncResult {
   target_count?: number;
   elapsed_ms?: number;
   journal_invalidated?: boolean;
+  matched?: number;
+  ambiguous?: number;
+  reconciliation_rows?: number;
+  reconciliation_changed?: number;
+  reactivated?: number;
   utxos_skipped_unchanged?: boolean;
   utxos_refreshed?: boolean;
   force_full?: boolean;
@@ -135,6 +140,23 @@ function syncResultObservability(result: SyncResult | undefined): string | null 
     parts.push(`${formatNumber(result.scripts_checked)} scripts checked`);
   } else if (typeof result.target_count === "number" && result.target_count > 0) {
     parts.push(`${formatNumber(result.target_count)} targets`);
+  }
+  if (
+    typeof result.reconciliation_rows === "number" &&
+    result.reconciliation_rows > 0 &&
+    Number(result.reconciliation_changed ?? 0) > 0
+  ) {
+    if (result.matched) {
+      parts.push(`${formatNumber(result.matched)} migration overlaps matched`);
+    }
+    if (result.ambiguous) {
+      parts.push(`${formatNumber(result.ambiguous)} migration overlaps need review`);
+    }
+    if (result.reactivated) {
+      parts.push(
+        `${formatNumber(result.reactivated)} migration row${result.reactivated === 1 ? "" : "s"} reactivated`,
+      );
+    }
   }
   if (result.utxos_skipped_unchanged) {
     parts.push("UTXOs unchanged");

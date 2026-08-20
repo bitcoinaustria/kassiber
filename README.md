@@ -75,9 +75,11 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   inventory. Observer state stays inside the project SQLCipher database and a
   refresh commits chain state and accounting projections atomically.
 - **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, Coinfinity,
-  21bitcoin, Pocket Bitcoin, Strike, Samourai/Whirlpool public descriptor/xpub,
-  generic CSV/JSON, a fill-in Excel/CSV ledger template for manual entry,
-  local-AI photo/PDF OCR drafts, BIP329 labels.
+  21bitcoin, Pocket Bitcoin, Strike, CoinTracking, Blockpit,
+  Samourai/Whirlpool public descriptor/xpub, generic CSV/JSON, a fill-in
+  Excel/CSV ledger template for manual entry, local-AI photo/PDF OCR drafts,
+  BIP329 labels. Existing tax-report files can be archived as evidence without
+  importing their totals as facts.
 - **Review workflows** — notes, tags, exclusions, attachments; append-only
   transaction edit history with Activity review and safe revert; reviewed
   transfer/swap pairing for Lightning, Liquid peg-in/peg-out, and submarine

@@ -24,6 +24,7 @@ describe("connection catalog", () => {
       "silent-payment",
       "file-wallet",
       "file-enrichment",
+      "prior-report",
       "btcpay",
       "bullbitcoin-wallet",
       "bip329",
