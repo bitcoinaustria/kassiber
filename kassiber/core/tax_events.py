@@ -936,6 +936,10 @@ def _row_msat(row: Mapping[str, Any], key: str) -> int:
     return int(_row_get(row, key) or 0)
 
 
+def _row_anchor_id(row: Mapping[str, Any]) -> str:
+    return str(_row_get(row, "journal_transaction_id") or row["id"])
+
+
 def _fee_inclusive_gap_evidence(
     out_rows: Sequence[Mapping[str, Any]],
     in_rows: Sequence[Mapping[str, Any]],
@@ -1545,6 +1549,86 @@ def normalize_tax_asset_inputs(
     conflict_row_ids: Optional[set[str]] = None,
     pending_onchain_row_ids: Optional[set[str]] = None,
 ) -> NormalizedTaxAssetInputs:
+    source_rows = tuple(rows)
+    source_intra_pairs = tuple(intra_pairs)
+    quarantines: list[dict[str, Any]] = []
+
+    # Production rows already pass through QuantityObservation's non-negative
+    # fee invariant. Keep this lower boundary fail-closed too: direct/internal
+    # callers must not let a corrupt fee alter transfer arithmetic or reach RP2.
+    invalid_fee_anchor_ids = {
+        _row_anchor_id(row) for row in rows if _row_msat(row, "fee") < 0
+    }
+    if invalid_fee_anchor_ids:
+        related_groups: list[set[str]] = []
+        for pair in intra_pairs:
+            related_groups.append(
+                {
+                    _row_anchor_id(row)
+                    for row in (
+                        pair["out"],
+                        pair["in"],
+                        *_pair_group_block_rows(pair),
+                    )
+                }
+            )
+        related_groups.extend(
+            {_row_anchor_id(row) for row, _config in group}
+            for group in _samourai_internal_privacy_groups(rows)
+        )
+        for group_key in (_custody_component_id, onchain_transfer_scope):
+            grouped: dict[Any, set[str]] = {}
+            for row in rows:
+                key = group_key(row)
+                if key is not None:
+                    grouped.setdefault(key, set()).add(_row_anchor_id(row))
+            related_groups.extend(grouped.values())
+
+        blocked_fee_anchor_ids = set(invalid_fee_anchor_ids)
+        changed = True
+        while changed:
+            changed = False
+            for group in related_groups:
+                if group & blocked_fee_anchor_ids and not group <= blocked_fee_anchor_ids:
+                    blocked_fee_anchor_ids.update(group)
+                    changed = True
+
+        for row in rows:
+            row_id = _row_anchor_id(row)
+            if row_id not in blocked_fee_anchor_ids:
+                continue
+            invalid = row_id in invalid_fee_anchor_ids
+            quarantines.append(
+                build_tax_quarantine(
+                    profile,
+                    row,
+                    (
+                        "invalid_transaction_fee"
+                        if invalid
+                        else "derived_transfer_group_blocked"
+                    ),
+                    {
+                        "asset": asset,
+                        "direction": _row_get(row, "direction"),
+                        "required_for": "non_negative_transaction_fee",
+                        **(
+                            {"fee_msat": _row_msat(row, "fee")}
+                            if invalid
+                            else {"blocked_by_reason": "invalid_transaction_fee"}
+                        ),
+                    },
+                )
+            )
+        rows = [
+            row for row in rows if _row_anchor_id(row) not in blocked_fee_anchor_ids
+        ]
+        intra_pairs = [
+            pair
+            for pair in intra_pairs
+            if _row_anchor_id(pair["out"]) not in blocked_fee_anchor_ids
+            and _row_anchor_id(pair["in"]) not in blocked_fee_anchor_ids
+        ]
+
     tax_country = ""
     if hasattr(profile, "keys") and "tax_country" in profile.keys():
         tax_country = str(profile["tax_country"] or "").strip().lower()
@@ -1739,7 +1823,6 @@ def normalize_tax_asset_inputs(
     events: list[NormalizedTaxEvent] = []
     transfers: list[NormalizedTaxTransfer] = []
     ordered_items: list[tuple[str, str]] = []
-    quarantines: list[dict[str, Any]] = []
     samourai_transfer_by_out_id = _collect_samourai_internal_transfers(
         profile,
         asset,
@@ -2537,8 +2620,8 @@ def normalize_tax_asset_inputs(
     # individual reasons, so a newly-added quarantine reason can't silently slip
     # past the basis-provenance guard.
     quarantined_ids = {str(q["transaction_id"]) for q in quarantines}
-    contamination_rows = list(rows)
-    for pair in intra_pairs:
+    contamination_rows = list(source_rows)
+    for pair in source_intra_pairs:
         contamination_rows.extend(_pair_group_block_rows(pair))
     contamination_times = [
         str(_row_get(row, "occurred_at"))

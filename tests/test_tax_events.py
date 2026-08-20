@@ -138,6 +138,117 @@ class NormalizeTaxAssetInputsTest(unittest.TestCase):
         self.assertEqual(float(event.spot_price), 60000.0)
         self.assertEqual(float(event.fiat_value), 60000.0)
 
+    def test_negative_fee_is_quarantined_before_tax_arithmetic(self):
+        invalid = _row(
+            "negative-fee",
+            "wallet-a",
+            "outbound",
+            100_000,
+            fee=-50_000,
+            fiat_rate=60_000,
+        )
+        valid = _row(
+            "valid-inbound",
+            "wallet-b",
+            "inbound",
+            100_000,
+            fiat_rate=60_000,
+        )
+
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [invalid, valid],
+            self.wallet_refs_by_id,
+            [],
+        )
+
+        self.assertEqual(
+            [event.transaction_id for event in inputs.events], ["valid-inbound"]
+        )
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(
+            [(item["transaction_id"], item["reason"]) for item in inputs.quarantines],
+            [("negative-fee", "invalid_transaction_fee")],
+        )
+
+    def test_negative_fee_blocks_whole_manual_transfer_component(self):
+        out_row = _row(
+            "negative-out",
+            "wallet-a",
+            "outbound",
+            100_000,
+            fee=-50_000,
+            fiat_rate=60_000,
+        )
+        in_one = _row("in-one", "wallet-b", "inbound", 30_000, fiat_rate=60_000)
+        in_two = _row("in-two", "wallet-b", "inbound", 20_000, fiat_rate=60_000)
+
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_one, in_two],
+            self.wallet_refs_by_id,
+            [
+                {"out": out_row, "in": in_one, "pair_id": "pair-1"},
+                {"out": out_row, "in": in_two, "pair_id": "pair-2"},
+            ],
+        )
+
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(
+            {item["transaction_id"]: item["reason"] for item in inputs.quarantines},
+            {
+                "negative-out": "invalid_transaction_fee",
+                "in-one": "derived_transfer_group_blocked",
+                "in-two": "derived_transfer_group_blocked",
+            },
+        )
+
+    def test_negative_fee_blocks_whole_samourai_transfer_group(self):
+        def config(section):
+            return json.dumps(
+                {"samourai": {"role": "child", "group_id": "wp", "section": section}}
+            )
+
+        out_row = _row(
+            "negative-out",
+            "wallet-a",
+            "outbound",
+            100_000,
+            fee=-50_000,
+            fiat_rate=60_000,
+            external_id="coinjoin",
+        )
+        out_row["config_json"] = config("deposit")
+        in_row = _row(
+            "mix-in",
+            "wallet-b",
+            "inbound",
+            40_000,
+            external_id="coinjoin",
+        )
+        in_row["config_json"] = config("premix")
+
+        inputs = normalize_tax_asset_inputs(
+            self.profile,
+            "BTC",
+            [out_row, in_row],
+            self.wallet_refs_by_id,
+            [],
+        )
+
+        self.assertEqual(inputs.events, [])
+        self.assertEqual(inputs.transfers, [])
+        self.assertEqual(
+            {item["transaction_id"]: item["reason"] for item in inputs.quarantines},
+            {
+                "negative-out": "invalid_transaction_fee",
+                "mix-in": "derived_transfer_group_blocked",
+            },
+        )
+
     def test_explicit_mempool_outbound_is_quarantined_not_disposed(self):
         txid = "c" * 64
         row = _row(
