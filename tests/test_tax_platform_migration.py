@@ -84,18 +84,22 @@ class TaxPlatformParserTests(unittest.TestCase):
         cases = (
             ("Unlabeled (In)", "inbound", "Deposit"),
             ("Unlabeled Incoming (Deposit)", "inbound", "Deposit"),
+            ("Non-Taxable (In)", "inbound", "Gift received"),
             ("Gift (In)", "inbound", "Gift received"),
             ("Other Income", "inbound", "Income"),
             ("Unlabeled (Out)", "outbound", "Withdrawal"),
             ("Unlabeled Outgoing (Withdrawal)", "outbound", "Withdrawal"),
+            ("Non-Taxable (Out)", "outbound", "Gift sent"),
             ("Gift (Out)", "outbound", "Gift sent"),
             ("Fehlendes Label (Ein)", "inbound", "Deposit"),
+            ("Steuerfrei (Ein)", "inbound", "Gift received"),
             ("Zinsen", "inbound", "Interest"),
             ("Geschenk (Ein)", "inbound", "Gift received"),
             ("Sonstiger Ertrag", "inbound", "Income"),
             ("Hardfork", "inbound", "Fork"),
             ("Security-Token-Ertrag", "inbound", "Income"),
             ("Fehlendes Label (Aus)", "outbound", "Withdrawal"),
+            ("Steuerfrei (Aus)", "outbound", "Gift sent"),
             ("Zahlung", "outbound", "Spend"),
             ("Gebühr", "outbound", "Spend"),
             ("Geschenk (Aus)", "outbound", "Gift sent"),
@@ -107,6 +111,30 @@ class TaxPlatformParserTests(unittest.TestCase):
                     importers._platform_type("Blockpit", label, direction),
                     expected,
                 )
+
+    def test_blockpit_non_taxable_rows_keep_tax_neutral_semantics(self):
+        # Official export shape with sanitized values, a BOM, CRLF, and quoted comments.
+        body = "\r\n".join(
+            (
+                "\ufeffDate (UTC),Integration Name,Label,Outgoing Asset,Outgoing Amount,Incoming Asset,Incoming Amount,Fee Asset,Fee Amount,Comments,Trx. ID,Source Type,Source Name",
+                '2026-07-01 12:00:00,Bank,Non-Taxable (In),,,BTC,0.001,,,"bank deposit, reviewed",bp-nt-in,Manual,Blockpit WebApp',
+                '2026-07-02 12:00:00,Bank,Non-Taxable (Out),BTC,0.0005,,,,,"bank withdrawal, reviewed",bp-nt-out,Manual,Blockpit WebApp',
+                '2026-07-03 12:00:00,Bank,Steuerfrei (Ein),,,BTC,0.002,,,"Bankeinzahlung, geprüft",bp-nt-de-in,Manual,Blockpit WebApp',
+                '2026-07-04 12:00:00,Bank,Steuerfrei (Aus),BTC,0.0006,,,,,"Bankauszahlung, geprüft",bp-nt-de-out,Manual,Blockpit WebApp',
+                "",
+            )
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            rows = importers.load_blockpit_csv_records(
+                self._write(tmp, "blockpit-current.csv", body)
+            )
+        self.assertEqual(
+            [row["kind"] for row in rows],
+            [None, "expense_non_taxable", None, "expense_non_taxable"],
+        )
+        self.assertEqual(
+            rows[0]["description"], "bank deposit, reviewed · Blockpit WebApp"
+        )
 
     def test_ambiguous_platform_types_fail_closed(self):
         body = COINTRACKING_CSV.replace("Staking,", "Receive Loan,")

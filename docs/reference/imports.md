@@ -241,6 +241,12 @@ three separate sources:
   evidence store, records its provider and tax year, and never treats the
   report's totals or lot assignments as transaction facts.
 
+The dedicated provider wallets are historical accounting containers, not
+on-chain wallet discovery. Import and sync each real descriptor/xpub wallet
+separately when you want authoritative ownership, balances, UTXOs, and automatic
+overlap reconciliation. The provider CSV can stand alone when only the historical
+accounting record is available.
+
 The two CSV paths create ordinary rollback-capable import runs and preserve
 each original provider row in `transactions.raw_json` for audit. They are
 Bitcoin-scoped: BTC and L-BTC legs import, while unrelated
@@ -255,6 +261,10 @@ follow the account language; Kassiber accepts the documented English and
 German labels for the transaction kinds above. Country selection changes
 Blockpit's tax calculation and report configuration; Kassiber does not branch
 this transaction parser by tax country.
+Blockpit's `Non-Taxable (In)` / `Steuerfrei (Ein)` labels import as ordinary
+acquisitions rather than income. `Non-Taxable (Out)` / `Steuerfrei (Aus)` rows
+retain a dedicated non-sale kind and go to explicit review instead of being
+silently taxed as market sales.
 CoinTracking's non-taxable receipt variants import as acquisitions rather than
 income. Its non-taxable expense variant is retained as an outflow but goes to
 the existing non-sale-disposal review gate instead of being taxed as a sale.

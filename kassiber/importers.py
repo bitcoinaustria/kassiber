@@ -2639,6 +2639,8 @@ _BLOCKPIT_TYPES = {
     "unlabeled incoming (deposit)": "Deposit",
     "fehlendes label (ein)": "Deposit",
     "deposit": "Deposit",
+    "non-taxable (in)": "Gift received",
+    "steuerfrei (ein)": "Gift received",
     "airdrop": "Airdrop",
     "bounty": "Income",
     "staking": "Staking",
@@ -2663,6 +2665,8 @@ _BLOCKPIT_TYPES = {
     "unlabeled outgoing (withdrawal)": "Withdrawal",
     "fehlendes label (aus)": "Withdrawal",
     "withdrawal": "Withdrawal",
+    "non-taxable (out)": "Gift sent",
+    "steuerfrei (aus)": "Gift sent",
     "payment": "Spend",
     "zahlung": "Spend",
     "fee": "Spend",
@@ -2837,9 +2841,12 @@ def _normalize_tax_platform_record(
         )
 
     normalized = normalize_generic_ledger_record(row, index=index)
+    normalized_type = " ".join(str(row_type or "").casefold().split())
     if (
-        provider == "CoinTracking"
-        and " ".join(str(row_type or "").casefold().split()) == "expense (non taxable)"
+        provider == "CoinTracking" and normalized_type == "expense (non taxable)"
+    ) or (
+        provider == "Blockpit"
+        and normalized_type in {"non-taxable (out)", "steuerfrei (aus)"}
     ):
         normalized["kind"] = "expense_non_taxable"
     normalized["pricing_method"] = f"{provider.casefold()}_csv".replace(" ", "")

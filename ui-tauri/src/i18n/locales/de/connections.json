@@ -672,7 +672,7 @@
       "createConnections": "Verbindungen erstellen",
       "importTransactions": "Transaktionen importieren",
       "importPricing": "Bewertung importieren",
-      "archiveReport": "Report archivieren",
+      "archiveReport": "Bericht archivieren",
       "createAndScan": "Erstellen & scannen",
       "createConnection": "Verbindung erstellen",
       "setupBtcpayAccount": "BTCPay-Account einrichten"
@@ -858,19 +858,19 @@
       "samouraiSourceSet": "Samourai-Descriptor-Source-Set",
       "csvOrJson": "CSV oder JSON",
       "genericLedger": "Excel- oder CSV-Journal",
-      "priorTaxReport": "Früherer Steuerreport"
+      "priorTaxReport": "Früherer Steuerbericht"
     },
     "priorReport": {
-      "provider": "Report-Anbieter",
+      "provider": "Berichtsanbieter",
       "providerPlaceholder": "CoinTracking oder Blockpit",
       "taxYear": "Steuerjahr",
       "taxYearHelper": "Optional. Das sind Nachweis-Metadaten, kein importiertes Steuerergebnis.",
-      "fileLabel": "Pfad zur Steuerreport-Datei",
-      "fileHelper": "Kassiber kopiert das Original in den verwalteten Anhangsspeicher und übernimmt weder Summen noch Lot-Zuordnungen.",
-      "errorProvider": "Gib den Report-Anbieter ein.",
-      "errorFile": "Wähle die Datei des früheren Steuerreports.",
+      "fileLabel": "Pfad zur Steuerberichtsdatei",
+      "fileHelper": "Kassiber kopiert das Original in den verwalteten Anhangsspeicher und übernimmt weder Summen noch Tranchenzuordnungen.",
+      "errorProvider": "Gib den Berichtsanbieter ein.",
+      "errorFile": "Wähle die Datei des früheren Steuerberichts.",
       "errorYear": "Das Steuerjahr muss vierstellig sein.",
-      "archivedTitle": "Früherer Report archiviert",
+      "archivedTitle": "Früherer Bericht archiviert",
       "archivedBody": "{{label}} wurde als lokaler Nachweis gespeichert."
     },
     "genericLedger": {
