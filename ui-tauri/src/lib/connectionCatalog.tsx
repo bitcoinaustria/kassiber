@@ -55,6 +55,7 @@ export type SetupKind =
   | "silent-payment"
   | "file-wallet"
   | "file-enrichment"
+  | "prior-report"
   | "samourai"
   | "btcpay"
   | "bullbitcoin-wallet"
@@ -77,6 +78,8 @@ export type ConnectionSourceFormat =
   | "strike_csv"
   | "ledgerlive_csv"
   | "binance_supplemental_csv"
+  | "cointracking_csv"
+  | "blockpit_csv"
   | "wasabi_bundle"
   | "generic_ledger";
 
@@ -776,6 +779,63 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     details: [
       "BTC autoinvest rows funded by fiat preserve exact execution value",
       "BTC dividend/mining rows import as income without guessing fiat price",
+    ],
+  },
+  {
+    id: "prior-tax-report",
+    title: "Prior tax report",
+    description: "Preserve a CoinTracking, Blockpit, or other prior report as evidence.",
+    category: "files",
+    image: sourceIcon("DOC", "#7f1d1d", "#ffffff"),
+    icon: FileInput,
+    status: "ready",
+    pathLabel: "Evidence archive",
+    formatLabel: "Report file",
+    setupKind: "prior-report",
+    details: [
+      "Copies the original report into Kassiber's managed attachment store",
+      "Records the provider and tax year without trusting imported totals",
+      "Use the transaction-history migration cards to rebuild auditable Kassiber reports",
+    ],
+  },
+  {
+    id: "cointracking",
+    title: "CoinTracking",
+    description: "Move your Bitcoin transaction history into Kassiber.",
+    category: "files",
+    image: sourceIcon("CT", "#2f78c4", "#ffffff"),
+    status: "ready",
+    pathLabel: "Tax-platform migration",
+    formatLabel: "CoinTracking transaction CSV",
+    docsHref:
+      "https://cointracking.freshdesk.com/en/support/solutions/articles/29000031008-create-backup-restore-or-export-your-account-data",
+    setupKind: "file-wallet",
+    walletKind: "cointracking",
+    sourceFormat: "cointracking_csv",
+    details: [
+      "Use the complete English-header CSV from Transactions → Export → CSV",
+      "Add the CSV and descriptor wallets in either order; sync reconciles overlaps",
+      "With a chain ID, exact matches are excluded; ID-less collisions stay in review",
+    ],
+  },
+  {
+    id: "blockpit",
+    title: "Blockpit",
+    description: "Move your Bitcoin transaction history into Kassiber.",
+    category: "files",
+    image: sourceIcon("BP", "#111827", "#ffffff"),
+    status: "ready",
+    pathLabel: "Tax-platform migration",
+    formatLabel: "Blockpit transaction CSV",
+    docsHref:
+      "https://intercom.help/blockpit/en/articles/12137149-how-to-export-my-blockpit-transactions-as-a-csv-file",
+    setupKind: "file-wallet",
+    walletKind: "blockpit",
+    sourceFormat: "blockpit_csv",
+    details: [
+      "Use the complete Transactions CSV with filters cleared; excluded Blockpit rows are absent",
+      "Add the CSV and descriptor wallets in either order; sync reconciles overlaps",
+      "With a chain ID, exact matches are excluded; ID-less collisions stay in review",
     ],
   },
   {

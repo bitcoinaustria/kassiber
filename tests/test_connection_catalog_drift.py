@@ -126,6 +126,7 @@ _DESKTOP_COMMERCIAL_RECONCILIATION_KINDS = (
     "ui.documents.list",
     "ui.documents.create",
     "ui.documents.attach",
+    "ui.documents.import_report",
 )
 
 
@@ -530,9 +531,9 @@ class ConnectionCatalogDriftTests(unittest.TestCase):
             source_format = _extract_field(entry, "sourceFormat")
             setup_kind = _extract_field(entry, "setupKind")
             entry_id = _extract_field(entry, "id") or "<unknown>"
-            if setup_kind in (None, "backend-settings", "bip329", "btcpay"):
-                # Backend-only / label-import / BTCPay entries do not declare a
-                # walletKind; the daemon picks the wallet kind for them.
+            if setup_kind in (None, "backend-settings", "bip329", "btcpay", "prior-report"):
+                # Backend-only / label-import / evidence-archive / BTCPay entries
+                # do not declare a walletKind; the daemon owns their target.
                 continue
             self.assertIsNotNone(
                 wallet_kind,

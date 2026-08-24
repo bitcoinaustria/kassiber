@@ -403,6 +403,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.documents.list",
     "ui.documents.create",
     "ui.documents.attach",
+    "ui.documents.import_report",
     "ui.logs.snapshot",
 ];
 

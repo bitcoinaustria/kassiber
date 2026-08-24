@@ -1685,6 +1685,16 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_import_ledgerlive.add_argument("--profile")
     wallets_import_ledgerlive.add_argument("--wallet", required=True)
     wallets_import_ledgerlive.add_argument("--file", required=True)
+    wallets_import_cointracking = wallets_sub.add_parser("import-cointracking")
+    wallets_import_cointracking.add_argument("--workspace")
+    wallets_import_cointracking.add_argument("--profile")
+    wallets_import_cointracking.add_argument("--wallet", required=True)
+    wallets_import_cointracking.add_argument("--file", required=True)
+    wallets_import_blockpit = wallets_sub.add_parser("import-blockpit")
+    wallets_import_blockpit.add_argument("--workspace")
+    wallets_import_blockpit.add_argument("--profile")
+    wallets_import_blockpit.add_argument("--wallet", required=True)
+    wallets_import_blockpit.add_argument("--file", required=True)
     wallets_import_binance_supplemental = wallets_sub.add_parser("import-binance-supplemental")
     wallets_import_binance_supplemental.add_argument("--workspace")
     wallets_import_binance_supplemental.add_argument("--profile")
@@ -2821,6 +2831,13 @@ def build_parser() -> argparse.ArgumentParser:
     documents_attach.add_argument("--url")
     documents_attach.add_argument("--label")
     documents_attach.add_argument("--media-type")
+    documents_import_report = documents_sub.add_parser("import-report")
+    documents_import_report.add_argument("--workspace")
+    documents_import_report.add_argument("--profile")
+    documents_import_report.add_argument("--provider", required=True)
+    documents_import_report.add_argument("--file", required=True)
+    documents_import_report.add_argument("--tax-year")
+    documents_import_report.add_argument("--label")
 
     source_funds = sub.add_parser("source-funds")
     source_funds_sub = source_funds.add_subparsers(dest="source_funds_command", required=True)
@@ -3838,6 +3855,30 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.wallet,
                     args.file,
                     "ledgerlive_csv",
+                ),
+            )
+        if args.wallets_command == "import-cointracking":
+            return emit(
+                args,
+                import_into_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    "cointracking_csv",
+                ),
+            )
+        if args.wallets_command == "import-blockpit":
+            return emit(
+                args,
+                import_into_wallet(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.wallet,
+                    args.file,
+                    "blockpit_csv",
                 ),
             )
         if args.wallets_command == "import-binance-supplemental":
@@ -5154,6 +5195,21 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     url=args.url,
                     label=args.label,
                     media_type=args.media_type,
+                ),
+            )
+        if args.documents_command == "import-report":
+            return emit(
+                args,
+                core_commercial.import_prior_tax_report(
+                    conn,
+                    args.data_root,
+                    args.workspace,
+                    args.profile,
+                    commercial_hooks,
+                    provider=args.provider,
+                    file_path=args.file,
+                    tax_year=args.tax_year,
+                    label=args.label,
                 ),
             )
     if args.command == "source-funds":

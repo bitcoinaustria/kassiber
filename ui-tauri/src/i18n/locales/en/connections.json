@@ -677,6 +677,7 @@
       "createConnections": "Create connections",
       "importTransactions": "Import transactions",
       "importPricing": "Import pricing",
+      "archiveReport": "Archive report",
       "createAndScan": "Create & scan",
       "createConnection": "Create connection",
       "setupBtcpayAccount": "Set up BTCPay account"
@@ -839,6 +840,10 @@
       "label": "Export file path",
       "btcpayLabel": "BTCPay CSV export path",
       "btcpayHelper": "Choose a BTCPay wallet transactions CSV export. Kassiber imports comments as notes and labels as tags.",
+      "cointrackingLabel": "CoinTracking CSV export",
+      "cointrackingHelper": "Set CoinTracking to English, then choose Transactions → Export → CSV. Export the complete history.",
+      "blockpitLabel": "Blockpit transaction CSV",
+      "blockpitHelper": "In Blockpit, clear the Transactions filters, then download the CSV. English and German labels are accepted; rows excluded in Blockpit are not exported.",
       "wasabiLabel": "Wasabi JSON bundle path",
       "wasabiHelper": "Choose a sanitized local bundle with Wasabi gethistory plus listcoins/listunspentcoins data. Kassiber imports it as watch-only accounting evidence."
     },
@@ -852,12 +857,28 @@
       "twentyonebitcoinCsv": "21bitcoin CSV",
       "strikeCsv": "Strike CSV",
       "ledgerliveCsv": "Ledger Live CSV",
+      "cointrackingCsv": "CoinTracking transaction CSV",
+      "blockpitCsv": "Blockpit transaction CSV",
       "binanceSupplementalCsv": "Binance supplemental CSV",
       "btcpayCsv": "BTCPay CSV",
       "wasabiBundle": "Wasabi JSON bundle",
       "samouraiSourceSet": "Samourai descriptor source set",
       "csvOrJson": "CSV or JSON",
-      "genericLedger": "Excel or CSV ledger"
+      "genericLedger": "Excel or CSV ledger",
+      "priorTaxReport": "Prior tax report"
+    },
+    "priorReport": {
+      "provider": "Report provider",
+      "providerPlaceholder": "CoinTracking or Blockpit",
+      "taxYear": "Tax year",
+      "taxYearHelper": "Optional. This is evidence metadata, not an imported tax result.",
+      "fileLabel": "Tax report file path",
+      "fileHelper": "Kassiber copies the original into its managed attachment store and does not adopt the report's totals or lot assignments.",
+      "errorProvider": "Enter the report provider.",
+      "errorFile": "Choose the prior tax report file.",
+      "errorYear": "Tax year must be four digits.",
+      "archivedTitle": "Prior report archived",
+      "archivedBody": "{{label}} is preserved as local evidence."
     },
     "genericLedger": {
       "templateHint": "New here? Download the template, fill in your transactions, then import the file.",
