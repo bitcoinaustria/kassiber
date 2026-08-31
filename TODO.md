@@ -61,20 +61,21 @@ same verification surface.
   Austrian `per_wallet` mode belongs here.
   - [x] G0: pin the wage, global-pool, moving-average transfer, and fee-bearing
     regression fixtures; record the Austrian wallet-scope legal/product gate.
-  - [ ] G1-G2 in RP2: effective-basis materialization and the unsafe
-    country-hook guard are implemented locally; no wage-tax category belongs in RP2.
+  - [x] G1-G2 in RP2: effective-basis materialization and the unsafe
+    country-hook guard are implemented in RP2 PR #48; no wage-tax category
+    belongs in RP2.
     General narrow-pool execution remains gated on one chronological movement +
     taxable-event cursor; fee-bearing `per_wallet` transfers fail closed.
-  - [ ] G3 in Kassiber: add the one profile column, generic normalized pool
+  - [x] G3 in Kassiber: add the one profile column, generic normalized pool
     fields, legacy-global migration, replication/profile plumbing, AT adapter
     markers, wage valuation quarantine, and the tested RP2 pin.
   - [x] G4: reuse existing acquisition/profile/report/attachment surfaces;
     keep compensation provenance outside E 1kv selectors; disclose the active
     scope and current self-custody gate.
-  - [ ] G5: if legally enabled, prove wallet-scope salary/transit/savings;
-    otherwise prove global-only and fail closed on wallet. Pass RP2 + Kassiber
-    targeted/full gates, fresh/migrated book proofs, update current-truth docs,
-    run independent correctness review, and stop.
+  - [x] G5: the legal/product gate was not satisfied, so prove global-only and
+    fail closed on wallet. RP2 + Kassiber targeted/full gates, fresh/migrated
+    book proofs, current-truth docs, and independent correctness reviews are
+    complete. Wallet activation remains a separate future gate.
 
 - [x] Standardize contributor dependency and test execution on the two locked
   project managers: `uv sync --locked` / `uv run --locked` for Python and the

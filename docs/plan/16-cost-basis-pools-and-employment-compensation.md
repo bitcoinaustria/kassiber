@@ -1,15 +1,16 @@
 # Country-configurable cost-basis pools and compensation acquisitions
 
 **Status:** The compensation-acquisition and global-only foundation is
-implemented locally across Kassiber and RP2, including the global
+PR-ready across Kassiber and RP2, including the global
 salary/transit/savings fixture. A valued `wages` receipt is an ordinary
 acquisition for RP2 while its raw kind remains factual provenance in Kassiber.
 Production narrower-pool activation remains
 disabled: RP2's existing `per_wallet` two-pass engine cannot replay transfers
 and later taxable source events through one chronological inventory cursor.
-Fee-bearing `per_wallet` transfers therefore fail closed. Release still
-requires RP2 publication, a tested Kassiber dependency pin, and the full G5
-verification cutoffs below.
+Fee-bearing `per_wallet` transfers therefore fail closed. RP2 PR #48 contains
+the reusable basis-carry fix; Kassiber pins and tests its exact commit. The G5
+global-only verification cutoffs below are complete. Release still requires
+merging RP2 #48 before the dependent Kassiber change.
 **Executable backlog:** the single matching item in `TODO.md`.
 **Current-truth documents until cutover:** `docs/austrian-handoff.md`,
 `docs/plan/06-austrian-tax-engine.md`, current code, and current tests.
