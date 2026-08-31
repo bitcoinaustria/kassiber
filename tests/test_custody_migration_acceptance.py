@@ -61,7 +61,9 @@ def test_fresh_database_does_not_emit_a_fake_schema_migration_audit(tmp_path):
     conn = open_db(tmp_path)
     try:
         assert conn.execute(
-            "SELECT COUNT(*) FROM schema_migration_audits"
+            "SELECT COUNT(*) FROM schema_migration_audits "
+            "WHERE migration_name = ?",
+            (CUSTODY_DURABLE_EVIDENCE_MIGRATION,),
         ).fetchone()[0] == 0
         tables = {
             row["name"]

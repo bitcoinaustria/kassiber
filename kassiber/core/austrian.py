@@ -2,7 +2,7 @@
 
 Kassiber owns the normalization layer: raw transaction rows become
 `NormalizedTaxEvent` values with typed Austrian fields (`at_regime`,
-`at_pool`, `at_swap_link`). The rp2 adapter
+`at_swap_link`) plus a country-neutral cost-basis pool id. The rp2 adapter
 serializes those fields into rp2's `notes` wire format; the rp2 AT
 plugin (`rp2.plugin.country.at`) interprets them.
 
@@ -42,8 +42,9 @@ AT_NEU_CUTOFF = datetime(2021, 3, 1, 0, 0, 0, tzinfo=AT_TAX_TZ)
 REGIME_ALT: Literal["alt"] = "alt"
 REGIME_NEU: Literal["neu"] = "neu"
 
-# Single global moving-average pool id per asset (see resolve_pool_id). Matches
-# rp2.plugin.country.at.AT_DEFAULT_POOL and rp2's absent-marker fallback.
+# Austrian plugin wire id for the global moving-average pool. Generic Kassiber
+# normalization uses its own opaque `global` identity; only the RP2 adapter
+# translates that identity to this legacy marker value.
 AT_DEFAULT_POOL = "default"
 
 # Quarantine reason emitted when a reviewed Neu cross-asset swap cannot be
@@ -524,26 +525,6 @@ def infer_outbound_regimes(
     return regimes_by_row_id
 
 
-def resolve_pool_id(wallet_id: Optional[str]) -> str:  # wallet_id reserved as a future per-wallet seam; intentionally unused
-    """Single global Neuvermögen moving-average pool per asset.
-
-    The gleitender Durchschnittspreis (§ 2 KryptowährungsVO) is computed over the
-    taxpayer's *entire holding of each cryptocurrency*, not per wallet. rp2 runs one
-    accounting pass per asset, so a single constant pool id == the whole per-asset
-    holding. This also keeps the Austrian cost-basis pool consistent with the rest of
-    the engine, where cost basis is global (universal-application FIFO) and only the
-    *availability* gate is per-`(exchange, holder)` — see kassiber/core/engines/rp2.py.
-
-    Returning one pool id regardless of wallet fixes the multi-wallet hazard where coins
-    acquired in one wallet and sold from another were tagged with different `at_pool`s, so
-    rp2's `moving_average_at` found no lots in the disposal's pool (bitcoinaustria/kassiber#213,
-    bitcoinaustria/rp2#7). `wallet_id` is retained as the seam for a hypothetical future
-    per-wallet scheme; it is intentionally unused today. The wallet-keyed *output shape*
-    (a single pool-id string) is preserved, so upstream consumers do not change.
-    """
-    return AT_DEFAULT_POOL
-
-
 def kennzahl_for_disposal_category(category: Optional[str]) -> int | None:
     if category is None:
         return None
@@ -561,7 +542,6 @@ __all__ = [
     "infer_outbound_regimes",
     "infer_regime_from_timestamp",
     "kennzahl_for_disposal_category",
-    "resolve_pool_id",
     "tax_year_in_vienna",
     "vienna_local_date",
     "vienna_tax_year_utc_window",

@@ -114,6 +114,7 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
             "gains_algorithm",
             "require_coarse_review",
             "bitcoin_rail_carrying_value",
+            "cost_basis_pool_scope",
             "created_at",
         ),
         ("id",),
@@ -126,8 +127,10 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
                 "gains_algorithm",
                 "require_coarse_review",
                 "bitcoin_rail_carrying_value",
+                "cost_basis_pool_scope",
             }
         ),
+        optional_columns=frozenset({"cost_basis_pool_scope"}),
     ),
     TableSpec(
         "filed_report_snapshots",

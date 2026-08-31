@@ -223,10 +223,11 @@ earlier pricing for the same transaction.
 If imported transactions do not carry `fiat_rate` or `fiat_value`, `journals process` first tries to backfill pricing from the local rates cache. When `confirmed_at` is present, Kassiber prices from that timestamp; otherwise it falls back to `occurred_at`. Liquid Bitcoin import spellings such as `L-BTC` are normalized to `LBTC` and use the BTC fiat rate because L-BTC is pegged one-to-one with BTC. Coarse provider samples such as daily historical fallback are stored with provenance but quarantined for pricing review instead of being silently accepted as exact FMV.
 
 For inbound transactions, explicit earn-like `kind` values such as `income`,
-`interest`, `staking`, `mining`, `airdrop`, `hardfork`, `wages`,
-`lending_interest`, and `routing_income` are preserved and later promoted into
-RP2 earn-like receipts during journal processing. Unlabeled inbound rows stay
-conservative and process as acquisitions.
+`interest`, `staking`, `mining`, `airdrop`, `hardfork`, `lending_interest`, and
+`routing_income` are preserved and later promoted into RP2 earn-like receipts
+during journal processing. `wages` is preserved as source provenance but books
+as a normal valued acquisition: wage-tax calculation remains outside Kassiber.
+Unlabeled inbound rows stay conservative and process as acquisitions.
 
 ## Moving from CoinTracking or Blockpit
 

@@ -184,7 +184,7 @@ from ..secrets.prompt import read_passphrase_from_fd
 from ..secrets.sqlcipher import open_encrypted, require_sqlcipher
 from ..operator.cli import add_operator_parser, dispatch_operator, route_brokered_command
 from ..release_verification import verify_download
-from ..tax_policy import supported_tax_countries
+from ..tax_policy import DEFAULT_COST_BASIS_POOL_SCOPE, supported_tax_countries
 from ..update_check import (
     check_for_update,
     render_update_status,
@@ -1413,6 +1413,11 @@ def build_parser() -> argparse.ArgumentParser:
     profiles_create.add_argument("--tax-long-term-days", type=int, default=DEFAULT_LONG_TERM_DAYS)
     profiles_create.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS))
     profiles_create.add_argument(
+        "--cost-basis-pool-scope",
+        default=DEFAULT_COST_BASIS_POOL_SCOPE,
+        help="Country-policy-controlled cost-basis pool scope (currently: global).",
+    )
+    profiles_create.add_argument(
         "--bitcoin-rail-carrying-value",
         dest="bitcoin_rail_carrying_value",
         action=argparse.BooleanOptionalAction,
@@ -1435,6 +1440,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     profiles_set.add_argument("--tax-long-term-days", type=int)
     profiles_set.add_argument("--gains-algorithm", choices=list(RP2_ACCOUNTING_METHODS))
+    profiles_set.add_argument(
+        "--cost-basis-pool-scope",
+        help="Country-policy-controlled cost-basis pool scope (currently: global).",
+    )
     profiles_set.add_argument(
         "--bitcoin-rail-carrying-value",
         dest="bitcoin_rail_carrying_value",
@@ -3574,6 +3583,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         args.tax_country,
                         args.tax_long_term_days,
                         bitcoin_rail_carrying_value=args.bitcoin_rail_carrying_value,
+                        cost_basis_pool_scope=args.cost_basis_pool_scope,
                     )
                 ),
             )
@@ -3591,12 +3601,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 "gains_algorithm": args.gains_algorithm,
                 "require_coarse_review": args.require_coarse_review,
                 "bitcoin_rail_carrying_value": args.bitcoin_rail_carrying_value,
+                "cost_basis_pool_scope": args.cost_basis_pool_scope,
             }
             if all(v is None for v in updates.values()):
                 raise AppError(
                     "profiles set requires at least one field to update",
                     code="validation",
-                    hint="Pass one or more of --label, --fiat-currency, --tax-country, --tax-long-term-days, --gains-algorithm, --require-coarse-review, --bitcoin-rail-carrying-value",
+                    hint="Pass one or more of --label, --fiat-currency, --tax-country, --tax-long-term-days, --gains-algorithm, --require-coarse-review, --bitcoin-rail-carrying-value, --cost-basis-pool-scope",
                 )
             return emit(
                 args,

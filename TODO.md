@@ -48,6 +48,34 @@ same verification surface.
 
 ## Right now
 
+- [ ] **Country-configurable cost-basis pools and compensation acquisitions.**
+  Execute the ordered, cross-repository gates in
+  [`docs/plan/16-cost-basis-pools-and-employment-compensation.md`](docs/plan/16-cost-basis-pools-and-employment-compensation.md).
+  The terminal state is intentionally narrow: book valued `wages` as a normal
+  basis-bearing acquisition, outside Austrian E 1kv crypto-income rows; add one legacy-safe profile scope;
+  carry exact effective basis between opaque pools in RP2; preserve `global`;
+  and enable `wallet` plus the salary/transit/savings fixture only after the
+  Austrian release-time legal/product gate. If that gate is not satisfied,
+  ship the mandatory bugfix foundation and stop. No address/provider grouping,
+  domestic KESt automation, payroll engine, new report/UI route, new table, or
+  Austrian `per_wallet` mode belongs here.
+  - [x] G0: pin the wage, global-pool, moving-average transfer, and fee-bearing
+    regression fixtures; record the Austrian wallet-scope legal/product gate.
+  - [ ] G1-G2 in RP2: effective-basis materialization and the unsafe
+    country-hook guard are implemented locally; no wage-tax category belongs in RP2.
+    General narrow-pool execution remains gated on one chronological movement +
+    taxable-event cursor; fee-bearing `per_wallet` transfers fail closed.
+  - [ ] G3 in Kassiber: add the one profile column, generic normalized pool
+    fields, legacy-global migration, replication/profile plumbing, AT adapter
+    markers, wage valuation quarantine, and the tested RP2 pin.
+  - [x] G4: reuse existing acquisition/profile/report/attachment surfaces;
+    keep compensation provenance outside E 1kv selectors; disclose the active
+    scope and current self-custody gate.
+  - [ ] G5: if legally enabled, prove wallet-scope salary/transit/savings;
+    otherwise prove global-only and fail closed on wallet. Pass RP2 + Kassiber
+    targeted/full gates, fresh/migrated book proofs, update current-truth docs,
+    run independent correctness review, and stop.
+
 - [x] Standardize contributor dependency and test execution on the two locked
   project managers: `uv sync --locked` / `uv run --locked` for Python and the
   pinned `pnpm` for the desktop. Keep `pip` only as an end-user packaging
