@@ -2334,6 +2334,17 @@ class RefundLinkMatchingTests(unittest.TestCase):
         self.assertEqual(candidates[0].confidence, CONFIDENCE_EXACT)
         self.assertEqual(candidates[0].evidence_id, f"{funding_txid}:2")
 
+        # Stored compatibility/Core graphs may wrap the transaction or retain
+        # Bitcoin-denominated values. These encode the same funding outpoint.
+        for nested in (False, True):
+            for value in ({"value_sats": 10_000}, {"value": "0.00010000"}):
+                with self.subTest(nested=nested, value=value):
+                    raw = {"txid": funding_txid, "vout": [{"n": 2, **value}]}
+                    lockup["raw_json"] = {"tx": raw} if nested else raw
+                    recovered = suggest_swap_candidates([lockup, refund])
+                    self.assertEqual(len(recovered), 1)
+                    self.assertEqual(recovered[0].confidence, CONFIDENCE_EXACT)
+
     def test_same_wallet_refund_paired_by_funding_link(self):
         lockup = _row(
             id="lockup",
