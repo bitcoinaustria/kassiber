@@ -47,6 +47,12 @@ from .ownership_transfers import (
     derive_profile_transfers,
 )
 from .privacy_hops import privacy_hop_evidence_from_row
+from .custody_native_transitions import (
+    NATIVE_TRANSITION_SOURCE,
+    NativeTransitionProof,
+    compile_native_transitions,
+    has_native_transition_evidence,
+)
 
 
 def _field(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
@@ -474,6 +480,7 @@ def _pair_claims(
     excluded_transaction_ids: set[str],
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
     physical_scopes_by_anchor: Mapping[str, tuple[str, str, str, str]],
+    native_transition_proofs: Mapping[tuple[str, str], NativeTransitionProof] | None = None,
 ) -> tuple[
     tuple[QuantityClaim, ...],
     tuple[str, ...],
@@ -517,6 +524,12 @@ def _pair_claims(
         if source.direction != "outbound" or target.direction != "inbound":
             continue
         source_name = _pair_source(pair)
+        transition_proof = (native_transition_proofs or {}).get((out_id, in_id))
+        exact_native_transition = bool(
+            source_name == NATIVE_TRANSITION_SOURCE
+            and transition_proof is not None
+            and transition_proof.validates(pair, source, target)
+        )
         exact_native_pair = _is_exact_native_pair(source, target)
         exact_recorded_pair = _is_exact_recorded_pair(
             pair, out_row, in_row, source, target
@@ -580,6 +593,7 @@ def _pair_claims(
             and not exact_recorded_pair
             and not exact_recorded_fanout
             and not exact_native_pair
+            and not exact_native_transition
         ):
             # Amount/time coincidence and imported graph-shaped JSON are
             # suggestions, never native ownership proof. A shared canonical
@@ -706,10 +720,15 @@ def _pair_claims(
             blocked_transaction_ids.update((out_id, in_id))
             continue
         allow_cross_rail = source_domain.rail != target_domain.rail
-        # A cross-asset link carries custody only when it was explicitly
-        # reviewed as carrying value.  The quantity domain validates the
-        # Bitcoin-network/msat restriction independently.
-        if allow_cross_rail and str(_field(pair, "policy") or "") != "carrying-value":
+        # Reviewed carrying-value links and independently proven native
+        # transitions can cross rails. Native custody remains a fact even when
+        # profile policy requires taxable treatment in the later tax projection.
+        # The quantity domain validates Bitcoin-network/msat compatibility.
+        if (
+            allow_cross_rail
+            and str(_field(pair, "policy") or "") != "carrying-value"
+            and not exact_native_transition
+        ):
             continue
         inferred_fee_msat = max(0, min(requested_msat, available_source) - amount_msat)
         unclaimed_after_pair = available_source - amount_msat - inferred_fee_msat
@@ -935,6 +954,8 @@ def compile_custody_interpreters(
     canonical: CanonicalQuantityInput,
     *,
     wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
+    profile: Mapping[str, Any] | None = None,
+    swap_dismissals: Sequence[Mapping[str, Any]] = (),
     owned_index: Any = None,
     channel_transfer_pairs: Sequence[Mapping[str, Any]] = (),
     channel_roles: Mapping[str, str] | None = None,
@@ -1023,13 +1044,42 @@ def compile_custody_interpreters(
     channel_blocked_ids = {
         str(item["transaction_id"]) for item in channel_role_quarantines
     }
+    complete_recorded_pair_ids = _complete_recorded_pair_ids(auto_pairs, observations)
+    occupied_transition_ids = (
+        excluded | samourai_touched_ids | set(channel_roles)
+        | complete_recorded_pair_ids
+        | {
+            str(_field(leg, "transaction_id"))
+            for leg in loan_legs if _field(leg, "transaction_id")
+        }
+        | {
+            _anchor_id(_field(pair, side, {}) or {})
+            for pair in channel_transfer_pairs for side in ("out", "in")
+        }
+    )
+    native_transition_pairs, native_transition_proofs, native_transition_quarantines = (
+        compile_native_transitions(
+            rows, observations, profile=profile,
+            occupied_ids=occupied_transition_ids, dismissals=swap_dismissals,
+        )
+        if profile is not None and has_native_transition_evidence(rows)
+        else ([], {}, ())
+    )
+    native_transition_blocked_ids = {
+        str(item["transaction_id"]) for item in native_transition_quarantines
+    }
+    native_transition_ids = {
+        transaction_id for key in native_transition_proofs for transaction_id in key
+    }
     same_asset_pairs = list(auto_pairs)
     # Graph ownership gets first opportunity only where the imported endpoints
     # are incomplete. A complete, conserving 1:1 physical event is already
     # stronger evidence; an unavailable historic prevout must not weaken it.
     paired_ids: set[str] = set()
     paired_ids.update(samourai_touched_ids)
-    paired_ids.update(_complete_recorded_pair_ids(auto_pairs, observations))
+    paired_ids.update(complete_recorded_pair_ids)
+    paired_ids.update(native_transition_ids)
+    paired_ids.update(native_transition_blocked_ids)
     if has_chain_events or owned_index is not None:
         derivation = derive_profile_transfers(
             rows,
@@ -1145,6 +1195,7 @@ def compile_custody_interpreters(
     resolved_privacy_ids.update(_exact_native_pair_ids(auto_pairs, observations))
     resolved_privacy_ids.update(_exact_native_pair_ids(derived_pairs, observations))
     resolved_privacy_ids.update(excluded)
+    resolved_privacy_ids.update(native_transition_ids)
     privacy_quarantines = (
         tuple(
             {
@@ -1192,12 +1243,14 @@ def compile_custody_interpreters(
         *same_asset_pairs,
         *samourai_pairs,
         *derived_pairs,
+        *native_transition_pairs,
     ]
     claims, blocked_transaction_ids, pair_quarantines = _pair_claims(
         pair_inputs,
         observations,
         excluded_transaction_ids=excluded,
         wallet_refs_by_id=wallet_refs_by_id,
+        native_transition_proofs=native_transition_proofs,
         physical_scopes_by_anchor=(
             {
                 _anchor_id(row): scope
@@ -1249,6 +1302,7 @@ def compile_custody_interpreters(
                     *derivation_blocked_ids,
                     *privacy_blocked_ids,
                     *samourai_unverified_ids,
+                    *native_transition_blocked_ids,
                 }
             )
         ),
@@ -1259,6 +1313,7 @@ def compile_custody_interpreters(
                 *channel_role_quarantines,
                 *privacy_quarantines,
                 *samourai_unverified_quarantines,
+                *native_transition_quarantines,
             )
         ),
     )
