@@ -26,6 +26,7 @@ from .custody_quantity import (
     QuantitySlice,
 )
 from .custody_quantity_runtime import CanonicalQuantityState
+from .transfer_chronology import chain_order_evidence
 
 
 def _field(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
@@ -105,6 +106,7 @@ def _base_row(
         observation.anchor_transaction_id
     )
     result = dict(source or {})
+    result["custody_chain_order"] = chain_order_evidence(result)
     result.update(
         {
             "wallet_id": observation.wallet_id,
