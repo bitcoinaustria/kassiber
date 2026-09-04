@@ -47,7 +47,7 @@ describe("quarantine row model", () => {
     );
     expect(row.event).toBe(event);
     expect(row.transactionAction).toMatchObject({ label: action, tab: "details" });
-    expect(row.evidenceHint).toMatch(lang === "en" ? /after fees/ : /nach Gebühren/);
+    expect(row.evidenceHint).toMatch(lang === "en" ? /amounts and fees/ : /Beträge und Gebühren/);
     expect(row.nextAction).not.toMatch(/sync|synchron|exclu|ausschließ|price|Preis/i);
     expect(row.metricFilterIds).toEqual(["other-review"]);
   });
