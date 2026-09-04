@@ -3103,6 +3103,7 @@ def bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None
 
 BITCOINRPC_RESCAN_TIMESTAMP_WINDOW_SECONDS = 2 * 60 * 60
 BITCOINRPC_HISTORY_ATTESTATION_VERSION = 1
+BITCOINRPC_GRAPH_NORMALIZATION_VERSION = 1
 
 
 def bitcoinrpc_prune_coverage(
@@ -3738,6 +3739,17 @@ def record_from_bitcoinrpc_details(
         "counterparty": None,
         "raw_json": json.dumps(json_ready(raw_payload), sort_keys=True),
     }
+    # Core's normalized graph is curated below before raw witnesses are
+    # discarded. These fields are hints; exact matching still requires the
+    # closed observation authority bound to that graph and quantity.
+    proof = raw_graph.get("htlc_spend") if isinstance(raw_graph, dict) else None
+    if isinstance(proof, dict):
+        if proof.get("role") == "claim":
+            record.update(_payment_hash_fields((
+                proof["payment_hash"], proof["funding_txid"], proof["funding_vout"],
+            )))
+        elif proof.get("role") == "refund":
+            record.update(_swap_refund_fields(proof["funding_txid"], proof["funding_vout"]))
     if privacy_boundary:
         record["privacy_boundary"] = privacy_boundary
     return record
@@ -3834,6 +3846,8 @@ def _bitcoinrpc_graph_has_foreign_inputs(raw_graph, tracked_scripts) -> bool:
 
 
 def _bitcoinrpc_normalized_graph(txid, payload):
+    from .chain_observer.htlc_evidence import htlc_spend_attestation
+
     decoded = payload.get("decoded") if isinstance(payload, dict) else None
     if not isinstance(decoded, dict):
         return None
@@ -3841,6 +3855,17 @@ def _bitcoinrpc_normalized_graph(txid, payload):
     vout = decoded.get("vout")
     if not isinstance(vin, list) or not isinstance(vout, list):
         return None
+
+    def core_witness_items(entry):
+        if not isinstance(entry, dict):
+            return []
+        return _esplora_witness_items({"witness": entry.get("txinwitness")})
+
+    proof = htlc_spend_attestation(
+        claim=_extract_unique_claim_payment_hash_outpoint(vin, core_witness_items),
+        refund=_extract_refund_funding_outpoint(vin, core_witness_items),
+        input_count=len(vin),
+    )
     normalized_vin = []
     for entry in vin:
         if not isinstance(entry, dict):
@@ -3881,6 +3906,7 @@ def _bitcoinrpc_normalized_graph(txid, payload):
         "vin": normalized_vin,
         "vout": normalized_vout,
         "source": "bitcoinrpc_gettransaction",
+        **({"observer": "bitcoinrpc", "htlc_spend": proof} if proof else {}),
     }
 
 
@@ -3934,7 +3960,13 @@ def bitcoinrpc_records_for_wallet(
     wallet_name = wallet_name or bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
     if imported_count is None:
         imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
-    transaction_checkpoint = checkpoint if not imported_count else None
+    # Replay Core's existing wallet history once after normalization changes.
+    # This is independent of descriptor import/rescan coverage attestation.
+    normalization_current = (
+        (checkpoint or {}).get("bitcoinrpc_graph_normalization_version")
+        == BITCOINRPC_GRAPH_NORMALIZATION_VERSION
+    )
+    transaction_checkpoint = checkpoint if not imported_count and normalization_current else None
     details, fetch_meta = fetch_bitcoinrpc_wallet_transactions(
         backend,
         wallet_name,
@@ -3956,7 +3988,7 @@ def bitcoinrpc_records_for_wallet(
         ),
     ):
         normalized = record_from_bitcoinrpc_details(txid, tx_details, backend["name"])
-        if normalized and normalized["direction"] == "outbound":
+        if normalized:
             raw_graph = _bitcoinrpc_fetch_normalized_graph(
                 backend,
                 wallet_name,
@@ -3972,7 +4004,7 @@ def bitcoinrpc_records_for_wallet(
                     raw_graph=raw_graph,
                     tracked_scripts=tracked_scripts,
                 )
-            elif sync_state and (sync_state.tracked_scripts or {}):
+            else:
                 graph_unavailable_txids.append(str(txid).lower())
         if normalized:
             records.append(normalized)
@@ -3981,6 +4013,8 @@ def bitcoinrpc_records_for_wallet(
             set(graph_unavailable_txids)
         )
         fetch_meta.pop("bitcoinrpc_last_block", None)
+    else:
+        fetch_meta["bitcoinrpc_graph_normalization_version"] = BITCOINRPC_GRAPH_NORMALIZATION_VERSION
     retracted_txids = set(fetch_meta.get("bitcoinrpc_retracted_txids") or [])
     if retracted_txids:
         active_txids = {str(record.get("txid") or "").lower() for record in records}
@@ -4195,6 +4229,8 @@ def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
         next_checkpoint["bitcoinrpc_history_attestation"] = history_attestation
         if meta.get("bitcoinrpc_last_block"):
             next_checkpoint["bitcoinrpc_last_block"] = meta["bitcoinrpc_last_block"]
+        if meta.get("bitcoinrpc_graph_normalization_version"):
+            next_checkpoint["bitcoinrpc_graph_normalization_version"] = meta["bitcoinrpc_graph_normalization_version"]
         if meta.get("bitcoinrpc_pending_maturity"):
             next_checkpoint["bitcoinrpc_pending_maturity"] = True
         else:

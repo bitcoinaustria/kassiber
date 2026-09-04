@@ -99,6 +99,157 @@ class _DummySocket:
 
 
 class SyncBackendsTest(unittest.TestCase):
+    def test_bitcoinrpc_curates_native_htlc_proof_before_discarding_witness(self):
+        from tests.test_transfer_matching import _claim_raw, _row, _CLAIM_HASH, _CLAIM_PREIMAGE
+        from tests.custody_tax_helpers import authoritative_chain_observation
+        from kassiber.core.transfer_matching import suggest_swap_candidates
+        from kassiber.msat import btc_to_msat
+
+        for role in ("claim", "refund"):
+            with self.subTest(role=role):
+                txid = "66" * 32
+                decoded = _claim_raw(txid)
+                witness = decoded["vin"][0].pop("witness")
+                if role == "refund":
+                    witness = [witness[0], "", witness[-1]]
+                decoded["vin"][0]["txinwitness"] = witness
+                decoded["vout"] = [{"n": 0, "value": "0.00099500", "scriptPubKey": {"hex": "0014" + "77" * 20}}]
+                graph = sb._bitcoinrpc_normalized_graph(txid, {"decoded": decoded})
+                details = [{"txid": txid, "category": "receive", "amount": "0.00099500", "blocktime": 1_760_000_000}]
+                with patch.object(sb, "fetch_bitcoinrpc_wallet_transactions", return_value=(details, {"bitcoinrpc_last_block": "aa" * 32})), patch.object(
+                    sb, "bitcoinrpc_call", return_value={"decoded": decoded},
+                ) as rpc:
+                    records, _ = sb.bitcoinrpc_records_for_wallet(
+                        {"name": "core", "kind": "bitcoinrpc"}, {"id": "wallet"}, [],
+                        wallet_name="core-wallet", imported_count=0,
+                    )
+                self.assertEqual(len(records), 1)
+                record = records[0]
+                rpc.assert_called_once_with(
+                    {"name": "core", "kind": "bitcoinrpc"}, "gettransaction", [txid, True, True], wallet_name="core-wallet",
+                )
+                if role == "claim":
+                    self.assertEqual(record.get("payment_hash"), _CLAIM_HASH)
+                else:
+                    self.assertEqual(record.get("swap_refund_funding_txid"), "44" * 32)
+                self.assertNotIn(_CLAIM_PREIMAGE.hex(), record["raw_json"])
+                self.assertNotIn("txinwitness", record["raw_json"])
+                incoming = _row(
+                    **{**record, "id": "claim", "wallet_id": "chain", "wallet_kind": "descriptor",
+                       "external_id": txid, "amount": btc_to_msat(record["amount"]), "fee": 0,
+                       "config_json": json.dumps({"chain": "bitcoin", "network": "main"})},
+                )
+                source = _row(
+                    id="send", wallet_id="node", wallet_kind="lnd", direction="outbound", amount=100_000_000,
+                    payment_hash=_CLAIM_HASH, payment_hash_source="lnd",
+                )
+                if role == "refund":
+                    source = _row(
+                        id="send", wallet_id="chain", external_id="44" * 32, direction="outbound", amount=100_000_000,
+                        raw_json={"txid": "44" * 32, "vout": [{"n": 0, "value_sats": 100_000}]},
+                    )
+                self.assertFalse(any(c.confidence == "exact" for c in suggest_swap_candidates([source, incoming])))
+                incoming = authoritative_chain_observation(incoming, observer_kind="bitcoinrpc")
+                incoming["observation_observer_kinds_json"] = '["bitcoinrpc"]'
+                candidates = suggest_swap_candidates([source, incoming])
+                self.assertEqual(len(candidates), 1)
+                self.assertEqual(candidates[0].confidence, "exact")
+                for invalid in ("mixed_inputs", "forged_marker"):
+                    with self.subTest(role=role, invalid=invalid):
+                        untrusted = json.loads(json.dumps(decoded))
+                        if invalid == "mixed_inputs":
+                            untrusted["vin"].append({"txid": "88" * 32, "vout": 0, "txinwitness": []})
+                        else:
+                            untrusted["vin"][0]["txinwitness"] = []
+                            untrusted["htlc_spend"] = graph["htlc_spend"]
+                        sanitized = sb._bitcoinrpc_normalized_graph(txid, {"decoded": untrusted})
+                        self.assertNotIn("htlc_spend", sanitized)
+
+    def test_bitcoinrpc_normalization_upgrade_replays_history_without_rescan_and_retries_missing_graph(self):
+        from tests.test_transfer_matching import _claim_raw, _CLAIM_HASH
+
+        backend = {"name": "core", "kind": "bitcoinrpc", "url": "http://core.example"}
+        txid = "66" * 32
+        decoded = _claim_raw(txid)
+        decoded["vin"][0]["txinwitness"] = decoded["vin"][0].pop("witness")
+        decoded["vout"] = [{
+            "n": 0, "value": "0.00099500",
+            "scriptPubKey": {"hex": "0014" + "77" * 20},
+        }]
+        attestation = _bitcoinrpc_address_attestation()
+        legacy_checkpoint = {
+            "bitcoinrpc_last_block": "aa" * 32,
+            "bitcoinrpc_history_attestation": attestation,
+        }
+        # Address-only wallets also need graph retries, even without a locally
+        # derived script inventory. An upgrade must not trigger a node rescan.
+        state = WalletSyncState(
+            chain="bitcoin", network="bitcoin", descriptor_plan=None,
+            policy_asset_id="", targets=[{"address": "bc1qcore"}],
+            tracked_scripts={}, history_cache={}, checkpoint=legacy_checkpoint,
+        )
+        calls = []
+        graph_available = False
+
+        def rpc(_backend, method, params=None, wallet_name=None):
+            calls.append((method, params, wallet_name))
+            if method == "listwallets":
+                return ["kassiber-wallet-1"]
+            if method == "getaddressinfo":
+                return {"iswatchonly": True, "ismine": False}
+            if method == "listtransactions":
+                return [{
+                    "txid": txid, "category": "receive", "amount": "0.00099500",
+                    "blocktime": 1_760_000_000,
+                }]
+            if method == "getbestblockhash":
+                return "bb" * 32
+            if method == "gettransaction":
+                self.assertEqual(params, [txid, True, True])
+                if not graph_available:
+                    raise AppError("temporary Core failure")
+                return {"decoded": decoded}
+            if method == "listunspent":
+                return []
+            if method == "listsinceblock":
+                self.assertEqual(params, ["bb" * 32, 1, True, True])
+                return {"transactions": [], "removed": [], "lastblock": "cc" * 32}
+            raise AssertionError(f"Unexpected RPC call: {method}")
+
+        with patch.object(sb, "bitcoinrpc_call", side_effect=rpc):
+            records, failed = sb.bitcoinrpc_sync_adapter(backend, {"id": "wallet-1"}, state)
+            self.assertEqual(str(records[0]["amount"]), "0.00099500")
+            self.assertEqual(records[0]["direction"], "inbound")
+            self.assertIsNone(records[0].get("payment_hash"))
+            self.assertEqual(failed["bitcoinrpc_graph_unavailable_txids"], [txid])
+            self.assertNotIn("bitcoinrpc_graph_normalization_version", failed)
+            self.assertNotIn("bitcoinrpc_last_block", failed)
+            self.assertNotIn("freshness_checkpoint", failed)
+            self.assertEqual(state.checkpoint, legacy_checkpoint)
+
+            graph_available = True
+            records, upgraded = sb.bitcoinrpc_sync_adapter(backend, {"id": "wallet-1"}, state)
+            self.assertEqual(records[0]["payment_hash"], _CLAIM_HASH)
+            self.assertEqual(str(records[0]["amount"]), "0.00099500")
+            checkpoint = upgraded["freshness_checkpoint"]
+            self.assertEqual(checkpoint["bitcoinrpc_history_attestation"], attestation)
+            self.assertEqual(checkpoint["bitcoinrpc_graph_normalization_version"], sb.BITCOINRPC_GRAPH_NORMALIZATION_VERSION)
+            self.assertEqual(upgraded["bitcoinrpc_sync_mode"], "full_scan")
+
+            records, incremental = sb.bitcoinrpc_sync_adapter(
+                backend, {"id": "wallet-1"}, replace(state, checkpoint=checkpoint),
+            )
+            self.assertEqual(records, [])
+            self.assertEqual(incremental["bitcoinrpc_sync_mode"], "sinceblock")
+            self.assertEqual(incremental["freshness_checkpoint"]["bitcoinrpc_last_block"], "cc" * 32)
+
+        methods = [call[0] for call in calls]
+        self.assertEqual(methods.count("listtransactions"), 2)
+        self.assertEqual(methods.count("gettransaction"), 2)
+        self.assertEqual(methods.count("listsinceblock"), 1)
+        self.assertNotIn("importdescriptors", methods)
+        self.assertNotIn("getblockchaininfo", methods)
+
     def test_script_type_detection_infers_test_network_from_tpub(self):
         backend = {
             "name": "test-esplora",
@@ -2014,6 +2165,12 @@ class SyncBackendsTest(unittest.TestCase):
                 "kassiber-wallet-1",
             ):
                 return []
+            if method == "gettransaction" and params == ["33" * 32, True, True]:
+                return {"decoded": {
+                    "txid": "33" * 32,
+                    "vin": [{"txid": "99" * 32, "vout": 0}],
+                    "vout": [{"n": 0, "value": "0.001", "scriptPubKey": {"hex": "0014" + "11" * 20}}],
+                }}
             raise AssertionError(f"Unexpected RPC call: {key!r}")
 
         with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
@@ -2179,6 +2336,7 @@ class SyncBackendsTest(unittest.TestCase):
             history_cache={},
             checkpoint={
                 "bitcoinrpc_last_block": "aa" * 32,
+                "bitcoinrpc_graph_normalization_version": sb.BITCOINRPC_GRAPH_NORMALIZATION_VERSION,
                 "bitcoinrpc_history_attestation": attestation,
             },
         )
@@ -2213,6 +2371,12 @@ class SyncBackendsTest(unittest.TestCase):
                 "kassiber-wallet-1",
             ):
                 return []
+            if method == "gettransaction" and params == ["44" * 32, True, True]:
+                return {"decoded": {
+                    "txid": "44" * 32,
+                    "vin": [{"txid": "99" * 32, "vout": 0}],
+                    "vout": [{"n": 0, "value": "0.002", "scriptPubKey": {"hex": "0014" + "11" * 20}}],
+                }}
             raise AssertionError(f"Unexpected RPC call: {key!r}")
 
         with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
@@ -2651,6 +2815,7 @@ class SyncBackendsTest(unittest.TestCase):
             history_cache={},
             checkpoint={
                 "bitcoinrpc_last_block": "aa" * 32,
+                "bitcoinrpc_graph_normalization_version": sb.BITCOINRPC_GRAPH_NORMALIZATION_VERSION,
                 "bitcoinrpc_history_attestation": _bitcoinrpc_address_attestation(),
             },
         )
@@ -2711,6 +2876,7 @@ class SyncBackendsTest(unittest.TestCase):
             history_cache={},
             checkpoint={
                 "bitcoinrpc_last_block": "aa" * 32,
+                "bitcoinrpc_graph_normalization_version": sb.BITCOINRPC_GRAPH_NORMALIZATION_VERSION,
                 "bitcoinrpc_pending_maturity": True,
                 "bitcoinrpc_history_attestation": _bitcoinrpc_address_attestation(),
             },
@@ -2744,6 +2910,12 @@ class SyncBackendsTest(unittest.TestCase):
                 "kassiber-wallet-1",
             ):
                 return []
+            if method == "gettransaction" and params == ["45" * 32, True, True]:
+                return {"decoded": {
+                    "txid": "45" * 32,
+                    "vin": [{"txid": "99" * 32, "vout": 0}],
+                    "vout": [{"n": 0, "value": "50", "scriptPubKey": {"hex": "0014" + "11" * 20}}],
+                }}
             raise AssertionError(f"Unexpected RPC call: {key!r}")
 
         with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call):
@@ -3084,6 +3256,7 @@ class SyncBackendsTest(unittest.TestCase):
             history_cache={},
             checkpoint={
                 "bitcoinrpc_last_block": "aa" * 32,
+                "bitcoinrpc_graph_normalization_version": sb.BITCOINRPC_GRAPH_NORMALIZATION_VERSION,
                 "bitcoinrpc_descriptor_range_ends": {"6": 5},
                 "highest_used": {"6": 2},
                 "bitcoinrpc_history_attestation": sb.bitcoinrpc_history_attestation(
@@ -3196,6 +3369,12 @@ class SyncBackendsTest(unittest.TestCase):
                 return "bb" * 32
             if method == "listunspent":
                 return []
+            if method == "gettransaction" and params == ["55" * 32, True, True]:
+                return {"decoded": {
+                    "txid": "55" * 32,
+                    "vin": [{"txid": "99" * 32, "vout": 0}],
+                    "vout": [{"n": 0, "value": "0.001", "scriptPubKey": {"hex": "0014" + "11" * 20}}],
+                }}
             raise AssertionError(f"Unexpected RPC call: {(method, params, wallet_name)!r}")
 
         with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=fake_bitcoinrpc_call), patch(
