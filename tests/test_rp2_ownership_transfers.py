@@ -1971,6 +1971,57 @@ class MultiSourceConsolidationEngineTest(unittest.TestCase):
         self.assertAlmostEqual(holdings.get("Savings", 0.0), 0.799, places=6)
         self.assertAlmostEqual(sum(holdings.values()), 0.799, places=6)
 
+    def _assert_two_to_two_transfer_preserves_holdings_and_fee(self, *, recorded_destinations):
+        script_d = "0014" + "d4" * 20
+        graph = json.dumps({
+            "txid": "multi-source-fanout",
+            "vin": [
+                {"txid": "pa", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}},
+                {"txid": "pb", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B}},
+            ],
+            "vout": [
+                {"n": 0, "scriptpubkey": SCRIPT_C, "value": 40_000_000},
+                {"n": 1, "scriptpubkey": script_d, "value": 39_900_000},
+            ],
+        })
+        rows = [
+            _row("A", "inbound", 50_000_000_000, external_id="acqA"),
+            _row("B", "inbound", 30_000_000_000, external_id="acqB"),
+            _row("A", "outbound", 49_900_000_000, external_id="multi-source-fanout", raw_json=graph, fee=100_000_000),
+            _row("B", "outbound", 29_900_000_000, external_id="multi-source-fanout", raw_json=graph, fee=100_000_000),
+            _row("C", "inbound", 40_000_000_000, external_id="multi-source-fanout"),
+        ]
+        d = _row("C", "inbound", 39_900_000_000, external_id="multi-source-fanout")
+        d.update(id="D-inbound-multi-source-fanout", wallet_id="D", wallet_label="Vault")
+        rows.append(authoritative_chain_observation(d))
+        if not recorded_destinations:
+            rows = [row for row in rows if row["wallet_id"] not in {"C", "D"}]
+        index = _fanout_index()
+        index.add_script(script_d, _match("D", "Vault"))
+        refs = {**WALLET_REFS, "D": {**WALLET_REFS["C"], "id": "D", "label": "Vault"}}
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(finalized_tax_inputs(
+            PROFILE, rows=rows, wallet_refs_by_id=refs, manual_pair_records=[], owned_index=index,
+        ))
+        self.assertEqual(state.quarantines, [])
+        types = [entry["entry_type"] for entry in state.entries]
+        self.assertNotIn("disposal", types)
+        self.assertEqual(types.count("transfer_fee"), 1)
+        holdings = {
+            label: float(totals["quantity"])
+            for (_, label, _, _), totals in state.wallet_holdings.items()
+        }
+        self.assertAlmostEqual(holdings.get("Cold", 0), 0)
+        self.assertAlmostEqual(holdings.get("Hot", 0), 0)
+        self.assertAlmostEqual(holdings.get("Savings", 0), 0.4)
+        self.assertAlmostEqual(holdings.get("Vault", 0), 0.399)
+        self.assertAlmostEqual(sum(holdings.values()), 0.799)
+
+    def test_fully_observed_two_to_two_transfer_preserves_holdings_and_fee(self):
+        self._assert_two_to_two_transfer_preserves_holdings_and_fee(recorded_destinations=True)
+
+    def test_rowless_two_to_two_transfer_preserves_holdings_and_fee(self):
+        self._assert_two_to_two_transfer_preserves_holdings_and_fee(recorded_destinations=False)
+
     def test_consolidation_with_sync_gapped_destination_books_moves(self):
         # Same consolidation but the destination never synced an inbound. The
         # graph still proves C owns the output, so the legs are synthesized.
