@@ -110,6 +110,9 @@ CORE_TOOL_NAMES = frozenset(
         "ui.reports.balance_sheet", "ui.reports.portfolio_summary",
         "ui.reports.tax_summary", "ui.reports.balance_history",
         "ui.journals.snapshot", "ui.journals.quarantine",
+        # The default CLI profile must be able to inspect the evidence and
+        # perform the same consented, audited price/exclusion repair as chat.
+        "ui.transactions.review_context", "ui.journals.quarantine.resolve",
         "ui.journals.transfers.list", "ui.rates.summary", "ui.rates.coverage",
         "ui.rates.rebuild", "ui.report.blockers",
         "ui.audit.changes_since_last_answer", "ui.maintenance.settings",
@@ -3356,6 +3359,9 @@ def select_tool_capabilities(
         "source_funds": ("source of funds", "source-of-funds", "provenance", "audit package", "proof of funds"),
         "merchant": ("btcpay", "invoice", "receipt", "merchant", "commercial", "document"),
         "transfers": (
+            # Quarantine includes custody failures; a generic help request must
+            # expose their repair workflow before the model knows the reason.
+            "quarantine", "quarantäne", "quarantaene",
             "transfer",
             "swap",
             "payout",

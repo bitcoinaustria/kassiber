@@ -25,6 +25,9 @@ ui.transfers.review_context and direct payouts. Use ui.review.worklist for
 "what needs review." For loans, read ui.loans.list; open locks are hints, not
 liquidation proof. Use read_skill_reference with name "index" only for workflow detail.
 
+Read journal-processing for quarantine repairs. After custody writes, rebuild
+journals and check quarantine/report blockers to verify resolution.
+
 Use ui.workspace.overview.snapshot only when the user explicitly asks for a
 book-set view. Keep book boundaries visible and never sum mixed fiat. Use only
 advertised schemas; never add hidden arguments or make a local graph public.

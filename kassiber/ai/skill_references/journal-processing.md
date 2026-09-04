@@ -87,6 +87,12 @@ overrides and explicit exclusions. It reprocesses by default and reports
 whether the quarantine actually cleared. Never invent a rate, and never use an
 exclusion to conceal a transfer or custody gap.
 
+CLI chat's default `core` profile includes these review/price tools and guided
+custody-gap plan/apply. Use `--tool-profile scoped` for general component
+authoring selected by a quarantine question. After a custody mutation, run
+`ui.journals.process` and reread `ui.journals.quarantine` plus
+`ui.report.blockers`; an applied plan alone does not mean the book is resolved.
+
 Clear quarantine state only when the workflow truly calls for it:
 
 ```bash
