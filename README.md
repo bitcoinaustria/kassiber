@@ -263,6 +263,9 @@ workflow documented in
 [docs/reference/custody-components.md](docs/reference/custody-components.md).
 Custody-component preview is read-only; apply requires the journal input version
 returned by the matching preview and rejects stale inputs.
+For automatic watch-only movement recognition, evidence boundaries and repair
+through CLI or chat, see
+[Understanding movements and resolving quarantine](docs/reference/custody-resolution.md).
 
 For a likely return through wallet history that is no longer available, use
 the guided custody-gap workflow instead of writing component JSON:

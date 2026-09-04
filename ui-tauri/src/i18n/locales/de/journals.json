@@ -195,7 +195,9 @@
       "pendingConfirmation": "On-Chain-Transaktion in {{wallet}} ist noch ausständig",
       "transferGroupBlocked": "Transfergruppe blockiert durch {{reason}}",
       "insufficientLots": "Nicht genug {{asset}}-Lots in {{wallet}}",
-      "missingBasis": "Fehlende {{asset}}-Anschaffungskosten in {{wallet}}"
+      "missingBasis": "Fehlende {{asset}}-Anschaffungskosten in {{wallet}}",
+      "nativeTransitionFeeTiming": "Nachgewiesener Transfer: Gebührenzeitpunkt fehlt",
+      "nativeTransitionAmountMismatch": "Beträge des nachgewiesenen Transfers stimmen nicht überein"
     },
     "basis": {
       "missingPrice": "Fehlender Fiat-Preis",
@@ -208,7 +210,9 @@
       "ownershipAmountMismatch": "Wallet-Sync-Abweichung",
       "ownedFanout": "Mehrgliedriger Transfer zwischen deinen Wallets",
       "conflictingSpend": "Konkurrierende On-Chain-Transaktionen",
-      "pendingConfirmation": "Ausständige On-Chain-Bestätigung"
+      "pendingConfirmation": "Ausständige On-Chain-Bestätigung",
+      "nativeTransitionFeeTiming": "Gebührenzeitpunkt braucht einen Beleg",
+      "nativeTransitionAmountMismatch": "Transferbeträge brauchen einen Beleg"
     },
     "evidence": {
       "price": "Füge einen Fiat-Preis oder Kursabdeckung hinzu",
@@ -228,7 +232,9 @@
       "ownershipTransfer": "Aus der On-Chain-Transaktion belegt — eine Ausgabe ging an eine andere deiner Wallets, der passende Eingang ließ sich aber nicht automatisch zuordnen",
       "ownedFanout": "Die Transaktion zahlt an mehrere eigene Wallets. Deshalb muss jeder echte Eingang als eigenes Carrying-Value-Leg bestätigt werden",
       "conflictingSpend": "Zwei Transaktionen geben denselben Input aus. Nur der bestätigte Gewinner gehört ins Journal",
-      "pendingConfirmation": "Die synchronisierten Chain-Daten melden diese Transaktion ausdrücklich als unbestätigt"
+      "pendingConfirmation": "Die synchronisierten Chain-Daten melden diese Transaktion ausdrücklich als unbestätigt",
+      "nativeTransitionFeeTiming": "Die Verwahrungsverbindung ist nachgewiesen. Abgang und Eingang liegen aber an verschiedenen UTC-Tagen oder ihre Zeitangaben fehlen. Kassiber kann die Gebührendifferenz keinem Zeitpunkt automatisch zuordnen.",
+      "nativeTransitionAmountMismatch": "Die Verbindung zwischen den Transaktionen ist nachgewiesen. Die erfassten Beträge und Gebühren ergeben aber keinen positiven, mengenmäßig ausgeglichenen Transfer."
     },
     "nextAction": {
       "price": "Preis setzen, dann Journale verarbeiten",
@@ -242,7 +248,9 @@
       "ownershipAmountMismatch": "Der erfasste Betrag weicht von der On-Chain-Transaktion ab — Wallet neu synchronisieren, dann Journale verarbeiten",
       "ownedFanout": "Jeden echten Zieleingang einzeln bestätigen, dann Journale verarbeiten",
       "conflictingSpend": "Bestätigungen synchronisieren, den Gewinner prüfen und einen Verlierer nur bei klarem Chain-Nachweis ausschließen",
-      "pendingConfirmation": "Bestätigung abwarten oder die Wallet erneut synchronisieren, dann Journale verarbeiten"
+      "pendingConfirmation": "Bestätigung abwarten oder die Wallet erneut synchronisieren, dann Journale verarbeiten",
+      "nativeTransitionFeeTiming": "Prüfe anhand deiner Belege, wann die Gebührendifferenz angefallen ist.",
+      "nativeTransitionAmountMismatch": "Prüfe anhand deiner Belege den Ausgangsbetrag und die Gebührenbehandlung gegenüber dem vollständigen Eingangsbetrag."
     },
     "action": {
       "openTransaction": "Details prüfen",
@@ -251,7 +259,9 @@
       "openSyncReview": "Sync-Problem prüfen",
       "openConflictReview": "Konkurrierende Ausgabe prüfen",
       "openBasisReview": "Kostenbasis ergänzen",
-      "openTaxReview": "Kostenbasis ergänzen"
+      "openTaxReview": "Kostenbasis ergänzen",
+      "nativeTransitionFeeTiming": "Gebührenbelege prüfen",
+      "nativeTransitionAmountMismatch": "Transferbeträge prüfen"
     },
     "resolvePlan": {
       "button": "Lösungsplan",

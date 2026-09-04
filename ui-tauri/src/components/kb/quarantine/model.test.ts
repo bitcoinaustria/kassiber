@@ -32,6 +32,49 @@ const baseItem: QuarantineItem = {
 };
 
 describe("quarantine row model", () => {
+  it.each([
+    ["en", "Proven transfer amounts do not reconcile", "Review transfer quantities"],
+    ["de", "Beträge des nachgewiesenen Transfers stimmen nicht überein", "Transferbeträge prüfen"],
+  ])("explains canonical quantity mismatches in %s", (lang, event, action) => {
+    const row = quarantineItemToRow(
+      {
+        ...baseItem,
+        reason: "native_transition_amount_mismatch",
+        detail: { source_principal_msat: 99_000_000, target_principal_msat: 99_500_000 },
+      },
+      "AT profile",
+      i18n.getFixedT(lang, "journals"),
+    );
+    expect(row.event).toBe(event);
+    expect(row.transactionAction).toMatchObject({ label: action, tab: "details" });
+    expect(row.evidenceHint).toMatch(lang === "en" ? /after fees/ : /nach Gebühren/);
+    expect(row.nextAction).not.toMatch(/sync|synchron|exclu|ausschließ|price|Preis/i);
+    expect(row.metricFilterIds).toEqual(["other-review"]);
+  });
+
+  it.each([
+    ["en", "Proven transfer needs fee timing", "Review fee evidence"],
+    ["de", "Nachgewiesener Transfer: Gebührenzeitpunkt fehlt", "Gebührenbelege prüfen"],
+  ])("explains native fee timing without a pricing or sync shortcut in %s", (lang, event, action) => {
+    const row = quarantineItemToRow(
+      {
+        ...baseItem,
+        reason: "native_transition_fee_timing_unresolved",
+        detail: { required_for: "explicit_transition_fee_timeline" },
+      },
+      "AT profile",
+      i18n.getFixedT(lang, "journals"),
+    );
+    expect(row.event).toBe(event);
+    expect(row.transactionAction).toMatchObject({ label: action, tab: "details" });
+    expect(row.basis).not.toContain("reviewRequired");
+    expect(row.evidenceHint).not.toContain("native_transition");
+    expect(row.evidenceHint).toMatch(lang === "en" ? /different UTC dates/ : /verschiedenen UTC-Tagen/);
+    expect(row.nextAction).toMatch(lang === "en" ? /when the fee/ : /wann die Gebühr/);
+    expect(row.nextAction).not.toMatch(/sync|synchron|exclu|ausschließ|price|Preis/i);
+    expect(row.metricFilterIds).toEqual(["other-review"]);
+  });
+
   it("maps missing price quarantines into review-table rows", () => {
     const row = quarantineItemToRow(baseItem, "AT profile", t);
 

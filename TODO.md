@@ -1206,6 +1206,19 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ## Open bugs and debt
 
+- [x] Audit false custody quarantines across native transfers, swaps and AI
+  repair: canonical receipt identity, zero-value placeholders, fully owned N:M
+  allocation, same-block chain ordering, authority-bound LWK/Core HTLC evidence and
+  English/German quarantine tool routing. See
+  [custody resolution](docs/reference/custody-resolution.md) for the evidence
+  contract, regression coverage and remaining partial-observation boundaries.
+- [ ] Represent separately timed fees for native multi-date HTLC routes.
+  Keep exact linkage visible but block automatic tax projection when a positive
+  principal shortfall would otherwise be booked at the funding timestamp.
+  Resolve with typed fee-event timing, in-transit custody and cross-period
+  wallet balances, cost-basis and report tests,
+  not a looser matching threshold or a quarantine exclusion.
+
 - [ ] Self-transfer audit follow-ups (deferred from the
   `claude/self-transfer-fixes` PR, which fixed the as-of/balance-history fee +
   income double-count, the non-positive-inbound detection asymmetry, and

@@ -195,7 +195,9 @@
       "pendingConfirmation": "On-chain transaction is still pending in {{wallet}}",
       "transferGroupBlocked": "Transfer group blocked by {{reason}}",
       "insufficientLots": "Not enough {{asset}} lots in {{wallet}}",
-      "missingBasis": "Missing {{asset}} cost basis in {{wallet}}"
+      "missingBasis": "Missing {{asset}} cost basis in {{wallet}}",
+      "nativeTransitionFeeTiming": "Proven transfer needs fee timing",
+      "nativeTransitionAmountMismatch": "Proven transfer amounts do not reconcile"
     },
     "basis": {
       "missingPrice": "Missing fiat price",
@@ -208,7 +210,9 @@
       "ownershipAmountMismatch": "Wallet sync mismatch",
       "ownedFanout": "Multi-leg transfer between your wallets",
       "conflictingSpend": "Competing on-chain transactions",
-      "pendingConfirmation": "Pending on-chain confirmation"
+      "pendingConfirmation": "Pending on-chain confirmation",
+      "nativeTransitionFeeTiming": "Fee timing needs evidence",
+      "nativeTransitionAmountMismatch": "Transfer quantities need evidence"
     },
     "evidence": {
       "price": "Add a fiat price or rates coverage",
@@ -228,7 +232,9 @@
       "ownershipTransfer": "Proven from the on-chain transaction — an output paid another of your wallets, but the matching receipt couldn't be resolved automatically",
       "ownedFanout": "The transaction pays more than one wallet you own, so each real receipt must be confirmed as its own carrying-value leg",
       "conflictingSpend": "Two transactions spend the same input. Only the confirmed winner belongs in the journal",
-      "pendingConfirmation": "The synced chain payload explicitly reports this transaction as unconfirmed"
+      "pendingConfirmation": "The synced chain payload explicitly reports this transaction as unconfirmed",
+      "nativeTransitionFeeTiming": "The custody link is proven, but the debit and receipt fall on different UTC dates or their timestamps are unavailable. Kassiber cannot automatically date the fee difference.",
+      "nativeTransitionAmountMismatch": "The link between the transactions is proven, but the recorded amounts and fees do not reconcile to a positive transfer."
     },
     "nextAction": {
       "price": "Set price, then process journals",
@@ -242,7 +248,9 @@
       "ownershipAmountMismatch": "The recorded amount disagrees with the on-chain transaction — re-sync the wallet, then process journals",
       "ownedFanout": "Confirm each real destination receipt separately, then process journals",
       "conflictingSpend": "Sync confirmations, verify which transaction won, and exclude a loser only when the chain evidence is clear",
-      "pendingConfirmation": "Wait for confirmation or sync the wallet again, then process journals"
+      "pendingConfirmation": "Wait for confirmation or sync the wallet again, then process journals",
+      "nativeTransitionFeeTiming": "Review supporting records to establish when the fee difference was incurred.",
+      "nativeTransitionAmountMismatch": "Review the source amount and fee treatment against the complete recipient amount using supporting records."
     },
     "action": {
       "openTransaction": "Review details",
@@ -251,7 +259,9 @@
       "openSyncReview": "Review sync issue",
       "openConflictReview": "Review competing spend",
       "openBasisReview": "Fix cost basis",
-      "openTaxReview": "Fix cost basis"
+      "openTaxReview": "Fix cost basis",
+      "nativeTransitionFeeTiming": "Review fee evidence",
+      "nativeTransitionAmountMismatch": "Review transfer quantities"
     },
     "resolvePlan": {
       "button": "Resolve plan",

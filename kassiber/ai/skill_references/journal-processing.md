@@ -12,10 +12,14 @@ kassiber rates sync
 kassiber journals process
 ```
 
-If the wallet activity includes BTC ↔ LBTC peg-ins / peg-outs or
-submarine swaps, inspect for likely outbound / inbound pairs and pair
-them before `journals process`. Reports do not discover those pairs on
-their own.
+Journal processing recognizes complete native HTLC claims/refunds automatically
+when both endpoints are authoritative, quantities conserve, fee timing is
+representable and the full evidence graph has no conflict. A positive principal
+shortfall across dates remains `native_transition_fee_timing_unresolved`:
+neither manual pairing nor a price override supplies the missing in-transit
+custody and fee timeline. The book's policy is applied after matching. For
+remaining BTC ↔ LBTC peg-ins / peg-outs, provider-only evidence or incomplete submarine routes,
+inspect the candidates and review their meaning before relying on reports.
 
 Re-run `kassiber journals process` after:
 

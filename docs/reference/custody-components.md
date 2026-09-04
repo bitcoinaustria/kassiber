@@ -207,8 +207,12 @@ always name a wallet and an `occurred_at` timestamp.
 
 ## N:M allocations
 
-One-source fan-out and many-source consolidation are inferred only when the
-flow is unambiguous. A genuine N:M graph needs explicit edges:
+For authored components, one-source fan-out and many-source consolidation are
+inferred only when the flow is unambiguous; a general N:M component needs
+explicit reviewed edges. Separately, a complete native chain event whose
+inputs and destinations are all owned can produce automatic exact FIFO
+allocations without authoring a component (see
+[custody resolution](custody-resolution.md)). Authored edges use this shape:
 
 ```json
 "allocations": [
