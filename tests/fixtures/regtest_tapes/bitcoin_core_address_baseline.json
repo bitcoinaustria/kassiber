@@ -119,6 +119,36 @@
     "{\"method\":\"getblockheader\",\"params\":[\"33bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"\"}": {
       "height": 102,
       "time": 1700000600
+    },
+    "{\"method\":\"gettransaction\",\"params\":[\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",true,true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-1\"}": {
+      "blockhash": "22aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "blocktime": 1700000000,
+      "time": 1700000000,
+      "txid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "decoded": {
+        "txid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "vin": [
+          {
+            "txid": "1010101010101010101010101010101010101010101010101010101010101010",
+            "vout": 0,
+            "prevout": {
+              "value": 0.25001,
+              "scriptPubKey": {
+                "hex": "0014ffffffffffffffffffffffffffffffffffffffff"
+              }
+            }
+          }
+        ],
+        "vout": [
+          {
+            "n": 0,
+            "value": 0.25,
+            "scriptPubKey": {
+              "hex": "001487a87e0e17a80a2d2bd65c421a1090df8ed6cc9a"
+            }
+          }
+        ]
+      }
     }
   }
 }
