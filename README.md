@@ -217,6 +217,12 @@ can use macOS Keychain, Windows Credential Manager, or an available unlocked
 Linux Secret Service. Kassiber rejects configured third-party/file keyring
 backends and never falls back to a plaintext credential file.
 
+Source installs use `cryptography` 50 for the existing replication signatures
+and authenticated encryption. Upstream no longer supplies Intel macOS or
+32-bit Windows wheels; the packaged targets remain Apple Silicon macOS and
+64-bit Linux/Windows. Source builds on other targets require the upstream
+Rust/OpenSSL build prerequisites and are not covered by the packaged CI matrix.
+
 ## Quick start
 
 ### Desktop

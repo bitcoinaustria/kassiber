@@ -29,7 +29,7 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `sqlcipher3` | `>=0.6.2,<1` | Python binding around SQLCipher 4; wheels bundle a SQLCipher community build for at-rest database encryption | Zlib (binding) + BSD-style (SQLCipher community) |
 | `pyrage` | `>=1.3,<2` | In-process `age` implementation used by the `tar | age` backup format when no system `age`/`rage` binary is available | Apache-2.0 / MIT |
 | `keyring` | `>=25.6,<26` | Native macOS Keychain, Windows Credential Manager, and Linux Secret Service access for opt-in CLI remembered unlock | MIT |
-| `cryptography` | `>=44,<48` | Ed25519 event signatures, LAN HKDF/AES-GCM key confirmation, and authenticated direct-sync frames | Apache-2.0 OR BSD-3-Clause |
+| `cryptography` | `>=50.0.0,<51` | Ed25519 event signatures, LAN HKDF/AES-GCM key confirmation, and authenticated direct-sync frames | Apache-2.0 OR BSD-3-Clause |
 | `spake2` | `0.9` | Password-authenticated key exchange for explicit LAN/Tor direct pairing | MIT |
 | `zeroconf` | `>=0.150,<1` | Rotating, unlinkable mDNS advertisement for the opt-in LAN fast path | LGPL-2.1-or-later |
 | `PyYAML` | `>=6,<7` | Structured parsing for the repository-wide GitHub Actions pin-policy test | MIT |
@@ -53,6 +53,13 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `zbus-secret-service-keyring-store` | `1.0.0` | Linux Secret Service backend for AI provider API keys | MIT OR Apache-2.0 |
 
 ## Notable downstream license note
+
+The September 2026 security refresh keeps the existing dependency ownership:
+`cryptography` supplies reviewed cryptographic primitives unavailable in Python's
+standard library; it is not replaced with custom signing or encryption code.
+Frontend overrides select patched compatible versions for existing router,
+provider-broker and build-tool dependencies, rather than adding new frameworks.
+The package-manager lockfiles remain the authoritative transitive inventory.
 
 ### Optional accounting document tools (not bundled)
 

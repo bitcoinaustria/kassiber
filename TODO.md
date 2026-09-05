@@ -641,6 +641,9 @@ top of the monolith.
   - [ ] Keep EBICS and FinanzOnline submission outside this delivery. Additional
     country/form Adapters, including K1, remain later work unless needed scope
     is explicitly resolved with the user.
+- [x] Add exact local evidence amendments to durable accounting tasks and
+  preserve immutable selection/receipts, stale-approval checks and recurring
+  bank-payment allocation guards. Full agent/pilot acceptance remains separate.
 
 ### 0.5e - Rates and journal follow-through
 

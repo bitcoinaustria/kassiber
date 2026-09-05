@@ -157,6 +157,34 @@ It is a local worklist, not an accounting screen or a whole-book AI disclosure.
    separate action. Neither amendment command is an ordinary AI tool or an
    automatic file-discovery/disclosure grant.
 
+### Selected Bitcoin sources in tasks
+
+`task-create` can select actual retained Bitcoin calculation events with
+`projection: {artifact_id, policy_id, events: [{event_id, binding_id, category}]}`.
+The artifact must be current and the reviewed policy must belong to the selected
+book and fiscal period. Selection does not infer recognition from a receipt:
+ambiguous categories or bindings become named exceptions. Existing source
+bindings may be reused; arbitrary result values and new source claims are not
+accepted as task input.
+
+`prepare`/`post` reuse the canonical projection services. Only the earliest
+unpublished selected Bitcoin event is prepared at a time, so cumulative minor-unit
+rounding and transit dependencies use actual prior publications. Remaining
+events stay visible as pending exceptions. Quantity-only custody movements are
+published without fabricated fiat entries. Shared bank source claims block
+duplicate rule-created postings; settlement still requires explicit canonical
+bank allocation, not a task's assumption that the two sources match.
+
+For a missing selected event's binding/category, use
+`task-projection-assign-preview` with `task_id`, `event_id`, `binding_id`,
+`category` and `reason`; approve `task-source-assign` with `kind:"projection"`,
+those fields, exact `expected_digest`, `expected_revision`, `idempotency_key`
+and `confirmed:true`. The answer appends a receipt and invalidates old approvals.
+It cannot replace the artifact/policy, add events, or rewrite prepared/published
+proposals. Changed calculation sources require a fresh reviewed capture.
+
+### Approved export delivery
+
 Task export prepares reproducible bytes and an artifact identity; it does
 **not** claim to have saved a file or filed a return. Use the explicit CLI
 `--machine --output close.json` destination for the returned JSON export envelope (plaintext financial
