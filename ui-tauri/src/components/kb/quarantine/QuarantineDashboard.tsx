@@ -506,6 +506,7 @@ export function QuarantineDashboard({
         onVisibleRowsChange={setOrderedRows}
         actions={
           <QuarantineActions
+            quarantineCount={snapshot.summary.count}
             isProcessingJournals={isProcessingJournals}
             onProcessJournals={onProcessJournals}
             onOpenResolvePlan={() => setResolvePlanOpen(true)}

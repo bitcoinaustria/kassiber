@@ -128,6 +128,21 @@ describe("daemon mutation key", () => {
 });
 
 describe("daemon mutation invalidation scope", () => {
+  it("refreshes source-of-funds investigations after evidence, provenance and custody changes", () => {
+    for (const mutation of ["ui.attachments.add", "ui.attachments.copy", "ui.attachments.rename",
+      "ui.attachments.remove", "ui.wallets.document_import.import", "ui.wallets.sync",
+      "ui.freshness.run", "ui.journals.process", "ui.source_funds.links.review",
+      "ui.source_funds.sources.create", "ui.wallets.import_file"]) {
+      const client = new QueryClient();
+      const key = ["daemon", "real", "ui.source_funds.review_context", {
+        target_transaction: "target", expected_scope: { workspace_id: "w", profile_id: "p" },
+      }];
+      client.setQueryData(key, { report: { explain_gates: { exportable: true } } });
+      invalidateDaemonQueriesForMutation(client, "real", mutation);
+      expect(client.getQueryState(key)?.isInvalidated, mutation).toBe(true);
+      client.clear();
+    }
+  });
   it("applies the same targeted cache policy to external mutation callers", () => {
     const queryClient = new QueryClient();
     const journalKey = ["daemon", "real", "ui.journals.snapshot", {}];
@@ -156,6 +171,7 @@ describe("daemon mutation invalidation scope", () => {
       "ui.audit.evidence.summary",
       "ui.source_funds.evidence.list",
       "ui.source_funds.preview",
+      "ui.source_funds.review_context",
     ]);
   });
 

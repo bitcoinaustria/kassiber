@@ -214,6 +214,15 @@ describe("app search results", () => {
     },
   } as OverviewSnapshot;
 
+  it("targets the custody tabs and respects their developer gate", () => {
+    const options = { query: "custody", aiFeaturesEnabled: true, developerToolsEnabled: true, t, limit: 50 };
+    const ranked = buildAppSearchResults(options);
+    expect(ranked.find((result) => result.id === "page:custody-gaps")?.route).toEqual({ to: "/swaps", search: { tab: "gaps" } });
+    expect(ranked.find((result) => result.id === "page:custody-components")?.route).toEqual({ to: "/swaps", search: { tab: "components" } });
+    const locked = buildAppSearchResults({ ...options, developerToolsEnabled: false });
+    expect(locked.some((result) => ["page:custody-gaps", "page:custody-components"].includes(result.id))).toBe(false);
+  });
+
   it("puts resolved exact txid results first and opens the transaction route", () => {
     const ranked = buildAppSearchResults({
       snapshot,

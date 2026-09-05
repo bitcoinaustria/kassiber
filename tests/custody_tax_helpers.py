@@ -286,6 +286,7 @@ def finalized_tax_inputs(
     channel_transfer_pairs: Sequence[Mapping[str, Any]] = (),
     loan_legs: Sequence[Mapping[str, Any]] = (),
     direct_payout_records: Sequence[Mapping[str, Any]] = (),
+    swap_dismissals: Sequence[Mapping[str, Any]] = (),
 ) -> CanonicalTaxTestInputs:
     """Compile raw test fixtures through the same pre-tax custody stages.
 
@@ -311,6 +312,8 @@ def finalized_tax_inputs(
     interpreters = compile_custody_interpreters(
         prepared_rows,
         canonical,
+        profile=profile,
+        swap_dismissals=swap_dismissals,
         wallet_refs_by_id=wallet_refs_by_id,
         owned_index=owned_index,
         channel_transfer_pairs=channel_transfer_pairs,

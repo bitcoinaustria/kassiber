@@ -2180,9 +2180,7 @@ class SourceFundsCliTest(unittest.TestCase):
                 "SELECT stored_relpath, sha256 FROM attachments WHERE id = ?",
                 (seed["file_attachment"],),
             ).fetchone()
-            stale_sha = row["sha256"]
-            managed_path = self.root / "attachments" / row["stored_relpath"]
-            managed_path.write_text("Tampered evidence bytes after attach\n", encoding="utf-8")
+            saved_sha = row["sha256"]
         finally:
             conn.close()
         bundle_path = self.root / "bundle.zip"
@@ -2228,7 +2226,7 @@ class SourceFundsCliTest(unittest.TestCase):
                     hashlib.sha256(archive.read(item["filename"])).hexdigest(),
                     item["sha256"],
                 )
-                self.assertNotEqual(item["sha256"], stale_sha)
+                self.assertEqual(item["sha256"], saved_sha)
             url_items = [e for e in manifest["evidence"] if e.get("source") == "url"]
             self.assertGreaterEqual(len(url_items), 1)
             self.assertTrue(all("source_url" not in item for item in url_items))
@@ -2259,6 +2257,31 @@ class SourceFundsCliTest(unittest.TestCase):
                     for item in manifest["evidence"]
                 )
             )
+
+    def test_bundle_rejects_changed_or_missing_saved_evidence_and_preserves_export(self):
+        seed = self._seed_exportable_disclosure_path()
+        report = self._source_funds_report(reveal_mode="standard", save_case=True)
+        with self._db() as conn:
+            row = conn.execute("SELECT stored_relpath FROM attachments WHERE id = ?",
+                               (seed["file_attachment"],)).fetchone()
+        managed = self.root / "attachments" / row["stored_relpath"]
+        original = managed.read_bytes()
+        output = self.root / "existing-bundle.zip"
+        output.write_bytes(b"previous completed export")
+        args = ("reports", "export-source-funds-bundle", "--workspace", "Sof",
+                "--profile", "Default", "--case", report["case"]["id"], "--file", str(output))
+        managed.write_bytes(b"replacement bytes never reviewed")
+        error = self.cli_error(*args)
+        self.assertEqual(error["error"]["code"], "source_funds_evidence_changed")
+        self.assertEqual(output.read_bytes(), b"previous completed export")
+        managed.unlink()
+        error = self.cli_error(*args)
+        self.assertEqual(error["error"]["code"], "source_funds_evidence_unavailable")
+        self.assertEqual(output.read_bytes(), b"previous completed export")
+        self.assertEqual(list(self.root.glob(".existing-bundle.zip.*.tmp")), [])
+        managed.write_bytes(original)
+        self.assertTrue(self.cli(*args)["data"]["exportable"])
+        self.assertTrue(output.read_bytes().startswith(b"PK"))
 
     def test_report_options_precision_masking_and_section_omission(self):
         """Advanced report options (amount precision, recipient masking, and

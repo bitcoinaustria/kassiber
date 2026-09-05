@@ -12,6 +12,9 @@ import {
 import type { AiChatToolCall } from "@/daemon/stream";
 import { formatFiatAmount } from "@/lib/currency";
 import { Button } from "@/components/ui/button";
+import { reviewArtifact, reviewReceipt } from "./reviewWorkflow";
+import { evidenceRequest } from "./evidenceRequest";
+import { EvidenceRequestCard } from "./EvidenceRequestCard";
 
 interface ChatToolCallProps {
   toolCall: AiChatToolCall;
@@ -19,6 +22,8 @@ interface ChatToolCallProps {
 
 export function ChatToolCall({ toolCall }: ChatToolCallProps) {
   const { t } = useTranslation("assistant");
+  const request = evidenceRequest(toolCall);
+  if (request) return <EvidenceRequestCard request={request} />;
   const hasArguments = Object.keys(toolCall.arguments).length > 0;
   const hasResult = toolCall.result !== undefined && toolCall.result !== null;
   const summary = summarizeToolResult(toolCall.result, t);
@@ -101,6 +106,20 @@ function summarizeToolResult(
   if (!kind || !data) return null;
 
   switch (kind) {
+    case "ui.review.cases":
+      return t(data.next_cursor ? "review.cases.more" : "review.cases.last", {
+        count: Array.isArray(data.cases) ? data.cases.length : 0,
+      });
+    case "ui.review.plan": {
+      const artifact = reviewArtifact(data);
+      return artifact ? t("review.planSummary", { count: artifact.operations.length,
+        before: artifact.before.quarantine_count, after: artifact.after.quarantine_count }) : null;
+    }
+    case "ui.review.apply":
+    case "ui.review.receipt": {
+      const receipt = reviewReceipt(data);
+      return receipt ? t("review.receipt.verified", { count: receipt.operations.length }) : null;
+    }
     case "ui.overview.snapshot": {
       const connections = Array.isArray(data.connections)
         ? data.connections

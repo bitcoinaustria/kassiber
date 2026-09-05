@@ -12,6 +12,7 @@ import pytest
 
 import kassiber.cli.main as cli_main
 from kassiber import __version__
+from kassiber.db import native_state_root
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -225,9 +226,10 @@ def test_hidden_migration_helper_moves_default_state(tmp_path):
 
     result = _run_cli(tmp_path, "--migrate-default-state-root")
 
-    native_catalog = (
-        tmp_path / ".local" / "share" / "kassiber" / "config" / "projects.json"
-    )
+    native_catalog = native_state_root(
+        home=tmp_path,
+        environ={key: value for key, value in os.environ.items() if key != "XDG_DATA_HOME"},
+    ) / "config" / "projects.json"
     assert result.returncode == 0, result.stderr
     assert not (tmp_path / ".kassiber" / "config").exists()
     assert (

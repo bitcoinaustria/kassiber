@@ -335,3 +335,20 @@ kassiber --format plain reports balance-sheet
 kassiber --machine reports portfolio-summary
 kassiber --machine reports tax-summary
 ```
+
+
+## Portable accounting review
+
+```bash
+kassiber --machine review cases --limit 20
+kassiber --machine review cases --cursor <next_cursor>
+kassiber --machine --output review-plan.json review plan --operations-file operations.json --expected-input-version <input_version>
+kassiber --machine review apply --artifact-file review-plan.json --idempotency-key <unique-review-key>
+kassiber --machine review receipt --idempotency-key <unique-review-key>
+```
+
+Read `journal-processing` for operation shapes, exact evidence requirements,
+consent, pagination and uncertain retries. Both CLI chat's default `core` profile
+and built-in chat expose the bounded review pack for quarantine investigations.
+Portable plans are reviewable local artifacts; applying them is explicit and
+returns a durable verification receipt. This is not a background agent run.

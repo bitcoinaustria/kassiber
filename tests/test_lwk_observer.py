@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import inspect
 import os
 import tempfile
@@ -33,7 +34,7 @@ from kassiber.core.imports import ImportCoordinatorHooks, insert_wallet_records
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.fingerprints import make_transaction_fingerprint
-from kassiber.msat import btc_to_msat
+from kassiber.msat import btc_to_msat, msat_to_btc
 from kassiber.time_utils import now_iso
 from kassiber.wallet_descriptors import (
     derive_descriptor_target,
@@ -62,6 +63,135 @@ def wallet_row(config: dict) -> dict:
 
 
 class LwkDescriptorContractTest(unittest.TestCase):
+    def _htlc_matcher_rows(self, role, *, mixed=False):
+        from kassiber.core.chain_observer.provenance import (
+            AUTHORITY_VERSION, canonical_graph_hash, canonical_observed_quantity_hash,
+        )
+
+        wallet, discovery = self._discovery()
+        observer = LwkObserver(
+            identity=identities_for_wallet(wallet, observer_kind="lwk")[0],
+            backend=discovery.backend,
+            descriptor_plan=discovery.sync_state.descriptor_plan,
+            policy_asset_id=POLICY_ASSET,
+            stored_values={},
+        )
+        preimage = bytes.fromhex("42" * 32)
+        payment_hash = hashlib.sha256(preimage).hexdigest()
+        script = bytes.fromhex(
+            "a914" + hashlib.new("ripemd160", bytes.fromhex(payment_hash)).hexdigest()
+            + "87632102" + "11" * 32 + "6703000010b1752103" + "22" * 32 + "68ac"
+        )
+        witness = [b"signature", preimage, b"\x01", script] if role == "claim" else [b"signature", b"", script]
+        decoded_inputs = [SimpleNamespace(
+            txid=bytes.fromhex("44" * 32), vout=0,
+            witness=SimpleNamespace(script_witness=SimpleNamespace(items=witness)),
+        )]
+        if mixed:
+            decoded_inputs.append(SimpleNamespace(
+                txid=bytes.fromhex("55" * 32), vout=1,
+                witness=SimpleNamespace(script_witness=SimpleNamespace(items=[])),
+            ))
+        tx = Mock()
+        raw_inputs = []
+        for item in decoded_inputs:
+            txin = Mock()
+            txin.outpoint.return_value.txid.return_value = item.txid.hex()
+            txin.outpoint.return_value.vout.return_value = item.vout
+            raw_inputs.append(txin)
+        tx.inputs.return_value = raw_inputs
+        tx.outputs.return_value = []
+        tx.to_bytes.return_value = b"decoded below"
+        wallet_tx = Mock()
+        wallet_tx.tx.return_value = tx
+        wallet_tx.txid.return_value = "66" * 32
+        wallet_tx.inputs.return_value = [None] * len(raw_inputs)
+        wallet_tx.outputs.return_value = []
+        wallet_tx.balance.return_value = {POLICY_ASSET: 99_500}
+        wallet_tx.timestamp.return_value = 1_760_000_000
+        with patch("kassiber.wallet_descriptors.decode_liquid_transaction", return_value=SimpleNamespace(vin=decoded_inputs)):
+            record = observer._records(wallet_tx)[0]
+        incoming = {
+            **record, "id": "claim", "profile_id": "profile", "wallet_id": "liquid-wallet",
+            "wallet_kind": "descriptor", "external_id": record["txid"],
+            "amount": btc_to_msat(record["amount"]), "fee": btc_to_msat(record["fee"]),
+            "excluded": 0,
+        }
+        incoming.update({
+            "observation_authority_version": AUTHORITY_VERSION,
+            "observation_observer_kinds_json": '["lwk"]',
+            "observation_graph_hash": canonical_graph_hash(incoming["raw_json"]),
+            "observation_quantity_hash": canonical_observed_quantity_hash(incoming),
+        })
+        outgoing = {
+            "id": "send", "profile_id": "profile", "wallet_id": "lightning-wallet",
+            "wallet_kind": "lnd", "direction": "outbound", "asset": "BTC",
+            "amount": 100_000_000, "fee": 0, "excluded": 0,
+            "occurred_at": incoming["occurred_at"], "kind": "lnd_pay",
+            "payment_hash": payment_hash, "payment_hash_source": "lnd",
+            "raw_json": {"chain": "lightning", "network": "regtest", "_kassiber_provenance": {"import_source": "lnd"}},
+        }
+        if role == "refund":
+            outgoing.update({
+                "wallet_id": incoming["wallet_id"], "wallet_kind": "descriptor", "asset": "LBTC",
+                "external_id": "44" * 32, "payment_hash": None, "kind": "withdrawal",
+                "raw_json": {"txid": "44" * 32, "chain": "liquid", "network": "elementsregtest",
+                             "component": {"asset_id": POLICY_ASSET, "asset": "LBTC"},
+                             "vout": [{"n": 0, "value_sats": 100_000}]},
+            })
+        return outgoing, incoming, preimage
+
+    def test_authoritative_lwk_htlc_evidence_survives_without_preimage(self):
+        from kassiber.core.transfer_matching import suggest_swap_candidates
+
+        for role in ("claim", "refund"):
+            with self.subTest(role=role):
+                outgoing, incoming, preimage = self._htlc_matcher_rows(role)
+                self.assertNotIn(preimage.hex(), incoming["raw_json"])
+                candidates = suggest_swap_candidates([outgoing, incoming])
+                self.assertEqual(len(candidates), 1)
+                self.assertEqual(candidates[0].confidence, "exact")
+
+    def test_lwk_htlc_attestation_requires_current_authority_and_one_input(self):
+        from kassiber.core.transfer_matching import suggest_swap_candidates
+
+        for role in ("claim", "refund"):
+            for changed in ("missing_authority", "wrong_observer", "stale_graph", "stale_quantity", "mixed_inputs"):
+                with self.subTest(role=role, changed=changed):
+                    outgoing, incoming, _ = self._htlc_matcher_rows(role, mixed=changed == "mixed_inputs")
+                    if changed == "missing_authority":
+                        incoming.pop("observation_authority_version")
+                    elif changed == "wrong_observer":
+                        incoming["observation_observer_kinds_json"] = '["bitcoinrpc"]'
+                    elif changed == "stale_graph":
+                        payload = json.loads(incoming["raw_json"])
+                        payload["changed"] = True
+                        incoming["raw_json"] = json.dumps(payload)
+                    elif changed == "stale_quantity":
+                        incoming["amount"] -= 1
+                    self.assertFalse(any(c.confidence == "exact" for c in suggest_swap_candidates([outgoing, incoming])))
+
+    def test_lwk_htlc_attestation_must_agree_with_the_committed_graph(self):
+        from kassiber.core.chain_observer.provenance import canonical_graph_hash
+        from kassiber.core.transfer_matching import suggest_swap_candidates
+
+        for role in ("claim", "refund"):
+            for changed in ("outpoint", "extra_input", "unsupported_version"):
+                with self.subTest(role=role, changed=changed):
+                    outgoing, incoming, _ = self._htlc_matcher_rows(role)
+                    payload = json.loads(incoming["raw_json"])
+                    if changed == "outpoint":
+                        payload["htlc_spend"]["funding_vout"] += 1
+                    elif changed == "extra_input":
+                        payload["vin"].append({"txid": "77" * 32, "vout": 1})
+                    else:
+                        payload["htlc_spend"]["version"] = 2
+                    incoming["raw_json"] = json.dumps(payload)
+                    # Even current authority cannot make internally
+                    # contradictory or unsupported attestation facts exact.
+                    incoming["observation_graph_hash"] = canonical_graph_hash(incoming["raw_json"])
+                    self.assertFalse(any(c.confidence == "exact" for c in suggest_swap_candidates([outgoing, incoming])))
+
     def test_force_full_lag_guard_rejects_an_older_backend_tip(self):
         tip = Mock()
         tip.height.return_value = 41
@@ -834,6 +964,66 @@ class LwkForeignStoreTest(unittest.TestCase):
         )
         self.conn.commit()
         self.identity = identities_for_wallet(wallet_row(config), observer_kind="lwk")[0]
+
+    def _assert_htlc_authority_reaches_review_loaders(self, role):
+        from kassiber.cli.handlers import _load_matcher_rows
+        from kassiber.core.ui_snapshot import _load_swap_report_matcher_rows
+        from kassiber.core.transfer_matching import suggest_swap_candidates
+        from kassiber.core.chain_observer.provenance import persist_chain_observation_provenance
+
+        outgoing, incoming, preimage = LwkDescriptorContractTest()._htlc_matcher_rows(role)
+        profile = self.conn.execute("SELECT * FROM profiles WHERE id='profile'").fetchone()
+        wallet = self.conn.execute("SELECT * FROM wallets WHERE id='wallet'").fetchone()
+        source_wallet = wallet
+        if role == "claim":
+            self.conn.execute(
+                "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) "
+                "VALUES('node','workspace','profile','Node','lnd',?,?)",
+                (json.dumps({"chain": "lightning", "network": "regtest"}), now_iso()),
+            )
+            source_wallet = self.conn.execute("SELECT * FROM wallets WHERE id='node'").fetchone()
+        hooks = ImportCoordinatorHooks(ensure_tag_row=Mock(), invalidate_journals=Mock())
+
+        def record(row):
+            return {**row, "txid": row.get("external_id"), "amount": str(msat_to_btc(row["amount"])), "fee": str(msat_to_btc(row["fee"]))}
+
+        insert_wallet_records(self.conn, profile, source_wallet, [record(outgoing)], "lnd" if role == "claim" else "liquid", hooks)
+        forged = record(incoming)
+        # A CSV/import copy of every raw marker is still merely review evidence.
+        insert_wallet_records(self.conn, profile, wallet, [forged], "generic_ledger", hooks)
+        loaders = (_load_matcher_rows, _load_swap_report_matcher_rows)
+        for loader in loaders:
+            self.assertFalse(any(c.confidence == "exact" for c in suggest_swap_candidates(loader(self.conn, "profile"))))
+
+        applied = insert_wallet_records(
+            self.conn, profile, wallet, [forged], "lwk", hooks,
+            authoritative_chain_observer=True,
+        )
+        persist_chain_observation_provenance(
+            self.conn, profile, wallet, application_revision="htlc-test",
+            chain="liquid", network="elementsregtest",
+            entries=[{
+                "external_id": incoming["external_id"], "asset": incoming["asset"], "direction": "inbound",
+                "observer_ids": [self.identity.id], "observer_kinds": ["lwk"],
+            }],
+            resolved_records=applied["_observer_resolved_records"],
+        )
+        for loader in loaders:
+            candidates = suggest_swap_candidates(loader(self.conn, "profile"))
+            self.assertEqual(len(candidates), 1)
+            self.assertEqual(candidates[0].confidence, "exact")
+        for row in self.conn.execute("SELECT raw_json FROM transactions"):
+            self.assertNotIn(preimage.hex(), row["raw_json"])
+
+        self.conn.execute("DELETE FROM chain_observation_provenance")
+        for loader in loaders:
+            self.assertFalse(any(c.confidence == "exact" for c in suggest_swap_candidates(loader(self.conn, "profile"))))
+
+    def test_claim_authority_reaches_cli_and_report_review(self):
+        self._assert_htlc_authority_reaches_review_loaders("claim")
+
+    def test_refund_authority_reaches_cli_and_report_review(self):
+        self._assert_htlc_authority_reaches_review_loaders("refund")
 
     def test_foreign_store_roundtrips_opaque_bytes_only_on_apply_savepoint(self):
         lwk = require_lwk()

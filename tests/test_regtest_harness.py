@@ -480,8 +480,8 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertGreater(max(rates) / min(rates), 2.0)
         self.assertNotEqual(rates, sorted(rates))
         self.assertNotEqual(rates, sorted(rates, reverse=True))
-        self.assertEqual(scenario["expected"]["collaborative_excluded"], 5)
-        self.assertEqual(scenario["expected"]["min_transfer_pairs"], 13)
+        self.assertNotIn("collaborative_excluded", scenario["expected"])
+        self.assertEqual(scenario["expected"]["min_transfer_pairs"], 3)
         self.assertEqual(scenario["expected"]["ownership_derived_transfer_pairs"], 2)
         fanouts = [op for op in scenario["operations"] if op["kind"] == "self_transfer_fanout"]
         self.assertEqual(len(fanouts), 1)

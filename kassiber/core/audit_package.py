@@ -16,6 +16,7 @@ from ..msat import msat_to_btc
 from . import source_funds as core_source_funds
 from . import custody_filed_reports as core_custody_filed_reports
 from . import custody_gap_reviews as core_custody_gap_reviews
+from . import review_workflow as core_review_workflow
 from . import custody_ai_audit as core_custody_ai_audit
 from . import custody_journal as core_custody_journal
 from . import custody_quantity_store as core_custody_quantity_store
@@ -1116,6 +1117,9 @@ def build_evidence_summary(
         profile["id"],
         transaction_ids=(tx_ids if resolved_transaction_refs is not None else None),
     )
+    review_workflow_receipts = core_review_workflow.audit_receipt_summary(
+        conn, profile["id"], transaction_ids=(tx_ids if bounded_scope else None),
+    )
     schema_migration_audits = _schema_migration_audits(conn)
     result = {
         "schema_version": AUDIT_PACKAGE_SCHEMA_VERSION,
@@ -1138,6 +1142,7 @@ def build_evidence_summary(
         ),
         "custody_gap_review_history": custody_gap_review_history,
         "custody_ai_assistance": custody_ai_assistance,
+        "review_workflow_receipts": review_workflow_receipts,
         "schema_migration_audits": schema_migration_audits,
         "transactions": transactions,
         "summary": {
@@ -1157,6 +1162,7 @@ def build_evidence_summary(
                 "returned"
             ],
             "custody_ai_assistance_count": custody_ai_assistance["count"],
+            "review_workflow_receipt_count": review_workflow_receipts["count"],
             "schema_migration_audit_count": len(schema_migration_audits),
         },
         "excluded_sensitive_material": SENSITIVE_MATERIAL_EXCLUSIONS,

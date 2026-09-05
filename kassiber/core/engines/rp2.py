@@ -22,6 +22,7 @@ from ...tax_policy import (
 )
 from ...transfers import is_bitcoin_rail_pair
 from .. import pricing
+from ..transfer_chronology import order_same_time_transfers
 from ..ownership_transfers import (
     detect_conflicting_spend_ids,
     detect_pending_onchain_ids,
@@ -654,50 +655,9 @@ def _ordered_rp2_items(
             else:
                 outbound_events.append(indexed_item)
         ordered.extend(item for _, item in sorted(inbound_events))
-        ordered.extend(_topologically_order_transfers(transfer_items, transfers_by_id))
+        ordered.extend(order_same_time_transfers(transfer_items, transfers_by_id))
         ordered.extend(item for _, item in sorted(outbound_events))
     return ordered
-
-
-def _topologically_order_transfers(
-    transfer_items: Sequence[tuple[int, tuple[str, str]]],
-    transfers_by_id: Mapping[str, NormalizedTaxTransfer],
-) -> list[tuple[str, str]]:
-    if len(transfer_items) <= 1:
-        return [item for _, item in transfer_items]
-
-    original_order = {ident: index for index, (_, ident) in transfer_items}
-    transfer_ids = [ident for _, (_, ident) in transfer_items]
-    outgoing: dict[str, set[str]] = {ident: set() for ident in transfer_ids}
-    incoming_count: dict[str, int] = {ident: 0 for ident in transfer_ids}
-    for source_id in transfer_ids:
-        source = transfers_by_id[source_id]
-        for target_id in transfer_ids:
-            if source_id == target_id:
-                continue
-            target = transfers_by_id[target_id]
-            if source.to_wallet_id == target.from_wallet_id:
-                if target_id not in outgoing[source_id]:
-                    outgoing[source_id].add(target_id)
-                    incoming_count[target_id] += 1
-
-    ready = sorted(
-        [ident for ident in transfer_ids if incoming_count[ident] == 0],
-        key=lambda ident: original_order[ident],
-    )
-    ordered_ids: list[str] = []
-    while ready:
-        ident = ready.pop(0)
-        ordered_ids.append(ident)
-        for target_id in sorted(outgoing[ident], key=lambda tid: original_order[tid]):
-            incoming_count[target_id] -= 1
-            if incoming_count[target_id] == 0:
-                ready.append(target_id)
-        ready.sort(key=lambda tid: original_order[tid])
-
-    if len(ordered_ids) != len(transfer_ids):
-        return [item for _, item in sorted(transfer_items)]
-    return [("transfer", ident) for ident in ordered_ids]
 
 
 def _row_get(row: Mapping[str, Any] | None, key: str, default: Any = None) -> Any:

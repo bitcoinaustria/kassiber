@@ -1,4 +1,5 @@
 import * as React from "react";
+import type { EvidenceRequest, EvidenceRequestState } from "./evidenceRequest";
 
 import type {
   AiChatMessage,
@@ -37,6 +38,7 @@ export type AssistantToolCapability =
   | "source_funds"
   | "merchant"
   | "transfers"
+  | "review"
   | "operations";
 
 export interface AssistantScreenContext {
@@ -77,6 +79,9 @@ export interface AssistantAttachment {
 }
 
 export interface AssistantSessionContextValue {
+  evidenceRequests?: Record<string, EvidenceRequestState>;
+  openEvidenceRequest?: (request: EvidenceRequest) => Promise<void>;
+  continueEvidenceRequest?: (request: EvidenceRequest, unavailable?: boolean) => void;
   messages: AiChatMessage[];
   isStreaming: boolean;
   error: { code: string; message: string } | null;

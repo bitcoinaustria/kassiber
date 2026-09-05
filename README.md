@@ -267,6 +267,32 @@ workflow documented in
 [docs/reference/custody-components.md](docs/reference/custody-components.md).
 Custody-component preview is read-only; apply requires the journal input version
 returned by the matching preview and rejects stale inputs.
+For automatic watch-only movement recognition, evidence boundaries and repair
+through CLI or chat, see
+[Understanding movements and resolving quarantine](docs/reference/custody-resolution.md).
+This includes CoinJoin/Payjoin ownership boundaries: connected intermediate
+wallets can prove conserving own movements, while unexplained payments or fee
+shares remain reviewable. The desktop Transfers & Custody surface provides a
+guided component editor with a server preview and separate confirmation.
+Quarantine also offers **Investigate with assistant**: the agent reads all case
+pages, prepares evidence-backed corrections and requests one approval of their
+computed accounting effects. External agents use `review cases`, `review plan`,
+`review apply` and `review receipt` through the same core. Plans are portable JSON;
+application is atomic and retry-safe, with a durable receipt and the remaining
+report blockers. Detailed CLI examples and resumption semantics are in the
+[resolution guide](docs/reference/custody-resolution.md#resolve-with-the-cli-or-chat).
+
+If evidence is missing, the assistant offers a direct action to connect a wallet,
+import history into an existing connection, or attach a document to the case.
+After successful input it continues the same review and checks the updated book.
+Saved evidence remains attached for later inspection; supplying it does not
+automatically approve an accounting change.
+
+**Source of Funds** uses the same assistant handoff for documentary gaps, even
+when a transaction is not quarantined. Choose the transaction to explain;
+Kassiber inspects its relevant origin evidence and retains explicit disclosure
+and export controls. Saved evidence bundles verify the original file hashes.
+See the [source-of-funds review guide](docs/reference/source-of-funds-review.md).
 
 For a likely return through wallet history that is no longer available, use
 the guided custody-gap workflow instead of writing component JSON:

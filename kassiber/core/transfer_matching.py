@@ -76,6 +76,8 @@ from .htlc_parser import (
     extract_from_claim_witness,
     refund_funding_outpoint_from_tx_mapping,
 )
+from .chain_observer.htlc_evidence import authoritative_htlc_spend
+from .onchain import output_value_sats, stored_tx_mapping
 
 
 # Compatibility exports for callers/UI routing. The canonical sets live next to
@@ -216,6 +218,7 @@ def suggest_swap_candidates(
     fee_pct_max: float = DEFAULT_FEE_PCT_MAX,
     fee_sats_min: int = DEFAULT_FEE_SATS_MIN,
     now_iso: Optional[str] = None,
+    include_heuristics: bool = True,
 ) -> list[SwapCandidate]:
     """Return the swap candidates the matcher believes form valid pairings.
 
@@ -242,6 +245,9 @@ def suggest_swap_candidates(
             even when ``fee_pct_max * out_amount`` falls below it.
         now_iso: Override the "current time" used to evaluate dismissal
             expiry. Defaults to ``datetime.now(UTC)`` when omitted.
+        include_heuristics: Include advisory time/amount edges. Native custody
+            compilation can omit them because exact edges already dominate
+            every heuristic sharing their legs; all identity evidence remains.
 
     Returns:
         Sorted list of :class:`SwapCandidate` (exact first, then
@@ -333,7 +339,7 @@ def suggest_swap_candidates(
         time_window_seconds=time_window_seconds,
         fee_pct_max=fee_pct_max,
         fee_sats_min=fee_sats_min,
-    )
+    ) if include_heuristics else []
 
     raw_candidates: list[SwapCandidate] = []
     for out_row, in_row, whole_row_exact in hash_pairs:
@@ -568,6 +574,13 @@ def _active_dismissals(
     return active
 
 
+def active_dismissed_pairs(
+    dismissals: Iterable[Mapping], *, now_iso: Optional[str] = None
+) -> set[tuple[str, str]]:
+    """Return active review vetoes without filtering an evidence population."""
+    return _active_dismissals(dismissals, _seconds_or_now(now_iso))
+
+
 def _select_eligible_rows(rows: Sequence[Mapping], paired_ids: set[str]) -> list[Mapping]:
     eligible: list[Mapping] = []
     for row in rows:
@@ -680,6 +693,13 @@ def _payment_hash_role(row: Mapping) -> str:
 def _row_has_verified_unique_claim_outpoint(row: Mapping) -> bool:
     """Replay the witness/outpoint proof behind an exact claim hash label."""
 
+    attestation = authoritative_htlc_spend(row, role="claim")
+    if attestation is not None:
+        return (
+            attestation.get("payment_hash")
+            == _normalized_payment_hash(_record_get(row, "payment_hash"))
+            and onchain_transfer_scope(row) is not None
+        )
     payload = _raw_json_payload(row)
     if not isinstance(payload, Mapping):
         return False
@@ -842,13 +862,15 @@ def _match_by_refund_link(
 
 def _funding_output_amount_msat(row: Mapping, vout: int) -> int | None:
     raw = _record_get(row, "raw_json")
-    try:
-        payload = json.loads(raw) if isinstance(raw, str) else raw
-    except (TypeError, ValueError, json.JSONDecodeError):
+    payload = stored_tx_mapping(raw)
+    if payload is None:
         return None
-    if not isinstance(payload, Mapping):
-        return None
+    # Liquid compatibility observations retain locally unblinded outputs next
+    # to a nested provider transaction. Prefer those normalized values when
+    # present; fall back to the nested graph only for older wrapper payloads.
     outputs = payload.get("vout")
+    if not isinstance(outputs, list) and isinstance(payload.get("tx"), Mapping):
+        outputs = payload["tx"].get("vout")
     if not isinstance(outputs, list):
         return None
     for position, output in enumerate(outputs):
@@ -861,12 +883,8 @@ def _funding_output_amount_msat(row: Mapping, vout: int) -> int | None:
             continue
         if index != vout:
             continue
-        raw_sats = output.get("value_sats", output.get("value"))
-        try:
-            sats = int(raw_sats)
-        except (TypeError, ValueError):
-            return None
-        return sats * 1000 if sats >= 0 else None
+        sats = output_value_sats(output)
+        return sats * 1000 if sats is not None and sats >= 0 else None
     return None
 
 
@@ -879,6 +897,9 @@ def _refund_funding_reference(row: Mapping) -> tuple[str, int | None, bool]:
     evidence even though the legacy transaction-pair schema cannot persist it.
     """
     def recovered_from_raw() -> tuple[tuple[str, int] | None, bool]:
+        attestation = authoritative_htlc_spend(row, role="refund")
+        if attestation is not None:
+            return (attestation["funding_txid"], attestation["funding_vout"]), True
         raw = _record_get(row, "raw_json")
         try:
             payload = json.loads(raw) if isinstance(raw, str) else raw

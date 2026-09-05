@@ -7182,9 +7182,14 @@ def _load_swap_report_matcher_rows(
             t.occurred_at, t.direction, t.asset, t.amount, t.amount_includes_fee,
             t.fee, t.kind, t.raw_json, t.excluded,
             w.label AS wallet_label, w.kind AS wallet_kind,
-            w.config_json AS config_json
+            w.config_json AS config_json,
+            observation.authority_version AS observation_authority_version,
+            observation.observer_kinds_json AS observation_observer_kinds_json,
+            observation.graph_hash AS observation_graph_hash,
+            observation.quantity_hash AS observation_quantity_hash
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN chain_observation_provenance observation ON observation.transaction_id = t.id
         WHERE t.profile_id = ?
         """,
         (profile_id,),

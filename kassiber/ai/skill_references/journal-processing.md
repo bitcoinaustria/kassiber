@@ -12,10 +12,14 @@ kassiber rates sync
 kassiber journals process
 ```
 
-If the wallet activity includes BTC ↔ LBTC peg-ins / peg-outs or
-submarine swaps, inspect for likely outbound / inbound pairs and pair
-them before `journals process`. Reports do not discover those pairs on
-their own.
+Journal processing recognizes complete native HTLC claims/refunds automatically
+when both endpoints are authoritative, quantities conserve, fee timing is
+representable and the full evidence graph has no conflict. A positive principal
+shortfall across dates remains `native_transition_fee_timing_unresolved`:
+neither manual pairing nor a price override supplies the missing in-transit
+custody and fee timeline. The book's policy is applied after matching. For
+remaining BTC ↔ LBTC peg-ins / peg-outs, provider-only evidence or incomplete submarine routes,
+inspect the candidates and review their meaning before relying on reports.
 
 Re-run `kassiber journals process` after:
 
@@ -64,28 +68,66 @@ When scripting, use `--machine` and follow `next_cursor`.
 
 ## Quarantine
 
-List unresolved problems:
+Prefer the portable review workflow for an investigation spanning several cases:
+
+```bash
+kassiber --machine review cases --limit 20
+kassiber --machine review cases --limit 20 --cursor <next_cursor>
+kassiber --machine --output review-plan.json review plan --operations-file operations.json --expected-input-version <input_version>
+kassiber --machine review apply --artifact-file review-plan.json --idempotency-key <unique-review-key>
+kassiber --machine review receipt --idempotency-key <unique-review-key>
+```
+
+Use `input_version` from cases, follow `next_cursor` until null, and inspect
+transaction/evidence context before writing `operations.json`. The file is an
+array of typed operations, for example after verifying the stated invoice:
+
+```json
+[{"type":"price_override","transaction_id":"<transaction-id>","fiat_rate":"20000","reason":"Reviewed invoice evidence <evidence-id>"}]
+```
+
+A price operation requires exactly one of `fiat_rate` or `fiat_value`, as an exact
+decimal string, plus an audit reason. `exclude` requires `transaction_id` and a
+reason establishing why the row belongs outside accounting. Never use exclusion
+to hide missing evidence, a custody gap, or a transfer. `custody_component` wraps
+an existing typed component planner request under `request`; the CLI supports
+its actions, while AI may only create components. Reviewed conversion approval
+remains unavailable to AI. Unsupported repairs remain unresolved.
+
+In chat use `ui.review.cases`, inspect `ui.transactions.review_context` and
+`ui.transfers.review_context`, then `ui.review.plan`. Explain the returned
+before/after effects and obtain per-call consent for `ui.review.apply`, passing
+the artifact unchanged. The default CLI `core` profile and built-in chat both
+advertise this bounded review pack for quarantine questions. Planning is read
+only; applying atomically rechecks scope/version/effects, writes, rebuilds, and
+stores a durable receipt. Read `ui.review.receipt` after an uncertain response
+before retrying with the same idempotency key. A `verified` receipt means the
+planned effects were reproduced; inspect `verification.report_ready` and remaining
+quarantine before claiming resolution. A stale artifact needs a new plan.
+
+No new background agent or automatic continuation is implied: at a tool/token
+budget limit or cancellation, report what was inspected, `next_cursor`, unresolved
+evidence, and any receipt/idempotency key needed for the next turn. Re-read cases
+if its cursor expires. Do not increase the budget instead of checking an uncertain
+write. Selected redacted local facts can reach the configured provider; native
+custody-gap/lineage tools remain local-provider only. Portable AI plans reject
+path/URL/secret-bearing free text rather than changing a digest-bound artifact;
+refer to local evidence IDs. Explicit CLI files retain their exact content.
+
+The older single-row commands remain available:
 
 ```bash
 kassiber journals quarantined
 kassiber journals quarantine show --transaction <transaction-id>
-```
-
-`journals quarantined` currently has no pagination or `--limit`.
-
-Resolve when the user has enough information:
-
-```bash
 kassiber journals quarantine resolve price-override --transaction <transaction-id> --fiat-rate <rate>
 kassiber journals quarantine resolve exclude --transaction <transaction-id>
 ```
 
-In chat, first read `ui.transactions.review_context` (and
-`ui.transfers.review_context` for ownership or rail questions). The consented
-`ui.journals.quarantine.resolve` tool is deliberately limited to reviewed price
-overrides and explicit exclusions. It reprocesses by default and reports
-whether the quarantine actually cleared. Never invent a rate, and never use an
-exclusion to conceal a transfer or custody gap.
+`journals quarantined` has no pagination or `--limit`. The individual AI tool
+`ui.journals.quarantine.resolve` repairs reviewed prices or explicit exclusions.
+After custody mutations outside `ui.review.apply`, run `ui.journals.process`
+and reread quarantine/report blockers; an applied component alone does not
+mean the book is resolved.
 
 Clear quarantine state only when the workflow truly calls for it:
 
@@ -132,3 +174,32 @@ reprocessed.
 Timing and amount similarity can help identify candidate peg-ins / peg-outs,
 but those heuristics are only for review. They do not create a pair on their
 own.
+
+## Missing user input
+
+When local evidence is insufficient, call `ui.review.request_input` using current
+`ui.review.cases` case IDs and `input_version`. Choose `connect_wallet`,
+`import_history`, or `attach_evidence` and explain the specific missing facts
+in one or two short sentences: what is missing and why it matters. Use wallet
+names and meaningful dates or amounts; omit internal IDs, schema fields and
+diagnostic codes. The card supplies the action. End with a brief explanation
+instead of repeating a menu of setup instructions or the full investigation.
+For `attach_evidence`, select exactly one case. The user-selected file becomes a
+durable attachment on that transaction; local analysis uses the same managed
+copy. Saving the attachment does not approve its contents or alter accounting.
+This read-only tool returns a scoped handoff to an existing local input dialog;
+it neither imports data nor approves an accounting interpretation. The
+explanation is advisory text, not evidence. Do not include private paths,
+descriptors, credentials, or custody graphs. Missing-wallet gap investigation
+continues to require a local provider; the generic handoff cannot reveal it.
+
+After issuing the handoff, explain why the requested input is needed and wait.
+Do not offer unrelated repair menus or substitute an exclusion. A user may
+cancel or supply only part of the history. When the user step completes, read
+fresh cases and recorded evidence in the same book, discard stale cursors and
+plans, and verify whether the missing facts now exist before proposing changes.
+Creating a connection, attaching a document, or completing an import does not by
+itself establish basis, custody continuity, or report readiness. A handoff ID is
+only a correlation identifier; it is not an application receipt or permission to
+write. Standard CLI imports followed by `review cases` use the same accounting
+recheck; no background agent runs while the chat is waiting.

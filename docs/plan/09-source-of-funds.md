@@ -384,6 +384,14 @@ Reviewed `missing_history` gaps may appear in the report, but they must be
 labeled as gaps with the evidence the user attached. They are not equivalent to
 fiat purchases, mining income, gifts, or exchange withdrawals.
 
+ZIP exports verify each disclosed file against the SHA-256 recorded in the
+saved case, after copying it into the export staging directory. Missing or
+changed files block export with a typed error; they are never silently replaced
+by newly hashed bytes. Restore the original or review replacement evidence in
+a new case. Modes that withhold files do not read them. URL disclosures use the
+saved URL. Archive creation replaces an existing output only after the complete
+verified ZIP is ready, so a failed export preserves the previous artifact.
+
 ## Audit Package Handoff
 
 The Reports audit package export now reuses the same reviewed source-funds

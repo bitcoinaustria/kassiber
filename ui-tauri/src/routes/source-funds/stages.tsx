@@ -3,7 +3,6 @@
 
 import {
   AlertTriangle,
-  ArrowRight,
   Check,
   FileCheck,
   FileDown,
@@ -49,7 +48,6 @@ import {
   formatBtc,
   pretty,
   txRef,
-  coverageSummary,
   type SourceFundsFinding,
 } from "./model";
 import {
@@ -99,52 +97,34 @@ function StageHeader({
   );
 }
 
-function StageFooter({
-  label,
-  onContinue,
-}: {
-  label: string;
-  onContinue: () => void;
-}) {
-  return (
-    <div className="flex justify-end border-t pt-4">
-      <Button type="button" onClick={onContinue}>
-        {label}
-        <ArrowRight className="ml-2 size-4" aria-hidden="true" />
-      </Button>
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------------ */
 /* Stage 1 — Target                                                    */
 /* ------------------------------------------------------------------ */
 
 export function TargetStage({ state }: { state: SourceFundsCaseState }) {
+  const { t } = useTranslation("sourceFunds");
   const planned = state.reportPurpose === "planned_exchange_sale";
-  const targetLabel = planned
-    ? "Bitcoin you're about to sell"
-    : "Completed transaction";
-  const amountLabel = planned ? "Planned sale amount" : "Report amount";
+  const targetLabel = t(planned ? "setup.targetLabelPlanned" : "setup.targetLabelExisting");
+  const amountLabel = t(planned ? "setup.amountLabelPlanned" : "setup.amountLabelExisting");
 
   return (
     <div className="space-y-5">
       <StageHeader
-        title="What needs explaining?"
-        lede="Every dossier is anchored to one transaction. Kassiber traces history backwards from it and disclosure stays scoped to the amount you enter — nothing else."
+        title={t("workstation.whatNeedsExplaining")}
+        lede={t("workstation.everyDossierIsAnchoredTo")}
       />
 
       <div className="grid gap-3 md:grid-cols-2">
         <PurposeButton
           active={planned}
-          title="Planned exchange sale"
-          body="Prepare a bank or exchange disclosure before the deposit or sale happens."
+          title={t("purpose.planned.title")}
+          body={t("purpose.planned.body")}
           onClick={() => state.setReportPurpose("planned_exchange_sale")}
         />
         <PurposeButton
           active={!planned}
-          title="Already happened"
-          body="Explain a completed sale, exchange deposit, withdrawal, or transfer."
+          title={t("purpose.existing.title")}
+          body={t("purpose.existing.body")}
           onClick={() => state.setReportPurpose("existing_transaction")}
         />
       </div>
@@ -153,10 +133,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
         <div className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2.5 text-sm text-muted-foreground">
           <Info className="mt-0.5 size-4 shrink-0 opacity-70" aria-hidden="true" />
           <p>
-            Planned reports prove the reviewed history of the bitcoin you intend
-            to sell. If those sats were originally bought on an exchange, attach
-            fiat-funds proof to that purchase source as a separate evidence item.
-          </p>
+            {t("purpose.plannedHint")}</p>
         </div>
       )}
 
@@ -173,34 +150,37 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
 
       {planned && (
         <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
-          <Field label="Exchange or broker" htmlFor="planned-destination">
+          <Field label={t("setup.exchangeBroker.label")} htmlFor="planned-destination">
             <Input
               id="planned-destination"
               value={state.plannedDestination}
               onChange={(event) =>
                 state.setPlannedDestination(event.target.value)
               }
-              placeholder="Kraken, Bitpanda, OTC desk..."
+              placeholder={t("workstation.krakenBitpandaOtcDesk")}
             />
           </Field>
-          <Field label="Bank disclosure note" htmlFor="planned-note">
+          <Field label={t("setup.bankNote.label")} htmlFor="planned-note">
             <Input
               id="planned-note"
               value={state.plannedNote}
               onChange={(event) => state.setPlannedNote(event.target.value)}
-              placeholder="Expected EUR proceeds, bank contact, or internal case note"
+              placeholder={t("setup.bankNote.placeholder")}
             />
           </Field>
         </div>
       )}
 
+      <Field label={t("case.targetReference")} htmlFor="source-funds-target-reference">
+        <Input id="source-funds-target-reference" value={state.target} onChange={(event) => state.setTarget(event.target.value)} placeholder={t("case.targetReferenceHint")} />
+      </Field>
+      {state.selectedTarget && state.resolvedTarget.isError && <p role="alert" className="text-sm text-destructive">{t("case.targetUnavailable")}</p>}
       <div className="kb-surface-inset overflow-hidden">
         <div className="flex flex-col gap-3 border-b p-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="text-sm font-medium">{targetLabel}</div>
             <div className="text-xs text-muted-foreground">
-              {state.filteredTargetRows.length} of {state.rows.length}{" "}
-              transactions
+              {t("case.loadedTransactions", { count: state.rows.length })}
             </div>
           </div>
           <div className="space-y-3">
@@ -214,7 +194,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                   type="search"
                   value={state.targetSearch}
                   onChange={(event) => state.setTargetSearch(event.target.value)}
-                  placeholder="Search txid, wallet, note..."
+                  placeholder={t("workstation.searchTxidWalletNote")}
                   className="h-8 pl-9"
                 />
               </div>
@@ -231,8 +211,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                 aria-expanded={state.showAdvancedTargetFilters}
               >
                 <SlidersHorizontal className="mr-2 size-4" aria-hidden="true" />
-                Filters
-              </Button>
+                {t("filters.title")}</Button>
               {state.targetFiltersActive && (
                 <Button
                   type="button"
@@ -242,8 +221,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                   onClick={state.clearTargetFilters}
                 >
                   <X className="mr-2 size-4" aria-hidden="true" />
-                  Clear
-                </Button>
+                  {t("filters.clear")}</Button>
               )}
             </div>
             <Collapsible
@@ -255,56 +233,56 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                   value={state.targetDirectionFilter}
                   onValueChange={state.setTargetDirectionFilter}
                 >
-                  <SelectTrigger className="h-8 w-full" aria-label="Filter by direction">
+                  <SelectTrigger className="h-8 w-full" aria-label={t("filters.direction.ariaLabel")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All flows</SelectItem>
-                    <SelectItem value="incoming">Incoming</SelectItem>
-                    <SelectItem value="outgoing">Outgoing</SelectItem>
-                    <SelectItem value="transfer">Transfer</SelectItem>
-                    <SelectItem value="swap">Swap</SelectItem>
+                    <SelectItem value="all">{t("filters.direction.all")}</SelectItem>
+                    <SelectItem value="incoming">{t("flow.incoming")}</SelectItem>
+                    <SelectItem value="outgoing">{t("flow.outgoing")}</SelectItem>
+                    <SelectItem value="transfer">{t("flow.transfer")}</SelectItem>
+                    <SelectItem value="swap">{t("linkType.swap")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
                   value={state.targetDateFilter}
                   onValueChange={state.setTargetDateFilter}
                 >
-                  <SelectTrigger className="h-8 w-full" aria-label="Filter by date">
+                  <SelectTrigger className="h-8 w-full" aria-label={t("filters.date.ariaLabel")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All dates</SelectItem>
-                    <SelectItem value="today">Today</SelectItem>
-                    <SelectItem value="yesterday">Yesterday</SelectItem>
-                    <SelectItem value="7days">Last 7 days</SelectItem>
-                    <SelectItem value="30days">Last 30 days</SelectItem>
-                    <SelectItem value="older">Older</SelectItem>
+                    <SelectItem value="all">{t("filters.date.all")}</SelectItem>
+                    <SelectItem value="today">{t("filters.date.today")}</SelectItem>
+                    <SelectItem value="yesterday">{t("filters.date.yesterday")}</SelectItem>
+                    <SelectItem value="7days">{t("filters.date.last7days")}</SelectItem>
+                    <SelectItem value="30days">{t("filters.date.last30days")}</SelectItem>
+                    <SelectItem value="older">{t("filters.date.older")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
                   value={state.targetStatusFilter}
                   onValueChange={state.setTargetStatusFilter}
                 >
-                  <SelectTrigger className="h-8 w-full" aria-label="Filter by status">
+                  <SelectTrigger className="h-8 w-full" aria-label={t("filters.status.ariaLabel")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All statuses</SelectItem>
-                    <SelectItem value="confirmed">Confirmed</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="review">Needs review</SelectItem>
+                    <SelectItem value="all">{t("filters.status.all")}</SelectItem>
+                    <SelectItem value="confirmed">{t("filters.status.confirmed")}</SelectItem>
+                    <SelectItem value="pending">{t("filters.status.pending")}</SelectItem>
+                    <SelectItem value="review">{t("filters.status.review")}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
                   value={state.targetNetworkFilter}
                   onValueChange={state.setTargetNetworkFilter}
                 >
-                  <SelectTrigger className="h-8 w-full" aria-label="Filter by network">
+                  <SelectTrigger className="h-8 w-full" aria-label={t("filters.network.ariaLabel")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All networks</SelectItem>
+                    <SelectItem value="all">{t("filters.network.all")}</SelectItem>
                     {state.targetNetworkOptions.map((network) => (
                       <SelectItem key={network} value={network}>
                         {network}
@@ -316,11 +294,11 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                   value={state.targetAssetFilter}
                   onValueChange={state.setTargetAssetFilter}
                 >
-                  <SelectTrigger className="h-8 w-full" aria-label="Filter by asset">
+                  <SelectTrigger className="h-8 w-full" aria-label={t("filters.asset.ariaLabel")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All assets</SelectItem>
+                    <SelectItem value="all">{t("filters.asset.all")}</SelectItem>
                     {state.targetAssetOptions.map((asset) => (
                       <SelectItem key={asset} value={asset}>
                         {asset}
@@ -334,12 +312,12 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                 >
                   <SelectTrigger
                     className="h-8 w-full xl:col-span-2"
-                    aria-label="Filter by wallet"
+                    aria-label={t("filters.wallet.ariaLabel")}
                   >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All wallets</SelectItem>
+                    <SelectItem value="all">{t("filters.wallet.all")}</SelectItem>
                     {state.targetWalletOptions.map((wallet) => (
                       <SelectItem key={wallet} value={wallet}>
                         {wallet}
@@ -351,11 +329,12 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
             </Collapsible>
           </div>
         </div>
+        {state.transactions.isError && <p role="alert" className="p-3 text-sm text-destructive">{t("case.transactionsError")}</p>}
         <TransactionTargetHeader />
         <div className="max-h-[430px] overflow-y-auto">
           {state.filteredTargetRows.length === 0 ? (
             <div className="p-3">
-              <EmptyState text="No transactions match these filters." />
+              <EmptyState text={t("setup.noMatches")} />
             </div>
           ) : (
             <div className="divide-y">
@@ -364,7 +343,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                   key={txRef(row)}
                   row={row}
                   active={txRef(row) === state.selectedTarget}
-                  onSelect={() => state.setTarget(txRef(row))}
+                  onSelect={() => { state.setTarget(txRef(row)); state.setStage("trace"); }}
                   onOpenDetails={() => {
                     state.openTxDetailById(txRef(row));
                   }}
@@ -375,24 +354,21 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
         </div>
       </div>
 
-      <TracedCoverageHero coverage={state.coverageQuery.data?.data} />
+      {state.transactions.hasNextPage && <Button variant="outline" disabled={state.transactions.isFetchingNextPage} onClick={() => void state.transactions.fetchNextPage()}>{state.transactions.isFetchingNextPage ? t("case.loading") : t("case.loadMore")}</Button>}
       <OptionalSection
         open={state.showCoverage}
         onOpenChange={state.setShowCoverage}
         icon={<GitBranch className="size-4" aria-hidden="true" />}
-        title="Historical inbound coverage"
-        summary={coverageSummary(state.coverageQuery.data?.data)}
+        title={t("coverage.sectionTitle")}
+        summary={state.coverageQuery.data?.data ? t("coverage.summary", { amount: state.coverageQuery.data.data.totals.buckets.fully_traced.amount.toFixed(8), count: state.coverageQuery.data.data.totals.tx_count }) : t("coverage.summaryEmpty")}
       >
+        <TracedCoverageHero coverage={state.coverageQuery.data?.data} />
         <CoveragePanel
           coverage={state.coverageQuery.data?.data}
           loading={state.coverageQuery.isLoading}
         />
       </OptionalSection>
 
-      <StageFooter
-        label="Trace this history"
-        onContinue={() => state.goToStage("trace")}
-      />
     </div>
   );
 }
@@ -435,16 +411,17 @@ export function TraceStage({ state }: { state: SourceFundsCaseState }) {
   return (
     <div className="space-y-5">
       <StageHeader
-        title="Assemble the history"
-        lede="Kassiber proves every hop it can from local evidence: transaction inputs/outputs of synced wallets (Bitcoin and Liquid), Lightning payment hashes, platform ids, and reviewed pairs. You document only what remains."
+        title={t("caseStages.trace.hint")}
+        lede={t("workstation.kassiberProvesEveryHopIt")}
       >
         <Button
           type="button"
+          variant="outline"
           onClick={() => void state.runAssembly()}
           disabled={!state.selectedTarget || state.assembleLinks.isPending}
         >
           <GitBranch className="mr-2 size-4" aria-hidden="true" />
-          {state.assembleLinks.isPending ? "Assembling…" : "Assemble History"}
+          {t(state.assembleLinks.isPending ? "actionsBar.assembling" : "actionsBar.assemble")}
         </Button>
         <Button
           type="button"
@@ -455,64 +432,56 @@ export function TraceStage({ state }: { state: SourceFundsCaseState }) {
           }}
         >
           <AlertTriangle className="mr-2 size-4" aria-hidden="true" />
-          Mark Gap
-        </Button>
+          {t("actionsBar.markGap")}</Button>
       </StageHeader>
 
       {assembled && (
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-sm">
           <span className="font-semibold">
-            {assembled.auto_reviewed} hop
-            {assembled.auto_reviewed === 1 ? "" : "s"} proven
+            {t("actionsBar.assembleResult", { count: assembled.auto_reviewed })}
           </span>
           <span className="text-xs text-muted-foreground">
             {Object.entries(assembled.methods)
               .map(([method, count]) => `${methodLabel(method)} ×${count}`)
-              .join(" · ") || "no new evidence this run"}
+              .join(" · ") || t("actionsBar.assembleResultEmpty")}
           </span>
           {assembled.awaiting_manual_review > 0 && (
             <span className="text-xs text-muted-foreground">
-              · {assembled.awaiting_manual_review} suggestion
-              {assembled.awaiting_manual_review === 1 ? "" : "s"} need manual
-              review
+              {t("actionsBar.manualReviewHint", { count: assembled.awaiting_manual_review })}
             </span>
           )}
         </div>
       )}
 
-      <CaseBrief
+      <details className="rounded-md border p-3"><summary className="cursor-pointer text-sm font-medium">{t("case.evidenceSection")}</summary><div className="pt-3"><CaseBrief
         report={state.report}
         bulkReviewable={state.bulkReviewableSuggestions.length}
         manualReview={state.manualSuggestionCount}
         onOpenTransaction={state.openTxDetailById}
-      />
+      /></div></details>
 
-      <section aria-label="Work ledger" className="space-y-2">
+      <section id="source-funds-findings" aria-label={t("case.findingsTitle")} className="space-y-2">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-            Work ledger
-          </h2>
+            {t("workstation.workLedger")}</h2>
           <span className="text-xs text-muted-foreground">
-            {state.blockers.length} blocker
-            {state.blockers.length === 1 ? "" : "s"} · {state.warnings.length}{" "}
-            warning{state.warnings.length === 1 ? "" : "s"}
+            {t("case.findings", { blockers: state.blockers.length, warnings: state.warnings.length })}
           </span>
         </div>
         {state.preview.isLoading && (
-          <EmptyState text="Building reviewed flow..." />
+          <EmptyState text={t("workstation.buildingReviewedFlow")} />
         )}
         {state.preview.isError && (
           <GateRow
             finding={{
               code: "preview_unavailable",
-              message:
-                "No source-funds report can be built for this target yet.",
+              message: t("gates.previewUnavailable"),
             }}
           />
         )}
         {!state.preview.isLoading && !state.preview.isError && gaps.length === 0 && state.report && (
           <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200">
-            Nothing left to document — every hop on this path is reviewed.
+            {t("case.noBlockers")}
           </div>
         )}
         <div className="grid gap-2 xl:grid-cols-2">
@@ -535,16 +504,12 @@ export function TraceStage({ state }: { state: SourceFundsCaseState }) {
         open={state.showAdvancedReview}
         onOpenChange={state.setShowAdvancedReview}
         icon={<SlidersHorizontal className="size-4" aria-hidden="true" />}
-        title="Advanced review editor"
-        summary={`${state.reviewQueueLinks.length} links, ${state.sources.length} sources, ${state.evidence.length} evidence items`}
+        title={t("advancedReview.title")}
+        summary={t("advancedReview.summary", { links: state.reviewQueueLinks.length, sources: state.sources.length, evidence: state.evidence.length })}
       >
         <AdvancedReviewEditor state={state} />
       </OptionalSection>
 
-      <StageFooter
-        label="Choose what to disclose"
-        onContinue={() => state.goToStage("disclose")}
-      />
     </div>
   );
 }
@@ -561,12 +526,9 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
           <CardHeader className="border-b">
             <CardTitle className="flex items-center gap-2 text-base">
               <Link2 className="size-4" aria-hidden="true" />
-              Review Queue
-            </CardTitle>
+              {t("reviewQueue.title")}</CardTitle>
             <CardDescription>
-              Matched links for the selected target, plus suggested upstream
-              hops that can extend the path.
-            </CardDescription>
+              {t("reviewQueue.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 p-4">
             <div className="flex flex-wrap gap-2">
@@ -578,8 +540,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                 disabled={!state.selectedTarget || state.suggestLinks.isPending}
               >
                 <RefreshCw className="mr-2 size-4" aria-hidden="true" />
-                Find Links
-              </Button>
+                {t("actionsBar.findLinks")}</Button>
               <Button
                 type="button"
                 size="sm"
@@ -592,11 +553,10 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                 }
               >
                 <Check className="mr-2 size-4" aria-hidden="true" />
-                Review Deterministic Hops
-              </Button>
+                {t("actionsBar.reviewDeterministic")}</Button>
             </div>
             {state.reviewQueueLinks.length === 0 ? (
-              <EmptyState text="No matched links yet. Assemble History looks for transaction input/output structure, payment hashes, same-id transfers, reviewed pairs, and provider ids." />
+              <EmptyState text={t("workstation.noMatchedLinksYetAssemble")} />
             ) : (
               state.reviewQueueLinks.map((link) => (
                 <button
@@ -614,12 +574,12 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                     <StatusPill state={link.state} />
                     <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                       {state.reachableLinkIds.has(link.id)
-                        ? "Path"
+                        ? t("reviewQueue.badge.path")
                         : link.to_transaction_id === state.selectedTxId
-                          ? "Target"
-                          : "Suggested"}
+                          ? t("reviewQueue.badge.target")
+                          : t("reviewQueue.badge.suggested")}
                     </span>
-                    <span className="font-medium">{pretty(link.link_type)}</span>
+                    <span className="font-medium">{t(`linkType.${link.link_type}`, { defaultValue: pretty(link.link_type) })}</span>
                     <span className="text-muted-foreground">
                       {methodLabel(link.method)}
                     </span>
@@ -633,7 +593,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                     </span>
                     <span>
                       {formatBtc(link.allocation_amount ?? null, link.asset)} ·{" "}
-                      {pretty(link.confidence)}
+                      {t(`confidence.${link.confidence}`, { defaultValue: pretty(link.confidence) })}
                     </span>
                   </div>
                 </button>
@@ -646,15 +606,13 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
           <CardHeader className="border-b">
             <CardTitle className="flex items-center gap-2 text-base">
               <FileCheck className="size-4" aria-hidden="true" />
-              Link Review
-            </CardTitle>
+              {t("linkReview.title")}</CardTitle>
             <CardDescription>
-              Accept, reject, allocate, and attach evidence.
-            </CardDescription>
+              {t("linkReview.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 p-4">
             {!state.selectedLink ? (
-              <EmptyState text="Select a link to review." />
+              <EmptyState text={t("linkReview.empty")} />
             ) : (
               <>
                 <div className="rounded-md border p-3 text-sm">
@@ -669,7 +627,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <SelectField
                     id="review-link-type"
-                    label="Type"
+                    label={t("manualLink.type")}
                     value={state.linkForm.link_type}
                     options={LINK_TYPES}
                     onChange={(value) =>
@@ -681,7 +639,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                   />
                   <SelectField
                     id="review-confidence"
-                    label="Confidence"
+                    label={t("manualLink.confidence")}
                     value={state.linkForm.confidence}
                     options={CONFIDENCE_LEVELS}
                     onChange={(value) =>
@@ -691,7 +649,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                       }))
                     }
                   />
-                  <Field label="Allocation" htmlFor="review-allocation">
+                  <Field label={t("manualLink.allocation")} htmlFor="review-allocation">
                     <Input
                       id="review-allocation"
                       value={state.linkForm.allocation_amount}
@@ -703,7 +661,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                       }
                     />
                   </Field>
-                  <Field label="From amount" htmlFor="review-from-allocation">
+                  <Field label={t("manualLink.fromAmount")} htmlFor="review-from-allocation">
                     <Input
                       id="review-from-allocation"
                       value={state.linkForm.from_allocation_amount}
@@ -727,7 +685,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                     }))
                   }
                 />
-                <Field label="Review note" htmlFor="review-note">
+                <Field label={t("manualLink.reviewNote")} htmlFor="review-note">
                   <Textarea
                     id="review-note"
                     value={state.linkForm.explanation}
@@ -748,8 +706,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                     }
                   >
                     <Check className="mr-2 size-4" aria-hidden="true" />
-                    Accept
-                  </Button>
+                    {t("linkReview.accept")}</Button>
                   <Button
                     type="button"
                     variant="outline"
@@ -757,8 +714,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                     disabled={state.reviewLink.isPending}
                   >
                     <X className="mr-2 size-4" aria-hidden="true" />
-                    Reject
-                  </Button>
+                    {t("linkReview.reject")}</Button>
                 </div>
               </>
             )}
@@ -770,17 +726,15 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
           <CardHeader className="border-b">
             <CardTitle className="flex items-center gap-2 text-base">
               <Plus className="size-4" aria-hidden="true" />
-              Source Or Gap
-            </CardTitle>
+              {t("sourceOrGap.title")}</CardTitle>
             <CardDescription>
-              Add a reviewed root source or explicit missing-history stop.
-            </CardDescription>
+              {t("sourceOrGap.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 p-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <SelectField
                 id="source-type"
-                label="Source type"
+                label={t("sourceOrGap.sourceType")}
                 value={state.sourceForm.source_type}
                 options={SOURCE_TYPES}
                 onChange={(value) =>
@@ -798,7 +752,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
               />
               <SelectField
                 id="source-link-type"
-                label="Link type"
+                label={t("sourceOrGap.linkType")}
                 value={state.sourceForm.link_type}
                 options={LINK_TYPES}
                 onChange={(value) =>
@@ -808,7 +762,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                   }))
                 }
               />
-              <Field label="Label" htmlFor="source-label">
+              <Field label={t("sourceOrGap.label")} htmlFor="source-label">
                 <Input
                   id="source-label"
                   value={state.sourceForm.label}
@@ -820,7 +774,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                   }
                 />
               </Field>
-              <Field label="Amount" htmlFor="source-amount">
+              <Field label={t("sourceOrGap.amount")} htmlFor="source-amount">
                 <Input
                   id="source-amount"
                   value={state.sourceForm.amount}
@@ -832,7 +786,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                   }
                 />
               </Field>
-              <Field label="Asset" htmlFor="source-asset">
+              <Field label={t("sourceOrGap.asset")} htmlFor="source-asset">
                 <Input
                   id="source-asset"
                   value={state.sourceForm.asset}
@@ -846,10 +800,10 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
               </Field>
               <TransactionSelect
                 id="source-to"
-                label="Applies to"
+                label={t("sourceOrGap.appliesTo")}
                 rows={state.rows}
                 value={state.sourceForm.to_transaction}
-                defaultLabel="Use selected target"
+                defaultLabel={t("case.useTarget")}
                 onChange={(value) =>
                   state.setSourceForm((current) => ({
                     ...current,
@@ -869,7 +823,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                 }))
               }
             />
-            <Field label="Evidence note" htmlFor="source-description">
+            <Field label={t("sourceOrGap.evidenceNote")} htmlFor="source-description">
               <Textarea
                 id="source-description"
                 value={state.sourceForm.description}
@@ -893,8 +847,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
               }
             >
               <Plus className="mr-2 size-4" aria-hidden="true" />
-              Create Source Link
-            </Button>
+              {t("sourceOrGap.create")}</Button>
           </CardContent>
         </Card>
 
@@ -902,17 +855,15 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
           <CardHeader className="border-b">
             <CardTitle className="flex items-center gap-2 text-base">
               <Link2 className="size-4" aria-hidden="true" />
-              Manual Link
-            </CardTitle>
+              {t("manualLink.title")}</CardTitle>
             <CardDescription>
-              Connect two known transactions with explicit allocation.
-            </CardDescription>
+              {t("manualLink.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 p-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <TransactionSelect
                 id="manual-from"
-                label="From"
+                label={t("manualLink.from")}
                 rows={state.rows}
                 value={state.manualLinkForm.from_transaction}
                 onChange={(value) =>
@@ -927,7 +878,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                 label="To"
                 rows={state.rows}
                 value={state.manualLinkForm.to_transaction}
-                defaultLabel="Use selected target"
+                defaultLabel={t("case.useTarget")}
                 onChange={(value) =>
                   state.setManualLinkForm((current) => ({
                     ...current,
@@ -937,7 +888,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
               />
               <SelectField
                 id="manual-type"
-                label="Type"
+                label={t("manualLink.type")}
                 value={state.manualLinkForm.link_type}
                 options={LINK_TYPES}
                 onChange={(value) =>
@@ -949,7 +900,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
               />
               <SelectField
                 id="manual-confidence"
-                label="Confidence"
+                label={t("manualLink.confidence")}
                 value={state.manualLinkForm.confidence}
                 options={CONFIDENCE_LEVELS}
                 onChange={(value) =>
@@ -959,7 +910,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                   }))
                 }
               />
-              <Field label="Allocation" htmlFor="manual-allocation">
+              <Field label={t("manualLink.allocation")} htmlFor="manual-allocation">
                 <Input
                   id="manual-allocation"
                   value={state.manualLinkForm.allocation_amount}
@@ -971,7 +922,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                   }
                 />
               </Field>
-              <Field label="From amount" htmlFor="manual-from-amount">
+              <Field label={t("manualLink.fromAmount")} htmlFor="manual-from-amount">
                 <Input
                   id="manual-from-amount"
                   value={state.manualLinkForm.from_allocation_amount}
@@ -995,7 +946,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                 }))
               }
             />
-            <Field label="Review note" htmlFor="manual-note">
+            <Field label={t("manualLink.reviewNote")} htmlFor="manual-note">
               <Textarea
                 id="manual-note"
                 value={state.manualLinkForm.explanation}
@@ -1018,8 +969,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
               }
             >
               <Plus className="mr-2 size-4" aria-hidden="true" />
-              Add Reviewed Link
-            </Button>
+              {t("manualLink.add")}</Button>
           </CardContent>
         </Card>
       </div>
@@ -1032,11 +982,12 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
 /* ------------------------------------------------------------------ */
 
 export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
+  const { t } = useTranslation("sourceFunds");
   return (
     <div className="space-y-5">
       <StageHeader
-        title="Through their eyes"
-        lede="Everything below is exactly what the recipient receives — no more. Tune the reveal mode, hide individual transactions, and trim report sections until the disclosure matches what this recipient needs."
+        title={t("caseStages.disclose.hint")}
+        lede={t("workstation.everythingBelowIsExactlyWhat")}
       />
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -1059,13 +1010,13 @@ export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
             }
           />
           <DisclosureList
-            label="Evidence"
+            label={t("evidence.label")}
             values={(state.report?.disclosure_preview.attachments ?? []).map(
               (item) => item.label,
             )}
           />
           <DisclosureList
-            label="Excluded"
+            label={t("disclosure.excluded")}
             values={state.report?.disclosure_preview.excluded ?? []}
           />
           {state.report?.disclosure_preview.privacy_note && (
@@ -1082,11 +1033,9 @@ export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
         <div className="space-y-4">
           <Card>
             <CardHeader className="border-b">
-              <CardTitle className="text-base">Recipient</CardTitle>
+              <CardTitle className="text-base">{t("recipient.ariaLabel")}</CardTitle>
               <CardDescription>
-                Who receives this dossier — their default reveal mode is a
-                suggestion, your choice wins.
-              </CardDescription>
+                {t("workstation.whoReceivesThisDossierTheir")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 p-4">
               <RecipientPicker
@@ -1108,13 +1057,12 @@ export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
 
           <Card>
             <CardHeader className="border-b">
-              <CardTitle className="text-base">Report options</CardTitle>
+              <CardTitle className="text-base">{t("workstation.reportOptions")}</CardTitle>
               <CardDescription>
-                Frozen into the case at export time.
-              </CardDescription>
+                {t("workstation.frozenIntoTheCaseAt")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 p-4 text-sm">
-              <Field label="Reveal mode" htmlFor="disclose-reveal">
+              <Field label={t("disclosure.revealMode")} htmlFor="disclose-reveal">
                 <Select
                   value={state.revealMode}
                   onValueChange={state.setRevealMode}
@@ -1126,14 +1074,14 @@ export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
                     {["labels_only", "minimal", "standard", "full"].map(
                       (mode) => (
                         <SelectItem key={mode} value={mode}>
-                          {pretty(mode)}
+                          {t(`reveal.${mode}`, { defaultValue: pretty(mode) })}
                         </SelectItem>
                       ),
                     )}
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Diagram detail" htmlFor="disclose-diagram">
+              <Field label={t("workstation.diagramDetail")} htmlFor="disclose-diagram">
                 <Select
                   value={state.diagramDetail}
                   onValueChange={(value) =>
@@ -1144,12 +1092,12 @@ export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="summary">Summary</SelectItem>
-                    <SelectItem value="detailed">Detailed</SelectItem>
+                    <SelectItem value="summary">{t("workstation.summary")}</SelectItem>
+                    <SelectItem value="detailed">{t("workstation.detailed")}</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Amounts" htmlFor="disclose-precision">
+              <Field label={t("workstation.amounts")} htmlFor="disclose-precision">
                 <Select
                   value={state.amountPrecision}
                   onValueChange={(value) =>
@@ -1172,18 +1120,16 @@ export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
                     state.setMaskRecipient(checked === true)
                   }
                 />
-                Mask recipient name on the cover
-              </label>
+                {t("workstation.maskRecipientNameOnThe")}</label>
               <div className="space-y-1.5 border-t pt-3">
                 <div className="text-xs font-medium text-muted-foreground">
-                  Omit verbose sections
-                </div>
+                  {t("workstation.omitVerboseSections")}</div>
                 {(
                   [
-                    ["flow_levels", "Flow diagram data"],
-                    ["transaction_details", "Transaction details"],
-                    ["flow_links", "Reviewed flow links"],
-                    ["graph_nodes", "Disclosure graph nodes"],
+                    ["flow_levels", t("case.omitFlow")],
+                    ["transaction_details", t("case.omitTransactions")],
+                    ["flow_links", t("case.omitLinks")],
+                    ["graph_nodes", t("case.omitNodes")],
                   ] as const
                 ).map(([key, label]) => (
                   <label
@@ -1212,23 +1158,22 @@ export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
           {state.report?.diagrams?.flow_svg && (
             <Card>
               <CardHeader className="border-b">
-                <CardTitle className="text-base">Report visuals</CardTitle>
+                <CardTitle className="text-base">{t("workstation.reportVisuals")}</CardTitle>
                 <CardDescription>
-                  Rendered on this device — identical to the exported PDF.
-                </CardDescription>
+                  {t("workstation.renderedOnThisDeviceIdentical")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 p-4">
                 <ReportDiagram
                   svg={state.report.diagrams.flow_svg}
-                  label="Simplified flow path"
+                  label={t("flowPath.title")}
                 />
                 <ReportDiagram
                   svg={state.report.diagrams.source_mix_ring_svg}
-                  label="Source mix"
+                  label={t("workstation.sourceMix")}
                 />
                 <ReportDiagram
                   svg={state.report.diagrams.data_source_ring_svg}
-                  label="Data sources"
+                  label={t("workstation.dataSources")}
                 />
               </CardContent>
             </Card>
@@ -1236,10 +1181,6 @@ export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
         </div>
       </div>
 
-      <StageFooter
-        label="Freeze and export"
-        onContinue={() => state.goToStage("export")}
-      />
     </div>
   );
 }
@@ -1250,7 +1191,7 @@ export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
 
 export function ExportStage({ state }: { state: SourceFundsCaseState }) {
   const { t } = useTranslation("sourceFunds");
-  const exportable = Boolean(state.report?.explain_gates.exportable);
+  const exportable = Boolean(state.report?.explain_gates.exportable) && !state.preview.isFetching;
   return (
     <div className="space-y-5">
       <StageHeader
@@ -1262,26 +1203,23 @@ export function ExportStage({ state }: { state: SourceFundsCaseState }) {
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
           <div className="flex items-center gap-2 font-medium">
             <ShieldAlert className="size-4" aria-hidden="true" />
-            Export is blocked by {state.blockers.length} open gap
-            {state.blockers.length === 1 ? "" : "s"}.
+            {t("case.exportBlocked")}
           </div>
           <button
             type="button"
             className="mt-1 text-xs font-medium underline-offset-2 hover:underline"
-            onClick={() => state.goToStage("trace")}
+            onClick={() => document.getElementById("source-funds-findings")?.scrollIntoView({ block: "center" })}
           >
-            Go to the trace work ledger to resolve them →
-          </button>
+            {t("workstation.goToTheTraceWork")}</button>
         </div>
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="border-b">
-            <CardTitle className="text-base">Source-of-funds PDF</CardTitle>
+            <CardTitle className="text-base">{t("workstation.sourceoffundsPdf")}</CardTitle>
             <CardDescription>
-              Saves the case snapshot first, then renders the PDF from it.
-            </CardDescription>
+              {t("workstation.savesTheCaseSnapshotFirst")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 p-4">
             <Button
@@ -1297,23 +1235,23 @@ export function ExportStage({ state }: { state: SourceFundsCaseState }) {
             >
               <FileDown className="mr-2 size-4" aria-hidden="true" />
               {state.casesSave.isPending
-                ? "Saving case…"
+                ? t("export.savingCase")
                 : state.exportPdf.isPending
-                  ? "Rendering…"
-                  : "Save case & export PDF"}
+                  ? t("case.rendering")
+                  : t("export.saveAndExport")}
             </Button>
             {state.savedCase && (
               <dl className="space-y-1 rounded-md border px-3 py-2 text-xs">
                 <div className="flex justify-between gap-3">
-                  <dt className="text-muted-foreground">Case</dt>
+                  <dt className="text-muted-foreground">{t("workstation.case")}</dt>
                   <dd className="font-mono">{state.savedCase.id}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-muted-foreground">Status</dt>
+                  <dt className="text-muted-foreground">{t("workstation.status")}</dt>
                   <dd>{state.savedCase.status}</dd>
                 </div>
                 <div className="flex justify-between gap-3">
-                  <dt className="text-muted-foreground">Snapshot</dt>
+                  <dt className="text-muted-foreground">{t("workstation.snapshot")}</dt>
                   <dd className="truncate font-mono">
                     {state.savedCase.snapshot_hash}
                   </dd>
@@ -1322,7 +1260,7 @@ export function ExportStage({ state }: { state: SourceFundsCaseState }) {
             )}
             {state.exportedPdf?.filename && (
               <p className="text-xs text-muted-foreground">
-                Exported: {state.exportedPdf.filename}
+                {t("case.exported", { filename: state.exportedPdf.filename })}
               </p>
             )}
           </CardContent>
@@ -1330,17 +1268,13 @@ export function ExportStage({ state }: { state: SourceFundsCaseState }) {
 
         <Card>
           <CardHeader className="border-b">
-            <CardTitle className="text-base">Evidence bundle</CardTitle>
+            <CardTitle className="text-base">{t("workstation.evidenceBundle")}</CardTitle>
             <CardDescription>
-              Report PDF plus the original evidence files and a SHA-256
-              manifest, reveal-mode scoped.
-            </CardDescription>
+              {t("workstation.reportPdfPlusTheOriginal")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 p-4 text-sm text-muted-foreground">
             <p>
-              Save a frozen case and export the recipient handoff ZIP from the
-              same reviewed snapshot:
-            </p>
+              {t("workstation.saveAFrozenCaseAnd")}</p>
             <Button
               type="button"
               variant="outline"
@@ -1355,14 +1289,14 @@ export function ExportStage({ state }: { state: SourceFundsCaseState }) {
             >
               <FileDown className="mr-2 size-4" aria-hidden="true" />
               {state.casesSave.isPending
-                ? "Saving case…"
+                ? t("export.savingCase")
                 : state.exportBundle.isPending
-                  ? "Building bundle…"
-                  : "Save case & export bundle"}
+                  ? t("case.buildingBundle")
+                  : t("case.exportBundle")}
             </Button>
             {state.exportedBundle?.filename && (
               <p className="text-xs text-muted-foreground">
-                Exported: {state.exportedBundle.filename}
+                {t("case.exported", { filename: state.exportedBundle.filename })}
               </p>
             )}
             <code className="block rounded-md border bg-muted/40 px-3 py-2 font-mono text-xs">

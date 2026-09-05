@@ -55,6 +55,12 @@ not compatibility fallbacks, and ordinary BDK descriptor discovery must not be
 used as a substitute for Core-specific import/rescan behavior or BIP352 chain
 scanning.
 
+Core retains sanitized HTLC claim/refund evidence from decoded incoming and
+outgoing transactions. Its graph-normalization checkpoint is independent of
+descriptor-rescan coverage: a new version replays existing Core wallet history
+once without forcing descriptor reimport or a blockchain rescan. Unavailable
+graphs keep the old cursor/version so the next refresh retries them.
+
 Fetch and scanning finish before a SQLite write transaction begins. Applying a
 successful refresh is one transaction containing observer state, normalized
 transactions, retractions/replacements, output inventory, derivation coverage,

@@ -533,7 +533,7 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
   stays intentionally tiny; immature coinbases must never import
 - a customer payment that is still unconfirmed in the mempool when the book is
   synced, imported with an empty confirmed-at and a mempool UTXO state
-- a deterministic historical stress lane: 132 cycles spaced 20 days apart, with
+- a deterministic historical stress lane: 84 cycles spaced 30 days apart, with
   batched inbound funding into operational wallets, rotating outbound payments,
   and regular fiat-expense disposals for payroll, rent, software, tax prep,
   contractors, and equipment; amounts and fees vary per cycle through a
@@ -547,7 +547,7 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
   climbing monotonically); regimes stay within each wallet's running balance
   so RP2's per-account balance gate never trips
 - wallet key-rotation events for treasury, merchant, cold storage, and Liquid
-  treasury, reviewed as same-asset transfer pairs after sync; the old source
+  treasury, recognized from native ownership evidence after sync; the old source
   wallets are then marked deprecated so their history remains visible while
   refresh-all/background freshness skips them
 - an ownership-derived Bitcoin fan-out transfer where one treasury transaction
@@ -562,14 +562,14 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
   TCP, Bitcoin mempool-compatible HTTP, Liquid Electrum-compatible TCP, and
   Liquid mempool-compatible HTTP; the demo deletes public/default backends and
   fails if any non-regtest backend remains
-- reviewed same-asset transfer pairs for wallet-to-wallet movements
-- CoinJoin-shaped PSBT flow with two owned inputs, equal external/tracked
-  outputs, and explicit watched change; the resulting rows are explicitly
-  review-excluded before tax reporting because the generic tax engine correctly
-  treats unresolved owned fanout as unsafe to classify automatically
-- PayJoin-shaped PSBT flow with payer and merchant inputs in the same
-  transaction; those rows are likewise review-excluded after sync so the demo
-  book remains reportable without pretending to know provider-specific intent
+- automatic same-chain wallet-to-wallet movements, without preparing manual
+  pairs to make the checks pass
+- a signed CoinJoin-shaped PSBT with two owned participants and a separate
+  foreign participant, equal owned outputs, and watched change. The foreign
+  participant pays the network fee; the user's ledger must not charge it again
+- a signed Payjoin-shaped PSBT with connected payer and merchant wallets;
+  the receiving wallet's contributed input must be subtracted from its receipt.
+  Collaborative rows remain included in accounting and exercise native matching
 - Bitcoin-backed-loan marks for collateral lock/release and BTC principal
   receive/repay, linked under one loan id
 - real historical BTC/EUR pricing from Kassiber's bundled Kraken daily cache,
@@ -581,6 +581,21 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
   override that provider, or `off` to keep only the historical cache.
 - journal processing, summary reporting, PDF/CSV/XLSX report export, and
   CSV/XLSX transaction export
+- a separate `Exchange Reconciliation` profile with a synthetic Strike export
+  imported through the production importer and genuine Core withdrawal/deposit
+  transactions. A deliberately missing purchase leaves an accounting case;
+  importing the complete export and applying a portable reviewed custody plan
+  must restore report readiness without exclusions. Independent quantities and
+  FIFO basis distinguish the platform withdrawal charge from the foreign hot
+  wallet's batch fee and the user's return fee. Repeated export import and native
+  refresh must preserve the result. Prices are scoped to these transaction rows
+- signed, paginated Coinbase API requests against a disposable loopback fixture,
+  including a repeated import. This checks the production connection adapter's
+  protocol behavior, not live Coinbase compatibility. Its temporary book and
+  stopped service are not added as an unusable connection in the interactive demo
+- `demo-cases.md` and `demo-cases.json` describe the successful assertions,
+  evidence origins and exact native wallet deltas; exchange results and the
+  review artifact are retained under the export directory's `exchange/` folder
 - a generated oracle artifact at `generated-truth.json` in the demo export
   directory for the report/export build point (before the optional post-sync
   business tick). The demo records expected transaction row identities,
@@ -636,8 +651,10 @@ What `demo-up` does:
 - builds the `full-accounting-v1` book once into
   `~/.kassiber/regtest-demo/data` (override with
   `KASSIBER_REGTEST_DEMO_HOME`) and reuses it on later runs while the
-  scenario file is unchanged; set `KASSIBER_REGTEST_DEMO_REBUILD=1` to force
-  a rebuild;
+  scenario and generator are unchanged. The manifest fingerprint includes the
+  selected scenario, integration helpers, local service configuration and
+  harness, so fixing a generated case also rebuilds an existing demo book;
+  set `KASSIBER_REGTEST_DEMO_REBUILD=1` to force a rebuild;
 - seeds the Lightning business topology into that same demo book by default:
   `cln_merchant` appears as a `coreln` wallet/backend in
   `Regtest Demo / Full Accounting`, while `cln_customer`, `cln_supplier`, and

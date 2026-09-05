@@ -7,6 +7,7 @@ import sqlite3
 import uuid
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
 
 from ..envelope import json_ready
@@ -2555,6 +2556,29 @@ def attach_diagram_svgs(envelope: dict[str, Any]) -> None:
     envelope["diagrams"] = diagrams
 
 
+@dataclass(frozen=True)
+class _ReportInputs:
+    """Immutable book inputs shared only inside one read-only coverage request."""
+
+    connection: sqlite3.Connection
+    profile_id: str
+    active_rows_by_id: Mapping[str, Mapping[str, Any]]
+    custody_allocations: Mapping[tuple[str, str, str], _StoredCustodyAllocation]
+
+
+def _load_report_inputs(conn: sqlite3.Connection, profile_id: str) -> _ReportInputs:
+    rows = MappingProxyType({
+        str(tx["id"]): MappingProxyType(dict(tx))
+        for tx in _active_transaction_rows(conn, profile_id)
+    })
+    return _ReportInputs(
+        connection=conn,
+        profile_id=profile_id,
+        active_rows_by_id=rows,
+        custody_allocations=MappingProxyType(_stored_custody_allocation_map(conn, profile_id, rows)),
+    )
+
+
 def build_report(
     conn: sqlite3.Connection,
     workspace_ref: str | None,
@@ -2573,6 +2597,7 @@ def build_report(
     recipient_ref: str | None = None,
     include_diagrams: bool = False,
     report_options: Mapping[str, Any] | None = None,
+    _report_inputs: _ReportInputs | None = None,
 ) -> dict[str, Any]:
     if max_depth <= 0:
         max_depth = 1
@@ -2580,15 +2605,11 @@ def build_report(
         max_depth = _MAX_BUILD_REPORT_DEPTH
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     target = hooks.resolve_transaction(conn, profile["id"], target_transaction_ref)
-    active_rows_by_id = {
-        str(tx["id"]): tx
-        for tx in _active_transaction_rows(conn, str(profile["id"]))
-    }
-    custody_allocations = _stored_custody_allocation_map(
-        conn,
-        str(profile["id"]),
-        active_rows_by_id,
-    )
+    report_inputs = _report_inputs or _load_report_inputs(conn, str(profile["id"]))
+    if report_inputs.connection is not conn or report_inputs.profile_id != str(profile["id"]):
+        raise AppError("Source-funds report inputs belong to a different book", code="validation")
+    active_rows_by_id = report_inputs.active_rows_by_id
+    custody_allocations = report_inputs.custody_allocations
     from .source_funds_recipients import effective_reveal_mode
     resolved_mode, recipient = effective_reveal_mode(
         conn,
@@ -2779,6 +2800,44 @@ def build_report(
                     ref=link["id"],
                 )
                 continue
+            from_endpoint = (
+                conn.execute(
+                    "SELECT * FROM source_funds_sources WHERE id = ? AND profile_id = ?",
+                    (link["from_source_id"], profile["id"]),
+                ).fetchone()
+                if link["from_source_id"]
+                else _transaction_by_id(conn, profile["id"], link["from_transaction_id"])
+            )
+            from_allocation_msat = link["from_allocation_amount"]
+            # A complete, unique reviewed route can explain a smaller disclosure.
+            # Keep the authored link intact (including the custody check above),
+            # and project only exact quantities for this report's selected amount.
+            if (
+                len(reviewed) == 1
+                and link["allocation_policy"] == "explicit"
+                and 0 < required_msat < int(allocation_msat) == int(tx["amount"])
+                and from_endpoint is not None
+                and from_endpoint["amount"] is not None
+                and 0 < int(from_allocation_msat or allocation_msat) <= int(from_endpoint["amount"])
+                and normalize_asset_code(link["asset"]) == required_asset
+                and normalize_asset_code(link["from_asset"] or link["asset"]) == required_asset
+                and normalize_asset_code(from_endpoint["asset"]) == required_asset
+            ):
+                projected_from, remainder = divmod(
+                    required_msat * int(from_allocation_msat or allocation_msat),
+                    int(allocation_msat),
+                )
+                if remainder:
+                    _add_finding(
+                        findings,
+                        "ambiguous_allocation",
+                        "blocker",
+                        "The selected amount cannot follow the reviewed allocation ratio in exact millisatoshis.",
+                        ref=link["id"],
+                    )
+                    continue
+                allocation_msat = required_msat
+                from_allocation_msat = projected_from
             reviewed_total += int(allocation_msat)
             if link["allocation_policy"] != "explicit":
                 _add_finding(
@@ -2824,14 +2883,11 @@ def build_report(
             for attachment in attachment_rows:
                 disclosure_attachments[attachment["id"]] = _attachment_summary(attachment, mode)
             if link["from_source_id"]:
-                source = conn.execute(
-                    "SELECT * FROM source_funds_sources WHERE id = ?",
-                    (link["from_source_id"],),
-                ).fetchone()
+                source = from_endpoint
                 if not source:
                     _add_finding(findings, "missing_history", "blocker", "Reviewed source record is missing.", ref=link["id"])
                     continue
-                source_required = int(link["from_allocation_amount"] or allocation_msat)
+                source_required = int(from_allocation_msat or allocation_msat)
                 link_from_asset = normalize_asset_code(link["from_asset"] or link["asset"])
                 if normalize_asset_code(source["asset"]) != link_from_asset:
                     _add_finding(
@@ -2902,12 +2958,12 @@ def build_report(
                     disclosure_attachments[attachment["id"]] = _attachment_summary(attachment, mode)
                 from_id = source_node_id
             else:
-                from_tx = _transaction_by_id(conn, profile["id"], link["from_transaction_id"])
+                from_tx = from_endpoint
                 if not from_tx:
                     _add_finding(findings, "missing_history", "blocker", "Reviewed parent transaction is missing.", ref=link["id"])
                     continue
                 from_tx_id = from_tx["id"]
-                parent_required = int(link["from_allocation_amount"] or allocation_msat)
+                parent_required = int(from_allocation_msat or allocation_msat)
                 link_from_asset = normalize_asset_code(link["from_asset"] or from_tx["asset"])
                 if _timestamp_after(from_tx["occurred_at"], tx["occurred_at"]):
                     _add_finding(
@@ -3000,8 +3056,8 @@ def build_report(
                     "allocation_amount": _btc_value(allocation_msat),
                     "allocation_amount_msat": int(allocation_msat),
                     "from_asset": link["from_asset"] or link["asset"],
-                    "from_allocation_amount": _btc_value(link["from_allocation_amount"]),
-                    "from_allocation_amount_msat": link["from_allocation_amount"],
+                    "from_allocation_amount": _btc_value(from_allocation_msat),
+                    "from_allocation_amount_msat": from_allocation_msat,
                     "allocation_policy": link["allocation_policy"],
                     "explanation": edge_explanation,
                     "attachments": [_attachment_summary(attachment, mode) for attachment in attachment_rows],
@@ -3540,6 +3596,7 @@ def export_bundle(
     (``standard``/``full``); ``labels_only``/``minimal`` ship the PDF and a
     manifest that records the evidence was withheld by reveal mode.
     """
+    import os
     import shutil
     import tempfile
     import zipfile
@@ -3618,20 +3675,43 @@ def export_bundle(
                     {"label": label, "attachment_type": attachment_type, "source": "withheld_by_reveal_mode", "sha256": ""}
                 )
                 continue
+            expected_sha = str(item.get("sha256") or "").lower()
+            if expected_sha and not (info and info.get("resolved_path")):
+                raise AppError(
+                    "A disclosed evidence file is no longer available",
+                    code="source_funds_evidence_unavailable",
+                    hint="Restore the original attachment before exporting this saved case.",
+                    details={"attachment_id": item.get("id")},
+                )
             if info and info.get("resolved_path"):
                 evidence_dir.mkdir(parents=True, exist_ok=True)
                 source = _Path(info["resolved_path"])
                 fname = _bundle_safe_name(label, info.get("original_filename") or "", source.suffix, used_names)
                 bundled_path = evidence_dir / fname
-                shutil.copy2(source, bundled_path)
+                try:
+                    shutil.copy2(source, bundled_path)
+                except OSError as exc:
+                    raise AppError(
+                        "A disclosed evidence file could not be read",
+                        code="source_funds_evidence_unavailable",
+                        hint="Restore the original attachment before exporting this saved case.",
+                        details={"attachment_id": item.get("id")},
+                    ) from exc
                 sha = _sha256_file(bundled_path)
+                if not re.fullmatch(r"[0-9a-f]{64}", expected_sha) or sha != expected_sha:
+                    raise AppError(
+                        "Evidence bytes do not match the saved source-of-funds case",
+                        code="source_funds_evidence_changed",
+                        hint="Restore the original file, or attach and review replacement evidence in a new case.",
+                        details={"attachment_id": item.get("id")},
+                    )
                 evidence_manifest.append(
                     {
                         "label": label,
                         "attachment_type": attachment_type,
                         "source": "file",
                         "filename": f"evidence/{fname}",
-                        "media_type": info.get("media_type") or "",
+                        "media_type": item.get("media_type") or "",
                         "sha256": sha,
                     }
                 )
@@ -3644,9 +3724,7 @@ def export_bundle(
                     "sha256": "",
                 }
                 if reveal_mode == "full":
-                    manifest_item["source_url"] = (
-                        (info.get("url") if info else None) or item.get("source_url") or ""
-                    )
+                    manifest_item["source_url"] = item.get("source_url") or ""
                 evidence_manifest.append(manifest_item)
                 url_count += 1
             else:
@@ -3679,14 +3757,21 @@ def export_bundle(
             encoding="utf-8",
         )
 
-        if out_path.exists():
-            out_path.unlink()
-        with zipfile.ZipFile(out_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-            archive.write(pdf_path, "source-of-funds-report.pdf")
-            archive.write(manifest_path, "manifest.json")
-            if evidence_dir.exists():
-                for evidence_file in sorted(evidence_dir.iterdir()):
-                    archive.write(evidence_file, f"evidence/{evidence_file.name}")
+        # Keep an existing export intact until the complete verified archive
+        # exists. The sibling temporary file makes replacement atomic.
+        with tempfile.NamedTemporaryFile(dir=out_path.parent, prefix=f".{out_path.name}.",
+                                         suffix=".tmp", delete=False) as staged:
+            staged_path = _Path(staged.name)
+        try:
+            with zipfile.ZipFile(staged_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.write(pdf_path, "source-of-funds-report.pdf")
+                archive.write(manifest_path, "manifest.json")
+                if evidence_dir.exists():
+                    for evidence_file in sorted(evidence_dir.iterdir()):
+                        archive.write(evidence_file, f"evidence/{evidence_file.name}")
+            os.replace(staged_path, out_path)
+        finally:
+            staged_path.unlink(missing_ok=True)
 
     return {
         "file": str(out_path.resolve()),

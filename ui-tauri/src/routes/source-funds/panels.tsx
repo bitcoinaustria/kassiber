@@ -1,3 +1,5 @@
+import { findingTranslationKeys } from "./findingCopy";
+import { Trans, useTranslation } from "react-i18next";
 // Leaf panels of the source-of-funds workstation. Presentation only:
 // every mutation/query lives in useSourceFundsCase, every payload shape in
 // model.ts.
@@ -40,10 +42,8 @@ import { cn } from "@/lib/utils";
 
 import {
   COVERAGE_BUCKET_BARS,
-  COVERAGE_BUCKET_LABELS,
   COVERAGE_BUCKET_ORDER,
   COVERAGE_BUCKET_TONES,
-  GAP_ACTION_LABELS,
   NO_ATTACHMENT,
   NO_RECIPIENT,
   PROVENANCE_SHORT_LABELS,
@@ -58,7 +58,6 @@ import {
   txDate,
   txDirection,
   txFlow,
-  txFlowLabel,
   txLabel,
   txRef,
   txWallet,
@@ -87,6 +86,7 @@ export function ReportControlFields({
   onAmountChange: (value: string) => void;
   onRevealModeChange: (value: string) => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   return (
     <>
       <Field label={amountLabel} htmlFor="sof-amount">
@@ -96,8 +96,9 @@ export function ReportControlFields({
           onChange={(event) => onAmountChange(event.target.value)}
           placeholder={selectedTx ? txAmount(selectedTx) : "0.00000000"}
         />
+        <p className="mt-1 text-xs text-muted-foreground">{t("case.optionalAmount")}</p>
       </Field>
-      <Field label="Reveal" htmlFor="sof-reveal">
+      <Field label={t("controls.revealLabel")} htmlFor="sof-reveal">
         <Select value={revealMode} onValueChange={onRevealModeChange}>
           <SelectTrigger id="sof-reveal" className="h-10 w-full">
             <SelectValue />
@@ -105,7 +106,7 @@ export function ReportControlFields({
           <SelectContent>
             {REVEAL_MODES.map((mode) => (
               <SelectItem key={mode} value={mode}>
-                {pretty(mode)}
+                {t(`reveal.${mode}`, { defaultValue: pretty(mode) })}
               </SelectItem>
             ))}
           </SelectContent>
@@ -126,6 +127,7 @@ export function TransactionTargetRow({
   onSelect: () => void;
   onOpenDetails: () => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   const flow = txFlow(row);
   const FlowIcon =
     flow === "incoming"
@@ -146,7 +148,7 @@ export function TransactionTargetRow({
         ? "text-red-700 dark:text-red-300"
         : "text-muted-foreground";
   const txid = row.external_id || row.externalId || row.id;
-  const description = row.counter || row.description || row.note || txid || "Transaction";
+  const description = row.counter || row.description || row.note || txid || t("transactionRow.fallbackDescription");
 
   return (
     <div
@@ -178,7 +180,7 @@ export function TransactionTargetRow({
                   {shortId(txid)}
                 </span>
                 {row.direction && (
-                  <span className="md:hidden">{pretty(txDirection(row))}</span>
+                  <span className="md:hidden">{t(txDirection(row) === "inbound" ? "flow.incoming" : "flow.outgoing")}</span>
                 )}
               </div>
             </div>
@@ -187,13 +189,13 @@ export function TransactionTargetRow({
             {txSignedAmount(row)}
           </div>
           <div className="text-sm text-muted-foreground">
-            <span className="md:hidden">Wallet: </span>
+            <span className="md:hidden">{t("transactionRow.walletMobile")}</span>
             {txWallet(row)}
           </div>
           <div className="flex flex-wrap items-center gap-2 md:justify-end">
             <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium ${flowClassName}`}>
               <FlowIcon className="size-3.5" aria-hidden="true" />
-              {txFlowLabel(row)}
+              {t(`flow.${flow}`, { defaultValue: flow })}
             </span>
             <span className="text-xs text-muted-foreground">
               {txDate(row)}
@@ -205,8 +207,8 @@ export function TransactionTargetRow({
         type="button"
         className="flex shrink-0 items-center justify-center border-l text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground"
         onClick={onOpenDetails}
-        aria-label="View transaction details"
-        title="View details"
+        aria-label={t("workstation.viewTransactionDetails")}
+        title={t("workstation.viewDetails")}
       >
         <Eye className="size-4" aria-hidden="true" />
       </button>
@@ -216,12 +218,13 @@ export function TransactionTargetRow({
 
 
 export function TransactionTargetHeader() {
+  const { t } = useTranslation("sourceFunds");
   return (
     <div className="hidden border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,1fr)_150px_160px_130px_44px] md:gap-3">
-      <span>Transaction</span>
-      <span className="text-right">Amount</span>
-      <span>Wallet</span>
-      <span className="text-right">Flow</span>
+      <span>{t("transactionRow.header.transaction")}</span>
+      <span className="text-right">{t("sourceOrGap.amount")}</span>
+      <span>{t("fallback.wallet")}</span>
+      <span className="text-right">{t("transactionRow.header.flow")}</span>
       <span aria-hidden="true" />
     </div>
   );
@@ -291,6 +294,7 @@ export function CaseBrief({
   manualReview: number;
   onOpenTransaction?: (txId: string) => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   const overview = report?.overview;
   const targetAsset = overview?.target_asset || report?.target.asset || "BTC";
   const paragraphs = report?.narrative?.paragraphs ?? [];
@@ -304,11 +308,11 @@ export function CaseBrief({
       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h2 className="text-base font-semibold">
-            {overview?.target_label || report?.target.label || "Selected target"}
+            {overview?.target_label || report?.target.label || t("caseBrief.fallbackTarget")}
           </h2>
           <p className="text-sm text-muted-foreground">
             {formatDateTime(overview?.target_date)} ·{" "}
-            {overview?.target_wallet || report?.target.wallet || "No wallet"} ·{" "}
+            {overview?.target_wallet || report?.target.wallet || t("caseBrief.fallbackWallet")} ·{" "}
             {formatBtc(overview?.target_amount ?? report?.target.required_amount, targetAsset)}
             {(jurisdiction || fiatCurrency) && (
               <>
@@ -318,16 +322,14 @@ export function CaseBrief({
             )}
           </p>
         </div>
-        <StatusPill
-          state={report?.explain_gates.exportable ? "reviewed" : "suggested"}
-        />
+        <span className="text-xs text-muted-foreground">{t(report?.explain_gates.exportable ? "case.exportable" : "case.needsEvidence")}</span>
       </div>
       <div className="grid gap-3 md:grid-cols-5">
-        <Metric label="Transactions" value={overview?.transaction_count ?? 0} />
-        <Metric label="Reviewed links" value={overview?.link_count ?? 0} />
-        <Metric label="Sources" value={overview?.source_category_count ?? 0} />
-        <Metric label="Blockers" value={overview?.blocker_count ?? 0} />
-        <Metric label="Batchable" value={bulkReviewable} />
+        <Metric label={t("caseBrief.metric.transactions")} value={overview?.transaction_count ?? 0} />
+        <Metric label={t("caseBrief.metric.reviewedLinks")} value={overview?.link_count ?? 0} />
+        <Metric label={t("caseBrief.metric.sources")} value={overview?.source_category_count ?? 0} />
+        <Metric label={t("caseBrief.metric.blockers")} value={overview?.blocker_count ?? 0} />
+        <Metric label={t("caseBrief.metric.batchable")} value={bulkReviewable} />
       </div>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-2">
@@ -339,12 +341,11 @@ export function CaseBrief({
             ))
           ) : (
             <p className="text-sm text-muted-foreground">
-              Local preview data is not available yet.
-            </p>
+              {t("workstation.localPreviewDataIsNot")}</p>
           )}
           {manualReview > 0 && (
             <p className="text-xs text-amber-700 dark:text-amber-300">
-              {manualReview} manual review item{manualReview === 1 ? "" : "s"}.
+              {t("caseBrief.manualReview", { count: manualReview })}
             </p>
           )}
         </div>
@@ -470,6 +471,7 @@ export function FlowPathPreview({
   flow?: SourceFundsPreview["simplified_flow"];
   onOpenTransaction?: (txId: string) => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   const levels = flow?.levels ?? [];
   if (levels.length === 0) {
     return null;
@@ -477,11 +479,10 @@ export function FlowPathPreview({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold">Simplified flow path</h3>
+        <h3 className="text-sm font-semibold">{t("flowPath.title")}</h3>
         {flow?.deferred_privacy_hops?.length ? (
           <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
-            Privacy hop deferred
-          </span>
+            {t("flowPath.privacyHopDeferred")}</span>
         ) : null}
       </div>
       {flow?.note && (
@@ -538,7 +539,7 @@ export function FlowPathPreview({
                           type="button"
                           className={nodeClassName}
                           onClick={() => onOpenTransaction?.(transactionId)}
-                          title="Open transaction details"
+                          title={t("workstation.openTransactionDetails")}
                         >
                           {nodeContent}
                         </button>
@@ -675,6 +676,7 @@ export function TransactionSelect({
   onChange: (value: string) => void;
   defaultLabel?: string;
 }) {
+  const { t } = useTranslation("sourceFunds");
   const defaultValue = "__source_funds_selected_target__";
   return (
     <Field label={label} htmlFor={id}>
@@ -683,7 +685,7 @@ export function TransactionSelect({
         onValueChange={(next) => onChange(next === defaultValue ? "" : next)}
       >
         <SelectTrigger id={id} className="h-10 w-full">
-          <SelectValue placeholder="Select transaction" />
+          <SelectValue placeholder={t("select.transaction")} />
         </SelectTrigger>
         <SelectContent>
           {defaultLabel ? (
@@ -712,14 +714,15 @@ export function EvidenceSelect({
   evidence: EvidenceAttachment[];
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   return (
-    <Field label="Evidence" htmlFor={id}>
+    <Field label={t("evidence.label")} htmlFor={id}>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger id={id} className="h-10 w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={NO_ATTACHMENT}>No attachment</SelectItem>
+          <SelectItem value={NO_ATTACHMENT}>{t("select.noAttachment")}</SelectItem>
           {evidence.map((item) => (
             <SelectItem key={item.id} value={item.id}>
               {[item.label, item.wallet, item.external_id].filter(Boolean).join(" · ")}
@@ -733,6 +736,7 @@ export function EvidenceSelect({
 
 
 export function StatusPill({ state }: { state: string }) {
+  const { t } = useTranslation("sourceFunds");
   const className =
     state === "reviewed"
       ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200"
@@ -741,13 +745,14 @@ export function StatusPill({ state }: { state: string }) {
         : "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200";
   return (
     <span className={`rounded-full border px-2 py-0.5 text-xs ${className}`}>
-      {pretty(state)}
+      {t(`linkState.${state}`, { defaultValue: pretty(state) })}
     </span>
   );
 }
 
 
 export function TracedCoverageHero({ coverage }: { coverage?: SourceFundsCoverage }) {
+  const { t } = useTranslation("sourceFunds");
   const totals = coverage?.totals;
   const total = totals?.amount ?? 0;
   const txCount = totals?.tx_count ?? 0;
@@ -763,14 +768,13 @@ export function TracedCoverageHero({ coverage }: { coverage?: SourceFundsCoverag
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="text-xs uppercase tracking-wide text-muted-foreground">
-              Inbound history traced
-            </div>
+              {t("workstation.inboundHistoryTraced")}</div>
             <div className="mt-0.5 flex items-baseline gap-2">
               <span className="font-mono text-3xl font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">
                 {pct("fully_traced").toFixed(1)}%
               </span>
               <span className="text-sm text-muted-foreground">
-                fully traced · {txCount} inbound tx
+                {t("case.fullyTraced", { count: txCount })}
               </span>
             </div>
           </div>
@@ -781,7 +785,7 @@ export function TracedCoverageHero({ coverage }: { coverage?: SourceFundsCoverag
               <span key={name} className="inline-flex items-center gap-1.5">
                 <span className={`size-2.5 rounded-sm ${COVERAGE_BUCKET_BARS[name]}`} />
                 <span className="text-muted-foreground">
-                  {COVERAGE_BUCKET_LABELS[name]}
+                  {t(`coverageBucket.${name}`)}
                 </span>
                 <span className={`font-medium ${COVERAGE_BUCKET_TONES[name]}`}>
                   {pct(name).toFixed(1)}%
@@ -798,19 +802,17 @@ export function TracedCoverageHero({ coverage }: { coverage?: SourceFundsCoverag
                 key={name}
                 className={COVERAGE_BUCKET_BARS[name]}
                 style={{ width: `${percent}%` }}
-                title={`${COVERAGE_BUCKET_LABELS[name]}: ${percent.toFixed(1)}%`}
+                title={`${t(`coverageBucket.${name}`)}: ${percent.toFixed(1)}%`}
               />
             ) : null;
           })}
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Attested ({pct("attested").toFixed(1)}%) is prior-history attestation,
-          shown separately — not counted as fully traced.
+          {t("case.attested", { percent: pct("attested").toFixed(1) })}
         </p>
         {coverage.truncation?.truncated && (
           <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-            Partial: {txCount} of {coverage.truncation.inbound_total_count} inbound
-            transactions classified.
+            {t("case.partialCoverage", { shown: txCount, total: coverage.truncation.inbound_total_count })}
           </p>
         )}
       </CardContent>
@@ -826,6 +828,7 @@ export function CoveragePanel({
   coverage?: SourceFundsCoverage;
   loading?: boolean;
 }) {
+  const { t } = useTranslation("sourceFunds");
   const totals = coverage?.totals;
   const totalAmount = totals?.amount ?? 0;
   const totalTxCount = totals?.tx_count ?? 0;
@@ -834,18 +837,14 @@ export function CoveragePanel({
   return (
     <section>
         {loading && !coverage ? (
-          <EmptyState text="Computing coverage..." />
+          <EmptyState text={t("workstation.computingCoverage")} />
         ) : !coverage || totalTxCount === 0 ? (
-          <EmptyState text="No inbound transactions in this profile yet." />
+          <EmptyState text={t("coverage.noInbound")} />
         ) : (
           <>
             {coverage.truncation?.truncated && (
               <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
-                Coverage truncated to {totalTxCount} of{" "}
-                {coverage.truncation.inbound_total_count} inbound transactions
-                ({coverage.truncation.not_classified_count} not classified).
-                Run <code className="text-2xs">source-funds coverage</code>{" "}
-                with a higher --max-transactions to compute the full set.
+                <Trans t={t} i18nKey="coverage.truncated" values={{ shown: totalTxCount, total: coverage.truncation.inbound_total_count, notClassified: coverage.truncation.not_classified_count }} components={[<code className="text-2xs" />]} />
               </div>
             )}
             <div className="grid gap-4 md:grid-cols-5">
@@ -857,7 +856,7 @@ export function CoveragePanel({
                 return (
                   <div key={name} className="space-y-1">
                     <div className="text-xs uppercase tracking-wide opacity-70">
-                      {COVERAGE_BUCKET_LABELS[name]}
+                      {t(`coverageBucket.${name}`)}
                     </div>
                     <div className={`text-lg font-semibold ${COVERAGE_BUCKET_TONES[name]}`}>
                       {amount.toFixed(8)}
@@ -885,23 +884,20 @@ export function RecipientPicker({
   selectedRecipientId: string;
   onSelectRecipient: (recipient: SourceFundsRecipient | null) => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   if (recipients.length === 0) {
     return (
       <div className="rounded-md border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
-        No recipients defined yet. Run{" "}
-        <code className="text-xs">source-funds recipients create</code> to set
-        a sticky reveal-mode default per recipient.
+        {t("case.optionalRecipient")}
       </div>
     );
   }
   const selected = recipients.find((r) => r.id === selectedRecipientId) ?? null;
   return (
     <div className="rounded-md border px-3 py-3 text-sm">
-      <div className="mb-1 font-medium">Recipient</div>
+      <div className="mb-1 font-medium">{t("recipient.ariaLabel")}</div>
       <div className="mb-2 text-xs text-muted-foreground">
-        The recipient's preferred reveal mode is shown as advisory below;
-        your reveal-mode choice is what gets exported.
-      </div>
+        {t("recipient.hint")}</div>
       <Select
         value={selectedRecipientId || NO_RECIPIENT}
         onValueChange={(value) => {
@@ -914,17 +910,17 @@ export function RecipientPicker({
           onSelectRecipient(next);
         }}
       >
-        <SelectTrigger className="h-9 w-full" aria-label="Recipient">
+        <SelectTrigger className="h-9 w-full" aria-label={t("recipient.ariaLabel")}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={NO_RECIPIENT}>(no recipient)</SelectItem>
+          <SelectItem value={NO_RECIPIENT}>{t("recipient.none")}</SelectItem>
           {recipients.map((recipient) => {
             const inactive = recipient.active === false;
             return (
               <SelectItem key={recipient.id} value={recipient.id} disabled={inactive}>
-                {recipient.label} - {pretty(recipient.kind)} - {pretty(recipient.default_reveal_mode)}
-                {inactive ? " (inactive)" : ""}
+                {recipient.label} · {t(`reveal.${recipient.default_reveal_mode}`, { defaultValue: recipient.default_reveal_mode })}
+                {inactive ? t("recipient.inactiveSuffix") : ""}
               </SelectItem>
             );
           })}
@@ -947,17 +943,14 @@ export function RecipientPreferenceAdvisory({
   currentRevealMode: string;
   onApply: (mode: string) => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   if (!recipient) return null;
   const preferred = recipient.default_reveal_mode;
   if (!preferred || preferred === currentRevealMode) return null;
   return (
     <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2 text-xs">
       <span className="text-muted-foreground">
-        {recipient.label} prefers{" "}
-        <span className="font-medium text-foreground">{pretty(preferred)}</span>
-        . Your current reveal mode is{" "}
-        <span className="font-medium text-foreground">{pretty(currentRevealMode)}</span>
-        .
+        <Trans t={t} i18nKey="recipient.advisory" values={{ label: recipient.label, preferred: t(`reveal.${preferred}`, { defaultValue: preferred }), current: t(`reveal.${currentRevealMode}`, { defaultValue: currentRevealMode }) }} components={[<span className="font-medium text-foreground" />, <span className="font-medium text-foreground" />]} />
       </span>
       <Button
         type="button"
@@ -965,8 +958,7 @@ export function RecipientPreferenceAdvisory({
         variant="outline"
         onClick={() => onApply(preferred)}
       >
-        Apply preference
-      </Button>
+        {t("recipient.applyPreference")}</Button>
     </div>
   );
 }
@@ -982,11 +974,14 @@ export function GateRow({
   /** Dispatches the finding's next_step.action; gap cards become one-click fixes. */
   onAction?: (action: string, finding: SourceFundsFinding) => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
+  const copy = findingTranslationKeys(finding);
   const blocker = finding.severity === "blocker";
-  const headline = finding.next_step?.headline?.trim();
+  const rawHeadline = finding.next_step?.headline?.trim();
+  const headline = copy.nextStep ? t(copy.nextStep, { defaultValue: rawHeadline ?? "" }) : rawHeadline;
   const docAnchor = finding.next_step?.doc_anchor?.trim();
   const action = finding.next_step?.action?.trim();
-  const actionLabel = action ? GAP_ACTION_LABELS[action] : undefined;
+  const actionLabel = action && ["open_source_creator", "open_link_review", "open_review_queue", "open_source", "open_transaction"].includes(action) ? t(`gapAction.${action}`, { defaultValue: action }) : undefined;
   return (
     <div
       className={[
@@ -996,13 +991,13 @@ export function GateRow({
           : "",
       ].join(" ")}
     >
-      <div className="font-medium">{pretty(finding.code)}</div>
-      <div className="mt-1 text-xs opacity-80">{finding.message}</div>
+      <div className="font-medium">{copy.title ? t(copy.title, { defaultValue: pretty(finding.code) }) : pretty(finding.code)}</div>
+      <div className="mt-1 text-xs opacity-80">{copy.message ? t(copy.message, { defaultValue: finding.message }) : finding.message}</div>
       {headline && (
         <div className="mt-2 text-xs font-medium opacity-90">
-          Next step: {headline}
+          {t("gates.nextStep", { headline })}
           {docAnchor && (
-            <span className="ml-1 opacity-70">(see docs: {docAnchor})</span>
+            <span className="ml-1 opacity-70">{t("gates.seeDocs", { anchor: docAnchor })}</span>
           )}
         </div>
       )}
@@ -1024,8 +1019,7 @@ export function GateRow({
             onClick={onOpenTransaction}
           >
             <Eye className="size-3.5" aria-hidden="true" />
-            Open transaction to fix
-          </button>
+            {t("workstation.openTransactionToFix")}</button>
         )}
       </div>
     </div>
@@ -1051,6 +1045,7 @@ export function DisclosureNodeOverrides({
   overrides: Record<string, "show" | "hide">;
   onChange: (id: string, decision: "show" | "hide" | undefined) => void;
 }) {
+  const { t } = useTranslation("sourceFunds");
   const nodes = (report?.graph.nodes ?? []).filter(
     (node) => stringValue(node.node_type) === "transaction",
   );
@@ -1069,12 +1064,9 @@ export function DisclosureNodeOverrides({
   return (
     <div className="space-y-1">
       <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Per-transaction disclosure
-      </div>
+        {t("workstation.pertransactionDisclosure")}</div>
       <p className="text-xs text-muted-foreground">
-        Override the reveal mode for individual transactions. Changes update the
-        preview live and freeze into the exported case.
-      </p>
+        {t("workstation.overrideTheRevealModeFor")}</p>
       <div className="space-y-1">
         {nodes.map((node) => {
           const id = stringValue(node.transaction_id);
@@ -1104,8 +1096,7 @@ export function DisclosureNodeOverrides({
                     onChange(id, decision === "show" ? undefined : "show")
                   }
                 >
-                  Show
-                </button>
+                  {t("workstation.show")}</button>
                 <button
                   type="button"
                   className={buttonClass(decision === "hide", "hide")}
@@ -1113,8 +1104,7 @@ export function DisclosureNodeOverrides({
                     onChange(id, decision === "hide" ? undefined : "hide")
                   }
                 >
-                  Hide
-                </button>
+                  {t("workstation.hide")}</button>
               </div>
             </div>
           );
@@ -1132,30 +1122,27 @@ export function FlowLevelDetailPreview({
   report?: SourceFundsPreview;
   omitted: boolean;
 }) {
+  const { t } = useTranslation("sourceFunds");
   const levels = report?.flow_levels ?? [];
   if (levels.length === 0) return null;
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">Transaction details by level</h3>
+        <h3 className="text-sm font-semibold">{t("workstation.transactionDetailsByLevel")}</h3>
         {omitted && (
           <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
-            omitted from PDF
+            {t("case.omitted")}
           </span>
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        Level 1 is the report target; each further level moves one reviewed hop
-        backwards towards the root sources. This is the granular table the
-        exported PDF renders.
-      </p>
+        {t("workstation.level1IsTheReport")}</p>
       <div className={omitted ? "space-y-3 opacity-50" : "space-y-3"}>
         {levels.map((level) => (
           <div key={level.level} className="overflow-hidden rounded-md border">
             <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-1.5 text-xs font-medium">
               <span>
-                Level {level.level} · {level.transaction_count} tx ·{" "}
-                {level.source_count} source{level.source_count === 1 ? "" : "s"}
+                {t("case.levelSummary", { level: level.level, transactions: level.transaction_count, sources: level.source_count })}
               </span>
               {level.fiat_value_total != null && (
                 <span className="font-mono tabular-nums">
@@ -1209,12 +1196,12 @@ export function FlowLevelDetailPreview({
 
 
 export function DisclosureNarrative({ report }: { report?: SourceFundsPreview }) {
+  const { t } = useTranslation("sourceFunds");
   const txidCount = report?.disclosure_preview.txids.length ?? 0;
   const evidenceCount = report?.disclosure_preview.attachments.length ?? 0;
   const hiddenCount = report?.disclosure_preview.excluded.length ?? 0;
   const sourceCount = report?.source_mix.length ?? 0;
-  const sourceLabel = sourceCount === 1 ? "source category" : "source categories";
-  const reviewedLinkCount = report?.graph.edges.length ?? 0;
+    const reviewedLinkCount = report?.graph.edges.length ?? 0;
   const walletLabels =
     report?.disclosure_preview.wallets_named ??
     uniqueSorted(
@@ -1222,48 +1209,42 @@ export function DisclosureNarrative({ report }: { report?: SourceFundsPreview })
         .map((node) => stringValue(node.wallet))
         .filter(Boolean),
     );
-  const targetLabel = report?.target.label || "the selected target";
-  const purposeLabel = report?.purpose?.label || "source-of-funds report";
-  const revealMode = pretty(report?.reveal_mode || "standard");
+  const targetLabel = report?.target.label || t("disclosure.narrativeTarget");
+  const purposeLabel = report?.purpose?.label || t("disclosure.narrativePurpose");
+  const revealMode = t(`reveal.${report?.reveal_mode || "standard"}`, { defaultValue: report?.reveal_mode || "standard" });
 
   return (
     <section className="space-y-3 rounded-md border bg-muted/20 p-4">
       <div className="space-y-1">
-        <h2 className="text-base font-semibold">Disclosure Summary</h2>
+        <h2 className="text-base font-semibold">{t("disclosure.summaryTitle")}</h2>
         <p className="text-sm text-muted-foreground">
-          This {purposeLabel} will disclose the reviewed flow for {targetLabel}.
-          It will expose {txidCount} txid{txidCount === 1 ? "" : "s"},{" "}
-          {evidenceCount} evidence item{evidenceCount === 1 ? "" : "s"},{" "}
-          {reviewedLinkCount} reviewed link{reviewedLinkCount === 1 ? "" : "s"},
-          and {sourceCount} {sourceLabel}.
+          {t("disclosure.narrative", { purpose: purposeLabel, target: targetLabel, txids: t("disclosure.txidCount", { count: txidCount }), evidence: t("disclosure.evidenceCount", { count: evidenceCount }), links: t("disclosure.linkCount", { count: reviewedLinkCount }), sources: t("disclosure.sourceCount", { count: sourceCount }) })}
         </p>
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        <DisclosureMetric label="Txids" value={txidCount} />
-        <DisclosureMetric label="Evidence" value={evidenceCount} />
-        <DisclosureMetric label="Reviewed links" value={reviewedLinkCount} />
-        <DisclosureMetric label="Sources" value={sourceCount} />
-        <DisclosureMetric label="Hidden" value={hiddenCount} />
+        <DisclosureMetric label={t("disclosure.txids")} value={txidCount} />
+        <DisclosureMetric label={t("evidence.label")} value={evidenceCount} />
+        <DisclosureMetric label={t("caseBrief.metric.reviewedLinks")} value={reviewedLinkCount} />
+        <DisclosureMetric label={t("caseBrief.metric.sources")} value={sourceCount} />
+        <DisclosureMetric label={t("disclosure.metric.hidden")} value={hiddenCount} />
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
         <div className="rounded-md border bg-background px-3 py-2">
           <div className="text-xs font-medium text-muted-foreground">
-            Reveal mode
-          </div>
+            {t("disclosure.revealMode")}</div>
           <div className="mt-1 font-medium">{revealMode}</div>
           <p className="mt-1 text-xs text-muted-foreground">
             {report?.disclosure_preview.privacy_note ||
-              "No disclosure preview is available yet."}
+              t("disclosure.noPreview")}
           </p>
         </div>
         <div className="rounded-md border bg-background px-3 py-2">
           <div className="text-xs font-medium text-muted-foreground">
-            Wallet labels
-          </div>
+            {t("disclosure.walletLabels")}</div>
           <div className="mt-1 text-sm">
-            {walletLabels.length > 0 ? walletLabels.join(", ") : "None"}
+            {walletLabels.length > 0 ? walletLabels.join(", ") : t("disclosure.none")}
           </div>
           {report?.disclosure_preview.ownership_note && (
             <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
@@ -1271,9 +1252,7 @@ export function DisclosureNarrative({ report }: { report?: SourceFundsPreview })
             </p>
           )}
           <p className="mt-1 text-xs text-muted-foreground">
-            Kassiber does not include descriptors, xpubs, wallet files, seeds,
-            backend tokens, or unrelated wallet history in the PDF.
-          </p>
+            {t("disclosure.walletPrivacyNote")}</p>
         </div>
       </div>
     </section>
@@ -1294,6 +1273,7 @@ export function DisclosureMetric({ label, value }: { label: string; value: numbe
 
 
 export function DisclosureTxidList({ report }: { report?: SourceFundsPreview }) {
+  const { t } = useTranslation("sourceFunds");
   const [openingTxid, setOpeningTxid] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const txids = report?.disclosure_preview.txids ?? [];
@@ -1316,7 +1296,7 @@ export function DisclosureTxidList({ report }: { report?: SourceFundsPreview }) 
       setOpenError(
         error instanceof Error && error.message
           ? error.message
-          : "Could not open explorer URL.",
+          : t("disclosure.openError"),
       );
     } finally {
       setOpeningTxid(null);
@@ -1324,12 +1304,11 @@ export function DisclosureTxidList({ report }: { report?: SourceFundsPreview }) 
   };
   return (
     <section className="space-y-2">
-      <h2 className="text-sm font-semibold">Txids</h2>
+      <h2 className="text-sm font-semibold">{t("disclosure.txids")}</h2>
       <div className="space-y-1">
         {txids.length === 0 ? (
           <div className="rounded-md border px-3 py-2 text-muted-foreground">
-            None
-          </div>
+            {t("disclosure.none")}</div>
         ) : (
           txids.map((txid) => {
             const link = links.get(txid);
@@ -1347,15 +1326,14 @@ export function DisclosureTxidList({ report }: { report?: SourceFundsPreview }) 
                     className="h-8 shrink-0"
                     disabled={openingTxid === txid}
                     onClick={() => void onOpen(txid, link.url)}
-                    title={`Open ${txid} on ${link.label}`}
+                    title={t("disclosure.openTitle", { txid, label: link.label })}
                   >
                     <ExternalLink className="mr-2 size-3.5" aria-hidden="true" />
-                    {openingTxid === txid ? "Opening..." : link.label}
+                    {openingTxid === txid ? t("disclosure.opening") : link.label}
                   </Button>
                 ) : (
                   <span className="text-muted-foreground">
-                    No public explorer link
-                  </span>
+                    {t("disclosure.noExplorerLink")}</span>
                 )}
               </div>
             );
@@ -1376,14 +1354,14 @@ export function DisclosureTxidList({ report }: { report?: SourceFundsPreview }) 
 
 
 export function DisclosureList({ label, values }: { label: string; values: string[] }) {
+  const { t } = useTranslation("sourceFunds");
   return (
     <section className="space-y-2">
       <h2 className="text-sm font-semibold">{label}</h2>
       <div className="space-y-1">
         {values.length === 0 ? (
           <div className="rounded-md border px-3 py-2 text-muted-foreground">
-            None
-          </div>
+            {t("disclosure.none")}</div>
         ) : (
           values.map((value) => (
             <div

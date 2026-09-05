@@ -75,8 +75,12 @@ suggest) or dismiss the wrong ones.
   Arbitrary provider/import `external_id` values are never physical identity.
   Run `kassiber --machine journals transfers list` after processing to
   audit those moves.
-- It never auto-pairs without explicit user opt-in (CLI flag,
-  consented daemon action, or rule the user created).
+- It never authors a reviewed pair without explicit user opt-in (CLI flag,
+  consented daemon action, or rule the user created). Journal processing also
+  interprets complete, solo native HTLC claim/refund evidence directly, without
+  creating authored pairs. That path requires current chain-observer authority
+  or source-qualified node evidence on both endpoints and respects occupied
+  anchors and active dismissals after checking the full evidence population.
 - It never silently overrides pair-policy validation. Bitcoin ownership and
   matching are country-neutral; only after a link is proven does the profile's
   tax policy decide whether an unlike-asset conversion can carry value.
@@ -106,7 +110,7 @@ Two pieces handle this:
   ```
 
 - **Automatic detection from chain data.** When BTC/Liquid descriptor
-  sync (esplora / electrum) sees an inbound tx whose input spends a
+  sync (Esplora / Electrum / Bitcoin Core RPC) sees an inbound transaction spending a
   Boltz v1 HTLC via the refund (timeout) branch, it records the funding
   txid it spent on `transactions.swap_refund_funding_txid`. The matcher
   pairs that refund to the outbound leg in that canonical funding route and
@@ -116,15 +120,21 @@ Two pieces handle this:
   and outside the time window included. Txid-only legacy evidence stays strong.
   Filter to just these with `transfers suggest --method htlc_refund`.
 
-  Surfacing only — like every exact candidate it auto-pairs only via an
-  explicit `transfers bulk-pair`, a rule, or a user action.
+  Complete native exact refunds are also interpreted automatically by journal
+  processing when quantities conserve and fee timing is representable. A
+  positive principal shortfall across dates retains the targeted
+  `native_transition_fee_timing_unresolved` hold. Manual pairing or a price
+  override does not supply the missing in-transit custody and fee timeline.
+  Imported or incomplete evidence remains available for explicit
+  `transfers bulk-pair`, a rule, or a user-reviewed component.
 
 Coverage limits: the link needs on-chain witness data, so it covers
 chain-synced Boltz v1 P2WSH HTLC refunds. CSV/exchange imports and Boltz
-v2 Taproot cooperative refunds carry no witness, and rows synced before
-the `swap_refund_funding_txid` column existed are not backfilled — those
-fall back to the heuristic (different-wallet refunds inside the window)
-or to manual `swap-refund` pairing.
+v2 Taproot cooperative refunds carry no usable witness proof. The matcher can
+recover older native refund links from preserved witnesses; otherwise a new
+wallet sync may provide missing evidence. Bitcoin Core replays wallet history
+once when its graph-normalization version changes. Rows still lacking native
+proof fall back to suggestions or manual `swap-refund` review.
 
 ## Direct swap payouts
 

@@ -15,6 +15,13 @@ Use a component when a single pair cannot describe the history:
 - a refund or channel lifecycle returns value to the same logical wallet; or
 - an N:M consolidation needs explicit source-to-destination allocation.
 
+In the desktop, open **Transfers & Custody → Components** with developer mode
+enabled. The guided form supports manual bridges and swaps, typed source/sink
+legs and explicit allocations. Preview the resolved server plan, then separately
+confirm draft creation or activation. Changes to the form or active book require
+a fresh preview. Existing unsupported component shapes remain readable but cannot
+be silently converted by this editor; the CLI retains the full typed contract.
+
 ## Country-neutral ownership boundary
 
 Bitcoin evidence determines the graph. Country never does.
@@ -207,8 +214,12 @@ always name a wallet and an `occurred_at` timestamp.
 
 ## N:M allocations
 
-One-source fan-out and many-source consolidation are inferred only when the
-flow is unambiguous. A genuine N:M graph needs explicit edges:
+For authored components, one-source fan-out and many-source consolidation are
+inferred only when the flow is unambiguous; a general N:M component needs
+explicit reviewed edges. Separately, a complete native chain event whose
+inputs and destinations are all owned can produce automatic exact FIFO
+allocations without authoring a component (see
+[custody resolution](custody-resolution.md)). Authored edges use this shape:
 
 ```json
 "allocations": [

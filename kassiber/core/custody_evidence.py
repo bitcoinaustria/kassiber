@@ -14,6 +14,8 @@ from .chain_observer.provenance import (
     row_has_current_authoritative_observation,
 )
 from ..wallet_descriptors import normalize_chain, normalize_network
+from .onchain import merge_ownership_txs, parse_ownership_tx
+from .custody_allocations import allocate_msat_fifo
 
 
 _LIGHTNING_WALLET_KINDS = frozenset(
@@ -179,6 +181,110 @@ def row_principal_msat(row: Mapping[str, Any]) -> int:
     return row_boundary_amounts(row).principal_msat
 
 
+def _normalize_owned_bitcoin_fees(rows: Sequence[dict[str, Any]]) -> None:
+    """Allocate one graph fee only when every funding wallet is observed.
+
+    A wallet observer cannot distinguish another connected wallet from a
+    foreign participant. Its collaborative rows therefore retain gross wallet
+    deltas. Closed per-wallet script observations can jointly prove that the
+    whole transaction fee belongs to this profile; its allocation is an
+    accounting convention, never a physical input-to-output claim.
+    """
+
+    groups: dict[CanonicalEventKey, list[dict[str, Any]]] = {}
+    for row in rows:
+        if not isinstance(row.get(_VERIFIED_AUTHORITY_KEY), ChainObservationAuthority):
+            continue
+        key = canonical_event_key(row)
+        if key.native_namespace == "chain" and key.chain == "bitcoin":
+            groups.setdefault(key, []).append(row)
+    for group in groups.values():
+        outbound = [row for row in group if row.get("direction") == "outbound" and int(row.get("amount") or 0) > 0]
+        if not outbound or any(
+            row.get("observation_fee_attribution") != "implicit_wallet_delta"
+            or int(row.get("fee") or 0) != 0
+            or row.get("amount_includes_fee")
+            for row in outbound
+        ):
+            continue
+        if len({row["wallet_id"] for row in group}) != len(group):
+            continue
+        graphs = [_json_object(row.get("raw_json")) for row in group]
+        scripts: dict[str, set[str]] = {}
+        for row, raw in zip(group, graphs):
+            observed_scripts = raw.get("observer_owned_scripts")
+            if not isinstance(observed_scripts, list):
+                continue
+            for script in observed_scripts:
+                if isinstance(script, str) and script:
+                    scripts.setdefault(script, set()).add(str(row["wallet_id"]))
+        parsed_graphs = [parse_ownership_tx(raw) for raw in graphs]
+        if any(parsed is None for parsed in parsed_graphs):
+            continue
+        parsed_graphs = [parsed for parsed in parsed_graphs if parsed is not None]
+        shapes = {
+            (
+                tuple(sorted(str(entry.get("outpoint") or "") for entry in parsed["inputs"])),
+                tuple(sorted(entry["n"] for entry in parsed["outputs"])),
+            )
+            for parsed in parsed_graphs
+        }
+        merged = merge_ownership_txs(parsed_graphs)
+        if len(shapes) != 1 or merged is None or merged.get("evidence_conflicts"):
+            continue
+        if not merged["inputs"] or not merged["outputs"] or any(not entry.get("outpoint") for entry in merged["inputs"]):
+            continue
+        input_totals: dict[str, int] = {}
+        output_totals: dict[str, int] = {}
+        total_in = total_out = 0
+        valid = True
+        for vin in merged["inputs"]:
+            owners = scripts.get(vin.get("script") or "", set())
+            value = vin.get("value_sats")
+            if len(owners) != 1 or value is None:
+                valid = False
+                break
+            owner = next(iter(owners))
+            input_totals[owner] = input_totals.get(owner, 0) + int(value)
+            total_in += int(value)
+        for vout in merged["outputs"]:
+            value = vout.get("value_sats")
+            owners = scripts.get(vout.get("script") or "", set())
+            if value is None or len(owners) > 1:
+                valid = False
+                break
+            total_out += int(value)
+            if owners:
+                owner = next(iter(owners))
+                output_totals[owner] = output_totals.get(owner, 0) + int(value)
+        fee = (total_in - total_out) * 1000
+        if not valid or fee < 0 or any(raw.get("fee") is not None and raw["fee"] != total_in - total_out for raw in graphs):
+            continue
+        for row in group:
+            delta = (input_totals.get(str(row["wallet_id"]), 0) - output_totals.get(str(row["wallet_id"]), 0)) * 1000
+            signed_amount = int(row.get("amount") or 0) * (1 if row.get("direction") == "outbound" else -1)
+            if delta != signed_amount or int(row.get("fee") or 0):
+                valid = False
+        if not valid or sum(int(row["amount"]) for row in outbound) < fee:
+            continue
+        eligible_bearers = [row for row in outbound if int(row["amount"]) > fee]
+        if eligible_bearers:
+            bearer = min(eligible_bearers, key=lambda row: str(row["id"]))
+            allocated_fees = {str(bearer["id"]): fee}
+        else:
+            allocation = allocate_msat_fifo(
+                [(str(row["id"]), int(row["amount"])) for row in sorted(outbound, key=lambda row: str(row["id"]))],
+                [("network-fee", fee)],
+            )
+            allocated_fees = {cell.source_id: cell.amount_msat for cell in allocation.cells}
+        for row in outbound:
+            allocated_fee = allocated_fees.get(str(row["id"]), 0)
+            row["amount"] = int(row["amount"]) - allocated_fee
+            row["fee"] = allocated_fee
+            row["observation_fee_attribution"] = "exact"
+            row["custody_native_fee_normalized"] = True
+
+
 def enriched_quantity_rows(
     rows: Sequence[Mapping[str, Any]],
     *,
@@ -216,6 +322,8 @@ def enriched_quantity_rows(
         item.pop("config_json", None)
         enriched.append(item)
 
+    _normalize_owned_bitcoin_fees(enriched)
+
     # A single multi-wallet on-chain spend is commonly imported once per
     # source wallet, with the whole transaction fee stamped on every row. The
     # per-wallet debit (amount + fee) is still useful, but the physical event has
@@ -234,7 +342,8 @@ def enriched_quantity_rows(
         outbound_by_event.setdefault(event_key, []).append(item)
     for event_rows in outbound_by_event.values():
         positive_fee_rows = [
-            item for item in event_rows if int(item.get("fee") or 0) > 0
+            item for item in event_rows
+            if int(item.get("fee") or 0) > 0 and not item.get("custody_native_fee_normalized")
         ]
         duplicate_fees = {int(item.get("fee") or 0) for item in positive_fee_rows}
         if len(positive_fee_rows) <= 1 or len(duplicate_fees) != 1:

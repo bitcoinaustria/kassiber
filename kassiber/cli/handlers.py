@@ -38,6 +38,7 @@ from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
 from ..core import custody_authored_migration as core_custody_authored_migration
 from ..core import custody_journal as core_custody_journal
+from ..core import quarantine_resolution as core_quarantine_resolution
 from ..core import custody_review_terms as core_custody_review_terms
 from ..core import freshness as core_freshness
 from ..core import exchange_imports as core_exchange_imports
@@ -478,9 +479,14 @@ def _load_matcher_rows(conn, profile_id):
             t.occurred_at, t.direction, t.asset, t.amount, t.amount_includes_fee,
             t.fee, t.kind, t.raw_json, t.excluded,
             w.label AS wallet_label, w.kind AS wallet_kind,
-            w.config_json AS config_json
+            w.config_json AS config_json,
+            observation.authority_version AS observation_authority_version,
+            observation.observer_kinds_json AS observation_observer_kinds_json,
+            observation.graph_hash AS observation_graph_hash,
+            observation.quantity_hash AS observation_quantity_hash
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN chain_observation_provenance observation ON observation.transaction_id = t.id
         WHERE t.profile_id = ?
         """,
         (profile_id,),
@@ -4387,41 +4393,14 @@ def resolve_quarantine_price_override(
     source="cli",
     reason=None,
 ):
-    if fiat_rate is None and fiat_value is None:
-        raise AppError(
-            "Provide at least one of --fiat-rate or --fiat-value",
-            code="validation",
-        )
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     tx = resolve_transaction(conn, profile["id"], tx_ref)
     _ensure_quarantined(conn, profile["id"], tx["id"])
-    new_rate = dec(fiat_rate) if fiat_rate is not None else None
-    new_value = dec(fiat_value) if fiat_value is not None else None
-    amount = abs(msat_to_btc(tx["amount"]))
-    if new_rate is None and new_value is not None and amount > 0:
-        new_rate = new_value / amount
-    if new_value is None and new_rate is not None and amount > 0:
-        new_value = new_rate * amount
-    if new_rate is not None and new_rate <= 0:
-        raise AppError("--fiat-rate must be positive", code="validation")
-    if new_value is not None and new_value < 0:
-        raise AppError("--fiat-value must not be negative", code="validation")
-    record = core_metadata.update_transaction_metadata(
-        conn,
-        workspace_ref,
-        profile_ref,
-        tx["id"],
-        _metadata_hooks(),
-        pricing_update={
-            "fiat_rate": str(new_rate) if new_rate is not None else None,
-            "fiat_value": str(new_value) if new_value is not None else None,
-            "source_kind": pricing.SOURCE_MANUAL_OVERRIDE,
-            "quality": pricing.QUALITY_EXACT,
-            "method": "quarantine_price_override",
-        },
-        source=source,
-        reason=reason or "Resolved quarantine with manual pricing override",
-        commit=False,
+    record = core_quarantine_resolution.update_quarantine_metadata(
+        conn, profile, transaction_id=tx["id"], action="price_override",
+        hooks=_metadata_hooks(), fiat_rate=fiat_rate, fiat_value=fiat_value,
+        authored_source=source,
+        reason=reason or "Resolved quarantine with manual pricing override", commit=False,
     )
     conn.execute(
         "DELETE FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
@@ -4433,8 +4412,8 @@ def resolve_quarantine_price_override(
     return {
         "transaction_id": tx["id"],
         "resolution": "price-override",
-        "fiat_rate": float(new_rate) if new_rate is not None else None,
-        "fiat_value": float(new_value) if new_value is not None else None,
+        "fiat_rate": float(record["fiat_rate_exact"]) if record["fiat_rate_exact"] is not None else None,
+        "fiat_value": float(record["fiat_value_exact"]) if record["fiat_value_exact"] is not None else None,
         "fiat_rate_exact": record["fiat_rate_exact"],
         "fiat_value_exact": record["fiat_value_exact"],
         "pricing_source_kind": record["pricing_source_kind"],
@@ -4455,16 +4434,10 @@ def resolve_quarantine_exclude(
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     tx = resolve_transaction(conn, profile["id"], tx_ref)
     _ensure_quarantined(conn, profile["id"], tx["id"])
-    record = core_metadata.update_transaction_metadata(
-        conn,
-        workspace_ref,
-        profile_ref,
-        tx["id"],
-        _metadata_hooks(),
-        excluded=True,
-        source=source,
-        reason=reason or "Resolved quarantine by excluding transaction",
-        commit=False,
+    record = core_quarantine_resolution.update_quarantine_metadata(
+        conn, profile, transaction_id=tx["id"], action="exclude", hooks=_metadata_hooks(),
+        authored_source=source,
+        reason=reason or "Resolved quarantine by excluding transaction", commit=False,
     )
     conn.execute(
         "DELETE FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",

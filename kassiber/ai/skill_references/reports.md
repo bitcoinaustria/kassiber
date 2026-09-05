@@ -368,6 +368,35 @@ kassiber reports export-source-funds-pdf --case <case-id> --file sof.pdf
 kassiber reports export-source-funds-bundle --case <case-id> --file sof-bundle.zip
 ```
 
+For agent-led work, begin with `ui.source_funds.review_context` for the exact
+target instead of loading whole-book coverage. It returns the canonical report,
+reachable links/sources/evidence, documentary `input_needs`, and a
+`review_fingerprint` binding the current provenance facts and complete `recipe`.
+Respect `scope_truncated`; historical inbound coverage is not current holdings.
+CLI equivalents are `source-funds review-context --target-transaction <id>` and
+`source-funds request-input --target-transaction <id> --action <action>
+--expected-review-fingerprint <fingerprint> --recipe-file <context.json>`.
+
+When evidence is missing, use `ui.source_funds.request_input` with the unchanged
+fingerprint and canonical recipe, explain the missing facts in ordinary words,
+and wait for the user's connection/import/evidence step. This works outside
+quarantine and can improve an exportable attestation. The native evidence picker
+attaches the selected file durably to the target and stages that same managed
+copy for analysis. An attachment is evidence to review, not proof of origin or
+permission to change tax/custody interpretation. Re-read current context after
+input, assembly, source/link edits, or evidence changes; do not reuse stale facts.
+
+Before saving, review `explain_gates` and `disclosure_preview`, then pass the full
+canonical recipe and `expected_review_fingerprint` to `ui.source_funds.cases.save`
+with consent. Reuse its exact saved case ID for export and check the returned
+snapshot hash and file outcome. A saved snapshot remains historical; it does not
+assert that current facts are unchanged. A file/export failure is not completion,
+and missing or changed originals must not be described as verified evidence.
+Private URL/path-bearing recipes are rejected on the AI boundary rather than
+silently redacted into an unusable fingerprint. Use a destination label and
+non-sensitive note, or the local UI/CLI. Recipes too large for the bounded chat
+context also require a narrower recipe or the local workflow.
+
 Gotchas:
 
 - `export-source-funds-pdf` / `export-source-funds-bundle` take ONLY

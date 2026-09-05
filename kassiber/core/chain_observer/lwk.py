@@ -424,6 +424,7 @@ class LwkObserver:
         }
 
     def _records(self, wallet_tx: Any) -> list[Mapping[str, Any]]:
+        from .htlc_evidence import htlc_spend_attestation
         from ..sync_backends import (
             _extract_refund_funding_outpoint,
             _extract_unique_claim_payment_hash_outpoint,
@@ -478,6 +479,9 @@ class LwkObserver:
             decoded.vin, _liquid_witness_items,
             prev_txid_fn=liquid_input_txid, prev_vout_fn=liquid_input_vout,
         )
+        htlc_spend = htlc_spend_attestation(
+            claim=claim, refund=refund, input_count=len(raw_inputs)
+        )
         timestamp = wallet_tx.timestamp()
         occurred_at = timestamp_to_iso(timestamp) if timestamp is not None else UNKNOWN_OCCURRED_AT
         confirmed_at = occurred_at if timestamp is not None else None
@@ -528,6 +532,7 @@ class LwkObserver:
                                 "chain": "liquid",
                                 "network": self.identity.network,
                                 "observer": "lwk",
+                                **({"htlc_spend": htlc_spend} if htlc_spend else {}),
                                 "ownership_graph_version": 1,
                                 "vin": stored_vin,
                                 "vout": stored_vout,

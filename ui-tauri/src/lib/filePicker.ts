@@ -42,6 +42,8 @@ export interface PickedFileWithContents {
 
 export interface DocumentImportSourceSelection {
   document_token: string;
+  attachment_id?: string;
+  transaction_id?: string;
   source: {
     filename: string;
     media_type?: string;
@@ -132,16 +134,28 @@ export async function pickDocumentImportSource(): Promise<DocumentImportSourceSe
  * since an assistant attachment is usually a CSV/XLSX export from an exchange
  * that has no dedicated importer.
  */
-export async function pickChatAttachmentSource(): Promise<DocumentImportSourceSelection | null> {
+export async function pickChatAttachmentSource(options?: {
+  expected_scope?: { workspace_id: string; profile_id: string };
+  review_case_id?: string;
+  review_recipe?: Record<string, unknown>;
+  expected_review_fingerprint?: string;
+}): Promise<DocumentImportSourceSelection | null> {
   if (!isFilePickerAvailable) return null;
   if (isBridgeRuntime) {
-    const payload = await callFilePickerBridge({ purpose: "chat_attachment" });
+    const payload = await callFilePickerBridge({
+      purpose: "chat_attachment", ...options,
+    });
     if (payload.error) throw new Error(String(payload.error));
     return documentImportSourceSelection(payload.documentImportSource);
   }
   const { invoke } = await import("@tauri-apps/api/core");
   return documentImportSourceSelection(
-    await invoke<unknown>("pick_chat_attachment_source"),
+    await invoke<unknown>("pick_chat_attachment_source", {
+      expectedScope: options?.expected_scope,
+      reviewCaseId: options?.review_case_id,
+      ...(options?.review_recipe === undefined ? {} : { reviewRecipe: options.review_recipe }),
+      ...(options?.expected_review_fingerprint === undefined ? {} : { expectedReviewFingerprint: options.expected_review_fingerprint }),
+    }),
   );
 }
 

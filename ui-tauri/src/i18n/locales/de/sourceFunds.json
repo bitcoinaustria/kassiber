@@ -388,5 +388,247 @@
     "gapMarked": "Lücke als geprüft markiert",
     "sourceLinked": "Quelle verknüpft",
     "sourcePathBody": "Der Mittelherkunftspfad wurde aktualisiert."
+  },
+  "case": {
+    "description": "Erkläre die Herkunft eines Betrags anhand der Nachweise in diesem Buch.",
+    "loading": "Aktueller Fall wird geladen …",
+    "scopeError": "Das aktive Buch konnte nicht bestimmt werden. Bitte versuche es erneut.",
+    "investigate": "Mit dem Assistenten prüfen",
+    "assistantPrompt": "Prüfe die Mittelherkunft für Transaktion {{target}} mit ui.source_funds.review_context und genau diesen Optionen: {{recipe}}. Erkläre, was die vorhandenen Nachweise belegen und was noch fehlt. Nutze die Eingabeübergabe für die Mittelherkunft, wenn eine Verbindung, ein Historienimport oder ein Anhang benötigt wird. Zeige vorgeschlagene Änderungen vor der Zustimmung; eine dokumentierte Lücke ist kein Herkunftsnachweis.",
+    "selectTarget": "Wähle eine Transaktion und den zu erklärenden Betrag.",
+    "fullAmount": "Gesamter Transaktionsbetrag",
+    "needsEvidence": "Weitere Nachweise oder eine Prüfung sind erforderlich.",
+    "exportable": "Der aktuelle Bericht erfüllt die Exportprüfungen.",
+    "reviewUnavailable": "Der aktuelle Nachweispfad konnte nicht geladen werden.",
+    "targetUnavailable": "Diese Transaktion konnte im aktiven Buch nicht aufgelöst werden. Wähle eine Transaktion oder gib ihre genaue Referenz ein.",
+    "findings": "{{blockers}} Hindernisse · {{warnings}} Hinweise",
+    "findingsTitle": "Offene Prüfpunkte",
+    "noBlockers": "Im aktuellen Bericht gibt es keine offenen Prüfpunkte. Die Exportmöglichkeit wird gesondert geprüft.",
+    "targetSection": "Transaktion und Betrag",
+    "disclosureSection": "Offenlegung und Empfänger prüfen",
+    "exportSection": "Fall speichern und exportieren",
+    "evidenceSection": "Nachweise und Verlauf",
+    "targetReference": "Genaue Transaktionsreferenz",
+    "targetReferenceHint": "Transaktions-ID oder vollständige Txid",
+    "transactionsError": "Transaktionen konnten nicht geladen werden.",
+    "loadMore": "Weitere Transaktionen laden",
+    "loadedTransactions": "{{count}} Transaktionen geladen",
+    "useTarget": "Gewähltes Ziel verwenden",
+    "omitFlow": "Daten des Verlaufsdiagramms",
+    "omitTransactions": "Transaktionsdetails",
+    "omitLinks": "Geprüfte Verknüpfungen",
+    "omitNodes": "Knoten des Offenlegungsgraphen",
+    "exportBlocked": "Der aktuelle Bericht erfüllt die Exportprüfungen noch nicht.",
+    "rendering": "PDF wird erzeugt …",
+    "buildingBundle": "Paket wird erstellt …",
+    "exportBundle": "Speichern und Paket exportieren",
+    "exported": "Exportiert: {{filename}}",
+    "fullyTraced": "Vollständig nachvollzogen · {{count}} Eingänge",
+    "attested": "Bestätigte frühere Historie ({{percent}} %) wird gesondert ausgewiesen und zählt nicht als vollständig nachvollzogen.",
+    "partialCoverage": "Teilweise: {{shown}} von {{total}} Eingängen eingeordnet.",
+    "optionalRecipient": "Kein Empfänger ausgewählt. Ein Empfänger ist optional; die Offenlegungseinstellungen bestimmen den Berichtsinhalt.",
+    "omitted": "Im PDF weggelassen",
+    "levelSummary": "Ebene {{level}} · {{transactions}} Transaktionen · {{sources}} Quellen",
+    "scopeTruncated": "Diese Prüfung hat ihre Nachweisgrenze erreicht. Die angezeigte Liste ist unvollständig; fehlende Zeilen belegen keinen vollständigen Pfad.",
+    "exportError": "Der Export wurde nicht abgeschlossen. Prüfe den aktuellen Fall und versuche es erneut.",
+    "historyAssembled": "Historie zusammengestellt",
+    "exportFingerprintChanged": "Der Fall hat sich geändert. Prüfe ihn vor dem Export erneut.",
+    "remainingMore": "+{{count}} weitere",
+    "optionalAmount": "Leer lassen, um den gesamten Transaktionsbetrag zu erklären.",
+    "notClassified": "Nicht eingeordnet"
+  },
+  "workstation": {
+    "amounts": "Beträge",
+    "case": "Fall",
+    "dataSources": "Datenquellen",
+    "detailed": "Detailliert",
+    "diagramDetail": "Diagrammdetails",
+    "evidenceBundle": "Nachweispaket",
+    "frozenIntoTheCaseAt": "Wird beim Export im Fall festgehalten.",
+    "goToTheTraceWork": "Offene Prüfpunkte ansehen →",
+    "hide": "Ausblenden",
+    "inboundHistoryTraced": "Eingangshistorie nachvollzogen",
+    "level": "Ebene",
+    "localPreviewDataIsNot": "Lokale Vorschaudaten sind noch nicht verfügbar.",
+    "maskRecipientNameOnThe": "Empfängernamen auf dem Deckblatt verbergen",
+    "omitVerboseSections": "Ausführliche Abschnitte weglassen",
+    "openTransactionDetails": "Transaktionsdetails öffnen",
+    "openTransactionToFix": "Transaktion zur Prüfung öffnen",
+    "pertransactionDisclosure": "Offenlegung je Transaktion",
+    "reportOptions": "Berichtsoptionen",
+    "reportVisuals": "Berichtsdiagramme",
+    "show": "Anzeigen",
+    "snapshot": "Momentaufnahme",
+    "sourceMix": "Herkunftsmix",
+    "sourceoffundsPdf": "PDF zur Mittelherkunft",
+    "status": "Status",
+    "summary": "Zusammenfassung",
+    "transactionDetailsByLevel": "Transaktionsdetails nach Ebene",
+    "viewDetails": "Details ansehen",
+    "viewTransactionDetails": "Transaktionsdetails ansehen",
+    "whatNeedsExplaining": "Was soll erklärt werden?",
+    "workLedger": "Offene Prüfpunkte",
+    "everyDossierIsAnchoredTo": "Jeder Fall beginnt bei einer Transaktion. Kassiber verfolgt ihre Historie zurück und begrenzt den Bericht auf den gewählten Betrag.",
+    "everythingBelowIsExactlyWhat": "Prüfe die Offenlegung vor dem Export. Wähle den Umfang, blende einzelne Transaktionen aus und passe die Berichtsabschnitte an den Empfänger an.",
+    "kassiberProvesEveryHopIt": "Kassiber wertet vorhandene Wallet-Beobachtungen, Zahlungshashes und geprüfte Verknüpfungen aus. Vorschläge und bestätigte Nachweise bleiben unterscheidbar.",
+    "level1IsTheReport": "Ebene 1 ist die Zieltransaktion. Jede weitere Ebene folgt einer geprüften Verknüpfung zurück zu den ursprünglichen Quellen. Diese Tabelle erscheint auch im exportierten PDF.",
+    "noMatchedLinksYetAssemble": "Noch keine passenden Verknüpfungen. Die Historienprüfung berücksichtigt Ein- und Ausgänge, Zahlungshashes, Transaktionsidentitäten, geprüfte Paare und Anbieterreferenzen.",
+    "overrideTheRevealModeFor": "Passe die Offenlegung einzelner Transaktionen an. Änderungen aktualisieren die Vorschau und werden im exportierten Fall festgehalten.",
+    "renderedOnThisDeviceIdentical": "Lokal erzeugte Vorschau der Berichtsdiagramme.",
+    "reportPdfPlusTheOriginal": "Berichts-PDF, ausgewählte Nachweisdateien und SHA-256-Prüfverzeichnis im gewählten Offenlegungsumfang.",
+    "saveAFrozenCaseAnd": "Speichere einen unveränderlichen Fall und exportiere das ZIP-Paket aus derselben geprüften Momentaufnahme:",
+    "savesTheCaseSnapshotFirst": "Speichert zuerst den Fall und erzeugt daraus das PDF.",
+    "whoReceivesThisDossierTheir": "Der Empfänger ist optional. Seine bevorzugte Offenlegung ist ein Vorschlag; deine Auswahl gilt.",
+    "buildingReviewedFlow": "Geprüfter Verlauf wird aufgebaut …",
+    "computingCoverage": "Abdeckung wird berechnet …",
+    "searchTxidWalletNote": "Txid, Wallet oder Notiz suchen …",
+    "krakenBitpandaOtcDesk": "Kraken, Bitpanda, OTC-Handel …"
+  },
+  "gapAction": {
+    "open_source_creator": "Diese Lücke dokumentieren",
+    "open_link_review": "Diese Verknüpfung prüfen",
+    "open_review_queue": "Prüfliste öffnen",
+    "open_source": "Quellen öffnen",
+    "open_transaction": "Transaktion öffnen"
+  },
+  "coverageBucket": {
+    "fully_traced": "Vollständig nachvollzogen",
+    "attested": "Bestätigte Historie",
+    "in_review": "In Prüfung",
+    "untraced": "Nicht nachvollzogen",
+    "not_classified": "Nicht eingeordnet"
+  },
+  "findings": {
+    "path_truncated": {
+      "title": "Pfad unvollständig",
+      "nextStep": "Den vorgelagerten Pfad klären oder fehlende Historie bestätigen",
+      "messages": {
+        "source-fundsGraphExceededThePerreportNodeEdge": "Der Herkunftsgraph hat die Größenbegrenzung erreicht. Prüfe vorgelagerte Vorschläge oder grenze das Berichtsziel vor einem erneuten Versuch weiter ein.",
+        "maximumSourcefundsPathDepthReached": "Die maximale Tiefe des Herkunftspfads wurde erreicht."
+      }
+    },
+    "missing_history": {
+      "title": "Fehlende Historie",
+      "nextStep": "Ursprungsquelle verknüpfen oder die Lücke bestätigen",
+      "messages": {
+        "referencedTransactionIsNoLongerPresent": "Die referenzierte Transaktion ist nicht mehr vorhanden.",
+        "thePathStopsAtATransactionWithout": "Der Pfad endet bei einer Transaktion ohne geprüfte Ursprungsquelle oder dokumentierte Bestätigung der fehlenden Historie.",
+        "reviewedSourceRecordIsMissing": "Der geprüfte Quelldatensatz fehlt.",
+        "reviewedMissinghistoryGapIncludedItIsNot": "Eine geprüfte Lücke in der Historie wurde aufgenommen. Sie ist keine tatsächliche Ursprungsquelle.",
+        "reviewedParentTransactionIsMissing": "Die geprüfte Vorgängertransaktion fehlt."
+      }
+    },
+    "missing_pricing": {
+      "title": "Fehlende Bewertung",
+      "nextStep": "Fiat-Preis für diese Transaktion ergänzen",
+      "messages": {
+        "aTransactionOnTheDisclosedPathHas": "Für eine Transaktion im offengelegten Pfad fehlt die Fiat-Bewertung."
+      }
+    },
+    "asset_mismatch": {
+      "title": "Abweichender Vermögenswert",
+      "nextStep": "Die Verknüpfung mit übereinstimmenden Vermögenswerten erneut prüfen",
+      "messages": {
+        "aReviewedPathDeclaresADifferentAsset": "Ein geprüfter Pfad nennt einen anderen Vermögenswert als die verwendete Transaktion.",
+        "aSelftransferLinkDeclaresADifferentAsset": "Eine Eigenübertragung nennt einen anderen Vermögenswert als ihre Vorgänger- oder Zieltransaktion.",
+        "aRepeatedUpstreamTransactionIsRequiredWith": "Eine mehrfach verwendete Vorgängertransaktion wird mit widersprüchlichen Vermögenswerten benötigt."
+      }
+    },
+    "transaction_overallocation": {
+      "title": "Transaktion zu stark zugeordnet",
+      "nextStep": "Den zugeordneten Betrag auf den Betrag der Vorgängertransaktion reduzieren",
+      "messages": {
+        "aReviewedPathRequiresMoreValueThan": "Ein geprüfter Pfad benötigt mehr Wert, als diese Transaktion enthält."
+      }
+    },
+    "unreviewed_link": {
+      "title": "Verknüpfung ungeprüft",
+      "nextStep": "Die vorgeschlagene Verknüpfung prüfen oder ablehnen",
+      "messages": {
+        "aSuggestedSourcefundsLinkStillNeedsReview": "Eine vorgeschlagene Herkunftsverknüpfung muss vor dem Export noch geprüft werden."
+      }
+    },
+    "ambiguous_allocation": {
+      "title": "Unklare Zuordnung",
+      "nextStep": "Betrag und Zuordnungsregel an der Verknüpfung ausdrücklich festlegen",
+      "messages": {
+        "reviewedAllocationsDoNotExactlyCoverThe": "Die geprüften Zuordnungen decken den benötigten Betrag nicht exakt ab.",
+        "aReviewedLinkIsMissingAnExplicit": "Bei einer geprüften Verknüpfung fehlt ein ausdrücklich zugeordneter Betrag.",
+        "aReviewedLinkStillUsesAHeuristic": "Eine geprüfte Verknüpfung verwendet noch eine heuristische oder unbekannte Zuordnungsregel.",
+        "aRepeatedUpstreamTransactionReceivedAdditionalRequired": "Für eine bereits geprüfte, mehrfach verwendete Vorgängertransaktion wird nachträglich ein zusätzlicher Betrag benötigt.",
+        "selectedAmountNotExactlyRepresentable": "Der gewählte Betrag lässt sich nicht im geprüften Zuordnungsverhältnis in exakten Millisatoshis abbilden."
+      }
+    },
+    "unconfirmed_chain_data": {
+      "title": "Unbestätigte Blockchain-Daten",
+      "nextStep": "Die zugrunde liegende Blockchain-Beobachtung bestätigen oder entfernen",
+      "messages": {
+        "unconfirmedChainObservationsCannotBeUsedAs": "Unbestätigte Blockchain-Beobachtungen können im PDF-Export nicht als Nachweis dienen."
+      }
+    },
+    "chain_observation_privacy": {
+      "title": "Blockchain-Beobachtung",
+      "nextStep": "Reine Blockchain-Beobachtungen sind Kontext: Primärnachweise ergänzen",
+      "messages": {
+        "chain-backendObservationsAreContextOnlyAndDo": "Beobachtungen eines Blockchain-Backends liefern Kontext, belegen aber kein Eigentum."
+      }
+    },
+    "privacy_hop_unresolved": {
+      "title": "Privatsphäre-Übergang ungeklärt",
+      "nextStep": "Ausdrückliche Nachweise für den Privatsphäre-Übergang ergänzen",
+      "messages": {
+        "privacy-hopLinksRequireExplicitSupportingEvidenceUnrelated": "Verknüpfungen über Privatsphäre-Transaktionen benötigen ausdrückliche Nachweise. Eingänge unbeteiligter Teilnehmer werden nicht angezeigt."
+      }
+    },
+    "stale_custody_component_lineage": {
+      "title": "Verwahrungsnachweis geändert",
+      "nextStep": "Die betreffende Verknüpfung oder Quelle zur Prüfung öffnen",
+      "messages": {
+        "aReviewedCustodyLinkIsAbsentOr": "Eine geprüfte Verwahrungsverknüpfung fehlt in der aktuellen gespeicherten Ableitung oder ist dort veraltet."
+      }
+    },
+    "source_asset_mismatch": {
+      "title": "Abweichender Vermögenswert der Quelle",
+      "nextStep": "Eine Quelle mit passendem Vermögenswert wählen",
+      "messages": {
+        "aReviewedLinkAllocatesADifferentAsset": "Eine geprüfte Verknüpfung ordnet einen anderen Vermögenswert zu als ihren Quelldatensatz."
+      }
+    },
+    "chronology_violation": {
+      "title": "Zeitlicher Widerspruch",
+      "nextStep": "Eine Vorgängertransaktion wählen, die spätestens am Datum der Folgetransaktion liegt",
+      "messages": {
+        "aReviewedSourceIsDatedAfterThe": "Eine geprüfte Quelle liegt zeitlich nach der Transaktion, die sie finanziert.",
+        "aReviewedParentTransactionOccursAfterThe": "Eine geprüfte Vorgängertransaktion liegt zeitlich nach der Transaktion, die sie finanziert."
+      }
+    },
+    "path_cycle": {
+      "title": "Kreislauf im Pfad",
+      "nextStep": "Den Kreislauf durch Entfernen einer geprüften Verknüpfung auflösen",
+      "messages": {
+        "aReviewedSourcefundsPathFormsACycle": "Ein geprüfter Herkunftspfad bildet einen Kreislauf."
+      }
+    },
+    "source_amount_missing": {
+      "title": "Quellbetrag fehlt",
+      "nextStep": "Den Betrag der Quelle vor dem Export festlegen",
+      "messages": {
+        "aConcreteSourceRecordNeedsAnAmount": "Eine konkrete Quelle benötigt einen Betrag, bevor sie den Export stützen kann."
+      }
+    },
+    "source_overallocation": {
+      "title": "Quelle zu stark zugeordnet",
+      "nextStep": "Zuordnungen reduzieren oder auf mehrere Quellen verteilen",
+      "messages": {
+        "reviewedLinksAllocateMoreFundsThanThe": "Die geprüften Verknüpfungen ordnen mehr Mittel zu, als der Quelldatensatz enthält."
+      }
+    },
+    "opening_balance_attestation": {
+      "title": "Bestätigter Anfangsbestand",
+      "nextStep": "Bestätigte Anfangsbestände sind schwächer als Primärnachweise",
+      "messages": {
+        "openingBalanceIsAnAttestedPriorhistoryStop,": "Der Anfangsbestand bestätigt einen Endpunkt der früheren Historie. Er ist keine vollständig nachvollzogene Ursprungsquelle."
+      }
+    }
   }
 }
