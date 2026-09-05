@@ -11,6 +11,22 @@ import sys
 import traceback
 from typing import Any, Sequence
 
+# PyInstaller's sys.executable is this sidecar, not a Python interpreter. Keep
+# these two fixed parser jobs ahead of daemon/key/database bootstrap. Bytes are
+# supplied only on stdin; there is no arbitrary module or CLI dispatch here.
+if getattr(sys, "frozen", False) and sys.argv[1:2] == ["--accounting-document-worker"]:
+    if os.name != "posix":
+        raise SystemExit(2)
+    if sys.argv[2:3] == ["text"] and len(sys.argv) == 4:
+        from ..core.accounting._document_text_worker import main as _text_worker
+        sys.argv = [sys.argv[0], *sys.argv[3:]]
+        raise SystemExit(_text_worker())
+    if sys.argv[2:3] == ["ocr"] and len(sys.argv) == 8:
+        from ..core.accounting._document_ocr_worker import main as _ocr_worker
+        sys.argv = [sys.argv[0], *sys.argv[3:]]
+        raise SystemExit(_ocr_worker())
+    raise SystemExit(2)
+
 from .. import daemon as daemon_runtime
 from ..ai import (
     AI_PROVIDER_KINDS,
@@ -175,6 +191,7 @@ from ..db import migrate_hidden_home_state_root_if_needed
 from ..secrets.migration import create_empty_encrypted_database
 from ..secrets.cli import add_secrets_parser, dispatch_secrets
 from ..core.sync_replication.cli import add_sync_parser, dispatch_sync
+from .accounting import add_accounting_parser, dispatch_accounting
 from ..secrets.cli_input import (
     add_secret_stdin_options,
     enforce_single_stdin_consumer,
@@ -1220,6 +1237,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_backup_parser(sub)
     add_sync_parser(sub)
     add_review_parser(sub)
+    add_accounting_parser(sub)
 
     backends = sub.add_parser("backends")
     backends_sub = backends.add_subparsers(dest="backends_command", required=True)
@@ -3499,6 +3517,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         return emit(args, dispatch_sync(conn, args))
     if args.command == "review":
         return emit(args, dispatch_review(conn, args))
+    if args.command == "accounting":
+        return emit(args, dispatch_accounting(conn, args))
     if args.command == "backends":
         if args.backends_command == "list":
             return emit(args, core_accounts.list_backends(args.runtime_config))

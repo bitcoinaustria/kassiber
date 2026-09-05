@@ -21,7 +21,7 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | --- | --- | --- | --- |
 | `bdkpython` | `3.0.0` (exact) | Watch-only Bitcoin wallet observation through BDK's Esplora and Electrum clients; state is persisted as explicit versioned JSON inside Kassiber's SQLCipher database | MIT OR Apache-2.0 |
 | `lwk` | `0.18.0` (exact) | Watch-only Liquid wallet observation through LWK's Esplora and Electrum clients; opaque `ForeignStore` values live only inside Kassiber's SQLCipher database | MIT (BSD-MIT wording) |
-| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@7b0dd6771c611e83451cd7f97782af0c15382197` | Tax engine used by journal processing and tax-aware reports; separates acquisition basis from cutoff-scoped pool holdings | Apache-2.0 |
+| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@3d2e03ef27696fbd00f4516a0cb745300083e227` | Existing tax engine, retaining RP2-owned lot basis, Austrian moving-average and swap-carry fixes instead of duplicating tax calculations locally | Apache-2.0 |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential output handling | MIT |
 | `XlsxWriter` | `>=3.2,<4` | Styled `.xlsx` workbook export for practitioner-facing reports and the generic-ledger import template | BSD-2-Clause |
 | `openpyxl` | `>=3.1,<4` | Reads filled-in `.xlsx` files for the generic-ledger manual importer | MIT |
@@ -60,6 +60,25 @@ standard library; it is not replaced with custom signing or encryption code.
 Frontend overrides select patched compatible versions for existing router,
 provider-broker and build-tool dependencies, rather than adding new frameworks.
 The package-manager lockfiles remain the authoritative transitive inventory.
+
+### Optional accounting document tools (not bundled)
+
+Accounting adds no mandatory engine or OCR dependency. Its isolated POSIX
+document worker can invoke already installed `pdftotext`/`pdftoppm` from
+[Poppler](https://poppler.freedesktop.org/) and
+[Tesseract](https://github.com/tesseract-ocr/tesseract) for explicit local PDF/OCR
+requests. Tesseract uses the [Apache-2.0 license](https://github.com/tesseract-ocr/tesseract/blob/main/LICENSE).
+Poppler is GPL-licensed; consult the actual distributor's COPYING files and
+upstream license terms before any future bundling. Neither native binaries nor
+OCR trained-data files are copied into Kassiber by this feature.
+
+The installer/operator owns versions, native security updates and language-data
+installation. Capability checks fail explicitly when tools/languages are
+missing; no silent downloads, hosted OCR, or plaintext document caches are
+introduced. Native parsing is currently POSIX-only; plain UTF-8/manual reviewed
+transcription remains available without these tools. Regression tests exercise
+synthetic OCR workers and real Poppler; real Tesseract testing is conditional
+on a preinstalled runtime. See [general accounting](docs/reference/general-accounting.md).
 
 In the current tested RP2 install path, one runtime dependency worth calling out explicitly is:
 

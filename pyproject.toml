@@ -15,7 +15,7 @@ authors = [
 dependencies = [
   "bdkpython==3.0.0; python_version < '3.14' and (platform_system == 'Darwin' or (platform_system == 'Linux' and platform_machine == 'x86_64') or (platform_system == 'Windows' and platform_machine == 'AMD64'))",
   "embit>=0.8.0",
-  "rp2 @ git+https://github.com/bitcoinaustria/rp2.git@7b0dd6771c611e83451cd7f97782af0c15382197",
+  "rp2 @ git+https://github.com/bitcoinaustria/rp2.git@3d2e03ef27696fbd00f4516a0cb745300083e227",
   "XlsxWriter>=3.2,<4",
   "openpyxl>=3.1,<4",
   "reportlab>=4.4,<5",
@@ -48,6 +48,7 @@ include = ["kassiber*"]
 
 [tool.setuptools.package-data]
 kassiber = [
+  "core/accounting/jurisdiction_data/*.json",
   "ai/provider_broker/*.mjs",
   "ai/skill_references/*.md",
   "data/rates/kraken/btc_daily/*.csv",

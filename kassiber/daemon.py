@@ -229,6 +229,8 @@ from .egress_ledger import (
 from .envelope import build_envelope, build_error_envelope, build_event_envelope, json_ready
 from .errors import AppError
 from .daemon_sync_replication import SYNC_UI_KINDS, dispatch_sync_ui
+from .daemon_accounting import ACCOUNTING_UI_KINDS, dispatch_accounting_ui
+from . import daemon_accounting_documents
 from .projects import (
     create_project,
     get_project,
@@ -255,7 +257,7 @@ from .daemon_swap_review import (
 from .daemon_freshness import (
     _apply_sync_failure_blocker,
     _auto_maintain_for_read,
-    _clear_unlocked_passphrase,
+    _clear_unlocked_passphrase as _clear_unlocked_passphrase_base,
     _coerce_wallets_sync_args,
     _freshness_configure_payload,
     _freshness_control_payload,
@@ -332,6 +334,8 @@ _REQUEST_LOGGER = logging.getLogger("kassiber.daemon.request")
 _GRAPH_SEMANTICS_CACHE: dict[str, tuple[tuple[Any, ...], Any]] = {}
 
 SUPPORTED_KINDS = (
+    *ACCOUNTING_UI_KINDS,
+    *daemon_accounting_documents.KINDS,
     "status",
     "ui.logs.snapshot",
     "ui.egress.snapshot",
@@ -1141,6 +1145,16 @@ class DaemonContext:
     ai_discovery_cache: ProviderDiscoveryCache = field(
         default_factory=ProviderDiscoveryCache
     )
+    accounting_document_jobs: daemon_accounting_documents.DocumentJobs = field(
+        default_factory=daemon_accounting_documents.DocumentJobs
+    )
+
+
+def _clear_unlocked_passphrase(ctx):
+    _clear_unlocked_passphrase_base(ctx)
+    jobs = getattr(ctx, "accounting_document_jobs", None)
+    if jobs is not None:
+        jobs.cancel_all()
 
 
 @dataclass
@@ -9131,6 +9145,16 @@ def _delete_current_workspace(ctx: "DaemonContext") -> dict[str, Any]:
             hint="Reset the local UI identity if you only need to return to the Welcome flow.",
         )
 
+    if ctx.conn.execute(
+        "SELECT 1 FROM gl_books b JOIN profiles p ON p.id=b.profile_id WHERE p.workspace_id=? LIMIT 1",
+        (workspace_id,),
+    ).fetchone():
+        raise AppError(
+            "This books set contains retained accounting books.",
+            code="accounting_retention_required",
+            hint="Accounting records cannot be removed with the workspace deletion action.",
+        )
+
     counts = {
         "profiles": ctx.conn.execute(
             "SELECT COUNT(*) AS count FROM profiles WHERE workspace_id = ?",
@@ -16328,6 +16352,24 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.accounting.document_cancel":
+        result = ctx.accounting_document_jobs.cancel(ctx, _coerce_args_dict(request_id, request.get("args")))
+        return (_with_request_id(build_envelope(kind, result), request_id), False)
+
+    if kind == "ui.accounting.document_extract":
+        ctx.accounting_document_jobs.start(ctx, request_id, _coerce_args_dict(request_id, request.get("args")))
+        return (None, False)
+
+    if kind in ACCOUNTING_UI_KINDS:
+        args = _coerce_args_dict(request_id, request.get("args"))
+        return (
+            _with_request_id(
+                build_envelope(kind, dispatch_accounting_ui(ctx.conn, kind=kind, args=args)),
+                request_id,
+            ),
+            False,
+        )
+
     if kind in SYNC_UI_KINDS:
         args = _coerce_args_dict(request_id, request.get("args"))
 
@@ -17671,6 +17713,7 @@ def run(
     try:
         while True:
             _drain_daemon_main_thread_tasks(ctx)
+            ctx.accounting_document_jobs.poll(ctx, out)
             try:
                 line = _next_input_line(ctx, timeout=0.05)
             except queue.Empty:
@@ -17825,6 +17868,7 @@ def run(
             require_stopped=False,
         )
         _clear_unlocked_passphrase(ctx)
+        ctx.accounting_document_jobs.shutdown()
         _retry_retired_project_resources(ctx)
         if worker_stopped:
             _retire_current_project_resources(ctx)

@@ -104,17 +104,22 @@ def test_version_is_database_free(cli_parser):
     assert output.getvalue().strip() == f"Kassiber {__version__}"
 
 
-def _run_cli(home: Path, *args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+def _cli_environment(home: Path) -> dict[str, str]:
     env = os.environ.copy()
     env["HOME"] = str(home)
     env.pop("XDG_DATA_HOME", None)
     if os.name == "nt":
         env["USERPROFILE"] = str(home)
+        env["LOCALAPPDATA"] = str(home / "AppData" / "Local")
     env["PYTHONPYCACHEPREFIX"] = str(home / "pycache")
+    return env
+
+
+def _run_cli(home: Path, *args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "kassiber", *args],
         cwd=ROOT,
-        env=env,
+        env=_cli_environment(home),
         input=input_text,
         text=True,
         capture_output=True,
@@ -228,7 +233,7 @@ def test_hidden_migration_helper_moves_default_state(tmp_path):
 
     native_catalog = native_state_root(
         home=tmp_path,
-        environ={key: value for key, value in os.environ.items() if key != "XDG_DATA_HOME"},
+        environ=_cli_environment(tmp_path),
     ) / "config" / "projects.json"
     assert result.returncode == 0, result.stderr
     assert not (tmp_path / ".kassiber" / "config").exists()
