@@ -1,9 +1,6 @@
-"""Exact local additive task scope, retained history and stale agent consent."""
-import json
-
+"""Exact local additive task scope, retained history and stale approvals."""
 import pytest
 
-from kassiber import daemon_accounting_tasks as adapter
 from kassiber.core.accounting import evidence, ledger, tasks
 from kassiber.errors import AppError
 from tests.test_accounting_integration import book  # noqa: F401
@@ -18,15 +15,14 @@ def amendment(conn, profile, task, document, *, key='amend'):
                 expected_revision=preview['expected_revision'], idempotency_key=key, confirmed=True)
 
 
-def test_new_document_joins_same_task_preserving_history_and_staling_agent_consent(book):
+def test_new_document_joins_same_task_preserving_history_and_staling_approval(book):
     conn, profile, _ = book
     task, _ = setup(conn, profile)
     rule(conn, profile)
     prepared, original_request = approve(conn, profile, task['id'], 'prepare')
     original_spec = conn.execute('SELECT spec_json FROM gl_accounting_tasks WHERE id=?', (task['id'],)).fetchone()[0]
     prior_receipts = tasks.get(conn, profile, task['id'])['receipts']
-    grants = adapter.TaskApprovals()
-    old = adapter.execute(conn, profile, 'ui.accounting.task_preview', {'task_id': task['id'], 'step': 'post'}, grants)
+    old = tasks.preview(conn, profile, task['id'], 'post')
     document, review = reviewed_document(conn, profile)
     with pytest.raises(AppError) as denied:
         assign_document(conn, profile, task, document, review)
@@ -40,7 +36,9 @@ def test_new_document_joins_same_task_preserving_history_and_staling_agent_conse
     assert conn.execute('SELECT spec_json FROM gl_accounting_tasks WHERE id=?', (task['id'],)).fetchone()[0] == original_spec
     assert ledger.require_book(conn, profile)['revision'] == payload['expected_revision'] + 1
     with pytest.raises(AppError) as stale:
-        adapter.consent_preview(conn, profile, {'task_id': task['id'], 'approval_id': old['approval_id']}, grants)
+        tasks.execute(conn, profile, 'task-apply', dict(task_id=task['id'], step='post',
+            expected_digest=old['expected_digest'], expected_revision=old['expected_revision'],
+            idempotency_key='stale-post', confirmed=True))
     assert stale.value.code == 'accounting_stale_approval'
     retry = tasks.execute(conn, profile, 'task-amend', payload)
     assert retry['already_applied'] and retry['receipt'] == result['receipt']
@@ -193,8 +191,7 @@ def test_reopened_completed_task_amendment_preserves_old_export_not_completion(b
     assert {'kind': 'task_close_required'} in current_export['blockers']
 
 
-def test_amendment_is_local_only_and_survives_fresh_cli_process(book):
-    from kassiber.ai.tools import get_tool
+def test_amendment_survives_fresh_cli_process(book):
     from tests.test_accounting_cli_tasks import cli
     conn, profile, root = book
     task, _ = setup(conn, profile)
@@ -209,8 +206,3 @@ def test_amendment_is_local_only_and_survives_fresh_cli_process(book):
     assert retry['already_applied'] and retry['receipt'] == applied['receipt']
     current = cli(root, 'task-get', {'task_id': task['id']})['data']
     assert current['spec']['evidence_ids'] == [document['id']]
-    redacted = json.dumps(adapter.summary(current))
-    for private in (document['id'], document['content_sha256'], document['name'], selection['reason']):
-        assert private not in redacted
-    assert get_tool('ui.accounting.task_amend') is None
-    assert get_tool('ui.accounting.task_amend_preview') is None

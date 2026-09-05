@@ -9,10 +9,10 @@ import json
 from uuid import uuid4
 
 from ...errors import AppError
-from . import bank, ledger, posting_batch
+from . import bank, ledger, posting_batch, projection, task_projection
 from .task_schema import ensure_schema
 
-READ_ACTIONS = frozenset({'task-list', 'task-get', 'task-preview', 'task-amend-preview', 'rule-list'})
+READ_ACTIONS = frozenset({'task-list', 'task-get', 'task-preview', 'task-amend-preview', 'task-projection-assign-preview', 'rule-list'})
 WRITE_ACTIONS = frozenset({'task-create', 'task-apply', 'task-cancel', 'task-amend', 'task-source-assign', 'rule-create', 'rule-revoke'})
 STEPS = frozenset({'prepare', 'post', 'close', 'tax_finalize', 'export_close', 'export_tax'})
 MAX_SOURCES = 10000
@@ -42,10 +42,15 @@ def _task(conn, profile_id, task_id):
         _fail('accounting_task_not_found')
     row['spec'] = json.loads(row.pop('spec_json'))
     # The original selection and every prior receipt remain immutable. Only a
-    # separately reviewed, additive local receipt expands the effective scope.
-    amendments = ledger._rows(conn, "SELECT result_json FROM gl_accounting_task_receipts WHERE profile_id=? AND task_id=? AND step='amend_sources' ORDER BY rowid", (profile_id, task_id))
+    # separately reviewed local receipt adds evidence or answers a selected
+    # Bitcoin source's binding/category; it cannot select additional events.
+    amendments = ledger._rows(conn, "SELECT step,result_json FROM gl_accounting_task_receipts WHERE profile_id=? AND task_id=? AND step IN ('amend_sources','projection_assignment') ORDER BY rowid", (profile_id, task_id))
     for amendment in amendments:
-        row['spec']['evidence_ids'].extend(json.loads(amendment['result_json'])['evidence_ids'])
+        retained = json.loads(amendment['result_json'])
+        if amendment['step'] == 'amend_sources':
+            row['spec']['evidence_ids'].extend(retained['evidence_ids'])
+        else:
+            task_projection.fold_assignment(row['spec'], retained)
     row['spec']['evidence_ids'].sort()
     row['scope_revision'] = len(amendments)
     return row
@@ -144,7 +149,7 @@ def _create_rule(conn, profile_id, p):
 
 
 def _create(conn, profile_id, p):
-    _fields(p, {'period_id', 'idempotency_key', 'statement_ids', 'include_period_statements', 'evidence_ids', 'draft_ids', 'tax_workpaper_id'},
+    _fields(p, {'period_id', 'idempotency_key', 'statement_ids', 'include_period_statements', 'evidence_ids', 'draft_ids', 'tax_workpaper_id', 'projection'},
             {'period_id', 'idempotency_key'})
     ledger._text(p['idempotency_key'], 'idempotency_key', maximum=128)
     ledger._text(p['period_id'], 'period_id', maximum=128)
@@ -177,6 +182,8 @@ def _create(conn, profile_id, p):
             _fail('accounting_task_source_scope')
     spec = dict(statement_ids=statements, evidence_ids=evidence_ids, draft_ids=draft_ids,
                 tax_workpaper_id=p.get('tax_workpaper_id'))
+    if 'projection' in p:
+        spec['projection'] = task_projection.normalize(conn, profile_id, p['period_id'], p['projection'], MAX_SOURCES)
     identifier = uuid4().hex
     conn.execute('INSERT INTO gl_accounting_tasks(id,profile_id,period_id,idempotency_key,spec_json,request_digest) VALUES(?,?,?,?,?,?)',
                  (identifier, profile_id, p['period_id'], p['idempotency_key'], ledger.canonical_json(spec), ledger.digest(p)))
@@ -191,6 +198,7 @@ def _population(conn, profile_id, task):
     book = ledger.require_book(conn, profile_id)
     rules = [r for r in _rules(conn, profile_id) if not r['revoked']]
     coverage, proposals, represented = [], [], set()
+    bank_holds = task_projection.bank_holds(conn, profile_id, task)
     for statement_id in task['spec']['statement_ids']:
         report = bank.reconcile_statement(conn, profile_id, statement_id)
         statement = report['statement']
@@ -218,6 +226,8 @@ def _population(conn, profile_id, task):
                 item['status'] = 'covered'
             elif row['remaining_minor'] != abs(row['amount_minor']):
                 item['exception'] = 'partial_bank_allocation'
+            elif row['id'] in bank_holds:
+                item['exception'] = 'accounting_task_bank_source_claimed'
             elif conn.execute('''SELECT 1 FROM gl_lines l JOIN gl_entries e ON e.id=l.entry_id
                 WHERE e.profile_id=? AND e.entry_date=? AND e.status IN ('draft','posted') AND l.account_code=?
                 AND l.debit_minor-l.credit_minor=?
@@ -314,7 +324,8 @@ def _population(conn, profile_id, task):
         if item.get('entry_id') and conn.execute("SELECT 1 FROM gl_entries WHERE profile_id=? AND reversal_of=? AND status='posted'",
                                                (profile_id, item['entry_id'])).fetchone():
             item.update(status='exception', exception='source_entry_reversed')
-    return coverage, proposals
+    bitcoin_rows, bitcoin_proposals = task_projection.population(conn, profile_id, task)
+    return coverage + bitcoin_rows, proposals + bitcoin_proposals
 
 
 def _evidence_payload(conn, profile_id, task, assignment):
@@ -454,15 +465,18 @@ def preview(conn, profile_id, task_id, step):
             conn.execute('SAVEPOINT accounting_task_prepare_preview')
             try:
                 for proposal in proposals:
-                    ledger.create_draft(conn, profile_id, proposal['payload'])
+                    if proposal['source_kind'] != 'bitcoin':
+                        ledger.create_draft(conn, profile_id, proposal['payload'])
             except AppError as exc:
                 blockers.append({'kind': exc.code})
             finally:
                 conn.execute('ROLLBACK TO accounting_task_prepare_preview')
                 conn.execute('RELEASE accounting_task_prepare_preview')
     elif step == 'post':
-        ids = sorted({r['entry_id'] for r in coverage if r['status'] == 'draft'})
-        if not ids:
+        detail['projections'] = [r for r in coverage if r['source_kind'] == 'bitcoin' and r['status'] == 'draft']
+        projection_entries = {r.get('entry_id') for r in detail['projections']}
+        ids = sorted({r['entry_id'] for r in coverage if r['status'] == 'draft' and r['source_kind'] != 'bitcoin'} - projection_entries)
+        if not ids and not detail['projections']:
             blockers.append({'kind': 'nothing_to_post'})
         detail['draft_ids'] = ids
         detail['entries'] = [ledger._entry(conn, profile_id, i) for i in ids]
@@ -527,13 +541,23 @@ def _apply(conn, profile_id, p):
         _fail('accounting_task_blocked')
     step = p['step']
     if step == 'prepare':
-        ids = []
+        ids, projection_ids = [], []
         for proposal in reviewed['proposals']:
+            if proposal['source_kind'] == 'bitcoin':
+                prepared = projection.create_proposal(conn, profile_id, **proposal['request'])
+                if task_projection.financial_view(prepared) != proposal['projection']:
+                    _fail('accounting_stale_approval')
+                projection_ids.append(prepared['id'])
+                if prepared['draft_id']:
+                    ids.append(prepared['draft_id'])
+                continue
             entry = ledger.create_draft(conn, profile_id, proposal['payload'])
             conn.execute('INSERT INTO gl_accounting_task_claims VALUES(?,?,?,?,?)',
                 (profile_id, proposal['source_kind'], proposal['source_id'], p['task_id'], entry['id']))
             ids.append(entry['id'])
         result = {'draft_ids': ids}
+        if projection_ids:
+            result['projection_ids'] = projection_ids
     elif step == 'post':
         ids = reviewed['detail']['draft_ids']
         for start in range(0, len(ids), 50):
@@ -549,6 +573,13 @@ def _apply(conn, profile_id, p):
             line = next(l for l in entry['lines'] if l['account_code'] == row['account_code'])
             bank.allocate_bank_row(conn, profile_id, row_id=row['id'], line_id=line['id'], amount_minor=abs(row['amount_minor']), idempotency_key='task-bank-' + row['id'])
         result = {'posted_ids': ids}
+        if reviewed['detail']['projections']:
+            result['projection_ids'] = []
+            for item in reviewed['detail']['projections']:
+                published = projection.post_proposal(conn, profile_id, proposal_id=item['proposal_id'], expected_digest=item['proposal_digest'])
+                result['projection_ids'].append(published['id'])
+                if published['draft_id']:
+                    ids.append(published['draft_id'])
     elif step == 'close':
         result = ledger.close_period(conn, profile_id, period_id=reviewed['period_id'], expected_revision=p['expected_revision'])
     elif step == 'tax_finalize':
@@ -563,7 +594,7 @@ def _apply(conn, profile_id, p):
         from .tax_workpapers import export_workpaper
         result = export_workpaper(conn, profile_id, final_id=reviewed['detail']['final_id'], confirm_plaintext=True)
     # Export bytes stay in the explicit response; receipts retain identities only.
-    retained = {key: value for key, value in result.items() if key in ('id', 'final_id', 'period_id', 'revision', 'snapshot_digest', 'report_digest', 'input_digest', 'draft_ids', 'posted_ids')}
+    retained = {key: value for key, value in result.items() if key in ('id', 'final_id', 'period_id', 'revision', 'snapshot_digest', 'report_digest', 'input_digest', 'draft_ids', 'posted_ids', 'projection_ids')}
     if step in ('export_close', 'export_tax'):
         retained['artifact_state'] = 'prepared'
         result['artifact_state'] = 'prepared'
@@ -587,7 +618,11 @@ def execute(conn, profile_id, action, payload):
         if action == 'task-amend':
             return _amend(conn, profile_id, payload)
         if action == 'task-source-assign':
+            if payload.get('kind') == 'projection':
+                return task_projection.assign(conn, profile_id, payload)
             return _assign_source(conn, profile_id, payload)
+        if action == 'task-projection-assign-preview':
+            return task_projection.assignment_preview(conn, profile_id, payload)
         if action == 'rule-create':
             return _create_rule(conn, profile_id, payload)
         if action in ('task-list', 'rule-list'):
