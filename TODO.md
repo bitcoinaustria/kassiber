@@ -551,6 +551,9 @@ top of the monolith.
   self-custody Kennzahl assumption in the CLI envelope and PDF/XLSX output;
   domestic-provider withheld KESt needs structured metadata before
   Kassiber can populate the inländisch rows
+- [x] Add exact local evidence amendments to durable accounting tasks and
+  preserve immutable selection/receipts, stale-approval checks and recurring
+  bank-payment allocation guards. Full agent/pilot acceptance remains separate.
 
 ### 0.5e - Rates and journal follow-through
 

@@ -27,6 +27,8 @@ _ACTION_HELP = {
     "task-apply": "Apply one reviewed step using task_id, step, expected_digest, expected_revision, idempotency_key and confirmed:true. Exports also require confirm_plaintext:true; retain the full response to save artifact bytes.",
     "task-cancel": "Cancel task_id with a reason; already committed entries remain unchanged.",
     "task-source-assign": "Explicitly assign selected evidence to a bank row or reviewed posting; requires confirmed:true.",
+    "task-amend-preview": "Locally review adding exact retained evidence_ids to task_id + period_id with a reason; returns expected_digest and expected_revision. No source discovery or posting.",
+    "task-amend": "Append the reviewed evidence_ids to the same task using task_id, period_id, reason, expected_digest, expected_revision, idempotency_key and confirmed:true. Prior receipts remain; old approvals expire. Local only, not an AI tool.",
     "rule-create": "Approve an exact bank description/account/direction rule for draft preparation only.",
     "rule-list": "List explicit preparation rules; empty payload.",
     "rule-revoke": "Revoke a preparation rule by rule_id and reason; existing postings remain unchanged.",

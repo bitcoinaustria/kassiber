@@ -65,6 +65,17 @@ defaults do not infer legal obligations. Executable full workflows live in
 [`test_accounting_integration.py`](../../tests/test_accounting_integration.py)
 and [`test_accounting_tax_workpapers.py`](../../tests/test_accounting_tax_workpapers.py).
 
+## Same-task evidence amendments
+
+Retain a genuinely new missing document in the same encrypted book, then use
+`task-amend-preview` with `task_id`, `period_id`, additive `evidence_ids` and
+`reason`. Approve `task-amend` with that exact selection, `expected_digest`,
+`expected_revision`, `idempotency_key` and `confirmed:true`. An append-only
+receipt extends effective scope; original selection and completed receipts
+remain immutable. Older approvals become stale. Cancelled tasks and closed
+periods cannot acquire new sources; reopening is a separate decision. This
+is explicit local selection, not automatic file discovery or disclosure.
+
 ## Approval, retention and exports
 
 The CLI is an explicit local operator surface, not a generic model dispatcher.
