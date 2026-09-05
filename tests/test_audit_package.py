@@ -303,6 +303,7 @@ class AuditPackageCoreTest(unittest.TestCase):
 
         manifest = json.loads(Path(result["manifest"]).read_text(encoding="utf-8"))
         self.assertEqual(manifest["summary"]["transaction_count"], 1)
+        self.assertEqual(manifest["profile"]["cost_basis_pool_scope"], "global")
         self.assertEqual(manifest["package"]["options"]["include_copied_attachments"], True)
         self.assertEqual(manifest["package"]["options"]["include_url_references"], True)
         self.assertIn("wallet descriptors", manifest["excluded_sensitive_material"])
@@ -1386,12 +1387,17 @@ class AuditPackageCoreTest(unittest.TestCase):
                 "filed_report_impact_count": 1,
             },
         )
-        self.assertEqual(summary["summary"]["schema_migration_audit_count"], 1)
+        self.assertEqual(summary["summary"]["schema_migration_audit_count"], 3)
+        custody_migration_audit = next(
+            audit
+            for audit in summary["schema_migration_audits"]
+            if audit["migration_name"] == "custody-durable-evidence-v1"
+        )
         self.assertEqual(
-            summary["schema_migration_audits"][0]["scope"],
+            custody_migration_audit["scope"],
             "database_schema_only",
         )
-        self.assertNotIn("changes", summary["schema_migration_audits"][0]["impact"])
+        self.assertNotIn("changes", custody_migration_audit["impact"])
         self.assertNotIn("MUST_NOT_LEAVE_LOCAL_DB", json.dumps(summary))
         full_scope_json = json.dumps(summary)
         for unselected_value in (

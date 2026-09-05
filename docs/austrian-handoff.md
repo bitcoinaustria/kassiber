@@ -13,7 +13,7 @@ rp2 reads three markers from `InTransaction.notes` / `OutTransaction.notes`:
 | Marker | Shape | Effect in rp2 |
 | --- | --- | --- |
 | `at_regime=alt` / `at_regime=neu` | flag | forces regime, overrides the 2021-03-01 Europe/Vienna date cutoff |
-| `at_pool=<id>` | non-empty id | partitions the Neu moving-average pool; absent → `"default"`; ignored for Alt. Kassiber emits a single global pool per asset (`"default"`) — see the `at_pool` row below |
+| `at_pool=<id>` | non-empty id | partitions the Neu moving-average pool; absent → `"default"`; ignored for Alt. Kassiber's RP2 adapter maps its generic `global` pool id to `"default"` |
 | `at_swap_link=<id>` | non-empty id required | Neu outgoing leg: zero-gain + pool depletes at avg. Alt: marker ignored. Empty id → rp2 raises `RP2ValueError` |
 
 Multiple markers can coexist on the same `notes` separated by any of
@@ -39,7 +39,8 @@ country-level `compute_tax_for_assets` hook.
 | Field | Type | Populated by |
 | --- | --- | --- |
 | `at_regime` | `"alt" | "neu" | None` | Inbound rows: direct from the 2021-03-01 Europe/Vienna acquisition cutoff. Outbound rows: same cutoff by default, but post-cutoff disposals fall back to `alt` when only Alt inventory remains available in the disposing wallet. Same-asset internal transfers move regime availability between wallets before later disposals are classified. Future: explicit row annotations. |
-| `at_pool` | `str | None` | Single global pool per asset (always `"default"` for AT rows). The gleitender Durchschnittspreis (§ 2 KryptowährungsVO) is computed over the taxpayer's whole holding of each crypto, not per wallet; this also keeps the AT cost-basis pool consistent with the engine's global cost basis. The separate *availability* gate remains per-`(exchange, holder)` and is updated by explicit same-asset internal transfers. Earlier v1 keyed the pool by `wallet_id`, which broke when coins were sold from a transfer-funded wallet (kassiber#213). `resolve_pool_id` keeps a `wallet_id` parameter as a seam for a hypothetical future per-wallet scheme. |
+| `cost_basis_pool_id` | `str | None` | Country-neutral opaque event pool id. Every currently enabled country policy allows only `global`; the RP2 adapter serializes that id as `at_pool=default` for Austrian rows and emits no Austrian marker for generic profiles. |
+| `from_cost_basis_pool_id` / `to_cost_basis_pool_id` | `str | None` | Country-neutral source and destination facts on an internal transfer. Austrian transfers must currently resolve to the same global pool. RP2 has no reviewed two-ended Austrian transfer marker contract, so differing ids fail closed instead of being approximated. |
 | `at_regime_basis` | `"wahlrecht" | None` | Audit-trail provenance of an outbound row's `at_regime`, serialized into notes as `at_regime_basis=wahlrecht` but **not read by rp2**. `wahlrecht` means the disposing wallet held both Alt and Neu inventory, so Neu-first was Kassiber exercising the taxpayer's KryptowährungsVO designation right on their behalf — the statutory presumption absent a designation is earliest-acquired-first. `None` means the regime was forced by the wallet's holdings (pure Alt / pure Neu) or set by an explicit `at_regime_override`. A configurable ordering (earliest-first as the legal default) is a tracked follow-up. |
 | `at_swap_link` | `str | None` | Engine classifier tags both surviving legs of a reviewed Neu cross-asset carrying-value pair with the pair id. |
 
@@ -55,7 +56,7 @@ unambiguous earn-like kinds:
 - `airdrop` -> `AIRDROP`
 - `hardfork`, `hard_fork` -> `HARDFORK`
 - `income`, `routing_income` -> `INCOME`
-- `wages` -> `WAGES`
+- `wages` -> `BUY` (raw `kind=wages` remains provenance)
 
 Generic source-refresh / CSV receives such as `deposit`, `buy`, or Phoenix
 transport types still go through rp2 as `BUY`. Kassiber does not invent
@@ -93,6 +94,11 @@ field. Kassiber does not yet persist structured domestic-provider withheld-KESt
 metadata, so it cannot populate domestic-provider Kennzahlen such as 171, 173,
 or 175. CLI/PDF exports must surface that assumption until the data model can
 represent withheld tax.
+
+`wages` books as an ordinary acquisition. Kassiber treats the reviewed payroll
+EUR value as acquisition basis, keeps the raw transaction kind and attachments
+as provenance, and leaves wage-tax reporting outside the product. It does not
+create a separate employment-income journal or E 1kv row.
 
 `kassiber reports austrian-e1kv` is the canonical annual export. The
 friendlier `reports austrian-tax-summary` and `reports export-austrian`

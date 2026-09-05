@@ -95,6 +95,11 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
 - `13-device-sync.md`: shipped cross-device / multi-user sync guardrails (mailbox-first, no trusted server; issue #309)
 - `14-custody-lineage.md`: custody quantity/tax separation, durable
   missing-wallet bridges, and long-horizon reconciliation
+- `15-custody-simplification.md`: bounded simplification after the custody
+  lineage implementation
+- `16-cost-basis-pools-and-employment-compensation.md`: country-configurable
+  pool scope, exact cross-pool basis carry, and compensation-as-acquisition
+  handling across Kassiber and RP2
 
 ## Highest-Risk Drift Points
 

@@ -26,6 +26,7 @@ so a Steuerberater can review them.
 | AT-009 | Altvermögen declaration | computed by date, user declaration as warning/audit signal if added | future UI flow |
 | AT-010 | provider KESt withholding | outside MVP automation until withholding metadata exists | warning/review |
 | AT-011 | staking classification | classic staking: no laufende Einkünfte at receipt, zero acquisition cost; yield/lending/DeFi products labelled "staking" may be taxable Überlassung | product provenance required |
+| AT-012 | wallet-level cost-basis scope | keep `global`; do not approximate address or wallet pools | Steuerberater/project-owner acceptance plus RP2 two-ended transfer contract required |
 
 ## Implementation Rules
 
@@ -118,6 +119,15 @@ capture product mechanics explicitly. Until then, review staking-labelled rows
 before relying on the E 1kv handoff.
 
 Reference: BMF, [Steuerliche Behandlung von Kryptowährungen](https://www.bmf.gv.at/themen/steuern/sparen-veranlagen/steuerliche-behandlung-von-kryptowaehrungen.html).
+
+### AT-012 Wallet-Level Cost-Basis Scope
+
+Kassiber now has a country-neutral pool-scope policy and source/destination pool
+facts, but every current country remains `global`-only. Austria must not expose
+`wallet` until the legal/product gate accepts that scope for the intended
+self-custody setup and RP2 defines a reviewed two-ended transfer marker. Until
+both exist, requesting `wallet` fails and Austrian transfers stay in
+`at_pool=default`.
 
 ## Sources To Recheck When Touching This File
 

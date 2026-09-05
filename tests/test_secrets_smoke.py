@@ -52,6 +52,7 @@ from kassiber.backup.safe_tar import (
     UnsafeTarMember,
     inspect_tar_members,
 )
+from kassiber.core.accounts import create_profile, create_workspace
 from kassiber.db import (
     DB_BUSY_TIMEOUT_MS,
     DB_CACHE_SIZE_KIB,
@@ -685,6 +686,20 @@ class BackupRoundTripTests(unittest.TestCase):
             data_root = Path(root) / "data"
             data_root.mkdir()
             seed = open_db(str(data_root))
+            workspace = create_workspace(seed, "Backup books")
+            profile = create_profile(
+                seed,
+                workspace["id"],
+                "Backup profile",
+                "EUR",
+                "FIFO",
+                "generic",
+                365,
+            )
+            seed.execute(
+                "UPDATE profiles SET cost_basis_pool_scope = 'wallet' WHERE id = ?",
+                (profile["id"],),
+            )
             seed.execute("CREATE TABLE marker(x INTEGER)")
             seed.execute("INSERT INTO marker VALUES(99)")
             seed.commit()
@@ -733,6 +748,13 @@ class BackupRoundTripTests(unittest.TestCase):
             try:
                 self.assertEqual(
                     conn.execute("SELECT x FROM marker").fetchone()[0], 99
+                )
+                self.assertEqual(
+                    conn.execute(
+                        "SELECT cost_basis_pool_scope FROM profiles WHERE id = ?",
+                        (profile["id"],),
+                    ).fetchone()[0],
+                    "wallet",
                 )
             finally:
                 conn.close()
