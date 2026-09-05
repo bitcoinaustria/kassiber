@@ -1206,6 +1206,11 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 
 ## Open bugs and debt
 
+- [x] Collaborative Bitcoin accounting and selective transfer UI salvage from
+  PR #455: preserve own net deltas instead of subtracting other participants'
+  whole-transaction fees, recognize complete native conserving own N:M flows,
+  explain unresolved collaborative residuals, and integrate the guided component
+  editor with current preview/version/confirmation and developer-mode contracts.
 - [x] Audit false custody quarantines across native transfers, swaps and AI
   repair: canonical receipt identity, zero-value placeholders, fully owned N:M
   allocation, same-block chain ordering, authority-bound LWK/Core HTLC evidence and

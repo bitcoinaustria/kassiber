@@ -197,7 +197,8 @@
       "insufficientLots": "Not enough {{asset}} lots in {{wallet}}",
       "missingBasis": "Missing {{asset}} cost basis in {{wallet}}",
       "nativeTransitionFeeTiming": "Proven transfer needs fee timing",
-      "nativeTransitionAmountMismatch": "Proven transfer amounts do not reconcile"
+      "nativeTransitionAmountMismatch": "Proven transfer amounts do not reconcile",
+      "collaborativeReview": "Own movements need evidence"
     },
     "basis": {
       "missingPrice": "Missing fiat price",
@@ -212,7 +213,8 @@
       "conflictingSpend": "Competing on-chain transactions",
       "pendingConfirmation": "Pending on-chain confirmation",
       "nativeTransitionFeeTiming": "Fee timing needs evidence",
-      "nativeTransitionAmountMismatch": "Transfer quantities need evidence"
+      "nativeTransitionAmountMismatch": "Transfer quantities need evidence",
+      "collaborativeReview": "Own payment and fee allocation unresolved"
     },
     "evidence": {
       "price": "Add a fiat price or rates coverage",
@@ -234,7 +236,8 @@
       "conflictingSpend": "Two transactions spend the same input. Only the confirmed winner belongs in the journal",
       "pendingConfirmation": "The synced chain payload explicitly reports this transaction as unconfirmed",
       "nativeTransitionFeeTiming": "The custody link is proven, but the debit and receipt fall on different UTC dates or their timestamps are unavailable. Kassiber cannot automatically date the fee difference.",
-      "nativeTransitionAmountMismatch": "The link between the transactions is proven, but the recorded amounts and fees do not reconcile to a positive transfer."
+      "nativeTransitionAmountMismatch": "The link between the transactions is proven, but the recorded amounts and fees do not reconcile to a positive transfer.",
+      "collaborativeReview": "Wallet observations show your inputs and outputs. They do not yet explain which difference is your fee, a payment or another receipt in this shared transaction."
     },
     "nextAction": {
       "price": "Set price, then process journals",
@@ -250,7 +253,8 @@
       "conflictingSpend": "Sync confirmations, verify which transaction won, and exclude a loser only when the chain evidence is clear",
       "pendingConfirmation": "Wait for confirmation or sync the wallet again, then process journals",
       "nativeTransitionFeeTiming": "Review supporting records to establish when the fee difference was incurred.",
-      "nativeTransitionAmountMismatch": "Review the source amount and fee treatment against the complete recipient amount using supporting records."
+      "nativeTransitionAmountMismatch": "Review the source amount and fee treatment against the complete recipient amount using supporting records.",
+      "collaborativeReview": "Review the connected wallet history and supporting records, then record the supported movements and fees in a custody component."
     },
     "action": {
       "openTransaction": "Review details",
@@ -261,7 +265,8 @@
       "openBasisReview": "Fix cost basis",
       "openTaxReview": "Fix cost basis",
       "nativeTransitionFeeTiming": "Review fee evidence",
-      "nativeTransitionAmountMismatch": "Review transfer quantities"
+      "nativeTransitionAmountMismatch": "Review transfer quantities",
+      "collaborativeReview": "Review movement evidence"
     },
     "resolvePlan": {
       "button": "Resolve plan",

@@ -197,7 +197,8 @@
       "insufficientLots": "Nicht genug {{asset}}-Lots in {{wallet}}",
       "missingBasis": "Fehlende {{asset}}-Anschaffungskosten in {{wallet}}",
       "nativeTransitionFeeTiming": "Nachgewiesener Transfer: Gebührenzeitpunkt fehlt",
-      "nativeTransitionAmountMismatch": "Beträge des nachgewiesenen Transfers stimmen nicht überein"
+      "nativeTransitionAmountMismatch": "Beträge des nachgewiesenen Transfers stimmen nicht überein",
+      "collaborativeReview": "Eigene Bewegungen brauchen Belege"
     },
     "basis": {
       "missingPrice": "Fehlender Fiat-Preis",
@@ -212,7 +213,8 @@
       "conflictingSpend": "Konkurrierende On-Chain-Transaktionen",
       "pendingConfirmation": "Ausständige On-Chain-Bestätigung",
       "nativeTransitionFeeTiming": "Gebührenzeitpunkt braucht einen Beleg",
-      "nativeTransitionAmountMismatch": "Transferbeträge brauchen einen Beleg"
+      "nativeTransitionAmountMismatch": "Transferbeträge brauchen einen Beleg",
+      "collaborativeReview": "Eigene Zahlungen und Gebühren noch ungeklärt"
     },
     "evidence": {
       "price": "Füge einen Fiat-Preis oder Kursabdeckung hinzu",
@@ -234,7 +236,8 @@
       "conflictingSpend": "Zwei Transaktionen geben denselben Input aus. Nur der bestätigte Gewinner gehört ins Journal",
       "pendingConfirmation": "Die synchronisierten Chain-Daten melden diese Transaktion ausdrücklich als unbestätigt",
       "nativeTransitionFeeTiming": "Die Verwahrungsverbindung ist nachgewiesen. Abgang und Eingang liegen aber an verschiedenen UTC-Tagen oder ihre Zeitangaben fehlen. Kassiber kann die Gebührendifferenz keinem Zeitpunkt automatisch zuordnen.",
-      "nativeTransitionAmountMismatch": "Die Verbindung zwischen den Transaktionen ist nachgewiesen. Die erfassten Beträge und Gebühren ergeben aber keinen positiven, mengenmäßig ausgeglichenen Transfer."
+      "nativeTransitionAmountMismatch": "Die Verbindung zwischen den Transaktionen ist nachgewiesen. Die erfassten Beträge und Gebühren ergeben aber keinen positiven, mengenmäßig ausgeglichenen Transfer.",
+      "collaborativeReview": "Die Wallet-Daten zeigen deine Ein- und Ausgänge. Sie erklären noch nicht, welcher Unterschied deine Gebühr, eine Zahlung oder ein weiterer Eingang in dieser gemeinsamen Transaktion ist."
     },
     "nextAction": {
       "price": "Preis setzen, dann Journale verarbeiten",
@@ -250,7 +253,8 @@
       "conflictingSpend": "Bestätigungen synchronisieren, den Gewinner prüfen und einen Verlierer nur bei klarem Chain-Nachweis ausschließen",
       "pendingConfirmation": "Bestätigung abwarten oder die Wallet erneut synchronisieren, dann Journale verarbeiten",
       "nativeTransitionFeeTiming": "Prüfe anhand deiner Belege, wann die Gebührendifferenz angefallen ist.",
-      "nativeTransitionAmountMismatch": "Prüfe anhand deiner Belege den Ausgangsbetrag und die Gebührenbehandlung gegenüber dem vollständigen Eingangsbetrag."
+      "nativeTransitionAmountMismatch": "Prüfe anhand deiner Belege den Ausgangsbetrag und die Gebührenbehandlung gegenüber dem vollständigen Eingangsbetrag.",
+      "collaborativeReview": "Prüfe die verbundenen Wallet-Verläufe und ergänzenden Belege. Erfasse danach die belegten Bewegungen und Gebühren in einer Verwahrungskomponente."
     },
     "action": {
       "openTransaction": "Details prüfen",
@@ -261,7 +265,8 @@
       "openBasisReview": "Kostenbasis ergänzen",
       "openTaxReview": "Kostenbasis ergänzen",
       "nativeTransitionFeeTiming": "Gebührenbelege prüfen",
-      "nativeTransitionAmountMismatch": "Transferbeträge prüfen"
+      "nativeTransitionAmountMismatch": "Transferbeträge prüfen",
+      "collaborativeReview": "Bewegungsbelege prüfen"
     },
     "resolvePlan": {
       "button": "Lösungsplan",

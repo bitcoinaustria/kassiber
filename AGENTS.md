@@ -49,6 +49,12 @@
   - [kassiber/tax_policy.py](kassiber/tax_policy.py) — profile tax-policy layer.
   - [kassiber/wallet_descriptors.py](kassiber/wallet_descriptors.py) — descriptor normalization, chain/network validation.
 - Packaging is defined in [pyproject.toml](pyproject.toml).
+- Desktop transfer/custody navigation is unified in `routes/SwapMatching.tsx`;
+  structured component editing lives in `routes/transfers-custody/`. Preserve the
+  server-plan then explicit-confirm boundary, pinned book/input version, exact
+  decimal amounts and lossless revision timestamps. Gaps/components retain their
+  developer-mode gate. Collaborative Bitcoin ownership and fee limits are
+  documented in [docs/reference/custody-resolution.md](docs/reference/custody-resolution.md).
 - User-facing behavior is documented in [README.md](README.md).
 - Third-party dependency and license notes are tracked in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 - In-flight and deferred work is tracked in [TODO.md](TODO.md) — it is the

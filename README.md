@@ -266,6 +266,10 @@ returned by the matching preview and rejects stale inputs.
 For automatic watch-only movement recognition, evidence boundaries and repair
 through CLI or chat, see
 [Understanding movements and resolving quarantine](docs/reference/custody-resolution.md).
+This includes CoinJoin/Payjoin ownership boundaries: connected intermediate
+wallets can prove conserving own movements, while unexplained payments or fee
+shares remain reviewable. The desktop Transfers & Custody surface provides a
+guided component editor with a server preview and separate confirmation.
 
 For a likely return through wallet history that is no longer available, use
 the guided custody-gap workflow instead of writing component JSON:

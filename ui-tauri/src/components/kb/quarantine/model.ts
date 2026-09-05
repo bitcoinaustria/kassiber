@@ -11,9 +11,10 @@ import {
 
 import type { QuarantineItem, QuarantineReason, QuarantineSnapshot } from "./types";
 
-function nativeTransitionReasonKey(
+function custodyReasonKey(
   reason: string,
-): "nativeTransitionFeeTiming" | "nativeTransitionAmountMismatch" | undefined {
+): "nativeTransitionFeeTiming" | "nativeTransitionAmountMismatch" | "collaborativeReview" | undefined {
+  if (reason === "privacy_hop_unresolved") return "collaborativeReview";
   if (reason === "native_transition_fee_timing_unresolved") return "nativeTransitionFeeTiming";
   if (reason === "native_transition_amount_mismatch") return "nativeTransitionAmountMismatch";
   return undefined;
@@ -481,8 +482,8 @@ function basisLabel(
 ) {
   const normalized = effectiveReviewReason(reason, detail).toLowerCase();
   const original = reason.toLowerCase();
-  const nativeReason = nativeTransitionReasonKey(normalized);
-  if (nativeReason) return t(`quarantine.basis.${nativeReason}`);
+  const custodyReason = custodyReasonKey(normalized);
+  if (custodyReason) return t(`quarantine.basis.${custodyReason}`);
   if (normalized.includes("transfer_fee_implausible")) {
     return t("quarantine.basis.splitTransfer");
   }
@@ -522,8 +523,8 @@ function issueLabel(
 ) {
   const normalized = reason.toLowerCase();
   const detail = item.detail;
-  const nativeReason = nativeTransitionReasonKey(effectiveReviewReason(reason, detail).toLowerCase());
-  if (nativeReason) return t(`quarantine.issue.${nativeReason}`);
+  const custodyReason = custodyReasonKey(effectiveReviewReason(reason, detail).toLowerCase());
+  if (custodyReason) return t(`quarantine.issue.${custodyReason}`);
   const asset = detailString(detail, "asset") || item.asset;
   const fromWallet = detailString(detail, "from_wallet");
   const toWallet = detailString(detail, "to_wallet");
@@ -585,8 +586,8 @@ function evidenceHint(
 ) {
   const original = reason.toLowerCase();
   const normalized = effectiveReviewReason(reason, detail).toLowerCase();
-  const nativeReason = nativeTransitionReasonKey(normalized);
-  if (nativeReason) return t(`quarantine.evidence.${nativeReason}`);
+  const custodyReason = custodyReasonKey(normalized);
+  if (custodyReason) return t(`quarantine.evidence.${custodyReason}`);
   if (normalized.includes("transfer_fee_implausible")) {
     const impliedFee = formatBtcDetail(detailNumber(detail, "implied_fee"));
     const ceiling = formatBtcDetail(detailNumber(detail, "fee_ceiling"));
@@ -713,8 +714,8 @@ function nextAction(
 ) {
   const original = reason.toLowerCase();
   const normalized = effectiveReviewReason(reason, detail).toLowerCase();
-  const nativeReason = nativeTransitionReasonKey(normalized);
-  if (nativeReason) return t(`quarantine.nextAction.${nativeReason}`);
+  const custodyReason = custodyReasonKey(normalized);
+  if (custodyReason) return t(`quarantine.nextAction.${custodyReason}`);
   if (normalized.includes("transfer_fee_implausible")) {
     return t("quarantine.nextAction.splitTransfer");
   }
@@ -756,8 +757,8 @@ function actionLabel(
 ) {
   const original = reason.toLowerCase();
   const normalized = effectiveReviewReason(reason, detail).toLowerCase();
-  const nativeReason = nativeTransitionReasonKey(normalized);
-  if (nativeReason) return t(`quarantine.action.${nativeReason}`);
+  const custodyReason = custodyReasonKey(normalized);
+  if (custodyReason) return t(`quarantine.action.${custodyReason}`);
   if (normalized.includes("transfer_fee_implausible")) {
     return t("quarantine.action.openTransaction");
   }

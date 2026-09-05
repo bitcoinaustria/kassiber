@@ -32,6 +32,24 @@ const baseItem: QuarantineItem = {
 };
 
 describe("quarantine row model", () => {
+  it.each(["coinjoin", "payjoin", "collaborative"])(
+    "explains unresolved %s economics without suggesting exclusion",
+    (boundary) => {
+      for (const lang of ["en", "de"]) {
+        const row = quarantineItemToRow(
+          { ...baseItem, reason: "privacy_hop_unresolved", detail: { privacy_boundary: boundary } },
+          "Book",
+          i18n.getFixedT(lang, "journals"),
+        );
+        expect(row.transactionAction?.tab).toBe("details");
+        expect(row.event).not.toMatch(/Privacy hop|privacy_hop|collaborativeReview/);
+        expect(row.evidenceHint).toMatch(lang === "en" ? /fee, a payment/ : /Gebühr, eine Zahlung/);
+        expect(row.nextAction).toMatch(lang === "en" ? /supporting records/ : /Belege/);
+        expect(row.nextAction).not.toMatch(/exclu|ausschließ|price|Preis/i);
+      }
+    },
+  );
+
   it.each([
     ["en", "Proven transfer amounts do not reconcile", "Review transfer quantities"],
     ["de", "Beträge des nachgewiesenen Transfers stimmen nicht überein", "Transferbeträge prüfen"],
