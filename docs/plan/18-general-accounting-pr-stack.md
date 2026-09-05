@@ -14,6 +14,7 @@ EBICS, payment initiation, payroll and FinanzOnline transmission remain excluded
 | [Kassiber #543](https://github.com/bitcoinaustria/kassiber/pull/543) | Merged at `bbd983cb824de4ea51c685248b0d3fba5347d8d2` after fixing CLI consent at `6fc7c4e8` and passing full local/CI gates. Independent of #542. |
 | [Kassiber #455](https://github.com/bitcoinaustria/kassiber/pull/455) | Closed as superseded by #543's guided N:M, conversion, suspense and revision flow. No unique must-salvage feature found; branch retained. |
 | [Kassiber #428](https://github.com/bitcoinaustria/kassiber/pull/428) | Separate altcoin overview/import experiment, deferred. Its cash-symbol validation was extracted into independent [#544](https://github.com/bitcoinaustria/kassiber/pull/544), not used to justify merging the overlay. |
+| [Kassiber #544](https://github.com/bitcoinaustria/kassiber/pull/544) | Narrow cash-currency validation salvage merged at `f43d27f88bb9fd3f7c3acd141b6ae3145f43c029` after exact-head CI passed. Not an accounting-stack dependency. |
 | [Kassiber #431](https://github.com/bitcoinaustria/kassiber/pull/431) | Separate native macOS client; defer outside CLI/Agent accounting. |
 | [Kassiber #136](https://github.com/bitcoinaustria/kassiber/pull/136) | Separate modular overview layout; defer outside this stack. |
 

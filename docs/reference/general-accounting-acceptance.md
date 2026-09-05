@@ -41,7 +41,8 @@ not waive failing dependency or acceptance gates. See the
   → [#546](https://github.com/bitcoinaustria/kassiber/pull/546).
   These passes do not clear the RP2 blocker or AF outcome gates. Independent
   [#544](https://github.com/bitcoinaustria/kassiber/pull/544) extracts the useful
-  cash-currency guard from otherwise deferred #428.
+  cash-currency guard from otherwise deferred #428 and merged at `f43d27f8`
+  after all exact-head CI checks passed.
   External Claude review remains blocked by code-egress approval.
 
 ## Pilot facts still required
