@@ -1,4 +1,5 @@
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 
@@ -72,9 +73,10 @@ def test_same_asset_cross_cutoff_move_retains_transit_not_future_receipt():
     assert len(result.assets[0]['acquisitions']) == 1
 
 
-def test_real_encrypted_capture_maps_custody_identity_and_local_midnight(book):
+def test_real_encrypted_capture_maps_custody_identity_and_local_midnight(book, monkeypatch):
     from kassiber.core.accounting import artifacts, sources
     from kassiber.core.wallets import create_wallet
+    from kassiber.errors import AppError
 
     conn, scope, _ = book
     sources.ensure_schema(conn)
@@ -93,14 +95,25 @@ def test_real_encrypted_capture_maps_custody_identity_and_local_midnight(book):
     assert acquisition['source_ids'] == [snapshot['snapshot']['sources'][0]['source_id']]
     assert acquisition['quantity_msat'] == 1
     assert artifacts.capture_calculation(conn, scope, snapshot_id=snapshot['id'], period_id='2025')['id'] == captured['id']
+    assert artifacts.require_calculation_current(conn, scope, captured['id'])['id'] == captured['id']
+    # A semantic adapter upgrade invalidates retained results independently of
+    # the installed RP2 revision, while their immutable history remains readable.
+    monkeypatch.setattr(artifacts, 'ADAPTER_VERSION', 'next-adapter-contract')
+    with pytest.raises(AppError) as raised:
+        artifacts.require_calculation_current(conn, scope, captured['id'])
+    assert raised.value.code == 'accounting_calculation_stale'
+    assert artifacts.get_calculation(conn, scope, captured['id'])['capture'] == captured['capture']
 
 
-def test_cross_asset_future_receipt_is_only_basis_reference_not_pool_inventory():
+@pytest.mark.parametrize('receipt_time', ['2026-01-02T12:00:00Z', '2025-12-31T23:30:00Z'])
+@pytest.mark.parametrize('sell_all', [False, True])
+def test_cross_asset_future_receipt_is_only_basis_reference_not_pool_inventory(receipt_time, sell_all):
     acquisition = row('initial', '2025-01-01', BTC * 2, 100)
     destination_initial = row('liquidinitial', '2025-01-01', BTC, 300, asset='LBTC', wallet_id='B')
     outgoing = row('dispatch', '2025-12-30', BTC, 999, 'outbound')
     incoming = row('receipt', '2026-01-02', BTC, 999999, asset='LBTC', wallet_id='B')
-    destination_sale = row('liquidsale', '2025-12-31', BTC // 2, 500, 'outbound', asset='LBTC', wallet_id='B')
+    incoming['occurred_at'] = receipt_time
+    destination_sale = row('liquidsale', '2025-12-31', BTC if sell_all else BTC // 2, 500, 'outbound', asset='LBTC', wallet_id='B')
     future_sale = row('futuresale', '2026-01-03', BTC // 2, 500, 'outbound', asset='LBTC', wallet_id='B')
     projection = FinalizedTaxProjection(tuple([acquisition, destination_initial, outgoing, incoming, destination_sale, future_sale]), (),
         ({'out_id': 'dispatch', 'in_id': 'receipt', 'out_asset': 'BTC', 'in_asset': 'LBTC',
@@ -108,12 +121,12 @@ def test_cross_asset_future_receipt_is_only_basis_reference_not_pool_inventory()
     engine = GenericRP2TaxEngine(dict(PROFILE, fiat_currency='EUR', tax_country='AT',
         gains_algorithm='moving_average_at', cost_basis_pool_scope='global'))
     result = engine.capture_calculation(TaxEngineLedgerInputs(projection, WALLET_REFS),
-        cutoff_exclusive_utc='2026-01-01T00:00:00Z', calculation_timezone='Europe/Vienna')
+        cutoff_exclusive_utc='2025-12-31T23:00:00Z', calculation_timezone='Europe/Vienna')
     assert not result.blockers
     liquid = next(asset for asset in result.assets if asset['asset'] == 'LBTC')
-    assert sum(Decimal(item['basis_exact']) for item in liquid['open_positions']) == 150
-    assert sum(Decimal(item['basis_exact']) for item in liquid['gain_losses']) == 150
-    assert sum(item['quantity_msat'] for item in liquid['custody_balances']) == BTC // 2
+    assert sum(Decimal(item['basis_exact']) for item in liquid['open_positions']) == (0 if sell_all else 150)
+    assert sum(Decimal(item['basis_exact']) for item in liquid['gain_losses']) == (300 if sell_all else 150)
+    assert sum(item['quantity_msat'] for item in liquid['custody_balances']) == (0 if sell_all else BTC // 2)
     assert len(liquid['acquisitions']) == 1
     assert result.inputs['cutoff_relations'][0]['basis_carried_exact'] == '100'
     source = next(asset for asset in result.assets if asset['asset'] == 'BTC')
@@ -122,6 +135,27 @@ def test_cross_asset_future_receipt_is_only_basis_reference_not_pool_inventory()
     fact = next(item for item in result.inputs['execution_basis'] if item['event_id'] == 'dispatch')
     assert fact['unit_basis_exact'] == '100'
     assert fact['display_unit_basis_override_exact'] == '999'
+    assert len(result.inputs['execution_basis']) == 2
+
+
+def test_asset_with_only_future_receipt_has_no_cutoff_inventory():
+    acquisition = row('initial', '2025-01-01', BTC * 2, 100)
+    outgoing = row('dispatch', '2025-12-31', BTC, 999, 'outbound')
+    incoming = row('receipt', '2025-12-31', BTC, 999999, asset='LBTC', wallet_id='B')
+    incoming['occurred_at'] = '2025-12-31T23:30:00Z'
+    projection = FinalizedTaxProjection((acquisition, outgoing, incoming), (),
+        ({'out_id': 'dispatch', 'in_id': 'receipt', 'out_asset': 'BTC', 'in_asset': 'LBTC',
+          'pair_id': 'reviewed-cross', 'policy': 'carrying-value', 'kind': 'custody_cross_rail'},), (), ('cross',))
+    engine = GenericRP2TaxEngine(dict(PROFILE, fiat_currency='EUR', tax_country='AT',
+        gains_algorithm='moving_average_at', cost_basis_pool_scope='global'))
+    result = engine.capture_calculation(TaxEngineLedgerInputs(projection, WALLET_REFS),
+        cutoff_exclusive_utc='2025-12-31T23:00:00Z', calculation_timezone='Europe/Vienna')
+    assert not result.blockers
+    liquid = next(asset for asset in result.assets if asset['asset'] == 'LBTC')
+    assert liquid['acquisitions'] == []
+    assert liquid['open_positions'] == []
+    assert result.inputs['cutoff_relations'][0]['basis_carried_exact'] == '100'
+    assert len(result.inputs['execution_basis']) == 1
 
 
 @pytest.mark.parametrize('country,method', [('AT', 'moving_average_at'), ('generic', 'FIFO'), ('generic', 'LIFO')])
@@ -174,7 +208,10 @@ def test_cross_asset_chain_retains_execution_or_rejects_existing_same_instant_cy
     assert {transfer['basis_carried_exact'] for asset in result.assets for transfer in asset['transfers']} == {'100'}
     btc = next(asset for asset in result.assets if asset['asset'] == 'BTC')
     later = next(item for item in btc['acquisitions'] if item['rp2_unique_id'] == 'bin')
-    assert Decimal(later['effective_basis_exact']) == 500
+    assert Decimal(later['effective_basis_exact']) == 100
+    returned = next(item for item in btc['open_positions'] if item['lot_id'] == 'bin')
+    assert Decimal(returned['basis_exact']) == 250
+    assert sum(Decimal(item['basis_exact']) for item in btc['open_positions']) == 750
 
 
 def test_capture_rejects_naive_cutoff_and_unknown_calendar():
@@ -193,3 +230,64 @@ def test_changed_dependency_contract_fails_typed_without_global_patch(monkeypatc
     with pytest.raises(AppError) as exc:
         capture([row('buy','2025-01-01',BTC,100),row('sell','2025-02-01',BTC,200,'outbound')])
     assert exc.value.code == 'accounting_calculation_dependency'
+
+
+def _selection_observer():
+    from kassiber.core.engines.capture import capturing_accounting_engine
+
+    class SelectionEngine:
+        def __init__(self, years_2_methods):
+            self.years_2_methods = years_2_methods
+
+        def get_acquired_lot_for_taxable_event(self, taxable_event, acquired_lot, taxable_event_amount, acquired_lot_amount):
+            return SimpleNamespace(taxable_event=taxable_event, acquired_lot=acquired_lot,
+                taxable_event_amount=taxable_event_amount, acquired_lot_amount=acquired_lot_amount,
+                unit_cost_basis_override=taxable_event.basis, taxable_event_unit_cost_basis=None)
+
+    retained = []
+    return capturing_accounting_engine(SelectionEngine(None), retained), retained
+
+
+def _selection(engine, event_id, lot_id, quantity='1', basis='100'):
+    event = SimpleNamespace(asset='BTC', internal_id=event_id, unique_id=event_id, basis=Decimal(basis))
+    lot = SimpleNamespace(internal_id=lot_id, unique_id=lot_id)
+    return engine.get_acquired_lot_for_taxable_event(event, lot, Decimal(quantity), Decimal(quantity))
+
+
+def test_capture_replay_keeps_event_lot_splits_and_multiple_events_distinct():
+    owner, retained = _selection_observer()
+    for event, lot, amount in [('sale1','lot1','1'), ('sale1','lot2','0.5'), ('sale2','lot2','0.25')]:
+        _selection(owner, event, lot, amount)
+    before = list(retained)
+    replay = type(owner)(owner.years_2_methods)
+    for event, lot, amount in [('sale1','lot1','1'), ('sale1','lot2','0.5'), ('sale2','lot2','0.25')]:
+        _selection(replay, event, lot, amount)
+    assert retained == before
+    assert len(retained) == 3
+    assert sum(item['quantity_msat'] for item in retained) == BTC * 7 // 4
+
+
+@pytest.mark.parametrize('change', ['quantity', 'basis', 'identity', 'order', 'suffix', 'same_instance'])
+def test_capture_rejects_changed_or_nonprefix_replay(change):
+    from kassiber.errors import AppError
+    owner, retained = _selection_observer()
+    _selection(owner, 'sale1', 'lot1')
+    _selection(owner, 'sale1', 'lot2', '0.5')
+    replay = type(owner)(owner.years_2_methods)
+    with pytest.raises(AppError) as raised:
+        if change == 'quantity':
+            _selection(replay, 'sale1', 'lot1', '0.5')
+        elif change == 'basis':
+            _selection(replay, 'sale1', 'lot1', basis='200')
+        elif change == 'identity':
+            _selection(replay, 'other', 'lot1')
+        elif change == 'order':
+            _selection(replay, 'sale1', 'lot2', '0.5')
+        elif change == 'same_instance':
+            _selection(owner, 'sale1', 'lot1')
+        else:
+            _selection(replay, 'sale1', 'lot1')
+            _selection(replay, 'sale1', 'lot2', '0.5')
+            _selection(replay, 'sale2', 'lot3')
+    assert raised.value.code == 'accounting_calculation_dependency'
+    assert len(retained) == 2

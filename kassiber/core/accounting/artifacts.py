@@ -20,7 +20,7 @@ from .ledger import atomic, canonical_json, digest, require_book, strict_minor, 
 from .sources import get_snapshot, require_current
 
 MAX_ARTIFACT_BYTES = 32 * 1024 * 1024
-ADAPTER_VERSION = 'cutoff-prefix-v1'
+ADAPTER_VERSION = 'cutoff-prefix-v2'
 
 
 def _dependency_revision():
