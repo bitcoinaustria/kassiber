@@ -12412,6 +12412,37 @@ class ReviewRegressionTest(unittest.TestCase):
             ],
         )
 
+    def test_austrian_rp2_engine_books_wages_as_basis_bearing_acquisition(self):
+        profile, inputs = self._direct_austrian_single_wallet_inputs(
+            [
+                {
+                    "id": "wage-receipt-1",
+                    "occurred_at": "2024-01-01T00:00:00Z",
+                    "direction": "inbound",
+                    "amount": 100_000_000,
+                    "fiat_value": 40,
+                    "kind": "wages",
+                    "description": "Payroll BTC",
+                },
+            ]
+        )
+
+        actual = self._direct_engine_snapshot(profile, inputs)
+
+        self.assertEqual(actual["quarantines"], [])
+        self.assertEqual(
+            [entry["entry_type"] for entry in actual["entries"]],
+            ["acquisition"],
+        )
+        acquisition = actual["entries"][0]
+        self.assertEqual(acquisition["fiat_value"], 40.0)
+        self.assertNotIn("at_category", acquisition)
+        self.assertNotIn("at_kennzahl", acquisition)
+        self.assertEqual(
+            actual["wallet_holdings"][0]["cost_basis"],
+            40.0,
+        )
+
     def test_austrian_rp2_engine_emits_income_entry_for_mining_receipt_and_later_disposal(self):
         profile, inputs = self._direct_austrian_single_wallet_inputs(
             [
@@ -14304,8 +14335,13 @@ class ReviewRegressionTest(unittest.TestCase):
         report = payload["data"]
         self.assertEqual(report["form"], "E 1kv")
         self.assertEqual(report["tax_year"], 2024)
+        self.assertEqual(report["cost_basis_pool_scope"], "global")
         self.assertIn(
             "AT-E1KV-FOREIGN-SELF-CUSTODY",
+            {assumption["code"] for assumption in report["assumptions"]},
+        )
+        self.assertIn(
+            "AT-COST-BASIS-POOL-SCOPE",
             {assumption["code"] for assumption in report["assumptions"]},
         )
         summary_by_kennzahl = {row["kennzahl"]: row for row in report["summary_rows"]}
@@ -14416,6 +14452,7 @@ class ReviewRegressionTest(unittest.TestCase):
             self.assertIn("FAQ", extracted)
             self.assertIn("€ (EUR)", extracted)
             self.assertIn("BTC ↔ EUR", extracted)
+            self.assertIn("AT-COST-BASIS-POOL-SCOPE", extracted)
             self.assertNotIn("NFT", extracted)
 
         plain_result = self._run_cli(
@@ -14492,6 +14529,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn("Summe laufende Einkünfte", shared_strings)
         self.assertIn("Kennzahl-Abweichungen", shared_strings)
         self.assertIn("Transaktion | Kategorie | gespeichert | Export", shared_strings)
+        self.assertIn("AT-COST-BASIS-POOL-SCOPE", shared_strings)
         self.assertNotIn("NFT", shared_strings)
         self.assertIn(
             "AT-E1KV-KENNZAHL-REPROCESS",
@@ -14547,9 +14585,395 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertIn("Summe entrichtete Steuergebühren", section_33_csv.read_text(encoding="utf-8"))
         notes_text = notes_csv.read_text(encoding="utf-8")
         self.assertIn("AT-E1KV-KENNZAHL-REPROCESS", notes_text)
+        self.assertIn("AT-COST-BASIS-POOL-SCOPE", notes_text)
         self.assertIn("Kennzahl-Abweichungen", notes_text)
         self.assertIn("at-e1kv-staking", notes_text)
         self.assertNotIn("NFT", notes_text)
+
+    def test_austrian_wages_are_acquisition_with_basis_and_no_e1kv_income(self):
+        self._bootstrap_austrian_e1kv_wallet(label="Salary")
+        json_file = self.case_dir / "austrian-wages.json"
+        json_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "kind": "wages",
+                        "txid": "payroll-btc-1",
+                        "fiat_value": "40",
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        payload, result = self._run_json(
+            "wallets", "import-json",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--wallet", "Salary",
+            "--file", str(json_file),
+        )
+        self._assert_ok(payload, result, "wallets.import-json")
+        payload, result = self._run_json(
+            "journals", "process",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(payload, result, "journals.process")
+
+        journal, result = self._run_json(
+            "reports", "journal-entries",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(journal, result, "reports.journal-entries")
+        self.assertEqual(
+            [row["entry_type"] for row in journal["data"]],
+            ["acquisition"],
+        )
+        acquisition = journal["data"][0]
+        self.assertEqual(acquisition["fiat_value"], 40.0)
+        self.assertNotIn("at_category", acquisition)
+        self.assertNotIn("at_kennzahl", acquisition)
+
+        capital_gains, result = self._run_json(
+            "reports", "capital-gains",
+            "--workspace", "Main",
+            "--profile", "Default",
+        )
+        self._assert_ok(capital_gains, result, "reports.capital-gains")
+        self.assertEqual(capital_gains["data"], [])
+
+        db = sqlite3.connect(self.data_root / "kassiber.sqlite3")
+        db.row_factory = sqlite3.Row
+        try:
+            capital_snapshot = build_capital_gains_snapshot(db, 2024)
+            journal_snapshot = build_journal_events_list_snapshot(db)
+            transaction_kind = db.execute(
+                "SELECT kind FROM transactions WHERE external_id = ?",
+                ("payroll-btc-1",),
+            ).fetchone()["kind"]
+        finally:
+            db.close()
+        self.assertEqual(capital_snapshot["lots"], [])
+        self.assertEqual(transaction_kind, "wages")
+        self.assertEqual(len(journal_snapshot["events"]), 1)
+        acquisition_event = journal_snapshot["events"][0]
+        self.assertEqual(acquisition_event["entryType"], "acquisition")
+        self.assertIsNone(acquisition_event["atCategory"])
+        self.assertIsNone(acquisition_event["atKennzahl"])
+
+        e1kv, result = self._run_json(
+            "reports", "austrian-e1kv",
+            "--workspace", "Main",
+            "--profile", "Default",
+            "--year", "2024",
+        )
+        self._assert_ok(e1kv, result, "reports.austrian-e1kv")
+        self.assertEqual(e1kv["data"]["rows"], [])
+        self.assertEqual(
+            e1kv["data"]["kennzahl_totals"]["172"]["amount_eur_cents"],
+            0,
+        )
+
+    def test_austrian_global_salary_transit_savings_fixture(self):
+        self._bootstrap_austrian_e1kv_wallet(label="Salary")
+        for label in ("Savings", "Transit"):
+            payload, result = self._run_json(
+                "wallets",
+                "create",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Default",
+                "--label",
+                label,
+                "--kind",
+                "custom",
+            )
+            self._assert_ok(payload, result, "wallets.create")
+
+        records_by_wallet = {
+            "Salary": [
+                {
+                    "date": "2024-01-01",
+                    "direction": "inbound",
+                    "asset": "BTC",
+                    "amount": "0.01",
+                    "fee": "0",
+                    "kind": "wages",
+                    "txid": "payroll-btc-100",
+                    "fiat_value": "100",
+                    "description": "January payroll",
+                },
+                {
+                    "date": "2024-02-01",
+                    "direction": "inbound",
+                    "asset": "BTC",
+                    "amount": "0.01",
+                    "fee": "0",
+                    "kind": "wages",
+                    "txid": "payroll-btc-300",
+                    "fiat_value": "300",
+                    "description": "February payroll",
+                },
+                {
+                    "date": "2024-02-02T10:00:00Z",
+                    "direction": "outbound",
+                    "asset": "BTC",
+                    "amount": "0.005",
+                    "fee": "0",
+                    "txid": "salary-to-savings",
+                    "fiat_rate": "20000",
+                    "description": "Move payroll savings",
+                },
+                {
+                    "date": "2024-02-03T10:00:00Z",
+                    "direction": "outbound",
+                    "asset": "BTC",
+                    "amount": "0.004",
+                    "fee": "0.001",
+                    "txid": "salary-to-transit",
+                    "fiat_rate": "20000",
+                    "description": "Move payroll spending",
+                },
+                {
+                    "date": "2024-03-01",
+                    "direction": "inbound",
+                    "asset": "BTC",
+                    "amount": "0.001",
+                    "fee": "0",
+                    "kind": "wages",
+                    "txid": "payroll-missing-value",
+                    "description": "Payroll without reviewed valuation",
+                },
+            ],
+            "Savings": [
+                {
+                    "date": "2024-02-02T10:00:00Z",
+                    "direction": "inbound",
+                    "asset": "BTC",
+                    "amount": "0.005",
+                    "fee": "0",
+                    "txid": "salary-to-savings",
+                    "fiat_rate": "20000",
+                    "description": "Receive payroll savings",
+                },
+                {
+                    "date": "2024-02-10",
+                    "direction": "outbound",
+                    "asset": "BTC",
+                    "amount": "0.005",
+                    "fee": "0",
+                    "kind": "sell",
+                    "txid": "sell-savings",
+                    "fiat_value": "125",
+                    "description": "Sell savings",
+                },
+            ],
+            "Transit": [
+                {
+                    "date": "2024-02-03T10:00:00Z",
+                    "direction": "inbound",
+                    "asset": "BTC",
+                    "amount": "0.004",
+                    "fee": "0",
+                    "txid": "salary-to-transit",
+                    "fiat_rate": "20000",
+                    "description": "Receive payroll spending",
+                },
+                {
+                    "date": "2024-02-11",
+                    "direction": "outbound",
+                    "asset": "BTC",
+                    "amount": "0.004",
+                    "fee": "0",
+                    "kind": "sell",
+                    "txid": "sell-transit",
+                    "fiat_value": "100",
+                    "description": "Sell transit balance",
+                },
+            ],
+        }
+        for wallet, records in records_by_wallet.items():
+            import_file = self.case_dir / f"{wallet.lower()}-payroll.json"
+            import_file.write_text(json.dumps(records), encoding="utf-8")
+            payload, result = self._run_json(
+                "wallets",
+                "import-json",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Default",
+                "--wallet",
+                wallet,
+                "--file",
+                str(import_file),
+            )
+            self._assert_ok(payload, result, "wallets.import-json")
+
+        for txid in ("salary-to-savings", "salary-to-transit"):
+            payload, result = self._run_json(
+                "transfers",
+                "pair",
+                "--workspace",
+                "Main",
+                "--profile",
+                "Default",
+                "--tx-out",
+                txid,
+                "--tx-in",
+                txid,
+                "--kind",
+                "manual",
+                "--policy",
+                "carrying-value",
+            )
+            self._assert_ok(payload, result, "transfers.pair")
+
+        payroll_file = self.case_dir / "payroll-january.txt"
+        payroll_file.write_text("Reviewed payroll value: EUR 100\n", encoding="utf-8")
+        payload, result = self._run_json(
+            "attachments",
+            "add",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--transaction",
+            "payroll-btc-100",
+            "--file",
+            str(payroll_file),
+        )
+        self._assert_ok(payload, result, "attachments.add")
+        payroll_attachment_id = payload["data"]["id"]
+
+        payload, result = self._run_json(
+            "journals", "process", "--workspace", "Main", "--profile", "Default"
+        )
+        self._assert_ok(payload, result, "journals.process")
+        quarantines, result = self._run_json(
+            "journals", "quarantined", "--workspace", "Main", "--profile", "Default"
+        )
+        self._assert_ok(quarantines, result, "journals.quarantined")
+        self.assertIn(
+            "missing_spot_price",
+            {row["reason"] for row in quarantines["data"]},
+        )
+        missing_payroll = next(
+            row
+            for row in quarantines["data"]
+            if row["external_id"] == "payroll-missing-value"
+        )
+        self.assertEqual(missing_payroll["reason"], "missing_spot_price")
+        self.assertEqual(missing_payroll["detail"]["required_for"], "acquisition")
+
+        attachments, result = self._run_json(
+            "attachments",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--transaction",
+            "payroll-btc-100",
+        )
+        self._assert_ok(attachments, result, "attachments.list")
+        self.assertEqual(len(attachments["data"]), 1)
+        self.assertEqual(attachments["data"][0]["id"], payroll_attachment_id)
+        self.assertEqual(attachments["data"][0]["attachment_type"], "file")
+
+        transfers, result = self._run_json(
+            "journals",
+            "transfers",
+            "list",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+        )
+        self._assert_ok(transfers, result, "journals.transfers.list")
+        transfer_rows = {
+            row["to_wallet"]: row
+            for row in transfers["data"]["same_asset_transfers"]
+        }
+        self.assertEqual(
+            {
+                wallet: (
+                    row["sent_msat"],
+                    row["received_msat"],
+                    row["fee_msat"],
+                )
+                for wallet, row in transfer_rows.items()
+            },
+            {
+                "Savings": (500_000_000, 500_000_000, 0),
+                "Transit": (500_000_000, 400_000_000, 100_000_000),
+            },
+        )
+
+        journal, result = self._run_json(
+            "reports", "journal-entries", "--workspace", "Main", "--profile", "Default"
+        )
+        self._assert_ok(journal, result, "reports.journal-entries")
+        acquisition_rows = [
+            row for row in journal["data"] if row["entry_type"] == "acquisition"
+        ]
+        self.assertEqual(len(acquisition_rows), 2)
+        # Austrian moving average can redistribute basis between open lots;
+        # the reviewed payroll values must remain preserved in aggregate.
+        self.assertEqual(
+            sum(row["fiat_value"] for row in acquisition_rows),
+            400.0,
+        )
+        self.assertFalse(
+            any(row["entry_type"] == "income" for row in journal["data"])
+        )
+        disposals = [row for row in journal["data"] if row["entry_type"] == "disposal"]
+        disposals_by_wallet = {row["wallet"]: row for row in disposals}
+        self.assertEqual(set(disposals_by_wallet), {"Savings", "Transit"})
+        self.assertAlmostEqual(disposals_by_wallet["Savings"]["cost_basis"], 100.0)
+        self.assertAlmostEqual(disposals_by_wallet["Savings"]["gain_loss"], 25.0)
+        self.assertAlmostEqual(disposals_by_wallet["Transit"]["cost_basis"], 80.0)
+        self.assertAlmostEqual(disposals_by_wallet["Transit"]["gain_loss"], 20.0)
+        fee = next(row for row in journal["data"] if row["entry_type"] == "transfer_fee")
+        self.assertAlmostEqual(fee["cost_basis"], 20.0)
+
+        portfolio, result = self._run_json(
+            "reports", "portfolio-summary", "--workspace", "Main", "--profile", "Default"
+        )
+        self._assert_ok(portfolio, result, "reports.portfolio-summary")
+        btc_rows = [row for row in portfolio["data"] if row["asset"] == "BTC"]
+        self.assertAlmostEqual(sum(row["quantity"] for row in btc_rows), 0.01)
+        self.assertAlmostEqual(
+            sum(row["cost_basis"] for row in btc_rows), 200.0, msg=btc_rows
+        )
+        self.assertAlmostEqual(
+            sum(row["cost_basis"] for row in disposals)
+            + fee["cost_basis"]
+            + sum(row["cost_basis"] for row in btc_rows),
+            400.0,
+        )
+
+        e1kv, result = self._run_json(
+            "reports",
+            "austrian-e1kv",
+            "--workspace",
+            "Main",
+            "--profile",
+            "Default",
+            "--year",
+            "2024",
+        )
+        self._assert_ok(e1kv, result, "reports.austrian-e1kv")
+        self.assertEqual(e1kv["data"]["cost_basis_pool_scope"], "global")
+        self.assertFalse(
+            any(row["entry_type"] == "income" for row in e1kv["data"]["rows"])
+        )
 
     def test_pdf_report_transliterates_non_latin1_glyphs(self):
         # The generic text PDF transliterates common non-Latin-1 glyphs to

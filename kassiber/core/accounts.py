@@ -17,7 +17,10 @@ from ..backends import (
 from ..db import get_setting, set_setting
 from ..errors import AppError
 from ..tax_policy import (
+    DEFAULT_COST_BASIS_POOL_SCOPE,
     build_tax_policy,
+    normalize_cost_basis_pool_scope,
+    profile_cost_basis_pool_scope,
     require_tax_country_supported_for_profile_mutation,
     supported_tax_countries,
 )
@@ -140,6 +143,7 @@ def create_profile(
     tax_long_term_days,
     *,
     bitcoin_rail_carrying_value=True,
+    cost_basis_pool_scope=DEFAULT_COST_BASIS_POOL_SCOPE,
     commit=True,
 ):
     workspace = resolve_workspace(conn, workspace_ref)
@@ -163,14 +167,17 @@ def create_profile(
     except ValueError as exc:
         raise AppError(str(exc)) from exc
     normalized_algo = _normalized_profile_algorithm(gains_algorithm, policy)
+    normalized_pool_scope = normalize_cost_basis_pool_scope(
+        cost_basis_pool_scope, policy.allowed_cost_basis_pool_scopes
+    )
     profile_id = str(uuid.uuid4())
     try:
         conn.execute(
             """
             INSERT INTO profiles(
                 id, workspace_id, label, fiat_currency, tax_country, tax_long_term_days,
-                gains_algorithm, bitcoin_rail_carrying_value, created_at
-            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+                gains_algorithm, bitcoin_rail_carrying_value, cost_basis_pool_scope, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 profile_id,
@@ -181,6 +188,7 @@ def create_profile(
                 policy.long_term_days,
                 normalized_algo,
                 1 if bitcoin_rail_carrying_value else 0,
+                normalized_pool_scope,
                 now_iso(),
             ),
         )
@@ -204,7 +212,7 @@ def list_profiles(conn, workspace_ref=None):
     rows = conn.execute(
         """
         SELECT id, label, fiat_currency, tax_country, tax_long_term_days, gains_algorithm,
-               bitcoin_rail_carrying_value, created_at
+               bitcoin_rail_carrying_value, cost_basis_pool_scope, created_at
         FROM profiles
         WHERE workspace_id = ?
         ORDER BY created_at ASC
@@ -220,6 +228,7 @@ def list_profiles(conn, workspace_ref=None):
             "tax_long_term_days": row["tax_long_term_days"],
             "gains_algorithm": row["gains_algorithm"],
             "bitcoin_rail_carrying_value": bool(row["bitcoin_rail_carrying_value"]),
+            "cost_basis_pool_scope": row["cost_basis_pool_scope"],
             "current": "yes" if row["id"] == current else "",
             "created_at": row["created_at"],
         }
@@ -250,6 +259,10 @@ def get_profile_details(conn, workspace_ref=None, profile_ref=None):
         "gains_algorithm": profile["gains_algorithm"],
         "require_coarse_review": _profile_require_coarse_review(profile),
         "bitcoin_rail_carrying_value": profile_bitcoin_rail_carrying_value(profile),
+        "cost_basis_pool_scope": profile_cost_basis_pool_scope(profile),
+        "allowed_cost_basis_pool_scopes": list(
+            build_tax_policy(profile).allowed_cost_basis_pool_scopes
+        ),
         "last_processed_at": profile["last_processed_at"],
         "last_processed_tx_count": profile["last_processed_tx_count"],
         "created_at": profile["created_at"],
@@ -268,6 +281,7 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
     new_algo = updates.get("gains_algorithm")
     new_coarse = updates.get("require_coarse_review")
     new_bitcoin_rail = updates.get("bitcoin_rail_carrying_value")
+    new_pool_scope = updates.get("cost_basis_pool_scope")
 
     try:
         current_coarse = bool(profile["require_coarse_review"])
@@ -276,6 +290,7 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
     merged_coarse = bool(new_coarse) if new_coarse is not None else current_coarse
     current_bitcoin_rail = profile_bitcoin_rail_carrying_value(profile)
     merged_bitcoin_rail = bool(new_bitcoin_rail) if new_bitcoin_rail is not None else current_bitcoin_rail
+    current_pool_scope = profile_cost_basis_pool_scope(profile)
 
     merged_fiat = new_fiat if new_fiat is not None else profile["fiat_currency"]
     merged_country = new_country if new_country is not None else profile["tax_country"]
@@ -307,6 +322,10 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
         )
     except ValueError as exc:
         raise AppError(str(exc), code="validation") from exc
+    merged_pool_scope = normalize_cost_basis_pool_scope(
+        new_pool_scope if new_pool_scope is not None else current_pool_scope,
+        policy.allowed_cost_basis_pool_scopes,
+    )
     # Only (re-)enforce the per-country method when the method or country is
     # explicitly part of this update. The explicit method-change dialog always
     # sends gains_algorithm, and a deliberate country switch sends tax_country,
@@ -327,13 +346,15 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
         or normalized_algo != profile["gains_algorithm"]
         or merged_coarse != current_coarse
         or merged_bitcoin_rail != current_bitcoin_rail
+        or merged_pool_scope != current_pool_scope
     )
 
     conn.execute(
         """
         UPDATE profiles
         SET label = ?, fiat_currency = ?, tax_country = ?, tax_long_term_days = ?,
-            gains_algorithm = ?, require_coarse_review = ?, bitcoin_rail_carrying_value = ?
+            gains_algorithm = ?, require_coarse_review = ?,
+            bitcoin_rail_carrying_value = ?, cost_basis_pool_scope = ?
         WHERE id = ?
         """,
         (
@@ -344,6 +365,7 @@ def update_profile(conn, workspace_ref, profile_ref, updates):
             normalized_algo,
             1 if merged_coarse else 0,
             1 if merged_bitcoin_rail else 0,
+            merged_pool_scope,
             profile["id"],
         ),
     )

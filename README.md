@@ -88,7 +88,8 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   transactions, and a DB-backed audit package manifest/export for
   trusted handoff.
 - **Tax & reports** — RP2 lot accounting (FIFO/LIFO/HIFO/LOFO and moving
-  average); Austrian § 27b EStG with E 1kv PDF / XLSX / CSV; summary,
+  average); Austrian § 27b EStG with E 1kv PDF / XLSX / CSV, where valued BTC
+  wages retain acquisition basis but stay outside crypto-income rows; summary,
   balance sheet, capital gains, portfolio, balance history; self-verifying
   XLSX export with live recompute formulas so you can check every balance,
   average price, acquisition, disposal and gain in Excel/LibreOffice yourself
@@ -99,6 +100,9 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
   2011-01-01 with daily-derived Coin Metrics + ECB rows before Kraken hourly
   coverage begins) and
   opt-in desktop background refresh for the latest BTC price.
+  Cost-basis pool scope is country-policy controlled and currently remains one
+  global pool for every supported country; Austrian per-wallet pooling is not
+  enabled.
 - **Sovereign storage** — one SQLite system of record per project/book-set;
   optional SQLCipher 4 passphrase encryption; single-project `tar | age`
   backups recoverable with stock `age` + `tar` + `sqlcipher` even if

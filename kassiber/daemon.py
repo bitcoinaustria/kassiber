@@ -9281,15 +9281,30 @@ def _update_profile_payload(
             retryable=False,
         )
     profile_id = profile_id.strip()
+    updates: dict[str, Any] = {}
     gains_algorithm = args.get("gains_algorithm")
-    if not isinstance(gains_algorithm, str) or not gains_algorithm.strip():
-        raise AppError(
-            "Accounting method is required.",
-            code="validation",
-            hint="Choose an accounting method for the book.",
-            retryable=False,
-        )
-    updates: dict[str, Any] = {"gains_algorithm": gains_algorithm.strip()}
+    if gains_algorithm is not None:
+        if not isinstance(gains_algorithm, str) or not gains_algorithm.strip():
+            raise AppError(
+                "Accounting method is required.",
+                code="validation",
+                hint="Choose an accounting method for the book.",
+                retryable=False,
+            )
+        updates["gains_algorithm"] = gains_algorithm.strip()
+    cost_basis_pool_scope = args.get("cost_basis_pool_scope")
+    if cost_basis_pool_scope is not None:
+        if (
+            not isinstance(cost_basis_pool_scope, str)
+            or not cost_basis_pool_scope.strip()
+        ):
+            raise AppError(
+                "Cost-basis pool scope is required.",
+                code="validation",
+                hint="Choose a supported cost-basis pool scope for the book.",
+                retryable=False,
+            )
+        updates["cost_basis_pool_scope"] = cost_basis_pool_scope.strip()
     # Region (tax_country) is optional: the book-settings dialog only sends it
     # when the user explicitly switches region, and always pairs it with a
     # region-valid method in the same update. update_profile enforces the
@@ -9306,6 +9321,12 @@ def _update_profile_payload(
                 retryable=False,
             )
         updates["tax_country"] = tax_country.strip()
+    if not updates:
+        raise AppError(
+            "No book policy change was provided.",
+            code="validation",
+            retryable=False,
+        )
     row = conn.execute(
         "SELECT id, workspace_id FROM profiles WHERE id = ?",
         (profile_id,),
@@ -9343,7 +9364,8 @@ def _profile_defaults_for_workspace(
                 tax_country,
                 tax_long_term_days,
                 gains_algorithm,
-                bitcoin_rail_carrying_value
+                bitcoin_rail_carrying_value,
+                cost_basis_pool_scope
             FROM profiles
             WHERE workspace_id = ?
               AND id = ?
@@ -9364,6 +9386,7 @@ def _profile_defaults_for_workspace(
             "tax_long_term_days": row["tax_long_term_days"],
             "gains_algorithm": row["gains_algorithm"],
             "bitcoin_rail_carrying_value": bool(row["bitcoin_rail_carrying_value"]),
+            "cost_basis_pool_scope": row["cost_basis_pool_scope"],
         }
 
     context = current_context_snapshot(conn)
@@ -9375,7 +9398,8 @@ def _profile_defaults_for_workspace(
             tax_country,
             tax_long_term_days,
             gains_algorithm,
-            bitcoin_rail_carrying_value
+            bitcoin_rail_carrying_value,
+            cost_basis_pool_scope
         FROM profiles
         WHERE workspace_id = ?
         ORDER BY created_at ASC, label ASC
@@ -9393,6 +9417,7 @@ def _profile_defaults_for_workspace(
             "tax_long_term_days": row["tax_long_term_days"],
             "gains_algorithm": row["gains_algorithm"],
             "bitcoin_rail_carrying_value": bool(row["bitcoin_rail_carrying_value"]),
+            "cost_basis_pool_scope": row["cost_basis_pool_scope"],
         }
     return {
         "fiat_currency": "EUR",
@@ -9400,6 +9425,7 @@ def _profile_defaults_for_workspace(
         "tax_long_term_days": 365,
         "gains_algorithm": "FIFO",
         "bitcoin_rail_carrying_value": True,
+        "cost_basis_pool_scope": "global",
     }
 
 
@@ -9444,6 +9470,7 @@ def _create_profile_payload(
     gains_algorithm = defaults["gains_algorithm"]
     tax_long_term_days = int(defaults["tax_long_term_days"])
     bitcoin_rail_carrying_value = bool(defaults.get("bitcoin_rail_carrying_value", True))
+    cost_basis_pool_scope = str(defaults.get("cost_basis_pool_scope") or "global")
     # The "New book" dialog can pick a region + method explicitly. Copying from a
     # source book inherits its settings verbatim (region/method come from the
     # source), so explicit picks only apply when no source is chosen. core
@@ -9452,14 +9479,22 @@ def _create_profile_payload(
     if source_profile_id is None:
         requested_country = _optional_string_arg(args, "tax_country")
         requested_algo = _optional_string_arg(args, "gains_algorithm")
+        requested_pool_scope = _optional_string_arg(args, "cost_basis_pool_scope")
         if requested_country is not None and requested_country != tax_country:
             tax_country = requested_country
+            # Pool scopes are policy-specific. Do not carry an inherited scope
+            # into a different country's create validation; the target starts
+            # at the country-neutral global scope and may expose more choices
+            # after it has been saved.
+            cost_basis_pool_scope = "global"
             # Region picked away from the inherited default: use that region's
             # standard holding period instead of a mismatched one (the Austrian
             # policy overrides this regardless).
             tax_long_term_days = 365
         if requested_algo is not None:
             gains_algorithm = requested_algo
+        if requested_pool_scope is not None:
+            cost_basis_pool_scope = requested_pool_scope
     profile = core_accounts.create_profile(
         conn,
         workspace_id,
@@ -9469,6 +9504,7 @@ def _create_profile_payload(
         tax_country,
         tax_long_term_days,
         bitcoin_rail_carrying_value=bitcoin_rail_carrying_value,
+        cost_basis_pool_scope=cost_basis_pool_scope,
     )
     workspace = conn.execute(
         "SELECT id, label FROM workspaces WHERE id = ?",
@@ -9487,6 +9523,7 @@ def _create_profile_payload(
             "tax_country": profile["tax_country"],
             "tax_long_term_days": profile["tax_long_term_days"],
             "gains_algorithm": profile["gains_algorithm"],
+            "cost_basis_pool_scope": profile["cost_basis_pool_scope"],
         },
     }
 

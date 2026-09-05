@@ -15,7 +15,11 @@ from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 from ...errors import AppError
 from ...msat import btc_to_msat, dec, msat_to_btc
-from ...tax_policy import build_tax_policy, require_tax_processing_supported
+from ...tax_policy import (
+    GLOBAL_COST_BASIS_POOL_ID,
+    build_tax_policy,
+    require_tax_processing_supported,
+)
 from ...transfers import is_bitcoin_rail_pair
 from .. import pricing
 from ..transfer_chronology import order_same_time_transfers
@@ -24,6 +28,7 @@ from ..ownership_transfers import (
     detect_pending_onchain_ids,
 )
 from ..austrian import (
+    AT_DEFAULT_POOL,
     AT_SWAP_QUARANTINE_REASON,
     REGIME_NEU,
     kennzahl_for_disposal_category,
@@ -59,7 +64,6 @@ _RP2_EARN_TRANSACTION_TYPES = {
     "interest",
     "mining",
     "staking",
-    "wages",
 }
 _NON_REPORTABLE_AT_CATEGORY_OVERRIDES = {"alt_taxfree", "neu_swap"}
 _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE = {
@@ -73,7 +77,11 @@ _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE = {
     "mining_reward": "MINING",
     "routing_income": "INCOME",
     "staking": "STAKING",
-    "wages": "WAGES",
+    # Kassiber's tax lens starts at the Bitcoin acquisition. Compensation
+    # provenance stays on the raw transaction, but the reviewed EUR value is
+    # booked as ordinary acquisition basis instead of an employment-income
+    # event (wage-tax reporting lives outside Kassiber).
+    "wages": "BUY",
 }
 # Inbound kinds that look like income but are NOT in the map above. Defaulting
 # them to BUY (a plain acquisition) silently drops the income declaration, so
@@ -274,7 +282,14 @@ def _classify_at_disposal(gain_loss: Any) -> tuple[str, int | None]:
     return category_value, kennzahl_for_disposal_category(category_value)
 
 
-def _compose_event_notes(event: Any) -> str:
+def _austrian_wire_pool_id(pool_id: Any) -> str | None:
+    pool = str(pool_id or "").strip()
+    if not pool:
+        return None
+    return AT_DEFAULT_POOL if pool == GLOBAL_COST_BASIS_POOL_ID else pool
+
+
+def _compose_event_notes(event: Any, *, include_austrian_markers: bool = True) -> str:
     """Serialize typed Austrian markers plus human description into rp2 notes.
 
     Markers come first in a fixed order (regime, pool, swap_link) so downstream
@@ -292,7 +307,11 @@ def _compose_event_notes(event: Any) -> str:
         # Audit-only provenance of the regime choice (exercised Wahlrecht vs
         # forced); rp2 does not read it, the journal/GUI marker channel does.
         tokens.append(marker_token(MARKER_REGIME_BASIS, regime_basis))
-    pool = getattr(event, "at_pool", None)
+    pool = (
+        _austrian_wire_pool_id(getattr(event, "cost_basis_pool_id", None))
+        if include_austrian_markers
+        else None
+    )
     if pool:
         tokens.append(marker_token(MARKER_POOL, pool))
     swap_link = getattr(event, "at_swap_link", None)
@@ -375,7 +394,9 @@ def _capital_gains_type(gain_loss: Any) -> str:
     return "long" if bool(is_long) else "short"
 
 
-def _compose_transfer_notes(transfer: Any) -> str:
+def _compose_transfer_notes(
+    transfer: Any, *, include_austrian_markers: bool = True
+) -> str:
     tokens: list[str] = []
     # The MOVE's miner fee is a taxable disposal; under the Austrian
     # moving-average method rp2 needs its regime tag in notes or it aborts the
@@ -384,7 +405,16 @@ def _compose_transfer_notes(transfer: Any) -> str:
     regime = getattr(transfer, "at_regime", None)
     if regime:
         tokens.append(marker_token(MARKER_REGIME, regime))
-    pool = getattr(transfer, "at_pool", None)
+    from_pool = getattr(transfer, "from_cost_basis_pool_id", None)
+    to_pool = getattr(transfer, "to_cost_basis_pool_id", None)
+    if include_austrian_markers and from_pool != to_pool:
+        raise AppError(
+            "RP2 does not support Austrian transfers between cost-basis pools",
+            code="unsupported",
+            hint="Use the global cost-basis pool scope until the country plugin exposes a reviewed cross-pool marker contract.",
+            retryable=False,
+        )
+    pool = _austrian_wire_pool_id(from_pool) if include_austrian_markers else None
     if pool:
         tokens.append(marker_token(MARKER_POOL, pool))
     pairing_source = getattr(transfer, "pairing_source", None)
@@ -687,6 +717,7 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
     IntraTransaction = modules["IntraTransaction"]
     InputData = modules["InputData"]
     asset = normalized_inputs.asset
+    include_austrian_markers = _profile_str(profile, "tax_country").lower() == "at"
     in_set = TransactionSet(configuration, "IN", asset)
     out_set = TransactionSet(configuration, "OUT", asset)
     intra_set = TransactionSet(configuration, "INTRA", asset)
@@ -859,7 +890,9 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                 crypto_received=_rp2_decimal(transfer.received),
                 row=row_index,
                 unique_id=transfer_id,
-                notes=_compose_transfer_notes(transfer),
+                notes=_compose_transfer_notes(
+                    transfer, include_austrian_markers=include_austrian_markers
+                ),
             )
         )
         row_index += 1
@@ -909,8 +942,10 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
             audit_row["at_regime"] = transfer.at_regime
         if getattr(transfer, "regime_flows", None):
             audit_row["regime_flows"] = transfer.regime_flows
-        if getattr(transfer, "at_pool", None):
-            audit_row["at_pool"] = transfer.at_pool
+        if include_austrian_markers:
+            pool = _austrian_wire_pool_id(transfer.from_cost_basis_pool_id)
+            if pool:
+                audit_row["at_pool"] = pool
         if transfer.group_id:
             audit_row["transfer_group_id"] = transfer.group_id
         if transfer_id != transfer.out_transaction_id:
@@ -1043,7 +1078,9 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                     fiat_fee=_rp2_decimal(0),
                     row=row_index,
                     unique_id=event.transaction_id,
-                    notes=_compose_event_notes(event),
+                    notes=_compose_event_notes(
+                        event, include_austrian_markers=include_austrian_markers
+                    ),
                 )
             )
             priced_available += event.amount
@@ -1171,7 +1208,9 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                 fiat_fee=_rp2_decimal(event.fee * event.spot_price),
                 row=row_index,
                 unique_id=event.transaction_id,
-                notes=_compose_event_notes(event),
+                notes=_compose_event_notes(
+                    event, include_austrian_markers=include_austrian_markers
+                ),
             )
         )
         account_available[event.wallet_label] -= needed

@@ -8,6 +8,7 @@
  */
 
 export type ProfileTaxCountry = "at" | "generic";
+export type CostBasisPoolScope = "global" | "wallet";
 export type ProfileGainsAlgorithm =
   | "FIFO"
   | "LIFO"
@@ -24,6 +25,8 @@ export interface Profile {
   taxCountry?: ProfileTaxCountry;
   taxLongTermDays?: number;
   gainsAlgorithm?: ProfileGainsAlgorithm;
+  costBasisPoolScope?: CostBasisPoolScope;
+  allowedCostBasisPoolScopes?: CostBasisPoolScope[];
   accounts: number;
   wallets: number;
   lastOpened: string;

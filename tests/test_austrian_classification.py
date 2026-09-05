@@ -10,7 +10,6 @@ from kassiber.core.austrian import (
     infer_outbound_regimes,
     infer_regime_from_timestamp,
     kennzahl_for_disposal_category,
-    resolve_pool_id,
 )
 from kassiber.core.tax_events import normalize_tax_asset_inputs
 from tests.custody_tax_helpers import finalized_tax_inputs
@@ -71,16 +70,6 @@ class InferRegimeFromTimestampTest(unittest.TestCase):
             infer_regime_from_timestamp("2020-06-15T00:00:00Z"),
             REGIME_ALT,
         )
-
-
-class ResolvePoolIdTest(unittest.TestCase):
-    def test_pool_is_global_regardless_of_wallet(self):
-        # Single global moving-average pool per asset (§ 2 KryptowährungsVO): the pool id no longer
-        # depends on the wallet, so coins acquired in one wallet and sold from another share one pool.
-        self.assertEqual(resolve_pool_id("wallet-abc"), "default")
-        self.assertEqual(resolve_pool_id("wallet-xyz"), "default")
-        self.assertEqual(resolve_pool_id(None), "default")
-        self.assertEqual(resolve_pool_id(""), "default")
 
 
 class InferOutboundRegimesTest(unittest.TestCase):
@@ -343,12 +332,18 @@ class AustrianKennzahlMappingTest(unittest.TestCase):
 
         self.assertEqual(AT_NEU_CUTOFF, RP2_AT_NEU_CUTOFF)
 
-    def test_kennzahl_mapping_covers_every_rp2_category(self):
-        from rp2.plugin.country.at import AtDisposalCategory
-
+    def test_kennzahl_mapping_covers_every_kassiber_category(self):
         self.assertEqual(
             set(AT_CATEGORY_TO_KENNZAHL),
-            {category.value for category in AtDisposalCategory},
+            {
+                "income_general",
+                "income_capital_yield",
+                "neu_gain",
+                "neu_loss",
+                "neu_swap",
+                "alt_spekulation",
+                "alt_taxfree",
+            },
         )
 
     def test_maps_known_categories(self):
@@ -389,7 +384,7 @@ class AustrianNormalizationTest(unittest.TestCase):
         self.assertEqual(len(result.events), 1)
         event = result.events[0]
         self.assertEqual(event.at_regime, REGIME_NEU)
-        self.assertEqual(event.at_pool, "default")  # single global per-asset pool, not per-wallet
+        self.assertEqual(event.cost_basis_pool_id, "global")
         self.assertIsNone(event.at_swap_link)
 
     def test_at_inbound_event_pre_cutoff_gets_alt_regime(self):
@@ -407,7 +402,7 @@ class AustrianNormalizationTest(unittest.TestCase):
         )
         event = result.events[0]
         self.assertIsNone(event.at_regime)
-        self.assertIsNone(event.at_pool)
+        self.assertEqual(event.cost_basis_pool_id, "global")
         self.assertIsNone(event.at_swap_link)
 
     def test_at_swap_link_tags_inbound_without_basis_override(self):
@@ -439,7 +434,8 @@ class AustrianNormalizationTest(unittest.TestCase):
         self.assertEqual(len(result.transfers), 1)
         # Transfers carry the single global pool, not the source wallet — so a later sale from the
         # destination wallet resolves against the same Neu pool the coins were acquired in.
-        self.assertEqual(result.transfers[0].at_pool, "default")
+        self.assertEqual(result.transfers[0].from_cost_basis_pool_id, "global")
+        self.assertEqual(result.transfers[0].to_cost_basis_pool_id, "global")
 
     def test_at_outbound_post_cutoff_with_only_alt_inventory_gets_alt_regime(self):
         rows = [

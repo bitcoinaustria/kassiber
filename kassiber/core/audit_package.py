@@ -1124,7 +1124,13 @@ def build_evidence_summary(
     result = {
         "schema_version": AUDIT_PACKAGE_SCHEMA_VERSION,
         "workspace": {"id": workspace["id"], "label": workspace["label"]},
-        "profile": {"id": profile["id"], "label": profile["label"]},
+        "profile": {
+            "id": profile["id"],
+            "label": profile["label"],
+            "cost_basis_pool_scope": str(
+                _row_get(profile, "cost_basis_pool_scope", "global") or "global"
+            ),
+        },
         "scope": scope,
         "journal_freshness": freshness,
         "custody_quantity": custody_quantity,

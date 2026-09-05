@@ -11,6 +11,9 @@ DEFAULT_LONG_TERM_DAYS = 365
 DEFAULT_REPORT_GENERATORS = ("open_positions", "rp2_full_report")
 DEFAULT_ACCOUNTING_METHODS = ("fifo", "lifo", "hifo", "lofo", "moving_average")
 ACTIVE_TAX_COUNTRIES = (DEFAULT_TAX_COUNTRY, AUSTRIAN_TAX_COUNTRY)
+DEFAULT_COST_BASIS_POOL_SCOPE = "global"
+WALLET_COST_BASIS_POOL_SCOPE = "wallet"
+GLOBAL_COST_BASIS_POOL_ID = "global"
 
 
 @dataclass(frozen=True)
@@ -22,6 +25,45 @@ class TaxPolicy:
     report_generators: tuple[str, ...]
     default_accounting_method: str = "fifo"
     generation_language: str = "en"
+    allowed_cost_basis_pool_scopes: tuple[str, ...] = (DEFAULT_COST_BASIS_POOL_SCOPE,)
+
+
+def normalize_cost_basis_pool_scope(value, allowed_scopes=(DEFAULT_COST_BASIS_POOL_SCOPE,)):
+    scope = str(value or DEFAULT_COST_BASIS_POOL_SCOPE).strip().lower()
+    allowed = tuple(str(item).strip().lower() for item in allowed_scopes)
+    if scope not in allowed:
+        raise AppError(
+            f"Unsupported cost-basis pool scope '{value}'",
+            code="validation",
+            hint=f"Choose one of: {', '.join(sorted(allowed))}",
+        )
+    return scope
+
+
+def profile_cost_basis_pool_scope(profile):
+    policy = build_tax_policy(profile)
+    return normalize_cost_basis_pool_scope(
+        profile_value(profile, "cost_basis_pool_scope", DEFAULT_COST_BASIS_POOL_SCOPE),
+        policy.allowed_cost_basis_pool_scopes,
+    )
+
+
+def resolve_cost_basis_pool_id(profile, wallet_id):
+    """Resolve the opaque pool identity from already-reviewed custody facts."""
+
+    scope = profile_cost_basis_pool_scope(profile)
+    if scope == DEFAULT_COST_BASIS_POOL_SCOPE:
+        return GLOBAL_COST_BASIS_POOL_ID
+    if scope == WALLET_COST_BASIS_POOL_SCOPE:
+        wallet = str(wallet_id or "").strip()
+        if not wallet:
+            raise AppError(
+                "Wallet cost-basis pooling requires a wallet identity",
+                code="validation",
+                retryable=False,
+            )
+        return wallet
+    raise AssertionError(f"unhandled cost-basis pool scope: {scope}")
 
 
 def normalize_tax_country(value):
