@@ -67,7 +67,7 @@ same verification surface.
 
 ## Right now
 
-- [ ] **Country-configurable cost-basis pools and compensation acquisitions.**
+- [x] **Country-configurable cost-basis pools and compensation acquisitions.**
   Execute the ordered, cross-repository gates in
   [`docs/plan/16-cost-basis-pools-and-employment-compensation.md`](docs/plan/16-cost-basis-pools-and-employment-compensation.md).
   The terminal state is intentionally narrow: book valued `wages` as a normal
@@ -81,8 +81,9 @@ same verification surface.
   - [x] G0: pin the wage, global-pool, moving-average transfer, and fee-bearing
     regression fixtures; record the Austrian wallet-scope legal/product gate.
   - [x] G1-G2 in RP2: effective-basis materialization and the unsafe
-    country-hook guard are implemented in RP2 PR #48; no wage-tax category
-    belongs in RP2.
+    country-hook guard landed in RP2 PR #48 (`7b0dd677`); no wage-tax category
+    belongs in RP2. Acquisition/native carry and cutoff holdings have separate
+    accessors; existing processed pool journals become stale once on upgrade.
     General narrow-pool execution remains gated on one chronological movement +
     taxable-event cursor; fee-bearing `per_wallet` transfers fail closed.
   - [x] G3 in Kassiber: add the one profile column, generic normalized pool

@@ -1,8 +1,9 @@
 """Cutoff-safe, exact capture of the existing RP2 computation seam.
 
-Filtering full-history ComputedData is unsafe: later moving-average operations
-can replace earlier effective acquisition-basis overrides. This Adapter runs a
-fresh input prefix and never implements cost-basis selection or pool arithmetic.
+The explicit prefix bounds retained replay inputs and evidence. Native carry
+may also need unexecuted future receipt references, which must not enter the
+cutoff inventory. Acquisition carry and report-cutoff position basis use distinct
+RP2 contracts; this adapter never implements selection or pool arithmetic.
 """
 from __future__ import annotations
 
@@ -23,15 +24,23 @@ def capturing_accounting_engine(engine, retained):
 
     RP2 TaxEngineCursor constructs ``accounting_engine.__class__(methods)``.
     A per-run subclass closure therefore survives that supported construction
-    while sharing only this run's append-only sink. No monkeypatch or global
-    state, and the delegated result is returned unchanged. The true event unit
+    while sharing only this run's append-only sink. RP2's report cursor replays
+    the same asset's ordered prefix on a fresh engine: retain that prefix once,
+    and reject changed identities, ordering or values instead of hiding drift.
+    No monkeypatch or global state, and the delegated result is unchanged. The true event unit
     basis is intentionally distinct from the display zero-gain override.
     """
     contract = ('self', 'taxable_event', 'acquired_lot', 'taxable_event_amount', 'acquired_lot_amount')
     if tuple(inspect.signature(type(engine).get_acquired_lot_for_taxable_event).parameters) != contract:
         raise AppError('Installed RP2 execution capture contract changed', code='accounting_calculation_dependency')
 
+    selections, identities, owners = {}, set(), {}
+
     class CapturingAccountingEngine(type(engine)):
+        def __init__(self, years_2_methods):
+            super().__init__(years_2_methods)
+            self._capture_ordinals = {}
+
         def get_acquired_lot_for_taxable_event(self, taxable_event, acquired_lot, taxable_event_amount, acquired_lot_amount):
             result = super().get_acquired_lot_for_taxable_event(taxable_event, acquired_lot, taxable_event_amount, acquired_lot_amount)
             required = ('taxable_event','acquired_lot','taxable_event_amount','acquired_lot_amount',
@@ -44,11 +53,30 @@ def capturing_accounting_engine(engine, retained):
                 true_unit = result.unit_cost_basis_override
             if true_unit is None:
                 true_unit = result.acquired_lot.fiat_in_with_fee / result.acquired_lot.crypto_in
-            retained.append(dict(asset=result.taxable_event.asset, event_id=result.taxable_event.unique_id,
+            record = dict(asset=result.taxable_event.asset, event_id=result.taxable_event.unique_id,
                 lot_id=result.acquired_lot.unique_id, quantity_msat=_msat(quantity),
                 unit_basis_exact=_decimal(true_unit), basis_exact=_decimal(quantity * true_unit),
                 display_unit_basis_override_exact=None if result.unit_cost_basis_override is None else _decimal(result.unit_cost_basis_override),
-                carried_unit_basis_exact=None if result.taxable_event_unit_cost_basis is None else _decimal(result.taxable_event_unit_cost_basis)))
+                carried_unit_basis_exact=None if result.taxable_event_unit_cost_basis is None else _decimal(result.taxable_event_unit_cost_basis))
+            asset = result.taxable_event.asset
+            identity = (asset, result.taxable_event.internal_id, result.acquired_lot.internal_id)
+            sequence = selections.setdefault(asset, [])
+            owner = owners.setdefault(asset, self)
+            ordinal = self._capture_ordinals.get(asset, 0)
+            if ordinal < len(sequence):
+                if sequence[ordinal] != (identity, record):
+                    raise AppError('RP2 report replay changed its execution prefix', code='accounting_calculation_dependency')
+            else:
+                if owner is not self:
+                    raise AppError('RP2 report replay extended its execution prefix', code='accounting_calculation_dependency')
+                # A taxable event can consume several lots, and a lot can serve
+                # several events, but each event/lot pair is selected only once.
+                if identity in identities:
+                    raise AppError('RP2 repeated a selection within execution', code='accounting_calculation_dependency')
+                identities.add(identity)
+                sequence.append((identity, record))
+                retained.append(record)
+            self._capture_ordinals[asset] = ordinal + 1
             return result
 
     return CapturingAccountingEngine(engine.years_2_methods)
@@ -184,7 +212,38 @@ def _bounded_inputs(inputs, cutoff):
     return TaxEngineLedgerInputs(prefix, wallet_refs), blockers, relations
 
 
-def _freeze(capture, prefix, result, blockers, relations):
+def _positions_without_future_references(prepared, computed, future_refs, profile):
+    """Replay only observed inventory with RP2's already resolved native carry.
+
+    Future receipt references are required for cross-asset validation/carry, not
+    acquisitions at this cutoff. Input filtering is exact-instant upstream, so
+    removing these explicit references also handles a cutoff within a UTC date.
+    """
+    from rp2.input_data import InputData
+    from rp2.tax_engine import TaxEngineCursor
+    from rp2.transaction_set import TransactionSet
+    from .rp2 import _build_rp2_accounting_engine
+
+    original = prepared.input_data
+    configuration = original.unfiltered_in_transaction_set.configuration
+    eligible = [item for item in original.unfiltered_in_transaction_set if item.unique_id not in future_refs]
+    if not eligible:
+        return {}
+    acquisitions = TransactionSet(configuration, 'IN', prepared.asset)
+    for item in eligible:
+        acquisitions.add_entry(item)
+    inputs = InputData(prepared.asset, acquisitions, original.unfiltered_out_transaction_set,
+        original.unfiltered_intra_transaction_set,
+        in_transaction_2_fiat_in_with_fee_override={item: computed.get_in_transaction_fiat_in_with_fee(item) for item in eligible})
+    # An uncaptured engine prevents this report-only replay from creating
+    # additional retained execution evidence. RP2 still owns every calculation.
+    cursor = TaxEngineCursor(configuration, _build_rp2_accounting_engine(profile), inputs)
+    while cursor.has_next():
+        cursor.consume_next_taxable_event()
+    return cursor.get_open_position_basis()
+
+
+def _freeze(capture, prefix, result, blockers, relations, profile):
     prepared_rows, assets, source_map, overrides = [], [], {}, {}
     future_refs = {item['in_id']: item for item in relations if item.get('future_reference')}
     for row in prefix.finalized_tax_projection.rows:
@@ -201,6 +260,11 @@ def _freeze(capture, prefix, result, blockers, relations):
         computed = capture['states'][prepared.asset].computed_data
         if computed is None:
             continue
+        position_overrides = (
+            _positions_without_future_references(prepared, computed, future_refs, profile)
+            if any(item.unique_id in future_refs for item in prepared.input_data.unfiltered_in_transaction_set)
+            else None
+        )
         acquisitions, gains, positions, balances = [], [], [], []
         for item in computed.open_position_in_transaction_set:
             effective = computed.get_in_transaction_fiat_in_with_fee(item)
@@ -216,7 +280,9 @@ def _freeze(capture, prefix, result, blockers, relations):
             actual = computed.get_in_transaction_actual_amount(item)
             retained_quantity = item.crypto_in if actual is None else actual
             remaining = Decimal(retained_quantity) * (Decimal(1) - Decimal(sold))
-            basis = Decimal(effective) * remaining / Decimal(item.crypto_in)
+            position_basis = (computed.get_open_position_in_transaction_fiat_in_with_fee(item)
+                              if position_overrides is None else position_overrides[item])
+            basis = Decimal(position_basis) * remaining / Decimal(item.crypto_in)
             positions.append(dict(lot_id=item.unique_id, pool_id='global', quantity_msat=_msat(remaining), basis_exact=_decimal(basis)))
         for gain in computed.gain_loss_set:
             event, lot = gain.taxable_event, gain.acquired_lot
@@ -297,9 +363,9 @@ def capture_calculation(engine, inputs, *, cutoff_exclusive_utc, calculation_tim
             names = {str(row['asset']) for row in prefix.finalized_tax_projection.rows}
             with _rp2_configuration(engine.profile, labels, names) as configuration:
                 result = engine._build_finalized_ledger_state(prefix, configuration, calculation_capture=captured)
-                retained_inputs, assets, blockers = _freeze(captured, prefix, result, blockers, relations)
+                retained_inputs, assets, blockers = _freeze(captured, prefix, result, blockers, relations, engine.profile)
         else:
             result = engine._build_finalized_ledger_state(prefix, None)
-            retained_inputs, assets, blockers = _freeze(captured, prefix, result, blockers, relations)
+            retained_inputs, assets, blockers = _freeze(captured, prefix, result, blockers, relations, engine.profile)
     return TaxEngineCalculationResult(cutoff.isoformat().replace('+00:00', 'Z'), calculation_timezone,
                                        retained_inputs, assets, blockers)
