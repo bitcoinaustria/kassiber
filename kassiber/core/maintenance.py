@@ -227,6 +227,7 @@ def reset_current_profile_data(
         "custody_authored_evidence_snapshots": _count_profile_rows(
             conn, "custody_authored_evidence_snapshots", profile_id
         ),
+        "review_workflow_receipts": _count_profile_rows(conn, "review_workflow_receipts", profile_id),
         "custody_gap_reviews": _count_profile_rows(
             conn, "custody_gap_reviews", profile_id
         ),
@@ -441,6 +442,7 @@ def reset_current_profile_data(
             "custody_gap_review_transactions",
             "custody_gap_review_relation_sets",
             "custody_gap_reviews",
+            "review_workflow_receipts",
             "custody_filed_report_impact_resolutions",
             "custody_filed_report_impacts",
             "filed_report_snapshots",

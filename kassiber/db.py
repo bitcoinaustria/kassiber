@@ -1816,6 +1816,25 @@ END;
 -- crossed an explicit consent boundary.  Chat history is optional and cannot
 -- serve as this audit trail.  Proposal payloads remain inside SQLCipher and
 -- are deliberately absent from replication and public/audit-package exports.
+-- Application receipts bind one consented portable review to existing domain history.
+-- Investigation and preview remain read-only; raw chain evidence is never copied here.
+CREATE TABLE IF NOT EXISTS review_workflow_receipts (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    idempotency_key TEXT NOT NULL,
+    artifact_digest TEXT NOT NULL CHECK(length(artifact_digest) = 64),
+    receipt_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(profile_id, idempotency_key)
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_review_workflow_receipt_immutable
+BEFORE UPDATE ON review_workflow_receipts
+BEGIN
+    SELECT RAISE(ABORT, 'review_workflow_receipt_immutable');
+END;
+
 CREATE TABLE IF NOT EXISTS custody_ai_assistance_audits (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
