@@ -162,6 +162,9 @@ def _operations(operations):
         if kind == "custody_component":
             if set(operation) != {"type", "request"} or not isinstance(operation["request"], dict):
                 raise _error("Custody review requires a typed request")
+            action = operation["request"].get("action")
+            if not isinstance(action, str) or action not in custody_component_planner.COMPONENT_REVIEW_ACTIONS:
+                raise _error("Custody review requires a supported action")
             allowed = {"action", "components", "component_id", "spec", "activate", "reason"}
             if set(operation["request"]) - allowed:
                 raise _error("Custody review request contains unsupported fields")

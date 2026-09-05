@@ -205,3 +205,16 @@ def test_review_budget_preserves_explicit_override_and_ordinary_default():
     assert daemon._ai_chat_args(request)["tool_loop_max_iterations"] == 16
     request["tool_loop_max_iterations"] = 3
     assert daemon._ai_chat_args(request)["tool_loop_max_iterations"] == 3
+
+
+@pytest.mark.parametrize("component_request", [{}, {"action": {}}, {"action": []}, {"action": "invented"}])
+def test_malformed_component_plan_has_typed_error_without_writes(book, component_request):
+    conn, _runtime = book
+    with pytest.raises(AppError) as caught:
+        daemon._review_workflow_payload(conn, "ui.review.plan", {
+            "expected_input_version": 0,
+            "operations": [{"type": "custody_component", "request": component_request}],
+        })
+    assert caught.value.code == "validation"
+    assert not conn.in_transaction
+    assert conn.execute("SELECT COUNT(*) FROM review_workflow_receipts").fetchone()[0] == 0
