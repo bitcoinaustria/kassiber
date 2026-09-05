@@ -930,6 +930,10 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
 - [ ] Production code-signing & distribution: Apple Developer ID + notarization
   (macOS), Windows EV cert, signed Linux repository metadata and applicable
   artifact signatures; flip `tauri.conf.json` `bundle.active` for production
+  - macOS local-sign/CI-notarize tooling: see `docs/reference/macos-release.md`.
+    Notary secret names and main-only environment restriction are verified.
+    Activation still requires live credential validation, OpenPGP key ceremony,
+    and a real signed/notarized clean-Mac install test; do not claim this shipped.
 - [x] Minimal GitHub release notifier for installed desktop and interactive CLI
   builds: preference-controlled delayed/daily desktop checks, a native macOS
   manual action, cached non-blocking CLI notices, and no automatic download or

@@ -459,8 +459,12 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 - `.github/workflows/prerelease-binaries.yml` is intentionally not a normal PR
   workflow. Do not add PR-triggered binary builds unless the user explicitly
   asks for that policy change.
-- `v*` tag pushes build CLI and desktop artifacts and publish them to a GitHub
-  prerelease. Manual `workflow_dispatch` runs build/upload artifacts for the
+- `v*` tag pushes build CLI and desktop artifacts and stage a GitHub draft.
+  Public releases require local Developer ID signing, CI notarization, and
+  offline OpenPGP verification through `finalize-signed-release.yml`; see
+  [docs/reference/macos-release.md](docs/reference/macos-release.md).
+  Never put the Apple signing private key in CI or publish failed platform checks.
+  Manual `workflow_dispatch` runs build/upload artifacts for the
   selected ref; they only publish when `publish_release=true` and `tag_name`
   names an existing tag.
 - If the user asks for binaries for a PR or branch, run the workflow manually

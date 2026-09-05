@@ -59,9 +59,9 @@ on:
         default: ""
         type: string
       draft_release:
-        description: "Keep the GitHub release as a draft for offline PGP signing"
+        description: "Release builds always remain drafts until platform and OpenPGP verification"
         required: true
-        default: false
+        default: true
         type: boolean
   push:
     tags:
@@ -796,7 +796,7 @@ jobs:
       - name: Enforce release signing cutover policy
         id: release-signing
         env:
-          RELEASE_IS_DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.draft_release == true }}
+          RELEASE_IS_DRAFT: 'true'
         run: |
           set -euo pipefail
           policy_json="$(python3 scripts/release_manifest.py policy \
@@ -849,12 +849,26 @@ jobs:
           test -s "$manifest_path"
           echo "path=${manifest_path}" >> "$GITHUB_OUTPUT"
 
+      - name: Never replace an already published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+        run: |
+          set -euo pipefail
+          # A missing release is allowed; API/auth failures are not.
+          releases="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[] | [.tag_name, .draft] | @tsv')"
+          state="$(printf '%s\n' "$releases" | awk -F '\t' -v tag="$TAG" '$1 == tag {print $2}')"
+          test -z "$state" || test "$state" = true
+          if [ "$state" = true ]; then
+            echo 'Draft already exists; use a new tag/build rather than overwriting a signing handoff.' >&2
+            exit 1
+          fi
       - name: Create or update release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
           prerelease: ${{ github.event_name != 'workflow_dispatch' || inputs.release_channel == 'prerelease' }}
-          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft_release == true }}
+          draft: true
           fail_on_unmatched_files: true
           body: |
             Automated Kassiber release artifacts.
@@ -862,11 +876,13 @@ jobs:
             Each release includes a versioned SHA-256 manifest. A release is
             PGP-authenticated only when the matching `.txt.asc` detached
             signature is also attached and verifies against Kassiber's
-            independently published release-key fingerprint. Current packages
-            remain unsigned until that key and signature are published.
+            independently published release-key fingerprint.
 
-            Platform code signing is separate from the PGP manifest. These are
-            currently unsigned CLI and desktop builds.
+            Platform code signing is separate from the PGP manifest. While
+            this release is a draft, its artifacts are not ready for use.
+            The finalize-signed-release workflow requires macOS Developer ID
+            signing, notarization and offline OpenPGP verification before
+            publication. This does not claim Windows Authenticode signing.
             CLI-only archives are published for macOS, Linux, and Windows;
             Linux also gets GUI-free CLI-only Debian/RPM packages and a
             desktop RPM.
@@ -884,7 +900,7 @@ jobs:
         shell: bash
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          RELEASE_IS_DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.draft_release == true }}
+          RELEASE_IS_DRAFT: 'true'
           RELEASE_SIGNING_ENABLED: ${{ steps.release-signing.outputs.enabled }}
         run: |
           set -euo pipefail
