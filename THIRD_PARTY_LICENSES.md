@@ -21,7 +21,7 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | --- | --- | --- | --- |
 | `bdkpython` | `3.0.0` (exact) | Watch-only Bitcoin wallet observation through BDK's Esplora and Electrum clients; state is persisted as explicit versioned JSON inside Kassiber's SQLCipher database | MIT OR Apache-2.0 |
 | `lwk` | `0.18.0` (exact) | Watch-only Liquid wallet observation through LWK's Esplora and Electrum clients; opaque `ForeignStore` values live only inside Kassiber's SQLCipher database | MIT (BSD-MIT wording) |
-| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@1c6fa0e92567cf81a860f39125f9b8815b8b4bae` | Tax engine used by journal processing and tax-aware reports | Apache-2.0 |
+| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@7b0dd6771c611e83451cd7f97782af0c15382197` | Tax engine used by journal processing and tax-aware reports; separates acquisition basis from cutoff-scoped pool holdings | Apache-2.0 |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential output handling | MIT |
 | `XlsxWriter` | `>=3.2,<4` | Styled `.xlsx` workbook export for practitioner-facing reports and the generic-ledger import template | BSD-2-Clause |
 | `openpyxl` | `>=3.1,<4` | Reads filled-in `.xlsx` files for the generic-ledger manual importer | MIT |

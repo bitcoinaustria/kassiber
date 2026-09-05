@@ -1563,13 +1563,13 @@ def _accumulate_asset_holdings(account_holdings, wallet_holdings, computed_data,
     asset = computed_data.asset
     total_quantity = Decimal("0")
     total_cost_basis = Decimal("0")
-    for transaction in computed_data.in_transaction_set:
-        sold_percent = dec(computed_data.get_in_lot_sold_percentage(transaction))
+    for transaction in computed_data.open_position_in_transaction_set:
+        sold_percent = dec(computed_data.get_open_position_in_lot_sold_percentage(transaction))
         remaining_ratio = Decimal("1") - sold_percent
         if remaining_ratio <= 0:
             continue
         total_quantity += dec(transaction.crypto_in) * remaining_ratio
-        total_cost_basis += dec(_effective_fiat_in_with_fee(computed_data, transaction)) * remaining_ratio
+        total_cost_basis += dec(computed_data.get_open_position_in_transaction_fiat_in_with_fee(transaction)) * remaining_ratio
     if total_quantity <= 0 or balance_set is None:
         return
     avg_basis_per_unit = total_cost_basis / total_quantity

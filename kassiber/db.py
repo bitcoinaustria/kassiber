@@ -540,6 +540,7 @@ SWAP_FEE_PAIR_KINDS = (
 
 CUSTODY_DURABLE_EVIDENCE_MIGRATION = "custody-durable-evidence-v1"
 WAGES_ACQUISITION_SEMANTICS_MIGRATION = "wages-acquisition-semantics-v1"
+RP2_POOL_BASIS_SEMANTICS_MIGRATION = "rp2-pool-basis-semantics-v1"
 _CUSTODY_MIGRATION_EXPLANATIONS = {
     "durable_transaction_anchors": (
         "Copies each extant leg transaction id into the immutable anchor so "
@@ -620,6 +621,69 @@ def _migrate_wages_acquisition_semantics(conn) -> int:
             WHERE transaction_row.profile_id = profiles.id
               AND lower(trim(coalesce(transaction_row.kind, ''))) = 'wages'
         )
+        """
+    )
+    return 1
+
+
+def _migrate_rp2_pool_basis_semantics(conn) -> int:
+    """Mark old pool projections stale without changing their retained evidence.
+
+    AT profiles are included conservatively even if their current method changed;
+    generic profiles need explicit moving-average selection. The sentinel makes
+    the semantic upgrade one-shot, including on newly created databases.
+    """
+    if conn.execute(
+        "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+        (RP2_POOL_BASIS_SEMANTICS_MIGRATION,),
+    ).fetchone():
+        return 0
+    affected = """
+        (lower(trim(coalesce(tax_country, ''))) = 'at'
+         OR lower(trim(coalesce(gains_algorithm, ''))) = 'moving_average')
+        AND (last_processed_at IS NOT NULL OR EXISTS (
+            SELECT 1 FROM journal_entries WHERE profile_id = profiles.id
+        ))
+    """
+    affected_count = int(
+        conn.execute(f"SELECT COUNT(*) FROM profiles WHERE {affected}").fetchone()[0]
+    )
+    impact = {
+        "schema_version": 1,
+        "migration": RP2_POOL_BASIS_SEMANTICS_MIGRATION,
+        "changes": [
+            {
+                "name": "report_cutoff_pool_basis",
+                "affected_profile_count": affected_count,
+                "explanation": (
+                    "Marks previously processed pool journals stale to rebuild "
+                    "holdings with report-cutoff basis; retained journals are unchanged."
+                ),
+            }
+        ],
+    }
+    inserted = conn.execute(
+        """
+        INSERT OR IGNORE INTO schema_migration_audits(
+            id, migration_name, schema_version, impact_json, created_at
+        ) VALUES(?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        """,
+        (
+            RP2_POOL_BASIS_SEMANTICS_MIGRATION,
+            RP2_POOL_BASIS_SEMANTICS_MIGRATION,
+            json.dumps(impact, sort_keys=True, separators=(",", ":")),
+        ),
+    )
+    if int(inserted.rowcount or 0) == 0:
+        return 0
+    conn.execute(
+        f"""
+        UPDATE profiles
+        SET last_processed_at = NULL,
+            last_processed_tx_count = 0,
+            journal_input_version = journal_input_version + 1,
+            ownership_review_counts_json = NULL
+        WHERE {affected}
         """
     )
     return 1
@@ -5061,6 +5125,8 @@ def ensure_schema_compat(conn):
         )
         conn.commit()
     if _migrate_wages_acquisition_semantics(conn):
+        conn.commit()
+    if _migrate_rp2_pool_basis_semantics(conn):
         conn.commit()
     ensure_column(conn, "backends", "batch_size", "INTEGER")
     ensure_column(conn, "backends", "config_json", "TEXT NOT NULL DEFAULT '{}'")
