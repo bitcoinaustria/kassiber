@@ -20,13 +20,14 @@ MAX_PAYLOAD_CHARS = 32 * 1024 * 1024
 MAX_VERIFY_PAYLOAD_CHARS = 6 * 64 * 1024 * 1024 + 128 * 1024
 _ACTION_HELP = {
     "workbench": "Local accounting worklist and readiness; payload: period_id.",
-    "task-create": "Select statement_ids (an empty list is allowed), optional evidence_ids/draft_ids, period_id and idempotency_key; no posting. Alternatively explicitly select include_period_statements:true.",
+    "task-create": "Select statement_ids (an empty list is allowed), optional evidence_ids/draft_ids, period_id and idempotency_key; no posting. Optional projection:{artifact_id,policy_id,events:[{event_id,binding_id?,category?}]} selects actual Bitcoin sources; prepare/post advances one chronological Bitcoin source at a time. Alternatively explicitly select include_period_statements:true.",
     "task-list": "List local accounting tasks and durable progress; empty payload.",
     "task-get": "Resume a task by task_id; includes source coverage, exceptions and receipts.",
     "task-preview": "Preview task_id + step (prepare, post, close, tax_finalize, export_close, export_tax); returns exact effects, expected_digest and expected_revision.",
     "task-apply": "Apply one reviewed step using task_id, step, expected_digest, expected_revision, idempotency_key and confirmed:true. Exports also require confirm_plaintext:true; retain the full response to save artifact bytes.",
     "task-cancel": "Cancel task_id with a reason; already committed entries remain unchanged.",
-    "task-source-assign": "Explicitly assign selected evidence to a bank row or reviewed posting; requires confirmed:true.",
+    "task-source-assign": "Explicitly assign selected evidence to a bank row or reviewed posting; requires confirmed:true. For kind:projection, use task-projection-assign-preview and supply task_id,event_id,binding_id,category,reason,expected_digest,expected_revision,idempotency_key,confirmed:true.",
+    "task-projection-assign-preview": "Locally review a binding/category for an already selected Bitcoin task source: task_id,event_id,binding_id,category,reason. No new source selection or posting; returns expected_digest and expected_revision.",
     "task-amend-preview": "Locally review adding exact retained evidence_ids to task_id + period_id with a reason; returns expected_digest and expected_revision. No source discovery or posting.",
     "task-amend": "Append the reviewed evidence_ids to the same task using task_id, period_id, reason, expected_digest, expected_revision, idempotency_key and confirmed:true. Prior receipts remain; old approvals expire. Local only, not an AI tool.",
     "rule-create": "Approve an exact bank description/account/direction rule for draft preparation only.",
