@@ -1081,8 +1081,27 @@ def compile_custody_interpreters(
     paired_ids.update(native_transition_ids)
     paired_ids.update(native_transition_blocked_ids)
     if has_chain_events or owned_index is not None:
+        derivation_rows = []
+        for row in rows:
+            observation = observations.get(_anchor_id(row))
+            if (
+                _field(row, "observation_fee_attribution") == "implicit_wallet_delta"
+                and observation is not None
+                and observation.fee_attribution == "exact"
+            ):
+                # Canonical input jointly proved every funding wallet and
+                # allocated the one network fee. Graph inference must consume
+                # those same amounts rather than the original gross deltas.
+                derivation_rows.append({
+                    **dict(row), "amount": observation.amount_msat,
+                    "fee": observation.fee_msat,
+                    "observation_fee_attribution": "exact",
+                    "custody_native_fee_normalized": True,
+                })
+            else:
+                derivation_rows.append(row)
         derivation = derive_profile_transfers(
-            rows,
+            derivation_rows,
             index=owned_index,
             wallet_refs_by_id=wallet_refs_by_id,
             already_paired_ids=paired_ids,
@@ -1194,6 +1213,16 @@ def compile_custody_interpreters(
     # synthesized destination still stays blocked.
     resolved_privacy_ids.update(_exact_native_pair_ids(auto_pairs, observations))
     resolved_privacy_ids.update(_exact_native_pair_ids(derived_pairs, observations))
+    resolved_privacy_ids.update(
+        _anchor_id(row)
+        for row in rows
+        if _field(row, "observation_fee_attribution") == "implicit_wallet_delta"
+        and (observation := observations.get(_anchor_id(row))) is not None
+        and observation.authoritative_chain_observation
+        and observation.fee_attribution == "exact"
+        and observation.principal_msat == 0
+        and observation.fee_msat > 0
+    )
     resolved_privacy_ids.update(excluded)
     resolved_privacy_ids.update(native_transition_ids)
     privacy_quarantines = (

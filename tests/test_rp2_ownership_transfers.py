@@ -2669,5 +2669,235 @@ class AustrianSelfTransferEngineTest(unittest.TestCase):
         self.assertAlmostEqual(holdings.get("Hot", 0.0), 0.5, places=6)
 
 
+class CollaborativeBitcoinFeeTest(unittest.TestCase):
+    def test_core_complementary_prevouts_and_inbound_scope_prove_whole_owned_fee(self):
+        from kassiber.core.chain_observer.provenance import fee_attribution_from_raw
+        from kassiber.core.sync_backends import record_from_bitcoinrpc_details
+        from kassiber.msat import btc_to_msat
+
+        graph = {
+            "txid": "de" * 32,
+            "vin": [
+                {"txid": "11" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 50_000_000}},
+                {"txid": "22" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B, "value": 30_000_000}},
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_C, "value": 79_999_000}],
+        }
+        rows = [_row("A", "inbound", BTC // 2, external_id="acqA"), _row("B", "inbound", 3 * BTC // 10, external_id="acqB")]
+        for wallet, script, amount in (("A", SCRIPT_A, "-0.49999"), ("B", SCRIPT_B, "-0.29999"), ("C", SCRIPT_C, "0.79999")):
+            partial = json.loads(json.dumps(graph))
+            for vin in partial["vin"]:
+                if vin["prevout"]["scriptpubkey"] != script:
+                    vin.pop("prevout")
+            detail = {"category": "receive" if wallet == "C" else "send", "amount": amount, "blocktime": 1767225600}
+            if wallet != "C":
+                detail["fee"] = "-0.00001"
+            record = record_from_bitcoinrpc_details(graph["txid"], [detail], "core", raw_graph=partial, tracked_scripts={script})
+            self.assertEqual(json.loads(record["raw_json"])["observer_owned_scripts"], [script])
+            row = _row(wallet, record["direction"], btc_to_msat(record["amount"]), external_id=graph["txid"], raw_json=record["raw_json"], fee=btc_to_msat(record["fee"]))
+            row["privacy_boundary"] = record.get("privacy_boundary")
+            rows.append(authoritative_chain_observation(row, observer_kind="bitcoinrpc", fee_attribution=fee_attribution_from_raw(record["raw_json"])))
+        state = self._run(rows)
+        self.assertEqual(state.quarantines, [])
+        self.assertEqual(sum(v["quantity"] for v in state.wallet_holdings.values()), Decimal("0.79999"))
+        self.assertEqual([e["entry_type"] for e in state.entries].count("transfer_fee"), 1)
+
+    def _observed_rows(self, graph, wallets):
+        from kassiber.core.chain_observer.provenance import fee_attribution_from_raw
+        from kassiber.core.sync_backends import record_from_bitcoin_esplora_tx
+        from kassiber.msat import btc_to_msat
+
+        rows = []
+        for wallet, script in wallets:
+            record = record_from_bitcoin_esplora_tx(graph, {script: {}}, "bdk")
+            row = _row(wallet if wallet in WALLET_REFS else "C", record["direction"], btc_to_msat(record["amount"]),
+                       external_id=graph["txid"], raw_json=record["raw_json"],
+                       fee=btc_to_msat(record["fee"]))
+            if wallet not in WALLET_REFS:
+                row.update(id=f"{wallet}-{record['direction']}-{graph['txid']}", wallet_id=wallet, wallet_label=wallet)
+            row["privacy_boundary"] = record.get("privacy_boundary")
+            rows.append(authoritative_chain_observation(
+                row, observer_kind="bdk",
+                fee_attribution=fee_attribution_from_raw(record["raw_json"]),
+            ))
+        return rows
+
+    def _run(self, rows, *, extra_wallets=()):
+        refs = dict(WALLET_REFS)
+        index = _fanout_index()
+        for wallet, script in extra_wallets:
+            refs[wallet] = {**WALLET_REFS["C"], "id": wallet, "label": wallet}
+            index.add_script(script, _match(wallet, wallet))
+        return GenericRP2TaxEngine(PROFILE).build_ledger_state(finalized_tax_inputs(
+            PROFILE, rows=rows, wallet_refs_by_id=refs,
+            manual_pair_records=[], owned_index=index,
+        ))
+
+    def test_complete_collaborative_two_to_two_keeps_only_own_conserving_deltas(self):
+        foreign_script = "0014" + "ff" * 20
+        script_d = "0014" + "d4" * 20
+        graph = {
+            "txid": "dc" * 32, "observer": "bdk", "fee": 100_000,
+            "status": {"block_time": 1767225600, "confirmed": True},
+            "vin": [
+                {"txid": "11" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 50_000_000}},
+                {"txid": "22" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B, "value": 50_000_000}},
+                {"txid": "33" * 32, "vout": 0, "prevout": {"scriptpubkey": foreign_script, "value": 100_000_000}},
+            ],
+            "vout": [
+                {"n": 0, "scriptpubkey": SCRIPT_C, "value": 60_000_000},
+                {"n": 1, "scriptpubkey": script_d, "value": 40_000_000},
+                {"n": 2, "scriptpubkey": foreign_script, "value": 99_900_000},
+            ],
+        }
+        observed = self._observed_rows(graph, [("A", SCRIPT_A), ("B", SCRIPT_B), ("C", SCRIPT_C), ("D", script_d)])
+        acquisitions = [_row("A", "inbound", BTC // 2, external_id="acqA"), _row("B", "inbound", BTC // 2, external_id="acqB")]
+        state = self._run([*acquisitions, *observed], extra_wallets=[("D", script_d)])
+        self.assertEqual(state.quarantines, [])
+        self.assertFalse([e for e in state.entries if e["entry_type"] in {"fee", "transfer_fee", "disposal"}])
+        holdings = {key[0]: value["quantity"] for key, value in state.wallet_holdings.items()}
+        self.assertEqual(holdings.get("C"), Decimal("0.6"))
+        self.assertEqual(holdings.get("D"), Decimal("0.4"))
+        self.assertEqual(sum(holdings.values()), Decimal("1"))
+        for corruption in ("stale", "untrusted", "missing_receipt", "wrong_quantity", "own_residual"):
+            with self.subTest(corruption=corruption):
+                damaged = [dict(row) for row in observed]
+                if corruption == "stale":
+                    damaged[2]["observation_graph_hash"] = "00" * 32
+                elif corruption == "untrusted":
+                    damaged[2] = _without_observer_authority(damaged[2])
+                elif corruption == "missing_receipt":
+                    damaged.pop()
+                elif corruption == "wrong_quantity":
+                    damaged[2]["amount"] += 1000
+                    damaged[2] = authoritative_chain_observation(damaged[2], observer_kind="bdk")
+                else:
+                    changed_graph = json.loads(json.dumps(graph))
+                    changed_graph["vout"][0]["value"] -= 1000
+                    changed_graph["vout"][2]["value"] += 1000
+                    damaged = self._observed_rows(changed_graph, [("A", SCRIPT_A), ("B", SCRIPT_B), ("C", SCRIPT_C), ("D", script_d)])
+                blocked = self._run([*acquisitions, *damaged], extra_wallets=[("D", script_d)])
+                self.assertTrue(blocked.quarantines)
+                self.assertFalse([e for e in blocked.entries if e["entry_type"] in {"fee", "transfer_fee", "disposal"}])
+
+    def test_new_gross_wallet_deltas_allocate_all_owned_consolidation_fee_once(self):
+        graph = {
+            "txid": "da" * 32, "observer": "bdk", "fee": 100_000,
+            "status": {"block_time": 1767225600, "confirmed": True},
+            "vin": [
+                {"txid": "11" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 50_000_000}},
+                {"txid": "22" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B, "value": 30_000_000}},
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_C, "value": 79_900_000}],
+        }
+        observed = self._observed_rows(graph, [("A", SCRIPT_A), ("B", SCRIPT_B), ("C", SCRIPT_C)])
+        self.assertEqual([row["amount"] for row in observed], [BTC // 2, 3 * BTC // 10, 799 * BTC // 1000])
+        self.assertEqual([row["fee"] for row in observed], [0, 0, 0])
+        self.assertIsNone(observed[2]["privacy_boundary"])
+        acquisitions = [_row("A", "inbound", BTC // 2, external_id="acqA"), _row("B", "inbound", 3 * BTC // 10, external_id="acqB")]
+        state = self._run([*acquisitions, *observed])
+        self.assertEqual(state.quarantines, [])
+        self.assertEqual([e["entry_type"] for e in state.entries].count("transfer_fee"), 1)
+        self.assertEqual(sum(v["quantity"] for v in state.wallet_holdings.values()), Decimal("0.799"))
+        for corruption in ("stale", "missing", "wrong_quantity"):
+            with self.subTest(corruption=corruption):
+                damaged = [dict(row) for row in observed]
+                if corruption == "stale":
+                    damaged[1]["observation_graph_hash"] = "00" * 32
+                elif corruption == "missing":
+                    damaged.pop(1)
+                else:
+                    damaged[1]["amount"] += 1000
+                    damaged[1] = authoritative_chain_observation(damaged[1], observer_kind="bdk", fee_attribution="implicit_wallet_delta")
+                blocked = self._run([*acquisitions, *damaged])
+                self.assertTrue(blocked.quarantines)
+                self.assertFalse([e for e in blocked.entries if e["entry_type"] == "transfer_fee"])
+
+    def test_all_owned_recipient_contribution_uses_net_receipt(self):
+        graph = {
+            "txid": "db" * 32, "observer": "bdk", "fee": 100_000,
+            "status": {"block_time": 1767225600, "confirmed": True},
+            "vin": [
+                {"txid": "11" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 100_000_000}},
+                {"txid": "22" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B, "value": 50_000_000}},
+            ],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 149_900_000}],
+        }
+        observed = self._observed_rows(graph, [("A", SCRIPT_A), ("B", SCRIPT_B)])
+        self.assertEqual(observed[1]["amount"], 999 * BTC // 1000)
+        state = self._run([
+            _row("A", "inbound", BTC, external_id="acqA"),
+            _row("B", "inbound", BTC // 2, external_id="acqB"), *observed,
+        ])
+        self.assertEqual(state.quarantines, [])
+        self.assertEqual(sum(v["quantity"] for v in state.wallet_holdings.values()), Decimal("1.499"))
+        self.assertEqual([e["entry_type"] for e in state.entries].count("transfer_fee"), 1)
+
+    def test_fee_allocation_handles_small_and_fee_only_contributors(self):
+        script_d = "0014" + "d4" * 20
+        for amounts, fee in (((546, 80_000_000), 1000), ((1000, 1000, 1000), 1500)):
+            with self.subTest(amounts=amounts):
+                wallets = list(zip(("A", "B", "C"), (SCRIPT_A, SCRIPT_B, SCRIPT_C), amounts))
+                graph = {
+                    "txid": "dd" * 32, "observer": "bdk", "fee": fee,
+                    "status": {"block_time": 1767225600, "confirmed": True},
+                    "vin": [{"txid": f"{i+1:02x}" * 32, "vout": 0, "prevout": {"scriptpubkey": script, "value": amount}} for i, (_, script, amount) in enumerate(wallets)],
+                    "vout": [{"n": 0, "scriptpubkey": script_d, "value": sum(amounts) - fee}],
+                }
+                observed = self._observed_rows(graph, [(w, s) for w, s, _ in wallets] + [("D", script_d)])
+                state = self._run([
+                    *[_row(w, "inbound", a * 1000, external_id="acq" + w) for w, _, a in wallets], *observed,
+                ], extra_wallets=[("D", script_d)])
+                self.assertEqual(state.quarantines, [])
+                self.assertEqual(sum(v["quantity"] for v in state.wallet_holdings.values()), Decimal(sum(amounts) - fee) / Decimal(100_000_000))
+                self.assertEqual(-sum(e["quantity"] for e in state.entries if e["entry_type"] in {"fee", "transfer_fee"}), Decimal(fee) / Decimal(100_000_000))
+
+    def test_same_wallet_coinjoin_does_not_book_other_participants_fee(self):
+        from kassiber.core.chain_observer.provenance import fee_attribution_from_raw
+        from kassiber.core.sync_backends import record_from_bitcoin_esplora_tx
+        from kassiber.msat import btc_to_msat
+
+        foreign_script = "0014" + "ff" * 20
+        graph = {
+            "txid": "ef" * 32,
+            "observer": "bdk",
+            "status": {"block_time": 1767225600, "confirmed": True},
+            "fee": 20_000,
+            "vin": [
+                {"txid": "11" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 100_000_000}},
+                {"txid": "22" * 32, "vout": 0, "prevout": {"scriptpubkey": foreign_script, "value": 100_000_000}},
+            ],
+            "vout": [
+                {"n": 0, "scriptpubkey": SCRIPT_A, "value": 99_990_000},
+                {"n": 1, "scriptpubkey": foreign_script, "value": 99_990_000},
+            ],
+        }
+        record = record_from_bitcoin_esplora_tx(graph, {SCRIPT_A: {}}, "bdk")
+        row = _row(
+            "A", record["direction"], btc_to_msat(record["amount"]),
+            external_id=graph["txid"], raw_json=record["raw_json"],
+            fee=btc_to_msat(record["fee"]),
+        )
+        row["privacy_boundary"] = record.get("privacy_boundary")
+        row = authoritative_chain_observation(
+            row, observer_kind="bdk",
+            fee_attribution=fee_attribution_from_raw(record["raw_json"]),
+        )
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(finalized_tax_inputs(
+            PROFILE,
+            rows=[_row("A", "inbound", BTC, external_id="acqA"), row],
+            wallet_refs_by_id=WALLET_REFS, manual_pair_records=[],
+            owned_index=_fanout_index(),
+        ))
+
+        # The graph proves a 10,000-sat loss, not responsibility for the
+        # whole collaborative transaction's 20,000-sat network fee.
+        self.assertFalse([entry for entry in state.entries if entry["entry_type"] in {"fee", "transfer_fee", "disposal"}])
+        self.assertIn("privacy_hop_unresolved", {q["reason"] for q in state.quarantines})
+        self.assertEqual(btc_to_msat(record["amount"]), 10_000_000)
+        self.assertEqual(btc_to_msat(record["fee"]), 0)
+        self.assertEqual(json.loads(record["raw_json"])["fee"], 20_000)
+
+
 if __name__ == "__main__":
     unittest.main()

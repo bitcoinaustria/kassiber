@@ -7,6 +7,7 @@ import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from decimal import Decimal
 from email.message import Message
 from pathlib import Path
 from types import SimpleNamespace
@@ -3594,7 +3595,7 @@ class SyncBackendsTest(unittest.TestCase):
         # a separate ledger component.
         self.assertAlmostEqual(float(record["amount"]), 0.8, places=8)
 
-    def test_bitcoinrpc_multi_output_send_legacy_fallback_keeps_fee_separate(self):
+    def test_bitcoinrpc_graphless_send_preserves_reported_debit_for_review(self):
         record = record_from_bitcoinrpc_details(
             "66" * 32,
             [
@@ -3604,13 +3605,11 @@ class SyncBackendsTest(unittest.TestCase):
             "core",
         )
         self.assertEqual(record["direction"], "outbound")
-        self.assertAlmostEqual(float(record["fee"]), 0.0001, places=8)
-        # Core detail amounts are recipient value; the network fee is already
-        # carried separately. Subtracting it here underreports wallet/book
-        # balances and breaks ownership-derived fan-out matching.
-        self.assertAlmostEqual(float(record["amount"]), 0.8, places=8)
+        self.assertEqual(record["fee"], 0)
+        self.assertAlmostEqual(float(record["amount"]), 0.8001, places=8)
+        self.assertEqual(record["privacy_boundary"], "collaborative")
 
-    def test_bitcoinrpc_fee_only_self_spend_keeps_zero_amount(self):
+    def test_bitcoinrpc_graphless_self_spend_does_not_assume_fee_allocation(self):
         record = record_from_bitcoinrpc_details(
             "67" * 32,
             [
@@ -3620,9 +3619,10 @@ class SyncBackendsTest(unittest.TestCase):
             "core",
         )
         self.assertEqual(record["direction"], "outbound")
-        self.assertEqual(record["kind"], "fee")
-        self.assertAlmostEqual(float(record["amount"]), 0.0, places=8)
-        self.assertAlmostEqual(float(record["fee"]), 0.0001, places=8)
+        self.assertEqual(record["kind"], "withdrawal")
+        self.assertAlmostEqual(float(record["amount"]), 0.0001, places=8)
+        self.assertEqual(record["fee"], 0)
+        self.assertEqual(record["privacy_boundary"], "collaborative")
 
     def test_bitcoinrpc_multi_source_graph_keeps_wallet_local_amount(self):
         record = record_from_bitcoinrpc_details(
@@ -3653,7 +3653,8 @@ class SyncBackendsTest(unittest.TestCase):
             tracked_scripts={"0014" + "ab" * 20},
         )
         self.assertEqual(record["direction"], "outbound")
-        self.assertAlmostEqual(float(record["amount"]), 0.2999, places=8)
+        self.assertAlmostEqual(float(record["amount"]), 0.3, places=8)
+        self.assertEqual(record["fee"], 0)
 
     def test_bitcoinrpc_mixed_input_graph_marks_privacy_boundary(self):
         record = record_from_bitcoinrpc_details(
@@ -3683,9 +3684,78 @@ class SyncBackendsTest(unittest.TestCase):
             },
             tracked_scripts={"0014" + "ab" * 20},
         )
-        self.assertEqual(record["privacy_boundary"], "payjoin")
+        self.assertEqual(record["privacy_boundary"], "collaborative")
         raw_json = json.loads(record["raw_json"])
-        self.assertEqual(raw_json["privacy_boundary"], "payjoin")
+        self.assertEqual(raw_json["privacy_boundary"], "collaborative")
+
+    def test_bitcoinrpc_wallet_parent_enrichment_preserves_debit_and_retries_transient_failure(self):
+        own_script = "0014" + "ab" * 20
+        other_script = "0014" + "cd" * 20
+        txid, parent_id = "66" * 32, "55" * 32
+        decoded = {
+            "txid": txid,
+            "vin": [
+                {"txid": "44" * 32, "vout": 0, "prevout": {"value": "0.2", "scriptPubKey": {"hex": own_script}}},
+                {"txid": parent_id, "vout": 0},
+            ],
+            "vout": [
+                {"n": 0, "value": "0.1", "scriptPubKey": {"hex": own_script}},
+                {"n": 1, "value": "0.29999", "scriptPubKey": {"hex": other_script}},
+            ],
+        }
+        state = WalletSyncState(chain="bitcoin", network="main", descriptor_plan=None, policy_asset_id="", targets=[], tracked_scripts={own_script: {}}, history_cache={})
+        details = [{"txid": txid, "category": "send", "amount": "-0.29999", "fee": "-0.00001", "blocktime": 1_700_000_000}]
+        for mode in ("available", "unavailable", "transient"):
+            with self.subTest(mode=mode):
+                def rpc(_backend, method, params=None, wallet_name=None):
+                    self.assertEqual(method, "gettransaction")
+                    self.assertEqual(wallet_name, "owned")
+                    if params == [txid, True, True]:
+                        return {"decoded": decoded}
+                    self.assertEqual(params, [parent_id, True, True])
+                    if mode == "transient":
+                        raise AppError("temporary connection failure")
+                    if mode == "unavailable":
+                        raise AppError("not in wallet", details={"rpc_error_code": -5})
+                    return {"decoded": {"vout": [{"n": 0, "value": "0.2", "scriptPubKey": {"hex": own_script}}]}}
+                with patch.object(sb, "bitcoinrpc_call", side_effect=rpc) as calls, patch.object(sb, "fetch_bitcoinrpc_wallet_transactions", return_value=(details, {"bitcoinrpc_last_block": "bb" * 32})):
+                    records, meta = sb.bitcoinrpc_records_for_wallet(
+                        {"name": "core"}, {"id": "wallet"}, [], wallet_name="owned", imported_count=0, sync_state=state,
+                    )
+                self.assertEqual(calls.call_count, 2)
+                record = records[0]
+                self.assertEqual(record["amount"] + record["fee"], Decimal("0.3"))
+                if mode == "available":
+                    self.assertEqual(record["amount"], Decimal("0.29999"))
+                    self.assertEqual(record["fee"], Decimal("0.00001"))
+                    self.assertNotIn("privacy_boundary", record)
+                else:
+                    self.assertEqual(record["fee"], 0)
+                    self.assertEqual(record["privacy_boundary"], "collaborative")
+                if mode == "transient":
+                    self.assertEqual(meta["bitcoinrpc_graph_unavailable_txids"], [txid])
+                    self.assertNotIn("bitcoinrpc_last_block", meta)
+                    self.assertNotIn("bitcoinrpc_graph_normalization_version", meta)
+                else:
+                    self.assertEqual(meta["bitcoinrpc_last_block"], "bb" * 32)
+                    self.assertEqual(meta["bitcoinrpc_graph_normalization_version"], sb.BITCOINRPC_GRAPH_NORMALIZATION_VERSION)
+
+    def test_bitcoinrpc_missing_prevout_keeps_reported_debit_without_claiming_own_fee(self):
+        record = record_from_bitcoinrpc_details(
+            "66" * 32,
+            [{"category": "send", "amount": "-0.3", "fee": "-0.0001", "blocktime": 1_700_000_000}],
+            "core",
+            raw_graph={
+                "txid": "66" * 32,
+                "vin": [{"txid": "55" * 32, "vout": 0}],
+                "vout": [{"n": 0, "scriptpubkey": "0014" + "ef" * 20, "value": 30_000_000}],
+            },
+            tracked_scripts={"0014" + "ab" * 20},
+        )
+        self.assertEqual(str(record["amount"]), "0.3001")
+        self.assertEqual(record["fee"], 0)
+        self.assertEqual(record["privacy_boundary"], "collaborative")
+        self.assertEqual(json.loads(record["raw_json"])["component"]["fee_attribution"], "implicit_wallet_delta")
 
     def test_bitcoinrpc_verbose_transaction_graph_is_esplora_shaped(self):
         graph = sb._bitcoinrpc_normalized_graph(

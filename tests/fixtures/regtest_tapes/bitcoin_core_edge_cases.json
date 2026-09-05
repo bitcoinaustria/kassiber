@@ -96,7 +96,7 @@
       },
       {
         "abandoned": false,
-        "amount": -0.3,
+        "amount": -0.29988,
         "blockhash": "b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4",
         "blockheight": 205,
         "blocktime": 1700007200,
@@ -151,7 +151,7 @@
     "{\"method\":\"listunspent\",\"params\":[0,9999999,[\"bcrt1qv4jxwefdvdshxefdv9jxgu3ddahx2gfplsfksc\",\"bcrt1qv4jxwefdvdshxefdv9jxgu3dw3mk7gfpl9er9m\"],true],\"transport\":\"bitcoinrpc\",\"wallet_name\":\"kassiber-wallet-edge\"}": [
       {
         "address": "bcrt1qv4jxwefdvdshxefdv9jxgu3ddahx2gfplsfksc",
-        "amount": 24.649862,
+        "amount": 24.649982,
         "confirmations": 4,
         "safe": true,
         "scriptPubKey": "0014656467652d636173652d616464722d6f6e652121",
@@ -212,7 +212,7 @@
           },
           {
             "n": 1,
-            "value": 24.649862,
+            "value": 24.649982,
             "scriptPubKey": {
               "hex": "0014656467652d636173652d616464722d6f6e652121"
             }

@@ -9,6 +9,7 @@ from ..util import str_or_none
 PRIVACY_HOP_TYPES = frozenset(
     {
         "coinjoin",
+        "collaborative",
         "payjoin",
         "payment_in_coinjoin",
         "sweep",

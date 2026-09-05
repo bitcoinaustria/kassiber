@@ -176,6 +176,10 @@ def _projected_fee_row(
     side: str,
 ) -> dict[str, Any]:
     base = _base_row(observation, rows_by_id)
+    if observation.authoritative_chain_observation and observation.fee_attribution == "exact":
+        # This row represents only the independently proven fee. A privacy
+        # marker on its original principal must not re-block that known slice.
+        base["privacy_boundary"] = None
     base.update(
         {
             "id": f"custody-tax:{observation.quantity_hash}:{side}:{amount_msat}",
