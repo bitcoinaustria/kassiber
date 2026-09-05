@@ -118,6 +118,7 @@ class DemoTruth:
     scenario_id: str
     transaction_rows: list[dict[str, Any]] = field(default_factory=list)
     transfer_pairs: list[dict[str, Any]] = field(default_factory=list)
+    native_transfers: list[dict[str, Any]] = field(default_factory=list)
     skipped_txids: list[dict[str, str]] = field(default_factory=list)
     core_utxos: dict[str, dict[str, Any]] = field(default_factory=dict)
 
@@ -215,6 +216,7 @@ class DemoTruth:
                 "count": len(transfer_pairs),
                 "rows": transfer_pairs,
             },
+            "native_transfers": {"count": len(self.native_transfers), "rows": self.native_transfers},
             "skipped_txids": sorted(
                 self.skipped_txids,
                 key=lambda row: (row["external_id"], row["op_id"], row["reason"]),
@@ -339,6 +341,16 @@ def validate_scenario(scenario: dict[str, Any]) -> None:
                 destinations.append(to_key)
             if len(set(destinations)) != len(destinations):
                 raise ValueError(f"Scenario operation {op_id} fan-out destinations must be unique")
+        if kind == "coinjoin_shape":
+            signers = operation.get("signers") or []
+            targets = [output.get("to") for output in operation.get("outputs") or []]
+            if (len(signers) != 2 or len(set(signers)) != 2
+                    or len(targets) != 2 or len(set(targets)) != 2
+                    or set(signers) & set(targets)
+                    or not (set(signers) | set(targets)).issubset(core_wallet_keys)):
+                raise ValueError(f"Scenario operation {op_id} needs two distinct Core sources and destinations")
+            if operation.get("foreign_counterparty") != "customer_pool":
+                raise ValueError(f"Scenario operation {op_id} must name the unconnected customer_pool fee payer")
         if kind == "many_input_consolidation":
             min_count = int(operation.get("min_count") or operation.get("count") or 0)
             if min_count < 2 or min_count > int(operation.get("count") or 0):
@@ -1161,6 +1173,8 @@ def estimate_scenario_end_ts(scenario: dict[str, Any], *, start_ts: int | None =
         wallet for wallet in scenario.get("wallets") or [] if _is_silent_payment_wallet_spec(wallet)
     ]
     current_ts += len(silent_payment_wallets) * 600
+    if (scenario.get("exchange_cases") or {}).get("enabled"):
+        current_ts += 3 * 600  # exchange hot-wallet funding, withdrawal, deposit
     current_ts += len(scenario.get("pending_operations") or []) * 600
     return current_ts
 
@@ -1713,41 +1727,42 @@ def _send_coinjoin_shape(
     wallets: dict[str, DemoWallet],
     operation: dict[str, Any],
     external_address: str,
+    external_core_wallet: str,
 ) -> str:
+    """Joint spend with conserving own movement and a foreign fee payer."""
     signer_keys = list(operation["signers"])
-    if len(signer_keys) != 2:
-        raise RuntimeError("coinjoin_shape currently expects exactly two signers")
+    destinations = list(operation["outputs"])
+    if len(signer_keys) != 2 or len(destinations) != 2:
+        raise RuntimeError("coinjoin_shape requires two own signers and two own destinations")
     fee = _btc(operation["fee_btc"])
     equal_output = _btc(operation["equal_output_btc"])
-    signer_a = wallets[signer_keys[0]]
-    signer_b = wallets[signer_keys[1]]
-    utxo_a = _select_one_utxo(url, username, password, signer_a, equal_output + fee)
-    utxo_b = _select_one_utxo(url, username, password, signer_b, equal_output + fee)
-    amount_a = Decimal(str(utxo_a["amount"])).quantize(SAT)
-    amount_b = Decimal(str(utxo_b["amount"])).quantize(SAT)
-    half_fee = (fee / 2).quantize(SAT)
-    change_a = (amount_a - equal_output - half_fee).quantize(SAT)
-    change_b = (amount_b - equal_output - (fee - half_fee)).quantize(SAT)
-    if change_a <= 0 or change_b <= 0:
-        raise RuntimeError("coinjoin_shape selected UTXOs leave no change")
-    tracked_output_wallet = wallets[operation["tracked_output_wallet"]]
-    outputs = {
-        tracked_output_wallet.receive_address(): equal_output,
-        external_address: equal_output,
-        signer_a.change_address(): change_a,
-        signer_b.change_address(): change_b,
-    }
-    return _send_raw_transaction(
-        url,
-        username,
-        password,
-        [
-            {"txid": utxo_a["txid"], "vout": utxo_a["vout"]},
-            {"txid": utxo_b["txid"], "vout": utxo_b["vout"]},
-        ],
-        outputs,
-        [signer_a.core_wallet, signer_b.core_wallet],
-    )
+    inputs = []
+    outputs = {}
+    signers = []
+    for key, destination in zip(signer_keys, destinations):
+        sender = wallets[key]
+        utxo = _select_one_utxo(url, username, password, sender, equal_output + SAT)
+        amount = _btc(utxo["amount"])
+        inputs.append({"txid": utxo["txid"], "vout": utxo["vout"]})
+        outputs[wallets[destination["to"]].receive_address()] = equal_output
+        outputs[sender.change_address()] = (amount - equal_output).quantize(SAT)
+        signers.append(sender.core_wallet)
+    # This wallet belongs to the counterparty and is never connected to Kassiber.
+    # Its principal stays foreign; only it pays this transaction's network fee.
+    # Core's earlier sendmany receipts return change to new wallet addresses.
+    # Unlike connected demo wallets, this signer has no watched-address scope.
+    foreign_utxos = rpc(url, username, password, "listunspent", [1, 9999999, [], True],
+                        wallet=external_core_wallet)
+    eligible = [utxo for utxo in foreign_utxos or []
+                if utxo.get("spendable") and int(utxo.get("confirmations") or 0) >= 1
+                and _btc(utxo["amount"]) >= fee + SAT]
+    if not eligible:
+        raise RuntimeError("Foreign CoinJoin payer has no confirmed spendable UTXO covering the fee")
+    foreign_input = max(eligible, key=lambda row: (_btc(row["amount"]), row["txid"], row["vout"]))
+    inputs.append({"txid": foreign_input["txid"], "vout": foreign_input["vout"]})
+    outputs[external_address] = (_btc(foreign_input["amount"]) - fee).quantize(SAT)
+    signers.append(external_core_wallet)
+    return _send_raw_transaction(url, username, password, inputs, outputs, signers)
 
 
 def _send_payjoin_shape(
@@ -1872,37 +1887,19 @@ def _execute_scenario_operation(
         )
         truth.record_transaction(operation["id"], txids[operation["id"]], wallets[operation["wallet"]], "outbound")
     elif kind == "coinjoin_shape":
+        counterparty = str(operation.get("foreign_counterparty") or "customer_pool")
         txids[operation["id"]] = _send_coinjoin_shape(
-            url,
-            username,
-            password,
-            wallets,
-            operation,
-            counterparty_addresses["customer_pool"],
+            url, username, password, wallets, operation,
+            counterparty_addresses[counterparty], counterparty_wallets[counterparty],
         )
         for signer_key in operation["signers"]:
-            truth.record_transaction(
-                operation["id"],
-                txids[operation["id"]],
-                wallets[signer_key],
-                "outbound",
-                source="collaborative_review",
-            )
-        truth.record_transaction(
-            operation["id"],
-            txids[operation["id"]],
-            wallets[operation["tracked_output_wallet"]],
-            "inbound",
-            source="collaborative_review",
-        )
+            truth.record_transaction(operation["id"], txids[operation["id"]], wallets[signer_key], "outbound")
+        for destination in operation["outputs"]:
+            truth.record_transaction(operation["id"], txids[operation["id"]], wallets[destination["to"]], "inbound")
     elif kind == "payjoin_shape":
         txids[operation["id"]] = _send_payjoin_shape(url, username, password, wallets, operation)
-        truth.record_transaction(
-            operation["id"], txids[operation["id"]], wallets[operation["payer"]], "outbound", source="collaborative_review"
-        )
-        truth.record_transaction(
-            operation["id"], txids[operation["id"]], wallets[operation["merchant"]], "outbound", source="collaborative_review"
-        )
+        truth.record_transaction(operation["id"], txids[operation["id"]], wallets[operation["payer"]], "outbound")
+        truth.record_transaction(operation["id"], txids[operation["id"]], wallets[operation["merchant"]], "inbound")
     elif kind == "rbf_replaced_payment":
         txids[operation["id"]] = _send_rbf_replaced_payment(
             url,
@@ -3045,6 +3042,8 @@ def _expected_ownership_fanout_routes(scenario: dict[str, Any]) -> list[dict[str
 def _assert_ownership_self_transfer_matching(
     data_root: Path,
     scenario: dict[str, Any],
+    *,
+    truth: DemoTruth | None = None,
 ) -> dict[str, Any]:
     """Prove exact automatic custody matching before manual pairs hide it."""
     scope = _scope(scenario)
@@ -3096,11 +3095,13 @@ def _assert_ownership_self_transfer_matching(
             f"expectation: expected_count={expected_count}, "
             f"observed={observed_routes}, missing={missing}, duplicate={duplicate}"
         )
+    native = _assert_native_transfer_truth(data_root, truth, require_fees=False) if truth is not None else None
     return {
         "journal": journal,
         "rates": rate_seed,
         "expected_routes": expected_routes,
         "observed_routes": observed_routes,
+        "native_events": native,
     }
 
 
@@ -3112,127 +3113,9 @@ def _pair_transfers(
 ) -> list[dict[str, Any]]:
     scope = _scope(scenario)
     paired = []
-    for operation in scenario["operations"]:
-        if operation["kind"] != "self_transfer":
-            continue
-        if truth is not None:
-            truth.record_transfer_pair(
-                operation["id"],
-                txids[operation["id"]],
-                txids[operation["id"]],
-                kind="manual",
-                policy="carrying-value",
-                note=operation["note"],
-            )
-        paired.append(
-            run_cli(
-                data_root,
-                "transfers",
-                "pair",
-                *scope,
-                "--tx-out",
-                txids[operation["id"]],
-                "--tx-in",
-                txids[operation["id"]],
-                "--kind",
-                "manual",
-                "--policy",
-                "carrying-value",
-                "--note",
-                operation["note"],
-            )["data"]
-        )
+    # Native owned transfers and rotations must be understood without reviews.
+    # Simulated cross-rail service legs lack HTLC proof and remain explicit reviews.
     stress = scenario.get("stress") or {}
-    for rotation in stress.get("wallet_rotations") or []:
-        if truth is not None:
-            truth.record_transfer_pair(
-                rotation["id"],
-                txids[f"{rotation['id']}_rotation"],
-                txids[f"{rotation['id']}_rotation"],
-                kind="manual",
-                policy="carrying-value",
-                note=rotation.get("note") or f"Wallet key rotation into {rotation['to']}.",
-            )
-        paired.append(
-            run_cli(
-                data_root,
-                "transfers",
-                "pair",
-                *scope,
-                "--tx-out",
-                txids[f"{rotation['id']}_rotation"],
-                "--tx-in",
-                txids[f"{rotation['id']}_rotation"],
-                "--kind",
-                "manual",
-                "--policy",
-                "carrying-value",
-                "--note",
-                rotation.get("note") or f"Wallet key rotation into {rotation['to']}.",
-            )["data"]
-        )
-    for rotation in stress.get("liquid_wallet_rotations") or []:
-        prefix = f"{rotation['id']}_"
-        for rotation_key in sorted(key for key in txids if key.startswith(prefix)):
-            note = rotation.get("note") or f"Liquid wallet rotation into {rotation['to']}."
-            if truth is not None:
-                truth.record_transfer_pair(
-                    rotation_key,
-                    txids[rotation_key],
-                    txids[rotation_key],
-                    kind="manual",
-                    policy="carrying-value",
-                    note=note,
-                )
-            paired.append(
-                run_cli(
-                    data_root,
-                    "transfers",
-                    "pair",
-                    *scope,
-                    "--tx-out",
-                    txids[rotation_key],
-                    "--tx-in",
-                    txids[rotation_key],
-                    "--kind",
-                    "manual",
-                    "--policy",
-                    "carrying-value",
-                    "--note",
-                    note,
-                )["data"]
-            )
-    for rule in stress.get("internal_transfers") or []:
-        prefix = f"internal_transfer_{rule['id']}_"
-        for transfer_key in sorted(key for key in txids if key.startswith(prefix)):
-            note = str(rule.get("note") or f"Internal treasury policy {rule['id']}.")
-            if truth is not None:
-                truth.record_transfer_pair(
-                    transfer_key,
-                    txids[transfer_key],
-                    txids[transfer_key],
-                    kind="manual",
-                    policy="carrying-value",
-                    note=note,
-                )
-            paired.append(
-                run_cli(
-                    data_root,
-                    "transfers",
-                    "pair",
-                    *scope,
-                    "--tx-out",
-                    txids[transfer_key],
-                    "--tx-in",
-                    txids[transfer_key],
-                    "--kind",
-                    "manual",
-                    "--policy",
-                    "carrying-value",
-                    "--note",
-                    note,
-                )["data"]
-            )
     for bridge in stress.get("swap_bridges") or []:
         bridge_id = bridge["id"]
         if truth is not None:
@@ -3339,46 +3222,6 @@ def _mark_loans(data_root: Path, scenario: dict[str, Any], txids: dict[str, str]
             )
     listing = run_cli(data_root, "loans", "list", *scope)["data"]
     return {"marks": marks, "listing": listing}
-
-
-def _exclude_collaborative_shapes(
-    data_root: Path,
-    scenario: dict[str, Any],
-    txids: dict[str, str],
-    transactions: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    scope = _scope(scenario)
-    collaborative_txids = {
-        txids[operation["id"]]
-        for operation in scenario["operations"]
-        if operation["kind"] in {"coinjoin_shape", "payjoin_shape"}
-    }
-    excluded = []
-    for row in transactions:
-        if row["external_id"] not in collaborative_txids:
-            continue
-        updated = run_cli(
-            data_root,
-            "metadata",
-            "records",
-            "excluded",
-            "set",
-            *scope,
-            "--transaction",
-            row["id"],
-            "--reason",
-            "Regtest collaborative transaction shape reviewed outside this tax-report scenario.",
-        )["data"]
-        excluded.append(
-            {
-                "transaction_id": row["id"],
-                "external_id": row["external_id"],
-                "wallet": row["wallet"],
-                "direction": row["direction"],
-                "excluded": bool(updated["excluded"]),
-            }
-        )
-    return excluded
 
 
 def _export_reports(data_root: Path, export_dir: Path, scenario: dict[str, Any]) -> dict[str, Any]:
@@ -3646,6 +3489,137 @@ def _assert_live_liquid_sync_rows(
                 raise RuntimeError(f"Liquid live sync tx {txid} should be confirmed")
 
 
+def _native_event_from_graph(
+    tx: dict[str, Any],
+    previous_outputs: dict[tuple[str, int], dict[str, Any]],
+    script_wallets: dict[str, str],
+) -> dict[str, Any]:
+    """Independent scenario oracle over signed Core inputs and outputs.
+
+    This consumes neither imported amounts nor Kassiber's ownership/allocation
+    code. Script ownership comes solely from addresses generated for this demo.
+    """
+    deltas: Counter = Counter()
+    total_in = 0
+    total_out = 0
+    foreign_inputs = 0
+    for vin in tx["vin"]:
+        previous = previous_outputs[(str(vin["txid"]), int(vin["vout"]))]
+        amount = _btc_to_msat_int(previous["value"])
+        total_in += amount
+        owner = script_wallets.get(previous["scriptPubKey"]["hex"])
+        if owner is None:
+            foreign_inputs += 1
+        else:
+            deltas[owner] -= amount
+    for output in tx["vout"]:
+        amount = _btc_to_msat_int(output["value"])
+        total_out += amount
+        owner = script_wallets.get(output["scriptPubKey"]["hex"])
+        if owner is not None:
+            deltas[owner] += amount
+    network_fee = total_in - total_out
+    own_fee = -sum(deltas.values())
+    if network_fee < 0 or own_fee not in {0, network_fee}:
+        raise RuntimeError("Native demo event contains unexplained own principal or fee")
+    if foreign_inputs and own_fee:
+        raise RuntimeError("Collaborative demo event must conserve own value; foreign fee stays foreign")
+    return {
+        "txid": tx["txid"], "wallet_deltas_msat": dict(sorted((key, value) for key, value in deltas.items() if value)),
+        "network_fee_msat": network_fee, "own_fee_msat": own_fee,
+        "foreign_input_count": foreign_inputs,
+    }
+
+
+def _collect_native_transfer_truth(
+    truth: DemoTruth, *, url: str, username: str, password: str,
+    wallets: dict[str, DemoWallet],
+) -> None:
+    """Resolve bounded generated txids against the private demo Core oracle."""
+    core_wallets = {key: wallet for key, wallet in wallets.items() if _is_core_wallet(wallet)}
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for row in truth.transaction_rows:
+        if row["asset"] == "BTC" and row["wallet_key"] in core_wallets:
+            groups.setdefault(row["external_id"], []).append(row)
+    groups = {txid: rows for txid, rows in groups.items()
+              if {row["direction"] for row in rows} == {"inbound", "outbound"}}
+    script_wallets = {}
+    for wallet in core_wallets.values():
+        for address in wallet.addresses or [wallet.address]:
+            details = rpc(url, username, password, "getaddressinfo", [address], wallet=wallet.core_wallet)
+            script = str(details["scriptPubKey"])
+            if script in script_wallets and script_wallets[script] != wallet.kassiber_id:
+                raise RuntimeError("Generated wallets unexpectedly share a script")
+            script_wallets[script] = wallet.kassiber_id
+    graph_cache = {}
+    def graph(txid):
+        if txid not in graph_cache:
+            graph_cache[txid] = rpc(url, username, password, "getrawtransaction", [txid, True])
+        return graph_cache[txid]
+    events = []
+    for txid, rows in sorted(groups.items()):
+        tx = graph(txid)
+        previous = {}
+        for vin in tx["vin"]:
+            parent = graph(str(vin["txid"]))
+            previous[(str(vin["txid"]), int(vin["vout"]))] = next(
+                output for output in parent["vout"] if int(output["n"]) == int(vin["vout"])
+            )
+        event = _native_event_from_graph(tx, previous, script_wallets)
+        expected_roles = {core_wallets[row["wallet_key"]].kassiber_id: row["direction"] for row in rows}
+        actual_roles = {wallet_id: "inbound" if amount > 0 else "outbound"
+                        for wallet_id, amount in event["wallet_deltas_msat"].items()}
+        if expected_roles != actual_roles:
+            raise RuntimeError(f"Generated native roles disagree with signed graph for {txid}: {expected_roles} != {actual_roles}")
+        events.append({**event, "operation_ids": sorted({row["op_id"] for row in rows})})
+    truth.native_transfers = events
+
+
+def _assert_native_transfer_truth(data_root: Path, truth: DemoTruth, *, require_fees: bool) -> dict[str, Any]:
+    """Check actual custody boundaries against independently generated graph facts."""
+    if not truth.native_transfers:
+        raise RuntimeError("Native transfer truth is empty; collect independent graph facts first")
+    conn = open_db(data_root)
+    try:
+        for event in truth.native_transfers:
+            deltas = event["wallet_deltas_msat"]
+            sources = {wallet: -amount for wallet, amount in deltas.items() if amount < 0}
+            destinations = {wallet: amount for wallet, amount in deltas.items() if amount > 0}
+            rows = conn.execute(
+                "SELECT d.source_wallet_id,d.target_wallet_id,d.source_end_msat-d.source_start_msat AS amount_msat,"
+                "d.state,d.component_id,t.external_id AS target_txid FROM journal_custody_decisions d "
+                "JOIN transactions s ON s.id=d.source_transaction_id JOIN transactions t ON t.id=d.target_transaction_id "
+                "WHERE s.external_id=? AND d.source_asset='BTC' AND d.target_asset='BTC'", (event["txid"],),
+            ).fetchall()
+            sent = Counter()
+            received = Counter()
+            for row in rows:
+                if row["state"] != "internal_verified" or row["component_id"] is not None or row["target_txid"] != event["txid"]:
+                    raise RuntimeError(f"Native event {event['txid']} required authored or unrelated custody interpretation")
+                sent[row["source_wallet_id"]] += int(row["amount_msat"])
+                received[row["target_wallet_id"]] += int(row["amount_msat"])
+            if (dict(received) != destinations or set(sent) != set(sources)
+                    or any(sent[wallet] > amount for wallet, amount in sources.items())
+                    or sum(sources.values()) - sum(sent.values()) != event["own_fee_msat"]):
+                raise RuntimeError(f"Native custody mismatch for {event['operation_ids']}: "
+                                   f"sources={sources}, sent={dict(sent)}, destinations={destinations}, received={dict(received)}")
+            if require_fees:
+                entries = conn.execute(
+                    "SELECT j.entry_type,j.quantity FROM journal_entries j JOIN transactions t ON t.id=j.transaction_id "
+                    "WHERE t.external_id=? AND j.asset='BTC'", (event["txid"],),
+                ).fetchall()
+                if any(row["entry_type"] in {"acquisition", "disposal", "income"} for row in entries):
+                    raise RuntimeError(f"Native event {event['operation_ids']} created an external economic event")
+                fees = -sum(int(row["quantity"]) for row in entries if row["entry_type"] == "transfer_fee")
+                if fees != event["own_fee_msat"]:
+                    raise RuntimeError(f"Native event {event['operation_ids']} fee was not booked exactly once: {fees} != {event['own_fee_msat']}")
+        return {"events": len(truth.native_transfers),
+                "foreign_participant_events": sum(bool(event["foreign_input_count"]) for event in truth.native_transfers),
+                "own_fees_msat": sum(event["own_fee_msat"] for event in truth.native_transfers)}
+    finally:
+        conn.close()
+
+
 def _collect_core_utxo_truth(
     truth: DemoTruth,
     *,
@@ -3797,6 +3771,7 @@ def _assert_generated_truth(
     summary: dict[str, Any],
     exports: dict[str, Any],
 ) -> None:
+    _assert_native_transfer_truth(data_root, truth, require_fees=True)
     expected_tx = Counter(_truth_transaction_key(row) for row in truth.transaction_rows)
     actual_tx = Counter(
         (
@@ -3857,15 +3832,9 @@ def _assert_generated_truth(
         rendered = json.dumps(_counter_diff(expected_pairs, actual_pairs, _pair_key_dict), indent=2, sort_keys=True)
         raise RuntimeError(f"Generated demo transfer-pair truth mismatch:\n{rendered}")
 
-    expected_excluded = sum(
-        1 for row in truth.transaction_rows if row.get("source") == "collaborative_review"
-    )
-    expected_active = len(truth.transaction_rows) - expected_excluded
-    expected_export_tx = Counter(
-        _truth_transaction_key(row)
-        for row in truth.transaction_rows
-        if row.get("source") != "collaborative_review"
-    )
+    expected_excluded = 0
+    expected_active = len(truth.transaction_rows)
+    expected_export_tx = Counter(_truth_transaction_key(row) for row in truth.transaction_rows)
     metrics = summary["metrics"]
     if int(metrics.get("active_transactions") or 0) != expected_active:
         raise RuntimeError(
@@ -3936,7 +3905,6 @@ def _assert_expected(
     loans: dict[str, Any],
     journal: dict[str, Any],
     quarantines: list[dict[str, Any]],
-    collaborative_excluded: list[dict[str, Any]],
     wallet_listing: list[dict[str, Any]],
     summary: dict[str, Any],
     exports: dict[str, Any],
@@ -3959,11 +3927,6 @@ def _assert_expected(
         raise RuntimeError(f"Expected at least {expected['min_transactions']} transactions, got {len(transactions)}")
     if len(transfers["pairs"]) < int(expected["min_transfer_pairs"]):
         raise RuntimeError(f"Expected at least {expected['min_transfer_pairs']} transfer pairs")
-    if len(collaborative_excluded) != int(expected["collaborative_excluded"]):
-        raise RuntimeError(
-            f"Expected {expected['collaborative_excluded']} collaborative rows to be excluded, "
-            f"got {len(collaborative_excluded)}"
-        )
     loan_listing = loans["listing"]
     if len(loan_listing["marks"]) != int(expected["loan_marks"]):
         raise RuntimeError(f"Expected {expected['loan_marks']} loan marks, got {len(loan_listing['marks'])}")
@@ -4275,6 +4238,62 @@ def demo_tick(
     }
 
 
+def _write_demo_cases(
+    export_dir: Path, *, scenario: dict[str, Any], truth: DemoTruth,
+    exchange_cases: dict[str, Any], exchange_api: dict[str, Any] | None,
+) -> dict[str, str]:
+    """Publish the assertions that passed at the report/export build point."""
+    cards = [
+        {
+            "id": event["operation_ids"][0], "operations": event["operation_ids"],
+            "profile": scenario["profile"]["label"], "status": "verified",
+            "evidence": "Signed Core transaction and previous outputs; connected wallet scripts",
+            "assertion": "Exact automatic wallet deltas, no authored component, user fee booked once",
+            "txid": event["txid"], "wallet_deltas_msat": event["wallet_deltas_msat"],
+            "own_fee_msat": event["own_fee_msat"],
+            "foreign_input_count": event["foreign_input_count"],
+        }
+        for event in truth.native_transfers
+    ]
+    cards.extend(exchange_cases.get("case_cards", []))
+    if exchange_api is not None:
+        cards.append(exchange_api)
+    report = {"schema_version": 1, "build_point": "before_optional_business_tick", "cases": cards}
+    json_path = export_dir / "demo-cases.json"
+    json_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    lines = [
+        "# Regtest case results", "",
+        "These assertions passed before the optional incremental business tick.", "",
+        f"- {len(truth.native_transfers)} automatic Bitcoin custody events: signed transaction/prevout "
+        "deltas and user fees checked independently of Kassiber's matcher.",
+        "- Main book: generated transaction identities, Core UTXO inventory, journal readiness and export contents checked.",
+        "- Cross-rail bridges: explicit reviewed interpretation over real Bitcoin/Elements movements.", "",
+        "CoinJoin and Payjoin are signed transaction shapes, not interoperability tests against a production coordinator.",
+        "Foreign inputs never imply foreign-wallet ownership. The generated script ownership is the test oracle.", "",
+    ]
+    if exchange_cases.get("enabled"):
+        lines.extend([
+            "## Exchange Reconciliation", "",
+            "The separate demo profile contains an acquisition, batched withdrawal, return deposit and sale.",
+            "A missing purchase export first leaves unresolved accounting. The complete synthetic Strike export "
+            "and a version-bound reviewed custody plan resolve it without exclusions.", "",
+            "The platform withdrawal charge, foreign transaction fee and owned return fee are checked separately. "
+            "Repeat import and native refresh must preserve quantities and basis.", "",
+            "See [exchange results](exchange/exchange-case-results.json) for exact expected and observed amounts.", "",
+        ])
+    if exchange_api is not None:
+        lines.extend([
+            "## API protocol validation", "",
+            "A disposable local Coinbase fixture exercises signed requests, account/transaction pagination and repeat import. "
+            "It is not a live exchange compatibility test or an ongoing demo connection.", "",
+            "See [API results](exchange/api-protocol-results.json).", "",
+        ])
+    lines.extend(["[All case assertions](demo-cases.json) · [Generated chain truth](generated-truth.json)", ""])
+    markdown_path = export_dir / "demo-cases.md"
+    markdown_path.write_text("\n".join(lines), encoding="utf-8")
+    return {"json": str(json_path), "markdown": str(markdown_path)}
+
+
 def run_demo(
     *,
     scenario_path: Path = DEFAULT_SCENARIO,
@@ -4584,6 +4603,44 @@ def run_demo(
         scope = _scope(scenario)
         sync = run_cli(data_root, "wallets", "sync", *scope, "--all")["data"]
 
+        # These cases mine real Core transactions. Finish them before the main
+        # book's deliberate mempool receipt, which must remain unconfirmed.
+        from tests.integration.regtest_exchange_cases import run_exchange_cases
+        from tests.integration.regtest_exchange_api import run_exchange_api_case
+
+        exchange_cases = run_exchange_cases(
+            data_root=data_root,
+            artifact_dir=export_dir / "exchange",
+            workspace_label=scenario["workspace"],
+            rpc_url=url,
+            username=username,
+            password=password,
+            faucet_wallet=faucet_wallet,
+            mining_address=mining_address,
+            current_ts=current_ts,
+            config={
+                **(scenario.get("exchange_cases") or {"enabled": False}),
+                "wallet_prefix": backend_wallet_prefix,
+            },
+            core_wallets=created_core_wallets,
+        )
+        exchange_api = None
+        if exchange_cases.get("enabled"):
+            current_ts = exchange_cases["current_ts"]
+            # The API fixture validates protocol and refresh behavior. Its
+            # stopped server must not become a broken interactive connection.
+            with tempfile.TemporaryDirectory(prefix="kassiber-demo-exchange-api-") as protocol_root:
+                exchange_api = run_exchange_api_case(
+                    Path(protocol_root), scenario["workspace"],
+                    exchange_cases["txids"]["withdrawal"],
+                    exchange_cases["txids"]["deposit"],
+                    times=exchange_cases["times"],
+                )
+            (export_dir / "exchange" / "api-protocol-results.json").write_text(
+                json.dumps(exchange_api, indent=2, sort_keys=True), encoding="utf-8",
+            )
+            run_cli(data_root, "context", "set", *scope)
+
         # Broadcast the pending receipts only after the watch-only wallets
         # exist: a descriptor import rescans blocks, not the mempool, so a
         # payment sent earlier would be invisible until it confirmed. Doing it
@@ -4652,8 +4709,11 @@ def run_demo(
             "--order",
             "asc",
         )["data"]
-        collaborative_excluded = _exclude_collaborative_shapes(data_root, scenario, txids, transactions)
-        ownership_matching = _assert_ownership_self_transfer_matching(data_root, scenario)
+        _refresh_truth_wallet_ids(truth, wallets)
+        _collect_native_transfer_truth(
+            truth, url=url, username=username, password=password, wallets=wallets,
+        )
+        ownership_matching = _assert_ownership_self_transfer_matching(data_root, scenario, truth=truth)
         pairs = _pair_transfers(data_root, scenario, txids, truth=truth)
         loan_result = _mark_loans(data_root, scenario, txids)
         deprecated_wallets = _mark_deprecated_wallets(data_root, scenario, wallets)
@@ -4685,7 +4745,6 @@ def run_demo(
             loans=loan_result,
             journal=journal,
             quarantines=quarantines,
-            collaborative_excluded=collaborative_excluded,
             wallet_listing=wallet_listing,
             summary=summary,
             exports=exports,
@@ -4694,6 +4753,10 @@ def run_demo(
         # Prove the incremental resync path does real work: after the book is
         # already synced, stage fresh business activity and sync again. A no-op
         # resync (nothing imported) would mean "refresh" in the app is dead.
+        case_results = _write_demo_cases(
+            export_dir, scenario=scenario, truth=truth,
+            exchange_cases=exchange_cases, exchange_api=exchange_api,
+        )
         resync = None
         if run_business_tick:
             tick_rng = random.Random(0xC0FFEE)
@@ -4800,7 +4863,6 @@ def run_demo(
                     "count": len(transfer_listing),
                     "ownership_matching": ownership_matching,
                 },
-                "collaborative_excluded": collaborative_excluded,
                 "loans": {
                     "marks": len(loan_result["listing"]["marks"]),
                     "open_locks": len(loan_result["listing"]["open_locks"]),
@@ -4813,6 +4875,9 @@ def run_demo(
                 "summary_metrics": summary["metrics"],
                 "exports": exports,
                 "truth": truth_export,
+                "exchange_cases": exchange_cases,
+                "exchange_api": exchange_api,
+                "case_results": case_results,
             },
         }
         return result
