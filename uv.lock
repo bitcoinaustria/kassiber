@@ -519,7 +519,7 @@ requires-dist = [
     { name = "openpyxl", specifier = ">=3.1,<4" },
     { name = "pyrage", specifier = ">=1.3,<2" },
     { name = "reportlab", specifier = ">=4.4,<5" },
-    { name = "rp2", git = "https://github.com/bitcoinaustria/rp2.git?rev=7b0dd6771c611e83451cd7f97782af0c15382197" },
+    { name = "rp2", git = "https://github.com/bitcoinaustria/rp2.git?rev=3d2e03ef27696fbd00f4516a0cb745300083e227" },
     { name = "spake2", specifier = "==0.9" },
     { name = "sqlcipher3", specifier = ">=0.6.2,<1" },
     { name = "xlsxwriter", specifier = ">=3.2,<4" },
@@ -1018,7 +1018,7 @@ wheels = [
 [[package]]
 name = "rp2"
 version = "1.7.2"
-source = { git = "https://github.com/bitcoinaustria/rp2.git?rev=7b0dd6771c611e83451cd7f97782af0c15382197#7b0dd6771c611e83451cd7f97782af0c15382197" }
+source = { git = "https://github.com/bitcoinaustria/rp2.git?rev=3d2e03ef27696fbd00f4516a0cb745300083e227#3d2e03ef27696fbd00f4516a0cb745300083e227" }
 dependencies = [
     { name = "babel" },
     { name = "jsonschema" },
