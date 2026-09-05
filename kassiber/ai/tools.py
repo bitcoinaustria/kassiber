@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import json
 import re
 import sys
 from typing import Any, Literal
@@ -110,6 +111,9 @@ CORE_TOOL_NAMES = frozenset(
         "ui.reports.balance_sheet", "ui.reports.portfolio_summary",
         "ui.reports.tax_summary", "ui.reports.balance_history",
         "ui.journals.snapshot", "ui.journals.quarantine",
+        # The default CLI profile must be able to inspect the evidence and
+        # perform the same consented, audited price/exclusion repair as chat.
+        "ui.transactions.review_context", "ui.journals.quarantine.resolve",
         "ui.journals.transfers.list", "ui.rates.summary", "ui.rates.coverage",
         "ui.rates.rebuild", "ui.report.blockers",
         "ui.audit.changes_since_last_answer", "ui.maintenance.settings",
@@ -141,6 +145,26 @@ CORE_TOOL_NAMES = frozenset(
         "ui.custody.review.plan", "ui.custody.review.apply",
     }
 )
+
+
+# A quarantine investigation needs evidence and a complete repair/verification
+# path, without advertising unrelated report exports or wallet administration.
+REVIEW_TOOL_NAMES = frozenset({
+    "ui.review.cases", "ui.review.request_input", "ui.review.plan", "ui.review.apply", "ui.review.receipt",
+    "ui.review.worklist", "ui.journals.quarantine", "ui.journals.snapshot",
+    "ui.transactions.review_context", "ui.transactions.resolve",
+    "ui.transactions.graph", "ui.transactions.history", "ui.transactions.list",
+    "ui.attachments.list", "ui.audit.evidence.summary", "ui.documents.list",
+    "ui.wallets.list", "ui.wallets.identify", "ui.rates.coverage",
+    "ui.transfers.review_context", "ui.transfers.list", "ui.transfers.pair",
+    "ui.transfers.components.list", "ui.transfers.components.plan",
+    "ui.transfers.components.apply", "ui.journals.quarantine.resolve",
+    "ui.custody.coverage.snapshot", "ui.custody.lineage.snapshot",
+    "ui.custody.gaps.list", "ui.custody.gaps.review_context",
+    "ui.custody.gaps.history", "ui.custody.review.plan", "ui.custody.review.apply",
+    "ui.journals.process", "ui.report.blockers",
+})
+CORE_TOOL_NAMES = CORE_TOOL_NAMES | REVIEW_TOOL_NAMES
 
 
 _EMPTY_OBJECT_SCHEMA: dict[str, Any] = {
@@ -220,6 +244,30 @@ _SOURCE_FUNDS_CONFIDENCE_LEVELS = ("exact", "strong", "weak", "unknown")
 _SOURCE_FUNDS_ALLOCATION_POLICIES = ("explicit", "heuristic", "unknown")
 _SOURCE_FUNDS_REVEAL_MODES = ("labels_only", "minimal", "standard", "full")
 _SOURCE_FUNDS_REPORT_PURPOSES = ("existing_transaction", "planned_exchange_sale")
+
+_SOURCE_FUNDS_RECIPE_PROPERTIES = {
+    "target_amount": {"type": "string", "description": "Exact BTC amount to trace."},
+    "report_purpose": {"type": "string", "enum": list(_SOURCE_FUNDS_REPORT_PURPOSES)},
+    "planned_destination": {"type": "string", "maxLength": 1000},
+    "planned_note": {"type": "string", "maxLength": 4000},
+    "reveal_mode": {"type": "string", "enum": list(_SOURCE_FUNDS_REVEAL_MODES)},
+    "max_depth": {"type": "integer", "minimum": 1, "maximum": 32},
+    "recipient": {"type": ["string", "null"]},
+    "report_options": {"type": "object", "additionalProperties": False, "properties": {
+        "diagram_detail": {"type": "string", "enum": ["summary", "detailed"]},
+        "amount_precision": {"type": "string", "enum": ["btc", "sats"]},
+        "mask_recipient": {"type": "boolean"},
+        "omit_sections": {"type": "array", "maxItems": 20, "items": {"type": "string"}},
+        "reveal_overrides": {"type": "object", "additionalProperties": {"type": "string", "enum": ["show", "hide"]}},
+    }},
+}
+_SOURCE_FUNDS_RECIPE_SCHEMA = {
+    "type": "object", "additionalProperties": False, "properties": _SOURCE_FUNDS_RECIPE_PROPERTIES,
+}
+_SOURCE_FUNDS_REPORT_PROPERTIES = {
+    "target_transaction": {"type": "string", "minLength": 1}, **_SOURCE_FUNDS_RECIPE_PROPERTIES,
+}
+
 _TRANSFER_MATCH_METHODS = (
     "payment_hash",
     "provider_swap_id",
@@ -1427,32 +1475,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "heuristic allocations, privacy-hop ambiguity, or missing pricing."
         ),
         parameters={
-            "type": "object",
-            "additionalProperties": False,
+            "type": "object", "additionalProperties": False,
             "required": ["target_transaction"],
-            "properties": {
-                "target_transaction": {
-                    "type": "string",
-                    "description": "Target transaction id or txid.",
-                },
-                "target_amount": {
-                    "type": "string",
-                    "description": "Optional BTC amount of the target to trace.",
-                },
-                "report_purpose": {
-                    "type": "string",
-                    "enum": list(_SOURCE_FUNDS_REPORT_PURPOSES),
-                    "description": "Purpose of the source-funds preview.",
-                },
-                "planned_destination": {"type": "string"},
-                "planned_note": {"type": "string"},
-                "reveal_mode": {
-                    "type": "string",
-                    "enum": list(_SOURCE_FUNDS_REVEAL_MODES),
-                },
-                "max_depth": {"type": "integer", "minimum": 1, "maximum": 32},
-                "recipient": {"type": "string"},
-            },
+            "properties": {**_SOURCE_FUNDS_REPORT_PROPERTIES},
         },
         kind_class="read_only",
         wire_name="ui_source_funds_preview",
@@ -2961,6 +2986,29 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read source-funds cases",
     ),
     ToolEntry(
+        name="ui.source_funds.review_context", wire_name="ui_source_funds_review_context",
+        daemon_kind="ui.source_funds.review_context", kind_class="read_only",
+        description="Investigate one source-of-funds target using its canonical report, reachable links, root sources and evidence. Returns blockers, documentary input_needs, scope_truncated and a fingerprint covering provenance edits and the exact report recipe. Coverage is historical inflows, not current holdings. Source-funds evidence never changes tax or custody accounting.",
+        parameters={"type": "object", "additionalProperties": False, "required": ["target_transaction"],
+            "properties": _SOURCE_FUNDS_REPORT_PROPERTIES},
+        summary_template="Investigate source-of-funds target",
+    ),
+    ToolEntry(
+        name="ui.source_funds.request_input", wire_name="ui_source_funds_request_input",
+        daemon_kind="ui.source_funds.request_input", kind_class="read_only",
+        description="Request missing connection, history or documentary evidence for the inspected source-of-funds target, including targets outside quarantine. Reuse the exact review_fingerprint and canonical recipe from review_context. This only opens a typed user handoff; wait for user input, then inspect fresh context. Exportable attestations may still need better documentary evidence; never invent origin facts or treat an attachment as verified provenance.",
+        parameters={"type": "object", "additionalProperties": False,
+            "required": ["action", "target_transaction", "expected_review_fingerprint", "recipe"],
+            "properties": {
+                "action": {"type": "string", "enum": ["connect_wallet", "import_history", "attach_evidence"]},
+                "target_transaction": {"type": "string", "minLength": 1},
+                "expected_review_fingerprint": {"type": "string", "minLength": 64, "maxLength": 64},
+                "recipe": _SOURCE_FUNDS_RECIPE_SCHEMA,
+                "explanation": {"type": "string", "minLength": 1, "maxLength": 1000},
+            }},
+        summary_template="Request source-of-funds evidence",
+    ),
+    ToolEntry(
         name="ui.source_funds.assemble",
         description=(
             "Run the local deterministic source-funds assembly loop for one target after explicit consent. "
@@ -2983,20 +3031,12 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.source_funds.cases.save",
-        description="Save a reviewed source-funds case after explicit consent.",
+        description="Save a reviewed source-funds case after explicit consent. Reuse the full canonical recipe and expected_review_fingerprint from review_context so intervening provenance edits cannot change the saved disclosure unnoticed.",
         parameters={
-            "type": "object",
-            "additionalProperties": False,
+            "type": "object", "additionalProperties": False,
             "required": ["target_transaction"],
-            "properties": {
-                "target_transaction": {"type": "string"},
-                "case_label": {"type": "string"},
-                "target_amount": {"type": "string"},
-                "report_purpose": {"type": "string", "enum": list(_SOURCE_FUNDS_REPORT_PURPOSES)},
-                "reveal_mode": {"type": "string", "enum": list(_SOURCE_FUNDS_REVEAL_MODES)},
-                "max_depth": {"type": "integer", "minimum": 1, "maximum": 32},
-                "recipient": {"type": "string"},
-            },
+            "properties": {**_SOURCE_FUNDS_REPORT_PROPERTIES, "case_label": {"type": "string"},
+                "expected_review_fingerprint": {"type": "string", "minLength": 64, "maxLength": 64}},
         },
         kind_class="mutating",
         wire_name="ui_source_funds_cases_save",
@@ -3230,10 +3270,118 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
 )
 
 
-TOOL_CATALOG: tuple[ToolEntry, ...] = (*_BASE_TOOL_CATALOG, *_EXPANDED_TOOL_CATALOG)
+# The schema validator deliberately supports a small JSON Schema subset. The
+# operation discriminator is validated again by the core, including exclusive
+# price fields and fields allowed for each operation type.
+_REVIEW_OPERATIONS_SCHEMA = {
+    "type": "array", "minItems": 1, "maxItems": 50,
+    "items": {
+        "type": "object", "additionalProperties": False, "required": ["type"],
+        "properties": {
+            "type": {"type": "string", "enum": ["price_override", "exclude", "custody_component"]},
+            "transaction_id": {"type": "string", "minLength": 1},
+            "fiat_rate": {"type": "string", "description": "Exact positive decimal; use this OR fiat_value."},
+            "fiat_value": {"type": "string", "description": "Exact nonnegative decimal; use this OR fiat_rate."},
+            "reason": {"type": "string", "minLength": 1, "description": "Required audit reason for price/exclusion. Cite inspected evidence, never invent it."},
+            "request": {
+                "type": "object", "additionalProperties": False,
+                "required": ["action", "components"],
+                "properties": {
+                    "action": {"type": "string", "enum": ["create"]},
+                    "components": {"type": "array", "minItems": 1, "maxItems": 50, "items": _CUSTODY_COMPONENT_SPEC_SCHEMA},
+                    "activate": {"type": "boolean"},
+                    "reason": {"type": "string", "minLength": 1},
+                },
+                "description": "Create evidence-backed custody components only. Missing-wallet gap reviews remain in their local-provider tools; reviewed conversion approval is unavailable.",
+            },
+        },
+    },
+}
+_REVIEW_EFFECTS_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "required": ["entries_count", "quarantine_count", "quarantines", "wallet_holdings", "report_ready", "journal_digest"],
+    "properties": {
+        "entries_count": {"type": "integer", "minimum": 0},
+        "quarantine_count": {"type": "integer", "minimum": 0},
+        "quarantines": {"type": "array", "maxItems": 100, "items": {
+            "type": "object", "additionalProperties": False, "required": ["transaction_id", "reason"],
+            "properties": {"transaction_id": {"type": "string"}, "reason": {"type": "string"}},
+        }},
+        "wallet_holdings": {"type": "array", "maxItems": 100, "items": {
+            "type": "object", "additionalProperties": False, "required": ["wallet_id", "asset", "quantity", "cost_basis"],
+            "properties": {key: {"type": "string"} for key in ("wallet_id", "asset", "quantity", "cost_basis")},
+        }},
+        "report_ready": {"type": "boolean"}, "journal_digest": {"type": "string"},
+    },
+}
+_REVIEW_ARTIFACT_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "required": ["schema_version", "workspace_id", "profile_id", "base_input_version", "operations", "before", "after", "digest"],
+    "properties": {
+        "schema_version": {"type": "integer", "enum": [1]},
+        "workspace_id": {"type": "string", "minLength": 1},
+        "profile_id": {"type": "string", "minLength": 1},
+        "base_input_version": {"type": "integer", "minimum": 0},
+        "operations": _REVIEW_OPERATIONS_SCHEMA,
+        "before": _REVIEW_EFFECTS_SCHEMA, "after": _REVIEW_EFFECTS_SCHEMA,
+        "digest": {"type": "string", "minLength": 64, "maxLength": 64},
+    },
+    "description": "Exact unchanged artifact returned by ui.review.plan. Do not reconstruct quantities, effects, scope or digest.",
+}
+_REVIEW_TOOL_CATALOG = (
+    ToolEntry(
+        name="ui.review.cases", wire_name="ui_review_cases", daemon_kind="ui.review.cases",
+        description="Inspect a version-bound page of current quarantine cases. Follow next_cursor until null before claiming all cases were inspected. Evidence remains unresolved until verified; supported operations do not imply a suitable repair.",
+        parameters={"type": "object", "additionalProperties": False, "properties": {
+            "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+            "cursor": {"type": "string", "description": "Unchanged next_cursor from the preceding page; expired cursors require a fresh first page."},
+        }}, kind_class="read_only", summary_template="Inspect accounting review cases",
+    ),
+    ToolEntry(
+        name="ui.review.request_input", wire_name="ui_review_request_input", daemon_kind="ui.review.request_input",
+        description="Request a specific missing wallet connection, transaction-history import, or evidence attachment for current quarantine cases. For attach_evidence select exactly one case so the file has an unambiguous audit target. Read the cases and existing evidence first; explain the missing facts without paths, secrets or private graphs. Returns a typed user-input handoff, never imports or resolves anything itself. After requesting input, wait for the user step; then inspect fresh cases and replan. This generic handoff does not expose local-only custody-gap investigation.",
+        parameters={"type": "object", "additionalProperties": False,
+            "required": ["action", "case_ids", "expected_input_version"], "properties": {
+                "action": {"type": "string", "enum": ["connect_wallet", "import_history", "attach_evidence"]},
+                "case_ids": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": True,
+                    "items": {"type": "string", "minLength": 12, "maxLength": 300, "pattern": "^quarantine:"}},
+                "expected_input_version": {"type": "integer", "minimum": 0},
+                "explanation": {"type": "string", "minLength": 1, "maxLength": 1000,
+                    "description": "User-facing card text: one or two short sentences naming what is missing and why. Use wallet names; omit internal IDs, diagnostic codes and repeated setup instructions."},
+            }}, kind_class="read_only", summary_template="Request missing review input",
+    ),
+    ToolEntry(
+        name="ui.review.plan", wire_name="ui_review_plan", daemon_kind="ui.review.plan",
+        description="Preview a bounded batch of evidence-backed accounting repairs without changing the book. Use the cases input_version. Inspect evidence first and include audit reasons. Exclude only when the user establishes the row belongs outside accounting, never to clear missing evidence. Returns an exact portable artifact and canonical before/after effects for consent.",
+        parameters={"type": "object", "additionalProperties": False, "required": ["operations", "expected_input_version"], "properties": {
+            "operations": _REVIEW_OPERATIONS_SCHEMA,
+            "expected_input_version": {"type": "integer", "minimum": 0},
+        }}, kind_class="read_only", summary_template="Preview accounting review changes",
+    ),
+    ToolEntry(
+        name="ui.review.apply", wire_name="ui_review_apply", daemon_kind="ui.review.apply",
+        description="Apply the unchanged reviewed artifact after explicit per-call consent, then rebuild and verify atomically. Reuse the same idempotency_key for an uncertain retry; read its receipt before retrying. A verified receipt does not imply report_ready or that all quarantine is resolved. Stale artifacts require new investigation and planning.",
+        parameters={"type": "object", "additionalProperties": False, "required": ["artifact", "idempotency_key"], "properties": {
+            "artifact": _REVIEW_ARTIFACT_SCHEMA,
+            "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 200},
+        }}, kind_class="mutating", summary_template="Apply reviewed accounting changes",
+    ),
+    ToolEntry(
+        name="ui.review.receipt", wire_name="ui_review_receipt", daemon_kind="ui.review.receipt",
+        description="Read a durable application receipt by receipt_id OR idempotency_key. Use after interruption or uncertain application before retrying; check verification.report_ready and remaining quarantine rather than assuming success cleared every case.",
+        parameters={"type": "object", "additionalProperties": False, "properties": {
+            "receipt_id": {"type": "string", "minLength": 1},
+            "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 200},
+        }}, kind_class="read_only", summary_template="Read accounting review receipt",
+    ),
+)
+
+
+TOOL_CATALOG: tuple[ToolEntry, ...] = (*_BASE_TOOL_CATALOG, *_EXPANDED_TOOL_CATALOG, *_REVIEW_TOOL_CATALOG)
 
 TOOL_CAPABILITY_NAMES = (
     "core",
+    "review",
     "workspace",
     "transactions",
     "reports",
@@ -3261,6 +3409,8 @@ def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
 
     name = tool.name
     capabilities: set[str] = set()
+    if name in REVIEW_TOOL_NAMES:
+        capabilities.add("review")
     if name in _CORE_TOOL_NAMES:
         capabilities.add("core")
     if name in {"ui.profiles.snapshot", "ui.workspace.overview.snapshot"}:
@@ -3303,6 +3453,35 @@ def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
     return frozenset(capabilities or {"core"})
 
 
+def _continues_review_checkpoint(messages: list[dict[str, Any]], latest: str) -> bool:
+    """Retain review schemas for a terse continuation of the last checkpoint.
+
+    This selects capabilities only; every operation still needs current scoped
+    evidence and consent. Read only the last assistant message's bounded tail,
+    where the daemon appends its continuation packet.
+    """
+    if latest.strip().rstrip(".!?") not in {
+        "continue", "please continue", "weiter", "bitte weiter",
+        "fortsetzen", "bitte fortsetzen",
+    }:
+        return False
+    content = next((message.get("content") for message in reversed(messages)
+                    if message.get("role") == "assistant"), None)
+    if not isinstance(content, str):
+        return False
+    for match in re.finditer(r"(?:^|\n)```json[ \t]*\r?\n(.*?)\r?\n```(?:\s|$)",
+                             content[-16_384:], flags=re.DOTALL):
+        try:
+            payload = json.loads(match.group(1))
+        except (ValueError, RecursionError):
+            continue
+        if (isinstance(payload, dict) and set(payload) == {"review_checkpoint"}
+                and isinstance(payload["review_checkpoint"], dict)
+                and payload["review_checkpoint"]):
+            return True
+    return False
+
+
 def select_tool_capabilities(
     messages: list[dict[str, Any]] | None,
     screen_context: dict[str, Any] | None = None,
@@ -3331,6 +3510,13 @@ def select_tool_capabilities(
         selected.update(str(item) for item in requested if str(item) in TOOL_CAPABILITY_NAMES)
 
     haystack = f"{route} {' '.join(recent_user_messages)}"
+    if _continues_review_checkpoint(messages, latest) or any(
+        word in haystack for word in ("quarantine", "quarantäne", "quarantaene", "review cases", "review receipt", "accounting review")
+    ):
+        # Evidence, wallet and report words within a repair request should not
+        # expand it into every administrative/export capability.
+        selected.add("review")
+        return frozenset(selected)
     keyword_groups = {
         "workspace": (
             "all books", "book set", "books set", "treasury", "across books",
@@ -3353,9 +3539,12 @@ def select_tool_capabilities(
         ),
         "loans": ("loan", "collateral", "borrowed", "principal", "liquidation", "darlehen", "kredit"),
         "privacy": ("privacy", "linkable", "egress", "outbound", "psbt"),
-        "source_funds": ("source of funds", "source-of-funds", "provenance", "audit package", "proof of funds"),
+        "source_funds": ("source of funds", "source-of-funds", "provenance", "audit package", "proof of funds", "mittelherkunft", "herkunftsnachweis", "herkunft der mittel"),
         "merchant": ("btcpay", "invoice", "receipt", "merchant", "commercial", "document"),
         "transfers": (
+            # Quarantine includes custody failures; a generic help request must
+            # expose their repair workflow before the model knows the reason.
+            "quarantine", "quarantäne", "quarantaene",
             "transfer",
             "swap",
             "payout",
@@ -3473,6 +3662,12 @@ def _toggle_verb(enabled: bool) -> str:
 
 def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
     """Build a short, non-secret consent summary for an allowlisted tool."""
+    if tool.name in {"ui.review.plan", "ui.review.apply"}:
+        artifact = arguments.get("artifact") if tool.name == "ui.review.apply" else arguments
+        operations = artifact.get("operations") if isinstance(artifact, dict) else None
+        count = len(operations) if isinstance(operations, list) else 0
+        verb = "Apply" if tool.name == "ui.review.apply" else "Preview"
+        return f"{verb} {count} reviewed accounting change(s)"
     if tool.name == "ui.wallets.sync":
         wallet = arguments.get("wallet")
         if isinstance(wallet, str) and wallet.strip():
@@ -3743,7 +3938,11 @@ setting and ui.maintenance.run or ui.wallets.sync only after explicit consent.
 Read command-templates for exact CLI command shapes and common fast paths.
 Read onboarding for first-run setup, data roots, and context selection.
 Read wallets-backends for wallet kinds, backend selection, source refresh, and
-imports. Read journal-processing for processing order, stale journals,
+imports. Read journal-processing for the paged ui.review.cases → evidence →
+ui.review.plan → consented ui.review.apply → ui.review.receipt workflow. Follow
+next_cursor, preserve the exact artifact and retry key, and report unresolved
+cases at the tool budget limit. Missing evidence never justifies exclusion.
+It also covers processing order, stale journals,
 quarantines, and transfer/swap pairing. Read swap-matching for candidate review,
 conflicts, auto-pair rules, and saved review views. Read metadata for notes, tags,
 exclusions, BIP329 labels, and attachments. Read reports for summary,

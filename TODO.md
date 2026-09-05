@@ -24,6 +24,25 @@ Backlog contract:
 - If code and a plan doc disagree, trust the code, then update the plan doc so
   the drift does not survive.
 
+## Agent-assisted accounting review
+
+- [x] Target-scoped source-of-funds investigation shared by CLI/chat and the
+  desktop case page, fingerprint-bound missing-input handoffs, book-isolated
+  drafts and refreshed case results after evidence changes. ZIP evidence stays
+  bound to the saved snapshot; coverage reuses one request's immutable inputs.
+
+- [x] Shared canonical case pagination, portable mixed-operation previews,
+  atomic application and verification receipts for CLI and built-in chat.
+  Investigation uses existing evidence tools; bookkeeping remains in
+  `custody_journal`. Critical batch consent approves server-recomputed effects.
+  Quarantine's assistant entry and visible plan/receipt cards use the existing
+  chat. Continuation discovers durable receipts and current unresolved cases.
+  See [custody resolution](docs/reference/custody-resolution.md).
+- [x] Typed missing-input cards reuse connection setup, existing-wallet history
+  imports and durable transaction attachments. Successful input resumes the
+  originating review; scope, conversation and busy-state guards prevent stale
+  continuation. The agent rechecks canonical cases before proposing changes.
+
 ## Rules for every session
 
 Use `./scripts/quality-gate.sh` before calling work ready to push. It compiles
@@ -1205,6 +1224,24 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   release-platform check rather than a claim made by Linux-only local tests.
 
 ## Open bugs and debt
+
+- [x] Collaborative Bitcoin accounting and selective transfer UI salvage from
+  PR #455: preserve own net deltas instead of subtracting other participants'
+  whole-transaction fees, recognize complete native conserving own N:M flows,
+  explain unresolved collaborative residuals, and integrate the guided component
+  editor with current preview/version/confirmation and developer-mode contracts.
+- [x] Audit false custody quarantines across native transfers, swaps and AI
+  repair: canonical receipt identity, zero-value placeholders, fully owned N:M
+  allocation, same-block chain ordering, authority-bound LWK/Core HTLC evidence and
+  English/German quarantine tool routing. See
+  [custody resolution](docs/reference/custody-resolution.md) for the evidence
+  contract, regression coverage and remaining partial-observation boundaries.
+- [ ] Represent separately timed fees for native multi-date HTLC routes.
+  Keep exact linkage visible but block automatic tax projection when a positive
+  principal shortfall would otherwise be booked at the funding timestamp.
+  Resolve with typed fee-event timing, in-transit custody and cross-period
+  wallet balances, cost-basis and report tests,
+  not a looser matching threshold or a quarantine exclusion.
 
 - [ ] Self-transfer audit follow-ups (deferred from the
   `claude/self-transfer-fixes` PR, which fixed the as-of/balance-history fee +

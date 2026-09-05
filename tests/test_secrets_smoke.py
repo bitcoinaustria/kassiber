@@ -55,7 +55,7 @@ from kassiber.backup.safe_tar import (
 from kassiber.db import (
     DB_BUSY_TIMEOUT_MS,
     DB_CACHE_SIZE_KIB,
-    DB_JOURNAL_MODE,
+    _journal_settings_for_sqlite_version,
     DB_MMAP_SIZE_BYTES,
     open_db,
     resolve_database_path,
@@ -126,7 +126,7 @@ class OpenDbPlaintextTests(unittest.TestCase):
             db_path = Path(root) / "kassiber.sqlite3"
             self.assertTrue(looks_like_plaintext_sqlite(db_path))
 
-    def test_open_db_configures_wal_and_busy_timeout_for_daemon_workers(self):
+    def test_open_db_configures_safe_journal_and_busy_timeout_for_daemon_workers(self):
         with tempfile.TemporaryDirectory() as root:
             primary = open_db(root)
             try:
@@ -136,16 +136,18 @@ class OpenDbPlaintextTests(unittest.TestCase):
                 primary.commit()
                 self.assertEqual(
                     primary.execute("PRAGMA journal_mode").fetchone()[0].lower(),
-                    DB_JOURNAL_MODE,
+                    _journal_settings_for_sqlite_version(
+                        primary.execute("SELECT sqlite_version()").fetchone()[0]
+                    )[0],
                 )
                 self.assertGreaterEqual(
                     primary.execute("PRAGMA busy_timeout").fetchone()[0],
                     DB_BUSY_TIMEOUT_MS,
                 )
-                # synchronous=NORMAL (1) is the crash-safe WAL pairing that
-                # removes an fsync per commit from the write-heavy refresh paths.
+                # Affected SQLite runtimes use rollback + FULL; fixed ones retain WAL + NORMAL.
                 self.assertEqual(
-                    primary.execute("PRAGMA synchronous").fetchone()[0], 1
+                    primary.execute("PRAGMA synchronous").fetchone()[0],
+                    1 if primary.execute("PRAGMA journal_mode").fetchone()[0] == "wal" else 2,
                 )
                 # temp_store=MEMORY (2) keeps report/journal temp B-trees in RAM.
                 self.assertEqual(
@@ -303,7 +305,7 @@ class OpenDbEncryptedTests(unittest.TestCase):
                 open_db(str(data_root)).close()
             self.assertEqual(ctx.exception.code, "passphrase_required")
 
-    def test_encrypted_open_db_configures_wal_and_busy_timeout_for_daemon_workers(self):
+    def test_encrypted_open_db_configures_safe_journal_and_busy_timeout_for_daemon_workers(self):
         with tempfile.TemporaryDirectory() as root:
             data_root = Path(root) / "data"
             data_root.mkdir()
@@ -320,14 +322,17 @@ class OpenDbEncryptedTests(unittest.TestCase):
             try:
                 self.assertEqual(
                     primary.execute("PRAGMA journal_mode").fetchone()[0].lower(),
-                    DB_JOURNAL_MODE,
+                    _journal_settings_for_sqlite_version(
+                        primary.execute("SELECT sqlite_version()").fetchone()[0]
+                    )[0],
                 )
                 self.assertGreaterEqual(
                     primary.execute("PRAGMA busy_timeout").fetchone()[0],
                     DB_BUSY_TIMEOUT_MS,
                 )
                 self.assertEqual(
-                    primary.execute("PRAGMA synchronous").fetchone()[0], 1
+                    primary.execute("PRAGMA synchronous").fetchone()[0],
+                    1 if primary.execute("PRAGMA journal_mode").fetchone()[0] == "wal" else 2,
                 )
                 self.assertEqual(
                     primary.execute("PRAGMA temp_store").fetchone()[0], 2

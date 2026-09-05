@@ -135,6 +135,129 @@ class CoverageCoreTests(unittest.TestCase):
         )
         self.conn.commit()
 
+    def test_coverage_loads_book_population_once_and_keeps_report_gates(self):
+        """The sweep must reuse book inputs without caching past this request."""
+        targets = []
+        for index, source_type in enumerate(("fiat_purchase", "missing_history", "income")):
+            tx = self._add_inbound_tx(f"shared-input-{index}", 100_000)
+            source = self._add_source(source_type, amount_msat=100_000)
+            self._add_link(to_tx_id=tx, from_source_id=source, allocation_msat=100_000)
+            targets.append(tx)
+        self.conn.execute(
+            "UPDATE transactions SET fiat_rate = NULL, fiat_value = NULL WHERE id = ?", (targets[2],),
+        )
+        self.conn.commit()
+        self.assertEqual([self._classify(tx) for tx in targets], ["fully_traced", "attested", "in_review"])
+
+        statements = []
+        self.conn.set_trace_callback(statements.append)
+        try:
+            coverage = compute_coverage(self.conn, self.workspace_id, self.profile_id, self._build_hooks())
+        finally:
+            self.conn.set_trace_callback(None)
+        counts = {key: row["tx_count"] for key, row in coverage["totals"]["buckets"].items()}
+        self.assertEqual({key: value for key, value in counts.items() if value},
+                         {"fully_traced": 1, "attested": 1, "in_review": 1})
+        population_reads = [sql for sql in statements if "SELECT t.*" in sql and "t.excluded = 0" in sql]
+        self.assertEqual(len(population_reads), 1, "one whole-book read, not one per inbound report")
+
+        self.conn.execute("UPDATE transactions SET fiat_rate = 50000 WHERE id = ?", (targets[2],))
+        self.conn.commit()
+        refreshed = compute_coverage(self.conn, self.workspace_id, self.profile_id, self._build_hooks())
+        refreshed_counts = {key: row["tx_count"] for key, row in refreshed["totals"]["buckets"].items()}
+        self.assertEqual(refreshed_counts["fully_traced"], 2)
+
+    def test_shared_report_inputs_preserve_full_report_and_reject_other_scope(self):
+        from dataclasses import replace
+
+        from kassiber.core import source_funds as sf
+        from kassiber.errors import AppError
+
+        tx = self._add_inbound_tx("shared-report", 100_000)
+        source = self._add_source("fiat_purchase", amount_msat=100_000)
+        self._add_link(to_tx_id=tx, from_source_id=source, allocation_msat=100_000)
+        inputs = sf._load_report_inputs(self.conn, self.profile_id)
+        args = (self.conn, self.workspace_id, self.profile_id, self._build_hooks())
+        expected = sf.build_report(*args, target_transaction_ref=tx)
+        actual = sf.build_report(*args, target_transaction_ref=tx, _report_inputs=inputs)
+        self.assertEqual(actual, expected)
+        with self.assertRaises(TypeError):
+            inputs.active_rows_by_id[tx]["amount"] = 0
+        for mismatched in (replace(inputs, profile_id="other-book"), replace(inputs, connection=object())):
+            with self.assertRaises(AppError) as error:
+                sf.build_report(*args, target_transaction_ref=tx, _report_inputs=mismatched)
+            self.assertEqual(error.exception.code, "validation")
+
+    def test_coverage_skips_shared_book_reads_for_unlinked_or_capped_rows(self):
+        from kassiber.core import source_funds_coverage as coverage_module
+
+        tx = self._add_inbound_tx("unlinked-or-capped", 100_000)
+        with unittest.mock.patch.object(coverage_module, "_load_report_inputs") as loader:
+            result = compute_coverage(self.conn, self.workspace_id, self.profile_id, self._build_hooks())
+            self.assertEqual(result["totals"]["buckets"]["untraced"]["tx_count"], 1)
+            loader.assert_not_called()
+            source = self._add_source("fiat_purchase", amount_msat=100_000)
+            self._add_link(to_tx_id=tx, from_source_id=source, allocation_msat=100_000)
+            result = compute_coverage(
+                self.conn, self.workspace_id, self.profile_id, self._build_hooks(), max_transactions=0,
+            )
+            self.assertEqual(result["totals"]["buckets"]["not_classified"]["tx_count"], 1)
+            loader.assert_not_called()
+
+    def test_coverage_rollback_snapshot_blocks_commit_until_read_finishes(self):
+        self._assert_coverage_snapshot_during_edit("delete")
+
+    def test_coverage_wal_snapshot_is_stable_after_concurrent_commit(self):
+        self._assert_coverage_snapshot_during_edit("wal")
+
+    def _assert_coverage_snapshot_during_edit(self, journal_mode):
+        from kassiber import db
+        from kassiber.core import source_funds_coverage as coverage_module
+
+        tx = self._add_inbound_tx("concurrent-coverage", 100_000)
+        source = self._add_source("fiat_purchase", amount_msat=100_000)
+        self._add_link(to_tx_id=tx, from_source_id=source, allocation_msat=100_000)
+        # Exercise both runtime policies on this isolated fixture. The separate
+        # journal-safety tests verify actual-driver selection and fixed versions.
+        policy = (journal_mode, "NORMAL" if journal_mode == "wal" else "FULL")
+        with unittest.mock.patch.object(db, "_journal_settings_for_sqlite_version", return_value=policy):
+            db._configure_connection_pragmas(self.conn)
+        self.assertEqual(self.conn.execute("PRAGMA journal_mode").fetchone()[0], journal_mode)
+        database_path = self.conn.execute("PRAGMA database_list").fetchone()[2]
+        writer = sqlite3.connect(database_path, timeout=0.01)
+        self.addCleanup(writer.close)
+        original = coverage_module._load_report_inputs
+
+        def load_then_edit(conn, profile_id):
+            inputs = original(conn, profile_id)
+            writer.execute("UPDATE transactions SET fiat_rate = NULL, fiat_value = NULL WHERE id = ?", (tx,))
+            if journal_mode == "delete":
+                # Rollback mode must not publish a write while coverage still
+                # owns its read snapshot. The pending write commits after release.
+                with self.assertRaises(sqlite3.OperationalError) as blocked:
+                    writer.commit()
+                self.assertEqual(blocked.exception.sqlite_errorcode, sqlite3.SQLITE_BUSY)
+                self.assertTrue(writer.in_transaction)
+            else:
+                writer.commit()
+                self.assertFalse(writer.in_transaction)
+            return inputs
+
+        with unittest.mock.patch.object(coverage_module, "_load_report_inputs", side_effect=load_then_edit):
+            before = compute_coverage(self.conn, self.workspace_id, self.profile_id, self._build_hooks())
+        self.assertEqual(before["totals"]["buckets"]["fully_traced"]["tx_count"], 1)
+        self.assertFalse(self.conn.in_transaction)
+        if journal_mode == "delete":
+            writer.commit()
+            self.assertFalse(writer.in_transaction)
+        after = compute_coverage(self.conn, self.workspace_id, self.profile_id, self._build_hooks())
+        self.assertEqual(after["totals"]["buckets"]["in_review"]["tx_count"], 1)
+
+        self.conn.execute("UPDATE transactions SET fiat_rate = 50000 WHERE id = ?", (tx,))
+        compute_coverage(self.conn, self.workspace_id, self.profile_id, self._build_hooks())
+        self.assertTrue(self.conn.in_transaction, "coverage must preserve the caller's pending transaction")
+        self.conn.rollback()
+
     def _add_inbound_tx(
         self,
         external_id: str,

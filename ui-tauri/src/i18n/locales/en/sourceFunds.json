@@ -388,5 +388,247 @@
     "gapMarked": "Gap marked reviewed",
     "sourceLinked": "Source linked",
     "sourcePathBody": "The source-funds path has been updated."
+  },
+  "case": {
+    "description": "Explain the origin of one amount using the evidence in this book.",
+    "loading": "Loading the current case…",
+    "scopeError": "The active book could not be identified. Please try again.",
+    "investigate": "Investigate with assistant",
+    "assistantPrompt": "Investigate the source of funds for transaction {{target}} using ui.source_funds.review_context with this exact recipe: {{recipe}}. Explain what the current evidence proves and what remains missing. Use the source-funds input handoff when a connection, history import or attachment is needed. Preview proposed changes before asking for approval; do not treat a documented gap as proof.",
+    "selectTarget": "Select a transaction and the amount to explain.",
+    "fullAmount": "Full transaction amount",
+    "needsEvidence": "Further evidence or review is needed.",
+    "exportable": "The current report passes the export checks.",
+    "reviewUnavailable": "The current evidence path could not be loaded.",
+    "targetUnavailable": "This transaction could not be resolved in the active book. Select a transaction or enter its exact reference.",
+    "findings": "{{blockers}} blockers · {{warnings}} warnings",
+    "findingsTitle": "Open findings",
+    "noBlockers": "No open findings in the current report. Export availability is checked separately.",
+    "targetSection": "Transaction and amount",
+    "disclosureSection": "Review disclosure and recipient",
+    "exportSection": "Save a case and export",
+    "evidenceSection": "Evidence and history graph",
+    "targetReference": "Exact transaction reference",
+    "targetReferenceHint": "Transaction ID or complete txid",
+    "transactionsError": "Transactions could not be loaded.",
+    "loadMore": "Load more transactions",
+    "loadedTransactions": "{{count}} transactions loaded",
+    "useTarget": "Use selected target",
+    "omitFlow": "Flow diagram data",
+    "omitTransactions": "Transaction details",
+    "omitLinks": "Reviewed flow links",
+    "omitNodes": "Disclosure graph nodes",
+    "exportBlocked": "The current report does not pass the export checks.",
+    "rendering": "Rendering…",
+    "buildingBundle": "Building bundle…",
+    "exportBundle": "Save & export bundle",
+    "exported": "Exported: {{filename}}",
+    "fullyTraced": "Fully traced · {{count}} inbound transactions",
+    "attested": "Prior-history attestation ({{percent}}%) is shown separately and does not count as fully traced.",
+    "partialCoverage": "Partial: {{shown}} of {{total}} inbound transactions classified.",
+    "optionalRecipient": "No recipient selected. A recipient is optional; the disclosure settings below determine the report contents.",
+    "omitted": "Omitted from PDF",
+    "levelSummary": "Level {{level}} · {{transactions}} transactions · {{sources}} sources",
+    "scopeTruncated": "This investigation reached its evidence limit. The displayed list is partial; missing rows are not proof of a complete path.",
+    "exportError": "The export did not complete. Review the current case and try again.",
+    "historyAssembled": "History assembled",
+    "exportFingerprintChanged": "The case changed. Inspect it again before exporting.",
+    "remainingMore": "+{{count}} more",
+    "optionalAmount": "Leave blank to explain the full transaction amount.",
+    "notClassified": "Not classified"
+  },
+  "workstation": {
+    "amounts": "Amounts",
+    "case": "Case",
+    "dataSources": "Data sources",
+    "detailed": "Detailed",
+    "diagramDetail": "Diagram detail",
+    "evidenceBundle": "Evidence bundle",
+    "frozenIntoTheCaseAt": "Frozen into the case at export time.",
+    "goToTheTraceWork": "Go to the trace work ledger to resolve them →",
+    "hide": "Hide",
+    "inboundHistoryTraced": "Inbound history traced",
+    "level": "Level",
+    "localPreviewDataIsNot": "Local preview data is not available yet.",
+    "maskRecipientNameOnThe": "Mask recipient name on the cover",
+    "omitVerboseSections": "Omit verbose sections",
+    "openTransactionDetails": "Open transaction details",
+    "openTransactionToFix": "Open transaction to fix",
+    "pertransactionDisclosure": "Per-transaction disclosure",
+    "reportOptions": "Report options",
+    "reportVisuals": "Report visuals",
+    "show": "Show",
+    "snapshot": "Snapshot",
+    "sourceMix": "Source mix",
+    "sourceoffundsPdf": "Source-of-funds PDF",
+    "status": "Status",
+    "summary": "Summary",
+    "transactionDetailsByLevel": "Transaction details by level",
+    "viewDetails": "View details",
+    "viewTransactionDetails": "View transaction details",
+    "whatNeedsExplaining": "What needs explaining?",
+    "workLedger": "Work ledger",
+    "everyDossierIsAnchoredTo": "Every dossier is anchored to one transaction. Kassiber traces history backwards from it and disclosure stays scoped to the amount you enter — nothing else.",
+    "everythingBelowIsExactlyWhat": "Review the disclosure before export. Choose its scope, hide individual transactions and adjust report sections for the recipient.",
+    "kassiberProvesEveryHopIt": "Kassiber examines existing wallet observations, payment hashes and reviewed links. Suggestions remain distinct from verified evidence.",
+    "level1IsTheReport": "Level 1 is the report target; each further level moves one reviewed hop backwards towards the root sources. This is the granular table the exported PDF renders.",
+    "noMatchedLinksYetAssemble": "No matched links yet. Assemble History looks for transaction input/output structure, payment hashes, same-id transfers, reviewed pairs, and provider ids.",
+    "overrideTheRevealModeFor": "Override the reveal mode for individual transactions. Changes update the preview live and freeze into the exported case.",
+    "renderedOnThisDeviceIdentical": "Locally rendered preview of the report diagrams.",
+    "reportPdfPlusTheOriginal": "Report PDF plus the original evidence files and a SHA-256 manifest, reveal-mode scoped.",
+    "saveAFrozenCaseAnd": "Save a frozen case and export the recipient handoff ZIP from the same reviewed snapshot:",
+    "savesTheCaseSnapshotFirst": "Saves the case snapshot first, then renders the PDF from it.",
+    "whoReceivesThisDossierTheir": "Who receives this dossier — their default reveal mode is a suggestion, your choice wins.",
+    "buildingReviewedFlow": "Building reviewed flow...",
+    "computingCoverage": "Computing coverage...",
+    "searchTxidWalletNote": "Search txid, wallet, note...",
+    "krakenBitpandaOtcDesk": "Kraken, Bitpanda, OTC desk..."
+  },
+  "gapAction": {
+    "open_source_creator": "Document this gap",
+    "open_link_review": "Review this link",
+    "open_review_queue": "Open review queue",
+    "open_source": "Open sources",
+    "open_transaction": "Open transaction"
+  },
+  "coverageBucket": {
+    "fully_traced": "Fully traced",
+    "attested": "Attested",
+    "in_review": "In review",
+    "untraced": "Untraced",
+    "not_classified": "Not classified"
+  },
+  "findings": {
+    "path_truncated": {
+      "title": "Path truncated",
+      "nextStep": "Resolve the upstream path or attest a missing-history stop",
+      "messages": {
+        "source-fundsGraphExceededThePerreportNodeEdge": "Source-funds graph exceeded the per-report node/edge cap; review the upstream suggestions or split the disclosure into a narrower target before retrying.",
+        "maximumSourcefundsPathDepthReached": "Maximum source-funds path depth reached."
+      }
+    },
+    "missing_history": {
+      "title": "Missing history",
+      "nextStep": "Attach a root source or attest the gap",
+      "messages": {
+        "referencedTransactionIsNoLongerPresent": "Referenced transaction is no longer present.",
+        "thePathStopsAtATransactionWithout": "The path stops at a transaction without a reviewed root source or missing-history attestation.",
+        "reviewedSourceRecordIsMissing": "Reviewed source record is missing.",
+        "reviewedMissinghistoryGapIncludedItIsNot": "Reviewed missing-history gap included; it is not a real root source.",
+        "reviewedParentTransactionIsMissing": "Reviewed parent transaction is missing."
+      }
+    },
+    "missing_pricing": {
+      "title": "Missing valuation",
+      "nextStep": "Add a fiat price for this transaction",
+      "messages": {
+        "aTransactionOnTheDisclosedPathHas": "A transaction on the disclosed path has no fiat pricing."
+      }
+    },
+    "asset_mismatch": {
+      "title": "Asset mismatch",
+      "nextStep": "Re-review the link with matching assets",
+      "messages": {
+        "aReviewedPathDeclaresADifferentAsset": "A reviewed path declares a different asset than the transaction being consumed.",
+        "aSelftransferLinkDeclaresADifferentAsset": "A self-transfer link declares a different asset than its parent or target transaction.",
+        "aRepeatedUpstreamTransactionIsRequiredWith": "A repeated upstream transaction is required with conflicting assets."
+      }
+    },
+    "transaction_overallocation": {
+      "title": "Transaction overallocated",
+      "nextStep": "Reduce the link allocation to the parent transaction amount",
+      "messages": {
+        "aReviewedPathRequiresMoreValueThan": "A reviewed path requires more value than this transaction holds."
+      }
+    },
+    "unreviewed_link": {
+      "title": "Link awaiting review",
+      "nextStep": "Review the suggested link or reject it",
+      "messages": {
+        "aSuggestedSourcefundsLinkStillNeedsReview": "A suggested source-funds link still needs review before export."
+      }
+    },
+    "ambiguous_allocation": {
+      "title": "Ambiguous allocation",
+      "nextStep": "Set an explicit allocation amount and policy on the link",
+      "messages": {
+        "reviewedAllocationsDoNotExactlyCoverThe": "Reviewed allocations do not exactly cover the required amount.",
+        "aReviewedLinkIsMissingAnExplicit": "A reviewed link is missing an explicit allocation amount.",
+        "aReviewedLinkStillUsesAHeuristic": "A reviewed link still uses a heuristic or unknown allocation policy.",
+        "aRepeatedUpstreamTransactionReceivedAdditionalRequired": "A repeated upstream transaction received additional required amount after it was reviewed.",
+        "selectedAmountNotExactlyRepresentable": "The selected amount cannot follow the reviewed allocation ratio in exact millisatoshis."
+      }
+    },
+    "unconfirmed_chain_data": {
+      "title": "Unconfirmed blockchain data",
+      "nextStep": "Confirm or remove the chain observation backing this link",
+      "messages": {
+        "unconfirmedChainObservationsCannotBeUsedAs": "Unconfirmed chain observations cannot be used as proof in a PDF export."
+      }
+    },
+    "chain_observation_privacy": {
+      "title": "Blockchain observation",
+      "nextStep": "Chain-only evidence is context, not proof: add primary evidence",
+      "messages": {
+        "chain-backendObservationsAreContextOnlyAndDo": "Chain-backend observations are context only and do not prove ownership."
+      }
+    },
+    "privacy_hop_unresolved": {
+      "title": "Privacy transition unresolved",
+      "nextStep": "Attach explicit evidence covering the privacy hop",
+      "messages": {
+        "privacy-hopLinksRequireExplicitSupportingEvidenceUnrelated": "Privacy-hop links require explicit supporting evidence; unrelated participant inputs are not shown."
+      }
+    },
+    "stale_custody_component_lineage": {
+      "title": "Custody evidence changed",
+      "nextStep": "Open the relevant link or source to resolve this finding",
+      "messages": {
+        "aReviewedCustodyLinkIsAbsentOr": "A reviewed custody link is absent or stale in the current stored projection."
+      }
+    },
+    "source_asset_mismatch": {
+      "title": "Source asset mismatch",
+      "nextStep": "Pick a source whose asset matches the link",
+      "messages": {
+        "aReviewedLinkAllocatesADifferentAsset": "A reviewed link allocates a different asset than its source record."
+      }
+    },
+    "chronology_violation": {
+      "title": "Chronology conflict",
+      "nextStep": "Pick a parent dated on or before the child transaction",
+      "messages": {
+        "aReviewedSourceIsDatedAfterThe": "A reviewed source is dated after the transaction it funds.",
+        "aReviewedParentTransactionOccursAfterThe": "A reviewed parent transaction occurs after the child transaction it funds."
+      }
+    },
+    "path_cycle": {
+      "title": "Cycle in path",
+      "nextStep": "Break the cycle by removing one of the reviewed links",
+      "messages": {
+        "aReviewedSourcefundsPathFormsACycle": "A reviewed source-funds path forms a cycle."
+      }
+    },
+    "source_amount_missing": {
+      "title": "Source amount missing",
+      "nextStep": "Set the source's amount before exporting",
+      "messages": {
+        "aConcreteSourceRecordNeedsAnAmount": "A concrete source record needs an amount before it can support export."
+      }
+    },
+    "source_overallocation": {
+      "title": "Source overallocated",
+      "nextStep": "Reduce link allocations or split across multiple sources",
+      "messages": {
+        "reviewedLinksAllocateMoreFundsThanThe": "Reviewed links allocate more funds than the source record contains."
+      }
+    },
+    "opening_balance_attestation": {
+      "title": "Opening balance attestation",
+      "nextStep": "Opening-balance attestations are weaker than primary evidence",
+      "messages": {
+        "openingBalanceIsAnAttestedPriorhistoryStop,": "Opening balance is an attested prior-history stop, not a fully traced root source."
+      }
+    }
   }
 }

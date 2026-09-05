@@ -3,27 +3,18 @@
     "tabs": {
       "swaps": "Swaps",
       "transfers": "Bitcoin-Bewegungen",
-      "components": "Lücken schließen"
+      "components": "Komponenten",
+      "review": "Prüfung",
+      "gaps": "Verwahrungslücken"
     },
     "components": {
-      "title": "Verwahrungslücken schließen",
+      "title": "Verwahrungskomponenten",
       "description": "Löse lange Wallet-Migrations- und Konsolidierungsverläufe als atomare Verwahrungskomponenten. Eins-zu-viele-, Viele-zu-eins-, N:M-, On-chain-, Liquid- und Lightning-Legs können eine gemeinsame geprüfte Interpretation bilden, ohne importierte Transaktionen umzuschreiben.",
-      "bulkTitle": "Sammelauflösung für Komponenten",
-      "bulkDescription": "Füge eine Komponente oder einen Stapel als JSON ein, prüfe die Erhaltung lokal und speichere alles als Entwurf oder aktiviere den vollständigen Stapel.",
-      "atomicHint": "Die Sammelaktivierung ist atomar. Ist eine Komponente unvollständig oder nicht ausgeglichen, wird nichts aktiviert. Speichere Entwürfe, solange noch eine Wallet, Gebühr oder Zwischenstation fehlt.",
-      "jsonLabel": "JSON der Verwahrungskomponenten",
-      "loadExample": "Migrationsbeispiel laden",
-      "referenceHint": "Verwende transaction, transaction_ref oder transaction_id für importierte Anker. Für eine fehlende historische Wallet setze untracked_wallet auf ein neues oder vorhandenes Platzhalter-Label plus occurred_at; der Stapel erstellt und verwendet es atomar. N:M-Flüsse benötigen explizite source_ordinal/sink_ordinal-Allokationen. Schreibe amount_btc als dezimalen JSON-String; Ganzzahlfelder außerhalb des exakten JavaScript-Bereichs ebenfalls als Dezimal-Strings.",
-      "preview": "Vorschau",
-      "saveDrafts": "Als Entwürfe speichern",
-      "activateAll": "Alle aktivieren",
-      "previewTitle": "Lokale Vorschau",
       "readyToActivate": "Bereit zur Aktivierung",
       "needsCorrection": "Korrektur nötig",
       "draftOnly": "Nur als Entwurf",
       "structuralErrors": "Vor dem Speichern beheben",
       "activationErrors": "Verhindert Aktivierung",
-      "previewReadyHint": "Der Stapel ist strukturell gültig und lokal ausgeglichen. Vor dem Commit prüft der Daemon zusätzlich Wallet-Eigentum, Transaktionsrichtung, Asset, Allokationsabdeckung und Konflikte mit aktiven Komponenten.",
       "savedSummary_one": "{{count}} Komponente gespeichert: {{active}} aktiv, {{draft}} Entwurf.",
       "savedSummary_other": "{{count}} Komponenten gespeichert: {{active}} aktiv, {{draft}} Entwurf.",
       "listTitle": "Verwahrungskomponenten",
@@ -32,7 +23,7 @@
       "moreAvailable_other": "Die neuesten {{count}} Komponenten werden angezeigt. In diesem Buch gibt es weitere; grenze die Prüfung ein, um ältere Revisionen zu sehen.",
       "loading": "Verwahrungskomponenten werden geladen…",
       "loadFailed": "Verwahrungskomponenten konnten nicht geladen werden: {{error}}",
-      "empty": "Noch keine Verwahrungskomponenten. Starte oben mit der Vorschau eines Migrationsstapels.",
+      "empty": "Noch keine Verwahrungskomponenten. Erstelle oben eine mit dem Formular.",
       "revision": "Revision {{count}}",
       "activate": "Aktivieren",
       "supersede": "Ablösen",
@@ -60,14 +51,8 @@
         "refund": "Refund",
         "manual_bridge": "Manuelle Brücke"
       },
-      "serverPreviewTitle": "Daemon-Vorschau mit Dry-Run",
       "serverPreviewVerified": "Rollback-geprüft",
-      "serverPreviewActivates_one": "Der Daemon hat genau diesen Stapel zur atomaren Aktivierung akzeptiert: {{count}} Komponente, {{active}} aktiv.",
-      "serverPreviewActivates_other": "Der Daemon hat genau diesen Stapel zur atomaren Aktivierung akzeptiert: {{count}} Komponenten, {{active}} aktiv.",
-      "serverPreviewDrafts_one": "Der Daemon hat genau diesen Stapel als Entwurf akzeptiert: {{count}} Komponente, {{draft}} Entwurf.",
-      "serverPreviewDrafts_other": "Der Daemon hat genau diesen Stapel als Entwürfe akzeptiert: {{count}} Komponenten, {{draft}} Entwürfe.",
       "serverPreviewFailed": "Daemon-Vorschau fehlgeschlagen",
-      "revisionSingleRequired": "Ein Revisionsdokument muss genau eine Komponente enthalten.",
       "editDraft": "Entwurf bearbeiten",
       "revise": "Revision erstellen",
       "retireDraft": "Entwurf stilllegen",
@@ -78,7 +63,8 @@
         "external": "Extern",
         "retained": "Verwahrung behalten",
         "unresolved": "Ungeklärt",
-        "unknown": "Unbekannte Rolle: {{role}}"
+        "unknown": "Unbekannte Rolle: {{role}}",
+        "suspense": "Schwebeposten"
       },
       "mode": {
         "quantity": "Mengenerhaltung",
@@ -108,11 +94,7 @@
         "editTitle": "Entwurf der Verwahrungskomponente korrigieren",
         "reviseTitle": "Revision der Verwahrungskomponente erstellen",
         "description": "Änderungen erzeugen eine neue unveränderliche Revision. Der alte Datensatz bleibt im Prüfpfad; die Aktivierung ersetzt die aktive Interpretation atomar.",
-        "jsonLabel": "JSON für genau eine Komponentenrevision",
-        "safetyHint": "Bestehende Leg-IDs halten verborgene lokale Nachweise verbunden, während der Daemon neue unveränderliche IDs schreibt. Du kannst Legs, Allokationen, Erhaltung, Umwandlungsprüfung, Regel und Notizen korrigieren.",
-        "cancel": "Abbrechen",
-        "saveDraft": "Korrigierten Entwurf speichern",
-        "saveActivate": "Speichern und aktivieren"
+        "cancel": "Abbrechen"
       },
       "localIssue": {
         "jsonInvalid": "Ungültiges JSON: {{detail}}",
@@ -124,7 +106,7 @@
         "legObjectRequired": "Komponente {{component}}, Leg {{leg}} muss ein JSON-Objekt sein.",
         "roleUnsupported": "Komponente {{component}}, Leg {{leg}} hat eine nicht unterstützte Rolle.",
         "legIdDuplicate": "Komponente {{component}}, Leg {{leg}} wiederholt die Leg-ID {{id}}.",
-        "amountInvalid": "Komponente {{component}}, Leg {{leg}} muss genau einen nicht negativen exakten amount_msat-Ganzzahlwert (Zahl oder Dezimal-String) oder einen dezimalen amount_btc-Wert enthalten.",
+        "amountInvalid": "Bewegung {{leg}}: einen nicht negativen Bitcoin-Betrag mit höchstens 11 Nachkommastellen eingeben.",
         "transactionlessWalletRequired": "Komponente {{component}}, Leg {{leg}} hat keinen Transaktionsanker und benötigt eine Wallet-Referenz.",
         "transactionlessTimeRequired": "Komponente {{component}}, Leg {{leg}} hat keinen Transaktionsanker und benötigt occurred_at.",
         "valuationPairRequired": "Komponente {{component}}, Leg {{leg}} muss valuation_unit und valuation_amount gemeinsam angeben.",
@@ -153,7 +135,7 @@
         "allocationObjectRequired": "Komponente {{component}}, Allokation {{allocation}} muss ein JSON-Objekt sein.",
         "allocationSourceInvalid": "Komponente {{component}}, Allokation {{allocation}} hat kein gültiges Quell-Leg.",
         "allocationSinkInvalid": "Komponente {{component}}, Allokation {{allocation}} hat kein gültiges Senken-Leg.",
-        "allocationAmountInvalid": "Komponente {{component}}, Allokation {{allocation}} hat ein ungültiges exaktes Ganzzahlfeld {{field}} (Zahl oder Dezimal-String).",
+        "allocationAmountInvalid": "Zuordnung {{allocation}}: gültige, nicht negative Quell- und Zielbeträge eingeben.",
         "allocationEdgeDuplicate": "Komponente {{component}}, Allokation {{allocation}} wiederholt die Kante {{edge}}.",
         "allocationQuantityMismatch": "Komponente {{component}}, Allokation {{allocation}} erhält Menge und Einheit nicht.",
         "allocationSourceCoverage": "Komponente {{component}}, Quell-Leg {{leg}} hat die Allokationsabdeckung {{covered}}; erwartet {{expected}}.",
@@ -229,7 +211,113 @@
         "validation": "Der Daemon hat die Anfrage für die Verwahrungskomponente abgelehnt.",
         "unknown": "Der Daemon hat die Anfrage abgelehnt ({{code}}).",
         "unexpected": "Die Anfrage für die Verwahrungskomponente ist unerwartet fehlgeschlagen."
-      }
+      },
+      "form": {
+        "title": "Verwahrungskomponente erstellen",
+        "description": "Beschreibe, wie Bitcoin zwischen deinen Wallets bewegt wurde – auch über Wallet-Verläufe, die nicht in Kassiber importiert sind – als Quell-, Ziel- und Gebühren-Legs. Kassiber prüft vor dem Speichern, ob die Beträge ausgeglichen sind.",
+        "componentType": "Komponententyp",
+        "conservationMode": "Erhaltung",
+        "conversionPolicy": "Umwandlungsrichtlinie",
+        "conversionPolicyPlaceholder": "z. B. taxable_swap",
+        "conversionReviewed": "Geprüfte Umwandlung (für Aktivierung erforderlich)",
+        "evidenceKind": "Nachweisart",
+        "evidenceKindHint": "Kurzer, stabiler Code für die geprüfte Nachweisart, zum Beispiel manual_migration_review. Er wird mit der Komponente gespeichert.",
+        "sections": {
+          "interpretation": "Interpretation",
+          "interpretationHint": "Welche Art von Verwahrungsbewegung das ist und wie die Beträge aufgehen müssen.",
+          "evidence": "Nachweis und Notizen",
+          "evidenceHint": "Wird mit der Komponente gespeichert, damit später nachvollziehbar ist, warum diese Interpretation existiert."
+        },
+        "notes": "Notizen",
+        "notesPlaceholder": "Was hält diese Komponente fest, und warum?",
+        "legsTitle": "Legs",
+        "legsHint": "Füge ein Leg pro Bewegung hinzu: wo die Bitcoin abgingen, wo sie ankamen, und etwaige Gebühren.",
+        "addLeg": "Leg hinzufügen",
+        "removeLeg": "Leg entfernen",
+        "leg": {
+          "ordinal": "Leg {{index}}",
+          "role": "Rolle",
+          "amount": "Betrag",
+          "location": "Ort",
+          "existingLocation": "Ort",
+          "locationKind": {
+            "transaction": "Importierte Transaktion",
+            "wallet": "Importierte Wallet",
+            "untracked": "Nicht erfasste Wallet"
+          },
+          "transactionRef": "Transaktion",
+          "transactionRefPlaceholder": "Transaktions-ID oder externe ID",
+          "walletRef": "Wallet",
+          "walletRefPlaceholder": "Wallet-ID oder Bezeichnung",
+          "untrackedWallet": "Bezeichnung der nicht erfassten Wallet",
+          "untrackedWalletPlaceholder": "z. B. Alte Migrations-Wallet",
+          "occurredAt": "Zeitpunkt",
+          "originTransaction": "Importierte Transaktion {{id}}",
+          "originWallet": "Wallet {{id}}",
+          "changeLocation": "Ort ändern",
+          "valuationUnit": "Bewertungseinheit",
+          "valuationUnitPlaceholder": "z. B. eur_cents",
+          "valuationAmount": "Bewertungsbetrag",
+          "valuationAmountPlaceholder": "Ganzzahl in der Bewertungseinheit",
+          "suspenseHint": "Ein Schwebeposten hält Wert in der Schwebe – ohne Wallet oder Transaktion, nur mit Zeitpunkt. Füge unten eine Zuordnung von der speisenden Quelle hinzu.",
+          "asset": "Asset",
+          "originLocation": "Bestehender Ort ({{rail}})"
+        },
+        "balance": {
+          "title": "Bewegungsübersicht",
+          "sources": "Quellen",
+          "destinations": "Ziele",
+          "fees": "Gebühren",
+          "external": "Extern",
+          "suspense": "Schwebeposten",
+          "balanced": "Ausgeglichen",
+          "unbalanced": "Nicht ausgeglichen",
+          "difference": "Ziele und Gebühren weichen von den Quellen um {{amount}} ab."
+        },
+        "allocations": {
+          "title": "Zuordnungen",
+          "hint": "Lege genau fest, wie viel jede Quelle zu jedem Ziel-, Gebühren- oder behaltenen Leg beiträgt. Erforderlich für Komponenten mit mehreren Quellen, Umwandlungen und Schwebeposten.",
+          "add": "Zuordnung hinzufügen",
+          "remove": "Zuordnung entfernen",
+          "source": "Von (Quelle)",
+          "sink": "Nach (Ziel / Gebühr)",
+          "amount": "Betrag (BTC)",
+          "selectLeg": "Leg auswählen",
+          "empty": "Noch keine Zuordnungen. Füge eine Kante pro Quelle → Ziel hinzu.",
+          "sourceAmount": "Quellbetrag (BTC/LBTC)",
+          "sinkAmount": "Zielbetrag (BTC/LBTC)"
+        },
+        "saveDraft": "Als Entwurf speichern",
+        "activate": "Aktivieren",
+        "reset": "Neu beginnen",
+        "previewDraft": "Entwurf prüfen",
+        "previewActivation": "Aktivierung prüfen",
+        "confirmDraft": "Bestätigen und Entwurf speichern",
+        "confirmActivation": "Bestätigen und aktivieren",
+        "previewChanged": "Das Formular oder das aktive Buch hat sich geändert. Prüfe die Vorschau erneut, bevor du bestätigst.",
+        "unsupportedShape": "Diese Komponente kann im geführten Editor nicht sicher bearbeitet werden. Prüfe ihre Belege und verwende für nicht unterstützte Komponenten die CLI.",
+        "inputVersion": "Geprüfter Datenstand: {{version}}",
+        "review": {
+          "title": "Vor dem Bestätigen prüfen",
+          "activates_one": "Gegen dein Buch geprüft. Mit der Bestätigung wird diese Komponente aktiviert.",
+          "activates_other": "Gegen dein Buch geprüft. Mit der Bestätigung werden {{count}} Komponenten aktiviert.",
+          "drafts_one": "Gegen dein Buch geprüft. Mit der Bestätigung wird diese Komponente als Entwurf gespeichert.",
+          "drafts_other": "Gegen dein Buch geprüft. Mit der Bestätigung werden {{count}} Komponenten als Entwürfe gespeichert.",
+          "transaction": "Transaktion",
+          "wallet": "Wallet",
+          "occurredAt": "Zeitpunkt",
+          "rail": "Rail",
+          "network": "Netzwerk",
+          "conserved": "Erhalten als",
+          "valuation": "Bewertung",
+          "notes": "Notizen",
+          "allocations": "Zuordnungen",
+          "allocationEdge": "Leg {{source}} → Leg {{sink}}: {{sourceAmount}} → {{sinkAmount}}",
+          "issues": "Offene Validierungsprobleme"
+        }
+      },
+      "legCount_one": "{{count}} Leg",
+      "legCount_other": "{{count}} Legs"
     },
     "queueLabel": "Prüfungs-Warteschlange",
     "page": {
@@ -286,7 +374,8 @@
     },
     "header": {
       "applyExact": "Exakte anwenden {{count}}",
-      "rules": "Regeln {{enabled}}/{{total}}"
+      "rules": "Regeln {{enabled}}/{{total}}",
+      "advanced": "Erweitert"
     },
     "metric": {
       "candidates": "Kandidaten",
@@ -463,7 +552,8 @@
       "categoryNavigation": "Navigation",
       "categoryActions": "Aktionen"
     },
-    "dismissReason": "vom Benutzer aus der Prüfungs-Warteschlange verworfen"
+    "dismissReason": "vom Benutzer aus der Prüfungs-Warteschlange verworfen",
+    "loadMore": "Mehr laden"
   },
   "reconcile": {
     "placeholder": "Füge eine Adresse oder Transaktions-ID pro Zeile ein, zum Beispiel:\nbc1qexampleaddress…\na1b2c3…  (64-stellige Transaktions-ID)",

@@ -326,6 +326,12 @@
       }
     ]
   },
+  "exchange_cases": {
+    "enabled": true,
+    "profile_label": "Exchange Reconciliation",
+    "backend": "core-regtest",
+    "description": "Synthetic Strike CSV through the production importer, real Core batch withdrawal and redeposit, missing purchase export repair, exact trade/basis oracle; separate from the main stress book."
+  },
   "accounts": [
     {
       "code": "treasury",
@@ -564,8 +570,9 @@
       ],
       "equal_output_btc": "0.05000000",
       "fee_btc": "0.00002000",
-      "tracked_output_wallet": "spending",
-      "note": "Two owned inputs, equal-sized external/tracked outputs, and explicit change outputs."
+      "outputs": [{"to": "spending"}, {"to": "merchant"}],
+      "foreign_counterparty": "customer_pool",
+      "note": "Two connected own source wallets fund two connected own destination wallets; a separate foreign participant retains its principal and pays the network fee. Exact own movement conserves without authored matching."
     },
     {
       "id": "payjoin_purchase",
@@ -575,7 +582,7 @@
       "merchant": "merchant",
       "payment_btc": "0.00080000",
       "fee_btc": "0.00002310",
-      "note": "Payer and merchant both contribute inputs for a small purchase; merchant receives net payment plus its own change."
+      "note": "Two connected owned wallets contribute inputs. Treasury sends the configured net payment to its owned merchant wallet; the merchant input returns as change, and the source pays the fee."
     },
     {
       "id": "spending_rbf_replaced_payment",
@@ -776,8 +783,7 @@
     "min_transactions": 990,
     "min_active_transactions": 985,
     "pending_transactions": 1,
-    "collaborative_excluded": 5,
-    "min_transfer_pairs": 13,
+    "min_transfer_pairs": 3,
     "ownership_derived_transfer_pairs": 2,
     "loan_marks": 6,
     "open_collateral_locks": 1,

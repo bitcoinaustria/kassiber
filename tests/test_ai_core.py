@@ -167,6 +167,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
 
     def test_tool_catalog_stability(self):
         expected_tool_names = {
+            "ui_review_cases", "ui_review_request_input", "ui_review_plan", "ui_review_apply", "ui_review_receipt",
             "status",
             "ui_overview_snapshot",
             "ui_transactions_list",
@@ -207,6 +208,8 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_source_funds_sources_list",
             "ui_source_funds_links_list",
             "ui_source_funds_preview",
+            "ui_source_funds_review_context",
+            "ui_source_funds_request_input",
             "read_skill_reference",
             "ui_wallets_sync",
             "ui_maintenance_configure",
@@ -646,6 +649,49 @@ class ToolCatalogPromptTest(unittest.TestCase):
             [{"role": "user", "content": "What can you do? Show all tools."}]
         )
         self.assertEqual(len(discovery_tools), len(build_responses_tools()))
+
+    def test_quarantine_requests_advertise_custody_repairs(self):
+        for message, screen_context in (
+            ("Please help resolve my quarantine", None),
+            ("Bitte hilf mir, die Quarantäne zu lösen", None),
+            ("Bitte hilf mir mit der Quarantaene", None),
+            ("Help me resolve these", {"route": "/quarantine"}),
+        ):
+            with self.subTest(message=message, screen_context=screen_context):
+                names = {
+                    tool["name"]
+                    for tool in build_responses_tools(
+                        [{"role": "user", "content": message}],
+                        screen_context=screen_context,
+                    )
+                }
+                self.assertTrue({
+                    "ui_journals_quarantine", "ui_transactions_review_context",
+                    "ui_transfers_review_context", "ui_wallets_identify",
+                    "ui_transfers_components_list", "ui_transfers_components_plan",
+                    "ui_transfers_components_apply", "ui_journals_process",
+                    "ui_custody_gaps_review_context", "ui_custody_review_plan",
+                    "ui_custody_review_apply",
+                } <= names)
+                self.assertNotIn("ui_source_funds_assemble", names)
+
+    def test_core_quarantine_workflow_has_evidence_resolution_and_verification(self):
+        names = {
+            tool["name"]
+            for tool in build_responses_tools(
+                [{"role": "user", "content": "Resolve my quarantine"}],
+                profile="core",
+            )
+        }
+        self.assertTrue({
+            "ui_journals_quarantine", "ui_transactions_review_context",
+            "ui_journals_quarantine_resolve", "ui_transfers_review_context",
+            "ui_transfers_pair", "ui_custody_gaps_review_context",
+            "ui_custody_review_plan", "ui_custody_review_apply",
+            "ui_journals_process", "ui_report_blockers",
+        } <= names)
+        self.assertNotIn("ui_transfers_bulk_pair", names)
+        self.assertEqual(get_tool("ui.journals.quarantine.resolve").kind_class, "mutating")
 
     def test_ai_tool_result_redacts_embedded_urls_and_absolute_paths(self):
         payload = {

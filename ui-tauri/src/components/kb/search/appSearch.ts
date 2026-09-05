@@ -83,6 +83,7 @@ const PAGE_NAV_TITLE_KEYS: Record<string, string> = {
   "page:egress": "nav:book.egress",
   "page:source-of-funds": "nav:book.sourceFunds",
   "page:swaps-transfers": "nav:book.swaps",
+  "page:custody-components": "review:swap.tabs.components",
   "page:logs": "nav:book.logs",
   "page:assistant": "nav:book.assistant",
   "page:exit-tax": "nav:book.exitTax",
@@ -203,9 +204,9 @@ const PAGE_RESULTS: SearchResult[] = [
   {
     id: "page:swaps-transfers",
     category: "page",
-    title: "Swaps & Transfers",
+    title: "Transfers & Custody",
     subtitle: "Review candidate swap and transfer pairings",
-    keywords: ["swap", "swaps", "transfer", "transfers", "review", "pair"],
+    keywords: ["swap", "swaps", "transfer", "transfers", "review", "pair", "custody", "components"],
     iconKey: "transaction",
     route: { to: "/swaps" },
     privacyTier: "public",
@@ -217,7 +218,17 @@ const PAGE_RESULTS: SearchResult[] = [
     subtitle: "Review possible returns through missing wallet history",
     keywords: ["custody", "missing wallet", "wallet roll", "whirlpool", "coinjoin"],
     iconKey: "transaction",
-    route: { to: "/custody-gaps" },
+    route: { to: "/swaps", search: { tab: "gaps" } },
+    privacyTier: "public",
+  },
+  {
+    id: "page:custody-components",
+    category: "page",
+    title: "Custody components",
+    subtitle: "Review and edit custody components",
+    keywords: ["custody", "component", "components", "migration", "allocations"],
+    iconKey: "transaction",
+    route: { to: "/swaps", search: { tab: "components" } },
     privacyTier: "public",
   },
   {
@@ -355,8 +366,10 @@ export function buildAppSearchResults({
       if (!aiFeaturesEnabled && result.route?.to === "/assistant") return false;
       // Unfinished pre-release surfaces: no point offering a jump to a page the
       // nav has greyed out or hidden (see `devMode.ts`).
-      if (!developerToolsEnabled && isDevOnlyRoute(result.route?.to))
-        return false;
+      if (!developerToolsEnabled && (
+        isDevOnlyRoute(result.route?.to) ||
+        (result.route?.to === "/swaps" && ["gaps", "components"].includes(String(result.route.search?.tab)))
+      )) return false;
       return true;
     }).map((result) => localizePageResult(result, t)),
     ...ACTION_RESULTS.filter((result) => {
@@ -551,7 +564,7 @@ function localizePageResult(
   const defaultTitle = result.title;
   const titleKey = PAGE_NAV_TITLE_KEYS[result.id] ?? `search:page.${id}.title`;
   const title = translatedString(t, titleKey);
-  const subtitle = translatedString(t, `search:page.${id}.subtitle`);
+  const subtitle = translatedString(t, result.id === "page:custody-components" ? "review:swap.components.description" : `search:page.${id}.subtitle`);
   const titleAliases =
     defaultTitle.trim().toLowerCase() === title.trim().toLowerCase()
       ? localizedAliasKeywords(

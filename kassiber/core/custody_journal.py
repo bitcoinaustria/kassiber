@@ -442,6 +442,7 @@ class CustodyJournalBuilder:
                 w.account_id AS wallet_account_id,
                 w.config_json AS config_json,
                 observation.authority_version AS observation_authority_version,
+                observation.observer_kinds_json AS observation_observer_kinds_json,
                 observation.graph_hash AS observation_graph_hash,
                 observation.quantity_hash AS observation_quantity_hash,
                 observation.fee_attribution AS observation_fee_attribution,
@@ -628,9 +629,15 @@ class CustodyJournalBuilder:
         )
         enriched_rows = enriched_quantity_rows(rows, evidence_only=True)
         canonical_input = build_canonical_quantity_input(enriched_rows)
+        swap_dismissals = self.conn.execute(
+            "SELECT * FROM transaction_pair_dismissals WHERE profile_id = ?",
+            (self.profile_id,),
+        ).fetchall()
         interpretation = custody_interpreters.compile_custody_interpreters(
             rows,
             canonical_input,
+            profile=self.profile,
+            swap_dismissals=swap_dismissals,
             wallet_refs_by_id=wallet_refs_by_id,
             owned_index=owned_index,
             channel_transfer_pairs=channel_transfer_pairs,

@@ -5,6 +5,8 @@
  * per `kind` are added once the Pydantic→JSON Schema→TS pipeline lands.
  */
 
+import { createContext, useContext } from "react";
+
 import {
   type QueryClient,
   useInfiniteQuery,
@@ -19,6 +21,31 @@ import {
 } from "@tanstack/react-query";
 import { getTransport, type DaemonEnvelope } from "./transport";
 import { useUiStore, type DataMode } from "@/store/ui";
+
+export interface ExpectedBookScope {
+  workspace_id: string;
+  profile_id: string;
+}
+
+/** Scoped local dialogs inherit the requesting book through every nested hook. */
+export interface DaemonScopeBoundary {
+  expectedScope: ExpectedBookScope;
+  daemonSession: number;
+  isCurrent?: () => boolean;
+  onMutationSuccess?: (kind: string, data: unknown) => void;
+}
+export const DaemonScopeContext = createContext<DaemonScopeBoundary | null>(null);
+
+export function scopedDaemonArgs(
+  args: Record<string, unknown> | undefined,
+  boundary: DaemonScopeBoundary | null,
+): Record<string, unknown> | undefined {
+  if (!boundary) return args;
+  if (useUiStore.getState().daemonSession !== boundary.daemonSession || boundary.isCurrent?.() === false) {
+    throw new Error("This request belongs to a different book or conversation.");
+  }
+  return { ...args, expected_scope: boundary.expectedScope };
+}
 
 export const DAEMON_AUTH_REQUIRED_EVENT = "kassiber:auth-required";
 
@@ -202,12 +229,13 @@ export function useDaemon<T = unknown>(
     "queryKey" | "queryFn"
   >,
 ): UseQueryResult<DaemonEnvelope<T>> {
+  const boundary = useContext(DaemonScopeContext);
   const dataMode = useUiStore((state) => state.dataMode);
   const daemonSession = useUiStore((state) => state.daemonSession);
   return useQuery<DaemonEnvelope<T>>({
-    queryKey: daemonQueryKey(dataMode, daemonSession, kind, args),
+    queryKey: daemonQueryKey(dataMode, daemonSession, kind, boundary ? { ...args, expected_scope: boundary.expectedScope } : args),
     queryFn: async () => {
-      const envelope = await getTransport().invoke<T>({ kind, args });
+      const envelope = await getTransport().invoke<T>({ kind, args: scopedDaemonArgs(args, boundary) });
       if (envelope.kind === "auth_required") {
         handleAuthRequired(envelope, daemonSession);
       }
@@ -237,6 +265,7 @@ export function useDaemonInfinite<T = unknown>(
     "queryKey" | "queryFn" | "initialPageParam" | "getNextPageParam"
   >,
 ): UseInfiniteQueryResult<InfiniteData<DaemonEnvelope<T>>, Error> {
+  const boundary = useContext(DaemonScopeContext);
   const dataMode = useUiStore((state) => state.dataMode);
   const daemonSession = useUiStore((state) => state.daemonSession);
   return useInfiniteQuery<
@@ -246,15 +275,15 @@ export function useDaemonInfinite<T = unknown>(
     readonly unknown[],
     unknown
   >({
-    queryKey: daemonQueryKey(dataMode, daemonSession, kind, args),
+    queryKey: daemonQueryKey(dataMode, daemonSession, kind, boundary ? { ...args, expected_scope: boundary.expectedScope } : args),
     initialPageParam: null,
     queryFn: async ({ pageParam }) => {
       const envelope = await getTransport().invoke<T>({
         kind,
-        args: {
+        args: scopedDaemonArgs({
           ...(args ?? {}),
           ...(typeof pageParam === "string" ? { cursor: pageParam } : {}),
-        },
+        }, boundary),
       });
       if (envelope.kind === "auth_required") {
         handleAuthRequired(envelope, daemonSession);
@@ -343,6 +372,8 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.wallets.list",
     "ui.review.badges",
     "ui.workspace.health",
+    "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
   "wallets.reveal_descriptor": [],
   "ui.chat.history.configure": [
@@ -379,6 +410,9 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.wallets.utxos",
     "ui.review.badges",
     "ui.workspace.health",
+    "ui.source_funds.coverage",
+    "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
   "ui.wallets.sync": [
     "ui.activity.history",
@@ -406,6 +440,9 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.wallets.utxos",
     "ui.review.badges",
     "ui.workspace.health",
+    "ui.source_funds.coverage",
+    "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
   "ui.journals.process": [
     "ui.activity.history",
@@ -430,6 +467,9 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.transactions.resolve",
     "ui.review.badges",
     "ui.workspace.health",
+    "ui.source_funds.coverage",
+    "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
   "ui.attachments.add": [
     "ui.attachments.list",
@@ -438,6 +478,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.source_funds.coverage",
     "ui.source_funds.evidence.list",
     "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
   "ui.attachments.copy": [
     "ui.attachments.list",
@@ -446,6 +487,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.source_funds.coverage",
     "ui.source_funds.evidence.list",
     "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
   "ui.attachments.remove": [
     "ui.attachments.list",
@@ -454,12 +496,14 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.source_funds.coverage",
     "ui.source_funds.evidence.list",
     "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
   "ui.attachments.rename": [
     "ui.attachments.list",
     "ui.audit.evidence.summary",
     "ui.source_funds.evidence.list",
     "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
 };
 
@@ -497,6 +541,7 @@ export function useDaemonMutation<T = unknown>(
   kind: string,
   options?: { dataMode?: DataMode; invalidateQueries?: boolean },
 ) {
+  const boundary = useContext(DaemonScopeContext);
   const selectedDataMode = useUiStore((state) => state.dataMode);
   const dataMode = options?.dataMode ?? selectedDataMode;
   const queryClient = useQueryClient();
@@ -508,13 +553,14 @@ export function useDaemonMutation<T = unknown>(
     mutationKey: daemonMutationKey(dataMode, kind),
     mutationFn: async (args?: Record<string, unknown>) => {
       const daemonSession = useUiStore.getState().daemonSession;
-      const envelope = await getTransport().invoke<T>({ kind, args });
+      const envelope = await getTransport().invoke<T>({ kind, args: scopedDaemonArgs(args, boundary) });
       if (envelope.kind === "auth_required") {
         handleAuthRequired(envelope, daemonSession);
       }
       if (envelope.kind === "error" || envelope.error) {
         throw new DaemonRequestError(kind, envelope);
       }
+      boundary?.onMutationSuccess?.(kind, envelope.data);
       return envelope;
     },
     onSuccess: () => {
@@ -543,6 +589,7 @@ export function useDaemonStreamMutation<T = unknown, R = unknown>(
   kind: string,
   options?: DaemonStreamMutationOptions<R>,
 ) {
+  const boundary = useContext(DaemonScopeContext);
   const selectedDataMode = useUiStore((state) => state.dataMode);
   const dataMode = options?.dataMode ?? selectedDataMode;
   const queryClient = useQueryClient();
@@ -551,7 +598,7 @@ export function useDaemonStreamMutation<T = unknown, R = unknown>(
     mutationFn: async (args?: Record<string, unknown>) => {
       const daemonSession = useUiStore.getState().daemonSession;
       const envelope = await getTransport().stream<T, R>(
-        { kind, args },
+        { kind, args: scopedDaemonArgs(args, boundary) },
         {
           onRecord: (record) => {
             if (record.data !== undefined) {
@@ -566,6 +613,7 @@ export function useDaemonStreamMutation<T = unknown, R = unknown>(
       if (envelope.kind === "error" || envelope.error) {
         throw new DaemonRequestError(kind, envelope);
       }
+      boundary?.onMutationSuccess?.(kind, envelope.data);
       return envelope;
     },
     onSuccess: () =>

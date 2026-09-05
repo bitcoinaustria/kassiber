@@ -72,6 +72,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "notes_command",
     "tags_command",
     "bip329_command",
+    "review_command",
     "journals_command",
     "journal_transfers_command",
     "transfers_command",

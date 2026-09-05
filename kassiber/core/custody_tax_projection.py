@@ -26,6 +26,7 @@ from .custody_quantity import (
     QuantitySlice,
 )
 from .custody_quantity_runtime import CanonicalQuantityState
+from .transfer_chronology import chain_order_evidence
 
 
 def _field(row: Mapping[str, Any], key: str, default: Any = None) -> Any:
@@ -105,6 +106,7 @@ def _base_row(
         observation.anchor_transaction_id
     )
     result = dict(source or {})
+    result["custody_chain_order"] = chain_order_evidence(result)
     result.update(
         {
             "wallet_id": observation.wallet_id,
@@ -174,6 +176,10 @@ def _projected_fee_row(
     side: str,
 ) -> dict[str, Any]:
     base = _base_row(observation, rows_by_id)
+    if observation.authoritative_chain_observation and observation.fee_attribution == "exact":
+        # This row represents only the independently proven fee. A privacy
+        # marker on its original principal must not re-block that known slice.
+        base["privacy_boundary"] = None
     base.update(
         {
             "id": f"custody-tax:{observation.quantity_hash}:{side}:{amount_msat}",

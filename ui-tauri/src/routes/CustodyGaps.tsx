@@ -1090,9 +1090,8 @@ function GapReviewDetails({ gapId }: { gapId: string }) {
   );
 }
 
-function CustodyGapCard({ gap }: { gap: CustodyGap }) {
+function CustodyGapCard({ gap, expanded, onExpandedChange }: { gap: CustodyGap; expanded: boolean; onExpandedChange: () => void }) {
   const { t, i18n } = useTranslation("custodyGaps");
-  const [expanded, setExpanded] = useState(false);
   const hideSensitive = useUiStore((state) => state.hideSensitive);
   const destinations = gapDestinations(gap);
 
@@ -1124,7 +1123,7 @@ function CustodyGapCard({ gap }: { gap: CustodyGap }) {
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => setExpanded((value) => !value)}
+          onClick={onExpandedChange}
           aria-expanded={expanded}
         >
           {expanded ? t("card.hideReview") : t("card.review")}
@@ -1170,7 +1169,10 @@ function CustodyGapCard({ gap }: { gap: CustodyGap }) {
   );
 }
 
-export function CustodyGaps() {
+export function CustodyGapsContent({ focusGapId, onFocusGap }: { focusGapId?: string | null; onFocusGap?: (gap: string | null) => void }) {
+  const [localFocus, setLocalFocus] = useState<string | null>(null);
+  const activeGapId = focusGapId === undefined ? localFocus : focusGapId;
+  const setFocus = onFocusGap ?? setLocalFocus;
   const { t } = useTranslation("custodyGaps");
   const hideSensitive = useUiStore((state) => state.hideSensitive);
   const coverageQuery = useDaemon<CustodyCoverageSnapshot>(
@@ -1229,7 +1231,7 @@ export function CustodyGaps() {
   const canShowClear = canShowNoKnownCustodyGaps(snapshot, reviewGaps.length);
 
   return (
-    <div className={screenShellClassName}>
+    <div className="space-y-3 sm:space-y-4">
       <div className={pageHeaderClassName}>
         <div>
           <div className="flex items-center gap-2">
@@ -1397,6 +1399,11 @@ export function CustodyGaps() {
         </Card>
       )}
 
+      {activeGapId && !reviewGaps.some((gap) => gap.gap_id === activeGapId) ? (
+        <div className={screenPanelClassName}>
+          <GapReviewDetails key={activeGapId} gapId={activeGapId} />
+        </div>
+      ) : null}
       {reviewGaps.length ? (
         <section
           className="space-y-3"
@@ -1411,7 +1418,7 @@ export function CustodyGaps() {
             </p>
           </div>
           {reviewGaps.map((gap) => (
-            <CustodyGapCard key={gap.gap_id} gap={gap} />
+            <CustodyGapCard key={gap.gap_id} gap={gap} expanded={activeGapId === gap.gap_id} onExpandedChange={() => setFocus(activeGapId === gap.gap_id ? null : gap.gap_id)} />
           ))}
         </section>
       ) : derivedStateCurrent && canonicalIssueCount > 0 ? (
@@ -1457,4 +1464,8 @@ export function CustodyGaps() {
       ) : null}
     </div>
   );
+}
+
+export function CustodyGaps() {
+  return <div className={screenShellClassName}><CustodyGapsContent /></div>;
 }

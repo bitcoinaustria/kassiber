@@ -33,6 +33,7 @@ SCRIPT = {
     "A": "0014" + "aa" * 20,
     "B": "0014" + "bb" * 20,
     "C": "0014" + "cc" * 20,
+    "D": "0014" + "dd" * 20,
     "EXT": "0014" + "ee" * 20,  # external recipient, never in the index
 }
 SATS = 1000  # msat per sat
@@ -775,6 +776,36 @@ class OwnershipDeriverTests(unittest.TestCase):
                            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"))
         self.assertEqual(len(result.derived_pairs), 1)
         self.assertTrue(str(result.derived_pairs[0]["in"]["id"]).startswith("owned-derive:"))
+
+    def test_canonical_graph_identity_excludes_unrelated_provider_receipt(self):
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=50_000, fee_sats=100,
+            txid="real-txid", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 50_000)],
+        )
+        other = _inbound(row_id="b-other", wallet_id="B", amount_sats=50_000, txid="b" * 64)
+        other["external_id"] = "provider:receipt"
+        result = self._run(
+            [out, other],
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"),
+        )
+        self.assertEqual(result.blocked_sources, [])
+        self.assertEqual(len(result.derived_pairs), 1)
+        self.assertNotEqual(result.derived_pairs[0]["in"]["id"], "b-other")
+
+    def test_zero_placeholder_does_not_block_small_graph_proven_transfer(self):
+        out = _outbound(
+            row_id="a-out", wallet_id="A", amount_sats=1000, fee_sats=100,
+            txid="real-txid", input_scripts=[SCRIPT["A"]],
+            outputs=[(SCRIPT["B"], 1000)],
+        )
+        placeholder = _inbound(row_id="b-zero", wallet_id="B", amount_sats=0, txid="placeholder")
+        result = self._run(
+            [out, placeholder],
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B")}, _refs("B"),
+        )
+        self.assertEqual(result.blocked_sources, [])
+        self.assertEqual(len(result.derived_pairs), 1)
 
     def test_late_amount_compatible_receipt_declines_not_duplicate(self):
         # R3: B recorded the receipt under a CSV provider id LONG after the spend
@@ -1536,6 +1567,70 @@ class MultiSourceConsolidationDeriverTests(unittest.TestCase):
         self.assertEqual(sum(p["out"]["amount"] for p in result.derived_pairs), 80_000_000 * SATS)
         self.assertEqual(sorted(p["out"]["fee"] for p in result.derived_pairs), [0, 0])
 
+    def _multi_destination_rows(self):
+        rows = self._consol_rows(a_sats=49_900, b_sats=29_900, c_sats=79_900, fee_sats=100)
+        for row in rows[:2]:
+            raw = json.loads(row["raw_json"])
+            raw["vout"] = [
+                {"n": 0, "scriptpubkey": SCRIPT["C"], "value": 40_000},
+                {"n": 1, "scriptpubkey": SCRIPT["D"], "value": 39_900},
+            ]
+            row["raw_json"] = json.dumps(raw)
+        rows[2]["amount"] = 40_000 * SATS
+        rows.append(_inbound(row_id="d-in", wallet_id="D", amount_sats=39_900, txid="consol"))
+        return rows
+
+    def test_all_owned_multi_source_multi_destination_allocates_exactly(self):
+        rows = self._multi_destination_rows()
+        result = self._run(
+            rows, {SCRIPT[wid]: (wid, wid) for wid in "ABCD"}, _refs(*"ABCD"),
+        )
+        self.assertEqual(len(result.derived_pairs), 3)
+        self.assertEqual(result.dropped_in_ids, {"c-in", "d-in"})
+        self.assertEqual(result.dropped_out_ids, {"a-out", "b-out"})
+        self.assertEqual(sum(pair["out"]["fee"] for pair in result.derived_pairs), 100 * SATS)
+        for wallet, amount in (("A", 50_000), ("B", 30_000)):
+            self.assertEqual(sum(
+                pair["out"]["amount"] + pair["out"]["fee"]
+                for pair in result.derived_pairs if pair["out"]["wallet_id"] == wallet
+            ), amount * SATS)
+        for wallet, amount in (("C", 40_000), ("D", 39_900)):
+            self.assertEqual(sum(
+                pair["in"]["amount"] for pair in result.derived_pairs
+                if pair["in"]["wallet_id"] == wallet
+            ), amount * SATS)
+
+    def test_multi_destination_missing_source_external_or_ambiguous_receipt_declines(self):
+        for scenario in ("missing_source", "mixed_recorded_destinations", "external_destination", "foreign_input", "duplicate_receipt", "wrong_receipt", "fee_mismatch"):
+            with self.subTest(scenario=scenario):
+                rows = self._multi_destination_rows()
+                owned = {SCRIPT[wid]: (wid, wid) for wid in "ABCD"}
+                if scenario == "missing_source":
+                    rows.pop(1)
+                elif scenario == "mixed_recorded_destinations":
+                    rows.pop()
+                elif scenario == "external_destination":
+                    del owned[SCRIPT["D"]]
+                elif scenario == "foreign_input":
+                    del owned[SCRIPT["B"]]
+                elif scenario == "duplicate_receipt":
+                    rows.append({**rows[-1], "id": "d-duplicate"})
+                elif scenario == "wrong_receipt":
+                    rows[-1]["amount"] -= SATS
+                else:
+                    rows[1]["fee"] += SATS
+                result = self._run(rows, owned, _refs(*"ABCD"))
+                self.assertEqual(result.derived_pairs, [])
+                self.assertEqual(result.dropped_in_ids, set())
+                self.assertEqual(result.dropped_out_ids, set())
+
+    def test_multi_destination_allocation_is_independent_of_input_row_order(self):
+        rows = self._multi_destination_rows()
+        owned = {SCRIPT[wid]: (wid, wid) for wid in "ABCD"}
+        forward = self._run(rows, owned, _refs(*"ABCD"))
+        reverse = self._run(list(reversed(rows)), owned, _refs(*"ABCD"))
+        self.assertEqual(forward.derived_pairs, reverse.derived_pairs)
+
     def test_fee_booked_once_and_each_source_debited_its_contribution(self):
         # in_A=0.5, in_B=0.3, fee=0.001 (whole-tx, on BOTH rows). Recorded
         # amounts are net of the fee: a_A=0.499, a_B=0.299; out_C=0.799.
@@ -1581,6 +1676,32 @@ class MultiSourceConsolidationDeriverTests(unittest.TestCase):
             {p["in"]["journal_transaction_id"] for p in result.derived_pairs},
             {"a-out", "b-out"},
         )
+
+    def test_unrelated_canonical_provider_receipt_does_not_block_consolidation(self):
+        rows = self._consol_rows(
+            a_sats=50_000, b_sats=30_000, c_sats=80_000, fee_sats=0,
+            record_dest=False,
+        )
+        other = _inbound(row_id="c-other", wallet_id="C", amount_sats=80_000, txid="ab" * 32)
+        other["external_id"] = "provider:receipt"
+        result = self._run(
+            [*rows, other],
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(len(result.derived_pairs), 2)
+        self.assertEqual(result.dropped_in_ids, set())
+
+    def test_zero_placeholder_does_not_duplicate_recorded_destination(self):
+        rows = self._consol_rows(a_sats=600, b_sats=400, c_sats=1000, fee_sats=0)
+        rows.append(_inbound(row_id="c-zero", wallet_id="C", amount_sats=0, txid="consol"))
+        result = self._run(
+            rows,
+            {SCRIPT["A"]: ("A", "A"), SCRIPT["B"]: ("B", "B"), SCRIPT["C"]: ("C", "C")},
+            _refs("A", "B", "C"),
+        )
+        self.assertEqual(len(result.derived_pairs), 2)
+        self.assertEqual(result.dropped_in_ids, {"c-in"})
 
     def test_external_output_declined(self):
         # The spend also pays a non-owned recipient -> ambiguous fee attribution.

@@ -2,31 +2,25 @@
 // query, mutation, draft field, and derived selector of the case so the
 // stage components stay purely presentational.
 
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { type Transaction } from "@/components/transactions";
 import { toDashboardTransaction } from "@/components/transactions/dashboard/model";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { DaemonScopeContext, useDaemon, useDaemonInfinite, useDaemonMutation } from "@/daemon/client";
 import { useCurrency } from "@/lib/currency";
 import { type Tx } from "@/mocks/seed";
-import { sourceFundsExportArgs } from "@/lib/sourceFundsExport";
+import { exportCurrentCase } from "./caseExport";
 import { useUiStore } from "@/store/ui";
+import { targetQueryArgs, type SourceFundsReviewContext } from "./caseScope";
 
 import {
-  DATE_FILTER_BUCKETS,
   NO_ATTACHMENT,
   isBulkReviewableLink,
   pretty,
   shortId,
   transactionRows,
-  txDateFilterValue,
-  txFlow,
   txLabel,
-  txNetwork,
-  txRef,
-  txSearchText,
-  txStatus,
   txWallet,
   uniqueSorted,
   type EvidenceAttachment,
@@ -63,15 +57,15 @@ function migrateStage(value: string | undefined): CaseStage {
   return "target";
 }
 
-export function useSourceFundsCase() {
+export function useSourceFundsCase(profileKey: string, initialTarget = "") {
   const { t } = useTranslation("sourceFunds");
+  const scope = useContext(DaemonScopeContext);
   const addNotification = useUiStore((state) => state.addNotification);
-  const profileKey = useUiStore(
-    (state) => state.identity?.profile ?? "default",
-  );
-  const persistedDraft = useUiStore(
+  const storedDraft = useUiStore(
     (state) => state.sourceFundsDrafts[profileKey] ?? null,
   );
+  // A route opened for another transaction must not inherit the previous case amount/options.
+  const persistedDraft = initialTarget && initialTarget !== storedDraft?.target ? null : storedDraft;
   const setSourceFundsDraft = useUiStore((state) => state.setSourceFundsDraft);
   const currency = useCurrency();
   const hideSensitive = useUiStore((state) => state.hideSensitive);
@@ -83,7 +77,7 @@ export function useSourceFundsCase() {
   const [reportPurpose, setReportPurpose] = useState<
     "planned_exchange_sale" | "existing_transaction"
   >(persistedDraft?.reportPurpose ?? "planned_exchange_sale");
-  const [target, setTarget] = useState(persistedDraft?.target ?? "");
+  const [target, setTarget] = useState(initialTarget || persistedDraft?.target || "");
   const [targetAmount, setTargetAmount] = useState(
     persistedDraft?.targetAmount ?? "",
   );
@@ -134,6 +128,7 @@ export function useSourceFundsCase() {
   // Advanced editor working state.
   const [showAdvancedReview, setShowAdvancedReview] = useState(false);
   const [showCoverage, setShowCoverage] = useState(false);
+  const [showDisclosure, setShowDisclosure] = useState(false);
   const [selectedLinkId, setSelectedLinkId] = useState("");
   const [linkFormSourceId, setLinkFormSourceId] = useState("");
   const [linkForm, setLinkForm] = useState({
@@ -165,63 +160,21 @@ export function useSourceFundsCase() {
     attachment_id: NO_ATTACHMENT,
   });
 
-  const transactions = useDaemon<unknown>("ui.transactions.list", {
-    limit: 500,
-  });
-  const rows = useMemo(
-    () => transactionRows(transactions.data?.data),
-    [transactions.data],
+  const transactionArgs = useMemo(() => targetQueryArgs({
+    query: targetSearch, flow: targetDirectionFilter, date: targetDateFilter,
+    status: targetStatusFilter, network: targetNetworkFilter,
+    asset: targetAssetFilter, wallet: targetWalletFilter,
+  }), [targetSearch, targetDirectionFilter, targetDateFilter, targetStatusFilter,
+    targetNetworkFilter, targetAssetFilter, targetWalletFilter]);
+  const transactions = useDaemonInfinite<{ txs: TransactionRow[]; nextCursor?: string | null }>(
+    "ui.transactions.list", transactionArgs, (page) => page.data?.nextCursor ?? undefined,
   );
-  const targetAssetOptions = useMemo(
-    () => uniqueSorted(rows.map((row) => row.asset || "BTC")),
-    [rows],
-  );
-  const targetWalletOptions = useMemo(
-    () => uniqueSorted(rows.map(txWallet)),
-    [rows],
-  );
-  const targetNetworkOptions = useMemo(
-    () => uniqueSorted(rows.map(txNetwork)),
-    [rows],
-  );
-  const filteredTargetRows = useMemo(() => {
-    const query = targetSearch.trim().toLowerCase();
-    return rows.filter((row) => {
-      const matchesSearch = !query || txSearchText(row).includes(query);
-      const matchesDirection =
-        targetDirectionFilter === "all" || txFlow(row) === targetDirectionFilter;
-      const matchesDate =
-        targetDateFilter === "all" ||
-        (DATE_FILTER_BUCKETS[targetDateFilter]?.has(txDateFilterValue(row)) ??
-          true);
-      const matchesStatus =
-        targetStatusFilter === "all" || txStatus(row) === targetStatusFilter;
-      const matchesNetwork =
-        targetNetworkFilter === "all" || txNetwork(row) === targetNetworkFilter;
-      const matchesAsset =
-        targetAssetFilter === "all" || (row.asset || "BTC") === targetAssetFilter;
-      const matchesWallet =
-        targetWalletFilter === "all" || txWallet(row) === targetWalletFilter;
-      return (
-        matchesSearch &&
-        matchesDirection &&
-        matchesDate &&
-        matchesStatus &&
-        matchesNetwork &&
-        matchesAsset &&
-        matchesWallet
-      );
-    });
-  }, [
-    rows,
-    targetSearch,
-    targetDirectionFilter,
-    targetDateFilter,
-    targetStatusFilter,
-    targetNetworkFilter,
-    targetAssetFilter,
-    targetWalletFilter,
-  ]);
+  const rows = useMemo(() => transactions.data?.pages.flatMap((page) => transactionRows(page.data)) ?? [], [transactions.data]);
+  const walletsQuery = useDaemon<{ wallets: { label: string }[] }>("ui.wallets.list");
+  const targetAssetOptions = ["BTC", "LBTC"];
+  const targetWalletOptions = useMemo(() => uniqueSorted(walletsQuery.data?.data?.wallets?.map((wallet) => wallet.label) ?? rows.map(txWallet)), [walletsQuery.data, rows]);
+  const targetNetworkOptions = ["on-chain", "lightning", "liquid", "exchange"];
+  const filteredTargetRows = rows;
   const clearTargetFilters = () => {
     setTargetSearch("");
     setTargetDirectionFilter("all");
@@ -240,36 +193,7 @@ export function useSourceFundsCase() {
     targetAssetFilter !== "all" ||
     targetWalletFilter !== "all";
 
-  const selectedTarget = target || txRef(rows[0] ?? {});
-  const selectedTx =
-    rows.find((row) => txRef(row) === selectedTarget) ?? rows[0];
-  const selectedTxId = selectedTx?.id || selectedTx?.transaction_id || "";
-  const selectedTargetAmount =
-    targetAmount ||
-    (typeof selectedTx?.amount === "number"
-      ? selectedTx.amount.toFixed(8)
-      : "");
-  const txById = useMemo(() => {
-    const mapping = new Map<string, TransactionRow>();
-    rows.forEach((row) => {
-      if (row.id) mapping.set(row.id, row);
-      if (row.transaction_id) mapping.set(row.transaction_id, row);
-    });
-    return mapping;
-  }, [rows]);
-  const openTxDetailById = (txId: string) => {
-    if (!txId) return;
-    const index = rows.findIndex(
-      (row) =>
-        row.id === txId || row.transaction_id === txId || txRef(row) === txId,
-    );
-    if (index >= 0) {
-      setDetailTransaction(
-        toDashboardTransaction(rows[index] as unknown as Tx, index),
-      );
-    }
-  };
-
+  const selectedTarget = target.trim();
   const previewArgs = {
     target_transaction: selectedTarget,
     target_amount: targetAmount || undefined,
@@ -292,22 +216,45 @@ export function useSourceFundsCase() {
       reveal_overrides: revealOverrides,
     },
   };
-  const preview = useDaemon<SourceFundsPreview>(
-    "ui.source_funds.preview",
+  const preview = useDaemon<SourceFundsReviewContext>(
+    "ui.source_funds.review_context",
     previewArgs,
-    { enabled: Boolean(selectedTarget) },
+    { enabled: Boolean(selectedTarget), retry: false },
   );
+  const resolvedTarget = useDaemon<{ transaction?: TransactionRow }>(
+    "ui.transactions.resolve", { query: preview.data?.data?.target.transaction_id }, { enabled: Boolean(preview.data?.data?.target.transaction_id), retry: false },
+  );
+  const selectedTx = resolvedTarget.data?.data?.transaction;
+  const selectedTxId = preview.data?.data?.target.transaction_id ?? "";
+  const selectedTargetAmount = targetAmount;
+  const txById = useMemo(() => {
+    const mapping = new Map<string, TransactionRow>();
+    [...rows, ...(selectedTx ? [selectedTx] : [])].forEach((row) => {
+      if (row.id) mapping.set(row.id, row);
+      if (row.transaction_id) mapping.set(row.transaction_id, row);
+    });
+    return mapping;
+  }, [rows, selectedTx]);
+  const resolveDetail = useDaemonMutation<{ transaction?: TransactionRow }>("ui.transactions.resolve", { invalidateQueries: false });
+  const openTxDetailById = async (txId: string) => {
+    if (!txId) return;
+    try {
+      const envelope = await resolveDetail.mutateAsync({ query: txId });
+      if (scope?.isCurrent?.() === false) return;
+      if (envelope.data?.transaction) setDetailTransaction(toDashboardTransaction(envelope.data.transaction as unknown as Tx, 0));
+    } catch {
+      if (scope?.isCurrent?.() !== false) addNotification({ title: t("header.title"), body: t("case.targetUnavailable"), tone: "info" });
+    }
+  };
+
   const sourcesQuery = useDaemon<{ sources: SourceFundsSource[] }>(
-    "ui.source_funds.sources.list",
-  );
-  const linksQuery = useDaemon<{ links: SourceFundsLink[] }>(
-    "ui.source_funds.links.list",
+    "ui.source_funds.sources.list", undefined, { enabled: showAdvancedReview },
   );
   const evidenceQuery = useDaemon<{ attachments: EvidenceAttachment[] }>(
-    "ui.source_funds.evidence.list",
+    "ui.source_funds.evidence.list", undefined, { enabled: showAdvancedReview },
   );
   const coverageQuery = useDaemon<SourceFundsCoverage>(
-    "ui.source_funds.coverage",
+    "ui.source_funds.coverage", undefined, { enabled: showCoverage },
   );
   const recipientsQuery = useDaemon<{ recipients: SourceFundsRecipient[] }>(
     "ui.source_funds.recipients.list",
@@ -350,95 +297,58 @@ export function useSourceFundsCase() {
   const exportPdf = useDaemonMutation("ui.source_funds.export_pdf");
   const exportBundle = useDaemonMutation("ui.source_funds.export_bundle");
 
-  const report = preview.data?.data;
-  const savedCase = casesSave.data?.data?.case ?? null;
-  const exportedPdf = exportPdf.data?.data as { filename?: string } | undefined;
-  const exportedBundle = exportBundle.data?.data as
-    | { filename?: string }
-    | undefined;
-
-  const handleExportPdf = async () => {
-    if (!report?.explain_gates.exportable) return;
-    if (casesSave.isPending || exportPdf.isPending) return;
-    const saved = await casesSave.mutateAsync(previewArgs);
-    const args = sourceFundsExportArgs(saved.data);
-    if (!args) return;
-    exportPdf.mutate(args);
+  // Expensive printable SVGs are only requested while disclosure is expanded.
+  const diagramQuery = useDaemon<SourceFundsPreview>("ui.source_funds.preview", previewArgs,
+    { enabled: showDisclosure && Boolean(selectedTxId) });
+  const canonicalReport = preview.data?.data?.report;
+  const report = canonicalReport ? { ...canonicalReport,
+    diagrams: showDisclosure && !diagramQuery.isFetching ? diagramQuery.data?.data?.diagrams : undefined,
+  } : undefined;
+  const recipeKey = JSON.stringify([previewArgs, preview.data?.data?.review_fingerprint]);
+  const currentRecipe = useRef(recipeKey);
+  currentRecipe.current = recipeKey;
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const [completedExport, setCompletedExport] = useState<{
+    recipeKey: string; savedCase: NonNullable<SourceFundsPreview["case"]>;
+    pdf?: { filename?: string }; bundle?: { filename?: string };
+  } | null>(null);
+  const currentExport = completedExport?.recipeKey === recipeKey ? completedExport : null;
+  const savedCase = currentExport?.savedCase ?? null;
+  const exportedPdf = currentExport?.pdf;
+  const exportedBundle = currentExport?.bundle;
+  const [exportFailure, setExportFailure] = useState<string | null>(null);
+  const handleExport = async (kind: "pdf" | "bundle") => {
+    if (!report?.explain_gates.exportable || preview.isFetching) return;
+    if (casesSave.isPending || exportPdf.isPending || exportBundle.isPending) return;
+    const capturedRecipe = recipeKey;
+    setExportFailure(null);
+    try {
+      const result = await exportCurrentCase({
+        save: async () => (await casesSave.mutateAsync({ ...previewArgs, expected_review_fingerprint: preview.data?.data?.review_fingerprint })).data,
+        render: async (args) => (await (kind === "pdf" ? exportPdf : exportBundle).mutateAsync(args)).data as { filename?: string } | undefined,
+        isCurrent: () => mounted.current && currentRecipe.current === capturedRecipe && scope?.isCurrent?.() !== false && (!scope || useUiStore.getState().daemonSession === scope.daemonSession),
+      });
+      if (result) setCompletedExport({ recipeKey: capturedRecipe, savedCase: result.savedCase, [kind]: result.output });
+    } catch {
+      if (mounted.current && currentRecipe.current === capturedRecipe) setExportFailure(capturedRecipe);
+    }
   };
-
-  const handleExportBundle = async () => {
-    if (!report?.explain_gates.exportable) return;
-    if (casesSave.isPending || exportBundle.isPending) return;
-    const saved = await casesSave.mutateAsync(previewArgs);
-    const args = sourceFundsExportArgs(saved.data);
-    if (!args) return;
-    exportBundle.mutate(args);
-  };
-
-  const links = useMemo(
-    () => linksQuery.data?.data?.links ?? [],
-    [linksQuery.data],
-  );
-  const sources = useMemo(
-    () => sourcesQuery.data?.data?.sources ?? [],
-    [sourcesQuery.data],
-  );
-  const evidence = useMemo(
-    () => evidenceQuery.data?.data?.attachments ?? [],
-    [evidenceQuery.data],
-  );
+  const handleExportPdf = () => handleExport("pdf");
+  const handleExportBundle = () => handleExport("bundle");
+  const links = preview.data?.data?.links ?? [];
+  const sources = showAdvancedReview ? sourcesQuery.data?.data?.sources ?? preview.data?.data?.sources ?? [] : preview.data?.data?.sources ?? [];
+  const evidence = showAdvancedReview ? evidenceQuery.data?.data?.attachments ?? preview.data?.data?.evidence ?? [] : preview.data?.data?.evidence ?? [];
   const blockers = report?.explain_gates.blockers ?? [];
   const warnings = report?.explain_gates.warnings ?? [];
 
-  const reachableLinkIds = useMemo(() => {
-    const found = new Set<string>();
-    if (!selectedTxId) return found;
-    const byTo = new Map<string, SourceFundsLink[]>();
-    links.forEach((link) => {
-      const rowsForTarget = byTo.get(link.to_transaction_id) ?? [];
-      rowsForTarget.push(link);
-      byTo.set(link.to_transaction_id, rowsForTarget);
-    });
-    const queue = [selectedTxId];
-    const visited = new Set<string>();
-    while (queue.length > 0) {
-      const txId = queue.shift();
-      if (!txId || visited.has(txId)) continue;
-      visited.add(txId);
-      for (const link of byTo.get(txId) ?? []) {
-        if (link.state === "rejected") continue;
-        found.add(link.id);
-        if (link.from_transaction_id) queue.push(link.from_transaction_id);
-      }
-    }
-    return found;
-  }, [links, selectedTxId]);
-  const reviewQueueLinks = useMemo(() => {
-    const rowsForReview = links.filter(
-      (link) =>
-        reachableLinkIds.has(link.id) ||
-        link.to_transaction_id === selectedTxId ||
-        link.state === "suggested",
-    );
-    const queueRows = rowsForReview.length > 0 ? rowsForReview : links;
-    return [...queueRows].sort((a, b) => {
-      const score = (link: SourceFundsLink) => {
-        if (reachableLinkIds.has(link.id)) return 0;
-        if (link.to_transaction_id === selectedTxId) return 1;
-        if (link.state === "suggested") return 2;
-        if (link.state === "reviewed") return 3;
-        return 4;
-      };
-      const scoreDelta = score(a) - score(b);
-      if (scoreDelta !== 0) return scoreDelta;
-      return Number(a.state === "rejected") - Number(b.state === "rejected");
-    });
-  }, [links, reachableLinkIds, selectedTxId]);
+  // The canonical investigation owns graph reachability and evidence scope.
+  const reachableLinkIds = new Set(links.map((link) => link.id));
+  const reviewQueueLinks = links;
   const selectedLink =
     reviewQueueLinks.find((link) => link.id === selectedLinkId) ??
     reviewQueueLinks.find((link) => link.state === "suggested") ??
-    reviewQueueLinks[0] ??
-    links[0];
+    reviewQueueLinks[0];
   const selectedSource = sources.find(
     (source) => source.id === selectedLink?.from_source_id,
   );
@@ -452,7 +362,7 @@ export function useSourceFundsCase() {
       !isBulkReviewableLink(link),
   ).length;
 
-  // Persist the dossier draft per profile.
+  // Persist only under the canonical database/workspace/profile key supplied by the scope wrapper.
   useEffect(() => {
     setSourceFundsDraft(profileKey, {
       target,
@@ -539,8 +449,8 @@ export function useSourceFundsCase() {
     const inserted = envelope.data?.inserted ?? 0;
     if (showNotification || inserted > 0) {
       addNotification({
-        title: showNotification ? "Suggestions updated" : "Evidence matched",
-        body: `${inserted} new source-funds link${inserted === 1 ? "" : "s"}.`,
+        title: t(showNotification ? "toast.suggestionsUpdated" : "toast.evidenceMatched"),
+        body: t("toast.linksFound", { count: inserted }),
         tone: inserted > 0 ? "success" : "info",
       });
     }
@@ -556,12 +466,8 @@ export function useSourceFundsCase() {
     const manual = summary?.awaiting_manual_review ?? 0;
     if (showNotification || reviewed > 0) {
       addNotification({
-        title: reviewed > 0 ? "History assembled" : "Nothing new to assemble",
-        body:
-          `${reviewed} hop${reviewed === 1 ? "" : "s"} proven from local evidence` +
-          (manual > 0
-            ? `; ${manual} suggestion${manual === 1 ? "" : "s"} left for manual review.`
-            : "."),
+        title: t(reviewed > 0 ? "case.historyAssembled" : "actionsBar.assembleResultEmpty"),
+        body: t("toast.deterministicBody", { reviewed, skipped: manual }),
         tone: reviewed > 0 ? "success" : "info",
       });
     }
@@ -575,8 +481,8 @@ export function useSourceFundsCase() {
     const reviewed = envelope.data?.reviewed ?? 0;
     const skipped = envelope.data?.skipped ?? 0;
     addNotification({
-      title: "Deterministic hops reviewed",
-      body: `${reviewed} reviewed, ${skipped} left for manual review.`,
+      title: t("toast.deterministicReviewed"),
+      body: t("toast.deterministicBody", { reviewed, skipped }),
       tone: reviewed > 0 ? "success" : "info",
     });
   };
@@ -600,8 +506,8 @@ export function useSourceFundsCase() {
       });
     }
     addNotification({
-      title: state === "reviewed" ? "Link accepted" : "Link rejected",
-      body: `${pretty(linkForm.link_type)} ${state}.`,
+      title: t(state === "reviewed" ? "toast.linkAccepted" : "toast.linkRejected"),
+      body: t(state === "reviewed" ? "toast.linkReviewedBody" : "toast.linkRejectedBody", { type: t(`linkType.${linkForm.link_type}`, { defaultValue: pretty(linkForm.link_type) }) }),
       tone: state === "reviewed" ? "success" : "info",
     });
   };
@@ -632,8 +538,8 @@ export function useSourceFundsCase() {
       attachment_id: NO_ATTACHMENT,
     }));
     addNotification({
-      title: "Manual link added",
-      body: "The reviewed flow has been updated.",
+      title: t("toast.manualLinkAdded"),
+      body: t("toast.manualLinkBody"),
       tone: "success",
     });
   };
@@ -677,9 +583,9 @@ export function useSourceFundsCase() {
     addNotification({
       title:
         sourceForm.source_type === "missing_history"
-          ? "Gap marked reviewed"
-          : "Source linked",
-      body: "The source-funds path has been updated.",
+          ? t("toast.gapMarked")
+          : t("toast.sourceLinked"),
+      body: t("toast.sourcePathBody"),
       tone: "success",
     });
   };
@@ -694,7 +600,7 @@ export function useSourceFundsCase() {
       ...current,
       source_type: "missing_history",
       link_type: "missing_history",
-      label: current.label || "Reviewed missing history",
+      label: current.label || t("gapDefaults.label"),
       asset: gap?.asset || current.asset,
       amount:
         typeof gap?.amount === "number"
@@ -704,17 +610,11 @@ export function useSourceFundsCase() {
         gap?.ref && txById.has(gap.ref) ? gap.ref : current.to_transaction,
       description:
         current.description ||
-        "Prior history is missing and has been reviewed as a disclosure gap.",
+        t("gapDefaults.description"),
     }));
   };
 
-  const goToStage = (next: CaseStage) => {
-    const wasTarget = stage === "target";
-    setStage(next);
-    if (wasTarget && next === "trace" && selectedTarget) {
-      void runAssembly(false);
-    }
-  };
+  const goToStage = (next: CaseStage) => { setStage(next); };
 
   return {
     // identity / app context
@@ -757,6 +657,9 @@ export function useSourceFundsCase() {
     setDetailTransaction,
     // target picker
     rows,
+    transactions,
+    resolvedTarget,
+    previewArgs,
     filteredTargetRows,
     targetSearch,
     setTargetSearch,
@@ -821,6 +724,9 @@ export function useSourceFundsCase() {
     savedCase,
     exportedPdf,
     exportedBundle,
+    exportError: exportFailure === recipeKey,
+    showDisclosure,
+    setShowDisclosure,
     handleExportPdf,
     handleExportBundle,
     runSuggestions,

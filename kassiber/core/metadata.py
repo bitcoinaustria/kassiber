@@ -444,6 +444,11 @@ def _apply_audited_transaction_update(
     if not changed_fields:
         return None, False
 
+    savepoint = f"metadata_update_{uuid.uuid4().hex}" if not commit else None
+    if savepoint:
+        if not conn.in_transaction:
+            conn.execute("BEGIN")
+        conn.execute(f"SAVEPOINT {savepoint}")
     try:
         if tags_set and "tags" in changed_fields:
             tag_rows = [
@@ -477,11 +482,17 @@ def _apply_audited_transaction_update(
             after_state=after_state,
         )
         hooks.invalidate_journals(conn, profile["id"])
+        if savepoint:
+            conn.execute(f"RELEASE SAVEPOINT {savepoint}")
         if commit:
             conn.commit()
         return event_id, True
     except Exception:
-        conn.rollback()
+        if savepoint:
+            conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+        else:
+            conn.rollback()
         raise
 
 

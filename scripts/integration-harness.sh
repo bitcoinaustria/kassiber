@@ -72,6 +72,10 @@ run_fast() {
   KASSIBER_NO_EGRESS=1 py -m unittest \
     tests.test_regtest_harness \
     tests.test_lightning_business_plan \
+    tests.integration.test_demo_fingerprint \
+    tests.integration.test_regtest_demo_realism \
+    tests.integration.test_regtest_exchange_cases \
+    tests.test_regtest_exchange_api \
     -v
 }
 
@@ -618,7 +622,7 @@ PY
 }
 
 demo_scenario_checksum() {
-  py -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$DEMO_SCENARIO"
+  py -m tests.integration.demo_fingerprint "$DEMO_SCENARIO"
 }
 
 demo_scenario_base_epoch() {

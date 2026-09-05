@@ -307,5 +307,127 @@
     "remoteConfirm": "Use {{provider}} for chat? It reuses the provider's existing local CLI login/configuration, but prompts and selected Kassiber data may leave this device. Kassiber's typed tools stay capability-scoped; mutations and network access require consent. Provider-native coding tools are disabled.",
     "remoteDiscoveryConfirm": "Check models from {{provider}}? This contacts the provider now.",
     "cliChatOnly": "Local CLI broker · Kassiber tools available · native coding tools disabled"
+  },
+  "review": {
+    "seedPrompt": "Investigate the {{count}} quarantine issues in this book. Page through all cases, gather available evidence, and prepare one typed correction plan with reasons. Request one confirmation for the server-verified plan; make no unapproved changes. Explain any cases that still need evidence or a decision.",
+    "rawJson": "Technical details",
+    "computed": "Computed by Kassiber",
+    "proposedInterpretation": "Proposed interpretation",
+    "operations_one": "{{count}} correction",
+    "operations_other": "{{count}} corrections",
+    "more_one": "Show {{count}} more correction",
+    "more_other": "Show {{count}} more corrections",
+    "openQuestions": "Remaining issues",
+    "remaining_one": "{{count}} quarantine issue remains",
+    "remaining_other": "{{count}} quarantine issues remain",
+    "notListed_one": "{{count}} additional issue is not listed in this preview.",
+    "notListed_other": "{{count}} additional issues are not listed in this preview.",
+    "fingerprint": "Plan fingerprint",
+    "failed": "The application result could not be verified. Ask the assistant to retrieve the receipt before retrying.",
+    "effects": {
+      "quarantine": "Quarantine issues",
+      "readiness": "Report readiness",
+      "ready": "Ready",
+      "blocked": "Blocked",
+      "becomes": "becomes"
+    },
+    "proposal": {
+      "title": "Proposed corrections",
+      "revision": "Based on book input version {{revision}}"
+    },
+    "status": {
+      "applied": "Applied",
+      "proposed": "Proposed"
+    },
+    "op": {
+      "price_override": "Set price",
+      "exclude": "Exclude from ledger",
+      "custody_component": "Record custody interpretation",
+      "rate": "Rate in book fiat currency per BTC",
+      "value": "Value in book fiat currency",
+      "activate": "Activate",
+      "draft": "Save as draft",
+      "assetFromReference": "asset resolved from reference"
+    },
+    "receipt": {
+      "title": "Verified review receipt",
+      "verified_one": "{{count}} correction applied; the resulting journal was rebuilt and verified.",
+      "verified_other": "{{count}} corrections applied; the resulting journal was rebuilt and verified.",
+      "openQuarantine": "Open quarantine"
+    },
+    "cases": {
+      "more": "{{count}} cases inspected; more cases are available.",
+      "last": "{{count}} cases inspected; end of this case listing."
+    },
+    "planSummary": "{{count}} corrections proposed; quarantine issues {{before}} → {{after}}",
+    "progress": {
+      "confirmation": "Waiting for your review of the complete plan",
+      "plan": "Computing the proposed journal effects",
+      "apply": "Applying and verifying the approved plan",
+      "read": "Reviewing local cases and evidence"
+    },
+    "continuationDetails": "Continuation details"
+  },
+  "consent": {
+    "title": "Allow tool action?",
+    "toolAction": "Tool action",
+    "description": "This action needs approval before Kassiber runs it.",
+    "arguments": "Arguments",
+    "deny": "Deny",
+    "allowSession": "Allow this session",
+    "allowOnce": "Allow once",
+    "apply": {
+      "title": "Apply these corrections?",
+      "description": "Review the effects recalculated by Kassiber. This approval covers the complete plan shown below.",
+      "cancel": "Cancel",
+      "confirm": "Apply once",
+      "alreadyApplied": "This plan was already applied. Continuing returns the same receipt without making new changes.",
+      "returnReceipt": "Return receipt",
+      "unavailable": "Kassiber could not verify this plan against the current book. Ask the assistant to prepare a new plan before approving."
+    }
+  },
+  "evidence": {
+    "label": "Evidence needed",
+    "missing": {
+      "connect_wallet": "A connection is missing.",
+      "import_history": "Transaction history is missing.",
+      "attach_evidence": "A supporting file is needed."
+    },
+    "why": {
+      "connect_wallet": "Connecting the watch-only wallet lets the review check the actual movements.",
+      "import_history": "The export can establish what happened before or after the visible transfer.",
+      "attach_evidence": "The file will be saved as evidence for this transaction and made available for analysis. This does not import transactions or resolve the case."
+    },
+    "action": {
+      "connect_wallet": "Add watch-only connection",
+      "import_history": "Import transaction history",
+      "attach_evidence": "Choose evidence file"
+    },
+    "unavailable": "I don't have this",
+    "resume": "Continue review",
+    "stale": "This request belongs to an earlier book or case state. Inspect the case again.",
+    "failed": "The evidence could not be provided.",
+    "status": {
+      "idle": "Missing",
+      "opening": "Waiting for your input…",
+      "received": "Received. Ready to check against the current book.",
+      "partial": "Some changes were saved, but setup or sync did not finish. Continue to check what is available.",
+      "continuing": "Provided. See the follow-up review below; supplying evidence does not settle the case.",
+      "stale": "This request belongs to an earlier book or conversation.",
+      "error": "The action did not finish.",
+      "unavailable": "The gap remains acknowledged. Continue to consider other evidence."
+    },
+    "outcome": {
+      "received": "The local setup or import finished; verify what data is now available.",
+      "partial": "Some local changes were saved, but setup or sync did not finish. Inspect current data and the remaining blockers.",
+      "attached": "The selected file was saved as evidence for this transaction and is available for analysis. No transaction history was imported; the case is not necessarily resolved.",
+      "unavailable": "I do not have the requested evidence. Keep the gap explicit and consider alternative evidence."
+    },
+    "continuePrompt": "Continue the evidence review. {{outcome}} Inspect the current cases again before making a proposal. Cases: {{cases}}",
+    "sourceFundsContinuePrompt": "Continue the source-of-funds review for the same target, amount and purpose. {{outcome}} Read the current source-of-funds review context and evidence again. Keep recorded provenance separate from accounting and request consent before changes. Cases: {{cases}}",
+    "importTarget": "Import into connection",
+    "newImportTarget": "Create a separate connection",
+    "importTargetHint": "Use the connection whose history this export describes. Importing into an existing connection reuses that wallet.",
+    "attachmentUnverified": "The file picker did not confirm that evidence was saved to the requested transaction."
   }
 }

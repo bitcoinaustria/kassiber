@@ -20,6 +20,7 @@ from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
+from urllib import error as urlerror
 from urllib import parse as urlparse
 from urllib import request as urlrequest
 
@@ -62,6 +63,7 @@ from .onchain import (
     output_script,
     output_value_sats,
 )
+from .privacy_hops import privacy_boundary_from_import_record
 from .sync import WalletSyncState, emit_sync_progress, normalize_backend_kind
 from .wallets import (
     load_wallet_descriptor_plan_from_config,
@@ -187,6 +189,7 @@ def http_post_json(
     _sleeper=None,
     _rng=None,
     _max_attempts=None,
+    _http_error_handler=None,
 ):
     def _opener():
         request = urlrequest.Request(
@@ -200,15 +203,20 @@ def http_post_json(
             },
             method="POST",
         )
-        with urlopen_with_proxy(
-            request,
-            url,
-            timeout,
-            proxy_url=proxy_url,
-            source_label="backend",
-            ssl_context=ssl_context,
-        ) as response:
-            return json.loads(response.read().decode("utf-8"))
+        try:
+            with urlopen_with_proxy(
+                request,
+                url,
+                timeout,
+                proxy_url=proxy_url,
+                source_label="backend",
+                ssl_context=ssl_context,
+            ) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urlerror.HTTPError as exc:
+            if _http_error_handler is not None:
+                return _http_error_handler(exc)
+            raise
 
     return http_client.request_with_retry(
         url,
@@ -2501,14 +2509,18 @@ def _record_from_bitcoin_graph(
     )
     sent_sats = Decimal("0")
     total_input_sats = Decimal("0")
+    inputs_owned = bool(tx.get("vin"))
     for vin in tx.get("vin", []):
         if not isinstance(vin, dict):
+            inputs_owned = False
             continue
         value_sats = input_value_sats(vin)
+        owned = str(input_script(vin) or "").strip().lower() in tracked
+        inputs_owned = inputs_owned and owned and value_sats is not None
         if value_sats is None:
             continue
         total_input_sats += value_sats
-        if str(input_script(vin) or "").strip().lower() in tracked:
+        if owned:
             sent_sats += value_sats
     if received_sats == 0 and sent_sats == 0:
         return None
@@ -2521,6 +2533,7 @@ def _record_from_bitcoin_graph(
         fee_sats = max(total_input_sats - total_output_sats, Decimal("0"))
     else:
         fee_sats = max(dec(explicit_fee_sats, "0"), Decimal("0"))
+    collaborative = sent_sats > 0 and not inputs_owned
     if received_sats > sent_sats:
         direction = "inbound"
         amount = sats_to_btc(received_sats - sent_sats)
@@ -2529,12 +2542,27 @@ def _record_from_bitcoin_graph(
     else:
         direction = "outbound"
         gross_out_sats = sent_sats - received_sats
-        amount_sats = gross_out_sats - fee_sats
+        # A transaction-wide fee is not a wallet's contribution when another
+        # participant supplied inputs. Preserve the observed wallet delta;
+        # custody can allocate fees only after proving the complete ownership.
+        amount_sats = gross_out_sats if collaborative else gross_out_sats - fee_sats
         if amount_sats < 0:
             amount_sats = Decimal("0")
         amount = sats_to_btc(amount_sats)
-        fee = sats_to_btc(fee_sats)
+        fee = Decimal("0") if collaborative else sats_to_btc(fee_sats)
         kind = "withdrawal" if amount > 0 else "fee"
+    raw = {
+        **tx,
+        "fee": int(fee_sats),
+        "observer_owned_scripts": sorted(tracked),
+    }
+    boundary = privacy_boundary_from_import_record(tx)
+    if collaborative:
+        raw["component"] = {"fee_attribution": "implicit_wallet_delta"}
+        if received_sats != sent_sats:
+            boundary = boundary or "collaborative"
+    if boundary:
+        raw["privacy_boundary"] = boundary
     claim_evidence = _extract_unique_claim_payment_hash_outpoint(
         tx.get("vin", []), _esplora_witness_items
     )
@@ -2554,7 +2582,8 @@ def _record_from_bitcoin_graph(
         "kind": kind,
         "description": f"Synced from {backend_name}",
         "counterparty": None,
-        "raw_json": json.dumps(tx, sort_keys=True),
+        "raw_json": json.dumps(raw, sort_keys=True),
+        **({"privacy_boundary": boundary} if boundary else {}),
         **_payment_hash_fields(claim_evidence),
         **_swap_refund_fields(*(swap_refund_funding_outpoint or (None, None))),
     }
@@ -3077,6 +3106,38 @@ def bitcoinrpc_url(backend, wallet_name=None):
     return backend["url"]
 
 
+def _bitcoinrpc_http_error(exc, expected_id):
+    # Core JSON-RPC 1.0 normally carries typed RPC errors in HTTP 400/404/500.
+    # Keep this protocol decoder local: other HTTP callers retain the generic
+    # redaction/retry path, and throttling still goes through its backoff.
+    if exc.code not in {400, 404, 500}:
+        raise exc
+    try:
+        body = exc.read(65_537)
+    finally:
+        exc.close()
+    try:
+        envelope = json.loads(body) if len(body) <= 65_536 else None
+    except (ValueError, UnicodeDecodeError):
+        envelope = None
+    error = envelope.get("error") if isinstance(envelope, dict) else None
+    if (
+        not isinstance(envelope, dict)
+        or envelope.get("id") != expected_id
+        or envelope.get("result") is not None
+        or not isinstance(error, dict)
+        or type(error.get("code")) is not int
+    ):
+        raise AppError("Bitcoin Core returned an invalid RPC error response",
+                       details={"http_status": exc.code}) from None
+    # Never retain the untrusted body/prose in an exception or diagnostic.
+    category = "rescan failed" if (
+        "rescan" in str(error.get("message", "")).lower()
+        and any(word in str(error.get("message", "")).lower() for word in ("fail", "prun"))
+    ) else None
+    return {"error": {"code": error["code"], "category": category}}
+
+
 def bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
     payload = {
         "jsonrpc": "1.0",
@@ -3091,18 +3152,28 @@ def bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None
         timeout=backend_timeout(backend) if timeout is None else timeout,
         proxy_url=_backend_proxy_url(backend),
         ssl_context=_backend_ssl_context(backend),
+        _http_error_handler=lambda exc: _bitcoinrpc_http_error(exc, payload["id"]),
     )
     if response.get("error"):
         error = response["error"]
+        rpc_code = error.get("code") if isinstance(error, dict) else None
+        if type(rpc_code) is not int:
+            raise AppError(f"Bitcoin Core RPC {method} returned an invalid error")
+        message = str(error.get("message", "")).lower()
+        rescan_failed = error.get("category") == "rescan failed" or (
+            "rescan" in message and any(word in message for word in ("fail", "prun"))
+        )
         raise AppError(
-            f"Bitcoin Core RPC {method} failed"
-            f" ({error.get('code', 'unknown')}): {error.get('message', error)}"
+            f"Bitcoin Core RPC {method} failed ({rpc_code})"
+            + (": rescan failed" if rescan_failed else ""),
+            details={"rpc_method": method, "rpc_error_code": rpc_code},
         )
     return response.get("result")
 
 
 BITCOINRPC_RESCAN_TIMESTAMP_WINDOW_SECONDS = 2 * 60 * 60
 BITCOINRPC_HISTORY_ATTESTATION_VERSION = 1
+BITCOINRPC_GRAPH_NORMALIZATION_VERSION = 3
 
 
 def bitcoinrpc_prune_coverage(
@@ -3673,8 +3744,15 @@ def record_from_bitcoinrpc_details(
     raw_graph=None,
     tracked_scripts=None,
 ):
+    if isinstance(raw_graph, dict):
+        # Inbound rows also attest their current script scope, even when Core
+        # cannot resolve foreign parents. Other connected wallets may supply
+        # those complementary prevouts during canonical event reconciliation.
+        raw_graph = {**raw_graph, "observer_owned_scripts": sorted(tracked_scripts or ())}
     amount_total = Decimal("0")
     fee_total = Decimal("0")
+    has_send = False
+    seen_fees = set()
     occurred_at = UNKNOWN_OCCURRED_AT
     confirmed_at = None
     for detail in details:
@@ -3682,13 +3760,16 @@ def record_from_bitcoinrpc_details(
         if category == "immature" or _bitcoinrpc_detail_is_retracted(detail):
             continue
         amount_total += dec(detail.get("amount"), "0")
-        # Bitcoin Core stamps the SAME whole-tx fee on every `send`-category
-        # detail of one transaction, so summing per detail double-counts it for a
-        # multi-output send (inflating both the booked outflow and the taxable
-        # fee disposal). Take it once — the shared fee is identical across send
-        # details; receive details carry 0/none, so max() yields the real fee.
-        detail_fee = abs(dec(detail.get("fee"), "0"))
-        if detail_fee > fee_total:
+        # Core repeats one signed wallet-relative fee on every send detail.
+        # In collaborative transactions it may be positive: taking abs() can
+        # turn the recipient's net credit into a fictitious large disposal.
+        has_send = has_send or category == "send"
+        detail_fee = dec(detail.get("fee"), "0") if category == "send" else Decimal("0")
+        if detail_fee:
+            seen_fees.add(detail_fee)
+            if len(seen_fees) > 1:
+                raise AppError("Bitcoin Core returned inconsistent wallet fee details",
+                               code="bitcoinrpc_inconsistent_wallet_details")
             fee_total = detail_fee
         if detail.get("blocktime") not in (None, "", 0, "0"):
             confirmed_at = timestamp_to_iso(detail.get("blocktime"), default=None)
@@ -3704,22 +3785,9 @@ def record_from_bitcoinrpc_details(
     else:
         direction = "outbound"
         gross_out = abs(amount_total)
-        graph_amount = _bitcoinrpc_graph_outbound_amount(raw_graph, tracked_scripts, fee_total)
-        if graph_amount is not None:
-            # Decode-backed Core sync can use the same amount model as the
-            # Esplora adapter: sum outputs not paying this wallet's tracked
-            # scripts, with the network fee kept separately.
-            amount = graph_amount
-        else:
-            # Legacy fallback for older Core/tapes with only wallet details:
-            # Core send details already report recipient value separately from
-            # the fee. Keep that amount intact so downstream accounting consumes
-            # recipient value plus the explicit fee exactly once.
-            amount = gross_out
-        fee = fee_total
+        amount = gross_out
+        fee = abs(fee_total)
         kind = "withdrawal" if amount > 0 else "fee"
-        if _bitcoinrpc_graph_has_foreign_inputs(raw_graph, tracked_scripts):
-            privacy_boundary = "payjoin"
     raw_payload = raw_graph if raw_graph is not None else details
     if privacy_boundary and isinstance(raw_payload, dict):
         raw_payload = {**raw_payload, "privacy_boundary": privacy_boundary}
@@ -3738,6 +3806,47 @@ def record_from_bitcoinrpc_details(
         "counterparty": None,
         "raw_json": json.dumps(json_ready(raw_payload), sort_keys=True),
     }
+    inputs = raw_graph.get("vin") if isinstance(raw_graph, dict) else None
+    observed = None
+    if tracked_scripts and isinstance(inputs, list) and inputs and all(
+        input_value_sats(item) is not None and input_script(item)
+        for item in inputs
+    ):
+        observed = _record_from_bitcoin_graph(
+            raw_graph, tracked_scripts, backend_name, txid=txid,
+            occurred_at=occurred_at, confirmed_at=confirmed_at,
+        )
+        if observed is not None:
+            record = observed
+            privacy_boundary = record.get("privacy_boundary")
+    if observed is None and (direction == "outbound" or has_send):
+        # Wallet details report a debit, but without all previous outputs we
+        # cannot prove which participants paid the transaction-wide fee.
+        raw_payload = {
+            **(raw_graph if isinstance(raw_graph, dict) else {"source": "bitcoinrpc_wallet_details", "details": details}),
+            "component": {"fee_attribution": "implicit_wallet_delta"},
+            "observer_owned_scripts": sorted(tracked_scripts or ()),
+        }
+        privacy_boundary = privacy_boundary_from_import_record(raw_payload) or "collaborative"
+        raw_payload["privacy_boundary"] = privacy_boundary
+        wallet_delta = amount_total + fee_total
+        record.update(
+            direction="inbound" if wallet_delta > 0 else "outbound",
+            amount=abs(wallet_delta), fee=Decimal("0"),
+            kind="deposit" if wallet_delta > 0 else "withdrawal",
+            raw_json=json.dumps(json_ready(raw_payload), sort_keys=True),
+        )
+    # Core's normalized graph is curated below before raw witnesses are
+    # discarded. These fields are hints; exact matching still requires the
+    # closed observation authority bound to that graph and quantity.
+    proof = raw_graph.get("htlc_spend") if isinstance(raw_graph, dict) else None
+    if isinstance(proof, dict):
+        if proof.get("role") == "claim":
+            record.update(_payment_hash_fields((
+                proof["payment_hash"], proof["funding_txid"], proof["funding_vout"],
+            )))
+        elif proof.get("role") == "refund":
+            record.update(_swap_refund_fields(proof["funding_txid"], proof["funding_vout"]))
     if privacy_boundary:
         record["privacy_boundary"] = privacy_boundary
     return record
@@ -3757,83 +3866,9 @@ def _bitcoinrpc_prevout_from_vin(vin):
     return result
 
 
-def _bitcoinrpc_graph_outbound_amount(raw_graph, tracked_scripts, fee_btc):
-    if not isinstance(raw_graph, dict):
-        return None
-    tracked = {str(script).lower() for script in (tracked_scripts or set()) if script}
-    if not tracked:
-        return None
-    outputs = raw_graph.get("vout")
-    if not isinstance(outputs, list):
-        return None
-    received_sats = 0
-    external_sats = 0
-    for output in outputs:
-        if not isinstance(output, dict):
-            return None
-        script = output.get("scriptpubkey")
-        if not script:
-            return None
-        if str(script).lower() in tracked:
-            try:
-                received_sats += int(output.get("value"))
-            except (TypeError, ValueError):
-                return None
-            continue
-        try:
-            external_sats += int(output.get("value"))
-        except (TypeError, ValueError):
-            return None
-    inputs = raw_graph.get("vin")
-    sent_sats = 0
-    if isinstance(inputs, list):
-        for item in inputs:
-            if not isinstance(item, dict):
-                continue
-            prevout = item.get("prevout")
-            if not isinstance(prevout, dict):
-                continue
-            script = prevout.get("scriptpubkey")
-            if not script or str(script).lower() not in tracked:
-                continue
-            try:
-                sent_sats += int(prevout.get("value"))
-            except (TypeError, ValueError):
-                return None
-    if sent_sats > 0:
-        fee_sats = int((dec(fee_btc, "0") * SATS_PER_BTC).to_integral_value())
-        return sats_to_btc(max(sent_sats - received_sats - fee_sats, 0))
-    return None
-
-
-def _bitcoinrpc_graph_has_foreign_inputs(raw_graph, tracked_scripts) -> bool:
-    if not isinstance(raw_graph, dict):
-        return False
-    tracked = {str(script).lower() for script in (tracked_scripts or set()) if script}
-    if not tracked:
-        return False
-    inputs = raw_graph.get("vin")
-    if not isinstance(inputs, list):
-        return False
-    has_tracked = False
-    has_foreign = False
-    for item in inputs:
-        if not isinstance(item, dict):
-            continue
-        prevout = item.get("prevout")
-        if not isinstance(prevout, dict):
-            continue
-        script = prevout.get("scriptpubkey")
-        if not script:
-            continue
-        if str(script).lower() in tracked:
-            has_tracked = True
-        else:
-            has_foreign = True
-    return has_tracked and has_foreign
-
-
 def _bitcoinrpc_normalized_graph(txid, payload):
+    from .chain_observer.htlc_evidence import htlc_spend_attestation
+
     decoded = payload.get("decoded") if isinstance(payload, dict) else None
     if not isinstance(decoded, dict):
         return None
@@ -3841,6 +3876,17 @@ def _bitcoinrpc_normalized_graph(txid, payload):
     vout = decoded.get("vout")
     if not isinstance(vin, list) or not isinstance(vout, list):
         return None
+
+    def core_witness_items(entry):
+        if not isinstance(entry, dict):
+            return []
+        return _esplora_witness_items({"witness": entry.get("txinwitness")})
+
+    proof = htlc_spend_attestation(
+        claim=_extract_unique_claim_payment_hash_outpoint(vin, core_witness_items),
+        refund=_extract_refund_funding_outpoint(vin, core_witness_items),
+        input_count=len(vin),
+    )
     normalized_vin = []
     for entry in vin:
         if not isinstance(entry, dict):
@@ -3881,6 +3927,7 @@ def _bitcoinrpc_normalized_graph(txid, payload):
         "vin": normalized_vin,
         "vout": normalized_vout,
         "source": "bitcoinrpc_gettransaction",
+        **({"observer": "bitcoinrpc", "htlc_spend": proof} if proof else {}),
     }
 
 
@@ -3900,6 +3947,52 @@ def _bitcoinrpc_fetch_normalized_graph(backend, wallet_name, txid, tx_cache=None
     except AppError:
         return None
     return _bitcoinrpc_normalized_graph(txid, payload)
+
+
+def _bitcoinrpc_enrich_wallet_prevouts(backend, wallet_name, graph, tx_cache):
+    """Resolve wallet-local previous outputs; transient failure retries history."""
+
+    inputs = []
+    for source in graph.get("vin") or ():
+        entry = dict(source)
+        inputs.append(entry)
+        if input_value_sats(entry) is not None and input_script(entry):
+            continue
+        parent_id = canonical_txid(entry.get("txid"))
+        index = entry.get("vout")
+        if parent_id is None or type(index) is not int or index < 0:
+            continue
+        parent = tx_cache.get(parent_id)
+        if parent is None or (
+            isinstance(parent, dict)
+            and not isinstance(parent.get("decoded"), dict)
+            and not parent.get("_wallet_parent_unavailable")
+        ):
+            try:
+                parent = bitcoinrpc_call(backend, "gettransaction", [parent_id, True, True], wallet_name=wallet_name)
+            except AppError as exc:
+                if (exc.details or {}).get("rpc_error_code") == -5:
+                    # Core's wallet RPC cannot see a foreign/pruned parent.
+                    # Retain an explicit unknown input, never query the node's
+                    # global transaction index or assume it belongs to us.
+                    parent = {"_wallet_parent_unavailable": True}
+                else:
+                    return None
+            tx_cache[parent_id] = parent
+        decoded = parent.get("decoded") if isinstance(parent, dict) else None
+        outputs = decoded.get("vout") if isinstance(decoded, dict) else None
+        if not isinstance(outputs, list):
+            if isinstance(parent, dict) and parent.get("_wallet_parent_unavailable"):
+                continue
+            return None
+        output = next((item for position, item in enumerate(outputs) if isinstance(item, dict) and item.get("n", position) == index), None)
+        if output is None:
+            return None
+        prevout = _bitcoinrpc_prevout_from_vin({"prevout": output})
+        if not prevout or "value" not in prevout or "scriptpubkey" not in prevout:
+            return None
+        entry["prevout"] = prevout
+    return {**graph, "vin": inputs}
 
 
 def _bitcoinrpc_highest_used_from_details(details, sync_state: WalletSyncState | None):
@@ -3934,7 +4027,13 @@ def bitcoinrpc_records_for_wallet(
     wallet_name = wallet_name or bitcoinrpc_ensure_watchonly_wallet(backend, wallet)
     if imported_count is None:
         imported_count = bitcoinrpc_import_addresses(backend, wallet_name, wallet, addresses)
-    transaction_checkpoint = checkpoint if not imported_count else None
+    # Replay Core's existing wallet history once after normalization changes.
+    # This is independent of descriptor import/rescan coverage attestation.
+    normalization_current = (
+        (checkpoint or {}).get("bitcoinrpc_graph_normalization_version")
+        == BITCOINRPC_GRAPH_NORMALIZATION_VERSION
+    )
+    transaction_checkpoint = checkpoint if not imported_count and normalization_current else None
     details, fetch_meta = fetch_bitcoinrpc_wallet_transactions(
         backend,
         wallet_name,
@@ -3945,6 +4044,7 @@ def bitcoinrpc_records_for_wallet(
         txid = detail.get("txid")
         if txid:
             grouped[txid].append(detail)
+    tracked_scripts = set((sync_state.tracked_scripts or {}).keys()) if sync_state else set()
     records = []
     verbose_tx_cache = {}
     graph_unavailable_txids = []
@@ -3955,16 +4055,26 @@ def bitcoinrpc_records_for_wallet(
             item[0],
         ),
     ):
-        normalized = record_from_bitcoinrpc_details(txid, tx_details, backend["name"])
-        if normalized and normalized["direction"] == "outbound":
+        normalized = record_from_bitcoinrpc_details(txid, tx_details, backend["name"], tracked_scripts=tracked_scripts)
+        if normalized:
             raw_graph = _bitcoinrpc_fetch_normalized_graph(
                 backend,
                 wallet_name,
                 txid,
                 verbose_tx_cache,
             )
+            if raw_graph is not None and any(_bitcoinrpc_detail_category(detail) == "send" for detail in tx_details):
+                enriched = _bitcoinrpc_enrich_wallet_prevouts(
+                    backend, wallet_name, raw_graph, verbose_tx_cache,
+                )
+                if enriched is None:
+                    # Keep the already-curated transaction and current script
+                    # scope for complementary connected-wallet observations,
+                    # but do not attest history completeness after a failure.
+                    graph_unavailable_txids.append(str(txid).lower())
+                else:
+                    raw_graph = enriched
             if raw_graph is not None:
-                tracked_scripts = set((sync_state.tracked_scripts or {}).keys()) if sync_state else set()
                 normalized = record_from_bitcoinrpc_details(
                     txid,
                     tx_details,
@@ -3972,7 +4082,7 @@ def bitcoinrpc_records_for_wallet(
                     raw_graph=raw_graph,
                     tracked_scripts=tracked_scripts,
                 )
-            elif sync_state and (sync_state.tracked_scripts or {}):
+            else:
                 graph_unavailable_txids.append(str(txid).lower())
         if normalized:
             records.append(normalized)
@@ -3981,6 +4091,8 @@ def bitcoinrpc_records_for_wallet(
             set(graph_unavailable_txids)
         )
         fetch_meta.pop("bitcoinrpc_last_block", None)
+    else:
+        fetch_meta["bitcoinrpc_graph_normalization_version"] = BITCOINRPC_GRAPH_NORMALIZATION_VERSION
     retracted_txids = set(fetch_meta.get("bitcoinrpc_retracted_txids") or [])
     if retracted_txids:
         active_txids = {str(record.get("txid") or "").lower() for record in records}
@@ -4195,6 +4307,8 @@ def bitcoinrpc_sync_adapter(backend, wallet, sync_state: WalletSyncState):
         next_checkpoint["bitcoinrpc_history_attestation"] = history_attestation
         if meta.get("bitcoinrpc_last_block"):
             next_checkpoint["bitcoinrpc_last_block"] = meta["bitcoinrpc_last_block"]
+        if meta.get("bitcoinrpc_graph_normalization_version"):
+            next_checkpoint["bitcoinrpc_graph_normalization_version"] = meta["bitcoinrpc_graph_normalization_version"]
         if meta.get("bitcoinrpc_pending_maturity"):
             next_checkpoint["bitcoinrpc_pending_maturity"] = True
         else:

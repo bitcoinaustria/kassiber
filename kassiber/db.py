@@ -518,12 +518,8 @@ DEFAULT_DB_FILENAME = f"{APP_NAME}.sqlite3"
 LEGACY_DB_FILENAME = f"{LEGACY_APP_NAME}.sqlite3"
 DB_BUSY_TIMEOUT_MS = 30_000
 DB_BUSY_TIMEOUT_SECONDS = DB_BUSY_TIMEOUT_MS / 1000
-DB_JOURNAL_MODE = "wal"
-# `NORMAL` is the standard, crash-safe pairing for WAL: it only drops an fsync
-# per commit (a power-loss can lose the last transaction, never corrupt the DB),
-# which removes the dominant cost from write-heavy refresh paths (per-row sync
-# inserts, the journal delete+rebuild, UTXO inventory writes).
-DB_SYNCHRONOUS = "NORMAL"
+# Journal mode and synchronization are selected from the actual connection's
+# SQLite version below; SQLCipher can embed a different SQLite than stdlib.
 # Spill temp B-trees/sort runs to RAM instead of disk during reports/journaling.
 DB_TEMP_STORE = "MEMORY"
 # Negative cache_size is in KiB (here ~16 MiB) rather than pages, so the page
@@ -1816,6 +1812,25 @@ END;
 -- crossed an explicit consent boundary.  Chat history is optional and cannot
 -- serve as this audit trail.  Proposal payloads remain inside SQLCipher and
 -- are deliberately absent from replication and public/audit-package exports.
+-- Application receipts bind one consented portable review to existing domain history.
+-- Investigation and preview remain read-only; raw chain evidence is never copied here.
+CREATE TABLE IF NOT EXISTS review_workflow_receipts (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    idempotency_key TEXT NOT NULL,
+    artifact_digest TEXT NOT NULL CHECK(length(artifact_digest) = 64),
+    receipt_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(profile_id, idempotency_key)
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_review_workflow_receipt_immutable
+BEFORE UPDATE ON review_workflow_receipts
+BEGIN
+    SELECT RAISE(ABORT, 'review_workflow_receipt_immutable');
+END;
+
 CREATE TABLE IF NOT EXISTS custody_ai_assistance_audits (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -3230,6 +3245,24 @@ def database_has_core_schema(conn):
     return True
 
 
+def _journal_settings_for_sqlite_version(version: object) -> tuple[str, str]:
+    """Avoid the upstream WAL-reset race on runtimes without its documented fix.
+
+    https://www.sqlite.org/wal.html#walresetbug
+    Unknown/vendor version strings fail closed to rollback journaling.
+    """
+    parts = version.split(".") if isinstance(version, str) else []
+    if len(parts) != 3 or any(not part.isascii() or not part.isdigit() for part in parts):
+        return "delete", "FULL"
+    numbers = tuple(int(part) for part in parts)
+    fixed = (
+        numbers >= (3, 51, 3)
+        or (numbers[:2] == (3, 50) and numbers[2] >= 7)
+        or (numbers[:2] == (3, 44) and numbers[2] >= 6)
+    )
+    return ("wal", "NORMAL") if fixed else ("delete", "FULL")
+
+
 def _configure_connection_pragmas(conn, *, encrypted=False):
     """Apply connection settings used by daemon foreground/background writers.
 
@@ -3238,8 +3271,35 @@ def _configure_connection_pragmas(conn, *, encrypted=False):
     mmap path entirely rather than rely on the codec to intercept it.
     """
     conn.execute(f"PRAGMA busy_timeout = {DB_BUSY_TIMEOUT_MS}")
-    conn.execute(f"PRAGMA journal_mode = {DB_JOURNAL_MODE}")
-    conn.execute(f"PRAGMA synchronous = {DB_SYNCHRONOUS}")
+    # This runs after SQLCipher keying/verification. Query the connection so its
+    # embedded SQLite, not the unrelated Python stdlib driver, selects the mode.
+    version = conn.execute("SELECT sqlite_version()").fetchone()[0]
+    journal_mode, synchronous = _journal_settings_for_sqlite_version(version)
+    try:
+        result = conn.execute(f"PRAGMA journal_mode = {journal_mode}").fetchone()
+    except Exception as exc:
+        details = safe_sqlite_error_details(exc)
+        raise AppError(
+            "Could not configure a safe database journal mode",
+            code="database_journal_mode_unavailable",
+            hint="Close other connections to this book and retry, or upgrade its SQLite runtime to a fixed release.",
+            details={**details, "required_journal_mode": journal_mode},
+            retryable=sqlite_error_is_busy(details),
+        ) from exc
+    actual_mode = str(result[0]).lower() if result else ""
+    in_memory = actual_mode == "memory" and any(
+        row[1] == "main" and not row[2]
+        for row in conn.execute("PRAGMA database_list").fetchall()
+    )
+    if actual_mode != journal_mode and not in_memory:
+        raise AppError(
+            "Database did not accept the required safe journal mode",
+            code="database_journal_mode_unavailable",
+            hint="Close other connections to this book and retry before making changes.",
+            details={"required_journal_mode": journal_mode, "actual_journal_mode": actual_mode},
+            retryable=True,
+        )
+    conn.execute(f"PRAGMA synchronous = {synchronous}")
     conn.execute(f"PRAGMA temp_store = {DB_TEMP_STORE}")
     conn.execute(f"PRAGMA cache_size = {DB_CACHE_SIZE_KIB}")
     if not encrypted:

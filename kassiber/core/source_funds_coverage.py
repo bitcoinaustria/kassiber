@@ -44,11 +44,17 @@ from __future__ import annotations
 
 import sqlite3
 from collections import defaultdict
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from ..errors import AppError
 from ..msat import msat_to_btc
-from .source_funds import ATTESTATION_SOURCE_TYPES, SourceFundsHooks, build_report
+from .source_funds import (
+    ATTESTATION_SOURCE_TYPES,
+    SourceFundsHooks,
+    _ReportInputs,
+    _load_report_inputs,
+    build_report,
+)
 
 
 COVERAGE_BUCKETS = ("fully_traced", "attested", "in_review", "untraced", "not_classified")
@@ -124,6 +130,7 @@ def _classify_transaction(
     target_tx_id: str,
     *,
     max_depth: int = DEFAULT_MAX_DEPTH,
+    report_inputs: Callable[[], _ReportInputs] | None = None,
 ) -> str:
     """Classify one inbound transaction by delegating to ``build_report``.
 
@@ -148,6 +155,7 @@ def _classify_transaction(
             reveal_mode="standard",
             max_depth=max_depth,
             save_case=False,
+            _report_inputs=report_inputs() if report_inputs is not None else None,
         )
     except (AppError, sqlite3.Error, KeyError):
         # build_report can raise sqlite3.Error on a malformed link row
@@ -192,6 +200,30 @@ def compute_coverage(
     max_depth: int = DEFAULT_MAX_DEPTH,
     max_transactions: int = DEFAULT_MAX_TRANSACTIONS,
 ) -> dict[str, Any]:
+    """Classify historical inbound coverage from one consistent database view.
+
+    A read savepoint preserves any caller transaction and prevents a concurrent
+    sync from mixing newer links with the shared custody projection inputs.
+    """
+    conn.execute("SAVEPOINT source_funds_coverage")
+    try:
+        return _compute_coverage_snapshot(
+            conn, workspace_ref, profile_ref, hooks,
+            max_depth=max_depth, max_transactions=max_transactions,
+        )
+    finally:
+        conn.execute("RELEASE SAVEPOINT source_funds_coverage")
+
+
+def _compute_coverage_snapshot(
+    conn: sqlite3.Connection,
+    workspace_ref: str | None,
+    profile_ref: str | None,
+    hooks: SourceFundsHooks,
+    *,
+    max_depth: int = DEFAULT_MAX_DEPTH,
+    max_transactions: int = DEFAULT_MAX_TRANSACTIONS,
+) -> dict[str, Any]:
     """Compute coverage buckets for every inbound transaction in a profile.
 
     Returns:
@@ -217,6 +249,18 @@ def compute_coverage(
     """
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     profile_id = profile["id"]
+    # Load lazily: an entirely unlinked or capped population needs no graph.
+    # This closure dies with this request, so edits and book switches cannot
+    # reuse prior observations or custody authority. Each target still walks
+    # its own links and evaluates the canonical report gates independently.
+    shared_inputs: _ReportInputs | None = None
+
+    def report_inputs() -> _ReportInputs:
+        nonlocal shared_inputs
+        if shared_inputs is None:
+            shared_inputs = _load_report_inputs(conn, str(profile_id))
+        return shared_inputs
+
     inbound_rows = conn.execute(
         """
         SELECT t.id, t.wallet_id, t.asset, t.amount, w.label AS wallet_label
@@ -272,6 +316,7 @@ def compute_coverage(
             profile_id,
             tx_id,
             max_depth=max_depth,
+            report_inputs=report_inputs,
         )
 
         by_wallet_asset[wallet_key][bucket]["amount_msat"] += amount

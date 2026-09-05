@@ -3,6 +3,13 @@ import { describe, expect, it } from "vitest";
 import { assistantScreenContextFor } from "./assistantScreenContext";
 
 describe("assistantScreenContextFor", () => {
+  it("gives quarantine investigation custody tools and the safely selected transaction", () => {
+    expect(assistantScreenContextFor("/quarantine", "?tx=tx-held&url=https://untrusted.example"))
+      .toEqual({ route: "/quarantine", entityType: "transaction", entityId: "tx-held",
+        capabilities: ["review"] });
+    expect(assistantScreenContextFor("/quarantine", "?tx=%2FUsers%2Fsecret"))
+      .not.toHaveProperty("entityId");
+  });
   it("includes the selected transaction and allowlisted display filters", () => {
     expect(
       assistantScreenContextFor(
@@ -68,6 +75,13 @@ describe("assistantScreenContextFor", () => {
         departure_date: "2026-07-10",
       },
       capabilities: ["reports"],
+    });
+  });
+
+  it("keeps gap identity and wallet tools inside the unified custody tab", () => {
+    expect(assistantScreenContextFor("/swaps", "?tab=gaps&gap=gap-1")).toMatchObject({
+      route: "/swaps", entityType: "custody_gap", entityId: "gap-1",
+      capabilities: ["transfers", "transactions", "wallets"], filters: { tab: "gaps" },
     });
   });
 

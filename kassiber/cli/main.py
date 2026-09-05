@@ -194,6 +194,8 @@ from ..update_check import (
     update_checks_enabled,
 )
 from ..wallet_descriptors import MAX_DESCRIPTOR_GAP_LIMIT
+from .review import add_review_parser, dispatch_review
+from .source_funds_review import add_source_funds_review_parsers, dispatch_source_funds_review
 from .chat import run_chat_command
 from .command_registry import command_needs_database, describe_command_catalog
 
@@ -1109,8 +1111,8 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument(
         "--tool-loop-max-iterations",
         type=int,
-        default=8,
-        help="Maximum daemon tool-loop iterations for one assistant turn.",
+        default=None,
+        help="Maximum tool-loop iterations per turn (default: 16 for review, 8 otherwise).",
     )
     chat.add_argument(
         "--tool-profile",
@@ -1130,7 +1132,7 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument(
         "--yes",
         action="store_true",
-        help="Non-interactively allow mutating AI tools for this chat session.",
+        help="Non-interactively allow mutating AI tools, except ui.review.apply (fresh review required).",
     )
     chat.add_argument(
         "--allow-tool",
@@ -1138,7 +1140,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Non-interactively allow only this mutating tool name; repeat or "
             "pass comma-separated names. Other mutating tools still prompt on a TTY "
-            "or deny without one."
+            "or deny without one. ui.review.apply always requires fresh interactive review."
         ),
     )
     chat.add_argument(
@@ -1217,6 +1219,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_secrets_parser(sub)
     add_backup_parser(sub)
     add_sync_parser(sub)
+    add_review_parser(sub)
 
     backends = sub.add_parser("backends")
     backends_sub = backends.add_subparsers(dest="backends_command", required=True)
@@ -2841,6 +2844,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     source_funds = sub.add_parser("source-funds")
     source_funds_sub = source_funds.add_subparsers(dest="source_funds_command", required=True)
+    add_source_funds_review_parsers(source_funds_sub)
 
     sf_sources = source_funds_sub.add_parser("sources")
     sf_sources_sub = sf_sources.add_subparsers(dest="source_funds_sources_command", required=True)
@@ -3484,6 +3488,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         return emit(args, dispatch_backup(args))
     if args.command == "sync":
         return emit(args, dispatch_sync(conn, args))
+    if args.command == "review":
+        return emit(args, dispatch_review(conn, args))
     if args.command == "backends":
         if args.backends_command == "list":
             return emit(args, core_accounts.list_backends(args.runtime_config))
@@ -5214,6 +5220,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
     if args.command == "source-funds":
         source_funds_hooks = _source_funds_hooks()
+        if args.source_funds_command in {"review-context", "request-input"}:
+            return emit(args, dispatch_source_funds_review(conn, args, source_funds_hooks))
         if args.source_funds_command == "sources":
             if args.source_funds_sources_command == "list":
                 return emit(args, core_source_funds.list_sources(conn, args.workspace, args.profile, source_funds_hooks))

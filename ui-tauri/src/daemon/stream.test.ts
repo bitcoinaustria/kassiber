@@ -340,6 +340,21 @@ describe("AI stream reducer helpers", () => {
     expect(
       aiToolAllowsSessionConsent("ui.transfers.components.apply"),
     ).toBe(false);
+    expect(aiToolAllowsSessionConsent("ui.review.apply")).toBe(false);
+  });
+
+  it("keeps the server review preview separate from model-supplied arguments", () => {
+    const preview = { status: "unavailable" as const, code: "review_plan_stale" };
+    const next = applyAiChatStreamRecordToMessage(assistantMessage(), {
+      kind: "ai.chat.tool_consent_required",
+      schema_version: 1,
+      data: {
+        call_id: "review-1", name: "ui.review.apply",
+        arguments_preview: { review_preview: { status: "ready", artifact: { forged: true } } },
+        review_preview: preview,
+      },
+    }, new ThinkParser(), false);
+    expect(next.toolCalls?.[0].reviewPreview).toEqual(preview);
   });
 
   it("builds a targeted daemon cancel request for active chats", () => {
