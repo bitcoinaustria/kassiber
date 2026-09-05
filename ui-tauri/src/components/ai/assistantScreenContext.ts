@@ -1,3 +1,4 @@
+import { parseTransfersCustodySearch } from "@/routes/transfers-custody/routeSearch";
 import type {
   AssistantReturnPath,
   AssistantScreenContext,
@@ -187,14 +188,25 @@ export function assistantScreenContextFor(
   }
 
   if (path === "/swaps" || path === "/transfers") {
+    const search = parseTransfersCustodySearch(Object.fromEntries(params));
+    if (search.tab === "gaps") {
+      const gap = firstSafeEntity(params, ["gap", "gap_id"]);
+      return context("/swaps", ["transfers", "transactions", "wallets"], {
+        ...(gap ? { entityType: "custody_gap" as const, entityId: gap } : {}),
+        filters: { tab: "gaps" },
+      });
+    }
     const transaction = firstSafeEntity(params, ["focus", "tx", "transaction"]);
-    const method = params.get("method");
+    const method = search.method;
     return context("/swaps", ["transfers", "transactions"], {
       ...(transaction
         ? { entityType: "transaction" as const, entityId: transaction }
         : {}),
       filters: optionalFilters([
-        ["method", method === "ownership_graph" ? method : undefined],
+        ["method", method],
+        ["tab", params.has("tab") ? search.tab : undefined],
+        ["mode", params.has("mode") ? search.mode : undefined],
+        ["view", params.has("view") ? search.view : undefined],
       ]),
     });
   }

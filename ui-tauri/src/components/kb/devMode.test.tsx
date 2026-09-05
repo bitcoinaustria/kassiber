@@ -149,10 +149,10 @@ describe("pre-release dev mode", () => {
       const dev = (route: string | undefined) =>
         Boolean(route && devOnly.includes(route as (typeof devOnly)[number]));
 
-      expect(on.some((r) => dev(r.route?.to) || r.id === "setting:data-sync")).toBe(
+      expect(on.some((r) => dev(r.route?.to) || r.id === "page:custody-gaps" || r.id === "page:custody-components" || r.id === "setting:data-sync")).toBe(
         true,
       );
-      expect(off.some((r) => dev(r.route?.to))).toBe(false);
+      expect(off.some((r) => dev(r.route?.to) || r.id === "page:custody-gaps" || r.id === "page:custody-components")).toBe(false);
       expect(off.some((r) => r.id === "setting:data-sync")).toBe(false);
     }
   });

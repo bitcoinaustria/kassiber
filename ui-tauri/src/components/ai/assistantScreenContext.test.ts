@@ -71,6 +71,13 @@ describe("assistantScreenContextFor", () => {
     });
   });
 
+  it("keeps gap identity and wallet tools inside the unified custody tab", () => {
+    expect(assistantScreenContextFor("/swaps", "?tab=gaps&gap=gap-1")).toMatchObject({
+      route: "/swaps", entityType: "custody_gap", entityId: "gap-1",
+      capabilities: ["transfers", "transactions", "wallets"], filters: { tab: "gaps" },
+    });
+  });
+
   it("canonicalizes safe connection detail ids without forwarding the route segment", () => {
     expect(assistantScreenContextFor("/connections/wallet-7")).toEqual({
       route: "/connections",

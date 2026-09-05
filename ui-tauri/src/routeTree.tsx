@@ -9,6 +9,7 @@
  * under the AppShell layout and require a persisted identity; otherwise
  * the layout redirects to `/`.
  */
+import { custodyGapRedirectSearch, parseTransfersCustodySearch } from "./routes/transfers-custody/routeSearch";
 import {
   createRootRoute,
   createRoute,
@@ -68,10 +69,6 @@ const Journals = lazyRouteComponent(
 const SwapMatching = lazyRouteComponent(
   () => import("./routes/SwapMatching"),
   "SwapMatching",
-);
-const CustodyGaps = lazyRouteComponent(
-  () => import("./routes/CustodyGaps"),
-  "CustodyGaps",
 );
 const Quarantine = lazyRouteComponent(
   () => import("./routes/Quarantine"),
@@ -223,21 +220,32 @@ const taxEventsRoute = createRoute({
 const swapMatchingRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/swaps",
+  validateSearch: parseTransfersCustodySearch,
+  beforeLoad: ({ search }) => {
+    if (!useUiStore.getState().developerToolsEnabled && (search.tab === "gaps" || search.tab === "components")) {
+      throw redirect({ to: "/swaps", search: {}, replace: true });
+    }
+  },
   component: SwapMatching,
 });
 
 const custodyGapsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/custody-gaps",
+  validateSearch: custodyGapRedirectSearch,
   beforeLoad: requireDeveloperTools,
-  component: CustodyGaps,
+  loaderDeps: ({ search }) => search,
+  loader: ({ deps }) => {
+    throw redirect({ to: "/swaps", search: custodyGapRedirectSearch(deps), replace: true });
+  },
 });
 
 const transferMatchingRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/transfers",
-  beforeLoad: () => {
-    throw redirect({ to: "/swaps" });
+  validateSearch: parseTransfersCustodySearch,
+  beforeLoad: ({ search }) => {
+    throw redirect({ to: "/swaps", search, replace: true });
   },
 });
 
