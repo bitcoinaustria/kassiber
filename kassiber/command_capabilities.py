@@ -178,7 +178,7 @@ DAEMON_READ_KINDS = _paths(
     ui.profiles.snapshot ui.rates.summary ui.rates.coverage
     ui.audit.changes_since_last_answer
     ui.audit.evidence.summary ui.review.worklist ui.maintenance.settings
-    ui.review.cases ui.review.plan ui.review.receipt
+    ui.review.cases ui.review.request_input ui.review.plan ui.review.receipt
     ui.sync.status ui.sync.transports.list ui.sync.members.list
     ui.sync.devices.list ui.sync.conflicts.list ui.freshness.status
     ui.workspace.health ui.projects.list ui.next_actions ui.review.badges

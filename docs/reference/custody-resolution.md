@@ -159,6 +159,24 @@ cases and retrieves receipts; unapplied plans must be reconstructed unless the
 external CLI agent saved their artifact. Kassiber does not persist model
 reasoning or create a separate background agent scheduler.
 
+When a case needs input, the assistant can call `ui.review.request_input` with
+canonical case IDs and their input version. Its read-only response offers one
+of three actions: connect a wallet, import transaction history, or attach a
+document to a single case. The chat renders that request as an action card and
+opens the existing connection/import flow. History can be imported into the
+case's existing connection. A document selected for a case is copied into its
+managed attachments; analysis reads that same saved copy through an opaque
+token. Supplying a file or creating a connection does not resolve a quarantine.
+
+Successful input continues the same conversation with fresh cases. If another
+turn or draft intervened, the card offers an explicit continuation instead.
+Closing a dialog is not success; failed synchronization after connection setup
+is shown as partial completion. Book and conversation changes invalidate old
+cards. Dialog requests carry `expected_scope`, checked by the daemon before
+dispatch, including network probes and explicit target profiles. Choosing
+“I don't have this” asks the assistant to explain the remaining gap; it never
+excludes a transaction or invents acquisition basis.
+
 Before showing consent, the daemon recomputes the proposal's effects. Apply is
 always once-only consent and stays pinned to the chat's original book. A digest
 binds the content being reviewed; it never grants accounting authority. An AI

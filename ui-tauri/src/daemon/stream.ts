@@ -121,6 +121,7 @@ export interface AiChatToolCall {
 }
 
 export interface AiChatRequest {
+  expectedScope?: { workspace_id: string; profile_id: string };
   provider?: string;
   model: string;
   messages: { role: AiChatMessage["role"] | "tool"; content: string }[];
@@ -187,6 +188,7 @@ export function buildAiChatStreamArgs(
     system_prompt_kind: request.systemPromptKind,
     system_prompt: request.systemPrompt,
     session_id: request.sessionId ?? undefined,
+    expected_scope: request.expectedScope,
     persist: request.persist,
     seed_history: request.seedHistory ? true : undefined,
     attachment: request.attachment

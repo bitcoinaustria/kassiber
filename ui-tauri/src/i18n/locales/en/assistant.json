@@ -385,5 +385,48 @@
       "returnReceipt": "Return receipt",
       "unavailable": "Kassiber could not verify this plan against the current book. Ask the assistant to prepare a new plan before approving."
     }
+  },
+  "evidence": {
+    "label": "Evidence needed",
+    "missing": {
+      "connect_wallet": "A connection is missing.",
+      "import_history": "Transaction history is missing.",
+      "attach_evidence": "A supporting file is needed."
+    },
+    "why": {
+      "connect_wallet": "Connecting the watch-only wallet lets the review check the actual movements.",
+      "import_history": "The export can establish what happened before or after the visible transfer.",
+      "attach_evidence": "The file will be saved as evidence for this transaction and made available for analysis. This does not import transactions or resolve the case."
+    },
+    "action": {
+      "connect_wallet": "Add watch-only connection",
+      "import_history": "Import transaction history",
+      "attach_evidence": "Choose evidence file"
+    },
+    "unavailable": "I don't have this",
+    "resume": "Continue review",
+    "stale": "This request belongs to an earlier book or case state. Inspect the case again.",
+    "failed": "The evidence could not be provided.",
+    "status": {
+      "idle": "Missing",
+      "opening": "Waiting for your input…",
+      "received": "Received. Ready to check against the current book.",
+      "partial": "Some changes were saved, but setup or sync did not finish. Continue to check what is available.",
+      "continuing": "Provided. See the follow-up review below; supplying evidence does not settle the case.",
+      "stale": "This request belongs to an earlier book or conversation.",
+      "error": "The action did not finish.",
+      "unavailable": "The gap remains acknowledged. Continue to consider other evidence."
+    },
+    "outcome": {
+      "received": "The local setup or import finished; verify what data is now available.",
+      "partial": "Some local changes were saved, but setup or sync did not finish. Inspect current data and the remaining blockers.",
+      "attached": "The selected file was saved as evidence for this transaction and is available for analysis. No transaction history was imported; the case is not necessarily resolved.",
+      "unavailable": "I do not have the requested evidence. Keep the gap explicit and consider alternative evidence."
+    },
+    "continuePrompt": "Continue the evidence review. {{outcome}} Inspect the current cases again before making a proposal. Cases: {{cases}}",
+    "importTarget": "Import into connection",
+    "newImportTarget": "Create a separate connection",
+    "importTargetHint": "Use the connection whose history this export describes. Importing into an existing connection reuses that wallet.",
+    "attachmentUnverified": "The file picker did not confirm that evidence was saved to the requested transaction."
   }
 }

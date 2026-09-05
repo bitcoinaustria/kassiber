@@ -25,6 +25,7 @@ import { ChatLoader } from "./ChatLoader";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatReasoning } from "./ChatReasoning";
 import { ChatToolCall } from "./ChatToolCall";
+import { evidenceRequest } from "./evidenceRequest";
 import { ReviewProposalCard, ReviewReceiptCard } from "./ReviewWorkflowCard";
 import { reviewToolResult } from "./reviewWorkflow";
 import { splitReviewCheckpoint } from "./reviewCheckpoint";
@@ -179,7 +180,8 @@ function AssistantRound({
           hasAnswer={hasAnswer}
         />
       ) : null}
-      {round.toolCalls.length > 0 ? (
+      {round.toolCalls.filter((call) => evidenceRequest(call)).map((call) => <ChatToolCall key={call.callId} toolCall={call} />)}
+      {round.toolCalls.some((call) => !evidenceRequest(call)) ? (
         <div className="mb-2 w-full min-w-0">
           <ChainOfThought>
             <ChainOfThoughtHeader icon={Wrench}>
@@ -187,7 +189,7 @@ function AssistantRound({
             </ChainOfThoughtHeader>
             <ChainOfThoughtContent>
               <div className="mt-1 space-y-1 border-l border-border/70 py-0.5 pl-3">
-                {round.toolCalls.map((toolCall) => (
+                {round.toolCalls.filter((call) => !evidenceRequest(call)).map((toolCall) => (
                   <ChatToolCall key={toolCall.callId} toolCall={toolCall} />
                 ))}
               </div>

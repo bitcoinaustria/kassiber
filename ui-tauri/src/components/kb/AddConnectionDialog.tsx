@@ -20,6 +20,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   DaemonRequestError,
+  DaemonScopeContext,
+  type DaemonScopeBoundary,
   useDaemon,
   useDaemonMutation,
   useDaemonStreamMutation,
@@ -86,10 +88,17 @@ const WalletMaterialScannerDialog = React.lazy(() =>
   })),
 );
 
+import { recordConnectionSetupMutation, type ConnectionSetupOutcome } from "./connectionSetupOutcome";
+import { knownWalletImportSource, isHistoryImportSource, sourceForConnectionCategory } from "./connectionImportSource";
+
 interface AddConnectionDialogProps {
+  scopeBoundary?: DaemonScopeBoundary;
+  onCompleted?: (outcome: ConnectionSetupOutcome) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialSourceId?: string | null;
+  /** Defined only for a review history import; null requires an explicit target. */
+  initialTargetWalletId?: string | null;
 }
 
 type BtcpaySetupAction =
@@ -344,6 +353,7 @@ interface BtcpayDiscoveryData {
 
 interface WalletListData {
   wallets: Array<{
+    id: string;
     label: string;
     kind: string;
     chain: string;
@@ -914,12 +924,36 @@ function SourceArtwork({
   );
 }
 
-export function AddConnectionDialog({
+export function AddConnectionDialog(props: AddConnectionDialogProps) {
+  const outcome = React.useRef<ConnectionSetupOutcome>({ status: "success", mutations: [], synced: false });
+  const parentBoundary = React.useContext(DaemonScopeContext);
+  const boundary = props.scopeBoundary ?? parentBoundary;
+  const scoped = boundary ? {
+    ...boundary,
+    onMutationSuccess: (kind: string, data: unknown) => {
+      boundary.onMutationSuccess?.(kind, data);
+      recordConnectionSetupMutation(outcome.current, kind, data);
+    },
+  } : null;
+  return <DaemonScopeContext.Provider value={scoped}>
+    <AddConnectionDialogContent {...props}
+      onSetupStarted={() => { outcome.current = { status: "success", mutations: [], synced: false }; }}
+      onSetupCompleted={() => {
+        if (outcome.current.mutations.length) props.onCompleted?.({ ...outcome.current });
+      }}
+      onSetupFailed={() => {
+        if (outcome.current.mutations.length) props.onCompleted?.({ ...outcome.current, status: "partial" });
+      }} />
+  </DaemonScopeContext.Provider>;
+}
+
+function AddConnectionDialogContent({
   open,
   onOpenChange,
-  initialSourceId,
-}: AddConnectionDialogProps) {
-  const { t } = useTranslation(["connections", "common"]);
+  initialSourceId, initialTargetWalletId,
+  onSetupStarted, onSetupCompleted, onSetupFailed,
+}: AddConnectionDialogProps & { onSetupStarted: () => void; onSetupCompleted: () => void; onSetupFailed: () => void }) {
+  const { t } = useTranslation(["connections", "common", "assistant"]);
   const navigate = useNavigate();
   const addNotification = useUiStore((state) => state.addNotification);
   const setDeferredConnectionSetup = useUiStore(
@@ -933,6 +967,11 @@ export function AddConnectionDialog({
     "ui.backends.settings.list",
   );
   const walletsList = useDaemon<WalletListData>("ui.wallets.list");
+  const historyImport = initialTargetWalletId !== undefined;
+  const historySourceChosenRef = React.useRef(false);
+  const [historyTargetId, setHistoryTargetId] = React.useState(initialTargetWalletId ?? "");
+  const historyTarget = walletsList.data?.data?.wallets.find((wallet) => wallet.id === historyTargetId);
+  const historyUsesExisting = historyImport && historyTargetId !== "__new__";
   const createWallet =
     useDaemonMutation<{ wallet: { label: string } }>("ui.wallets.create");
   const createBackend = useDaemonMutation<{ name: string }>(
@@ -1130,13 +1169,14 @@ export function AddConnectionDialog({
     return CONNECTION_SOURCES.filter((source) => {
       if (!developerToolsEnabled && isDevOnlyConnectionSource(source.id))
         return false;
+      if (historyImport && !isHistoryImportSource(source)) return false;
       if (isSearching) {
         const haystack = `${source.title} ${source.description} ${source.id}`.toLowerCase();
         return haystack.includes(query);
       }
       return source.category === activeCategory;
     });
-  }, [activeCategory, developerToolsEnabled, sourceQuery]);
+  }, [activeCategory, developerToolsEnabled, sourceQuery, historyImport]);
   const selected =
     CONNECTION_SOURCES.find((source) => source.id === selectedId) ??
     CONNECTION_SOURCES[0];
@@ -1424,6 +1464,8 @@ export function AddConnectionDialog({
               : setupKind === "bullbitcoin-wallet" &&
                   form.bullWalletNetworks.length > 1
                 ? t("add.submit.createConnections")
+              : setupKind === "file-wallet" && historyUsesExisting
+                ? t("add.submit.importTransactions")
               : setupKind === "file-wallet" &&
                   selected.sourceFormat === "btcpay_csv" &&
                   form.btcpayCsvImportMode === "existing_wallet"
@@ -1434,7 +1476,8 @@ export function AddConnectionDialog({
                 ? t("add.submit.archiveReport")
               : t("add.submit.createConnection");
   const canContinue =
-    selected.status === "ready" && (setupKind !== "planned" || !!forwardTarget);
+    selected.status === "ready" && (setupKind !== "planned" || !!forwardTarget)
+    && (!historyImport || isHistoryImportSource(selected));
 
   React.useEffect(() => {
     setForm(formDefaultsFor(selected, t));
@@ -1457,14 +1500,17 @@ export function AddConnectionDialog({
 
   React.useEffect(() => {
     if (!open) return;
+    historySourceChosenRef.current = false;
     const resolvedSourceId = initialSourceId
       ? CONNECTION_SOURCE_ALIASES[initialSourceId] ?? initialSourceId
       : null;
     const requestedSource = CONNECTION_SOURCES.find(
-      (candidate) => candidate.id === resolvedSourceId,
+      (candidate) => candidate.id === resolvedSourceId && (!historyImport || isHistoryImportSource(candidate)),
     );
-    const source = requestedSource ?? CONNECTION_SOURCES[0];
-    setActiveCategory(source.category);
+    const source = requestedSource ?? (historyImport
+      ? CONNECTION_SOURCES.find((candidate) => candidate.id === "csv") ?? CONNECTION_SOURCES[0]
+      : CONNECTION_SOURCES[0]);
+    setActiveCategory(historyImport && !requestedSource ? "files" : source.category);
     setSelectedId(source.id);
     setStep(
       requestedSource && source.status === "ready" && !source.forwardTo
@@ -1477,7 +1523,21 @@ export function AddConnectionDialog({
     setGenericLedgerPreviewSource(null);
     setBip329Preview(null);
     setSourceQuery("");
-  }, [initialSourceId, open]);
+  }, [initialSourceId, open, historyImport]);
+
+  React.useEffect(() => {
+    if (!open || !historyImport || initialSourceId || historySourceChosenRef.current
+      || !walletsList.data?.data) return;
+    // Seed once after the canonical wallet query arrives. Later refetches and
+    // target changes must not replace the format the user has already chosen.
+    historySourceChosenRef.current = true;
+    const wallet = walletsList.data.data.wallets.find((candidate) => candidate.id === initialTargetWalletId);
+    const source = knownWalletImportSource(wallet?.kind, CONNECTION_SOURCES);
+    if (!source) return;
+    setActiveCategory(source.category);
+    setSelectedId(source.id);
+    setStep("setup");
+  }, [open, historyImport, initialSourceId, initialTargetWalletId, walletsList.data]);
 
   React.useEffect(() => {
     if (open) return;
@@ -1618,20 +1678,19 @@ export function AddConnectionDialog({
   }, [btcpayBackends.length, defaultBtcpayBackendName, setupKind]);
 
   const selectCategory = (category: ConnectionCategory) => {
+    historySourceChosenRef.current = true;
+    const firstSource = sourceForConnectionCategory(CONNECTION_SOURCES, category, historyImport);
+    if (!firstSource) return;
     setActiveCategory(category);
-    const firstSource = CONNECTION_SOURCES.find(
-      (source) => source.category === category,
-    );
-    if (firstSource) {
-      setSelectedId(firstSource.id);
-    }
+    setSelectedId(firstSource.id);
   };
 
   const selectSourceForSetup = (sourceId: string) => {
+    historySourceChosenRef.current = true;
     const source = CONNECTION_SOURCES.find(
       (candidate) => candidate.id === sourceId,
     );
-    if (!source) return;
+    if (!source || (historyImport && !isHistoryImportSource(source))) return;
     setActiveCategory(source.category);
     setSelectedId(source.id);
     setSourceQuery("");
@@ -1838,7 +1897,7 @@ export function AddConnectionDialog({
       setupKind === "descriptor" ||
       setupKind === "silent-payment" ||
       setupKind === "address-list" ||
-      (setupKind === "file-wallet" &&
+      (setupKind === "file-wallet" && !historyUsesExisting &&
         !(
           selected.sourceFormat === "btcpay_csv" &&
           form.btcpayCsvImportMode === "existing_wallet"
@@ -2005,6 +2064,7 @@ export function AddConnectionDialog({
       }
     }
     if (setupKind === "file-wallet") {
+      if (historyUsesExisting && !historyTarget) errors.targetWallet = t("add.enrichment.errorChooseWallet");
       if (
         selected.sourceFormat === "wasabi_bundle" &&
         form.wasabiImportMode === "rpc"
@@ -2124,6 +2184,10 @@ export function AddConnectionDialog({
 
   const onSetupSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (historyImport && !isHistoryImportSource(selected)) {
+      setSetupError(t("add.enrichment.errorNoFormat"));
+      return;
+    }
     if (setupKind === "planned") {
       addNotification({
         title: t("add.planned.title"),
@@ -2138,6 +2202,7 @@ export function AddConnectionDialog({
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) return;
     const label = form.label.trim();
+    onSetupStarted();
     try {
       if (setupKind === "backend-settings" && selected.id === "bitcoin-core") {
         const backendArgs = coreRpcBackendArgs();
@@ -2325,7 +2390,15 @@ export function AddConnectionDialog({
         if (!sourceFormat) {
           throw new Error(t("add.enrichment.errorNoFormat"));
         }
-        if (
+        if (historyUsesExisting) {
+          if (!historyTarget) throw new Error(t("add.enrichment.errorChooseWallet"));
+          const bundle = selected.sourceFormat === "wasabi_bundle" && form.wasabiImportMode === "rpc"
+            ? buildWasabiBundle({ history: form.wasabiHistory, coins: form.wasabiCoins,
+                walletInfo: form.wasabiWalletInfo, additional: form.wasabiAdditional }).bundle : null;
+          const envelope = await importFile.mutateAsync({ wallet: historyTarget.id, source_format: sourceFormat,
+            ...(bundle ? { source_bundle: bundle } : { source_file: form.sourceFile.trim() }) });
+          setLastImportResult(envelope.data ?? null);
+        } else if (
           selected.sourceFormat === "btcpay_csv" &&
           form.btcpayCsvImportMode === "existing_wallet"
         ) {
@@ -2640,8 +2713,10 @@ export function AddConnectionDialog({
           tone: "success",
         });
       }
+      onSetupCompleted();
       onOpenChange(false);
     } catch (error) {
+      onSetupFailed();
       const message =
         error instanceof Error ? error.message : t("add.setupFailed.fallback");
       setSetupError(message);
@@ -3663,7 +3738,7 @@ export function AddConnectionDialog({
       if (selected.sourceFormat === "wasabi_bundle") {
         return (
           <>
-            {renderConnectionLabelField()}
+            {!historyUsesExisting ? renderConnectionLabelField() : null}
             <SetupField
               id="connection-wasabi-mode"
               label={t("add.wasabi.importSource")}
@@ -3826,7 +3901,7 @@ export function AddConnectionDialog({
           </>
         );
       }
-      if (selected.sourceFormat === "btcpay_csv") {
+      if (selected.sourceFormat === "btcpay_csv" && !historyImport) {
         const importIntoExisting =
           form.btcpayCsvImportMode === "existing_wallet";
         return (
@@ -3912,7 +3987,7 @@ export function AddConnectionDialog({
       }
       return (
         <>
-          {renderConnectionLabelField()}
+          {!historyUsesExisting ? renderConnectionLabelField() : null}
           {selected.id === "csv" ? (
             <SetupField
               id="connection-source-format"
@@ -3931,7 +4006,7 @@ export function AddConnectionDialog({
               </select>
             </SetupField>
           ) : null}
-          {renderSourceFileSetup(t("add.fileWallet.importAfter"))}
+          {renderSourceFileSetup(historyUsesExisting ? undefined : t("add.fileWallet.importAfter"))}
         </>
       );
     }
@@ -5707,7 +5782,8 @@ export function AddConnectionDialog({
   const renderSourceStep = () => (
     <div className="grid min-h-0 grid-cols-1 overflow-hidden rounded-lg border lg:grid-cols-[190px_minmax(0,1fr)]">
       <div className="overflow-y-auto border-b bg-muted/30 p-2 lg:border-r lg:border-b-0">
-        {CONNECTION_CATEGORIES.map((category) => {
+        {CONNECTION_CATEGORIES.filter((category) => !historyImport
+          || sourceForConnectionCategory(CONNECTION_SOURCES, category.id, true)).map((category) => {
           const Icon = category.icon;
           const active = activeCategory === category.id && !sourceQuery.trim();
           return (
@@ -5761,7 +5837,7 @@ export function AddConnectionDialog({
                   "flex w-full items-start gap-4 rounded-lg border p-4 text-left transition-colors hover:bg-muted/40",
                   selectedSource && "border-primary bg-primary/5",
                 )}
-                onClick={() => setSelectedId(source.id)}
+                onClick={() => { historySourceChosenRef.current = true; setSelectedId(source.id); }}
               >
                 <SourceArtwork source={source} />
                 <span className="min-w-0 flex-1 space-y-1">
@@ -5846,7 +5922,7 @@ export function AddConnectionDialog({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={(next) => { if (!isSubmitting) onOpenChange(next); }}>
         <DialogContent className="grid h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:h-[740px] sm:max-w-[960px] lg:max-w-[1040px]">
           <DialogHeader>
             <DialogTitle>
@@ -5861,7 +5937,20 @@ export function AddConnectionDialog({
             </DialogDescription>
           </DialogHeader>
 
-          {isSetupStep ? renderSetupStep() : renderSourceStep()}
+          <div className="min-h-0 overflow-auto">
+            {historyImport && isSetupStep && setupKind === "file-wallet" ? <div className="mb-4 space-y-1">
+              <Label htmlFor="review-history-target">{t("assistant:evidence.importTarget")}</Label>
+              <select id="review-history-target" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={historyTargetId} disabled={isSubmitting} onChange={(event) => setHistoryTargetId(event.target.value)}>
+                <option value="">{t("add.enrichment.errorChooseWallet")}</option>
+                {(walletsList.data?.data?.wallets ?? []).map((wallet) => <option key={wallet.id} value={wallet.id}>{wallet.label}</option>)}
+                <option value="__new__">{t("assistant:evidence.newImportTarget")}</option>
+              </select>
+              <p className="text-xs text-muted-foreground">{t("assistant:evidence.importTargetHint")}</p>
+              {fieldErrors.targetWallet ? <p role="alert" className="text-xs text-destructive">{fieldErrors.targetWallet}</p> : null}
+            </div> : null}
+            {isSetupStep ? renderSetupStep() : renderSourceStep()}
+          </div>
 
           <DialogFooter className="gap-2 sm:justify-between">
             {isSetupStep ? (
@@ -5880,7 +5969,7 @@ export function AddConnectionDialog({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => onOpenChange(false)}
+                onClick={() => { if (!isSubmitting) onOpenChange(false); }}
                 disabled={isSubmitting}
               >
                 {t("common:actions.cancel")}
@@ -5891,6 +5980,7 @@ export function AddConnectionDialog({
                   form="connection-setup-form"
                   disabled={
                     isSubmitting ||
+                    !canContinue ||
                     setupKind === "planned" ||
                     missingBackend ||
                     (isPreviewableLedgerFormat(selected.sourceFormat) &&
@@ -5904,6 +5994,8 @@ export function AddConnectionDialog({
                   type="button"
                   disabled={!canContinue}
                   onClick={() => {
+                    if (!canContinue) return;
+                    historySourceChosenRef.current = true;
                     if (forwardTarget) setSelectedId(forwardTarget.id);
                     setStep("setup");
                   }}

@@ -1,4 +1,13 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
+import { evidenceRequest, sameHandoffContext, canAutoContinueEvidence,
+  canStartEvidenceHandoff, canResumeEvidenceHandoff, isActiveEvidenceHandoff,
+  type EvidenceRequest, type EvidenceRequestState, type HandoffStamp } from "./evidenceRequest";
+import type { ConnectionSetupOutcome } from "@/components/kb/connectionSetupOutcome";
+const AddConnectionDialog = React.lazy(() => import("@/components/kb/AddConnectionDialog").then((module) => ({ default: module.AddConnectionDialog })));
+type EvidenceOutcome = "received" | "partial" | "attached" | "unavailable";
+interface PendingEvidence { request: EvidenceRequest; origin: HandoffStamp; outcome?: EvidenceOutcome; attachment?: AssistantAttachment }
+
 
 import {
   AssistantSessionContext,
@@ -33,6 +42,16 @@ export function AssistantSessionProvider({
   children,
   screenContext,
 }: AssistantSessionProviderProps) {
+  const { t } = useTranslation("assistant");
+  const daemonSession = useUiStore((state) => state.daemonSession);
+  const generationRef = React.useRef(0);
+  const promptRevisionRef = React.useRef(0);
+  const turnStampRef = React.useRef<HandoffStamp>({ generation: 0, daemonSession, promptRevision: 0 });
+  const evidenceOriginsRef = React.useRef(new Map<string, HandoffStamp>());
+  const continuedEvidenceRef = React.useRef(new Set<string>());
+  const pendingEvidenceRef = React.useRef<PendingEvidence | null>(null);
+  const [evidenceDialog, setEvidenceDialog] = React.useState<PendingEvidence | null>(null);
+  const [evidenceRequests, setEvidenceRequests] = React.useState<Record<string, EvidenceRequestState>>({});
   const selection = useUiStore((state) => state.assistantModelSelection);
   const setSelection = useUiStore(
     (state) => state.setAssistantModelSelection,
@@ -72,8 +91,11 @@ export function AssistantSessionProvider({
       prompt: string,
       baseMessages: AiChatMessage[],
       activeSession: string | null,
+      evidence?: { request: EvidenceRequest; attachment?: AssistantAttachment },
     ) => {
       if (!selection?.model) return;
+      turnStampRef.current = { generation: generationRef.current,
+        daemonSession: useUiStore.getState().daemonSession, promptRevision: promptRevisionRef.current };
       const priorMessages: AiChatRequest["messages"] = baseMessages
         .filter((message) => message.role !== "system")
         .map((message) => ({
@@ -104,7 +126,9 @@ export function AssistantSessionProvider({
           // CLI's --file-context); sending the filename there would have the
           // daemon tell the model "the user describes it as: export.csv", and
           // the daemon already names the file from the staging grant.
-          attachment: attachment ? { token: attachment.token } : undefined,
+          attachment: (evidence ? evidence.attachment : attachment)
+            ? { token: (evidence ? evidence.attachment : attachment)!.token } : undefined,
+          expectedScope: evidence ? { workspace_id: evidence.request.workspace_id, profile_id: evidence.request.profile_id } : undefined,
           screenContext: currentAssistantScreenContext(screenContext),
         },
         prompt,
@@ -112,6 +136,141 @@ export function AssistantSessionProvider({
     },
     [attachment, incognito, screenContext, selection, send, thinkingEffort],
   );
+
+  const latestRef = React.useRef({ messages, sessionId, isStreaming, hasModel: Boolean(selection?.model), queued: queuedPrompts.length > 0, runTurn });
+  React.useEffect(() => { latestRef.current = { messages, sessionId, isStreaming, hasModel: Boolean(selection?.model), queued: queuedPrompts.length > 0, runTurn }; },
+    [messages, sessionId, isStreaming, selection?.model, queuedPrompts.length, runTurn]);
+
+  const stamp = React.useCallback((): HandoffStamp => ({
+    generation: generationRef.current,
+    daemonSession: useUiStore.getState().daemonSession,
+    promptRevision: promptRevisionRef.current,
+  }), []);
+
+  const clearEvidence = React.useCallback(() => {
+    generationRef.current += 1;
+    pendingEvidenceRef.current = null;
+    evidenceOriginsRef.current.clear();
+    continuedEvidenceRef.current.clear();
+    setEvidenceDialog(null);
+    setEvidenceRequests({});
+  }, []);
+
+  React.useEffect(() => {
+    for (const message of messages) for (const call of message.toolCalls ?? []) {
+      const request = evidenceRequest(call);
+      if (request && !evidenceOriginsRef.current.has(request.request_id)) {
+        evidenceOriginsRef.current.set(request.request_id, { ...turnStampRef.current });
+      }
+    }
+  }, [messages]);
+
+  React.useEffect(() => {
+    setEvidenceRequests((states) => {
+      const next = { ...states };
+      for (const [id, origin] of evidenceOriginsRef.current) {
+        if (!sameHandoffContext(origin, stamp())) next[id] = { status: "stale" };
+      }
+      return next;
+    });
+    if (pendingEvidenceRef.current && !sameHandoffContext(pendingEvidenceRef.current.origin, stamp())) {
+      pendingEvidenceRef.current = null;
+      setEvidenceDialog(null);
+    }
+  }, [daemonSession, stamp]);
+
+  const currentEvidence = React.useCallback((request: EvidenceRequest, origin: HandoffStamp) =>
+    sameHandoffContext(origin, stamp()) && latestRef.current.messages.some((message) =>
+      message.toolCalls?.some((call) => evidenceRequest(call)?.request_id === request.request_id)), [stamp]);
+
+  const continueEvidenceRequest = React.useCallback((request: EvidenceRequest, unavailable = false) => {
+    if (!canResumeEvidenceHandoff(request.request_id, pendingEvidenceRef.current, continuedEvidenceRef.current)) return;
+    const origin = evidenceOriginsRef.current.get(request.request_id);
+    if (!origin || !currentEvidence(request, origin)) {
+      setEvidenceRequests((old) => ({ ...old, [request.request_id]: { status: "stale" } }));
+      return;
+    }
+    if (unavailable) pendingEvidenceRef.current = { request, origin, outcome: "unavailable" };
+    const latest = latestRef.current;
+    if (!latest.hasModel || latest.isStreaming || latest.queued || useAssistantDraftStore.getState().draft.trim()) {
+      setEvidenceRequests((old) => ({ ...old, [request.request_id]: { status: unavailable ? "unavailable" : "received" } }));
+      return;
+    }
+    const pending = pendingEvidenceRef.current;
+    const outcome = unavailable ? "unavailable" : pending?.outcome ?? "received";
+    const nextAttachment = pending?.attachment;
+    pendingEvidenceRef.current = null;
+    continuedEvidenceRef.current.add(request.request_id);
+    setEvidenceRequests((old) => ({ ...old, [request.request_id]: { status: "continuing" } }));
+    const prompt = t("evidence.continuePrompt", {
+      outcome: t(`evidence.outcome.${outcome}`),
+      cases: request.cases.map((item) => item.case_id).join(", "),
+    });
+    latest.runTurn(prompt, latest.messages, latest.sessionId, { request, attachment: nextAttachment });
+  }, [currentEvidence, t]);
+
+  const completeEvidence = React.useCallback((pending: PendingEvidence, outcome: EvidenceOutcome,
+    nextAttachment?: AssistantAttachment) => {
+    if (!isActiveEvidenceHandoff(pendingEvidenceRef.current, pending, stamp()) || !currentEvidence(pending.request, pending.origin)) return;
+    pending.outcome = outcome;
+    pending.attachment = nextAttachment;
+    if (nextAttachment) setAttachment(nextAttachment);
+    setEvidenceDialog(null);
+    setEvidenceRequests((old) => ({ ...old, [pending.request.request_id]: { status: outcome === "partial" ? "partial" : "received" } }));
+    const latest = latestRef.current;
+    if (canAutoContinueEvidence(pending.origin, stamp(), latest.isStreaming || !latest.hasModel,
+      Boolean(useAssistantDraftStore.getState().draft.trim()), latest.queued)) {
+      continueEvidenceRequest(pending.request);
+    }
+  }, [continueEvidenceRequest, currentEvidence, stamp]);
+
+  const openEvidenceRequest = React.useCallback(async (request: EvidenceRequest) => {
+    if (latestRef.current.isStreaming) return;
+    if (!canStartEvidenceHandoff(request.request_id, pendingEvidenceRef.current, continuedEvidenceRef.current)) return;
+    const origin = evidenceOriginsRef.current.get(request.request_id);
+    if (!origin || !currentEvidence(request, origin)) {
+      setEvidenceRequests((old) => ({ ...old, [request.request_id]: { status: "stale" } }));
+      return;
+    }
+    const pending: PendingEvidence = { request, origin: { ...origin, promptRevision: promptRevisionRef.current } };
+    pendingEvidenceRef.current = pending;
+    setEvidenceRequests((old) => ({ ...old, [request.request_id]: { status: "opening" } }));
+    try {
+      // Revalidate current cases before any local picker or setup egress.
+      const checked = await getTransport().invoke({ kind: "ui.review.request_input", args: {
+        action: request.action, case_ids: request.cases.map((item) => item.case_id),
+        expected_input_version: request.input_version, explanation: request.explanation,
+        expected_scope: { workspace_id: request.workspace_id, profile_id: request.profile_id },
+      } });
+      if (checked.kind === "error" || checked.error) throw new Error(checked.error?.message ?? t("evidence.stale"));
+      const packet = checked.data as { request_id?: unknown } | undefined;
+      if (packet?.request_id !== request.request_id) throw new Error(t("evidence.stale"));
+      if (!isActiveEvidenceHandoff(pendingEvidenceRef.current, pending, stamp()) || !currentEvidence(request, origin)) return;
+      if (request.action === "attach_evidence") {
+        const selected = await pickChatAttachmentSource({ review_case_id: request.cases[0].case_id, expected_scope: {
+          workspace_id: request.workspace_id, profile_id: request.profile_id,
+        } });
+        if (!isActiveEvidenceHandoff(pendingEvidenceRef.current, pending, stamp()) || !currentEvidence(request, origin)) return;
+        if (!selected) {
+          pendingEvidenceRef.current = null;
+          setEvidenceRequests((old) => ({ ...old, [request.request_id]: { status: "idle" } }));
+          return;
+        }
+        if (typeof selected.attachment_id !== "string" || !selected.attachment_id
+          || selected.transaction_id !== request.cases[0].transaction_id) {
+          throw new Error(t("evidence.attachmentUnverified"));
+        }
+        completeEvidence(pending, "attached", { token: selected.document_token,
+          filename: selected.source.filename, kind: selected.source.kind, sizeBytes: selected.source.size_bytes });
+      } else setEvidenceDialog(pending);
+    } catch (error) {
+      if (!isActiveEvidenceHandoff(pendingEvidenceRef.current, pending, stamp()) || !currentEvidence(request, origin)) return;
+      pendingEvidenceRef.current = null;
+      setEvidenceRequests((old) => ({ ...old, [request.request_id]: {
+        status: "error", error: error instanceof Error ? error.message : t("evidence.failed"),
+      } }));
+    }
+  }, [completeEvidence, currentEvidence, stamp, t]);
 
   const dispatchPrompt = React.useCallback(
     (prompt: string) => {
@@ -124,6 +283,7 @@ export function AssistantSessionProvider({
     (prompt: string) => {
       const trimmed = prompt.trim();
       if (!trimmed || !selection?.model) return;
+      promptRevisionRef.current += 1;
       if (isStreaming) {
         setQueuedPrompts((current) => [...current, trimmed]);
         return;
@@ -147,16 +307,19 @@ export function AssistantSessionProvider({
   );
 
   const clearChat = React.useCallback(() => {
+    clearEvidence();
     setQueuedPrompts([]);
     seedHistoryPendingRef.current = false;
     // The grant belongs to the conversation that asked for it; a new chat must
     // not silently keep analyzing the previous chat's file.
     setAttachment(null);
     reset();
-  }, [reset]);
+  }, [clearEvidence, reset]);
 
   const attachFile = React.useCallback(async () => {
+    const origin = stamp();
     const selected = await pickChatAttachmentSource();
+    if (!sameHandoffContext(origin, stamp())) return;
     if (!selected) return; // cancelled, or no picker in this runtime
     setAttachment({
       token: selected.document_token,
@@ -164,13 +327,15 @@ export function AssistantSessionProvider({
       kind: selected.source.kind,
       sizeBytes: selected.source.size_bytes,
     });
-  }, []);
+  }, [stamp]);
 
   const clearAttachment = React.useCallback(() => setAttachment(null), []);
 
   const resumeSession = React.useCallback(
     async (targetSessionId: string) => {
       if (isStreaming) return;
+      clearEvidence();
+      const resumeGeneration = generationRef.current;
       const envelope = await getTransport().invoke<StoredSessionShape>({
         kind: "ui.chat.sessions.get",
         request_id: makeDaemonRequestId(),
@@ -181,6 +346,7 @@ export function AssistantSessionProvider({
           envelope.error?.message ?? "Could not load the chat session",
         );
       }
+      if (generationRef.current !== resumeGeneration) return;
       const entries: StoredChatEntry[] = (envelope.data?.messages ?? [])
         .filter(
           (message): message is { role: "user" | "assistant"; content: string } =>
@@ -202,7 +368,7 @@ export function AssistantSessionProvider({
       seedHistoryPendingRef.current = false;
       loadConversation(entries, envelope.data?.id ?? targetSessionId);
     },
-    [isStreaming, loadConversation, setAssistantDraft],
+    [clearEvidence, isStreaming, loadConversation, setAssistantDraft],
   );
 
   const branchFromMessage = React.useCallback(
@@ -225,6 +391,7 @@ export function AssistantSessionProvider({
         )
         .map((message) => ({ role: message.role, content: message.content }));
       if (entries.length === 0) return;
+      clearEvidence();
       // Preserve the current Incognito choice — forking must never silently
       // flip a private conversation into one that persists.
       setQueuedPrompts([]);
@@ -232,7 +399,7 @@ export function AssistantSessionProvider({
       seedHistoryPendingRef.current = true;
       loadConversation(entries, null);
     },
-    [isStreaming, messages, loadConversation],
+    [clearEvidence, isStreaming, messages, loadConversation],
   );
 
   const editUserMessage = React.useCallback(
@@ -242,6 +409,7 @@ export function AssistantSessionProvider({
       if (index < 0) return;
       const target = messages[index];
       if (target.role !== "user") return;
+      clearEvidence();
       // Everything strictly before the edited prompt is the conversation we
       // keep; the edited turn and all downstream messages are regenerated.
       const priorMessages = messages
@@ -282,6 +450,7 @@ export function AssistantSessionProvider({
       runTurn(trimmed, priorMessages, null);
     },
     [
+      clearEvidence,
       isStreaming,
       messages,
       loadConversation,
@@ -293,6 +462,7 @@ export function AssistantSessionProvider({
 
   const value = React.useMemo<AssistantSessionContextValue>(
     () => ({
+      evidenceRequests, openEvidenceRequest, continueEvidenceRequest,
       messages,
       isStreaming,
       error,
@@ -319,6 +489,7 @@ export function AssistantSessionProvider({
       forgetSession,
     }),
     [
+      evidenceRequests, openEvidenceRequest, continueEvidenceRequest,
       abort,
       attachFile,
       attachment,
@@ -347,6 +518,23 @@ export function AssistantSessionProvider({
   return (
     <AssistantSessionContext.Provider value={value}>
       {children}
+      {evidenceDialog ? <React.Suspense fallback={null}>
+        <AddConnectionDialog key={evidenceDialog.request.request_id} open
+          initialSourceId={evidenceDialog.request.action === "import_history" ? null : "descriptor"}
+          initialTargetWalletId={evidenceDialog.request.action === "import_history"
+            ? (new Set(evidenceDialog.request.cases.map((item) => item.wallet_id)).size === 1
+              ? evidenceDialog.request.cases[0].wallet_id ?? null : null) : undefined}
+          scopeBoundary={{ expectedScope: { workspace_id: evidenceDialog.request.workspace_id,
+            profile_id: evidenceDialog.request.profile_id }, daemonSession: evidenceDialog.origin.daemonSession,
+            isCurrent: () => pendingEvidenceRef.current === evidenceDialog && currentEvidence(evidenceDialog.request, evidenceDialog.origin) }}
+          onCompleted={(outcome: ConnectionSetupOutcome) => completeEvidence(evidenceDialog, outcome.status === "partial" ? "partial" : "received")}
+          onOpenChange={(open) => {
+            if (open || pendingEvidenceRef.current !== evidenceDialog || evidenceDialog.outcome) return;
+            pendingEvidenceRef.current = null;
+            setEvidenceDialog(null);
+            setEvidenceRequests((old) => ({ ...old, [evidenceDialog.request.request_id]: { status: "idle" } }));
+          }} />
+      </React.Suspense> : null}
     </AssistantSessionContext.Provider>
   );
 }

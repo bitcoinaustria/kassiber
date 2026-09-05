@@ -278,6 +278,12 @@ application is atomic and retry-safe, with a durable receipt and the remaining
 report blockers. Detailed CLI examples and resumption semantics are in the
 [resolution guide](docs/reference/custody-resolution.md#resolve-with-the-cli-or-chat).
 
+If evidence is missing, the assistant offers a direct action to connect a wallet,
+import history into an existing connection, or attach a document to the case.
+After successful input it continues the same review and checks the updated book.
+Saved evidence remains attached for later inspection; supplying it does not
+automatically approve an accounting change.
+
 For a likely return through wallet history that is no longer available, use
 the guided custody-gap workflow instead of writing component JSON:
 

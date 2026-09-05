@@ -484,6 +484,7 @@ SUPPORTED_KINDS = (
     "ui.audit.evidence.summary",
     "ui.review.worklist",
     "ui.review.cases",
+    "ui.review.request_input",
     "ui.review.plan",
     "ui.review.apply",
     "ui.review.receipt",
@@ -6094,7 +6095,7 @@ def _execute_read_only_ai_tool(
                         retryable=False,
                     )
                 payload = build_review_badges_snapshot(conn)
-            elif entry.daemon_kind in {"ui.review.cases", "ui.review.plan", "ui.review.receipt"}:
+            elif entry.daemon_kind in {"ui.review.cases", "ui.review.request_input", "ui.review.plan", "ui.review.receipt"}:
                 payload = _review_workflow_payload(
                     conn, entry.daemon_kind, call.arguments, authored_source="ai_tool",
                 )
@@ -6407,6 +6408,7 @@ def _review_workflow_payload(
 
     allowed = {
         "ui.review.cases": {"limit", "cursor"},
+        "ui.review.request_input": {"action", "case_ids", "expected_input_version", "explanation"},
         "ui.review.plan": {"operations", "expected_input_version"},
         "ui.review.apply": {"artifact", "idempotency_key"},
         "ui.review.receipt": {"receipt_id", "idempotency_key"},
@@ -6414,6 +6416,7 @@ def _review_workflow_payload(
     if kind not in allowed or set(args) - allowed[kind]:
         raise AppError("Unsupported review arguments", code="validation")
     required = {
+        "ui.review.request_input": {"action", "case_ids", "expected_input_version"},
         "ui.review.plan": {"operations", "expected_input_version"},
         "ui.review.apply": {"artifact", "idempotency_key"},
     }.get(kind, set())
@@ -6423,6 +6426,9 @@ def _review_workflow_payload(
     hooks = core_review_workflow.ReviewHooks(metadata=_metadata_hooks())
     if kind == "ui.review.cases":
         return core_review_workflow.inspect_cases(conn, profile, **args)
+    if kind == "ui.review.request_input":
+        safe_args = redact_ai_tool_result(args) if authored_source == "ai_tool" else args
+        return core_review_workflow.request_input(conn, profile, **safe_args)
     if kind == "ui.review.receipt":
         return core_review_workflow.get_receipt(conn, profile, **args)
     operations = (
@@ -11147,6 +11153,30 @@ def _document_import_stage_payload(
     except (AppError, OSError) as exc:
         raise _document_import_source_unavailable() from exc
     workspace, profile = resolve_scope(ctx.conn, None, None)
+    attachment_fields = {}
+    if "review_case_id" in args:
+        case_id = _required_str_arg(args, "review_case_id", "Review case")
+        packet = core_review_workflow.request_input(
+            ctx.conn, profile, action="attach_evidence", case_ids=[case_id],
+            expected_input_version=int(profile["journal_input_version"] or 0),
+        )
+        transaction_id = packet["cases"][0]["transaction_id"]
+        attachment = core_attachments.add_attachment(
+            ctx.conn, ctx.data_root, workspace["id"], profile["id"], transaction_id,
+            _attachment_hooks(), file_path=str(source_path),
+        )
+        # Analyze the durable copy, so later changes to the selected file cannot
+        # make chat analysis disagree with the transaction's audit evidence.
+        managed = core_attachments.resolve_attachment_files(
+            ctx.conn, ctx.data_root, [attachment["id"]],
+        )[attachment["id"]]
+        if not managed["resolved_path"]:
+            raise _document_import_source_unavailable()
+        source_path = Path(managed["resolved_path"])
+        source_stat = source_path.stat()
+        attachment_fields = {
+            "attachment_id": attachment["id"], "transaction_id": transaction_id,
+        }
     token = ctx.document_import_sessions.stage(
         source_file=str(source_path),
         workspace_id=str(workspace["id"]),
@@ -11155,8 +11185,9 @@ def _document_import_stage_payload(
     )
     return {
         "document_token": token,
+        **attachment_fields,
         "source": {
-            "filename": source_path.name,
+            "filename": attachment["original_filename"] if attachment_fields else source_path.name,
             "media_type": core_document_import._mime_type(source_path),
             "size_bytes": source_stat.st_size,
             "kind": "pdf" if source_path.suffix.lower() == ".pdf" else "image",
@@ -14495,6 +14526,54 @@ def handle_request(
             False,
         )
 
+    # Handoff dialogs inherit this guard for every setup request, including
+    # read-only network probes. Strip it before the existing typed handlers.
+    request_args = request.get("args")
+    if isinstance(request_args, dict) and "expected_scope" in request_args:
+        expected = request_args["expected_scope"]
+        if (not isinstance(expected, dict)
+                or set(expected) != {"workspace_id", "profile_id"}
+                or any(not isinstance(value, str) or not value.strip() for value in expected.values())):
+            raise AppError("Expected book scope is malformed", code="validation")
+        # A fresh daemon opens plaintext books lazily. Scoped continuations
+        # need the same initialization as ordinary requests before inspecting
+        # their scope; encrypted books still use the existing unlock boundary.
+        if ctx.conn is None:
+            try:
+                _open_daemon_connection(ctx)
+            except AppError as exc:
+                if exc.code == "passphrase_required":
+                    return (
+                        _locked_envelope(
+                            "unlock_database",
+                            "Enter the SQLCipher database passphrase to unlock Kassiber.",
+                            request_id,
+                        ),
+                        False,
+                    )
+                raise
+        current = current_context_snapshot(_require_conn(ctx))
+        if any(current.get(key) != expected[key] for key in expected):
+            raise AppError(
+                "The active book changed before the requested input was supplied",
+                code="stale_context", retryable=True,
+                hint="Return to the original book and restart this input step.",
+            )
+        # Some handlers accept explicit scope selectors. A matching active book
+        # must not permit an operation redirected to a different destination.
+        if any(key in request_args for key in ("workspace", "profile")):
+            workspace, profile = resolve_scope(
+                ctx.conn, request_args.get("workspace"), request_args.get("profile"),
+            )
+            if (workspace["id"] != expected["workspace_id"]
+                    or profile["id"] != expected["profile_id"]):
+                raise AppError("Requested input targets another book", code="stale_context")
+        if any(key in request_args and request_args[key] != expected[key]
+               for key in ("workspace_id", "profile_id")):
+            raise AppError("Requested input targets another book", code="stale_context")
+        request = {**request, "args": {key: value for key, value in request_args.items()
+                                     if key != "expected_scope"}}
+
     if kind == "daemon.shutdown":
         return (
             _with_request_id(
@@ -15801,7 +15880,7 @@ def handle_request(
             False,
         )
 
-    if kind in {"ui.review.cases", "ui.review.plan", "ui.review.apply", "ui.review.receipt"}:
+    if kind in {"ui.review.cases", "ui.review.request_input", "ui.review.plan", "ui.review.apply", "ui.review.receipt"}:
         payload = _review_workflow_payload(
             _require_conn(ctx), kind,
             _coerce_args_dict(request_id, request.get("args")),

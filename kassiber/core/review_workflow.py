@@ -135,6 +135,63 @@ def _recent_receipts(conn, profile):
             (json.loads(row["receipt_json"]) for row in rows)]
 
 
+def request_input(
+    conn, profile, *, action, case_ids, expected_input_version, explanation=None,
+) -> dict[str, Any]:
+    """Describe missing user input without creating evidence or changing accounting.
+
+    The packet identifies current canonical cases, not a successful resolution.
+    Its digest is a stable UI correlation ID, never an authorization token.
+    """
+    if action not in ("connect_wallet", "import_history", "attach_evidence"):
+        raise _error("Unsupported review input action")
+    if (not isinstance(case_ids, list) or not 1 <= len(case_ids) <= 20
+            or any(not isinstance(value, str) or not value.startswith("quarantine:")
+                   or len(value) > 300 for value in case_ids)
+            or len(set(case_ids)) != len(case_ids)):
+        raise _error("Review input requires 1 to 20 distinct canonical case IDs")
+    if action == "attach_evidence" and len(case_ids) != 1:
+        raise _error("Attach evidence requires exactly one review case")
+    if explanation is not None and (
+        not isinstance(explanation, str) or not 1 <= len(explanation.strip()) <= 1000
+        or any(ord(char) < 32 and char not in "\n\t" for char in explanation)
+    ):
+        raise _error("Review input explanation must be bounded plain text")
+    owns_transaction = not conn.in_transaction
+    if owns_transaction:
+        conn.execute("BEGIN")
+    try:
+        current = _profile(conn, profile)
+        custody_components.require_review_input_version(
+            conn, workspace_id=current["workspace_id"], profile_id=current["id"],
+            expected_input_version=expected_input_version,
+        )
+        state = _build(conn, current)
+        reasons = {str(row["transaction_id"]): str(row["reason"])
+                   for row in state["quarantines"]}
+        cases = []
+        for case_id in sorted(case_ids):
+            transaction_id = case_id.removeprefix("quarantine:")
+            row = conn.execute(
+                "SELECT id AS transaction_id, wallet_id, direction, asset, occurred_at "
+                "FROM transactions WHERE id = ? AND profile_id = ?",
+                (transaction_id, current["id"]),
+            ).fetchone()
+            if row is None or transaction_id not in reasons:
+                raise _error("Requested review case is no longer current", "review_case_stale")
+            cases.append({**dict(row), "case_id": case_id, "reason": reasons[transaction_id]})
+        packet = {
+            "schema_version": 1, "workspace_id": current["workspace_id"],
+            "profile_id": current["id"], "input_version": expected_input_version,
+            "action": action, "cases": cases,
+            "explanation": explanation.strip() if explanation is not None else None,
+        }
+        return {**packet, "request_id": _digest(packet)}
+    finally:
+        if owns_transaction:
+            conn.rollback()
+
+
 def _operation_summary(operation):
     if operation["type"] != "custody_component":
         return dict(operation)

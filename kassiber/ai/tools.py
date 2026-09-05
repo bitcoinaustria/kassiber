@@ -150,7 +150,7 @@ CORE_TOOL_NAMES = frozenset(
 # A quarantine investigation needs evidence and a complete repair/verification
 # path, without advertising unrelated report exports or wallet administration.
 REVIEW_TOOL_NAMES = frozenset({
-    "ui.review.cases", "ui.review.plan", "ui.review.apply", "ui.review.receipt",
+    "ui.review.cases", "ui.review.request_input", "ui.review.plan", "ui.review.apply", "ui.review.receipt",
     "ui.review.worklist", "ui.journals.quarantine", "ui.journals.snapshot",
     "ui.transactions.review_context", "ui.transactions.resolve",
     "ui.transactions.graph", "ui.transactions.history", "ui.transactions.list",
@@ -3320,6 +3320,19 @@ _REVIEW_TOOL_CATALOG = (
             "limit": {"type": "integer", "minimum": 1, "maximum": 100},
             "cursor": {"type": "string", "description": "Unchanged next_cursor from the preceding page; expired cursors require a fresh first page."},
         }}, kind_class="read_only", summary_template="Inspect accounting review cases",
+    ),
+    ToolEntry(
+        name="ui.review.request_input", wire_name="ui_review_request_input", daemon_kind="ui.review.request_input",
+        description="Request a specific missing wallet connection, transaction-history import, or evidence attachment for current quarantine cases. For attach_evidence select exactly one case so the file has an unambiguous audit target. Read the cases and existing evidence first; explain the missing facts without paths, secrets or private graphs. Returns a typed user-input handoff, never imports or resolves anything itself. After requesting input, wait for the user step; then inspect fresh cases and replan. This generic handoff does not expose local-only custody-gap investigation.",
+        parameters={"type": "object", "additionalProperties": False,
+            "required": ["action", "case_ids", "expected_input_version"], "properties": {
+                "action": {"type": "string", "enum": ["connect_wallet", "import_history", "attach_evidence"]},
+                "case_ids": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": True,
+                    "items": {"type": "string", "minLength": 12, "maxLength": 300, "pattern": "^quarantine:"}},
+                "expected_input_version": {"type": "integer", "minimum": 0},
+                "explanation": {"type": "string", "minLength": 1, "maxLength": 1000,
+                    "description": "User-facing card text: one or two short sentences naming what is missing and why. Use wallet names; omit internal IDs, diagnostic codes and repeated setup instructions."},
+            }}, kind_class="read_only", summary_template="Request missing review input",
     ),
     ToolEntry(
         name="ui.review.plan", wire_name="ui_review_plan", daemon_kind="ui.review.plan",

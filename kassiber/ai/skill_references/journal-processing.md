@@ -174,3 +174,32 @@ reprocessed.
 Timing and amount similarity can help identify candidate peg-ins / peg-outs,
 but those heuristics are only for review. They do not create a pair on their
 own.
+
+## Missing user input
+
+When local evidence is insufficient, call `ui.review.request_input` using current
+`ui.review.cases` case IDs and `input_version`. Choose `connect_wallet`,
+`import_history`, or `attach_evidence` and explain the specific missing facts
+in one or two short sentences: what is missing and why it matters. Use wallet
+names and meaningful dates or amounts; omit internal IDs, schema fields and
+diagnostic codes. The card supplies the action. End with a brief explanation
+instead of repeating a menu of setup instructions or the full investigation.
+For `attach_evidence`, select exactly one case. The user-selected file becomes a
+durable attachment on that transaction; local analysis uses the same managed
+copy. Saving the attachment does not approve its contents or alter accounting.
+This read-only tool returns a scoped handoff to an existing local input dialog;
+it neither imports data nor approves an accounting interpretation. The
+explanation is advisory text, not evidence. Do not include private paths,
+descriptors, credentials, or custody graphs. Missing-wallet gap investigation
+continues to require a local provider; the generic handoff cannot reveal it.
+
+After issuing the handoff, explain why the requested input is needed and wait.
+Do not offer unrelated repair menus or substitute an exclusion. A user may
+cancel or supply only part of the history. When the user step completes, read
+fresh cases and recorded evidence in the same book, discard stale cursors and
+plans, and verify whether the missing facts now exist before proposing changes.
+Creating a connection, attaching a document, or completing an import does not by
+itself establish basis, custody continuity, or report readiness. A handoff ID is
+only a correlation identifier; it is not an application receipt or permission to
+write. Standard CLI imports followed by `review cases` use the same accounting
+recheck; no background agent runs while the chat is waiting.

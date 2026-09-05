@@ -13,6 +13,8 @@ import type { AiChatToolCall } from "@/daemon/stream";
 import { formatFiatAmount } from "@/lib/currency";
 import { Button } from "@/components/ui/button";
 import { reviewArtifact, reviewReceipt } from "./reviewWorkflow";
+import { evidenceRequest } from "./evidenceRequest";
+import { EvidenceRequestCard } from "./EvidenceRequestCard";
 
 interface ChatToolCallProps {
   toolCall: AiChatToolCall;
@@ -20,6 +22,8 @@ interface ChatToolCallProps {
 
 export function ChatToolCall({ toolCall }: ChatToolCallProps) {
   const { t } = useTranslation("assistant");
+  const request = evidenceRequest(toolCall);
+  if (request) return <EvidenceRequestCard request={request} />;
   const hasArguments = Object.keys(toolCall.arguments).length > 0;
   const hasResult = toolCall.result !== undefined && toolCall.result !== null;
   const summary = summarizeToolResult(toolCall.result, t);

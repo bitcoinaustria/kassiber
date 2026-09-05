@@ -33,6 +33,10 @@ Backlog contract:
   Quarantine's assistant entry and visible plan/receipt cards use the existing
   chat. Continuation discovers durable receipts and current unresolved cases.
   See [custody resolution](docs/reference/custody-resolution.md).
+- [x] Typed missing-input cards reuse connection setup, existing-wallet history
+  imports and durable transaction attachments. Successful input resumes the
+  originating review; scope, conversation and busy-state guards prevent stale
+  continuation. The agent rechecks canonical cases before proposing changes.
 
 ## Rules for every session
 

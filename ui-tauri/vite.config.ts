@@ -230,6 +230,8 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.secrets.forget_cli_unlock",
   "ui.next_actions",
   "ui.review.badges",
+  "ui.review.cases",
+  "ui.review.request_input",
   "ui.wallets.utxos",
   "ui.privacy_hygiene.snapshot",
   "ui.loans.list",
@@ -935,7 +937,11 @@ async function handleBridgeFilePicker(
       }
       const staged = await supervisor.invoke({
         kind: DOCUMENT_IMPORT_STAGE_KIND,
-        args: { source_file: paths[0] },
+        args: {
+          source_file: paths[0],
+          ...(request.expected_scope === undefined ? {} : { expected_scope: request.expected_scope }),
+          ...(request.review_case_id === undefined ? {} : { review_case_id: request.review_case_id }),
+        },
       });
       if (staged.kind !== DOCUMENT_IMPORT_STAGE_KIND || !staged.data) {
         const error = staged.error;
