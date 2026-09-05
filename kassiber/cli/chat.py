@@ -25,8 +25,9 @@ _DAEMON_STDERR_TAIL_CHARS = 2000
 _FINISH_NOTICES = {
     "cancelled": "Cancelled.",
     "tool_loop_max_iterations": (
-        "Stopped at the tool-loop iteration limit; raise "
-        "--tool-loop-max-iterations to let the assistant keep working."
+        "Stopped at the tool-loop iteration limit. Continue with the remaining cases; "
+        "check the review receipt before retrying an uncertain apply. "
+        "Use --tool-loop-max-iterations for a larger bounded turn."
     ),
     "length": "Stopped at the provider token limit; raise --max-tokens for longer answers.",
 }
@@ -377,10 +378,12 @@ def _build_chat_args(
         "tools_enabled": tools_enabled,
         "tool_profile": getattr(args, "tool_profile", "core"),
         "timeout_seconds": _timeout_seconds(args),
-        "tool_loop_max_iterations": getattr(args, "tool_loop_max_iterations", 8),
         "persist": False if getattr(args, "incognito", False) else "auto",
         "session_id": session_id,
     }
+    loop_budget = getattr(args, "tool_loop_max_iterations", None)
+    if loop_budget is not None:
+        payload["tool_loop_max_iterations"] = loop_budget
     attachment = getattr(args, "chat_attachment", None)
     if attachment:
         payload["attachment"] = attachment

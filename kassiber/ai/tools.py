@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import json
 import re
 import sys
 from typing import Any, Literal
@@ -144,6 +145,26 @@ CORE_TOOL_NAMES = frozenset(
         "ui.custody.review.plan", "ui.custody.review.apply",
     }
 )
+
+
+# A quarantine investigation needs evidence and a complete repair/verification
+# path, without advertising unrelated report exports or wallet administration.
+REVIEW_TOOL_NAMES = frozenset({
+    "ui.review.cases", "ui.review.plan", "ui.review.apply", "ui.review.receipt",
+    "ui.review.worklist", "ui.journals.quarantine", "ui.journals.snapshot",
+    "ui.transactions.review_context", "ui.transactions.resolve",
+    "ui.transactions.graph", "ui.transactions.history", "ui.transactions.list",
+    "ui.attachments.list", "ui.audit.evidence.summary", "ui.documents.list",
+    "ui.wallets.list", "ui.wallets.identify", "ui.rates.coverage",
+    "ui.transfers.review_context", "ui.transfers.list", "ui.transfers.pair",
+    "ui.transfers.components.list", "ui.transfers.components.plan",
+    "ui.transfers.components.apply", "ui.journals.quarantine.resolve",
+    "ui.custody.coverage.snapshot", "ui.custody.lineage.snapshot",
+    "ui.custody.gaps.list", "ui.custody.gaps.review_context",
+    "ui.custody.gaps.history", "ui.custody.review.plan", "ui.custody.review.apply",
+    "ui.journals.process", "ui.report.blockers",
+})
+CORE_TOOL_NAMES = CORE_TOOL_NAMES | REVIEW_TOOL_NAMES
 
 
 _EMPTY_OBJECT_SCHEMA: dict[str, Any] = {
@@ -3233,10 +3254,105 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
 )
 
 
-TOOL_CATALOG: tuple[ToolEntry, ...] = (*_BASE_TOOL_CATALOG, *_EXPANDED_TOOL_CATALOG)
+# The schema validator deliberately supports a small JSON Schema subset. The
+# operation discriminator is validated again by the core, including exclusive
+# price fields and fields allowed for each operation type.
+_REVIEW_OPERATIONS_SCHEMA = {
+    "type": "array", "minItems": 1, "maxItems": 50,
+    "items": {
+        "type": "object", "additionalProperties": False, "required": ["type"],
+        "properties": {
+            "type": {"type": "string", "enum": ["price_override", "exclude", "custody_component"]},
+            "transaction_id": {"type": "string", "minLength": 1},
+            "fiat_rate": {"type": "string", "description": "Exact positive decimal; use this OR fiat_value."},
+            "fiat_value": {"type": "string", "description": "Exact nonnegative decimal; use this OR fiat_rate."},
+            "reason": {"type": "string", "minLength": 1, "description": "Required audit reason for price/exclusion. Cite inspected evidence, never invent it."},
+            "request": {
+                "type": "object", "additionalProperties": False,
+                "required": ["action", "components"],
+                "properties": {
+                    "action": {"type": "string", "enum": ["create"]},
+                    "components": {"type": "array", "minItems": 1, "maxItems": 50, "items": _CUSTODY_COMPONENT_SPEC_SCHEMA},
+                    "activate": {"type": "boolean"},
+                    "reason": {"type": "string", "minLength": 1},
+                },
+                "description": "Create evidence-backed custody components only. Missing-wallet gap reviews remain in their local-provider tools; reviewed conversion approval is unavailable.",
+            },
+        },
+    },
+}
+_REVIEW_EFFECTS_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "required": ["entries_count", "quarantine_count", "quarantines", "wallet_holdings", "report_ready", "journal_digest"],
+    "properties": {
+        "entries_count": {"type": "integer", "minimum": 0},
+        "quarantine_count": {"type": "integer", "minimum": 0},
+        "quarantines": {"type": "array", "maxItems": 100, "items": {
+            "type": "object", "additionalProperties": False, "required": ["transaction_id", "reason"],
+            "properties": {"transaction_id": {"type": "string"}, "reason": {"type": "string"}},
+        }},
+        "wallet_holdings": {"type": "array", "maxItems": 100, "items": {
+            "type": "object", "additionalProperties": False, "required": ["wallet_id", "asset", "quantity", "cost_basis"],
+            "properties": {key: {"type": "string"} for key in ("wallet_id", "asset", "quantity", "cost_basis")},
+        }},
+        "report_ready": {"type": "boolean"}, "journal_digest": {"type": "string"},
+    },
+}
+_REVIEW_ARTIFACT_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "required": ["schema_version", "workspace_id", "profile_id", "base_input_version", "operations", "before", "after", "digest"],
+    "properties": {
+        "schema_version": {"type": "integer", "enum": [1]},
+        "workspace_id": {"type": "string", "minLength": 1},
+        "profile_id": {"type": "string", "minLength": 1},
+        "base_input_version": {"type": "integer", "minimum": 0},
+        "operations": _REVIEW_OPERATIONS_SCHEMA,
+        "before": _REVIEW_EFFECTS_SCHEMA, "after": _REVIEW_EFFECTS_SCHEMA,
+        "digest": {"type": "string", "minLength": 64, "maxLength": 64},
+    },
+    "description": "Exact unchanged artifact returned by ui.review.plan. Do not reconstruct quantities, effects, scope or digest.",
+}
+_REVIEW_TOOL_CATALOG = (
+    ToolEntry(
+        name="ui.review.cases", wire_name="ui_review_cases", daemon_kind="ui.review.cases",
+        description="Inspect a version-bound page of current quarantine cases. Follow next_cursor until null before claiming all cases were inspected. Evidence remains unresolved until verified; supported operations do not imply a suitable repair.",
+        parameters={"type": "object", "additionalProperties": False, "properties": {
+            "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+            "cursor": {"type": "string", "description": "Unchanged next_cursor from the preceding page; expired cursors require a fresh first page."},
+        }}, kind_class="read_only", summary_template="Inspect accounting review cases",
+    ),
+    ToolEntry(
+        name="ui.review.plan", wire_name="ui_review_plan", daemon_kind="ui.review.plan",
+        description="Preview a bounded batch of evidence-backed accounting repairs without changing the book. Use the cases input_version. Inspect evidence first and include audit reasons. Exclude only when the user establishes the row belongs outside accounting, never to clear missing evidence. Returns an exact portable artifact and canonical before/after effects for consent.",
+        parameters={"type": "object", "additionalProperties": False, "required": ["operations", "expected_input_version"], "properties": {
+            "operations": _REVIEW_OPERATIONS_SCHEMA,
+            "expected_input_version": {"type": "integer", "minimum": 0},
+        }}, kind_class="read_only", summary_template="Preview accounting review changes",
+    ),
+    ToolEntry(
+        name="ui.review.apply", wire_name="ui_review_apply", daemon_kind="ui.review.apply",
+        description="Apply the unchanged reviewed artifact after explicit per-call consent, then rebuild and verify atomically. Reuse the same idempotency_key for an uncertain retry; read its receipt before retrying. A verified receipt does not imply report_ready or that all quarantine is resolved. Stale artifacts require new investigation and planning.",
+        parameters={"type": "object", "additionalProperties": False, "required": ["artifact", "idempotency_key"], "properties": {
+            "artifact": _REVIEW_ARTIFACT_SCHEMA,
+            "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 200},
+        }}, kind_class="mutating", summary_template="Apply reviewed accounting changes",
+    ),
+    ToolEntry(
+        name="ui.review.receipt", wire_name="ui_review_receipt", daemon_kind="ui.review.receipt",
+        description="Read a durable application receipt by receipt_id OR idempotency_key. Use after interruption or uncertain application before retrying; check verification.report_ready and remaining quarantine rather than assuming success cleared every case.",
+        parameters={"type": "object", "additionalProperties": False, "properties": {
+            "receipt_id": {"type": "string", "minLength": 1},
+            "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 200},
+        }}, kind_class="read_only", summary_template="Read accounting review receipt",
+    ),
+)
+
+
+TOOL_CATALOG: tuple[ToolEntry, ...] = (*_BASE_TOOL_CATALOG, *_EXPANDED_TOOL_CATALOG, *_REVIEW_TOOL_CATALOG)
 
 TOOL_CAPABILITY_NAMES = (
     "core",
+    "review",
     "workspace",
     "transactions",
     "reports",
@@ -3264,6 +3380,8 @@ def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
 
     name = tool.name
     capabilities: set[str] = set()
+    if name in REVIEW_TOOL_NAMES:
+        capabilities.add("review")
     if name in _CORE_TOOL_NAMES:
         capabilities.add("core")
     if name in {"ui.profiles.snapshot", "ui.workspace.overview.snapshot"}:
@@ -3306,6 +3424,35 @@ def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
     return frozenset(capabilities or {"core"})
 
 
+def _continues_review_checkpoint(messages: list[dict[str, Any]], latest: str) -> bool:
+    """Retain review schemas for a terse continuation of the last checkpoint.
+
+    This selects capabilities only; every operation still needs current scoped
+    evidence and consent. Read only the last assistant message's bounded tail,
+    where the daemon appends its continuation packet.
+    """
+    if latest.strip().rstrip(".!?") not in {
+        "continue", "please continue", "weiter", "bitte weiter",
+        "fortsetzen", "bitte fortsetzen",
+    }:
+        return False
+    content = next((message.get("content") for message in reversed(messages)
+                    if message.get("role") == "assistant"), None)
+    if not isinstance(content, str):
+        return False
+    for match in re.finditer(r"(?:^|\n)```json[ \t]*\r?\n(.*?)\r?\n```(?:\s|$)",
+                             content[-16_384:], flags=re.DOTALL):
+        try:
+            payload = json.loads(match.group(1))
+        except (ValueError, RecursionError):
+            continue
+        if (isinstance(payload, dict) and set(payload) == {"review_checkpoint"}
+                and isinstance(payload["review_checkpoint"], dict)
+                and payload["review_checkpoint"]):
+            return True
+    return False
+
+
 def select_tool_capabilities(
     messages: list[dict[str, Any]] | None,
     screen_context: dict[str, Any] | None = None,
@@ -3334,6 +3481,13 @@ def select_tool_capabilities(
         selected.update(str(item) for item in requested if str(item) in TOOL_CAPABILITY_NAMES)
 
     haystack = f"{route} {' '.join(recent_user_messages)}"
+    if _continues_review_checkpoint(messages, latest) or any(
+        word in haystack for word in ("quarantine", "quarantäne", "quarantaene", "review cases", "review receipt", "accounting review")
+    ):
+        # Evidence, wallet and report words within a repair request should not
+        # expand it into every administrative/export capability.
+        selected.add("review")
+        return frozenset(selected)
     keyword_groups = {
         "workspace": (
             "all books", "book set", "books set", "treasury", "across books",
@@ -3479,6 +3633,12 @@ def _toggle_verb(enabled: bool) -> str:
 
 def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
     """Build a short, non-secret consent summary for an allowlisted tool."""
+    if tool.name in {"ui.review.plan", "ui.review.apply"}:
+        artifact = arguments.get("artifact") if tool.name == "ui.review.apply" else arguments
+        operations = artifact.get("operations") if isinstance(artifact, dict) else None
+        count = len(operations) if isinstance(operations, list) else 0
+        verb = "Apply" if tool.name == "ui.review.apply" else "Preview"
+        return f"{verb} {count} reviewed accounting change(s)"
     if tool.name == "ui.wallets.sync":
         wallet = arguments.get("wallet")
         if isinstance(wallet, str) and wallet.strip():
@@ -3749,7 +3909,11 @@ setting and ui.maintenance.run or ui.wallets.sync only after explicit consent.
 Read command-templates for exact CLI command shapes and common fast paths.
 Read onboarding for first-run setup, data roots, and context selection.
 Read wallets-backends for wallet kinds, backend selection, source refresh, and
-imports. Read journal-processing for processing order, stale journals,
+imports. Read journal-processing for the paged ui.review.cases → evidence →
+ui.review.plan → consented ui.review.apply → ui.review.receipt workflow. Follow
+next_cursor, preserve the exact artifact and retry key, and report unresolved
+cases at the tool budget limit. Missing evidence never justifies exclusion.
+It also covers processing order, stale journals,
 quarantines, and transfer/swap pairing. Read swap-matching for candidate review,
 conflicts, auto-pair rules, and saved review views. Read metadata for notes, tags,
 exclusions, BIP329 labels, and attachments. Read reports for summary,

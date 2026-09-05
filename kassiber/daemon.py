@@ -81,6 +81,7 @@ from .ai.tools import (
     redact_ai_tool_result,
     redact_tool_arguments,
     summarize_tool_call,
+    select_tool_capabilities,
 )
 from .cli.handlers import (
     _attachment_hooks,
@@ -125,6 +126,7 @@ from .core import commercial as core_commercial
 from .core import custody_gaps as core_custody_gaps
 from .core import custody_component_planner as core_custody_component_planner
 from .core import custody_components as core_custody_components
+from .core import review_workflow as core_review_workflow
 from .core import custody_gap_reviews as core_custody_gap_reviews
 from .core import custody_ai_audit as core_custody_ai_audit
 from .core import ownership_policy_epochs as core_ownership_policy_epochs
@@ -481,6 +483,10 @@ SUPPORTED_KINDS = (
     "ui.audit.changes_since_last_answer",
     "ui.audit.evidence.summary",
     "ui.review.worklist",
+    "ui.review.cases",
+    "ui.review.plan",
+    "ui.review.apply",
+    "ui.review.receipt",
     "ui.maintenance.settings",
     "ui.maintenance.configure",
     "ui.maintenance.run",
@@ -698,6 +704,7 @@ def _resolve_report_depth(max_depth: Any, default: int = 8) -> int:
 AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
 AI_TOOL_ONCE_ONLY_CONSENT = frozenset(
     {
+        "ui.review.apply",
         "ui.journals.quarantine.resolve",
         "ui.transfers.components.apply",
         "ui.custody.review.apply",
@@ -4738,6 +4745,9 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
         )
     screen_context = _ai_chat_screen_context(args.get("screen_context"))
     attachment = _ai_chat_attachment(args.get("attachment"))
+    if "tool_loop_max_iterations" not in args and tools_enabled:
+        if "review" in (select_tool_capabilities(cleaned, screen_context=screen_context) or ()):
+            tool_loop_max_iterations = 16
     return {
         "provider": provider,
         "model": model.strip(),
@@ -6084,6 +6094,10 @@ def _execute_read_only_ai_tool(
                         retryable=False,
                     )
                 payload = build_review_badges_snapshot(conn)
+            elif entry.daemon_kind in {"ui.review.cases", "ui.review.plan", "ui.review.receipt"}:
+                payload = _review_workflow_payload(
+                    conn, entry.daemon_kind, call.arguments, authored_source="ai_tool",
+                )
             elif entry.daemon_kind == "ui.review.worklist":
                 payload = _review_worklist_payload(conn, runtime, call.arguments)
             elif entry.daemon_kind == "ui.loans.list":
@@ -6349,6 +6363,133 @@ def _run_scoped_ai_mutation(
     return _run_scoped_ai_operation(runtime, callback)
 
 
+def _validate_ai_review_operations(operations: Any) -> None:
+    """A batch cannot widen the authority of its individual AI operations."""
+
+    if not isinstance(operations, list):
+        raise AppError("Review operations must be a list", code="validation")
+    if redact_ai_tool_result(operations) != operations:
+        raise AppError(
+            "Review operations contain private paths, URLs or secret material",
+            code="validation",
+            hint="Use local evidence identifiers and a brief audit reason instead.",
+        )
+    for operation in operations:
+        if not isinstance(operation, dict):
+            raise AppError("Review operation must be an object", code="validation")
+        if operation.get("type") != "custody_component":
+            continue
+        request = operation.get("request")
+        if not isinstance(request, dict) or request.get("action", "create") != "create":
+            raise AppError(
+                "AI review batches may create custody components only",
+                code="interaction_required",
+                hint="Review existing component revisions in the local custody workflow.",
+            )
+        components = request.get("components")
+        if not isinstance(components, list) or any(
+            not isinstance(component, dict) for component in components
+        ):
+            raise AppError("Custody components must be objects", code="validation")
+        _validate_ai_custody_conversion_boundary(
+            components, activate=request.get("activate", True),
+        )
+
+
+def _review_workflow_payload(
+    conn: sqlite3.Connection,
+    kind: str,
+    args: dict[str, Any],
+    *,
+    authored_source: str = "gui",
+) -> dict[str, Any]:
+    """One composition root shared by desktop requests and pinned AI calls."""
+
+    allowed = {
+        "ui.review.cases": {"limit", "cursor"},
+        "ui.review.plan": {"operations", "expected_input_version"},
+        "ui.review.apply": {"artifact", "idempotency_key"},
+        "ui.review.receipt": {"receipt_id", "idempotency_key"},
+    }
+    if kind not in allowed or set(args) - allowed[kind]:
+        raise AppError("Unsupported review arguments", code="validation")
+    required = {
+        "ui.review.plan": {"operations", "expected_input_version"},
+        "ui.review.apply": {"artifact", "idempotency_key"},
+    }.get(kind, set())
+    if required - set(args):
+        raise AppError("Missing required review arguments", code="validation")
+    _, profile = resolve_scope(conn, None, None)
+    hooks = core_review_workflow.ReviewHooks(metadata=_metadata_hooks())
+    if kind == "ui.review.cases":
+        return core_review_workflow.inspect_cases(conn, profile, **args)
+    if kind == "ui.review.receipt":
+        return core_review_workflow.get_receipt(conn, profile, **args)
+    operations = (
+        args.get("artifact", {}).get("operations")
+        if isinstance(args.get("artifact"), dict)
+        else args.get("operations")
+    )
+    if authored_source == "ai_tool":
+        _validate_ai_review_operations(operations)
+    if kind == "ui.review.plan":
+        payload = core_review_workflow.plan_review(conn, profile, hooks=hooks, **args)
+        if authored_source == "ai_tool" and len(json.dumps(
+            {"artifact": payload, "idempotency_key": "x" * 200}, separators=(",", ":"),
+        )) > 65_536:
+            raise AppError(
+                "Review artifact exceeds the AI tool argument limit",
+                code="validation", hint="Plan fewer operations in each review batch.",
+            )
+        if authored_source == "ai_tool" and redact_ai_tool_result(payload) != payload:
+            raise AppError(
+                "This review artifact requires the local CLI workflow",
+                code="interaction_required",
+                hint="Its private fields cannot be sent unchanged to an AI provider.",
+            )
+        return payload
+    return core_review_workflow.apply_review(
+        conn, profile, hooks=hooks, authored_source=authored_source, **args,
+    )
+
+
+def _ai_review_consent_preview(
+    runtime: AiToolRuntime, arguments: dict[str, Any],
+) -> dict[str, Any]:
+    """Recompute displayed accounting effects; never trust model-supplied totals."""
+
+    def preview(conn: sqlite3.Connection) -> dict[str, Any]:
+        artifact = arguments.get("artifact")
+        if not isinstance(artifact, dict):
+            raise AppError("Review artifact is required", code="validation")
+        _validate_ai_review_operations(artifact.get("operations"))
+        _, profile = resolve_scope(conn, None, None)
+        if arguments.get("idempotency_key"):
+            try:
+                receipt = core_review_workflow.get_receipt(
+                    conn, profile, idempotency_key=arguments["idempotency_key"],
+                )
+            except AppError as exc:
+                if exc.code != "not_found":
+                    raise
+            else:
+                if receipt["artifact_digest"] != artifact.get("digest"):
+                    raise AppError("Idempotency key belongs to another plan", code="review_idempotency_conflict")
+                return {"status": "applied", "receipt": receipt}
+        validated = core_review_workflow.validate_review(
+            conn, profile, artifact=artifact,
+            hooks=core_review_workflow.ReviewHooks(metadata=_metadata_hooks()),
+        )
+        if redact_ai_tool_result(validated) != validated:
+            raise AppError("Review artifact requires local review", code="interaction_required")
+        return {"status": "ready", "artifact": validated}
+
+    try:
+        return _run_scoped_ai_operation(runtime, preview)
+    except AppError as exc:
+        return {"status": "unavailable", "code": exc.code}
+
+
 def _quarantine_resolution_payload(
     conn: sqlite3.Connection,
     args: dict[str, Any],
@@ -6579,6 +6720,14 @@ def _execute_mutating_ai_tool(
 
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
                 payload = _journals_process_payload(conn)
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+
+            return _run_scoped_ai_mutation(runtime, _execute)
+        if entry.daemon_kind == "ui.review.apply":
+            def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _review_workflow_payload(
+                    conn, entry.daemon_kind, call.arguments, authored_source="ai_tool",
+                )
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
             return _run_scoped_ai_mutation(runtime, _execute)
@@ -8222,6 +8371,41 @@ def _write_ai_chat_terminal(
     )
 
 
+def _update_review_checkpoint(checkpoint: dict[str, Any], name: str, result: dict[str, Any]) -> None:
+    """Keep bounded continuation facts in the final answer, never model reasoning."""
+
+    if not result.get("ok"):
+        return
+    envelope = result.get("envelope")
+    data = envelope.get("data") if isinstance(envelope, dict) else None
+    if not isinstance(data, dict):
+        return
+    if name == "ui.review.cases":
+        checkpoint.update({key: data[key] for key in (
+            "workspace_id", "profile_id", "input_version", "next_cursor",
+        ) if key in data})
+        checkpoint["last_page_transaction_ids"] = [
+            case["transaction_id"] for case in data.get("cases", [])[:100]
+            if isinstance(case, dict) and isinstance(case.get("transaction_id"), str)
+        ]
+    elif name == "ui.review.plan":
+        checkpoint["unapplied_plan_digest"] = data.get("digest")
+    elif name in {"ui.review.apply", "ui.review.receipt"}:
+        receipt_id = data.get("id")
+        if isinstance(receipt_id, str):
+            receipts = checkpoint.setdefault("receipt_ids", [])
+            if receipt_id not in receipts:
+                receipts.append(receipt_id)
+                del receipts[:-32]
+        if checkpoint.get("unapplied_plan_digest") == data.get("artifact_digest"):
+            checkpoint.pop("unapplied_plan_digest", None)
+        if name == "ui.review.apply":
+            # Applying invalidates the old page cursor; inspect the new population.
+            checkpoint.pop("next_cursor", None)
+            checkpoint.pop("last_page_transaction_ids", None)
+            checkpoint["input_version"] = data.get("result_input_version")
+
+
 def _run_ai_chat_tool_loop(
     request_id: object,
     client,
@@ -8343,6 +8527,7 @@ def _run_ai_chat_tool_loop(
     response_context = responses_request_context(messages)
     finish_reason = None
     content = ""
+    review_checkpoint: dict[str, Any] = {}
     for _iteration in range(validated["tool_loop_max_iterations"]):
         if cancel_event.is_set():
             finish_reason = "cancelled"
@@ -8445,6 +8630,8 @@ def _run_ai_chat_tool_loop(
                                     "name": display_name,
                                     "summary": summarize_tool_call(entry, call.arguments),
                                     "arguments_preview": preview_arguments,
+                                    **({"review_preview": _ai_review_consent_preview(runtime, call.arguments)}
+                                       if entry.name == "ui.review.apply" else {}),
                                 },
                             ),
                             request_id,
@@ -8539,6 +8726,7 @@ def _run_ai_chat_tool_loop(
                 result = _execute_read_only_ai_tool(call, runtime)
             _record_ai_tool_usage(runtime, display_name, result)
             safe_result = redact_ai_tool_result(result)
+            _update_review_checkpoint(review_checkpoint, display_name, safe_result)
             out.write(
                 _with_request_id(
                     build_envelope(
@@ -8566,6 +8754,16 @@ def _run_ai_chat_tool_loop(
             break
     else:
         finish_reason = "tool_loop_max_iterations"
+        if review_checkpoint:
+            continuation = (
+                "\n\nReview paused at the tool budget. Continue with the current cases; "
+                "unapplied proposals must be planned again. Applied receipts remain available.\n"
+                "```json\n" + json.dumps({"review_checkpoint": review_checkpoint}, sort_keys=True) + "\n```"
+            )
+            content = (content or "") + continuation
+            out.write(_with_request_id(build_envelope(
+                "ai.chat.delta", {"delta": {"content": continuation}},
+            ), request_id))
 
     if cancel_event.is_set():
         finish_reason = "cancelled"
@@ -15602,6 +15800,13 @@ def handle_request(
             ),
             False,
         )
+
+    if kind in {"ui.review.cases", "ui.review.plan", "ui.review.apply", "ui.review.receipt"}:
+        payload = _review_workflow_payload(
+            _require_conn(ctx), kind,
+            _coerce_args_dict(request_id, request.get("args")),
+        )
+        return _with_request_id(build_envelope(kind, payload), request_id), False
 
     if kind == "ui.journals.quarantine.resolve":
         return (

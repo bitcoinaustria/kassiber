@@ -194,6 +194,7 @@ from ..update_check import (
     update_checks_enabled,
 )
 from ..wallet_descriptors import MAX_DESCRIPTOR_GAP_LIMIT
+from .review import add_review_parser, dispatch_review
 from .chat import run_chat_command
 from .command_registry import command_needs_database, describe_command_catalog
 
@@ -1109,8 +1110,8 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument(
         "--tool-loop-max-iterations",
         type=int,
-        default=8,
-        help="Maximum daemon tool-loop iterations for one assistant turn.",
+        default=None,
+        help="Maximum tool-loop iterations per turn (default: 16 for review, 8 otherwise).",
     )
     chat.add_argument(
         "--tool-profile",
@@ -1217,6 +1218,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_secrets_parser(sub)
     add_backup_parser(sub)
     add_sync_parser(sub)
+    add_review_parser(sub)
 
     backends = sub.add_parser("backends")
     backends_sub = backends.add_subparsers(dest="backends_command", required=True)
@@ -3484,6 +3486,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         return emit(args, dispatch_backup(args))
     if args.command == "sync":
         return emit(args, dispatch_sync(conn, args))
+    if args.command == "review":
+        return emit(args, dispatch_review(conn, args))
     if args.command == "backends":
         if args.backends_command == "list":
             return emit(args, core_accounts.list_backends(args.runtime_config))

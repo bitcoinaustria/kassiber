@@ -68,34 +68,66 @@ When scripting, use `--machine` and follow `next_cursor`.
 
 ## Quarantine
 
-List unresolved problems:
+Prefer the portable review workflow for an investigation spanning several cases:
+
+```bash
+kassiber --machine review cases --limit 20
+kassiber --machine review cases --limit 20 --cursor <next_cursor>
+kassiber --machine --output review-plan.json review plan --operations-file operations.json --expected-input-version <input_version>
+kassiber --machine review apply --artifact-file review-plan.json --idempotency-key <unique-review-key>
+kassiber --machine review receipt --idempotency-key <unique-review-key>
+```
+
+Use `input_version` from cases, follow `next_cursor` until null, and inspect
+transaction/evidence context before writing `operations.json`. The file is an
+array of typed operations, for example after verifying the stated invoice:
+
+```json
+[{"type":"price_override","transaction_id":"<transaction-id>","fiat_rate":"20000","reason":"Reviewed invoice evidence <evidence-id>"}]
+```
+
+A price operation requires exactly one of `fiat_rate` or `fiat_value`, as an exact
+decimal string, plus an audit reason. `exclude` requires `transaction_id` and a
+reason establishing why the row belongs outside accounting. Never use exclusion
+to hide missing evidence, a custody gap, or a transfer. `custody_component` wraps
+an existing typed component planner request under `request`; the CLI supports
+its actions, while AI may only create components. Reviewed conversion approval
+remains unavailable to AI. Unsupported repairs remain unresolved.
+
+In chat use `ui.review.cases`, inspect `ui.transactions.review_context` and
+`ui.transfers.review_context`, then `ui.review.plan`. Explain the returned
+before/after effects and obtain per-call consent for `ui.review.apply`, passing
+the artifact unchanged. The default CLI `core` profile and built-in chat both
+advertise this bounded review pack for quarantine questions. Planning is read
+only; applying atomically rechecks scope/version/effects, writes, rebuilds, and
+stores a durable receipt. Read `ui.review.receipt` after an uncertain response
+before retrying with the same idempotency key. A `verified` receipt means the
+planned effects were reproduced; inspect `verification.report_ready` and remaining
+quarantine before claiming resolution. A stale artifact needs a new plan.
+
+No new background agent or automatic continuation is implied: at a tool/token
+budget limit or cancellation, report what was inspected, `next_cursor`, unresolved
+evidence, and any receipt/idempotency key needed for the next turn. Re-read cases
+if its cursor expires. Do not increase the budget instead of checking an uncertain
+write. Selected redacted local facts can reach the configured provider; native
+custody-gap/lineage tools remain local-provider only. Portable AI plans reject
+path/URL/secret-bearing free text rather than changing a digest-bound artifact;
+refer to local evidence IDs. Explicit CLI files retain their exact content.
+
+The older single-row commands remain available:
 
 ```bash
 kassiber journals quarantined
 kassiber journals quarantine show --transaction <transaction-id>
-```
-
-`journals quarantined` currently has no pagination or `--limit`.
-
-Resolve when the user has enough information:
-
-```bash
 kassiber journals quarantine resolve price-override --transaction <transaction-id> --fiat-rate <rate>
 kassiber journals quarantine resolve exclude --transaction <transaction-id>
 ```
 
-In chat, first read `ui.transactions.review_context` (and
-`ui.transfers.review_context` for ownership or rail questions). The consented
-`ui.journals.quarantine.resolve` tool is deliberately limited to reviewed price
-overrides and explicit exclusions. It reprocesses by default and reports
-whether the quarantine actually cleared. Never invent a rate, and never use an
-exclusion to conceal a transfer or custody gap.
-
-CLI chat's default `core` profile includes these review/price tools and guided
-custody-gap plan/apply. Use `--tool-profile scoped` for general component
-authoring selected by a quarantine question. After a custody mutation, run
-`ui.journals.process` and reread `ui.journals.quarantine` plus
-`ui.report.blockers`; an applied plan alone does not mean the book is resolved.
+`journals quarantined` has no pagination or `--limit`. The individual AI tool
+`ui.journals.quarantine.resolve` repairs reviewed prices or explicit exclusions.
+After custody mutations outside `ui.review.apply`, run `ui.journals.process`
+and reread quarantine/report blockers; an applied component alone does not
+mean the book is resolved.
 
 Clear quarantine state only when the workflow truly calls for it:
 

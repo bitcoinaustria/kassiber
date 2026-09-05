@@ -54,6 +54,7 @@ CLI_READ_PATHS = _paths(
     metadata.records.get metadata.records.history.list
     metadata.records.history.activity metadata.records.history.stale
     imports.list
+    review.cases review.plan review.receipt
     journals.list journals.quarantined journals.transfers.list
     journals.events.list journals.events.get journals.quarantine.show loans.list
     transfers.list transfers.gaps.list transfers.gaps.history transfers.gaps.plan
@@ -112,6 +113,7 @@ CLI_OPERATOR_PATHS = _paths(
 
 CLI_ACCOUNTING_DECISION_PATHS = _paths(
     """
+    review.apply
     profiles.set metadata.exclude metadata.include metadata.records.excluded.set
     metadata.records.excluded.clear metadata.records.kind.set
     metadata.records.kind.clear metadata.records.history.revert
@@ -176,6 +178,7 @@ DAEMON_READ_KINDS = _paths(
     ui.profiles.snapshot ui.rates.summary ui.rates.coverage
     ui.audit.changes_since_last_answer
     ui.audit.evidence.summary ui.review.worklist ui.maintenance.settings
+    ui.review.cases ui.review.plan ui.review.receipt
     ui.sync.status ui.sync.transports.list ui.sync.members.list
     ui.sync.devices.list ui.sync.conflicts.list ui.freshness.status
     ui.workspace.health ui.projects.list ui.next_actions ui.review.badges
@@ -238,7 +241,7 @@ DAEMON_ACCOUNTING_DECISION_KINDS = _paths(
     ui.transactions.history.revert ui.loans.link ui.loans.mark ui.loans.unmark
     ui.source_funds.cases.save ui.source_funds.links.review
     ui.source_funds.links.bulk_review ui.btcpay.provenance.review
-    ui.journals.quarantine.resolve ui.transfers.payouts.create
+    ui.journals.quarantine.resolve ui.review.apply ui.transfers.payouts.create
     ui.transfers.payouts.delete ui.transfers.pair ui.transfers.unpair
     ui.transfers.update ui.transfers.bulk_pair ui.transfers.dismiss
     ui.transfers.components.apply ui.custody.review.apply ui.transfers.rules.create
