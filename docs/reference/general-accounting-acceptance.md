@@ -92,6 +92,18 @@ not waive failing dependency or acceptance gates. See the
   An unknown post-publication outcome is not reported as "no file saved".
   Independent re-review found both confirmed blockers fixed; its separate
   export-delivery rerun passed all 35 tests.
+- The final combined candidate is `c6ce832c`, with core `0568757e` and the
+  merged security dependency ancestry. Core owns the local amendment and
+  selected-Bitcoin contracts; the agent cut owns consent and artifact delivery.
+  Bounded independent merge/partition review found no new blocker. Final
+  full-gate results are recorded separately once completed.
+- The mixed-source loop previously failed after preparing 97 drafts when its
+  next preview returned `accounting_requires_encryption` on a genuine SQLCipher
+  book. A bounded instrumented repeat completed 640 fresh encrypted-book runs
+  in 600 seconds without reproducing that failure. It observed original
+  status/salt/schema operations without pre-probe SQL or weakened validation;
+  no cause was established. Process-only probes were removed on exit. This
+  intermittent failure remains an explicit merge hold despite green repeats.
 
 These focused results do not replace the final combined gate, independent
 re-review or the measured/pilot outcome requirements below.
@@ -306,10 +318,11 @@ does not waive the separate intermittent-failure investigation or pilot gates.
 - The canonical bank interchange is not a verified adapter for the unknown
   pilot bank export. Confirm that format before claiming the pilot import is done.
 - Delivery now uses the [dependency-aware PR stack](../plan/18-general-accounting-pr-stack.md).
-  PR #542 and #543 exact heads are combined locally with the preserved accounting
-  checkpoint; both remained open on GitHub at integration. Per-cut PR extraction
-  and final acceptance remain separate work. The latest owner request now
-  authorizes merge only after review; current dependency blockers still apply.
+  Historically #542 and #543 were still open when their exact heads were first
+  integrated locally. Both have since merged, as recorded in the latest
+  checkpoint; #545/#546 are extracted draft PRs. The owner authorizes merge
+  after review, but the unresolved encrypted-handle failure and final
+  organizational/agent acceptance still prevent calling this delivery complete.
 - EBICS, payment initiation, FinanzOnline transmission, automatic official-PDF
   filling, invoice issuing, consolidation and speculative further countries are
   excluded. K1/K3 receive an explicit unsupported route, not disguised K2 output.

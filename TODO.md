@@ -568,9 +568,11 @@ top of the monolith.
     neither cut advertises absent modules or dedicated accounting screens.
   - [x] Publish draft stack #542 → #545 → #546 with explicit RP2 merge hold.
     Merge independently green #543 and close superseded #455, retaining branches.
-  - [ ] Land the dependent stack only after RP2 #48's chronological/historical
-    basis blockers are resolved, #542 is repinned and per-cut/full gates pass.
-    Remaining agent-workflow acceptance is not satisfied by publishing drafts.
+  - [x] Resolve RP2 #48's chronological/historical basis blockers, merge the
+    verified dependency and repinned #542, and inherit security #548.
+  - [ ] Land the accounting stack only after final per-cut/full gates and
+    agent-workflow acceptance. Draft publication and green stress repeats do
+    not waive the unresolved intermittent encrypted-handle rejection.
   - [x] Owner-approved CLI/Agent-only pivot: retain the experimental full UI at
     `fbfce410` on `codex/accounting-ui-preserved-20260905`; remove accounting
     route, sidebar, Settings switch and forms from `codex/accounting-cli-agent`.

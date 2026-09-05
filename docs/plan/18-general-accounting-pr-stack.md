@@ -85,6 +85,15 @@ remain unenrolled and need no general-accounting configuration.
 
 ## Verification and unresolved gates
 
+The follow-up combined candidate is `c6ce832c` over core `0568757e`, including
+merged #548. It adds exact local task amendments/Bitcoin preparation, durable
+agent mutation receipts, explicit local export delivery and matching minimal
+CLI/Assistant consent. A bounded independent merge review is clean. A previously
+observed intermittent `accounting_requires_encryption` in the actual mixed-source
+agent fixture is still unresolved; 640 instrumented green repeats do not clear
+that hold. Full final gates and the fresh packaged build are recorded in the
+acceptance record when complete; the historical results below are not those runs.
+
 After the RP2 correction, clean full gates pass on core `0d80356d` (4,275
 Python passes, 38 optional skips, 423 subtests, 134 UI files / 1,004 tests)
 and scoped-agent `ddd208ae` (4,418 Python passes, 38 optional skips, 430
