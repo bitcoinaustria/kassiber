@@ -7,10 +7,13 @@ acquisition for RP2 while its raw kind remains factual provenance in Kassiber.
 Production narrower-pool activation remains
 disabled: RP2's existing `per_wallet` two-pass engine cannot replay transfers
 and later taxable source events through one chronological inventory cursor.
-Fee-bearing `per_wallet` transfers therefore fail closed. RP2 PR #48 contains
-the reusable basis-carry fix; Kassiber pins and tests its exact commit. The G5
-global-only verification cutoffs below are complete. Release still requires
-merging RP2 #48 before the dependent Kassiber change.
+Fee-bearing `per_wallet` transfers therefore fail closed. RP2 PR #48 merged as
+`7b0dd6771c611e83451cd7f97782af0c15382197`; Kassiber pins that revision.
+The adapter retains original/native-carried acquisition basis and uses RP2's
+separate cutoff-scoped open-position API for holdings. A one-shot semantic
+migration marks previously processed AT and generic moving-average books stale
+without deleting their retained journals or evidence. The G5 global-only
+verification cutoffs below are complete; narrower-pool activation is not.
 **Executable backlog:** the single matching item in `TODO.md`.
 **Current-truth documents until cutover:** `docs/austrian-handoff.md`,
 `docs/plan/06-austrian-tax-engine.md`, current code, and current tests.
@@ -148,15 +151,14 @@ It does block:
    Austrian cross-pool serialization remains intentionally blocked because the
    RP2 plugin has no reviewed two-ended marker contract.
 3. RP2's initial `TransferAnalyzer` correction failed adversarial conservation,
-   straddling-fee, and rollback tests. Those are mandatory blockers until the
-   revised core implementation and full suite pass.
+   straddling-fee, and rollback tests. The merged revision passes the full suite;
+   unsupported pooled per-wallet chronological paths fail closed.
 4. Kassiber maps valued `wages` receipts to RP2 `BUY` acquisitions while
-   retaining the raw source kind. Runtime cutover waits for RP2 publication and
-   pinning.
+   retaining the raw source kind. The dependency is now pinned to merged RP2 #48.
 5. RP2 now rejects `per_wallet` when it would bypass an overridden country-wide
    computation hook.
-6. Current-truth Kassiber docs use the generic pool contract; publication notes
-   must still record the final RP2 revision.
+6. Current-truth Kassiber docs use the generic pool contract; the final RP2
+   revision is recorded above and in the dependency and license manifests.
 
 ## Target module seams
 
