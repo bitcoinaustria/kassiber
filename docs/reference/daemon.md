@@ -780,10 +780,19 @@ originating request, the worker reports through unsolicited event envelopes
 `ui.freshness.background` after a pass that enqueued or completed work, and
 `ui.freshness.worker` for worker lifecycle errors. Wallet and journal sources use the
 general 15-minute background interval; market-rate sources use an hourly
-interval by default. Kassiber opens local databases in WAL mode with an explicit
-busy timeout so the daemon foreground connection and the freshness worker can
-safely serialize writes instead of failing immediately on ordinary lock
-contention.
+interval by default. Kassiber checks `SELECT sqlite_version()` on each actual
+connection, including SQLCipher after keying. WAL with `synchronous=NORMAL` is
+used only on versions with the official WAL-reset corruption fix: 3.51.3 and
+later, or the 3.50.7 and 3.44.6 maintenance branches and their later patches.
+Affected or unrecognized versions use the rollback journal (`DELETE`) with
+`synchronous=FULL`. This follows the [upstream SQLite WAL-reset advisory](https://www.sqlite.org/wal.html#walresetbug).
+The fallback adds commit synchronization and makes readers and writers contend
+more often; the explicit busy timeout still lets ordinary contention wait.
+An existing WAL database is switched before schema or book writes. If another
+connection prevents that transition, opening fails with
+`database_journal_mode_unavailable`; close other connections and retry. This
+configuration prevents using the known affected mode and does not repair an
+already damaged database.
 
 For SQLCipher databases, the daemon keeps the verified database passphrase only
 as unlocked-session state so the background worker can open its own connection.
