@@ -151,19 +151,18 @@ def reconcile_exports(
     scope = ("--workspace", workspace, "--profile", profile["id"])
     files = write_exports(artifact_dir, txids=txids, times=times)
     partial = cli(data_root, "wallets", "import-strike", *scope, "--file", str(files["incomplete"]))["data"]
+    # These synthetic exchange references name genuine regtest transactions.
+    # Ordinary Strike imports default to mainnet; configure the fixture's
+    # actual connection scope before asking custody validation to join them.
+    cli(data_root, "wallets", "update", *scope, "--wallet", partial["wallet"],
+        "--config", json.dumps({"chain": "bitcoin", "network": "regtest",
+                                "source_file": str(files["incomplete"]), "source_format": "strike_csv"}))
     cli(data_root, "journals", "process", *scope)
     incomplete = cli(data_root, "review", "cases", *scope, "--limit", "100")["data"]
     partial_rows = cli(data_root, "transactions", "list", *scope, "--limit", "100")["data"]
     withdrawal_ids = {row["id"] for row in partial_rows if row["external_id"] == txids["withdrawal"]
                       and row["wallet"] != native_wallet["label"]}
-    if not any(case["transaction_id"] in withdrawal_ids and case["reason"] == "insufficient_lots"
-               for case in incomplete["cases"]):
-        raise RuntimeError(
-            "Missing purchase export must hold the platform withdrawal for insufficient_lots: "
-            f"{incomplete['cases']}"
-        )
-    complete = cli(data_root, "wallets", "import-strike", *scope, "--file", str(files["complete"]))["data"]
-    rows = cli(data_root, "transactions", "list", *scope, "--limit", "100")["data"]
+    rows = partial_rows
     def anchor(txid: str, owned: bool) -> str:
         matches = [row for row in rows if row["external_id"] == txid
                    and (row["wallet"] == native_wallet["label"]) == owned]
@@ -200,6 +199,25 @@ def reconcile_exports(
     }]
     operations_file = artifact_dir / "review-operations.json"
     operations_file.write_text(json.dumps(operations, indent=2))
+    # Genuine Core rows cannot be paired automatically with graphless exchange
+    # exports. Explain custody in a dry run first, then prove that the missing
+    # purchase still blocks basis independently of those authority conflicts.
+    incomplete_plan = cli(
+        data_root, "review", "plan", *scope, "--operations-file", str(operations_file),
+        "--expected-input-version", str(incomplete["input_version"]),
+    )
+    incomplete_plan_file = artifact_dir / "incomplete-review-plan.json"
+    incomplete_plan_file.write_text(json.dumps(incomplete_plan, indent=2))
+    incomplete_projection = incomplete_plan["data"]["after"]
+    if incomplete_projection["report_ready"] or not any(
+        case["transaction_id"] in withdrawal_ids and case["reason"] == "insufficient_lots"
+        for case in incomplete_projection["quarantines"]
+    ):
+        raise RuntimeError(
+            "Missing purchase must hold the reviewed platform withdrawal for insufficient_lots: "
+            f"{incomplete_projection}"
+        )
+    complete = cli(data_root, "wallets", "import-strike", *scope, "--file", str(files["complete"]))["data"]
     cases = cli(data_root, "review", "cases", *scope)["data"]
     plan = cli(data_root, "review", "plan", *scope, "--operations-file", str(operations_file),
                "--expected-input-version", str(cases["input_version"]))
@@ -223,7 +241,8 @@ def reconcile_exports(
     if actual["excluded_transactions"]:
         raise RuntimeError("Exchange scenario must never clear quarantine by exclusion")
     cli(data_root, "wallets", "update", *scope, "--wallet", complete["wallet"],
-        "--config", json.dumps({"source_file": str(files["complete"]), "source_format": "strike_csv"}))
+        "--config", json.dumps({"chain": "bitcoin", "network": "regtest",
+                                "source_file": str(files["complete"]), "source_format": "strike_csv"}))
     repeated = cli(data_root, "wallets", "import-strike", *scope, "--file", str(files["complete"]))["data"]
     if int(repeated.get("imported") or 0) != 0:
         raise RuntimeError("Repeated exchange export imported duplicate transactions")
@@ -235,12 +254,14 @@ def reconcile_exports(
         raise RuntimeError("Repeated exchange export changed accounting")
     return {
         "profile": profile, "connection_kind": "synthetic Strike CSV import", "expected": EXPECTED,
-        "actual": actual, "incomplete_export_cases": incomplete["cases"],
+        "actual": actual, "pre_review_cases": incomplete["cases"],
+        "incomplete_export_cases": incomplete_projection["quarantines"],
         "imports": {
             "incomplete": partial, "complete": complete, "repeat": repeated, "file_sync": file_sync,
         },
         "review_receipt_id": receipt["id"],
-        "artifacts": {**{key: str(path) for key, path in files.items()}, "review_plan": str(plan_file)},
+        "artifacts": {**{key: str(path) for key, path in files.items()}, "review_plan": str(plan_file),
+                      "incomplete_review_plan": str(incomplete_plan_file)},
         "case_cards": [
             {
                 "id": "exchange-missing-purchase", "title": "Missing exchange purchase export",

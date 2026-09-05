@@ -30,7 +30,8 @@ class RegtestExchangeCasesTest(unittest.TestCase):
             profile = run_cli(root, "profiles", "create", "Exchange lifecycle", "--workspace", "Exchange tests",
                               "--fiat-currency", "EUR", "--tax-country", "generic", "--gains-algorithm", "FIFO")["data"]
             scope = ("--workspace", "Exchange tests", "--profile", profile["id"])
-            wallet = run_cli(root, "wallets", "create", *scope, "--label", "Native replay", "--kind", "custom")["data"]
+            wallet = run_cli(root, "wallets", "create", *scope, "--label", "Native replay", "--kind", "custom",
+                             "--chain", "bitcoin", "--network", "regtest")["data"]
             txids = {"withdrawal":"a"*64,"deposit":"b"*64}
             times = {"buy_time":"2020-01-01T00:00:00Z", "withdrawal_time":"2020-01-02T00:00:00Z",
                      "deposit_time":"2020-01-03T00:00:00Z", "sell_time":"2020-01-04T00:00:00Z"}
