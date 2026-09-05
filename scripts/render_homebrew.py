@@ -92,7 +92,14 @@ def render_cli_formula(
   end
 
   def install
-    bin.install "kassiber"
+    if OS.mac?
+      # Keep the notarized bundle intact; its launcher resolves symlinks.
+      libexec.install "Kassiber.app"
+      (bin/"kassiber").write_env_script libexec/"Kassiber.app/Contents/Resources/bin/kassiber",
+                                       KASSIBER_HOMEBREW_PACKAGE: "formula"
+    else
+      bin.install "kassiber"
+    end
   end
 
   # Formulae cannot declare conflicts with casks, so the overlap is surfaced

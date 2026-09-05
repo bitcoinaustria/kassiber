@@ -133,7 +133,7 @@ the quickest route, and `brew upgrade` tracks new releases automatically:
 
 ```bash
 brew install --cask bitcoinaustria/kassiber/kassiber  # desktop app + CLI
-brew install bitcoinaustria/kassiber/kassiber-cli     # CLI only, no GUI
+brew install bitcoinaustria/kassiber/kassiber-cli     # terminal entry point
 ```
 
 Install the cask or the formula, not both — each provides the `kassiber`
@@ -145,7 +145,7 @@ current and future package in the tap. This Homebrew trust check is separate
 from the unsigned desktop app's macOS Gatekeeper prompt. Details in
 [docs/reference/homebrew.md](docs/reference/homebrew.md).
 
-**Desktop app** — download an unsigned prerelease binary for Apple Silicon
+**Desktop app** — download a prerelease binary for Apple Silicon
 macOS, Linux x86_64, or Windows x86_64 from the latest `v*` release. The
 bundle ships the
 same CLI executable as the CLI-only downloads,
@@ -170,10 +170,16 @@ SHA-256 manifest; once Bitcoin Austria publishes its permanent OpenPGP release
 key, signed releases will add the matching `.txt.asc` detached signature.
 Current releases remain unauthenticated until that key and signature exist.
 
-**CLI only** — use the portable macOS/Linux `.tar.gz`, Windows `.zip`, or the
+New releases follow the [local signing and automated notarization runbook](docs/reference/macos-release.md)
+and remain drafts until platform and OpenPGP checks pass. Historical unsigned
+releases remain unsigned; this workflow change does not authenticate them.
+
+**CLI** — use the portable macOS/Linux `.tar.gz`, Windows `.zip`, or the
 GUI-free Linux `kassiber-cli` Debian/RPM package from the same release. The
 frozen CLI is the same executable bundled inside the desktop app and does not
-require Python or desktop GUI libraries.
+require a separate Python installation. Final notarized macOS CLI archives
+include the sealed app runtime (without launching its GUI); Linux CLI packages
+remain GUI-free.
 
 Once signed releases begin, `kassiber verify-download` authenticates the PGP
 signature and then the selected artifact hash. During the key-publication

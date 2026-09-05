@@ -154,9 +154,11 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertIn("gh release edit", workflow)
         self.assertIn("--draft=false", workflow)
         self.assertIn("fetch-depth: 0", workflow)
-        self.assertIn("git merge-base --is-ancestor HEAD origin/main", workflow)
+        tag_guard = 'git merge-base --is-ancestor "refs/tags/$RELEASE_TAG_NAME^{commit}" origin/main'
+        self.assertIn(tag_guard, workflow)
+        self.assertIn('ref: ${{ github.sha }}', workflow)
         self.assertLess(
-            workflow.index("git merge-base --is-ancestor HEAD origin/main"),
+            workflow.index(tag_guard),
             workflow.index("scripts/release_manifest.py policy"),
         )
         self.assertNotIn("gh release upload", workflow)
@@ -164,15 +166,19 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertNotIn("tauri build", workflow)
         self.assertNotIn("pyinstaller", workflow)
 
-    def test_signed_release_is_published_only_after_homebrew_push(self):
+    def test_homebrew_follows_public_downloads_and_can_retry_without_replacing_assets(self):
         workflow = (
             ROOT / ".github/workflows/finalize-signed-release.yml"
         ).read_text(encoding="utf-8")
 
         self.assertLess(
-            workflow.index('git push origin "HEAD:${HOMEBREW_TAP_BRANCH}"'),
             workflow.index('gh release edit "$RELEASE_TAG_NAME"'),
+            workflow.index('git push origin "HEAD:${HOMEBREW_TAP_BRANCH}"'),
         )
+        self.assertIn("if: steps.release.outputs.draft == 'true'", workflow)
+        self.assertIn('case "$actual_draft" in true|false)', workflow)
+        self.assertIn('cmp release-assets.json current-assets.json', workflow)
+        self.assertNotIn('gh release upload', workflow)
 
     def test_release_publish_rejects_tags_outside_main_history(self):
         workflow = (

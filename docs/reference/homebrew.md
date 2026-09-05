@@ -154,6 +154,13 @@ not offer to overwrite it.
 
 ## Unsigned builds and Gatekeeper
 
+This section describes historical unsigned previews, not the acceptance bar
+for new production releases. The [macOS release pipeline](macos-release.md)
+now requires Developer ID signing, notarization and verification before
+publication. Never use a quarantine bypass as a release acceptance test.
+Final macOS CLI formula archives preserve the full notarized app runtime
+under `libexec`; invoking the CLI does not launch the GUI.
+
 Homebrew's integrity model is the SHA-256 checksum in the rendered files, so
 installs and upgrades work without Apple code signing or notarization. What
 signing changes is Gatekeeper friction, and it differs per package:

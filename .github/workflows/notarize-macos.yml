@@ -1,0 +1,120 @@
+name: notarize-macos
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Existing draft release tag
+        required: true
+        type: string
+      input_sha256:
+        description: SHA-256 printed by the local signing helper
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-seal-${{ inputs.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  notarize:
+    environment: macos-notarization
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Require trusted workflow
+        run: test "$GITHUB_REF" = refs/heads/main
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+      - name: Download draft and bind source commit
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag_name }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]
+          test "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true
+          commit="$(git rev-parse "refs/tags/$TAG^{commit}")"
+          git merge-base --is-ancestor "$commit" origin/main
+          mkdir incoming
+          gh release download "$TAG" --dir incoming
+          # Never rewrite a set an operator has already OpenPGP-signed.
+          test -z "$(find incoming -name '*.asc' -print -quit)"
+          test -f incoming/kassiber-macos-signing-input.dmg
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+      - name: Install notarization credentials in a temporary keychain
+        env:
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$NOTARY_KEY_P8"
+          test -n "$NOTARY_KEY_ID"
+          test -n "$NOTARY_ISSUER_ID"
+          keychain="$RUNNER_TEMP/notary.keychain-db"
+          keychain_unlock="$(openssl rand -hex 32)"
+          echo "::add-mask::$keychain_unlock"
+          security create-keychain -p "$keychain_unlock" "$keychain"
+          security unlock-keychain -p "$keychain_unlock" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security list-keychains -d user -s "$keychain"
+          printf '%s' "$NOTARY_KEY_P8" > "$RUNNER_TEMP/notary.p8"
+          xcrun notarytool store-credentials kassiber-notary \
+            --key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER_ID" --keychain "$keychain"
+          rm "$RUNNER_TEMP/notary.p8"
+      - name: Notarize and verify sealed distributions
+        env:
+          EXPECTED_SHA256: ${{ inputs.input_sha256 }}
+          COMMIT: ${{ steps.release.outputs.commit }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          python3 scripts/macos_release.py notarize \
+            --image incoming/kassiber-macos-signing-input.dmg \
+            --sha256 "$EXPECTED_SHA256" --commit "$COMMIT" --version "$VERSION" \
+            --profile kassiber-notary --keychain "$RUNNER_TEMP/notary.keychain-db" --output notarized
+          python3 scripts/macos_release.py verify \
+            --release-dir notarized --commit "$COMMIT" --version "$VERSION"
+      - name: Preserve notarization evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: notarization-evidence
+          path: notarized/notarization.json
+          if-no-files-found: ignore
+      - name: Replace draft macOS artifacts and regenerate final manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag_name }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          test "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true
+          test -z "$(gh release view "$TAG" --json assets --jq '.assets[].name' | sed -n '/\.asc$/p')"
+          cp notarized/kassiber-macos-arm64.app.zip incoming/
+          cp notarized/kassiber-macos-arm64.dmg incoming/
+          cp notarized/kassiber-cli-macos-arm64.tar.gz incoming/
+          rm incoming/kassiber-macos-signing-input.dmg
+          python3 scripts/release_manifest.py generate --release-dir incoming --version "$VERSION"
+          gh release upload "$TAG" --clobber \
+            incoming/kassiber-macos-arm64.app.zip incoming/kassiber-macos-arm64.dmg \
+            incoming/kassiber-cli-macos-arm64.tar.gz "incoming/kassiber-$VERSION-manifest.txt"
+          gh release delete-asset "$TAG" kassiber-macos-signing-input.dmg --yes
+          echo 'Notarized draft ready. Download and independently verify the final artifacts before offline OpenPGP signing.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove temporary credentials
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/notary.p8"
+          security delete-keychain "$RUNNER_TEMP/notary.keychain-db" || true

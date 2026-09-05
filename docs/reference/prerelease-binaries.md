@@ -1,8 +1,10 @@
 # Prerelease Binaries
 
-Kassiber is still in early development. Version tags publish prerelease
+Kassiber is still in early development. Version tags stage draft release
 artifacts, while pull requests that touch packaging inputs run the same build
-matrix without publishing.
+matrix without publishing. New public releases must complete the
+[local signing / CI notarization runbook](macos-release.md) and offline
+OpenPGP verification; older unsigned downloads are not retroactively signed.
 
 ## What Runs Automatically
 
@@ -12,7 +14,8 @@ matrix without publishing.
   publishing.
 - Pushes to `main` run `.github/workflows/ci.yml` only.
 - Pushes of tags matching `v*` run `.github/workflows/prerelease-binaries.yml`
-  and publish the resulting artifacts to a GitHub prerelease.
+  and stage the resulting artifacts in a GitHub draft. Only
+  `finalize-signed-release.yml` publishes after verification.
 
 Keep the packaging workflow's pull-request path filter narrow. For one-off
 branch artifacts outside those paths, use a manual workflow run instead.
