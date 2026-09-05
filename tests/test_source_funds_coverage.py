@@ -204,27 +204,52 @@ class CoverageCoreTests(unittest.TestCase):
             self.assertEqual(result["totals"]["buckets"]["not_classified"]["tx_count"], 1)
             loader.assert_not_called()
 
-    def test_coverage_keeps_one_snapshot_during_concurrent_edits(self):
+    def test_coverage_rollback_snapshot_blocks_commit_until_read_finishes(self):
+        self._assert_coverage_snapshot_during_edit("delete")
+
+    def test_coverage_wal_snapshot_is_stable_after_concurrent_commit(self):
+        self._assert_coverage_snapshot_during_edit("wal")
+
+    def _assert_coverage_snapshot_during_edit(self, journal_mode):
+        from kassiber import db
         from kassiber.core import source_funds_coverage as coverage_module
 
         tx = self._add_inbound_tx("concurrent-coverage", 100_000)
         source = self._add_source("fiat_purchase", amount_msat=100_000)
         self._add_link(to_tx_id=tx, from_source_id=source, allocation_msat=100_000)
+        # Exercise both runtime policies on this isolated fixture. The separate
+        # journal-safety tests verify actual-driver selection and fixed versions.
+        policy = (journal_mode, "NORMAL" if journal_mode == "wal" else "FULL")
+        with unittest.mock.patch.object(db, "_journal_settings_for_sqlite_version", return_value=policy):
+            db._configure_connection_pragmas(self.conn)
+        self.assertEqual(self.conn.execute("PRAGMA journal_mode").fetchone()[0], journal_mode)
         database_path = self.conn.execute("PRAGMA database_list").fetchone()[2]
-        writer = sqlite3.connect(database_path)
+        writer = sqlite3.connect(database_path, timeout=0.01)
         self.addCleanup(writer.close)
         original = coverage_module._load_report_inputs
 
         def load_then_edit(conn, profile_id):
             inputs = original(conn, profile_id)
             writer.execute("UPDATE transactions SET fiat_rate = NULL, fiat_value = NULL WHERE id = ?", (tx,))
-            writer.commit()
+            if journal_mode == "delete":
+                # Rollback mode must not publish a write while coverage still
+                # owns its read snapshot. The pending write commits after release.
+                with self.assertRaises(sqlite3.OperationalError) as blocked:
+                    writer.commit()
+                self.assertEqual(blocked.exception.sqlite_errorcode, sqlite3.SQLITE_BUSY)
+                self.assertTrue(writer.in_transaction)
+            else:
+                writer.commit()
+                self.assertFalse(writer.in_transaction)
             return inputs
 
         with unittest.mock.patch.object(coverage_module, "_load_report_inputs", side_effect=load_then_edit):
             before = compute_coverage(self.conn, self.workspace_id, self.profile_id, self._build_hooks())
         self.assertEqual(before["totals"]["buckets"]["fully_traced"]["tx_count"], 1)
         self.assertFalse(self.conn.in_transaction)
+        if journal_mode == "delete":
+            writer.commit()
+            self.assertFalse(writer.in_transaction)
         after = compute_coverage(self.conn, self.workspace_id, self.profile_id, self._build_hooks())
         self.assertEqual(after["totals"]["buckets"]["in_review"]["tx_count"], 1)
 
