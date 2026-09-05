@@ -100,6 +100,183 @@ class _DummySocket:
 
 
 class SyncBackendsTest(unittest.TestCase):
+    def test_bitcoinrpc_http500_preserves_typed_rpc_error_without_payload(self):
+        secret = "private-core-error-secret"
+        body = json.dumps({"id": "kassiber-gettransaction", "result": None,
+                           "error": {"code": -5, "message": secret}}).encode()
+        error = urlerror.HTTPError("http://127.0.0.1:8332", 500, "Internal Server Error", {}, io.BytesIO(body))
+        with patch.object(sb, "urlopen_with_proxy", side_effect=error) as opener:
+            with self.assertRaises(AppError) as raised:
+                sb.bitcoinrpc_call({"name": "core", "url": "http://127.0.0.1:8332", "username": "test", "password": "test"}, "gettransaction", ["11" * 32, True, True], wallet_name="merchant")
+        opener.assert_called_once()
+        self.assertTrue(error.fp.closed)
+        self.assertEqual((raised.exception.details or {}).get("rpc_error_code"), -5)
+        self.assertNotIn(secret, str(raised.exception))
+
+    def test_bitcoinrpc_payjoin_signed_fee_preserves_wallet_net_receipt_without_graph(self):
+        # Real Core 1.0 details from the regtest merchant: the positive fee is
+        # the wallet-relative correction for inputs supplied by the payer.
+        details = [
+            {"category": "receive", "amount": "0.42948186"},
+            {"category": "send", "amount": "-2.80380051", "fee": "2.80460051"},
+            {"category": "send", "amount": "-0.42948186", "fee": "2.80460051"},
+        ]
+        unknown_scope_graph = {
+            "txid": "66" * 32,
+            "vin": [{"txid": "11" * 32, "vout": 0,
+                     "prevout": {"scriptpubkey": "0014" + "11" * 20, "value": 100_000}}],
+            "vout": [{"scriptpubkey": "0014" + "22" * 20, "value": 99_000}],
+        }
+        for graph in (None, unknown_scope_graph):
+            with self.subTest(has_graph=graph is not None):
+                record = sb.record_from_bitcoinrpc_details(
+                    "66" * 32, details, "core", raw_graph=graph,
+                    tracked_scripts={"0014" + "33" * 20},
+                )
+                self.assertEqual(record["direction"], "inbound")
+                self.assertEqual(record["amount"], Decimal("0.00080000"))
+                self.assertEqual(record["fee"], 0)
+                self.assertEqual(record["privacy_boundary"], "collaborative")
+
+    def test_bitcoinrpc_http_error_envelopes_are_bounded_matched_and_closed(self):
+        valid = {"id": "kassiber-gettransaction", "result": None,
+                 "error": {"code": -5, "message": "private-error-body"}}
+        invalid = [
+            b"private-error-body",
+            json.dumps({**valid, "id": "another-request"}).encode(),
+            json.dumps({**valid, "result": "private-error-body"}).encode(),
+            json.dumps({**valid, "error": {"code": True}}).encode(),
+            json.dumps({**valid, "error": {"code": "-5"}}).encode(),
+            b" " * 65_537,
+        ]
+        backend = {"name": "core", "url": "http://127.0.0.1:8332", "username": "test", "password": "test"}
+        for body in invalid:
+            with self.subTest(body_length=len(body)):
+                stream = io.BytesIO(body)
+                error = urlerror.HTTPError(backend["url"], 500, "private-error-body", {}, stream)
+                with patch.object(sb, "urlopen_with_proxy", side_effect=error) as opener:
+                    with self.assertRaises(AppError) as raised:
+                        sb.bitcoinrpc_call(backend, "gettransaction", ["11" * 32])
+                opener.assert_called_once()
+                self.assertTrue(stream.closed)
+                self.assertNotIn("private-error-body", str(raised.exception))
+                self.assertNotIn("rpc_error_code", raised.exception.details or {})
+        # The narrow decoder does not consume transport errors owned by retry.
+        stream = io.BytesIO(b"private-error-body")
+        error = urlerror.HTTPError(backend["url"], 503, "retry", {}, stream)
+        with self.assertRaises(urlerror.HTTPError):
+            sb._bitcoinrpc_http_error(error, "kassiber-gettransaction")
+        self.assertEqual(stream.tell(), 0)
+        self.assertFalse(stream.closed)
+        stream.close()
+
+    def test_bitcoinrpc_conflicting_signed_detail_fees_fail_closed(self):
+        with self.assertRaises(AppError) as raised:
+            sb.record_from_bitcoinrpc_details("66" * 32, [
+                {"category": "send", "amount": "-1", "fee": "0.5"},
+                {"category": "send", "amount": "-1", "fee": "-0.5"},
+            ], "core")
+        self.assertEqual(raised.exception.code, "bitcoinrpc_inconsistent_wallet_details")
+
+    def test_bitcoinrpc_payjoin_http_parent_errors_keep_net_and_native_accounting(self):
+        from tests.test_rp2_ownership_transfers import CollaborativeBitcoinFeeTest, _row, SCRIPT_A, SCRIPT_B
+        from tests.custody_tax_helpers import authoritative_chain_observation
+        from kassiber.core.chain_observer.provenance import fee_attribution_from_raw
+        from kassiber.msat import btc_to_msat
+
+        txid, payer_parent, merchant_parent = "66" * 32, "11" * 32, "22" * 32
+        scripts = {"payer": SCRIPT_A, "merchant": SCRIPT_B}
+        parent_outputs = {
+            payer_parent: {"n": 0, "value": "2.80462361", "scriptPubKey": {"hex": SCRIPT_A}},
+            merchant_parent: {"n": 0, "value": "0.42868186", "scriptPubKey": {"hex": SCRIPT_B}},
+        }
+        decoded = {"txid": txid, "vin": [
+            {"txid": payer_parent, "vout": 0}, {"txid": merchant_parent, "vout": 0},
+        ], "vout": [
+            {"n": 0, "value": "0.42948186", "scriptPubKey": {"hex": SCRIPT_B}},
+            {"n": 1, "value": "2.80380051", "scriptPubKey": {"hex": SCRIPT_A}},
+        ]}
+        merchant_details = [
+            {"category": "receive", "amount": "0.42948186"},
+            {"category": "send", "amount": "-2.80380051", "fee": "2.80460051"},
+            {"category": "send", "amount": "-0.42948186", "fee": "2.80460051"},
+        ]
+        backend = {"name": "core", "kind": "bitcoinrpc", "url": "http://127.0.0.1:8332", "username": "test", "password": "test"}
+
+        def fetch(wallet_name, *, foreign_error=-5):
+            details = merchant_details if wallet_name == "merchant" else [
+                {"category": "send", "amount": "-0.0008", "fee": "-0.0000231"},
+            ]
+            details = [{**detail, "txid": txid, "blocktime": 1767225600} for detail in details]
+            own_parent = merchant_parent if wallet_name == "merchant" else payer_parent
+            calls = []
+
+            def transport(request, *args, **kwargs):
+                request_body = json.loads(request.data)
+                self.assertEqual(request_body["method"], "gettransaction")
+                self.assertIn("/wallet/" + wallet_name, request.full_url)
+                requested = request_body["params"][0]
+                calls.append(requested)
+                if requested == txid:
+                    result = {"decoded": decoded}
+                elif requested == own_parent or foreign_error is None:
+                    result = {"decoded": {"vout": [parent_outputs[requested]]}}
+                else:
+                    body = json.dumps({"id": request_body["id"], "result": None,
+                                       "error": {"code": foreign_error, "message": "private-node-message"}}).encode()
+                    raise urlerror.HTTPError(request.full_url, 500, "private-node-message", {}, io.BytesIO(body))
+                return _FakeHttpResponse(json.dumps({"id": request_body["id"], "error": None, "result": result}))
+
+            state = WalletSyncState(chain="bitcoin", network="main", descriptor_plan=None,
+                                    policy_asset_id="BTC", targets=[], tracked_scripts={scripts[wallet_name]: {}}, history_cache={})
+            with patch.object(sb, "fetch_bitcoinrpc_wallet_transactions", return_value=(details, {"bitcoinrpc_last_block": "aa" * 32})), patch.object(sb, "urlopen_with_proxy", side_effect=transport):
+                records, meta = sb.bitcoinrpc_records_for_wallet(backend, {"id": wallet_name}, [], wallet_name=wallet_name, imported_count=0, sync_state=state)
+            self.assertEqual(calls[0], txid)
+            self.assertIn(payer_parent, calls)
+            self.assertEqual(len(records), 1)
+            record = records[0]
+            raw = json.loads(record["raw_json"])
+            self.assertEqual(raw["observer_owned_scripts"], [scripts[wallet_name]])
+            self.assertEqual(len(raw["vin"]), 2)
+            self.assertNotIn("private-node-message", record["raw_json"])
+            self.assertEqual(record["fee"], 0)
+            return record, meta
+
+        merchant, meta = fetch("merchant")
+        self.assertEqual((merchant["direction"], btc_to_msat(merchant["amount"])), ("inbound", 80_000_000))
+        self.assertEqual(meta["bitcoinrpc_last_block"], "aa" * 32)
+        self.assertEqual(meta["bitcoinrpc_graph_normalization_version"], sb.BITCOINRPC_GRAPH_NORMALIZATION_VERSION)
+        raw = json.loads(merchant["raw_json"])
+        self.assertNotIn("prevout", raw["vin"][0])
+        self.assertEqual(raw["vin"][1]["prevout"]["value"], 42_868_186)
+        for error_code in (-28, "invalid"):
+            with self.subTest(transient=error_code):
+                retry_record, retry_meta = fetch("merchant", foreign_error=error_code)
+                self.assertEqual((retry_record["direction"], retry_record["amount"]), ("inbound", Decimal("0.0008")))
+                self.assertEqual(retry_meta["bitcoinrpc_graph_unavailable_txids"], [txid])
+                self.assertNotIn("bitcoinrpc_last_block", retry_meta)
+                self.assertNotIn("bitcoinrpc_graph_normalization_version", retry_meta)
+        complete, _ = fetch("merchant", foreign_error=None)
+        self.assertEqual((complete["direction"], complete["amount"]), (merchant["direction"], merchant["amount"]))
+
+        payer, _ = fetch("payer")
+        self.assertEqual(btc_to_msat(payer["amount"]), 82_310_000)
+        rows = [_row("A", "inbound", 280_462_361_000, external_id="acqA"),
+                _row("B", "inbound", 42_868_186_000, external_id="acqB")]
+        for wallet, record in (("A", payer), ("B", merchant)):
+            row = _row(wallet, record["direction"], btc_to_msat(record["amount"]), external_id=txid,
+                       raw_json=record["raw_json"], fee=btc_to_msat(record["fee"]))
+            row["privacy_boundary"] = record.get("privacy_boundary")
+            rows.append(authoritative_chain_observation(row, observer_kind="bitcoinrpc", fee_attribution=fee_attribution_from_raw(record["raw_json"])))
+        ledger = CollaborativeBitcoinFeeTest()._run(rows)
+        self.assertEqual(ledger.quarantines, [])
+        holdings = {key[1]: value["quantity"] for key, value in ledger.wallet_holdings.items()}
+        self.assertEqual(holdings["Cold"], Decimal("2.80380051"))
+        self.assertEqual(holdings["Hot"], Decimal("0.42948186"))
+        fees = [entry for entry in ledger.entries if entry["entry_type"] == "transfer_fee"]
+        self.assertEqual(len(fees), 1)
+        self.assertEqual(abs(Decimal(str(fees[0]["quantity"]))), Decimal("0.00002310"))
+
     def test_bitcoinrpc_curates_native_htlc_proof_before_discarding_witness(self):
         from tests.test_transfer_matching import _claim_raw, _row, _CLAIM_HASH, _CLAIM_PREIMAGE
         from tests.custody_tax_helpers import authoritative_chain_observation
