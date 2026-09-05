@@ -1387,7 +1387,7 @@ class AuditPackageCoreTest(unittest.TestCase):
                 "filed_report_impact_count": 1,
             },
         )
-        self.assertEqual(summary["summary"]["schema_migration_audit_count"], 2)
+        self.assertEqual(summary["summary"]["schema_migration_audit_count"], 3)
         custody_migration_audit = next(
             audit
             for audit in summary["schema_migration_audits"]
