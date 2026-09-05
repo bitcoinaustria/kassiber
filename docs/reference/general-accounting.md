@@ -147,6 +147,15 @@ It is a local worklist, not an accounting screen or a whole-book AI disclosure.
 6. Retry reads durable receipts; cancellation does not erase committed work.
    `task-source-assign` records reviewed evidence-only links or standalone
    expense assignments. Rules are book-scoped, explicit and revocable, not consent.
+7. For a genuinely new missing document, retain it in the same encrypted book,
+   then use `task-amend-preview` with `task_id`, `period_id`, exact additive
+   `evidence_ids` and `reason`. Locally approve `task-amend` with that selection,
+   `expected_digest`, `expected_revision`, `idempotency_key` and `confirmed: true`.
+   An append-only receipt extends effective source scope; the original selection
+   and completed receipts stay immutable. Old step approvals become stale.
+   Cancelled tasks and closed periods cannot acquire new sources; reopen is a
+   separate action. Neither amendment command is an ordinary AI tool or an
+   automatic file-discovery/disclosure grant.
 
 Task export prepares reproducible bytes and an artifact identity; it does
 **not** claim to have saved a file or filed a return. Use the explicit CLI

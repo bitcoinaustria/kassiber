@@ -616,6 +616,9 @@ top of the monolith.
     - [ ] AF-4: Resolve missing evidence, ambiguous partial payments and
       conflicting classifications within the same task; preserve independent
       work and safely resume without duplicate actions or revived permissions.
+      Exact local additive evidence amendments and safe recurring-payment
+      resumption now have regression coverage; complete agent/pilot acceptance
+      remains separate from these deterministic contracts.
     - [ ] AF-5: Complete a private portfolio/assignment workflow through actual
       agent tools and verify recomputed reports, without organizational setup.
   - [ ] Record the organization's actual transaction/report coverage matrix,

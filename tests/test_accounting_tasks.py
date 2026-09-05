@@ -210,6 +210,65 @@ def test_existing_unallocated_entry_prevents_blind_second_bank_post(book):
     assert not tasks.preview(conn, profile_id, task['id'], 'prepare')['ready']
 
 
+def test_fully_allocated_distinct_bank_row_does_not_block_later_review(book):
+    conn, profile_id, _ = book
+    statement = bank.import_statement(conn, profile_id, account_code='bank', statement_id='same-day',
+        start_date='2025-01-01', end_date='2025-12-31',
+        csv_text='row_id,date,amount_minor,description\na,2025-02-03,100,Membership\nb,2025-02-03,100,Donation\n')
+    task = tasks.execute(conn, profile_id, 'task-create', dict(period_id='2025', statement_ids=[statement['id']], idempotency_key='same-day-task'))
+    rule(conn, profile_id)
+    approve(conn, profile_id, task['id'], 'prepare')
+    approve(conn, profile_id, task['id'], 'post')
+    tasks.execute(conn, profile_id, 'rule-create', dict(idempotency_key='donation-rule', account_code='bank',
+        direction='in', description_exact='Donation', counter_account_code='sales', reason='Reviewed distinct donation', confirmed=True))
+    later = tasks.preview(conn, profile_id, task['id'], 'prepare')
+    assert later['ready'] and len(later['proposals']) == 1
+    assert later['proposals'][0]['payload']['description'] == 'Donation'
+    approve(conn, profile_id, task['id'], 'prepare', 'prepare-donation')
+    approve(conn, profile_id, task['id'], 'post', 'post-donation')
+    assert all(row['status'] == 'posted' for row in tasks.get(conn, profile_id, task['id'])['coverage'])
+    assert conn.execute('SELECT count(*) FROM gl_entries').fetchone()[0] == 2
+    # Another statement cannot relabel this same dated population to bypass
+    # source identity and book these fully allocated rows a second time.
+    with pytest.raises(AppError) as error:
+        bank.import_statement(conn, profile_id, account_code='bank', statement_id='relabeled-copy',
+            start_date='2025-02-03', end_date='2025-02-03',
+            csv_text='row_id,date,amount_minor,description\ncopy,2025-02-03,100,Donation\n')
+    assert error.value.code == 'accounting_bank_overlap'
+
+
+@pytest.mark.parametrize('amount', [100, -100])
+@pytest.mark.parametrize('state', ['draft', 'unallocated', 'partial', 'full', 'voided'])
+def test_possible_bank_entry_guard_tracks_active_allocation_capacity(book, amount, state):
+    conn, profile_id, _ = book
+    statement = bank.import_statement(conn, profile_id, account_code='bank', statement_id='capacity',
+        start_date='2025-01-01', end_date='2025-12-31',
+        csv_text=f'row_id,date,amount_minor,description\na,2025-02-03,{amount},Earlier\nb,2025-02-03,{amount},Later\n')
+    task = tasks.execute(conn, profile_id, 'task-create', dict(period_id='2025', statement_ids=[statement['id']], idempotency_key='capacity-task'))
+    tasks.execute(conn, profile_id, 'rule-create', dict(idempotency_key='capacity-rule', account_code='bank',
+        direction='in' if amount > 0 else 'out', description_exact='Later', counter_account_code='sales',
+        reason='Reviewed independent bank row', confirmed=True))
+    draft = ledger.create_draft(conn, profile_id, dict(period_id='2025', entry_date='2025-02-03',
+        idempotency_key='manual-earlier', description='Earlier manually entered row',
+        lines=[dict(account_code='bank', debit_minor=max(amount, 0), credit_minor=max(-amount, 0)),
+               dict(account_code='sales', debit_minor=max(-amount, 0), credit_minor=max(amount, 0))]))
+    if state != 'draft':
+        posted = ledger.post_draft(conn, profile_id, draft_id=draft['id'], expected_digest=draft['payload_digest'])
+        if state != 'unallocated':
+            rows = bank.reconcile_statement(conn, profile_id, statement['id'])['rows']
+            line = next(row for row in posted['lines'] if row['account_code'] == 'bank')
+            allocation = bank.allocate_bank_row(conn, profile_id, row_id=rows[0]['id'], line_id=line['id'],
+                amount_minor=50 if state == 'partial' else 100, idempotency_key='earlier-allocation')
+            if state == 'voided':
+                bank.void_bank_allocation(conn, profile_id, allocation_id=allocation['id'], reason='Undo wrong allocation', idempotency_key='void-earlier')
+    current = tasks.get(conn, profile_id, task['id'])
+    later = next(row for row in current['coverage'] if row['description'] == 'Later')
+    if state == 'full':
+        assert later['status'] == 'ready'
+    else:
+        assert later['exception'] == 'possible_existing_entry'
+
+
 def test_empty_period_close_and_real_package_export_are_separate_approvals(book):
     from kassiber.core.accounting.package import verify_package
     conn, profile_id, _ = book

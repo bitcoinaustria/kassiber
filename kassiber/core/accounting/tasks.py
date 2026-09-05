@@ -12,8 +12,8 @@ from ...errors import AppError
 from . import bank, ledger, posting_batch
 from .task_schema import ensure_schema
 
-READ_ACTIONS = frozenset({'task-list', 'task-get', 'task-preview', 'rule-list'})
-WRITE_ACTIONS = frozenset({'task-create', 'task-apply', 'task-cancel', 'task-source-assign', 'rule-create', 'rule-revoke'})
+READ_ACTIONS = frozenset({'task-list', 'task-get', 'task-preview', 'task-amend-preview', 'rule-list'})
+WRITE_ACTIONS = frozenset({'task-create', 'task-apply', 'task-cancel', 'task-amend', 'task-source-assign', 'rule-create', 'rule-revoke'})
 STEPS = frozenset({'prepare', 'post', 'close', 'tax_finalize', 'export_close', 'export_tax'})
 MAX_SOURCES = 10000
 
@@ -41,7 +41,74 @@ def _task(conn, profile_id, task_id):
     if not row:
         _fail('accounting_task_not_found')
     row['spec'] = json.loads(row.pop('spec_json'))
+    # The original selection and every prior receipt remain immutable. Only a
+    # separately reviewed, additive local receipt expands the effective scope.
+    amendments = ledger._rows(conn, "SELECT result_json FROM gl_accounting_task_receipts WHERE profile_id=? AND task_id=? AND step='amend_sources' ORDER BY rowid", (profile_id, task_id))
+    for amendment in amendments:
+        row['spec']['evidence_ids'].extend(json.loads(amendment['result_json'])['evidence_ids'])
+    row['spec']['evidence_ids'].sort()
+    row['scope_revision'] = len(amendments)
     return row
+
+
+def _amend_preview(conn, profile_id, p):
+    keys = {'task_id', 'period_id', 'evidence_ids', 'reason'}
+    _fields(p, keys, keys)
+    ledger._text(p['reason'], 'reason', maximum=2000)
+    ledger._text(p['period_id'], 'period_id', maximum=128)
+    task = _task(conn, profile_id, p['task_id'])
+    if p['period_id'] != task['period_id']:
+        _fail('accounting_task_source_scope')
+    current = get(conn, profile_id, task['id'])
+    if current['state'] == 'cancelled':
+        _fail('accounting_task_cancelled')
+    period = ledger._period(conn, profile_id, task['period_id'])
+    if period['state'] != 'open':
+        _fail('accounting_task_blocked')
+    identifiers = _ids(p['evidence_ids'])
+    if not identifiers or set(identifiers) & set(task['spec']['evidence_ids']):
+        _fail('accounting_task_source_scope')
+    if current['source_count'] + len(identifiers) > MAX_SOURCES:
+        _fail('accounting_task_population_limit')
+    from .evidence import require_evidence
+    evidence = [require_evidence(conn, profile_id, i) for i in identifiers]
+    book = ledger.require_book(conn, profile_id)
+    journal = ledger._row(conn, 'SELECT journal_input_version FROM profiles WHERE id=?', (profile_id,))
+    binding = dict(profile_id=profile_id, book=book, period=period, task=current,
+        evidence=evidence, reason=p['reason'], journal_input_version=journal['journal_input_version'])
+    return dict(task_id=task['id'], period_id=task['period_id'], scope_revision=task['scope_revision'],
+        evidence_ids=identifiers, evidence=evidence, reason=p['reason'],
+        expected_revision=book['revision'], expected_digest=ledger.digest(binding))
+
+
+def _amend(conn, profile_id, p):
+    selection = {'task_id', 'period_id', 'evidence_ids', 'reason'}
+    keys = selection | {'expected_digest', 'expected_revision', 'idempotency_key', 'confirmed'}
+    _fields(p, keys, keys)
+    if p['confirmed'] is not True:
+        _fail('accounting_task_consent_required')
+    ledger._text(p['idempotency_key'], 'idempotency_key', maximum=128)
+    _task(conn, profile_id, p['task_id'])
+    request_digest = ledger.digest(p)
+    prior = ledger._row(conn, 'SELECT * FROM gl_accounting_task_receipts WHERE profile_id=? AND idempotency_key=?', (profile_id, p['idempotency_key']))
+    # Retry before checking the now-expanded scope, including after completion.
+    if prior:
+        if prior['request_digest'] != request_digest or prior['step'] != 'amend_sources':
+            _fail('accounting_idempotency_conflict')
+        retained = json.loads(prior['result_json'])
+        return dict(task=get(conn, profile_id, p['task_id']), receipt={'id': prior['id'], 'step': prior['step'], 'result': retained}, already_applied=True)
+    reviewed = _amend_preview(conn, profile_id, {key: p[key] for key in selection})
+    if type(p['expected_revision']) is not int or reviewed['expected_revision'] != p['expected_revision'] or reviewed['expected_digest'] != p['expected_digest']:
+        _fail('accounting_stale_approval')
+    retained = dict(period_id=p['period_id'], evidence_ids=reviewed['evidence_ids'], reason=p['reason'],
+        previous_scope_revision=reviewed['scope_revision'], scope_revision=reviewed['scope_revision'] + 1,
+        expected_revision=p['expected_revision'], expected_digest=p['expected_digest'],
+        evidence_digests={r['id']: r['content_sha256'] for r in reviewed['evidence']})
+    identifier = uuid4().hex
+    conn.execute('INSERT INTO gl_accounting_task_receipts(id,profile_id,task_id,step,idempotency_key,request_digest,result_json) VALUES(?,?,?,?,?,?,?)',
+        (identifier, profile_id, p['task_id'], 'amend_sources', p['idempotency_key'], request_digest, ledger.canonical_json(retained)))
+    ledger._bump(conn, profile_id)
+    return dict(task=get(conn, profile_id, p['task_id']), receipt={'id': identifier, 'step': 'amend_sources', 'result': retained}, already_applied=False)
 
 
 def _rules(conn, profile_id):
@@ -153,7 +220,10 @@ def _population(conn, profile_id, task):
                 item['exception'] = 'partial_bank_allocation'
             elif conn.execute('''SELECT 1 FROM gl_lines l JOIN gl_entries e ON e.id=l.entry_id
                 WHERE e.profile_id=? AND e.entry_date=? AND e.status IN ('draft','posted') AND l.account_code=?
-                AND l.debit_minor-l.credit_minor=?''',
+                AND l.debit_minor-l.credit_minor=?
+                AND abs(l.debit_minor-l.credit_minor) > COALESCE((SELECT SUM(a.amount_minor)
+                    FROM gl_bank_allocations a WHERE a.profile_id=e.profile_id AND a.line_id=l.id
+                    AND NOT EXISTS(SELECT 1 FROM gl_bank_allocation_voids v WHERE v.allocation_id=a.id)),0)''',
                 (profile_id, row['occurred_on'], statement['account_code'], row['amount_minor'])).fetchone():
                 item['exception'] = 'possible_existing_entry'
             else:
@@ -340,7 +410,7 @@ def get(conn, profile_id, task_id):
         completed = any(r['step'] == ('export_tax' if final else 'export_close')
             and r['result'].get('final_id' if final else 'id') == (final['final_id'] if final else (identity or {}).get('id'))
             for r in receipts) and (not task['spec']['tax_workpaper_id'] or bool(final))
-    return dict(id=task_id, period_id=task['period_id'], spec=task['spec'], created_at=task['created_at'],
+    return dict(id=task_id, period_id=task['period_id'], spec=task['spec'], scope_revision=task['scope_revision'], created_at=task['created_at'],
         state='cancelled' if cancelled else 'attention' if exceptions else 'completed' if completed else 'active', source_count=len(coverage),
         coverage=coverage, exceptions=exceptions, receipts=receipts, next_step=None if cancelled or completed else next_step)
 
@@ -512,6 +582,10 @@ def execute(conn, profile_id, action, payload):
             return _create(conn, profile_id, payload)
         if action == 'task-apply':
             return _apply(conn, profile_id, payload)
+        if action == 'task-amend-preview':
+            return _amend_preview(conn, profile_id, payload)
+        if action == 'task-amend':
+            return _amend(conn, profile_id, payload)
         if action == 'task-source-assign':
             return _assign_source(conn, profile_id, payload)
         if action == 'rule-create':
