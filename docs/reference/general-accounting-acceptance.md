@@ -18,17 +18,31 @@ not waive failing dependency or acceptance gates. See the
   historical pooled-basis errors; comments record the synthetic counterexamples.
 - #543's CLI review approval bypass is fixed at `6fc7c4e8`. Its complete local
   gate passed: 3,830 Python tests, 35 skips, 423 subtests; TypeScript, ESLint
-  and 132 UI files / 1,001 tests. Exact-head CI remains the merge gate.
+  and 132 UI files / 1,001 tests. Every exact-head CI check passed; #543 merged
+  at `bbd983cb`. Superseded #455 is closed with its branch retained.
 - Core/CLI was extracted at `7ce7f9b3`: 459 focused tests, 3 skips. Independent
   partition review passed 156 tests plus a real locked-daemon scenario.
+  Its complete quality gate passed, including TypeScript, ESLint and 134 UI
+  files / 1,004 tests. After restacking on the custody fix, 120 affected
+  interface tests passed at `b3926798`.
 - Scoped agents are the second cut, not another accounting UI. Combined
   custody/accounting consent and renderer-catalog checks passed 98 tests.
 - The frozen pre-triage full integration had 4,347 passes, 38 skips and 430
   subtests, but two real catalog-drift failures. The extracted delivery does
   not carry the stale Vite-only accounting grants; native export and scope
   protections are retained. No failed test is hidden by weakening assertions.
-- Full per-cut gates, published links and final head status are recorded at
-  closeout. External Claude review remains blocked by code-egress approval.
+- The scoped-agent full quality gate passed at `b9b31474`: 4,365 Python tests,
+  38 optional skips, 430 subtests, TypeScript, ESLint (zero errors, 50 existing
+  warnings), and 137 UI files / 1,021 tests. The offline native suite passed
+  115 tests. Restack `02dfd273` preserves that tree exactly; 140 further
+  consent/CLI/scope/catalog checks passed after conflict resolution.
+- Published draft stack: [#542](https://github.com/bitcoinaustria/kassiber/pull/542)
+  → [#545](https://github.com/bitcoinaustria/kassiber/pull/545)
+  → [#546](https://github.com/bitcoinaustria/kassiber/pull/546).
+  These passes do not clear the RP2 blocker or AF outcome gates. Independent
+  [#544](https://github.com/bitcoinaustria/kassiber/pull/544) extracts the useful
+  cash-currency guard from otherwise deferred #428.
+  External Claude review remains blocked by code-egress approval.
 
 ## Pilot facts still required
 

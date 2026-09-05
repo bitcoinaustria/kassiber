@@ -11,9 +11,9 @@ EBICS, payment initiation, payroll and FinanzOnline transmission remain excluded
 | --- | --- |
 | [RP2 #48](https://github.com/bitcoinaustria/rp2/pull/48) | Blocked: final-history pooled basis contaminates earlier per-wallet sales and historical global open positions. Do not merge the pinned `1c6fa0e`. |
 | [Kassiber #542](https://github.com/bitcoinaustria/kassiber/pull/542) | Required compensation/acquisition foundation, not duplicated by custody or GL work. Blocked on corrected RP2 basis and a new reviewed dependency pin. |
-| [Kassiber #543](https://github.com/bitcoinaustria/kassiber/pull/543) | Independent custody/source-of-funds foundation. CLI consent bypass fixed at `6fc7c4e8`; exact-head local/CI gates govern landing. It does not depend on #542. |
-| [Kassiber #455](https://github.com/bitcoinaustria/kassiber/pull/455) | Superseded by #543's guided N:M, conversion, suspense and revision flow. No unique must-salvage feature found. Close after #543 lands; retain its branch. |
-| [Kassiber #428](https://github.com/bitcoinaustria/kassiber/pull/428) | Separate altcoin overview/import product experiment; not a dependency. Its cash-symbol validation is potentially separable, not a reason to merge the entire overlay. |
+| [Kassiber #543](https://github.com/bitcoinaustria/kassiber/pull/543) | Merged at `bbd983cb824de4ea51c685248b0d3fba5347d8d2` after fixing CLI consent at `6fc7c4e8` and passing full local/CI gates. Independent of #542. |
+| [Kassiber #455](https://github.com/bitcoinaustria/kassiber/pull/455) | Closed as superseded by #543's guided N:M, conversion, suspense and revision flow. No unique must-salvage feature found; branch retained. |
+| [Kassiber #428](https://github.com/bitcoinaustria/kassiber/pull/428) | Separate altcoin overview/import experiment, deferred. Its cash-symbol validation was extracted into independent [#544](https://github.com/bitcoinaustria/kassiber/pull/544), not used to justify merging the overlay. |
 | [Kassiber #431](https://github.com/bitcoinaustria/kassiber/pull/431) | Separate native macOS client; defer outside CLI/Agent accounting. |
 | [Kassiber #136](https://github.com/bitcoinaustria/kassiber/pull/136) | Separate modular overview layout; defer outside this stack. |
 
@@ -28,16 +28,16 @@ Partial exploratory RP2 fixes are not a shipped dependency.
 
 | Order | Branch | Responsibility |
 | --- | --- | --- |
-| 1 | `codex/accounting-core-cli` | Complete deterministic local accounting domain and CLI: encrypted separate ledger/evidence, bank/open items/schedules/cash, retained RP2 sources/calculations, projections/openings/valuations, statements/close, jurisdiction workpapers, durable local tasks, recovery and internal daemon/document-worker contracts. No accounting AI tools, provider changes or new UI. |
-| 2 | `codex/accounting-scoped-agent` | Exact selected-disclosure AI, guarded draft proposals, opaque scoped task tools, CLI assistance, minimal existing-Assistant approval, provider isolation/cancellation and native security protections. No dedicated accounting screens or broad renderer accounting allowlist. |
+| [#545](https://github.com/bitcoinaustria/kassiber/pull/545) | `codex/accounting-core-cli` | Complete deterministic local accounting domain and CLI: encrypted separate ledger/evidence, bank/open items/schedules/cash, retained RP2 sources/calculations, projections/openings/valuations, statements/close, jurisdiction workpapers, durable local tasks, recovery and internal daemon/document-worker contracts. No accounting AI tools, provider changes or new UI. |
+| [#546](https://github.com/bitcoinaustria/kassiber/pull/546) | `codex/accounting-scoped-agent` | Exact selected-disclosure AI, guarded draft proposals, opaque scoped task tools, CLI assistance, minimal existing-Assistant approval, provider isolation/cancellation and native security protections. No dedicated accounting screens or broad renderer accounting allowlist. |
 
 These are two cohesive extracted branches, not seven artificial layers whose
 eager imports or schemas reference absent modules. The coupled financial
 domain remains together. Each cut must pass independently; the full stack must
 also preserve the previously tested composition.
 
-Land #543 independently when ready. Keep #542 based on the resulting main and
-the accounting core based on #542; the agent PR targets the core branch.
+PR #543 landed independently. PR #542 was updated to that main at `335a0fd5`
+and marked draft; #545 targets its branch and #546 targets #545's branch.
 Both accounting PRs remain draft while the RP2 dependency and full outcome
 acceptance are unresolved. No auto-merge is armed around those blockers.
 If any base changes, restack and rerun scope/basis/consent integration tests.
@@ -78,14 +78,18 @@ remain unenrolled and need no general-accounting configuration.
 ## Verification and unresolved gates
 
 The core extraction passed 459 focused tests (3 optional skips). Independent
-partition review verified all100 accounting action classifications, zero
+partition review verified all 100 accounting action classifications, zero
 accounting AI exposure, retention and worker lifecycle; 156 tests plus a real
 locked-daemon scenario passed. These are partition checks, not exhaustive
 accounting certification.
 
-The pre-triage full integration gate completed with4347 passes,38 skips and430
+The pre-triage full integration gate completed with 4347 passes, 38 skips and 430
 subtests, but two failures exposed stale Vite-only accounting allowlist entries.
-The extracted agent cut omits those entries; rerun both drift and full gates.
+The extracted agent cut omits those entries. Its full gate passed at `b9b31474`:
+4365 Python tests, 38 skips, 430 subtests; TypeScript; ESLint with zero errors
+and 50 existing warnings; 137 UI files / 1021 tests. The native suite passed
+115 tests. Restack `02dfd273` has the identical tree; another 140 CLI/consent/
+scope/catalog tests passed after resolving the overlapping consent hunks.
 The external Claude review remains blocked by code-egress approval and is not
 represented as completed.
 

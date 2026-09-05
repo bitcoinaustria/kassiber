@@ -565,6 +565,8 @@ top of the monolith.
   - [x] Extract two cohesive accounting cuts: full deterministic core/CLI, then
     scoped agents and minimal consent. The seven-cut sketch is superseded;
     neither cut advertises absent modules or dedicated accounting screens.
+  - [x] Publish draft stack #542 → #545 → #546 with explicit RP2 merge hold.
+    Merge independently green #543 and close superseded #455, retaining branches.
   - [ ] Land the dependent stack only after RP2 #48's chronological/historical
     basis blockers are resolved, #542 is repinned and per-cut/full gates pass.
     Remaining agent-workflow acceptance is not satisfied by publishing drafts.
