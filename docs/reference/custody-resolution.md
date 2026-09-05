@@ -95,6 +95,15 @@ conversion amounts unless the user edits them.
 
 ## Resolve with the CLI or chat
 
+The preferred direction is agent-assisted investigation with a reviewable
+result. Users should not have to reproduce the agent's transaction search and
+evidence comparisons by clicking through individual editors. CLI and built-in
+chat share the typed investigation and plan/apply contracts; the UI makes
+evidence, open questions and proposed accounting effects inspectable. The manual
+component editor remains available for cases that need direct correction.
+This is a product direction, not a claim that an unattended quarantine-resolution
+agent is already implemented.
+
 Start with the actual reason and evidence:
 
 ```bash
