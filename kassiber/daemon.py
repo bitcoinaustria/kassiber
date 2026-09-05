@@ -139,6 +139,7 @@ from .core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registe
 from .core import reports as core_reports
 from .core import samourai as core_samourai
 from .core import source_funds as core_source_funds
+from .core import source_funds_review as core_source_funds_review
 from .core import transfer_matching as core_transfer_matching
 from .core import source_funds_coverage as core_source_funds_coverage
 from .core import source_funds_recipients as core_source_funds_recipients
@@ -402,6 +403,8 @@ SUPPORTED_KINDS = (
     "ui.reports.export_exit_tax_xlsx",
     "ui.reports.export_audit_package",
     "ui.source_funds.preview",
+    "ui.source_funds.review_context",
+    "ui.source_funds.request_input",
     "ui.source_funds.cases.save",
     "ui.source_funds.cases.list",
     "ui.source_funds.sources.list",
@@ -618,6 +621,8 @@ _CUSTODY_GAP_DAEMON_KINDS = (
 )
 _SOURCE_FUNDS_READ_AI_DAEMON_KINDS = {
     "ui.source_funds.preview",
+    "ui.source_funds.review_context",
+    "ui.source_funds.request_input",
     "ui.source_funds.sources.list",
     "ui.source_funds.links.list",
     "ui.source_funds.evidence.list",
@@ -2669,6 +2674,20 @@ def _ui_source_funds_payload_from_conn(
     data_root: str | Path | None = None,
 ) -> dict[str, Any]:
     hooks = _source_funds_hooks()
+    if kind == "ui.source_funds.review_context":
+        if set(args) - (core_source_funds_review.RECIPE_KEYS | {"target_transaction"}):
+            raise AppError("Unsupported source-funds review arguments", code="validation")
+        _, profile = resolve_scope(conn, None, None)
+        return core_source_funds_review.review_context(
+            conn, profile, hooks, target_transaction=args.get("target_transaction"),
+            recipe={key: value for key, value in args.items() if key != "target_transaction"},
+        )
+    if kind == "ui.source_funds.request_input":
+        required = {"action", "target_transaction", "expected_review_fingerprint"}
+        if required - set(args) or set(args) - (required | {"recipe", "explanation"}):
+            raise AppError("Unsupported source-funds input arguments", code="validation")
+        _, profile = resolve_scope(conn, None, None)
+        return core_source_funds_review.request_input(conn, profile, hooks, **args)
     if kind == "ui.source_funds.sources.list":
         return {
             "sources": core_source_funds.list_sources(conn, None, None, hooks),
@@ -2967,6 +2986,14 @@ def _ui_source_funds_payload_from_conn(
             raise AppError(
                 "ui.source_funds.cases.save case_label must be a string",
                 code="validation",
+            )
+        if "expected_review_fingerprint" in args:
+            _, profile = resolve_scope(conn, None, None)
+            return core_source_funds_review.save_reviewed_case(
+                conn, profile, hooks, target_transaction=target.strip(),
+                expected_review_fingerprint=args["expected_review_fingerprint"],
+                recipe={key: value for key, value in args.items() if key in core_source_funds_review.RECIPE_KEYS},
+                case_label=case_label,
             )
         return core_source_funds.build_report(
             conn,
@@ -4747,7 +4774,9 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
     screen_context = _ai_chat_screen_context(args.get("screen_context"))
     attachment = _ai_chat_attachment(args.get("attachment"))
     if "tool_loop_max_iterations" not in args and tools_enabled:
-        if "review" in (select_tool_capabilities(cleaned, screen_context=screen_context) or ()):
+        if {"review", "source_funds"}.intersection(
+            select_tool_capabilities(cleaned, screen_context=screen_context) or ()
+        ):
             tool_loop_max_iterations = 16
     return {
         "provider": provider,
@@ -6146,14 +6175,32 @@ def _execute_read_only_ai_tool(
             elif entry.daemon_kind == "ui.next_actions":
                 payload = build_next_actions_snapshot(conn)
             elif entry.daemon_kind in _SOURCE_FUNDS_READ_AI_DAEMON_KINDS:
-                payload = _redact_source_funds_payload_for_ai(
-                    _ui_source_funds_payload_from_conn(
-                        conn,
-                        entry.daemon_kind,
-                        call.arguments,
-                        data_root=runtime.data_root,
-                    )
+                arguments = call.arguments
+                if entry.daemon_kind == "ui.source_funds.request_input" and "explanation" in arguments:
+                    arguments = {
+                        **arguments,
+                        "explanation": redact_ai_tool_result(
+                            _redact_source_funds_payload_for_ai(arguments["explanation"])
+                        ),
+                    }
+                payload = _ui_source_funds_payload_from_conn(
+                    conn, entry.daemon_kind, arguments, data_root=runtime.data_root,
                 )
+                if entry.daemon_kind in {"ui.source_funds.review_context", "ui.source_funds.request_input"}:
+                    recipe = payload["recipe"]
+                    if len(json.dumps({"source_funds_recipe": recipe})) > 4096:
+                        raise AppError(
+                            "This source-funds recipe is too large for a chat continuation",
+                            code="source_funds_recipe_too_large",
+                            hint="Narrow the disclosure options or shorten the note, or continue in the local UI or CLI.",
+                        )
+                    if redact_ai_tool_result(_redact_source_funds_payload_for_ai(recipe)) != recipe:
+                        raise AppError(
+                            "This source-funds recipe cannot be returned unchanged to an AI provider",
+                            code="source_funds_recipe_private",
+                            hint="Use a destination label and non-sensitive note, or review the full recipe in the local UI or CLI.",
+                        )
+                payload = _redact_source_funds_payload_for_ai(payload)
             elif entry.daemon_kind in _CUSTODY_COVERAGE_READ_DAEMON_KINDS:
                 payload = _ui_custody_coverage_payload_from_conn(
                     conn,
@@ -11154,12 +11201,30 @@ def _document_import_stage_payload(
         raise _document_import_source_unavailable() from exc
     workspace, profile = resolve_scope(ctx.conn, None, None)
     attachment_fields = {}
+    if "review_case_id" not in args and any(
+        key in args for key in ("review_recipe", "expected_review_fingerprint")
+    ):
+        raise AppError("Review recipe requires a source-funds case ID", code="validation")
     if "review_case_id" in args:
         case_id = _required_str_arg(args, "review_case_id", "Review case")
-        packet = core_review_workflow.request_input(
-            ctx.conn, profile, action="attach_evidence", case_ids=[case_id],
-            expected_input_version=int(profile["journal_input_version"] or 0),
-        )
+        if case_id.startswith("source_funds:"):
+            if "review_recipe" not in args or "expected_review_fingerprint" not in args:
+                raise AppError("Source-funds attachment requires its reviewed recipe and fingerprint", code="validation")
+            packet = core_source_funds_review.request_input(
+                ctx.conn, profile, _source_funds_hooks(), action="attach_evidence",
+                target_transaction=case_id.removeprefix("source_funds:"),
+                recipe=args["review_recipe"],
+                expected_review_fingerprint=args["expected_review_fingerprint"],
+            )
+            if packet["cases"][0]["case_id"] != case_id:
+                raise AppError("Source-funds case ID must be canonical", code="validation")
+        else:
+            if "review_recipe" in args or "expected_review_fingerprint" in args:
+                raise AppError("Only source-funds evidence accepts a review recipe", code="validation")
+            packet = core_review_workflow.request_input(
+                ctx.conn, profile, action="attach_evidence", case_ids=[case_id],
+                expected_input_version=int(profile["journal_input_version"] or 0),
+            )
         transaction_id = packet["cases"][0]["transaction_id"]
         attachment = core_attachments.add_attachment(
             ctx.conn, ctx.data_root, workspace["id"], profile["id"], transaction_id,
@@ -15778,6 +15843,8 @@ def handle_request(
 
     if kind in {
         "ui.source_funds.preview",
+        "ui.source_funds.review_context",
+        "ui.source_funds.request_input",
         "ui.source_funds.cases.save",
         "ui.source_funds.cases.list",
         "ui.source_funds.sources.list",

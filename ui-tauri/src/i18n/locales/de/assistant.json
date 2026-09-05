@@ -424,6 +424,7 @@
       "unavailable": "Ich habe den angefragten Nachweis nicht. Halte die Lücke offen und prüfe alternative Nachweise."
     },
     "continuePrompt": "Setze die Prüfung der Nachweise fort. {{outcome}} Prüfe die aktuellen Fälle erneut, bevor du eine Änderung vorschlägst. Fälle: {{cases}}",
+    "sourceFundsContinuePrompt": "Setze die Mittelherkunftsprüfung für dasselbe Ziel, denselben Betrag und Zweck fort. {{outcome}} Lies den aktuellen Mittelherkunftsfall und die Nachweise erneut. Trenne dokumentierte Herkunft von Buchhaltung und hole vor Änderungen die Freigabe ein. Fälle: {{cases}}",
     "importTarget": "In Verbindung importieren",
     "newImportTarget": "Separate Verbindung erstellen",
     "importTargetHint": "Wähle die Verbindung, deren Verlauf der Export beschreibt. Ein Import in eine bestehende Verbindung verwendet dieselbe Wallet.",

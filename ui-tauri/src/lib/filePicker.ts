@@ -137,6 +137,8 @@ export async function pickDocumentImportSource(): Promise<DocumentImportSourceSe
 export async function pickChatAttachmentSource(options?: {
   expected_scope?: { workspace_id: string; profile_id: string };
   review_case_id?: string;
+  review_recipe?: Record<string, unknown>;
+  expected_review_fingerprint?: string;
 }): Promise<DocumentImportSourceSelection | null> {
   if (!isFilePickerAvailable) return null;
   if (isBridgeRuntime) {
@@ -151,6 +153,8 @@ export async function pickChatAttachmentSource(options?: {
     await invoke<unknown>("pick_chat_attachment_source", {
       expectedScope: options?.expected_scope,
       reviewCaseId: options?.review_case_id,
+      ...(options?.review_recipe === undefined ? {} : { reviewRecipe: options.review_recipe }),
+      ...(options?.expected_review_fingerprint === undefined ? {} : { expectedReviewFingerprint: options.expected_review_fingerprint }),
     }),
   );
 }

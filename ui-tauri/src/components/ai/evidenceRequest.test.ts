@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAutoContinueEvidence, evidenceRequest, sameHandoffContext, canStartEvidenceHandoff, canResumeEvidenceHandoff, isActiveEvidenceHandoff } from "./evidenceRequest";
+import { canAutoContinueEvidence, evidenceRequest, evidenceRevalidationRequest, evidenceAttachmentOptions, evidenceContinuationScreenContext, sameHandoffContext, canStartEvidenceHandoff, canResumeEvidenceHandoff, isActiveEvidenceHandoff } from "./evidenceRequest";
 import type { AiChatToolCall } from "@/daemon/stream";
 
 export const requestPacket = {
@@ -14,6 +14,32 @@ export const requestCall: AiChatToolCall = {
 };
 
 describe("evidence handoff boundary", () => {
+  it("revalidates source-of-funds recipe and carries its fingerprint through native staging", () => {
+    const data = { ...requestPacket, domain: "source_funds", action: "attach_evidence",
+      target_transaction: "tx-1", recipe: { target_amount: "0.01", reveal_mode: "standard" },
+      review_fingerprint: "b".repeat(64), cases: [{ ...requestPacket.cases[0],
+        case_id: "source_funds:tx-1", reason: "evidence_review" }] };
+    const call = { ...requestCall, name: "ui.source_funds.request_input",
+      result: { kind: "ui.source_funds.request_input", data } };
+    const parsed = evidenceRequest(call)!;
+    expect(parsed).not.toBeNull();
+    expect(evidenceRevalidationRequest(parsed)).toEqual({ kind: "ui.source_funds.request_input", args: {
+      action: "attach_evidence", target_transaction: "tx-1", recipe: data.recipe,
+      expected_review_fingerprint: data.review_fingerprint, explanation: data.explanation,
+      expected_scope: { workspace_id: "workspace", profile_id: "profile" },
+    } });
+    expect(evidenceAttachmentOptions(parsed)).toMatchObject({ review_case_id: "source_funds:tx-1",
+      review_recipe: data.recipe, expected_review_fingerprint: data.review_fingerprint });
+    expect(evidenceContinuationScreenContext(parsed)).toEqual({ route: "/source-of-funds",
+      capabilities: ["source_funds"], entityType: "transaction", entityId: "tx-1",
+      filters: { source_funds_recipe: data.recipe } });
+    expect(evidenceContinuationScreenContext(evidenceRequest(requestCall)!)).toBeNull();
+    for (const patch of [{ domain: undefined }, { target_transaction: "tx-2" },
+      { review_fingerprint: "bad" }, { recipe: null }, { cases: requestPacket.cases }]) {
+      expect(evidenceRequest({ ...call, result: { ...call.result, data: { ...data, ...patch } } })).toBeNull();
+    }
+    expect(evidenceRequest({ ...requestCall, result: { kind: "ui.review.request_input", data } })).toBeNull();
+  });
   it("accepts only a completed, typed server input request", () => {
     expect(evidenceRequest(requestCall)?.action).toBe("connect_wallet");
     for (const patch of [

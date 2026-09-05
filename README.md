@@ -284,6 +284,12 @@ After successful input it continues the same review and checks the updated book.
 Saved evidence remains attached for later inspection; supplying it does not
 automatically approve an accounting change.
 
+**Source of Funds** uses the same assistant handoff for documentary gaps, even
+when a transaction is not quarantined. Choose the transaction to explain;
+Kassiber inspects its relevant origin evidence and retains explicit disclosure
+and export controls. Saved evidence bundles verify the original file hashes.
+See the [source-of-funds review guide](docs/reference/source-of-funds-review.md).
+
 For a likely return through wallet history that is no longer available, use
 the guided custody-gap workflow instead of writing component JSON:
 

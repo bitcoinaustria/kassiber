@@ -26,6 +26,11 @@ Backlog contract:
 
 ## Agent-assisted accounting review
 
+- [x] Target-scoped source-of-funds investigation shared by CLI/chat and the
+  desktop case page, fingerprint-bound missing-input handoffs, book-isolated
+  drafts and refreshed case results after evidence changes. ZIP evidence stays
+  bound to the saved snapshot; coverage reuses one request's immutable inputs.
+
 - [x] Shared canonical case pagination, portable mixed-operation previews,
   atomic application and verification receipts for CLI and built-in chat.
   Investigation uses existing evidence tools; bookkeeping remains in

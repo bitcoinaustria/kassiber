@@ -195,6 +195,7 @@ from ..update_check import (
 )
 from ..wallet_descriptors import MAX_DESCRIPTOR_GAP_LIMIT
 from .review import add_review_parser, dispatch_review
+from .source_funds_review import add_source_funds_review_parsers, dispatch_source_funds_review
 from .chat import run_chat_command
 from .command_registry import command_needs_database, describe_command_catalog
 
@@ -2843,6 +2844,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     source_funds = sub.add_parser("source-funds")
     source_funds_sub = source_funds.add_subparsers(dest="source_funds_command", required=True)
+    add_source_funds_review_parsers(source_funds_sub)
 
     sf_sources = source_funds_sub.add_parser("sources")
     sf_sources_sub = sf_sources.add_subparsers(dest="source_funds_sources_command", required=True)
@@ -5218,6 +5220,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
     if args.command == "source-funds":
         source_funds_hooks = _source_funds_hooks()
+        if args.source_funds_command in {"review-context", "request-input"}:
+            return emit(args, dispatch_source_funds_review(conn, args, source_funds_hooks))
         if args.source_funds_command == "sources":
             if args.source_funds_sources_command == "list":
                 return emit(args, core_source_funds.list_sources(conn, args.workspace, args.profile, source_funds_hooks))

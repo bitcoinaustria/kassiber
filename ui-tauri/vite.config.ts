@@ -295,6 +295,8 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.chat.sessions.clear",
   "ui.chat.history.configure",
   "ui.source_funds.preview",
+  "ui.source_funds.review_context",
+  "ui.source_funds.request_input",
   "ui.source_funds.cases.save",
   "ui.source_funds.cases.list",
   "ui.source_funds.sources.list",
@@ -941,6 +943,8 @@ async function handleBridgeFilePicker(
           source_file: paths[0],
           ...(request.expected_scope === undefined ? {} : { expected_scope: request.expected_scope }),
           ...(request.review_case_id === undefined ? {} : { review_case_id: request.review_case_id }),
+          ...(request.review_recipe === undefined ? {} : { review_recipe: request.review_recipe }),
+          ...(request.expected_review_fingerprint === undefined ? {} : { expected_review_fingerprint: request.expected_review_fingerprint }),
         },
       });
       if (staged.kind !== DOCUMENT_IMPORT_STAGE_KIND || !staged.data) {

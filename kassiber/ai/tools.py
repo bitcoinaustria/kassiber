@@ -244,6 +244,30 @@ _SOURCE_FUNDS_CONFIDENCE_LEVELS = ("exact", "strong", "weak", "unknown")
 _SOURCE_FUNDS_ALLOCATION_POLICIES = ("explicit", "heuristic", "unknown")
 _SOURCE_FUNDS_REVEAL_MODES = ("labels_only", "minimal", "standard", "full")
 _SOURCE_FUNDS_REPORT_PURPOSES = ("existing_transaction", "planned_exchange_sale")
+
+_SOURCE_FUNDS_RECIPE_PROPERTIES = {
+    "target_amount": {"type": "string", "description": "Exact BTC amount to trace."},
+    "report_purpose": {"type": "string", "enum": list(_SOURCE_FUNDS_REPORT_PURPOSES)},
+    "planned_destination": {"type": "string", "maxLength": 1000},
+    "planned_note": {"type": "string", "maxLength": 4000},
+    "reveal_mode": {"type": "string", "enum": list(_SOURCE_FUNDS_REVEAL_MODES)},
+    "max_depth": {"type": "integer", "minimum": 1, "maximum": 32},
+    "recipient": {"type": ["string", "null"]},
+    "report_options": {"type": "object", "additionalProperties": False, "properties": {
+        "diagram_detail": {"type": "string", "enum": ["summary", "detailed"]},
+        "amount_precision": {"type": "string", "enum": ["btc", "sats"]},
+        "mask_recipient": {"type": "boolean"},
+        "omit_sections": {"type": "array", "maxItems": 20, "items": {"type": "string"}},
+        "reveal_overrides": {"type": "object", "additionalProperties": {"type": "string", "enum": ["show", "hide"]}},
+    }},
+}
+_SOURCE_FUNDS_RECIPE_SCHEMA = {
+    "type": "object", "additionalProperties": False, "properties": _SOURCE_FUNDS_RECIPE_PROPERTIES,
+}
+_SOURCE_FUNDS_REPORT_PROPERTIES = {
+    "target_transaction": {"type": "string", "minLength": 1}, **_SOURCE_FUNDS_RECIPE_PROPERTIES,
+}
+
 _TRANSFER_MATCH_METHODS = (
     "payment_hash",
     "provider_swap_id",
@@ -1451,32 +1475,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "heuristic allocations, privacy-hop ambiguity, or missing pricing."
         ),
         parameters={
-            "type": "object",
-            "additionalProperties": False,
+            "type": "object", "additionalProperties": False,
             "required": ["target_transaction"],
-            "properties": {
-                "target_transaction": {
-                    "type": "string",
-                    "description": "Target transaction id or txid.",
-                },
-                "target_amount": {
-                    "type": "string",
-                    "description": "Optional BTC amount of the target to trace.",
-                },
-                "report_purpose": {
-                    "type": "string",
-                    "enum": list(_SOURCE_FUNDS_REPORT_PURPOSES),
-                    "description": "Purpose of the source-funds preview.",
-                },
-                "planned_destination": {"type": "string"},
-                "planned_note": {"type": "string"},
-                "reveal_mode": {
-                    "type": "string",
-                    "enum": list(_SOURCE_FUNDS_REVEAL_MODES),
-                },
-                "max_depth": {"type": "integer", "minimum": 1, "maximum": 32},
-                "recipient": {"type": "string"},
-            },
+            "properties": {**_SOURCE_FUNDS_REPORT_PROPERTIES},
         },
         kind_class="read_only",
         wire_name="ui_source_funds_preview",
@@ -2985,6 +2986,29 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read source-funds cases",
     ),
     ToolEntry(
+        name="ui.source_funds.review_context", wire_name="ui_source_funds_review_context",
+        daemon_kind="ui.source_funds.review_context", kind_class="read_only",
+        description="Investigate one source-of-funds target using its canonical report, reachable links, root sources and evidence. Returns blockers, documentary input_needs, scope_truncated and a fingerprint covering provenance edits and the exact report recipe. Coverage is historical inflows, not current holdings. Source-funds evidence never changes tax or custody accounting.",
+        parameters={"type": "object", "additionalProperties": False, "required": ["target_transaction"],
+            "properties": _SOURCE_FUNDS_REPORT_PROPERTIES},
+        summary_template="Investigate source-of-funds target",
+    ),
+    ToolEntry(
+        name="ui.source_funds.request_input", wire_name="ui_source_funds_request_input",
+        daemon_kind="ui.source_funds.request_input", kind_class="read_only",
+        description="Request missing connection, history or documentary evidence for the inspected source-of-funds target, including targets outside quarantine. Reuse the exact review_fingerprint and canonical recipe from review_context. This only opens a typed user handoff; wait for user input, then inspect fresh context. Exportable attestations may still need better documentary evidence; never invent origin facts or treat an attachment as verified provenance.",
+        parameters={"type": "object", "additionalProperties": False,
+            "required": ["action", "target_transaction", "expected_review_fingerprint", "recipe"],
+            "properties": {
+                "action": {"type": "string", "enum": ["connect_wallet", "import_history", "attach_evidence"]},
+                "target_transaction": {"type": "string", "minLength": 1},
+                "expected_review_fingerprint": {"type": "string", "minLength": 64, "maxLength": 64},
+                "recipe": _SOURCE_FUNDS_RECIPE_SCHEMA,
+                "explanation": {"type": "string", "minLength": 1, "maxLength": 1000},
+            }},
+        summary_template="Request source-of-funds evidence",
+    ),
+    ToolEntry(
         name="ui.source_funds.assemble",
         description=(
             "Run the local deterministic source-funds assembly loop for one target after explicit consent. "
@@ -3007,20 +3031,12 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.source_funds.cases.save",
-        description="Save a reviewed source-funds case after explicit consent.",
+        description="Save a reviewed source-funds case after explicit consent. Reuse the full canonical recipe and expected_review_fingerprint from review_context so intervening provenance edits cannot change the saved disclosure unnoticed.",
         parameters={
-            "type": "object",
-            "additionalProperties": False,
+            "type": "object", "additionalProperties": False,
             "required": ["target_transaction"],
-            "properties": {
-                "target_transaction": {"type": "string"},
-                "case_label": {"type": "string"},
-                "target_amount": {"type": "string"},
-                "report_purpose": {"type": "string", "enum": list(_SOURCE_FUNDS_REPORT_PURPOSES)},
-                "reveal_mode": {"type": "string", "enum": list(_SOURCE_FUNDS_REVEAL_MODES)},
-                "max_depth": {"type": "integer", "minimum": 1, "maximum": 32},
-                "recipient": {"type": "string"},
-            },
+            "properties": {**_SOURCE_FUNDS_REPORT_PROPERTIES, "case_label": {"type": "string"},
+                "expected_review_fingerprint": {"type": "string", "minLength": 64, "maxLength": 64}},
         },
         kind_class="mutating",
         wire_name="ui_source_funds_cases_save",
@@ -3523,7 +3539,7 @@ def select_tool_capabilities(
         ),
         "loans": ("loan", "collateral", "borrowed", "principal", "liquidation", "darlehen", "kredit"),
         "privacy": ("privacy", "linkable", "egress", "outbound", "psbt"),
-        "source_funds": ("source of funds", "source-of-funds", "provenance", "audit package", "proof of funds"),
+        "source_funds": ("source of funds", "source-of-funds", "provenance", "audit package", "proof of funds", "mittelherkunft", "herkunftsnachweis", "herkunft der mittel"),
         "merchant": ("btcpay", "invoice", "receipt", "merchant", "commercial", "document"),
         "transfers": (
             # Quarantine includes custody failures; a generic help request must

@@ -208,6 +208,8 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_source_funds_sources_list",
             "ui_source_funds_links_list",
             "ui_source_funds_preview",
+            "ui_source_funds_review_context",
+            "ui_source_funds_request_input",
             "read_skill_reference",
             "ui_wallets_sync",
             "ui_maintenance_configure",

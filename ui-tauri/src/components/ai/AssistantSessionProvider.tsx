@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { evidenceRequest, sameHandoffContext, canAutoContinueEvidence,
+import { evidenceRequest, evidenceRevalidationRequest, evidenceAttachmentOptions, evidenceContinuationScreenContext, sameHandoffContext, canAutoContinueEvidence,
   canStartEvidenceHandoff, canResumeEvidenceHandoff, isActiveEvidenceHandoff,
   type EvidenceRequest, type EvidenceRequestState, type HandoffStamp } from "./evidenceRequest";
 import type { ConnectionSetupOutcome } from "@/components/kb/connectionSetupOutcome";
@@ -129,7 +129,8 @@ export function AssistantSessionProvider({
           attachment: (evidence ? evidence.attachment : attachment)
             ? { token: (evidence ? evidence.attachment : attachment)!.token } : undefined,
           expectedScope: evidence ? { workspace_id: evidence.request.workspace_id, profile_id: evidence.request.profile_id } : undefined,
-          screenContext: currentAssistantScreenContext(screenContext),
+          screenContext: (evidence ? evidenceContinuationScreenContext(evidence.request) : null)
+            ?? currentAssistantScreenContext(screenContext),
         },
         prompt,
       );
@@ -202,7 +203,7 @@ export function AssistantSessionProvider({
     pendingEvidenceRef.current = null;
     continuedEvidenceRef.current.add(request.request_id);
     setEvidenceRequests((old) => ({ ...old, [request.request_id]: { status: "continuing" } }));
-    const prompt = t("evidence.continuePrompt", {
+    const prompt = t(request.domain === "source_funds" ? "evidence.sourceFundsContinuePrompt" : "evidence.continuePrompt", {
       outcome: t(`evidence.outcome.${outcome}`),
       cases: request.cases.map((item) => item.case_id).join(", "),
     });
@@ -237,19 +238,13 @@ export function AssistantSessionProvider({
     setEvidenceRequests((old) => ({ ...old, [request.request_id]: { status: "opening" } }));
     try {
       // Revalidate current cases before any local picker or setup egress.
-      const checked = await getTransport().invoke({ kind: "ui.review.request_input", args: {
-        action: request.action, case_ids: request.cases.map((item) => item.case_id),
-        expected_input_version: request.input_version, explanation: request.explanation,
-        expected_scope: { workspace_id: request.workspace_id, profile_id: request.profile_id },
-      } });
+      const checked = await getTransport().invoke(evidenceRevalidationRequest(request));
       if (checked.kind === "error" || checked.error) throw new Error(checked.error?.message ?? t("evidence.stale"));
       const packet = checked.data as { request_id?: unknown } | undefined;
       if (packet?.request_id !== request.request_id) throw new Error(t("evidence.stale"));
       if (!isActiveEvidenceHandoff(pendingEvidenceRef.current, pending, stamp()) || !currentEvidence(request, origin)) return;
       if (request.action === "attach_evidence") {
-        const selected = await pickChatAttachmentSource({ review_case_id: request.cases[0].case_id, expected_scope: {
-          workspace_id: request.workspace_id, profile_id: request.profile_id,
-        } });
+        const selected = await pickChatAttachmentSource(evidenceAttachmentOptions(request));
         if (!isActiveEvidenceHandoff(pendingEvidenceRef.current, pending, stamp()) || !currentEvidence(request, origin)) return;
         if (!selected) {
           pendingEvidenceRef.current = null;

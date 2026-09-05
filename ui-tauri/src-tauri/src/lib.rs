@@ -376,6 +376,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.chat.sessions.clear",
     "ui.chat.history.configure",
     "ui.source_funds.preview",
+    "ui.source_funds.review_context",
+    "ui.source_funds.request_input",
     "ui.source_funds.cases.save",
     "ui.source_funds.cases.list",
     "ui.source_funds.sources.list",
@@ -687,6 +689,8 @@ async fn pick_document_import_source(
         DOCUMENT_IMPORT_EXTENSIONS,
         None,
         None,
+        None,
+        None,
     )
     .await
 }
@@ -702,6 +706,8 @@ async fn pick_chat_attachment_source(
     state: State<'_, Arc<DaemonSupervisor>>,
     expected_scope: Option<Value>,
     review_case_id: Option<String>,
+    review_recipe: Option<Value>,
+    expected_review_fingerprint: Option<String>,
 ) -> Result<Option<Value>, String> {
     let extensions: Vec<&str> = LEDGER_PREVIEW_EXTENSIONS
         .iter()
@@ -715,6 +721,8 @@ async fn pick_chat_attachment_source(
         &extensions,
         expected_scope,
         review_case_id,
+        review_recipe,
+        expected_review_fingerprint,
     )
     .await
 }
@@ -726,6 +734,8 @@ async fn pick_staged_source(
     extensions: &[&str],
     expected_scope: Option<Value>,
     review_case_id: Option<String>,
+    review_recipe: Option<Value>,
+    expected_review_fingerprint: Option<String>,
 ) -> Result<Option<Value>, String> {
     // This command deliberately accepts no path or filter arguments from the
     // webview. Only the native picker may mint the daemon's opaque document
@@ -750,6 +760,12 @@ async fn pick_staged_source(
         }
         if let Some(case_id) = review_case_id {
             args["review_case_id"] = Value::String(case_id);
+        }
+        if let Some(recipe) = review_recipe {
+            args["review_recipe"] = recipe;
+        }
+        if let Some(fingerprint) = expected_review_fingerprint {
+            args["expected_review_fingerprint"] = Value::String(fingerprint);
         }
         supervisor.invoke(DOCUMENT_IMPORT_STAGE_KIND, Some(args), &app, false, None)
     })

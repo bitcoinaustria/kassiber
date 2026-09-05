@@ -15,6 +15,18 @@ afterEach(() => {
 });
 
 describe("review attachment scope", () => {
+  it("keeps a source-of-funds snapshot bound across the native picker", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    mocks.invoke.mockResolvedValue(selection);
+    const { pickChatAttachmentSource } = await import("./filePicker");
+    const recipe = { target_amount: "0.01", report_purpose: "planned_exchange_sale" };
+    await pickChatAttachmentSource({ expected_scope: scope, review_case_id: "source_funds:tx-a",
+      review_recipe: recipe, expected_review_fingerprint: "b".repeat(64) });
+    expect(mocks.invoke).toHaveBeenCalledWith("pick_chat_attachment_source", {
+      expectedScope: scope, reviewCaseId: "source_funds:tx-a", reviewRecipe: recipe,
+      expectedReviewFingerprint: "b".repeat(64),
+    });
+  });
   it("carries the original book to the bridge staging request after native selection", async () => {
     vi.stubGlobal("window", {});
     const fetch = vi.fn().mockResolvedValue({

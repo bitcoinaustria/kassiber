@@ -424,6 +424,7 @@
       "unavailable": "I do not have the requested evidence. Keep the gap explicit and consider alternative evidence."
     },
     "continuePrompt": "Continue the evidence review. {{outcome}} Inspect the current cases again before making a proposal. Cases: {{cases}}",
+    "sourceFundsContinuePrompt": "Continue the source-of-funds review for the same target, amount and purpose. {{outcome}} Read the current source-of-funds review context and evidence again. Keep recorded provenance separate from accounting and request consent before changes. Cases: {{cases}}",
     "importTarget": "Import into connection",
     "newImportTarget": "Create a separate connection",
     "importTargetHint": "Use the connection whose history this export describes. Importing into an existing connection reuses that wallet.",

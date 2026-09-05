@@ -62,6 +62,7 @@ CLI_READ_PATHS = _paths(
     transfers.payouts.list transfers.suggest transfers.rules.list views.list
     btcpay.provenance.list btcpay.provenance.links documents.list
     source-funds.sources.list source-funds.links.list source-funds.cases.list
+    source-funds.review-context source-funds.request-input
     source-funds.coverage source-funds.recipients.list reports.summary
     reports.tax-summary reports.balance-sheet reports.portfolio-summary
     reports.capital-gains reports.journal-entries reports.privacy-hygiene
@@ -162,7 +163,7 @@ DAEMON_READ_KINDS = _paths(
     ui.backends.settings.list
     ui.reports.privacy_hygiene ui.reports.privacy_mirror
     ui.reports.psbt_privacy
-    ui.source_funds.preview ui.source_funds.cases.list
+    ui.source_funds.preview ui.source_funds.review_context ui.source_funds.request_input ui.source_funds.cases.list
     ui.source_funds.sources.list ui.source_funds.links.list
     ui.source_funds.evidence.list ui.source_funds.coverage
     ui.source_funds.recipients.list ui.btcpay.provenance.list

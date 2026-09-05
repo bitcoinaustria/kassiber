@@ -372,6 +372,8 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.wallets.list",
     "ui.review.badges",
     "ui.workspace.health",
+    "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
   "wallets.reveal_descriptor": [],
   "ui.chat.history.configure": [
@@ -408,6 +410,9 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.wallets.utxos",
     "ui.review.badges",
     "ui.workspace.health",
+    "ui.source_funds.coverage",
+    "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
   "ui.wallets.sync": [
     "ui.activity.history",
@@ -435,6 +440,9 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.wallets.utxos",
     "ui.review.badges",
     "ui.workspace.health",
+    "ui.source_funds.coverage",
+    "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
   "ui.journals.process": [
     "ui.activity.history",
@@ -459,6 +467,9 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.transactions.resolve",
     "ui.review.badges",
     "ui.workspace.health",
+    "ui.source_funds.coverage",
+    "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
   "ui.attachments.add": [
     "ui.attachments.list",
@@ -467,6 +478,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.source_funds.coverage",
     "ui.source_funds.evidence.list",
     "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
   "ui.attachments.copy": [
     "ui.attachments.list",
@@ -475,6 +487,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.source_funds.coverage",
     "ui.source_funds.evidence.list",
     "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
   "ui.attachments.remove": [
     "ui.attachments.list",
@@ -483,12 +496,14 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.source_funds.coverage",
     "ui.source_funds.evidence.list",
     "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
   "ui.attachments.rename": [
     "ui.attachments.list",
     "ui.audit.evidence.summary",
     "ui.source_funds.evidence.list",
     "ui.source_funds.preview",
+    "ui.source_funds.review_context",
   ],
 };
 
