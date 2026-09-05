@@ -2968,8 +2968,8 @@ GENERIC_LEDGER_COLUMNS = (
 )
 
 # Asset codes (normalized via `normalize_asset_code`) treated as the Bitcoin
-# leg. Anything else in an asset cell is treated as a fiat/cash currency (the
-# pricing leg). `SATS`/`SAT` mark an amount denominated in whole satoshis.
+# leg. The other side must be a known fiat/cash currency, never an arbitrary
+# symbol treated as pricing. `SATS`/`SAT` mark whole-satoshi amounts.
 _GENERIC_LEDGER_SATS_ASSETS = {"SATS", "SAT"}
 # Internal marker column: set by the BYO remapper when a mapped direction
 # column holds a value it cannot read. Never a user-facing ledger column.
@@ -3263,6 +3263,16 @@ def normalize_generic_ledger_record(record, index=0):
         amount = _generic_ledger_btc_amount(sent_amount, sent_asset)
         fiat_asset = received_asset if (received_asset and not _generic_ledger_is_crypto(received_asset)) else None
         fiat_leg_amount = received_amount if fiat_asset else None
+    if fiat_asset is not None and fiat_asset not in FIAT_CURRENCIES:
+        raise AppError(
+            f"{row_label}: unrecognized cash currency '{fiat_asset}'",
+            code="validation",
+            hint=(
+                "Use a supported fiat code such as EUR, USD, or CHF on the cash side. "
+                "For a separately valued Bitcoin leg, omit the opposing asset and "
+                "amount and enter its reviewed Fiat Value in the book currency."
+            ),
+        )
     # `leg_asset` keeps the row's original Bitcoin spelling (e.g. SATS); `asset`
     # is canonicalized for storage (SATS/XBT -> BTC). The fee fallback below
     # needs the original so a blank Fee Asset on a SATS leg stays in sats.

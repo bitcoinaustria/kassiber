@@ -465,9 +465,13 @@ the AI-assisted path (below) is allowed to propose a plan at all.
 | `Tx-ID` | Optional but recommended — the dedup key. Without it, rows dedup by their economic fingerprint (date/direction/asset/amount/fee), so two genuinely identical rows need a `Tx-ID` to be kept apart. |
 
 Each row carries exactly **one Bitcoin leg** (`BTC`, `LBTC`, or `SATS`); the
-other side, when present, is the fiat/cash leg that becomes exact
-`exchange_execution` pricing. Crypto-to-crypto rows (Bitcoin on both sides) are
-rejected. Amounts are in BTC (e.g. `0.05000000`) unless the asset is `SATS`,
+other side, when present, must use a supported fiat code such as EUR, USD or
+CHF before it can become exact `exchange_execution` pricing. Altcoins,
+stablecoins and unknown symbols on the cash side are rejected with the row
+number; an explicit `Fiat Value` does not turn those assets into fiat. For a
+separately valued Bitcoin leg, omit the opposing asset and amount and enter
+its reviewed `Fiat Value` in the book currency. Crypto-to-crypto rows (Bitcoin
+on both sides) are rejected. Amounts are in BTC (e.g. `0.05000000`) unless the asset is `SATS`,
 in which case whole satoshis are converted. Numbers may use either a dot or a
 comma decimal separator (`0,05` and `3.000,00` are read the same as `0.05` and
 `3000.00`), so a sheet exported from a German/Austrian-locale spreadsheet
