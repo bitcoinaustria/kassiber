@@ -1149,7 +1149,7 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument(
         "--yes",
         action="store_true",
-        help="Non-interactively allow mutating AI tools for this chat session.",
+        help="Non-interactively allow mutating AI tools, except ui.review.apply (fresh review required).",
     )
     chat.add_argument(
         "--allow-tool",
@@ -1157,7 +1157,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Non-interactively allow only this mutating tool name; repeat or "
             "pass comma-separated names. Other mutating tools still prompt on a TTY "
-            "or deny without one."
+            "or deny without one. ui.review.apply always requires fresh interactive review."
         ),
     )
     chat.add_argument(

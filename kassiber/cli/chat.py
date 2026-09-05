@@ -15,6 +15,7 @@ from ..ai.contracts import CLI_DEFAULT_MODEL, is_cli_provider_locator
 from ..ai.tools import CORE_TOOL_NAMES, TOOL_CATALOG
 from ..core.runtime import resolve_db_passphrase_for_bypass
 from ..errors import AppError
+from . import review_consent
 from .termrender import MarkdownStreamRenderer, render_envelope_table
 
 
@@ -39,7 +40,7 @@ _REPL_HELP = (
     "  /tools            list daemon AI tools and their consent class\n"
     "  /model [id]       show or switch the model for following turns\n"
     "  /provider [name]  show or switch the provider (model re-resolves)\n"
-    "  /allow <tool>     allow a mutating tool for this session\n"
+    "  /allow <tool>     allow a mutating tool for this session (except ui.review.apply)\n"
     "  /allowed          show which mutating tools are pre-allowed\n"
     "  /new              start a fresh conversation (history cleared)\n"
     "  /exit             leave the chat (also /quit or Ctrl-D)\n"
@@ -685,7 +686,16 @@ def _decide_and_send_consent(
     session_allowed: set[str] | None,
     control_requests: set[str],
 ) -> str | None:
-    decision = _policy_decision(args, name, stdin)
+    if name == review_consent.TOOL_NAME:
+        decision = review_consent.decide(
+            data,
+            interactive=(stdin.isatty() and getattr(args, "format", None) != "json"
+                         and not getattr(args, "stream_json", False)
+                         and not getattr(args, "non_interactive", False)),
+            stdin=stdin, out=chrome,
+        )
+    else:
+        decision = _policy_decision(args, name, stdin)
     if decision is None and session_allowed is not None and name in session_allowed:
         # Daemon-side allow_session only spans one ai.chat request; carry the
         # user's "session" answer across REPL turns here.
@@ -828,6 +838,11 @@ def _handle_allow_command(arg: str, session_allowed: set[str], out: TextIO) -> N
         _write("Usage: /allow <tool-name>\n", out)
         return
     matched = sorted(_split_tool_names([arg]) & _mutating_tool_names())
+    if review_consent.TOOL_NAME in matched:
+        _write("ui.review.apply requires a fresh once-only review; it cannot be pre-allowed.\n", out)
+        matched.remove(review_consent.TOOL_NAME)
+        if not matched:
+            return
     if not matched:
         _write(f"{arg} is not a known mutating tool; /tools lists them.\n", out)
         return
@@ -837,15 +852,16 @@ def _handle_allow_command(arg: str, session_allowed: set[str], out: TextIO) -> N
 
 def _render_allowed(args: Any, session_allowed: set[str], out: TextIO) -> None:
     if getattr(args, "yes", False):
-        _write("All mutating tools are allowed for this session (--yes).\n", out)
+        _write("Mutating tools are allowed for this session (--yes), except ui.review.apply, which requires fresh review.\n", out)
         return
     flag_allowed = sorted(
-        _split_tool_names(getattr(args, "allow_tool", None)) & _mutating_tool_names()
+        (_split_tool_names(getattr(args, "allow_tool", None)) & _mutating_tool_names())
+        - {review_consent.TOOL_NAME}
     )
     lines = [f"  {name}  (--allow-tool)" for name in flag_allowed]
     lines.extend(
         f"  {name}  (this session)"
-        for name in sorted(session_allowed - set(flag_allowed))
+        for name in sorted(session_allowed - set(flag_allowed) - {review_consent.TOOL_NAME})
     )
     if not lines:
         _write("No mutating tools are pre-allowed; each will ask for consent.\n", out)
@@ -975,6 +991,7 @@ def _stream_turn_records(
                     if (
                         data.get("needs_consent")
                         and isinstance(name, str)
+                        and name != review_consent.TOOL_NAME
                         and call_id not in consented_calls
                     ):
                         _decide_and_send_consent(
