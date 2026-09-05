@@ -14,8 +14,23 @@ supersedes the historical no-publication/no-merge restriction below; it does
 not waive failing dependency or acceptance gates. See the
 [current stack map](../plan/18-general-accounting-pr-stack.md).
 
-- RP2 #48 and Kassiber #542 are blocked by reproduced chronological and
-  historical pooled-basis errors; comments record the synthetic counterexamples.
+- RP2 #48 merged as `7b0dd677` after fixing the chronological/historical basis
+  errors: 292 local passes, 14 optional skips, 141 subtests and 35 successful
+  hosted checks. #542 merged as `384c5f78` from reviewed candidate `140cb630`:
+  25 successful checks and one intentional release-publication skip. It pins
+  that revision and separates acquisition and holdings basis.
+- The dependent retained-calculation adapter is corrected at `a17ffae5`:
+  canonical execution evidence is retained once, future receipt references
+  cannot revalue cutoff inventory, and native acquisition carry stays distinct
+  from position basis. Version `cutoff-prefix-v2` makes earlier captures stale
+  without removing their history. All 72 targeted capture/projection/valuation/
+  source/artifact tests pass. Clean full gates now pass on both stack cuts:
+  core `0d80356d` has 4,275 Python passes, 38 optional skips and 423 subtests;
+  TypeScript, ESLint (zero errors, 50 existing warnings), and 134 UI files /
+  1,004 tests pass. Scoped-agent `ddd208ae` has 4,418 Python passes, 38 optional
+  skips and 430 subtests; TypeScript, ESLint (zero errors, 50 existing warnings),
+  and 137 UI files / 1,021 tests pass. Modern Bash avoids the unchanged macOS
+  Bash 3.2 Linux-publisher test limitation. This is still synthetic acceptance.
 - #543's CLI review approval bypass is fixed at `6fc7c4e8`. Its complete local
   gate passed: 3,830 Python tests, 35 skips, 423 subtests; TypeScript, ESLint
   and 132 UI files / 1,001 tests. Every exact-head CI check passed; #543 merged
@@ -36,10 +51,11 @@ not waive failing dependency or acceptance gates. See the
   warnings), and 137 UI files / 1,021 tests. The offline native suite passed
   115 tests. Restack `02dfd273` preserves that tree exactly; 140 further
   consent/CLI/scope/catalog checks passed after conflict resolution.
-- Published draft stack: [#542](https://github.com/bitcoinaustria/kassiber/pull/542)
+- Current draft stack on merged #542: `main`
   → [#545](https://github.com/bitcoinaustria/kassiber/pull/545)
   → [#546](https://github.com/bitcoinaustria/kassiber/pull/546).
-  These passes do not clear the RP2 blocker or AF outcome gates. Independent
+  These passes do not establish the AF outcome gates. The RP2 correction is
+  recorded separately above. Independent
   [#544](https://github.com/bitcoinaustria/kassiber/pull/544) extracts the useful
   cash-currency guard from otherwise deferred #428 and merged at `f43d27f8`
   after all exact-head CI checks passed.

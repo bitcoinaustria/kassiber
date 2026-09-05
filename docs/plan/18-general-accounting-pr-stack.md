@@ -9,21 +9,27 @@ EBICS, payment initiation, payroll and FinanzOnline transmission remain excluded
 
 | PR | Decision |
 | --- | --- |
-| [RP2 #48](https://github.com/bitcoinaustria/rp2/pull/48) | Blocked: final-history pooled basis contaminates earlier per-wallet sales and historical global open positions. Do not merge the pinned `1c6fa0e`. |
-| [Kassiber #542](https://github.com/bitcoinaustria/kassiber/pull/542) | Required compensation/acquisition foundation, not duplicated by custody or GL work. Blocked on corrected RP2 basis and a new reviewed dependency pin. |
+| [RP2 #48](https://github.com/bitcoinaustria/rp2/pull/48) | Merged as `7b0dd6771c611e83451cd7f97782af0c15382197` after correcting acquisition versus cutoff basis and unsafe per-wallet replay. All 35 hosted checks passed. |
+| [Kassiber #542](https://github.com/bitcoinaustria/kassiber/pull/542) | Merged as `384c5f785dd68c36ea7e7be0ad3fe1ef059053d2` after 25 successful exact-head checks and one intentional release-publication skip. Pins merged RP2, adapts holdings and invalidates old pool journals once. |
 | [Kassiber #543](https://github.com/bitcoinaustria/kassiber/pull/543) | Merged at `bbd983cb824de4ea51c685248b0d3fba5347d8d2` after fixing CLI consent at `6fc7c4e8` and passing full local/CI gates. Independent of #542. |
 | [Kassiber #455](https://github.com/bitcoinaustria/kassiber/pull/455) | Closed as superseded by #543's guided N:M, conversion, suspense and revision flow. No unique must-salvage feature found; branch retained. |
 | [Kassiber #428](https://github.com/bitcoinaustria/kassiber/pull/428) | Separate altcoin overview/import experiment, deferred. Its cash-symbol validation was extracted into independent [#544](https://github.com/bitcoinaustria/kassiber/pull/544), not used to justify merging the overlay. |
 | [Kassiber #544](https://github.com/bitcoinaustria/kassiber/pull/544) | Narrow cash-currency validation salvage merged at `f43d27f88bb9fd3f7c3acd141b6ae3145f43c029` after exact-head CI passed. Not an accounting-stack dependency. |
 | [Kassiber #431](https://github.com/bitcoinaustria/kassiber/pull/431) | Separate native macOS client; defer outside CLI/Agent accounting. |
 | [Kassiber #136](https://github.com/bitcoinaustria/kassiber/pull/136) | Separate modular overview layout; defer outside this stack. |
+| [Kassiber #547](https://github.com/bitcoinaustria/kassiber/pull/547) | Separate release/signing lane on main, not an accounting dependency. Bounded Standards/Spec reviews found no code blocker at `70309f7`; actual notary credentials, OpenPGP enrollment, production protections and clean-Mac/Touch ID activation remain unverified. |
 
-Reproductions and merge blockers are recorded on
+The original reproductions are retained on
 [RP2 #48](https://github.com/bitcoinaustria/rp2/pull/48#issuecomment-5552699773)
 and [Kassiber #542](https://github.com/bitcoinaustria/kassiber/pull/542#issuecomment-5552699913).
-Global-only policy does not avoid the historical-report bug. Removing the RP2
-dependency blindly restores the older incorrect pooled remaining basis.
-Partial exploratory RP2 fixes are not a shipped dependency.
+The corrective review and verification are recorded on
+[RP2 #48](https://github.com/bitcoinaustria/rp2/pull/48#issuecomment-5553903308).
+The historical blocker is resolved by the merged dependency, not by dropping
+pool support. #545 also adopts the distinct report basis in retained captures,
+retains the real execution sequence once across RP2's report replay, and excludes
+explicit future receipt references from cutoff inventory using RP2 itself.
+Adapter version `cutoff-prefix-v2` rejects stale calculation reuse without
+rewriting immutable history. This does not establish organizational acceptance.
 
 ## Actual accounting cuts
 
@@ -37,10 +43,10 @@ eager imports or schemas reference absent modules. The coupled financial
 domain remains together. Each cut must pass independently; the full stack must
 also preserve the previously tested composition.
 
-PR #543 landed independently. PR #542 was updated to that main at `335a0fd5`
-and marked draft; #545 targets its branch and #546 targets #545's branch.
-Both accounting PRs remain draft while the RP2 dependency and full outcome
-acceptance are unresolved. No auto-merge is armed around those blockers.
+PR #543 landed independently. #542 is merged after the dependency correction;
+the current stack is `main -> #545 -> #546`.
+Both accounting PRs remain draft while full outcome acceptance is unresolved.
+No auto-merge is armed around those acceptance gates.
 If any base changes, restack and rerun scope/basis/consent integration tests.
 
 ## Preserved checkpoints
@@ -77,6 +83,14 @@ the removed accounting visibility setting is not re-advertised. Private users
 remain unenrolled and need no general-accounting configuration.
 
 ## Verification and unresolved gates
+
+After the RP2 correction, clean full gates pass on core `0d80356d` (4,275
+Python passes, 38 optional skips, 423 subtests, 134 UI files / 1,004 tests)
+and scoped-agent `ddd208ae` (4,418 Python passes, 38 optional skips, 430
+subtests, 137 UI files / 1,021 tests). Both include TypeScript and ESLint
+with zero errors and 50 existing warnings. Modern Bash was used for the
+unchanged Linux publisher tests. These runs include merged #544 and the
+`a17ffae5` cutoff/capture correction, not the obsolete failing adapter.
 
 The core extraction passed 459 focused tests (3 optional skips). Independent
 partition review verified all 100 accounting action classifications, zero
