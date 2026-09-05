@@ -15,7 +15,7 @@ from ..ai.contracts import CLI_DEFAULT_MODEL, is_cli_provider_locator
 from ..ai.tools import CORE_TOOL_NAMES, TOOL_CATALOG
 from ..core.runtime import resolve_db_passphrase_for_bypass
 from ..errors import AppError
-from . import accounting_consent
+from . import accounting_consent, accounting_delivery
 from . import review_consent
 from .termrender import MarkdownStreamRenderer, render_envelope_table
 
@@ -699,6 +699,7 @@ def _decide_and_send_consent(
             stdin=stdin, out=chrome,
         )
     elif name in accounting_consent.ONCE_ONLY_TOOLS:
+        delivery = getattr(args, '_accounting_delivery', None)
         decision = accounting_consent.decide(
             name, data,
             interactive=(
@@ -708,7 +709,10 @@ def _decide_and_send_consent(
                 and not getattr(args, "non_interactive", False)
             ),
             stdin=stdin, out=chrome,
+            destination=delivery.destination(data) if delivery else None,
         )
+        if decision == 'allow_once' and delivery is not None:
+            delivery.approve(call_id, data)
     else:
         decision = _policy_decision(args, name, stdin)
     if decision is None and session_allowed is not None and name in session_allowed:
@@ -943,6 +947,9 @@ def _run_turn(
         # buffered table) into the next prompt or the user's shell.
         if markdown is not None:
             _write(markdown.flush(), out)
+        delivery = getattr(args, '_accounting_delivery', None)
+        if delivery is not None:
+            delivery.render(chrome)
         raise
 
 
@@ -977,7 +984,7 @@ def _stream_turn_records(
             if record_request_id != request_id:
                 continue
             if stream_out is not None:
-                _write(json.dumps(record, separators=(",", ":")) + "\n", stream_out)
+                _write(json.dumps(accounting_consent.transcript_record(record, include_preview=True), separators=(",", ":")) + "\n", stream_out)
             if kind == "auth_required":
                 raise _auth_required_error(record)
             if kind == "error":
@@ -1056,6 +1063,9 @@ def _stream_turn_records(
                 )
                 consented_calls.add(call_id)
             elif kind == "ai.chat.tool_result":
+                delivery = getattr(args, '_accounting_delivery', None)
+                if delivery is not None:
+                    delivery.consume(data)
                 call_id = data.get("call_id")
                 if isinstance(call_id, str):
                     existing = tool_calls.setdefault(
@@ -1096,6 +1106,9 @@ def _stream_turn_records(
                     _write(markdown.flush(), out)
                 if render and (content_parts or out.isatty()):
                     _write("\n", out)
+                delivery = getattr(args, '_accounting_delivery', None)
+                if delivery is not None:
+                    delivery.render(chrome)
                 return ChatTurnResult(
                     content="".join(content_parts),
                     terminal=record,
@@ -1117,6 +1130,9 @@ def _stream_turn_records(
             _write(markdown.flush(), out)
         if render and (content_parts or out.isatty()):
             _write("\n", out)
+        delivery = getattr(args, '_accounting_delivery', None)
+        if delivery is not None:
+            delivery.render(chrome)
         return ChatTurnResult(
             content="".join(content_parts),
             terminal=terminal,
@@ -1132,6 +1148,7 @@ def run_chat_command(
 ) -> ChatSessionResult:
     input_stream = stdin or sys.stdin
     output_stream = stdout or sys.stdout
+    args._accounting_delivery = accounting_delivery.Delivery(getattr(args, 'accounting_export', None))
     if getattr(args, "accounting_selection", None):
         from .accounting_assist import run
         return run(args, stdin=input_stream, stdout=output_stream)

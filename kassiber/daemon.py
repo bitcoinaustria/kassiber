@@ -6167,9 +6167,10 @@ def _execute_read_only_ai_tool(
                     )
                 payload = build_review_badges_snapshot(conn)
             elif entry.daemon_kind in daemon_accounting_tasks.READ_KINDS:
-                _, profile = resolve_scope(conn, None, None)
-                payload = daemon_accounting_tasks.execute(conn, profile['id'], entry.daemon_kind,
-                    call.arguments, runtime.accounting_task_approvals)
+                with daemon_accounting_tasks.owned_read_transaction(conn):
+                    _, profile = resolve_scope(conn, None, None)
+                    payload = daemon_accounting_tasks.execute(conn, profile['id'], entry.daemon_kind,
+                        call.arguments, runtime.accounting_task_approvals)
             elif entry.daemon_kind in {"ui.review.cases", "ui.review.request_input", "ui.review.plan", "ui.review.receipt"}:
                 payload = _review_workflow_payload(
                     conn, entry.daemon_kind, call.arguments, authored_source="ai_tool",
@@ -6555,8 +6556,9 @@ def _review_workflow_payload(
 def _ai_accounting_task_consent_preview(runtime: AiToolRuntime, arguments: dict[str, Any]) -> dict[str, Any]:
     """UI-only exact task consequences; never included in provider results."""
     def preview(conn):
-        _, profile = resolve_scope(conn, None, None)
-        return daemon_accounting_tasks.consent_preview(conn, profile['id'], arguments, runtime.accounting_task_approvals)
+        with daemon_accounting_tasks.owned_read_transaction(conn):
+            _, profile = resolve_scope(conn, None, None)
+            return daemon_accounting_tasks.consent_preview(conn, profile['id'], arguments, runtime.accounting_task_approvals)
     try:
         return _run_scoped_ai_operation(runtime, preview)
     except AppError:
@@ -6834,12 +6836,24 @@ def _execute_mutating_ai_tool(
 
             return _run_scoped_ai_mutation(runtime, _execute)
         if entry.daemon_kind in daemon_accounting_tasks.WRITE_KINDS:
+            local_export: dict[str, Any] = {}
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
-                _, profile = resolve_scope(conn, None, None)
-                payload = daemon_accounting_tasks.execute(conn, profile['id'], entry.daemon_kind,
-                    call.arguments, runtime.accounting_task_approvals)
+                try:
+                    _, profile = resolve_scope(conn, None, None)
+                    payload = daemon_accounting_tasks.execute(conn, profile['id'], entry.daemon_kind,
+                        call.arguments, runtime.accounting_task_approvals, local_export=local_export)
+                    conn.commit()
+                except Exception as exc:
+                    try:
+                        conn.rollback()
+                    finally:
+                        raise AppError('Accounting action was not confirmed durable; inspect its retained state before retrying.',
+                            code=exc.code if isinstance(exc, AppError) else 'accounting_task_commit_failed', retryable=True) from None
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
-            return _run_scoped_ai_mutation(runtime, _execute)
+            result = _run_scoped_ai_mutation(runtime, _execute)
+            if local_export:
+                result['accounting_local_export'] = local_export
+            return result
         if entry.daemon_kind == "ui.review.apply":
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
                 payload = _review_workflow_payload(
@@ -8849,6 +8863,8 @@ def _run_ai_chat_tool_loop(
                     )
             else:
                 result = _execute_read_only_ai_tool(call, runtime)
+            # Remove local plaintext before every provider/history/usage/checkpoint path.
+            local_export = result.pop('accounting_local_export', None)
             _record_ai_tool_usage(runtime, display_name, result)
             safe_result = redact_ai_tool_result(result)
             _update_review_checkpoint(review_checkpoint, display_name, safe_result)
@@ -8856,7 +8872,8 @@ def _run_ai_chat_tool_loop(
                 _with_request_id(
                     build_envelope(
                         "ai.chat.tool_result",
-                        {"call_id": call.call_id, **safe_result},
+                        {"call_id": call.call_id, **safe_result,
+                         **({'accounting_local_export': local_export} if local_export is not None else {})},
                     ),
                     request_id,
                 )

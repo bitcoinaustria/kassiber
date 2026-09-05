@@ -61,6 +61,41 @@ not waive failing dependency or acceptance gates. See the
   after all exact-head CI checks passed.
   External Claude review remains blocked by code-egress approval.
 
+### Follow-up implementation and verification
+
+- Independent dependency hardening merged in
+  [#548](https://github.com/bitcoinaustria/kassiber/pull/548) as `115a5186`
+  from candidate `c17dfaa1`, after 25 successful hosted checks and one
+  intentional release-publication skip. Its complete local gate passed 3,886 Python tests, 35 skips,
+  423 subtests, TypeScript, ESLint (zero errors, 50 existing warnings) and
+  134 UI files / 1,004 tests. Production frontend/provider builds passed.
+  The existing frontend 14-day release quarantine remains intact; `fast-uri`
+  and `qs` fixes require a separately approved exception or their normal
+  maturity dates. This is not a zero-advisory claim.
+- Same-task evidence amendments landed locally at `a37af26a`; 77 task,
+  amendment and bank tests passed. Original source selection and receipts
+  remain immutable. Additive evidence requires exact local approval and
+  invalidates older scope grants. Fully allocated bank lines no longer
+  prevent genuinely distinct recurring payments from being proposed.
+- The exact #545 CI artifact (`0d80356d`, run `33987315385`, macOS arm64 CLI)
+  passed three real frozen-binary tests: encrypted book/tax-pack access,
+  pipe-only Poppler extraction, and retained calculation capture with a
+  pinned RP2 revision. This is neither the later dependency-hardened binary
+  nor a signed/notarized desktop or clean-machine activation test.
+- Export-delivery review exposed an ordinary-agent transaction ownership
+  bug: successful task writes had not been committed. The fix commits at
+  the daemon task boundary before success or local artifact release, rolls
+  back failures, and releases read-created locks without discarding caller
+  work. Its 70-test focused selection includes actual daemon queue dispatch,
+  independent SQLCipher reopen after each task mutation, commit failure,
+  post-publication filesystem uncertainty and an annual export over 512 KiB.
+  An unknown post-publication outcome is not reported as "no file saved".
+  Independent re-review found both confirmed blockers fixed; its separate
+  export-delivery rerun passed all 35 tests.
+
+These focused results do not replace the final combined gate, independent
+re-review or the measured/pilot outcome requirements below.
+
 ## Pilot facts still required
 
 The real organization has not yet supplied a confirmed fiscal/assessment year,
@@ -224,11 +259,20 @@ must not be represented as the organization's confirmed pilot population.
 
 | Gate | Required proof | Current status |
 | --- | --- | --- |
-| AF-1: Whole period | At least 100 mixed source records; complete selected-population coverage; correct routine proposals without repeated data entry; exceptions and user effort measured | 123-bank-row core case implemented; mixed-source/user-effort benchmark still pending |
-| AF-2: Actual artifacts | Approved agent actions produce and verify the close, finalized K2/annex working papers and selected package; missing facts/denials remain honest partial outcomes | Pending end-to-end agent proof |
-| AF-3: Reused decisions | Explicit rule approval; next matching case cites the rule; nonmatches, conflicting rules, another book, revocation and stale proposals fail safely | Core rules and tests exist; full measured agent outcome pending |
-| AF-4: Same-task exceptions | Answer/new evidence resolves affected items and continues work; independent results survive; restart does not duplicate actions or resurrect consent | Explicit CLI assignments/restart tests exist; complete mixed-case agent outcome pending |
-| AF-5: Private workflow | Agent resolves approved private assignment cases and verifies recalculated portfolio/basis reports without GL/company/K2 setup | Pending end-to-end agent proof |
+| AF-1: Whole period | At least 100 mixed source records; complete selected-population coverage; correct routine proposals without repeated data entry; exceptions and user effort measured | Actual tool-loop fixture `mixed-june-v1`: 104 selected records, 97 correct routine proposals including raw BTC preparation, 5 named exceptions, 2 approvals, exact manual financial equivalence. Intermittent encrypted-handle rejection under diagnosis; human time/provider inference/pilot remain pending. |
+| AF-2: Actual artifacts | Approved agent actions produce and verify the close, finalized K2/annex working papers and selected package; missing facts/denials remain honest partial outcomes | Synthetic annual tool/consent flow produces retained close/K2/HTML; CLI-only exact-destination delivery verifies hashes/arithmetic and actual saved bytes. Independent reopen proves mutation durability. Final combined/interactive acceptance pending. |
+| AF-3: Reused decisions | Explicit rule approval; next matching case cites the rule; nonmatches, conflicting rules, another book, revocation and stale proposals fail safely | Actual tool-loop rule reuse, nonmatch/conflict/revocation/stale-consent fixtures implemented. Rule creation/correction stays explicit local input, not invisible agent learning; measured interactive/pilot outcome pending. |
+| AF-4: Same-task exceptions | Answer/new evidence resolves affected items and continues work; independent results survive; restart does not duplicate actions or resurrect consent | Same-task additive evidence and Bitcoin-classification answers retain history; actual agent resumes after fresh-process CLI amendment/assignment. Independent completed work and expired-grant boundaries tested; interactive/pilot outcome pending. |
+| AF-5: Private workflow | Agent resolves approved private assignment cases and verifies recalculated portfolio/basis reports without GL/company/K2 setup | Actual scoped private review/plan/apply/receipt fixtures cover denial, restart, retry and manual report equivalence without GL enrollment or encryption migration. Real-provider/interactive outcome pending. |
+
+The five outcome tests use the actual tool schemas, consent loop and domain
+operations, with scripted provider transport. Initial intake, rule approval,
+source bindings and missing factual answers are explicitly local setup, not
+counted as autonomous agent work. The mixed fixture compares against 98 manual
+posting operations; it reports zero missed/wrong routine cases and zero repeated
+routine data entries, not a human productivity percentage. Active human time and
+provider inference are deliberately unmeasured. A successful fixture execution
+does not waive the separate intermittent-failure investigation or pilot gates.
 
 ### Other open gates and scope limits
 

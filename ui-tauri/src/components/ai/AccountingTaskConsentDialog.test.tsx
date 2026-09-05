@@ -51,6 +51,25 @@ function request(step: "prepare" | "post" = "prepare"): AiToolConsentRequest {
   };
 }
 
+function bitcoinRequest(step: "prepare" | "post", zero = false): AiToolConsentRequest {
+  const result = request(step);
+  const selected = { policy_id: "policy", artifact_id: "artifact", binding_id: "LOCAL-BTC-BINDING", event_id: "LOCAL-BTC-SOURCE\u202e<img src=x>",
+    category: "purchase", period_id: "2025", idempotency_key: "bitcoin" };
+  const projection = { request: selected, policy_digest: "b".repeat(64), valuation_release_digest: null,
+    lines: zero ? [] : [{ account_code: "btc", debit_minor: exact, credit_minor: "0" }, { account_code: "bank", debit_minor: "0", credit_minor: exact }],
+    quantitative_posting: { asset: "BTC", account_code: "btc", location: "inventory", quantity_msat: zero ? "1" : exact + "123",
+      basis_exact: "90071992547409.97123456789", book_value_minor: zero ? "0" : exact,
+      currency_rounding: [{ account_code: "btc", before_basis_exact: "0", before_minor: "0", unrounded_event_minor: zero ? "0" : exact,
+        remainder_minor: "0", dependencies_digest: "c".repeat(64) }] } };
+  const row = { source_kind: "bitcoin", source_id: selected.event_id, request: selected, projection, status: "draft",
+    proposal_id: "local-proposal", proposal_digest: "d".repeat(64), artifact_digest: "e".repeat(64), policy_digest: projection.policy_digest };
+  if (result.accountingTaskPreview?.status !== "ready") throw new Error("Expected ready fixture");
+  const preview = result.accountingTaskPreview.preview as Record<string, unknown>;
+  preview.proposals = step === "prepare" ? [row] : [];
+  preview.detail = { entries: [], projections: step === "post" ? [row] : [] };
+  return result;
+}
+
 describe("desktop-only accounting task consent", () => {
   let value: AiToolConsentRequest;
   const decide = vi.fn();
@@ -122,5 +141,52 @@ describe("desktop-only accounting task consent", () => {
     expect(focus).toHaveBeenCalledOnce();
     (dialog.props.onEscapeKeyDown as (event: unknown) => void)(event);
     expect(decide).toHaveBeenCalledExactlyOnceWith("deny");
+  });
+
+  it("renders every exact Bitcoin effect and preserves once-only acknowledgement for prepare/post, including zero-fiat", async () => {
+    for (const step of ["prepare", "post"] as const) for (const zero of [false, true]) {
+      mock.slots = []; value = bitcoinRequest(step, zero); decide.mockClear();
+      const card = find((node) => node.type === TaskPreviewCard);
+      const markup = renderToStaticMarkup(card);
+      for (const text of ["LOCAL-BTC-BINDING", "LOCAL-BTC-SOURCE", "quantity_msat", "basis_exact", "currency_rounding", "dependencies_digest",
+        "90071992547409.97123456789", "minor_unit_exponent", "EUR", "\\u202e"]) expect(markup).toContain(text);
+      expect(markup).not.toContain("FORGED");
+      expect(markup).not.toContain("\u202e");
+      expect(markup).not.toContain("<img");
+      if (!zero) expect(markup).toContain(exact + "123");
+      if (step === "post") for (const text of ["local-proposal", "proposal_digest", "artifact_digest"]) expect(markup).toContain(text);
+      const label = `consent.accountingTask.${step}`;
+      expect(button(label).props.disabled).toBe(true);
+      acknowledge();
+      expect(button(label).props.disabled).toBe(false);
+      await (button(label).props.onClick as () => Promise<void>)();
+      expect(decide).toHaveBeenCalledExactlyOnceWith("allow_once");
+      expect(nodes(render()).some((node) => node.props.children === "consent.allowSession")).toBe(false);
+    }
+  });
+
+  it("keeps hidden Bitcoin effects out of markup and refuses stale approval callbacks", async () => {
+    value = bitcoinRequest("post", true);
+    render(); acknowledge();
+    const approve = button("consent.accountingTask.post").props.onClick as () => Promise<void>;
+    const card = find((node) => node.type === TaskPreviewCard);
+    mock.hidden = true;
+    expect(renderToStaticMarkup(card)).not.toContain("LOCAL-BTC");
+    await approve();
+    expect(decide).not.toHaveBeenCalled();
+    expect(nodes(render()).some((node) => node.type === TaskPreviewCard)).toBe(false);
+    (button("consent.apply.cancel").props.onClick as () => void)();
+    expect(decide).toHaveBeenCalledExactlyOnceWith("deny");
+  });
+
+  it("does not show or authorize malformed Bitcoin effects", async () => {
+    value = bitcoinRequest("post");
+    if (value.accountingTaskPreview?.status !== "ready") throw new Error("Expected ready fixture");
+    const preview = value.accountingTaskPreview.preview as { detail: { projections: { projection: { quantitative_posting: { quantity_msat: unknown } } }[] } };
+    preview.detail.projections[0].projection.quantitative_posting.quantity_msat = Number(exact);
+    expect(nodes(render()).some((node) => node.type === TaskPreviewCard)).toBe(false);
+    acknowledge();
+    await (button("consent.allowOnce").props.onClick as () => Promise<void>)();
+    expect(decide).not.toHaveBeenCalled();
   });
 });

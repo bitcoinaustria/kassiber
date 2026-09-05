@@ -165,7 +165,29 @@ The verifier accepts raw close packages, `accounting.export-close` envelopes,
 and genuine `accounting.task-apply` close-export envelopes. Tax HTML/JSON is a
 working paper for manual use, not official form submission.
 
-CLI `--transcript` strips the local accounting consent preview.
+Interactive chat can deliver the actual approved export without giving the
+model filesystem access: `kassiber chat --accounting-export TASK_ID export_close
+/absolute/existing-parent/close.json` (use `export_tax` for the full tax JSON,
+including its HTML rendering). Repeat for another exact task/step/destination.
+The path stays in the CLI; the local once-only approval shows it and authorizes
+plaintext release. No directory grant, automatic output location or overwrite
+is permitted. The CLI verifies the approved artifact identity, content hashes
+and close-package arithmetic, publishes a private file exclusively, and checks
+its exact bytes on readback. Only the deterministic **LOCAL EXPORT RECEIPT**
+confirms a saved and verified file; provider responses still report preparation,
+not saving, certification or filing. A byte-identical existing file is a safe
+retry; conflicts or failed delivery leave the retained artifact prepared and
+require fresh approval. Failures after publication report an unknown saved state
+and `may_exist: true`; they never remove a possibly changed target. Symlink
+parents/targets and unsupported safe filesystem
+operations fail closed. This is a JSON handoff, not a standalone HTML export.
+The local stream sideband uses the existing 64 MiB accounting-package bound,
+including JSON escaping; larger
+artifacts stay prepared and require the explicit direct CLI export above.
+
+CLI `--transcript` strips the local accounting consent preview and export bytes.
+Export sidebands are also excluded from `--stream-json`, model context,
+tool history, logs and diagnostics; no Assistant export UI is added.
 Explicit `--stream-json` is raw local event output and **can contain that
 financial preview**; treat it as sensitive. Raw-stream chat does not approve
 financial mutations. User-authored chat messages and explicit file exports

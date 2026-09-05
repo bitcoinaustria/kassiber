@@ -1184,6 +1184,10 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     chat.add_argument(
+        "--accounting-export", nargs=3, action="append", metavar=("TASK_ID", "STEP", "PATH"),
+        help="CLI-only exact destination for export_close or export_tax; repeat for another task/step. Fresh interactive review required; never overwrites.",
+    )
+    chat.add_argument(
         "--plain",
         action="store_true",
         help=(

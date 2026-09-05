@@ -18,6 +18,7 @@ EBICS, payment initiation, payroll and FinanzOnline transmission remain excluded
 | [Kassiber #431](https://github.com/bitcoinaustria/kassiber/pull/431) | Separate native macOS client; defer outside CLI/Agent accounting. |
 | [Kassiber #136](https://github.com/bitcoinaustria/kassiber/pull/136) | Separate modular overview layout; defer outside this stack. |
 | [Kassiber #547](https://github.com/bitcoinaustria/kassiber/pull/547) | Separate release/signing lane on main, not an accounting dependency. Bounded Standards/Spec reviews found no code blocker at `70309f7`; actual notary credentials, OpenPGP enrollment, production protections and clean-Mac/Touch ID activation remain unverified. |
+| [Kassiber #548](https://github.com/bitcoinaustria/kassiber/pull/548) | Independent dependency security patch merged as `115a5186a6ea6ea888b9bb87562c547288fc54cb` after the full local gate, independent Standards/Spec review and 25 successful hosted checks. Keeps frontend release quarantine; remaining `fast-uri`/`qs` patches await explicit exception or maturity. Restacked accounting inherits this patch. |
 
 The original reproductions are retained on
 [RP2 #48](https://github.com/bitcoinaustria/rp2/pull/48#issuecomment-5552699773)

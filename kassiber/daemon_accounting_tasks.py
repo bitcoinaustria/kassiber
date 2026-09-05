@@ -5,15 +5,31 @@ and cannot survive a restart. The existing daemon scope and once-only consent
 loop must wrap calls; the old tool-free disclosure grants are not involved.
 """
 from dataclasses import dataclass, field
+from contextlib import contextmanager
+import hashlib
+import json
 import re
 import secrets
 import time
 
 from .core.accounting import ledger, tasks
+from .core.accounting.package import MAX_SNAPSHOT_BYTES
 from .errors import AppError
 
 READ_KINDS = frozenset({'ui.accounting.task_get', 'ui.accounting.task_preview'})
 WRITE_KINDS = frozenset({'ui.accounting.task_apply', 'ui.accounting.task_cancel'})
+MAX_LOCAL_EXPORT_BYTES = MAX_SNAPSHOT_BYTES  # Encoded JSONL sideband, including string escaping.
+
+
+@contextmanager
+def owned_read_transaction(conn):
+    """Release task-created read locks without committing or discarding caller work."""
+    owned = not conn.in_transaction
+    try:
+        yield
+    finally:
+        if owned and conn.in_transaction:
+            conn.rollback()
 
 
 def _fail(code='accounting_task_approval_expired'):
@@ -81,7 +97,7 @@ def consent_preview(conn, profile_id, args, approvals):
             'book': {'currency': book['currency'], 'minor_unit_exponent': book['minor_unit_exponent']}}
 
 
-def execute(conn, profile_id, kind, args, approvals):
+def execute(conn, profile_id, kind, args, approvals, *, local_export=None):
     """Only invoked through the daemon's pinned read/mutation callbacks."""
     try:
         if kind not in READ_KINDS | WRITE_KINDS or not isinstance(args, dict) or not _opaque(args.get('task_id')):
@@ -101,7 +117,16 @@ def execute(conn, profile_id, kind, args, approvals):
             payload.update(idempotency_key=args['idempotency_key'], confirmed=True)
             if grant['step'] in ('export_close', 'export_tax'):
                 payload['confirm_plaintext'] = True
-            return summary(tasks.execute(conn, profile_id, 'task-apply', payload))
+            value = tasks.execute(conn, profile_id, 'task-apply', payload)
+            if local_export is not None and grant['step'] in ('export_close', 'export_tax'):
+                artifact = value['result']
+                encoded = json.dumps(artifact, sort_keys=True, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
+                release = dict(task_id=grant['task_id'], step=grant['step'], artifact_json=encoded,
+                               sha256=hashlib.sha256(encoded.encode('utf-8')).hexdigest())
+                if len(json.dumps(release, ensure_ascii=True).encode('utf-8')) > MAX_LOCAL_EXPORT_BYTES:
+                    return {**summary(value), 'delivery_code': 'accounting_export_too_large'}
+                local_export.update(release)
+            return summary(value)
         if kind == 'ui.accounting.task_cancel':
             return summary(tasks.execute(conn, profile_id, 'task-cancel', {
                 'task_id': args['task_id'], 'reason': 'Explicitly approved cancellation through the task assistant'}))
