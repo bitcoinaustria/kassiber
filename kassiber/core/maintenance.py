@@ -122,6 +122,15 @@ def reset_current_profile_data(
             hint="Disable replication for this book before resetting its local data.",
         )
 
+    # General-ledger evidence and source history are retained records, not
+    # re-creatable caches. The testing reset must never erase their inputs.
+    if conn.execute("SELECT 1 FROM gl_books WHERE profile_id = ?", (profile_id,)).fetchone():
+        raise AppError(
+            "An accounting book cannot be cleared with the testing reset.",
+            code="accounting_retention_required",
+            hint="Keep the retained book and create a separate book for testing.",
+        )
+
     attachments_root = _attachments_root_path(data_root)
     attachment_paths = _managed_attachment_paths_for_profile(
         conn,

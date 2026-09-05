@@ -17,6 +17,14 @@
 
 ## What Kassiber is
 
+General accounting is available as an explicit encrypted-book opt-in through
+`kassiber accounting`: double-entry ledger, local evidence, bank reconciliation,
+Bitcoin projections, financial statements, close/recovery and Austrian K2
+workpaper preparation. Personal portfolio users need no accounting setup.
+See [the local accounting CLI guide](docs/reference/general-accounting.md).
+Scoped agent delivery follows in the next stacked PR; there is no dedicated
+accounting screen or implicit AI access to the ledger.
+
 Most Bitcoin accounting tools want you to upload your wallets and
 descriptors to a SaaS — a yearly subscription, full trust in the provider,
 and every customer's identified holdings concentrated in one database for

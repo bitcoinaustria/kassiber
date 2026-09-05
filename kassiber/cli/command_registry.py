@@ -25,6 +25,7 @@ _NO_BOOTSTRAP_DATABASE_PREFIXES = {
     "verify-download",
 }
 _NO_BOOTSTRAP_DATABASE_PATHS = {
+    "accounting.verify-package",
     "backends.kinds",
     "chat",
     "daemon",
@@ -33,6 +34,7 @@ _NO_BOOTSTRAP_DATABASE_PATHS = {
     "wallets.analyze-file",
 }
 _SECRET_DEST_FRAGMENTS = (
+    "payload",
     "api_key",
     "auth_header",
     "operator_auth",

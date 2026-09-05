@@ -41,6 +41,19 @@ def _paths(value: str) -> frozenset[str]:
 
 CLI_READ_PATHS = _paths(
     """
+    accounting.capabilities accounting.snapshot accounting.journal accounting.reports
+    accounting.account-ledger accounting.document-capabilities accounting.document-get accounting.document-search
+    accounting.tax-packs accounting.tax-list accounting.tax-get accounting.tax-preview
+    accounting.batch-preview accounting.workbench
+    accounting.task-list accounting.task-get accounting.task-preview accounting.rule-list
+    accounting.close-readiness accounting.valuation-get accounting.valuation-list
+    accounting.cash-snapshot accounting.cash-report accounting.cash-reconciliation accounting.cash-assets
+    accounting.projection-events accounting.projection-list accounting.projection-policy-list accounting.opening-preview
+    accounting.source-preview accounting.source-get accounting.source-binding-get accounting.source-coverage accounting.calculation-get accounting.projection-policy-get accounting.projection-get accounting.projection-controls
+    accounting.verify-package
+    accounting.evidence-list accounting.bank-preview accounting.bank-list accounting.bank-reconcile
+    accounting.item-list accounting.schedule-list
+    accounting.evidence-upload-list
     status update verify-download health next-actions commands.describe projects.list projects.show
     operator.status operator.operation.status operator.touch-id.status
     chats.list chats.show secrets.status sync.status sync.transport.list
@@ -115,6 +128,23 @@ CLI_OPERATOR_PATHS = _paths(
 CLI_ACCOUNTING_DECISION_PATHS = _paths(
     """
     review.apply
+    accounting.configure accounting.account-create accounting.period-create
+    accounting.draft accounting.post accounting.reverse accounting.close accounting.reopen
+    accounting.discard accounting.export-close
+    accounting.evidence-add accounting.bank-import accounting.bank-allocate
+    accounting.evidence-upload-begin accounting.evidence-upload-append
+    accounting.evidence-upload-finish accounting.evidence-upload-cancel
+    accounting.bank-void-allocation accounting.bank-void-statement
+    accounting.item-create accounting.item-allocate accounting.item-void accounting.item-void-settlement
+    accounting.schedule-create accounting.schedule-revise
+    accounting.document-extract accounting.document-transcribe accounting.document-review
+    accounting.tax-create accounting.tax-review accounting.tax-finalize accounting.tax-export
+    accounting.batch-post
+    accounting.task-create accounting.task-apply accounting.task-cancel accounting.task-source-assign accounting.rule-create accounting.rule-revoke
+    accounting.valuation-create accounting.valuation-post accounting.item-revise
+    accounting.cash-select-account accounting.cash-count accounting.cash-classify accounting.cash-void
+    accounting.opening-bind accounting.opening-create
+    accounting.source-capture accounting.source-bind accounting.source-void accounting.calculation-capture accounting.projection-policy-create accounting.projection-create accounting.projection-post accounting.projection-void-quantity
     profiles.set metadata.exclude metadata.include metadata.records.excluded.set
     metadata.records.excluded.clear metadata.records.kind.set
     metadata.records.kind.clear metadata.records.history.revert
@@ -151,6 +181,20 @@ CLI_ADMIN_PATHS = _paths(
 
 DAEMON_READ_KINDS = _paths(
     """
+    ui.accounting.capabilities ui.accounting.snapshot ui.accounting.journal ui.accounting.reports
+    ui.accounting.account_ledger ui.accounting.document_capabilities ui.accounting.document_get ui.accounting.document_search
+    ui.accounting.tax_packs ui.accounting.tax_list ui.accounting.tax_get ui.accounting.tax_preview
+    ui.accounting.source_preview ui.accounting.source_get ui.accounting.source_binding_get ui.accounting.source_coverage ui.accounting.calculation_get ui.accounting.projection_policy_get ui.accounting.projection_get ui.accounting.projection_controls
+    ui.accounting.evidence_list ui.accounting.bank_preview ui.accounting.bank_list ui.accounting.bank_reconcile
+    ui.accounting.item_list ui.accounting.schedule_list
+    ui.accounting.evidence_upload_list
+    ui.accounting.batch_preview
+    ui.accounting.projection_events ui.accounting.projection_list ui.accounting.projection_policy_list ui.accounting.opening_preview
+    ui.accounting.valuation_get ui.accounting.cash_snapshot ui.accounting.cash_report ui.accounting.cash_reconciliation ui.accounting.cash_assets
+    ui.accounting.valuation_list
+    ui.accounting.close_readiness ui.accounting.workbench
+    ui.accounting.task_list ui.accounting.task_get ui.accounting.task_preview ui.accounting.rule_list
+    ui.accounting.document_cancel
     status ui.logs.snapshot ui.egress.snapshot ui.overview.snapshot
     ui.workspace.overview.snapshot ui.transactions.list
     ui.transactions.dashboard ui.transactions.extremes ui.transactions.resolve
@@ -238,6 +282,23 @@ DAEMON_OPERATOR_KINDS = _paths(
 
 DAEMON_ACCOUNTING_DECISION_KINDS = _paths(
     """
+    ui.accounting.configure ui.accounting.account_create ui.accounting.period_create
+    ui.accounting.draft ui.accounting.post ui.accounting.reverse ui.accounting.close ui.accounting.reopen
+    ui.accounting.discard ui.accounting.export_close
+    ui.accounting.evidence_add ui.accounting.bank_import ui.accounting.bank_allocate
+    ui.accounting.evidence_upload_begin ui.accounting.evidence_upload_append
+    ui.accounting.evidence_upload_finish ui.accounting.evidence_upload_cancel
+    ui.accounting.bank_void_allocation ui.accounting.bank_void_statement
+    ui.accounting.item_create ui.accounting.item_allocate ui.accounting.item_void ui.accounting.item_void_settlement
+    ui.accounting.schedule_create ui.accounting.schedule_revise
+    ui.accounting.document_extract ui.accounting.document_transcribe ui.accounting.document_review
+    ui.accounting.tax_create ui.accounting.tax_review ui.accounting.tax_finalize ui.accounting.tax_export
+    ui.accounting.batch_post
+    ui.accounting.task_create ui.accounting.task_apply ui.accounting.task_cancel ui.accounting.task_source_assign ui.accounting.rule_create ui.accounting.rule_revoke
+    ui.accounting.opening_bind ui.accounting.opening_create
+    ui.accounting.valuation_create ui.accounting.valuation_post ui.accounting.item_revise
+    ui.accounting.cash_select_account ui.accounting.cash_count ui.accounting.cash_classify ui.accounting.cash_void
+    ui.accounting.source_capture ui.accounting.source_bind ui.accounting.source_void ui.accounting.calculation_capture ui.accounting.projection_policy_create ui.accounting.projection_create ui.accounting.projection_post ui.accounting.projection_void_quantity
     ui.profiles.update ui.transactions.metadata.update
     ui.transactions.history.revert ui.loans.link ui.loans.mark ui.loans.unmark
     ui.source_funds.cases.save ui.source_funds.links.review

@@ -967,8 +967,9 @@ def _prepare_actual_row(
                     external_ref, issuer, counterparty, issued_at, due_at,
                     fiat_currency, fiat_value_exact, review_state, notes,
                     raw_json, created_at, updated_at
-                ) VALUES(?, ?, ?, 'commercial_record_snapshot', ?, ?, NULL, NULL,
-                         ?, NULL, ?, ?, 'reviewed', ?, '{}', ?, ?)
+                ) SELECT ?, ?, ?, 'commercial_record_snapshot', ?, ?, NULL, NULL,
+                         ?, NULL, ?, ?, 'reviewed', ?, '{}', ?, ?
+                  WHERE NOT EXISTS (SELECT 1 FROM external_documents WHERE id = ?)
                 """,
                 (
                     document_id,
@@ -986,6 +987,7 @@ def _prepare_actual_row(
                     "Materialized from a signed reviewed BTCPay snapshot; live BTCPay provenance remains device-local.",
                     timestamp,
                     timestamp,
+                    document_id,
                 ),
             )
             actual["document_id"] = document_id
@@ -1044,6 +1046,27 @@ def _insert_or_update_with_collision_notice(
     event: Mapping[str, Any],
 ) -> None:
     columns = list(actual)
+    # Retained accounting evidence forbids replacement INSERTs of its source
+    # document, including SQLite's BEFORE INSERT phase of an UPSERT. Ordinary
+    # metadata refresh is still permitted through the guarded UPDATE path.
+    if spec.table == "external_documents" and conn.execute(
+        "SELECT 1 FROM external_documents WHERE id = ?", (actual["id"],)
+    ).fetchone():
+        update_columns = [column for column in columns if column not in spec.primary_key]
+        if update_columns:
+            from ...secrets.sqlcipher import _database_error_classes
+            try:
+                conn.execute(
+                    f"UPDATE external_documents SET {', '.join(column + ' = ?' for column in update_columns)} WHERE id = ?",
+                    (*[actual[column] for column in update_columns], actual["id"]),
+                )
+            except _database_error_classes() as exc:
+                # Document labels are not unique. Renaming cannot repair a
+                # retained-scope or NOT NULL violation; reject the merge with
+                # the same typed constraint contract and no raw driver data.
+                raise AppError("synced document violates a local integrity constraint",
+                    code="sync_row_constraint", details={"table": spec.table, "event_id": event["id"]}) from exc
+        return
     try:
         conn.execute(_upsert_sql(spec, columns), tuple(actual[column] for column in columns))
         return

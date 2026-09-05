@@ -48,6 +48,7 @@ include = ["kassiber*"]
 
 [tool.setuptools.package-data]
 kassiber = [
+  "core/accounting/jurisdiction_data/*.json",
   "ai/provider_broker/*.mjs",
   "ai/skill_references/*.md",
   "data/rates/kraken/btc_daily/*.csv",

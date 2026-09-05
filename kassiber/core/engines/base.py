@@ -48,7 +48,25 @@ class TaxEngineLedgerResult:
     wallet_holdings: dict[tuple[Any, ...], dict[str, Any]]
 
 
+@dataclass(frozen=True)
+class TaxEngineCalculationResult:
+    """Exact replay material from an explicitly bounded calculation run.
+
+    This is not a general ledger or a legal approval. Original acquisition
+    values, cutoff-specific effective basis and raw gain/loss fragments remain
+    distinct. No runtime RP2 object, wallet configuration or raw node JSON may
+    cross this Interface.
+    """
+
+    cutoff_exclusive_utc: str
+    calculation_timezone: str
+    inputs: dict[str, Any]
+    assets: list[dict[str, Any]]
+    blockers: list[dict[str, Any]]
+
+
 __all__ = [
     "TaxEngineLedgerInputs",
     "TaxEngineLedgerResult",
+    "TaxEngineCalculationResult",
 ]

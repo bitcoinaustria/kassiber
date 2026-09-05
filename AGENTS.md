@@ -422,7 +422,15 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
   in commits whenever practical. Mark generated files clearly when the generator
   supports it, and avoid editing generated output by hand unless that exception
   is documented near the change.
-- Keep Kassiber as the BTC-side subledger and reconciliation layer; invoice issuance, VAT workflow, and the company general ledger stay outside Kassiber.
+- Preserve the existing BTC subledger and personal workflows. The explicitly
+  authorized general-accounting expansion is an opt-in, separate ledger; see
+  `docs/reference/general-accounting.md`. Never reinterpret wallet `accounts`
+  or RP2 `journal_entries` as general-ledger records. Invoice issuance, payment
+  initiation, EBICS and FinanzOnline transmission remain outside this scope.
+  This supersedes the former product-wide general-ledger exclusion. Delivery
+  is CLI-first with internal daemon contracts; do not build accounting routes,
+  navigation, Settings switches or forms. Scoped agent delivery is a separate
+  stacked change and must retain exact consent and disclosure boundaries.
 - For merchant and document-linked flows, keep provenance capture, commercial matching, and RP2-facing tax normalization as separate layers.
 - Prefer standard-library solutions unless a dependency clearly buys a lot.
 - Keep `--machine` output deterministic — add a `kind` to every new envelope.

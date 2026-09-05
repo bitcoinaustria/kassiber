@@ -586,7 +586,7 @@ def _rp2_configuration(
             pass
 
 
-def _build_rp2_accounting_engine(profile: Mapping[str, Any]):
+def _build_rp2_accounting_engine(profile: Mapping[str, Any], *, execution_capture=None):
     modules = _get_rp2_modules()
     method_name = str(profile["gains_algorithm"]).strip().lower()
     try:
@@ -601,7 +601,11 @@ def _build_rp2_accounting_engine(profile: Mapping[str, Any]):
         raise AppError(f"RP2 accounting method '{profile['gains_algorithm']}' is not available") from exc
     years_to_methods = modules["AVLTree"]()
     years_to_methods.insert_node(1970, method_module.AccountingMethod())
-    return modules["AccountingEngine"](years_2_methods=years_to_methods)
+    engine = modules["AccountingEngine"](years_2_methods=years_to_methods)
+    if execution_capture is not None:
+        from .capture import capturing_accounting_engine
+        return capturing_accounting_engine(engine, execution_capture)
+    return engine
 
 
 def _rows_by_transaction_id(normalized_inputs: NormalizedTaxAssetInputs) -> dict[str, Mapping[str, Any]]:
@@ -1238,7 +1242,7 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
     )
 
 
-def _rp2_asset_state_from_prepared(prepared: _RP2PreparedInput, profile, configuration) -> _RP2AssetState:
+def _rp2_asset_state_from_prepared(prepared: _RP2PreparedInput, profile, configuration, *, execution_capture=None) -> _RP2AssetState:
     """Run ``compute_tax`` + ``BalanceSet`` on a prepared input. No-op when there are no
     acquisitions (``prepared.input_data is None``)."""
 
@@ -1252,7 +1256,11 @@ def _rp2_asset_state_from_prepared(prepared: _RP2PreparedInput, profile, configu
     modules = _get_rp2_modules()
     compute_tax = modules["compute_tax"]
     try:
-        computed_data = compute_tax(configuration, _build_rp2_accounting_engine(profile), prepared.input_data)
+        computed_data = compute_tax(configuration, _build_rp2_accounting_engine(profile, execution_capture=execution_capture), prepared.input_data)
+    except AppError as exc:
+        if execution_capture is not None and str(exc.code).startswith('accounting_calculation_'):
+            raise
+        raise AppError(f"RP2 tax calculation failed for asset '{prepared.asset}': {exc}") from exc
     except Exception as exc:
         raise AppError(f"RP2 tax calculation failed for asset '{prepared.asset}': {exc}") from exc
     return _rp2_asset_state_from_computed_data(prepared, computed_data, configuration)
@@ -1283,6 +1291,7 @@ def _rp2_asset_states_from_prepared(
     configuration: Any,
     *,
     requires_multi_asset_compute: bool = False,
+    execution_capture=None,
 ) -> dict[str, _RP2AssetState]:
     input_data_by_asset = {
         prepared.asset: prepared.input_data
@@ -1302,9 +1311,13 @@ def _rp2_asset_states_from_prepared(
         try:
             computed_by_asset = multi_asset_compute(
                 configuration,
-                _build_rp2_accounting_engine(profile),
+                _build_rp2_accounting_engine(profile, execution_capture=execution_capture),
                 input_data_by_asset,
             )
+        except AppError as exc:
+            if execution_capture is not None and str(exc.code).startswith('accounting_calculation_'):
+                raise
+            raise AppError(f"RP2 multi-asset tax calculation failed: {exc}") from exc
         except Exception as exc:
             raise AppError(f"RP2 multi-asset tax calculation failed: {exc}") from exc
         if computed_by_asset is not None:
@@ -1332,7 +1345,7 @@ def _rp2_asset_states_from_prepared(
             return states
 
     return {
-        prepared.asset: _rp2_asset_state_from_prepared(prepared, profile, configuration)
+        prepared.asset: _rp2_asset_state_from_prepared(prepared, profile, configuration, execution_capture=execution_capture)
         for _, prepared in prepared_by_asset
     }
 
@@ -2075,6 +2088,8 @@ class GenericRP2TaxEngine:
         self,
         inputs: TaxEngineLedgerInputs,
         configuration: Any | None,
+        *,
+        calculation_capture: dict[str, Any] | None = None,
     ) -> TaxEngineLedgerResult:
         """Run RP2 exclusively over finalized custody tax events and moves."""
 
@@ -2177,7 +2192,10 @@ class GenericRP2TaxEngine:
             self.profile,
             configuration,
             requires_multi_asset_compute=bool(swap_link_by_row_id),
+            execution_capture=calculation_capture.setdefault('execution', []) if calculation_capture is not None else None,
         )
+        if calculation_capture is not None:
+            calculation_capture.update(prepared=prepared_by_asset, states=asset_states)
         wallet_refs_by_label = {
             str(item["label"]): item
             for item in inputs.wallet_refs_by_id.values()
@@ -2221,6 +2239,13 @@ class GenericRP2TaxEngine:
             account_holdings=dict(account_holdings),
             wallet_holdings=dict(wallet_holdings),
         )
+
+    def capture_calculation(self, inputs: TaxEngineLedgerInputs, *, cutoff_exclusive_utc: str,
+                            calculation_timezone: str):
+        """Capture a separate bounded run; ordinary tax processing is unchanged."""
+        from .capture import capture_calculation
+        return capture_calculation(self, inputs, cutoff_exclusive_utc=cutoff_exclusive_utc,
+                                   calculation_timezone=calculation_timezone)
 
     def build_ledger_state(self, inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult:
         """Run RP2 exclusively over finalized custody tax events and moves."""
