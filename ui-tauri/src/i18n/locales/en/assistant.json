@@ -376,6 +376,19 @@
     "deny": "Deny",
     "allowSession": "Allow this session",
     "allowOnce": "Allow once",
+    "accountingTask": {
+      "title": "Approve this accounting step?",
+      "description": "These effects were calculated by Kassiber and are shown only on this device. Approval covers this step only; later steps need a separate review.",
+      "acknowledge": "I reviewed every displayed entry and the consequences of this step.",
+      "unavailable": "Kassiber could not verify a complete current preview. Ask for a new preview before approving.",
+      "hidden": "Financial details are hidden. Turn off Hide sensitive data to review and approve this step.",
+      "prepare": "Create reviewed drafts",
+      "post": "Post reviewed entries",
+      "close": "Close reviewed period",
+      "tax_finalize": "Finalize reviewed tax workpaper",
+      "export_close": "Export reviewed close package",
+      "export_tax": "Export reviewed tax package"
+    },
     "apply": {
       "title": "Apply these corrections?",
       "description": "Review the effects recalculated by Kassiber. This approval covers the complete plan shown below.",

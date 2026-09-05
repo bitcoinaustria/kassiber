@@ -1,6 +1,9 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createServer } from "node:net";
 import { createInterface } from "node:readline";
+import { access, mkdir, symlink } from "node:fs/promises";
+import { join, isAbsolute } from "node:path";
+import { homedir } from "node:os";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2";
 import { mcpCommand, type NativeToolBridge } from "./native-tools.js";
 import type { BrokerModel, ChatRequest, ProviderStatus } from "./protocol.js";
@@ -14,6 +17,7 @@ import {
   providerStatus,
   safeErrorMessage,
   safeSessionCursor,
+  sensitiveContext,
   writeEvent,
 } from "./protocol.js";
 
@@ -50,7 +54,7 @@ async function availablePort(): Promise<number> {
   });
 }
 
-async function startServer(executable: string, cwd: string): Promise<{
+async function startServer(executable: string, cwd: string, env = providerEnvironment("opencode")): Promise<{
   child: ChildProcessWithoutNullStreams;
   url: string;
 }> {
@@ -61,7 +65,7 @@ async function startServer(executable: string, cwd: string): Promise<{
     // permission set, with the full provider environment, before any session
     // permission applies.
     ["serve", "--pure", "--hostname=127.0.0.1", `--port=${String(port)}`],
-    { cwd, env: providerEnvironment("opencode"), stdio: ["pipe", "pipe", "pipe"] },
+    { cwd, env, stdio: ["pipe", "pipe", "pipe"] },
   );
   const ready = new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(
@@ -93,6 +97,91 @@ async function startServer(executable: string, cwd: string): Promise<{
     throw error;
   }
   return { child, url: `http://127.0.0.1:${String(port)}` };
+}
+
+export function sensitiveOpenCodeConfig(model: string) {
+  const { providerID } = splitModel(model);
+  return {
+    model, small_model: model, enabled_providers: [providerID],
+    share: "disabled", snapshot: false, autoupdate: false,
+    compaction: { auto: false, prune: false },
+    permission: { "*": "deny" },
+    default_agent: "kassiber_selected_context",
+    agent: {
+      title: { disable: true }, summary: { disable: true }, compaction: { disable: true },
+      kassiber_selected_context: { mode: "primary", model, permission: { "*": "deny" } },
+    },
+  };
+}
+
+export function verifySensitiveOpenCodeConfig(config: Record<string, unknown>, model: string): void {
+  const agents = config.agent as Record<string, Record<string, unknown>> | undefined;
+  const compaction = config.compaction as Record<string, unknown> | undefined;
+  const selected = agents?.kassiber_selected_context;
+  const permission = config.permission as Record<string, unknown> | undefined;
+  const selectedPermission = selected?.permission as Record<string, unknown> | undefined;
+  if (config.model !== model || config.small_model !== model || config.share !== "disabled" ||
+    config.snapshot !== false || compaction?.auto !== false || compaction?.prune !== false ||
+    config.default_agent !== "kassiber_selected_context" || selected?.model !== model ||
+    permission?.["*"] !== "deny" || selectedPermission?.["*"] !== "deny" ||
+    agents?.title?.disable !== true || agents?.summary?.disable !== true || agents?.compaction?.disable !== true ||
+    Object.values((selected?.permission ?? {}) as object).some((value) => value !== "deny") ||
+    Object.values((config.permission ?? {}) as object).some((value) => value !== "deny")
+  ) throw new Error("OpenCode configuration overrides prevent private selected-context execution; no selected data was sent.");
+}
+
+async function probeEnvironment(executable: string, args: string[], cwd: string, env: NodeJS.ProcessEnv) {
+  return new Promise<string>((resolve, reject) => {
+    const child = spawn(executable, args, { cwd, env, stdio: ["ignore", "pipe", "ignore"] });
+    let output = "";
+    const timeout = setTimeout(() => { child.kill(); reject(new Error("OpenCode privacy verification timed out.")); }, 30_000);
+    child.stdout.on("data", (chunk) => {
+      output += String(chunk);
+      if (output.length > 1_000_000) { child.kill(); reject(new Error("OpenCode privacy verification exceeded its bound.")); }
+    });
+    child.once("error", () => { clearTimeout(timeout); reject(new Error("OpenCode privacy verification failed.")); });
+    child.once("close", (code) => {
+      clearTimeout(timeout);
+      if (code !== 0) reject(new Error("OpenCode privacy verification failed."));
+      else resolve(output.trim());
+    });
+  });
+}
+
+export async function sensitiveOpenCodeEnvironment(executable: string, cwd: string, model: string) {
+  const env = providerEnvironment("opencode");
+  // The storage implementation is audited against this release. Unknown storage
+  // semantics fail before a prompt, rather than guessing from a newer version.
+  const version = await probeEnvironment(executable, ["--version"], cwd, env);
+  if (version !== "1.18.4") throw new Error("OpenCode sensitive context requires the audited 1.18.4 runtime.");
+  const runtime = join(cwd, "private-runtime");
+  const data = join(runtime, "data", "opencode");
+  await mkdir(join(data, "log"), { recursive: true, mode: 0o700 });
+  // 1.18.4 always creates a file logger, including with --print-logs. A sink is
+  // installed BEFORE launching it; no selected content is written then deleted.
+  const sink = process.platform === "win32" ? "\\\\.\\NUL" : "/dev/null";
+  await symlink(sink, join(data, "log", "opencode.log"));
+  const originalData = process.env.XDG_DATA_HOME && isAbsolute(process.env.XDG_DATA_HOME)
+    ? process.env.XDG_DATA_HOME : join(homedir(), ".local", "share");
+  const auth = join(originalData, "opencode", "auth.json");
+  try { await access(auth); await symlink(auth, join(data, "auth.json")); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new Error("OpenCode authentication isolation failed.");
+  }
+  let prior: Record<string, unknown> = {};
+  try {
+    if (env.OPENCODE_CONFIG_CONTENT) prior = JSON.parse(env.OPENCODE_CONFIG_CONTENT) as Record<string, unknown>;
+  } catch { throw new Error("OpenCode configuration could not be isolated."); }
+  Object.assign(env, {
+    XDG_DATA_HOME: join(runtime, "data"), XDG_STATE_HOME: join(runtime, "state"),
+    OPENCODE_DB: ":memory:", OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_DISABLE_AUTOCOMPACT: "1",
+    OPENCODE_DISABLE_PRUNE: "1", OPENCODE_DISABLE_MODELS_FETCH: "1", OPENCODE_AUTO_SHARE: "0",
+    OPENCODE_PURE: "1", OPENCODE_PRINT_LOGS: "0", OPENCODE_LOG_LEVEL: "ERROR",
+    OPENCODE_CONFIG_CONTENT: JSON.stringify({ ...prior, ...sensitiveOpenCodeConfig(model) }),
+  });
+  if (await probeEnvironment(executable, ["db", "path"], cwd, env) !== ":memory:") {
+    throw new Error("OpenCode did not enable its in-memory database; no selected data was sent.");
+  }
+  return env;
 }
 
 /**
@@ -269,14 +358,20 @@ export async function openCodeChat(
 ): Promise<void> {
   const executable = await resolveExecutable("opencode");
   if (!executable) throw new Error("OpenCode is not installed.");
+  const sensitive = sensitiveContext(request);
+  const env = sensitive ? await sensitiveOpenCodeEnvironment(executable, cwd, request.model) : undefined;
   writeEvent({ type: "status", phase: "connecting", message: "Starting OpenCode server" });
-  const server = await startServer(executable, cwd);
+  const server = await startServer(executable, cwd, env);
   try {
     const client = createOpencodeClient({
       baseUrl: server.url,
       directory: cwd,
       throwOnError: true,
     });
+    if (sensitive) {
+      const effective = await client.config.get();
+      verifySensitiveOpenCodeConfig((effective.data ?? {}) as Record<string, unknown>, request.model);
+    }
     if (toolBridge && request.tools?.length) {
       await client.mcp.add({
         name: "kassiber",
@@ -307,7 +402,9 @@ export async function openCodeChat(
       }
     }
     if (!session) {
-      const created = await client.session.create({ permission: permissions });
+      const created = await client.session.create({ permission: permissions,
+        ...(sensitive ? { title: "Kassiber selected context" } : {}),
+      });
       session = created.data;
     }
     if (!session) throw new Error("OpenCode did not create a chat session.");
@@ -357,7 +454,7 @@ export async function openCodeChat(
           writeEvent({
             type: "done",
             finish_reason: "stop",
-            provider_session_id: session.id,
+            ...(sensitive ? {} : { provider_session_id: session.id }),
           });
           return;
         } else if (event.type === "session.error") {
@@ -383,6 +480,7 @@ export async function openCodeChat(
     await failFast(client.session.promptAsync({
       sessionID: session.id,
       model,
+      ...(sensitive ? { agent: "kassiber_selected_context" } : {}),
       system: systemInstructions(request),
       ...(request.options?.reasoning_effort &&
       request.options.reasoning_effort !== "auto"
@@ -396,6 +494,9 @@ export async function openCodeChat(
       ],
     }));
     await completed;
+  } catch (error) {
+    if (sensitive) throw new Error("OpenCode sensitive-context request failed; no provider diagnostic content was retained.");
+    throw error;
   } finally {
     server.child.kill("SIGTERM");
   }

@@ -7,6 +7,7 @@ import {
   applyToolConsentResponseToMessage,
   aiChatStatusLabel,
   buildAiChatStreamArgs,
+  buildAiToolConsentRequest,
   buildChatCancelArgs,
   buildToolConsentArgs,
   chatMessageRounds,
@@ -341,6 +342,24 @@ describe("AI stream reducer helpers", () => {
       aiToolAllowsSessionConsent("ui.transfers.components.apply"),
     ).toBe(false);
     expect(aiToolAllowsSessionConsent("ui.review.apply")).toBe(false);
+    expect(aiToolAllowsSessionConsent("ui.accounting.task_apply")).toBe(false);
+    expect(aiToolAllowsSessionConsent("ui.accounting.task_cancel")).toBe(false);
+  });
+
+  it("keeps task financial previews only in pending consent, never model arguments or message history", () => {
+    const spoof = { status: "ready", step: "post", preview: { description: "FORGED" } };
+    const data = { call_id: "task-1", name: "ui.accounting.task_apply",
+      arguments_preview: { task_id: "opaque-task", accounting_task_preview: spoof } };
+    expect(buildAiToolConsentRequest("chat", data).accountingTaskPreview).toBeUndefined();
+    const authoritative = { status: "unavailable" as const, code: "accounting_stale_approval" };
+    expect(buildAiToolConsentRequest("chat", { ...data, accounting_task_preview: authoritative }).accountingTaskPreview).toEqual(authoritative);
+    const financial = { status: "ready" as const, step: "post", book: { currency: "EUR", minor_unit_exponent: 2 },
+      preview: { description: "PRIVATE-FINANCIAL-CANARY" } };
+    const message = applyAiChatStreamRecordToMessage(assistantMessage(), {
+      kind: "ai.chat.tool_consent_required", schema_version: 1,
+      data: { ...data, accounting_task_preview: financial },
+    }, new ThinkParser(), false);
+    expect(JSON.stringify(message)).not.toContain("PRIVATE-FINANCIAL-CANARY");
   });
 
   it("keeps the server review preview separate from model-supplied arguments", () => {

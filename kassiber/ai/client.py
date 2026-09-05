@@ -21,7 +21,8 @@ already render through the standard envelope:
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import threading
 from typing import Any, Iterable, Iterator
 
 import urllib.error
@@ -439,6 +440,7 @@ def _responses_options(options: dict[str, Any] | None) -> dict[str, Any]:
         "model",
         "previous_response_id",
         "store",
+        "sensitive_context",
         "stream",
         "tool_choice",
         "tools",
@@ -694,6 +696,21 @@ class OpenAIResponsesClient:
     timeout: float = DEFAULT_TIMEOUT_SECONDS
     user_agent: str = "kassiber/ai"
     direct_connection: bool = False
+    _cancelled: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _active_response: Any = field(default=None, init=False, repr=False)
+
+    def cancel(self) -> None:
+        self._cancelled.set()
+        response = self._active_response
+        if response is not None:
+            # Buffered HTTP readers can hold their own lock. Closing them must
+            # never stall the daemon's lock/cancel control thread.
+            def close_response():
+                try:
+                    response.close()
+                except OSError:
+                    pass
+            threading.Thread(target=close_response, daemon=True, name="kassiber-ai-http-cancel").start()
 
     def _headers(self, *, json_body: bool = False, accept_sse: bool = False) -> dict[str, str]:
         headers = {"Accept": "application/json", "User-Agent": self.user_agent}
@@ -714,6 +731,8 @@ class OpenAIResponsesClient:
         accept_sse: bool,
         timeout: float | None = None,
     ):
+        if self._cancelled.is_set():
+            raise AppError("AI request cancelled", code="ai_cancelled")
         url = f"{self.base_url.rstrip('/')}/{path.lstrip('/')}"
         request = urllib.request.Request(
             url,
@@ -735,8 +754,14 @@ class OpenAIResponsesClient:
                     urllib.request.ProxyHandler({}),
                     _SameOriginRedirectHandler(self.base_url),
                 )
-                return opener.open(request, timeout=request_timeout)
-            return urllib.request.urlopen(request, timeout=request_timeout)
+                response = opener.open(request, timeout=request_timeout)
+            else:
+                response = urllib.request.urlopen(request, timeout=request_timeout)
+            self._active_response = response
+            if self._cancelled.is_set():
+                response.close()
+                raise AppError("AI request cancelled", code="ai_cancelled")
+            return response
         except urllib.error.HTTPError as exc:
             raise _http_error_app_error(exc) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
@@ -938,6 +963,8 @@ class OpenAIResponsesClient:
                 emitted_reasoning = False
                 line_iter = (raw.decode("utf-8", errors="replace") for raw in response)
                 for event in parse_sse_chunks(line_iter):
+                    if self._cancelled.is_set():
+                        return
                     event_type = event.get("type")
                     if event_type in {"error", "response.failed"}:
                         raise _response_stream_error(event)
@@ -998,6 +1025,9 @@ class OpenAIResponsesClient:
                     )
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise _network_error_app_error(exc) from exc
+
+        finally:
+            self._active_response = None
 
 
 def ai_client_for_locator(

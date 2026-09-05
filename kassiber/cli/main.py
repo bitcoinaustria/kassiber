@@ -1080,6 +1080,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="One-shot prompt; pass '-' to read it from stdin. Omit for REPL mode.",
     )
     chat.add_argument("--prompt", dest="prompt_text", help="One-shot prompt text.")
+    chat.add_argument("--accounting-selection", metavar="PATH", help=(
+        "Opt-in selected financial assistance: bounded local JSON with profile_id, question, purpose and selection. "
+        "Requires --accounting-selection-sha256 and an interactive terminal; fresh tool-free no-history turn, "
+        "separate disclosure and draft/field approvals. Select the matching book with context set first."))
+    chat.add_argument("--accounting-selection-sha256", metavar="SHA256", help="SHA-256 of exact --accounting-selection file bytes.")
     chat.add_argument(
         "--file",
         metavar="PATH",
@@ -1149,7 +1154,7 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument(
         "--yes",
         action="store_true",
-        help="Non-interactively allow mutating AI tools, except ui.review.apply (fresh review required).",
+        help="Non-interactively allow mutating AI tools, except ui.review.apply and accounting task actions (fresh review required).",
     )
     chat.add_argument(
         "--allow-tool",
@@ -1157,7 +1162,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Non-interactively allow only this mutating tool name; repeat or "
             "pass comma-separated names. Other mutating tools still prompt on a TTY "
-            "or deny without one. ui.review.apply always requires fresh interactive review."
+            "or deny without one. ui.review.apply and accounting task actions always require fresh interactive review."
         ),
     )
     chat.add_argument(
@@ -1177,6 +1182,10 @@ def build_parser() -> argparse.ArgumentParser:
             "session to PATH as NDJSON. The file is plaintext and includes "
             "prompts and redacted tool results."
         ),
+    )
+    chat.add_argument(
+        "--accounting-export", nargs=3, action="append", metavar=("TASK_ID", "STEP", "PATH"),
+        help="CLI-only exact destination for export_close or export_tax; repeat for another task/step. Fresh interactive review required; never overwrites.",
     )
     chat.add_argument(
         "--plain",

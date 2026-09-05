@@ -99,6 +99,8 @@ const AI_TOOL_ONCE_ONLY_CONSENT = new Set([
   "ui.journals.quarantine.resolve",
   "ui.transfers.components.apply",
   "ui.review.apply",
+  "ui.accounting.task_apply",
+  "ui.accounting.task_cancel",
 ]);
 
 export function aiToolAllowsSessionConsent(name: string): boolean {
@@ -214,6 +216,11 @@ export type AiReviewPreview =
   | { status: "applied"; receipt: unknown }
   | { status: "unavailable"; code: string };
 
+/** Financial details exist only in the pending desktop approval, never chat messages. */
+export type AiAccountingTaskPreview =
+  | { status: "ready"; step: string; preview: unknown; book: { currency: string; minor_unit_exponent: number } }
+  | { status: "unavailable"; code: string };
+
 export interface AiToolConsentRequest {
   targetRequestId: string;
   callId: string;
@@ -221,6 +228,7 @@ export interface AiToolConsentRequest {
   summary: string;
   argumentsPreview: Record<string, unknown>;
   reviewPreview?: AiReviewPreview;
+  accountingTaskPreview?: AiAccountingTaskPreview;
 }
 
 export interface AiChatDeltaShape {
@@ -273,6 +281,23 @@ export interface AiChatToolConsentRequiredShape {
   summary?: string;
   arguments_preview?: Record<string, unknown>;
   review_preview?: AiReviewPreview;
+  accounting_task_preview?: AiAccountingTaskPreview;
+}
+
+export function buildAiToolConsentRequest(
+  targetRequestId: string,
+  data: AiChatToolConsentRequiredShape,
+): AiToolConsentRequest {
+  return {
+    targetRequestId,
+    callId: data.call_id,
+    name: data.name,
+    summary: data.summary ?? data.name,
+    argumentsPreview: data.arguments_preview ?? {},
+    reviewPreview: data.review_preview,
+    // Never fall back to model-supplied arguments_preview for authorization.
+    accountingTaskPreview: data.accounting_task_preview,
+  };
 }
 
 interface AiToolConsentResponseShape {
@@ -787,14 +812,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
             ? record.request_id
             : requestIdRef.current;
         if (data?.call_id && data.name && targetRequestId) {
-          setPendingConsent({
-            targetRequestId,
-            callId: data.call_id,
-            name: data.name,
-            summary: data.summary ?? data.name,
-            argumentsPreview: data.arguments_preview ?? {},
-            reviewPreview: data.review_preview,
-          });
+          setPendingConsent(buildAiToolConsentRequest(targetRequestId, data));
         }
       }
       if (record.kind === "ai.chat.tool_result") {

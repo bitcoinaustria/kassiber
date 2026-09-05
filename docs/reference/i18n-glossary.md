@@ -165,6 +165,11 @@ FIFO, KESt, ESt, Kz./KZ, **Formular E 1**, **Beilage E 1kv**, § 27 / § 27a /
 | Inflow | Zugang | inventory inflow; time-of-receipt = „Zufluss". |
 | Outflow | Abgang | inventory outflow; „Abfluss" for cash. |
 | Ledger | Hauptbuch | the app ledger — NOT the Blockchain. |
+| Trial balance | Saldenliste | General-ledger debit/credit totals by account. |
+| Debit / credit | Soll / Haben | Posting sides, not receipt/payment directions. |
+| Fiscal period | Geschäftsjahr | Explicit book accounting interval. |
+| Result appropriation | Ergebnisübertrag | Transfer the period result to equity. |
+| Open items | Offene Posten | Receivables/payables and their partial settlements. |
 | Journal | Journal | das Journal (Grundbuch). |
 | Journal entry | Journaleintrag | a.k.a. Buchung. |
 | Quarantine | Quarantäne | data held back from a report for missing pricing. Verb „in Quarantäne stellen". |
