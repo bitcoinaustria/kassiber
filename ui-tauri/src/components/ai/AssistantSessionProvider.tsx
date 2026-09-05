@@ -96,7 +96,6 @@ export function AssistantSessionProvider({
               ? undefined
               : { reasoning_effort: thinkingEffort },
           toolsEnabled: true,
-          toolLoopMaxIterations: 8,
           systemPromptKind: "kassiber",
           sessionId: activeSession,
           persist: incognito && activeSession === null ? false : "auto",

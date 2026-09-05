@@ -270,6 +270,13 @@ This includes CoinJoin/Payjoin ownership boundaries: connected intermediate
 wallets can prove conserving own movements, while unexplained payments or fee
 shares remain reviewable. The desktop Transfers & Custody surface provides a
 guided component editor with a server preview and separate confirmation.
+Quarantine also offers **Investigate with assistant**: the agent reads all case
+pages, prepares evidence-backed corrections and requests one approval of their
+computed accounting effects. External agents use `review cases`, `review plan`,
+`review apply` and `review receipt` through the same core. Plans are portable JSON;
+application is atomic and retry-safe, with a durable receipt and the remaining
+report blockers. Detailed CLI examples and resumption semantics are in the
+[resolution guide](docs/reference/custody-resolution.md#resolve-with-the-cli-or-chat).
 
 For a likely return through wallet history that is no longer available, use
 the guided custody-gap workflow instead of writing component JSON:

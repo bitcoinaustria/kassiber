@@ -3,6 +3,13 @@ import { describe, expect, it } from "vitest";
 import { assistantScreenContextFor } from "./assistantScreenContext";
 
 describe("assistantScreenContextFor", () => {
+  it("gives quarantine investigation custody tools and the safely selected transaction", () => {
+    expect(assistantScreenContextFor("/quarantine", "?tx=tx-held&url=https://untrusted.example"))
+      .toEqual({ route: "/quarantine", entityType: "transaction", entityId: "tx-held",
+        capabilities: ["review"] });
+    expect(assistantScreenContextFor("/quarantine", "?tx=%2FUsers%2Fsecret"))
+      .not.toHaveProperty("entityId");
+  });
   it("includes the selected transaction and allowlisted display filters", () => {
     expect(
       assistantScreenContextFor(

@@ -98,6 +98,7 @@ export type AiToolConsentDecision = "allow_once" | "allow_session" | "deny";
 const AI_TOOL_ONCE_ONLY_CONSENT = new Set([
   "ui.journals.quarantine.resolve",
   "ui.transfers.components.apply",
+  "ui.review.apply",
 ]);
 
 export function aiToolAllowsSessionConsent(name: string): boolean {
@@ -113,6 +114,8 @@ export interface AiChatToolCall {
   status: AiToolCallStatus;
   result?: unknown;
   reason?: string;
+  /** Server-revalidated effects, separate from the model's tool arguments. */
+  reviewPreview?: AiReviewPreview;
   /** Reasoning segment (provider completion round) this call belongs to. */
   segmentId?: string;
 }
@@ -204,12 +207,18 @@ export function buildAiChatStreamArgs(
   };
 }
 
+export type AiReviewPreview =
+  | { status: "ready"; artifact: unknown }
+  | { status: "applied"; receipt: unknown }
+  | { status: "unavailable"; code: string };
+
 export interface AiToolConsentRequest {
   targetRequestId: string;
   callId: string;
   name: string;
   summary: string;
   argumentsPreview: Record<string, unknown>;
+  reviewPreview?: AiReviewPreview;
 }
 
 export interface AiChatDeltaShape {
@@ -261,6 +270,7 @@ export interface AiChatToolConsentRequiredShape {
   name: string;
   summary?: string;
   arguments_preview?: Record<string, unknown>;
+  review_preview?: AiReviewPreview;
 }
 
 interface AiToolConsentResponseShape {
@@ -657,6 +667,7 @@ export function applyAiChatStreamRecordToMessage(
       callId: data.call_id,
       name: data.name,
       arguments: data.arguments_preview ?? {},
+      reviewPreview: data.review_preview,
       kindClass: "mutating",
       needsConsent: true,
       status: "awaiting_consent",
@@ -780,6 +791,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
             name: data.name,
             summary: data.summary ?? data.name,
             argumentsPreview: data.arguments_preview ?? {},
+            reviewPreview: data.review_preview,
           });
         }
       }

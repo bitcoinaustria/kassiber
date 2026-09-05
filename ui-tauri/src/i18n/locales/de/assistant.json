@@ -307,5 +307,83 @@
     "remoteConfirm": "{{provider}} für den Chat verwenden? Die vorhandene lokale CLI-Anmeldung/-Konfiguration wird wiederverwendet, Prompts und ausgewählte Kassiber-Daten können dieses Gerät aber verlassen. Kassibers typisierte Tools bleiben fähigkeitsbeschränkt; Änderungen und Netzwerkzugriffe erfordern Zustimmung. Provider-eigene Coding-Tools sind deaktiviert.",
     "remoteDiscoveryConfirm": "Modelle von {{provider}} prüfen? Dadurch wird der Provider jetzt kontaktiert.",
     "cliChatOnly": "Lokaler CLI-Broker · Kassiber-Tools verfügbar · native Coding-Tools deaktiviert"
+  },
+  "review": {
+    "seedPrompt": "Untersuche die {{count}} Quarantäne-Probleme in diesem Buch. Geh alle Fälle seitenweise durch, sammle verfügbare Belege und erstelle einen gemeinsamen typisierten Korrekturplan mit Begründungen. Bitte einmal um Bestätigung des vom Server geprüften Plans; ändere nichts ohne Freigabe. Erkläre, welche Fälle noch Belege oder eine Entscheidung benötigen.",
+    "rawJson": "Technische Details",
+    "computed": "Von Kassiber berechnet",
+    "proposedInterpretation": "Vorgeschlagene Einordnung",
+    "operations_one": "{{count}} Korrektur",
+    "operations_other": "{{count}} Korrekturen",
+    "more_one": "{{count}} weitere Korrektur anzeigen",
+    "more_other": "{{count}} weitere Korrekturen anzeigen",
+    "openQuestions": "Verbleibende Probleme",
+    "remaining_one": "{{count}} Quarantäne-Problem bleibt offen",
+    "remaining_other": "{{count}} Quarantäne-Probleme bleiben offen",
+    "notListed_one": "{{count}} weiteres Problem ist in dieser Vorschau nicht aufgeführt.",
+    "notListed_other": "{{count}} weitere Probleme sind in dieser Vorschau nicht aufgeführt.",
+    "fingerprint": "Plan-Fingerabdruck",
+    "failed": "Das Ergebnis der Anwendung konnte nicht geprüft werden. Bitte den Assistenten vor einem erneuten Versuch um den Prüfbeleg.",
+    "effects": {
+      "quarantine": "Quarantäne-Probleme",
+      "readiness": "Berichtsbereitschaft",
+      "ready": "Bereit",
+      "blocked": "Blockiert",
+      "becomes": "wird"
+    },
+    "proposal": {
+      "title": "Vorgeschlagene Korrekturen",
+      "revision": "Basiert auf Eingabestand {{revision}} des Buchs"
+    },
+    "status": {
+      "applied": "Angewendet",
+      "proposed": "Vorgeschlagen"
+    },
+    "op": {
+      "price_override": "Preis setzen",
+      "exclude": "Aus dem Journal ausschließen",
+      "custody_component": "Verwahrung einordnen",
+      "rate": "Kurs in der Fiat-Währung des Buchs pro BTC",
+      "value": "Wert in der Fiat-Währung des Buchs",
+      "activate": "Aktivieren",
+      "draft": "Als Entwurf speichern",
+      "assetFromReference": "Asset wird aus der Referenz ermittelt"
+    },
+    "receipt": {
+      "title": "Geprüfter Review-Beleg",
+      "verified_one": "{{count}} Korrektur angewendet; das resultierende Journal wurde neu berechnet und geprüft.",
+      "verified_other": "{{count}} Korrekturen angewendet; das resultierende Journal wurde neu berechnet und geprüft.",
+      "openQuarantine": "Quarantäne öffnen"
+    },
+    "cases": {
+      "more": "{{count}} Fälle geprüft; weitere Fälle sind verfügbar.",
+      "last": "{{count}} Fälle geprüft; Ende dieser Fallliste."
+    },
+    "planSummary": "{{count}} Korrekturen vorgeschlagen; Quarantäne-Probleme {{before}} → {{after}}",
+    "progress": {
+      "confirmation": "Wartet auf deine Prüfung des gesamten Plans",
+      "plan": "Berechnet die vorgeschlagenen Journal-Auswirkungen",
+      "apply": "Wendet den freigegebenen Plan an und prüft das Ergebnis",
+      "read": "Prüft lokale Fälle und Belege"
+    },
+    "continuationDetails": "Details zum Fortsetzen"
+  },
+  "consent": {
+    "title": "Werkzeugaktion erlauben?",
+    "toolAction": "Werkzeugaktion",
+    "description": "Diese Aktion benötigt eine Freigabe, bevor Kassiber sie ausführt.",
+    "arguments": "Argumente",
+    "deny": "Ablehnen",
+    "allowSession": "Für diese Sitzung erlauben",
+    "allowOnce": "Einmal erlauben",
+    "apply": {
+      "title": "Diese Korrekturen anwenden?",
+      "description": "Prüfe die von Kassiber neu berechneten Auswirkungen. Diese Freigabe gilt für den gesamten unten gezeigten Plan.",
+      "cancel": "Abbrechen",
+      "confirm": "Einmal anwenden",
+      "alreadyApplied": "Dieser Plan wurde bereits angewendet. Beim Fortfahren wird derselbe Beleg zurückgegeben, ohne neue Änderungen vorzunehmen.",
+      "returnReceipt": "Beleg abrufen",
+      "unavailable": "Kassiber konnte diesen Plan nicht gegen das aktuelle Buch prüfen. Bitte den Assistenten vor einer Freigabe um einen neuen Plan."
+    }
   }
 }

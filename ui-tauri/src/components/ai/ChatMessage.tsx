@@ -25,6 +25,9 @@ import { ChatLoader } from "./ChatLoader";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatReasoning } from "./ChatReasoning";
 import { ChatToolCall } from "./ChatToolCall";
+import { ReviewProposalCard, ReviewReceiptCard } from "./ReviewWorkflowCard";
+import { reviewToolResult } from "./reviewWorkflow";
+import { splitReviewCheckpoint } from "./reviewCheckpoint";
 import {
   ChainOfThought,
   ChainOfThoughtContent,
@@ -66,11 +69,20 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
   const isStreaming =
     message.status === "streaming" || message.status === "pending";
   const hasAnswer = Boolean(message.content);
+  const displayContent = splitReviewCheckpoint(message.content);
   const rounds = chatMessageRounds(message);
+  const reviews = (message.toolCalls ?? []).map(reviewToolResult).filter((value) => value !== null);
+  const uniqueReviews = [...new Map(reviews.map((value) => [
+    value.kind === "plan" ? `plan:${value.artifact.digest}` : `receipt:${value.receipt.id}`, value,
+  ])).values()];
+  const appliedDigests = new Set(reviews.flatMap((value) => value.kind === "receipt" ? [value.receipt.artifact_digest] : []));
+  const lastReviewCall = (message.toolCalls ?? []).filter((call) => call.name.startsWith("ui.review.")).at(-1);
+  const reviewFailure = lastReviewCall?.name === "ui.review.apply" && lastReviewCall.status === "error" ? lastReviewCall : null;
+  const reviewPending = lastReviewCall && ["pending", "running", "awaiting_consent"].includes(lastReviewCall.status) ? lastReviewCall : null;
   const hasToolCalls = rounds.some((round) => round.toolCalls.length > 0);
   const hasThinking = rounds.some((round) => round.thinking.length > 0);
   const showLoader =
-    !hasAnswer &&
+    !reviewPending && !hasAnswer &&
     !hasThinking &&
     (message.status === "pending" || message.status === "streaming");
   const loaderLabel = message.activityLabel ?? t("message.generating");
@@ -90,13 +102,24 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
             hasAnswer={hasAnswer}
           />
         ))}
+        {uniqueReviews.map((review) => review.kind === "plan"
+          ? <ReviewProposalCard key={`plan:${review.artifact.digest}`} artifact={review.artifact} applied={appliedDigests.has(review.artifact.digest)} />
+          : <ReviewReceiptCard key={`receipt:${review.receipt.id}`} receipt={review.receipt} />)}
+        {reviewPending ? <div role="status" className="my-2 text-xs text-muted-foreground">{t(reviewPending.status === "awaiting_consent" ? "review.progress.confirmation"
+          : reviewPending.name === "ui.review.plan" ? "review.progress.plan"
+            : reviewPending.name === "ui.review.apply" ? "review.progress.apply" : "review.progress.read")}</div> : null}
+        {reviewFailure ? <p role="status" className="my-3 rounded-md border border-destructive/30 p-3 text-sm text-destructive">{t("review.failed")} {reviewFailure.reason}</p> : null}
         {hasAnswer ? (
           <div
             className={cn(
               hasThinking || hasToolCalls ? "mt-4" : undefined,
             )}
           >
-            <ChatMarkdown content={message.content} />
+            <ChatMarkdown content={displayContent.prose} />
+            {displayContent.packet ? <details className="mt-3 text-xs text-muted-foreground">
+              <summary className="cursor-pointer py-2">{t("review.continuationDetails")}</summary>
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3">{displayContent.packet}</pre>
+            </details> : null}
           </div>
         ) : null}
         {hasAnswer ? (

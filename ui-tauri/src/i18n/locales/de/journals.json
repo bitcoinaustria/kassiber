@@ -157,7 +157,9 @@
     "empty": "Keine Transaktionen in Quarantäne im aktiven Buch.",
     "actions": {
       "transactions": "Transaktionen",
-      "processJournals": "Journale verarbeiten"
+      "processJournals": "Journale verarbeiten",
+      "investigate": "Mit Assistent untersuchen",
+      "investigateEmpty": "Nichts in Quarantäne zu untersuchen"
     },
     "metric": {
       "quarantined": "In Quarantäne",

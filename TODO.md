@@ -24,6 +24,16 @@ Backlog contract:
 - If code and a plan doc disagree, trust the code, then update the plan doc so
   the drift does not survive.
 
+## Agent-assisted accounting review
+
+- [x] Shared canonical case pagination, portable mixed-operation previews,
+  atomic application and verification receipts for CLI and built-in chat.
+  Investigation uses existing evidence tools; bookkeeping remains in
+  `custody_journal`. Critical batch consent approves server-recomputed effects.
+  Quarantine's assistant entry and visible plan/receipt cards use the existing
+  chat. Continuation discovers durable receipts and current unresolved cases.
+  See [custody resolution](docs/reference/custody-resolution.md).
+
 ## Rules for every session
 
 Use `./scripts/quality-gate.sh` before calling work ready to push. It compiles

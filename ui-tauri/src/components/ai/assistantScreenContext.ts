@@ -184,7 +184,10 @@ export function assistantScreenContextFor(
   }
 
   if (path === "/quarantine") {
-    return context("/quarantine", ["transactions", "reports", "operations"]);
+    const transaction = firstSafeEntity(params, ["tx", "transaction"]);
+    return context("/quarantine", ["review"], {
+      ...(transaction ? { entityType: "transaction" as const, entityId: transaction } : {}),
+    });
   }
 
   if (path === "/swaps" || path === "/transfers") {

@@ -37,6 +37,7 @@ export type AssistantToolCapability =
   | "source_funds"
   | "merchant"
   | "transfers"
+  | "review"
   | "operations";
 
 export interface AssistantScreenContext {

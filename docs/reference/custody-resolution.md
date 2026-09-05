@@ -95,52 +95,91 @@ conversion amounts unless the user edits them.
 
 ## Resolve with the CLI or chat
 
-The preferred direction is agent-assisted investigation with a reviewable
-result. Users should not have to reproduce the agent's transaction search and
-evidence comparisons by clicking through individual editors. CLI and built-in
-chat share the typed investigation and plan/apply contracts; the UI makes
-evidence, open questions and proposed accounting effects inspectable. The manual
-component editor remains available for cases that need direct correction.
-This is a product direction, not a claim that an unattended quarantine-resolution
-agent is already implemented.
+The agent investigates through typed tools; Kassiber computes and validates the
+accounting consequences. **Investigate with assistant** on Quarantine starts the
+same workflow available to external agents through the CLI. The UI displays the
+proposed changes and their computed effects, then asks for one approval of that
+exact proposal. Manual component editing remains available.
 
-Start with the actual reason and evidence:
+The shared `core/review_workflow.py` module exposes four operations:
+
+| Operation | Contract |
+| --- | --- |
+| `review cases` / `ui.review.cases` | Current canonical quarantine cases, paginated with a book/version-bound cursor; recent execution receipts support continuation. |
+| `review plan` / `ui.review.plan` | Apply typed operations to an isolated in-memory book snapshot and rebuild with the canonical custody journal. Return a portable artifact containing scope, input version, operations, before/after effects and a digest. No live-book writes or network calls. |
+| `review apply` / `ui.review.apply` | Revalidate scope, version and effects under one writer transaction, apply the exact operations, rebuild/store journals and append a durable receipt. Any failure rolls back the whole batch. |
+| `review receipt` / `ui.review.receipt` | Retrieve the historical execution and verification result by receipt ID or idempotency key in the active book. |
+
+Supported batch operations are exact price overrides, explicitly justified
+exclusions, and typed custody components. The CLI accepts the existing component
+create/revise/state actions. AI batches create components; conversion components
+remain drafts until separately reviewed. Missing-wallet gap investigation keeps
+its existing local-provider-only tools (`ui.custody.review.plan/apply`) and is
+not smuggled into the general batch interface.
+
+An external agent can save and inspect the same portable proposal:
 
 ```bash
-kassiber --machine journals quarantined
-kassiber --machine journals quarantine show --transaction <transaction-id>
-kassiber --machine journals transfers list
-kassiber chat --tool-profile scoped
+kassiber --machine review cases --limit 100
+# Follow next_cursor until null. Use the returned input_version below.
+kassiber --machine --output proposal.json review plan \
+  --operations-file corrections.json --expected-input-version 7
+# After reviewing proposal.json:
+kassiber --machine review apply \
+  --artifact-file proposal.json --idempotency-key review-2026-09-05-1
+kassiber --machine review receipt --idempotency-key review-2026-09-05-1
 ```
 
-The built-in chat recognizes English and German quarantine requests and exposes
-the transfer/custody tools needed to investigate them. CLI chat's default
-`core` profile includes transaction review context, guided custody-gap review,
-and audited price/exclusion repairs. Use `scoped` for specialist component
-authoring based on the current question, or `full` for the complete catalog.
+`corrections.json` contains an ordered operations array, for example:
 
-The AI workflow is:
+```json
+[
+  {
+    "type": "price_override",
+    "transaction_id": "transaction-from-review-cases",
+    "fiat_rate": "20000",
+    "reason": "Acquisition rate verified against the supplied invoice"
+  }
+]
+```
 
-1. Read `ui.journals.quarantine`, `ui.transactions.review_context` and, for
-   ownership/rail problems, `ui.transfers.review_context`.
-2. Use available local observations first. If evidence is missing, explain
-   which wallet, source document, price or review decision is needed.
-3. For a custody gap, use `ui.custody.review.plan` then
-   `ui.custody.review.apply`; for a general multi-leg interpretation, use
-   `ui.transfers.components.plan` then `ui.transfers.components.apply`.
-   Apply must reference the previewed journal input version.
-   The guided custody-gap tools require an on-device AI provider; an off-device
-   chat cannot use them. The CLI can perform the same review locally.
-4. For a substantiated price correction or explicit exclusion, use
-   `ui.journals.quarantine.resolve`. It rebuilds by default. An exclusion is
-   never a substitute for explaining an owned movement.
-5. After custody changes, run `ui.journals.process` and reread quarantine and
-   `ui.report.blockers`. Successful mutation alone does not prove resolution.
+Prices are decimal strings. A price assertion still needs evidence: the module
+checks arithmetic and records the reviewed assertion, rather than proving an
+invoice's contents. An exclusion is never a substitute for explaining an owned
+movement or missing acquisition basis. Native chain authority, component anchor
+coverage and conservation retain their existing checks.
 
-CLI equivalents for guided review and components are documented in
-[custody-components.md](custody-components.md). Writes and network reads retain
-the chat's consent and pinned book scope. AI interprets and proposes evidence;
-the deterministic accounting boundary validates every application.
+The chat's bounded review capability pack is selected by English/German review
+requests or the Quarantine screen. It includes case pagination, transaction and
+transfer context, evidence reads and the shared plan/apply tools. A review turn
+defaults to 16 model rounds (ordinary turns remain 8; explicit limits win).
+At budget exhaustion the answer retains a bounded continuation packet with
+case cursor/version and applied receipt IDs. A resumed agent inspects current
+cases and retrieves receipts; unapplied plans must be reconstructed unless the
+external CLI agent saved their artifact. Kassiber does not persist model
+reasoning or create a separate background agent scheduler.
+
+Before showing consent, the daemon recomputes the proposal's effects. Apply is
+always once-only consent and stays pinned to the chat's original book. A digest
+binds the content being reviewed; it never grants accounting authority. An AI
+proposal that would change under privacy redaction or exceed the tool argument
+limit is rejected with instructions to use local evidence identifiers or a
+smaller batch. Network evidence gathering keeps its separate existing consent.
+
+A receipt's `verified` status means the canonical rebuild completed and matched
+the preview. Check `verification.report_ready` and remaining quarantines; verified
+does not mean every case was resolved. Receipts are historical, not a promise
+about a subsequently changed book. Retrying the same key and artifact returns
+the original receipt even after the book changes; reusing the key for another
+artifact fails. Preview and apply use recorded observations and prices with
+identical semantics, without an extra sync/repricing pass only at application.
+
+Applied receipts reference the existing transaction/component audit history;
+they are included as bounded audit summaries and are not replicated as authored
+accounting decisions. SQLCipher snapshots use the same binding and an ephemeral
+in-memory encryption key; decrypted book pages are never exported to disk for
+planning. Detailed component and guided-review contracts remain documented in
+[custody-components.md](custody-components.md).
 
 ## Regression evidence
 

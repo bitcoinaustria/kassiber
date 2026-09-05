@@ -307,5 +307,83 @@
     "remoteConfirm": "Use {{provider}} for chat? It reuses the provider's existing local CLI login/configuration, but prompts and selected Kassiber data may leave this device. Kassiber's typed tools stay capability-scoped; mutations and network access require consent. Provider-native coding tools are disabled.",
     "remoteDiscoveryConfirm": "Check models from {{provider}}? This contacts the provider now.",
     "cliChatOnly": "Local CLI broker · Kassiber tools available · native coding tools disabled"
+  },
+  "review": {
+    "seedPrompt": "Investigate the {{count}} quarantine issues in this book. Page through all cases, gather available evidence, and prepare one typed correction plan with reasons. Request one confirmation for the server-verified plan; make no unapproved changes. Explain any cases that still need evidence or a decision.",
+    "rawJson": "Technical details",
+    "computed": "Computed by Kassiber",
+    "proposedInterpretation": "Proposed interpretation",
+    "operations_one": "{{count}} correction",
+    "operations_other": "{{count}} corrections",
+    "more_one": "Show {{count}} more correction",
+    "more_other": "Show {{count}} more corrections",
+    "openQuestions": "Remaining issues",
+    "remaining_one": "{{count}} quarantine issue remains",
+    "remaining_other": "{{count}} quarantine issues remain",
+    "notListed_one": "{{count}} additional issue is not listed in this preview.",
+    "notListed_other": "{{count}} additional issues are not listed in this preview.",
+    "fingerprint": "Plan fingerprint",
+    "failed": "The application result could not be verified. Ask the assistant to retrieve the receipt before retrying.",
+    "effects": {
+      "quarantine": "Quarantine issues",
+      "readiness": "Report readiness",
+      "ready": "Ready",
+      "blocked": "Blocked",
+      "becomes": "becomes"
+    },
+    "proposal": {
+      "title": "Proposed corrections",
+      "revision": "Based on book input version {{revision}}"
+    },
+    "status": {
+      "applied": "Applied",
+      "proposed": "Proposed"
+    },
+    "op": {
+      "price_override": "Set price",
+      "exclude": "Exclude from ledger",
+      "custody_component": "Record custody interpretation",
+      "rate": "Rate in book fiat currency per BTC",
+      "value": "Value in book fiat currency",
+      "activate": "Activate",
+      "draft": "Save as draft",
+      "assetFromReference": "asset resolved from reference"
+    },
+    "receipt": {
+      "title": "Verified review receipt",
+      "verified_one": "{{count}} correction applied; the resulting journal was rebuilt and verified.",
+      "verified_other": "{{count}} corrections applied; the resulting journal was rebuilt and verified.",
+      "openQuarantine": "Open quarantine"
+    },
+    "cases": {
+      "more": "{{count}} cases inspected; more cases are available.",
+      "last": "{{count}} cases inspected; end of this case listing."
+    },
+    "planSummary": "{{count}} corrections proposed; quarantine issues {{before}} → {{after}}",
+    "progress": {
+      "confirmation": "Waiting for your review of the complete plan",
+      "plan": "Computing the proposed journal effects",
+      "apply": "Applying and verifying the approved plan",
+      "read": "Reviewing local cases and evidence"
+    },
+    "continuationDetails": "Continuation details"
+  },
+  "consent": {
+    "title": "Allow tool action?",
+    "toolAction": "Tool action",
+    "description": "This action needs approval before Kassiber runs it.",
+    "arguments": "Arguments",
+    "deny": "Deny",
+    "allowSession": "Allow this session",
+    "allowOnce": "Allow once",
+    "apply": {
+      "title": "Apply these corrections?",
+      "description": "Review the effects recalculated by Kassiber. This approval covers the complete plan shown below.",
+      "cancel": "Cancel",
+      "confirm": "Apply once",
+      "alreadyApplied": "This plan was already applied. Continuing returns the same receipt without making new changes.",
+      "returnReceipt": "Return receipt",
+      "unavailable": "Kassiber could not verify this plan against the current book. Ask the assistant to prepare a new plan before approving."
+    }
   }
 }
