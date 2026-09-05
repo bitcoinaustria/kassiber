@@ -95,8 +95,24 @@ not waive failing dependency or acceptance gates. See the
 - The final combined candidate is `c6ce832c`, with core `0568757e` and the
   merged security dependency ancestry. Core owns the local amendment and
   selected-Bitcoin contracts; the agent cut owns consent and artifact delivery.
-  Bounded independent merge/partition review found no new blocker. Final
-  full-gate results are recorded separately once completed.
+  Independent bounded Standards and Spec/composition reviews found no new
+  blocker. The complete final core gate at `0568757e` passed 4,322 Python tests,
+  39 optional skips and 425 subtests; TypeScript, ESLint (zero errors,
+  50 existing warnings), and 134 UI files / 1,004 tests passed. All 25 hosted
+  core checks passed with one intentional release-publication skip.
+  The final agent implementation at `c6ce832c` (unchanged by documentation-only
+  `c6879c1f`) passed 4,539 Python tests, 39 optional skips and 432 subtests;
+  TypeScript, ESLint (zero errors, 50 existing warnings), and 137 UI files /
+  1,026 tests passed. These complete gates do not resolve the separately
+  reproduced intermittent rejection or the unmeasured pilot outcomes.
+- Fresh exact-source `c6ce832c` macOS ARM64 onefile CLI and onedir sidecar
+  builds each passed all three packaged smoke tests (11.31 and 2.15 seconds,
+  no skips). Both used Python 3.11.15, PyInstaller 6.20.0, locked cryptography
+  50.0.1, RP2 `7b0dd677`, a rebuilt broker and the existing release collection
+  flags. They prove pipe-only PDF processing, encrypted K2-pack access and
+  retained calculation pinning. Both binaries report the correct source
+  revision; the sidecar payload contains no symlinks. This supersedes the old
+  binary's dependency limitation, not clean-Mac, desktop or notarization gates.
 - The mixed-source loop previously failed after preparing 97 drafts when its
   next preview returned `accounting_requires_encryption` on a genuine SQLCipher
   book. A bounded instrumented repeat completed 640 fresh encrypted-book runs
@@ -104,6 +120,11 @@ not waive failing dependency or acceptance gates. See the
   status/salt/schema operations without pre-probe SQL or weakened validation;
   no cause was established. Process-only probes were removed on exit. This
   intermittent failure remains an explicit merge hold despite green repeats.
+  A second passive frame-trace probe at `c6879c1f` (Python 3.13.13,
+  `PYTHONHASHSEED=33`) passed 139 fresh-book runs in 118.168 seconds, covering
+  302,464 original guard calls without an exception. It used the original
+  connection and guards, no proxy, extra SQL, retries or fallback. This also
+  produced no failure evidence and does not clear the hold.
 
 These focused results do not replace the final combined gate, independent
 re-review or the measured/pilot outcome requirements below.

@@ -91,8 +91,13 @@ agent mutation receipts, explicit local export delivery and matching minimal
 CLI/Assistant consent. A bounded independent merge review is clean. A previously
 observed intermittent `accounting_requires_encryption` in the actual mixed-source
 agent fixture is still unresolved; 640 instrumented green repeats do not clear
-that hold. Full final gates and the fresh packaged build are recorded in the
-acceptance record when complete; the historical results below are not those runs.
+that hold. The full final gates passed: core has 4,322 Python tests / 425 subtests
+and 1,004 UI tests; the agent implementation has 4,539 Python tests / 432
+subtests and 1,026 UI tests. Both pass TypeScript and ESLint with zero errors;
+39 optional Python skips and 50 existing lint warnings remain on each cut.
+Fresh exact-source agent CLI and sidecar builds each pass three real packaged
+smoke tests. Provenance and limits are in the acceptance record; the older
+results below are historical checkpoints, not these final runs.
 
 After the RP2 correction, clean full gates pass on core `0d80356d` (4,275
 Python passes, 38 optional skips, 423 subtests, 134 UI files / 1,004 tests)
