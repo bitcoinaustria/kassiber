@@ -1,11 +1,34 @@
 # Organizational accounting acceptance record
 
-Status: local CLI/Agent-only delivery; full release acceptance still pending
+Status: extracted CLI/Agent draft stack; full release acceptance still pending
 (2026-09-05). The full UI prototype is preserved, not part of this delivery.
 This is a technical coverage record, not a statement of the organization's
 actual legal obligations or complete source population. The scope is defined in
 [plan 17](../plan/17-general-accounting-and-private-ai-spec.md); the executable
 contracts are documented in [general accounting](general-accounting.md).
+
+## Latest triage checkpoint (2026-09-05)
+
+The owner now authorizes relevant stacked PRs and merge after review. This
+supersedes the historical no-publication/no-merge restriction below; it does
+not waive failing dependency or acceptance gates. See the
+[current stack map](../plan/18-general-accounting-pr-stack.md).
+
+- RP2 #48 and Kassiber #542 are blocked by reproduced chronological and
+  historical pooled-basis errors; comments record the synthetic counterexamples.
+- #543's CLI review approval bypass is fixed at `6fc7c4e8`. Its complete local
+  gate passed: 3,830 Python tests, 35 skips, 423 subtests; TypeScript, ESLint
+  and 132 UI files / 1,001 tests. Exact-head CI remains the merge gate.
+- Core/CLI was extracted at `7ce7f9b3`: 459 focused tests, 3 skips. Independent
+  partition review passed 156 tests plus a real locked-daemon scenario.
+- Scoped agents are the second cut, not another accounting UI. Combined
+  custody/accounting consent and renderer-catalog checks passed 98 tests.
+- The frozen pre-triage full integration had 4,347 passes, 38 skips and 430
+  subtests, but two real catalog-drift failures. The extracted delivery does
+  not carry the stale Vite-only accounting grants; native export and scope
+  protections are retained. No failed test is hidden by weakening assertions.
+- Full per-cut gates, published links and final head status are recorded at
+  closeout. External Claude review remains blocked by code-egress approval.
 
 ## Pilot facts still required
 
@@ -210,7 +233,8 @@ must not be represented as the organization's confirmed pilot population.
 - Delivery now uses the [dependency-aware PR stack](../plan/18-general-accounting-pr-stack.md).
   PR #542 and #543 exact heads are combined locally with the preserved accounting
   checkpoint; both remained open on GitHub at integration. Per-cut PR extraction
-  and final acceptance remain separate work. No main merge is authorized.
+  and final acceptance remain separate work. The latest owner request now
+  authorizes merge only after review; current dependency blockers still apply.
 - EBICS, payment initiation, FinanzOnline transmission, automatic official-PDF
   filling, invoice issuing, consolidation and speculative further countries are
   excluded. K1/K3 receive an explicit unsupported route, not disguised K2 output.

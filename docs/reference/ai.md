@@ -415,7 +415,11 @@ Output modes cover scripting:
   the encrypted database.
 
 For automation, `kassiber chat --yes "..."` approves mutating tool requests for
-that chat session without prompting. Prefer the narrower
+that chat session without prompting, except `ui.review.apply`: each custody
+review requires a fresh interactive answer to the daemon-validated preview.
+Neither `--allow-tool`, `/allow`, nor prior session consent bypasses that
+requirement, and non-interactive chat denies this tool. Use the explicit
+`review plan/apply` CLI for externally reviewed artifacts. Prefer the narrower
 `--allow-tool ui.journals.process` form when a script should approve only one
 tool. Machine and `--stream-json` runs never prompt interactively even on a
 TTY; there, and without a TTY in rendered mode, unapproved mutating tools are

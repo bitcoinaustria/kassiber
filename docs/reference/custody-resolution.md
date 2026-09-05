@@ -101,6 +101,13 @@ same workflow available to external agents through the CLI. The UI displays the
 proposed changes and their computed effects, then asks for one approval of that
 exact proposal. Manual component editing remains available.
 
+Terminal chat waits for the daemon's revalidated `review_preview` and prints
+the complete proposal or historical retry receipt before asking for approval.
+`ui.review.apply` cannot be pre-approved with `--yes`, `--allow-tool`, `/allow`,
+or a previous session answer. Every proposal needs a new terminal answer;
+non-interactive chat denies it. The explicit `review plan/apply` CLI remains
+available for externally reviewed, portable artifacts.
+
 The shared `core/review_workflow.py` module exposes four operations:
 
 | Operation | Contract |

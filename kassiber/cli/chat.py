@@ -16,6 +16,7 @@ from ..ai.tools import CORE_TOOL_NAMES, TOOL_CATALOG
 from ..core.runtime import resolve_db_passphrase_for_bypass
 from ..errors import AppError
 from . import accounting_consent
+from . import review_consent
 from .termrender import MarkdownStreamRenderer, render_envelope_table
 
 
@@ -40,7 +41,7 @@ _REPL_HELP = (
     "  /tools            list daemon AI tools and their consent class\n"
     "  /model [id]       show or switch the model for following turns\n"
     "  /provider [name]  show or switch the provider (model re-resolves)\n"
-    "  /allow <tool>     allow a mutating tool for this session\n"
+    "  /allow <tool>     allow a mutating tool for this session (except exact-review tools)\n"
     "  /allowed          show which mutating tools are pre-allowed\n"
     "  /new              start a fresh conversation (history cleared)\n"
     "  /exit             leave the chat (also /quit or Ctrl-D)\n"
@@ -689,8 +690,15 @@ def _decide_and_send_consent(
     session_allowed: set[str] | None,
     control_requests: set[str],
 ) -> str | None:
-    once_only = name in accounting_consent.ONCE_ONLY_TOOLS
-    if once_only:
+    if name == review_consent.TOOL_NAME:
+        decision = review_consent.decide(
+            data,
+            interactive=(stdin.isatty() and getattr(args, "format", None) != "json"
+                         and not getattr(args, "stream_json", False)
+                         and not getattr(args, "non_interactive", False)),
+            stdin=stdin, out=chrome,
+        )
+    elif name in accounting_consent.ONCE_ONLY_TOOLS:
         decision = accounting_consent.decide(
             name, data,
             interactive=(
@@ -845,6 +853,11 @@ def _handle_allow_command(arg: str, session_allowed: set[str], out: TextIO) -> N
         _write("Usage: /allow <tool-name>\n", out)
         return
     matched = sorted(_split_tool_names([arg]) & _mutating_tool_names())
+    if review_consent.TOOL_NAME in matched:
+        _write("ui.review.apply requires a fresh once-only review; it cannot be pre-allowed.\n", out)
+        matched.remove(review_consent.TOOL_NAME)
+        if not matched:
+            return
     once_only = set(matched) & accounting_consent.ONCE_ONLY_TOOLS
     if once_only:
         _write(
@@ -865,17 +878,17 @@ def _render_allowed(args: Any, session_allowed: set[str], out: TextIO) -> None:
     if getattr(args, "yes", False):
         _write(
             "Mutating tools are allowed for this session (--yes), "
-            "except once-only accounting actions.\n", out,
+            "except ui.review.apply and once-only accounting actions.\n", out,
         )
         return
     flag_allowed = sorted(
         (_split_tool_names(getattr(args, "allow_tool", None)) & _mutating_tool_names())
-        - accounting_consent.ONCE_ONLY_TOOLS
+        - accounting_consent.ONCE_ONLY_TOOLS - {review_consent.TOOL_NAME}
     )
     lines = [f"  {name}  (--allow-tool)" for name in flag_allowed]
     lines.extend(
         f"  {name}  (this session)"
-        for name in sorted(session_allowed - set(flag_allowed) - accounting_consent.ONCE_ONLY_TOOLS)
+        for name in sorted(session_allowed - set(flag_allowed) - accounting_consent.ONCE_ONLY_TOOLS - {review_consent.TOOL_NAME})
     )
     if not lines:
         _write("No mutating tools are pre-allowed; each will ask for consent.\n", out)
@@ -1006,6 +1019,7 @@ def _stream_turn_records(
                         data.get("needs_consent")
                         and isinstance(name, str)
                         and name not in accounting_consent.ONCE_ONLY_TOOLS
+                        and name != review_consent.TOOL_NAME
                         and call_id not in consented_calls
                     ):
                         _decide_and_send_consent(
