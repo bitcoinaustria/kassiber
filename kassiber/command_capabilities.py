@@ -46,6 +46,7 @@ CLI_READ_PATHS = _paths(
     accounting.tax-packs accounting.tax-list accounting.tax-get accounting.tax-preview
     accounting.batch-preview accounting.workbench
     accounting.task-list accounting.task-get accounting.task-preview accounting.rule-list
+    accounting.task-amend-preview accounting.task-projection-assign-preview
     accounting.close-readiness accounting.valuation-get accounting.valuation-list
     accounting.cash-snapshot accounting.cash-report accounting.cash-reconciliation accounting.cash-assets
     accounting.projection-events accounting.projection-list accounting.projection-policy-list accounting.opening-preview
@@ -141,6 +142,7 @@ CLI_ACCOUNTING_DECISION_PATHS = _paths(
     accounting.tax-create accounting.tax-review accounting.tax-finalize accounting.tax-export
     accounting.batch-post
     accounting.task-create accounting.task-apply accounting.task-cancel accounting.task-source-assign accounting.rule-create accounting.rule-revoke
+    accounting.task-amend
     accounting.valuation-create accounting.valuation-post accounting.item-revise
     accounting.cash-select-account accounting.cash-count accounting.cash-classify accounting.cash-void
     accounting.opening-bind accounting.opening-create
@@ -194,6 +196,7 @@ DAEMON_READ_KINDS = _paths(
     ui.accounting.valuation_list
     ui.accounting.close_readiness ui.accounting.workbench
     ui.accounting.task_list ui.accounting.task_get ui.accounting.task_preview ui.accounting.rule_list
+    ui.accounting.task_amend_preview ui.accounting.task_projection_assign_preview
     ui.accounting.document_cancel
     status ui.logs.snapshot ui.egress.snapshot ui.overview.snapshot
     ui.workspace.overview.snapshot ui.transactions.list
@@ -295,6 +298,7 @@ DAEMON_ACCOUNTING_DECISION_KINDS = _paths(
     ui.accounting.tax_create ui.accounting.tax_review ui.accounting.tax_finalize ui.accounting.tax_export
     ui.accounting.batch_post
     ui.accounting.task_create ui.accounting.task_apply ui.accounting.task_cancel ui.accounting.task_source_assign ui.accounting.rule_create ui.accounting.rule_revoke
+    ui.accounting.task_amend
     ui.accounting.opening_bind ui.accounting.opening_create
     ui.accounting.valuation_create ui.accounting.valuation_post ui.accounting.item_revise
     ui.accounting.cash_select_account ui.accounting.cash_count ui.accounting.cash_classify ui.accounting.cash_void
