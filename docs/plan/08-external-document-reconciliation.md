@@ -1,5 +1,11 @@
 # External Document Reconciliation
 
+> This document describes the original BTC-side implementation. The proposed
+> opt-in organizational-accounting and document-AI extension is governed by
+> [plan 17](17-general-accounting-and-private-ai-spec.md), which supersedes the
+> product-wide general-ledger prohibition below. Existing shipped behavior and
+> security contracts remain unchanged until that work is implemented.
+
 **Status:** Initial schema, CLI commands, daemon-safe list/suggest/review
 surfaces, and CSV subledger export have landed. Rich desktop workflow and AI
 extraction remain future work.

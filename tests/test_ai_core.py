@@ -167,6 +167,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
 
     def test_tool_catalog_stability(self):
         expected_tool_names = {
+            "ui_accounting_task_get", "ui_accounting_task_preview", "ui_accounting_task_apply", "ui_accounting_task_cancel",
             "ui_review_cases", "ui_review_request_input", "ui_review_plan", "ui_review_apply", "ui_review_receipt",
             "status",
             "ui_overview_snapshot",

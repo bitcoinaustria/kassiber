@@ -550,6 +550,91 @@ top of the monolith.
   self-custody Kennzahl assumption in the CLI envelope and PDF/XLSX output;
   domestic-provider withheld KESt needs structured metadata before
   Kassiber can populate the inländisch rows
+- [ ] Re-check Austrian moving-average pool semantics against current primary
+  guidance before expanding claims or support. Current docs/code intentionally
+  pool Neuvermögen per asset across wallets, while current BMF crypto guidance
+  describes the gleitender Durchschnittspreis on the same
+  Kryptowährungsadresse / Kryptowährungswallet.
+- [ ] Deliver complete organizational accounting through a reviewable PR stack under
+  [`docs/plan/17-general-accounting-and-private-ai-spec.md`](docs/plan/17-general-accounting-and-private-ai-spec.md).
+  Preserve private portfolio/cost-basis/personal-tax workflows without mandatory
+  corporate setup. Plan 16 is retained as historical Austrian research.
+  - [x] Preserve the complete pre-split checkpoint and integrate exact PR #542
+    and #543 revisions in separate local dependency/integration branches.
+    [Stack map and safety seams](docs/plan/18-general-accounting-pr-stack.md).
+  - [x] Extract two cohesive accounting cuts: full deterministic core/CLI, then
+    scoped agents and minimal consent. The seven-cut sketch is superseded;
+    neither cut advertises absent modules or dedicated accounting screens.
+  - [ ] Land the dependent stack only after RP2 #48's chronological/historical
+    basis blockers are resolved, #542 is repinned and per-cut/full gates pass.
+    Remaining agent-workflow acceptance is not satisfied by publishing drafts.
+  - [x] Owner-approved CLI/Agent-only pivot: retain the experimental full UI at
+    `fbfce410` on `codex/accounting-ui-preserved-20260905`; remove accounting
+    route, sidebar, Settings switch and forms from `codex/accounting-cli-agent`.
+    Keep all financial data/core and exact approval in the existing Assistant.
+    Explicit CLI configuration replaces UI enrollment; no automatic encryption.
+  - [x] Restore selected financial AI assistance through a hash-bound interactive
+    CLI request, reusing the existing tool-free/no-history grants with separate
+    disclosure and draft/field approvals. No blanket approval, output capture,
+    implicit context switch, ordinary-agent financial read, or model fallback.
+  - [ ] **Implementation checkpoint (2026-09-05):** country-neutral ledger,
+    encrypted evidence, canonical bank interchange, partial settlements,
+    manual schedules, revisioned close and portable arithmetic verifier are
+    implemented locally, with CLI/internal daemon workflows, chunked evidence
+    uploads, paginated lists, and verified close export. The dedicated UI is
+    retained only in the recovery branch. Integrated follow-up adds RP2/source projections,
+    historical opening, lot-bound book-only valuation, cash-book controls,
+    K2/2025 and six annex working papers, local extraction/optional OCR,
+    scoped no-history AI proposals, and reviewed atomic batch posting.
+    Real encrypted backup/restore covers two closes and retained source data.
+    Final independent review, full CLI/agent acceptance and real pilot facts
+    are still outstanding; this is not the completed
+    specification or a production-ready claim.
+    [Current contract](docs/reference/general-accounting.md).
+  - [ ] Deliver agent-first workflow coverage under spec 17 section 7.1:
+    intent -> scoped discovery -> proposals -> human review -> guarded execution
+    -> verified result. Reuse the same Modules across explicit agent tools,
+    CLI and minimal Assistant consent; no generic dispatch or UI automation.
+    Durable tasks, scoped rules/assignments, four opaque agent tools, and
+    fresh-process CLI prepare/post/close/K2/export tests now exist. This does
+    not by itself complete every measured mixed-source outcome below.
+    Preserve exact disclosure grants, action-specific approvals and manual
+    fallback; prove multi-round workflow parity, cancellation and idempotency.
+    Spec 17 section 7.2 makes the following outcomes mandatory for the full stack;
+    track proof in the [acceptance record](docs/reference/general-accounting-acceptance.md):
+    - [ ] AF-1: Complete a selected period from one task on a frozen mixed
+      100-record benchmark; cover all selected records and measure routine-case
+      accuracy, exceptions, corrections, repeated inputs and active user time.
+    - [ ] AF-2: Execute approved close, final K2/annex working papers and export
+      through agent tools; verify real retained artifacts, not instructions.
+    - [ ] AF-3: Turn an explicitly approved correction into a versioned,
+      book-scoped, revocable proposal rule; prove reuse, conflicts and revocation
+      without extending posting/disclosure consent or rewriting old decisions.
+    - [ ] AF-4: Resolve missing evidence, ambiguous partial payments and
+      conflicting classifications within the same task; preserve independent
+      work and safely resume without duplicate actions or revived permissions.
+    - [ ] AF-5: Complete a private portfolio/assignment workflow through actual
+      agent tools and verify recomputed reports, without organizational setup.
+  - [ ] Record the organization's actual transaction/report coverage matrix,
+    accounting regime, opening, and required K2/annex/year scope; do not assume
+    that every Verein belongs on K2 or that a permanent blocker is completion.
+  - [ ] Add opt-in exact double-entry books, manual/proposed postings, opening,
+    bank import, source allocations, required open-item/valuation schedules,
+    reconciliation, financial reports, and a two-year close/correction workflow.
+  - [ ] Prove RP2 point-in-time/regime/pool suitability; persist replay context
+    and result artifacts; keep book valuation adjustments distinct from tax basis.
+  - [ ] Add retained encrypted accounting evidence, local OCR/extraction/search,
+    scoped AI sorting/matching/drafting, reviewed batch actions, and remote
+    disclosure controls using existing daemon/consent/egress enforcement.
+  - [ ] Protect legacy personal workflows, secrets, book isolation, evidence
+    retention, backup/restore, diagnostics exclusions, and local-only ledger state.
+  - [ ] Add narrow country-pack Interfaces, AT K2/required-annex mappings,
+    applicability and tax carryforwards, and independent accounting-close exports.
+  - [ ] Complete CLI/scoped-agent workflows and minimal localized consent, adversarial accounting
+    and AI/privacy tests, golden books, package verification, builds, and review.
+  - [ ] Keep EBICS and FinanzOnline submission outside this delivery. Additional
+    country/form Adapters, including K1, remain later work unless needed scope
+    is explicitly resolved with the user.
 
 ### 0.5e - Rates and journal follow-through
 

@@ -5350,6 +5350,7 @@ def ensure_schema_compat(conn):
     from .core.accounting import sources as accounting_sources
     from .core.accounting import artifacts as accounting_artifacts
     from .core.accounting import projection as accounting_projection
+    from .core.accounting import ai_proposals as accounting_ai_proposals
     from .core.accounting import posting_batch as accounting_posting_batch
     from .core.accounting import valuation as accounting_valuation
     from .core.accounting import cashbook as accounting_cashbook
@@ -5364,6 +5365,7 @@ def ensure_schema_compat(conn):
     accounting_sources.ensure_schema(conn)
     accounting_artifacts.ensure_schema(conn)
     accounting_projection.ensure_schema(conn)
+    accounting_ai_proposals.ensure_schema(conn)
     accounting_posting_batch.ensure_schema(conn)
     accounting_valuation.ensure_schema(conn)
     accounting_cashbook.ensure_schema(conn)

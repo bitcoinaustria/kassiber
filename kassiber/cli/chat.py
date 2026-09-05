@@ -15,6 +15,7 @@ from ..ai.contracts import CLI_DEFAULT_MODEL, is_cli_provider_locator
 from ..ai.tools import CORE_TOOL_NAMES, TOOL_CATALOG
 from ..core.runtime import resolve_db_passphrase_for_bypass
 from ..errors import AppError
+from . import accounting_consent
 from .termrender import MarkdownStreamRenderer, render_envelope_table
 
 
@@ -260,8 +261,6 @@ class _DaemonChatClient:
                 details={"stderr": stderr} if stderr else {},
                 retryable=False,
             )
-        if record and self._transcript is not None:
-            self._transcript.write(line if line.endswith("\n") else line + "\n")
         try:
             payload = json.loads(line)
         except json.JSONDecodeError as exc:
@@ -276,6 +275,11 @@ class _DaemonChatClient:
                 "daemon emitted a non-object JSON record",
                 code="daemon_protocol_error",
                 retryable=False,
+            )
+        if record and self._transcript is not None:
+            self._transcript.write(
+                json.dumps(accounting_consent.transcript_record(payload), separators=(",", ":"))
+                + "\n"
             )
         return payload
 
@@ -685,7 +689,20 @@ def _decide_and_send_consent(
     session_allowed: set[str] | None,
     control_requests: set[str],
 ) -> str | None:
-    decision = _policy_decision(args, name, stdin)
+    once_only = name in accounting_consent.ONCE_ONLY_TOOLS
+    if once_only:
+        decision = accounting_consent.decide(
+            name, data,
+            interactive=(
+                stdin.isatty()
+                and getattr(args, "format", None) != "json"
+                and not getattr(args, "stream_json", False)
+                and not getattr(args, "non_interactive", False)
+            ),
+            stdin=stdin, out=chrome,
+        )
+    else:
+        decision = _policy_decision(args, name, stdin)
     if decision is None and session_allowed is not None and name in session_allowed:
         # Daemon-side allow_session only spans one ai.chat request; carry the
         # user's "session" answer across REPL turns here.
@@ -828,6 +845,15 @@ def _handle_allow_command(arg: str, session_allowed: set[str], out: TextIO) -> N
         _write("Usage: /allow <tool-name>\n", out)
         return
     matched = sorted(_split_tool_names([arg]) & _mutating_tool_names())
+    once_only = set(matched) & accounting_consent.ONCE_ONLY_TOOLS
+    if once_only:
+        _write(
+            "Accounting actions require a fresh once-only review: "
+            + ", ".join(sorted(once_only)) + "\n", out,
+        )
+        matched = [name for name in matched if name not in once_only]
+        if not matched:
+            return
     if not matched:
         _write(f"{arg} is not a known mutating tool; /tools lists them.\n", out)
         return
@@ -837,15 +863,19 @@ def _handle_allow_command(arg: str, session_allowed: set[str], out: TextIO) -> N
 
 def _render_allowed(args: Any, session_allowed: set[str], out: TextIO) -> None:
     if getattr(args, "yes", False):
-        _write("All mutating tools are allowed for this session (--yes).\n", out)
+        _write(
+            "Mutating tools are allowed for this session (--yes), "
+            "except once-only accounting actions.\n", out,
+        )
         return
     flag_allowed = sorted(
-        _split_tool_names(getattr(args, "allow_tool", None)) & _mutating_tool_names()
+        (_split_tool_names(getattr(args, "allow_tool", None)) & _mutating_tool_names())
+        - accounting_consent.ONCE_ONLY_TOOLS
     )
     lines = [f"  {name}  (--allow-tool)" for name in flag_allowed]
     lines.extend(
         f"  {name}  (this session)"
-        for name in sorted(session_allowed - set(flag_allowed))
+        for name in sorted(session_allowed - set(flag_allowed) - accounting_consent.ONCE_ONLY_TOOLS)
     )
     if not lines:
         _write("No mutating tools are pre-allowed; each will ask for consent.\n", out)
@@ -975,6 +1005,7 @@ def _stream_turn_records(
                     if (
                         data.get("needs_consent")
                         and isinstance(name, str)
+                        and name not in accounting_consent.ONCE_ONLY_TOOLS
                         and call_id not in consented_calls
                     ):
                         _decide_and_send_consent(
@@ -1087,6 +1118,11 @@ def run_chat_command(
 ) -> ChatSessionResult:
     input_stream = stdin or sys.stdin
     output_stream = stdout or sys.stdout
+    if getattr(args, "accounting_selection", None):
+        from .accounting_assist import run
+        return run(args, stdin=input_stream, stdout=output_stream)
+    if getattr(args, "accounting_selection_sha256", None):
+        raise AppError("A selection digest requires --accounting-selection", code="accounting_invalid_fields")
     one_shot_prompt = _resolve_prompt(args)
     stream_json = bool(getattr(args, "stream_json", False))
     machine = getattr(args, "format", None) == "json"

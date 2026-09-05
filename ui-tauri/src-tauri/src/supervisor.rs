@@ -53,6 +53,8 @@ pub struct DaemonSupervisor {
     resource_dir: Option<PathBuf>,
     data_root: Mutex<Option<PathBuf>>,
     next_request_id: AtomicU64,
+    accounting_export_epoch: AtomicU64,
+    accounting_scope_changes: AtomicU64,
     secret_store: SharedSecretStore,
     lifecycle: Mutex<VecDeque<LifecycleRecord>>,
     next_lifecycle_id: AtomicU64,
@@ -61,6 +63,31 @@ pub struct DaemonSupervisor {
     /// journal, and report jobs wait for their terminal daemon record. Tests may
     /// install a short deadline to exercise legacy late-response handling.
     invoke_timeout: Option<Duration>,
+}
+
+/// Native-only disclosure approval; not a renderer-supplied capability.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountingExportScope {
+    epoch: u64,
+    pub data_root: Option<PathBuf>,
+}
+
+struct AccountingExportInvalidation<'a>(&'a AtomicU64, &'a AtomicU64);
+
+impl<'a> AccountingExportInvalidation<'a> {
+    fn begin(epoch: &'a AtomicU64, pending: &'a AtomicU64) -> Self {
+        pending.fetch_add(1, Ordering::SeqCst);
+        epoch.fetch_add(1, Ordering::SeqCst);
+        Self(epoch, pending)
+    }
+}
+
+impl Drop for AccountingExportInvalidation<'_> {
+    fn drop(&mut self) {
+        // Also invalidate a dialog opened while the scope change was pending.
+        self.0.fetch_add(1, Ordering::SeqCst);
+        self.1.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 /// Daemon lifecycle event kept for the diagnostics screen. `detail` and
@@ -339,6 +366,8 @@ impl DaemonSupervisor {
             resource_dir,
             data_root: Mutex::new(None),
             next_request_id: AtomicU64::new(1),
+            accounting_export_epoch: AtomicU64::new(1),
+            accounting_scope_changes: AtomicU64::new(0),
             secret_store: Arc::new(NativeSecretStore),
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
@@ -354,6 +383,8 @@ impl DaemonSupervisor {
             resource_dir: None,
             data_root: Mutex::new(None),
             next_request_id: AtomicU64::new(1),
+            accounting_export_epoch: AtomicU64::new(1),
+            accounting_scope_changes: AtomicU64::new(0),
             secret_store: Arc::new(NativeSecretStore),
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
@@ -380,6 +411,8 @@ impl DaemonSupervisor {
             resource_dir: None,
             data_root: Mutex::new(None),
             next_request_id: AtomicU64::new(1),
+            accounting_export_epoch: AtomicU64::new(1),
+            accounting_scope_changes: AtomicU64::new(0),
             secret_store,
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),
@@ -415,7 +448,51 @@ impl DaemonSupervisor {
             })
     }
 
+    pub fn accounting_export_scope(&self) -> Result<AccountingExportScope, SupervisorError> {
+        let epoch = self.accounting_export_epoch.load(Ordering::SeqCst);
+        if self.accounting_scope_changes.load(Ordering::SeqCst) != 0 {
+            return Err(accounting_export_scope_changed());
+        }
+        // Inspect only; never restart a daemon to revive an old disclosure.
+        let slot = self
+            .process
+            .lock()
+            .map_err(|_| accounting_export_scope_changed())?;
+        let process = slot.as_ref().ok_or_else(accounting_export_scope_changed)?;
+        if process.is_broken()
+            || process
+                .try_wait()
+                .map_err(|_| accounting_export_scope_changed())?
+                .is_some()
+        {
+            return Err(accounting_export_scope_changed());
+        }
+        let data_root = self.current_data_root()?;
+        if self.accounting_export_epoch.load(Ordering::SeqCst) != epoch
+            || self.accounting_scope_changes.load(Ordering::SeqCst) != 0
+        {
+            return Err(accounting_export_scope_changed());
+        }
+        Ok(AccountingExportScope { epoch, data_root })
+    }
+
+    pub fn require_accounting_export_scope(
+        &self,
+        expected: &AccountingExportScope,
+    ) -> Result<(), SupervisorError> {
+        if &self.accounting_export_scope()? != expected {
+            return Err(accounting_export_scope_changed());
+        }
+        // This is the disclosure linearization point. No lock spans disk I/O;
+        // an already approved write may finish if a later lock request arrives.
+        Ok(())
+    }
+
     fn replace_data_root(&self, data_root: Option<PathBuf>) -> Result<(), SupervisorError> {
+        let _invalidate = AccountingExportInvalidation::begin(
+            &self.accounting_export_epoch,
+            &self.accounting_scope_changes,
+        );
         let mut slot = self.process.lock().map_err(|_| {
             SupervisorError::new("daemon_lock_poisoned", "daemon process lock is poisoned")
                 .retryable()
@@ -478,6 +555,7 @@ impl DaemonSupervisor {
         stderr_tail: &str,
         source: &'static str,
     ) {
+        self.accounting_export_epoch.fetch_add(1, Ordering::SeqCst);
         let record = LifecycleRecord {
             id: self.next_lifecycle_id.fetch_add(1, Ordering::SeqCst),
             ts_ms: SystemTime::now()
@@ -525,10 +603,6 @@ impl DaemonSupervisor {
                 eprintln!("kassiber: failed to emit stream event: {error}");
             }
         })
-        .map(|response| {
-            self.note_project_data_root_from_response(kind, &response);
-            response
-        })
     }
 
     fn invoke_inner<F>(
@@ -542,6 +616,24 @@ impl DaemonSupervisor {
     where
         F: FnMut(&Value),
     {
+        let _invalidate = matches!(
+            kind,
+            "daemon.lock"
+                | "daemon.unlock"
+                | "daemon.shutdown"
+                | "ui.projects.select"
+                | "ui.projects.create"
+                | "ui.profiles.switch"
+                | "ui.profiles.create"
+                | "ui.workspace.create"
+                | "ui.workspace.delete"
+        )
+        .then(|| {
+            AccountingExportInvalidation::begin(
+                &self.accounting_export_epoch,
+                &self.accounting_scope_changes,
+            )
+        });
         // Honor a JS-supplied String request_id so streaming transports can
         // filter `daemon://stream` records as they arrive without buffering;
         // fall back to the supervisor-allocated id otherwise.
@@ -684,6 +776,10 @@ impl DaemonSupervisor {
             .with_stderr_tail(stderr_tail));
         };
         process.unregister_request(&request_id);
+        if let Ok(response) = &result {
+            // Complete root tracking before the scope-change guard is released.
+            self.note_project_data_root_from_response(kind, response);
+        }
         result
     }
 
@@ -770,6 +866,13 @@ impl DaemonSupervisor {
             SupervisorError::new("daemon_unavailable", "Python daemon is unavailable")
         })
     }
+}
+
+fn accounting_export_scope_changed() -> SupervisorError {
+    SupervisorError::new(
+        "accounting_export_scope_changed",
+        "The accounting session changed; review the export again.",
+    )
 }
 
 fn daemon_busy_timeout(kind: &str) -> SupervisorError {
@@ -2098,6 +2201,13 @@ for line in sys.stdin:
         threading.Thread(target=slow, args=(request_id,), daemon=True).start()
     elif kind == "fast":
         emit({"kind":"fast","schema_version":1,"request_id":request_id,"data":{"ok":True,"pid":os.getpid()}})
+    elif kind in ("daemon.lock", "daemon.unlock", "ui.projects.select", "ui.projects.create", "ui.profiles.switch", "ui.profiles.create", "ui.workspace.create", "ui.workspace.delete"):
+        args = request.get("args", {})
+        time.sleep(args.get("delay", 0))
+        if args.get("fail"):
+            emit({"kind":"error","schema_version":1,"request_id":request_id,"error":{"code":"synthetic_failure"}})
+        else:
+            emit({"kind":kind,"schema_version":1,"request_id":request_id,"data":args})
     elif kind in ("busy", "ui.overview.snapshot", "ui.wallets.create"):
         # Read but never answer: models the single-threaded daemon being busy
         # on another request. The reader loop stays free for later requests.
@@ -2129,6 +2239,205 @@ for line in sys.stdin:
         permissions.set_mode(0o755);
         fs::set_permissions(&script, permissions).expect("chmod stub daemon");
         (dir, script)
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn accounting_export_epoch_invalidates_actual_scope_requests_and_same_root_cycles() {
+        let (dir, script) = write_stub_daemon();
+        let process = DaemonProcess::spawn_command(DaemonCommand {
+            program: script,
+            args: Vec::new(),
+            cwd: dir.clone(),
+            source: "env_python",
+        })
+        .expect("spawn export scope stub");
+        let supervisor = DaemonSupervisor::new_with_process(process);
+        let original = supervisor.accounting_export_scope().unwrap();
+        supervisor
+            .invoke_inner("fast", None, false, None, |_| {})
+            .unwrap();
+        supervisor
+            .require_accounting_export_scope(&original)
+            .unwrap();
+        for kind in [
+            "daemon.lock",
+            "daemon.unlock",
+            "ui.projects.select",
+            "ui.projects.create",
+            "ui.profiles.switch",
+            "ui.profiles.create",
+            "ui.workspace.create",
+            "ui.workspace.delete",
+        ] {
+            let before = supervisor.accounting_export_scope().unwrap();
+            supervisor
+                .invoke_inner(kind, Some(json!({})), false, None, |_| {})
+                .unwrap();
+            let after = supervisor.accounting_export_scope().unwrap();
+            assert_eq!(before.data_root, after.data_root);
+            assert!(after.epoch > before.epoch, "{kind}");
+            assert_eq!(
+                supervisor
+                    .require_accounting_export_scope(&before)
+                    .unwrap_err()
+                    .code,
+                "accounting_export_scope_changed"
+            );
+        }
+        let before_failure = supervisor.accounting_export_scope().unwrap();
+        let failed = supervisor
+            .invoke_inner(
+                "daemon.unlock",
+                Some(json!({"fail": true})),
+                false,
+                None,
+                |_| {},
+            )
+            .unwrap();
+        assert_eq!(failed["kind"], "error");
+        assert!(supervisor
+            .require_accounting_export_scope(&before_failure)
+            .is_err());
+        let project_a = json!({"project": {"data_root": dir.join("a").to_string_lossy()}});
+        let project_b = json!({"project": {"data_root": dir.join("b").to_string_lossy()}});
+        supervisor
+            .invoke_inner(
+                "ui.projects.select",
+                Some(project_a.clone()),
+                false,
+                None,
+                |_| {},
+            )
+            .unwrap();
+        let scope_a = supervisor.accounting_export_scope().unwrap();
+        assert_eq!(scope_a.data_root, Some(dir.join("a")));
+        supervisor
+            .invoke_inner("ui.projects.select", Some(project_b), false, None, |_| {})
+            .unwrap();
+        assert_eq!(
+            supervisor.accounting_export_scope().unwrap().data_root,
+            Some(dir.join("b"))
+        );
+        supervisor
+            .invoke_inner("ui.projects.select", Some(project_a), false, None, |_| {})
+            .unwrap();
+        assert_eq!(
+            supervisor.accounting_export_scope().unwrap().data_root,
+            scope_a.data_root
+        );
+        assert!(supervisor
+            .require_accounting_export_scope(&scope_a)
+            .is_err());
+        // Even a same-root supervisor replacement attempt is conservative.
+        let current = supervisor.accounting_export_scope().unwrap();
+        supervisor
+            .replace_data_root(current.data_root.clone())
+            .unwrap();
+        assert!(supervisor
+            .require_accounting_export_scope(&current)
+            .is_err());
+        let current = supervisor.accounting_export_scope().unwrap();
+        supervisor
+            .invoke_inner("daemon.shutdown", None, false, None, |_| {})
+            .unwrap();
+        assert!(supervisor
+            .require_accounting_export_scope(&current)
+            .is_err());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn accounting_export_epoch_rejects_actual_replacement_and_restart() {
+        let (dir, script) = write_stub_daemon();
+        fs::rename(&script, dir.join(sidecar_filename().unwrap())).unwrap();
+        let supervisor = DaemonSupervisor::new(Some(dir.clone()));
+        let first_root = dir.join("first");
+        supervisor.set_data_root(first_root.clone()).unwrap();
+        let original = supervisor.accounting_export_scope().unwrap();
+        supervisor.set_data_root(dir.join("second")).unwrap();
+        supervisor.set_data_root(first_root).unwrap();
+        assert_eq!(
+            supervisor.accounting_export_scope().unwrap().data_root,
+            original.data_root
+        );
+        assert!(supervisor
+            .require_accounting_export_scope(&original)
+            .is_err());
+        let before_restart = supervisor.accounting_export_scope().unwrap();
+        let first = supervisor
+            .invoke_inner("fast", None, false, None, |_| {})
+            .unwrap();
+        supervisor
+            .process
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .mark_broken();
+        assert!(supervisor
+            .require_accounting_export_scope(&before_restart)
+            .is_err());
+        let second = supervisor
+            .invoke_inner("fast", None, false, None, |_| {})
+            .unwrap();
+        assert_ne!(response_pid(&first), response_pid(&second));
+        assert!(supervisor
+            .require_accounting_export_scope(&before_restart)
+            .is_err());
+        let current = supervisor.accounting_export_scope().unwrap();
+        supervisor
+            .require_accounting_export_scope(&current)
+            .unwrap();
+        supervisor
+            .invoke_inner("daemon.shutdown", None, false, None, |_| {})
+            .unwrap();
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn accounting_export_scope_rejects_inflight_changes_and_dead_process() {
+        let (dir, script) = write_stub_daemon();
+        let process = DaemonProcess::spawn_command(DaemonCommand {
+            program: script,
+            args: Vec::new(),
+            cwd: dir.clone(),
+            source: "env_python",
+        })
+        .expect("spawn export scope stub");
+        let supervisor = Arc::new(DaemonSupervisor::new_with_process(process));
+        let original = supervisor.accounting_export_scope().unwrap();
+        let worker = Arc::clone(&supervisor);
+        let changing = thread::spawn(move || {
+            worker.invoke_inner(
+                "daemon.unlock",
+                Some(json!({"delay": 0.3})),
+                false,
+                None,
+                |_| {},
+            )
+        });
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while supervisor.accounting_scope_changes.load(Ordering::SeqCst) == 0 {
+            assert!(Instant::now() < deadline, "scope change did not start");
+            thread::yield_now();
+        }
+        assert!(supervisor.accounting_export_scope().is_err());
+        assert!(supervisor
+            .require_accounting_export_scope(&original)
+            .is_err());
+        changing.join().unwrap().unwrap();
+        let current = supervisor.accounting_export_scope().unwrap();
+        assert!(supervisor
+            .require_accounting_export_scope(&original)
+            .is_err());
+        supervisor.process.lock().unwrap().as_ref().unwrap().kill();
+        assert!(supervisor
+            .require_accounting_export_scope(&current)
+            .is_err());
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -2821,6 +3130,8 @@ for line in sys.stdin:
             resource_dir: Some(sidecar_dir.clone()),
             data_root: Mutex::new(None),
             next_request_id: AtomicU64::new(1),
+            accounting_export_epoch: AtomicU64::new(1),
+            accounting_scope_changes: AtomicU64::new(0),
             secret_store: Arc::new(NativeSecretStore),
             lifecycle: Mutex::new(VecDeque::new()),
             next_lifecycle_id: AtomicU64::new(1),

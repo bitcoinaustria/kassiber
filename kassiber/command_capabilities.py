@@ -188,6 +188,8 @@ DAEMON_READ_KINDS = _paths(
     ui.accounting.evidence_list ui.accounting.bank_preview ui.accounting.bank_list ui.accounting.bank_reconcile
     ui.accounting.item_list ui.accounting.schedule_list
     ui.accounting.evidence_upload_list
+    ui.accounting.ai_preview ui.accounting.ai_cancel
+    ui.accounting.ai_result_preview
     ui.accounting.batch_preview
     ui.accounting.projection_events ui.accounting.projection_list ui.accounting.projection_policy_list ui.accounting.opening_preview
     ui.accounting.valuation_get ui.accounting.cash_snapshot ui.accounting.cash_report ui.accounting.cash_reconciliation ui.accounting.cash_assets
@@ -293,6 +295,7 @@ DAEMON_ACCOUNTING_DECISION_KINDS = _paths(
     ui.accounting.schedule_create ui.accounting.schedule_revise
     ui.accounting.document_extract ui.accounting.document_transcribe ui.accounting.document_review
     ui.accounting.tax_create ui.accounting.tax_review ui.accounting.tax_finalize ui.accounting.tax_export
+    ui.accounting.ai_result_apply
     ui.accounting.batch_post
     ui.accounting.task_create ui.accounting.task_apply ui.accounting.task_cancel ui.accounting.task_source_assign ui.accounting.rule_create ui.accounting.rule_revoke
     ui.accounting.opening_bind ui.accounting.opening_create

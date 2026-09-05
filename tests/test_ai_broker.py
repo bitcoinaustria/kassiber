@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import io
 import sys
 import tempfile
 import threading
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from kassiber.ai.broker_client import BrokerAIClient
@@ -24,6 +26,11 @@ elif request["command"] == "models":
     print(json.dumps({"type":"result","data":[{"id":"model-a"}]}), flush=True)
 elif request.get("model") == "wait":
     time.sleep(30)
+elif request.get("model") == "sensitive":
+    assert request["options"] == {"sensitive_context": True, "reasoning_effort": "high"}
+    assert request["tools"] == []
+    print(json.dumps({"type":"delta","content":"selected only"}), flush=True)
+    print(json.dumps({"type":"done","finish_reason":"stop","provider_session_id":"must-not-retain"}), flush=True)
 elif request.get("model") == "tool-call":
     print(json.dumps({"type":"tool_call","call_id":"native-call-1","name":"ui_reports_tax_summary","arguments":{}}), flush=True)
     reply = json.loads(sys.stdin.readline())
@@ -39,6 +46,123 @@ else:
 
 
 class BrokerClientTest(unittest.TestCase):
+    def test_sensitive_windows_provider_fails_before_resolution_or_spawn(self):
+        client = BrokerAIClient(locator='claude-cli://default')
+        with patch('kassiber.ai.broker_client.os.name', 'nt'), \
+             patch('kassiber.ai.broker_client._node_executable') as resolve, \
+             patch('kassiber.ai.broker_client.subprocess.Popen') as spawn:
+            with self.assertRaises(AppError) as error:
+                list(client.stream_chat(messages=[{'role':'user','content':'private fixture'}], model='test', options={'sensitive_context':True}))
+            self.assertEqual(error.exception.code, 'ai_sensitive_provider_unavailable')
+            resolve.assert_not_called()
+            spawn.assert_not_called()
+
+    def test_cancel_is_latched_before_resolution_spawn_registration_and_send(self):
+        for stage in ('before', 'resolution', 'spawn', 'serialization'):
+            with self.subTest(stage=stage):
+                client = BrokerAIClient(locator='claude-cli://default')
+                sent = []
+                stdin = SimpleNamespace(write=sent.append, flush=lambda: None, close=lambda: None)
+                process = SimpleNamespace(stdin=stdin, stdout=io.StringIO('{"type":"done","finish_reason":"stop"}\n'),
+                    poll=lambda: 0, wait=lambda **kw: 0, pid=0)
+                def resolve():
+                    if stage == 'resolution':
+                        client.cancel()
+                    return sys.executable
+                def spawn(*args, **kwargs):
+                    if stage == 'spawn':
+                        client.cancel()
+                    return process
+                encode = json.dumps
+                def serialize(value):
+                    if stage == 'serialization':
+                        client.cancel()
+                    return encode(value)
+                if stage == 'before':
+                    client.cancel()
+                with patch('kassiber.ai.broker_client._node_executable', resolve), \
+                     patch('kassiber.ai.broker_client._broker_script', return_value=Path(__file__)), \
+                     patch('kassiber.ai.broker_client.subprocess.Popen', side_effect=spawn) as popen, \
+                     patch('kassiber.ai.broker_client.json.dumps', serialize):
+                    with self.assertRaises(AppError) as raised:
+                        list(client.stream_chat(messages=[{'role':'user','content':'selected sensitive fixture'}],
+                            model='test', options={'sensitive_context':True}))
+                    self.assertEqual(raised.exception.code, 'ai_cancelled')
+                    self.assertEqual(sent, [])
+                    self.assertIsNone(client._process)
+                    if stage in ('before', 'resolution'):
+                        popen.assert_not_called()
+
+    def test_cancellation_does_not_wait_for_a_blocked_prompt_writer(self):
+        client = BrokerAIClient(locator='codex-cli://default')
+        writing, signalled = threading.Event(), threading.Event()
+        outcome = []
+        def write(_):
+            writing.set()
+            self.assertTrue(signalled.wait(2), 'cancel was blocked by the pipe writer')
+            raise BrokenPipeError()
+        process = SimpleNamespace(stdin=SimpleNamespace(write=write, flush=lambda:None, close=lambda:None),
+            stdout=io.StringIO(''), poll=lambda: 0 if signalled.is_set() else None, wait=lambda **kw:0, pid=0)
+        def consume():
+            try:
+                list(client.stream_chat(messages=[{'role':'user','content':'synthetic'}], model='test', options={'sensitive_context':True}))
+            except AppError as error:
+                outcome.append(error.code)
+        with patch('kassiber.ai.broker_client._node_executable', return_value=sys.executable), \
+             patch('kassiber.ai.broker_client._broker_script', return_value=Path(__file__)), \
+             patch('kassiber.ai.broker_client.subprocess.Popen', return_value=process), \
+             patch.object(client, '_signal_group', side_effect=lambda *_: signalled.set()):
+            reader = threading.Thread(target=consume)
+            reader.start()
+            self.assertTrue(writing.wait(2))
+            started = time.monotonic()
+            client.cancel()
+            self.assertLess(time.monotonic() - started, .5)
+            reader.join(2)
+            self.assertFalse(reader.is_alive())
+        self.assertEqual(outcome, ['ai_cancelled'])
+        self.assertIsNone(client._process)
+
+    def test_sensitive_context_crosses_broker_and_cannot_retain_session(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-broker-test-") as tmp:
+            script = self._fake_broker(Path(tmp))
+            with patch.dict("os.environ", {
+                "KASSIBER_AI_BROKER_NODE": sys.executable,
+                "KASSIBER_AI_PROVIDER_BROKER": str(script),
+            }):
+                client = BrokerAIClient(locator="claude-cli://default")
+                chunks = list(client.stream_chat(
+                    messages=[{"role": "user", "content": "selected fixture"}],
+                    model="sensitive", options={"sensitive_context": True, "reasoning_effort": "high"},
+                ))
+                self.assertEqual(chunks[-1].finish_reason, "stop")
+                self.assertIsNone(client.last_provider_session_id)
+
+    def test_sensitive_mode_rejects_resume_tools_and_nonboolean_before_spawn(self):
+        client = BrokerAIClient(locator="codex-cli://default")
+        for options, tools in [
+            ({"sensitive_context": "true"}, []),
+            ({"sensitive_context": True, "provider_session_id": "old"}, []),
+            ({"sensitive_context": True}, [{"name": "tool"}]),
+        ]:
+            with self.subTest(options=options), patch("subprocess.Popen") as spawn:
+                with self.assertRaises(AppError):
+                    list(client.stream_chat(model="default", options=options, tools=tools))
+                spawn.assert_not_called()
+
+    def test_sensitive_mode_rejects_hostile_broker_tool_event(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-broker-test-") as tmp:
+            script = self._fake_broker(Path(tmp))
+            with patch.dict("os.environ", {
+                "KASSIBER_AI_BROKER_NODE": sys.executable,
+                "KASSIBER_AI_PROVIDER_BROKER": str(script),
+            }):
+                client = BrokerAIClient(locator="codex-cli://default")
+                with self.assertRaises(AppError) as raised:
+                    list(client.stream_chat(model="tool-call", options={"sensitive_context": True}))
+                self.assertEqual(raised.exception.code, "ai_request_invalid")
+                self.assertFalse(client._pending_call_ids)
+
     def _fake_broker(self, root: Path) -> Path:
         script = root / "fake_broker.py"
         script.write_text(FAKE_BROKER, encoding="utf-8")

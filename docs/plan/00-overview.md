@@ -17,13 +17,25 @@ transfer pairing, review/quarantine workflows, CLI/desktop UX, and
 accountant-facing BTC subledger exports. Source-of-funds reporting is in scope
 as a reviewed, path-scoped provenance report, not as chain-surveillance scoring.
 
-RP2 owns tax computation. Kassiber prepares and explains; RP2 computes.
+RP2 owns the existing crypto lot/tax calculation path. Opt-in organizational
+accounting adds a separate general ledger, book valuation adjustments, and
+jurisdiction working papers; see plan 17. It does not reinterpret current
+wallet buckets or personal tax journals as double-entry books.
+
+The accepted product direction serves private individuals, businesses, and
+associations. Organizational accounting is opt-in per book. Portfolio and
+personal-tax workflows remain available without ledger or corporate setup.
+AI assistance extends through scoped local processing and explicitly approved
+remote disclosures under the existing daemon, secret, and consent contracts.
 
 Out of scope unless a future design says otherwise:
 
 - invoicing
 - VAT/RKSV
-- company general ledger
+- unreviewed production claims for the general ledger; the integrated local
+  implementation follows `17-general-accounting-and-private-ai-spec.md` and
+  its remaining acceptance gates are recorded in
+  `../reference/general-accounting-acceptance.md`
 - remote multi-user service
 - mobile
 - broad altcoin product scope
@@ -63,6 +75,8 @@ Out of scope unless a future design says otherwise:
 | Core extraction | Landed | keep logic in shared core, not CLI/UI copies |
 | Attachments | Landed | use shipped `attachments`; keep links/file blobs bounded |
 | Austrian RP2 path | Active | processing and review-gated E 1kv PDF/XLSX export work; domestic-provider KESt metadata pending |
+| Organizational accounting and AI | Proposed, not shipped | complete opt-in double-entry workflow, local document assistance, country packs, and the user's K2/annex acceptance case; plan 17 |
+| Austrian corporate handoff | Proposed | K2 and required annexes consume reviewed accounting/tax facts; plan 16 is historical research superseded in scope by plan 17 |
 | Desktop UI | In progress | Tauri 2 + React + TypeScript with a Python sidecar daemon, per [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md) |
 | Project storage | Target-state | app-wide to per-project migration still needs a focused plan |
 | External documents | Design | reconcile BTC evidence without becoming ERP/invoicing |
@@ -100,16 +114,24 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
 - `16-cost-basis-pools-and-employment-compensation.md`: country-configurable
   pool scope, exact cross-pool basis carry, and compensation-as-acquisition
   handling across Kassiber and RP2
+- `16-austrian-corporate-tax-handoff.md`: K1/K2 corporate-tax handoff
+  research; earlier subledger-only scope superseded by plan 17
+- `17-general-accounting-and-private-ai-spec.md`: consolidated One-Shot
+  organizational-accounting specification, private-user compatibility, scoped
+  AI assistance, security requirements, and K2/annex acceptance criteria
 
 ## Highest-Risk Drift Points
 
 - treating historical phase lists as live work
 - implementing schema sketches without checking shipped tables
 - describing target project storage as current behavior
-- expanding Kassiber into invoicing/VAT/general-ledger territory
+- confusing proposed organizational accounting with shipped functionality, or
+  making organizational setup mandatory for private portfolio users
+- treating `K2` and `K1` as the same Austrian crypto path
 - treating source-of-funds reports as automatic proof when reviewed links or
   source evidence are missing
-- adding Austrian tax math in Kassiber instead of RP2
+- duplicating RP2 crypto lot math or assuming its personal-tax result is always
+  a valid organizational book carrying value
 - relying on VCS-pinned RP2 for packaged builds without testing
 - forgetting to re-run journals after metadata, pricing, pairing, or exclusion
   changes

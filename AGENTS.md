@@ -423,14 +423,16 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
   supports it, and avoid editing generated output by hand unless that exception
   is documented near the change.
 - Preserve the existing BTC subledger and personal workflows. The explicitly
-  authorized general-accounting expansion is an opt-in, separate ledger; see
-  `docs/reference/general-accounting.md`. Never reinterpret wallet `accounts`
-  or RP2 `journal_entries` as general-ledger records. Invoice issuance, payment
-  initiation, EBICS and FinanzOnline transmission remain outside this scope.
-  This supersedes the former product-wide general-ledger exclusion. Delivery
-  is CLI-first with internal daemon contracts; do not build accounting routes,
-  navigation, Settings switches or forms. Scoped agent delivery is a separate
-  stacked change and must retain exact consent and disclosure boundaries.
+  authorized general-accounting expansion is an opt-in, separate ledger under
+  `docs/plan/17-general-accounting-and-private-ai-spec.md`; do not reinterpret
+  wallet `accounts` or RP2 `journal_entries` as general-ledger records. Invoice
+  issuance, payment initiation, EBICS, and FinanzOnline transmission remain out
+  of scope. This supersedes the former product-wide general-ledger exclusion.
+  General accounting is CLI/Agent-only; do not rebuild dedicated accounting
+  routes, navigation, Settings switches or forms. Keep the full deterministic
+  CLI and minimal exact action review in the existing Assistant. Ordinary AI
+  receives opaque task state, not financial previews; preserve explicit
+  per-step mutation consent and separate disclosure authorization.
 - For merchant and document-linked flows, keep provenance capture, commercial matching, and RP2-facing tax normalization as separate layers.
 - Prefer standard-library solutions unless a dependency clearly buys a lot.
 - Keep `--machine` output deterministic — add a `kind` to every new envelope.
