@@ -567,13 +567,14 @@ top of the monolith.
     scoped agents and minimal consent. The seven-cut sketch is superseded;
     neither cut advertises absent modules or dedicated accounting screens.
     Historical extraction; the approved three-cut split below supersedes it.
-  - [ ] Complete the approved 2026-09-06 split: keep #545 intact; #546 retains
+  - [x] Complete the approved 2026-09-06 split: keep #545 intact; #546 retains
     four opaque task tools, exact local consent and durable export/restart;
     move selected financial AI assistance to dependent
     `codex/accounting-selected-ai`. Verify each cut and recombined feature
     coverage; no placeholder imports, disabled tests or new accounting UI.
-    The second-cut extraction is applied locally with explicit owner approval;
-    fresh verification, third-cut restoration and publication remain pending.
+    Published #545 `780f2da9` → #546 `9ef535f1` → #550 `2d5ab45f`;
+    independent split reviews and full local task/selected gates passed.
+    All remain unmerged; the technical reliability hold is not waived.
   - [x] Publish draft stack #542 → #545 → #546 with explicit RP2 merge hold.
     Merge independently green #543 and close superseded #455, retaining branches.
   - [x] Resolve RP2 #48's chronological/historical basis blockers, merge the
@@ -588,14 +589,13 @@ top of the monolith.
     route, sidebar, Settings switch and forms from `codex/accounting-cli-agent`.
     Keep all financial data/core and exact approval in the existing Assistant.
     Explicit CLI configuration replaces UI enrollment; no automatic encryption.
-  - [ ] Restore and verify selected financial AI assistance in the dependent
+  - [x] Restore and verify selected financial AI assistance in the dependent
     third cut only, from preserved complete agent `32312f0e` on
     `codex/accounting-agent-presplit-20260906`. Keep the hash-bound interactive
     request, tool-free/no-history grants and separate disclosure/draft approvals.
     No blanket approval, output capture, implicit context switch,
-    ordinary-agent financial read or model fallback. Absent from this local
-    second cut; published #546 remains at preserved full candidate `32312f0e`
-    until verification and publication.
+    ordinary-agent financial read or model fallback. Absent from this second
+    cut; published in #550 with passing full local and provider-isolation gates.
   - [ ] **Implementation checkpoint (2026-09-05):** country-neutral ledger,
     encrypted evidence, canonical bank interchange, partial settlements,
     manual schedules, revisioned close and portable arithmetic verifier are
@@ -605,11 +605,11 @@ top of the monolith.
     historical opening, lot-bound book-only valuation, cash-book controls,
     K2/2025 and six annex working papers, local extraction/optional OCR,
     and reviewed atomic batch posting. Scoped no-history AI proposals are
-    removed with their security/tests from this local second cut for restoration
-    in the dependent third cut; the owner explicitly approved that atomic move.
+    absent from this second cut and restored with their security/tests in #550;
+    the owner explicitly approved that atomic move.
     Real encrypted backup/restore covers two closes and retained source data.
-    Fresh split verification/review and separate CLI/agent product acceptance
-    and real pilot facts are still outstanding; this is not the completed
+    Split verification/reviews passed. The reliability hold, separate CLI/agent
+    product acceptance and real pilot facts remain open; this is not the completed
     specification or a production-ready claim.
     [Current contract](docs/reference/general-accounting.md).
   - [ ] Deliver agent-first workflow coverage under spec 17 section 7.1:

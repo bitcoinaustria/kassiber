@@ -21,7 +21,7 @@ that replace existing files instead of making targeted edits.
   become separate product acceptance, not blanket code-merge blockers.
 - Files: Selected financial AI context/proposals, disclosure daemon and CLI,
   sensitive provider isolation and their tests are removed from this #546 cut
-  for restoration together in dependent `codex/accounting-selected-ai`.
+  and restored together in dependent `codex/accounting-selected-ai` (#550).
   Unused accounting-export scope scaffolding in native `supervisor.rs` is
   removed following independent review; its former dedicated export UI was
   already removed. Shared files retain ordinary opaque
@@ -31,11 +31,13 @@ that replace existing files instead of making targeted edits.
   `32312f0e` on `codex/accounting-agent-presplit-20260906` and core `780f2da9`
   on `codex/accounting-core-presplit-20260906`. No financial records, live
   books or original preview are targets. Technical failures remain merge holds;
-  the extraction and recombination require fresh independent verification.
+  the extraction and recombination passed independent reviews and full local gates.
 - Command/tool: Scoped `apply_patch` extraction with preserved recovery refs.
-  Second-cut changes are local; fresh tests, third-lane restoration and stack
-  publication remain pending. The feature is absent alongside its protections,
-  not left enabled with weaker guards.
+  Task cut #546 is published at `9ef535f1`; third cut #550 is published at
+  `2d5ab45f`. The feature is absent alongside its protections here, not left
+  enabled with weaker guards. Recombined code/tests match preserved `32312f0e`
+  except the unused native scaffold; docs retain approved policy updates.
+  Publication and passing gates do not waive the unresolved reliability hold.
 
 - Date: 2026-09-05
 - Approval source: Owner requested full accounting CLI/Agent-only instead of a
