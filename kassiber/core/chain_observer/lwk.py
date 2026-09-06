@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Any, Mapping
 from urllib import parse as urlparse
 
-from ...backends import backend_batch_size, backend_timeout, backend_value
+from ...backends import backend_value
 from ...egress_ledger import endpoint_from_url, get_egress_ledger
 from ...envelope import json_ready
 from ...errors import AppError
@@ -100,20 +100,11 @@ def lwk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
         lwk_descriptor_for_plan(plan)
     except Exception:
         return "descriptor_unsupported"
+    if kind == "esplora":
+        # LWK 0.18's HTTP builder cannot disable redirects or ambient proxies.
+        # Keep the user's exact endpoint/route on the named Python transport.
+        return "http_route_policy"
     return None
-
-
-def _lwk_esplora_auth_options(lwk: Any, backend: Mapping[str, Any]) -> dict[str, Any]:
-    """Translate encrypted Kassiber credentials into LWK builder options."""
-
-    options: dict[str, Any] = {}
-    auth_header = str(backend_value(backend, "auth_header") or "").strip()
-    token = str(backend_value(backend, "token") or "").strip()
-    if auth_header:
-        options["headers"] = {"Authorization": auth_header}
-    if token:
-        options["token_provider"] = lwk.TokenProvider.STATIC(token)
-    return options
 
 
 def _lwk_electrum_connection(backend: Mapping[str, Any]) -> tuple[str, bool, bool]:
@@ -389,6 +380,14 @@ class LwkObserver:
                 code="network_egress_disabled",
                 retryable=False,
             )
+        kind = normalize_backend_kind(self.backend["kind"])
+        if kind == "esplora":
+            raise AppError(
+                "LWK cannot enforce the configured HTTP endpoint and proxy policy",
+                code="observer_capability_unsupported",
+                details={"capability": "http_route_policy", "observer": "lwk"},
+                retryable=False,
+            )
         host, port, scheme = endpoint_from_url(endpoint)
         get_egress_ledger().record(
             subsystem="sync",
@@ -398,16 +397,6 @@ class LwkObserver:
             operation=f"lwk.{self.backend['kind']}.connect",
             via_proxy=False,
         )
-        kind = normalize_backend_kind(self.backend["kind"])
-        if kind == "esplora":
-            builder = lwk.EsploraClientBuilder(
-                base_url=endpoint,
-                network=network,
-                concurrency=max(1, min(8, backend_batch_size(self.backend))),
-                timeout=max(1, min(255, backend_timeout(self.backend))),
-                **_lwk_esplora_auth_options(lwk, self.backend),
-            )
-            return lwk.EsploraClient.from_builder(builder)
         if kind == "electrum":
             electrum_endpoint, tls, validate_domain = _lwk_electrum_connection(self.backend)
             return lwk.ElectrumClient(electrum_endpoint, tls, validate_domain)

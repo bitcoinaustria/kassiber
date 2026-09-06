@@ -1300,6 +1300,11 @@ def redact_freshness_payload(value: Any) -> Any:
         redacted: dict[str, Any] = {}
         for key, item in value.items():
             lowered = str(key).lower()
+            # Observer checkpoints contain raw script/transaction membership and
+            # private source fingerprints. They are persisted separately from
+            # sanitized job results and have no desktop/AI display contract.
+            if lowered in {"checkpoint", "checkpoint_json", "freshness_checkpoint", "_freshness_checkpoint", "esplora_history_memberships"}:
+                continue
             if lowered in {"backend_url", "url"}:
                 redacted[f"has_{lowered}"] = bool(item)
                 continue

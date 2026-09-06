@@ -83,8 +83,8 @@ class BdkDependencyContractTest(TestCase):
             targets = targets[1:]
         resolved_backend = backend or {
             "name": "native",
-            "kind": "esplora",
-            "url": "https://example.invalid",
+            "kind": "electrum",
+            "url": "ssl://example.invalid:50002",
         }
         state = core_sync.WalletSyncState(
             chain="bitcoin",
@@ -155,7 +155,7 @@ class BdkDependencyContractTest(TestCase):
         with mock.patch.object(
             sync_backends,
             "SYNC_BACKEND_ADAPTERS",
-            {"esplora": compatibility},
+            {"electrum": compatibility},
         ), mock.patch(
             "kassiber.core.chain_observer.prepare_observer_update",
             return_value=prepared,
@@ -212,7 +212,7 @@ class BdkDependencyContractTest(TestCase):
         with mock.patch.object(
             sync_backends,
             "SYNC_BACKEND_ADAPTERS",
-            {"esplora": compatibility},
+            {"electrum": compatibility},
         ), mock.patch(
             "kassiber.core.chain_observer.prepare_observer_update",
             side_effect=AppError("native failure", code="backend_sync_failed"),
@@ -238,10 +238,14 @@ class BdkDependencyContractTest(TestCase):
             "source_overlap_partial_descriptor": (
                 {
                     "name": "overlap",
-                    "kind": "esplora",
-                    "url": "https://example.invalid",
+                    "kind": "electrum",
+                    "url": "ssl://example.invalid:50002",
                 },
                 True,
+            ),
+            "http_route_policy": (
+                {"name": "http", "kind": "esplora", "url": "https://example.invalid"},
+                False,
             ),
         }
         for reason, (backend, partial_targets) in cases.items():
@@ -335,7 +339,7 @@ class BdkDependencyContractTest(TestCase):
         with mock.patch.object(
             sync_backends,
             "COMPATIBILITY_SYNC_BACKEND_ADAPTERS",
-            {"esplora": compatibility},
+            {"electrum": compatibility},
         ), mock.patch.object(
             sync_backends,
             "discover_compatibility_descriptor_targets",
@@ -781,11 +785,15 @@ class BdkDependencyContractTest(TestCase):
     def test_route_capabilities_are_explicit(self):
         _wallet, plan = _descriptor_wallet()
         state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
-        self.assertIsNone(
+        self.assertEqual(
             bdk_compatibility_reason(
                 {"kind": "esplora", "url": "https://mempool.space/api"}, state
-            )
+            ),
+            "http_route_policy",
         )
+        self.assertIsNone(bdk_compatibility_reason(
+            {"kind": "electrum", "url": "ssl://example.invalid:50002"}, state,
+        ))
         self.assertEqual(
             bdk_compatibility_reason(
                 {
@@ -851,11 +859,11 @@ class BdkDependencyContractTest(TestCase):
             "insecure_tls",
         )
 
-    def test_discovered_host_ca_keeps_custom_esplora_native(self):
+    def test_discovered_host_ca_keeps_http_route_policy(self):
         _wallet, plan = _descriptor_wallet()
         state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
         with mock.patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}):
-            self.assertIsNone(
+            self.assertEqual(
                 bdk_compatibility_reason(
                     {
                         "name": "private-node",
@@ -863,7 +871,8 @@ class BdkDependencyContractTest(TestCase):
                         "url": "https://node.example",
                     },
                     state,
-                )
+                ),
+                "http_route_policy",
             )
 
     def test_operator_ca_override_routes_custom_esplora_to_python_transport(self):
@@ -911,11 +920,11 @@ class BdkDependencyContractTest(TestCase):
                 "insecure_tls",
             )
 
-    def test_operator_ca_override_keeps_plain_http_esplora_native(self):
+    def test_operator_ca_override_keeps_plain_http_route_policy(self):
         _wallet, plan = _descriptor_wallet()
         state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
         with mock.patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "explicit"}):
-            self.assertIsNone(
+            self.assertEqual(
                 bdk_compatibility_reason(
                     {
                         "name": "local-esplora",
@@ -923,14 +932,15 @@ class BdkDependencyContractTest(TestCase):
                         "url": "http://127.0.0.1:3002",
                     },
                     state,
-                )
+                ),
+                "http_route_policy",
             )
 
-    def test_discovered_host_ca_keeps_exact_builtin_esplora_native(self):
+    def test_discovered_host_ca_keeps_builtin_http_route_policy(self):
         _wallet, plan = _descriptor_wallet()
         state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
         with mock.patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}):
-            self.assertIsNone(
+            self.assertEqual(
                 bdk_compatibility_reason(
                     {
                         "name": "mempool",
@@ -938,7 +948,8 @@ class BdkDependencyContractTest(TestCase):
                         "url": "https://mempool.bitcoin-austria.at/api",
                     },
                     state,
-                )
+                ),
+                "http_route_policy",
             )
 
     def test_explicit_ca_override_routes_exact_builtin_to_python_transport(self):
@@ -959,13 +970,14 @@ class BdkDependencyContractTest(TestCase):
                 "system_ca_trust",
             )
 
-    def test_mempool_backend_alias_selects_bdk(self):
+    def test_mempool_backend_alias_preserves_http_route_policy(self):
         _wallet, plan = _descriptor_wallet()
         state = type("State", (), {"chain": "bitcoin", "descriptor_plan": plan})()
-        self.assertIsNone(
+        self.assertEqual(
             bdk_compatibility_reason(
                 {"kind": "mempool", "url": "https://mempool.example/api"}, state
-            )
+            ),
+            "http_route_policy",
         )
         self.assertEqual(core_sync.normalize_backend_kind("mempool"), "esplora")
 
@@ -1128,6 +1140,21 @@ class BdkDependencyContractTest(TestCase):
                 observer._client()
         self.assertEqual(raised.exception.code, "network_egress_disabled")
         client.assert_not_called()
+
+    def test_direct_esplora_client_cannot_bypass_http_routing_policy(self):
+        for kind, endpoint in (("esplora", "http://127.0.0.1:3002"), ("mempool", "https://example.invalid")):
+            with self.subTest(kind=kind):
+                observer = self._observer()
+                observer.backend = {"kind": kind, "url": endpoint}
+                observer.backend_kind = core_sync.normalize_backend_kind(kind)
+                with mock.patch.object(bdk, "EsploraClient") as native, mock.patch(
+                    "kassiber.core.chain_observer.bdk._truthy_env", return_value=False,
+                ):
+                    with self.assertRaises(AppError) as raised:
+                        observer._client()
+                self.assertEqual(raised.exception.code, "observer_capability_unsupported")
+                self.assertEqual(raised.exception.details["capability"], "http_route_policy")
+                native.assert_not_called()
 
     def test_onion_never_connects_directly(self):
         wallet, plan = _descriptor_wallet()

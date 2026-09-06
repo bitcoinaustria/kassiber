@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import unittest
 from unittest.mock import patch
 from urllib import error as urlerror, request as urlrequest, response as urlresponse
@@ -66,6 +67,37 @@ class ChainAnalysisAcquisitionTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "validation")
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM chain_analysis_observations").fetchone()[0], 0)
 
+    def test_no_egress_switch_blocks_http_rpc_and_electrum_before_dns_or_connect(self):
+        for flag in ("1", "true", "YES", " on "):
+            for kind, url in (("esplora", "http://127.0.0.1:18443/api"), ("bitcoinrpc", "http://rpc.example:8332"), ("electrum", "tcp://127.0.0.1:50001")):
+                with self.subTest(flag=flag, kind=kind):
+                    self.conn.execute("UPDATE backends SET kind=?,url=?,config_json=?", (kind, url, json.dumps({"username": "test", "password": "synthetic"})))
+                    with (
+                        patch.dict(os.environ, {"KASSIBER_NO_EGRESS": flag}),
+                        patch("socket.getaddrinfo", side_effect=AssertionError("unexpected DNS")) as dns,
+                        patch("socket.socket.connect", side_effect=AssertionError("unexpected connection")) as connect,
+                        patch.object(acquisition.transport, "urlopen_with_proxy", side_effect=AssertionError("unexpected HTTP")) as http,
+                    ):
+                        plan = self.plan()  # Offline planning remains available.
+                        with self.assertRaises(AppError) as caught:
+                            acquisition.apply_acquisition(self.conn, "pf", {"plan": plan})
+                    self.assertEqual(caught.exception.code, "network_egress_disabled")
+                    dns.assert_not_called()
+                    connect.assert_not_called()
+                    http.assert_not_called()
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM chain_analysis_observations").fetchone()[0], 0)
+
+    def test_no_egress_switch_is_rechecked_between_requests(self):
+        def genesis(_request):
+            os.environ["KASSIBER_NO_EGRESS"] = "1"
+            return acquisition.GENESIS[("bitcoin", "main")].encode()
+        http = self.http(**{"/block-height/0": genesis, f"/tx/{tid(2)}": raw(2)})
+        with patch.dict(os.environ, {"KASSIBER_NO_EGRESS": "0"}), patch.object(acquisition.transport, "urlopen_with_proxy", side_effect=http):
+            result = acquisition.apply_acquisition(self.conn, "pf", {"plan": self.plan()})
+        self.assertEqual(len(http.calls), 1)
+        self.assertEqual(result["acquired_count"], 0)
+        self.assertFalse(result["complete"])
+
     def test_same_timestamp_backend_redirect_invalidates_plan(self):
         plan = self.plan()
         self.conn.execute("UPDATE backends SET url='https://different.example/api'")
@@ -73,6 +105,45 @@ class ChainAnalysisAcquisitionTests(unittest.TestCase):
             with self.assertRaises(AppError) as caught:
                 acquisition.apply_acquisition(self.conn, "pf", {"plan": plan})
         self.assertEqual(caught.exception.code, "chain_analysis_stale")
+
+    def test_backend_change_between_validation_and_dispatch_cannot_redirect_subject(self):
+        plan = self.plan()
+        read_backend = acquisition.get_db_backend
+        reads = 0
+        def read_then_change(conn, name):
+            nonlocal reads
+            backend = read_backend(conn, name)
+            reads += 1
+            if reads == 1:
+                conn.execute("UPDATE backends SET url='https://different.example/api'")
+            return backend
+        http = self.http(**{f"/tx/{tid(2)}": raw(2)})
+        with patch.object(acquisition, "get_db_backend", side_effect=read_then_change), patch.object(acquisition.transport, "urlopen_with_proxy", side_effect=http):
+            with self.assertRaises(AppError) as caught:
+                acquisition.apply_acquisition(self.conn, "pf", {"plan": plan})
+        self.assertEqual(caught.exception.code, "chain_analysis_stale")
+        self.assertEqual([call[0] for call in http.calls], ["https://node.example/api/block-height/0", f"https://node.example/api/tx/{tid(2)}"])
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM chain_analysis_observations").fetchone()[0], 0)
+
+    def test_wallet_change_between_validation_and_dispatch_cannot_add_query_subjects(self):
+        self.book._insert_transaction(tx_id="initial", external_id=tid(2), raw_json=raw(2))
+        plan = self.plan(subject="wal")
+        read_index = acquisition.build_index
+        reads = 0
+        def index_then_change(conn, profile_id):
+            nonlocal reads
+            index = read_index(conn, profile_id)
+            reads += 1
+            if reads == 1:
+                self.book._insert_transaction(tx_id="added", external_id=tid(3), raw_json=raw(3))
+            return index
+        http = self.http(**{f"/tx/{tid(2)}": raw(2), f"/tx/{tid(3)}": raw(3)})
+        with patch.object(acquisition, "build_index", side_effect=index_then_change), patch.object(acquisition.transport, "urlopen_with_proxy", side_effect=http):
+            with self.assertRaises(AppError) as caught:
+                acquisition.apply_acquisition(self.conn, "pf", {"plan": plan})
+        self.assertEqual(caught.exception.code, "chain_analysis_stale")
+        self.assertEqual([call[0] for call in http.calls], ["https://node.example/api/block-height/0", f"https://node.example/api/tx/{tid(2)}"])
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM chain_analysis_observations").fetchone()[0], 0)
 
     def test_backward_acquisition_sanitizes_secrets_and_stays_reference_only(self):
         child = {**raw(2, [1]), "descriptor": "xpub-secret", "preimage": "private-preimage", "raw_hex": "private-raw"}
@@ -193,7 +264,7 @@ class ChainAnalysisAcquisitionTests(unittest.TestCase):
         class FakeHTTPHandler(urlrequest.HTTPHandler):
             def http_open(self, request):
                 calls.append((request.full_url, request.get_header("Authorization")))
-                headers = {"Location": "http://second.invalid/stolen"} if len(calls) == 1 else {}
+                headers = {"location": "http://second.invalid/stolen"} if len(calls) == 1 else {}
                 response = urlresponse.addinfourl(io.BytesIO(b""), headers, request.full_url, 302 if len(calls) == 1 else 200)
                 response.msg = "Found"
                 return response
@@ -203,6 +274,12 @@ class ChainAnalysisAcquisitionTests(unittest.TestCase):
                 proxy.urlopen_with_proxy(urlrequest.Request("http://first.invalid/start", headers={"Authorization": "Bearer synthetic-secret"}), follow_redirects=False)
         self.assertEqual(caught.exception.code, 302)
         self.assertEqual(calls, [("http://first.invalid/start", "Bearer synthetic-secret")])
+        # Negative control: the same fake really follows the redirect with the
+        # ordinary urllib handler, including forwarding the sensitive header.
+        calls.clear()
+        with original(urlrequest.ProxyHandler({}), FakeHTTPHandler()).open(urlrequest.Request("http://first.invalid/start", headers={"Authorization": "Bearer synthetic-secret"})) as response:
+            self.assertEqual(response.status, 200)
+        self.assertEqual(calls, [("http://first.invalid/start", "Bearer synthetic-secret"), ("http://second.invalid/stolen", "Bearer synthetic-secret")])
 
     def test_socks_error_body_is_bounded_before_context_entry(self):
         reads = []

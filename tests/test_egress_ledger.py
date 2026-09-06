@@ -135,7 +135,7 @@ class EgressLedgerTest(unittest.TestCase):
             def __exit__(self, exc_type, exc, tb):
                 return False
 
-        with patch("kassiber.proxy.urlrequest.urlopen", return_value=Response()):
+        with patch("kassiber.proxy.urlrequest.OpenerDirector.open", return_value=Response()):
             with urlopen_with_proxy(request, request.full_url, timeout=1) as response:
                 self.assertEqual(response.read(), b"{}")
 

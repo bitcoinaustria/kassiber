@@ -131,26 +131,32 @@ temporary SQLCipher database. The runner injects and rolls back a failed state
 write, reopens the encrypted project, and rejects BDK/LWK-looking sidecar files.
 For Bitcoin/all selections, the lane then creates a real Core descriptor wallet,
 funds both low and gap-edge receive indices, and refreshes its public descriptor
-through Fulcrum using BDK. It asserts the BDK route, transaction/UTXO projection,
-per-branch coverage, SQLCipher-only state, process restart, and byte-stable
-immediate no-op state.
+through Fulcrum using BDK and through the local Esplora-compatible service using
+Kassiber's explicit HTTP transport. It asserts native Electrum state and
+per-branch coverage, the HTTP `http_route_policy` compatibility reason,
+transaction/UTXO parity, SQLCipher-only persistence, process restart, and
+byte-stable immediate no-op native state.
 For Liquid/all selections, the lane creates a real Elements descriptor wallet
 with private SLIP77 view material and public spending keys, then refreshes it
-through both the local Electrum and Esplora-compatible services using LWK. It
-asserts the LWK-only route, opaque `ForeignStore` bytes in the main database,
-restart and immediate no-op stability, confidential LBTC receive/spend and fee
-normalization, issued-asset history, transport parity, confirmation, block
-invalidation and unconfirmed resurrection.
+through local Electrum using LWK and the Esplora-compatible service using
+Kassiber's explicit HTTP transport. It asserts opaque native `ForeignStore`
+bytes only for Electrum, the HTTP compatibility reason, restart and immediate
+no-op stability, confidential LBTC receive/spend and fee normalization,
+issued-asset history, transport parity, confirmation, block invalidation and
+unconfirmed resurrection.
 Only loopback RPC, Electrum and HTTP targets are accepted. Routing metadata
 pins pre-connect compatibility selection for this phase, forbids runtime
 fallback, and records that `.onion` endpoints may not connect directly.
-The transport oracle also drives the pinned clients themselves: BDK crosses
+Separately, the transport oracle drives the pinned clients themselves: BDK crosses
 plain Electrum, Esplora, insecure test TLS and SOCKS5h; LWK crosses plain
 Electrum, Esplora, explicit insecure test TLS and an authentication-enforcing
 Esplora reverse proxy. Focused routing and SSL-context tests cover custom-CA and
 explicitly insecure Esplora rows through Kassiber's compatibility HTTP transport
 because neither pinned dependency accepts a per-client trust root; the selected
-TLS policy is exercised instead of being silently ignored.
+TLS policy is exercised instead of being silently ignored. Direct SDK HTTP
+probes establish the binding's capabilities; they do not authorize its use by
+Kassiber. Production Esplora routing stays on the explicit compatibility
+transport until the SDK exposes enforceable redirect and proxy controls.
 
 Pull requests and main-branch pushes expose a required
 `Chain observers (Linux Docker)` job in `.github/workflows/ci.yml`. It runs the
@@ -764,9 +770,10 @@ mode.
   sets it before collection for every non-integration run. It blocks Python
   DNS, TCP connects, and UDP sends to non-loopback hosts. A `sitecustomize` on
   `PYTHONPATH` carries it into spawned Python children and stops a child if the
-  guard cannot start. `KASSIBER_NO_EGRESS=1` also tells BDK/LWK observers to
-  refuse chain observation outright, including loopback, so it is not used
-  suite-wide.
+  guard cannot start. The separate product override `KASSIBER_NO_EGRESS=1`
+  blocks BDK/LWK observer construction, shared backend HTTP/SOCKS and Python
+  Electrum connections, and chain-analysis acquisition, including loopback.
+  It is not used suite-wide and is not an OS-wide network firewall.
 - Tapes must include provenance (`backend_kind`, network, regtest anchor, and
   issue number) and fail closed: an adapter request absent from the tape raises
   `TapeMiss`, while unused recorded interactions fail the replay test.
@@ -831,6 +838,14 @@ quality-gate runs skip these live tests; the dedicated lane additionally sets
 stack. Unit tests cover official BIP174/370 vectors, BIP78 hostile proposals,
 observer views, acquisition budgets, conditional entropy scenarios, labels,
 case revisions, CLI/daemon and AI projection without network.
+
+`tests/test_chain_analysis_consent.py` runs the actual assistant tool loop and
+consent broker with synthetic provider turns and node responses. It checks
+approval, denial, cancellation, timeout, once-only scope and stale plans while
+forbidding even loopback DNS/socket attempts. Transport tests in
+`tests/test_proxy.py`, `tests/test_ai_core.py`, `tests/test_lnd_adapter.py` and
+`tests/test_update_check.py` separately exercise real urllib handler chains,
+including vulnerable redirect controls, explicit proxy routing and TLS checks.
 
 [Cashu-regtest](https://github.com/callebtc/cashu-regtest) is a useful reference
 for later cross-rail fixtures: its

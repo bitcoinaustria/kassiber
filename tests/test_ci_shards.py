@@ -42,6 +42,7 @@ class PythonShardContractTest(unittest.TestCase):
             "tests/test_sync_replication_s5.py": "serial-network",
             "tests/test_cli_chat.py": "serial-daemon",
             "tests/test_daemon_smoke.py": "serial-daemon",
+            "tests/test_chain_analysis_consent.py": "daemon-cli",
             "tests/test_review_regressions.py": "serial-regressions",
             "tests/test_remembered_unlock.py": "serial-integration",
             "tests/test_wasabi_import.py": "serial-integration",

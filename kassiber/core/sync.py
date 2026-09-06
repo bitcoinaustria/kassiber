@@ -14,10 +14,13 @@ from typing import Any, Callable, Mapping, MutableMapping, Protocol, Sequence
 
 from ..backends import redact_backend_text, redact_backend_url
 from ..errors import AppError
+from ..time_utils import UNKNOWN_OCCURRED_AT
 from ..transfers import canonical_txid
 from ..util import str_or_none
 from ..wallet_descriptors import DEFAULT_DESCRIPTOR_GAP_LIMIT, MAX_DESCRIPTOR_GAP_LIMIT
 from . import source_overlap
+from .esplora_history import full_scan_checkpoint
+from .onchain import stored_tx_mapping
 from .chain_observer import (
     PreparedObserverUpdate,
     apply_prepared_observer_update,
@@ -505,7 +508,10 @@ def discover_wallet_backend(
     del profile  # not needed to fetch; kept for call-shape symmetry with apply
     started = time.monotonic()
     config = json.loads(wallet["config_json"] or "{}")
-    effective_checkpoint = {} if force_full else checkpoint
+    effective_checkpoint = (
+        full_scan_checkpoint(checkpoint if checkpoint is not None else dict(wallet).get("_freshness_checkpoint"))
+        if force_full else checkpoint
+    )
     resolver_wallet: WalletRow = (
         {**dict(wallet), "_freshness_checkpoint": dict(effective_checkpoint)}
         if effective_checkpoint is not None
@@ -1089,7 +1095,7 @@ def sync_wallet_from_backend(
                 profile,
                 repair_wallet,
                 hooks,
-                checkpoint={},
+                checkpoint=full_scan_checkpoint(outcome.get("freshness_checkpoint", sync_state.checkpoint)),
                 force_full=True,
                 _allow_negative_balance_rescan=False,
             )
@@ -1123,37 +1129,80 @@ def _wallet_negative_balance_events(
         return []
     rows = conn.execute(
         """
-        SELECT id, external_id, occurred_at, direction, asset, amount, fee, created_at
+        SELECT id, external_id, occurred_at, confirmed_at, raw_json,
+               direction, asset, amount, fee, created_at
         FROM transactions
         WHERE profile_id = ? AND wallet_id = ? AND excluded = 0
-        ORDER BY occurred_at ASC, created_at ASC, id ASC
         """,
         (profile_id, wallet_id),
     ).fetchall()
-    balances: dict[str, int] = {}
-    first_negative_by_asset: dict[str, dict[str, Any]] = {}
+    return negative_balance_events([dict(row) for row in rows])
+
+
+def _unconfirmed_chain_position(row: Mapping[str, Any]) -> bool:
+    # A missing confirmed_at also describes dated manual/CSV observations.
+    # Only explicit chain evidence makes a first-seen time unordered here.
+    if row.get("confirmed_at"):
+        return False
+    raw = stored_tx_mapping(row.get("raw_json"), allow_nested=True)
+    if raw is None or canonical_txid(raw.get("txid") or row.get("external_id")) is None:
+        return False
+    status = raw.get("status")
+    return isinstance(status, Mapping) and status.get("confirmed") is False
+
+
+def negative_balance_events(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Find only inventory deficits that can justify a wider network rescan.
+
+    UNKNOWN_OCCURRED_AT is missing evidence, not a transaction in 1970. A
+    mempool first-seen time also does not order a transaction against block
+    times (which can be ahead of wall time). These unordered inflows supply an
+    upper bound on inventory available at each dated prefix; unordered outflows
+    are evaluated together after dated history. A deficit that
+    persists under this best possible placement is useful as a rescan hint.
+    This does not assign dates or grant journal/accounting authority.
+    """
+    dated: dict[tuple[str, str], list[tuple[Mapping[str, Any], int]]] = {}
+    undated_inflows: dict[str, int] = {}
+    undated_deltas: dict[str, int] = {}
     for row in rows:
-        asset = str(row["asset"] or "")
-        amount = int(row["amount"] or 0)
-        fee = int(row["fee"] or 0)
-        if row["direction"] == "inbound":
-            delta = amount
-        elif row["direction"] == "outbound":
-            delta = -amount - fee
+        asset = str(row.get("asset") or "")
+        amount, fee = int(row.get("amount") or 0), int(row.get("fee") or 0)
+        direction = row.get("direction")
+        delta = amount if direction == "inbound" else -amount - fee if direction == "outbound" else 0
+        if row.get("occurred_at") in (None, "", UNKNOWN_OCCURRED_AT) or _unconfirmed_chain_position(row):
+            undated_inflows[asset] = undated_inflows.get(asset, 0) + max(0, delta)
+            undated_deltas[asset] = undated_deltas.get(asset, 0) + delta
         else:
-            delta = 0
-        next_balance = balances.get(asset, 0) + delta
-        balances[asset] = next_balance
-        if next_balance < 0 and asset not in first_negative_by_asset:
-            first_negative_by_asset[asset] = {
-                "asset": asset,
-                "transaction_id": row["id"],
-                "external_id": row["external_id"],
-                "occurred_at": row["occurred_at"],
-                "delta_msat": delta,
-                "running_balance_msat": next_balance,
+            dated.setdefault((str(row["occurred_at"]), asset), []).append((row, delta))
+    balances = dict(undated_inflows)
+    first_negative: dict[str, dict[str, Any]] = {}
+    for (occurred_at, asset), group in sorted(dated.items()):
+        # Transactions in the same block share a timestamp. Neither import
+        # order nor row ID proves their chain order, so evaluate the whole
+        # per-asset group and attribute a deficit only for a single-row group.
+        delta = sum(delta for _row, delta in group)
+        running = balances.get(asset, 0) + delta
+        balances[asset] = running
+        if running < 0 and asset not in first_negative:
+            row = group[0][0] if len(group) == 1 else {}
+            first_negative[asset] = {
+                "asset": asset, "transaction_id": row.get("id"),
+                "external_id": row.get("external_id"), "occurred_at": occurred_at,
+                "delta_msat": delta, "running_balance_msat": running,
             }
-    return list(first_negative_by_asset.values())
+    for asset in sorted(undated_deltas):
+        delta = undated_deltas[asset]
+        running = balances.get(asset, 0) - undated_inflows.get(asset, 0) + delta
+        if running < 0 and asset not in first_negative:
+            # There is no justified ordering or individual transaction cause
+            # for an undated aggregate. Preserve that uncertainty in the hint.
+            first_negative[asset] = {
+                "asset": asset, "transaction_id": None, "external_id": None,
+                "occurred_at": None, "delta_msat": delta,
+                "running_balance_msat": running,
+            }
+    return list(first_negative.values())
 
 
 def negative_balance_rescan_gap_limit(sync_state: WalletSyncState) -> int | None:
@@ -1238,7 +1287,7 @@ def prefetch_wallets_backend(
         return results
 
     def _discover(wallet: WalletRow):
-        checkpoint = {} if force_full else (checkpoints or {}).get(str(wallet["id"]))
+        checkpoint = (checkpoints or {}).get(str(wallet["id"]))
         try:
             return discover_wallet_backend(
                 runtime_config,
@@ -1324,7 +1373,11 @@ def sync_wallets(
 ) -> list[SyncOutcome]:
     results = []
     for wallet in wallets:
-        wallet_checkpoint = {} if force_full else (checkpoints or {}).get(str(wallet["id"]))
+        wallet_checkpoint = (checkpoints or {}).get(str(wallet["id"]))
+        if force_full:
+            wallet_checkpoint = full_scan_checkpoint(
+                wallet_checkpoint if wallet_checkpoint is not None else dict(wallet).get("_freshness_checkpoint")
+            )
         sync_wallet: WalletRow = (
             {**dict(wallet), "_freshness_checkpoint": dict(wallet_checkpoint)}
             if wallet_checkpoint is not None
@@ -1402,14 +1455,13 @@ def sync_wallets(
             results.append({"wallet": sync_wallet["label"], "status": "synced", **outcome})
             continue
         if addresses or has_descriptor or has_silent_payment:
-            checkpoint = {} if force_full else (checkpoints or {}).get(str(wallet["id"]))
             outcome = sync_wallet_from_backend(
                 conn,
                 runtime_config,
                 profile,
                 sync_wallet,
                 hooks,
-                checkpoint=checkpoint,
+                checkpoint=wallet_checkpoint,
                 force_full=force_full,
                 prefetched=(prefetched or {}).get(str(wallet["id"])),
             )
@@ -1452,7 +1504,9 @@ __all__ = [
     "discard_fetch_observer_updates",
     "emit_sync_progress",
     "fetch_wallet_backend",
+    "full_scan_checkpoint",
     "normalize_backend_kind",
+    "negative_balance_events",
     "negative_balance_rescan_gap_limit",
     "notify_apply_stage",
     "prefetch_wallets_backend",

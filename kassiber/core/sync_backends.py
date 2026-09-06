@@ -35,6 +35,7 @@ from ..msat import SATS_PER_BTC, dec
 from ..proxy import (
     _connect_via_socks5,
     is_onion_endpoint,
+    require_egress_enabled,
     urlopen_with_proxy,
 )
 from ..redaction import redact_operational_text
@@ -54,6 +55,7 @@ from ..wallet_descriptors import (
     liquid_plan_can_unblind,
 )
 from . import htlc_parser
+from . import esplora_history
 from . import silent_payments
 from .address_scripts import address_to_scriptpubkey
 from .onchain import (
@@ -275,6 +277,7 @@ def parse_socket_backend_url(url, default_scheme="ssl", default_ports=None):
 
 
 def _connect_backend_socket(backend, host, port):
+    require_egress_enabled()
     timeout = backend_timeout(backend)
     proxy = backend_value(backend, "tor_proxy", "proxy")
     get_egress_ledger().record(
@@ -2864,8 +2867,24 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
     proxy_url = _backend_proxy_url(backend)
     ssl_context = _backend_ssl_context(backend)
     checkpoint = _checkpoint_mapping(sync_state)
+    # Bind the complete private transport configuration, not just the backend
+    # name. This digest remains inside the local-only freshness checkpoint.
+    # A different endpoint, credential, route or TLS policy cannot inherit
+    # another observation source's absence authority or unchanged cache.
+    membership_backend_key = hashlib.sha256(json.dumps(json_ready({
+        "backend": _backend_identity(backend, sync_state),
+        "url": backend.get("url"), "headers": headers,
+        "proxy": proxy_url,
+        "certificate": backend_value(backend, "certificate"),
+        "insecure": backend_value(backend, "insecure", "trust_ssl"),
+    }), sort_keys=True).encode()).hexdigest()
+    memberships = esplora_history.EsploraMemberships(
+        checkpoint.get("esplora_history_memberships"), membership_backend_key,
+    )
     previous_stats = checkpoint.get("esplora_scripthashes") or {}
     next_stats = {}
+    current_stats = {}
+    scripts_by_scripthash = {}
     highest_used = dict(checkpoint.get("highest_used") or {})
     changed_targets = []
     unchanged_scripts = 0
@@ -2906,12 +2925,15 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
         tx_count = int(chain_stats.get("tx_count") or 0) + int(mempool_stats.get("tx_count") or 0)
         mempool_tx_count = int(mempool_stats.get("tx_count") or 0)
         fingerprint = esplora_stats_fingerprint(stats)
+        current_stats[scripthash] = stats
+        scripts_by_scripthash[scripthash] = target["script_pubkey"]
         previous = previous_stats.get(scripthash) if isinstance(previous_stats, dict) else None
         previous_dirty = isinstance(previous, dict) and bool(previous.get("mempool_dirty"))
         unchanged = (
             isinstance(previous, dict)
             and previous.get("fingerprint") == fingerprint
             and not previous_dirty
+            and memberships.reusable(scripthash, fingerprint)
         )
         next_stats[scripthash] = {
             "fingerprint": fingerprint,
@@ -2948,7 +2970,25 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
             ),
             ):
             target_txs.append(tx)
-        return scripthash, target_txs
+        before = current_stats[scripthash]
+        # The endpoints do not supply an atomic snapshot. A second observation
+        # rejects visible mempool/block races around pagination. Missing counts,
+        # duplicate identities and configured page limits are never absence.
+        after = esplora_scripthash_stats(
+            backend["url"], target["script_pubkey"],
+            **_esplora_call_kwargs(timeout=timeout, headers=headers,
+                                   proxy_url=proxy_url, ssl_context=ssl_context),
+        )
+        expected_count = esplora_history.explicit_history_count(before)
+        complete = (
+            max_pages is None
+            and expected_count is not None
+            and expected_count == len(target_txs)
+            and expected_count == esplora_history.explicit_history_count(after)
+            and esplora_stats_fingerprint(before) == esplora_stats_fingerprint(after)
+            and esplora_history.history_matches_script(target_txs, target["script_pubkey"])
+        )
+        return scripthash, target_txs, complete
 
     def history_fetch_progress(index, _result, total):
         if index % max(1, worker_count) == 0 or index == total:
@@ -2958,7 +2998,7 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
                 targets_checked=index,
             )
 
-    for history_index, (_scripthash, target_txs) in enumerate(
+    for history_index, (scripthash, target_txs, complete) in enumerate(
         _map_bounded(
             changed_targets,
             fetch_target_transactions,
@@ -2967,6 +3007,10 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
         ),
         start=1,
     ):
+        memberships.observe(scripthash, target_txs,
+                            script_pubkey=scripts_by_scripthash[scripthash],
+                            fingerprint=next_stats[scripthash]["fingerprint"],
+                            complete=complete)
         for tx in target_txs:
             transactions_by_txid[tx["txid"]] = tx
         if history_index % max(1, worker_count) == 0 or history_index == len(changed_targets):
@@ -3058,10 +3102,12 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
                 transactions_total=len(sorted_transactions),
                 records=len(records),
             )
+    membership_checkpoint, retracted, history_complete = memberships.finish()
     checkpoint.update(
         {
             "backend": _backend_identity(backend, sync_state),
             "esplora_scripthashes": dict(sorted(next_stats.items())),
+            "esplora_history_memberships": membership_checkpoint,
             "highest_used": dict(sorted(highest_used.items())),
         }
     )
@@ -3070,6 +3116,8 @@ def compatibility_esplora_records_for_wallet(backend, sync_state: WalletSyncStat
         "scripts_changed": len(changed_targets),
         "scripts_unchanged": unchanged_scripts,
         "known_txids": len(transactions_by_txid),
+        "esplora_history_complete": history_complete,
+        "observer_retracted_external_ids": retracted,
     }
 
 

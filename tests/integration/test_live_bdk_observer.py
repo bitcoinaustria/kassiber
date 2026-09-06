@@ -172,18 +172,20 @@ def _create_book(
         )
 
 
-def _observer_snapshot(root: Path) -> tuple[str, int, int, int]:
+def _observer_snapshot(root: Path, *, native: bool = True) -> tuple[str, int, int, int]:
     conn = open_db(root)
     try:
         state = conn.execute(
             "SELECT state_json FROM chain_observer_instances WHERE observer_kind = 'bdk'"
         ).fetchone()
-        if state is None:
+        if native and state is None:
             raise AssertionError("BDK observer state was not persisted")
+        if not native and state is not None:
+            raise AssertionError("HTTP compatibility route unexpectedly persisted native BDK state")
         tx_count = int(conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0])
         utxo_count = int(conn.execute("SELECT COUNT(*) FROM wallet_utxos WHERE spent_at IS NULL").fetchone()[0])
         coverage_count = int(conn.execute("SELECT COUNT(*) FROM chain_observer_coverage").fetchone()[0])
-        return str(state["state_json"]), tx_count, utxo_count, coverage_count
+        return str(state["state_json"]) if state else "", tx_count, utxo_count, coverage_count
     finally:
         conn.close()
 
@@ -271,18 +273,20 @@ class LiveBdkObserverTest(unittest.TestCase):
                     receive=receive,
                     change=change,
                 )
-                states = {}
                 for kind, root in roots.items():
                     first = _sync(root, "BDK watch")
-                    self.assertEqual(first["observer_route"], "bdk")
-                    state_before, tx_count, utxo_count, coverage_count = _observer_snapshot(root)
+                    native = kind == "electrum"
+                    self.assertEqual(first["observer_route"], "bdk" if native else "compatibility")
+                    if not native:
+                        self.assertEqual(first["observer_compatibility_reason"], "http_route_policy")
+                    state_before, tx_count, utxo_count, coverage_count = _observer_snapshot(root, native=native)
                     self.assertEqual(tx_count, 1, f"{kind}: {first}")
                     self.assertEqual(utxo_count, 1, f"{kind}: {first}")
-                    self.assertEqual(coverage_count, 2)
-                    payload = json.loads(state_before)
-                    self.assertEqual(payload["schema_version"], 1)
-                    self.assertIn("bdk_changeset", payload)
-                    states[kind] = state_before
+                    self.assertEqual(coverage_count, 2 if native else 0)
+                    if native:
+                        payload = json.loads(state_before)
+                        self.assertEqual(payload["schema_version"], 1)
+                        self.assertIn("bdk_changeset", payload)
                 self.assertEqual(
                     _transport_projection(roots["electrum"]),
                     _transport_projection(roots["mempool"]),
@@ -312,8 +316,8 @@ class LiveBdkObserverTest(unittest.TestCase):
                 )
                 for kind, root in roots.items():
                     expanded = _sync(root, "BDK watch")
-                    self.assertEqual(expanded["observer_route"], "bdk")
-                    _state, tx_count, utxo_count, _coverage_count = _observer_snapshot(root)
+                    self.assertEqual(expanded["observer_route"], "bdk" if kind == "electrum" else "compatibility")
+                    _state, tx_count, utxo_count, _coverage_count = _observer_snapshot(root, native=kind == "electrum")
                     self.assertEqual(tx_count, 2)
                     self.assertEqual(utxo_count, 2)
                 self.assertEqual(
@@ -350,7 +354,12 @@ class LiveBdkObserverTest(unittest.TestCase):
                         outcome = _sync(root, "BDK watch")
                     except AssertionError as exc:
                         raise AssertionError(f"{kind} outbound refresh failed: {exc}") from exc
-                    self.assertEqual(outcome["observer_route"], "bdk", kind)
+                    self.assertEqual(outcome["observer_route"], "bdk" if kind == "electrum" else "compatibility", kind)
+                    self.assertNotIn(
+                        "negative_balance_rescan",
+                        outcome,
+                        f"{kind}: a funded mempool spend must not trigger missing-history repair",
+                    )
                 self.assertEqual(
                     _transport_projection(roots["electrum"]),
                     _transport_projection(roots["mempool"]),
@@ -373,7 +382,7 @@ class LiveBdkObserverTest(unittest.TestCase):
                 _wait_for_esplora(esplora_url, replacement_txid, confirmed=False)
                 for kind, root in roots.items():
                     outcome = _sync(root, "BDK watch")
-                    self.assertEqual(outcome["observer_route"], "bdk", kind)
+                    self.assertEqual(outcome["observer_route"], "bdk" if kind == "electrum" else "compatibility", kind)
                 electrum_rows = _transport_projection(roots["electrum"])
                 self.assertEqual(electrum_rows, _transport_projection(roots["mempool"]))
                 self.assertNotIn(spend_txid, {row["external_id"] for row in electrum_rows})
@@ -670,14 +679,16 @@ class LiveBdkObserverTest(unittest.TestCase):
                     _utxo_projection(roots["mempool"]),
                 )
 
-                # New CLI processes load each aggregate through custom
-                # Persistence; immediate no-ops keep exact state JSON.
+                # New CLI processes load native Electrum state through custom
+                # Persistence. Both routes keep their projection on a no-op.
                 for kind, root in roots.items():
-                    state_before = _observer_snapshot(root)[0]
+                    state_before = _observer_snapshot(root, native=kind == "electrum")[0]
+                    projection_before = _transport_projection(root)
                     noop = _sync(root, "BDK watch")
-                    self.assertEqual(noop["observer_route"], "bdk")
-                    state_after, *_ = _observer_snapshot(root)
+                    self.assertEqual(noop["observer_route"], "bdk" if kind == "electrum" else "compatibility")
+                    state_after, *_ = _observer_snapshot(root, native=kind == "electrum")
                     self.assertEqual(state_after, state_before)
+                    self.assertEqual(_transport_projection(root), projection_before)
 
                 base = Path(tmp)
                 banned = list(base.rglob("*.sqlite")) + list(base.rglob("*.db-wal"))

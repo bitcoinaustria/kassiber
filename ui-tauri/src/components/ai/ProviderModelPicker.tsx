@@ -51,7 +51,6 @@ import {
   type AiProviderKind,
   type AiModelsListData,
   type AiProviderRow,
-  type AiProviderRuntimeStatusData,
   type AiProvidersListData,
 } from "@/lib/aiCapabilities";
 import { useUiStore } from "@/store/ui";
@@ -62,8 +61,6 @@ import {
   filterModelRows,
   sortModelRowsByPosture,
   modelPrivacyPosture,
-  providerRuntimeSelectable,
-  providerRuntimeTone,
 } from "./providerModelSearch";
 import { PROVIDER_BRAND_ICON_BY_RUNTIME } from "./providerBrandIcons";
 
@@ -182,30 +179,8 @@ export function ProviderModelPicker({
       value?.provider ?? providersQuery.data.data.default,
     );
   }, [providersQuery.data, value?.provider]);
-  const runtimeQuery = useDaemon<AiProviderRuntimeStatusData>(
-    "ai.provider_runtime.status",
-    { refresh: true },
-    {
-      enabled: false,
-      retry: false,
-      staleTime: Infinity,
-      gcTime: 30 * 60 * 1000,
-    },
-  );
-  const runtimeByProvider = React.useMemo(() => {
-    const rows =
-      runtimeQuery.data?.kind === "ai.provider_runtime.status" &&
-      runtimeQuery.data.data
-        ? runtimeQuery.data.data.providers
-        : [];
-    return new Map(rows.map((row) => [row.provider, row]));
-  }, [runtimeQuery.data]);
-
-  // Resolve the active provider eagerly so the models query fires for the
-  // default provider even before the parent has picked a `value`. Without
-  // this, a freshly-seeded `ollama` row (which has `default_model = null`)
-  // would leave the picker showing only disabled placeholders, blocking
-  // the first chat send.
+  // Resolve the selection from stored configuration. Discovery remains disabled
+  // until the user checks this provider, including loopback and native CLIs.
   const fallbackProvider = React.useMemo(
     () => providers.find((p) => p.is_default) ?? providers[0],
     [providers],
@@ -252,15 +227,10 @@ export function ProviderModelPicker({
         next.set(provider.name, result.data.data.models);
         return;
       }
-      const runtime = runtimeProviderName(provider);
-      if (runtime) {
-        next.set(provider.name, runtimeByProvider.get(runtime)?.models ?? []);
-        return;
-      }
       next.set(provider.name, []);
     });
     return next;
-  }, [providers, modelQueries, runtimeByProvider]);
+  }, [providers, modelQueries]);
   const models = React.useMemo(
     () =>
       selectedProvider
@@ -419,23 +389,9 @@ export function ProviderModelPicker({
     visibleGroups.find(({ provider }) => provider.name === activeProviderName) ??
     visibleGroups[0] ??
     null;
-  const activeRuntimeName = activeGroup
-    ? runtimeProviderName(activeGroup.provider)
-    : null;
-  const activeRuntime = activeRuntimeName
-    ? runtimeByProvider.get(activeRuntimeName)
-    : null;
-  const runtimeSnapshot =
-    runtimeQuery.data?.kind === "ai.provider_runtime.status"
-      ? runtimeQuery.data.data
-      : undefined;
-  const activeDiscovery = activeRuntimeName
-    ? activeGroup
-      ? modelSnapshotsByProvider.get(activeGroup.provider.name) ?? runtimeSnapshot
-      : runtimeSnapshot
-    : activeGroup
-      ? modelSnapshotsByProvider.get(activeGroup.provider.name)
-      : undefined;
+  const activeDiscovery = activeGroup
+    ? modelSnapshotsByProvider.get(activeGroup.provider.name)
+    : undefined;
   const activeModelQuery = activeGroup
     ? modelQueries[
         providers.findIndex((provider) => provider.name === activeGroup.provider.name)
@@ -483,15 +439,9 @@ export function ProviderModelPicker({
       await acknowledgeProvider.mutateAsync({ name: provider.name });
       await providersQuery.refetch();
     }
-    // CLI providers report "not installed" / "authentication required"
-    // through the runtime status, not through the model list. Nothing else
-    // refetches it now that opening the picker doesn't, so without this the
-    // check reports "no models found" for a provider that simply isn't
-    // logged in.
-    await Promise.all([
-      activeModelQuery.refetch(),
-      ...(isCliProvider(provider) ? [runtimeQuery.refetch()] : []),
-    ]);
+    // Native model discovery already probes this provider. Global runtime
+    // status would additionally start every other CLI without authorization.
+    await activeModelQuery.refetch();
   };
 
   React.useEffect(
@@ -541,15 +491,9 @@ export function ProviderModelPicker({
                   (runtimeName
                     ? PROVIDER_BRAND_ICON_BY_RUNTIME[runtimeName]
                     : undefined) ?? KIND_ICON[provider.kind];
-                const runtime = runtimeName
-                  ? runtimeByProvider.get(runtimeName)
-                  : null;
-                const discoveryStale = runtimeName
-                  ? runtimeSnapshot?.stale
-                  : modelSnapshotsByProvider.get(provider.name)?.stale;
-                const runtimeTone = discoveryStale
-                  ? "attention"
-                  : providerRuntimeTone(runtime);
+                const discoveryStale = modelSnapshotsByProvider.get(
+                  provider.name,
+                )?.stale;
                 return (
                   <button
                     key={provider.name}
@@ -562,27 +506,20 @@ export function ProviderModelPicker({
                       "relative flex aspect-square w-full items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
                       active && "bg-background text-foreground shadow-sm",
                     )}
-                    aria-label={`${providerDisplayName(provider)}${
-                      runtime ? ` · ${runtime.message}` : ""
-                    }`}
+                    aria-label={providerDisplayName(provider)}
                     title={`${providerDisplayName(provider)} · ${
-                      runtime?.message ?? KIND_BADGE_LABEL[provider.kind]
+                      KIND_BADGE_LABEL[provider.kind]
                     }`}
                   >
                     <Icon className="size-5" aria-hidden="true" />
                     <span
                       className={cn(
                         "absolute right-1 top-1 size-1.5 rounded-full",
-                        runtimeTone === "ready" && "bg-emerald-500",
-                        runtimeTone === "attention" && "bg-amber-500",
-                        runtimeTone === "unavailable" && "bg-destructive",
-                        !runtime &&
-                          provider.kind === "local" &&
-                          "bg-emerald-500",
-                        !runtime &&
-                          provider.kind === "remote" &&
-                          "bg-amber-500",
-                        !runtime && provider.kind === "tee" && "bg-sky-500",
+                        discoveryStale || provider.kind === "remote"
+                          ? "bg-amber-500"
+                          : provider.kind === "local"
+                            ? "bg-emerald-500"
+                            : "bg-sky-500",
                       )}
                       aria-hidden="true"
                     />
@@ -603,11 +540,15 @@ export function ProviderModelPicker({
                     {activeGroup ? (
                       <p className="truncate text-xs text-muted-foreground">
                         {isCliProvider(activeGroup.provider)
-                          ? activeRuntime?.message ??
-                            (runtimeQuery.isFetching
+                          ? activeModelQuery?.isFetching
                               ? t("modelPicker.checkingProvider")
-                              : t("modelPicker.cliChatOnly"))
+                              : t("modelPicker.cliChatOnly")
                           : activeGroup.provider.base_url}
+                      </p>
+                    ) : null}
+                    {activeModelQuery?.error instanceof Error ? (
+                      <p role="status" className="text-xs text-destructive">
+                        {activeModelQuery.error.message}
                       </p>
                     ) : null}
                     {activeDiscovery?.stale ? (
@@ -697,9 +638,7 @@ export function ProviderModelPicker({
                   </p>
                 ) : filteredModels.length === 0 ? (
                   <p className="p-3 text-sm text-muted-foreground">
-                    {activeRuntime && activeRuntime.state !== "ready"
-                      ? activeRuntime.message
-                      : activeModelQuery?.isFetching
+                    {activeModelQuery?.isFetching
                         ? t("modelPicker.checkingModels")
                         : activeModelQuery?.error instanceof Error
                           ? activeModelQuery.error.message
@@ -720,10 +659,7 @@ export function ProviderModelPicker({
                       <button
                         key={model.id}
                         type="button"
-                        disabled={
-                          acknowledgeProvider.isPending ||
-                          Boolean(!providerRuntimeSelectable(activeRuntime))
-                        }
+                        disabled={acknowledgeProvider.isPending}
                         onClick={() =>
                           void selectModel(activeGroup.provider, model.id)
                         }

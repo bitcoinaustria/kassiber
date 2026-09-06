@@ -17,12 +17,16 @@ Pin the contract the adapter exposes to ``resolve_adapter("lnd")``:
 from __future__ import annotations
 
 import json
+import io
 import tempfile
 import unittest
+from email.message import Message
 from pathlib import Path
 from typing import Any, Mapping
 from unittest.mock import patch
+from urllib import request as urlrequest, response as urlresponse
 
+from kassiber import proxy
 from kassiber.backends import get_db_backend
 from kassiber.core import accounts as core_accounts
 from kassiber.core import wallets as core_wallets
@@ -36,6 +40,7 @@ from kassiber.core.lightning import (
 from kassiber.core.lightning import lnd as core_lnd
 from kassiber.core.repo import fetch_wallet_with_account
 from kassiber.db import open_db
+from kassiber.errors import AppError
 
 
 CANNED_GETINFO = {
@@ -515,6 +520,98 @@ class LndAdapterFetchSnapshotTest(unittest.TestCase):
         self.assertEqual(cleaned["r_hash"], "INVOICE_R_HASH")
         self.assertEqual(cleaned["value_msat"], "3000000")
         self.assertEqual(cleaned["memo"], "Consulting invoice")
+
+
+class LndRestTransportTest(unittest.TestCase):
+    def test_client_construction_does_not_probe_the_configured_node(self):
+        with (
+            patch("socket.getaddrinfo", side_effect=AssertionError("unexpected DNS")) as dns,
+            patch("socket.socket.connect", side_effect=AssertionError("unexpected connection")) as connect,
+            patch.object(core_lnd, "urlopen_with_proxy", side_effect=AssertionError("unexpected request")) as http,
+        ):
+            core_lnd.LndRestClient({"url": "http://127.0.0.1:8080", "token": "00aa"})
+        dns.assert_not_called()
+        connect.assert_not_called()
+        http.assert_not_called()
+
+    def test_request_uses_explicit_backend_proxy_and_tls_context(self):
+        backend = {"url": "https://node.example", "token": "00aa", "tor_proxy": "socks5h://127.0.0.1:9050", "insecure": True}
+        client = core_lnd.LndRestClient(backend)
+        with patch.object(core_lnd, "urlopen_with_proxy", return_value=io.BytesIO(b'{"ok":true}')) as http:
+            self.assertEqual(client.get("/v1/getinfo", params={"field": "value"}), {"ok": True})
+        request = http.call_args.args[0]
+        self.assertEqual(request.full_url, "https://node.example/v1/getinfo?field=value")
+        self.assertEqual(request.get_header("Grpc-metadata-macaroon"), "00aa")
+        self.assertEqual(http.call_args.kwargs["proxy_url"], backend["tor_proxy"])
+        self.assertIs(http.call_args.kwargs["ssl_context"], client.context)
+        self.assertFalse(http.call_args.kwargs["follow_redirects"])
+
+    def test_direct_request_ignores_ambient_proxy_and_records_one_egress_event(self):
+        calls = []
+        class FakeHTTPHandler(urlrequest.HTTPHandler):
+            def http_open(self, request):
+                calls.append((request.full_url, request.host, request.has_proxy()))
+                response = urlresponse.addinfourl(io.BytesIO(b'{"synced_to_chain":true}'), {}, request.full_url, 200)
+                response.msg = "OK"
+                return response
+        original = urlrequest.build_opener
+        with (
+            patch.object(proxy.urlrequest, "getproxies", return_value={"http": "http://unapproved.example:3128"}),
+            patch.object(proxy.urlrequest, "build_opener", side_effect=lambda *handlers: original(FakeHTTPHandler(), *handlers)),
+            patch.object(proxy, "get_egress_ledger") as ledger,
+            patch("socket.getaddrinfo", side_effect=AssertionError("unexpected DNS")),
+            patch("socket.socket.connect", side_effect=AssertionError("unexpected socket")),
+        ):
+            client = core_lnd.LndRestClient({"url": "http://node.example", "token": "00aa"})
+            self.assertEqual(client.get("/v1/getinfo"), {"synced_to_chain": True})
+        self.assertEqual(calls, [("http://node.example/v1/getinfo", "node.example", False)])
+        ledger.return_value.record_url.assert_called_once()
+        self.assertEqual(ledger.return_value.record_url.call_args.args, ("http://node.example/v1/getinfo",))
+        self.assertFalse(ledger.return_value.record_url.call_args.kwargs["via_proxy"])
+
+    def test_redirect_does_not_forward_macaroon_or_follow_second_host(self):
+        for status in (301, 302, 303, 307, 308):
+            with self.subTest(status=status):
+                calls, streams = [], []
+                class FakeHTTPHandler(urlrequest.HTTPHandler):
+                    def http_open(self, request):
+                        calls.append((request.full_url, request.get_header("Grpc-metadata-macaroon")))
+                        headers = Message()
+                        if len(calls) == 1:
+                            headers["Location"] = "http://second.example/stolen"
+                        body = io.BytesIO(b"{}")
+                        streams.append(body)
+                        response = urlresponse.addinfourl(body, headers, request.full_url, status if len(calls) == 1 else 200)
+                        response.msg = "Found"
+                        return response
+                original = urlrequest.build_opener
+                with (
+                    patch.object(proxy.urlrequest, "build_opener", side_effect=lambda *handlers: original(FakeHTTPHandler(), *handlers)),
+                    patch("socket.getaddrinfo", side_effect=AssertionError("unexpected DNS")),
+                    patch("socket.socket.connect", side_effect=AssertionError("unexpected socket")),
+                ):
+                    client = core_lnd.LndRestClient({"url": "http://first.example", "token": "00aa"})
+                    with self.assertRaises(AppError) as caught:
+                        client.get("/v1/getinfo")
+                self.assertEqual(caught.exception.code, "backend_error")
+                self.assertEqual(calls, [("http://first.example/v1/getinfo", "00aa")])
+                self.assertTrue(all(stream.closed for stream in streams))
+                # Ensure the fake would expose the prior vulnerable behavior.
+                calls.clear()
+                request = urlrequest.Request("http://first.example/v1/getinfo", headers={"Grpc-Metadata-macaroon": "00aa"})
+                with original(urlrequest.ProxyHandler({}), FakeHTTPHandler()).open(request) as response:
+                    self.assertEqual(response.status, 200)
+                self.assertEqual(calls[-1], ("http://second.example/stolen", "00aa"))
+
+    def test_socks_redirect_body_is_not_accepted_as_node_state(self):
+        response = io.BytesIO(b'{"synced_to_chain":true}')
+        response.status = 302
+        client = core_lnd.LndRestClient({"url": "http://node.example", "token": "00aa", "tor_proxy": "socks5h://127.0.0.1:9050"})
+        with patch.object(core_lnd, "urlopen_with_proxy", return_value=response):
+            with self.assertRaises(AppError) as caught:
+                client.get("/v1/getinfo")
+        self.assertEqual(caught.exception.code, "backend_error")
+        self.assertTrue(response.closed)
 
 
 class LndAdapterSslContextTest(unittest.TestCase):

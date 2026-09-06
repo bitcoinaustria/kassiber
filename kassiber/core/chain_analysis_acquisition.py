@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections import deque
 from contextlib import nullcontext
 import json
+import os
 import re
 import time
 from urllib import error as urlerror, request as urlrequest, parse as urlparse
@@ -57,7 +58,7 @@ def _routing_identity(backend):
     return [endpoint(backend.get("url"), path=True), endpoint(transport._backend_proxy_url(backend)), transport.backend_value(backend, "certificate"), transport.backend_value(backend, "insecure"), backend_timeout(backend)]
 
 
-def plan_acquisition(conn, profile_id, args):
+def _prepare_acquisition(conn, profile_id, args):
     arguments(args, ("backend", "subject", "chain", "network", "direction", "depth", "max_transactions", "genesis_hash"), ("backend", "subject", "chain", "network", "direction"))
     validate_domain(args["chain"], args["network"])
     value = {**args, "backend": text_value(args["backend"], "backend", 128).lower(), "subject": text_value(args["subject"], "subject", 256), "depth": args.get("depth", 3), "max_transactions": args.get("max_transactions", 50)}
@@ -103,7 +104,12 @@ def plan_acquisition(conn, profile_id, args):
     # secrets. Backend CRUD maintains updated_at; bind every safe plan field.
     revision = conn.execute("SELECT updated_at FROM backends WHERE name=?", (backend["name"],)).fetchone()[0]
     result["plan_id"] = digest([profile_id, result, revision, seeds, _routing_identity(backend)])
-    return result
+    return result, backend, seeds
+
+
+def plan_acquisition(conn, profile_id, args):
+    plan, _backend, _seeds = _prepare_acquisition(conn, profile_id, args)
+    return plan
 
 
 class _Budget:
@@ -113,6 +119,14 @@ class _Budget:
         self.deadline = time.monotonic() + seconds
 
     def request(self):
+        # This boundary covers HTTP requests and the initial Electrum handshake,
+        # before either transport resolves or connects to even a loopback host.
+        if str(os.environ.get("KASSIBER_NO_EGRESS") or "").strip().lower() in {"1", "true", "yes", "on"}:
+            raise AppError(
+                "Outbound chain acquisition is disabled by KASSIBER_NO_EGRESS",
+                code="network_egress_disabled",
+                retryable=False,
+            )
         if self.count >= self.maximum or self.bytes_read >= MAX_TOTAL_BYTES or time.monotonic() >= self.deadline:
             invalid("Acquisition budget reached", "acquisition_budget")
         self.count += 1
@@ -335,17 +349,14 @@ def apply_acquisition(conn, profile_id, args):
     supplied = args["plan"]
     if not isinstance(supplied, dict) or not isinstance(supplied.get("args"), dict):
         invalid("An acquisition plan is required")
-    expected = plan_acquisition(conn, profile_id, supplied["args"])
+    expected, backend, seeds = _prepare_acquisition(conn, profile_id, supplied["args"])
     if canonical(expected) != canonical(supplied):
         invalid("Acquisition plan changed; review a new plan before fetching", "chain_analysis_stale")
     value, safe_backend = expected["args"], expected["backend"]
-    backend = get_db_backend(conn, safe_backend["name"])
+    # Use the exact backend and seed snapshots bound to the recomputed plan.
+    # Re-reading could use a concurrently changed endpoint or new wallet txids.
     backend["timeout"] = min(8, backend_timeout(backend))
     budget = _Budget(expected["effects"]["max_requests"])
-    index = build_index(conn, profile_id)
-    subject = value["subject"].lower()
-    bare = subject.split(":tx:", 1)[-1].split(":out:", 1)[-1].split(":", 1)[0]
-    seeds = [bare] if _txid(bare) else sorted({index.nodes[node]["txid"] for node in resolve_subject(index, value["subject"], value) if _txid(index.nodes[node].get("txid"))})
     queue, seen, observations, frontier = deque((seed, 0) for seed in seeds), set(), {}, []
     spend_claims = {}
     def stop(txid, reason):

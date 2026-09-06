@@ -69,9 +69,9 @@ carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
 
 ## Highlights
 
-- **Dependency-backed chain sync** — BDK-backed Bitcoin Esplora/Electrum and
-  LWK-backed Liquid Esplora/Electrum descriptor observation, explicit Bitcoin
-  Core RPC and Silent Payments paths, BTCPay Greenfield, plus watch-only UTXO
+- **Watch-only chain sync** — BDK-backed Bitcoin and LWK-backed Liquid Electrum
+  descriptor observation, Esplora through Kassiber's controlled HTTP transport,
+  explicit Bitcoin Core RPC and Silent Payments paths, BTCPay Greenfield, plus watch-only UTXO
   inventory. Observer state stays inside the project SQLCipher database and a
   refresh commits chain state and accounting projections atomically.
 - **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, Coinfinity,
@@ -410,11 +410,13 @@ from default cookie paths or `bitcoin.conf`; it reports wallet-RPC and BIP158
 filter-index availability, but Kassiber's current Core sync path is still
 watch-only descriptor import, not filter-first P2P sync.
 
-Supported Esplora/Electrum descriptor wallets use the pinned BDK/LWK observers.
+Supported Electrum descriptor wallets use the pinned BDK/LWK observers.
+Esplora uses the existing compatibility observer with `http_route_policy`
+because the SDK bindings cannot disable redirects or enforce the explicit
+proxy route. More specific configuration reasons retain precedence.
 Private spending descriptors are rejected before any connection; Liquid view
-or blinding material may be accepted but remains sensitive. BDK/LWK are the
-default indexer-backed descriptor observers, while Bitcoin address scripts,
-Bitcoin Core RPC and Silent Payments remain first-class specialized routes.
+or blinding material may be accepted but remains sensitive. Bitcoin address
+scripts, Bitcoin Core RPC and Silent Payments remain first-class specialized routes.
 Unsupported transport capabilities fail before egress or select an explicitly
 named protocol route; dependency failures never trigger runtime fallback. See the complete
 [chain-observer capability matrix](docs/reference/chain-observers.md).

@@ -135,6 +135,11 @@ def bdk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str
                 return "custom_timeout"
         except (TypeError, ValueError):
             return "custom_timeout"
+    if kind == "esplora":
+        # BDK 3.0's HTTP binding follows redirects and exposes no redirect or
+        # ambient-proxy policy. Only the named Python transport can preserve
+        # the endpoint and route that the user authorized.
+        return "http_route_policy"
     return None
 
 
@@ -240,6 +245,13 @@ class BdkObserver:
                 code="network_egress_disabled",
                 retryable=False,
             )
+        if self.backend_kind == "esplora":
+            raise AppError(
+                "BDK cannot enforce the configured HTTP endpoint and proxy policy",
+                code="observer_capability_unsupported",
+                details={"capability": "http_route_policy", "observer": "bdk"},
+                retryable=False,
+            )
         host, port, scheme = endpoint_from_url(endpoint)
         get_egress_ledger().record(
             subsystem="sync",
@@ -249,8 +261,6 @@ class BdkObserver:
             operation=f"bdk.{self.backend_kind}.connect",
             via_proxy=False,
         )
-        if self.backend_kind == "esplora":
-            return bdk.EsploraClient(endpoint, proxy=None)
         if self.backend_kind == "electrum":
             return bdk.ElectrumClient(
                 endpoint,

@@ -19,8 +19,8 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
-| `bdkpython` | `3.0.0` (exact) | Watch-only Bitcoin wallet observation through BDK's Esplora and Electrum clients; state is persisted as explicit versioned JSON inside Kassiber's SQLCipher database | MIT OR Apache-2.0 |
-| `lwk` | `0.18.0` (exact) | Watch-only Liquid wallet observation through LWK's Esplora and Electrum clients; opaque `ForeignStore` values live only inside Kassiber's SQLCipher database | MIT (BSD-MIT wording) |
+| `bdkpython` | `3.0.0` (exact) | Watch-only Bitcoin wallet observation through BDK's Electrum client; state is persisted as explicit versioned JSON inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT OR Apache-2.0 |
+| `lwk` | `0.18.0` (exact) | Watch-only Liquid wallet observation through LWK's Electrum client; opaque `ForeignStore` values live only inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT (BSD-MIT wording) |
 | `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@3d2e03ef27696fbd00f4516a0cb745300083e227` | Existing tax engine, retaining RP2-owned lot basis, Austrian moving-average and swap-carry fixes instead of duplicating tax calculations locally | Apache-2.0 |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential outputs, PSBT transaction/UTXO parsing and supported Payjoin receiver signature commitments | MIT |
 | `XlsxWriter` | `>=3.2,<4` | Styled `.xlsx` workbook export for practitioner-facing reports and the generic-ledger import template | BSD-2-Clause |

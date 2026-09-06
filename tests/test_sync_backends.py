@@ -1,4 +1,5 @@
 import io
+import itertools
 import json
 import random
 import sqlite3
@@ -54,8 +55,9 @@ from kassiber.core.chain_observer.provenance import (
 from kassiber.core.imports import ImportCoordinatorHooks
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from kassiber.msat import btc_to_msat, msat_to_btc
 from kassiber.proxy import _connect_via_socks5, _read_exact, _socks5_address
-from kassiber.time_utils import iso_to_unix, now_iso, timestamp_to_iso
+from kassiber.time_utils import UNKNOWN_OCCURRED_AT, iso_to_unix, now_iso, timestamp_to_iso
 from kassiber.wallet_descriptors import (
     DEFAULT_DESCRIPTOR_GAP_LIMIT,
     DescriptorBranch,
@@ -89,6 +91,320 @@ def _bitcoinrpc_address_attestation(address="bc1qcore", birthday_ts=0):
         birthday_ts,
         sb.bitcoinrpc_history_target_fingerprint(addresses=[address]),
     )
+
+
+class NegativeBalanceRescanOrderingTest(unittest.TestCase):
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("""CREATE TABLE transactions (
+            id TEXT PRIMARY KEY, profile_id TEXT, wallet_id TEXT, external_id TEXT,
+            occurred_at TEXT, confirmed_at TEXT, raw_json TEXT, direction TEXT, asset TEXT, amount INTEGER,
+            fee INTEGER, excluded INTEGER DEFAULT 0, created_at TEXT
+        )""")
+        self.profile, self.wallet = {"id": "profile"}, {"id": "wallet", "config_json": "{}"}
+
+    def tearDown(self):
+        self.conn.close()
+
+    @staticmethod
+    def row(name, direction, amount, *, fee=0, when=UNKNOWN_OCCURRED_AT, asset="BTC"):
+        return {"id": name, "external_id": name, "occurred_at": when,
+                "direction": direction, "asset": asset, "amount": amount,
+                "fee": fee, "created_at": "2026-09-01T00:00:00Z"}
+
+    def store(self, rows):
+        for row in rows:
+            self.conn.execute("""INSERT INTO transactions(
+                id, profile_id, wallet_id, external_id, occurred_at, direction,
+                asset, amount, fee, created_at, confirmed_at, raw_json
+            ) VALUES(?,'profile','wallet',?,?,?,?,?,?,?,?,?)""", (
+                row["id"], row["external_id"], row["occurred_at"], row["direction"],
+                row["asset"], row["amount"], row["fee"], row["created_at"],
+                row.get("confirmed_at"), row.get("raw_json"),
+            ))
+
+    def fetch(self, records, *, meta=None):
+        return WalletBackendFetch(
+            backend={"name": "node", "kind": "esplora"},
+            sync_state=SimpleNamespace(descriptor_plan=SimpleNamespace(gap_limit=20)),
+            normalized_records=records, adapter_meta=meta or {}, kind="esplora",
+            started=0, force_full=False,
+        )
+
+    def both_callers(self, rows):
+        self.conn.execute("DELETE FROM transactions")
+        self.store(rows)
+        persisted = core_sync._wallet_negative_balance_events(self.conn, "profile", "wallet")
+        # The final row is newly fetched, exercising the actual prospective
+        # normalization and merge instead of calling the pure helper twice.
+        incoming = rows[-1]
+        self.conn.execute("DELETE FROM transactions WHERE id=?", (incoming["id"],))
+        record = {**incoming, "amount": msat_to_btc(incoming["amount"]), "fee": msat_to_btc(incoming["fee"])}
+        prospective = cli_handlers._prospective_negative_balance_events(
+            self.conn, self.profile, self.wallet, self.fetch([record]),
+        )
+        return persisted, prospective
+
+    def test_funded_unknown_time_spend_does_not_precede_dated_receipt(self):
+        rows = [self.row("funding", "inbound", 100, when="2026-01-01T00:00:00Z"), self.row("pending", "outbound", 99, fee=1)]
+        for order in itertools.permutations(rows):
+            for result in self.both_callers(order):
+                self.assertEqual(result, [])
+        self.assertEqual(rows[1]["occurred_at"], UNKNOWN_OCCURRED_AT)
+
+    def test_unknown_family_is_aggregated_without_import_order_or_fake_attribution(self):
+        rows = [self.row("parent", "inbound", 100), self.row("child", "outbound", 60, fee=1), self.row("grandchild", "outbound", 38, fee=1)]
+        for order in itertools.permutations(rows):
+            for result in self.both_callers(order):
+                self.assertEqual(result, [])
+        rows[-1]["fee"] = 2
+        for order in itertools.permutations(rows):
+            for result in self.both_callers(order):
+                self.assertEqual(result, [{"asset": "BTC", "transaction_id": None,
+                    "external_id": None, "occurred_at": None, "delta_msat": -1,
+                    "running_balance_msat": -1}])
+
+    def test_unknown_inflow_is_only_an_upper_bound_for_dated_inventory(self):
+        rows = [self.row("earlier-spend", "outbound", 100, when="2026-01-01T00:00:00Z"), self.row("possible-funding", "inbound", 100)]
+        for result in self.both_callers(rows):
+            self.assertEqual(result, [])
+        rows[0]["fee"] = 1
+        for result in self.both_callers(rows):
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0]["external_id"], "earlier-spend")
+            self.assertEqual(result[0]["occurred_at"], "2026-01-01T00:00:00Z")
+            self.assertEqual(result[0]["running_balance_msat"], -1)
+
+    def test_bdk_first_seen_before_confirmed_parent_is_unordered_in_both_callers(self):
+        script = "0014" + "11" * 20
+        funding = record_from_bitcoin_esplora_tx({
+            "txid": "22" * 32, "vin": [], "vout": [{"scriptpubkey": script, "value": 100}],
+            "fee": 0, "status": {"confirmed": True, "block_time": 1700000060}, "observer": "bdk",
+        }, {script}, "node")
+        spend = record_from_bitcoin_esplora_tx({
+            "txid": "33" * 32,
+            "vin": [{"txid": "22" * 32, "vout": 0, "prevout": {"scriptpubkey": script, "value": 100}}],
+            "vout": [{"scriptpubkey": "0014" + "44" * 20, "value": 99}],
+            "fee": 1, "status": {"confirmed": False}, "observed_at": 1700000000, "observer": "bdk",
+        }, {script}, "node")
+        self.assertLess(spend["occurred_at"], funding["occurred_at"])
+        rows = [{**self.row(record["txid"], record["direction"], btc_to_msat(record["amount"]),
+                           fee=btc_to_msat(record["fee"]), when=record["occurred_at"]),
+                 "confirmed_at": record["confirmed_at"], "raw_json": record["raw_json"]}
+                for record in (funding, spend)]
+        original_times = [(row["occurred_at"], row["confirmed_at"]) for row in rows]
+        for order in itertools.permutations(rows):
+            for result in self.both_callers(order):
+                self.assertEqual(result, [])
+        self.assertEqual([(row["occurred_at"], row["confirmed_at"]) for row in rows], original_times)
+        rows[0]["amount"] -= 1000
+        for result in self.both_callers(rows):
+            self.assertEqual(result, [{"asset": "BTC", "transaction_id": None, "external_id": None,
+                                      "occurred_at": None, "delta_msat": -100000, "running_balance_msat": -1000}])
+
+    def test_missing_confirmation_does_not_erase_dated_manual_shortage(self):
+        for raw in (None, "{}", "invalid-json", json.dumps({"txid": "11" * 32, "status": {"confirmed": "false"}})):
+            rows = [{**self.row("manual-spend", "outbound", 100, when="2026-01-01T00:00:00Z"),
+                     "confirmed_at": None, "raw_json": raw},
+                    self.row("later-funding", "inbound", 100, when="2026-01-02T00:00:00Z")]
+            for result in self.both_callers(rows):
+                self.assertEqual(result[0]["external_id"], "manual-spend")
+                self.assertEqual(result[0]["occurred_at"], "2026-01-01T00:00:00Z")
+                self.assertEqual(result[0]["running_balance_msat"], -100)
+
+    def test_same_block_movements_do_not_inherit_import_or_lexical_order(self):
+        when = "2026-01-01T00:00:00Z"
+        funding = self.row("z-funding", "inbound", 100, when=when)
+        spend = self.row("a-spend", "outbound", 99, fee=1, when=when)
+        for created in ("2025-01-01T00:00:00Z", "2027-01-01T00:00:00Z"):
+            spend["created_at"] = created
+            for order in itertools.permutations([funding, spend]):
+                for result in self.both_callers(order):
+                    self.assertEqual(result, [])
+
+    def test_same_time_group_total_deficit_is_detected_without_fake_tx_attribution(self):
+        when = "2026-01-01T00:00:00Z"
+        rows = [self.row("funding", "inbound", 100, when=when),
+                self.row("spend-one", "outbound", 60, fee=1, when=when),
+                self.row("spend-two", "outbound", 39, fee=1, when=when)]
+        expected = [{"asset": "BTC", "transaction_id": None, "external_id": None,
+                     "occurred_at": when, "delta_msat": -1, "running_balance_msat": -1}]
+        for order in itertools.permutations(rows):
+            for result in self.both_callers(order):
+                self.assertEqual(result, expected)
+
+    def test_same_time_groups_keep_assets_separate(self):
+        when = "2026-01-01T00:00:00Z"
+        rows = [self.row("btc-funding", "inbound", 100, when=when),
+                self.row("liquid-spend", "outbound", 100, when=when, asset="LBTC")]
+        for result in self.both_callers(rows):
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0]["asset"], "LBTC")
+            self.assertEqual(result[0]["running_balance_msat"], -100)
+
+    def test_later_dated_receipt_does_not_hide_genuine_historical_deficit(self):
+        rows = [self.row("spend", "outbound", 110, when="2026-01-01T00:00:00Z"),
+                self.row("later-receipt", "inbound", 200, when="2026-01-02T00:00:00Z"),
+                self.row("undated-funding", "inbound", 100)]
+        for result in self.both_callers(rows):
+            self.assertEqual(result[0]["external_id"], "spend")
+            self.assertEqual(result[0]["occurred_at"], "2026-01-01T00:00:00Z")
+            self.assertEqual(result[0]["running_balance_msat"], -10)
+
+    def test_known_funding_does_not_hide_unknown_total_deficit_or_cross_assets(self):
+        rows = [self.row("funding", "inbound", 100, when="2026-01-01T00:00:00Z"),
+                self.row("other-asset", "inbound", 1000, asset="LBTC"),
+                self.row("pending", "outbound", 100, fee=1)]
+        for result in self.both_callers(rows):
+            self.assertEqual(result, [{"asset": "BTC", "transaction_id": None,
+                "external_id": None, "occurred_at": None, "delta_msat": -101,
+                "running_balance_msat": -1}])
+
+    def test_real_esplora_mempool_record_does_not_trigger_widened_fetch(self):
+        script = "0014" + "11" * 20
+        record = record_from_bitcoin_esplora_tx({
+            "txid": "22" * 32, "status": {"confirmed": False}, "fee": 100,
+            "vin": [{"txid": "11" * 32, "vout": 0, "prevout": {"scriptpubkey": script, "value": 10000}}],
+            "vout": [{"scriptpubkey": "0014" + "33" * 20, "value": 9000}, {"scriptpubkey": script, "value": 900}],
+        }, {script: {"script_pubkey": script}}, "node")
+        self.assertEqual(record["occurred_at"], UNKNOWN_OCCURRED_AT)
+        self.store([self.row("funding", "inbound", 10_000_000, when="2026-01-01T00:00:00Z")])
+        fetched = self.fetch([record])
+        with patch.object(core_sync, "fetch_wallet_backend", side_effect=AssertionError("unjustified widened network scan")) as wider:
+            prepared = cli_handlers._prepare_negative_balance_repairs(
+                self.conn, {}, self.profile, [self.wallet], None, {"wallet": fetched},
+            )
+        wider.assert_not_called()
+        self.assertIs(prepared["wallet"], fetched)
+        self.store([self.row("pending", "outbound", btc_to_msat(record["amount"]), fee=btc_to_msat(record["fee"]))])
+        self.assertEqual(core_sync._wallet_negative_balance_events(self.conn, "profile", "wallet"), [])
+        self.assertEqual(self.conn.execute("SELECT occurred_at FROM transactions WHERE id='pending'").fetchone()[0], UNKNOWN_OCCURRED_AT)
+
+    def test_prospective_compatibility_retraction_removes_old_spend_before_checking(self):
+        self.store([self.row("funding", "inbound", 100, when="2026-01-01T00:00:00Z"), self.row("replaced", "outbound", 100)])
+        replacement = {**self.row("replacement", "outbound", 100), "amount": msat_to_btc(100), "fee": "0"}
+        result = cli_handlers._prospective_negative_balance_events(
+            self.conn, self.profile, self.wallet,
+            self.fetch([replacement], meta={"observer_retracted_external_ids": ["replaced"]}),
+        )
+        self.assertEqual(result, [])
+
+    def test_widened_prefetch_keeps_unapplied_prior_membership_not_next_snapshot(self):
+        prior = {"version": 1, "backend_key": "11" * 32, "scripts": {"22" * 32: {
+            "txids": ["33" * 32], "complete": True,
+        }}}
+        fetch = self.fetch([{"txid": "44" * 32, "occurred_at": UNKNOWN_OCCURRED_AT,
+                            "direction": "outbound", "asset": "BTC", "amount": "0.00001", "fee": "0"}])
+        fetch.sync_state.checkpoint = {"esplora_history_memberships": prior, "highest_used": {"0": 10}}
+        fetch.adapter_meta["freshness_checkpoint"] = {"esplora_history_memberships": {
+            **prior, "scripts": {},
+        }}
+        with patch.object(core_sync, "fetch_wallet_backend", return_value=fetch) as widened:
+            cli_handlers._prepare_negative_balance_repairs(
+                self.conn, {}, self.profile, [self.wallet], SimpleNamespace(), {"wallet": fetch},
+            )
+        self.assertEqual(widened.call_args.kwargs["checkpoint"], {"esplora_history_memberships": prior})
+        self.assertTrue(widened.call_args.kwargs["force_full"])
+
+
+class ForcedEsploraMembershipTest(unittest.TestCase):
+    def setUp(self):
+        self.fixture = EsploraHistoryRetractionTest()
+        self.wallet = {"id": "wallet", "kind": "address", "label": "Watch",
+                       "config_json": json.dumps({"backend": "node", "addresses": ["watched"]})}
+        self.profile = {"id": "profile"}
+        self.stored = {}
+        self.histories = {1: []}
+        self.checkpoints_seen = []
+        self.history_reads = []
+        target = self.fixture.target(1)
+
+        def adapter(_backend, _wallet, state):
+            self.checkpoints_seen.append(state.checkpoint)
+            records, meta, reads = self.fixture.scan(self.histories, checkpoint=state.checkpoint)
+            self.history_reads.append(reads)
+            return records, meta
+
+        def insert(_conn, _profile, _wallet, records, _source, **_kwargs):
+            self.stored.update({record["txid"]: record for record in records})
+            return {"imported": len(records), "skipped": 0}
+
+        def retract(_conn, _profile, _wallet, txids, _source):
+            for txid in txids:
+                self.stored.pop(txid, None)
+            return {"retracted": len(txids)}
+
+        self.hooks = WalletSyncHooks(
+            import_file=lambda *_args, **_kwargs: {}, insert_records=insert, retract_records=retract,
+            resolve_backend=lambda *_args: {"name": "node", "kind": "esplora", "url": "https://node.example"},
+            resolve_sync_state=lambda _backend, wallet: WalletSyncState(
+                chain="bitcoin", network="main", descriptor_plan=None, policy_asset_id="BTC",
+                targets=[target], tracked_scripts={target["script_pubkey"]: target}, history_cache={},
+                checkpoint=wallet.get("_freshness_checkpoint"),
+            ),
+            normalize_addresses=lambda values: list(values or []), backend_adapters={"esplora": adapter},
+        )
+
+    def refresh(self, *, checkpoint=None, full=False, prefetch=False):
+        checkpoints = {"wallet": checkpoint} if checkpoint is not None else {}
+        fetched = core_sync.prefetch_wallets_backend(
+            {}, self.profile, [self.wallet], self.hooks, checkpoints=checkpoints, force_full=full,
+        ) if prefetch else None
+        # This fixture replaces storage with the dictionary above; SQL-backed
+        # provenance/retraction integrity is exercised in the observer tests.
+        with patch.object(core_sync, "persist_chain_observation_provenance"):
+            return core_sync.sync_wallets(
+                None, {}, self.profile, [self.wallet], self.hooks,
+                checkpoints=checkpoints, force_full=full, prefetched=fetched,
+            )[0]
+
+    def test_full_refresh_retracts_rbf_then_incremental_drop_direct_and_prefetched(self):
+        for prefetch in (False, True):
+            with self.subTest(prefetch=prefetch):
+                self.stored.clear()
+                old, replacement = self.fixture.transaction(1), self.fixture.transaction(2)
+                self.histories = {1: [old]}
+                initial = self.refresh()
+                self.assertEqual(set(self.stored), {old["txid"]})
+                self.histories = {1: [replacement]}
+                forced = self.refresh(checkpoint=initial["freshness_checkpoint"], full=True, prefetch=prefetch)
+                self.assertEqual(set(self.stored), {replacement["txid"]})
+                self.assertEqual(forced["retracted"], 1)
+                self.assertEqual(set(self.checkpoints_seen[-1]), {"esplora_history_memberships"})
+                self.histories = {1: []}
+                following = self.refresh(checkpoint=forced["freshness_checkpoint"], prefetch=prefetch)
+                self.assertEqual(self.stored, {})
+                self.assertEqual(following["retracted"], 1)
+
+    def test_full_refresh_bypasses_unchanged_stats_and_keeps_partial_candidates(self):
+        old = self.fixture.transaction(1, confirmed=True)
+        self.histories = {1: [old]}
+        initial = self.refresh()
+        unchanged = self.refresh(checkpoint=initial["freshness_checkpoint"])
+        self.assertEqual(self.history_reads[-1], 0)
+        forced = self.refresh(checkpoint=unchanged["freshness_checkpoint"], full=True, prefetch=True)
+        self.assertEqual(self.history_reads[-1], 1)
+        self.assertEqual(forced["scripts_unchanged"], 0)
+        for entry in forced["freshness_checkpoint"]["esplora_history_memberships"]["scripts"].values():
+            entry["complete"] = False
+        self.histories = {1: []}
+        self.assertEqual(self.refresh(checkpoint=forced["freshness_checkpoint"], full=True)["retracted"], 1)
+        self.assertEqual(self.stored, {})
+
+    def test_full_checkpoint_drops_unknown_versions_and_copies_only_membership(self):
+        membership = {"version": 1, "backend_key": "11" * 32, "scripts": {"22" * 32: {
+            "txids": ["33" * 32], "complete": False,
+        }}}
+        retained = core_sync.full_scan_checkpoint({"esplora_history_memberships": membership,
+            "esplora_scripthashes": {"cached": True}, "highest_used": {"0": 500}, "other": "drop"})
+        self.assertEqual(retained, {"esplora_history_memberships": membership})
+        retained["esplora_history_memberships"]["scripts"].clear()
+        self.assertTrue(membership["scripts"])
+        for version in (None, True, 2, "1"):
+            self.assertEqual(core_sync.full_scan_checkpoint({"esplora_history_memberships": {
+                **membership, "version": version,
+            }}), {})
 
 
 class _DummySocket:
@@ -938,6 +1254,8 @@ class SyncBackendsTest(unittest.TestCase):
                 wallet_id TEXT NOT NULL,
                 external_id TEXT,
                 occurred_at TEXT NOT NULL,
+                confirmed_at TEXT,
+                raw_json TEXT,
                 direction TEXT NOT NULL,
                 asset TEXT NOT NULL,
                 amount INTEGER NOT NULL,
@@ -962,6 +1280,9 @@ class SyncBackendsTest(unittest.TestCase):
         }
         adapter_gaps = []
         checkpoints_seen = []
+        membership = {"version": 1, "backend_key": "11" * 32, "scripts": {"22" * 32: {
+            "txids": ["33" * 32], "complete": False,
+        }}}
 
         def resolve_sync_state(backend, wallet_row):
             config = json.loads(wallet_row["config_json"] or "{}")
@@ -982,7 +1303,7 @@ class SyncBackendsTest(unittest.TestCase):
             adapter_gaps.append(sync_state.descriptor_plan.gap_limit)
             return (
                 [{"pass": len(adapter_gaps)}],
-                {"freshness_checkpoint": {"pass": len(adapter_gaps)}},
+                {"freshness_checkpoint": {"pass": len(adapter_gaps), "esplora_history_memberships": membership}},
             )
 
         def insert_records(
@@ -1075,7 +1396,7 @@ class SyncBackendsTest(unittest.TestCase):
             [DEFAULT_DESCRIPTOR_GAP_LIMIT, NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT],
         )
         self.assertIsNone(checkpoints_seen[0])
-        self.assertEqual(checkpoints_seen[1], {})
+        self.assertEqual(checkpoints_seen[1], {"esplora_history_memberships": membership})
         self.assertTrue(outcome["force_full"])
         self.assertEqual(outcome["gap_limit"], NEGATIVE_BALANCE_RESCAN_MIN_GAP_LIMIT)
         self.assertEqual(
@@ -1331,7 +1652,7 @@ class SyncBackendsTest(unittest.TestCase):
 
         with patch(
             "kassiber.core.sync_backends.esplora_scripthash_stats",
-            side_effect=[stats_first, stats_second],
+            side_effect=[stats_first, stats_first, stats_second, stats_second],
         ), patch(
             "kassiber.core.sync_backends.fetch_esplora_scripthash_transactions",
             side_effect=[[tx1], [tx1, tx2]],
@@ -4271,7 +4592,7 @@ class HttpRetryAndLimiterTest(unittest.TestCase):
                 raise item
             return _FakeHttpResponse(item)
 
-        return patch.object(sb.urlrequest, "urlopen", side_effect=fake_urlopen)
+        return patch.object(sb.urlrequest.OpenerDirector, "open", side_effect=fake_urlopen)
 
     def test_http_get_json_retries_on_429_then_succeeds(self):
         sleeps = []
@@ -4615,7 +4936,7 @@ class HttpBackoffProgressTest(unittest.TestCase):
                 raise item
             return _FakeHttpResponse(item)
 
-        return patch.object(sb.urlrequest, "urlopen", side_effect=fake_urlopen)
+        return patch.object(sb.urlrequest.OpenerDirector, "open", side_effect=fake_urlopen)
 
     def test_backoff_emits_rate_limited_progress_event(self):
         # The silent-backoff fix: a 429 wait must surface as a progress event so
@@ -5547,6 +5868,229 @@ class RetractWalletRecordsDbTest(unittest.TestCase):
         self.assertEqual(result["retracted_records"][0]["external_id"], uppercase_txid)
         self.assertNotIn(uppercase_txid, self._external_ids())
         self.assertEqual(self.invalidated, ["profile-1"])
+
+
+class EsploraHistoryRetractionTest(unittest.TestCase):
+    @staticmethod
+    def target(number):
+        return {"script_pubkey": "0014" + f"{number:02x}" * 20}
+
+    @classmethod
+    def transaction(cls, number, *, scripts=(1,), confirmed=False):
+        return {
+            "txid": f"{number:064x}", "fee": 0, "vin": [],
+            "vout": [{"scriptpubkey": cls.target(script)["script_pubkey"], "value": 1000} for script in scripts],
+            "status": {"confirmed": confirmed, **({"block_time": 1700000000} if confirmed else {})},
+        }
+
+    def scan(self, histories, *, checkpoint=None, backend=None, stats=None, network="main"):
+        targets = [self.target(number) for number in histories]
+        by_script = {self.target(number)["script_pubkey"]: rows for number, rows in histories.items()}
+
+        def read_stats(_url, script, **_kwargs):
+            if stats is not None:
+                return stats(script) if callable(stats) else stats
+            rows = by_script[script]
+            confirmed = sum(row["status"]["confirmed"] for row in rows)
+            return {"chain_stats": {"tx_count": confirmed}, "mempool_stats": {"tx_count": len(rows) - confirmed}}
+
+        with patch.object(sb, "esplora_scripthash_stats", side_effect=read_stats), patch.object(
+            sb, "fetch_esplora_scripthash_transactions", side_effect=lambda _url, script, **_kwargs: by_script[script],
+        ) as history:
+            records, meta = sb.compatibility_esplora_records_for_wallet(
+                {"name": "node", "kind": "esplora", "url": "https://node.example", **(backend or {})},
+                WalletSyncState(chain="bitcoin", network=network, descriptor_plan=None,
+                                policy_asset_id="BTC", targets=targets,
+                                tracked_scripts={target["script_pubkey"]: target for target in targets},
+                                history_cache={}, checkpoint=checkpoint),
+            )
+        return records, meta, history.call_count
+
+    def test_same_count_mempool_replacement_retracts_the_disappeared_transaction(self):
+        old, replacement = self.transaction(1), self.transaction(2)
+        _, first, _ = self.scan({1: [old]})
+        records, second, _ = self.scan({1: [replacement]}, checkpoint=first["freshness_checkpoint"])
+        self.assertEqual([record["txid"] for record in records], [replacement["txid"]])
+        self.assertEqual(second.get("observer_retracted_external_ids"), [old["txid"]])
+
+    def test_dropped_mempool_transaction_retracts_against_complete_empty_history(self):
+        old = self.transaction(1)
+        _, first, _ = self.scan({1: [old]})
+        _, second, _ = self.scan({1: []}, checkpoint=first["freshness_checkpoint"])
+        self.assertEqual(second.get("observer_retracted_external_ids"), [old["txid"]])
+
+    def test_unchanged_script_membership_keeps_a_shared_transaction(self):
+        shared = self.transaction(1, scripts=(1, 2), confirmed=True)
+        replacement = self.transaction(2)
+        _, first, _ = self.scan({1: [shared], 2: [shared]})
+        _, second, calls = self.scan({1: [replacement], 2: [shared]}, checkpoint=first["freshness_checkpoint"])
+        self.assertEqual(calls, 1)
+        self.assertEqual(second["scripts_unchanged"], 1)
+        self.assertEqual(second["observer_retracted_external_ids"], [])
+        self.assertTrue(second["esplora_history_complete"])
+
+    def test_expanded_discovery_scope_can_retract_same_input_replacement(self):
+        old, replacement = self.transaction(1), self.transaction(2, scripts=(1, 2))
+        funding = {"txid": "99" * 32, "vout": 0,
+                   "prevout": {"scriptpubkey": self.target(1)["script_pubkey"], "value": 10000}}
+        old["vin"] = [funding]
+        replacement["vin"] = [funding]
+        replacement["vout"] = [{"scriptpubkey": self.target(2)["script_pubkey"], "value": 500}]
+        _, first, _ = self.scan({1: [old]})
+        _, second, _ = self.scan({1: [replacement], 2: [replacement]}, checkpoint=first["freshness_checkpoint"])
+        self.assertEqual(second["observer_retracted_external_ids"], [old["txid"]])
+        self.assertTrue(second["esplora_history_complete"])
+
+    def test_shrunken_scope_retains_candidates_until_all_old_scripts_are_covered(self):
+        old, shared = self.transaction(1), self.transaction(2, scripts=(2,))
+        replacement = self.transaction(3)
+        _, first, _ = self.scan({1: [old], 2: [shared]})
+        _, narrowed, _ = self.scan({1: [replacement]}, checkpoint=first["freshness_checkpoint"])
+        self.assertEqual(narrowed["observer_retracted_external_ids"], [])
+        self.assertFalse(narrowed["esplora_history_complete"])
+        _, complete, _ = self.scan({1: [replacement], 2: []}, checkpoint=narrowed["freshness_checkpoint"])
+        self.assertEqual(complete["observer_retracted_external_ids"], [old["txid"], shared["txid"]])
+
+    def test_incomplete_round_retains_previous_and_new_positive_candidates(self):
+        old, partial = self.transaction(1), self.transaction(2)
+        _, first, _ = self.scan({1: [old]})
+        _, incomplete, _ = self.scan(
+            {1: [partial]}, checkpoint=first["freshness_checkpoint"],
+            stats={"chain_stats": {"tx_count": 0}, "mempool_stats": {"tx_count": 2}},
+        )
+        self.assertEqual(incomplete["observer_retracted_external_ids"], [])
+        self.assertFalse(incomplete["esplora_history_complete"])
+        _, complete, _ = self.scan({1: []}, checkpoint=incomplete["freshness_checkpoint"])
+        self.assertEqual(complete["observer_retracted_external_ids"], [old["txid"], partial["txid"]])
+
+    def test_page_limit_cannot_authorize_absence_even_if_count_matches(self):
+        old, replacement = self.transaction(1), self.transaction(2)
+        _, first, _ = self.scan({1: [old]})
+        _, limited, _ = self.scan({1: [replacement]}, checkpoint=first["freshness_checkpoint"], backend={"maxpages": 1})
+        self.assertEqual(limited["observer_retracted_external_ids"], [])
+        self.assertFalse(limited["esplora_history_complete"])
+        _, complete, _ = self.scan({1: [replacement]}, checkpoint=limited["freshness_checkpoint"])
+        self.assertEqual(complete["observer_retracted_external_ids"], [old["txid"]])
+
+    def test_stats_race_blocks_absence_and_is_refetched_next_round(self):
+        old, replacement = self.transaction(1), self.transaction(2)
+        _, first, _ = self.scan({1: [old]})
+        observed = iter([
+            {"chain_stats": {"tx_count": 0}, "mempool_stats": {"tx_count": 1, "spent_txo_sum": 1000}},
+            {"chain_stats": {"tx_count": 0}, "mempool_stats": {"tx_count": 1, "spent_txo_sum": 2000}},
+        ])
+        _, raced, _ = self.scan({1: [replacement]}, checkpoint=first["freshness_checkpoint"], stats=lambda _script: next(observed))
+        self.assertEqual(raced["observer_retracted_external_ids"], [])
+        self.assertFalse(raced["esplora_history_complete"])
+        _, complete, calls = self.scan({1: [replacement]}, checkpoint=raced["freshness_checkpoint"])
+        self.assertEqual(calls, 1)
+        self.assertEqual(complete["observer_retracted_external_ids"], [old["txid"]])
+
+    def test_missing_or_invalid_counts_never_mean_empty_history(self):
+        old = self.transaction(1)
+        _, first, _ = self.scan({1: [old]})
+        for stats in ({}, {"chain_stats": {"tx_count": 0}},
+                      {"chain_stats": {"tx_count": False}, "mempool_stats": {"tx_count": 0}},
+                      {"chain_stats": {"tx_count": -1}, "mempool_stats": {"tx_count": 1}}):
+            with self.subTest(stats=stats):
+                _, incomplete, _ = self.scan({1: []}, checkpoint=first["freshness_checkpoint"], stats=stats)
+                self.assertEqual(incomplete["observer_retracted_external_ids"], [])
+                self.assertFalse(incomplete["esplora_history_complete"])
+
+    def test_duplicate_invalid_or_wrong_script_history_cannot_retract(self):
+        old, replacement = self.transaction(1), self.transaction(2)
+        _, first, _ = self.scan({1: [old]})
+        for rows in ([replacement, replacement], [{**replacement, "txid": "invalid"}],
+                     [self.transaction(3, scripts=(2,))]):
+            with self.subTest(rows=rows):
+                _, incomplete, _ = self.scan({1: rows}, checkpoint=first["freshness_checkpoint"])
+                self.assertEqual(incomplete["observer_retracted_external_ids"], [])
+                self.assertFalse(incomplete["esplora_history_complete"])
+
+    def test_wrong_script_response_cannot_seed_a_later_out_of_scope_retraction(self):
+        old, unrelated = self.transaction(1), self.transaction(3, scripts=(2,))
+        _, first, _ = self.scan({1: [old]})
+        _, malformed, _ = self.scan({1: [unrelated]}, checkpoint=first["freshness_checkpoint"])
+        _, complete, _ = self.scan({1: []}, checkpoint=malformed["freshness_checkpoint"])
+        self.assertEqual(complete["observer_retracted_external_ids"], [old["txid"]])
+
+    def test_endpoint_auth_proxy_or_tls_change_resets_membership_and_stats_reuse(self):
+        old, replacement = self.transaction(1, confirmed=True), self.transaction(2, confirmed=True)
+        _, first, _ = self.scan({1: [old]})
+        for config in ({"url": "https://different.example"}, {"auth_header": "Bearer new"},
+                       {"tor_proxy": "socks5h://127.0.0.1:9050"}, {"insecure": True}):
+            with self.subTest(config=config):
+                records, second, calls = self.scan({1: [replacement]}, checkpoint=first["freshness_checkpoint"], backend=config)
+                self.assertEqual(calls, 1)
+                self.assertEqual(second["scripts_unchanged"], 0)
+                self.assertEqual([record["txid"] for record in records], [replacement["txid"]])
+                self.assertEqual(second["observer_retracted_external_ids"], [])
+
+    def test_legacy_stats_without_membership_refetch_before_claiming_coverage(self):
+        old = self.transaction(1, confirmed=True)
+        _, first, _ = self.scan({1: [old]})
+        legacy = dict(first["freshness_checkpoint"])
+        legacy.pop("esplora_history_memberships")
+        _, next_scan, calls = self.scan({1: [old]}, checkpoint=legacy)
+        self.assertEqual(calls, 1)
+        self.assertTrue(next_scan["esplora_history_complete"])
+        self.assertEqual(next_scan["observer_retracted_external_ids"], [])
+
+    def test_network_change_cannot_inherit_another_networks_membership(self):
+        old = self.transaction(1)
+        _, first, _ = self.scan({1: [old]})
+        _, second, _ = self.scan({1: []}, checkpoint=first["freshness_checkpoint"], network="test")
+        self.assertEqual(second["observer_retracted_external_ids"], [])
+
+    def test_malformed_or_future_membership_version_cannot_supply_absence(self):
+        old, replacement = self.transaction(1, confirmed=True), self.transaction(2, confirmed=True)
+        _, first, _ = self.scan({1: [old]})
+        for malformed in ({"version": 2}, {"version": True}, {"scripts": {None: {"txids": [None]}}}):
+            with self.subTest(malformed=malformed):
+                checkpoint = json.loads(json.dumps(first["freshness_checkpoint"]))
+                checkpoint["esplora_history_memberships"].update(malformed)
+                _, second, calls = self.scan({1: [replacement]}, checkpoint=checkpoint)
+                self.assertEqual(calls, 1)
+                self.assertEqual(second["observer_retracted_external_ids"], [])
+
+    def test_produced_retraction_removes_real_row_before_canonical_insert(self):
+        fixture = RetractWalletRecordsDbTest()
+        fixture.setUp()
+        self.addCleanup(fixture.tearDown)
+        old, replacement = self.transaction(1), self.transaction(2)
+        fixture.conn.execute("UPDATE transactions SET external_id=? WHERE id='tx-rbf-1'", (old["txid"],))
+        fixture.conn.commit()
+        _, first, _ = self.scan({1: [old]})
+        records, second, _ = self.scan({1: [replacement]}, checkpoint=first["freshness_checkpoint"])
+        wallet = dict(fixture.conn.execute("SELECT * FROM wallets WHERE id='wallet-a'").fetchone())
+        profile = dict(fixture.conn.execute("SELECT * FROM profiles WHERE id='profile-1'").fetchone())
+        target = self.target(1)
+        state = WalletSyncState(chain="bitcoin", network="main", descriptor_plan=None,
+                                policy_asset_id="BTC", targets=[target], tracked_scripts={target["script_pubkey"]: target},
+                                history_cache={})
+        inserted = []
+
+        def insert(conn, profile, wallet, records, source, **_kwargs):
+            self.assertNotIn(old["txid"], fixture._external_ids())
+            inserted.extend(records)
+            return {"imported": len(records), "skipped": 0}
+
+        hooks = WalletSyncHooks(
+            import_file=lambda *_args, **_kwargs: {}, insert_records=insert,
+            retract_records=lambda conn, profile, wallet, txids, source: core_imports.retract_wallet_records(
+                conn, profile, wallet, txids, source, fixture.hooks,
+            ),
+            resolve_backend=lambda *_args: {}, resolve_sync_state=lambda *_args: state,
+            normalize_addresses=lambda values: values, backend_adapters={},
+        )
+        fetch = WalletBackendFetch(backend={"name": "node", "kind": "esplora", "url": "https://node.example"},
+                                   sync_state=state, normalized_records=records, adapter_meta=second,
+                                   kind="esplora", started=0, force_full=False)
+        outcome = core_sync.sync_wallet_from_backend(fixture.conn, {}, profile, wallet, hooks, prefetched=fetch)
+        self.assertEqual(outcome["retracted"], 1)
+        self.assertEqual([record["txid"] for record in inserted], [replacement["txid"]])
+        self.assertNotIn("observer_retracted_external_ids", outcome)
+        self.assertIn("kept-txid", fixture._external_ids())
 
 
 if __name__ == "__main__":

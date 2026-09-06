@@ -97,6 +97,7 @@ _SECURITY_TOKENS = (
 )
 _DAEMON_CLI_TOKENS = (
     "ai_core",
+    "chain_analysis_consent",
     "cli_",
     "core_maintenance",
     "daemon_",

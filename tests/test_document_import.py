@@ -243,7 +243,6 @@ class DocumentImportTest(unittest.TestCase):
         ):
             client = document_import._client_for_provider(provider)
 
-        self.assertTrue(client.direct_connection)
         response = object()
         opener = mock.Mock()
         opener.open.return_value = response

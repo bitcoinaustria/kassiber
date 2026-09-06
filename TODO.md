@@ -73,6 +73,11 @@ independent adversarial verification):
 - [x] Explicit configured-backend acquisition with genesis verification,
   Core31 spender-index capabilities, Esplora/Electrum limits and bounded partial
   results. Disposable Core31 test proves mined intermediate-wallet paths.
+- [x] Egress/consent audit: bind acquisition routes and seeds through dispatch,
+  prove once-only AI approvals, prevent implicit proxy/redirect destinations,
+  stop revoked automatic sync jobs, restrict manual refresh/model-discovery
+  scope, and keep Markdown images inert. Native Esplora uses the controlled
+  compatibility transport until its bindings expose the required HTTP policy.
 - [x] Dedicated power-user workspace, immutable saved investigations/comparisons,
   JSON/CSV export and opaque-reference remote-agent projection; same shared core
   and version/scope checks across interfaces.

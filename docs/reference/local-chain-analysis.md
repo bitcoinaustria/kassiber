@@ -123,6 +123,12 @@ The acquisition panel first computes a plan using an explicitly selected
 configured backend. The plan binds the book snapshot, query, routing identity
 and bounded effects. Applying it is a separate action. A changed plan or book
 requires a fresh preview. There is no implicit public-backend fallback.
+Dispatch uses the exact backend and seed-transaction snapshot used to validate
+the plan, so a later configuration or wallet change cannot redirect the
+approved request. HTTP uses only the explicitly configured proxy, ignoring
+system/environment proxy discovery and bypass rules, and refuses redirects.
+`KASSIBER_NO_EGRESS=1` blocks acquisition before any request or initial Electrum
+handshake, including loopback, and is rechecked between requests.
 
 | Backend | Acquisition coverage |
 | --- | --- |
@@ -252,6 +258,11 @@ require chat consent; acquisition and dataset import require once-only consent
 with server-recomputed effects. Acquisition artifacts and dataset import/
 preview provenance are available only to on-device providers. A provider called
 "local" but hosted on the LAN does not count as on-device.
+Acquisition cannot inherit session-wide consent: every application needs a
+new once-only approval. Denial, cancellation, timeout, changed scope and stale
+plans make no node request. Opening the page, planning, inspecting PSBTs and
+importing local datasets do not contact node or attribution services. Source
+URLs inside dataset manifests remain metadata and are never fetched.
 
 Remote providers receive a curated topology/amount projection with opaque,
 process-and-book-scoped references, instead of public txids, addresses, outpoints,

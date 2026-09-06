@@ -16,6 +16,7 @@ import tempfile
 import threading
 import unittest
 import urllib.error
+import urllib.response
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -1240,6 +1241,62 @@ class ClientDefaultsTest(unittest.TestCase):
         self.assertEqual(headers["Accept"], "text/event-stream")
 
 
+class ProviderRouteConsentTest(unittest.TestCase):
+    """Run urllib's routing/redirect handlers without opening any socket."""
+
+    @staticmethod
+    def _transport(location=None, status=302):
+        calls = []
+
+        class CaptureHTTP(urllib.request.HTTPHandler):
+            def http_open(self, request):
+                calls.append((request.host, request.full_url, request.get_header("Authorization"), request.data))
+                redirect = location is not None and len(calls) == 1
+                result = urllib.response.addinfourl(io.BytesIO(b'{"data":[]}'), {"location": location} if redirect else {}, request.full_url, status if redirect else 200)
+                result.msg = "Redirect" if redirect else "OK"
+                return result
+
+        class CaptureHTTPS(urllib.request.HTTPSHandler):
+            https_open = CaptureHTTP.http_open
+
+        original = urllib.request.build_opener
+        return calls, lambda *handlers: original(CaptureHTTP(), CaptureHTTPS(), *handlers)
+
+    def test_http_provider_does_not_use_ambient_proxy_for_models_or_prompts(self):
+        for base_url in ("http://127.0.0.1:11434/v1", "https://provider.invalid/v1"):
+            for method, path, body in (("GET", "models", None), ("POST", "responses", b'{"input":"private context"}')):
+                with self.subTest(base_url=base_url, method=method):
+                    calls, opener = self._transport()
+                    client = OpenAIResponsesClient(base_url=base_url, api_key="synthetic-key")
+                    with patch("urllib.request.build_opener", side_effect=opener), patch("urllib.request.getproxies", return_value={"http": "http://unapproved.invalid", "https": "http://unapproved.invalid"}) as proxies, patch("socket.getaddrinfo") as dns:
+                        with client._open(path, method=method, body=body, accept_sse=False) as response:
+                            self.assertEqual(response.read(), b'{"data":[]}')
+                    proxies.assert_not_called()
+                    dns.assert_not_called()
+                    self.assertEqual(calls, [(urllib.parse.urlsplit(base_url).netloc, base_url + "/" + path, "Bearer synthetic-key", body)])
+
+    def test_off_origin_redirect_never_receives_credentials_or_prompt(self):
+        for location in ("https://unapproved.invalid/stolen", "http://provider.invalid/stolen", "https://provider.invalid:8443/stolen"):
+            for status in (301, 302, 303, 307, 308):
+                for method in ("GET", "POST"):
+                    with self.subTest(location=location, status=status, method=method):
+                        calls, opener = self._transport(location, status)
+                        client = OpenAIResponsesClient(base_url="https://provider.invalid/v1", api_key="synthetic-key")
+                        body = b'{"input":"private context"}' if method == "POST" else None
+                        with patch("urllib.request.build_opener", side_effect=opener):
+                            with self.assertRaises(AppError) as caught:
+                                client._open("models" if method == "GET" else "responses", method=method, body=body, accept_sse=False)
+                        self.assertEqual(caught.exception.code, "ai_request_invalid")
+                        self.assertEqual(len(calls), 1)
+                        self.assertEqual(calls[0][0], "provider.invalid")
+
+    def test_same_origin_model_redirect_remains_usable(self):
+        calls, opener = self._transport("https://provider.invalid/v1/models/")
+        with patch("urllib.request.build_opener", side_effect=opener):
+            self.assertEqual(OpenAIResponsesClient(base_url="https://provider.invalid/v1", api_key="synthetic-key").list_models(strict=True), [])
+        self.assertEqual([row[0] for row in calls], ["provider.invalid", "provider.invalid"])
+
+
 class ListModelsStrictModeTest(unittest.TestCase):
     """`list_models(strict=True)` must surface 4xx so `ai.test_connection`
     can tell a misconfigured base URL apart from a provider that simply
@@ -1270,12 +1327,12 @@ class ListModelsStrictModeTest(unittest.TestCase):
     def test_default_mode_swallows_4xx_to_empty_list(self):
         # Picker UX: providers that skip /v1/models still let the user fall
         # back to a configured default_model.
-        with patch("urllib.request.urlopen", side_effect=self._http_error(404)):
+        with patch("urllib.request.OpenerDirector.open", side_effect=self._http_error(404)):
             client = OpenAIResponsesClient(base_url="http://x/v1")
             self.assertEqual(client.list_models(), [])
 
     def test_strict_mode_propagates_4xx(self):
-        with patch("urllib.request.urlopen", side_effect=self._http_error(404)):
+        with patch("urllib.request.OpenerDirector.open", side_effect=self._http_error(404)):
             client = OpenAIResponsesClient(base_url="http://x/v1")
             with self.assertRaises(AppError) as ctx:
                 client.list_models(strict=True)
@@ -1283,7 +1340,7 @@ class ListModelsStrictModeTest(unittest.TestCase):
 
     def test_strict_mode_rejects_invalid_json_200(self):
         with patch(
-            "urllib.request.urlopen",
+            "urllib.request.OpenerDirector.open",
             return_value=self._FakeResponse(b"<html>not json</html>"),
         ):
             client = OpenAIResponsesClient(base_url="http://x/v1")
@@ -1294,7 +1351,7 @@ class ListModelsStrictModeTest(unittest.TestCase):
 
     def test_strict_mode_rejects_unexpected_200_shape(self):
         with patch(
-            "urllib.request.urlopen",
+            "urllib.request.OpenerDirector.open",
             return_value=self._FakeResponse(b'{"ok":true}'),
         ):
             client = OpenAIResponsesClient(base_url="http://x/v1")
@@ -1305,7 +1362,7 @@ class ListModelsStrictModeTest(unittest.TestCase):
 
     def test_strict_mode_does_not_change_auth_failure(self):
         # 401 was never swallowed; strict mode shouldn't change that path.
-        with patch("urllib.request.urlopen", side_effect=self._http_error(401)):
+        with patch("urllib.request.OpenerDirector.open", side_effect=self._http_error(401)):
             client = OpenAIResponsesClient(base_url="http://x/v1")
             with self.assertRaises(AppError) as ctx:
                 client.list_models()
@@ -1331,7 +1388,7 @@ class ListModelsStrictModeTest(unittest.TestCase):
             ]
         }
         with patch(
-            "urllib.request.urlopen",
+            "urllib.request.OpenerDirector.open",
             return_value=self._FakeResponse(json.dumps(payload).encode("utf-8")),
         ):
             client = OpenAIResponsesClient(base_url="http://x/v1")
@@ -1388,7 +1445,7 @@ class ResponsesBodyContractTest(unittest.TestCase):
                 b'"content":[{"type":"output_text","text":"ok"}]}]}'
             )
 
-        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        with patch("urllib.request.OpenerDirector.open", side_effect=fake_urlopen):
             client = OpenAIResponsesClient(base_url="http://x/v1")
             client.chat(
                 messages=[{"role": "user", "content": "real"}],
@@ -1469,7 +1526,7 @@ class ResponsesBodyContractTest(unittest.TestCase):
             captured.update(json.loads(request.data.decode("utf-8")))
             return self._StreamResponse()
 
-        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        with patch("urllib.request.OpenerDirector.open", side_effect=fake_urlopen):
             client = OpenAIResponsesClient(base_url="http://x/v1")
             list(
                 client.stream_chat(
@@ -1502,7 +1559,7 @@ class ResponsesBodyContractTest(unittest.TestCase):
                 b'"content":[{"type":"output_text","text":"ok"}]}]}'
             )
 
-        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        with patch("urllib.request.OpenerDirector.open", side_effect=fake_urlopen):
             client = OpenAIResponsesClient(base_url="http://x/v1")
             client.chat(
                 messages=[{"role": "user", "content": "real"}],
@@ -1531,7 +1588,7 @@ class ResponsesBodyContractTest(unittest.TestCase):
                 b'"text":"{}"}]}]}'
             )
 
-        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+        with patch("urllib.request.OpenerDirector.open", side_effect=fake_urlopen):
             client = OpenAIResponsesClient(base_url="http://x/v1")
             client.chat(
                 messages=[
@@ -1603,7 +1660,7 @@ class ResponsesNormalizationTest(unittest.TestCase):
             b'"usage":{"input_tokens":1,"output_tokens":2}}'
         )
         with patch(
-            "urllib.request.urlopen",
+            "urllib.request.OpenerDirector.open",
             return_value=self._FakeResponse(payload),
         ):
             client = OpenAIResponsesClient(base_url="http://x/v1")
@@ -1622,7 +1679,7 @@ class ResponsesNormalizationTest(unittest.TestCase):
             b'"arguments":"{}"}]}'
         )
         with patch(
-            "urllib.request.urlopen",
+            "urllib.request.OpenerDirector.open",
             return_value=self._FakeResponse(payload),
         ):
             client = OpenAIResponsesClient(base_url="http://x/v1")
@@ -1660,7 +1717,7 @@ class ResponsesNormalizationTest(unittest.TestCase):
                 )
                 yield b"\n"
 
-        with patch("urllib.request.urlopen", return_value=_StreamResponse()):
+        with patch("urllib.request.OpenerDirector.open", return_value=_StreamResponse()):
             client = OpenAIResponsesClient(base_url="http://x/v1")
             chunks = list(
                 client.stream_chat(
@@ -1690,7 +1747,7 @@ class ResponsesNormalizationTest(unittest.TestCase):
                 )
                 yield b"\n"
 
-        with patch("urllib.request.urlopen", return_value=_StreamResponse()):
+        with patch("urllib.request.OpenerDirector.open", return_value=_StreamResponse()):
             client = OpenAIResponsesClient(base_url="http://x/v1")
             chunks = list(
                 client.stream_chat(
@@ -1728,7 +1785,7 @@ class ResponsesNormalizationTest(unittest.TestCase):
                 )
                 yield b"\n"
 
-        with patch("urllib.request.urlopen", return_value=_StreamResponse()):
+        with patch("urllib.request.OpenerDirector.open", return_value=_StreamResponse()):
             client = OpenAIResponsesClient(base_url="http://x/v1")
             chunks = list(
                 client.stream_chat(
@@ -1765,7 +1822,7 @@ class ResponsesNormalizationTest(unittest.TestCase):
                 )
                 yield b"\n"
 
-        with patch("urllib.request.urlopen", return_value=_StreamResponse()):
+        with patch("urllib.request.OpenerDirector.open", return_value=_StreamResponse()):
             client = OpenAIResponsesClient(base_url="http://x/v1")
             chunks = list(
                 client.stream_chat(
@@ -1784,7 +1841,7 @@ class ResponsesNormalizationTest(unittest.TestCase):
             b'[{"type":"output_text","text":"plain"}]}]}'
         )
         with patch(
-            "urllib.request.urlopen",
+            "urllib.request.OpenerDirector.open",
             return_value=self._FakeResponse(payload),
         ):
             client = OpenAIResponsesClient(base_url="http://x/v1")
@@ -1808,7 +1865,7 @@ class ResponsesNormalizationTest(unittest.TestCase):
                     b'"message":"slow down"}\n\n'
                 )
 
-        with patch("urllib.request.urlopen", return_value=_StreamResponse()):
+        with patch("urllib.request.OpenerDirector.open", return_value=_StreamResponse()):
             client = OpenAIResponsesClient(base_url="http://x/v1")
             with self.assertRaises(AppError) as ctx:
                 list(
@@ -1847,7 +1904,7 @@ class StreamChatErrorMappingTest(unittest.TestCase):
 
     def test_socket_timeout_mid_stream_maps_to_ai_unavailable(self):
         with patch(
-            "urllib.request.urlopen",
+            "urllib.request.OpenerDirector.open",
             return_value=self._ResponseRaisingMidIteration(),
         ):
             client = OpenAIResponsesClient(base_url="http://x/v1")

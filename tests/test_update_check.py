@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
+from urllib import request as urlrequest, response as urlresponse
 
 from kassiber import update_check
 from kassiber.cli.main import main
@@ -237,6 +238,82 @@ def test_default_redirect_handler_refuses_cross_origin_redirects():
         )
         is None
     )
+
+
+def test_default_update_transport_is_inert_until_canonical_consent_and_ignores_ambient_proxy(tmp_path: Path, monkeypatch):
+    preference = tmp_path / "update-checks.json"
+    requests = []
+    class CaptureHTTPS(urlrequest.HTTPSHandler):
+        def https_open(self, request):
+            requests.append((request.host, request.full_url, request.get_header("Proxy-authorization")))
+            response = urlresponse.addinfourl(io.BytesIO(_release_response()), {}, request.full_url, 200)
+            response.msg = "OK"
+            return response
+    original = urlrequest.build_opener
+    monkeypatch.setenv("https_proxy", "http://user:pass@unapproved.invalid:8080")
+    monkeypatch.setenv("http_proxy", "http://user:pass@unapproved.invalid:8080")
+    monkeypatch.setenv("no_proxy", "")
+    monkeypatch.delenv(update_check.DISABLE_UPDATE_CHECK_ENV, raising=False)
+    with (
+        patch.object(update_check, "build_opener", side_effect=lambda *handlers: original(CaptureHTTPS(), *handlers)) as opener,
+        patch.object(urlrequest, "getproxies", return_value={"https": "http://user:pass@unapproved.invalid:8080"}) as discovery,
+        patch.object(urlrequest, "proxy_bypass", return_value=False) as bypass,
+        patch("socket.getaddrinfo", side_effect=AssertionError("unexpected DNS")) as dns,
+        patch("socket.create_connection", side_effect=AssertionError("unexpected socket")) as connect,
+        patch.object(update_check, "packaged_build_info", return_value={}),
+    ):
+        for contents in (None, "not-json", '{"schema_version":1,"enabled":false}'):
+            if contents is not None:
+                preference.write_text(contents, encoding="utf-8")
+            try:
+                update_check.fetch_latest_release(consent=preference)
+            except update_check.AppError as error:
+                assert error.code == "update_checks_disabled"
+            else:
+                raise AssertionError("Update check ran without canonical permission")
+            opener.assert_not_called()
+            assert not requests
+        update_check.set_update_checks_enabled(True, preference)
+        assert update_check.fetch_latest_release(consent=preference)["latest_version"] == "0.22.56"
+        assert requests == [("api.github.com", update_check.GITHUB_RELEASES_API_URL, None)]
+        opener.assert_called_once()
+        update_check.set_update_checks_enabled(False, preference)
+        try:
+            update_check.fetch_latest_release(consent=preference)
+        except update_check.AppError as error:
+            assert error.code == "update_checks_disabled"
+        else:
+            raise AssertionError("Update check ran after permission was revoked")
+        opener.assert_called_once()
+    discovery.assert_not_called()
+    bypass.assert_not_called()
+    dns.assert_not_called()
+    connect.assert_not_called()
+
+
+def test_consented_default_update_transport_does_not_follow_redirect(tmp_path: Path):
+    requests = []
+    class RedirectHTTPS(urlrequest.HTTPSHandler):
+        def https_open(self, request):
+            requests.append(request.full_url)
+            response = urlresponse.addinfourl(io.BytesIO(b""), {"location": "https://unapproved.invalid/releases"}, request.full_url, 302)
+            response.msg = "Found"
+            return response
+    original = urlrequest.build_opener
+    with (
+        patch.object(update_check, "build_opener", side_effect=lambda *handlers: original(RedirectHTTPS(), *handlers)),
+        patch.object(update_check, "packaged_build_info", return_value={}),
+        patch("socket.getaddrinfo", side_effect=AssertionError("unexpected DNS")),
+        patch("socket.create_connection", side_effect=AssertionError("unexpected socket")),
+    ):
+        try:
+            update_check.fetch_latest_release(consent=_enabled_preference(tmp_path))
+        except update_check.AppError as error:
+            assert error.code == "update_check_failed"
+            error.__cause__.close()
+        else:
+            raise AssertionError("Update transport followed a redirect")
+    assert requests == [update_check.GITHUB_RELEASES_API_URL]
 
 
 def test_fetch_latest_release_refuses_without_consent(tmp_path: Path):
@@ -708,7 +785,7 @@ def test_download_verification_never_triggers_the_network_update_checker():
         )
 
 
-def test_machine_update_command_returns_clean_structured_information():
+def test_machine_update_command_returns_clean_structured_information(tmp_path: Path):
     result = {
         "current_version": "0.22.55",
         "latest_version": "0.22.56",
@@ -728,7 +805,7 @@ def test_machine_update_command_returns_clean_structured_information():
         patch("sys.stdout", stdout),
         patch("sys.stderr", stderr),
     ):
-        exit_code = main(["--machine", "update"])
+        exit_code = main(["--data-root", str(tmp_path / "data"), "--machine", "update"])
 
     assert exit_code == 0
     payload = json.loads(stdout.getvalue())
@@ -753,7 +830,7 @@ def test_cli_can_disable_and_inspect_update_checks_without_network(tmp_path: Pat
         patch("sys.stdout", stdout),
         patch("sys.stderr", stderr),
     ):
-        exit_code = main(["--machine", "update", "--disable-checks"])
+        exit_code = main(["--data-root", str(tmp_path / "data"), "--machine", "update", "--disable-checks"])
 
     assert exit_code == 0
     assert not update_check.update_checks_enabled(preference)
@@ -788,7 +865,7 @@ def test_cli_can_enable_consent_and_check_immediately(tmp_path: Path):
         patch("kassiber.cli.main.check_for_update", return_value=result) as check,
         patch("sys.stdout", stdout),
     ):
-        exit_code = main(["--machine", "update", "--enable-checks"])
+        exit_code = main(["--data-root", str(tmp_path / "data"), "--machine", "update", "--enable-checks"])
 
     assert exit_code == 0
     assert update_check.update_checks_enabled(preference)

@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Callable, Mapping, TextIO
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from . import __version__
 from .build_info import packaged_build_info
@@ -79,7 +79,8 @@ class _NoRedirectHandler(HTTPRedirectHandler):
 
 
 def _open_without_redirects(request: Request, *, timeout: float) -> BinaryIO:
-    return build_opener(_NoRedirectHandler()).open(request, timeout=timeout)
+    # Update permission covers GitHub, not an ambient proxy intermediary.
+    return build_opener(ProxyHandler({}), _NoRedirectHandler()).open(request, timeout=timeout)
 
 
 @dataclass(frozen=True)

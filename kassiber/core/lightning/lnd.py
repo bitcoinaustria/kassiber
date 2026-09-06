@@ -43,9 +43,9 @@ from urllib import request as urlrequest
 from ... import __version__
 from ...backends import backend_timeout, backend_value
 from ...db import APP_NAME
-from ...egress_ledger import get_egress_ledger, http_request_bytes_out
 from ...errors import AppError
 from ...msat import msat_to_btc
+from ...proxy import urlopen_with_proxy
 from ...time_utils import UNKNOWN_OCCURRED_AT, now_iso, timestamp_to_iso
 from ...transfers import canonical_txid
 from .. import imports as core_imports
@@ -212,20 +212,25 @@ class LndRestClient:
                 "User-Agent": f"{APP_NAME}/{__version__}",
             },
         )
-        get_egress_ledger().record_url(
-            request.full_url,
-            subsystem="sync",
-            operation="http.request",
-            method=method,
-            bytes_out=http_request_bytes_out(request, method),
-        )
         try:
-            with urlrequest.urlopen(
-                request, timeout=self.timeout, context=self.context
+            # The shared transport records egress once and only uses the
+            # backend's explicit route. Never forward the macaroon on redirects.
+            with urlopen_with_proxy(
+                request, timeout=self.timeout, ssl_context=self.context,
+                proxy_url=backend_value(self.backend, "tor_proxy", "proxy"),
+                source_label="LND backend", follow_redirects=False,
             ) as response:
+                status = getattr(response, "status", None)
+                if isinstance(status, int) and not 200 <= status < 300:
+                    # SOCKS responses do not follow redirects either; reject
+                    # their status explicitly instead of accepting a JSON body.
+                    raise AppError(f"LND returned HTTP {status}", code="backend_error", retryable=500 <= status < 600)
                 raw = response.read().decode("utf-8")
         except urlerror.HTTPError as exc:
-            detail = exc.read().decode("utf-8", "replace") if exc.fp else ""
+            try:
+                detail = exc.read().decode("utf-8", "replace") if exc.fp else ""
+            finally:
+                exc.close()
             hint = None
             if exc.code in (401, 403):
                 hint = (

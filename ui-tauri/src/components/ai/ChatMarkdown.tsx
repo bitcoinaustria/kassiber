@@ -13,12 +13,49 @@ import remarkGfm from "remark-gfm";
 import { Check, Copy } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@/components/ui/button";
+import { normalizeExternalBrowserUrl, openExternalUrl } from "@/daemon/transport";
 import { copyTextWithPolicy } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
 interface ChatMarkdownProps {
   content: string;
   className?: string;
+}
+
+function ChatImageReference({ src, alt }: { src?: string; alt?: string }) {
+  const { t } = useTranslation("assistant");
+  const [failed, setFailed] = React.useState(false);
+  let url: string | null = null;
+  try {
+    if (src) url = normalizeExternalBrowserUrl(src);
+  } catch {
+    // Unsupported image references remain text; rendering never fetches them.
+  }
+  if (!url) return <span>{alt || t("message.imageReference")}</span>;
+  const target = url;
+  return (
+    <span>
+      <Button
+        type="button"
+        variant="link"
+        className="h-auto whitespace-normal p-0 text-left text-sm"
+        data-chat-image-reference
+        title={target}
+        onClick={(event) => {
+          // A Markdown image can itself be inside a link. Do not also navigate
+          // that surrounding link when the user opens this specific image.
+          event.preventDefault();
+          event.stopPropagation();
+          setFailed(false);
+          void openExternalUrl(target).catch(() => setFailed(true));
+        }}
+      >
+        {t("message.openImage", { name: alt || new URL(target).host })}
+      </Button>
+      {failed ? <span role="status"> {t("message.imageOpenFailed")}</span> : null}
+    </span>
+  );
 }
 
 function nodeToString(node: React.ReactNode): string {
@@ -115,6 +152,14 @@ function ChatCodeBlock({
 }
 
 const components: Components = {
+  // Model output and restored transcripts are untrusted content. Native CSP
+  // is defense in depth; the supported browser UI must be safe without it too.
+  img: ({ src, alt }) => (
+    <ChatImageReference
+      src={typeof src === "string" ? src : undefined}
+      alt={alt}
+    />
+  ),
   h1: ({ className, ...props }) => (
     <h1
       className={cn(

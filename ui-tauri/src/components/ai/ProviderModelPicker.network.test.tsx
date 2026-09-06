@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   openPicker: null as ((open: boolean) => void) | null,
   checkModels: null as (() => void | Promise<void>) | null,
   daemonHooks: [] as Array<{ kind: string; enabled?: boolean }>,
+  provider: { name: "codex", base_url: "codex-cli://default", kind: "remote" },
+  modelError: null as Error | null,
 }));
 
 vi.mock("@/components/ui/popover", () => ({
@@ -65,12 +67,10 @@ vi.mock("@/daemon/client", async (importOriginal) => {
           data: {
             kind,
             data: {
-              default: "codex",
+              default: mocks.provider.name,
               providers: [
                 {
-                  name: "codex",
-                  base_url: "codex-cli://default",
-                  kind: "remote",
+                  ...mocks.provider,
                   default_model: "default",
                   acknowledged_at: "2026-01-01T00:00:00Z",
                   has_api_key: false,
@@ -115,7 +115,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
     useQueries: ({ queries }: { queries: Array<{ enabled?: boolean; queryFn: () => unknown }> }) =>
       queries.map((query) => {
         if (query.enabled) void query.queryFn();
-        return { data: undefined, refetch: query.queryFn };
+        return { data: undefined, error: mocks.modelError, refetch: query.queryFn };
       }),
   };
 });
@@ -127,6 +127,8 @@ describe("ProviderModelPicker network consent", () => {
     mocks.daemonHooks.length = 0;
     mocks.openPicker = null;
     mocks.checkModels = null;
+    mocks.provider = { name: "codex", base_url: "codex-cli://default", kind: "remote" };
+    mocks.modelError = null;
     mocks.invoke.mockResolvedValue({
       kind: "ai.list_models",
       data: { provider: "codex", models: [] },
@@ -149,21 +151,31 @@ describe("ProviderModelPicker network consent", () => {
     expect(mocks.runtimeRefetch).not.toHaveBeenCalled();
   });
 
-  it("checks only after the user clicks Check models", async () => {
+  it.each([
+    { name: "codex", base_url: "codex-cli://default", kind: "remote" },
+    { name: "claude", base_url: "claude-cli://default", kind: "remote" },
+    { name: "opencode", base_url: "opencode-cli://default", kind: "remote" },
+    { name: "ollama", base_url: "http://127.0.0.1:11434/v1", kind: "local" },
+  ])("checks only the selected $name provider after an explicit click", async (provider) => {
+    mocks.provider = provider;
     renderToStaticMarkup(<ProviderModelPicker value={null} onChange={vi.fn()} />);
 
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    mocks.openPicker?.(true);
     expect(mocks.invoke).not.toHaveBeenCalled();
     await mocks.checkModels?.();
 
     expect(mocks.invoke).toHaveBeenCalledOnce();
     expect(mocks.invoke).toHaveBeenCalledWith({
       kind: "ai.list_models",
-      args: { provider: "codex", refresh: true },
+      args: { provider: provider.name, refresh: true },
     });
-    // codex is a CLI provider, and its "not installed" / "needs login" state
-    // arrives via the runtime status rather than the model list. Opening the
-    // picker no longer refetches it, so the explicit check has to.
-    expect(mocks.runtimeRefetch).toHaveBeenCalled();
+    // The broker already probes the selected native provider for its models.
+    // Global runtime status would also launch unrelated provider executables.
+    expect(mocks.runtimeRefetch).not.toHaveBeenCalled();
+    expect(mocks.daemonHooks.map(({ kind }) => kind)).not.toContain(
+      "ai.provider_runtime.status",
+    );
   });
 
   it("does not list provider models when Settings mounts", () => {
@@ -177,6 +189,13 @@ describe("ProviderModelPicker network consent", () => {
     expect(mocks.daemonHooks.map(({ kind }) => kind)).not.toContain(
       "ai.list_models",
     );
+  });
+
+  it("shows selected discovery errors even when a configured default model remains", () => {
+    mocks.modelError = new Error("The selected provider requires authentication.");
+    const html = renderToStaticMarkup(<ProviderModelPicker value={null} onChange={vi.fn()} />);
+    expect(html).toContain("The selected provider requires authentication.");
+    expect(mocks.runtimeRefetch).not.toHaveBeenCalled();
   });
 
   it("only reads cached model metadata for reasoning support", () => {
