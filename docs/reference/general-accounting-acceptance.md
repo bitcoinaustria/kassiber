@@ -1,7 +1,7 @@
 # Organizational accounting acceptance record
 
-Status: second-cut extraction applied locally; third-cut restoration/publication,
-technical verification and
+Status: second-cut extraction and third-cut restoration applied locally;
+publication, technical verification and
 full product/pilot acceptance remain distinct and pending (2026-09-06).
 The full UI prototype is preserved, not part of this delivery.
 This is a technical coverage record, not a statement of the organization's
@@ -17,11 +17,10 @@ durable export/restart remain in #546; selected financial AI grants/proposals,
 hash-bound CLI selection and tool-free/no-history provider isolation move to
 dependent `codex/accounting-selected-ai` (third PR publication pending).
 The owner explicitly approved moving selected assistance with its protections
-and tests. This local second cut now excludes that lane; restoration into the
-third cut and publication remain pending. Published #546 at `32312f0e` still
-provides both lanes until the verified extraction is pushed. Its historical
-tests below remain evidence about the preserved full candidate, not current
-feature availability or a passing extraction gate.
+and tests. This local third cut restores that lane above the task-only second
+cut. Published #546 at `32312f0e` still provides both lanes until the verified
+extraction is pushed; third-PR publication is pending. Historical tests below
+remain evidence about preserved candidates, not a passing new extraction gate.
 
 Recovery references: core `780f2da9` on
 `codex/accounting-core-presplit-20260906`; complete agent `32312f0e` on
@@ -31,7 +30,9 @@ independent review must be recorded against their exact candidate heads.
 Unused native accounting-export scope scaffolding was also removed following
 independent review; the former dedicated accounting export UI was already absent.
 Recovery preserves the full former implementation. CLI task-export consent,
-destination and durable-delivery protections remain part of this second cut.
+destination and durable-delivery protections are inherited from the second cut.
+Recombined code/tests match `32312f0e` except the unused native scaffold;
+documentation retains the approved split and acceptance-policy updates.
 
 **Code merge:** passing per-cut contracts and integration/security/reliability
 checks, including retained financial correctness, exact consent, durable writes
@@ -205,21 +206,21 @@ before calling the organization's workflow complete.
 | Cash basis | Selected liquidity accounts, physical counts, exact partial payment allocations, income/expenditure distinct from accrual P&L | `test_accounting_cashbook`, `test_accounting_cash_adversarial` |
 | Multi-year close | Shared close-readiness controls, immutable prior snapshots, reopen cascades, independent arithmetic verifier | `test_accounting_close_readiness`, `test_accounting_ledger`, `test_accounting_integration` |
 | Retained evidence | SQLCipher bytes/text/reviews, bounded uploads, explicit local OCR or manual transcription, no remote fallback | `test_accounting_evidence`, `test_accounting_document_text`, `test_accounting_document_ocr`, `test_accounting_document_jobs` |
+| Selected financial AI (third cut) | Exact disclosure, provider/book/revision binding, one-use tokens, no history/tools, separate approval for drafts/fields; never posting | `test_accounting_ai_context`, `test_accounting_daemon_ai`, `test_accounting_ai_proposals`, `test_accounting_ai_result_tokens`, `test_cli_accounting_assist`, provider broker tests; fresh split verification pending |
 | AT filing preparation | 2025 K2 + K2kv/K2a/K2b/K11/K12/K12a; applicability/unknown/N/A states; specialist review; assessment-year aggregation | `test_accounting_jurisdiction`, `test_accounting_tax_workpapers` |
 | Portable recovery | Real encrypted tar/age archive restores bytes, extraction, open items, source artifacts, projections and two close revisions | `test_accounting_backup_roundtrip` |
 | Packaged runtime | Built PyInstaller sidecar launches; bundled AT resources load against encrypted fixture; real Poppler worker uses only pipes | `test_accounting_packaged_smoke` with explicit `KASSIBER_FROZEN_SMOKE_BIN` |
 
 Test filenames above are module stems under `tests/`. UI models/components and
-native export guards have additional tests under `ui-tauri/`. A passing row
+exact Assistant consent has additional tests under `ui-tauri/`. A passing row
 demonstrates its fixture only, not arbitrary legal compliance or missing-source
 completeness. Core support remains usable with AI disabled.
 
-Selected financial AI is absent from this local second cut; published #546 still
-retains the preserved full candidate until verification and publication. Its historical
+Selected financial AI is restored in this dependent third cut. Its historical
 `test_accounting_ai_context`, `test_accounting_daemon_ai`,
 `test_accounting_ai_proposals`, `test_accounting_ai_result_tokens`, CLI selection
-and provider-broker proofs must travel with the dependent third cut and be rerun
-there. One-use provider/book/revision-bound disclosure and separate draft/field
+and provider-broker proofs are restored with the feature and must be rerun
+here. One-use provider/book/revision-bound disclosure and separate draft/field
 approval remain required; ordinary task consent cannot substitute for them.
 
 ## Historical pre-stack verification checkpoint (2026-09-05)
@@ -395,9 +396,9 @@ does not resolve the technical intermittent-failure hold or complete pilot accep
   it is not installed; synthetic worker and real Poppler tests are separate.
 - Native PDF/OCR parsing remains fail-closed on Windows until process-tree
   cancellation is tested there; UTF-8 and reviewed manual transcription remain
-  alternatives. The dependent selected-AI lane must separately preserve its
-  sensitive CLI-provider Windows guard. Neither selected assistance nor its
-  provider guard is part of this local second cut; restoration must be atomic.
+  alternatives. This selected-AI lane retains its sensitive CLI-provider
+  Windows guard alongside the feature. Explicit HTTP providers remain an
+  alternative; there is no hidden hosted fallback.
 - The canonical bank interchange is not a verified adapter for the unknown
   pilot bank export. Confirm that format before claiming the pilot import is done.
 - Delivery now uses the [dependency-aware PR stack](../plan/18-general-accounting-pr-stack.md).

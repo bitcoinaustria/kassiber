@@ -572,8 +572,8 @@ top of the monolith.
     move selected financial AI assistance to dependent
     `codex/accounting-selected-ai`. Verify each cut and recombined feature
     coverage; no placeholder imports, disabled tests or new accounting UI.
-    The second-cut extraction is applied locally with explicit owner approval;
-    fresh verification, third-cut restoration and publication remain pending.
+    Second-cut extraction and third-cut restoration are applied locally with
+    explicit owner approval; fresh verification and publication remain pending.
   - [x] Publish draft stack #542 → #545 → #546 with explicit RP2 merge hold.
     Merge independently green #543 and close superseded #455, retaining branches.
   - [x] Resolve RP2 #48's chronological/historical basis blockers, merge the
@@ -588,14 +588,13 @@ top of the monolith.
     route, sidebar, Settings switch and forms from `codex/accounting-cli-agent`.
     Keep all financial data/core and exact approval in the existing Assistant.
     Explicit CLI configuration replaces UI enrollment; no automatic encryption.
-  - [ ] Restore and verify selected financial AI assistance in the dependent
-    third cut only, from preserved complete agent `32312f0e` on
+  - [ ] Verify selected financial AI assistance restored locally in the dependent
+    third cut from preserved complete agent `32312f0e` on
     `codex/accounting-agent-presplit-20260906`. Keep the hash-bound interactive
     request, tool-free/no-history grants and separate disclosure/draft approvals.
     No blanket approval, output capture, implicit context switch,
-    ordinary-agent financial read or model fallback. Absent from this local
-    second cut; published #546 remains at preserved full candidate `32312f0e`
-    until verification and publication.
+    ordinary-agent financial read or model fallback. Available in this third
+    cut, not #546's ordinary-task cut; fresh verification/publication pending.
   - [ ] **Implementation checkpoint (2026-09-05):** country-neutral ledger,
     encrypted evidence, canonical bank interchange, partial settlements,
     manual schedules, revisioned close and portable arithmetic verifier are
@@ -605,8 +604,8 @@ top of the monolith.
     historical opening, lot-bound book-only valuation, cash-book controls,
     K2/2025 and six annex working papers, local extraction/optional OCR,
     and reviewed atomic batch posting. Scoped no-history AI proposals are
-    removed with their security/tests from this local second cut for restoration
-    in the dependent third cut; the owner explicitly approved that atomic move.
+    restored with their security/tests in this dependent third cut after the
+    owner-approved atomic extraction from #546.
     Real encrypted backup/restore covers two closes and retained source data.
     Fresh split verification/review and separate CLI/agent product acceptance
     and real pilot facts are still outstanding; this is not the completed

@@ -20,8 +20,8 @@ that replace existing files instead of making targeted edits.
   Missing real-organization facts and measured pilot outcomes
   become separate product acceptance, not blanket code-merge blockers.
 - Files: Selected financial AI context/proposals, disclosure daemon and CLI,
-  sensitive provider isolation and their tests are removed from this #546 cut
-  for restoration together in dependent `codex/accounting-selected-ai`.
+  sensitive provider isolation and their tests were removed from #546 and are
+  restored together here in dependent `codex/accounting-selected-ai`.
   Unused accounting-export scope scaffolding in native `supervisor.rs` is
   removed following independent review; its former dedicated export UI was
   already removed. Shared files retain ordinary opaque
@@ -33,9 +33,11 @@ that replace existing files instead of making targeted edits.
   books or original preview are targets. Technical failures remain merge holds;
   the extraction and recombination require fresh independent verification.
 - Command/tool: Scoped `apply_patch` extraction with preserved recovery refs.
-  Second-cut changes are local; fresh tests, third-lane restoration and stack
-  publication remain pending. The feature is absent alongside its protections,
-  not left enabled with weaker guards.
+  Third-lane restoration is applied locally; fresh tests and stack publication
+  remain pending. The recombined code/tests match preserved `32312f0e` except
+  the intentionally removed unused native export scaffold; documentation
+  retains the approved split and acceptance-policy updates. The feature was
+  never left enabled with weaker guards in the second cut.
 
 - Date: 2026-09-05
 - Approval source: Owner requested full accounting CLI/Agent-only instead of a
