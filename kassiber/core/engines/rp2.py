@@ -22,6 +22,10 @@ from ...tax_policy import (
 )
 from ...transfers import is_bitcoin_rail_pair
 from .. import pricing
+from ..transaction_kinds import (
+    INBOUND_KIND_TO_RP2_TYPE as _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE,
+    normalized_transaction_kind,
+)
 from ..transfer_chronology import order_same_time_transfers
 from ..ownership_transfers import (
     detect_conflicting_spend_ids,
@@ -66,23 +70,6 @@ _RP2_EARN_TRANSACTION_TYPES = {
     "staking",
 }
 _NON_REPORTABLE_AT_CATEGORY_OVERRIDES = {"alt_taxfree", "neu_swap"}
-_RP2_INBOUND_KIND_TO_TRANSACTION_TYPE = {
-    "airdrop": "AIRDROP",
-    "hardfork": "HARDFORK",
-    "hard_fork": "HARDFORK",
-    "income": "INCOME",
-    "interest": "INTEREST",
-    "lending_interest": "INTEREST",
-    "mining": "MINING",
-    "mining_reward": "MINING",
-    "routing_income": "INCOME",
-    "staking": "STAKING",
-    # Kassiber's tax lens starts at the Bitcoin acquisition. Compensation
-    # provenance stays on the raw transaction, but the reviewed EUR value is
-    # booked as ordinary acquisition basis instead of an employment-income
-    # event (wage-tax reporting lives outside Kassiber).
-    "wages": "BUY",
-}
 # Inbound kinds that look like income but are NOT in the map above. Defaulting
 # them to BUY (a plain acquisition) silently drops the income declaration, so
 # they are quarantined for explicit income-vs-acquisition classification.
@@ -357,17 +344,7 @@ def _rp2_config_token(value: Any, field: str) -> str:
 
 
 def _normalized_event_kind(event: Any) -> str:
-    raw_row = getattr(event, "raw_row", None) or {}
-    keys = raw_row.keys() if hasattr(raw_row, "keys") else ()
-    # A user-assigned classification wins over the importer's provenance kind.
-    # `kind` still records what the source said, so trust checks that key off it
-    # (the Lightning payment-hash pairing in transfers.py) keep working.
-    kind = raw_row["kind_override"] if "kind_override" in keys else None
-    if kind in (None, ""):
-        kind = raw_row["kind"] if "kind" in keys else None
-    if kind is None:
-        return ""
-    return str(kind).strip().lower().replace("-", "_").replace(" ", "_")
+    return normalized_transaction_kind(getattr(event, "raw_row", None) or {})
 
 
 def _rp2_in_transaction_type(event: Any) -> str:

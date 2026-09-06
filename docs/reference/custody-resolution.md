@@ -22,6 +22,20 @@ JSON cannot impersonate a native observer. Provider IDs, matching amounts and
 nearby timestamps remain candidate evidence. A reviewed component can supply
 missing historical meaning with explicit quantities and durable provenance.
 
+Swap and refund candidates cannot connect known different Bitcoin network
+domains. Provider-ID and refund-funding uniqueness is checked within compatible
+networks; unknown-network duplicates remain competing evidence rather than
+promoting a candidate to exact. This also applies to time/amount suggestions
+used by report-readiness checks.
+
+Missing-wallet discovery uses the same explicit inbound classification and
+user override precedence as the accounting adapter. A classified purchase or
+income receipt is not an unexplained custody return merely because its wallet
+is a postmix wallet. Search-capacity limits cannot turn already-disqualified
+external sources back into custody holds; genuine unresolved sources remain
+held when their search is incomplete. Notes and taxability flags do not
+establish an external origin.
+
 ## Automatic evidence and remaining boundaries
 
 | Situation | Result |

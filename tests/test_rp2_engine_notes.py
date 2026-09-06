@@ -111,6 +111,24 @@ class ComposeEventNotesTest(unittest.TestCase):
             "BUY",
         )
 
+    def test_shared_kind_normalization_preserves_rp2_override_precedence(self):
+        for kind, override, expected in (
+            ("buy", None, "BUY"),
+            ("income", None, "INCOME"),
+            ("mining-reward", "", "MINING"),
+            ("deposit", " Lending Interest ", "INTEREST"),
+            ("income", "wages", "BUY"),
+            ("income", "deposit", "BUY"),
+            ("income", " ", "BUY"),
+        ):
+            with self.subTest(kind=kind, override=override):
+                self.assertEqual(
+                    _rp2_in_transaction_type(_KindEventStub(raw_row={
+                        "kind": kind, "kind_override": override,
+                    })),
+                    expected,
+                )
+
 
 def _pool_result(country, buys, sales, from_date=date.min, to_date=date.max):
     from rp2.configuration import Configuration
