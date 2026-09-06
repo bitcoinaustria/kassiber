@@ -21,6 +21,7 @@ from ..onchain import (
     output_address, output_script, output_value_sats, stored_tx_mapping,
 )
 from ..privacy_hygiene import collaborative_transaction_evidence
+from .ownership import branch_evidence
 
 
 def digest(value: Any) -> str:
@@ -148,6 +149,8 @@ def observer_index(index: AnalysisIndex, observer: str) -> AnalysisIndex:
         for side in ("inputs", "outputs"):
             for item in public[side]:
                 item["amount_msat"] = nodes.get(item["output_id"], {}).get("amount_msat")
+        public.pop("directions", None)
+        public.pop("transaction_ids", None)
         if nodes[ident]["chain"] == "liquid":
             public["fee_msat"] = None
         marker = public.get("collaboration")
@@ -173,6 +176,11 @@ def observer_index(index: AnalysisIndex, observer: str) -> AnalysisIndex:
         public["evidence"] = refs(finding.get("evidence", ()), ids[0])
         findings.append(public)
     coverage = thaw(index.coverage)
+    datasets = coverage.get("datasets")
+    if isinstance(datasets, dict):
+        partitions = datasets.pop("visibility_coverage", {})
+        if "public" in partitions:
+            datasets.update(partitions["public"])
     coverage.update(observer_knowledge="public_chain_facts", hidden_private_node_count=len(index.nodes) - len(nodes),
                     hidden_private_relation_count=sum(edge["kind"] == "custody" for edge in index.edges.values()),
                     public_liquid_value_policy="explicit_public_values_only", private_labels_withheld=True)
@@ -333,7 +341,14 @@ class _Builder:
         if isinstance(confirmations, int) and confirmations < 0 or raw.get("removed") is True:
             node["status"] = "stale"
             self.finding("retracted_transaction", [node_id], "Stored transaction is removed or conflicted; it cannot prove current reachability.")
-        fact = self.tx_facts.setdefault(node_id, {"inputs": [], "outputs": [], "fee_msat": None, "complete": False, "collaboration": None})
+        fact = self.tx_facts.setdefault(node_id, {"inputs": [], "outputs": [], "fee_msat": None, "complete": False, "collaboration": None,
+                                                "transaction_ids": [], "directions": []})
+        if not cached:
+            if row["id"] not in fact["transaction_ids"]:
+                fact["transaction_ids"].append(row["id"])
+            direction = str(row.get("direction") or "").strip().lower()
+            if direction and direction not in fact["directions"]:
+                fact["directions"].append(direction)
         if chain == "bitcoin":
             from .features import extract_transaction_features, normalize_persisted_features, PERSISTED_FEATURE_KEY
             source = "reference_cache" if cached else "stored_transaction"
@@ -419,19 +434,29 @@ class _Builder:
         if scope.protocol_chain not in {"bitcoin", "liquid"} or txid is None or vout is None:
             self.coverage["invalid_observations"] += 1
             return
-        ref = evidence("wallet_inventory", str(row["id"]), "wallet_observed")
+        ref = evidence("wallet_inventory", str(row.get("id") or digest(row)), "wallet_observed")
         amount = integer(row.get("amount"))
         entry = {"scriptpubkey": row.get("script_pubkey"), "address": row.get("address"), "asset": row.get("asset")}
         node = self.output(scope.protocol_chain, scope.network, txid, vout, entry, ref, 3)
         self.merge(node, {"amount_msat": str(amount) if amount is not None else None}, 3, ref)
         self.own(node, row.get("wallet_id"))
         self.profile_seeds.add(node["id"])
-        self.output_facts[node["id"]].update(branch_role=row.get("branch_label"), ownership_known=True)
+        facts = self.output_facts[node["id"]]
+        facts["inventory_observation_count"] = facts.get("inventory_observation_count", 0) + 1
+        ambiguous = facts["inventory_observation_count"] > 1
+        facts.update(branch_evidence(row.get("branch_label"), row.get("branch_index")))
+        facts.update(ownership_known=not ambiguous, ownership_ambiguous=ambiguous)
+        if ambiguous:
+            facts.update(branch_role="unknown", branch_evidence_level="unknown", change_evidence="unavailable", branch_source="ambiguous_inventory_ownership")
         spent = canonical_txid(row.get("spent_by"))
         if spent:
             target = self.node(tx_node_id(scope.protocol_chain, scope.network, spent), scope.protocol_chain, scope.network, "transaction", txid=spent)
             self.alias(spent, target["id"])
             self.edge(node["id"], target["id"], "spends", ref, level="wallet_observed")
+            fact = self.tx_facts.setdefault(target["id"], {"inputs": [], "outputs": [], "fee_msat": None, "complete": False, "collaboration": None,
+                                                          "transaction_ids": [], "directions": []})
+            if not fact["complete"] and node["id"] not in {item["output_id"] for item in fact["inputs"]}:
+                fact["inputs"].append({"output_id": node["id"], "amount_msat": None})
 
     def relations(self, decisions: list[dict], economics: list[dict], fresh: bool):
         self.coverage["custody_fresh"] = fresh
@@ -486,6 +511,9 @@ class _Builder:
                     edge["status"] = "conflicting"
                 self.finding("competing_spends", [output_id, *sorted({edge["target"] for edge in edges})], "Multiple retained transactions spend the same outpoint. No current winner is inferred.")
         for node_id, fact in self.tx_facts.items():
+            for key in ("transaction_ids", "directions"):
+                if key in fact:
+                    fact[key].sort()
             for side in ("inputs", "outputs"):
                 for item in fact[side]:
                     item["amount_msat"] = self.nodes[item["output_id"]]["amount_msat"]

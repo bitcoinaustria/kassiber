@@ -14,11 +14,13 @@ import unittest
 import uuid
 
 from embit.psbt import PSBT
+from unittest.mock import patch
 
 from kassiber.core.chain_analysis import build_index, run_analysis, run_entropy
 from kassiber.core.chain_analysis.psbt import analyze_psbt, compare_psbts
 from kassiber.core.chain_analysis_acquisition import apply_acquisition, plan_acquisition
 from kassiber.core.chain_analysis_cases import compare_case, get_case, save_case
+from kassiber.core.privacy_mirror import build_privacy_mirror
 from kassiber.db import open_db
 from tests.integration.env import skip_unless_integration
 from tests.integration.test_live_bitcoin_core_regtest import _rpc
@@ -148,6 +150,43 @@ class LiveChainAnalysisTest(unittest.TestCase):
         for row in self.conn.execute("SELECT payload_json FROM chain_analysis_observations"):
             inspect(json.loads(row[0]))
             self.assertNotIn(self.password, row[0])
+        # Mirror must summarize acquired observations without contacting even
+        # the configured loopback node. An investigation alone cannot invent
+        # wallet ownership, and public workbench handoffs use the same snapshot.
+        with patch("socket.getaddrinfo", side_effect=AssertionError("implicit DNS")), patch("socket.socket.connect", side_effect=AssertionError("implicit network")):
+            mirror = build_privacy_mirror(self.conn, "p", redacted=False)
+            self.assertEqual(mirror["summary"]["status"], "unavailable")
+            self.assertEqual(mirror["summary"]["owned_output_count"], 0)
+            for finding in mirror["findings"]:
+                target = run_analysis(self.conn, "p", finding["investigation"]["query"])
+                self.assertEqual(target["snapshot_id"], mirror["investigation"]["snapshot_id"])
+
+    def test_mirror_personal_relevance_uses_core_owned_output_and_shared_evidence(self):
+        alice, bob = self.wallet(), self.wallet()
+        owned, counterparty = self.fund(alice), self.fund(bob)
+        signed = self.process(self.create_psbt([owned, counterparty], [{self.address(alice): 1.4}, {self.address(bob): 0.5999}]), alice, bob)
+        txid, _ = self.broadcast(signed)
+        self.acquire(txid)
+        funding = self.rpc("getrawtransaction", [owned["txid"], 1])
+        output = funding["vout"][owned["vout"]]
+        self.assertTrue(self.rpc("getaddressinfo", [output["scriptPubKey"]["address"]], alice)["ismine"])
+        now = "2026-09-06T12:00:00Z"
+        self.conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('alice','ws','p','Alice','descriptor','{}',?)", (now,))
+        self.conn.execute("INSERT INTO wallet_utxos(id,workspace_id,profile_id,wallet_id,chain,network,asset,amount,txid,vout,outpoint,confirmation_status,script_pubkey,spent_by,first_seen_at,last_seen_at) VALUES('owned','ws','p','alice','bitcoin','regtest','BTC',?,?,?,?, 'confirmed',?,?,?,?)", (int(_msat(output["value"])), owned["txid"], owned["vout"], f"{owned['txid']}:{owned['vout']}", output["scriptPubKey"]["hex"], txid, now, now))
+        self.conn.commit()
+        before = self.conn.total_changes
+        with patch("socket.getaddrinfo", side_effect=AssertionError("implicit DNS")), patch("socket.socket.connect", side_effect=AssertionError("implicit network")):
+            mirror = build_privacy_mirror(self.conn, "p", redacted=False)
+            common_input = next(row for row in mirror["findings"] if row["code"] == "common_input_control")
+            self.assertEqual(common_input["relevance"], "own_spend")
+            self.assertIn("assumes_no_undetected_collaboration", common_input["assumptions"])
+            self.assertEqual(mirror["summary"]["owned_output_count"], 1)
+            self.assertEqual(self.conn.total_changes, before)
+            # We know this fixture is collaborative because both Core wallets
+            # signed it. The public observer only gets a conditional hypothesis.
+            self.assertNotEqual(common_input["authority"], "observed")
+            reopened = run_analysis(self.conn, "p", common_input["investigation"]["query"])
+            self.assertEqual(reopened["snapshot_id"], common_input["investigation"]["snapshot_id"])
 
     def test_missing_intermediate_is_a_frontier_then_acquisition_recovers_exact_path_and_case(self):
         middle, destination, final_wallet = self.wallet(), self.wallet(), self.wallet()

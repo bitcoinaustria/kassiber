@@ -75,7 +75,7 @@ _FIELDS = set("""
     examples examples_truncated conditional_on_model limits max_states
     max_duration_ms max_inputs max_outputs complete local_only missing stale
     budget_exhausted topology_complete amount_complete_transaction_count
-    selected_node_count hypotheses_enabled hypothesis_count pattern_count
+    selected_node_count hypotheses_enabled hypothesis_count pattern_count label_count
     source_rows node_count edge_count transaction_count output_count record_count
     path_count visited_node_count inspected_edge_count invalid_observations
     cache_rejected custody_fresh missing_node_count conflicting_node_count
@@ -99,7 +99,7 @@ _FIELDS = set("""
     dataset_id datasets manifest content_sha256 dataset_state_digest state_digest
     byte_count row_count record_number claims dataset_version visibility dataset_status
     match_count subject_count active_dataset_count inactive_by_date_count lookup_queries
-    match_limit truncated complete_chain_coverage valid_from valid_until
+    match_limit match_limit_per_visibility truncated complete_chain_coverage valid_from valid_until
     scripts_skipped subject_limit subjects_truncated
     transaction_facts inputs outputs totals psbt_version validation input_msat output_msat
     final_vsize final_fee_rate_sat_vb known_input_amounts previous_transaction_hashes_verified

@@ -346,8 +346,8 @@ class PrivacyLinkageTests(unittest.TestCase):
             second = _txid("22")
             spend = _txid("33")
             reused_address = "bc1qreusedlocaladdress"
-            _insert_utxo(conn, wallet_id="w-a", txid=first, address=reused_address)
-            _insert_utxo(conn, wallet_id="w-a", txid=second, address=reused_address)
+            _insert_utxo(conn, wallet_id="w-a", txid=first, address=reused_address, script_pubkey="0014" + "12" * 20)
+            _insert_utxo(conn, wallet_id="w-a", txid=second, address=reused_address, script_pubkey="0014" + "12" * 20)
             _insert_tx(conn, spend, [(first, 0), (second, 0)])
 
             graph = build_privacy_linkage_graph(conn, PROFILE_ID)
@@ -409,13 +409,12 @@ class PrivacyLinkageTests(unittest.TestCase):
             conn.close()
 
         change_edges = [edge for edge in graph.edges if edge.kind == "change_output"]
-        self.assertEqual(len(change_edges), 1)
-        self.assertFalse(change_edges[0].new_linkage)
-        self.assertFalse(change_edges[0].observer_linkage)
-        self.assertEqual(change_edges[0].source, "stored_vin")
-        self.assertEqual(change_edges[0].evidence_level, "exact")
-        self.assertEqual(change_edges[0].evidence["change_evidence"], "ground_truth")
-        self.assertEqual(change_edges[0].evidence["change_source"], "wallet_branch_role")
+        self.assertEqual(change_edges, [])
+        change = graph.nodes[f"{spend}:0"]
+        self.assertEqual(change.branch_role, "change")
+        self.assertEqual(change.branch_evidence_level, "exact")
+        self.assertEqual(change.change_evidence, "ground_truth")
+        self.assertEqual(change.branch_source, "wallet_branch_role")
         self.assertEqual(graph.linkage_score, 0)
         self.assertEqual(len(graph.observer_entities), 0)
 
@@ -445,10 +444,9 @@ class PrivacyLinkageTests(unittest.TestCase):
             conn.close()
 
         change_edges = [edge for edge in graph.edges if edge.kind == "change_output"]
-        self.assertEqual(len(change_edges), 1)
-        self.assertFalse(change_edges[0].new_linkage)
-        self.assertFalse(change_edges[0].observer_linkage)
-        self.assertEqual(change_edges[0].source, "spent_by")
+        self.assertEqual(change_edges, [])
+        self.assertEqual(graph.nodes[f"{parent}:0"].spent_by, spend)
+        self.assertEqual(graph.nodes[f"{spend}:0"].branch_role, "change")
         self.assertEqual(graph.linkage_score, 0)
 
     def test_multi_script_change_label_beats_numeric_convention(self):
@@ -473,12 +471,12 @@ class PrivacyLinkageTests(unittest.TestCase):
             conn.close()
 
         change_edges = [edge for edge in graph.edges if edge.kind == "change_output"]
-        self.assertEqual(len(change_edges), 1)
-        self.assertEqual(change_edges[0].evidence_level, "exact")
-        self.assertEqual(change_edges[0].evidence["change_evidence"], "imported")
-        self.assertEqual(
-            change_edges[0].evidence["change_source"], "imported_branch_role"
-        )
+        self.assertEqual(change_edges, [])
+        change = graph.nodes[f"{spend}:0"]
+        self.assertEqual(change.branch_role, "change")
+        self.assertEqual(change.branch_evidence_level, "exact")
+        self.assertEqual(change.change_evidence, "imported")
+        self.assertEqual(change.branch_source, "imported_branch_role")
         serialized = json.dumps(payload, sort_keys=True)
         self.assertNotIn("p2tr change", serialized)
         self.assertNotIn("descriptor", serialized)
@@ -505,12 +503,12 @@ class PrivacyLinkageTests(unittest.TestCase):
             conn.close()
 
         change_edges = [edge for edge in graph.edges if edge.kind == "change_output"]
-        self.assertEqual(len(change_edges), 1)
-        self.assertEqual(change_edges[0].evidence_level, "derived")
-        self.assertEqual(change_edges[0].evidence["change_evidence"], "heuristic")
-        self.assertEqual(
-            change_edges[0].evidence["change_source"], "numeric_branch_convention"
-        )
+        self.assertEqual(change_edges, [])
+        change = graph.nodes[f"{spend}:0"]
+        self.assertEqual(change.branch_role, "change")
+        self.assertEqual(change.branch_evidence_level, "derived")
+        self.assertEqual(change.change_evidence, "heuristic")
+        self.assertEqual(change.branch_source, "numeric_branch_convention")
 
     def test_receive_branch_label_prevents_numeric_change_guess(self):
         conn = _conn()
@@ -577,7 +575,7 @@ class PrivacyLinkageTests(unittest.TestCase):
                 direction="outbound",
                 fee=1_000,
                 raw_json={
-                    "vin": [{"txid": parent, "vout": 0}],
+                    "vin": [{"txid": parent, "vout": 0, "sequence": 0xFFFFFFFD}],
                     "rbf": True,
                 },
             )
@@ -622,8 +620,8 @@ class PrivacyLinkageTests(unittest.TestCase):
                 fee=5_000,
                 raw_json={
                     "vin": [
-                        {"txid": external_a, "vout": 0},
-                        {"txid": external_b, "vout": 1},
+                        {"txid": external_a, "vout": 0, "sequence": 0xFFFFFFFD},
+                        {"txid": external_b, "vout": 1, "sequence": 0xFFFFFFFF},
                     ],
                     "rbf": True,
                     "vout": [
@@ -993,8 +991,8 @@ class PrivacyLinkageTests(unittest.TestCase):
             first = _txid("99")
             second = _txid("aa")
             reused_address = "bc1qaddressreusedacrossoutputs"
-            _insert_utxo(conn, wallet_id="w-a", txid=first, address=reused_address)
-            _insert_utxo(conn, wallet_id="w-b", txid=second, address=reused_address)
+            _insert_utxo(conn, wallet_id="w-a", txid=first, address=reused_address, script_pubkey="0014" + "12" * 20)
+            _insert_utxo(conn, wallet_id="w-b", txid=second, address=reused_address, script_pubkey="0014" + "12" * 20)
 
             graph = build_privacy_linkage_graph(conn, PROFILE_ID)
             payload = graph.to_redacted_payload()
@@ -1004,7 +1002,7 @@ class PrivacyLinkageTests(unittest.TestCase):
         reuse_edges = [edge for edge in graph.edges if edge.kind == "address_reuse"]
         self.assertEqual(len(reuse_edges), 1)
         self.assertTrue(reuse_edges[0].new_linkage)
-        self.assertEqual(reuse_edges[0].evidence_level, "exact")
+        self.assertEqual(reuse_edges[0].evidence_level, "derived")  # Script equality is observed; common control is conditional.
         self.assertEqual(payload["summary"]["linkage_score"], 1)
         serialized = json.dumps(payload, sort_keys=True)
         self.assertNotIn(reused_address, serialized)
@@ -1089,7 +1087,7 @@ class PrivacyLinkageTests(unittest.TestCase):
                 wallet_id="w-a",
                 txid=second,
                 address=reused_address,
-                script_pubkey="0014" + "55" * 20,
+                script_pubkey="0014" + "44" * 20,
             )
             psbt = _psbt(
                 [(first, 0), (second, 0)],
@@ -1268,7 +1266,8 @@ class PrivacyLinkageTests(unittest.TestCase):
                 conn.execute("UPDATE transactions SET privacy_boundary=?", (boundary,))
                 graph = build_privacy_linkage_graph(conn, PROFILE_ID)
                 conn.close()
-                self.assertEqual({edge.kind for edge in graph.edges}, {"common_input", "change_output"})
+                self.assertEqual({edge.kind for edge in graph.edges}, {"common_input"})
+                self.assertEqual(graph.nodes[f"{spend}:0"].branch_role, "change")
                 self.assertTrue(all(not edge.observer_linkage for edge in graph.edges))
                 self.assertEqual(graph.linkage_score, 0)
                 self.assertEqual(graph.observer_entities, ())
@@ -1364,7 +1363,7 @@ class PrivacyLinkageTests(unittest.TestCase):
         clean, partial = _txid("b1"), _txid("b2")
         _insert_utxo(conn, wallet_id="one", txid=clean)
         _insert_tx(conn, clean, [], raw_json={"vin": [{"coinbase": "00"}], "vout": [{"value": 1000}]})
-        _insert_tx(conn, partial, [], direction="outbound", raw_json={"rbf": True})
+        _insert_tx(conn, partial, [], direction="outbound", raw_json={"vin": [{"txid": clean, "vout": 0, "sequence": 0xFFFFFFFD}]})
         graph = build_privacy_linkage_graph(conn, PROFILE_ID)
         conn.close()
         self.assertEqual(graph.analysed_transaction_count, 1)
@@ -1480,6 +1479,53 @@ class PrivacyLinkageTests(unittest.TestCase):
                     self.assertTrue(all(fact.evidence["reason"] == "ambiguous_output_allocation" for fact in graph.source_proximity))
                 else:
                     self.assertTrue(all(fact.provenance_status == "known_source_proximity" for fact in graph.source_proximity))
+
+    def test_shared_snapshot_projection_reuses_result_without_rebuilding(self):
+        from kassiber.core.chain_analysis import analyze_snapshot, build_index
+        conn = _conn()
+        try:
+            first, second, spend = _txid("c7"), _txid("c8"), _txid("c9")
+            for txid in (first, second):
+                _insert_utxo(conn, wallet_id="one", txid=txid)
+            _insert_tx(conn, spend, [(first, 0), (second, 0)])
+            index = build_index(conn, PROFILE_ID)
+            analysis = analyze_snapshot(index, {"observer": "public", "include_hypotheses": True})
+            with patch.object(privacy_linkage, "build_index", side_effect=AssertionError("duplicate database graph read")), patch.object(privacy_linkage, "analyze_snapshot", side_effect=AssertionError("duplicate interpretation")), patch.object(socket, "getaddrinfo", side_effect=AssertionError("unexpected DNS")):
+                graph = build_privacy_linkage_graph(conn, PROFILE_ID, index=index, analysis=analysis)
+            shared_edges = {row["id"] for row in analysis["edges"] if row["kind"] == "hypothesis"}
+            self.assertTrue(graph.edges)
+            self.assertTrue(all(edge.evidence["shared_evidence_id"] in shared_edges for edge in graph.edges))
+            self.assertEqual(graph.linkage_score, 1)
+            with self.assertRaises(ValueError):
+                build_privacy_linkage_graph(conn, PROFILE_ID, index=index, analysis={**analysis, "snapshot_id": "stale"})
+        finally:
+            conn.close()
+
+    def test_identical_address_text_cannot_override_distinct_locking_scripts(self):
+        conn = _conn()
+        try:
+            first, second = _txid("d6"), _txid("d7")
+            for txid, script in ((first, "0014" + "12" * 20), (second, "0014" + "34" * 20)):
+                _insert_utxo(conn, wallet_id="one", txid=txid, address="identical-imported-text", script_pubkey=script)
+            graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+            self.assertEqual(graph.linkage_score, 0)
+            proposal = _psbt([(first, 0), (second, 0)], [(150_000, "0014" + "56" * 20)])
+            self.assertEqual(analyze_psbt_privacy(conn, PROFILE_ID, proposal).summary["cluster_merge_delta"], 1)
+        finally:
+            conn.close()
+
+    def test_rbf_metadata_without_sequences_is_not_structural_proof(self):
+        conn = _conn()
+        try:
+            first = _txid("f9")
+            _insert_utxo(conn, wallet_id="one", txid=first)
+            _insert_tx(conn, first, [], direction="outbound", raw_json={"rbf": True})
+            graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+            self.assertNotIn("sender_rbf", {tell.kind for tell in graph.transaction_tells})
+            self.assertEqual(graph.scored_transaction_count, 0)
+            self.assertEqual(graph.transaction_coverage_unknown_count, 1)
+        finally:
+            conn.close()
 
 
 if __name__ == "__main__":

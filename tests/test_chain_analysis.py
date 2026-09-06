@@ -3,7 +3,7 @@ import json
 import sqlite3
 import unittest
 
-from kassiber.core.chain_analysis import build_index, normalize_query, query_index
+from kassiber.core.chain_analysis import analyze_snapshot, build_index, normalize_query, query_index, run_analysis
 from kassiber.core.chain_analysis.index import output_node_id, tx_node_id
 from kassiber.core.chain_analysis.query import resolve_subject
 from kassiber.errors import AppError
@@ -342,6 +342,44 @@ class ObserverAndInterpretationRegressionTests(unittest.TestCase):
         result = run_analysis(self.conn, "p", {"include_hypotheses": True})
         self.assertTrue(any(row["code"] == "conflicting_output_script" for row in result["findings"]))
         self.assertFalse(result["clusters"])
+
+    def test_snapshot_analysis_is_pure_and_matches_workbench(self):
+        add_tx(self.conn, 1)
+        add_tx(self.conn, 2, [(1, 0)], outputs=(900,))
+        args = {"observer": "public", "include_hypotheses": True}
+        expected = run_analysis(self.conn, "p", args)
+        index = build_index(self.conn, "p")
+        # A frozen snapshot must remain usable after its DB connection ends.
+        self.conn.close()
+        self.assertEqual(analyze_snapshot(index, args), expected)
+
+    def test_branch_evidence_and_duplicate_ownership_are_canonical_and_private(self):
+        from kassiber.core.chain_analysis.index import observer_index
+        self.conn.execute("ALTER TABLE wallet_utxos ADD COLUMN branch_index INTEGER")
+        add_tx(self.conn, 1)
+        self.conn.execute("INSERT INTO wallet_utxos VALUES('u','p','w','bitcoin','main',?,0,1000000,'BTC',NULL,?,'p2tr change',NULL,6)", (txid(1), "0014" + "22" * 20))
+        oid = output_node_id("bitcoin", "main", txid(1), 0)
+        index = build_index(self.conn, "p")
+        self.assertEqual(index.output_facts[oid]["branch_role"], "change")
+        self.assertEqual(index.output_facts[oid]["change_evidence"], "imported")
+        self.assertTrue(index.output_facts[oid]["ownership_known"])
+        public = observer_index(index, "public")
+        self.assertFalse(public.output_facts[oid]["ownership_known"])
+        self.assertIsNone(public.output_facts[oid]["branch_role"])
+        self.assertNotIn("branch_source", public.output_facts[oid])
+        self.conn.execute("INSERT INTO wallet_utxos SELECT 'duplicate',profile_id,'another',chain,network,txid,vout,amount,asset,address,script_pubkey,branch_label,spent_by,branch_index FROM wallet_utxos")
+        duplicate = build_index(self.conn, "p")
+        self.assertTrue(duplicate.output_facts[oid]["ownership_ambiguous"])
+        self.assertFalse(duplicate.output_facts[oid]["ownership_known"])
+        self.assertEqual(duplicate.output_facts[oid]["branch_role"], "unknown")
+
+    def test_retracted_transactions_do_not_publish_current_structural_findings(self):
+        add_tx(self.conn, 1)
+        add_tx(self.conn, 2, [(1, 0)], extra={"vin": [{"txid": txid(1), "vout": 0, "sequence": 0xFFFFFFFD}], "confirmations": -1})
+        result = run_analysis(self.conn, "p", {"observer": "public"})
+        tid = tx_node_id("bitcoin", "main", txid(2))
+        self.assertNotIn(tid, {row["subject"] for row in result["transaction_features"]})
+        self.assertFalse(any(row["code"] == "explicit_rbf_signal" and tid in row["node_ids"] for row in result["findings"]))
 
 
 def test_partial_duplicate_cannot_extend_a_complete_transaction_in_either_order():

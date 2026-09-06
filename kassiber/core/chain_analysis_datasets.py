@@ -556,7 +556,10 @@ def match_subjects(conn, profile_id, subjects, *, observer="owner", limit=5000, 
 
     ``as_of`` defaults to now. Validity is [valid_from, valid_until). Expired or
     not-yet-valid claims stay stored but do not count as present attribution.
-    Coverage explicitly reports bounds; absence is never proof of anonymity.
+    ``limit`` applies independently to public/private claim populations, so
+    private knowledge cannot starve public observer analysis. Owner/disclosed
+    calls return at most twice that limit; public calls return at most limit.
+    Coverage reports each visibility bound; absence is never proof of anonymity.
     ``datasets`` includes active visible manifests even when nothing matches.
     """
     if observer not in ("public", "owner", "disclosed") or type(limit) is not int or not 1 <= limit <= 20_000:
@@ -574,24 +577,43 @@ def match_subjects(conn, profile_id, subjects, *, observer="owner", limit=5000, 
     with _atomic(conn):
         packs = [_pack(row) for row in conn.execute(f"SELECT * FROM chain_analysis_datasets WHERE profile_id=? AND status='active'{clause} ORDER BY id", (profile_id,))]
         state = hashlib.sha256(_json(packs).encode()).hexdigest()
-        found, queries, expired = [], 0, 0
-        truncated = False
+        # Ownership knowledge must not consume an outside observer's claim
+        # budget. Otherwise a large private pack encountered first would hide a
+        # public attribution when a canonical owner snapshot is projected later.
+        visibilities = ("public",) if observer == "public" else ("public", "private")
+        found = {visibility: [] for visibility in visibilities}
+        coverage_by_visibility = {visibility: {"match_count": 0, "active_dataset_count": 0,
+                                  "inactive_by_date_count": 0, "lookup_queries": 0,
+                                  "match_limit": limit, "truncated": False} for visibility in visibilities}
         for pack in packs:
+            visibility = pack["visibility"]
+            partition = coverage_by_visibility[visibility]
+            partition["active_dataset_count"] += 1
             manifest = pack["manifest"]
             if (manifest["valid_from"] and instant < manifest["valid_from"]) or (manifest["valid_until"] and instant >= manifest["valid_until"]):
-                expired += 1
+                partition["inactive_by_date_count"] += 1
+                continue
+            if partition["truncated"]:
                 continue
             keys = sorted(grouped.get((pack["chain"], pack["network"]), ()))
+            matches = found[visibility]
             for offset in range(0, len(keys), 200):
                 chunk = keys[offset:offset+200]
                 marks = ",".join("?" for _ in chunk)
-                queries += 1
-                rows = conn.execute(f"SELECT * FROM chain_analysis_dataset_claims INDEXED BY idx_chain_analysis_dataset_subject WHERE dataset_id=? AND subject IN ({marks}) AND (valid_from IS NULL OR valid_from<=?) AND (valid_until IS NULL OR valid_until>?) ORDER BY subject,record_number LIMIT ?", (pack["id"], *chunk, instant, instant, limit + 1 - len(found))).fetchall()
-                for row in rows:
-                    found.append(_matched_claim(pack, row))
-                if len(found) > limit:
-                    truncated = True
+                partition["lookup_queries"] += 1
+                rows = conn.execute(f"SELECT * FROM chain_analysis_dataset_claims INDEXED BY idx_chain_analysis_dataset_subject WHERE dataset_id=? AND subject IN ({marks}) AND (valid_from IS NULL OR valid_from<=?) AND (valid_until IS NULL OR valid_until>?) ORDER BY subject,record_number LIMIT ?", (pack["id"], *chunk, instant, instant, limit + 1 - len(matches))).fetchall()
+                matches.extend(_matched_claim(pack, row) for row in rows)
+                if len(matches) > limit:
+                    partition["truncated"] = True
                     break
-            if truncated:
-                break
-    return {"claims": found[:limit], "datasets": packs, "dataset_state_digest": state, "coverage": {"subject_count": sum(len(keys) for keys in grouped.values()), "match_count": min(limit, len(found)), "active_dataset_count": len(packs), "inactive_by_date_count": expired, "lookup_queries": queries, "match_limit": limit, "truncated": truncated, "as_of": instant, "complete_chain_coverage": False, "authority": "imported_attribution_claims"}}
+        for visibility in visibilities:
+            coverage_by_visibility[visibility]["match_count"] = min(limit, len(found[visibility]))
+        claims = [claim for visibility in visibilities for claim in found[visibility][:limit]]
+        coverage = {"subject_count": sum(len(keys) for keys in grouped.values()), "match_count": len(claims),
+                    "active_dataset_count": len(packs), "inactive_by_date_count": sum(row["inactive_by_date_count"] for row in coverage_by_visibility.values()),
+                    "lookup_queries": sum(row["lookup_queries"] for row in coverage_by_visibility.values()), "match_limit": limit,
+                    "match_limit_per_visibility": True,
+                    "truncated": any(row["truncated"] for row in coverage_by_visibility.values()),
+                    "visibility_coverage": coverage_by_visibility, "as_of": instant, "complete_chain_coverage": False,
+                    "authority": "imported_attribution_claims"}
+    return {"claims": claims, "datasets": packs, "dataset_state_digest": state, "coverage": coverage}

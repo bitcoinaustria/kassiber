@@ -738,11 +738,14 @@ smuggle a hidden network or mutation argument into a narrower tool.
   tool receives only this redacted payload.
 - `ui_reports_privacy_mirror` maps to daemon kind
   `ui.reports.privacy_mirror`; it returns the redacted Privacy Mirror payload
-  used by the dedicated page and `kassiber reports privacy-mirror`, including
-  exposure summary, adversary cards, wallet/transaction/UTXO views, timeline,
-  coverage, unknowns, evidence drilldowns, and the computed worst local privacy
-  risk. It is read-only, local-only, advisory-only, and every result carries
-  `evidence_level`. The AI tool does not receive raw PSBT text. The chain-analysis workbench
+  projected from the same immutable public-observer snapshot as Chain Analysis:
+  personal linkage findings, counterparty context, executed checks, coverage and
+  bounded conditional interpretation counts. CLI exports use the same opaque
+  scoped references; desktop navigation retains physical references locally.
+  There is no aggregate grade or inferred ownership probability. Finding-specific
+  assistant handoffs require `ui.chain_analysis.ai_context` with the displayed
+  snapshot; raw graph identities must not be interpolated into prompts.
+  The read is local-only and advisory-only. The chain-analysis workbench
   can inspect and compare PSBT v0/v2 sources through native-selected opaque
   grants; structured facts, explicit Payjoin constraints and job receipts pass
   through the same provider projection. Long work uses cancellable `.start`

@@ -5033,6 +5033,8 @@ def _reports_privacy_hygiene_payload(
 def _reports_privacy_mirror_payload(
     conn: sqlite3.Connection,
     raw_args: dict[str, Any] | None = None,
+    *,
+    redacted: bool = False,
 ) -> dict[str, Any]:
     args = raw_args or {}
     unknown = sorted(set(args))
@@ -5043,7 +5045,7 @@ def _reports_privacy_mirror_payload(
             details={"unknown": unknown},
             retryable=False,
         )
-    return core_reports.report_privacy_mirror(conn, None, None, _report_hooks())
+    return core_reports.report_privacy_mirror(conn, None, None, _report_hooks(), redacted=redacted)
 
 
 def _reports_psbt_privacy_payload(
@@ -6030,7 +6032,7 @@ def _execute_read_only_ai_tool(
             elif entry.daemon_kind == "ui.reports.privacy_hygiene":
                 payload = _reports_privacy_hygiene_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.reports.privacy_mirror":
-                payload = _reports_privacy_mirror_payload(conn, call.arguments)
+                payload = _reports_privacy_mirror_payload(conn, call.arguments, redacted=True)
             elif entry.daemon_kind == "ui.reports.exit_tax_preview":
                 payload = core_reports.report_exit_tax(
                     conn,

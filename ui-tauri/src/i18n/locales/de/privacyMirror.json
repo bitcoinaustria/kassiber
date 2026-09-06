@@ -1,248 +1,235 @@
 {
   "title": "Privacy Mirror",
-  "subtitle": "Lokale Linkage-, Gegner-, Coverage- und Future-Spend-Privatsphäre-Evidenz für das aktive Buch.",
-  "refresh": "Privacy Mirror aktualisieren",
-  "yes": "Ja",
-  "bounded": "Begrenzt",
-  "guardrail": {
-    "local": "Nur lokal",
-    "advisory": "Hinweis",
-    "degraded": "Eingeschränkt"
+  "observer": "Öffentlicher Blockchain-Beobachter",
+  "subtitle": "Was lokale Chain-Daten über deine Aktivitäten verraten könnten – mit sichtbaren Annahmen und Datenlücken.",
+  "refresh": "Lokale Analyse aktualisieren",
+  "ask": "Assistent fragen",
+  "explain": "Erklären",
+  "workbench": "Chain Analysis öffnen",
+  "investigate": "Untersuchen",
+  "investigateTransaction": "Öffentliche Rückschlüsse untersuchen",
+  "refreshFailed": "Aktualisierung fehlgeschlagen. Dies sind die vorherigen Ergebnisse; sie bilden dein aktuelles Buch möglicherweise nicht mehr ab.",
+  "affectedOutputs_one": "{{count}} deiner Outputs betroffen",
+  "affectedOutputs_other": "{{count}} deiner Outputs betroffen",
+  "findingBasis": "Annahmen und Grenzen",
+  "assumptions": "Annahmen des Beobachters",
+  "toolsElsewhere": "Im Analyse-Werkzeug fortfahren:",
+  "checkSpend": "Geplante Zahlung prüfen",
+  "datasets": "Zuordnungsquellen",
+  "summary": {
+    "findings_one": "{{count}} Befund zur Prüfung",
+    "findings_other": "{{count}} Befunde zur Prüfung",
+    "no_observed_exposure": "Kein vorrangiger Verknüpfungsbefund in den geprüften Daten",
+    "unavailable": "Mehr lokale Nachweise erforderlich"
   },
-  "evidence": {
-    "exact": "Exakt",
-    "derived": "Abgeleitet",
-    "unknown": "Unbekannt"
+  "summaryBody": {
+    "findings": "Diese Beobachtungen können Verknüpfungen erleichtern. Ein Rückschluss gilt unter den genannten Annahmen; er beweist kein gemeinsames Eigentum.",
+    "no_observed_exposure": "Diese Aussage bezieht sich auf die unten geprüften Daten. Fehlende Historie, verborgene Beträge und gemeinsame Transaktionen begrenzen mögliche Rückschlüsse.",
+    "unavailable": "Die vorhandenen Beobachtungen reichen noch nicht für eine aussagekräftige Einschätzung. Verbinde oder importiere die relevante Historie und aktualisiere diese lokale Ansicht."
   },
-  "severity": {
-    "info": "Info",
-    "warning": "Warnung",
-    "alert": "Alarm"
+  "population": {
+    "outputs": "Deine beobachteten Outputs",
+    "transactions": "Transaktionen geprüft / lokal vorhanden",
+    "domains": "Chain- und Netzwerkbereiche"
   },
-  "question": {
-    "linkable": "Was ist verknüpfbar",
-    "infer": "Wer kann es ableiten",
-    "evidence": "Die Evidenz",
-    "future": "Was unbekannt ist oder sich bei einer künftigen Ausgabe verschlechtert",
-    "findings": "Befunde"
+  "groups": {
+    "attention": "Deine Aktivitäten",
+    "attentionBody": "Signale zu deinen Zahlungen oder eigenen Outputs.",
+    "context": "Umliegende Aktivitäten",
+    "contextBody": "Signale von Gegenparteien und benachbarten Transaktionen liefern Kontext. Für sich allein belegen sie weder dein Eigentum noch legen sie deine eigenen Aktivitäten offen."
   },
-  "score": {
-    "unavailable": "Bewertung nicht verfügbar",
-    "unavailableBody": "Eigene Outputs und Transaktionsdaten sind nicht ausreichend abgedeckt, um diese Bewertung zu berechnen. Beobachtete Signale bleiben unten sichtbar; fehlende Daten sind keine Privatsphärenbewertung.",
-    "notAvailable": "Nicht verfügbar",
-    "observations": "Beobachtete Signale",
-    "observedCount_one": "{{count}} beobachtet",
-    "observedCount_other": "{{count}} beobachtet",
-    "of": " / 100",
-    "local": "Heuristische Priorisierung anhand lokal beobachteter Signale, keine Privatsphäre-Wahrscheinlichkeit oder Garantie. Fehlende Daten begrenzen die Aussagekraft.",
-    "census": "Befunde nach Schweregrad",
-    "findings": "Befunde",
-    "waterfall": "Wie dieser Score entsteht",
-    "base": "Basis",
-    "result": "Score",
-    "coverage": "Herkunfts-Abdeckung",
-    "factor": {
-      "wallet_linkage": "Verknüpfte Wallets",
-      "transaction_leaks": "Transaktionen mit Lecks",
-      "alert": "Alarme",
-      "warning": "Warnungen",
-      "info": "Info"
-    }
+  "category": {
+    "linkage": "Verknüpfung",
+    "structure": "Transaktionsstruktur",
+    "pattern": "Aktivitätsmuster",
+    "attribution": "Belegte Zuordnung"
   },
-  "gradeHint": {
-    "A+": "Wenige Verknüpfungssignale in diesem Modell beobachtet",
-    "B": "Einige Verknüpfungssignale in diesem Modell beobachtet",
-    "C": "Mehrere Verknüpfungssignale in diesem Modell beobachtet",
-    "D": "Viele Verknüpfungssignale in diesem Modell beobachtet",
-    "F": "Umfangreiche Verknüpfungssignale in diesem Modell beobachtet"
+  "relevance": {
+    "own_spend": "Deine Zahlung",
+    "owned_output": "Dein Output",
+    "received_context": "Empfangskontext",
+    "nearby_context": "Umliegender Kontext"
   },
-  "worstKind": {
-    "common_input": "Gemeinsame Inputs können Wallets verknüpfen",
-    "unknown_coverage": "Einige Coins konnten nicht geprüft werden",
-    "bounded_local_model": "Lokal nichts Stärkeres gefunden"
-  },
-  "adversaryTier": {
-    "passive_chain_watcher": "Alle, die die Blockchain beobachten",
-    "reviewed_kyc_source_funds_anchor_watcher": "Beobachter mit geprüften Herkunftsnachweisen",
-    "known_counterparty_hypothetical": "Jemand, den du bezahlt hast oder der dich bezahlt hat"
-  },
-  "assumption": {
-    "bitcoin_graph_facts_only": "Nimmt bei gemeinsamen Inputs denselben Eigentümer an, solange keine Zusammenarbeit bekannt ist. Private Wechselgeld-Metadaten belegen keine öffentliche Verknüpfung.",
-    "reviewed_anchor_starting_knowledge": "Startet von den lokal geprüften Herkunftsnachweisen (Anchors).",
-    "counterparty_starting_knowledge": "Startet von den lokal gekennzeichneten Gegenparteien."
-  },
-  "action": {
-    "reviewOrigins": "Coin-Herkunft prüfen"
-  },
-  "heuristics": {
-    "title": "Analysefunktionen",
-    "note": "Verfügbarkeit je Ansicht, keine Liste der in diesem Buch ausgeführten Prüfungen. Die Transaktionsdetails nutzen eine eigene Hygiene-Analyse. Chain Analysis hat eigene begrenzte Abfragen und explizite Modelle; diese Funktionen wurden damit nicht automatisch im Privacy Mirror ausgeführt. Fehlende Transaktionsdaten können verfügbare Prüfungen verhindern.",
-    "status": {
-      "mirror": "Privacy Mirror",
-      "transaction_detail": "Transaktionsdetails",
-      "chain_analysis_workspace": "Chain-Analysis-Arbeitsbereich",
-      "not_implemented": "Nicht implementiert"
-    }
-  },
-  "primary": {
-    "title": "Was du zuerst beheben solltest"
-  },
-  "finding": {
-    "empty": "Keine Befunde im lokalen Modell.",
-    "fee_fingerprint": "Eine gerundete Gebührenrate wurde beobachtet. Dieses schwache Transaktionsmerkmal identifiziert keine Wallet-Software."
-  },
-  "reco": {
-    "sender_common_input": "Gib Coins aus verschiedenen Clustern nicht in einer Transaktion aus — ein gemeinsamer Input verknüpft sie.",
-    "common_input": "Gib Coins aus verschiedenen Clustern nicht in einer Transaktion aus — ein gemeinsamer Input verknüpft sie.",
-    "fee_fingerprint": "Eine auffällige Gebührenrate grenzt den Wallet-Kreis ein. Nutze übliche Gebührenraten.",
-    "op_return_output": "OP_RETURN-Daten sind öffentlich und dauerhaft. Vermeide identifizierende Metadaten.",
-    "change_output": "Wechselgeld kann die Wallet-Struktur verraten. Nutze gleiche Skripttypen und frische Adressen.",
-    "unknown_provenance": "Prüfe die Herkunft dieser Coins, damit ihre Provenienz lokal bekannt ist.",
-    "source_proximity_coverage_gaps": "Einige eigene Coins haben keine geprüfte Quellen-Nähe. Importiere oder prüfe ihre Historie.",
-    "coverage_degraded": "Die Analyse ist unvollständig — synchronisiere oder importiere fehlende Transaktionsdetails.",
-    "transaction_tell": "Prüfe die Inputs und Outputs dieser Transaktion auf Verknüpfung.",
-    "fallback": "Prüfe diesen Eintrag auf Privatsphäre-Exposure."
-  },
-  "linkage": {
-    "title": "Was ist verknüpfbar",
-    "observer": "Alle, die die Chain beobachten",
-    "edges": "verknüpft mit {{count}}",
-    "empty": "Keine Wallets zum Abbilden.",
-    "legendLinked": "Verknüpfbar",
-    "legendIsolated": "Isoliert"
-  },
-  "section": {
-    "wallets": "Verknüpfte Wallet-Gruppen",
-    "transactionTells": "Transaktions-Lecks",
-    "coins": "Coins",
-    "timeline": "Timeline",
-    "evidenceItems": "Evidenz",
-    "coverage": "Datenvollständigkeit",
-    "records": "Alle Details",
-    "psbt": "Ausgabe vor dem Senden prüfen (PSBT)"
-  },
-  "flow": {
-    "view": "Fluss ansehen",
-    "title": "Transaktionsfluss",
-    "subtitle": "Lokaler Flussgraph — nur hinweisend, verlässt dieses Gerät nie."
-  },
-  "tellKind": {
-    "sender_common_input": "Gemeinsamer Input",
-    "common_input": "Gemeinsamer Input",
-    "fee_fingerprint": "Gebühren-Fingerabdruck",
-    "op_return_output": "OP_RETURN-Ausgabe",
-    "change_output": "Wechselgeld-Ausgabe",
-    "unknown_provenance": "Unbekannte Coin-Herkunft",
-    "known_source_proximity": "Bekannte Coin-Herkunft",
-    "source_proximity_coverage_gaps": "Unbekannte Coin-Herkünfte",
-    "coverage_degraded": "Unvollständige Analyse"
-  },
-  "metric": {
-    "linkageScore": "Linkage-Score",
-    "clusters": "Verknüpfbare Cluster",
-    "adversaries": "Gegner",
-    "utxos": "UTXOs",
-    "unknowns": "Unbekannt",
-    "wallets": "Wallets",
-    "transactionTells": "Transaktionsmerkmale",
-    "findings": "Befunde"
-  },
-  "worst": {
-    "title": "Größtes Privatsphäre-Risiko",
-    "fallback": "Kein Befund ausgewählt",
-    "empty": "Das reduzierte lokale Modell hat keinen stärkeren Befund zurückgegeben."
-  },
-  "tab": {
-    "overview": "Übersicht",
-    "adversaries": "Gegner",
-    "wallets": "Wallets",
-    "transactions": "Transaktionen",
-    "utxos": "UTXOs",
-    "timeline": "Timeline",
-    "evidence": "Evidenz",
-    "psbt": "PSBT"
-  },
-  "exposure": {
-    "title": "Exposure-Zusammenfassung"
+  "authority": {
+    "observed": "Beobachteter Fakt",
+    "heuristic": "Bedingter Rückschluss",
+    "derived": "Bedingter Rückschluss",
+    "hypothesis": "Hypothese",
+    "sourced_claim": "Quellenbehauptung",
+    "source_claim": "Quellenbehauptung",
+    "private": "Privater Nachweis",
+    "sourced_claim_with_evidence_path": "Quellenbehauptung mit beobachtetem Pfad"
   },
   "coverage": {
-    "title": "Datenvollständigkeit",
-    "known": "Coins mit bekannter Herkunft",
-    "unknown": "Coins mit unbekannter Herkunft",
-    "degraded": "Einige Coins konnten nicht analysiert werden"
-  },
-  "unknowns": {
-    "title": "Unbekannte und eingeschränkte Zustände",
-    "empty": "Das reduzierte lokale Modell hat keine unbekannte Coverage-Zeile ausgegeben."
-  },
-  "adversary": {
-    "unknown": "Unbekannter Beobachter",
-    "clusters": "Verknüpfte Gruppen",
-    "wallets": "Gesehene Wallets"
-  },
-  "table": {
-    "wallet": "Wallet",
-    "transaction": "Transaktion",
-    "coin": "Coin",
-    "coins": "Coins",
-    "amount": "Betrag",
-    "edges": "Verknüpfungen",
-    "tells": "Lecks",
-    "kinds": "Leck-Art",
-    "penalties": "Penalties",
-    "role": "Rolle",
-    "proximity": "Herkunft",
-    "event": "Ereignis",
-    "category": "Kategorie",
-    "detail": "Detail",
-    "section": "Abschnitt",
-    "item": "Eintrag",
-    "kind": "Art",
-    "evidence": "Evidenz",
-    "empty": "Keine Zeilen in dieser reduzierten Ansicht."
-  },
-  "timeline": {
-    "newLinkage": "Neue Verknüpfung"
-  },
-  "psbt": {
-    "title": "PSBT und What-if",
-    "intent": "Füge eine unsignierte Entwurfs-Transaktion ein, um zu sehen, was sie verknüpfen würde — bevor du sie sendest.",
-    "placeholder": "Base64-PSBT für lokale Pre-Broadcast-Analyse einfügen",
-    "inputAria": "PSBT-Text",
-    "analyze": "Diese Ausgabe prüfen",
-    "whatIf": "What-if-Szenarien",
-    "empty": "Noch keine PSBT-Analyse.",
-    "metric": {
-      "merge": "Neu verknüpfte Wallet-Gruppen",
-      "unknown": "Inputs mit unbekannter Herkunft",
-      "blast": "Wallets, die dies offenlegen würde"
+    "title": "Was geprüft wurde",
+    "body": "Die Zahlen zeigen ausgeführte Prüfungen und geeignete lokale Nachweise. Vollständig bedeutet vollständig innerhalb dieser begrenzten Ansicht.",
+    "status": {
+      "complete": "Lokale Abdeckung vollständig",
+      "partial": "Teilweise lokale Abdeckung",
+      "unavailable": "Abdeckung nicht verfügbar"
     },
-    "scenario": {
-      "fresh_receive_output": "Wenn du auf eine frische Adresse empfangen hättest",
-      "hypothetical_input_consolidation": "Wenn du diese Inputs konsolidiert hättest"
-    }
+    "gaps": "{{missing}} fehlende Knoten · {{stale}} veraltet · {{conflicting}} widersprüchlich",
+    "truncated": "Die Analyse hat eine Grenze erreicht."
   },
-  "detail": {
-    "walletTitle": "Privacy Mirror für dieses Wallet",
-    "transactionTitle": "Privacy Mirror für diese Transaktion",
-    "source": "Dieselben redigierten lokalen Fakten wie auf der Privacy-Mirror-Seite.",
-    "loading": "Lokale Privatsphäre-Evidenz wird gelesen...",
-    "degraded": "Für diesen lokalen Datensatz ist keine passende redigierte Privacy-Mirror-Zeile verfügbar.",
-    "queryError": "Privacy Mirror konnte nicht gelesen werden: {{message}}",
-    "none": "Keine",
-    "walletCoins": "Coins",
-    "walletAmount": "Betrag",
-    "walletEdges": "Linkage-Kanten",
-    "walletUnknown": "Coins mit unbekannter Rolle",
-    "walletMatched": "Redigierte Wallet-Zeile {{id}} gefunden. Nur hinweisend; es wählt keine Coins und ändert keine Accounting-Daten.",
-    "transactionTells": "Merkmale",
-    "transactionKinds": "Merkmalsarten",
-    "transactionPenalties": "Wallet-Penalties",
-    "transactionMatched": "Redigierte Transaktionszeile {{id}} gefunden. Nur hinweisend; es signiert nicht, sendet nicht und ändert keine Accounting-Daten."
+  "checkStatus": {
+    "complete": "Vollständig",
+    "partial": "Teilweise",
+    "unavailable": "Nicht verfügbar",
+    "not_applicable": "Nicht anwendbar",
+    "bounded": "Begrenzt"
+  },
+  "checks": {
+    "linkage": "Öffentliche Verknüpfungen",
+    "structure": "Transaktionsstruktur",
+    "patterns": "Aktivitätsmuster",
+    "attribution": "Belegte Zuordnung",
+    "entropy": "Bedingte Transaktionsinterpretationen",
+    "transaction_features": "Transaktionsstruktur",
+    "clustering": "Öffentliche Verknüpfungen",
+    "dataset_exposure": "Belegte Zuordnung",
+    "physical_topology": "Beobachtete Transaktionsverbindungen",
+    "ownership_hypotheses": "Bedingte Kontrollhypothesen",
+    "structural_features": "Transaktionsstruktur",
+    "multi_hop_patterns": "Muster über mehrere Transaktionen",
+    "public_attribution": "Öffentliche Zuordnungsbehauptungen",
+    "conditional_entropy": "Bedingte Transaktionsinterpretationen"
+  },
+  "entropy": {
+    "title_one": "{{count}} bedingte Interpretationsanalyse",
+    "title_other": "{{count}} bedingte Interpretationsanalysen",
+    "body": "Diese Anzahlen hängen von einem ausdrücklichen Transaktionsmodell ab. Sie sind keine Eigentumswahrscheinlichkeiten oder Anonymitätswerte.",
+    "interpretations": "{{countText}} Interpretationen unter dem gewählten Modell",
+    "inspect": "Modell prüfen",
+    "omitted_one": "{{count}} geeignete Transaktion lag außerhalb des Analysebudgets dieses Berichts.",
+    "omitted_other": "{{count}} geeignete Transaktionen lagen außerhalb des Analysebudgets dieses Berichts.",
+    "lowerBound": "Mindestens {{countText}} Interpretationen gefunden; Suche unvollständig"
   },
   "unavailable": {
     "title": "Privacy Mirror nicht verfügbar",
-    "body": "Der lokale Daemon hat keinen Privacy-Mirror-Payload zurückgegeben."
+    "body": "Der Daemon hat keinen aktuellen lokalen Bericht geliefert. Aktualisiere die Ansicht nach dem Neustart des Daemons."
   },
-  "chainAnalysisLink": "Chain-Analyse"
+  "assistantPrompt": "Lies ui_reports_privacy_mirror für dieses Buch. Erkläre die wichtigsten Befunde aus Sicht eines öffentlichen Beobachters, trenne meine Aktivitäten vom umliegenden Kontext, nenne fehlende Nachweise und bedingte Annahmen und schlage konkrete nächste Schritte vor. Nutze nur lokale Nachweise; frage vor jedem Netzwerkabruf.",
+  "statement": {
+    "public_chain_observer_with_locally_available_history": "Ein öffentlicher Chain-Beobachter wird anhand der lokal vorhandenen Historie modelliert.",
+    "private_ownership_selects_relevance_not_observer_knowledge": "Privates Eigentumswissen bestimmt, welche Befunde dich betreffen. Es erweitert nicht das Wissen des öffentlichen Beobachters.",
+    "common_control_is_conditional_not_identity_proof": "Gemeinsame Kontrolle ist ein bedingter Rückschluss, kein Identitätsnachweis.",
+    "collaboration_blocks_ownership_assumptions_not_physical_spends": "Gemeinsame Transaktionen behalten ihre tatsächlichen Ausgabeverbindungen, blockieren aber Annahmen über gemeinsames Eigentum.",
+    "topological_contact_is_not_payment_allocation_or_taint": "Graph-Verbindungen belegen weder Zahlungszuordnungen noch eine Belastung der Mittel.",
+    "local_coverage_is_not_whole_chain_completeness": "Vollständige lokale Abdeckung bedeutet nicht, dass die gesamte Blockchain geprüft wurde.",
+    "entropy_counts_conditional_models_not_ownership_probabilities": "Interpretationsanzahlen hängen von ausdrücklichen Modellen ab; sie sind keine Eigentumswahrscheinlichkeiten.",
+    "connectivity_does_not_allocate_value": "Transaktionsverbindungen ordnen den Teilnehmern keine Werte zu.",
+    "source_claim_requires_independent_review": "Eine Zuordnungsbehauptung erfordert eine unabhängige Prüfung ihrer Quelle.",
+    "observed_co_spend": "Die Inputs werden beobachtbar in einer Transaktion ausgegeben.",
+    "assumes_no_undetected_collaboration": "Setzt voraus, dass keine unerkannte Zusammenarbeit vorliegt.",
+    "two_output_transaction": "Die Transaktion hat zwei Outputs.",
+    "one_output_reuses_input_script": "Ein Output verwendet ein Input-Skript erneut.",
+    "payment_to_same_script_remains_alternative": "Eine Zahlung an dasselbe Skript bleibt eine alternative Erklärung.",
+    "fee_rate_is_not_wallet_identity": "Eine Gebührenrate identifiziert keine Wallet-Software.",
+    "protocol_cannot_be_established_from_equal_amounts": "Gleiche Beträge allein belegen kein Protokoll.",
+    "single_owner_not_established": "Ein einzelner Eigentümer ist nicht nachgewiesen.",
+    "observed_signatures_only": "Es werden nur beobachtete Signaturkodierungen berücksichtigt.",
+    "adjacency_does_not_prove_payment_or_ownership": "Nachbarschaft beweist weder Zahlung noch Eigentum.",
+    "selected_local_coverage_only": "Nur die ausgewählte lokale Abdeckung wird berücksichtigt."
+  },
+  "reason": {
+    "no_local_public_claims": "Es wurden noch keine öffentlichen Zuordnungsbehauptungen lokal importiert.",
+    "no_analyzable_transactions": "Lokal sind keine ausreichend belegten Transaktionen verfügbar.",
+    "finding_display_limit": "Weitere Befunde überschreiten die Anzeigegrenze dieses Berichts.",
+    "entropy_transaction_budget": "Einige geeignete Transaktionen überschritten das Budget der bedingten Analyse.",
+    "local_transactions_outside_selected_subgraph": "Einige lokale Transaktionen liegen außerhalb des ausgewählten Teilgraphen.",
+    "dataset_match_budget": "Die Zuordnungssuche hat ihr Budget erreicht.",
+    "invalid_observations": "Einige Beobachtungen konnten nicht validiert werden.",
+    "node_limit": "Die Knotengrenze wurde erreicht.",
+    "edge_limit": "Die Verbindungsgrenze wurde erreicht.",
+    "depth_limit": "Die maximale Verfolgungstiefe wurde erreicht.",
+    "missing_observation": "Eine erforderliche lokale Beobachtung fehlt.",
+    "incomplete_transaction": "Inputs oder Outputs der Transaktion sind lokal unvollständig.",
+    "unobserved_successor": "Lokal ist keine spätere Ausgabe beobachtet. Das beweist nicht, dass der Output unausgegeben ist.",
+    "stale": "Einige Beobachtungen sind veraltet.",
+    "conflicting": "Einige Beobachtungen widersprechen sich.",
+    "stale_relation": "Ein Verwahrungszusammenhang ist veraltet.",
+    "conflicting_relation": "Ein Verwahrungszusammenhang hat widersprüchliche Nachweise.",
+    "domain_filter": "Ein Chain- oder Netzwerkfilter begrenzt die Verfolgung.",
+    "amount_filter": "Ein Betragsfilter begrenzt die Verfolgung.",
+    "time_filter": "Ein Zeitfilter begrenzt die Verfolgung.",
+    "label_analysis_budget": "Die Zuordnungsanalyse hat ihr Budget erreicht.",
+    "hypothesis_budget": "Die Hypothesenbildung hat ihr Budget erreicht.",
+    "pattern_result_budget": "Die Ergebnisgrenze für Muster wurde erreicht.",
+    "pattern_depth_limit": "Die Mustersuche hat ihre Tiefengrenze erreicht.",
+    "pattern_search_budget": "Die Mustersuche hat ihr Budget erreicht.",
+    "exposure_depth_limit": "Die Zuordnungsverfolgung hat ihre Tiefengrenze erreicht.",
+    "exposure_search_budget": "Die Zuordnungsverfolgung hat ihr Budget erreicht.",
+    "entropy_single_transaction_limit": "Die Abfrage erlaubt eine bedingte Transaktionsanalyse.",
+    "bitcoin_only": "Dieses bedingte Modell unterstützt nur Bitcoin-Transaktionen.",
+    "joint_payment_or_unknown_collaboration": "Gemeinsame Zahlungen oder unbekannte Zusammenarbeit liegen außerhalb dieses Modells.",
+    "missing_inputs_or_outputs": "Erforderliche Inputs oder Outputs fehlen.",
+    "input_output_limit": "Die Transaktion überschreitet die Input-/Output-Grenze dieses Modells.",
+    "invalid_input_output": "Ein Input oder Output ist für dieses Modell ungültig.",
+    "invalid_or_duplicate_output_identity": "Eine Output-Identität ist ungültig oder doppelt vorhanden.",
+    "unknown_amount": "Ein für das Modell erforderlicher Betrag ist unbekannt.",
+    "non_integral_bitcoin_satoshi": "Ein Betrag ist keine ganzzahlige Anzahl von Satoshis.",
+    "zero_value_output_model_unsupported": "Dieses Modell unterstützt keine Outputs mit Wert null.",
+    "inconsistent_amounts_or_fee": "Beträge oder Gebühren sind widersprüchlich.",
+    "state_budget": "Die Interpretationssuche hat ihr Zustandsbudget erreicht.",
+    "time_budget": "Die Interpretationssuche hat ihr Zeitbudget erreicht.",
+    "cancelled": "Die Analyse wurde abgebrochen.",
+    "unsupported": "Das gewählte Modell kann diese Transaktion nicht analysieren.",
+    "model_bounded": "Die Modell- oder Suchgrenze wurde erreicht.",
+    "budget_exhausted": "Das Analysebudget wurde ausgeschöpft.",
+    "timeout": "Die Zeitgrenze der Analyse wurde erreicht."
+  },
+  "repeatedFindings_one": "{{count}} Befund",
+  "repeatedFindings_other": "{{count}} Befunde",
+  "findingTitle": {
+    "common_input_control": "Bedingte gemeinsame Input-Kontrolle",
+    "change_script_return": "Mögliches Wechselgeld an ein wiederverwendetes Skript",
+    "script_reuse": "Sperrskript wiederverwendet",
+    "collaborative_boundary": "Grenze einer gemeinsamen Transaktion",
+    "unusual_transaction_version": "Ungewöhnliche Transaktionsversion",
+    "ineffective_absolute_locktime": "Inaktive absolute Sperrzeit",
+    "explicit_rbf_signal": "Ausdrückliches RBF-Signal",
+    "op_return_output": "Öffentlicher OP_RETURN-Output",
+    "rounded_fee_rate": "Übliche gerundete Gebührenrate",
+    "relative_lock_constraints": "Relative Sperrbedingungen",
+    "mixed_input_script_types": "Gemischte Input-Skripttypen",
+    "mixed_output_script_types": "Gemischte Output-Skripttypen",
+    "equal_output_groups": "Wiederholte Output-Beträge",
+    "consolidation_shape": "Transaktion mit Konsolidierungsform",
+    "batch_payment_shape": "Transaktion mit Sammelzahlungsform",
+    "consistent_low_r_encoding": "Einheitliche Low-R-Signaturen",
+    "nondefault_sighash": "Abweichender Signaturumfang",
+    "peel_chain_candidate": "Mögliches Peel-Chain-Muster",
+    "postmix_reconvergence": "Postmix-Pfade treffen wieder zusammen",
+    "direct_label_match": "Direkte öffentliche Zuordnung",
+    "fan_in": "Inputs treffen zusammen",
+    "fan_out": "Outputs verzweigen in spätere Transaktionen",
+    "reconvergence": "Getrennte Pfade treffen wieder zusammen",
+    "indirect_topological_contact": "Indirekter Kontakt zu einer öffentlichen Zuordnung"
+  },
+  "findingDetail": {
+    "script_reuse": "Dasselbe Sperrskript kommt in mehreren lokal beobachteten Outputs vor. Gemeinsame Kontrolle bleibt eine Hypothese.",
+    "collaborative_boundary": "Hinweise auf Zusammenarbeit blockieren Eigentumsannahmen aus gemeinsamen Inputs oder Wechselgeld. Tatsächliche Ausgaben bleiben beobachtbar.",
+    "common_input_control": "Beobachtete Inputs werden gemeinsam ausgegeben. Gemeinsame Kontrolle setzt eine gewöhnliche Transaktion ohne unerkannte Zusammenarbeit voraus.",
+    "change_script_return": "Ein Output geht an ein Input-Skript zurück. Wechselgeld ist eine Hypothese; eine Zahlung an dasselbe Skript bleibt eine Alternative.",
+    "unusual_transaction_version": "Die Transaktion verwendet eine ungewöhnliche Version. Daraus lässt sich keine Wallet identifizieren.",
+    "ineffective_absolute_locktime": "Alle Input-Sequenzen sind final. Deshalb ist die gesetzte absolute Sperrzeit unwirksam.",
+    "explicit_rbf_signal": "Mindestens ein Input signalisiert ausdrücklich Ersetzbarkeit nach BIP125. Weiterleitung und Ersetzung hängen von der Node-Policy ab.",
+    "op_return_output": "Ein beobachteter Output enthält ein OP_RETURN-Skript. Dessen Nutzdaten werden in dieser Analyse nicht ausgegeben.",
+    "rounded_fee_rate": "Die beobachtete Gebührenrate liegt nahe einer üblichen ganzzahligen Rate. Viele Wallets und manuelle Einstellungen verwenden solche Werte.",
+    "relative_lock_constraints": "Input-Sequenzen enthalten relative Sperrbedingungen. Ihre Fälligkeit erfordert den Bestätigungskontext der vorherigen Outputs.",
+    "mixed_input_script_types": "Die Input-Skripte verwenden unterschiedliche Vorlagen. Das ist ein Strukturmerkmal und kein Eigentumszusammenhang.",
+    "mixed_output_script_types": "Die Output-Skripte verwenden unterschiedliche Vorlagen. Das ist ein Strukturmerkmal und kein Eigentumszusammenhang.",
+    "equal_output_groups": "Wiederholte Output-Beträge lassen eine CoinJoin-Hypothese zu, kommen aber auch in gewöhnlichen Sammelzahlungen vor.",
+    "consolidation_shape": "Mehrere Inputs erzeugen einen Output. Das passt sowohl zu einer Konsolidierung als auch zu einer gemeinsam finanzierten Zahlung.",
+    "batch_payment_shape": "Viele Outputs passen zu einer Sammelzahlung. Die Rollen der einzelnen Outputs bleiben unbekannt.",
+    "consistent_low_r_encoding": "Alle beobachteten ECDSA-Signaturen verwenden Low-R-Kodierungen. Mehrere Wallets zeigen dieses Verhalten; es kann auch zufällig entstehen.",
+    "nondefault_sighash": "Eine beobachtete Signatur verwendet einen Sighash ungleich DEFAULT oder ALL. Ihr Bindungsumfang unterscheidet sich.",
+    "fan_in": "Inputs aus mehreren beobachteten Vorgängertransaktionen werden gemeinsam ausgegeben. Das belegt die Topologie, nicht gemeinsames Eigentum.",
+    "fan_out": "Für unterschiedliche Outputs sind lokal Ausgaben in verschiedenen späteren Transaktionen beobachtet.",
+    "reconvergence": "Getrennte Output-Pfade erreichen über beobachtete Ausgaben dieselbe spätere Transaktion. Daraus folgen weder eine eindeutige Wertzuordnung noch ein gemeinsamer Eigentümer.",
+    "postmix_reconvergence": "Getrennte Output-Pfade einer CoinJoin-Grenze erreichen dieselbe spätere Transaktion. Die Interpretation hängt von dieser Grenze ab; eine eindeutige Wertzuordnung oder gemeinsames Eigentum folgen daraus nicht.",
+    "peel_chain_candidate": "Mindestens drei nicht als gemeinsam markierte Transaktionen mit einem Input und zwei Outputs setzen sich über den größeren Output fort. Wiederholte Zahlungen und Eigentum bleiben Hypothesen; unerkannte Zusammenarbeit kann sie entkräften.",
+    "direct_label_match": "Ein lokal importierter öffentlicher Datensatz benennt dieses Objekt. Die Behauptung belegt kein verifiziertes Eigentum.",
+    "indirect_topological_contact": "Beobachtete Transaktionsverbindungen erreichen ein Objekt aus einem lokal importierten öffentlichen Datensatz. Das belegt weder Zahlung noch Eigentum oder eine Belastung der Mittel."
+  }
 }

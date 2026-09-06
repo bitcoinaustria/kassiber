@@ -12,7 +12,7 @@ from collections import Counter
 from hashlib import new as hash_new, sha256
 from typing import Any, Mapping, Sequence
 
-from ..onchain import input_script, output_script, output_value_sats
+from ..onchain import input_script, input_value_sats, output_script, output_value_sats
 
 FEATURE_VERSION = 1
 RULE_VERSION = 1
@@ -230,6 +230,13 @@ def extract_transaction_features(raw: Mapping[str, Any], *, source: str = "store
     ordering = list(zip(values, scripts)) if ordering_available else []
     add("output_ordering", {"bip69_value_script_order": ordering == sorted(ordering) if ordering_available else None}, available=ordering_available,
         assumptions=("matching_sort_order_can_occur_by_chance",))
+    input_values = [input_value_sats(row) for row in inputs]
+    vsize = _integer(raw.get("vsize"))
+    fee_available = bool(inputs) and bool(outputs) and input_complete and output_complete and all(value is not None for value in (*input_values, *values))
+    fee_sats = sum(input_values) - sum(values) if fee_available else None
+    fee_available = fee_available and fee_sats >= 0 and vsize is not None and vsize > 0
+    add("fee_rate", {"fee_sats": fee_sats if fee_available else None, "vsize": vsize if fee_available else None},
+        available=fee_available, assumptions=("observed_transaction_values_only", "rounded_rate_does_not_identify_wallet"))
     return {"schema_version": 1, "extractor_version": FEATURE_VERSION, "source": source,
             "subject_id": subject_id, "features": features}
 
@@ -279,6 +286,7 @@ def normalize_persisted_features(value: Any, *, subject_id: str | None, source: 
         "witness_shapes": lambda v: items(v, lambda n: nullable_number(n, 100_000)),
         "output_value_pattern": lambda v: exact_dict(v, {"equal_groups": lambda s: items(s, lambda r: exact_dict(r, {"amount_msat": amount, "count": lambda n: number(n, 4096) and n >= 2})), "round_1000_sat_count": lambda n: number(n, 4096)}),
         "output_ordering": lambda v: exact_dict(v, {"bip69_value_script_order": boolean}),
+        "fee_rate": lambda v: exact_dict(v, {"fee_sats": lambda n: nullable_number(n, 2_100_000_000_000_000), "vsize": nullable_number}),
     }
     for code in ("input_script_types", "output_script_types"):
         validators[code] = lambda v: exact_dict(v, {"counts": lambda d: isinstance(d, dict) and len(d) <= len(script_types) and all(k in script_types and number(n, 4096) for k, n in d.items()), "by_index": lambda s: items(s, lambda k: isinstance(k, str) and k in script_types)})
@@ -342,6 +350,17 @@ def evaluate_features(snapshot: Mapping, *, collaboration: Mapping | None = None
     sequence = value("sequences", {})
     if sequence.get("signals_bip125"):
         add("explicit_rbf_signal", ["sequences"], "At least one input explicitly signals BIP125 replacement; relay and replacement depend on node policy.")
+    if value("output_script_types", {}).get("counts", {}).get("op_return", 0):
+        add("op_return_output", ["output_script_types"], "An observed output carries an OP_RETURN script; the payload is not included in analysis.")
+    rate = value("fee_rate", {})
+    fee_sats, vsize = rate.get("fee_sats"), rate.get("vsize")
+    if fee_sats is not None and vsize:
+        # Keep exact integer arithmetic. This is a weak structural pattern, not
+        # a claim that a wallet vendor or sender has been identified.
+        rounded = (fee_sats + vsize // 2) // vsize
+        if rounded in {1, 2, 3, 5, 10, 15, 20, 25, 50, 100} and abs(fee_sats - rounded * vsize) * 100 < vsize and collaboration is None:
+            add("rounded_fee_rate", ["fee_rate"], "The observed fee rate is close to a common integer rate; many wallets and manual settings share it.",
+                authority="hypothesis", assumptions=("fee_rate_is_not_wallet_identity",), contradictions=("manual_fee_selection", "shared_node_estimator"))
     if sequence.get("relative_locks"):
         add("relative_lock_constraints", ["sequences", "transaction_version"], "Input sequences encode relative lock constraints; maturity needs prevout confirmation context.")
     for side in ("input", "output"):

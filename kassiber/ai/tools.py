@@ -1077,13 +1077,14 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.reports.privacy_mirror",
         description=(
-            "Read the active profile's redacted Privacy Mirror payload and its "
-            "precomputed worst-risk answer. Use this for questions such as what "
-            "is linkable, who can infer it, what proves it, what is unknown, or "
-            "what future PSBT/what-if analysis would worsen. The payload is "
-            "local-only, advisory-only, read-only, and omits addresses, scripts, "
-            "descriptors, xpubs, backend URLs/tokens, wallet config, raw_json, "
-            "branch/index values, derivation paths, and raw PSBT bytes."
+            "Read the active profile's public-observer Privacy Mirror: personal "
+            "linkage findings, counterparty context, executed checks, missing "
+            "evidence and bounded conditional interpretation counts from the "
+            "shared local Chain Analysis engine. No privacy grade or ownership "
+            "probability is inferred. Use Chain Analysis tools for deeper queries "
+            "and PSBT analysis. Graph handoffs use opaque scoped references; raw "
+            "chain identities, private labels and wallet configuration are omitted. "
+            "This read is local-only, advisory-only and does not contact a node."
         ),
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",

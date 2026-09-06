@@ -2,7 +2,6 @@ import { useCallback, useContext, useMemo, useRef, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Download, Eye, Network, Sparkles, X } from "lucide-react";
-import { AssistantSessionContext } from "@/components/ai/assistantSession";
 import { Button } from "@/components/ui/button";
 import {
   DaemonScopeContext,
@@ -11,7 +10,6 @@ import {
 } from "@/daemon/client";
 import { screenShellClassName } from "@/lib/screen-layout";
 import {
-  DEFAULT_ANALYSIS_QUERY,
   analysisNodeSubject,
   analysisQueryKey,
   formatAnalysisAmount,
@@ -19,8 +17,9 @@ import {
   type AnalysisQuery,
   type AnalysisResult,
 } from "@/lib/chainAnalysis";
+import { analysisSearchQuery, parseAnalysisSearch, type AnalysisSearch, type AnalysisTab, type AnalysisWorkspace } from "@/lib/chainAnalysisNavigation";
 import { exportChainAnalysis } from "@/lib/chainAnalysisExport";
-import { useAssistantDraftStore } from "@/store/assistantDraft";
+import { useChainAnalysisAssistant } from "@/hooks/useChainAnalysisAssistant";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
 import {
   InvestigationGraph,
@@ -48,8 +47,7 @@ export function ChainAnalysis() {
   const search = useRouterState({
     select: (state) => state.location.search,
   }) as Record<string, unknown>;
-  const initialSubject =
-    typeof search.subject === "string" ? search.subject : "";
+  const initialSearch = parseAnalysisSearch(search);
   const databaseIdentity = bookIdentityKey(identity) ?? "local";
   const workspaceId = health.data?.data?.workspace?.id,
     profileId = health.data?.data?.profile?.id;
@@ -76,59 +74,41 @@ export function ChainAnalysis() {
   return (
     <DaemonScopeContext.Provider value={boundary}>
       <ChainAnalysisWorkbench
-        key={`${databaseIdentity}:${workspaceId}:${profileId}:${daemonSession}:${initialSubject}`}
-        initialSubject={initialSubject}
+        key={`${databaseIdentity}:${workspaceId}:${profileId}:${daemonSession}:${JSON.stringify(initialSearch)}`}
+        initialSearch={initialSearch}
       />
     </DaemonScopeContext.Provider>
   );
 }
 
 export function ChainAnalysisWorkbench({
-  initialSubject = "",
+  initialSearch = {},
 }: {
-  initialSubject?: string;
+  initialSearch?: AnalysisSearch;
 }) {
   const { t } = useTranslation("chainAnalysis");
-  const [query, setQuery] = useState<AnalysisQuery>({
-    ...DEFAULT_ANALYSIS_QUERY,
-    ...(initialSubject ? { mode: "trace", subject: initialSubject } : {}),
-  });
+  const [query, setQuery] = useState<AnalysisQuery>(() => analysisSearchQuery(initialSearch));
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [historical, setHistorical] = useState(false);
   const [selection, setSelection] = useState<GraphSelection | null>(null);
   const [highlighted, setHighlighted] = useState<string[]>([]);
   const [view, setView] = useState<"graph" | "table">("graph");
-  const [tab, setTab] = useState<
-    | "findings"
-    | "frontier"
-    | "clusters"
-    | "paths"
-    | "coverage"
-    | "entropy"
-    | "labels"
-    | "patterns"
-    | "exposure"
-  >("findings");
+  const [tab, setTab] = useState<AnalysisTab>(initialSearch.tab ?? "findings");
   const [showAcquire, setShowAcquire] = useState(false);
-  const [workspace, setWorkspace] = useState<"graph" | "psbt" | "datasets">("graph");
+  const [workspace, setWorkspace] = useState<AnalysisWorkspace>(initialSearch.workspace ?? "graph");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const requestVersion = useRef(0);
   const boundary = useContext(DaemonScopeContext);
-  const assistant = useContext(AssistantSessionContext);
   const run = useDaemonMutation<AnalysisResult>("ui.chain_analysis.query", {
     invalidateQueries: false,
   });
-  const assistantContext = useDaemonMutation<{
-    query: Record<string, unknown>;
-    subject?: string;
-    snapshot_id: string;
-  }>("ui.chain_analysis.ai_context", { invalidateQueries: false });
   const reportError = useCallback(
     (value: unknown) =>
       setError(value instanceof Error ? value.message : String(value)),
     [],
   );
+  const assistant = useChainAnalysisAssistant(reportError);
   const execute = async (next: AnalysisQuery = query) => {
     const version = ++requestVersion.current;
     setError(null);
@@ -194,39 +174,7 @@ export function ChainAnalysisWorkbench({
     setHighlighted([]);
     setError(null);
   };
-  const ask = async () => {
-    if (
-      !result ||
-      !assistant ||
-      assistant.isStreaming ||
-      assistantContext.isPending ||
-      boundary?.isCurrent?.() === false
-    )
-      return;
-    try {
-      // Chain identities must cross the daemon's provider projection, including UI-authored prompts.
-      const response = await assistantContext.mutateAsync({
-        query: result.query,
-        ...(pickedSubject ? { subject: pickedSubject } : {}),
-        expected_snapshot_id: result.snapshot_id,
-      });
-      if (!response.data || boundary?.isCurrent?.() === false) return;
-      const context = response.data;
-      const prompt = t("assistantPrompt", {
-        subject: context.subject || t("overview"),
-        query: JSON.stringify(context.query),
-        snapshot: context.snapshot_id,
-      });
-      const ui = useUiStore.getState();
-      ui.setAssistantDockDiscovered(true);
-      ui.setAssistantDockMinimized(false);
-      ui.setAssistantDockExpanded(true);
-      if (assistant.selection?.model) assistant.sendPrompt(prompt);
-      else useAssistantDraftStore.getState().setDraft(prompt);
-    } catch (value) {
-      reportError(value);
-    }
-  };
+  const ask = () => result ? assistant.ask({ query: result.query, snapshot_id: result.snapshot_id }, pickedSubject || undefined) : undefined;
   const exportResult = async (format: "json" | "csv") => {
     if (!result) return;
     try {
@@ -270,9 +218,7 @@ export function ChainAnalysisWorkbench({
             onClick={() => void ask()}
             disabled={
               workspace !== "graph" || !result ||
-              !assistant ||
-              assistant.isStreaming ||
-              assistantContext.isPending
+              !assistant.available || assistant.busy
             }
           >
             <Sparkles className="size-4" />

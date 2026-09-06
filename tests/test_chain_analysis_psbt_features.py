@@ -41,6 +41,21 @@ def sample(*, sequence=0xFFFFFFFD, previous=True, witness=True):
     return psbt
 
 
+def test_shared_fee_and_op_return_features_have_closed_persisted_evidence():
+    raw = {"vin": [{"txid": "01" * 32, "vout": 0, "prevout": {"value": 1100}, "sequence": 0xFFFFFFFD}],
+           "vout": [{"value": 1000, "scriptpubkey": "0014" + "12" * 20}, {"value": 0, "scriptpubkey": "6a0155"}], "vsize": 100}
+    snapshot = extract_transaction_features(raw)
+    codes = {row["code"] for row in evaluate_features(snapshot)}
+    assert {"rounded_fee_rate", "op_return_output", "explicit_rbf_signal"} <= codes
+    restored = normalize_persisted_features(snapshot, subject_id="bounded-subject", source="stored_transaction")
+    assert restored is not None
+    assert {row["code"] for row in evaluate_features(restored)} == codes
+    assert "rounded_fee_rate" not in {row["code"] for row in evaluate_features(restored, collaboration={"kind": "payjoin"})}
+    malicious = deepcopy(snapshot)
+    next(row for row in malicious["features"] if row["code"] == "fee_rate")["value"]["server"] = "private-url"
+    assert normalize_persisted_features(malicious, subject_id="bounded-subject", source="stored_transaction") is None
+
+
 @pytest.mark.parametrize("vector", VECTORS, ids=lambda row: f"BIP{row['bip']}: {row['case']}")
 def test_official_bip174_and_bip370_vectors(vector):
     if not vector["valid"]:

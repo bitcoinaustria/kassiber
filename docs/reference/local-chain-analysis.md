@@ -4,6 +4,13 @@ Open **Extras → Chain analysis** (`/chain-analysis`). The investigation worksp
 is available without developer mode. It reads the active book and its local
 reference observations; opening it does not contact an explorer or sync a wallet.
 
+[Privacy Mirror](privacy-mirror.md) is the concise public-observer summary of
+this same engine. `analyze_snapshot` composes an immutable canonical index after
+observer projection; Mirror adds personal relevance, executed-check coverage and
+bounded solver summaries. It has no separate graph, detector or grade. Deep
+links preserve the physical subject and observer/domain; PSBT and dataset tools
+stay in this workbench.
+
 ## Investigating a movement
 
 Start with an overview or enter a transaction ID, outpoint, address, wallet ID

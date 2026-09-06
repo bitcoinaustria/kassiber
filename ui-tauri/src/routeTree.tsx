@@ -9,6 +9,7 @@
  * under the AppShell layout and require a persisted identity; otherwise
  * the layout redirects to `/`.
  */
+import { parseAnalysisSearch } from "./lib/chainAnalysisNavigation";
 import { custodyGapRedirectSearch, parseTransfersCustodySearch } from "./routes/transfers-custody/routeSearch";
 import {
   createRootRoute,
@@ -193,9 +194,7 @@ const privacyMirrorRoute = createRoute({
 const chainAnalysisRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/chain-analysis",
-  validateSearch: (search: Record<string, unknown>): { subject?: string } => ({
-    subject: typeof search.subject === "string" && search.subject.length <= 512 ? search.subject : undefined,
-  }),
+  validateSearch: parseAnalysisSearch,
   component: ChainAnalysis,
 });
 

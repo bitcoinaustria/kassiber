@@ -11,7 +11,17 @@ from .query import normalize_query, query_index, resolve_subject
 
 def run_analysis(conn: sqlite3.Connection, profile_id: str, args: Mapping[str, Any] | None = None) -> dict[str, Any]:
     query = normalize_query(args)
-    index = observer_index(build_index(conn, profile_id, observer=query["observer"]), query["observer"])
+    return analyze_snapshot(build_index(conn, profile_id), query)
+
+
+def analyze_snapshot(index: AnalysisIndex, args: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """Compose one observer's bounded findings from an immutable local index.
+
+    Pure: no database reads, source refreshes, or network requests. Both the
+    workbench and Privacy Mirror use this same interpretation of the evidence.
+    """
+    query = normalize_query(args)
+    index = observer_index(index, query["observer"])
     result = query_index(index, query)
     from .analytics import analyze_index
     analytics_query = dict(query)
@@ -29,6 +39,8 @@ def run_analysis(conn: sqlite3.Connection, profile_id: str, args: Mapping[str, A
     from .index import digest
     result["transaction_features"] = []
     for node in result["nodes"]:
+        if node.get("status") in {"missing", "stale", "conflicting", "retracted"}:
+            continue
         fact = index.transaction_facts.get(node["id"], {})
         snapshot = fact.get("features")
         if not snapshot:
@@ -67,7 +79,7 @@ def prepare_entropy(conn: sqlite3.Connection, profile_id: str, args: Mapping[str
         raise AppError("max_duration_ms must be between 1 and 30000", code="validation", retryable=False)
     from .entropy import normalize_scenario
     scenario = normalize_scenario(args.get("scenario"))
-    index = observer_index(build_index(conn, profile_id, observer=query["observer"]), query["observer"])
+    index = observer_index(build_index(conn, profile_id), query["observer"])
     context = {"schema_version": 1, "snapshot_id": index.snapshot_id, "subject": query.get("subject"), "observer": query["observer"]}
     try:
         subjects = resolve_subject(index, query["subject"], query)
@@ -102,4 +114,4 @@ def start_entropy(conn: sqlite3.Connection, profile_id: str, args: Mapping[str, 
     return JOBS.start(scope_key(conn, profile_id), {**dict(args), "snapshot_id": context["snapshot_id"]}, compute)
 
 
-__all__ = ["AnalysisIndex", "build_index", "normalize_query", "query_index", "run_analysis", "run_entropy"]
+__all__ = ["AnalysisIndex", "build_index", "normalize_query", "query_index", "analyze_snapshot", "run_analysis", "run_entropy"]

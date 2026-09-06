@@ -14,6 +14,7 @@ from typing import Any, Mapping, Sequence
 
 from ...wallet_descriptors import normalize_network
 from .entropy import ENTROPY_MODEL, analyze_transaction_entropy
+from .components import Components
 
 RULE_VERSION = "local-analytics-v1"
 _BAD_STATUS = {"stale", "conflicting", "retracted"}
@@ -76,9 +77,10 @@ def analyze_index(index: Any, query: Mapping[str, Any], selected_node_ids: set[s
     all_nodes = _get(index, "nodes", {})
     selected = set(selected_node_ids) & set(all_nodes)
     nodes = {ident: all_nodes[ident] for ident in sorted(selected)}
+    selected_edges = frozenset(query["_selected_edge_ids"]) if "_selected_edge_ids" in query else None
     edges = {ident: row for ident, row in _get(index, "edges", {}).items()
              if row.get("source") in selected and row.get("target") in selected
-             and ("_selected_edge_ids" not in query or ident in query["_selected_edge_ids"])}
+             and (selected_edges is None or ident in selected_edges)}
     txfacts = _get(index, "transaction_facts", {})
     outfacts = _get(index, "output_facts", {})
     observer = query.get("observer", "public")
@@ -152,6 +154,8 @@ def analyze_index(index: Any, query: Mapping[str, Any], selected_node_ids: set[s
         ins = [row["output_id"] for row in fact.get("inputs", ()) if row.get("output_id") in observed_inputs]
         outs = [row["output_id"] for row in fact.get("outputs", ()) if row.get("output_id") in observed_outputs]
         collab = fact.get("collaboration")
+        if len(ins) > 1:
+            result["findings"].append(_finding("observed_co_spend", [txid, *ins], detail="These observed outputs are spent in one transaction. Common ownership is a separate hypothesis and can fail under collaboration.", observer="public", level="observed", evidence=nodes[txid].get("evidence", ()), edge_ids=[edge for output, edge in reverse.get(txid, ()) if output in ins]))
         if collab:
             result["findings"].append(_finding("collaborative_boundary", [txid], detail="Collaboration evidence suppresses common-input and change ownership assumptions; physical spends remain observable.", observer=observer, level=collab.get("evidence_level", "heuristic"), evidence=[collab]))
             continue
@@ -201,28 +205,19 @@ def analyze_index(index: Any, query: Mapping[str, Any], selected_node_ids: set[s
             result["entropy"].append(dict(analyze_transaction_entropy(txfacts[txid], chain=nodes[txid].get("chain"), max_states=query.get("entropy_max_states", 200_000), max_duration_ms=query.get("entropy_max_duration_ms", 1000)), transaction_node_id=txid))
         if len(candidates) > 1:
             result["coverage"]["stopped_reasons"].append("entropy_single_transaction_limit")
-    result["coverage"].update(transaction_count=len(txids), amount_complete_transaction_count=sum(bool(txfacts[ident].get("complete")) and all(_amount(row.get("amount_msat")) is not None for row in (*txfacts[ident].get("inputs", ()), *txfacts[ident].get("outputs", ()))) for ident in txids), hypothesis_count=len(hypothesis_edges), pattern_count=len(result["patterns"]))
+    result["coverage"].update(transaction_count=len(txids), amount_complete_transaction_count=sum(bool(txfacts[ident].get("complete")) and all(_amount(row.get("amount_msat")) is not None for row in (*txfacts[ident].get("inputs", ()), *txfacts[ident].get("outputs", ()))) for ident in txids), hypothesis_count=len(hypothesis_edges), pattern_count=len(result["patterns"]), label_count=len(visible_labels))
     return result
 
 
 def _clusters(result: dict, edges: Sequence[Mapping], nodes: Mapping, observer: str) -> None:
-    parents: dict[str, str] = {}
-
-    def root(node: str) -> str:
-        parents.setdefault(node, node)
-        while parents[node] != node:
-            parents[node] = parents[parents[node]]
-            node = parents[node]
-        return node
-
+    components = Components({edge[side] for edge in edges for side in ("source", "target")})
     for edge in edges:
-        a, b = root(edge["source"]), root(edge["target"])
-        parents[max(a, b)] = min(a, b)
-    components: dict[str, list[str]] = defaultdict(list)
-    for member in parents:
-        components[root(member)].append(member)
-    for members in components.values():
-        refs = [edge for edge in edges if edge["source"] in members]
+        components.union(edge["source"], edge["target"])
+    edges_by_root: dict[str, list[Mapping]] = defaultdict(list)
+    for edge in edges:
+        edges_by_root[components.find(edge["source"])].append(edge)
+    for members in components.groups():
+        refs = edges_by_root[components.find(members[0])]
         result["clusters"].append({"id": _id("cluster", sorted(members), observer), "node_ids": sorted(members),
                                    "edge_ids": sorted(edge["id"] for edge in refs), "observer": observer,
                                    "kind": "possible_common_control", "evidence_level": "heuristic",

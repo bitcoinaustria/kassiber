@@ -3,6 +3,7 @@ import io
 import json
 import time
 import unittest
+import uuid
 from unittest.mock import patch
 
 from kassiber.core import chain_analysis_datasets as datasets
@@ -148,6 +149,7 @@ class ChainAnalysisDatasetTests(unittest.TestCase):
         self.assertNotIn(hidden["id"], json.dumps(public_view))
         other = datasets.match_subjects(self.conn, "other", [("bitcoin", "main", TXID)])
         self.assertEqual(other["claims"], [])
+
         self.assertEqual(other["datasets"], [])
         empty = self.match("b" * 64)
         self.assertEqual(empty["claims"], [])
@@ -157,6 +159,23 @@ class ChainAnalysisDatasetTests(unittest.TestCase):
         datasets.revoke_dataset(self.conn, "pf", public["id"], 1)
         self.assertNotEqual(self.match("b" * 64)["dataset_state_digest"], empty["dataset_state_digest"])
 
+    def test_public_snapshot_handoff_uses_same_commitment_with_private_packs(self):
+        from kassiber.core.chain_analysis import analyze_snapshot, build_index, prepare_entropy, run_analysis
+        self.book._insert_transaction(tx_id="snapshot", external_id=TXID, raw_json={
+            "txid": TXID, "vin": [{"coinbase": "0101"}], "vout": [{"value": 1000, "scriptpubkey": SCRIPT}],
+        })
+        self.conn.commit()
+        self.pack(changes={"dataset_key": "public-claim"}, rows=[{"subject": TXID, "label": "Public claim"}])
+        self.pack(changes={"dataset_key": "private-claim", "visibility": "private"}, rows=[{"subject": TXID, "label": "PRIVATE ANCHOR"}])
+        index = build_index(self.conn, "pf")
+        args = {"observer": "public", "include_hypotheses": True}
+        mirror = analyze_snapshot(index, args)
+        workbench = run_analysis(self.conn, "pf", args)
+        entropy_context, _, _ = prepare_entropy(self.conn, "pf", {"subject": TXID, "observer": "public"})
+        self.assertEqual(mirror, workbench)
+        self.assertEqual(mirror["snapshot_id"], entropy_context["snapshot_id"])
+        self.assertNotIn("PRIVATE ANCHOR", json.dumps(mirror))
+        self.assertIn("Public claim", json.dumps(mirror))
     def test_replacement_is_atomic_and_old_versions_are_immutable(self):
         old = self.pack()
         seen = []
@@ -281,6 +300,51 @@ class ChainAnalysisDatasetTests(unittest.TestCase):
         self.assertTrue(result["coverage"]["truncated"])
         self.assertEqual(len(self.match(limit=5)["claims"]), 5)
         self.assertFalse(self.match(limit=5)["coverage"]["truncated"])
+
+    def test_private_match_budget_cannot_starve_public_snapshot_or_mirror(self):
+        from kassiber.core.chain_analysis import analyze_snapshot, build_index, run_analysis
+        from kassiber.core.chain_analysis_ai import project_ai_result
+        from kassiber.core.privacy_mirror import build_privacy_mirror
+        self.book._insert_transaction(tx_id="visible", external_id=TXID, raw_json={
+            "txid": TXID, "vin": [{"coinbase": "0101"}], "vout": [{"value": 1000, "scriptpubkey": SCRIPT}],
+        })
+        self.book._insert_utxo(utxo_id="visible", txid=TXID, vout=0, sats=1000, address=ADDRESS, script=SCRIPT)
+        self.conn.commit()
+        with patch.object(datasets.uuid, "uuid4", return_value=uuid.UUID(int=1)):
+            self.pack(changes={"dataset_key": "private-many", "visibility": "private"}, rows=[{"subject": TXID, "label": f"Private claim {number}"} for number in range(5001)])
+        with patch.object(datasets.uuid, "uuid4", return_value=uuid.UUID(int=2)):
+            self.pack(changes={"dataset_key": "public-one"}, rows=[{"subject": TXID, "label": "Public claim"}])
+        index = build_index(self.conn, "pf")
+        self.assertTrue(index.coverage["datasets"]["visibility_coverage"]["private"]["truncated"])
+        self.assertEqual(index.coverage["datasets"]["visibility_coverage"]["private"]["match_count"], 5000)
+        args = {"observer": "public", "include_hypotheses": True}
+        snapshot = analyze_snapshot(index, args)
+        workbench = run_analysis(self.conn, "pf", args)
+        self.assertEqual(snapshot, workbench)
+        self.assertEqual(snapshot["snapshot_id"], index.snapshot_id)
+        self.assertEqual(snapshot["coverage"]["analytics"]["label_count"], 1)
+        self.assertEqual(snapshot["coverage"]["datasets"]["match_count"], 1)
+        self.assertEqual(snapshot["coverage"]["datasets"]["active_dataset_count"], 1)
+        self.assertFalse(snapshot["coverage"]["datasets"]["truncated"])
+        self.assertNotIn("visibility_coverage", snapshot["coverage"]["datasets"])
+        self.assertTrue(any(row["claim"]["label"] == "Public claim" for row in snapshot["exposure"]))
+        projected = project_ai_result(self.conn, "pf", snapshot)
+        self.assertEqual(projected["coverage"]["analytics"]["label_count"], 1)
+        mirror = build_privacy_mirror(self.conn, "pf", redacted=False)
+        check = next(row for row in mirror["coverage"]["checks"] if row["code"] == "public_attribution")
+        self.assertEqual((check["evaluated"], check["eligible"]), (1, 1))
+        self.assertNotEqual(check.get("reason"), "no_local_public_claims")
+        self.assertEqual(mirror["investigation"]["snapshot_id"], index.snapshot_id)
+
+    def test_public_and_private_match_limits_are_independent_in_owner_view(self):
+        self.pack(rows=[{"subject": TXID, "label": f"Public {number}"} for number in range(3)])
+        self.pack(changes={"dataset_key": "private", "visibility": "private"}, rows=[{"subject": TXID, "label": "Private"}])
+        result = self.match(limit=2)
+        self.assertEqual(len(result["claims"]), 3)
+        self.assertEqual(sum(row["visibility"] == "public" for row in result["claims"]), 2)
+        self.assertEqual(sum(row["visibility"] == "private" for row in result["claims"]), 1)
+        self.assertTrue(result["coverage"]["visibility_coverage"]["public"]["truncated"])
+        self.assertFalse(result["coverage"]["visibility_coverage"]["private"]["truncated"])
 
     def test_exact_entity_and_subject_query_pages_are_scope_bound_and_historical(self):
         rows = [{"subject": f"{value:064x}", "label": "Same Entity", "source_id": str(value)} for value in range(1, 5)]

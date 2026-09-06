@@ -505,14 +505,13 @@ tokens. Report security-impacting issues privately, not in the public tracker â€
 see [SECURITY.md](SECURITY.md).
 
 For the local privacy view, open Privacy Mirror or run
-`kassiber reports privacy-mirror`. It shows observed Bitcoin output links,
-observer-model assumptions, supporting evidence, unknowns and possible effects
-of a future spend. Its capability catalog does not imply every listed check
-ran on the current book. The
-posture-only snapshot remains available with `kassiber reports privacy-hygiene`
-and Settings -> Privacy. GUI, CLI, and assistant read tools share redacted facts
-with `evidence_level`, without addresses, scripts, descriptors, xpubs, backend
-URLs/tokens, wallet config, raw JSON, branch/index values, or derivation paths.
+`kassiber reports privacy-mirror`. It summarizes personal linkage findings,
+counterparty context and executed checks from the shared Chain Analysis engine,
+with explicit evidence gaps and computation limits. Findings open the same
+workbench for deeper investigation; there is no separate grade or graph model.
+The posture-only snapshot remains available with `kassiber reports privacy-hygiene`
+and Settings â†’ Privacy. CLI and assistant results use opaque scoped graph
+references; physical identities remain local to the desktop investigation.
 See [Privacy Mirror](docs/reference/privacy-mirror.md).
 The [local chain-analysis workspace](docs/reference/local-chain-analysis.md)
 adds bounded source/destination/path tracing, sourced label exposure, reversible

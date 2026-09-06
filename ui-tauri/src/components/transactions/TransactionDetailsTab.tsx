@@ -1,23 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ShieldAlert } from "lucide-react";
+import { Eye } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TabsContent } from "@/components/ui/tabs";
 import { useDaemon } from "@/daemon/client";
-import {
-  findPrivacyTransactionRow,
-  formatPrivacyInt,
-  privacyEvidenceTone,
-  shortPrivacyId,
-  type EvidenceLevel,
-  type PrivacyMirrorPayload,
-} from "@/lib/privacyMirror";
+import { transactionAnalysisSearch } from "@/lib/chainAnalysisNavigation";
 import { transactionTypeLabel } from "@/lib/transactionTypeLabel";
 import { cn } from "@/lib/utils";
-import { isDevLockedRoute } from "@/components/kb/devMode";
 import { useUiStore } from "@/store/ui";
 
 import {
@@ -137,92 +129,9 @@ function fallbackRouteKind(pair: PairRow) {
   return classifyRouteKind(pairRouteArgs(pair));
 }
 
-function PrivacyEvidencePill({ level }: { level?: EvidenceLevel }) {
-  const { t } = useTranslation("privacyMirror");
-  const key = level || "unknown";
-  const label =
-    key === "exact"
-      ? t("evidence.exact")
-      : key === "derived"
-        ? t("evidence.derived")
-        : key === "unknown"
-          ? t("evidence.unknown")
-          : key;
-  return (
-    <Badge variant="outline" className={cn("rounded-md", privacyEvidenceTone(key))}>
-      {label}
-    </Badge>
-  );
-}
-
-function TransactionPrivacyMirrorPanel({
-  payload,
-  loading,
-  errorMessage,
-  transactionRefs,
-}: {
-  payload?: PrivacyMirrorPayload;
-  loading: boolean;
-  errorMessage: string | null;
-  transactionRefs: Array<string | null | undefined>;
-}) {
-  const { t } = useTranslation("privacyMirror");
-  const row = findPrivacyTransactionRow(payload, transactionRefs);
-  const tellKinds = row?.tell_kinds ?? [];
-  const degraded = Boolean(errorMessage) || (!loading && !row);
-
-  return (
-    <div className="overflow-hidden rounded-md border" data-testid="transaction-privacy-mirror-panel">
-      <div className="flex items-center justify-between gap-3 border-b bg-muted px-3 py-1.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <ShieldAlert className="size-4 text-amber-600" aria-hidden="true" />
-          <span className="truncate text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {t("detail.transactionTitle")}
-          </span>
-        </div>
-        <PrivacyEvidencePill level={row?.evidence_level ?? (degraded ? "unknown" : "derived")} />
-      </div>
-      <div className="grid gap-3 p-3 sm:grid-cols-3">
-        <div>
-          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            {t("detail.transactionTells")}
-          </p>
-          <p className="font-mono text-lg tabular-nums">
-            {loading && !row ? "..." : formatPrivacyInt(row?.tell_count)}
-          </p>
-        </div>
-        <div>
-          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            {t("detail.transactionPenalties")}
-          </p>
-          <p className="font-mono text-lg tabular-nums">
-            {loading && !row ? "..." : formatPrivacyInt(row?.wallet_penalty_count)}
-          </p>
-        </div>
-        <div className="min-w-0">
-          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            {t("detail.transactionKinds")}
-          </p>
-          <p className="truncate text-sm">
-            {tellKinds.length ? tellKinds.join(", ") : t("detail.none")}
-          </p>
-        </div>
-      </div>
-      <div className="border-t px-3 py-2 text-xs text-muted-foreground">
-        {errorMessage
-          ? t("detail.queryError", { message: errorMessage })
-          : row
-            ? t("detail.transactionMatched", { id: shortPrivacyId(row.txid) })
-            : loading
-              ? t("detail.loading")
-              : t("detail.degraded")}
-      </div>
-    </div>
-  );
-}
-
 export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContext }) {
   const { t } = useTranslation("transactions");
+  const { t: tPrivacy } = useTranslation("privacyMirror");
   const navigate = useNavigate();
   const setDeferredConnectionSetup = useUiStore(
     (state) => state.setDeferredConnectionSetup,
@@ -311,17 +220,6 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     ),
     { enabled: Boolean(swapInGraphArgs.transaction) },
   );
-  // The embedded Privacy Mirror panel is the same early-stage feature as the
-  // /privacy-mirror page (see devMode.ts) — don't render it, and don't ask the
-  // daemon for the report either, while the switch is off.
-  const privacyMirrorAvailable =
-    useUiStore((state) => state.developerToolsEnabled) ||
-    !isDevLockedRoute("/privacy-mirror");
-  const privacyMirrorQuery = useDaemon<PrivacyMirrorPayload>(
-    "ui.reports.privacy_mirror",
-    undefined,
-    { enabled: privacyMirrorAvailable },
-  );
   const activeSwapGraphQuery =
     activeSwapLeg === "out"
       ? swapOutGraphQuery
@@ -367,8 +265,6 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
         ? activeSwapGraphQuery.error.message
         : null
       : graphError;
-  const privacyMirrorError =
-    privacyMirrorQuery.error instanceof Error ? privacyMirrorQuery.error.message : null;
   const graphTx = activeGraphData?.transaction;
   const graphNetworkFeeBtc =
     typeof activeGraphData?.fee?.valueBtc === "number"
@@ -579,14 +475,15 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         />
                       </div>
                     </div>
-                    {privacyMirrorAvailable ? (
-                      <TransactionPrivacyMirrorPanel
-                        payload={privacyMirrorQuery.data?.data}
-                        loading={privacyMirrorQuery.isLoading}
-                        errorMessage={privacyMirrorError}
-                        transactionRefs={currentGraphReferences}
-                      />
-                    ) : null}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="self-start"
+                      onClick={() => void navigate({ to: "/chain-analysis", search: transactionAnalysisSearch(transaction) })}
+                    >
+                      <Eye className="size-3.5" aria-hidden="true" />
+                      {tPrivacy("investigateTransaction")}
+                    </Button>
                     {technicalRows.length ? (
                       <div className="overflow-hidden rounded-md border">
                         <div className="border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">

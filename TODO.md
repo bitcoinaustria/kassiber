@@ -51,6 +51,10 @@ Research and the pre-implementation inventory: [architecture](docs/plan/17-local
 Current expansion (completion includes shared CLI/daemon/AI/UI contracts and
 independent adversarial verification):
 
+- [x] Unify Privacy Mirror with the shared observer snapshot and analytics;
+  remove duplicate scoring/graphs/editors, preserve local/AI audience boundaries,
+  and verify desktop, CLI, model handoffs and regression coverage.
+
 - [x] Exact value-class partition solver, explicit participant-fee scenarios,
   large repeated-value transactions and cancellable computation receipts.
 - [x] Shared public structure/rule pipeline for chain observations and PSBT
