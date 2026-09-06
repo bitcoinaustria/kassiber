@@ -1,0 +1,9 @@
+.source-funds-graph .ca-node-label {
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+
+.source-funds-graph .ca-node-detail {
+  font-family: var(--font-sans);
+  font-size: 13px;
+}

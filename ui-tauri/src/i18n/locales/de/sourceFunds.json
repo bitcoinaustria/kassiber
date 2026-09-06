@@ -426,7 +426,7 @@
     "fullyTraced": "Vollständig nachvollzogen · {{count}} Eingänge",
     "attested": "Bestätigte frühere Historie ({{percent}} %) wird gesondert ausgewiesen und zählt nicht als vollständig nachvollzogen.",
     "partialCoverage": "Teilweise: {{shown}} von {{total}} Eingängen eingeordnet.",
-    "optionalRecipient": "Kein Empfänger ausgewählt. Ein Empfänger ist optional; die Offenlegungseinstellungen bestimmen den Berichtsinhalt.",
+    "optionalRecipient": "Kein Empfänger ausgewählt. Du kannst auch ohne Empfänger exportieren.",
     "omitted": "Im PDF weggelassen",
     "levelSummary": "Ebene {{level}} · {{transactions}} Transaktionen · {{sources}} Quellen",
     "scopeTruncated": "Diese Prüfung hat ihre Nachweisgrenze erreicht. Die angezeigte Liste ist unvollständig; fehlende Zeilen belegen keinen vollständigen Pfad.",
@@ -667,5 +667,11 @@
       "flow": "Bewegung"
     },
     "reviewWithAssistant": "Mit Assistent prüfen"
+  },
+  "review": {
+    "title": "Was du weitergibst",
+    "contents": "Transaktionsreferenzen: {{references}} · Belege: {{evidence}}",
+    "ownership": "Dieser Bericht verknüpft die genannten Wallets und offengelegten Transaktionen mit deiner Identität.",
+    "printGraphics": "Grafiken im PDF"
   }
 }

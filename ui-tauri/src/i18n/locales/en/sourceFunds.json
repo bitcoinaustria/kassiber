@@ -426,7 +426,7 @@
     "fullyTraced": "Fully traced · {{count}} inbound transactions",
     "attested": "Prior-history attestation ({{percent}}%) is shown separately and does not count as fully traced.",
     "partialCoverage": "Partial: {{shown}} of {{total}} inbound transactions classified.",
-    "optionalRecipient": "No recipient selected. A recipient is optional; the disclosure settings below determine the report contents.",
+    "optionalRecipient": "No recipient selected. You can export without one.",
     "omitted": "Omitted from PDF",
     "levelSummary": "Level {{level}} · {{transactions}} transactions · {{sources}} sources",
     "scopeTruncated": "This investigation reached its evidence limit. The displayed list is partial; missing rows are not proof of a complete path.",
@@ -667,5 +667,11 @@
       "flow": "Movement"
     },
     "reviewWithAssistant": "Review with assistant"
+  },
+  "review": {
+    "title": "What you share",
+    "contents": "Transaction references: {{references}} · Evidence: {{evidence}}",
+    "ownership": "Sharing this report links the named wallets and disclosed transactions to your identity.",
+    "printGraphics": "PDF graphics"
   }
 }

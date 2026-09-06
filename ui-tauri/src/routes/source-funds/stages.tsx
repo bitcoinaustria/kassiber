@@ -55,7 +55,7 @@ import {
   CaseBrief,
   CoveragePanel,
   DisclosureList,
-  DisclosureNarrative,
+  DisclosureSummary,
   DisclosureNodeOverrides,
   DisclosureTxidList,
   EmptyState,
@@ -961,105 +961,78 @@ export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
   const { t } = useTranslation("sourceFunds");
   return (
     <div className="space-y-5">
-      <StageHeader
-        title={t("caseStages.disclose.hint")}
-        lede={t("workstation.everythingBelowIsExactlyWhat")}
-      />
-
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="space-y-4">
-          <DisclosureNarrative report={state.report} />
-          {state.report?.diagrams?.flow_svg && <ReportDiagram svg={state.report.diagrams.flow_svg} label={t("flowPath.title")} />}
-          <details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-medium">{t("journey.previewDetails")}</summary><div className="space-y-4 pt-4">
-          <DisclosureTxidList report={state.report} />
-          <DisclosureNodeOverrides
-            report={state.report}
-            overrides={state.revealOverrides}
-            onChange={(id, decision) =>
-              state.setRevealOverrides((current) => {
-                const next = { ...current };
-                if (decision) {
-                  next[id] = decision;
-                } else {
-                  delete next[id];
-                }
-                return next;
-              })
-            }
-          />
-          <DisclosureList
-            label={t("evidence.label")}
-            values={(state.report?.disclosure_preview.attachments ?? []).map(
-              (item) => item.label,
-            )}
-          />
-          <DisclosureList
-            label={t("disclosure.excluded")}
-            values={state.report?.disclosure_preview.excluded ?? []}
-          />
-          {state.report?.disclosure_preview.privacy_note && (
-            <p className="rounded-md border px-3 py-2 text-xs text-muted-foreground">
-              {state.report.disclosure_preview.privacy_note}
-            </p>
-          )}
-          <FlowLevelDetailPreview
-            report={state.report}
-            omitted={state.omitSections.includes("transaction_details")}
-          />
-          </div></details>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <h2 className="text-lg font-semibold">{t("review.title")}</h2>
+        <div className="w-44">
+          <Field label={t("disclosure.revealMode")} htmlFor="disclose-reveal">
+            <Select
+              value={state.revealMode}
+              onValueChange={state.setRevealMode}
+            >
+              <SelectTrigger id="disclose-reveal" className="h-9 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {["labels_only", "minimal", "standard", "full"].map(
+                  (mode) => (
+                    <SelectItem key={mode} value={mode}>
+                      {t(`reveal.${mode}`, { defaultValue: pretty(mode) })}
+                    </SelectItem>
+                  ),
+                )}
+              </SelectContent>
+            </Select>
+          </Field>
         </div>
-
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="border-b">
-              <CardTitle className="text-base">{t("recipient.ariaLabel")}</CardTitle>
-              <CardDescription>
-                {t("workstation.whoReceivesThisDossierTheir")}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 p-4">
-              <RecipientPicker
-                recipients={
-                  state.recipientsQuery.data?.data?.recipients ?? []
-                }
-                selectedRecipientId={state.selectedRecipientId}
-                onSelectRecipient={(recipient) => {
-                  state.setSelectedRecipientId(recipient?.id ?? "");
-                }}
-              />
-              <RecipientPreferenceAdvisory
-                recipient={state.selectedRecipient}
-                currentRevealMode={state.revealMode}
-                onApply={(mode) => state.setRevealMode(mode)}
-              />
-            </CardContent>
-          </Card>
-
-          <details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-medium">{t("journey.reportOptions")}</summary><div className="pt-3"><Card>
-            <CardHeader className="border-b">
-              <CardTitle className="text-base">{t("workstation.reportOptions")}</CardTitle>
-              <CardDescription>
-                {t("workstation.frozenIntoTheCaseAt")}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 p-4 text-sm">
-              <Field label={t("disclosure.revealMode")} htmlFor="disclose-reveal">
-                <Select
-                  value={state.revealMode}
-                  onValueChange={state.setRevealMode}
-                >
-                  <SelectTrigger id="disclose-reveal" className="h-9 w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["labels_only", "minimal", "standard", "full"].map(
-                      (mode) => (
-                        <SelectItem key={mode} value={mode}>
-                          {t(`reveal.${mode}`, { defaultValue: pretty(mode) })}
-                        </SelectItem>
-                      ),
-                    )}
-                  </SelectContent>
-                </Select>
-              </Field>
+      </div>
+      <DisclosureSummary report={state.report} />
+      <FlowPathPreview flow={state.report?.simplified_flow} />
+      <div className="divide-y border-t">
+        <details className="py-4">
+          <summary className="cursor-pointer text-sm font-medium">{t("journey.previewDetails")}</summary>
+          <div className="space-y-4 pt-4">
+            <DisclosureTxidList report={state.report} />
+            <DisclosureNodeOverrides
+              report={state.report}
+              overrides={state.revealOverrides}
+              onChange={(id, decision) =>
+                state.setRevealOverrides((current) => {
+                  const next = { ...current };
+                  if (decision) {
+                    next[id] = decision;
+                  } else {
+                    delete next[id];
+                  }
+                  return next;
+                })
+              }
+            />
+            <DisclosureList
+              label={t("evidence.label")}
+              values={(state.report?.disclosure_preview.attachments ?? []).map(
+                (item) => item.label,
+              )}
+            />
+            <DisclosureList
+              label={t("disclosure.excluded")}
+              values={state.report?.disclosure_preview.excluded ?? []}
+            />
+            {state.report?.disclosure_preview.privacy_note && (
+              <p className="rounded-md border px-3 py-2 text-xs text-muted-foreground">
+                {state.report.disclosure_preview.privacy_note}
+              </p>
+            )}
+            {state.report?.disclosure_preview.ownership_note && <p className="text-sm text-muted-foreground">{state.report.disclosure_preview.ownership_note}</p>}
+            <FlowLevelDetailPreview
+              report={state.report}
+              omitted={state.omitSections.includes("transaction_details")}
+            />
+          </div>
+        </details>
+        <details className="py-4">
+          <summary className="cursor-pointer text-sm font-medium">{t("journey.reportOptions")}</summary>
+          <div className="grid gap-6 pt-4 sm:grid-cols-2">
+            <div className="space-y-4">
               <Field label={t("workstation.diagramDetail")} htmlFor="disclose-diagram">
                 <Select
                   value={state.diagramDetail}
@@ -1131,32 +1104,36 @@ export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
                   </label>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-
-          </div></details>
-          {state.report?.diagrams?.flow_svg && (
-            <details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-medium">{t("workstation.reportVisuals")}</summary><Card>
-              <CardHeader className="border-b">
-                <CardTitle className="text-base">{t("workstation.reportVisuals")}</CardTitle>
-                <CardDescription>
-                  {t("workstation.renderedOnThisDeviceIdentical")}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 p-4">
-                <ReportDiagram
-                  svg={state.report.diagrams.source_mix_ring_svg}
-                  label={t("workstation.sourceMix")}
-                />
-                <ReportDiagram
-                  svg={state.report.diagrams.data_source_ring_svg}
-                  label={t("workstation.dataSources")}
-                />
-              </CardContent>
-            </Card></details>
-          )}
-        </div>
+            </div>
+            <div className="space-y-4">
+              <RecipientPicker
+                recipients={
+                  state.recipientsQuery.data?.data?.recipients ?? []
+                }
+                selectedRecipientId={state.selectedRecipientId}
+                onSelectRecipient={(recipient) => {
+                  state.setSelectedRecipientId(recipient?.id ?? "");
+                }}
+              />
+              <RecipientPreferenceAdvisory
+                recipient={state.selectedRecipient}
+                currentRevealMode={state.revealMode}
+                onApply={(mode) => state.setRevealMode(mode)}
+              />
+            </div>
+          </div>
+        </details>
+        {state.report?.diagrams?.flow_svg && <details className="py-4">
+          <summary className="cursor-pointer text-sm font-medium">{t("review.printGraphics")}</summary>
+          <div className="space-y-4 pt-4">
+            <ReportDiagram svg={state.report.diagrams.flow_svg} label={t("flowPath.title")} wide />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ReportDiagram svg={state.report.diagrams.source_mix_ring_svg} label={t("workstation.sourceMix")} />
+              <ReportDiagram svg={state.report.diagrams.data_source_ring_svg} label={t("workstation.dataSources")} />
+            </div>
+          </div>
+        </details>}
       </div>
-
     </div>
   );
 }

@@ -8,8 +8,10 @@ is the primary trace view, with expandable stations and transaction details;
 open findings and an assistant action lead to missing evidence. Manual source
 and link tools remain available on demand.
 
-The report step shows the disclosure narrative and printable flow, with
-recipient and optional disclosure/detail controls. Continuing to export requires
+The report step shows a concise disclosure summary and the shared interactive
+evidence graph, using only the report's disclosure-filtered flow. Exact references,
+recipient and detail controls, and original PDF graphics are expandable. Print
+graphics retain their original palette in either app theme. Continuing to export requires
 a current exportable review, an available printable preview and explicit preview
 confirmation. Approval is bound to the review fingerprint: changed evidence,
 amount or disclosure options require another review. A restored draft step is

@@ -4,6 +4,7 @@ import { EvidenceGraph, type EvidenceGraphSelection } from "@/components/evidenc
 import { Button } from "@/components/ui/button";
 import { provenanceGraph, type ProvenanceFlow } from "./provenanceGraph";
 import { pretty } from "./model";
+import "./sourceFundsGraph.css";
 
 /** Uses the same canvas as Chain Analysis, with the reviewed provenance report as its only input. */
 export function SourceFundsFlowGraph({ flow, onOpenTransaction }: {
