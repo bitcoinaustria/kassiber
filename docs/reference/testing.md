@@ -804,10 +804,47 @@ changing the contributor entrypoint.
 ## Local chain-analysis oracle
 
 `./scripts/integration-harness.sh chain-analysis` runs the dedicated disposable
-Core31 test. It uses an ephemeral loopback port and its own container with
-`txindex` and `txospenderindex`, mines transfers through intermediate wallets,
-then proves forward paths and a saved-case difference after another mined spend.
-The script cleans up only its own container. It needs Docker and may pull the
-`bitcoin/bitcoin:31.0` image. Normal quality-gate runs skip this opt-in live test;
-unit tests exercise topology/entropy oracles, observer views, budgets, partial
-history, label/case revisions, CLI/daemon and AI projection without network.
+Core31 consensus/index oracle. It uses an ephemeral loopback RPC port, generated
+credentials, its own container with `txindex` and `txospenderindex`, and temporary
+Kassiber books. P2P networking is disabled; the node is limited to two CPUs and
+1 GiB RAM. Cleanup removes only that container, including when a test fails or
+the script is interrupted. It needs Docker and may pull `bitcoin/bitcoin:31.0`.
+
+`tests.integration.test_live_chain_analysis` covers:
+
+| Real Core fixture | Required result |
+| --- | --- |
+| Transfers through three intermediate wallets; only endpoints initially acquired | No invented path, explicit acquisition frontier, then exact create/spend path after acquiring the missing transaction; saved-case difference preserves the original incomplete evidence. |
+| Another confirmed spend after saving a complete local trace | Current case comparison includes the new transaction; the saved snapshot remains unchanged. |
+| Four independently funded legacy, nested SegWit, native SegWit and Taproot inputs | Empty PSBT amounts remain unknown; wallet-filled/signed PSBT fee and final vsize match Core; acquired transaction features match PSBT structure and signature categories after raw witness discard. |
+| Two independent wallet signers with equal inputs and equal outputs | One signer cannot finalize; both can produce a mined transaction; the financial-flow model retains three possible partitions and grants no ownership authority. This exercises collaborative transaction structure, not a CoinJoin coordinator. |
+| Original payment and receiver-signed Payjoin proposal | Added receiver contribution, fee delta, preserved output order and actual receiver signature commitments pass; reordered outputs fail; sender completion produces a Core-accepted mined transaction. The fixture constructs proposals locally and does not exercise HTTP negotiation. |
+| Relative block lock and absolute height lock | Core rejects each transaction before its prerequisite height and accepts it afterward; structural locktime and RBF-signalling features agree. |
+
+Every scenario also checks that acquisition creates no accounting transactions,
+watch-only wallets, custody components or ownership provenance. Public observation
+payloads retain categorical features while discarding raw witnesses, scriptSig,
+derivations and credentials. The lane waits for confirmed outpoints and both
+indexes at the exact mined tip rather than using fixed startup sleeps. Normal
+quality-gate runs skip these live tests; the dedicated lane additionally sets
+`KASSIBER_DISPOSABLE_CHAIN_ANALYSIS=1` to avoid running them against another test
+stack. Unit tests cover official BIP174/370 vectors, BIP78 hostile proposals,
+observer views, acquisition budgets, conditional entropy scenarios, labels,
+case revisions, CLI/daemon and AI projection without network.
+
+[Cashu-regtest](https://github.com/callebtc/cashu-regtest) is a useful reference
+for later cross-rail fixtures: its
+[startup checks](https://github.com/callebtc/cashu-regtest/blob/main/start.sh)
+exercise channel readiness and settled payments, and its optional stacks cover
+Arkade, Bark and Spark alongside LND, CLN and LDK. Reuse the evidence/readiness
+pattern: bind a funding outpoint to confirmation, compare both payment endpoints
+by payment hash, and check principal plus fees at each custody boundary. Starting
+that entire environment is not part of this lane; its reset behavior and large
+optional builds require a separately isolated project.
+
+This Bitcoin-only lane does not validate exchange export reconciliation, Liquid
+confidential amounts, live Lightning routing, Cashu proofs or Ark/Spark exits.
+Existing accounting/Lightning/Elements lanes cover their stated adapters. LDK,
+Ark and Spark still need Kassiber observation adapters and real protocol evidence
+before a cross-rail edge can claim more than a reviewed custody relation. A
+successful payment in an external demo alone does not establish that integration.
