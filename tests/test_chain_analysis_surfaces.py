@@ -59,6 +59,20 @@ def test_read_queries_never_refresh_or_mutate_book(book):
     assert conn.total_changes == before
 
 
+def test_feature_findings_remain_serializable_across_query_and_saved_case(book):
+    conn, _ = book
+    raw = json.loads(conn.execute("SELECT raw_json FROM transactions WHERE id='in'").fetchone()[0])
+    raw["version"] = 2
+    raw["vin"][0]["sequence"] = 0xFFFFFFFD
+    conn.execute("UPDATE transactions SET raw_json=? WHERE id='in'", (json.dumps(raw),))
+    conn.commit()
+    result = dispatch(conn, "ui.chain_analysis.query", {})
+    assert any(row["code"] == "explicit_rbf_signal" for row in result["findings"])
+    assert json.loads(json.dumps(result)) == result
+    saved = dispatch(conn, "ui.chain_analysis.cases.save", {"title": "Observed sequence", "query": result["query"], "expected_snapshot_id": result["snapshot_id"]})
+    assert dispatch(conn, "ui.chain_analysis.cases.get", {"id": saved["id"]})["result"] == result
+
+
 def test_scope_guard_refuses_case_save_in_changed_book(book):
     conn, _ = book
     result = dispatch(conn, "ui.chain_analysis.query", {})

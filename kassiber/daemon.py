@@ -27,6 +27,8 @@ from urllib import request as urlrequest
 
 from . import __version__
 from .core import chain_analysis_api
+from .core import chain_analysis_runtime
+from .daemon_chain_analysis import job_starter as chain_analysis_job_starter
 from .command_capabilities import daemon_capability
 from .secrets.auth_backoff import AuthAttemptBackoff, AUTH_BACKOFF_FILENAME
 from .operator.project import (
@@ -520,6 +522,7 @@ SUPPORTED_KINDS = (
     "ui.wallets.create",
     "ui.wallets.import_file",
     "internal.document_import.stage",
+    "internal.chain_analysis.stage",
     "ui.wallets.document_import.preview",
     "ui.wallets.document_import.import",
     "ui.wallets.import_samourai",
@@ -715,6 +718,8 @@ AI_TOOL_ONCE_ONLY_CONSENT = frozenset(
     {
         "ui.review.apply",
         "ui.chain_analysis.acquire.apply",
+        "ui.chain_analysis.datasets.import",
+        "ui.chain_analysis.datasets.import.start",
         "ui.journals.quarantine.resolve",
         "ui.transfers.components.apply",
         "ui.custody.review.apply",
@@ -3680,6 +3685,7 @@ def _projects_list_payload(ctx: DaemonContext) -> dict[str, Any]:
 def _close_current_project_for_switch(ctx: DaemonContext) -> None:
     _stop_freshness_background_worker(ctx, cancel_running=True)
     ctx.document_import_sessions.clear()
+    chain_analysis_runtime.clear_runtime()
     if ctx.conn is not None:
         ctx.conn.close()
         ctx.conn = None
@@ -3881,6 +3887,7 @@ def _select_project_payload(
             old_conn = ctx.conn
             old_owner = ctx.project_owner
             ctx.document_import_sessions.clear()
+            chain_analysis_runtime.clear_runtime()
             ctx.project_id = entry.id
             ctx.project_root = str(entry.root)
             ctx.data_root = target_data_root
@@ -5823,15 +5830,38 @@ def _chain_analysis_acquisition_consent_preview(runtime, args):
         return {"status": "blocked", "code": exc.code}
 
 
+def _chain_analysis_dataset_consent_preview(runtime, args):
+    """Bind consent to actual local source bytes and their declared provenance."""
+    def preview(conn):
+        if runtime.maintenance_state.get("provider_on_device") is not True:
+            return {"status": "blocked", "code": "local_provider_required"}
+        try:
+            from .core.chain_analysis_datasets import normalize_manifest
+            _, profile = resolve_scope(conn, None, None)
+            recipe = {"manifest": normalize_manifest(args.get("manifest")), "format": args.get("format", "csv"), "adapter": args.get("adapter", "generic")}
+            result = chain_analysis_runtime.SOURCES.preview(chain_analysis_runtime.scope_key(conn, profile["id"]), args.get("source_token"), recipe, args.get("expected_sha256"))
+            return {"status": "ready", "manifest": result["manifest"], "row_count": result["row_count"], "byte_count": result["byte_count"], "sha256": result["sha256"]}
+        except AppError as exc:
+            return {"status": "blocked", "code": exc.code}
+    try:
+        return _run_scoped_ai_operation(runtime, preview)
+    except AppError as exc:
+        return {"status": "blocked", "code": exc.code}
+
+
 def _chain_analysis_ai_payload(conn, runtime, kind, args):
     from .core.chain_analysis_ai import decode_ai_args, project_ai_result
     _, profile = resolve_scope(conn, None, None)
     on_device = runtime.maintenance_state.get("provider_on_device") is True
-    if kind in {"ui.chain_analysis.acquire.plan", "ui.chain_analysis.acquire.apply"} and not on_device:
-        raise AppError("Backend acquisition is available to on-device AI providers and the desktop workflow", code="local_provider_required")
+    if kind in {"ui.chain_analysis.acquire.plan", "ui.chain_analysis.acquire.apply", "ui.chain_analysis.datasets.preview", "ui.chain_analysis.datasets.import", "ui.chain_analysis.datasets.preview.start", "ui.chain_analysis.datasets.import.start"} and not on_device:
+        raise AppError("Source acquisition and dataset imports are available to on-device AI providers and the desktop workflow", code="local_provider_required")
     try:
         decoded = decode_ai_args(conn, profile["id"], args)
-        result = chain_analysis_api.dispatch(conn, kind, decoded)
+        if kind in {"ui.chain_analysis.datasets.import", "ui.chain_analysis.datasets.import.start"}:
+            from .core.chain_analysis_datasets import normalize_manifest
+            recipe = {"manifest": normalize_manifest(decoded.get("manifest")), "format": decoded.get("format", "csv"), "adapter": decoded.get("adapter", "generic")}
+            chain_analysis_runtime.SOURCES.preview(chain_analysis_runtime.scope_key(conn, profile["id"]), decoded.get("source_token"), recipe, decoded.get("expected_sha256"))
+        result = chain_analysis_api.dispatch(conn, kind, decoded, job_starter=runtime.maintenance_state.get("chain_analysis_job_starter"))
     except AppError as exc:
         if on_device:
             raise
@@ -8600,7 +8630,7 @@ def _run_ai_chat_tool_loop(
             offered.add(entry.provider_name)
             tools.append(entry.to_responses_tool())
     if not runtime.maintenance_state.get("provider_on_device"):
-        tools = [tool for tool in tools if tool.get("name") not in {"ui_chain_analysis_acquire_plan", "ui_chain_analysis_acquire_apply"}]
+        tools = [tool for tool in tools if tool.get("name") not in {"ui_chain_analysis_acquire_plan", "ui_chain_analysis_acquire_apply", "ui_chain_analysis_datasets_preview", "ui_chain_analysis_datasets_import", "ui_chain_analysis_datasets_preview_start", "ui_chain_analysis_datasets_import_start"}]
     runtime.maintenance_state["advertised_tools"] = [
         function["name"]
         for function in tools
@@ -8676,6 +8706,8 @@ def _run_ai_chat_tool_loop(
             preview_arguments = redact_tool_arguments(call.arguments)
             if entry is not None and entry.name == "ui.chain_analysis.acquire.apply":
                 preview_arguments = _chain_analysis_acquisition_consent_preview(runtime, call.arguments)
+            if entry is not None and entry.name in {"ui.chain_analysis.datasets.import", "ui.chain_analysis.datasets.import.start"}:
+                preview_arguments = _chain_analysis_dataset_consent_preview(runtime, call.arguments)
             proposal_seen_at = now_iso()
             needs_consent = (
                 entry is not None
@@ -14745,6 +14777,7 @@ def handle_request(
     if kind == "daemon.lock":
         _stop_freshness_background_worker(ctx, cancel_running=True)
         ctx.document_import_sessions.clear()
+        chain_analysis_runtime.clear_runtime()
         if ctx.conn is not None:
             ctx.conn.close()
             ctx.conn = None
@@ -16044,7 +16077,19 @@ def handle_request(
     if kind in chain_analysis_api.KINDS:
         payload = chain_analysis_api.dispatch(
             _require_conn(ctx), kind, _coerce_args_dict(request_id, request.get("args")),
+            job_starter=chain_analysis_job_starter(ctx.data_root, getattr(ctx, "db_passphrase", None)),
         )
+        return _with_request_id(build_envelope(kind, payload), request_id), False
+
+    if kind == "internal.chain_analysis.stage":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        from .core.chain_analysis_cases import arguments
+        arguments(args, ("source_file", "purpose", "expected_scope"), ("source_file", "purpose"))
+        conn = _require_conn(ctx)
+        workspace, profile = resolve_scope(conn, None, None)
+        if args.get("expected_scope") is not None and args["expected_scope"] != {"workspace_id": workspace["id"], "profile_id": profile["id"]}:
+            raise AppError("The active book changed; choose the analysis source again", code="scope_changed")
+        payload = chain_analysis_runtime.SOURCES.stage(chain_analysis_runtime.scope_key(conn, profile["id"]), args["source_file"], args["purpose"])
         return _with_request_id(build_envelope(kind, payload), request_id), False
 
     if kind in {"ui.review.cases", "ui.review.request_input", "ui.review.plan", "ui.review.apply", "ui.review.receipt"}:
@@ -16234,6 +16279,7 @@ def handle_request(
             _coerce_args_dict(request_id, request.get("args")),
         )
         ctx.document_import_sessions.clear()
+        chain_analysis_runtime.clear_runtime()
         return (
             _with_request_id(
                 build_envelope(
@@ -17512,6 +17558,7 @@ def handle_request(
                 "provider_on_device": _provider_is_on_device(provider),
                 "scope_workspace_id": chat_scope.get("workspace_id"),
                 "scope_profile_id": chat_scope.get("profile_id"),
+                "chain_analysis_job_starter": chain_analysis_job_starter(ctx.data_root, ctx.db_passphrase),
                 **attachment_state,
             },
         )

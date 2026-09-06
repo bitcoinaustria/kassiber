@@ -1014,6 +1014,46 @@ CREATE TABLE IF NOT EXISTS chain_analysis_label_history (
     PRIMARY KEY (label_id, revision)
 );
 
+-- Attribution packs are imported reference claims, never wallet authority.
+-- Claims stage in bounded commits; only a final metadata switch activates them.
+CREATE TABLE IF NOT EXISTS chain_analysis_datasets (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    dataset_key TEXT NOT NULL,
+    version TEXT NOT NULL,
+    chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    visibility TEXT NOT NULL CHECK (visibility IN ('public', 'private')),
+    status TEXT NOT NULL CHECK (status IN ('staging', 'active', 'superseded', 'revoked', 'failed')),
+    revision INTEGER NOT NULL DEFAULT 1,
+    manifest_json TEXT NOT NULL,
+    content_sha256 TEXT,
+    claims_sha256 TEXT,
+    row_count INTEGER NOT NULL DEFAULT 0,
+    byte_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chain_analysis_dataset_active
+    ON chain_analysis_datasets(profile_id, dataset_key) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_chain_analysis_dataset_profile
+    ON chain_analysis_datasets(profile_id, created_at DESC, id DESC);
+CREATE TABLE IF NOT EXISTS chain_analysis_dataset_claims (
+    dataset_id TEXT NOT NULL REFERENCES chain_analysis_datasets(id) ON DELETE CASCADE,
+    record_number INTEGER NOT NULL,
+    subject TEXT NOT NULL,
+    label TEXT NOT NULL,
+    category TEXT NOT NULL,
+    source_record_json TEXT NOT NULL,
+    valid_from TEXT,
+    valid_until TEXT,
+    PRIMARY KEY (dataset_id, record_number)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_chain_analysis_dataset_subject
+    ON chain_analysis_dataset_claims(dataset_id, subject, record_number);
+CREATE INDEX IF NOT EXISTS idx_chain_analysis_dataset_entity
+    ON chain_analysis_dataset_claims(dataset_id, label, record_number);
+
 CREATE TABLE IF NOT EXISTS tags (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

@@ -83,7 +83,19 @@ class ChainAnalysisAcquisitionTests(unittest.TestCase):
         self.assertEqual(result["acquired_count"], 2)
         self.assertEqual(result["request_count"], 3)
         stored = self.conn.execute("SELECT payload_json FROM chain_analysis_observations").fetchall()
-        self.assertFalse(any("private" in row[0] or "xpub" in row[0] or "witness" in row[0] for row in stored))
+        self.assertFalse(any("private" in row[0] or "xpub" in row[0] for row in stored))
+        def assert_no_raw_stacks(value):
+            if isinstance(value, dict):
+                self.assertFalse({"witness", "txinwitness", "scriptSig", "raw_hex", "preimage"} & set(value))
+                for child in value.values():
+                    assert_no_raw_stacks(child)
+            elif isinstance(value, list):
+                for child in value:
+                    assert_no_raw_stacks(child)
+        for row in stored:
+            payload = json.loads(row[0])
+            assert_no_raw_stacks(payload)
+            self.assertIn("chain_analysis_features", payload)
         self.assertTrue(all(timeout <= 8 for _, timeout, _ in http.calls))
         self.assertTrue(all(options["follow_redirects"] is False for _, _, options in http.calls))
         index = build_index(self.conn, "pf")
@@ -337,6 +349,28 @@ class ChainAnalysisAcquisitionTests(unittest.TestCase):
         self.assertTrue(result["complete"])
         spender = next(item for item in calls if item["method"] == "gettxspendingprevout")
         self.assertEqual(spender["params"], [[{"txid": tid(2), "vout": 0}], {"mempool_only": False}])
+
+    def test_core_requests_available_prevout_evidence_without_retaining_witness(self):
+        from tests.test_chain_analysis_psbt_features import KEY, SIG, SCRIPT, value
+        from kassiber.core.chain_analysis.features import PERSISTED_FEATURE_KEY
+        decoded = {"txid": tid(2), "version": 2, "locktime": 0,
+                   "vin": [{"txid": tid(1), "vout": 0, "sequence": 0xFFFFFFFD,
+                            "prevout": {"value": .001, "scriptPubKey": {"hex": SCRIPT.hex()}},
+                            "txinwitness": [SIG.hex(), KEY.hex()]}],
+                   "vout": [{"value": .00099, "scriptPubKey": {"hex": SCRIPT.hex()}}]}
+        reader = acquisition._Reader({"kind": "bitcoinrpc"}, acquisition._Budget(1))
+        with patch.object(reader, "rpc", return_value=decoded) as rpc:
+            clean, _ = reader.transaction(tid(2), "bitcoin")
+        rpc.assert_called_once_with("getrawtransaction", [tid(2), 2])
+        self.assertEqual(clean["vin"][0]["prevout"]["value"], 100000)
+        self.assertEqual(value(clean[PERSISTED_FEATURE_KEY], "input_script_types")["counts"], {"p2wpkh": 1})
+        self.assertEqual(len(value(clean[PERSISTED_FEATURE_KEY], "signature_encodings")["observations"]), 1)
+        self.assertNotIn("txinwitness", clean["vin"][0])
+        self.assertNotIn(SIG.hex(), json.dumps(clean))
+        del decoded["vin"][0]["prevout"]
+        with patch.object(reader, "rpc", return_value=decoded):
+            unavailable, _ = reader.transaction(tid(2), "bitcoin")
+        self.assertEqual(value(unavailable[PERSISTED_FEATURE_KEY], "input_script_types")["counts"], {"unknown": 1})
 
     def test_core_missing_spender_index_does_not_claim_forward_completeness(self):
         self.conn.execute("UPDATE backends SET kind='bitcoinrpc'")

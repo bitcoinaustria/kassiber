@@ -127,12 +127,15 @@ def compare_case(conn, profile_id, args):
         base = get_case(conn, profile_id, args["id"])
         current = get_case(conn, profile_id, args["other_id"])["result"] if args.get("other_id") else run_analysis(conn, profile_id, base["query"])
         result = {"base_id": base["id"], "base_snapshot_id": base["snapshot_id"], "current_snapshot_id": current["snapshot_id"], "changed": digest(base["result"]) != digest(current), "comparison": "saved_to_saved" if args.get("other_id") else "saved_to_current", "summary": {"base": base["summary"], "current": current.get("summary", {})}}
-        for kind in ("nodes", "edges"):
-            before = {row["id"]: row for row in base["result"][kind]}
-            after = {row["id"]: row for row in current[kind]}
+        for kind in ("nodes", "edges", "findings", "clusters", "patterns", "exposure", "transaction_features"):
+            key_field = "subject" if kind == "transaction_features" else "id"
+            before = {row[key_field]: row for row in base["result"].get(kind, ())}
+            after = {row[key_field]: row for row in current.get(kind, ())}
             result[f"added_{kind}"] = [after[key] for key in sorted(after.keys() - before.keys())]
             result[f"removed_{kind}"] = [before[key] for key in sorted(before.keys() - after.keys())]
             result[f"changed_{kind}"] = [{"id": key, "before": before[key], "after": after[key]} for key in sorted(before.keys() & after.keys()) if before[key] != after[key]]
+        if base["result"].get("coverage") != current.get("coverage"):
+            result["coverage_changed"] = {"before": base["result"].get("coverage"), "after": current.get("coverage")}
         return result
 
 

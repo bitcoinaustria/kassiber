@@ -15,8 +15,6 @@ local reuse.
 
 from __future__ import annotations
 
-import base64
-import binascii
 import json
 import sqlite3
 from collections import defaultdict, deque
@@ -704,162 +702,21 @@ class _UnionFind:
         return True
 
 
-def _read_compact_size(data: bytes, offset: int) -> tuple[int, int]:
-    if offset >= len(data):
-        raise ValueError("Unexpected end of compact-size value")
-    prefix = data[offset]
-    offset += 1
-    if prefix < 0xFD:
-        return prefix, offset
-    if prefix == 0xFD:
-        width = 2
-    elif prefix == 0xFE:
-        width = 4
-    else:
-        width = 8
-    if offset + width > len(data):
-        raise ValueError("Unexpected end of compact-size value")
-    return int.from_bytes(data[offset : offset + width], "little"), offset + width
-
-
-def _read_bytes(data: bytes, offset: int, length: int, label: str) -> tuple[bytes, int]:
-    if length < 0 or offset + length > len(data):
-        raise ValueError(f"Unexpected end of {label}")
-    return data[offset : offset + length], offset + length
-
-
-def _read_uint32(data: bytes, offset: int, label: str) -> tuple[int, int]:
-    raw, offset = _read_bytes(data, offset, 4, label)
-    return int.from_bytes(raw, "little"), offset
-
-
-def _read_uint64(data: bytes, offset: int, label: str) -> tuple[int, int]:
-    raw, offset = _read_bytes(data, offset, 8, label)
-    return int.from_bytes(raw, "little"), offset
-
-
-def _decode_unsigned_transaction(raw_tx: bytes) -> _DecodedPsbt:
-    offset = 0
-    version, offset = _read_uint32(raw_tx, offset, "transaction version")
-    witness_encoded = False
-    if offset + 2 <= len(raw_tx) and raw_tx[offset] == 0 and raw_tx[offset + 1] != 0:
-        witness_encoded = True
-        offset += 2
-    input_count, offset = _read_compact_size(raw_tx, offset)
-    if input_count > 100_000:
-        raise ValueError("PSBT unsigned transaction has too many inputs")
-    inputs: list[_DecodedPsbtInput] = []
-    unsigned_tx_clean = not witness_encoded
-    for _ in range(input_count):
-        raw_prev_txid, offset = _read_bytes(raw_tx, offset, 32, "input prevout")
-        vout, offset = _read_uint32(raw_tx, offset, "input vout")
-        script_len, offset = _read_compact_size(raw_tx, offset)
-        script_sig, offset = _read_bytes(raw_tx, offset, script_len, "input script")
-        sequence, offset = _read_uint32(raw_tx, offset, "input sequence")
-        if script_sig:
-            unsigned_tx_clean = False
-        inputs.append(
-            _DecodedPsbtInput(
-                prev_txid=raw_prev_txid[::-1].hex(),
-                vout=vout,
-                sequence=sequence,
-            )
-        )
-    output_count, offset = _read_compact_size(raw_tx, offset)
-    if output_count > 100_000:
-        raise ValueError("PSBT unsigned transaction has too many outputs")
-    outputs: list[_DecodedPsbtOutput] = []
-    for _ in range(output_count):
-        value_sats, offset = _read_uint64(raw_tx, offset, "output value")
-        script_len, offset = _read_compact_size(raw_tx, offset)
-        script, offset = _read_bytes(raw_tx, offset, script_len, "output script")
-        outputs.append(
-            _DecodedPsbtOutput(
-                value_msat=value_sats * 1000,
-                script_key=script.hex(),
-                is_op_return=script.startswith(b"\x6a"),
-            )
-        )
-    if witness_encoded:
-        for _ in range(input_count):
-            item_count, offset = _read_compact_size(raw_tx, offset)
-            if item_count:
-                unsigned_tx_clean = False
-            for _ in range(item_count):
-                item_len, offset = _read_compact_size(raw_tx, offset)
-                _item, offset = _read_bytes(raw_tx, offset, item_len, "witness item")
-    locktime, offset = _read_uint32(raw_tx, offset, "transaction locktime")
-    if offset != len(raw_tx):
-        raise ValueError("PSBT unsigned transaction has trailing bytes")
-    return _DecodedPsbt(
-        version=version,
-        locktime=locktime,
-        inputs=tuple(inputs),
-        outputs=tuple(outputs),
-        unsigned_tx_clean=unsigned_tx_clean,
-        signature_material_present=False,
-    )
-
-
-_PSBT_SIGNATURE_KEY_TYPES = {0x02, 0x08, 0x09, 0x13, 0x14}
-
-
-def _read_psbt_map(data: bytes, offset: int) -> tuple[list[tuple[int, bytes]], int]:
-    entries: list[tuple[int, bytes]] = []
-    while True:
-        key_len, offset = _read_compact_size(data, offset)
-        if key_len == 0:
-            return entries, offset
-        key, offset = _read_bytes(data, offset, key_len, "PSBT key")
-        value_len, offset = _read_compact_size(data, offset)
-        _value, offset = _read_bytes(data, offset, value_len, "PSBT value")
-        if not key:
-            raise ValueError("PSBT map contains an empty key")
-        entries.append((key[0], key))
-
-
 def _decode_psbt(psbt_text: str) -> _DecodedPsbt:
-    compact = "".join(str(psbt_text or "").split())
-    if not compact:
-        raise ValueError("PSBT payload is empty")
+    # Keep inventory/privacy policy here; framing, v2 reconstruction and UTXO
+    # validation belong to the same read-only decoder used by chain analysis.
+    from .chain_analysis.psbt import decode_psbt_structure
+
     try:
-        data = base64.b64decode(compact, validate=True)
-    except (binascii.Error, ValueError) as exc:
-        raise ValueError("PSBT payload is not valid base64") from exc
-    if not data.startswith(b"psbt\xff"):
-        raise ValueError("PSBT magic bytes are missing")
-    offset = 5
-    unsigned_tx: bytes | None = None
-    while True:
-        key_len, offset = _read_compact_size(data, offset)
-        if key_len == 0:
-            break
-        key, offset = _read_bytes(data, offset, key_len, "PSBT global key")
-        value_len, offset = _read_compact_size(data, offset)
-        value, offset = _read_bytes(data, offset, value_len, "PSBT global value")
-        if not key:
-            raise ValueError("PSBT global map contains an empty key")
-        if key[0] == 0x00 and len(key) == 1:
-            unsigned_tx = value
-    if unsigned_tx is None:
-        raise ValueError("PSBT unsigned transaction is missing")
-    decoded = _decode_unsigned_transaction(unsigned_tx)
-    signature_material_present = False
-    for _ in decoded.inputs:
-        input_entries, offset = _read_psbt_map(data, offset)
-        if any(key_type in _PSBT_SIGNATURE_KEY_TYPES for key_type, _key in input_entries):
-            signature_material_present = True
-    for _ in decoded.outputs:
-        _output_entries, offset = _read_psbt_map(data, offset)
-    if offset != len(data):
-        raise ValueError("PSBT has trailing bytes")
+        decoded = decode_psbt_structure(psbt_text)
+    except AppError as exc:
+        raise ValueError("PSBT structure or supplied prevout evidence is invalid") from exc
     return _DecodedPsbt(
-        version=decoded.version,
-        locktime=decoded.locktime,
-        inputs=decoded.inputs,
-        outputs=decoded.outputs,
-        unsigned_tx_clean=decoded.unsigned_tx_clean,
-        signature_material_present=signature_material_present,
+        version=decoded["version"], locktime=decoded["locktime"],
+        inputs=tuple(_DecodedPsbtInput(**row) for row in decoded["inputs"]),
+        outputs=tuple(_DecodedPsbtOutput(**row) for row in decoded["outputs"]),
+        unsigned_tx_clean=decoded["unsigned_tx_clean"],
+        signature_material_present=decoded["signature_material_present"],
     )
 
 

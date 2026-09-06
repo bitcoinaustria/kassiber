@@ -235,8 +235,12 @@ class _Reader:
 
     def transaction(self, txid, chain):
         status = {}
+        feature_raw = None
         if self.backend["kind"] == "bitcoinrpc":
-            decoded = self.rpc("getrawtransaction", [txid, True])
+            # Verbosity 2 includes prevout values/scripts when Core has undo
+            # data. Verbosity 1 silently discarded these available facts and
+            # made input characteristics and entropy unnecessarily unknown.
+            decoded = self.rpc("getrawtransaction", [txid, 2])
             if not isinstance(decoded, dict) or decoded.get("txid") != txid:
                 invalid("Backend returned a different transaction", "invalid_observation")
             confirmations = decoded.get("confirmations")
@@ -247,6 +251,10 @@ class _Reader:
             for original, target in zip(decoded.get("vin", ()), raw["vin"]):
                 if isinstance(original, dict) and isinstance(original.get("coinbase"), str) and normalized_script_hex(original["coinbase"]):
                     target["is_coinbase"] = True
+                if isinstance(original, dict):
+                    for key in ("scriptSig", "txinwitness"):
+                        if key in original:
+                            target[key] = original[key]
         elif self.client is not None:
             raw_hex = self.electrum("blockchain.transaction.get", [txid])
             if not isinstance(raw_hex, str) or len(raw_hex) > 8_000_000:
@@ -256,6 +264,8 @@ class _Reader:
                 tx = Transaction.parse(bytes.fromhex(raw_hex))
                 actual = tx.txid().hex()
                 raw = graph._bitcoin_electrum_decoded_to_graph_raw(txid, transport.decode_raw_transaction(raw_hex), raw_hex)
+                from .chain_analysis.features import feature_raw_from_transaction
+                feature_raw = feature_raw_from_transaction(tx)
             else:
                 tx = transport.decode_liquid_transaction(raw_hex)
                 actual = tx.txid().hex()
@@ -275,6 +285,9 @@ class _Reader:
         if not isinstance(raw.get("vin"), list) or not isinstance(raw.get("vout"), list) or not raw["vin"] or not raw["vout"] or len(raw["vin"]) + len(raw["vout"]) > 20000:
             invalid("Backend returned an incomplete or oversized transaction", "invalid_observation")
         clean = graph._sanitize_graph_lookup_raw(raw, chain, txid)
+        if chain == "bitcoin":
+            from .chain_analysis.features import extract_transaction_features, PERSISTED_FEATURE_KEY
+            clean[PERSISTED_FEATURE_KEY] = extract_transaction_features(feature_raw or raw, source="local_acquisition", subject_id=f"tx:{txid}")
         if len(clean["vin"]) != len(raw["vin"]) or len(clean["vout"]) != len(raw["vout"]):
             invalid("Backend returned malformed transaction legs", "invalid_observation")
         # Sequence is public transaction structure; witness stacks and preimages

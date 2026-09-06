@@ -123,19 +123,19 @@ def test_entropy_fail_closed_for_unknown_nonbitcoin_conflicting_and_oversized():
     bad = deepcopy(facts)
     bad["inputs"][1]["output_id"] = "i0"
     assert analyze_transaction_entropy(bad)["reason"] == "invalid_or_duplicate_output_identity"
-    large = analyze_transaction_entropy(entropy_facts([10] * 9, [9] * 9))
+    large = analyze_transaction_entropy(entropy_facts([10] * 129, [9] * 129))
     assert large["status"] == "model_bounded"
     assert large["interpretation_count"] is None
 
 
 def test_state_and_time_limits_never_publish_partial_deterministic_links():
     facts = entropy_facts([10] * 4, [9] * 4)
-    result = analyze_transaction_entropy(facts, max_states=100)
+    result = analyze_transaction_entropy(facts, max_states=20)
     assert result["status"] == "model_bounded"
     assert int(result["interpretation_count_lower_bound"]) > 0
     assert result["entropy_bits"] is None and result["interpretation_count"] is None
     assert not result["link_counts"] and not result["deterministic_links"]
-    with patch("kassiber.core.chain_analysis.analytics.time.monotonic", side_effect=[0, 2]):
+    with patch("kassiber.core.chain_analysis.entropy.time.monotonic", side_effect=[0, 2]):
         result = analyze_transaction_entropy(facts)
     assert result["status"] == "timeout"
     assert not result["deterministic_links"]

@@ -22,7 +22,7 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `bdkpython` | `3.0.0` (exact) | Watch-only Bitcoin wallet observation through BDK's Esplora and Electrum clients; state is persisted as explicit versioned JSON inside Kassiber's SQLCipher database | MIT OR Apache-2.0 |
 | `lwk` | `0.18.0` (exact) | Watch-only Liquid wallet observation through LWK's Esplora and Electrum clients; opaque `ForeignStore` values live only inside Kassiber's SQLCipher database | MIT (BSD-MIT wording) |
 | `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@3d2e03ef27696fbd00f4516a0cb745300083e227` | Existing tax engine, retaining RP2-owned lot basis, Austrian moving-average and swap-carry fixes instead of duplicating tax calculations locally | Apache-2.0 |
-| `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential output handling | MIT |
+| `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential outputs, PSBT transaction/UTXO parsing and supported Payjoin receiver signature commitments | MIT |
 | `XlsxWriter` | `>=3.2,<4` | Styled `.xlsx` workbook export for practitioner-facing reports and the generic-ledger import template | BSD-2-Clause |
 | `openpyxl` | `>=3.1,<4` | Reads filled-in `.xlsx` files for the generic-ledger manual importer | MIT |
 | `reportlab` | `>=4.4,<5` | Styled PDF rendering for Austrian and source-of-funds report exports | BSD |
@@ -77,6 +77,12 @@ daily OHLCVT values used as local fallback pricing data.
 | Kraken BTC daily OHLCVT history | `kassiber/data/rates/kraken/btc_daily/*.csv` | Offline fallback rates for `BTC-EUR` and `BTC-USD` | Unknown / not specified in the local export; review before public release redistribution |
 
 ## Development and test infrastructure
+
+The public BIP174/370 PSBT vectors (Ava Chow) and BIP78 Payjoin vectors
+(Nicolas Dorier) under `tests/fixtures/chain_analysis/` retain their BSD-2-Clause
+license and attribution in that directory's README. The partition solver is
+implemented independently; no am-i-exposed/Dojo solver code or entity dataset
+is vendored. Research/reference vectors do not supply runtime attribution data.
 
 The regtest Docker harness can build a local Sparrow Frigate image for Silent
 Payments protocol testing. It is not a Kassiber runtime dependency.

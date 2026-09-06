@@ -181,7 +181,7 @@ def observer_index(index: AnalysisIndex, observer: str) -> AnalysisIndex:
                    incoming=_freeze({key: tuple(value) for key, value in incoming.items()}),
                    subjects=_freeze({key: tuple(sorted(value)) for key, value in subjects.items()}),
                    transaction_facts=_freeze(facts), output_facts=_freeze(output_facts), findings=_freeze(findings),
-                   coverage=_freeze(coverage), labels=(), profile_seeds=tuple(ident for ident in index.profile_seeds if ident in nodes))
+                   coverage=_freeze(coverage), labels=tuple(label for label in index.labels if label.get("dataset_id") and label.get("visibility") == "public"), profile_seeds=tuple(ident for ident in index.profile_seeds if ident in nodes))
 
 
 class _Builder:
@@ -334,6 +334,22 @@ class _Builder:
             node["status"] = "stale"
             self.finding("retracted_transaction", [node_id], "Stored transaction is removed or conflicted; it cannot prove current reachability.")
         fact = self.tx_facts.setdefault(node_id, {"inputs": [], "outputs": [], "fee_msat": None, "complete": False, "collaboration": None})
+        if chain == "bitcoin":
+            from .features import extract_transaction_features, normalize_persisted_features, PERSISTED_FEATURE_KEY
+            source = "reference_cache" if cached else "stored_transaction"
+            snapshot = normalize_persisted_features(raw.get(PERSISTED_FEATURE_KEY), source=source, subject_id=node_id)
+            snapshot = snapshot or extract_transaction_features(raw, source=source, subject_id=node_id)
+            previous = fact.get("features")
+            if previous:
+                old = {item["code"]: item for item in previous["features"]}
+                for item in snapshot["features"]:
+                    prior = old.get(item["code"])
+                    if prior and prior["availability"] != "unavailable":
+                        if item["availability"] == "unavailable" or prior["value"] == item["value"]:
+                            item.update(prior)
+                        elif prior["availability"] == "conflicting" or item["availability"] == "observed" and prior["availability"] == "observed":
+                            item.update(value=None, availability="conflicting", confidence="unavailable")
+            fact["features"] = snapshot
         fact["collaboration"] = _collaboration(fact["collaboration"], collaborative_transaction_evidence(row, stored_tx_mapping(row.get("raw_json")) or {}))
         vin = raw.get("vin") if isinstance(raw.get("vin"), list) else []
         vout = raw.get("vout") if isinstance(raw.get("vout"), list) else []
@@ -490,7 +506,7 @@ class _Builder:
         return AnalysisIndex(snapshot_id, _freeze(self.nodes), _freeze(self.edges), _freeze({key: tuple(sorted(values)) for key, values in outgoing.items()}), _freeze({key: tuple(sorted(values)) for key, values in incoming.items()}), _freeze({key: tuple(sorted(values)) for key, values in self.subjects.items()}), _freeze(self.tx_facts), _freeze(self.output_facts), _freeze(self.findings), _freeze(self.coverage), _freeze(self.labels), tuple(sorted(self.profile_seeds)))
 
 
-def build_index(conn: sqlite3.Connection, profile_id: str) -> AnalysisIndex:
+def build_index(conn: sqlite3.Connection, profile_id: str, *, observer: str = "owner") -> AnalysisIndex:
     """Read one consistent local snapshot; never refresh, mutate, or egress."""
     builder = _Builder(profile_id)
     conn.execute("SAVEPOINT chain_analysis_read")
@@ -565,6 +581,32 @@ def build_index(conn: sqlite3.Connection, profile_id: str) -> AnalysisIndex:
                     continue
                 builder.labels.append({**row, "chain": scope.protocol_chain, "network": scope.network})
             builder.labels.sort(key=lambda row: str(row.get("id")))
+        if "chain_analysis_datasets" in tables:
+            from ..chain_analysis_datasets import match_subjects, MAX_SUBJECTS, MAX_SCRIPT_BYTES
+            observed = set()
+            skipped_scripts = 0
+            for ident, node in builder.nodes.items():
+                if node.get("chain") not in {"bitcoin", "liquid"}:
+                    continue
+                if node["kind"] == "transaction":
+                    observed.add((node["chain"], node["network"], f"tx:{node['txid']}"))
+                    builder.alias(f"tx:{node['txid']}", ident)
+                elif node["kind"] == "output":
+                    observed.add((node["chain"], node["network"], f"out:{node['outpoint']}"))
+                    builder.alias(f"out:{node['outpoint']}", ident)
+                    script = builder.output_facts.get(ident, {}).get("script")
+                    if script and len(script) <= MAX_SCRIPT_BYTES * 2:
+                        observed.add((node["chain"], node["network"], f"script:{script}"))
+                    elif script:
+                        # Attribution bounds must never prevent physical graph
+                        # inspection. The exact outpoint remains matchable.
+                        skipped_scripts += 1
+            matched = match_subjects(conn, profile_id, sorted(observed)[:MAX_SUBJECTS], observer=observer)
+            builder.labels.extend(matched["claims"])
+            # Evaluation time must not invalidate a case every second. Actual
+            # validity transitions change matched claims/coverage and therefore
+            # the snapshot; an unchanged observation has a stable commitment.
+            builder.coverage["datasets"] = {"state_digest": matched["dataset_state_digest"], **{key: value for key, value in matched["coverage"].items() if key != "as_of"}, "subject_limit": MAX_SUBJECTS, "subjects_truncated": len(observed) > MAX_SUBJECTS, "scripts_skipped": skipped_scripts}
         profiles = []
         if "profiles" in tables:
             cursor = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,))

@@ -20,6 +20,7 @@ import uuid
 
 from ..errors import AppError
 from .chain_analysis import build_index
+from .chain_analysis_runtime import scope_key as _scope
 
 _PROCESS_KEY = secrets.token_bytes(32)
 _REFERENCE_PREFIX = "ca-ref:"
@@ -27,15 +28,18 @@ _CODE_RE = re.compile(r"[a-z][a-z0-9_]*(?:-[a-z0-9_]+)*\Z")
 _HANDLE_FIELDS = {
     "snapshot_id", "expected_snapshot_id", "base_snapshot_id", "current_snapshot_id",
     "case_id", "base_id", "other_id", "next_cursor", "cursor", "result_digest", "status_commitment",
+    "job_id", "dataset_id", "source_token", "psbt_token", "expected_active_id", "content_sha256", "dataset_state_digest", "state_digest",
 }
 _REFERENCE_FIELDS = {
     "node_id", "edge_id", "input_id", "output_id", "transaction_node_id",
     "wallet_id", "transaction_id", "relation_id", "component_id", "reference",
     "subject", "target",
+    "subject_id", "original_subject",
 }
 _REFERENCE_LISTS = {
     "node_ids", "edge_ids", "input_ids", "output_ids", "wallet_ids",
     "transaction_ids", "component_ids", "subjects",
+    "inputs_added", "inputs_removed",
 }
 _CODE_FIELDS = {
     "kind", "code", "rule", "rule_version", "model", "status", "reason",
@@ -43,16 +47,19 @@ _CODE_FIELDS = {
     "chain", "network", "scope", "authority", "basis_state", "confidence",
     "category", "comparison", "mode", "egress", "filter", "depth_unit",
     "ai_reference_scope", "source_kind", "observer_knowledge", "amount_visibility", "public_liquid_value_policy", "severity",
+    "protocol", "phase", "algorithm", "availability", "field", "unit", "receipt_scope", "error_code", "visibility", "dataset_status", "format", "adapter", "network_source", "utxo_evidence", "value", "by_index",
 }
 _CODE_LISTS = {
     "rules", "premises", "assumptions", "limitations", "path_kinds",
     "stopped_reasons", "missing_tables",
+    "feature_codes", "contradictions", "findings_added", "findings_removed",
 }
 _SOURCE_CODES = {
     "stored_transaction", "wallet_inventory", "reference_cache", "local_label",
     "journal_custody_decisions", "journal_custody_economic_relations",
     "reviewed_or_imported_privacy_boundary", "invalid_privacy_metadata",
     "equal_output_coinjoin", "large_equal_output_coinjoin", "local_acquisition", "observer_exclusion",
+    "psbt", "psbt_proposal", "psbt_supplied", "local_dataset",
 }
 # Unknown additions are omitted until their disclosure has been considered.
 # Numeric dictionary keys are also admitted for participant-group counts.
@@ -77,20 +84,37 @@ _FIELDS = set("""
     include_hypotheses start end reversible accounting_authority taint_inference
     cluster_defining changed comparison base current added_nodes removed_nodes
     changed_nodes added_edges removed_edges changed_edges before after
+    added_findings removed_findings changed_findings added_clusters removed_clusters changed_clusters
+    added_patterns removed_patterns changed_patterns added_exposure removed_exposure changed_exposure
+    added_transaction_features removed_transaction_features changed_transaction_features coverage_changed
     local_graph backward_forward_trace bounded_alternative_paths
     cross_rail_custody_relations network_acquisition taint_attribution
     global_chain_completeness labels error retryable details
     wallet_inventory stored_transaction transactions wallets wallet_utxos
     transaction_graph_cache journal_custody_decisions journal_custody_economic_relations
     chain_analysis_labels chain_analysis_observations
+    transaction_features features extractor_version scenario computation cache_hits
+    request progress cancel_requested elapsed_ms phase job_id error_code receipt_scope
+    max_received_fee_msat max_paid_fee_msat completed input_count output_count
+    dataset_id datasets manifest content_sha256 dataset_state_digest state_digest
+    byte_count row_count record_number claims dataset_version visibility dataset_status
+    match_count subject_count active_dataset_count inactive_by_date_count lookup_queries
+    match_limit truncated complete_chain_coverage valid_from valid_until
+    scripts_skipped subject_limit subjects_truncated
+    transaction_facts inputs outputs totals psbt_version validation input_msat output_msat
+    final_vsize final_fee_rate_sat_vb known_input_amounts previous_transaction_hashes_verified
+    missing_input_indices network_source network_verified chain_membership_verified
+    unspentness_verified signatures_verified input_metadata output_derivation_metadata_present
+    global_xpubs_present transaction_modifiable_flags utxo_evidence input_index output_index
+    delta inputs_added inputs_removed output_scripts_added output_scripts_removed
+    features_changed findings_added findings_removed payjoin checks additional_input_count
+    receiver_contribution_msat negotiation_verified safe_to_sign metadata
+    payment_output_substitution_allowed
+    feature_codes contradictions value values signals_bip125 relative_locks minimum
+    relative_lock_interpretation_available enabled counts by_index observations sighash
+    low_r low_s verified equal_groups round_1000_sat_count bip69_value_script_order
+    p2pkh p2sh p2wpkh p2wsh p2tr op_return p2pk witness_unknown other unknown
 """.split()) | _REFERENCE_FIELDS | _REFERENCE_LISTS | _HANDLE_FIELDS | _CODE_FIELDS | _CODE_LISTS | {"source"}
-
-
-def _scope(conn: sqlite3.Connection, profile_id: str) -> bytes:
-    databases = conn.execute("PRAGMA database_list").fetchall()
-    path = next((str(row[2]) for row in databases if row[1] == "main"), "")
-    identity = path or f"memory-connection:{id(conn)}"
-    return json.dumps([identity, profile_id], separators=(",", ":")).encode()
 
 
 def _reference(scope: bytes, value: str) -> str:
@@ -151,7 +175,9 @@ def project_ai_result(conn: sqlite3.Connection, profile_id: str, value: Any) -> 
             return item if re.fullmatch(r"[A-Z]{2,8}", item) else "unknown_asset"
         if field.endswith("_msat") or field in {"interpretation_count", "interpretation_count_lower_bound"} or field.isdecimal():
             return item if re.fullmatch(r"-?(?:0|[1-9][0-9]*)", item) else omitted
-        if field in {"created_at", "updated_at", "occurred_at", "confirmed_at", "observed_at", "start", "end"}:
+        if field == "final_fee_rate_sat_vb":
+            return item if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", item) else omitted
+        if field in {"created_at", "updated_at", "occurred_at", "confirmed_at", "observed_at", "start", "end", "valid_from", "valid_until"}:
             return item if re.fullmatch(r"[0-9T:.+Z-]{10,40}", item) else omitted
         return omitted
 

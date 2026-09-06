@@ -11,7 +11,7 @@ from .query import normalize_query, query_index, resolve_subject
 
 def run_analysis(conn: sqlite3.Connection, profile_id: str, args: Mapping[str, Any] | None = None) -> dict[str, Any]:
     query = normalize_query(args)
-    index = observer_index(build_index(conn, profile_id), query["observer"])
+    index = observer_index(build_index(conn, profile_id, observer=query["observer"]), query["observer"])
     result = query_index(index, query)
     from .analytics import analyze_index
     analytics_query = dict(query)
@@ -25,6 +25,23 @@ def run_analysis(conn: sqlite3.Connection, profile_id: str, args: Mapping[str, A
     for key in ("patterns", "exposure", "entropy"):
         if key in analytics:
             result[key] = thaw(analytics[key])
+    from .features import evaluate_features
+    from .index import digest
+    result["transaction_features"] = []
+    for node in result["nodes"]:
+        fact = index.transaction_facts.get(node["id"], {})
+        snapshot = fact.get("features")
+        if not snapshot:
+            continue
+        result["transaction_features"].append({"subject": node["id"], "features": thaw(snapshot)})
+        for finding in evaluate_features(snapshot, collaboration=fact.get("collaboration")):
+            finding = thaw(finding)
+            result["findings"].append({
+                **finding, "id": digest([node["id"], finding["code"], finding["rule_version"]]),
+                "title": finding["code"].replace("_", " ").capitalize(), "detail": finding["message"],
+                "node_ids": [node["id"]], "edge_ids": [], "accounting_authority": False,
+                "observer": query["observer"], "evidence_level": finding["authority"],
+            })
     if query["include_hypotheses"]:
         selected = {node["id"] for node in result["nodes"]}
         for edge in analytics.get("hypothesis_edges", ()):
@@ -37,26 +54,52 @@ def run_analysis(conn: sqlite3.Connection, profile_id: str, args: Mapping[str, A
     return result
 
 
-def run_entropy(conn: sqlite3.Connection, profile_id: str, args: Mapping[str, Any]) -> dict[str, Any]:
-    if not isinstance(args, Mapping) or set(args) - {"subject", "chain", "network", "max_states"}:
+def prepare_entropy(conn: sqlite3.Connection, profile_id: str, args: Mapping[str, Any]):
+    """Freeze observer-visible inputs before computation leaves the DB thread."""
+    if not isinstance(args, Mapping) or set(args) - {"subject", "chain", "network", "observer", "max_states", "max_duration_ms", "scenario"}:
         raise AppError("Unsupported entropy arguments", code="validation", retryable=False)
-    query = normalize_query({"mode": "trace", **{key: value for key, value in args.items() if key != "max_states"}})
+    query = normalize_query({"mode": "trace", **{key: value for key, value in args.items() if key in {"subject", "chain", "network", "observer"}}})
     states = args.get("max_states", 200000)
-    if type(states) is not int or not 1 <= states <= 200000:
-        raise AppError("max_states must be between 1 and 200000", code="validation", retryable=False)
-    index = build_index(conn, profile_id)
+    duration = args.get("max_duration_ms", 1000)
+    if type(states) is not int or not 1 <= states <= 2000000:
+        raise AppError("max_states must be between 1 and 2000000", code="validation", retryable=False)
+    if type(duration) is not int or not 1 <= duration <= 30000:
+        raise AppError("max_duration_ms must be between 1 and 30000", code="validation", retryable=False)
+    from .entropy import normalize_scenario
+    scenario = normalize_scenario(args.get("scenario"))
+    index = observer_index(build_index(conn, profile_id, observer=query["observer"]), query["observer"])
+    context = {"schema_version": 1, "snapshot_id": index.snapshot_id, "subject": query.get("subject"), "observer": query["observer"]}
     try:
         subjects = resolve_subject(index, query["subject"], query)
     except AppError as error:
         if error.code != "subject_ambiguous":
             raise
-        return {"schema_version": 1, "snapshot_id": index.snapshot_id, "subject": query["subject"], "status": "unavailable", "reason": "ambiguous_domain"}
+        return context, None, {"status": "unavailable", "reason": "ambiguous_domain"}
     if len(subjects) != 1 or index.nodes[subjects[0]]["kind"] != "transaction":
-        return {"schema_version": 1, "snapshot_id": index.snapshot_id, "subject": query["subject"], "status": "unavailable", "reason": "single_physical_transaction_required"}
+        return context, None, {"status": "unavailable", "reason": "single_physical_transaction_required"}
     node_id = subjects[0]
+    context["subject"] = node_id
+    options = {"chain": index.nodes[node_id]["chain"], "max_states": states, "max_duration_ms": duration}
+    options["scenario"] = scenario
+    return context, thaw(index.transaction_facts.get(node_id, {})), options
+
+
+def run_entropy(conn: sqlite3.Connection, profile_id: str, args: Mapping[str, Any]) -> dict[str, Any]:
+    context, facts, options = prepare_entropy(conn, profile_id, args)
+    if facts is None:
+        return {**context, **options}
     from .analytics import analyze_transaction_entropy
-    result = analyze_transaction_entropy(index.transaction_facts.get(node_id, {}), chain=index.nodes[node_id]["chain"], max_states=states)
-    return {"schema_version": 1, "snapshot_id": index.snapshot_id, "subject": node_id, **thaw(result)}
+    return {**context, **thaw(analyze_transaction_entropy(facts, **options))}
+
+
+def start_entropy(conn: sqlite3.Connection, profile_id: str, args: Mapping[str, Any]) -> dict[str, Any]:
+    from ..chain_analysis_runtime import JOBS, scope_key
+    from .analytics import analyze_transaction_entropy
+    context, facts, options = prepare_entropy(conn, profile_id, args)
+    def compute(progress, cancelled):
+        result = options if facts is None else analyze_transaction_entropy(facts, **options, progress=progress, cancelled=cancelled)
+        return {**context, **thaw(result)}
+    return JOBS.start(scope_key(conn, profile_id), {**dict(args), "snapshot_id": context["snapshot_id"]}, compute)
 
 
 __all__ = ["AnalysisIndex", "build_index", "normalize_query", "query_index", "run_analysis", "run_entropy"]

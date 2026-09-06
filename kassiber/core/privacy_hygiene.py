@@ -41,6 +41,11 @@ INBOUND_COUNTERPARTY_FINDINGS = {
     "wallet_fingerprint_locktime",
     "wallet_fingerprint_version",
     "wallet_fingerprint_witness",
+    "unusual_transaction_version",
+    "ineffective_absolute_locktime",
+    "relative_lock_constraints",
+    "consistent_low_r_encoding",
+    "nondefault_sighash",
 }
 ROUND_BTC_DENOMINATIONS_SATS = {
     100_000,
@@ -624,7 +629,8 @@ def _score_transaction(
     findings.extend(_script_type_findings(parsed))
     if not collaboration:
         findings.extend(_change_fingerprint_findings(parsed))
-    findings.extend(_wallet_fingerprint_findings(parsed))
+    if identity is not None and identity[0] == "bitcoin":
+        findings.extend(_structural_feature_findings(raw, collaboration=collaboration))
     findings.extend(_metadata_findings(parsed))
     findings.extend(_taproot_findings(parsed))
     findings = _apply_direction_attribution(row, findings)
@@ -1122,49 +1128,30 @@ def _change_fingerprint_findings(parsed: Mapping[str, Any]) -> list[dict[str, An
     return findings
 
 
-def _wallet_fingerprint_findings(parsed: Mapping[str, Any]) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-    locktime = parsed["locktime"]
-    if locktime not in (None, 0):
-        findings.append(
-            _finding(
-                "wallet_fingerprint_locktime",
-                "low",
-                -3,
-                scope="transaction",
-                count=1,
-                details={},
-            )
-        )
-    version = parsed["version"]
-    if version is not None and version not in {1, 2}:
-        findings.append(
-            _finding(
-                "wallet_fingerprint_version",
-                "low",
-                -3,
-                scope="transaction",
-                count=1,
-                details={"version": version},
-            )
-        )
-    witness_counts = [
-        item["witness_items"]
-        for item in parsed["inputs"]
-        if item["witness_items"] is not None and item["witness_items"] > 0
-    ]
-    if len(witness_counts) >= 2 and len(set(witness_counts)) == 1:
-        findings.append(
-            _finding(
-                "wallet_fingerprint_witness",
-                "low",
-                -2,
-                scope="transaction",
-                count=len(witness_counts),
-                details={"witness_items": witness_counts[0]},
-            )
-        )
-    return findings
+def _structural_feature_findings(raw: Mapping[str, Any], *, collaboration: Mapping | None) -> list[dict[str, Any]]:
+    # Imported lazily to preserve the core's existing privacy/index dependency
+    # direction. The shared extractor never returns raw scripts or witnesses.
+    from .chain_analysis.features import (
+        PERSISTED_FEATURE_KEY, extract_transaction_features, evaluate_features,
+        normalize_persisted_features,
+    )
+
+    transaction = stored_tx_mapping(raw, allow_nested=True) or {}
+    features = normalize_persisted_features(
+        transaction.get(PERSISTED_FEATURE_KEY), subject_id=None, source="stored_transaction",
+    ) or extract_transaction_features(transaction, subject_id=None)
+    # Other hygiene rules already cover RBF, mixed scripts and equal-output
+    # patterns. New structural tells are evidence context and carry no score.
+    selected = {
+        "unusual_transaction_version", "ineffective_absolute_locktime",
+        "relative_lock_constraints", "consistent_low_r_encoding", "nondefault_sighash",
+    }
+    return [_finding(
+        item["code"], "info", 0, scope="transaction", count=1,
+        evidence_level="heuristic" if item["authority"] == "hypothesis" else "ground_truth",
+        details={"rule_version": item["rule_version"], "feature_codes": item["feature_codes"],
+                 "assumptions": item["assumptions"], "contradictions": item["contradictions"]},
+    ) for item in evaluate_features(features, collaboration=collaboration) if item["code"] in selected]
 
 
 def _metadata_findings(parsed: Mapping[str, Any]) -> list[dict[str, Any]]:

@@ -2,7 +2,7 @@
 
 No output grants ownership, accounting, or taint authority. Entropy implements
 paired partitions of independent financial flows (LaurentMT's Boltzmann model),
-with no intrafees or joint payments, not probabilities of wallet ownership.
+with explicit fee scenarios, not probabilities of wallet ownership.
 https://gist.github.com/LaurentMT/e758767ca4038ac40aaf
 """
 from __future__ import annotations
@@ -10,14 +10,12 @@ from __future__ import annotations
 from collections import defaultdict, deque
 import hashlib
 import json
-import math
-import time
 from typing import Any, Mapping, Sequence
 
 from ...wallet_descriptors import normalize_network
+from .entropy import ENTROPY_MODEL, analyze_transaction_entropy
 
 RULE_VERSION = "local-analytics-v1"
-ENTROPY_MODEL = "independent-flow-partitions-no-intrafees-v1"
 _BAD_STATUS = {"stale", "conflicting", "retracted"}
 
 
@@ -64,141 +62,6 @@ def _plain(value: Any) -> Any:
     return value
 
 
-class _Limit(Exception):
-    def __init__(self, status: str):
-        self.status = status
-
-
-def analyze_transaction_entropy(
-    transaction_facts: Mapping[str, Any], *, chain: str = "bitcoin",
-    max_states: int = 200_000, max_duration_ms: int = 1000,
-) -> dict[str, Any]:
-    """Enumerate each compatible paired partition exactly once.
-
-    Every group has at least one input and output. Its input sum covers its
-    output sum; the difference is that group's nonnegative mining fee. All
-    inputs/outputs occur once, groups are unlabeled, and intergroup payments are
-    excluded. Enumerating groups by the lowest unused input removes participant
-    permutations. Link counts describe membership in financial-flow groups,
-    never ownership or a unique path taken by individual satoshis.
-
-    Partial searches publish only a lower bound; they never publish an entropy,
-    a normalized link matrix or deterministic links. Limits include preparation.
-    """
-    base: dict[str, Any] = {
-        "model": ENTROPY_MODEL, "rule_version": RULE_VERSION,
-        "status": "unsupported", "reason": None, "interpretation_count": None,
-        "interpretation_count_lower_bound": "0", "entropy_bits": None,
-        "link_counts": [], "deterministic_links": [], "states_explored": 0,
-        "assumptions": ["complete_bitcoin_values", "independent_financial_flow_groups",
-                        "nonnegative_mining_fee_per_group", "no_intergroup_payments_or_intrafees",
-                        "no_ownership_constraints", "uniform_interpretations_for_log2_only"],
-        "limitations": ["not_wallet_ownership_probability", "not_satoshi_flow",
-                        "not_composable_across_transactions", "unmarked_joint_payments_may_violate_model"],
-    }
-    if chain != "bitcoin":
-        return dict(base, reason="bitcoin_only")
-    collaboration = transaction_facts.get("collaboration") or {}
-    if collaboration and collaboration.get("kind") != "coinjoin":
-        return dict(base, reason="joint_payment_or_unknown_collaboration")
-    if transaction_facts.get("complete") is not True:
-        return dict(base, reason="incomplete_transaction")
-    inputs, outputs = transaction_facts.get("inputs", ()), transaction_facts.get("outputs", ())
-    if not isinstance(inputs, (list, tuple)) or not isinstance(outputs, (list, tuple)) or not inputs or not outputs:
-        return dict(base, reason="missing_inputs_or_outputs")
-    if len(inputs) > 8 or len(outputs) > 8:
-        return dict(base, status="model_bounded", reason="input_output_limit", limits={"max_inputs": 8, "max_outputs": 8})
-    if any(not isinstance(row, Mapping) for row in (*inputs, *outputs)):
-        return dict(base, reason="invalid_input_output")
-    in_ids, out_ids = [row.get("output_id") for row in inputs], [row.get("output_id") for row in outputs]
-    if any(not isinstance(ident, str) or not ident for ident in (*in_ids, *out_ids)) or len(set(in_ids)) != len(in_ids) or len(set(out_ids)) != len(out_ids) or set(in_ids) & set(out_ids):
-        return dict(base, reason="invalid_or_duplicate_output_identity")
-    inv, outv = [_amount(row.get("amount_msat")) for row in inputs], [_amount(row.get("amount_msat")) for row in outputs]
-    if any(value is None for value in (*inv, *outv)):
-        return dict(base, reason="unknown_amount")
-    if any(value % 1000 for value in (*inv, *outv)):
-        return dict(base, reason="non_integral_bitcoin_satoshi")
-    # Zero-value outputs (e.g. OP_RETURN) need an explicit attribution model.
-    if any(value == 0 for value in (*inv, *outv)):
-        return dict(base, reason="zero_value_output_model_unsupported")
-    fee = sum(inv) - sum(outv)
-    if fee < 0 or transaction_facts.get("fee_msat") is not None and _amount(transaction_facts["fee_msat"]) != fee:
-        return dict(base, reason="inconsistent_amounts_or_fee")
-    state_limit = _bounded_int(max_states, 200_000, 2_000_000)
-    duration = _bounded_int(max_duration_ms, 1000, 5000)
-    deadline = time.monotonic() + duration / 1000
-    states = 0
-    count = 0
-    links = [[0] * len(outputs) for _ in inputs]
-    group_counts: dict[int, int] = defaultdict(int)
-    examples: list[list[dict]] = []
-
-    def tick() -> None:
-        nonlocal states
-        states += 1
-        if states > state_limit:
-            raise _Limit("model_bounded")
-        if time.monotonic() >= deadline:
-            raise _Limit("timeout")
-
-    def sums(values: Sequence[int]) -> list[int]:
-        result = [0] * (1 << len(values))
-        for mask in range(1, len(result)):
-            tick()
-            bit = mask & -mask
-            result[mask] = result[mask ^ bit] + values[bit.bit_length() - 1]
-        return result
-
-    def visit(imask: int, omask: int, groups: list[tuple[int, int]]) -> None:
-        nonlocal count
-        tick()
-        if not imask:
-            if omask:
-                return
-            count += 1
-            group_counts[len(groups)] += 1
-            for igroup, ogroup in groups:
-                for i in range(len(inputs)):
-                    if igroup & (1 << i):
-                        for j in range(len(outputs)):
-                            if ogroup & (1 << j):
-                                links[i][j] += 1
-            if len(examples) < 3:
-                examples.append([{"input_ids": [in_ids[i] for i in range(len(inputs)) if ig & (1 << i)],
-                                  "output_ids": [out_ids[j] for j in range(len(outputs)) if og & (1 << j)],
-                                  "fee_msat": str(isums[ig] - osums[og])} for ig, og in groups])
-            return
-        if not omask:
-            return
-        first = imask & -imask
-        igroup = imask
-        while igroup:
-            if igroup & first:
-                ogroup = omask
-                while ogroup:
-                    tick()
-                    if 0 <= isums[igroup] - osums[ogroup] <= fee:
-                        visit(imask ^ igroup, omask ^ ogroup, [*groups, (igroup, ogroup)])
-                    ogroup = (ogroup - 1) & omask
-            igroup = (igroup - 1) & imask
-
-    try:
-        isums, osums = sums(inv), sums(outv)
-        visit((1 << len(inputs)) - 1, (1 << len(outputs)) - 1, [])
-    except _Limit as limit:
-        return dict(base, status=limit.status, reason="time_budget" if limit.status == "timeout" else "state_budget",
-                    states_explored=states, interpretation_count_lower_bound=str(count),
-                    limits={"max_states": state_limit, "max_duration_ms": duration})
-    matrix = [{"input_id": in_ids[i], "output_id": out_ids[j], "interpretation_count": str(links[i][j])}
-              for i in range(len(inputs)) for j in range(len(outputs))]
-    return dict(base, status="exact", reason=None, interpretation_count=str(count),
-                interpretation_count_lower_bound=str(count), entropy_bits=math.log2(count) if count else None,
-                link_counts=matrix, deterministic_links=[dict(row, conditional_on_model=True) for row in matrix if count and int(row["interpretation_count"]) == count],
-                states_explored=states, fee_msat=str(fee),
-                participant_group_counts={str(k): str(v) for k, v in sorted(group_counts.items())},
-                examples=examples, examples_truncated=count > len(examples))
-
-
 def _finding(code: str, ids: Sequence[str], *, evidence: Sequence[Mapping] = (),
              detail: str, observer: str, level: str = "heuristic", edge_ids: Sequence[str] = ()) -> dict:
     return {"id": _id(code, sorted(set(ids))), "code": code, "rule_version": RULE_VERSION,
@@ -243,9 +106,11 @@ def analyze_index(index: Any, query: Mapping[str, Any], selected_node_ids: set[s
     if isinstance(labels, Mapping):
         labels = list(labels.values())
     visible_labels = []
-    if observer in {"owner", "disclosed"}:
+    if observer in {"owner", "disclosed", "public"}:
         for row in labels:
             if not isinstance(row, Mapping) or row.get("deleted"):
+                continue
+            if observer == "public" and not (row.get("dataset_id") and row.get("visibility") == "public"):
                 continue
             matched = row.get("node_ids") or _get(index, "subjects", {}).get(row.get("subject"), ())
             matched = sorted(ident for ident in matched if ident in safe and _domain(nodes[ident]) == (row.get("chain"), row.get("network")))
@@ -483,7 +348,7 @@ def _exposure(result: dict, index: Any, query: Mapping, nodes: Mapping, labels: 
     remaining = 20_000
     stopped = False
     for label, targets in labels:
-        claim = {key: label.get(key) for key in ("id", "revision", "label", "category", "source", "confidence")}
+        claim = {key: label.get(key) for key in ("id", "revision", "label", "category", "source", "confidence", "dataset_id", "dataset_version", "content_sha256", "license", "attribution_method", "source_record", "valid_from", "valid_until", "visibility") if key in label}
         for target in targets:
             if len(result["exposure"]) >= 250 or not remaining:
                 stopped = True
