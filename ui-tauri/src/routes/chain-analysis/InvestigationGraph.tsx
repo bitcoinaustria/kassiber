@@ -19,6 +19,17 @@ import {
   type AnalysisEdge,
   type AnalysisNode,
 } from "@/lib/chainAnalysis";
+import {
+  fitGraphCamera,
+  focusGraphCamera,
+  graphNodeInView,
+  graphOverview,
+  graphSelectionInView,
+  graphSelectionPosition,
+  initialGraphCamera,
+  resizeGraphCamera,
+  type GraphViewport,
+} from "./graphViewport";
 
 export interface GraphSelection {
   kind: "node" | "edge";
@@ -194,7 +205,6 @@ export function InvestigationGraph({
   const svg = useRef<SVGSVGElement>(null);
   const marker = useId().replace(/:/g, "");
   const [viewport, setViewport] = useState({ width: 1000, height: 540 });
-  const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
   const drag = useRef<{
     pointer: number;
     x: number;
@@ -206,23 +216,38 @@ export function InvestigationGraph({
     () => layoutAnalysisGraph(nodes, edges),
     [nodes, edges],
   );
+  const [camera, setCamera] = useState(() =>
+    initialGraphCamera(layout, viewport, nodes, edges, selected),
+  );
+  const previousView = useRef<{
+    layout: typeof layout;
+    viewport: GraphViewport;
+    selection: string;
+  } | null>(null);
+  const viewTouched = useRef(false);
+  const overview = useMemo(
+    () => graphOverview(layout, camera, viewport),
+    [layout, camera, viewport],
+  );
+  const visibleCount = useMemo(
+    () => [...layout.positions.values()].filter((position) =>
+      graphNodeInView(position, camera, viewport),
+    ).length,
+    [layout, camera, viewport],
+  );
   const highlighted = useMemo(() => new Set(highlightedIds), [highlightedIds]);
   const select = useCallback(
     (selection: GraphSelection) => onSelect(selection),
     [onSelect],
   );
   const fit = useCallback(() => {
-    const scale = Math.max(
-      0.025,
-      Math.min(viewport.width / layout.width, viewport.height / layout.height) *
-        0.9,
-    );
-    setCamera({
-      scale,
-      x: (viewport.width - layout.width * scale) / 2,
-      y: (viewport.height - layout.height * scale) / 2,
-    });
-  }, [layout.width, layout.height, viewport.width, viewport.height]);
+    viewTouched.current = true;
+    setCamera(fitGraphCamera(layout, viewport));
+  }, [layout, viewport]);
+  const focus = useCallback(() => {
+    viewTouched.current = true;
+    setCamera(initialGraphCamera(layout, viewport, nodes, edges, selected));
+  }, [layout, viewport, nodes, edges, selected]);
   useEffect(() => {
     if (!container.current || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(([entry]) => {
@@ -236,13 +261,41 @@ export function InvestigationGraph({
     return () => observer.disconnect();
   }, []);
   useEffect(() => {
-    fit();
-  }, [fit]);
+    const previous = previousView.current;
+    const selection = selected ? `${selected.kind}:${selected.id}` : "";
+    previousView.current = { layout, viewport, selection };
+    if (!previous || previous.layout !== layout) {
+      viewTouched.current = false;
+      setCamera(initialGraphCamera(layout, viewport, nodes, edges, selected));
+      return;
+    }
+    if (previous.selection !== selection && selected) viewTouched.current = true;
+    if (!viewTouched.current) {
+      setCamera(initialGraphCamera(layout, viewport, nodes, edges, selected));
+      return;
+    }
+    setCamera((current) => {
+      const resized = resizeGraphCamera(current, previous.viewport, viewport);
+      const position = graphSelectionPosition(layout, edges, selected);
+      // A selection from findings or the inspector must be visible. Clicking an
+      // already visible node leaves the user's position unchanged.
+      if (
+        previous.selection !== selection && position &&
+        !graphSelectionInView(position, resized, viewport)
+      ) {
+        return focusGraphCamera(position, viewport);
+      }
+      return resized;
+    });
+  }, [layout, viewport, nodes, edges, selected]);
   const zoom = useCallback(
     (
       factor: number,
       point = { x: viewport.width / 2, y: viewport.height / 2 },
-    ) => setCamera((previous) => zoomAnalysisCamera(previous, factor, point)),
+    ) => {
+      viewTouched.current = true;
+      setCamera((previous) => zoomAnalysisCamera(previous, factor, point));
+    },
     [viewport.width, viewport.height],
   );
   useEffect(() => {
@@ -276,6 +329,7 @@ export function InvestigationGraph({
             (event.target as Element).closest("[data-node], .ca-edge")
           )
             return;
+          viewTouched.current = true;
           drag.current = {
             pointer: event.pointerId,
             x: event.clientX,
@@ -311,12 +365,16 @@ export function InvestigationGraph({
           } else if (event.key === "0" || event.key === "Home") {
             event.preventDefault();
             fit();
+          } else if (event.key.toLowerCase() === "f") {
+            event.preventDefault();
+            focus();
           } else if (
             ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(
               event.key,
             )
           ) {
             event.preventDefault();
+            viewTouched.current = true;
             setCamera((previous) =>
               panAnalysisCamera(previous, {
                 x:
@@ -406,32 +464,78 @@ export function InvestigationGraph({
           variant="outline"
           size="icon"
           aria-label={t("graph.fit")}
+          title={t("graph.fit")}
+          className="ca-fit-button"
           onClick={fit}
         >
           <Focus className="size-4" />
+          <span>{t("graph.fit")}</span>
         </Button>
         <Button
           variant="outline"
           size="icon"
-          aria-label={t("graph.focusSelection")}
-          disabled={selected?.kind !== "node"}
-          onClick={() => {
-            const position = selected && layout.positions.get(selected.id);
-            if (position)
-              setCamera((previous) => {
-                const scale = Math.max(0.8, previous.scale);
-                return {
-                  scale,
-                  x: viewport.width / 2 - position.x * scale,
-                  y: viewport.height / 2 - position.y * scale,
-                };
-              });
-          }}
+          aria-label={
+            selected ? t("graph.focusSelection") : t("graph.readableView")
+          }
+          title={selected ? t("graph.focusSelection") : t("graph.readableView")}
+          onClick={focus}
         >
           <Crosshair className="size-4" />
         </Button>
         <span className="min-w-10 text-center font-mono text-xs">
           {Math.round(camera.scale * 100)}%
+        </span>
+      </div>
+      <div className="ca-graph-overview">
+        <svg
+          viewBox="0 0 164 60"
+          role="button"
+          tabIndex={0}
+          aria-label={t("graph.overview")}
+          onClick={(event) => {
+            viewTouched.current = true;
+            const rect = event.currentTarget.getBoundingClientRect();
+            const position = {
+              x: Math.max(0, Math.min(
+                layout.width,
+                ((event.clientX - rect.left) * 164 / rect.width - overview.x) / overview.scale,
+              )),
+              y: Math.max(0, Math.min(
+                layout.height,
+                ((event.clientY - rect.top) * 60 / rect.height - overview.y) / overview.scale,
+              )),
+            };
+            setCamera(focusGraphCamera(position, viewport));
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              fit();
+            }
+          }}
+        >
+          <title>{t("graph.overview")}</title>
+          {[...layout.positions].map(([id, position]) => (
+            <circle
+              key={id}
+              cx={overview.x + position.x * overview.scale}
+              cy={overview.y + position.y * overview.scale}
+              r={selected?.id === id ? 2.5 : 1.5}
+              fill={selected?.id === id ? "var(--ca-owned)" : "var(--ca-physical)"}
+            />
+          ))}
+          <rect
+            {...overview.viewport}
+            fill="var(--ca-physical)"
+            fillOpacity={0.12}
+            stroke="var(--ca-physical)"
+            strokeWidth={1}
+            rx={1}
+            pointerEvents="none"
+          />
+        </svg>
+        <span>
+          {t("graph.inView", { visible: visibleCount, total: nodes.length })}
         </span>
       </div>
       <p id={`${marker}-help`} className="ca-graph-help">

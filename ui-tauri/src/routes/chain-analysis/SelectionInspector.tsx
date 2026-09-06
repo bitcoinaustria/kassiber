@@ -19,6 +19,8 @@ import {
 import { copyTextWithPolicy } from "@/lib/clipboard";
 import type { GraphSelection } from "./InvestigationGraph";
 import { EvidenceDetails, Fact } from "./EvidenceDetails";
+import { FeatureDetails } from "./FeatureDetails";
+import type { FeatureSnapshot } from "@/lib/chainAnalysisWorkbench";
 
 export function SelectionInspector({
   node,
@@ -28,6 +30,7 @@ export function SelectionInspector({
   onTarget,
   onSelect,
   onError,
+  features,
 }: {
   node?: AnalysisNode;
   edge?: AnalysisEdge;
@@ -36,6 +39,7 @@ export function SelectionInspector({
   onTarget: (subject: string) => void;
   onSelect: (value: GraphSelection) => void;
   onError: (error: unknown) => void;
+  features?: FeatureSnapshot;
 }) {
   const { t } = useTranslation("chainAnalysis");
   const [copied, setCopied] = useState(false);
@@ -129,6 +133,7 @@ export function SelectionInspector({
                 />
               </dl>
               <EvidenceDetails value={node.evidence} />
+              {features && <div className="mt-5"><FeatureDetails snapshot={features} /></div>}
             </>
           )}
           {edge && (

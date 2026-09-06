@@ -730,9 +730,13 @@ smuggle a hidden network or mutation argument into a narrower tool.
   exposure summary, adversary cards, wallet/transaction/UTXO views, timeline,
   coverage, unknowns, evidence drilldowns, and the computed worst local privacy
   risk. It is read-only, local-only, advisory-only, and every result carries
-  `evidence_level`. The AI tool does not receive raw PSBT text; PSBT preflight
-  is reduced locally in the GUI/CLI before any assistant-facing summary can be
-  discussed. See [`privacy-mirror.md`](privacy-mirror.md).
+  `evidence_level`. The AI tool does not receive raw PSBT text. The chain-analysis workbench
+  can inspect and compare PSBT v0/v2 sources through native-selected opaque
+  grants; structured facts, explicit Payjoin constraints and job receipts pass
+  through the same provider projection. Long work uses cancellable `.start`
+  jobs. Local dataset import requires a completed source/recipe/hash-bound
+  preview, an on-device provider and once-only consent; consent reuses that
+  validation receipt while the worker verifies bytes again before activation. See [`privacy-mirror.md`](privacy-mirror.md).
 - `ui_journals_snapshot` maps to daemon kind `ui.journals.snapshot`; recent
   rows include reviewed pair context for swap/peg journal rows when available
 - `ui_journals_quarantine` maps to daemon kind `ui.journals.quarantine`

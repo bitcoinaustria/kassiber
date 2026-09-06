@@ -8,14 +8,15 @@ export interface PrivacyScoreFactor {
   leaking?: number;
   total?: number;
   weight?: number;
-  points?: number;
+  points?: number | null;
 }
 
 export interface PrivacyScoreSummary {
-  value?: number;
+  value?: number | null;
   base?: number;
   evidence_level?: EvidenceLevel;
-  coverage_ratio?: number;
+  evaluation_status?: "available" | "unavailable";
+  coverage_ratio?: number | null;
   factors?: PrivacyScoreFactor[];
 }
 

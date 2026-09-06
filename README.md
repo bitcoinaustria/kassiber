@@ -514,9 +514,13 @@ URLs/tokens, wallet config, raw JSON, branch/index values, or derivation paths.
 See [Privacy Mirror](docs/reference/privacy-mirror.md).
 The [local chain-analysis workspace](docs/reference/local-chain-analysis.md)
 adds bounded source/destination/path tracing, sourced label exposure, reversible
-clustering and multi-hop patterns, compatible-partition entropy, and immutable
-investigation comparisons. Desktop, CLI and chat share one evidence engine;
-expanding history uses a separate, explicit backend acquisition plan.
+clustering and multi-hop patterns, and immutable investigation comparisons.
+Its workbench includes exact conditional entropy with explicit participant-fee
+scenarios, PSBT v0/v2 inspection and Payjoin proposal checks, and versioned
+local attribution datasets with preserved provenance. Long computations and
+imports expose progress and cancellation. Desktop, CLI and chat share one
+evidence engine; expanding history uses a separate, explicit backend
+acquisition plan.
 
 ## Contributing & license
 

@@ -698,7 +698,7 @@ export function PrivacyMirrorPayloadView({
         icon={<ListChecks className="size-4 shrink-0" aria-hidden="true" />}
         count={`${heuristicAvailableCount()}/34`}
       >
-        <HeuristicCoverage />
+        <HeuristicCoverage onOpenChainAnalysis={onNavigate ? () => onNavigate("/chain-analysis") : undefined} />
       </Section>
 
       {flowTxid ? (

@@ -101,6 +101,37 @@
   border: none;
   background: transparent;
 }
+.ca-graph-controls .ca-fit-button {
+  width: auto;
+  padding: 0 6px;
+  gap: 4px;
+  font-size: 11px;
+}
+.ca-graph-overview {
+  position: absolute;
+  right: 12px;
+  bottom: 60px;
+  width: 164px;
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--card) 95%, transparent);
+}
+.ca-graph-overview svg {
+  display: block;
+  width: 100%;
+  cursor: crosshair;
+  outline-offset: -3px;
+}
+.ca-graph-overview span {
+  display: block;
+  padding: 0 6px 6px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
 .ca-graph-help {
   position: absolute;
   bottom: 10px;

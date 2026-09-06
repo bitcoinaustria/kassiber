@@ -6,9 +6,9 @@ import {
 } from "./privacyMirror";
 
 /**
- * Client-side privacy score, modelled on am-i-exposed: start from a neutral
- * base and let findings pull it DOWN by severity (there are no positive signals
- * in the redacted local payload, so the base is the ceiling). The score is a
+ * Client-side fallback for an evaluable owned-output population: observed
+ * wallet findings reduce the base; coverage gaps and counterparty context do
+ * not incur penalties. Without that population the score is unavailable. It is a
  * UI-level summary of the same local evidence the rest of the page shows — it
  * is deterministic and never fetches anything.
  */
@@ -28,6 +28,7 @@ export interface ScoreFinding {
   severity: PrivacySeverity;
   evidenceLevel?: string;
   txid?: string | null;
+  affectsScore?: boolean;
 }
 
 export const GRADE_HEX: Record<PrivacyGrade, string> = {
@@ -67,6 +68,7 @@ export function deriveScoreFindings(payload: PrivacyMirrorPayload): ScoreFinding
       severity: transactionRowSeverity(row),
       evidenceLevel: row.evidence_level,
       txid: row.txid ?? null,
+      affectsScore: (row.wallet_penalty_count ?? row.tell_count ?? 0) > 0,
     });
   }
 
@@ -76,6 +78,7 @@ export function deriveScoreFindings(payload: PrivacyMirrorPayload): ScoreFinding
       kind: row.code ?? "unknown_coverage",
       severity: "info",
       evidenceLevel: row.evidence_level ?? "unknown",
+      affectsScore: false,
     });
   }
 
@@ -85,6 +88,7 @@ export function deriveScoreFindings(payload: PrivacyMirrorPayload): ScoreFinding
       kind: "coverage_degraded",
       severity: "info",
       evidenceLevel: payload.coverage.evidence_level ?? "unknown",
+      affectsScore: false,
     });
   }
 
@@ -94,7 +98,7 @@ export function deriveScoreFindings(payload: PrivacyMirrorPayload): ScoreFinding
 
 export function computeScore(findings: ScoreFinding[]): number {
   const penalty = findings.reduce(
-    (sum, finding) => sum + SEVERITY_PENALTY[finding.severity],
+    (sum, finding) => sum + (finding.affectsScore === false ? 0 : SEVERITY_PENALTY[finding.severity]),
     0,
   );
   return clampScore(SCORE_BASE - penalty);
@@ -128,7 +132,7 @@ export interface WaterfallStep {
 
 /** Grouped score contributions: base -> (-alerts) -> (-warnings) -> (-info). */
 export function scoreWaterfall(findings: ScoreFinding[]): WaterfallStep[] {
-  const census = severityCensus(findings);
+  const census = severityCensus(findings.filter(finding => finding.affectsScore !== false));
   return SEVERITY_ORDER.map((severity) => ({
     severity,
     count: census[severity],
@@ -141,12 +145,12 @@ export interface ScoreFactor {
   linked?: number;
   leaking?: number;
   total?: number;
-  points: number;
+  points: number | null;
 }
 
 export interface PrivacyScoreModel {
-  score: number;
-  grade: PrivacyGrade;
+  score: number | null;
+  grade: PrivacyGrade | null;
   base: number;
   findings: ScoreFinding[];
   census: Record<PrivacySeverity, number>;
@@ -161,7 +165,7 @@ export interface PrivacyScoreModel {
 // currently have separate analysis surfaces. Availability does not mean a check
 // ran for this book, and it is not a measured privacy guarantee. Names are proper/technical terms, kept in
 // English (like the raw tell kinds); only the wrapper strings are localized.
-export type HeuristicStatus = "mirror" | "transaction_detail" | "not_implemented";
+export type HeuristicStatus = "mirror" | "transaction_detail" | "chain_analysis_workspace" | "not_implemented";
 
 export const AIE_HEURISTIC_COVERAGE: Array<{ id: string; name: string; status: HeuristicStatus }> = [
   { id: "h3", name: "Common input ownership", status: "mirror" },
@@ -178,9 +182,9 @@ export const AIE_HEURISTIC_COVERAGE: Array<{ id: string; name: string; status: H
   { id: "h9", name: "UTXO analysis", status: "mirror" },
   { id: "h10", name: "Address type", status: "transaction_detail" },
   { id: "h4", name: "CoinJoin boundary patterns", status: "mirror" },
-  { id: "consolidation", name: "Consolidation patterns", status: "not_implemented" },
+  { id: "consolidation", name: "Consolidation patterns", status: "chain_analysis_workspace" },
   { id: "utxo-age", name: "UTXO age spread", status: "not_implemented" },
-  { id: "bip69", name: "BIP69 ordering", status: "not_implemented" },
+  { id: "bip69", name: "BIP69 ordering", status: "chain_analysis_workspace" },
   { id: "coinsel", name: "Coin selection", status: "not_implemented" },
   { id: "dust-spend", name: "Dust spending", status: "not_implemented" },
   { id: "h17", name: "Multisig / escrow", status: "not_implemented" },
@@ -188,13 +192,13 @@ export const AIE_HEURISTIC_COVERAGE: Array<{ id: string; name: string; status: H
   { id: "spending", name: "Spending patterns", status: "not_implemented" },
   { id: "recurring", name: "Recurring payment", status: "not_implemented" },
   { id: "highactivity", name: "High activity", status: "not_implemented" },
-  { id: "h5", name: "Transaction entropy", status: "not_implemented" },
+  { id: "h5", name: "Conditional transaction entropy", status: "chain_analysis_workspace" },
   { id: "anon", name: "Anonymity sets", status: "not_implemented" },
-  { id: "peel", name: "Peel chain", status: "not_implemented" },
+  { id: "peel", name: "Peel chain", status: "chain_analysis_workspace" },
   { id: "tx0", name: "CoinJoin premix", status: "not_implemented" },
-  { id: "postmix", name: "Post-mix consolidation", status: "not_implemented" },
+  { id: "postmix", name: "Post-mix consolidation", status: "chain_analysis_workspace" },
   { id: "ricochet", name: "Ricochet", status: "not_implemented" },
-  { id: "entity", name: "Known entity", status: "not_implemented" },
+  { id: "entity", name: "Sourced attribution claims", status: "chain_analysis_workspace" },
   { id: "exchange", name: "Exchange pattern", status: "not_implemented" },
   { id: "bip47", name: "BIP47 notification", status: "not_implemented" },
   { id: "timing", name: "Timing analysis", status: "not_implemented" },
@@ -204,20 +208,72 @@ export function heuristicAvailableCount() {
   return AIE_HEURISTIC_COVERAGE.filter((h) => h.status !== "not_implemented").length;
 }
 
+function validCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function hasOwnedPopulation(payload: PrivacyMirrorPayload): boolean {
+  if ([...(payload.unknowns ?? []), ...(payload.limitations ?? [])].some(row => row.code === "no_owned_bitcoin_outputs")) return false;
+  // A declared zero cannot be overridden by stale detail rows. Older payloads
+  // without the summary can still establish ownership with actual coin rows.
+  if (validCount(payload.summary?.utxo_count)) return payload.summary.utxo_count > 0;
+  if (payload.utxo_view?.length) return true;
+  if (payload.wallet_view?.some(row => validCount(row.coin_count) && row.coin_count > 0)) return true;
+  const known = payload.coverage?.source_proximity_known_coin_count;
+  const unknown = payload.coverage?.source_proximity_unknown_coin_count;
+  return validCount(known) && validCount(unknown) && known + unknown > 0;
+}
+
+function sourceCoverageRatio(payload: PrivacyMirrorPayload): number | undefined {
+  const known = payload.coverage?.source_proximity_known_coin_count;
+  const unknown = payload.coverage?.source_proximity_unknown_coin_count;
+  const ratio = payload.summary?.privacy_score?.coverage_ratio;
+  // In particular, the old daemon's empty-population ratio of 1 is not coverage.
+  return validCount(known) && validCount(unknown) && known + unknown > 0 &&
+    typeof ratio === "number" && Number.isFinite(ratio) && ratio >= 0 && ratio <= 1
+    ? ratio : undefined;
+}
+
+function hasDaemonScorePopulation(payload: PrivacyMirrorPayload): boolean {
+  const factors = payload.summary?.privacy_score?.factors ?? [];
+  const known = payload.coverage?.source_proximity_known_coin_count;
+  const unknown = payload.coverage?.source_proximity_unknown_coin_count;
+  return validCount(known) && validCount(unknown) && known + unknown > 0 &&
+    ["wallet_linkage", "transaction_leaks"].every(key => {
+      const total = factors.find(factor => factor.key === key)?.total;
+      return validCount(total) && total > 0;
+    });
+}
+
 export function privacyScoreModel(payload: PrivacyMirrorPayload): PrivacyScoreModel {
   const findings = deriveScoreFindings(payload);
   const census = severityCensus(findings);
   const worstSeverity = privacySeverity(payload.summary?.worst_risk?.severity);
   const daemon = payload.summary?.privacy_score;
+  const evaluable = hasOwnedPopulation(payload) && daemon?.evaluation_status !== "unavailable" && (!daemon || hasDaemonScorePopulation(payload));
+  const factors: ScoreFactor[] = (daemon?.factors ?? []).map((factor) => ({
+    key: String(factor.key ?? "factor"),
+    linked: factor.linked,
+    leaking: factor.leaking,
+    total: factor.total,
+    points: typeof factor.points === "number" && Number.isFinite(factor.points) ? factor.points : null,
+  }));
+
+  if (!evaluable || (daemon && (daemon.value == null || !Number.isFinite(daemon.value)))) {
+    return {
+      score: null,
+      grade: null,
+      base: daemon?.base ?? SCORE_BASE,
+      findings,
+      census,
+      factors,
+      coverageRatio: hasOwnedPopulation(payload) ? sourceCoverageRatio(payload) : undefined,
+      grounded: !!daemon,
+      worstSeverity,
+    };
+  }
 
   if (daemon && typeof daemon.value === "number") {
-    const factors: ScoreFactor[] = (daemon.factors ?? []).map((factor) => ({
-      key: String(factor.key ?? "factor"),
-      linked: factor.linked,
-      leaking: factor.leaking,
-      total: factor.total,
-      points: typeof factor.points === "number" ? factor.points : 0,
-    }));
     return {
       score: daemon.value,
       grade: gradeForScore(daemon.value),
@@ -225,8 +281,7 @@ export function privacyScoreModel(payload: PrivacyMirrorPayload): PrivacyScoreMo
       findings,
       census,
       factors,
-      coverageRatio:
-        typeof daemon.coverage_ratio === "number" ? daemon.coverage_ratio : undefined,
+      coverageRatio: sourceCoverageRatio(payload),
       grounded: true,
       worstSeverity,
     };
@@ -234,7 +289,7 @@ export function privacyScoreModel(payload: PrivacyMirrorPayload): PrivacyScoreMo
 
   // Fallback for payloads without a daemon score: the legacy client-side model.
   const score = computeScore(findings);
-  const factors: ScoreFactor[] = scoreWaterfall(findings).map((step) => ({
+  const fallbackFactors: ScoreFactor[] = scoreWaterfall(findings).map((step) => ({
     key: step.severity,
     total: step.count,
     points: step.delta,
@@ -245,7 +300,7 @@ export function privacyScoreModel(payload: PrivacyMirrorPayload): PrivacyScoreMo
     base: SCORE_BASE,
     findings,
     census,
-    factors,
+    factors: fallbackFactors,
     coverageRatio: undefined,
     grounded: false,
     worstSeverity,

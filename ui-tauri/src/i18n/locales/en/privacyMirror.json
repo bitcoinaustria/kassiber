@@ -27,6 +27,12 @@
     "findings": "Findings"
   },
   "score": {
+    "unavailable": "Score unavailable",
+    "unavailableBody": "There is not enough owned-output and transaction coverage to calculate this score. Observed signals remain below; missing data is not a privacy rating.",
+    "notAvailable": "Not available",
+    "observations": "Observed signals",
+    "observedCount_one": "{{count}} observed",
+    "observedCount_other": "{{count}} observed",
     "of": " / 100",
     "local": "Heuristic priority from observed local signals, not a privacy probability or guarantee. Missing data limits what this model can see.",
     "census": "Findings by severity",
@@ -70,10 +76,11 @@
   },
   "heuristics": {
     "title": "Analysis capabilities",
-    "note": "Availability by surface, not checks performed on this book. Transaction detail uses a separate hygiene scan. Missing transaction data can prevent available checks from running.",
+    "note": "Availability by surface, not checks performed on this book. Transaction detail uses a separate hygiene scan. Chain Analysis has its own bounded queries and explicit models; its capabilities do not imply that Privacy Mirror ran them. Missing transaction data can prevent available checks from running.",
     "status": {
       "mirror": "Privacy Mirror",
       "transaction_detail": "Transaction detail",
+      "chain_analysis_workspace": "Chain Analysis workspace",
       "not_implemented": "Not implemented"
     }
   },

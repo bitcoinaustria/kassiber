@@ -441,6 +441,37 @@ class PrivacyMirrorTests(unittest.TestCase):
         self.assertEqual(clean["value"], 100)
         self.assertEqual(clean["coverage_ratio"], 0.0)
 
+    def test_empty_populations_are_unavailable_not_perfect_privacy(self):
+        cases = [
+            ([], [], {}, 0, 0),
+            ([{"linkage_edge_count": 0}], [], {}, 1, 0),
+            ([], [{"wallet_penalty_count": 1, "wallet_penalty_kinds": ["sender_common_input"]}], {"scored_transaction_count": 1}, 1, 0),
+            ([{"linkage_edge_count": 0}], [], {"scored_transaction_count": 1}, 0, 0),
+        ]
+        for args in cases:
+            with self.subTest(args=args):
+                score = core_reports._privacy_mirror_score(*args)
+                self.assertIsNone(score["value"])
+                self.assertEqual(score["evaluation_status"], "unavailable")
+                self.assertEqual(score["evidence_level"], "unknown")
+                if args[3] + args[4] == 0:
+                    self.assertIsNone(score["coverage_ratio"])
+                for factor in score["factors"]:
+                    if factor["total"] == 0:
+                        self.assertIsNone(factor["points"])
+
+    def test_empty_book_report_and_cli_preserve_unavailable_score(self):
+        self.conn.execute("DELETE FROM wallet_utxos")
+        self.conn.execute("DELETE FROM transactions")
+        self.conn.commit()
+        result = core_reports.report_privacy_mirror(self.conn, None, None, _privacy_report_hooks("ws", "pf"))
+        score = result["summary"]["privacy_score"]
+        self.assertIsNone(score["value"])
+        self.assertIsNone(score["coverage_ratio"])
+        self.assertEqual(score["evaluation_status"], "unavailable")
+        cli = _run_cli(self.data_root, "reports", "privacy-mirror")
+        self.assertEqual(cli["data"]["summary"]["privacy_score"], score)
+
     @unittest.skipUnless(
         importlib.util.find_spec("embit") is not None,
         "CLI privacy-mirror test requires runtime dependencies",
@@ -556,7 +587,7 @@ class PrivacyMirrorTests(unittest.TestCase):
             {"txid": "inbound", "kind": "sender_rbf", "penalizes_wallet": False},
         ]}
         rows = core_reports._privacy_mirror_transaction_rows(graph)
-        score = core_reports._privacy_mirror_score([], rows, {"scored_transaction_count": 1}, 0, 0)
+        score = core_reports._privacy_mirror_score([{"linkage_edge_count": 0}], rows, {"scored_transaction_count": 1}, 0, 1)
         self.assertEqual(rows[0]["tell_count"], 2)
         self.assertEqual(rows[0]["wallet_penalty_count"], 0)
         self.assertEqual(score["value"], 100)
@@ -569,7 +600,7 @@ class PrivacyMirrorTests(unittest.TestCase):
                     for index in range(count)
                 ]})
                 self.assertEqual(len(rows), count)
-                score = core_reports._privacy_mirror_score([], rows, {"scored_transaction_count": count}, 0, 0)
+                score = core_reports._privacy_mirror_score([{"linkage_edge_count": 0}], rows, {"scored_transaction_count": count}, 0, 1)
                 self.assertEqual(score["value"], 55)
 
     def test_full_report_score_ignores_duplicate_and_graphless_observations(self):

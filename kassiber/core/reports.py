@@ -1400,8 +1400,9 @@ def _privacy_mirror_score(
 
     The score is ``100 - 100*(0.55*linkage_fraction + 0.45*leak_fraction)``.
     Uncertainty (coins whose origin is unknown) deliberately does NOT lower the
-    score: it is reported separately as ``coverage_ratio`` so a confident score
-    cannot silently hide missing data. Every factor ships its own counts so the
+    score: it is reported separately as ``coverage_ratio``. An empty observed
+    population is unavailable, never a perfect score or complete coverage.
+    Every factor ships its own counts so the
     number is fully explainable in the UI rather than opaque.
     """
 
@@ -1426,32 +1427,33 @@ def _privacy_mirror_score(
         (weighted_leak_sum / transaction_total) if transaction_total else 0.0
     )
 
-    linkage_points = round(100 * _PRIVACY_SCORE_LINKAGE_WEIGHT * linkage_fraction)
-    leak_points = round(100 * _PRIVACY_SCORE_LEAK_WEIGHT * leak_fraction)
-    value = max(0, min(100, 100 - linkage_points - leak_points))
-
     known_total = coverage_known + coverage_unknown
-    coverage_ratio = (coverage_known / known_total) if known_total else 1.0
+    linkage_points = round(100 * _PRIVACY_SCORE_LINKAGE_WEIGHT * linkage_fraction) if wallet_count else None
+    leak_points = round(100 * _PRIVACY_SCORE_LEAK_WEIGHT * leak_fraction) if transaction_total else None
+    evaluable = known_total > 0 and linkage_points is not None and leak_points is not None
+    value = max(0, min(100, 100 - linkage_points - leak_points)) if evaluable else None
+    coverage_ratio = round(coverage_known / known_total, 3) if known_total else None
 
     return {
         "value": value,
         "base": 100,
-        "evidence_level": "derived",
-        "coverage_ratio": round(coverage_ratio, 3),
+        "evidence_level": "derived" if evaluable else "unknown",
+        "evaluation_status": "available" if evaluable else "unavailable",
+        "coverage_ratio": coverage_ratio,
         "factors": [
             {
                 "key": "wallet_linkage",
                 "linked": linked_wallets,
                 "total": wallet_count,
                 "weight": _PRIVACY_SCORE_LINKAGE_WEIGHT,
-                "points": -linkage_points,
+                "points": -linkage_points if linkage_points is not None else None,
             },
             {
                 "key": "transaction_leaks",
                 "leaking": leaking_transactions,
                 "total": transaction_total,
                 "weight": _PRIVACY_SCORE_LEAK_WEIGHT,
-                "points": -leak_points,
+                "points": -leak_points if leak_points is not None else None,
             },
         ],
     }

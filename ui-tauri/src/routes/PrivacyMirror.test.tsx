@@ -7,6 +7,7 @@ import { router } from "@/routeTree";
 import type { PrivacyMirrorPayload } from "@/lib/privacyMirror";
 
 import { PrivacyMirrorPayloadView } from "./PrivacyMirror";
+import { HeuristicCoverage } from "@/components/privacy/PrivacyScore";
 
 const PRIVACY_MIRROR_TEST_PAYLOAD: PrivacyMirrorPayload = {
   local_only: true,
@@ -101,17 +102,60 @@ const PRIVACY_MIRROR_TEST_PAYLOAD: PrivacyMirrorPayload = {
 
 // The elevated PSBT panel uses a daemon mutation, so the view needs a query
 // client in context; the mutation is idle at render so no transport is needed.
-function renderMirror() {
+function renderMirror(payload: PrivacyMirrorPayload = PRIVACY_MIRROR_TEST_PAYLOAD) {
   return renderToStaticMarkup(
     <QueryClientProvider client={new QueryClient()}>
       <PrivacyMirrorPayloadView
-        payload={PRIVACY_MIRROR_TEST_PAYLOAD}
+        payload={payload}
       />
     </QueryClientProvider>,
   );
 }
 
 describe("PrivacyMirror route", () => {
+  it.each([100, null])("shows neutral unavailable coverage for an empty owned population with daemon value %s", (value) => {
+    const html = renderMirror({
+      summary: { utxo_count: 0, privacy_score: {
+        value, base: 100, coverage_ratio: value === null ? null : 1,
+        factors: [
+          { key: "wallet_linkage", linked: 0, total: 0, points: null },
+          { key: "transaction_leaks", leaking: 0, total: 0, points: null },
+        ],
+      } },
+      coverage: { degraded: true, source_proximity_known_coin_count: 0, source_proximity_unknown_coin_count: 0 },
+      unknowns: [{ code: "no_owned_bitcoin_outputs", evidence_level: "unknown" }],
+    });
+    expect(html).toContain('data-testid="privacy-score-unavailable"');
+    expect(html).toContain("Score unavailable");
+    expect(html).toContain("Origin coverage");
+    expect(html).toContain("Not available");
+    expect(html).not.toContain('data-testid="privacy-score-grade"');
+    expect(html).not.toMatch(/>0\/0</);
+    expect(html).not.toMatch(/>100%</);
+  });
+
+  it("keeps observed signals without inventing a quotient or grade when coverage is unavailable", () => {
+    const html = renderMirror({
+      summary: { utxo_count: 0, privacy_score: { value: null, evaluation_status: "unavailable", factors: [
+        { key: "wallet_linkage", linked: 2, total: 0, points: null },
+      ] } },
+      transaction_view: [{ txid: "observed", tell_count: 1, wallet_penalty_count: 1, tell_kinds: ["sender_common_input"] }],
+    });
+    expect(html).toContain("2 observed");
+    expect(html).toContain("Common input");
+    expect(html).not.toMatch(/>2\/0</);
+    expect(html).not.toContain('data-testid="privacy-score-grade"');
+    expect(renderMirror({})).not.toContain('stroke="#22c55e"');
+  });
+
+  it("distinguishes workspace capabilities from checks performed by Privacy Mirror", () => {
+    const html = renderToStaticMarkup(<HeuristicCoverage onOpenChainAnalysis={() => {}} />);
+    expect(html).toContain("Chain Analysis workspace");
+    expect(html).toContain("Conditional transaction entropy");
+    expect(html).toContain("Sourced attribution claims");
+    expect(html).toContain("do not imply that Privacy Mirror ran them");
+    expect(html).toContain(">Chain Analysis</button>");
+  });
   it("registers the dedicated Privacy Mirror page route", () => {
     expect(router.routesByPath["/privacy-mirror"]).toBeTruthy();
   });

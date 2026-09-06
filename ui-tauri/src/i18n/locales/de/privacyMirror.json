@@ -27,6 +27,12 @@
     "findings": "Befunde"
   },
   "score": {
+    "unavailable": "Bewertung nicht verfügbar",
+    "unavailableBody": "Eigene Outputs und Transaktionsdaten sind nicht ausreichend abgedeckt, um diese Bewertung zu berechnen. Beobachtete Signale bleiben unten sichtbar; fehlende Daten sind keine Privatsphärenbewertung.",
+    "notAvailable": "Nicht verfügbar",
+    "observations": "Beobachtete Signale",
+    "observedCount_one": "{{count}} beobachtet",
+    "observedCount_other": "{{count}} beobachtet",
     "of": " / 100",
     "local": "Heuristische Priorisierung anhand lokal beobachteter Signale, keine Privatsphäre-Wahrscheinlichkeit oder Garantie. Fehlende Daten begrenzen die Aussagekraft.",
     "census": "Befunde nach Schweregrad",
@@ -70,10 +76,11 @@
   },
   "heuristics": {
     "title": "Analysefunktionen",
-    "note": "Verfügbarkeit je Ansicht, keine Liste der in diesem Buch ausgeführten Prüfungen. Die Transaktionsdetails nutzen eine eigene Hygiene-Analyse. Fehlende Transaktionsdaten können verfügbare Prüfungen verhindern.",
+    "note": "Verfügbarkeit je Ansicht, keine Liste der in diesem Buch ausgeführten Prüfungen. Die Transaktionsdetails nutzen eine eigene Hygiene-Analyse. Chain Analysis hat eigene begrenzte Abfragen und explizite Modelle; diese Funktionen wurden damit nicht automatisch im Privacy Mirror ausgeführt. Fehlende Transaktionsdaten können verfügbare Prüfungen verhindern.",
     "status": {
       "mirror": "Privacy Mirror",
       "transaction_detail": "Transaktionsdetails",
+      "chain_analysis_workspace": "Chain-Analysis-Arbeitsbereich",
       "not_implemented": "Nicht implementiert"
     }
   },

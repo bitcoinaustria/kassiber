@@ -119,7 +119,7 @@ describe("bounded graph interaction", () => {
     );
     expect(after.scale).toBe(1);
     expect(zoomAnalysisCamera(after, 1000, pointer).scale).toBe(4);
-    expect(zoomAnalysisCamera(after, 0.000001, pointer).scale).toBe(0.025);
+    expect(zoomAnalysisCamera(after, 0.000001, pointer).scale).toBe(0.001);
   });
   it("pans without changing graph scale or mutating prior state", () => {
     const before = { x: 10, y: 30, scale: 2 };

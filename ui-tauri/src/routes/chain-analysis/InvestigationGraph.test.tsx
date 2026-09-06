@@ -112,6 +112,9 @@ describe("investigation graph presentation", () => {
     expect(html).not.toContain("<script>");
     expect(html).toContain('aria-label="Zoom in"');
     expect(html).toContain('aria-label="Focus selection"');
+    expect(html).toContain('class="ca-graph-overview"');
+    expect(html).toContain("nodes in view");
+    expect(html).toContain(">Fit graph</span>");
   });
   it("exposes the power-user route without a developer gate and gives AI only allowlisted screen context", () => {
     expect(

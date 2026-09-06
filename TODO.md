@@ -48,6 +48,18 @@ Backlog contract:
 Current behavior and limits: [local chain analysis](docs/reference/local-chain-analysis.md).
 Research and the pre-implementation inventory: [architecture](docs/plan/17-local-chain-analysis.md).
 
+Current expansion (completion includes shared CLI/daemon/AI/UI contracts and
+independent adversarial verification):
+
+- [x] Exact value-class partition solver, explicit participant-fee scenarios,
+  large repeated-value transactions and cancellable computation receipts.
+- [x] Shared public structure/rule pipeline for chain observations and PSBT
+  v0/v2, complete UTXO validation and original/proposal Payjoin comparisons.
+- [x] Versioned local dataset packs with exact indexed lookup, preserved
+  provenance/conflicts, content-bound import and explicit revocation.
+- [x] Power-user workbench for scenarios, PSBT preflight and dataset lifecycle;
+  the assistant uses the same evidence, source grants and computation results.
+
 - [x] Audit existing privacy/graph correctness: source attribution, pagination,
   truthful coverage, domain isolation and cache-only reads.
 - [x] Shared immutable observation/ownership index and bounded forward/backward/
@@ -64,12 +76,10 @@ Research and the pre-implementation inventory: [architecture](docs/plan/17-local
 - [x] Dedicated power-user workspace, immutable saved investigations/comparisons,
   JSON/CSV export and opaque-reference remote-agent projection; same shared core
   and version/scope checks across interfaces.
-- [ ] Extend PSBT preflight with validated input-map evidence and explicit v2
-  support, malicious/inconsistent prevout cases and observer disclosure tests.
-- [ ] Evaluate incremental/full-chain indexing and measured large-dataset limits;
-  the current index is built from local book/reference observations on demand.
-- [ ] Add optional local dataset import formats beyond the structured label
-  contract, and explicit background watchlist jobs with evidence-change alerts.
+- [ ] Evaluate incremental/full-chain observation indexing; the graph is built
+  from local book/reference observations on demand. Attribution lookup already
+  uses persistent exact indexes (one-million-record benchmark documented).
+- [ ] Add explicit background watchlist jobs with evidence-change alerts.
 
 ## Rules for every session
 

@@ -4,17 +4,15 @@ import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { Button } from "@/components/ui/button";
 import type {
   AnalysisCase,
-  AnalysisEntropyOutcome,
-  AnalysisEntropyRequest,
   AnalysisQuery,
   AnalysisResult,
 } from "@/lib/chainAnalysis";
 import {
   analysisNetworkInput,
-  currentAnalysisEntropyOutcome,
   shortAnalysisId,
 } from "@/lib/chainAnalysis";
 import { EvidenceDetails, Fact } from "./EvidenceDetails";
+import { CaseComparison } from "./CaseComparison";
 
 export function SavedInvestigations({
   result,
@@ -206,14 +204,7 @@ export function SavedInvestigations({
           {t("case.more")}
         </Button>
       )}
-      {comparison && (
-        <div className="mt-3 rounded-md bg-muted/30 p-3">
-          <p className="text-xs">
-            {comparison.changed ? t("case.changed") : t("case.unchanged")}
-          </p>
-          <EvidenceDetails value={comparison} />
-        </div>
-      )}
+      {comparison && <CaseComparison comparison={comparison} />}
     </section>
   );
 }
@@ -496,166 +487,4 @@ export function AcquisitionPanel({
   );
 }
 
-export function EntropyPanel({
-  subject,
-  query,
-  onError,
-}: {
-  subject: string;
-  query: AnalysisQuery;
-  onError: (error: unknown) => void;
-}) {
-  const { t } = useTranslation("chainAnalysis");
-  const [value, setValue] = useState(subject);
-  const [budget, setBudget] = useState(50_000);
-  const [outcome, setOutcome] = useState<AnalysisEntropyOutcome | null>(null);
-  const compute = useDaemonMutation<Record<string, unknown>>(
-    "ui.chain_analysis.entropy",
-    { invalidateQueries: false },
-  );
-  const request: AnalysisEntropyRequest = {
-    subject: value.trim(),
-    ...(query.chain ? { chain: query.chain } : {}),
-    ...(query.network ? { network: query.network } : {}),
-    max_states: budget,
-  };
-  const current = currentAnalysisEntropyOutcome(
-    request,
-    outcome,
-    compute.isPending,
-  );
-  return (
-    <section className="space-y-3">
-      <p className="max-w-3xl text-xs leading-relaxed text-muted-foreground">
-        {t("entropyPanel.description")}
-      </p>
-      <p className="text-xs text-muted-foreground">
-        {t("entropyPanel.unsupported")}
-      </p>
-      <form
-        className="flex flex-wrap items-end gap-3"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (compute.isPending) return;
-          setOutcome(null);
-          try {
-            const response = await compute.mutateAsync({ ...request });
-            if (response.data) setOutcome({ request, result: response.data });
-          } catch (error) {
-            onError(error);
-          }
-        }}
-      >
-        <label className="ca-field min-w-64 flex-1">
-          {t("entropyPanel.subject")}
-          <input
-            required
-            className="ca-input font-mono"
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-          />
-        </label>
-        <label className="ca-field">
-          {t("entropyPanel.budget")}
-          <input
-            className="ca-input w-36"
-            type="number"
-            required
-            min={1}
-            max={200000}
-            value={budget}
-            onChange={(event) => setBudget(Number(event.target.value))}
-          />
-        </label>
-        <Button
-          type="submit"
-          size="sm"
-          variant="outline"
-          disabled={!value.trim() || compute.isPending}
-        >
-          {t("entropyPanel.run")}
-        </Button>
-      </form>
-      {outcome && !current && !compute.isPending && (
-        <p className="text-xs text-muted-foreground" role="status">
-          {t("entropyPanel.inputsChanged")}
-        </p>
-      )}
-      {current && (
-        <EntropyResult result={current.result} request={current.request} />
-      )}
-    </section>
-  );
-}
-
-export function EntropyResult({
-  result,
-  request,
-}: {
-  result: Record<string, unknown>;
-  request?: AnalysisEntropyRequest;
-}) {
-  const { t } = useTranslation("chainAnalysis");
-  const exact = result.status === "exact";
-  const bounded =
-    result.status === "model_bounded" || result.status === "timeout";
-  return (
-    <div className="space-y-3">
-      <dl className="grid gap-4 sm:grid-cols-3">
-        <Fact
-          label={t("entropyPanel.resultSubject")}
-          value={result.subject || request?.subject}
-        />
-        {request && (
-          <>
-            <Fact
-              label={t("entropyPanel.requestDomain")}
-              value={`${request.chain || t("all")} / ${request.network || t("all")}`}
-            />
-            <Fact label={t("entropyPanel.budget")} value={request.max_states} />
-          </>
-        )}
-      </dl>
-      <dl className="grid gap-4 sm:grid-cols-4">
-        <Fact label={t("entropyPanel.status")} value={result.status} />
-        <Fact label={t("entropyPanel.model")} value={result.model} />
-        {(exact || bounded) && (
-          <Fact
-            label={
-              exact
-                ? t("entropyPanel.partitions")
-                : t("entropyPanel.lowerBound")
-            }
-            value={
-              exact
-                ? result.interpretation_count
-                : result.interpretation_count_lower_bound
-            }
-          />
-        )}
-        {exact && (
-          <Fact label={t("entropyPanel.bits")} value={result.entropy_bits} />
-        )}
-      </dl>
-      <Fact label={t("entropyPanel.reason")} value={result.reason} />
-      <EvidenceDetails
-        value={result.assumptions}
-        label={t("entropyPanel.assumptions")}
-      />
-      <EvidenceDetails
-        value={result.limitations}
-        label={t("entropyPanel.limitations")}
-      />
-      <EvidenceDetails
-        value={{
-          deterministic_links: result.deterministic_links,
-          link_counts: result.link_counts,
-          snapshot_id: result.snapshot_id,
-          states_explored: result.states_explored,
-          limits: result.limits,
-        }}
-        label={t("entropyPanel.details")}
-      />
-    </div>
-  );
-}
+export { EntropyPanel, EntropyResult } from "./EntropyPanel";

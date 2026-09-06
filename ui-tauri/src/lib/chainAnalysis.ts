@@ -51,6 +51,9 @@ export interface AnalysisEntropyRequest {
   chain?: AnalysisQuery["chain"];
   network?: string;
   max_states: number;
+  max_duration_ms?: number;
+  observer?: "owner" | "public" | "disclosed";
+  scenario?: import("./chainAnalysisWorkbench").EntropyScenario;
 }
 
 export interface AnalysisEntropyOutcome {
@@ -69,7 +72,10 @@ export function currentAnalysisEntropyOutcome(
   return request.subject.trim() === submitted.subject.trim() &&
     request.chain === submitted.chain &&
     request.network === submitted.network &&
-    request.max_states === submitted.max_states
+    request.max_states === submitted.max_states &&
+    request.max_duration_ms === submitted.max_duration_ms &&
+    request.observer === submitted.observer &&
+    JSON.stringify(request.scenario) === JSON.stringify(submitted.scenario)
     ? outcome
     : null;
 }
@@ -96,6 +102,7 @@ export interface AnalysisCluster {
   [key: string]: unknown;
 }
 export interface AnalysisResult {
+  transaction_features?: Array<{ subject: string; features: import("./chainAnalysisWorkbench").FeatureSnapshot }>;
   schema_version: number;
   snapshot_id: string;
   query: AnalysisQuery;
@@ -294,7 +301,7 @@ export function zoomAnalysisCamera(
   factor: number,
   point: GraphPosition,
 ): GraphCamera {
-  const scale = Math.max(0.025, Math.min(4, previous.scale * factor));
+  const scale = Math.max(0.001, Math.min(4, previous.scale * factor));
   const ratio = scale / previous.scale;
   return {
     scale,

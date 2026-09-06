@@ -64,8 +64,9 @@ the advisory projection does not repair them by inventing an allocation.
 
 ## Privacy score
 
-The desktop surface leads with an at-a-glance **privacy score (0–100) and letter
-grade (A+ ≥90 / B ≥75 / C ≥50 / D ≥25 / F <25)**. It is computed in the daemon
+For an evaluable owned-output population, the desktop surface shows a
+**privacy score (0–100) and letter grade (A+ ≥90 / B ≥75 / C ≥50 / D ≥25 / F <25)**.
+It is computed in the daemon
 (`_privacy_mirror_score`) from real local quantities, deterministic, and never
 performs a chain lookup:
 
@@ -95,10 +96,13 @@ coverage are shown alongside the score.
 The weights are a prioritization convention, not a calibrated probability of
 deanonymization or a guarantee of privacy.
 
-The existing numerical model can still return a high number for an empty or
-poorly observed book. This means few modeled signals, not a completed privacy
-assessment; inspect unknowns and coverage. Replacing the grade with a
-coverage-aware investigation summary is part of the proposed expansion.
+An empty owned-output population, wallet denominator or modeled-transaction
+denominator returns `value: null` and `evaluation_status: "unavailable"` to
+desktop, CLI and AI. A zero-size origin population has `coverage_ratio: null`;
+it cannot be represented as 100% coverage. The UI shows the unavailable state
+without a grade, preserving observed counts and findings. A nonempty population
+with unknown origins can still have an observed-signal score and 0% origin
+coverage; uncertainty never becomes a penalty or an assurance of privacy.
 
 The current implementation performs several full-profile reads. It does not
 yet share one immutable observation snapshot across linkage, source proximity,
@@ -113,10 +117,12 @@ them. It is not a count of checks executed on this book or transaction. The
 transaction-hygiene panel can provide checks that Mirror does not compute.
 Missing input data still makes an available detector inapplicable.
 
-Transaction entropy / anonymity sets (Boltzmann), general entity attribution
-and multi-hop peel/postmix analysis are not currently implemented. They are
-possible local extensions with appropriate data and computation; they are not
-inherently remote features. The researched scope, actual current capabilities
+The [Chain Analysis workspace](local-chain-analysis.md) provides conditional
+partition entropy, exact local attribution-pack lookup, and bounded multi-hop
+peel/postmix patterns. These are distinct from a measured anonymity set or
+verified entity ownership. Its shared structural pipeline also inspects PSBT
+v0/v2 and original/proposal Payjoin constraints. These capabilities do not mean
+every check ran in Privacy Mirror. The researched scope, actual current capabilities
 and proposed shared graph are in
 [Local chain analysis](../plan/17-local-chain-analysis.md).
 

@@ -88,15 +88,26 @@ const GRADE_TEXT_CLASS: Record<keyof typeof GRADE_HEX, string> = {
 const HEURISTIC_STATUS_CLASS: Record<HeuristicStatus, string> = {
   mirror: "bg-emerald-500",
   transaction_detail: "bg-amber-500",
+  chain_analysis_workspace: "bg-violet-500",
   not_implemented: "bg-muted-foreground",
 };
 
 export function PrivacyScoreHero({ model }: { model: PrivacyScoreModel }) {
   const { t } = useTranslation("privacyMirror");
   const reduced = usePrefersReducedMotion();
-  const shown = useCountUp(model.score);
+  const shown = useCountUp(model.score ?? 0);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  if (model.score === null || model.grade === null) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 rounded-md border bg-card p-5 text-center text-card-foreground sm:p-6" data-testid="privacy-score-unavailable">
+        <span className="font-mono text-6xl leading-none text-muted-foreground" aria-hidden="true">—</span>
+        <p className="text-sm font-medium">{t("score.unavailable")}</p>
+        <p className="max-w-md text-sm text-muted-foreground">{t("score.unavailableBody")}</p>
+        <p className="text-xs text-muted-foreground">{t("score.local")}</p>
+      </div>
+    );
+  }
   const hex = GRADE_HEX[model.grade];
   const gradeClass = GRADE_TEXT_CLASS[model.grade];
 
@@ -195,9 +206,7 @@ export function SeverityRing({
             strokeWidth={stroke}
             className="text-muted/40"
           />
-          {total === 0 ? (
-            <circle cx="70" cy="70" r={radius} fill="none" stroke={GRADE_HEX["A+"]} strokeWidth={stroke} />
-          ) : (
+          {total === 0 ? null : (
             segments.map((seg) => (
               <circle
                 key={seg.key}
@@ -235,9 +244,15 @@ export function SeverityRing({
   );
 }
 
-function factorDetail(factor: ScoreFactor) {
-  if (factor.key === "wallet_linkage") return `${factor.linked ?? 0}/${factor.total ?? 0}`;
-  if (factor.key === "transaction_leaks") return `${factor.leaking ?? 0}/${factor.total ?? 0}`;
+function factorDetail(factor: ScoreFactor, score: number | null, t: ReturnType<typeof useTranslation<"privacyMirror">>["t"]) {
+  if (factor.key === "wallet_linkage" || factor.key === "transaction_leaks") {
+    const observed = factor.key === "wallet_linkage" ? factor.linked : factor.leaking;
+    if (score === null || !factor.total || factor.total < 0) {
+      return typeof observed === "number" && observed > 0
+        ? t("score.observedCount", { count: observed }) : t("score.notAvailable");
+    }
+    return `${observed ?? 0}/${factor.total}`;
+  }
   return factor.total != null ? String(factor.total) : "";
 }
 
@@ -248,7 +263,7 @@ export function ScoreWaterfall({
   coverageRatio,
 }: {
   factors: ScoreFactor[];
-  score: number;
+  score: number | null;
   base: number;
   coverageRatio?: number;
 }) {
@@ -256,39 +271,37 @@ export function ScoreWaterfall({
   return (
     <div className="rounded-md border bg-card p-4 text-card-foreground">
       <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {t("score.waterfall")}
+        {t(score === null ? "score.observations" : "score.waterfall")}
       </p>
       <div className="grid gap-2 text-sm">
-        <div className="flex items-center justify-between gap-2">
+        {score !== null && <div className="flex items-center justify-between gap-2">
           <span className="text-muted-foreground">{t("score.base")}</span>
           <span className="font-mono tabular-nums">{base}</span>
-        </div>
+        </div>}
         {factors.map((factor) => (
           <div key={factor.key} className="flex items-center justify-between gap-2">
             <span className="flex min-w-0 items-center gap-2 truncate">
               <span>{t(`score.factor.${factor.key}`, { defaultValue: factor.key })}</span>
-              <span className="font-mono text-xs text-muted-foreground">{factorDetail(factor)}</span>
+              <span className="font-mono text-xs text-muted-foreground">{factorDetail(factor, score, t)}</span>
             </span>
             <span
               className={cn(
                 "font-mono tabular-nums",
-                factor.points < 0 && "text-amber-600 dark:text-amber-300",
+                score !== null && factor.points !== null && factor.points < 0 && "text-amber-600 dark:text-amber-300",
               )}
             >
-              {factor.points > 0 ? `+${factor.points}` : factor.points}
+              {score === null || factor.points === null || !factor.total ? "—" : factor.points > 0 ? `+${factor.points}` : factor.points}
             </span>
           </div>
         ))}
         <div className="mt-1 flex items-center justify-between gap-2 border-t pt-2 font-medium">
           <span>{t("score.result")}</span>
-          <span className="font-mono tabular-nums">{score}</span>
+          <span className="font-mono tabular-nums">{score ?? t("score.notAvailable")}</span>
         </div>
-        {typeof coverageRatio === "number" ? (
-          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span>{t("score.coverage")}</span>
-            <span className="font-mono tabular-nums">{Math.round(coverageRatio * 100)}%</span>
-          </div>
-        ) : null}
+        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>{t("score.coverage")}</span>
+          <span className="font-mono tabular-nums">{typeof coverageRatio === "number" ? `${Math.round(coverageRatio * 100)}%` : t("score.notAvailable")}</span>
+        </div>
       </div>
     </div>
   );
@@ -365,9 +378,9 @@ export function PrivacyFindingCard({
   );
 }
 
-export function HeuristicCoverage() {
+export function HeuristicCoverage({ onOpenChainAnalysis }: { onOpenChainAnalysis?: () => void }) {
   const { t } = useTranslation("privacyMirror");
-  const order: HeuristicStatus[] = ["mirror", "transaction_detail", "not_implemented"];
+  const order: HeuristicStatus[] = ["mirror", "transaction_detail", "chain_analysis_workspace", "not_implemented"];
   const counts = AIE_HEURISTIC_COVERAGE.reduce(
     (acc, h) => ({ ...acc, [h.status]: (acc[h.status] ?? 0) + 1 }),
     {} as Record<HeuristicStatus, number>,
@@ -375,6 +388,9 @@ export function HeuristicCoverage() {
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">{t("heuristics.note")}</p>
+      {onOpenChainAnalysis && <Button variant="outline" size="sm" onClick={onOpenChainAnalysis}>
+        {t("chainAnalysisLink")}
+      </Button>}
       <div className="flex flex-wrap gap-1.5">
         {AIE_HEURISTIC_COVERAGE.map((h) => (
           <span
