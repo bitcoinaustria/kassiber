@@ -64,7 +64,7 @@ ensure_core_wallet() {
 
 faucet_balance_ok() {
   local balance="$1"
-  python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) >= 10 else 1)' "$balance"
+  python3 -c 'import sys; sys.exit(0 if float(sys.argv[1]) >= 20 else 1)' "$balance"
 }
 
 mine_to_faucet() {
@@ -87,7 +87,25 @@ ensure_faucet_funds() {
   fi
   balance="$(btc -rpcwallet="$FAUCET_WALLET" getbalance)"
   if ! faucet_balance_ok "$balance"; then
-    mine_to_faucet 120
+    # Historical regtest demos can be many subsidy halvings old. Their known
+    # external actor retains early coinbase funds; never guess another wallet.
+    local funding_wallet="${KASSIBER_REGTEST_LIGHTNING_FUNDING_WALLET:-}"
+    if [ -n "$funding_wallet" ]; then
+      local address
+      address="$(btc -rpcwallet="$FAUCET_WALLET" getnewaddress "lightning faucet seed" bech32)" || return 1
+      if ! btc -rpcwallet="$funding_wallet" sendtoaddress "$address" 20 >/dev/null; then
+        echo "Could not seed the Lightning faucet from the configured regtest funding wallet." >&2
+        return 1
+      fi
+      mine_to_faucet 1 || return 1
+    else
+      mine_to_faucet 120 || return 1
+    fi
+    balance="$(btc -rpcwallet="$FAUCET_WALLET" getbalance)" || return 1
+    if ! faucet_balance_ok "$balance"; then
+      echo "Lightning faucet needs at least 20 regtest BTC. Configure KASSIBER_REGTEST_LIGHTNING_FUNDING_WALLET for a chain past its early subsidy eras." >&2
+      return 1
+    fi
   fi
 }
 

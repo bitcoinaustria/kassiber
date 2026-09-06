@@ -72,11 +72,17 @@ run_fast() {
   KASSIBER_NO_EGRESS=1 py -m unittest \
     tests.test_regtest_harness \
     tests.test_lightning_business_plan \
+    tests.test_lightning_funding \
+    tests.test_regtest_source_funds_seed \
     tests.integration.test_demo_fingerprint \
     tests.integration.test_regtest_demo_realism \
     tests.integration.test_regtest_exchange_cases \
-    tests.test_regtest_exchange_api \
     -v
+  # These tests exercise the real HTTP adapter against a loopback-only fixture.
+  # Their socket guard blocks external destinations; the product kill switch
+  # would also block the fixture before its authentication can be tested.
+  KASSIBER_NO_EGRESS=0 KASSIBER_TEST_NO_EGRESS=1 py -m unittest \
+    tests.test_regtest_exchange_api -v
 }
 
 rpc_auth() {
@@ -998,10 +1004,15 @@ demo_seed_lightning() {
   export KASSIBER_LIGHTNING_BUSINESS_REUSE_BOOK=1
   export KASSIBER_LIGHTNING_BUSINESS_PLAN="${KASSIBER_LIGHTNING_BUSINESS_PLAN:-$KASSIBER_LIGHTNING_BUSINESS_HOME/business-plan.json}"
   export KASSIBER_LIGHTNING_BUSINESS_MERCHANT_CLI="$merchant_cli"
+  # Reuse only this generated scenario's external actor for late-height faucet funding.
+  local demo_run_id
+  demo_run_id="$(py -c 'import json, sys; print(json.load(open(sys.argv[1]))["data"]["run_id"])' "$DEMO_HOME/demo-summary.json")"
+  KASSIBER_REGTEST_LIGHTNING_FUNDING_WALLET="kassiber-demo-${demo_run_id}-external" \
   ./dev/regtest/lightning-business-bootstrap.sh
   export KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_URL="https://127.0.0.1:$KASSIBER_REGTEST_LND_BACKUP_REST_PORT"
   export KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_MACAROON_HEX
   KASSIBER_LIGHTNING_BUSINESS_BACKUP_LND_MACAROON_HEX="$(demo_lnd_readonly_macaroon_hex)"
+  KASSIBER_REGTEST_LIGHTNING_FUNDING_WALLET="kassiber-demo-${demo_run_id}-external" \
   ./dev/regtest/lightning-business-scenario.sh
   py -m tests.integration.lightning_business_regtest >/dev/null
   # Real lightningd/lnd stamp settle times at wall-clock "now"; spread the
@@ -1044,6 +1055,11 @@ demo_seed_btcpay() {
     --json-output "$seed_path" >/dev/null
 }
 
+demo_seed_source_funds() {
+  echo "Seeding synthetic source-of-funds proof and missing-evidence cases..."
+  py -m dev.regtest.source_funds_seed --demo-home "$DEMO_HOME" >/dev/null
+}
+
 demo_build_book() {
   local checksum
   local current_checksum
@@ -1056,6 +1072,7 @@ demo_build_book() {
     demo_refresh_live_rate
     demo_seed_btcpay
     demo_seed_lightning
+    demo_seed_source_funds
     demo_write_manifest "$checksum"
     echo "Reusing existing demo book (scenario unchanged): $DEMO_HOME/data"
     return 0
@@ -1071,7 +1088,7 @@ demo_build_book() {
 
   demo_assert_safe_home rebuild
   rm -rf "$DEMO_HOME/data" "$DEMO_HOME/exports" "$DEMO_HOME/imports" "$DEMO_HOME/lightning" \
-    "$DEMO_HOME/demo-summary.json" "$DEMO_MANIFEST"
+    "$DEMO_HOME/demo-summary.json" "$DEMO_HOME/source-funds-seed.json" "$DEMO_MANIFEST"
   mkdir -p "$DEMO_HOME"
   echo "Building the demo book (a few minutes of regtest history)..."
   KASSIBER_REGTEST_DEMO_ROOT="$DEMO_HOME" py -m tests.integration.regtest_demo \
@@ -1082,6 +1099,7 @@ demo_build_book() {
   demo_refresh_live_rate
   demo_seed_btcpay
   demo_seed_lightning
+  demo_seed_source_funds
   demo_write_manifest "$checksum"
 }
 

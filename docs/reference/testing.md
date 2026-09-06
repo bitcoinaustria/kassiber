@@ -674,6 +674,20 @@ What `demo-up` does:
 - keeps the demo Core wallets loaded (`--keep-core-wallets`) so incremental
   syncs from the app keep seeing new activity.
 
+The embedded Lightning bootstrap funds its faucet from this demo's generated
+external actor when mature funds are low. This avoids relying on regtest block
+subsidies after the historical scenario has crossed many halvings. Standalone
+Lightning runs mine their own faucet funds; an explicit
+`KASSIBER_REGTEST_LIGHTNING_FUNDING_WALLET` selects a known regtest funding
+wallet for an older chain. Failed funding aborts immediately.
+
+Persistent demos also seed two explicitly synthetic source-of-funds cases:
+a reviewed Strike CSV purchase through its exchange withdrawal into the observed
+regtest wallet receipt, and a separate receipt whose origin evidence remains
+missing. The attached CSV and `exports/source-funds-synthetic.pdf` are generated
+test artifacts, not proof of a real exchange purchase. `source-funds-seed.json`
+records the case IDs; restarts reuse them and preserve manual demo edits.
+
 The `fulcrum` container is provisioned and exposed as the
 `bitcoin-electrum-regtest` backend row. The full-accounting demo assigns the
 active `treasury_2020`, `merchant_2022`, and `cold_2024` wallets to Fulcrum while
