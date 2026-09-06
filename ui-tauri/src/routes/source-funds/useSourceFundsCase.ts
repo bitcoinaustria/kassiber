@@ -76,7 +76,7 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
   );
   const [reportPurpose, setReportPurpose] = useState<
     "planned_exchange_sale" | "existing_transaction"
-  >(persistedDraft?.reportPurpose ?? "planned_exchange_sale");
+  >(persistedDraft?.reportPurpose ?? "existing_transaction");
   const [target, setTarget] = useState(initialTarget || persistedDraft?.target || "");
   const [targetAmount, setTargetAmount] = useState(
     persistedDraft?.targetAmount ?? "",
@@ -693,6 +693,7 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     openTxDetailById,
     // queries
     preview,
+    diagramQuery,
     report,
     coverageQuery,
     recipientsQuery,

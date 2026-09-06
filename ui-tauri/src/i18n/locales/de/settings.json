@@ -749,5 +749,11 @@
     "saveError": "Backend konnte nicht gespeichert werden.",
     "healthJustChecked": "gerade geprüft – ok",
     "healthJustAdded": "gerade hinzugefügt – ok"
+  },
+  "analysisNetwork": {
+    "title": "Lokale Analyse",
+    "label": "Standardnetzwerk für neue Untersuchungen",
+    "help": "Gilt, wenn eine importierte Datei keinen Netzwerkkontext hat. Bestehende Untersuchungen und Netzwerke der Verbindungen bleiben unverändert.",
+    "effective": "Netzwerk: {{network}}"
   }
 }

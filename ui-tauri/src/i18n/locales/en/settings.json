@@ -749,5 +749,11 @@
     "saveError": "Could not save backend.",
     "healthJustChecked": "just checked - ok",
     "healthJustAdded": "just added - ok"
+  },
+  "analysisNetwork": {
+    "title": "Local analysis",
+    "label": "Default network for new inspections",
+    "help": "Used when an imported file has no network context. Existing inspections and connection networks stay unchanged.",
+    "effective": "Network: {{network}}"
   }
 }

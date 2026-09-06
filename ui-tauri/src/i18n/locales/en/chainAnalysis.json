@@ -7,7 +7,7 @@
   "run": "Run",
   "running": "Investigating…",
   "subject": "Starting point",
-  "subjectPlaceholder": "Transaction ID, outpoint, address or wallet ID; empty for an overview",
+  "subjectPlaceholder": "Search by transaction ID, address, outpoint or wallet ID",
   "target": "Path target",
   "targetPlaceholder": "Transaction, outpoint, address or wallet",
   "mode": "Query type",
@@ -30,7 +30,7 @@
   "disclosed": "Disclosed evidence",
   "relations": "Reviewed custody relations",
   "hypotheses": "Ownership hypotheses",
-  "filters": "Filters",
+  "filters": "Advanced",
   "minAmount": "Minimum amount (msat)",
   "start": "From (UTC)",
   "end": "Until (UTC)",
@@ -199,7 +199,7 @@
   "workbench": {
     "clearSelection": "Clear selection",
     "graph": "Investigation",
-    "psbt": "PSBT lab",
+    "psbt": "Inspect a PSBT file",
     "datasets": "Attribution datasets",
     "observer": "Observer perspective",
     "owner": "Owner · local knowledge",
@@ -328,5 +328,7 @@
     "progressDeleted": "{{count}} rows removed",
     "assistantDataset": "Inspect local attribution dataset {{id}} using dataset tools. Explain provenance, version, visibility and limitations. Labels remain sourced claims, not ownership or taint evidence.",
     "assistantSource": "Help inspect the selected local attribution source using opaque token {{token}}. Use an on-device provider for file preview/import. Require validated content and explicit consent before importing; do not fetch external data."
-  }
+  },
+  "resultView": "Results",
+  "backToInvestigation": "Back to investigation"
 }

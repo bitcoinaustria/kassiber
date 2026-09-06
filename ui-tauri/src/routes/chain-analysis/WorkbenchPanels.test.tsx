@@ -11,7 +11,7 @@ import { DEFAULT_ANALYSIS_QUERY, type AnalysisNode, type AnalysisResult } from "
 import type { AnalysisTab } from "@/lib/chainAnalysisNavigation";
 import type { PsbtAnalysis } from "@/lib/chainAnalysisWorkbench";
 
-describe("result section tabs", () => {
+describe("result view selection", () => {
   const result: AnalysisResult = {
     schema_version: 1, snapshot_id: "snapshot-1234567890", query: DEFAULT_ANALYSIS_QUERY, summary: {},
     nodes: [], edges: [], findings: [], clusters: [], paths: [], frontier: [{ node_id: "tx:a", reason: "node_limit" }],
@@ -23,32 +23,24 @@ describe("result section tabs", () => {
       <ResultPanels result={result} tab={tab} setTab={() => {}} pickedSubject="" select={() => {}} setHighlighted={() => {}} reportError={() => {}} />
     </QueryClientProvider>,
   );
-  it("exposes one roving tab stop whose selected tab labels the panel", () => {
+  it("keeps all result views reachable through one labelled selector", () => {
     const html = render("patterns");
-    const tabs = html.match(/<button[^>]*role="tab"[^>]*>/g) ?? [];
-    expect(tabs).toHaveLength(4);
-    expect(html.match(/role="tablist"/g)).toHaveLength(1);
-    const selected = tabs.filter((tab) => tab.includes('aria-selected="true"'));
-    expect(selected).toHaveLength(1);
-    expect(selected[0]).toContain('tabindex="0"');
-    expect(tabs.filter((tab) => tab.includes('tabindex="-1"'))).toHaveLength(3);
-    const id = selected[0].match(/ id="([^"]+)"/)![1];
-    const controls = selected[0].match(/aria-controls="([^"]+)"/)![1];
-    expect(html).toContain(`<div class="p-4" role="tabpanel" id="${controls}" aria-labelledby="${id}">`);
-    // The canonical subview stays addressable inside the Findings section.
-    expect(html).toMatch(/<button[^>]*aria-pressed="true"[^>]*>Patterns/);
+    expect(html).not.toContain('role="tablist"');
+    expect(html).not.toContain('role="tab"');
+    expect(html).toContain('<option value="patterns" selected="">Patterns (1)</option>');
+    expect(html).toContain('aria-label="Patterns"');
     expect(html).toContain("Inputs converge");
+    for (const view of ["findings", "patterns", "clusters", "exposure", "paths", "coverage", "frontier", "entropy", "labels"]) {
+      expect(html).toContain(`value="${view}"`);
+    }
   });
-  it("maps deep-linked frontier and entropy tabs onto their sections without a second tablist", () => {
+  it("opens exact deep-linked expert views without a navigation hierarchy", () => {
     const frontier = render("frontier");
-    expect(frontier).toMatch(/<button[^>]*aria-selected="true"[^>]*>Coverage/);
-    expect(frontier).toMatch(/<button[^>]*aria-pressed="true"[^>]*>Frontier/);
+    expect(frontier).toContain('<option value="frontier" selected="">Frontier (1)</option>');
     expect(frontier).toContain("The node limit was reached.");
     const entropy = render("entropy");
-    expect(entropy).toMatch(/<button[^>]*aria-selected="true"[^>]*>Tools/);
-    expect(entropy.match(/role="tablist"/g)).toHaveLength(1);
-    const coverage = render("coverage");
-    expect(coverage).toContain("snapshot-1234567890");
+    expect(entropy).toContain('<option value="entropy" selected="">Entropy</option>');
+    expect(render("coverage")).toContain("snapshot-1234567890");
   });
 });
 

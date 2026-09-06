@@ -14,6 +14,11 @@ import type { PeriodKey } from "@/lib/period";
 type Lang = LanguageCode;
 type Currency = "btc" | "eur";
 export type DataMode = "real" | "regtest";
+export const ANALYSIS_NETWORKS = ["main", "test", "signet", "regtest"] as const;
+export type AnalysisNetwork = (typeof ANALYSIS_NETWORKS)[number];
+export function normalizeAnalysisNetwork(value: unknown): AnalysisNetwork {
+  return ANALYSIS_NETWORKS.includes(value as AnalysisNetwork) ? value as AnalysisNetwork : "main";
+}
 export type ThemePreference = "system" | "light" | "dark";
 export type NotificationTone = "info" | "success" | "warning" | "error";
 // Chart/table range shared by the Overview chart and the Transactions
@@ -172,6 +177,8 @@ export interface UiState {
   lang: Lang;
   currency: Currency;
   dataMode: DataMode;
+  /** Default for new offline inspections; never overrides observed network identity. */
+  analysisNetwork: AnalysisNetwork;
   theme: ThemePreference;
   appScale: number;
   hideSensitive: boolean;
@@ -240,6 +247,7 @@ export interface UiState {
   setLang: (lang: Lang) => void;
   setCurrency: (currency: Currency) => void;
   setDataMode: (dataMode: DataMode) => void;
+  setAnalysisNetwork: (network: AnalysisNetwork) => void;
   setTheme: (theme: ThemePreference) => void;
   setAppScale: (appScale: number) => void;
   increaseAppScale: () => void;
@@ -399,6 +407,7 @@ export function uiStatePartialForStorage(state: UiState) {
     lang: state.lang,
     currency: state.currency,
     dataMode: normalizeStoredDataMode(state.dataMode, state.identity),
+    analysisNetwork: normalizeAnalysisNetwork(state.analysisNetwork),
     theme: state.theme,
     hideSensitive: state.hideSensitive,
     clearClipboard: state.clearClipboard,
@@ -455,6 +464,7 @@ export const useUiStore = create<UiState>()(
       lang: "en",
       currency: "btc",
       dataMode: "real",
+      analysisNetwork: "main",
       theme: DEFAULT_THEME,
       appScale: DEFAULT_APP_SCALE,
       hideSensitive: false,
@@ -490,6 +500,7 @@ export const useUiStore = create<UiState>()(
         set((state) => ({
           dataMode: normalizeStoredDataMode(dataMode, state.identity),
         })),
+      setAnalysisNetwork: (network) => set({ analysisNetwork: normalizeAnalysisNetwork(network) }),
       setTheme: (theme) => set({ theme }),
       setAppScale: (appScale) =>
         set({ appScale: normalizeAppScale(appScale) }),
@@ -686,6 +697,7 @@ export const useUiStore = create<UiState>()(
           ...current,
           ...restored,
           dataMode,
+          analysisNetwork: normalizeAnalysisNetwork(restored.analysisNetwork ?? current.analysisNetwork),
           appScale: normalizeAppScale(restored.appScale ?? current.appScale),
           clearClipboard: restored.clearClipboard ?? current.clearClipboard,
           explorerSettings: {

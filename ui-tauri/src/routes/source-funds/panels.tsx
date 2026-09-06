@@ -1,3 +1,4 @@
+import { SourceFundsFlowGraph } from "./SourceFundsFlowGraph";
 import { findingTranslationKeys } from "./findingCopy";
 import { Trans, useTranslation } from "react-i18next";
 // Leaf panels of the source-of-funds workstation. Presentation only:
@@ -486,87 +487,9 @@ export function FlowPathPreview({
         ) : null}
       </div>
       {flow?.note && (
-        <p className="text-xs text-muted-foreground">{flow.note}</p>
+        <details className="text-xs text-muted-foreground"><summary className="cursor-pointer">{t("journey.flowLimits")}</summary><p className="mt-2">{flow.note}</p></details>
       )}
-      <div className="overflow-x-auto pb-1">
-        <div className="flex min-w-max items-stretch gap-2">
-          {levels.map((level, levelIndex) => {
-            const nodes = level.nodes.slice(0, 3);
-            const hidden = Math.max(0, level.nodes.length - nodes.length);
-            return (
-              <div
-                key={`${level.role ?? "level"}-${levelIndex}`}
-                className="flex items-center gap-2"
-              >
-                <div className="w-44 rounded-md border bg-background p-2">
-                  <div className="mb-2 text-2xs font-semibold uppercase text-muted-foreground">
-                    {pretty(level.role || "flow")}
-                  </div>
-                  <div className="space-y-1">
-                    {nodes.map((node) => {
-                      const transactionId = stringValue(node.transaction_id);
-                      const clickable =
-                        node.node_type === "transaction" &&
-                        Boolean(transactionId) &&
-                        Boolean(onOpenTransaction);
-                      const nodeClassName = [
-                        "block w-full rounded border px-2 py-1 text-left",
-                        node.deferred_privacy_hop
-                          ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
-                          : level.role === "target"
-                            ? "border-primary/35 bg-primary/5"
-                            : "bg-muted/25",
-                        clickable
-                          ? "cursor-pointer transition-colors hover:border-primary/50"
-                          : "",
-                      ].join(" ");
-                      const nodeContent = (
-                        <>
-                          <div className="truncate text-xs font-medium">
-                            {node.label || node.id}
-                          </div>
-                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                            {pretty(node.kind || node.node_type || "")}
-                            {node.amount != null
-                              ? ` · ${formatBtc(node.amount, node.asset || "BTC")}`
-                              : ""}
-                          </div>
-                        </>
-                      );
-                      return clickable ? (
-                        <button
-                          key={node.id}
-                          type="button"
-                          className={nodeClassName}
-                          onClick={() => onOpenTransaction?.(transactionId)}
-                          title={t("workstation.openTransactionDetails")}
-                        >
-                          {nodeContent}
-                        </button>
-                      ) : (
-                        <div key={node.id} className={nodeClassName}>
-                          {nodeContent}
-                        </div>
-                      );
-                    })}
-                    {hidden > 0 && (
-                      <div className="rounded border border-dashed px-2 py-1 text-xs text-muted-foreground">
-                        +{hidden} more
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {levelIndex < levels.length - 1 && (
-                  <ArrowRight
-                    className="size-4 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <SourceFundsFlowGraph flow={flow!} onOpenTransaction={onOpenTransaction} />
     </div>
   );
 }
@@ -979,7 +902,6 @@ export function GateRow({
   const blocker = finding.severity === "blocker";
   const rawHeadline = finding.next_step?.headline?.trim();
   const headline = copy.nextStep ? t(copy.nextStep, { defaultValue: rawHeadline ?? "" }) : rawHeadline;
-  const docAnchor = finding.next_step?.doc_anchor?.trim();
   const action = finding.next_step?.action?.trim();
   const actionLabel = action && ["open_source_creator", "open_link_review", "open_review_queue", "open_source", "open_transaction"].includes(action) ? t(`gapAction.${action}`, { defaultValue: action }) : undefined;
   return (
@@ -993,12 +915,10 @@ export function GateRow({
     >
       <div className="font-medium">{copy.title ? t(copy.title, { defaultValue: pretty(finding.code) }) : pretty(finding.code)}</div>
       <div className="mt-1 text-xs opacity-80">{copy.message ? t(copy.message, { defaultValue: finding.message }) : finding.message}</div>
-      {headline && (
+      {headline && (!onAction || !actionLabel || !copy.nextStep) && (
         <div className="mt-2 text-xs font-medium opacity-90">
           {t("gates.nextStep", { headline })}
-          {docAnchor && (
-            <span className="ml-1 opacity-70">{t("gates.seeDocs", { anchor: docAnchor })}</span>
-          )}
+
         </div>
       )}
       <div className="flex flex-wrap gap-3">

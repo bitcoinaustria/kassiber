@@ -9,6 +9,8 @@ import {
 } from "@/lib/chainAnalysis";
 
 const FILTER_KEYS = [
+  "observer",
+  "direction",
   "chain",
   "network",
   "depth",
@@ -87,36 +89,6 @@ export function QueryControls({
             }));
           }}
         />
-        {query.mode !== "overview" && (
-          <select
-            className="ca-select h-10"
-            aria-label={t("direction")}
-            value={query.direction}
-            onChange={(event) =>
-              update("direction", event.target.value as AnalysisQuery["direction"])
-            }
-          >
-            {(["both", "backward", "forward"] as const).map((item) => (
-              <option key={item} value={item}>
-                {t(item)}
-              </option>
-            ))}
-          </select>
-        )}
-        <select
-          className="ca-select h-10"
-          aria-label={t("observer")}
-          value={query.observer}
-          onChange={(event) =>
-            update("observer", event.target.value as AnalysisQuery["observer"])
-          }
-        >
-          {(["owner", "public", "disclosed"] as const).map((item) => (
-            <option key={item} value={item}>
-              {t(item)}
-            </option>
-          ))}
-        </select>
         <Button className="h-10" type="submit" disabled={busy}>
           <Play className="size-3.5" />
           {busy ? t("running") : t("run")}
@@ -135,6 +107,42 @@ export function QueryControls({
           )}
         </summary>
         <div className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {query.mode !== "overview" && (
+          <label className="ca-field">
+            {t("direction")}
+          <select
+            className="ca-select"
+            aria-label={t("direction")}
+            value={query.direction}
+            onChange={(event) =>
+              update("direction", event.target.value as AnalysisQuery["direction"])
+            }
+          >
+            {(["both", "backward", "forward"] as const).map((item) => (
+              <option key={item} value={item}>
+                {t(item)}
+              </option>
+            ))}
+          </select>
+          </label>
+        )}
+        <label className="ca-field">
+          {t("observer")}
+        <select
+          className="ca-select"
+          aria-label={t("observer")}
+          value={query.observer}
+          onChange={(event) =>
+            update("observer", event.target.value as AnalysisQuery["observer"])
+          }
+        >
+          {(["owner", "public", "disclosed"] as const).map((item) => (
+            <option key={item} value={item}>
+              {t(item)}
+            </option>
+          ))}
+        </select>
+        </label>
           <label className="ca-field">
             {t("mode")}
             <select

@@ -323,14 +323,6 @@ class _SourceFundsPdfBuilder:
         for index, item in enumerate(checklist, start=1):
             rows.append([index, item])
         story.append(self.table(rows, widths=(10, 150), compact=True, right_columns={0}))
-        deferred = list(context.get("deferred") or [])
-        if deferred:
-            story.append(
-                self.p(
-                    "Deferred for later templates: " + "; ".join(str(item) for item in deferred) + ".",
-                    "small",
-                )
-            )
         return story
 
     def review_gates(self) -> list[Any]:
@@ -492,7 +484,7 @@ class _SourceFundsPdfBuilder:
         ]
         if source_nodes:
             detail_rows: list[list[Any]] = [
-                ["Date", "Source", "Type", "Amount", "Asset", "Fiat value", "Review"]
+                ["Date", "Source", "Type", "Allocated", "Asset", "Original fiat", "Review"]
             ]
             for node in sorted(source_nodes, key=lambda item: str(item.get("acquired_at") or "")):
                 detail_rows.append(
@@ -514,6 +506,7 @@ class _SourceFundsPdfBuilder:
                 [
                     self.spacer(4),
                     self.p("Root Source Details", "h2"),
+                    self.p("Original fiat values cover each full source, not just the allocated amount.", "small"),
                     self.table(
                         detail_rows,
                         widths=(20, 50, 26, 26, 13, 24, 17),
@@ -785,7 +778,7 @@ class _SourceFundsPdfBuilder:
             if node.get("node_type") == "source":
                 details = []
                 if node.get("fiat_value") not in (None, ""):
-                    details.append(_fiat(node.get("fiat_value"), node.get("fiat_currency")))
+                    details.append("Original source fiat: " + _fiat(node.get("fiat_value"), node.get("fiat_currency")))
                 if node.get("description"):
                     details.append(node.get("description", ""))
                 rows.append(
@@ -884,7 +877,7 @@ class _SourceFundsPdfBuilder:
         return story
 
     def limitations(self) -> list[Any]:
-        return [
+        story = [
             self.p("Limitations", "h1"),
             self.p(
                 "Kassiber reports reviewed local evidence. It does not certify ownership, "
@@ -893,6 +886,12 @@ class _SourceFundsPdfBuilder:
             self.p("Opening balances are rendered as attested prior-history stops, not as real root sources."),
             self.p("Suggested links and unconfirmed chain observations are never used as PDF proof."),
         ]
+        if (self.report.get("simplified_flow") or {}).get("deferred_privacy_hops"):
+            story.append(self.p(
+                "Reviewed CoinJoin/PayJoin boundaries are shown, but this report does not "
+                "trace ownership through them."
+            ))
+        return story
 
     def _section_plan(self) -> list[tuple[str | None, str, Any]]:
         # (section_key, contents title, builder) — keyed sections can be

@@ -8,18 +8,20 @@ Editing controls requires **Run**. PSBT and dataset links do not run a graph
 query. None of these entry actions contacts an explorer, syncs a wallet,
 acquires evidence or starts an entropy job.
 
-The query bar holds the starting point, direction, perspective and **Run**.
-Query type, path target, chain/network, budgets, time and amount bounds and the
-relation/hypothesis layers sit under **Filters**; a required filter that fails
-validation reopens the disclosure. A strip above the graph states what the
-*executed* query used: perspective, effective layers (the public observer never
-sees custody relations, even when requested), domain, coverage and frontier;
-edited but unrun controls show a separate notice. Node and edge counts and the
-full snapshot ID sit under Coverage. Results are grouped into Findings
-(findings, patterns, clusters, label exposure), Paths, Coverage (coverage,
-frontier) and Tools (entropy, labels). Deep links still address the individual
-subview. The inspector appears only for a selection, and
-the exactly resolved starting point carries a dotted ring in the graph.
+The query bar holds the starting point and **Run**. Perspective, direction,
+query type, path target, chain/network filters, budgets and optional layers sit
+under **Advanced**. Invalid hidden fields reopen the disclosure before browser
+validation focuses them. The executed-context strip shows effective visibility,
+domain and coverage, independently of edited controls. One result selector opens
+findings, paths, patterns, clusters, attribution, coverage or advanced tools;
+canonical deep links retain their exact subview. The inspector appears only
+for a selection. **Tools** opens PSBT inspection, attribution datasets, saved
+investigations, explicit evidence acquisition and exports.
+
+Settings → Bitcoin → Local analysis stores the default PSBT network. An explicit
+handoff network takes precedence, and each inspection pins its network at mount;
+changing the default never relabels existing results. The graph's chain/network
+filters remain query scope, not permission to access any backend.
 
 [Privacy Mirror](privacy-mirror.md) is the concise public-observer summary of
 this same engine. `analyze_snapshot` composes an immutable canonical index after
@@ -27,6 +29,12 @@ observer projection; Mirror adds personal relevance, executed-check coverage and
 bounded solver summaries. It has no separate graph, detector or grade. Deep
 links preserve the physical subject and observer/domain; PSBT and dataset tools
 stay in this workbench.
+
+Graph interaction lives in `ui-tauri/src/components/evidence-graph/` and is shared
+with Source Funds. Route adapters provide labels, visual edge styles and exact
+local identities; the renderer does not fetch data or interpret ownership,
+heuristics or provenance. Chain Analysis keeps its existing observation adapter;
+Source Funds supplies reviewed report edges independently.
 
 ## Investigating a movement
 

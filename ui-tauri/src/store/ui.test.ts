@@ -6,6 +6,7 @@ import {
   MAX_APP_SCALE,
   MIN_APP_SCALE,
   normalizeAppScale,
+  normalizeAnalysisNetwork,
   uiStatePartialForStorage,
   useUiStore,
 } from "./ui";
@@ -151,5 +152,27 @@ describe("UI persistence", () => {
     expect(normalizeAppScale(0.1)).toBe(MIN_APP_SCALE);
     expect(normalizeAppScale(2)).toBe(MAX_APP_SCALE);
     expect(normalizeAppScale("large")).toBe(DEFAULT_APP_SCALE);
+  });
+});
+
+describe("offline analysis network preference", () => {
+  it("persists the chosen network without changing data mode or connections", () => {
+    const state = useUiStore.getState();
+    const dataMode = state.dataMode;
+    const identity = state.identity;
+    state.setAnalysisNetwork("regtest");
+    expect(uiStatePartialForStorage(useUiStore.getState()).analysisNetwork).toBe("regtest");
+    expect(useUiStore.getState().dataMode).toBe(dataMode);
+    expect(useUiStore.getState().identity).toBe(identity);
+    state.setAnalysisNetwork("main");
+  });
+
+  it("rejects unknown restored networks and preserves explicit valid contexts", () => {
+    for (const network of ["main", "test", "signet", "regtest"]) {
+      expect(normalizeAnalysisNetwork(network)).toBe(network);
+    }
+    for (const invalid of [undefined, null, "bitcoin", "https://example.invalid", {}]) {
+      expect(normalizeAnalysisNetwork(invalid)).toBe("main");
+    }
   });
 });

@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { Download, Eye, Network, Sparkles, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Network, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -106,16 +106,8 @@ function ExecutedQueryStrip({
       <span title={t("observer")} className="font-medium text-foreground">
         {t(query.observer)}
       </span>
-      <span>
-        {t(layers.relations ? "layerOn" : "layerOff", {
-          layer: t("relations"),
-        })}
-      </span>
-      <span>
-        {t(layers.hypotheses ? "layerOn" : "layerOff", {
-          layer: t("hypotheses"),
-        })}
-      </span>
+      {layers.relations && <span>{t("relations")}</span>}
+      {layers.hypotheses && <span>{t("hypotheses")}</span>}
       {domain && <span className="font-mono">{domain}</span>}
       <button
         type="button"
@@ -131,10 +123,6 @@ function ExecutedQueryStrip({
           : result.coverage.complete
             ? t("complete")
             : t("incomplete")}
-      </button>
-      <button type="button" onClick={() => setTab("frontier")}>
-        <span className="font-mono">{result.frontier.length}</span>{" "}
-        {t("frontier")}
       </button>
     </div>
   );
@@ -156,6 +144,7 @@ export function ChainAnalysisWorkbench({
   const [view, setView] = useState<"graph" | "table">("graph");
   const [tab, setTab] = useState<AnalysisTab>(initialSearch.tab ?? "findings");
   const [showAcquire, setShowAcquire] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
   const [workspace, setWorkspace] = useState<AnalysisWorkspace>(initialSearch.workspace ?? "graph");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -288,17 +277,26 @@ export function ChainAnalysisWorkbench({
           <h1 className="text-2xl font-semibold tracking-tight">
             {t("title")}
           </h1>
-          <nav className="flex max-w-full gap-1 overflow-x-auto rounded-lg border bg-card p-1" aria-label={t("title")}>
-            {(["graph", "psbt", "datasets"] as const).map(item => <Button key={item} size="sm" variant={workspace === item ? "secondary" : "ghost"} aria-pressed={workspace === item} onClick={() => setWorkspace(item)}>{t(`workbench.${item}`)}</Button>)}
-          </nav>
+          {workspace !== "graph" && (
+            <Button variant="ghost" size="sm" onClick={() => setWorkspace("graph")}>
+              <ArrowLeft className="size-4" />{t("backToInvestigation")}
+            </Button>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/privacy-mirror">
-              <Eye className="size-4" />
-              {t("privacy")}
-            </Link>
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="outline" size="sm">{t("tools")}<ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setWorkspace("psbt")}>{t("workbench.psbt")}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setWorkspace("datasets")}>{t("workbench.datasets")}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => { setWorkspace("graph"); setShowSaved(true); setShowAcquire(false); }}>{t("case.title")}</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => { setWorkspace("graph"); setShowAcquire(true); setShowSaved(false); }}>{t("acquire.title")}</DropdownMenuItem>
+              <DropdownMenuItem disabled={workspace !== "graph" || !result} onSelect={() => void exportResult("json")}>{t("exportJson")}</DropdownMenuItem>
+              <DropdownMenuItem disabled={workspace !== "graph" || !result} onSelect={() => void exportResult("csv")}>{t("exportCsv")}</DropdownMenuItem>
+              <DropdownMenuItem asChild><Link to="/privacy-mirror">{t("privacy")}</Link></DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {workspace === "graph" && result && (
           <Button
             variant="outline"
             size="sm"
@@ -311,6 +309,7 @@ export function ChainAnalysisWorkbench({
             <Sparkles className="size-4" />
             {t("ask")}
           </Button>
+          )}
         </div>
       </header>
       {error && (
@@ -332,6 +331,24 @@ export function ChainAnalysisWorkbench({
       <div hidden={workspace !== "psbt"}><PsbtPanel initialNetwork={initialSearch.network} onError={reportError} /></div>
       <div hidden={workspace !== "datasets"}><DatasetsPanel onError={reportError} /></div>
       <div hidden={workspace !== "graph"} className="space-y-3">
+      {showSaved && (
+        <section className="rounded-lg border" aria-label={t("case.title")}>
+          <div className="flex items-center justify-between px-4 py-3">
+            <h2 className="text-sm font-medium">{t("case.title")}</h2>
+            <Button variant="ghost" size="icon" aria-label={t("dismiss")} onClick={() => setShowSaved(false)}><X className="size-4" /></Button>
+          </div>
+          <SavedInvestigations result={result} onLoad={load} onError={reportError} onNotice={setNotice} />
+        </section>
+      )}
+      {showAcquire && (
+        <section className="rounded-lg border" aria-label={t("acquire.title")}>
+          <div className="flex items-center justify-between px-4 py-3">
+            <h2 className="text-sm font-medium">{t("acquire.title")}</h2>
+            <Button variant="ghost" size="icon" aria-label={t("dismiss")} onClick={() => setShowAcquire(false)}><X className="size-4" /></Button>
+          </div>
+          <AcquisitionPanel query={query} onError={reportError} onAcquired={() => setHistorical(true)} />
+        </section>
+      )}
       <QueryControls
         query={query}
         setQuery={setQuery}
@@ -359,22 +376,7 @@ export function ChainAnalysisWorkbench({
               >
                 {t("table")}
               </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="ghost">
-                    <Download className="size-3.5" />
-                    {t("export")}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => void exportResult("json")}>
-                    {t("exportJson")}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => void exportResult("csv")}>
-                    {t("exportCsv")}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+
             </div>
           </div>
           {historical && (
@@ -513,33 +515,6 @@ export function ChainAnalysisWorkbench({
           {t("empty")}
         </div>
       )}
-      <details className="rounded-lg border">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
-          {t("case.title")}
-        </summary>
-        <SavedInvestigations
-          result={result}
-          onLoad={load}
-          onError={reportError}
-          onNotice={setNotice}
-        />
-      </details>
-      <details
-        className="rounded-lg border"
-        open={showAcquire}
-        onToggle={(event) => setShowAcquire(event.currentTarget.open)}
-      >
-        <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
-          {t("acquire.title")}
-        </summary>
-        {showAcquire && (
-          <AcquisitionPanel
-            query={query}
-            onError={reportError}
-            onAcquired={() => setHistorical(true)}
-          />
-        )}
-      </details>
       </div>
     </div>
   );

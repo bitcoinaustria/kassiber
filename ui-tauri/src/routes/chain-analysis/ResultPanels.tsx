@@ -1,4 +1,4 @@
-import { useId, useRef, type KeyboardEvent } from "react";
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,8 +10,6 @@ import {
 } from "@/lib/chainAnalysis";
 import {
   ANALYSIS_SECTIONS,
-  analysisSection,
-  type AnalysisSection,
   type AnalysisTab,
 } from "@/lib/chainAnalysisNavigation";
 import { EvidenceDetails, Fact } from "./EvidenceDetails";
@@ -19,7 +17,7 @@ import { EntropyPanel } from "./EntropyPanel";
 import { LabelsPanel } from "./LabelsPanel";
 import type { GraphSelection } from "./InvestigationGraph";
 
-const SECTIONS = Object.keys(ANALYSIS_SECTIONS) as AnalysisSection[];
+const RESULT_VIEWS = Object.values(ANALYSIS_SECTIONS).flat();
 
 function tabCount(result: AnalysisResult, tab: AnalysisTab): number | undefined {
   switch (tab) {
@@ -60,32 +58,6 @@ export function ResultPanels({
   const { t } = useTranslation("chainAnalysis");
   const { t: tm } = useTranslation("privacyMirror");
   const baseId = useId();
-  const tabButtons = useRef<Partial<Record<AnalysisSection, HTMLButtonElement | null>>>({});
-  const section = analysisSection(tab);
-  const subviews = ANALYSIS_SECTIONS[section];
-  const tabId = (item: AnalysisSection) => `${baseId}-tab-${item}`;
-  const panelId = `${baseId}-panel`;
-  // One tab stop: arrows move selection and focus together (WAI-ARIA tabs pattern).
-  const activate = (item: AnalysisSection) => {
-    setTab(ANALYSIS_SECTIONS[item][0]);
-    tabButtons.current[item]?.focus();
-  };
-  const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    const index = SECTIONS.indexOf(section);
-    const next =
-      event.key === "ArrowRight"
-        ? (index + 1) % SECTIONS.length
-        : event.key === "ArrowLeft"
-          ? (index + SECTIONS.length - 1) % SECTIONS.length
-          : event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? SECTIONS.length - 1
-              : -1;
-    if (next < 0) return;
-    event.preventDefault();
-    activate(SECTIONS[next]);
-  };
   const label = (item: AnalysisTab) =>
     item === "labels" ? t("labels.title") : t(item);
   const inspect = (ids: string[]) => {
@@ -117,62 +89,16 @@ export function ResultPanels({
   );
   return (
     <section className="overflow-hidden rounded-xl border bg-card">
-      <div className="flex overflow-auto border-b px-2" role="tablist" aria-label={t("findings")}>
-        {SECTIONS.map((item) => {
-          const selected = section === item;
-          const count = ANALYSIS_SECTIONS[item]
-            .map((sub) => tabCount(result, sub))
-            .filter((value): value is number => value !== undefined);
-          return (
-            <button
-              key={item}
-              ref={(element) => {
-                tabButtons.current[item] = element;
-              }}
-              id={tabId(item)}
-              className="ca-tab"
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              aria-controls={panelId}
-              tabIndex={selected ? 0 : -1}
-              onKeyDown={onTabKeyDown}
-              onClick={() => activate(item)}
-            >
-              {t(item)}
-              {count.length > 0 && (
-                <span className="ml-1.5 font-mono text-[10px] opacity-60">
-                  {count.reduce((sum, value) => sum + value, 0)}
-                </span>
-              )}
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+        <label className="text-sm font-medium" htmlFor={baseId}>{t("resultView")}</label>
+        <select id={baseId} className="ca-select max-w-full" value={tab} onChange={(event) => setTab(event.target.value as AnalysisTab)}>
+          {RESULT_VIEWS.map((item) => {
+            const count = tabCount(result, item);
+            return <option key={item} value={item}>{label(item)}{count === undefined ? "" : ` (${count})`}</option>;
+          })}
+        </select>
       </div>
-      <div className="p-4" role="tabpanel" id={panelId} aria-labelledby={tabId(section)}>
-        {subviews.length > 1 && (
-          <div className="mb-4 flex flex-wrap gap-1" role="group" aria-label={t(section)}>
-            {subviews.map((item) => {
-              const count = tabCount(result, item);
-              return (
-                <button
-                  key={item}
-                  className="ca-chip"
-                  type="button"
-                  aria-pressed={tab === item}
-                  onClick={() => setTab(item)}
-                >
-                  {label(item)}
-                  {count !== undefined && (
-                    <span className="ml-1 font-mono text-[10px] opacity-70">
-                      {count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
+      <div className="p-4" role="region" aria-label={label(tab)}>
         {tab === "findings" &&
           (result.findings.length ? (
             <div className="space-y-3">{result.findings.map(findingCard)}</div>

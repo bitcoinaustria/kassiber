@@ -468,8 +468,8 @@
     "viewTransactionDetails": "View transaction details",
     "whatNeedsExplaining": "What needs explaining?",
     "workLedger": "Work ledger",
-    "everyDossierIsAnchoredTo": "Every dossier is anchored to one transaction. Kassiber traces history backwards from it and disclosure stays scoped to the amount you enter — nothing else.",
-    "everythingBelowIsExactlyWhat": "Review the disclosure before export. Choose its scope, hide individual transactions and adjust report sections for the recipient.",
+    "everyDossierIsAnchoredTo": "Select the transaction whose funds you want to explain.",
+    "everythingBelowIsExactlyWhat": "Check the information and evidence you will disclose.",
     "kassiberProvesEveryHopIt": "Kassiber examines existing wallet observations, payment hashes and reviewed links. Suggestions remain distinct from verified evidence.",
     "level1IsTheReport": "Level 1 is the report target; each further level moves one reviewed hop backwards towards the root sources. This is the granular table the exported PDF renders.",
     "noMatchedLinksYetAssemble": "No matched links yet. Assemble History looks for transaction input/output structure, payment hashes, same-id transfers, reviewed pairs, and provider ids.",
@@ -630,5 +630,42 @@
         "openingBalanceIsAnAttestedPriorhistoryStop,": "Opening balance is an attested prior-history stop, not a fully traced root source."
       }
     }
+  },
+  "journey": {
+    "description": "Choose the funds. Review their origin. Export the evidence.",
+    "target": "Choose funds",
+    "trace": "Trace & resolve",
+    "disclose": "Review report",
+    "export": "Export",
+    "back": "Back",
+    "changeTarget": "Change",
+    "targetOptions": "Planned sale or transaction reference",
+    "traceTitle": "Where did these funds come from?",
+    "traceHint": "Follow the recorded route. Complete the evidence where the history stops.",
+    "resolveWithAssistant": "Resolve missing evidence",
+    "manualTools": "Manual tools",
+    "openQuestions": "Open questions",
+    "traceTarget": "Trace these funds",
+    "openPreview": "Review the report",
+    "approvePreview": "Confirm preview & continue",
+    "moreNodes": "Show {{count}} more",
+    "lessNodes": "Show fewer",
+    "previewDetails": "Transaction and disclosure details",
+    "reportOptions": "Adjust report",
+    "exportTitle": "Your source-of-funds report",
+    "exportHint": "Save the reviewed PDF, with an optional evidence bundle.",
+    "targetError": "This target could not be checked. Verify the transaction reference and amount, or retry.",
+    "previewError": "The report preview could not be rendered. Retry before confirming it.",
+    "retry": "Retry",
+    "flowLimits": "What this route establishes",
+    "resolveQuestions": "Resolve open questions",
+    "roles": {
+      "target": "Selected funds",
+      "upstream": "Earlier movement",
+      "source": "Origin",
+      "privacy_boundary": "Unresolved privacy boundary",
+      "flow": "Movement"
+    },
+    "reviewWithAssistant": "Review with assistant"
   }
 }

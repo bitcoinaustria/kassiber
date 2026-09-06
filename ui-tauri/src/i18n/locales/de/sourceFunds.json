@@ -468,8 +468,8 @@
     "viewTransactionDetails": "Transaktionsdetails ansehen",
     "whatNeedsExplaining": "Was soll erklärt werden?",
     "workLedger": "Offene Prüfpunkte",
-    "everyDossierIsAnchoredTo": "Jeder Fall beginnt bei einer Transaktion. Kassiber verfolgt ihre Historie zurück und begrenzt den Bericht auf den gewählten Betrag.",
-    "everythingBelowIsExactlyWhat": "Prüfe die Offenlegung vor dem Export. Wähle den Umfang, blende einzelne Transaktionen aus und passe die Berichtsabschnitte an den Empfänger an.",
+    "everyDossierIsAnchoredTo": "Wähle die Transaktion, deren Mittel du nachweisen möchtest.",
+    "everythingBelowIsExactlyWhat": "Prüfe die Angaben und Belege, die du offenlegen möchtest.",
     "kassiberProvesEveryHopIt": "Kassiber wertet vorhandene Wallet-Beobachtungen, Zahlungshashes und geprüfte Verknüpfungen aus. Vorschläge und bestätigte Nachweise bleiben unterscheidbar.",
     "level1IsTheReport": "Ebene 1 ist die Zieltransaktion. Jede weitere Ebene folgt einer geprüften Verknüpfung zurück zu den ursprünglichen Quellen. Diese Tabelle erscheint auch im exportierten PDF.",
     "noMatchedLinksYetAssemble": "Noch keine passenden Verknüpfungen. Die Historienprüfung berücksichtigt Ein- und Ausgänge, Zahlungshashes, Transaktionsidentitäten, geprüfte Paare und Anbieterreferenzen.",
@@ -630,5 +630,42 @@
         "openingBalanceIsAnAttestedPriorhistoryStop,": "Der Anfangsbestand bestätigt einen Endpunkt der früheren Historie. Er ist keine vollständig nachvollzogene Ursprungsquelle."
       }
     }
+  },
+  "journey": {
+    "description": "Betrag auswählen. Herkunft prüfen. Nachweis exportieren.",
+    "target": "Betrag auswählen",
+    "trace": "Herkunft klären",
+    "disclose": "Bericht prüfen",
+    "export": "Exportieren",
+    "back": "Zurück",
+    "changeTarget": "Ändern",
+    "targetOptions": "Geplanter Verkauf oder Transaktionsreferenz",
+    "traceTitle": "Woher stammen diese Mittel?",
+    "traceHint": "Folge dem erfassten Weg. Ergänze die Nachweise dort, wo die Historie endet.",
+    "resolveWithAssistant": "Fehlende Nachweise klären",
+    "manualTools": "Manuelle Werkzeuge",
+    "openQuestions": "Offene Fragen",
+    "traceTarget": "Herkunft nachvollziehen",
+    "openPreview": "Bericht prüfen",
+    "approvePreview": "Vorschau bestätigen und weiter",
+    "moreNodes": "{{count}} weitere anzeigen",
+    "lessNodes": "Weniger anzeigen",
+    "previewDetails": "Transaktions- und Offenlegungsdetails",
+    "reportOptions": "Bericht anpassen",
+    "exportTitle": "Dein Mittelherkunftsnachweis",
+    "exportHint": "Speichere das geprüfte PDF und bei Bedarf das Belegpaket.",
+    "targetError": "Dieses Ziel konnte nicht geprüft werden. Prüfe Transaktionsreferenz und Betrag oder versuche es erneut.",
+    "previewError": "Die Berichtsvorschau konnte nicht erstellt werden. Lade sie vor der Bestätigung erneut.",
+    "retry": "Erneut prüfen",
+    "flowLimits": "Aussagekraft dieses Wegs",
+    "resolveQuestions": "Offene Fragen klären",
+    "roles": {
+      "target": "Gewählte Mittel",
+      "upstream": "Vorherige Bewegung",
+      "source": "Ursprung",
+      "privacy_boundary": "Ungeklärte Privacy-Grenze",
+      "flow": "Bewegung"
+    },
+    "reviewWithAssistant": "Mit Assistent prüfen"
   }
 }

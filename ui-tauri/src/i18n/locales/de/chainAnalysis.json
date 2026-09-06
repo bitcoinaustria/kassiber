@@ -7,7 +7,7 @@
   "run": "Ausführen",
   "running": "Wird untersucht…",
   "subject": "Ausgangspunkt",
-  "subjectPlaceholder": "Transaktions-ID, Outpoint, Adresse oder Wallet-ID; leer für eine Übersicht",
+  "subjectPlaceholder": "Transaktions-ID, Adresse, Outpoint oder Wallet-ID suchen",
   "target": "Ziel des Pfads",
   "targetPlaceholder": "Transaktion, Outpoint, Adresse oder Wallet",
   "mode": "Abfrageart",
@@ -30,7 +30,7 @@
   "disclosed": "Offengelegte Belege",
   "relations": "Geprüfte Verwahrungsbeziehungen",
   "hypotheses": "Eigentumshypothesen",
-  "filters": "Filter",
+  "filters": "Erweitert",
   "minAmount": "Mindestbetrag (msat)",
   "start": "Ab (UTC)",
   "end": "Bis (UTC)",
@@ -199,7 +199,7 @@
   "workbench": {
     "clearSelection": "Auswahl entfernen",
     "graph": "Untersuchung",
-    "psbt": "PSBT-Prüfung",
+    "psbt": "PSBT-Datei prüfen",
     "datasets": "Zuordnungsdatensätze",
     "observer": "Beobachterperspektive",
     "owner": "Eigentümer · lokales Wissen",
@@ -328,5 +328,7 @@
     "progressDeleted": "{{count}} Zeilen entfernt",
     "assistantDataset": "Prüfe den lokalen Zuordnungsdatensatz {{id}} mit den Datensatzwerkzeugen. Erkläre Herkunft, Version, Sichtbarkeit und Grenzen. Labels bleiben Quellenbehauptungen und belegen weder Eigentum noch Taint.",
     "assistantSource": "Hilf bei der Prüfung der ausgewählten lokalen Zuordnungsquelle mit dem opaken Token {{token}}. Verwende einen lokalen Provider für Dateivorschau und Import. Verlange validierten Inhalt und ausdrückliche Zustimmung vor dem Import; rufe keine externen Daten ab."
-  }
+  },
+  "resultView": "Ergebnisse",
+  "backToInvestigation": "Zurück zur Untersuchung"
 }

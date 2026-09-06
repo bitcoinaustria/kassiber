@@ -8,18 +8,23 @@ import { isFilePickerAvailable, pickChainAnalysisSource, type AnalysisSourceSele
 import { DEFAULT_ANALYSIS_QUERY, formatAnalysisAmount } from "@/lib/chainAnalysis";
 import { payjoinOptions, psbtAssistantContext, type PsbtAnalysis, type PsbtComparison } from "@/lib/chainAnalysisWorkbench";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
-import { useUiStore } from "@/store/ui";
+import { ANALYSIS_NETWORKS, type AnalysisNetwork, useUiStore } from "@/store/ui";
 import { EntropyPanel } from "./EntropyPanel";
 import { CodeList, FeatureDetails, StructuredValue } from "./FeatureDetails";
 import { Fact } from "./EvidenceDetails";
 
 export function PsbtPanel({ onError, initialNetwork }: { onError: (value: unknown) => void; initialNetwork?: string }) {
   const { t } = useTranslation("chainAnalysis");
+  const { t: settingsT } = useTranslation("settings");
   const boundary = useContext(DaemonScopeContext);
   const assistant = useContext(AssistantSessionContext);
   const [before, setBefore] = useState<AnalysisSourceSelection | null>(null);
   const [after, setAfter] = useState<AnalysisSourceSelection | null>(null);
-  const [network, setNetwork] = useState(() => initialNetwork && ["main", "test", "signet", "regtest"].includes(initialNetwork) ? initialNetwork : "main");
+  // Pin the context for this inspection. A later Settings change must not
+  // relabel selected files, completed results, or an in-flight entropy job.
+  const [network] = useState(() => ANALYSIS_NETWORKS.includes(initialNetwork as AnalysisNetwork)
+    ? initialNetwork as AnalysisNetwork
+    : useUiStore.getState().analysisNetwork);
   const [payjoin, setPayjoin] = useState(false);
   const [payment, setPayment] = useState("0");
   const [feeOutput, setFeeOutput] = useState("");
@@ -135,26 +140,9 @@ export function PsbtPanel({ onError, initialNetwork }: { onError: (value: unknow
     {!isFilePickerAvailable && <p className="text-xs">
       {t("workbench.pickerUnavailable")}
       </p>}
-    <div className="flex flex-wrap items-center gap-4">
-      <label className="ca-field">
-        {t("network")}
-        <select
-          className="ca-input"
-          disabled={busy}
-          value={network}
-          onChange={e => {
-              setNetwork(e.target.value);
-              setEntropySide(null);
-          }}>
-          {["main", "test", "signet", "regtest"].map(n => <option key={n}>
-            {n}
-            </option>)}
-          </select>
-        </label>
-      <p className="max-w-xl text-xs text-muted-foreground">
-        {t("psbt.networkHelp")}
-        </p>
-      </div>
+    <p className="text-xs text-muted-foreground" title={t("psbt.networkHelp")}>
+      {settingsT("analysisNetwork.effective", { network })}
+    </p>
     <details className="rounded-lg border p-4">
       <summary className="cursor-pointer text-sm font-medium">
         {t("psbt.payjoin")}
