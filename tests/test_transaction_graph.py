@@ -3975,8 +3975,8 @@ class TransactionGraphTest(unittest.TestCase):
         self._utxo("wallet-b", ADDR_B, txid, 0, network="testnet")
         self._utxo("wallet-b", ADDR_A, previous, 0, network="testnet")
         self.conn.execute(
-            "UPDATE wallet_utxos SET spent_by = ?, block_height = 2_000_000",
-            (spender,),
+            "UPDATE wallet_utxos SET spent_by = ?, block_height = ?",
+            (spender, 2_000_000),
         )
         self._tx("inventory-domain-source", "wallet-a", "outbound", 100_000_000, txid, {
             "txid": txid,
@@ -4056,7 +4056,7 @@ class TransactionGraphTest(unittest.TestCase):
             "status": {"confirmed": True, "block_height": 800_000},
         })
         self._utxo("wallet-b", ADDR_A, previous, 0)
-        self.conn.execute("UPDATE wallet_utxos SET block_height = 800_001")
+        self.conn.execute("UPDATE wallet_utxos SET block_height = ?", (800_001,))
         self.assertNotIn("prevoutBlockHeight", self._graph("height-conflict-source")["inputs"][0])
 
     def test_local_graph_reads_reuse_valid_reference_cache_without_egress_or_authority(self):
