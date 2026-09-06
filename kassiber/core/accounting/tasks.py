@@ -10,7 +10,8 @@ from uuid import uuid4
 
 from ...errors import AppError
 from . import bank, ledger, posting_batch, projection, task_projection
-from .task_schema import ensure_schema
+# Public tasks API re-export used by task fixtures.
+from .task_schema import ensure_schema as ensure_schema
 
 READ_ACTIONS = frozenset({'task-list', 'task-get', 'task-preview', 'task-amend-preview', 'task-projection-assign-preview', 'rule-list'})
 WRITE_ACTIONS = frozenset({'task-create', 'task-apply', 'task-cancel', 'task-amend', 'task-source-assign', 'rule-create', 'rule-revoke'})

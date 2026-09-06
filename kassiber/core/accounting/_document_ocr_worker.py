@@ -69,6 +69,8 @@ def bounded_run(args: list[str], content: bytes, limit: int, *, timeout: float =
             process.stdin.write(content)
             process.stdin.close()
         except (BrokenPipeError, OSError):
+            # A parser that exits or is killed may close stdin early; the
+            # reader/wait path below owns output validation and exit status.
             pass
     writer = threading.Thread(target=feed, daemon=True)
     writer.start()
@@ -96,6 +98,8 @@ def main():
         if sys.platform != "darwin":
             resource.setrlimit(resource.RLIMIT_AS, (768 * 1024**2, 768 * 1024**2))
     except (ImportError, OSError, ValueError):
+        # OS resource caps are best effort; the parent still enforces a
+        # deadline/process-group kill and this worker bounds input/output.
         pass
     try:
         tesseract, renderer, media, language, selection = sys.argv[1:]
