@@ -252,4 +252,6 @@ manager.shutdown()
         try:
             os.killpg(pid, signal.SIGKILL)
         except ProcessLookupError:
+            # Successful shutdown already removed the group; cleanup is only
+            # a safety net when the assertion above fails.
             pass
