@@ -18,6 +18,7 @@ from ..backends import (
 from ..db import get_setting
 from ..errors import AppError
 from ..msat import dec, msat_to_btc
+from ..tax_policy import build_tax_policy
 from .journal_markers import (
     MARKER_ALT_IN,
     MARKER_ALT_OUT,
@@ -1154,6 +1155,7 @@ def build_profiles_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             p.tax_country,
             p.tax_long_term_days,
             p.gains_algorithm,
+            p.cost_basis_pool_scope,
             p.last_processed_at,
             p.created_at,
             COUNT(DISTINCT a.id) AS account_count,
@@ -1182,6 +1184,10 @@ def build_profiles_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
                 "taxCountry": row["tax_country"],
                 "taxLongTermDays": int(row["tax_long_term_days"] or 0),
                 "gainsAlgorithm": row["gains_algorithm"],
+                "costBasisPoolScope": row["cost_basis_pool_scope"],
+                "allowedCostBasisPoolScopes": list(
+                    build_tax_policy(row).allowed_cost_basis_pool_scopes
+                ),
                 "accounts": int(row["account_count"] or 0),
                 "wallets": int(row["wallet_count"] or 0),
                 "lastOpened": (

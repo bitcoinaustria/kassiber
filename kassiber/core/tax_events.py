@@ -8,7 +8,8 @@ from typing import Any, Literal, Mapping, Optional, Sequence
 from ..msat import msat_to_btc
 from ..transfers import detect_unscoped_transfer_review_ids, onchain_transfer_scope
 from . import pricing
-from .austrian import infer_outbound_regimes, infer_regime_from_timestamp, resolve_pool_id
+from ..tax_policy import resolve_cost_basis_pool_id
+from .austrian import infer_outbound_regimes, infer_regime_from_timestamp
 from .journal_markers import REGIME_BASIS_ELECTION
 from .loans import (
     CHANNEL_CLOSE_MISMATCH,
@@ -73,10 +74,9 @@ class NormalizedTaxEvent:
     # by the wallet's holdings, set by explicit user override, or not AT.
     # Audit-trail only — rp2 ignores the serialized marker.
     at_regime_basis: Optional[str] = None
-    # Moving-average pool partition id (Neu only; ignored by rp2 for Alt).
-    # Kassiber decides what a pool is — v1 uses wallet_id. None means
-    # "absent marker", which rp2 treats as the `AT_DEFAULT_POOL` bucket.
-    at_pool: Optional[str] = None
+    # Country-neutral opaque cost-basis pool identity. Country adapters may
+    # serialize it into plugin-specific wire markers.
+    cost_basis_pool_id: Optional[str] = None
     # Non-empty id tagging one leg of a matched crypto-to-crypto swap.
     # On a Neu outgoing leg, rp2 emits a zero-gain GainLoss and depletes
     # the pool at its running average. None means "not a swap". Empty
@@ -110,8 +110,8 @@ class NormalizedTaxTransfer:
     external_id: str | None
     out_row: Mapping[str, Any]
     in_row: Mapping[str, Any]
-    # Pool partition id to preserve across an intra-wallet move.
-    at_pool: Optional[str] = None
+    from_cost_basis_pool_id: Optional[str] = None
+    to_cost_basis_pool_id: Optional[str] = None
     # Austrian regime (alt/neu) for the MOVE's taxable miner-fee disposal. The
     # move itself is non-taxable, but the fee is a disposal; without a regime
     # rp2's moving-average aborts the whole asset on "Ambiguous Austrian
@@ -763,7 +763,12 @@ def _collect_samourai_internal_transfers(
                     external_id=_row_get(first_out, "external_id"),
                     out_row=first_out,
                     in_row=in_row,
-                    at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+                    from_cost_basis_pool_id=resolve_cost_basis_pool_id(
+                        profile, from_wallet["id"]
+                    ),
+                    to_cost_basis_pool_id=resolve_cost_basis_pool_id(
+                        profile, wallet_refs_by_id[in_row["wallet_id"]]["id"]
+                    ),
                     at_regime=_samourai_fee_regime(first_out),
                     regime_flows=flows_by_leg.get(
                         (str(first_out["id"]), str(in_row["id"]))
@@ -798,7 +803,12 @@ def _collect_samourai_internal_transfers(
                 external_id=_row_get(first_out, "external_id"),
                 out_row=first_out,
                 in_row=first_in,
-                at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+                from_cost_basis_pool_id=resolve_cost_basis_pool_id(
+                    profile, from_wallet["id"]
+                ),
+                to_cost_basis_pool_id=resolve_cost_basis_pool_id(
+                    profile, to_wallet["id"]
+                ),
                 at_regime=_samourai_fee_regime(first_out),
                 regime_flows=flows_by_leg.get(
                     (str(first_out["id"]), str(first_in["id"]))
@@ -1384,7 +1394,12 @@ def _build_manual_multi_pair_transfers(
                         external_id=out_row["external_id"],
                         out_row=out_row,
                         in_row=in_row,
-                        at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+                        from_cost_basis_pool_id=resolve_cost_basis_pool_id(
+                            profile, from_wallet["id"]
+                        ),
+                        to_cost_basis_pool_id=resolve_cost_basis_pool_id(
+                            profile, to_wallet["id"]
+                        ),
                         at_regime=at_regime,
                         regime_flows=(transfer_regime_flows or {}).get(
                             (str(out_row["id"]), str(in_row["id"]))
@@ -1514,10 +1529,11 @@ def _build_manual_multi_pair_transfers(
                                 external_id=out_row["external_id"],
                                 out_row=out_row,
                                 in_row=in_row,
-                                at_pool=(
-                                    resolve_pool_id(from_wallet["id"])
-                                    if is_at
-                                    else None
+                                from_cost_basis_pool_id=resolve_cost_basis_pool_id(
+                                    profile, from_wallet["id"]
+                                ),
+                                to_cost_basis_pool_id=resolve_cost_basis_pool_id(
+                                    profile, to_wallet["id"]
                                 ),
                                 at_regime=at_regime,
                                 regime_flows=(transfer_regime_flows or {}).get(
@@ -2359,7 +2375,12 @@ def normalize_tax_asset_inputs(
                     external_id=out_row["external_id"],
                     out_row=out_row,
                     in_row=in_row,
-                    at_pool=resolve_pool_id(from_wallet["id"]) if is_at else None,
+                    from_cost_basis_pool_id=resolve_cost_basis_pool_id(
+                        profile, from_wallet["id"]
+                    ),
+                    to_cost_basis_pool_id=resolve_cost_basis_pool_id(
+                        profile, to_wallet["id"]
+                    ),
                     at_regime=at_regime,
                     regime_flows=transfer_regime_flows.get(
                         (str(out_row["id"]), str(in_row["id"]))
@@ -2467,10 +2488,9 @@ def normalize_tax_asset_inputs(
 
         at_regime = None
         at_regime_basis = None
-        at_pool = None
+        cost_basis_pool_id = resolve_cost_basis_pool_id(profile, wallet["id"])
         at_swap_link = None
         if is_at:
-            at_pool = resolve_pool_id(wallet["id"])
             regime_override = _row_get(row, "at_regime_override")
             if direction == "inbound":
                 at_regime = infer_regime_from_timestamp(row["occurred_at"])
@@ -2510,7 +2530,7 @@ def normalize_tax_asset_inputs(
                 raw_row=row,
                 at_regime=at_regime,
                 at_regime_basis=at_regime_basis,
-                at_pool=at_pool,
+                cost_basis_pool_id=cost_basis_pool_id,
                 at_swap_link=at_swap_link,
                 loan_leg_role=loan_leg_role,
             )

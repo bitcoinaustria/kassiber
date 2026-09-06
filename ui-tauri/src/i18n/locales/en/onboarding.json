@@ -63,10 +63,13 @@
     },
     "renameProfile": {
       "title": "Book settings",
-      "description": "Rename the book or change its region and accounting method. Changing the region or method reprocesses journals so reports recompute.",
+      "description": "Rename the book or change its region, accounting method, and supported cost-basis pool scope. Policy changes reprocess journals so reports recompute.",
       "nameLabel": "Book name",
       "regionLabel": "Region",
       "methodLabel": "Accounting method",
+      "poolScopeLabel": "Cost-basis pool scope",
+      "poolScopeNote": "Changing the scope invalidates journals so reports can be recomputed.",
+      "poolScopeLockedNote": "Only the country policy's reviewed global scope is currently available.",
       "austrianMethodNote": "Austrian books use the moving-average method (gleitender Durchschnittspreis) by default. Other methods are available but not standard for Austria.",
       "switchRegion": {
         "title": "Switch region?",
@@ -82,6 +85,10 @@
     "region": {
       "generic": "Generic",
       "at": "Austria"
+    },
+    "poolScope": {
+      "global": "Whole book",
+      "wallet": "Per wallet"
     },
     "method": {
       "MOVING_AVERAGE_AT": "Moving average (Austrian)",

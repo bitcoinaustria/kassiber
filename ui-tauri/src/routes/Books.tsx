@@ -64,7 +64,16 @@ import {
   gainsAlgorithmsFor,
 } from "@/components/kb/Onboarding/constants";
 import type { TaxCountry } from "@/components/kb/Onboarding/types";
-import type { ProfilesSnapshot, Profile, Workspace } from "@/mocks/profiles";
+import type {
+  CostBasisPoolScope,
+  ProfilesSnapshot,
+  Profile,
+  Workspace,
+} from "@/mocks/profiles";
+import {
+  poolScopesForProfileEdit,
+  profileSettingsUpdatePayload,
+} from "@/routes/books-profile-settings";
 
 const ACCOUNTING_METHOD_LABEL_KEYS = {
   MOVING_AVERAGE_AT: "books.method.MOVING_AVERAGE_AT",
@@ -91,10 +100,20 @@ const TAX_COUNTRY_LABEL_KEYS = {
   generic: "books.region.generic",
 } as const satisfies Record<TaxCountry, string>;
 
+const COST_BASIS_POOL_SCOPE_LABEL_KEYS = {
+  global: "books.poolScope.global",
+  wallet: "books.poolScope.wallet",
+} as const satisfies Record<CostBasisPoolScope, string>;
+
 const regionLabel = (
   country: TaxCountry,
   t: TFunction<"onboarding">,
 ): string => t(TAX_COUNTRY_LABEL_KEYS[country]);
+
+const costBasisPoolScopeLabel = (
+  scope: CostBasisPoolScope,
+  t: TFunction<"onboarding">,
+): string => t(COST_BASIS_POOL_SCOPE_LABEL_KEYS[scope]);
 
 export function Books() {
   const { data, isLoading } = useDaemon<ProfilesSnapshot>(
@@ -146,6 +165,8 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     useState<PendingProfileRename | null>(null);
   const [renameProfileName, setRenameProfileName] = useState("");
   const [renameProfileMethod, setRenameProfileMethod] = useState("");
+  const [renameProfilePoolScope, setRenameProfilePoolScope] =
+    useState<CostBasisPoolScope>("global");
   const [renameProfileCountry, setRenameProfileCountry] =
     useState<TaxCountry>("generic");
   const [regionSwitchConfirming, setRegionSwitchConfirming] = useState(false);
@@ -220,6 +241,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
       profile.gainsAlgorithm ??
         gainsAlgorithmsFor(profile.taxCountry ?? "generic")[0],
     );
+    setRenameProfilePoolScope(profile.costBasisPoolScope ?? "global");
     setRenameTarget({ workspace, profile });
   };
 
@@ -304,11 +326,9 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     }
     setRenameProfileError(null);
     const profileId = renameTarget.profile.id;
-    const originalCountry = renameTarget.profile.taxCountry ?? "generic";
     const nameChanged = label !== renameTarget.profile.name;
-    const methodChanged =
-      renameProfileMethod !== (renameTarget.profile.gainsAlgorithm ?? "");
-    const countryChanged = renameProfileCountry !== originalCountry;
+    const countryChanged =
+      renameProfileCountry !== (renameTarget.profile.taxCountry ?? "generic");
     // A region switch resets the method and reprocesses journals — gate it
     // behind an explicit confirmation step.
     if (countryChanged && !regionSwitchConfirming) {
@@ -320,17 +340,14 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
       // invalidates journals so reports recompute. A region switch must send a
       // region-valid method in the same call, since generic books reject the
       // Austrian method (and vice versa).
-      if (countryChanged) {
-        await updateProfile.mutateAsync({
-          profile_id: profileId,
-          gains_algorithm: renameProfileMethod,
-          tax_country: renameProfileCountry,
-        });
-      } else if (methodChanged) {
-        await updateProfile.mutateAsync({
-          profile_id: profileId,
-          gains_algorithm: renameProfileMethod,
-        });
+      const settingsUpdate = profileSettingsUpdatePayload(
+        renameTarget.profile,
+        renameProfileCountry,
+        renameProfileMethod,
+        renameProfilePoolScope,
+      );
+      if (settingsUpdate) {
+        await updateProfile.mutateAsync(settingsUpdate);
       }
       if (nameChanged) {
         await renameProfile.mutateAsync({ profile_id: profileId, label });
@@ -338,6 +355,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
       setRenameTarget(null);
       setRenameProfileName("");
       setRenameProfileMethod("");
+      setRenameProfilePoolScope("global");
       setRenameProfileCountry("generic");
       setRegionSwitchConfirming(false);
     } catch (error) {
@@ -536,6 +554,12 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         name={renameProfileName}
         country={renameProfileCountry}
         method={renameProfileMethod}
+        poolScope={renameProfilePoolScope}
+        poolScopeOptions={
+          renameTarget
+            ? poolScopesForProfileEdit(renameTarget.profile, renameProfileCountry)
+            : ["global"]
+        }
         methodOptions={Array.from(
           new Set<string>([
             // Keep the stored method visible while still on the original region,
@@ -563,6 +587,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
           // Reset the method to the new region's default — the previous method
           // may be invalid there, and update_profile would reject it.
           setRenameProfileMethod(GAINS_ALGORITHM_DEFAULTS[value]);
+          setRenameProfilePoolScope("global");
           if (renameProfileError) setRenameProfileError(null);
         }}
         onMethodChange={(value) => {
@@ -574,6 +599,10 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
           setRenameProfileMethod(value);
           if (renameProfileError) setRenameProfileError(null);
         }}
+        onPoolScopeChange={(value) => {
+          setRenameProfilePoolScope(value);
+          if (renameProfileError) setRenameProfileError(null);
+        }}
         onCancelRegionSwitch={() => setRegionSwitchConfirming(false)}
         onOpenChange={(open) => {
           if (renameProfile.isPending || updateProfile.isPending) return;
@@ -581,6 +610,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             setRenameTarget(null);
             setRenameProfileName("");
             setRenameProfileMethod("");
+            setRenameProfilePoolScope("global");
             setRenameProfileCountry("generic");
             setRegionSwitchConfirming(false);
             setRenameProfileError(null);
@@ -1088,6 +1118,8 @@ interface RenameProfileDialogProps {
   country: TaxCountry;
   method: string;
   methodOptions: string[];
+  poolScope: CostBasisPoolScope;
+  poolScopeOptions: CostBasisPoolScope[];
   confirmingRegionSwitch: boolean;
   open: boolean;
   profile: Profile | null;
@@ -1095,6 +1127,7 @@ interface RenameProfileDialogProps {
   onNameChange: (value: string) => void;
   onCountryChange: (value: TaxCountry) => void;
   onMethodChange: (value: string) => void;
+  onPoolScopeChange: (value: CostBasisPoolScope) => void;
   onCancelRegionSwitch: () => void;
   onOpenChange: (open: boolean) => void;
   onSubmit: () => void;
@@ -1107,6 +1140,8 @@ function RenameProfileDialog({
   country,
   method,
   methodOptions,
+  poolScope,
+  poolScopeOptions,
   confirmingRegionSwitch,
   open,
   profile,
@@ -1114,6 +1149,7 @@ function RenameProfileDialog({
   onNameChange,
   onCountryChange,
   onMethodChange,
+  onPoolScopeChange,
   onCancelRegionSwitch,
   onOpenChange,
   onSubmit,
@@ -1226,6 +1262,35 @@ function RenameProfileDialog({
                     {t("books.renameProfile.austrianMethodNote")}
                   </p>
                 ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="rename-profile-pool-scope">
+                  {t("books.renameProfile.poolScopeLabel")}
+                </Label>
+                <Select
+                  value={poolScope}
+                  disabled={isSubmitting || poolScopeOptions.length <= 1}
+                  onValueChange={(value) =>
+                    onPoolScopeChange(value as CostBasisPoolScope)
+                  }
+                >
+                  <SelectTrigger id="rename-profile-pool-scope">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {poolScopeOptions.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {costBasisPoolScopeLabel(option, t)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {poolScopeOptions.length <= 1
+                    ? t("books.renameProfile.poolScopeLockedNote")
+                    : t("books.renameProfile.poolScopeNote")}
+                </p>
               </div>
             </>
           )}

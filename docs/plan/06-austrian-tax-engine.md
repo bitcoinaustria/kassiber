@@ -53,19 +53,27 @@ Do not grow a second Austrian tax engine inside Kassiber.
 `kassiber/core/tax_events.py` turns raw transaction rows plus wallet metadata,
 manual pairs, rates, and explicit annotations into typed normalized events.
 
-A **normalized tax container** is the unit used for Austrian basis/pool logic.
-The current binding is one container per `wallet_id`. Future address/UTXO-level
-provenance can narrow that binding without changing the engine boundary.
+A **normalized cost-basis pool** is country-neutral and opaque to the engine
+adapter. Every currently enabled country policy permits only the legacy-safe
+`global` scope. A narrower scope must be explicitly advertised by that country
+and must have a reviewed source/destination transfer contract before activation.
 
-Typed Austrian fields on normalized events:
+Typed normalized pool fields:
+
+- event `cost_basis_pool_id`
+- transfer `from_cost_basis_pool_id`
+- transfer `to_cost_basis_pool_id`
+
+Typed Austrian semantic fields remain:
 
 - `at_regime`
-- `at_pool`
 - `at_swap_link`
 
-The RP2 adapter serializes those markers into RP2 notes per
-`docs/austrian-handoff.md`; rp2's `compute_tax_for_assets` hook owns the
-carried-basis math for reviewed Neu cross-asset swaps.
+The RP2 adapter maps the generic global id to the legacy `at_pool=default`
+marker only for Austrian rows. Differing transfer pool ids fail closed because
+RP2 has no approved two-ended Austrian marker contract. RP2's
+`compute_tax_for_assets` hook still owns carried-basis math for reviewed Neu
+cross-asset swaps.
 
 ## Current Engine Boundary
 
@@ -90,6 +98,11 @@ engine type.
 - `at_kennzahl`
 
 Presentation-layer mapping lives in `kassiber/core/austrian.py`.
+
+Valued `wages` receipts book as ordinary acquisitions with the reviewed EUR
+value as basis. Their raw kind and attachments remain provenance, while wage-tax
+calculation stays outside Kassiber and no employment-income journal row or E 1kv
+Kennzahl is created.
 
 E 1kv export is built from these persisted journal rows plus profile and
 quarantine state. The first implementation lives in the report builder module:

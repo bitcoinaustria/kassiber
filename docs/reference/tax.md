@@ -10,6 +10,7 @@ Books carry tax defaults through the internal `profile` row:
 - `tax_long_term_days` (generic policy only; Austrian Altbestand handling is wallet-specific)
 - `gains_algorithm`
 - `bitcoin_rail_carrying_value` (default on; controls the generic default treatment for BTC-equivalent rail changes)
+- `cost_basis_pool_scope` (country-policy allowlisted; every current policy permits only `global`)
 
 Current policies:
 
@@ -28,9 +29,11 @@ Important behavior:
 
 - both `generic` and `at` policies currently run through RP2
 - Austrian books (`tax_country=at`) use rp2's Austrian country plugin while Kassiber keeps the normalization, provenance, transfer-preparation, and current report-mapping layer
-- cost basis is pooled per asset across all wallets in one set of books
+- cost basis is currently pooled per asset across all wallets in one set of
+  books; narrower scopes fail closed unless that country policy explicitly
+  advertises and implements them
 - self-transfers between user-owned wallets become RP2 `IntraTransaction` moves when Kassiber can prove the relationship
-- explicit inbound `kind` values such as `income`, `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `wages`, `lending_interest`, and `routing_income` are promoted into RP2 earn-like receipts; unlabeled inbound rows stay conservative and process as `BUY`
+- explicit inbound `kind` values such as `income`, `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `lending_interest`, and `routing_income` are promoted into RP2 earn-like receipts; valued `wages` preserve their source provenance but process as an ordinary `BUY` acquisition with the reviewed EUR value as basis, while wage-tax reporting remains outside Kassiber; unlabeled inbound rows stay conservative and process as `BUY`
 - missing or ambiguous tax inputs quarantine instead of being silently guessed
 
 After any transaction change, metadata change, exclusion change, transfer pair change, quarantine resolution, rate sync, or manual rate override, journals must be reprocessed before reports are trusted again.

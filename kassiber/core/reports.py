@@ -117,7 +117,6 @@ _TAX_SUMMARY_INCOME_TRANSACTION_TYPE_BY_KIND = {
     "mining_reward": "mining",
     "routing_income": "income",
     "staking": "staking",
-    "wages": "wages",
 }
 AUSTRIAN_TAX_SECTION_ORDER = (
     "1.1",
@@ -4693,6 +4692,13 @@ def _austrian_kennzahl_form_section(kennzahl):
 
 def _austrian_e1kv_detail_row(row):
     category = row["at_category"]
+    if category not in AUSTRIAN_E1KV_CATEGORY_LABELS:
+        raise AppError(
+            "Austrian E 1kv export encountered an unsupported journal category",
+            code="internal",
+            hint="Re-run `journals process` with the current Kassiber and RP2 versions.",
+            details={"at_category": category},
+        )
     kennzahl = kennzahl_for_disposal_category(category)
     quantity_msat = abs(int(row["quantity"] or 0))
     quantity = msat_to_btc(quantity_msat)
@@ -5068,7 +5074,7 @@ def _austrian_e1kv_overview_entries(report):
     return entries
 
 
-def _austrian_e1kv_assumptions(rows):
+def _austrian_e1kv_assumptions(rows, cost_basis_pool_scope="global"):
     assumptions = [
         {
             "code": "AT-E1KV-FOREIGN-SELF-CUSTODY",
@@ -5084,6 +5090,14 @@ def _austrian_e1kv_assumptions(rows):
             "code": "AT-E1KV-KENNZAHL-REPROCESS",
             "severity": "review",
             "message": AUSTRIAN_E1KV_REPROCESS_HINT,
+        },
+        {
+            "code": "AT-COST-BASIS-POOL-SCOPE",
+            "severity": "review",
+            "message": (
+                "Austrian cost basis was calculated using the reviewed "
+                f"'{cost_basis_pool_scope}' pool scope."
+            ),
         },
     ]
     if any(str(row["asset"]).upper() == "LBTC" for row in rows):
@@ -5176,16 +5190,22 @@ def report_austrian_e1kv(
     rows = _austrian_e1kv_rows(conn, profile, normalized_year)
     quarantines = _austrian_e1kv_quarantines(conn, profile, normalized_year)
     summary_rows = _austrian_e1kv_summary_rows(rows)
+    cost_basis_pool_scope = (
+        str(profile["cost_basis_pool_scope"] or "global")
+        if "cost_basis_pool_scope" in profile.keys()
+        else "global"
+    )
     return {
         "workspace": workspace["label"],
         "profile": profile["label"],
         "tax_year": normalized_year,
         "fiat_currency": profile["fiat_currency"],
         "tax_country": profile["tax_country"],
+        "cost_basis_pool_scope": cost_basis_pool_scope,
         "form": "E 1kv",
         "form_section": AUSTRIAN_E1KV_FORM_SECTION,
         "review_gate": AUSTRIAN_E1KV_REVIEW_GATE,
-        "assumptions": _austrian_e1kv_assumptions(rows),
+        "assumptions": _austrian_e1kv_assumptions(rows, cost_basis_pool_scope),
         "summary_rows": summary_rows,
         "kennzahl_totals": _austrian_e1kv_kennzahl_totals(summary_rows),
         "section_order": list(AUSTRIAN_TAX_SECTION_ORDER),

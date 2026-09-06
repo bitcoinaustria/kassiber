@@ -882,6 +882,12 @@ def _prepare_actual_row(
         if existing_optional:
             for column in missing_optional_columns:
                 actual[column] = existing_optional[column]
+        elif spec.table == "profiles" and "cost_basis_pool_scope" in missing_optional_columns:
+            # Profiles from pre-pool-scope signed bundles must materialize the
+            # same legacy-safe value as the SQL migration. The column is NOT
+            # NULL, so leaving the additive field absent cannot rely on SQLite's
+            # default because replication inserts an explicit column list.
+            actual["cost_basis_pool_scope"] = "global"
     if (
         spec.table == "custody_component_legs"
         and "anchor_transaction_id" not in wire_row

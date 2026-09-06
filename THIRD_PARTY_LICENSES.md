@@ -21,7 +21,7 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | --- | --- | --- | --- |
 | `bdkpython` | `3.0.0` (exact) | Watch-only Bitcoin wallet observation through BDK's Esplora and Electrum clients; state is persisted as explicit versioned JSON inside Kassiber's SQLCipher database | MIT OR Apache-2.0 |
 | `lwk` | `0.18.0` (exact) | Watch-only Liquid wallet observation through LWK's Esplora and Electrum clients; opaque `ForeignStore` values live only inside Kassiber's SQLCipher database | MIT (BSD-MIT wording) |
-| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@24eeeed5e88d79cedfada9062dbb4fb45f55946c` | Tax engine used by journal processing and tax-aware reports | Apache-2.0 |
+| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@3d2e03ef27696fbd00f4516a0cb745300083e227` | Existing tax engine, retaining RP2-owned lot basis, Austrian moving-average and swap-carry fixes instead of duplicating tax calculations locally | Apache-2.0 |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential output handling | MIT |
 | `XlsxWriter` | `>=3.2,<4` | Styled `.xlsx` workbook export for practitioner-facing reports and the generic-ledger import template | BSD-2-Clause |
 | `openpyxl` | `>=3.1,<4` | Reads filled-in `.xlsx` files for the generic-ledger manual importer | MIT |
@@ -29,7 +29,7 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `sqlcipher3` | `>=0.6.2,<1` | Python binding around SQLCipher 4; wheels bundle a SQLCipher community build for at-rest database encryption | Zlib (binding) + BSD-style (SQLCipher community) |
 | `pyrage` | `>=1.3,<2` | In-process `age` implementation used by the `tar | age` backup format when no system `age`/`rage` binary is available | Apache-2.0 / MIT |
 | `keyring` | `>=25.6,<26` | Native macOS Keychain, Windows Credential Manager, and Linux Secret Service access for opt-in CLI remembered unlock | MIT |
-| `cryptography` | `>=44,<48` | Ed25519 event signatures, LAN HKDF/AES-GCM key confirmation, and authenticated direct-sync frames | Apache-2.0 OR BSD-3-Clause |
+| `cryptography` | `>=50.0.0,<51` | Ed25519 event signatures, LAN HKDF/AES-GCM key confirmation, and authenticated direct-sync frames | Apache-2.0 OR BSD-3-Clause |
 | `spake2` | `0.9` | Password-authenticated key exchange for explicit LAN/Tor direct pairing | MIT |
 | `zeroconf` | `>=0.150,<1` | Rotating, unlinkable mDNS advertisement for the opt-in LAN fast path | LGPL-2.1-or-later |
 | `PyYAML` | `>=6,<7` | Structured parsing for the repository-wide GitHub Actions pin-policy test | MIT |
@@ -53,6 +53,13 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `zbus-secret-service-keyring-store` | `1.0.0` | Linux Secret Service backend for AI provider API keys | MIT OR Apache-2.0 |
 
 ## Notable downstream license note
+
+The September 2026 security refresh keeps the existing dependency ownership:
+`cryptography` supplies reviewed cryptographic primitives unavailable in Python's
+standard library; it is not replaced with custom signing or encryption code.
+Frontend overrides select patched compatible versions for existing router,
+provider-broker and build-tool dependencies, rather than adding new frameworks.
+The package-manager lockfiles remain the authoritative transitive inventory.
 
 In the current tested RP2 install path, one runtime dependency worth calling out explicitly is:
 

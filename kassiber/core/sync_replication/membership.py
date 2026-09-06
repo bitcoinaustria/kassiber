@@ -390,7 +390,7 @@ def create_invitation(
         """
         SELECT id, workspace_id, label, fiat_currency, tax_country,
                tax_long_term_days, gains_algorithm, require_coarse_review,
-               bitcoin_rail_carrying_value, created_at
+               bitcoin_rail_carrying_value, cost_basis_pool_scope, created_at
         FROM profiles WHERE id = ?
         """,
         (profile_id,),
@@ -589,8 +589,8 @@ def join_invitation(
         INSERT OR IGNORE INTO profiles(
             id, workspace_id, label, fiat_currency, tax_country,
             tax_long_term_days, gains_algorithm, require_coarse_review,
-            bitcoin_rail_carrying_value, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            bitcoin_rail_carrying_value, cost_basis_pool_scope, created_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             profile["id"],
@@ -602,6 +602,7 @@ def join_invitation(
             profile["gains_algorithm"],
             profile["require_coarse_review"],
             profile["bitcoin_rail_carrying_value"],
+            profile.get("cost_basis_pool_scope") or "global",
             profile["created_at"],
         ),
     )

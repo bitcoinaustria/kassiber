@@ -63,10 +63,13 @@
     },
     "renameProfile": {
       "title": "Bucheinstellungen",
-      "description": "Benenne das Buch um oder ändere seine Region und Buchhaltungsmethode. Eine Änderung von Region oder Methode verarbeitet die Journale neu, damit die Berichte neu berechnet werden.",
+      "description": "Benenne das Buch um oder ändere Region, Buchhaltungsmethode und den unterstützten Kostenbasis-Pool. Richtlinienänderungen verarbeiten die Journale neu, damit Berichte neu berechnet werden.",
       "nameLabel": "Buchname",
       "regionLabel": "Region",
       "methodLabel": "Buchhaltungsmethode",
+      "poolScopeLabel": "Kostenbasis-Pool",
+      "poolScopeNote": "Eine Änderung des Pools macht Journale veraltet, damit Berichte neu berechnet werden können.",
+      "poolScopeLockedNote": "Derzeit ist nur der durch das Steuerprofil geprüfte globale Pool verfügbar.",
       "austrianMethodNote": "Österreichische Bücher nutzen standardmäßig den gleitenden Durchschnittspreis. Andere Methoden stehen zur Auswahl, sind für Österreich aber nicht der Standard.",
       "switchRegion": {
         "title": "Region wechseln?",
@@ -82,6 +85,10 @@
     "region": {
       "generic": "Generisch",
       "at": "Österreich"
+    },
+    "poolScope": {
+      "global": "Gesamtes Buch",
+      "wallet": "Pro Wallet"
     },
     "method": {
       "MOVING_AVERAGE_AT": "Gleitender Durchschnittspreis (österreichisch)",
