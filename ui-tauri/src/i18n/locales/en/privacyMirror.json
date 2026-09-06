@@ -1,13 +1,13 @@
 {
   "title": "Privacy Mirror",
   "observer": "Public blockchain observer",
-  "subtitle": "What the local chain evidence could reveal about your activity, with assumptions and missing data kept visible.",
   "refresh": "Refresh local analysis",
   "ask": "Ask assistant",
   "explain": "Explain",
   "workbench": "Open Chain Analysis",
   "investigate": "Investigate",
   "investigateTransaction": "Investigate public exposure",
+  "connect": "Connect or import history",
   "refreshFailed": "Refresh failed. These are the previous results; they may no longer describe your current book.",
   "affectedOutputs_one": "{{count}} of your outputs affected",
   "affectedOutputs_other": "{{count}} of your outputs affected",
@@ -16,27 +16,29 @@
   "toolsElsewhere": "Continue in the analysis workbench:",
   "checkSpend": "Check a draft spend",
   "datasets": "Attribution sources",
-  "summary": {
-    "findings_one": "{{count}} finding to review",
-    "findings_other": "{{count}} findings to review",
-    "no_observed_exposure": "No priority linkage finding in the examined evidence",
+  "headline": {
+    "personal_findings": "Findings about your activity",
+    "context_only": "Surrounding activity only in this snapshot",
+    "no_local_evidence": "No local transactions to examine",
+    "no_owned_outputs": "No owned outputs in the local evidence",
+    "nothing_found": "No findings within the examined evidence",
     "unavailable": "More local evidence is needed"
   },
-  "summaryBody": {
-    "findings": "These observations can make activity easier to connect. An inference is conditional on its stated assumptions; it is not proof of common ownership.",
-    "no_observed_exposure": "This describes the evidence examined below. Missing history, hidden amounts and collaborative transactions limit what an outside observer can infer.",
-    "unavailable": "The available observations cannot support a useful exposure assessment yet. Connect or import the relevant history, then refresh this local view."
+  "headlineBody": {
+    "nothing_found": "Only the examined local evidence is described; missing history is not.",
+    "unavailable": "The available observations do not support an assessment yet."
   },
   "population": {
-    "outputs": "Your observed outputs",
-    "transactions": "Transactions examined / available locally",
-    "domains": "Chain and network domains"
+    "outputs_one": "{{count}} owned output",
+    "outputs_other": "{{count}} owned outputs",
+    "transactions": "{{examined}} of {{available}} local transactions examined",
+    "domains_one": "{{count}} chain/network domain",
+    "domains_other": "{{count}} chain/network domains"
   },
   "groups": {
     "attention": "Your activity",
-    "attentionBody": "Signals involving your spends or owned outputs.",
     "context": "Surrounding activity",
-    "contextBody": "Counterparty and nearby signals provide context. They do not establish your ownership or expose your own activity by themselves."
+    "contextNote": "Not personal exposure on its own."
   },
   "category": {
     "linkage": "Linkage",
@@ -62,7 +64,6 @@
   },
   "coverage": {
     "title": "What was examined",
-    "body": "Counts describe this report's executed checks and eligible local evidence. Complete means complete within this bounded view.",
     "status": {
       "complete": "Local coverage complete",
       "partial": "Partial local coverage",

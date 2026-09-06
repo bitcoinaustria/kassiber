@@ -187,7 +187,6 @@ const reportsRoute = createRoute({
 const privacyMirrorRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/privacy-mirror",
-  beforeLoad: requireDeveloperTools,
   component: PrivacyMirror,
 });
 

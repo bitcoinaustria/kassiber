@@ -9,10 +9,18 @@ catalog. Settings → Privacy retains the separate configuration-posture report.
 
 ## Surfaces and boundaries
 
-- Desktop: Privacy Mirror shows findings, personal relevance, executed checks and
-  coverage. Findings open Chain Analysis with the public observer, physical
-  subject and chain/network preserved. Transaction details use the same focused
-  workbench link rather than loading the entire profile's Mirror report.
+- Desktop: Privacy Mirror (Extras, no developer gate) opens with one headline
+  without counts. Any finding whose relevance is your spend or your output wins
+  (severity plays no role); otherwise the backend summary decides between no
+  local transactions, an unavailable assessment, no owned outputs, surrounding
+  activity only, or no findings within the examined evidence. Surrounding
+  findings never upgrade an unassessed book. Personal findings stay primary;
+  surrounding activity and the executed checks are collapsed disclosures, while
+  coverage status, gaps and truncation remain visible in the headline card.
+  Findings open Chain Analysis with the public observer, physical subject and
+  chain/network preserved and land on the matching subview. Transaction details
+  use the same focused workbench link rather than loading the entire profile's
+  Mirror report.
 - CLI: `kassiber reports privacy-mirror` returns the same report through the
   shared report service. JSON is schema version 2 inside the existing envelope;
   table/CSV output lists findings and executed-check coverage.

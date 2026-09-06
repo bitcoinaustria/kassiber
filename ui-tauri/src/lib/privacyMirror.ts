@@ -71,6 +71,37 @@ export interface PrivacyMirrorPayload {
   assumptions: string[];
 }
 
+export type PrivacyHeadline =
+  | "personal_findings"
+  | "context_only"
+  | "no_local_evidence"
+  | "no_owned_outputs"
+  | "nothing_found"
+  | "unavailable";
+
+export const PERSONAL_RELEVANCE: ReadonlySet<PrivacyFinding["relevance"]> = new Set(["own_spend", "owned_output"]);
+
+/**
+ * Pick the one-line answer for the report. Personal relevance comes from the
+ * findings themselves (attention_count is a severity count); the backend summary
+ * stays authoritative for population and status, and partial coverage never turns
+ * "nothing found" into a clean result; the coverage badge carries that.
+ */
+export function privacyHeadline(
+  summary: PrivacyMirrorPayload["summary"],
+  findings: ReadonlyArray<Pick<PrivacyFinding, "relevance">>,
+): PrivacyHeadline {
+  if (findings.some(finding => PERSONAL_RELEVANCE.has(finding.relevance))) return "personal_findings";
+  // Surrounding findings never upgrade an unassessed snapshot: the backend's
+  // unavailable status and empty populations stay unknown, not "nothing personal".
+  if (summary.local_transaction_count === 0) return "no_local_evidence";
+  if (summary.status === "unavailable") {
+    return summary.owned_output_count === 0 ? "no_owned_outputs" : "unavailable";
+  }
+  if (summary.owned_output_count === 0) return "no_owned_outputs";
+  return summary.finding_count > 0 ? "context_only" : "nothing_found";
+}
+
 /** Group repeated presentation rows without combining evidence, counts or assumptions. */
 export function groupPrivacyFindings(findings: PrivacyFinding[]): PrivacyFinding[][] {
   const groups = new Map<string, PrivacyFinding[]>();

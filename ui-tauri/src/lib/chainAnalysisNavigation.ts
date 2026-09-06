@@ -3,6 +3,17 @@ import { DEFAULT_ANALYSIS_QUERY, type AnalysisQuery } from "./chainAnalysis";
 export type AnalysisWorkspace = "graph" | "psbt" | "datasets";
 export type AnalysisTab = "findings" | "frontier" | "clusters" | "paths" | "coverage" | "entropy" | "labels" | "patterns" | "exposure";
 export type AnalysisSearch = Partial<AnalysisQuery> & { workspace?: AnalysisWorkspace; tab?: AnalysisTab };
+/** Presentation groups over the canonical tabs; deep links keep addressing the tab itself. */
+export type AnalysisSection = "findings" | "paths" | "coverage" | "tools";
+export const ANALYSIS_SECTIONS: Record<AnalysisSection, readonly AnalysisTab[]> = {
+  findings: ["findings", "patterns", "clusters", "exposure"],
+  paths: ["paths"],
+  coverage: ["coverage", "frontier"],
+  tools: ["entropy", "labels"],
+};
+export function analysisSection(tab: AnalysisTab): AnalysisSection {
+  return (Object.keys(ANALYSIS_SECTIONS) as AnalysisSection[]).find(section => ANALYSIS_SECTIONS[section].includes(tab)) ?? "findings";
+}
 
 const oneOf = <T extends string>(value: unknown, choices: readonly T[]): T | undefined =>
   typeof value === "string" && choices.includes(value as T) ? value as T : undefined;

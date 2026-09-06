@@ -11,11 +11,11 @@ import { Crosshair, Focus, Minus, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
+  analysisNodeCaption,
   formatAnalysisAmount,
   layoutAnalysisGraph,
   panAnalysisCamera,
   zoomAnalysisCamera,
-  shortAnalysisId,
   type AnalysisEdge,
   type AnalysisNode,
 } from "@/lib/chainAnalysis";
@@ -50,6 +50,7 @@ const GraphMarks = memo(function GraphMarks({
   positions,
   selected,
   highlighted,
+  subjectId,
   marker,
   onSelect,
 }: {
@@ -58,6 +59,7 @@ const GraphMarks = memo(function GraphMarks({
   positions: Map<string, { x: number; y: number }>;
   selected: GraphSelection | null;
   highlighted: Set<string>;
+  subjectId?: string;
   marker: string;
   onSelect: (selection: GraphSelection) => void;
 }) {
@@ -129,11 +131,13 @@ const GraphMarks = memo(function GraphMarks({
         if (!position) return null;
         const active = selected?.id === node.id;
         const isHighlighted = highlighted.has(node.id);
+        const isSubject = subjectId !== undefined && node.id === subjectId;
         return (
           <g
             key={node.id}
             data-node={node.id}
             data-status={node.status}
+            data-subject={isSubject || undefined}
             transform={`translate(${position.x}, ${position.y})`}
             role="button"
             tabIndex={0}
@@ -153,6 +157,18 @@ const GraphMarks = memo(function GraphMarks({
             }}
           >
             <title>{`${node.label}\n${node.outpoint || node.txid || node.id}\n${formatAnalysisAmount(node.amount_msat, node.asset)}`}</title>
+            {isSubject && (
+              <rect
+                x={-105}
+                y={-35}
+                width={210}
+                height={70}
+                rx={node.kind === "output" ? 32 : 12}
+                className="ca-node-subject"
+              >
+                <title>{t("graph.subject")}</title>
+              </rect>
+            )}
             <rect
               x={-99}
               y={-29}
@@ -170,15 +186,12 @@ const GraphMarks = memo(function GraphMarks({
               }
             />
             <text x={-71} y={-3} className="ca-node-label">
-              {shortAnalysisId(
-                node.label || node.outpoint || node.txid || node.id,
-                26,
-              )}
+              {analysisNodeCaption(node)}
             </text>
             <text x={-71} y={15} className="ca-node-detail">
               {node.kind === "output"
                 ? formatAnalysisAmount(node.amount_msat, node.asset)
-                : `${node.chain} · ${shortAnalysisId(node.txid || node.id, 18)}`}
+                : `${node.chain} · ${node.network}`}
             </text>
           </g>
         );
@@ -192,12 +205,15 @@ export function InvestigationGraph({
   edges,
   selected,
   highlightedIds,
+  subjectId,
   onSelect,
 }: {
   nodes: AnalysisNode[];
   edges: AnalysisEdge[];
   selected: GraphSelection | null;
   highlightedIds: string[];
+  /** Exactly resolved starting point of the executed query; undefined when ambiguous. */
+  subjectId?: string;
   onSelect: (selection: GraphSelection) => void;
 }) {
   const { t } = useTranslation("chainAnalysis");
@@ -438,6 +454,7 @@ export function InvestigationGraph({
             positions={layout.positions}
             selected={selected}
             highlighted={highlighted}
+            subjectId={subjectId}
             marker={marker}
             onSelect={select}
           />

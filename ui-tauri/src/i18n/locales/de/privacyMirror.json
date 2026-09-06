@@ -1,13 +1,13 @@
 {
   "title": "Privacy Mirror",
   "observer": "Öffentlicher Blockchain-Beobachter",
-  "subtitle": "Was lokale Chain-Daten über deine Aktivitäten verraten könnten – mit sichtbaren Annahmen und Datenlücken.",
   "refresh": "Lokale Analyse aktualisieren",
   "ask": "Assistent fragen",
   "explain": "Erklären",
   "workbench": "Chain Analysis öffnen",
   "investigate": "Untersuchen",
   "investigateTransaction": "Öffentliche Rückschlüsse untersuchen",
+  "connect": "Verbinden oder Historie importieren",
   "refreshFailed": "Aktualisierung fehlgeschlagen. Dies sind die vorherigen Ergebnisse; sie bilden dein aktuelles Buch möglicherweise nicht mehr ab.",
   "affectedOutputs_one": "{{count}} deiner Outputs betroffen",
   "affectedOutputs_other": "{{count}} deiner Outputs betroffen",
@@ -16,27 +16,29 @@
   "toolsElsewhere": "Im Analyse-Werkzeug fortfahren:",
   "checkSpend": "Geplante Zahlung prüfen",
   "datasets": "Zuordnungsquellen",
-  "summary": {
-    "findings_one": "{{count}} Befund zur Prüfung",
-    "findings_other": "{{count}} Befunde zur Prüfung",
-    "no_observed_exposure": "Kein vorrangiger Verknüpfungsbefund in den geprüften Daten",
+  "headline": {
+    "personal_findings": "Befunde zu deinen Aktivitäten",
+    "context_only": "Nur umliegende Aktivitäten in diesem Snapshot",
+    "no_local_evidence": "Keine lokalen Transaktionen zum Prüfen",
+    "no_owned_outputs": "Keine eigenen Outputs in den lokalen Nachweisen",
+    "nothing_found": "Keine Befunde in den geprüften Nachweisen",
     "unavailable": "Mehr lokale Nachweise erforderlich"
   },
-  "summaryBody": {
-    "findings": "Diese Beobachtungen können Verknüpfungen erleichtern. Ein Rückschluss gilt unter den genannten Annahmen; er beweist kein gemeinsames Eigentum.",
-    "no_observed_exposure": "Diese Aussage bezieht sich auf die unten geprüften Daten. Fehlende Historie, verborgene Beträge und gemeinsame Transaktionen begrenzen mögliche Rückschlüsse.",
-    "unavailable": "Die vorhandenen Beobachtungen reichen noch nicht für eine aussagekräftige Einschätzung. Verbinde oder importiere die relevante Historie und aktualisiere diese lokale Ansicht."
+  "headlineBody": {
+    "nothing_found": "Beschrieben sind nur die geprüften lokalen Nachweise, nicht fehlende Historie.",
+    "unavailable": "Die vorhandenen Beobachtungen reichen noch nicht für eine Einschätzung."
   },
   "population": {
-    "outputs": "Deine beobachteten Outputs",
-    "transactions": "Transaktionen geprüft / lokal vorhanden",
-    "domains": "Chain- und Netzwerkbereiche"
+    "outputs_one": "{{count}} eigener Output",
+    "outputs_other": "{{count}} eigene Outputs",
+    "transactions": "{{examined}} von {{available}} lokalen Transaktionen geprüft",
+    "domains_one": "{{count}} Chain-/Netzwerkbereich",
+    "domains_other": "{{count}} Chain-/Netzwerkbereiche"
   },
   "groups": {
     "attention": "Deine Aktivitäten",
-    "attentionBody": "Signale zu deinen Zahlungen oder eigenen Outputs.",
     "context": "Umliegende Aktivitäten",
-    "contextBody": "Signale von Gegenparteien und benachbarten Transaktionen liefern Kontext. Für sich allein belegen sie weder dein Eigentum noch legen sie deine eigenen Aktivitäten offen."
+    "contextNote": "Für sich allein keine persönliche Exposition."
   },
   "category": {
     "linkage": "Verknüpfung",
@@ -62,7 +64,6 @@
   },
   "coverage": {
     "title": "Was geprüft wurde",
-    "body": "Die Zahlen zeigen ausgeführte Prüfungen und geeignete lokale Nachweise. Vollständig bedeutet vollständig innerhalb dieser begrenzten Ansicht.",
     "status": {
       "complete": "Lokale Abdeckung vollständig",
       "partial": "Teilweise lokale Abdeckung",

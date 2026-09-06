@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_ANALYSIS_QUERY,
   analysisCsv,
+  analysisEffectiveLayers,
   analysisNetworkInput,
+  analysisNodeCaption,
   analysisUtcInput,
   analysisNodeSubject,
   analysisQueryKey,
+  analysisSubjectNodeId,
   formatAnalysisAmount,
   layoutAnalysisGraph,
   panAnalysisCamera,
@@ -69,6 +72,57 @@ describe("exact investigation values", () => {
     expect(
       analysisNodeSubject({ ...node("tx:bitcoin:regtest:abc"), txid: "abc" }),
     ).toBe("tx:bitcoin:regtest:abc");
+  });
+  it("marks the subject node only on an exact, unambiguous identity match", () => {
+    const txid = "ab".repeat(32);
+    const regtest = { ...node(`tx:bitcoin:regtest:${txid}`), txid };
+    const main = { ...node(`tx:bitcoin:main:${txid}`), txid };
+    const query = { ...DEFAULT_ANALYSIS_QUERY, mode: "trace" as const, subject: txid };
+    expect(analysisSubjectNodeId({ query, nodes: [regtest, node("other")] })).toBe(regtest.id);
+    expect(analysisSubjectNodeId({ query, nodes: [regtest, main] })).toBeUndefined();
+    expect(analysisSubjectNodeId({ query: { ...query, subject: txid.slice(0, 20) }, nodes: [regtest] })).toBeUndefined();
+    expect(analysisSubjectNodeId({ query: DEFAULT_ANALYSIS_QUERY, nodes: [regtest] })).toBeUndefined();
+  });
+  it("captions same-prefix identities by head and tail while keeping outpoint indexes and real labels", () => {
+    const first = `${"0".repeat(56)}aaaaaaaa`;
+    const second = `${"0".repeat(56)}bbbbbbbb`;
+    // Synthetic books label physical nodes with a bare identity prefix.
+    const prefixLabelled = (txid: string) => ({ ...node(`tx:bitcoin:regtest:${txid}`), txid, label: txid.slice(0, 16) });
+    const captions = [first, second].map((txid) => analysisNodeCaption(prefixLabelled(txid)));
+    expect(captions[0]).not.toBe(captions[1]);
+    expect(captions[0]).toBe("00000000…aaaaaaaa");
+    expect(captions[1]).toMatch(/…bbbbbbbb$/);
+    expect(analysisNodeCaption({ ...prefixLabelled(first), label: `${first.slice(0, 12)}…` })).toBe("00000000…aaaaaaaa");
+    expect(analysisNodeCaption({ ...prefixLabelled(first), label: first })).toBe("00000000…aaaaaaaa");
+    expect(analysisNodeCaption({ id: `out:bitcoin:regtest:${first}:1`, txid: first, outpoint: `${first}:1`, label: `${first}:1` })).toBe("00000000…aaaaaaaa:1");
+    // Production output label: ten-character txid prefix plus vout.
+    const output = { id: `out:bitcoin:regtest:${first}:1`, txid: first, outpoint: `${first}:1`, label: `${first.slice(0, 10)}:1` };
+    expect(analysisNodeCaption(output)).toBe("00000000…aaaaaaaa:1");
+    expect(analysisNodeCaption({ ...output, label: `${first.slice(0, 10)}:0` })).toBe(`${first.slice(0, 10)}:0`);
+    expect(analysisNodeCaption({ ...output, label: "Change:1" })).toBe("Change:1");
+    expect(analysisNodeCaption({ ...prefixLabelled(first), label: "Savings wallet" })).toBe("Savings wallet");
+    expect(analysisNodeCaption({ id: "record:42", label: "Exchange withdrawal" })).toBe("Exchange withdrawal");
+    expect(analysisNodeCaption({ id: "record:42", label: "" })).toBe("record:42");
+  });
+  it("marks the transaction, not its outputs, for a bare txid and an output for its outpoint", () => {
+    const txid = "cd".repeat(32);
+    const transaction = { ...node(`tx:bitcoin:regtest:${txid}`), txid };
+    const outputs = [0, 1].map((vout) => ({
+      ...node(`out:bitcoin:regtest:${txid}:${vout}`),
+      kind: "output" as const,
+      txid,
+      outpoint: `${txid}:${vout}`,
+    }));
+    const nodes = [transaction, ...outputs];
+    const query = { ...DEFAULT_ANALYSIS_QUERY, mode: "trace" as const, subject: txid };
+    expect(analysisSubjectNodeId({ query, nodes })).toBe(transaction.id);
+    expect(analysisSubjectNodeId({ query: { ...query, subject: `${txid}:1` }, nodes })).toBe(outputs[1].id);
+    expect(analysisSubjectNodeId({ query: { ...query, subject: outputs[0].id }, nodes })).toBe(outputs[0].id);
+  });
+  it("reports custody relations as off for the public observer even when requested", () => {
+    expect(analysisEffectiveLayers(DEFAULT_ANALYSIS_QUERY)).toEqual({ relations: true, hypotheses: false });
+    expect(analysisEffectiveLayers({ ...DEFAULT_ANALYSIS_QUERY, observer: "public", include_hypotheses: true })).toEqual({ relations: false, hypotheses: true });
+    expect(analysisEffectiveLayers({ ...DEFAULT_ANALYSIS_QUERY, observer: "disclosed" }).relations).toBe(true);
   });
   it("detects perspective, budget and evidence-toggle edits while ignoring empty optional inputs", () => {
     const query = { ...DEFAULT_ANALYSIS_QUERY };

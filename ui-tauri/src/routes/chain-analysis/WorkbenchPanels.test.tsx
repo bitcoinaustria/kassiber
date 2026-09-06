@@ -5,9 +5,52 @@ import { FeatureDetails } from "./FeatureDetails";
 import { CaseComparison } from "./CaseComparison";
 import { JobProgress } from "./JobProgress";
 import { EntropyPanel } from "./EntropyPanel";
+import { ResultPanels } from "./ResultPanels";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { DEFAULT_ANALYSIS_QUERY, type AnalysisNode } from "@/lib/chainAnalysis";
+import { DEFAULT_ANALYSIS_QUERY, type AnalysisNode, type AnalysisResult } from "@/lib/chainAnalysis";
+import type { AnalysisTab } from "@/lib/chainAnalysisNavigation";
 import type { PsbtAnalysis } from "@/lib/chainAnalysisWorkbench";
+
+describe("result section tabs", () => {
+  const result: AnalysisResult = {
+    schema_version: 1, snapshot_id: "snapshot-1234567890", query: DEFAULT_ANALYSIS_QUERY, summary: {},
+    nodes: [], edges: [], findings: [], clusters: [], paths: [], frontier: [{ node_id: "tx:a", reason: "node_limit" }],
+    patterns: [{ id: "p", code: "fan_in", severity: "info", title: "raw", detail: "Detail.", node_ids: [], edge_ids: [], evidence: [] }],
+    coverage: {}, capabilities: {},
+  };
+  const render = (tab: AnalysisTab) => renderToStaticMarkup(
+    <QueryClientProvider client={new QueryClient()}>
+      <ResultPanels result={result} tab={tab} setTab={() => {}} pickedSubject="" select={() => {}} setHighlighted={() => {}} reportError={() => {}} />
+    </QueryClientProvider>,
+  );
+  it("exposes one roving tab stop whose selected tab labels the panel", () => {
+    const html = render("patterns");
+    const tabs = html.match(/<button[^>]*role="tab"[^>]*>/g) ?? [];
+    expect(tabs).toHaveLength(4);
+    expect(html.match(/role="tablist"/g)).toHaveLength(1);
+    const selected = tabs.filter((tab) => tab.includes('aria-selected="true"'));
+    expect(selected).toHaveLength(1);
+    expect(selected[0]).toContain('tabindex="0"');
+    expect(tabs.filter((tab) => tab.includes('tabindex="-1"'))).toHaveLength(3);
+    const id = selected[0].match(/ id="([^"]+)"/)![1];
+    const controls = selected[0].match(/aria-controls="([^"]+)"/)![1];
+    expect(html).toContain(`<div class="p-4" role="tabpanel" id="${controls}" aria-labelledby="${id}">`);
+    // The canonical subview stays addressable inside the Findings section.
+    expect(html).toMatch(/<button[^>]*aria-pressed="true"[^>]*>Patterns/);
+    expect(html).toContain("Inputs converge");
+  });
+  it("maps deep-linked frontier and entropy tabs onto their sections without a second tablist", () => {
+    const frontier = render("frontier");
+    expect(frontier).toMatch(/<button[^>]*aria-selected="true"[^>]*>Coverage/);
+    expect(frontier).toMatch(/<button[^>]*aria-pressed="true"[^>]*>Frontier/);
+    expect(frontier).toContain("The node limit was reached.");
+    const entropy = render("entropy");
+    expect(entropy).toMatch(/<button[^>]*aria-selected="true"[^>]*>Tools/);
+    expect(entropy.match(/role="tablist"/g)).toHaveLength(1);
+    const coverage = render("coverage");
+    expect(coverage).toContain("snapshot-1234567890");
+  });
+});
 
 describe("structured evidence panels", () => {
   it("opens the unfiltered entropy form on the known subject's network and leaves ambiguous domains unselected", () => {

@@ -15,7 +15,6 @@ export const DEV_LOCKED_ROUTES = [
   "/activity",
   "/custody-gaps",
   "/exit-tax",
-  "/privacy-mirror",
   "/source-of-funds",
 ] as const;
 

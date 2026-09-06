@@ -4,14 +4,22 @@ import { useTranslation } from "react-i18next";
 import { Download, Eye, Network, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   DaemonScopeContext,
   useDaemon,
   useDaemonMutation,
 } from "@/daemon/client";
 import { screenShellClassName } from "@/lib/screen-layout";
 import {
+  analysisEffectiveLayers,
   analysisNodeSubject,
   analysisQueryKey,
+  analysisSubjectNodeId,
   formatAnalysisAmount,
   type AnalysisCase,
   type AnalysisQuery,
@@ -78,6 +86,57 @@ export function ChainAnalysis() {
         initialSearch={initialSearch}
       />
     </DaemonScopeContext.Provider>
+  );
+}
+
+/** Boundary facts of the executed query, never of the edited draft controls. */
+function ExecutedQueryStrip({
+  result,
+  setTab,
+}: {
+  result: AnalysisResult;
+  setTab: (tab: AnalysisTab) => void;
+}) {
+  const { t } = useTranslation("chainAnalysis");
+  const query = result.query;
+  const layers = analysisEffectiveLayers(query);
+  const domain = [query.chain, query.network].filter(Boolean).join(" / ");
+  return (
+    <div className="ca-strip" aria-label={t("resultQuery")}>
+      <span title={t("observer")} className="font-medium text-foreground">
+        {t(query.observer)}
+      </span>
+      <span>
+        {t(layers.relations ? "layerOn" : "layerOff", {
+          layer: t("relations"),
+        })}
+      </span>
+      <span>
+        {t(layers.hypotheses ? "layerOn" : "layerOff", {
+          layer: t("hypotheses"),
+        })}
+      </span>
+      {domain && <span className="font-mono">{domain}</span>}
+      <button
+        type="button"
+        className={
+          result.coverage.complete
+            ? ""
+            : "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+        }
+        onClick={() => setTab("coverage")}
+      >
+        {result.coverage.budget_exhausted
+          ? t("budgetReached")
+          : result.coverage.complete
+            ? t("complete")
+            : t("incomplete")}
+      </button>
+      <button type="button" onClick={() => setTab("frontier")}>
+        <span className="font-mono">{result.frontier.length}</span>{" "}
+        {t("frontier")}
+      </button>
+    </div>
   );
 }
 
@@ -181,6 +240,7 @@ export function ChainAnalysisWorkbench({
   const pickedSubject = node
     ? analysisNodeSubject(node)
     : result?.query.subject || query.subject || "";
+  const subjectNodeId = result ? analysisSubjectNodeId(result) : undefined;
   const trace = (direction: AnalysisQuery["direction"]) => {
     if (node)
       void execute({
@@ -217,21 +277,20 @@ export function ChainAnalysisWorkbench({
       reportError(value);
     }
   };
+  const inspecting = Boolean(node || edge);
   return (
     <div
       className={`${screenShellClassName} ca-workbench`}
       data-testid="chain-analysis-page"
     >
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="mb-1 flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-            <Network className="size-3.5" />
-            {t("local")}
-          </div>
+      <header className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">
             {t("title")}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
+          <nav className="flex max-w-full gap-1 overflow-x-auto rounded-lg border bg-card p-1" aria-label={t("title")}>
+            {(["graph", "psbt", "datasets"] as const).map(item => <Button key={item} size="sm" variant={workspace === item ? "secondary" : "ghost"} aria-pressed={workspace === item} onClick={() => setWorkspace(item)}>{t(`workbench.${item}`)}</Button>)}
+          </nav>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="ghost" size="sm" asChild>
@@ -270,12 +329,9 @@ export function ChainAnalysisWorkbench({
           {notice}
         </p>
       )}
-      <nav className="flex gap-1 overflow-auto rounded-lg border bg-card p-1" aria-label={t("title")}>
-        {(["graph", "psbt", "datasets"] as const).map(item => <Button key={item} size="sm" variant={workspace === item ? "secondary" : "ghost"} aria-pressed={workspace === item} onClick={() => setWorkspace(item)}>{t(`workbench.${item}`)}</Button>)}
-      </nav>
       <div hidden={workspace !== "psbt"}><PsbtPanel initialNetwork={initialSearch.network} onError={reportError} /></div>
       <div hidden={workspace !== "datasets"}><DatasetsPanel onError={reportError} /></div>
-      <div hidden={workspace !== "graph"} className="space-y-4">
+      <div hidden={workspace !== "graph"} className="space-y-3">
       <QueryControls
         query={query}
         setQuery={setQuery}
@@ -287,33 +343,7 @@ export function ChainAnalysisWorkbench({
       {result ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap gap-4">
-              <span className="ca-metric">
-                <strong>{result.nodes.length}</strong>
-                {t("nodes")}
-              </span>
-              <span className="ca-metric">
-                <strong>{result.edges.length}</strong>
-                {t("edges")}
-              </span>
-              <span className="ca-metric">
-                <strong>{result.paths.length}</strong>
-                {t("paths")}
-              </span>
-              <button className="ca-metric" onClick={() => setTab("frontier")}>
-                <strong>{result.frontier.length}</strong>
-                {t("frontier")}
-              </button>
-              <span
-                className={`self-center rounded-md px-2 py-1 text-[11px] ${result.coverage.complete ? "bg-muted text-muted-foreground" : "bg-amber-500/10 text-amber-700 dark:text-amber-300"}`}
-              >
-                {result.coverage.budget_exhausted
-                  ? t("budgetReached")
-                  : result.coverage.complete
-                    ? t("complete")
-                    : t("incomplete")}
-              </span>
-            </div>
+            <ExecutedQueryStrip result={result} setTab={setTab} />
             <div className="flex flex-wrap items-center gap-1">
               <Button
                 size="sm"
@@ -329,21 +359,22 @@ export function ChainAnalysisWorkbench({
               >
                 {t("table")}
               </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => void exportResult("json")}
-              >
-                <Download className="size-3.5" />
-                JSON
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => void exportResult("csv")}
-              >
-                CSV
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="ghost">
+                    <Download className="size-3.5" />
+                    {t("export")}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => void exportResult("json")}>
+                    {t("exportJson")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void exportResult("csv")}>
+                    {t("exportCsv")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
           {historical && (
@@ -362,7 +393,7 @@ export function ChainAnalysisWorkbench({
               {t("queryChanged")}
             </p>
           )}
-          <div className="ca-frame">
+          <div className={`ca-frame${inspecting ? " has-inspector" : ""}`}>
             <div className="min-w-0">
               {view === "graph" ? (
                 result.nodes.length ? (
@@ -371,6 +402,7 @@ export function ChainAnalysisWorkbench({
                     edges={result.edges}
                     selected={selection}
                     highlightedIds={highlighted}
+                    subjectId={subjectNodeId}
                     onSelect={select}
                   />
                 ) : (
@@ -379,7 +411,7 @@ export function ChainAnalysisWorkbench({
                   </p>
                 )
               ) : (
-                <div className="max-h-[560px] overflow-auto">
+                <div className="max-h-[520px] overflow-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="sticky top-0 bg-card">
                       <tr>
@@ -425,7 +457,7 @@ export function ChainAnalysisWorkbench({
                   </table>
                 </div>
               )}
-              <div className="flex flex-wrap gap-4 border-t px-3 py-2 text-[10px] text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-4 border-t px-3 py-2 text-[10px] text-muted-foreground">
                 {(["physical", "custody", "hypothesis"] as const).map(
                   (item) => (
                     <span className="flex items-center gap-2" key={item}>
@@ -441,44 +473,60 @@ export function ChainAnalysisWorkbench({
                     </span>
                   ),
                 )}
+                {!inspecting && result.nodes.length > 0 && (
+                  <span className="ml-auto">{t("select")}</span>
+                )}
               </div>
             </div>
-            <SelectionInspector
-              key={selection?.id || "empty"}
-              node={node}
-              edge={edge}
-              features={result.transaction_features?.find(item => item.subject === node?.id)?.features}
-              busy={run.isPending}
-              onTrace={trace}
-              onTarget={(target) =>
-                setQuery((previous) => ({ ...previous, mode: "path", target }))
-              }
-              onSelect={select}
-              onError={reportError}
-            />
+            {inspecting && (
+              <SelectionInspector
+                key={selection?.id}
+                node={node}
+                edge={edge}
+                features={result.transaction_features?.find(item => item.subject === node?.id)?.features}
+                busy={run.isPending}
+                onTrace={trace}
+                onTarget={(target) =>
+                  setQuery((previous) => ({ ...previous, mode: "path", target }))
+                }
+                onSelect={select}
+                onClose={() => setSelection(null)}
+                onError={reportError}
+              />
+            )}
           </div>
-          <ResultPanels result={result} tab={tab} setTab={setTab} node={node} pickedSubject={pickedSubject} select={select} setHighlighted={setHighlighted} reportError={reportError} />
-          <p className="select-text break-all font-mono text-[10px] text-muted-foreground">
-            {t("snapshot")}: {result.snapshot_id}
-          </p>
+          <ResultPanels
+            result={result}
+            tab={tab}
+            setTab={setTab}
+            node={node}
+            pickedSubject={pickedSubject}
+            select={select}
+            setHighlighted={setHighlighted}
+            reportError={reportError}
+            onAcquire={() => setShowAcquire(true)}
+          />
         </>
       ) : (
-        <div className="rounded-xl border border-dashed px-6 py-14 text-center">
-          <Network className="mx-auto mb-3 size-8 text-muted-foreground/50" />
-          <h2 className="text-base font-medium">{t("empty")}</h2>
-          <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
-            {t("emptyDetail")}
-          </p>
+        <div className="flex items-center justify-center gap-3 rounded-xl border border-dashed px-6 py-10 text-sm text-muted-foreground">
+          <Network className="size-5 text-muted-foreground/60" />
+          {t("empty")}
         </div>
       )}
-      <SavedInvestigations
-        result={result}
-        onLoad={load}
-        onError={reportError}
-        onNotice={setNotice}
-      />
+      <details className="rounded-lg border">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+          {t("case.title")}
+        </summary>
+        <SavedInvestigations
+          result={result}
+          onLoad={load}
+          onError={reportError}
+          onNotice={setNotice}
+        />
+      </details>
       <details
         className="rounded-lg border"
+        open={showAcquire}
         onToggle={(event) => setShowAcquire(event.currentTarget.open)}
       >
         <summary className="cursor-pointer px-4 py-3 text-sm font-medium">

@@ -52,10 +52,54 @@ describe("Privacy Mirror exposure report", () => {
   it("does not turn an empty or incomplete population into a privacy grade", () => {
     const empty = payload({ findings: [], summary: { status: "unavailable", finding_count: 0, attention_count: 0, owned_output_count: 0, analyzed_transaction_count: 0, local_transaction_count: 0, domain_count: 0 } });
     const html = render(empty);
-    expect(html).toContain("More local evidence is needed");
+    expect(html).toContain("No local transactions to examine");
     expect(html).not.toContain("No exposure identified");
+    expect(html).not.toContain("No findings");
     expect(html).not.toContain("A+");
     expect(html).not.toContain("privacy-score");
+  });
+  it("keeps an unassessed book unknown even when surrounding findings exist", () => {
+    const contextFinding = finding({ id: "ctx", relevance: "received_context", severity: "info" });
+    // QA book: 13 local transactions, none owned, backend status unavailable, only context findings.
+    const html = render(payload({ findings: [contextFinding], summary: { status: "unavailable", finding_count: 3, attention_count: 0, owned_output_count: 0, analyzed_transaction_count: 13, local_transaction_count: 13, domain_count: 1 } }));
+    expect(html).toContain("No owned outputs in the local evidence");
+    expect(html).not.toContain("Surrounding activity only");
+    expect(html).not.toContain("No findings");
+    expect(html).toContain('data-testid="privacy-mirror-context"');
+    expect(html).toContain('data-relevance="received_context"');
+    const owned = render(payload({ findings: [contextFinding], summary: { status: "unavailable", finding_count: 1, attention_count: 0, owned_output_count: 4, analyzed_transaction_count: 13, local_transaction_count: 13, domain_count: 1 } }));
+    expect(owned).toContain("More local evidence is needed");
+    expect(owned).not.toContain("Surrounding activity only");
+  });
+  it("names surrounding-only findings for an assessed snapshot without asserting absence", () => {
+    const html = render(payload({ findings: [finding({ id: "ctx", relevance: "nearby_context", severity: "info" })], summary: { status: "findings", finding_count: 1, attention_count: 0, owned_output_count: 4, analyzed_transaction_count: 13, local_transaction_count: 13, domain_count: 1 }, coverage: { ...payload().coverage, status: "complete", truncated: false, missing_nodes: 0, stopped_reasons: [] } }));
+    expect(html).toContain("Surrounding activity only in this snapshot");
+    expect(html).toContain("Not personal exposure on its own.");
+    expect(html).not.toContain('data-testid="privacy-mirror-attention"');
+    const clean = render(payload({ findings: [], summary: { status: "no_observed_exposure", finding_count: 0, attention_count: 0, owned_output_count: 0, analyzed_transaction_count: 13, local_transaction_count: 13, domain_count: 1 } }));
+    expect(clean).toContain("No owned outputs in the local evidence");
+    expect(clean).not.toContain("No findings");
+  });
+  it("treats an owned info-severity spend as personal even when the attention count is zero", () => {
+    // Actual backend fixture: ordinary owned RBF-signalling spend.
+    const rbf = finding({ id: "rbf", code: "explicit_rbf_signal", category: "structure", severity: "info", authority: "observed", relevance: "own_spend", title: "Explicit RBF signal", affected_output_count: 0 });
+    const html = render(payload({ findings: [rbf], summary: { status: "no_observed_exposure", finding_count: 1, attention_count: 0, owned_output_count: 1, analyzed_transaction_count: 1, local_transaction_count: 1, domain_count: 1 } }));
+    expect(html).toContain("Findings about your activity");
+    expect(html).toContain('data-testid="privacy-mirror-attention"');
+    expect(html).toContain('data-relevance="own_spend"');
+    expect(html).not.toContain("Surrounding activity only");
+    expect(html).not.toContain('data-testid="privacy-mirror-context"');
+  });
+  it("keeps personal findings primary and collapses context and coverage by default", () => {
+    const html = render();
+    expect(html).toContain('data-testid="privacy-mirror-attention"');
+    expect(html).toContain("Findings about your activity");
+    expect(html.indexOf('data-testid="privacy-mirror-attention"')).toBeLessThan(html.indexOf('data-testid="privacy-mirror-context"'));
+    expect(html).toContain('<details class="rounded-lg border bg-card" data-testid="privacy-mirror-context">');
+    expect(html).toContain('<details class="rounded-lg border bg-card" data-testid="privacy-mirror-coverage">');
+    expect(html.match(/<details[^>]*\sopen=""/g)).toBeNull();
+    expect(html).toContain("3 missing nodes");
+    expect(html).toContain("The analysis reached a bound.");
   });
   it("keeps a previous result visibly stale after refresh fails", () => {
     const html = render(payload(), "Local snapshot unavailable");
@@ -98,8 +142,9 @@ describe("Privacy Mirror exposure report", () => {
     expect(html).toContain("A separate premise.");
     expect(html.match(/data-testid="privacy-finding"/g)).toHaveLength(4);
   });
-  it("registers its route and preserves public Workbench search fields", () => {
+  it("registers its route without a developer gate and preserves public Workbench search fields", () => {
     expect(router.routesByPath["/privacy-mirror"]).toBeTruthy();
+    expect(router.routesByPath["/privacy-mirror"].options.beforeLoad).toBeUndefined();
     const validate = router.routesByPath["/chain-analysis"].options.validateSearch;
     expect(typeof validate).toBe("function");
     if (typeof validate === "function") expect(validate({ observer: "public", chain: "bitcoin", network: "regtest", workspace: "psbt" })).toEqual({ observer: "public", chain: "bitcoin", network: "regtest", workspace: "psbt" });

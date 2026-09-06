@@ -4,9 +4,22 @@ Open **Extras → Chain analysis** (`/chain-analysis`). The investigation worksp
 is available without developer mode. It reads the active book and its local
 reference observations. Opening the graph runs one bounded local overview; a
 transaction or Privacy Mirror investigation link runs its selected local query.
-Editing controls requires **Run investigation**. PSBT and dataset links do not
-run a graph query. None of these entry actions contacts an explorer, syncs a
-wallet, acquires evidence or starts an entropy job.
+Editing controls requires **Run**. PSBT and dataset links do not run a graph
+query. None of these entry actions contacts an explorer, syncs a wallet,
+acquires evidence or starts an entropy job.
+
+The query bar holds the starting point, direction, perspective and **Run**.
+Query type, path target, chain/network, budgets, time and amount bounds and the
+relation/hypothesis layers sit under **Filters**; a required filter that fails
+validation reopens the disclosure. A strip above the graph states what the
+*executed* query used: perspective, effective layers (the public observer never
+sees custody relations, even when requested), domain, coverage and frontier;
+edited but unrun controls show a separate notice. Node and edge counts and the
+full snapshot ID sit under Coverage. Results are grouped into Findings
+(findings, patterns, clusters, label exposure), Paths, Coverage (coverage,
+frontier) and Tools (entropy, labels). Deep links still address the individual
+subview. The inspector appears only for a selection, and
+the exactly resolved starting point carries a dotted ring in the graph.
 
 [Privacy Mirror](privacy-mirror.md) is the concise public-observer summary of
 this same engine. `analyze_snapshot` composes an immutable canonical index after

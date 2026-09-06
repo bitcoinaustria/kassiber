@@ -198,6 +198,55 @@ export function formatAnalysisAmount(
   return `${sign}${whole}${fraction ? `.${fraction}` : ""} ${asset || "BTC"}`;
 }
 
+/**
+ * Primary graph caption. Meaningful labels (wallets, records, custom names) pass
+ * through; labels that merely repeat or prefix the physical identity are replaced
+ * by a head+tail abbreviation so same-prefix identities stay distinguishable.
+ * An outpoint keeps its index. The full identity remains in the accessible name.
+ */
+export function analysisNodeCaption(
+  node: Pick<AnalysisNode, "label" | "txid" | "outpoint" | "id">,
+  maximum = 26,
+): string {
+  const identity = node.outpoint || node.txid || node.id;
+  const label = (node.label || "").trim();
+  const stem = label.replace(/[….]+$/, "");
+  const colon = node.outpoint ? node.outpoint.lastIndexOf(":") : -1;
+  const [core, index] =
+    node.outpoint && colon > 0
+      ? [node.outpoint.slice(0, colon), node.outpoint.slice(colon + 1)]
+      : [identity, undefined];
+  // Backend output labels are `${txid prefix}:${vout}`; the prefix alone is not readable.
+  const abbreviatedOutpoint =
+    index !== undefined &&
+    /^[0-9a-f]+:\d+$/i.test(stem) &&
+    stem.endsWith(`:${index}`) &&
+    core.startsWith(stem.slice(0, stem.lastIndexOf(":")));
+  const derived =
+    !stem ||
+    abbreviatedOutpoint ||
+    [node.id, node.txid, node.outpoint].some(
+      (value) => value && (value === label || value.startsWith(stem)),
+    );
+  if (!derived) return shortAnalysisId(label, maximum);
+  const abbreviated =
+    core.length > 20 ? `${core.slice(0, 8)}…${core.slice(-8)}` : core;
+  return index === undefined ? abbreviated : `${abbreviated}:${index}`;
+}
+
+/**
+ * Layers the engine actually applied. The public observer never sees private
+ * custody relations, whatever the request said; hypotheses stay as requested.
+ */
+export function analysisEffectiveLayers(
+  query: Pick<AnalysisQuery, "observer" | "include_relations" | "include_hypotheses">,
+): { relations: boolean; hypotheses: boolean } {
+  return {
+    relations: query.include_relations && query.observer !== "public",
+    hypotheses: query.include_hypotheses,
+  };
+}
+
 export function shortAnalysisId(value: string, maximum = 24): string {
   return value.length > maximum
     ? `${value.slice(0, Math.floor(maximum / 2))}…${value.slice(-8)}`
@@ -207,6 +256,22 @@ export function shortAnalysisId(value: string, maximum = 24): string {
 export function analysisNodeSubject(node: AnalysisNode): string {
   // The canonical ID retains chain/network identity for otherwise identical txids.
   return node.id;
+}
+
+/** The node the executed subject names exactly; ambiguity or a fuzzy match yields nothing. */
+export function analysisSubjectNodeId(
+  result: Pick<AnalysisResult, "query" | "nodes">,
+): string | undefined {
+  const subject = result.query.subject?.trim();
+  if (!subject) return undefined;
+  // Outputs carry their creating txid, so a bare txid marks the transaction only.
+  const matches = result.nodes.filter(
+    (node) =>
+      node.id === subject ||
+      node.outpoint === subject ||
+      (node.kind === "transaction" && node.txid === subject),
+  );
+  return matches.length === 1 ? matches[0].id : undefined;
 }
 
 export interface AnalysisCase {

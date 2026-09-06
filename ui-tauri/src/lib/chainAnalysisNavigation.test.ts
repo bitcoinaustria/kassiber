@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_ANALYSIS_QUERY } from "./chainAnalysis";
-import { analysisInvestigationSearch, analysisSearchQuery, parseAnalysisSearch, transactionAnalysisSearch } from "./chainAnalysisNavigation";
+import { ANALYSIS_SECTIONS, analysisInvestigationSearch, analysisSearchQuery, analysisSection, parseAnalysisSearch, transactionAnalysisSearch, type AnalysisTab } from "./chainAnalysisNavigation";
 
 const txid = "a".repeat(64);
 describe("Chain Analysis navigation", () => {
@@ -24,6 +24,18 @@ describe("Chain Analysis navigation", () => {
   });
   it.each([["liquidv1", "main"], ["liquidtestnet", "test"], ["elementsregtest", "regtest"]])("normalizes Liquid domain %s for the query API", (network, expected) => {
     expect(transactionAnalysisSearch({ explorerId: txid, chain: "liquid", network })).toMatchObject({ subject: txid, chain: "liquid", network: expected, observer: "public", mode: "trace" });
+  });
+  it("groups every canonical tab into exactly one presentation section", () => {
+    const tabs: AnalysisTab[] = ["findings", "frontier", "clusters", "paths", "coverage", "entropy", "labels", "patterns", "exposure"];
+    const grouped = Object.values(ANALYSIS_SECTIONS).flat();
+    expect([...grouped].sort()).toEqual([...tabs].sort());
+    expect(analysisSection("patterns")).toBe("findings");
+    expect(analysisSection("exposure")).toBe("findings");
+    expect(analysisSection("frontier")).toBe("coverage");
+    expect(analysisSection("entropy")).toBe("tools");
+    expect(analysisSection("paths")).toBe("paths");
+    // A Mirror deep link to a subview must land on that subview, not the group's first tab.
+    expect(parseAnalysisSearch(analysisInvestigationSearch(DEFAULT_ANALYSIS_QUERY, "graph", "exposure")).tab).toBe("exposure");
   });
   it("uses an honest public overview when the physical identity or domain is unavailable", () => {
     for (const record of [{ txnId: "private-record" }, { txnId: txid }, { txnId: txid, chain: "bitcoin" }]) {

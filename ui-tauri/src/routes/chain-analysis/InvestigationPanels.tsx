@@ -59,13 +59,9 @@ export function SavedInvestigations({
     await list.refetch();
   };
   return (
-    <section className="rounded-lg border bg-card p-4">
-      <h2 className="text-sm font-semibold">{t("case.title")}</h2>
-      <p className="mt-1 text-xs text-muted-foreground">
-        {t("case.localHelp")}
-      </p>
+    <div className="px-4 pb-4">
       <form
-        className="mt-3 flex flex-wrap gap-2"
+        className="flex flex-wrap gap-2"
         onSubmit={async (event) => {
           event.preventDefault();
           if (!result || !title.trim() || busy) return;
@@ -205,7 +201,7 @@ export function SavedInvestigations({
         </Button>
       )}
       {comparison && <CaseComparison comparison={comparison} />}
-    </section>
+    </div>
   );
 }
 
@@ -282,13 +278,12 @@ export function AcquisitionPanel({
   );
   const busy = preview.isPending || apply.isPending;
   return (
-    <section className="rounded-lg border bg-card p-4">
-      <h2 className="text-sm font-semibold">{t("acquire.title")}</h2>
-      <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">
+    <div className="px-4 pb-4">
+      <p className="max-w-3xl text-xs leading-relaxed text-muted-foreground">
         {t("acquire.description")}
       </p>
       <form
-        className="mt-4 space-y-3"
+        className="mt-3 space-y-3"
         onSubmit={async (event) => {
           event.preventDefault();
           if (busy) return;
@@ -483,7 +478,7 @@ export function AcquisitionPanel({
           <EvidenceDetails value={outcome.frontier} label={t("frontier")} />
         </div>
       )}
-    </section>
+    </div>
   );
 }
 
