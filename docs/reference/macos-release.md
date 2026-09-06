@@ -81,10 +81,17 @@ requiring another person's approval would deadlock the current team.
 
    The directory must not exist. The helper checks the official repository,
    workflow, successful run, event and exact tag commit before downloading.
-   It parses embedded metadata without executing downloaded binaries, signs
-   every Mach-O from inside out with secure timestamps and hardened runtime,
+   It parses embedded metadata without executing downloaded binaries, prepares
+   and checks Mach-O linkage that Homebrew can preserve without rewriting,
+   and signs every Mach-O from inside out with secure timestamps and hardened runtime,
    seals the app and DMG, uploads the signed input to the draft and dispatches
    `notarize-macos`. Omitting `--submit` stops after local signing.
+   Immediately before upload and again before dispatch, it rechecks that the
+   release is an unsigned draft and the tag still names the verified commit.
+   These checks close the long signing/upload window; they are not an atomic
+   GitHub transaction and do not replace tag protection. If a later check
+   fails, inspect the draft before retrying; the helper never clobbers an input
+   or automatically deletes a completed upload.
    Keychain access may require your local approval. Do not enable blanket
    access for arbitrary tools or disable library validation to pass a build.
 3. CI checks the input hash, Apple signature/team and source/version, submits
@@ -108,11 +115,17 @@ requiring another person's approval would deadlock the current team.
    download. Automated `codesign`, `stapler` and `spctl` checks are necessary,
    not a substitute for this installation test; never clear quarantine to
    make a release pass. Notarization is not a guarantee of bug-free software.
+   Also exercise both Homebrew installation routes with the candidate assets
+   and verify the installed app's Developer ID seal after Homebrew finishes.
+   Archive verification alone cannot prove that an installer preserved it.
 5. Only now use the existing offline OpenPGP manifest signing procedure and
    attach its `.asc`. Dispatch `finalize-signed-release` on `main`. It checks
    the exact complete file set, pinned OpenPGP identity, Developer ID signatures,
    tickets, Gatekeeper assessment and matching app contents across all three
    macOS distributions before publication. Homebrew gets the final hashes.
+   The macOS formula keeps the app intact under `libexec`, disabling Python
+   metadata cleanup for that subtree and preserving `@rpath` library IDs.
+   The sealed-artifact checks reject linkage that would still require rewriting.
 
 ## Failure and retry
 

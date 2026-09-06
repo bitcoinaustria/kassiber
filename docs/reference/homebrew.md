@@ -7,10 +7,10 @@ Kassiber publishes two Homebrew packages from a project-owned tap:
   bundled CLI sidecar via the desktop executable, and the cask links that
   launcher as the terminal command. Installing the cask therefore yields both
   the GUI and a working `kassiber` command with no further steps.
-- **Formula `kassiber-cli`** — the CLI-only frozen executable, with no desktop
-  GUI dependencies. It installs the same one-file binary that the CLI-only
-  release archives ship (macOS arm64 and — for Homebrew on Linux — Linux
-  x86_64).
+- **Formula `kassiber-cli`** — the terminal entrypoint. Verified macOS releases
+  install the complete notarized app runtime under `libexec/Kassiber.app` and
+  link its managed launcher; invoking it does not launch the GUI. Homebrew on
+  Linux installs the frozen one-file CLI executable (Linux x86_64).
 
 Both packages are Apple Silicon only on macOS; the cask declares
 `depends_on arch: :arm64`. Intel Macs run Kassiber from source.
@@ -27,7 +27,7 @@ Install one package by its fully qualified name:
 # Desktop app plus the kassiber terminal command
 brew install --cask bitcoinaustria/kassiber/kassiber
 
-# Or: CLI only, without desktop GUI dependencies
+# Or: terminal command without installing the desktop app in Applications
 brew install bitcoinaustria/kassiber/kassiber-cli
 ```
 
@@ -50,9 +50,10 @@ Tap trust and macOS Gatekeeper are separate checks:
 
 - Homebrew trust controls whether Homebrew may evaluate the tap's package
   definition.
-- Gatekeeper checks the downloaded macOS application. Kassiber's current cask
-  is unsigned and unnotarized, so the desktop app still needs the first-launch
-  approval described below even after Homebrew trusts its cask.
+- Gatekeeper checks the downloaded macOS application. New verified releases
+  require Developer ID signing and notarization; historical unsigned previews
+  still need the first-launch approval described below. Merging the release
+  tooling does not retroactively sign existing downloads.
 
 ## Tap setup
 
@@ -77,24 +78,29 @@ artifacts but skip or reject the requested Homebrew update as appropriate.
 
 ## Publishing
 
-During the unsigned transition, a tag publish or `workflow_dispatch` run with
-`publish_release=true` performs the complete build and tap update. After the
-code-reviewed release-signing policy is enabled, the build workflow creates a
-draft only and `finalize-signed-release.yml` performs the publication:
+For a tag build or `workflow_dispatch` run with `publish_release=true`, the
+build workflow creates a draft only. It never publishes or updates the tap,
+even while the release-signing policy is disabled. After the activation
+requirements in [macOS release trust](macos-release.md) are met, publication
+uses the following sequence:
 
-1. Builds and uploads `kassiber-macos-arm64.dmg` plus the
-   `kassiber-cli-*.tar.gz` archives.
-2. Generates `kassiber-<version>-manifest.txt`, the same versioned SHA-256
-   manifest used for OpenPGP release verification.
-3. Authenticates the detached manifest signature and verifies the exact draft
-   asset set without rebuilding or replacing files.
-4. Checks out `bitcoinaustria/homebrew-kassiber` when
-   `HOMEBREW_TAP_TOKEN` is configured.
-5. Renders `Casks/kassiber.rb` and `Formula/kassiber-cli.rb` from authenticated
-   manifest hashes with `scripts/render_homebrew.py`.
-6. Commits and pushes `Update Kassiber cask and CLI formula to <tag>`.
-7. Publishes the existing draft last. A failed tap push therefore leaves the
-   release as a draft instead of announcing a version the tap cannot install.
+1. Build unsigned inputs. Sign the macOS app locally, then notarize and staple
+   it in the gated workflow. Generate the final DMG, app ZIP, and CLI archive
+   from that same sealed app.
+2. Generate `kassiber-<version>-manifest.txt` over the final release asset set
+   and obtain its detached OpenPGP signature offline.
+3. `finalize-signed-release.yml` authenticates the manifest signature, checks
+   the exact asset set, and verifies the macOS signatures, tickets, provenance,
+   and smoke tests without rebuilding or replacing release files.
+4. When `publish_homebrew=true`, require `HOMEBREW_TAP_TOKEN`, check out
+   `bitcoinaustria/homebrew-kassiber`, and render `Casks/kassiber.rb` and
+   `Formula/kassiber-cli.rb` from the authenticated manifest hashes.
+5. Recheck that the release assets, tag commit, and draft state are unchanged,
+   then publish the verified draft.
+6. Commit and push `Update Kassiber cask and CLI formula to <tag>`. A failed
+   tap push leaves the already verified release published; rerunning the
+   finalizer re-verifies those same assets and retries the tap update without
+   replacing assets or requiring another signature.
 
 The generated cask points at the immutable GitHub release DMG and links the
 bundled terminal launcher:
@@ -106,13 +112,12 @@ binary "#{appdir}/Kassiber.app/Contents/Resources/bin/kassiber",
 ```
 
 The generated formula selects the matching CLI archive per platform and
-architecture and installs the frozen executable directly:
-
-```ruby
-def install
-  bin.install "kassiber"
-end
-```
+architecture. On macOS it preserves the sealed app under `libexec` with
+`skip_clean "libexec/Kassiber.app"` and `preserve_rpath`: Homebrew must not
+clean bundled Python metadata or rewrite library install names after signing.
+The release helper prepares and checks compatible Mach-O linkage before the
+app is sealed, and verifies that invariant again on the sealed artifacts.
+Linux continues to use `bin.install "kassiber"` directly.
 
 Users install the desktop app and terminal command with a scoped-trust command:
 
@@ -121,7 +126,7 @@ brew install --cask bitcoinaustria/kassiber/kassiber
 kassiber status
 ```
 
-Or the CLI only, without any desktop GUI dependencies:
+Or the terminal command without installing the app in Applications:
 
 ```bash
 brew install bitcoinaustria/kassiber/kassiber-cli
@@ -177,8 +182,8 @@ published release key; neither mechanism replaces the other.
   Settings -> Privacy & Security -> "Open Anyway" (macOS 15+ removed the
   right-click-Open shortcut). Installing with
   `brew install --cask --no-quarantine bitcoinaustria/kassiber/kassiber`
-  skips the prompt at the user's own discretion. Apple Developer ID signing
-  plus notarization is the eventual fix and is tracked separately in TODO.md.
+  skips the prompt at the user's own discretion. New production releases
+  instead require the signing and notarization pipeline described above.
 - **Formula**: the frozen CLI is downloaded by Homebrew itself, which does
   not quarantine formula resources, and the arm64 binary carries the ad-hoc
   signature PyInstaller applies. `kassiber-cli` therefore runs without any
