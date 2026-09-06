@@ -13,7 +13,10 @@ The integrated branch includes retained Bitcoin/RP2 projections, Austrian 2025
 K2/annex working papers, ordinary opaque accounting-task tools and selected
 financial AI assistance. This dependent third cut restores selected assistance
 with its security protections and tests; #546 remains the separate ordinary-task
-cut. Fresh split verification and publication remain outstanding.
+cut. This lane is published in
+[#550](https://github.com/bitcoinaustria/kassiber/pull/550) at `2d5ab45f`;
+full local gates and independent split reviews passed. The intermittent
+encrypted-handle rejection remains unresolved.
 The organization's actual coverage and measured pilot outcomes are separate product acceptance,
 not blanket code-merge blockers or a filing certification.
 An accounting period lock is not a tax-ready declaration or evidence that all
@@ -358,8 +361,8 @@ all or none. This deterministic CLI contract does not require selected AI.
 
 This optional lane is implemented in `codex/accounting-selected-ai`, above the
 ordinary task cut. Commands, grant lifecycle, provider protections and tests
-were restored together from preserved complete candidate `32312f0e`; fresh
-verification of this split remains pending.
+were restored together from preserved complete candidate `32312f0e` and passed
+the split's full local gate at `2d5ab45f`.
 Ordinary task tools above do not depend on this lane or release financial context.
 
 Selected accounting AI must work only with explicitly selected pages, fields,

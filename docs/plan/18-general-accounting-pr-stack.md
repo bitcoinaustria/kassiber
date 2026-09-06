@@ -32,13 +32,12 @@ explicit future receipt references from cutoff inventory using RP2 itself.
 Adapter version `cutoff-prefix-v2` rejects stale calculation reuse without
 rewriting immutable history. This does not establish organizational acceptance.
 
-## Accounting cuts (locally recombined; publication pending)
+## Published accounting cuts
 
-The local #546 cut contains ordinary task execution only. This dependent third
-cut restores selected assistance, its security protections and tests together,
-as explicitly approved by the owner. Published #546 still points to preserved
-full candidate `32312f0e` until the new cuts are verified and pushed. Third-PR
-publication remains pending. Recombined code/tests match that full candidate
+Published #546 at `9ef535f1` contains ordinary task execution only. This
+dependent third cut is published as #550 at `2d5ab45f`, restoring selected
+assistance, its security protections and tests together as explicitly approved
+by the owner. Recombined code/tests match full candidate `32312f0e`
 except the intentionally removed unused native export scaffold; docs retain
 the approved split and acceptance-policy updates.
 
@@ -46,7 +45,7 @@ the approved split and acceptance-policy updates.
 | --- | --- | --- |
 | [#545](https://github.com/bitcoinaustria/kassiber/pull/545) | `codex/accounting-core-cli` | Complete deterministic local accounting domain and CLI: encrypted separate ledger/evidence, bank/open items/schedules/cash, retained RP2 sources/calculations, projections/openings/valuations, statements/close, jurisdiction workpapers, durable local tasks, recovery and internal daemon/document-worker contracts. No accounting AI tools, provider changes or new UI. |
 | [#546](https://github.com/bitcoinaustria/kassiber/pull/546) | `codex/accounting-scoped-agent` | Ordinary agent execution through four opaque task tools, exact local CLI/existing-Assistant consent, durable prepare/post/close/tax/export receipts and restart. No selected financial disclosure or new accounting screens. |
-| Third PR (publication pending) | `codex/accounting-selected-ai` | Dependent selected financial assistance: exact disclosure grants, guarded document/draft proposals, hash-bound CLI selection and tool-free/no-history provider isolation/cancellation. Separate from ordinary task execution. |
+| [#550](https://github.com/bitcoinaustria/kassiber/pull/550) | `codex/accounting-selected-ai` | Dependent selected financial assistance: exact disclosure grants, guarded document/draft proposals, hash-bound CLI selection and tool-free/no-history provider isolation/cancellation. Separate from ordinary task execution. |
 
 The coupled financial domain remains together in #545. #546 separates task
 execution from financial-context disclosure, which belongs to the third cut.
@@ -54,10 +53,11 @@ Each cut must import and run independently without placeholder modules or
 disabled tests; the recombined stack must preserve the prior full composition.
 
 PR #543 landed independently. #542 is merged after the dependency correction;
-the target stack is `main -> #545 -> #546 -> selected-AI PR`.
-The two published accounting PRs remain draft at this checkpoint. Final per-cut
-verification and the unresolved encrypted-handle rejection are technical merge
-gates. Missing organization data and measured pilot outcomes are product/pilot
+the published stack is `main -> #545 -> #546 -> #550`, at code checkpoints
+`780f2da9`, `9ef535f1` and `2d5ab45f` respectively. All three are draft,
+unmerged PRs. Per-cut full local gates and independent split reviews passed;
+the unresolved encrypted-handle rejection remains a technical merge hold.
+Missing organization data and measured pilot outcomes are product/pilot
 acceptance, not blanket code-merge blockers; they remain mandatory before
 claiming the organization's workflow complete. No auto-merge is armed here.
 If any base changes, restack and rerun scope/basis/consent integration tests.
@@ -105,8 +105,16 @@ remain unenrolled and need no general-accounting configuration.
 
 ## Verification and unresolved gates
 
-The new split's per-cut and recombined verification is pending. Results below
-describe preserved earlier candidates, not proof that the new split is green.
+The new task cut `9ef535f1` passed 4,429 Python tests / 425 subtests and
+1,019 UI tests (136 files); selected-AI `2d5ab45f` passed 4,539 Python tests /
+432 subtests and 1,026 UI tests (137 files). Both pass TypeScript and ESLint
+with zero errors, 39 optional Python skips and 50 existing lint warnings.
+Independent split reviews found no actionable code issue. Shared native tests
+pass 112 cases; the selected broker passes seven isolation tests; exact-source
+selected CLI and sidecar each pass three packaged smoke cases. Details and
+limits are in the [acceptance record](../reference/general-accounting-acceptance.md).
+The reliability hold remains; external CLI model review is not completed.
+Older results below describe preserved candidates, not the new gate runs.
 
 The pre-split follow-up combined candidate was `c6ce832c` over core `0568757e`, including
 merged #548. It adds exact local task amendments/Bitcoin preparation, durable
@@ -150,5 +158,5 @@ Record exact final gate results and published PR links in the
 [acceptance record](../reference/general-accounting-acceptance.md). The real
 organization's confirmed facts, measured mixed-source user effort and full
 AF-1 through AF-5 product acceptance remain open independently of code merge.
-Current-cut technical/package verification remains required. A synthetic K2
-export is not a completed real filing.
+Passing current-cut technical/package checks do not resolve the reliability
+hold. A synthetic K2 export is not a completed real filing.

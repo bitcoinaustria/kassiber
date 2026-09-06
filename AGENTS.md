@@ -434,7 +434,7 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
   receives opaque task state, not financial previews; preserve explicit
   per-step mutation consent. #545 owns the complete deterministic core/CLI;
   #546 owns ordinary opaque task execution and exact local consent. This
-  dependent `codex/accounting-selected-ai` cut adds selected financial
+  dependent `codex/accounting-selected-ai` cut (#550) adds selected financial
   disclosure/proposals with their provider protections and tests. Keep
   disclosure authorization separate from task-mutation consent. Missing pilot
   data or measured productivity does not block code merge; unresolved security,

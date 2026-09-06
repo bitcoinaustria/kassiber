@@ -31,13 +31,14 @@ that replace existing files instead of making targeted edits.
   `32312f0e` on `codex/accounting-agent-presplit-20260906` and core `780f2da9`
   on `codex/accounting-core-presplit-20260906`. No financial records, live
   books or original preview are targets. Technical failures remain merge holds;
-  the extraction and recombination require fresh independent verification.
+  the extraction and recombination passed independent reviews and full local gates.
 - Command/tool: Scoped `apply_patch` extraction with preserved recovery refs.
-  Third-lane restoration is applied locally; fresh tests and stack publication
-  remain pending. The recombined code/tests match preserved `32312f0e` except
+  Task cut #546 is published at `9ef535f1`; third cut #550 is published at
+  `2d5ab45f`. The recombined code/tests match preserved `32312f0e` except
   the intentionally removed unused native export scaffold; documentation
   retains the approved split and acceptance-policy updates. The feature was
-  never left enabled with weaker guards in the second cut.
+  never left enabled with weaker guards in the second cut. Publication and
+  passing gates do not waive the unresolved reliability hold.
 
 - Date: 2026-09-05
 - Approval source: Owner requested full accounting CLI/Agent-only instead of a
