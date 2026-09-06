@@ -121,6 +121,8 @@ def _run_worker(kind, arguments, content, cancel, *, timeout):
             else:
                 process.kill()
         except ProcessLookupError:
+            # The group already exited between cancellation and kill; still
+            # reap the worker below and propagate the original failure.
             pass
         process.communicate()
         if isinstance(exc, subprocess.TimeoutExpired):

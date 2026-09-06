@@ -15,6 +15,8 @@ def main():
         if sys.platform != "darwin":
             resource.setrlimit(resource.RLIMIT_AS, (384 * 1024**2, 384 * 1024**2))
     except (ImportError, OSError, ValueError):
+        # OS resource caps are best effort; the parent still enforces a
+        # deadline/process-group kill and this worker bounds input/output.
         pass
     content = sys.stdin.buffer.read(20 * 1024**2 + 1)
     if not content.startswith(b"%PDF-") or len(content) > 20 * 1024**2:
@@ -33,6 +35,8 @@ def main():
                 process.stdin.write(content)
                 process.stdin.close()
             except (BrokenPipeError, OSError):
+                # The parser may exit or be killed before consuming stdin;
+                # the reader/wait path below validates its output and status.
                 pass
         writer = threading.Thread(target=feed, daemon=True)
         writer.start()
