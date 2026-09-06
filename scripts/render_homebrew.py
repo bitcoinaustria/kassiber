@@ -78,6 +78,9 @@ def render_cli_formula(
   license "AGPL-3.0-only"
 
   on_macos do
+    # Homebrew must not rewrite the Developer ID-sealed runtime or metadata.
+    preserve_rpath
+    skip_clean "libexec/Kassiber.app"
     on_arm do
       url "{RELEASE_URL_BASE}/v#{{version}}/kassiber-cli-macos-arm64.tar.gz"
       sha256 "{macos_arm64}"
@@ -92,7 +95,14 @@ def render_cli_formula(
   end
 
   def install
-    bin.install "kassiber"
+    if OS.mac?
+      # Keep the notarized bundle intact; its launcher resolves symlinks.
+      libexec.install "Kassiber.app"
+      (bin/"kassiber").write_env_script libexec/"Kassiber.app/Contents/Resources/bin/kassiber",
+                                       KASSIBER_HOMEBREW_PACKAGE: "formula"
+    else
+      bin.install "kassiber"
+    end
   end
 
   # Formulae cannot declare conflicts with casks, so the overlap is surfaced

@@ -25,7 +25,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: finalize-signed-release-${{ inputs.tag_name }}
+  group: release-seal-${{ inputs.tag_name }}
   cancel-in-progress: false
 
 env:
@@ -38,24 +38,37 @@ jobs:
   finalize:
     name: Verify and publish existing signed draft
     environment: release-production
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    runs-on: macos-15
+    timeout-minutes: 30
     steps:
       - name: Require the trusted main workflow ref
         run: test "$GITHUB_REF" = "refs/heads/main"
-      - name: Check out the release tag
+      - name: Require the standard public ARM64 runner
+        # GitHub's standard macos-15 label is ARM64 for public repositories.
+        # Fail explicitly if the repository/runner offering ever changes.
+        run: test "$(uname -m)" = arm64
+      - name: Check out trusted release tooling
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
           persist-credentials: false
-          ref: ${{ inputs.tag_name }}
+          # Execute the reviewed current workflow tooling, not old tag scripts.
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
       - name: Require the release tag to come from trusted main history
+        env:
+          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
         run: |
           set -euo pipefail
-          if ! git merge-base --is-ancestor HEAD origin/main; then
+          [[ "$RELEASE_TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]
+          if ! git merge-base --is-ancestor "refs/tags/$RELEASE_TAG_NAME^{commit}" origin/main; then
             echo "Release tag must point to a commit in origin/main history." >&2
             exit 1
           fi
+      - name: Install manifest verification tool
+        run: brew install gnupg
       - name: Load enabled release signing policy
         id: release-signing
         run: |
@@ -90,6 +103,11 @@ jobs:
             <<< "$release_state"
           test "$actual_tag" = "$RELEASE_TAG_NAME"
           test "$actual_prerelease" = "$expected_prerelease"
+          # Published releases may be re-verified to retry a failed tap push.
+          # This workflow never replaces release assets.
+          case "$actual_draft" in true|false) ;; *) exit 1 ;; esac
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG_NAME" \
+            --jq '[.assets[] | {id, name, size, digest}] | sort_by(.name)' > release-assets.json
           mkdir release
           gh release download "$RELEASE_TAG_NAME" \
             --repo "$GITHUB_REPOSITORY" --dir release
@@ -111,6 +129,14 @@ jobs:
             --signature "$RELEASE_SIGNATURE" \
             --public-key "$RELEASE_PUBLIC_KEY_PATH" \
             --fingerprint "$RELEASE_SIGNING_FINGERPRINT"
+      - name: Verify actual macOS release bytes before publication
+        env:
+          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          python3 scripts/macos_release.py verify --release-dir release \
+            --commit "$(git rev-parse "refs/tags/$RELEASE_TAG_NAME^{commit}")" \
+            --version "$VERSION" --smoke
       - name: Require Homebrew publication credentials
         if: inputs.publish_homebrew == true
         env:
@@ -148,6 +174,28 @@ jobs:
             --sha256-macos-arm64 "$(release_sha256 kassiber-cli-macos-arm64.tar.gz)" \
             --sha256-linux-x64 "$(release_sha256 kassiber-cli-linux-x64.tar.gz)" \
             --output "homebrew-tap/${HOMEBREW_FORMULA_PATH}"
+      - name: Require unchanged release assets and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
+          RELEASE_WAS_DRAFT: ${{ steps.release.outputs.draft }}
+        run: |
+          set -euo pipefail
+          test "$(gh release view "$RELEASE_TAG_NAME" --json isDraft --jq .isDraft)" = "$RELEASE_WAS_DRAFT"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG_NAME" \
+            --jq '[.assets[] | {id, name, size, digest}] | sort_by(.name)' > current-assets.json
+          cmp release-assets.json current-assets.json
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG_NAME" --jq .sha)" = \
+            "$(git rev-parse "refs/tags/$RELEASE_TAG_NAME^{commit}")"
+      - name: Publish the verified draft
+        if: steps.release.outputs.draft == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
+          RELEASE_IS_PRERELEASE: ${{ steps.release.outputs.prerelease }}
+        run: |
+          gh release edit "$RELEASE_TAG_NAME" --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --draft=false --prerelease="$RELEASE_IS_PRERELEASE"
       - name: Commit Homebrew tap update
         if: inputs.publish_homebrew == true
         working-directory: homebrew-tap
@@ -164,15 +212,3 @@ jobs:
           fi
           git commit -m "Update Kassiber cask and CLI formula to ${RELEASE_TAG_NAME}"
           git push origin "HEAD:${HOMEBREW_TAP_BRANCH}"
-      - name: Publish the verified draft
-        if: steps.release.outputs.draft == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG_NAME: ${{ inputs.tag_name }}
-          RELEASE_IS_PRERELEASE: ${{ steps.release.outputs.prerelease }}
-        run: |
-          gh release edit "$RELEASE_TAG_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --verify-tag \
-            --draft=false \
-            --prerelease="$RELEASE_IS_PRERELEASE"

@@ -1,8 +1,10 @@
 # Prerelease Binaries
 
-Kassiber is still in early development. Version tags publish prerelease
+Kassiber is still in early development. Version tags stage draft release
 artifacts, while pull requests that touch packaging inputs run the same build
-matrix without publishing.
+matrix without publishing. New public releases must complete the
+[local signing / CI notarization runbook](macos-release.md) and offline
+OpenPGP verification; older unsigned downloads are not retroactively signed.
 
 ## What Runs Automatically
 
@@ -12,7 +14,8 @@ matrix without publishing.
   publishing.
 - Pushes to `main` run `.github/workflows/ci.yml` only.
 - Pushes of tags matching `v*` run `.github/workflows/prerelease-binaries.yml`
-  and publish the resulting artifacts to a GitHub prerelease.
+  and stage the resulting artifacts in a GitHub draft. Only
+  `finalize-signed-release.yml` publishes after verification.
 
 Keep the packaging workflow's pull-request path filter narrow. For one-off
 branch artifacts outside those paths, use a manual workflow run instead.
@@ -54,8 +57,8 @@ git fetch --tags origin
 git show --no-patch --oneline <tag-name>
 ```
 
-Then either push a new `v*` tag, which publishes automatically, or manually run
-the workflow with publishing enabled for an existing tag:
+Then either push a new `v*` tag, which stages a draft automatically, or manually
+run the workflow with draft staging enabled for an existing tag:
 
 ```bash
 gh workflow run prerelease-binaries.yml \
@@ -65,17 +68,15 @@ gh workflow run prerelease-binaries.yml \
   -f tag_name=<tag-name>
 ```
 
-After the permanent OpenPGP release key is published, production releases use
-the same command with `-f draft_release=true`. Download and sign the generated
-manifest offline, upload its `.asc` file to the draft, and have a second
-operator verify it. The second operator then runs
-`.github/workflows/finalize-signed-release.yml` against `main`. That workflow
-downloads the existing draft assets, authenticates the signature and exact
-artifact set against the code-reviewed release policy, renders Homebrew hashes
-from that authenticated manifest, and publishes the existing draft without
-rebuilding or replacing any asset. Once `packaging/release/signing-policy.json`
-is enabled, tag pushes and non-draft build runs fail closed instead of taking an
-unsigned publishing path.
+The build always leaves a draft, regardless of `draft_release` or whether the
+OpenPGP policy is enabled. Follow the [macOS release runbook](macos-release.md)
+to sign locally, notarize in CI, and verify the final artifacts **before**
+signing their manifest offline. Only `finalize-signed-release.yml` on `main`
+can publish after authenticating the exact asset set against the enabled,
+code-reviewed signing policy and checking the sealed macOS distributions.
+It then updates Homebrew from the authenticated hashes. A failed tap push can
+be retried without replacing release assets. The documented authorization
+model supports one maintainer; a second operator is not silently required.
 
 Only use `publish_release=true` for real prerelease tags. PR and branch tester
 builds should stay workflow artifacts, not GitHub Releases.
@@ -90,7 +91,7 @@ asks for one.
 
 The workflow currently builds:
 
-- CLI-only releases: macOS arm64 and Linux x86_64 one-file PyInstaller
+- Unsigned CLI build inputs: macOS arm64 and Linux x86_64 one-file PyInstaller
   binaries as `.tar.gz` archives, Windows x86_64 as a `.zip`, and Linux
   x86_64 additionally as GUI-free `kassiber-cli` `.deb` and binary `.rpm`
   packages. The extracted
@@ -106,15 +107,21 @@ The workflow currently builds:
   re-unpacking a one-file sidecar on every launch costs ~6s of macOS code
   signature re-validation (see [desktop.md](desktop.md)).
 
+The final verified macOS CLI archive replaces the unsigned one-file input with
+the complete notarized `Kassiber.app` runtime and its terminal launcher. The
+formula installs it under `libexec`, not Applications; CLI calls do not launch
+the GUI. Final DMG, app ZIP, and CLI archive share the same signed app payload;
+stapled-ticket metadata inside the DMG may differ.
+
 macOS is Apple Silicon only. Intel macOS builds were dropped deliberately:
 they could not ship the pinned `lwk` wheel (no macOS x86_64 wheel exists), so
 they silently downgraded Liquid observation to the compatibility route, and
 half-capable builds are worse than an explicit platform floor. Intel Mac users
 can run from source.
 
-Tag pushes keep the existing safe default and publish as prereleases. A manual
-workflow run can select `release_channel=release` to publish the same verified
-artifact set as a stable GitHub release. The embedded `BUILD_INFO.json` reports
+Tag pushes stage drafts marked as prereleases. A manual workflow run can select
+`release_channel=release` to stage a stable-release draft instead; finalization
+must use the matching channel. The embedded `BUILD_INFO.json` reports
 the selected `prerelease` or `release` channel.
 
 Tag and publishing runs fail before building when the tag without its leading
