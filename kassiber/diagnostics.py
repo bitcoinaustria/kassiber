@@ -85,8 +85,6 @@ _SENSITIVE_KEY_TOKENS = {
 }
 _SENSITIVE_EXACT_KEYS = {
     "payload",
-    "accounting_selection",
-    "accounting_selection_sha256",
     "account",
     "asset",
     "backend",

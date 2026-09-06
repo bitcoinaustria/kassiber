@@ -566,22 +566,36 @@ top of the monolith.
   - [x] Extract two cohesive accounting cuts: full deterministic core/CLI, then
     scoped agents and minimal consent. The seven-cut sketch is superseded;
     neither cut advertises absent modules or dedicated accounting screens.
+    Historical extraction; the approved three-cut split below supersedes it.
+  - [ ] Complete the approved 2026-09-06 split: keep #545 intact; #546 retains
+    four opaque task tools, exact local consent and durable export/restart;
+    move selected financial AI assistance to dependent
+    `codex/accounting-selected-ai`. Verify each cut and recombined feature
+    coverage; no placeholder imports, disabled tests or new accounting UI.
+    The second-cut extraction is applied locally with explicit owner approval;
+    fresh verification, third-cut restoration and publication remain pending.
   - [x] Publish draft stack #542 → #545 → #546 with explicit RP2 merge hold.
     Merge independently green #543 and close superseded #455, retaining branches.
   - [x] Resolve RP2 #48's chronological/historical basis blockers, merge the
     verified dependency and repinned #542, and inherit security #548.
-  - [ ] Land the accounting stack only after final per-cut/full gates and
-    agent-workflow acceptance. Draft publication and green stress repeats do
-    not waive the unresolved intermittent encrypted-handle rejection.
+  - [ ] Land independently verified accounting cuts after final technical
+    per-cut/full gates and review. Draft publication and green stress repeats
+    do not waive the unresolved intermittent encrypted-handle rejection.
+    Missing organization data or measured pilot outcomes remain product/pilot
+    acceptance, not blanket code-merge blockers; actual technical failures do block.
   - [x] Owner-approved CLI/Agent-only pivot: retain the experimental full UI at
     `fbfce410` on `codex/accounting-ui-preserved-20260905`; remove accounting
     route, sidebar, Settings switch and forms from `codex/accounting-cli-agent`.
     Keep all financial data/core and exact approval in the existing Assistant.
     Explicit CLI configuration replaces UI enrollment; no automatic encryption.
-  - [x] Restore selected financial AI assistance through a hash-bound interactive
-    CLI request, reusing the existing tool-free/no-history grants with separate
-    disclosure and draft/field approvals. No blanket approval, output capture,
-    implicit context switch, ordinary-agent financial read, or model fallback.
+  - [ ] Restore and verify selected financial AI assistance in the dependent
+    third cut only, from preserved complete agent `32312f0e` on
+    `codex/accounting-agent-presplit-20260906`. Keep the hash-bound interactive
+    request, tool-free/no-history grants and separate disclosure/draft approvals.
+    No blanket approval, output capture, implicit context switch,
+    ordinary-agent financial read or model fallback. Absent from this local
+    second cut; published #546 remains at preserved full candidate `32312f0e`
+    until verification and publication.
   - [ ] **Implementation checkpoint (2026-09-05):** country-neutral ledger,
     encrypted evidence, canonical bank interchange, partial settlements,
     manual schedules, revisioned close and portable arithmetic verifier are
@@ -590,10 +604,12 @@ top of the monolith.
     retained only in the recovery branch. Integrated follow-up adds RP2/source projections,
     historical opening, lot-bound book-only valuation, cash-book controls,
     K2/2025 and six annex working papers, local extraction/optional OCR,
-    scoped no-history AI proposals, and reviewed atomic batch posting.
+    and reviewed atomic batch posting. Scoped no-history AI proposals are
+    removed with their security/tests from this local second cut for restoration
+    in the dependent third cut; the owner explicitly approved that atomic move.
     Real encrypted backup/restore covers two closes and retained source data.
-    Final independent review, full CLI/agent acceptance and real pilot facts
-    are still outstanding; this is not the completed
+    Fresh split verification/review and separate CLI/agent product acceptance
+    and real pilot facts are still outstanding; this is not the completed
     specification or a production-ready claim.
     [Current contract](docs/reference/general-accounting.md).
   - [ ] Deliver agent-first workflow coverage under spec 17 section 7.1:
@@ -603,9 +619,11 @@ top of the monolith.
     Durable tasks, scoped rules/assignments, four opaque agent tools, and
     fresh-process CLI prepare/post/close/K2/export tests now exist. This does
     not by itself complete every measured mixed-source outcome below.
-    Preserve exact disclosure grants, action-specific approvals and manual
+    Preserve action-specific approvals, separate third-lane disclosure grants and manual
     fallback; prove multi-round workflow parity, cancellation and idempotency.
-    Spec 17 section 7.2 makes the following outcomes mandatory for the full stack;
+    Spec 17 section 7.2 makes the following outcomes mandatory for full product
+    acceptance, with technical contracts remaining code-merge gates and missing
+    pilot facts/measurements tracked separately;
     track proof in the [acceptance record](docs/reference/general-accounting-acceptance.md):
     - [ ] AF-1: Complete a selected period from one task on a frozen mixed
       100-record benchmark; cover all selected records and measure routine-case

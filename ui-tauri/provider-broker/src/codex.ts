@@ -7,55 +7,10 @@ import {
   providerStatus,
   safeErrorMessage,
   safeSessionCursor,
-  sensitiveContext,
   writeEvent,
 } from "./protocol.js";
 import { providerEnvironment, resolveExecutable } from "./executables.js";
-import { CHAT_ONLY_INSTRUCTIONS, promptFromMessages, systemInstructions } from "./prompt.js";
-
-export const SENSITIVE_CODEX_PROFILE = "kassiber-selected-context";
-export function sensitiveCodexConfig() {
-  return {
-    project_doc_max_bytes: 0,
-    default_permissions: SENSITIVE_CODEX_PROFILE,
-    permissions: {
-      [SENSITIVE_CODEX_PROFILE]: {
-        filesystem: { ":root": "deny", ":minimal": "read", ":workspace_roots": "read" },
-        network: { enabled: false },
-      },
-    },
-    history: { persistence: "none" },
-    analytics: { enabled: false },
-    feedback: { enabled: false },
-    otel: { exporter: "none", log_user_prompt: false },
-    skills: { include_instructions: false, config: [] },
-    shell_environment_policy: { inherit: "none", set: {}, experimental_use_profile: false },
-    allow_login_shell: false,
-    web_search: "disabled",
-    tools: { view_image: false, web_search: false },
-    mcp_servers: {},
-    features: Object.fromEntries([
-      "shell_tool", "unified_exec", "shell_snapshot", "code_mode_host", "code_mode",
-      "code_mode_only", "multi_agent", "multi_agent_v2", "browser_use", "browser_use_external",
-      "computer_use", "apps", "plugins", "hooks", "memories", "remote_plugin",
-      "image_generation", "in_app_browser", "workspace_dependencies", "skill_search",
-      "tool_suggest", "skill_mcp_dependency_install", "request_permissions_tool",
-      "external_agent_memory_import", "chronicle", "goals",
-    ].map((name) => [name, false])),
-  };
-}
-
-function tomlValue(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(tomlValue).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}=${tomlValue(item)}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-export function sensitiveCodexArgs(): string[] {
-  return Object.entries(sensitiveCodexConfig()).flatMap(([key, value]) => ["-c", `${key}=${tomlValue(value)}`]);
-}
+import { promptFromMessages, systemInstructions } from "./prompt.js";
 
 export const CODEX_NON_TOOL_ITEM_TYPES = new Set([
   "userMessage",
@@ -89,15 +44,15 @@ class CodexConnection {
   readonly closed: Promise<never>;
   private closedReject!: (error: Error) => void;
 
-  constructor(executable: string, cwd: string, toolBridge?: NativeToolBridge, sensitive = false) {
+  constructor(executable: string, cwd: string, toolBridge?: NativeToolBridge) {
     this.closed = new Promise<never>((_, reject) => {
       this.closedReject = reject;
     });
     // Nothing awaits `closed` until a turn races it; keep Node quiet until then.
     this.closed.catch(() => undefined);
-    this.child = spawn(executable, ["app-server", "--stdio", ...(sensitive ? sensitiveCodexArgs() : [])], {
+    this.child = spawn(executable, ["app-server", "--stdio"], {
       cwd,
-      env: { ...providerEnvironment("codex"), ...(sensitive ? { RUST_LOG: "off" } : {}) },
+      env: providerEnvironment("codex"),
       stdio: ["pipe", "pipe", "pipe"],
     });
     createInterface({ input: this.child.stdout }).on("line", (line) => {
@@ -290,8 +245,7 @@ export async function codexChat(
 ): Promise<void> {
   const executable = await resolveExecutable("codex");
   if (!executable) throw new Error("Codex is not installed.");
-  const sensitive = sensitiveContext(request);
-  const connection = new CodexConnection(executable, cwd, toolBridge, sensitive);
+  const connection = new CodexConnection(executable, cwd, toolBridge);
   try {
     writeEvent({ type: "status", phase: "connecting", message: "Starting Codex app-server" });
     await initialize(connection);
@@ -301,16 +255,14 @@ export async function codexChat(
       model: request.model === "default" ? undefined : request.model,
       approvalPolicy: "untrusted",
       approvalsReviewer: "user",
-      ...(sensitive ? { permissions: SENSITIVE_CODEX_PROFILE } : { sandbox: "read-only" }),
-      ephemeral: sensitive,
-      ...(sensitive ? { environments: [] } : {}),
-      baseInstructions: sensitive ? CHAT_ONLY_INSTRUCTIONS : instructions,
-      developerInstructions: sensitive ? CHAT_ONLY_INSTRUCTIONS : instructions,
+      sandbox: "read-only",
+      ephemeral: false,
+      baseInstructions: instructions,
+      developerInstructions: instructions,
       config: {
         web_search: "disabled",
         mcp_servers: {},
         multi_agent_mode: "explicitRequestOnly",
-        ...(sensitive ? sensitiveCodexConfig() : {}),
       },
     };
     const startParams = {
@@ -330,11 +282,7 @@ export async function codexChat(
       : request.tools?.length
         ? undefined
         : rawResumeId;
-    let opened: {
-      thread: { id: string; ephemeral?: boolean };
-      activePermissionProfile?: { id?: string };
-      instructionSources?: string[];
-    };
+    let opened: { thread: { id: string } };
     let resumed = false;
     try {
       if (resumeId) {
@@ -356,15 +304,8 @@ export async function codexChat(
         startParams,
       );
     }
-    if (sensitive && (
-      opened.thread.ephemeral !== true ||
-      opened.activePermissionProfile?.id !== SENSITIVE_CODEX_PROFILE ||
-      !Array.isArray(opened.instructionSources) || opened.instructionSources.length !== 0
-    )) {
-      throw new Error("Codex could not verify ephemeral restricted execution; no selected data was sent.");
-    }
     const threadId = String(opened.thread.id);
-    const prompt = (sensitive ? `${instructions}\n\n` : "") + promptFromMessages(request.messages, resumed);
+    const prompt = promptFromMessages(request.messages, resumed);
     // Known residual risk: Codex exposes no no-tools profile, so tools are
     // constrained rather than absent. `sandboxPolicy` below sets readOnly with
     // networkAccess: false, and the listener aborts the turn on the first
@@ -400,9 +341,9 @@ export async function codexChat(
           message.method === "item/started" &&
           typeof message.params?.item === "object" &&
           message.params.item !== null &&
-          (!CODEX_NON_TOOL_ITEM_TYPES.has(
+          !CODEX_NON_TOOL_ITEM_TYPES.has(
             String((message.params.item as { type?: string }).type || ""),
-          ) || (sensitive && (message.params.item as { type?: string }).type === "dynamicToolCall"))
+          )
         ) {
           reject(new Error("Codex attempted to use a provider-native tool; Kassiber stopped it."));
         } else if (message.method === "turn/completed") {
@@ -419,9 +360,7 @@ export async function codexChat(
       input: [{ type: "text", text: prompt }],
       approvalPolicy: "untrusted",
       approvalsReviewer: "user",
-      ...(sensitive ? { permissions: SENSITIVE_CODEX_PROFILE } : {
-        sandboxPolicy: { type: "readOnly", networkAccess: false },
-      }),
+      sandboxPolicy: { type: "readOnly", networkAccess: false },
       ...(request.model === "default" ? {} : { model: request.model }),
       ...(effort && effort !== "auto" ? { effort } : {}),
     });
@@ -430,11 +369,8 @@ export async function codexChat(
     writeEvent({
       type: "done",
       finish_reason: "stop",
-      ...(sensitive ? {} : { provider_session_id: `${cursorPrefix}${threadId}` }),
+      provider_session_id: `${cursorPrefix}${threadId}`,
     });
-  } catch (error) {
-    if (sensitive) throw new Error("Codex sensitive-context request failed; no provider diagnostic content was retained.");
-    throw error;
   } finally {
     connection.close();
   }

@@ -432,7 +432,14 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
   routes, navigation, Settings switches or forms. Keep the full deterministic
   CLI and minimal exact action review in the existing Assistant. Ordinary AI
   receives opaque task state, not financial previews; preserve explicit
-  per-step mutation consent and separate disclosure authorization.
+  per-step mutation consent. #545 owns the complete deterministic core/CLI;
+  this #546 cut owns ordinary opaque task execution and exact local consent.
+  Selected financial disclosure/proposals are absent here and belong to dependent
+  `codex/accounting-selected-ai`; restore the feature, protections and tests
+  together there from preserved `32312f0e`. Keep
+  disclosure authorization separate from task-mutation consent. Missing pilot
+  data or measured productivity does not block code merge; unresolved security,
+  correctness and reliability failures do. See the stack and acceptance records.
 - For merchant and document-linked flows, keep provenance capture, commercial matching, and RP2-facing tax normalization as separate layers.
 - Prefer standard-library solutions unless a dependency clearly buys a lot.
 - Keep `--machine` output deterministic — add a `kind` to every new envelope.

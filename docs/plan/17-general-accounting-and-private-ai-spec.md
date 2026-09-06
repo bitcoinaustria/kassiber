@@ -451,6 +451,21 @@ restricting the organization's otherwise supported bookkeeping.
 
 ## 9. Verification and delivery gate
 
+Owner-approved staging (2026-09-06): #545 retains the complete deterministic
+core/CLI; #546 adds ordinary opaque task execution and exact local consent;
+selected financial AI assistance follows in a dependent third PR. Each cut
+must be independently usable and verified, with no absent-module imports or
+disabled tests. The complete product requirements below are not reduced by
+that staging.
+
+Separate **technical code-merge gates** from **product/pilot acceptance**.
+Financial correctness, security, consent, durable execution, regression and
+reliability failures block affected code even when intermittent. Missing real
+organization data, confirmed pilot categories, measured human effort or
+real-provider/interactive outcomes do not by themselves block independently
+verified code merge. They remain open requirements before claiming complete
+organizational delivery; synthetic tests do not supply those facts or measurements.
+
 The complete stack must pass three independent end-to-end acceptance lanes:
 
 1. Existing private book: portfolio, cost basis, personal-tax reports, and

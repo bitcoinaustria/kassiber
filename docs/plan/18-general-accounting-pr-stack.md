@@ -1,6 +1,6 @@
-# General accounting: live dependency triage and two-PR stack
+# General accounting: dependency triage and three-cut stack
 
-Updated: 2026-09-05. This supersedes the earlier planned seven-cut breakdown.
+Updated: 2026-09-06. This supersedes the earlier seven-cut and two-cut breakdowns.
 The accepted full scope remains [spec 17](17-general-accounting-and-private-ai-spec.md),
 but publication is not merge approval or completed organizational acceptance.
 EBICS, payment initiation, payroll and FinanzOnline transmission remain excluded.
@@ -32,22 +32,32 @@ explicit future receipt references from cutoff inventory using RP2 itself.
 Adapter version `cutoff-prefix-v2` rejects stale calculation reuse without
 rewriting immutable history. This does not establish organizational acceptance.
 
-## Actual accounting cuts
+## Accounting cuts (local extraction; publication pending)
+
+This local #546 cut contains ordinary task execution only. The owner explicitly
+approved extracting selected assistance together with its security protections
+and tests; they must be restored together in the dependent third cut. Published
+#546 still points to the preserved full candidate `32312f0e` until the new cut
+is verified and pushed. The third cut and its publication remain pending.
 
 | Order | Branch | Responsibility |
 | --- | --- | --- |
 | [#545](https://github.com/bitcoinaustria/kassiber/pull/545) | `codex/accounting-core-cli` | Complete deterministic local accounting domain and CLI: encrypted separate ledger/evidence, bank/open items/schedules/cash, retained RP2 sources/calculations, projections/openings/valuations, statements/close, jurisdiction workpapers, durable local tasks, recovery and internal daemon/document-worker contracts. No accounting AI tools, provider changes or new UI. |
-| [#546](https://github.com/bitcoinaustria/kassiber/pull/546) | `codex/accounting-scoped-agent` | Exact selected-disclosure AI, guarded draft proposals, opaque scoped task tools, CLI assistance, minimal existing-Assistant approval, provider isolation/cancellation and native security protections. No dedicated accounting screens or broad renderer accounting allowlist. |
+| [#546](https://github.com/bitcoinaustria/kassiber/pull/546) | `codex/accounting-scoped-agent` | Ordinary agent execution through four opaque task tools, exact local CLI/existing-Assistant consent, durable prepare/post/close/tax/export receipts and restart. No selected financial disclosure or new accounting screens. |
+| Third PR (publication pending) | `codex/accounting-selected-ai` | Dependent selected financial assistance: exact disclosure grants, guarded document/draft proposals, hash-bound CLI selection and tool-free/no-history provider isolation/cancellation. Separate from ordinary task execution. |
 
-These are two cohesive extracted branches, not seven artificial layers whose
-eager imports or schemas reference absent modules. The coupled financial
-domain remains together. Each cut must pass independently; the full stack must
-also preserve the previously tested composition.
+The coupled financial domain remains together in #545. #546 separates task
+execution from financial-context disclosure, which belongs to the third cut.
+Each cut must import and run independently without placeholder modules or
+disabled tests; the recombined stack must preserve the prior full composition.
 
 PR #543 landed independently. #542 is merged after the dependency correction;
-the current stack is `main -> #545 -> #546`.
-Both accounting PRs remain draft while full outcome acceptance is unresolved.
-No auto-merge is armed around those acceptance gates.
+the target stack is `main -> #545 -> #546 -> selected-AI PR`.
+The two published accounting PRs remain draft at this checkpoint. Final per-cut
+verification and the unresolved encrypted-handle rejection are technical merge
+gates. Missing organization data and measured pilot outcomes are product/pilot
+acceptance, not blanket code-merge blockers; they remain mandatory before
+claiming the organization's workflow complete. No auto-merge is armed here.
 If any base changes, restack and rerun scope/basis/consent integration tests.
 
 ## Preserved checkpoints
@@ -60,6 +70,10 @@ If any base changes, restack and rerun scope/basis/consent integration tests.
 - Full UI recovery: `codex/accounting-ui-preserved-20260905` at `fbfce410`.
 - Frozen pre-triage CLI/Agent integration: `61c20f07`.
 - First core cut: `7ce7f9b319b7ba5e2efcadc8f46789ee987ec903`.
+- Pre-third-cut core: `codex/accounting-core-presplit-20260906` at `780f2da9`.
+- Pre-third-cut complete agent: `codex/accounting-agent-presplit-20260906` at
+  `32312f0e`. Restore the selected-assistance lane from this reference only in
+  the dependent third cut, retaining later fixes and documentation decisions.
 
 The original preview checkout and its live book are untouched. The old combined
 dependency branch is a local recovery checkpoint, not a replacement PR.
@@ -72,20 +86,27 @@ finalization. Every financial task transition retains its own scope/revision/
 payload checks and fresh approval. CLI blanket or session approval must not
 silently grant either custody review or accounting task application.
 
-General chat does not consume selected-financial-disclosure grants: those stay
-tool-free, no-history, one-use and provider/book/revision-bound. Ordinary agent
-tools return opaque task state, not the local financial approval payload.
+Ordinary agent tools return opaque task state, not the local financial approval
+payload. The third cut's selected-financial-disclosure grants must stay separate:
+tool-free, no-history, one-use and provider/book/revision-bound. This #546 cut
+neither implements nor implicitly authorizes that disclosure lane.
 Accounting evidence stays inside SQLCipher; do not copy it into ordinary
 plaintext attachments or disclose it implicitly to remote providers.
 
-The existing native export and book-change protections remain. Vite/native
-renderer allowlists stay equal, with no direct accounting operation exposure;
+Unused native accounting-export scope scaffolding is removed with the already
+absent dedicated export UI; the complete former implementation remains in the
+recovery refs. Ordinary task exports keep their CLI-only destination, exact
+consent and durable local delivery guards. Vite/native renderer allowlists
+stay equal, with no direct accounting operation exposure;
 the removed accounting visibility setting is not re-advertised. Private users
 remain unenrolled and need no general-accounting configuration.
 
 ## Verification and unresolved gates
 
-The follow-up combined candidate is `c6ce832c` over core `0568757e`, including
+The new split's per-cut and recombined verification is pending. Results below
+describe preserved earlier candidates, not proof that the new split is green.
+
+The pre-split follow-up combined candidate was `c6ce832c` over core `0568757e`, including
 merged #548. It adds exact local task amendments/Bitcoin preparation, durable
 agent mutation receipts, explicit local export delivery and matching minimal
 CLI/Assistant consent. A bounded independent merge review is clean. A previously
@@ -125,6 +146,7 @@ represented as completed.
 
 Record exact final gate results and published PR links in the
 [acceptance record](../reference/general-accounting-acceptance.md). The real
-organization's confirmed facts, mixed-source100-record user-effort benchmark,
-AF-1 through AF-5, current packaged runtime and full organizational acceptance
-remain open. A synthetic K2 export is not a completed real filing.
+organization's confirmed facts, measured mixed-source user effort and full
+AF-1 through AF-5 product acceptance remain open independently of code merge.
+Current-cut technical/package verification remains required. A synthetic K2
+export is not a completed real filing.

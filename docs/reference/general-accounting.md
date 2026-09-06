@@ -10,9 +10,14 @@ Private portfolio and personal-tax use does not require accounting setup.
 This branch is **not the completed organizational-accounting delivery** in
 [the consolidated specification](../plan/17-general-accounting-and-private-ai-spec.md).
 The integrated branch includes retained Bitcoin/RP2 projections, Austrian 2025
-K2/annex working papers, and explicitly scoped accounting AI. Final independent
-review, CLI/agent acceptance and the pilot organization's actual coverage remain
-outstanding; these are implementation capabilities, not a filing certification.
+K2/annex working papers, and ordinary opaque accounting-task tools. This local
+second cut does not contain selected financial AI assistance: its implementation,
+security protections and tests were extracted together with explicit owner
+approval for restoration in the dependent third cut. Published #546 remains
+at the preserved full candidate `32312f0e` until verification and publication.
+Fresh split verification remains outstanding.
+The organization's actual coverage and measured pilot outcomes are separate product acceptance,
+not blanket code-merge blockers or a filing certification.
 An accounting period lock is not a tax-ready declaration or evidence that all
 external sources have been imported.
 
@@ -41,9 +46,10 @@ external sources have been imported.
   as decimal strings. There are no floating-point amounts in this ledger.
 - Bank/file/period controls are local and deterministic; no network is used.
 - New accounting tables are never replicated and are absent from default
-  diagnostics, ordinary audit packages, and the general in-app AI catalog.
-  The scoped accounting assistant uses a separate explicit disclosure workflow,
-  not generic SQL, shell, filesystem, or unrestricted accounting tools.
+  diagnostics and ordinary audit packages. The general in-app AI catalog
+  exposes only four opaque task tools, never the tables or financial previews.
+  Selected disclosure is destined for the dependent third cut; neither lane
+  permits generic SQL, shell, filesystem or unrestricted accounting tools.
 - Evidence bytes live inside SQLCipher, are immutable, and survive database
   backup/restore. Legacy attachment files are **not** retroactively encrypted.
 - Book reset and books-set deletion refuse retained accounting books.
@@ -347,8 +353,19 @@ Activity on a selected liquidity account before its effective selection date
 is surfaced as a coverage gap, not retroactively classified or silently omitted
 from a complete annual statement. Such gaps block a cash-basis close.
 
-Accounting AI works only with explicitly selected pages/fields/entries/periods
-and chart accounts. The tax-explanation purpose may additionally include one
+`batch-preview`/`batch-post` bind up to 50 reviewed drafts and atomically post
+all or none. This deterministic CLI contract does not require selected AI.
+
+## Planned dependent lane: selected financial assistance
+
+This section describes the contract retained for `codex/accounting-selected-ai`.
+It is **not implemented in this local second cut**. Commands, grant lifecycle,
+provider protections and tests must be restored and verified together in the
+third PR from preserved complete candidate `32312f0e`.
+Ordinary task tools above do not depend on this lane or release financial context.
+
+Selected accounting AI must work only with explicitly selected pages, fields,
+entries, periods and chart accounts. The tax-explanation purpose may additionally include one
 explicitly selected working paper; no other papers or evidence bytes are added.
 Its exact preview is recomputed at consent consumption, so a tax-only revision
 invalidates earlier consent even without a book-revision change.
@@ -369,12 +386,13 @@ Structured AI output must pass the same draft/document validators as manual
 input. Review previews use rollback-only savepoints. A separate human approval
 creates drafts or reviewed fields atomically and retains proposal provenance;
 it cannot post entries. Redacted pages cannot supply unreliable original-span
-offsets. `batch-preview`/`batch-post` separately bind up to 50 reviewed drafts
-and atomically post all or none. AI remains optional for every accounting step.
+offsets. Posting remains a separate guarded operation. AI remains optional for
+every accounting step.
 
-### Selected financial assistance from the CLI
+### Planned CLI contract (third cut only)
 
-Select the intended book first with `context set --workspace … --profile …`.
+The following example is not a runnable command in this second cut.
+In the dependent lane, select the intended book with `context set --workspace … --profile …`.
 Create a UTF-8 JSON selection file containing only this explicit request:
 
 ```json

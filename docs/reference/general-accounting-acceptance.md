@@ -1,17 +1,66 @@
 # Organizational accounting acceptance record
 
-Status: extracted CLI/Agent draft stack; full release acceptance still pending
-(2026-09-05). The full UI prototype is preserved, not part of this delivery.
+Status: second-cut extraction applied locally; third-cut restoration/publication,
+technical verification and
+full product/pilot acceptance remain distinct and pending (2026-09-06).
+The full UI prototype is preserved, not part of this delivery.
 This is a technical coverage record, not a statement of the organization's
 actual legal obligations or complete source population. The scope is defined in
 [plan 17](../plan/17-general-accounting-and-private-ai-spec.md); the executable
 contracts are documented in [general accounting](general-accounting.md).
 
-## Latest triage checkpoint (2026-09-05)
+## Current split and acceptance policy (2026-09-06)
+
+The owner approved keeping #545 as the complete deterministic core/CLI and
+splitting #546: ordinary four-tool task execution, exact local consent and
+durable export/restart remain in #546; selected financial AI grants/proposals,
+hash-bound CLI selection and tool-free/no-history provider isolation move to
+dependent `codex/accounting-selected-ai` (third PR publication pending).
+The owner explicitly approved moving selected assistance with its protections
+and tests. This local second cut now excludes that lane; restoration into the
+third cut and publication remain pending. Published #546 at `32312f0e` still
+provides both lanes until the verified extraction is pushed. Its historical
+tests below remain evidence about the preserved full candidate, not current
+feature availability or a passing extraction gate.
+
+Recovery references: core `780f2da9` on
+`codex/accounting-core-presplit-20260906`; complete agent `32312f0e` on
+`codex/accounting-agent-presplit-20260906`. New per-cut and recombined tests and
+independent review must be recorded against their exact candidate heads.
+
+Unused native accounting-export scope scaffolding was also removed following
+independent review; the former dedicated accounting export UI was already absent.
+Recovery preserves the full former implementation. CLI task-export consent,
+destination and durable-delivery protections remain part of this second cut.
+
+**Code merge:** passing per-cut contracts and integration/security/reliability
+checks, including retained financial correctness, exact consent, durable writes
+and private-user regressions. The intermittent `accounting_requires_encryption`
+rejection remains a technical hold until resolved; green repeats alone do not
+explain it. No current split verification is claimed here.
+
+Bounded diagnosis on frozen full-agent source `32312f0e` (2026-09-06,
+Python 3.13.13 / sqlcipher3 0.6.2 / SQLCipher 4.12.0, updated RP2 pin):
+300 fresh mixed104 books passed the original callback path, 300 passed the
+genuine worker/main-thread queue, and 30 passed fresh-process CLI prepare/post
+(120 subprocesses). All compare against 98 manual posting operations. A
+failure-only diagnostic never triggered; no guard was weakened or source fix
+made. These green repeats do not resolve the earlier failure. Separately, core
+`780f2da9` passed 149 focused ledger/integration/task/CLI tests; three frozen
+binary smoke cases skipped because no built artifact was selected. This is
+neither a full gate nor new packaged-runtime proof.
+
+**Product/pilot acceptance:** the organization's supplied facts, confirmed bank
+format/tax scope, actual source coverage, measured human effort and real-provider
+or interactive AF outcomes. Missing pilot input is not a blanket code-merge
+blocker and is never marked passed by synthetic tests. Any correctness or
+security failure discovered during a pilot is still a technical blocker.
+
+## Historical triage checkpoint (2026-09-05)
 
 The owner now authorizes relevant stacked PRs and merge after review. This
 supersedes the historical no-publication/no-merge restriction below; it does
-not waive failing dependency or acceptance gates. See the
+not waive failing technical gates. See the
 [current stack map](../plan/18-general-accounting-pr-stack.md).
 
 - RP2 #48 merged as `7b0dd677` after fixing the chronological/historical basis
@@ -51,7 +100,7 @@ not waive failing dependency or acceptance gates. See the
   warnings), and 137 UI files / 1,021 tests. The offline native suite passed
   115 tests. Restack `02dfd273` preserves that tree exactly; 140 further
   consent/CLI/scope/catalog checks passed after conflict resolution.
-- Current draft stack on merged #542: `main`
+- At this checkpoint the draft stack on merged #542 was `main`
   → [#545](https://github.com/bitcoinaustria/kassiber/pull/545)
   → [#546](https://github.com/bitcoinaustria/kassiber/pull/546).
   These passes do not establish the AF outcome gates. The RP2 correction is
@@ -126,8 +175,8 @@ not waive failing dependency or acceptance gates. See the
   connection and guards, no proxy, extra SQL, retries or fallback. This also
   produced no failure evidence and does not clear the hold.
 
-These focused results do not replace the final combined gate, independent
-re-review or the measured/pilot outcome requirements below.
+These historical results do not replace current-cut technical gates or
+independent re-review, and do not complete separate measured/pilot acceptance.
 
 ## Pilot facts still required
 
@@ -156,7 +205,6 @@ before calling the organization's workflow complete.
 | Cash basis | Selected liquidity accounts, physical counts, exact partial payment allocations, income/expenditure distinct from accrual P&L | `test_accounting_cashbook`, `test_accounting_cash_adversarial` |
 | Multi-year close | Shared close-readiness controls, immutable prior snapshots, reopen cascades, independent arithmetic verifier | `test_accounting_close_readiness`, `test_accounting_ledger`, `test_accounting_integration` |
 | Retained evidence | SQLCipher bytes/text/reviews, bounded uploads, explicit local OCR or manual transcription, no remote fallback | `test_accounting_evidence`, `test_accounting_document_text`, `test_accounting_document_ocr`, `test_accounting_document_jobs` |
-| Scoped AI | Exact selected disclosure, provider/book/revision binding, one-use tokens, no history/tools, preview→human approval→drafts | `test_accounting_ai_context`, `test_accounting_daemon_ai`, `test_accounting_ai_proposals`, `test_accounting_ai_result_tokens`, provider broker tests |
 | AT filing preparation | 2025 K2 + K2kv/K2a/K2b/K11/K12/K12a; applicability/unknown/N/A states; specialist review; assessment-year aggregation | `test_accounting_jurisdiction`, `test_accounting_tax_workpapers` |
 | Portable recovery | Real encrypted tar/age archive restores bytes, extraction, open items, source artifacts, projections and two close revisions | `test_accounting_backup_roundtrip` |
 | Packaged runtime | Built PyInstaller sidecar launches; bundled AT resources load against encrypted fixture; real Poppler worker uses only pipes | `test_accounting_packaged_smoke` with explicit `KASSIBER_FROZEN_SMOKE_BIN` |
@@ -166,13 +214,21 @@ native export guards have additional tests under `ui-tauri/`. A passing row
 demonstrates its fixture only, not arbitrary legal compliance or missing-source
 completeness. Core support remains usable with AI disabled.
 
+Selected financial AI is absent from this local second cut; published #546 still
+retains the preserved full candidate until verification and publication. Its historical
+`test_accounting_ai_context`, `test_accounting_daemon_ai`,
+`test_accounting_ai_proposals`, `test_accounting_ai_result_tokens`, CLI selection
+and provider-broker proofs must travel with the dependent third cut and be rerun
+there. One-use provider/book/revision-bound disclosure and separate draft/field
+approval remain required; ordinary task consent cannot substitute for them.
+
 ## Historical pre-stack verification checkpoint (2026-09-05)
 
 These results were recorded before the dependency-stack integration. At that
 time `codex/general-accounting` was at `b83ea695` plus uncommitted follow-up;
 that work and subsequent opt-in fixes are now preserved in `21552bca`.
 The old counts and manifest below do not describe the newer combined branch.
-No accounting PR has been published and nothing here has been merged to `main`.
+At that historical checkpoint no accounting PR had been published or merged.
 
 - Full UI suite: 131 files, 997 tests passed. Local socket tests required the
   normal approved execution environment; the sandbox-only EPERM run is not
@@ -282,10 +338,13 @@ The author-approved UI removals and retained security code are recorded in
 
 ## Remaining delivery gates and deliberate exclusions
 
-### Agent-first outcome gates
+### Agent-first product/pilot outcomes
 
 The strengthened outcomes in [spec 17 section 7.2](../plan/17-general-accounting-and-private-ai-spec.md#72-required-work-saving-outcomes)
-are mandatory for the full stack. These are acceptance requirements, not executed tests.
+are mandatory before declaring the full product delivered. Their deterministic
+correctness and security contracts are code-merge gates; missing real pilot
+facts, measured human effort or interactive outcomes are separate product/pilot
+acceptance, not blanket merge blockers. These are requirements, not executed tests.
 For a pass, record fixture identity, exact source revision, actual tool/provider
 path, manual comparison, measured results and review evidence. Synthetic data
 must not be represented as the organization's confirmed pilot population.
@@ -305,14 +364,15 @@ counted as autonomous agent work. The mixed fixture compares against 98 manual
 posting operations; it reports zero missed/wrong routine cases and zero repeated
 routine data entries, not a human productivity percentage. Active human time and
 provider inference are deliberately unmeasured. A successful fixture execution
-does not waive the separate intermittent-failure investigation or pilot gates.
+does not resolve the technical intermittent-failure hold or complete pilot acceptance.
 
 ### Other open gates and scope limits
 
-- Agent-first completion is required by spec 17 sections 7.1 and 7.2. The current
-  selected-context helper deliberately accepts one tool-free question and
-  applies reviewed draft/document suggestions. Separate durable task tools now
-  orchestrate bounded steps without financial disclosure. Full typed capability
+- Agent-first completion is required by spec 17 sections 7.1 and 7.2. The
+  selected-context helper belongs to the dependent third cut and must accept
+  one tool-free question with separately reviewed draft/document suggestions.
+  This cut's durable task tools orchestrate bounded steps without financial
+  disclosure. Full typed capability
   coverage and measured end-to-end outcomes remain open; neither the old
   source/test manifest nor the new synthetic tests prove every AF outcome.
 - Finish the final frozen-input structured accounting/security review.
@@ -333,17 +393,20 @@ does not waive the separate intermittent-failure investigation or pilot gates.
   do not substitute for it.
 - Real optional Tesseract execution remains untested on this machine because
   it is not installed; synthetic worker and real Poppler tests are separate.
-- Sensitive CLI providers and native PDF/OCR parsing are fail-closed on Windows
-  until process-tree cancellation is tested there. Scoped HTTP AI, UTF-8 and
-  reviewed manual transcription remain alternatives; no hidden hosted fallback.
+- Native PDF/OCR parsing remains fail-closed on Windows until process-tree
+  cancellation is tested there; UTF-8 and reviewed manual transcription remain
+  alternatives. The dependent selected-AI lane must separately preserve its
+  sensitive CLI-provider Windows guard. Neither selected assistance nor its
+  provider guard is part of this local second cut; restoration must be atomic.
 - The canonical bank interchange is not a verified adapter for the unknown
   pilot bank export. Confirm that format before claiming the pilot import is done.
 - Delivery now uses the [dependency-aware PR stack](../plan/18-general-accounting-pr-stack.md).
   Historically #542 and #543 were still open when their exact heads were first
   integrated locally. Both have since merged, as recorded in the latest
   checkpoint; #545/#546 are extracted draft PRs. The owner authorizes merge
-  after review, but the unresolved encrypted-handle failure and final
-  organizational/agent acceptance still prevent calling this delivery complete.
+  after review. The unresolved encrypted-handle failure remains a technical
+  merge hold. Final organizational/agent pilot acceptance separately prevents
+  calling the full product delivery complete, not independently safe code merge.
 - EBICS, payment initiation, FinanzOnline transmission, automatic official-PDF
   filling, invoice issuing, consolidation and speculative further countries are
   excluded. K1/K3 receive an explicit unsupported route, not disguised K2 output.

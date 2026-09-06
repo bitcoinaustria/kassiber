@@ -1149,11 +1149,6 @@ def run_chat_command(
     input_stream = stdin or sys.stdin
     output_stream = stdout or sys.stdout
     args._accounting_delivery = accounting_delivery.Delivery(getattr(args, 'accounting_export', None))
-    if getattr(args, "accounting_selection", None):
-        from .accounting_assist import run
-        return run(args, stdin=input_stream, stdout=output_stream)
-    if getattr(args, "accounting_selection_sha256", None):
-        raise AppError("A selection digest requires --accounting-selection", code="accounting_invalid_fields")
     one_shot_prompt = _resolve_prompt(args)
     stream_json = bool(getattr(args, "stream_json", False))
     machine = getattr(args, "format", None) == "json"
