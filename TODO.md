@@ -30,6 +30,9 @@ Backlog contract:
   desktop case page, fingerprint-bound missing-input handoffs, book-isolated
   drafts and refreshed case results after evidence changes. ZIP evidence stays
   bound to the saved snapshot; coverage reuses one request's immutable inputs.
+- [x] Guided target → trace/resolve → disclosure review → PDF/ZIP journey with
+  explicit fingerprint-bound preview approval. Persistent regtest includes an
+  attached synthetic purchase-to-wallet proof and a blocked missing-origin case.
 
 - [x] Shared canonical case pagination, portable mixed-operation previews,
   atomic application and verification receipts for CLI and built-in chat.
@@ -63,6 +66,9 @@ independent adversarial verification):
   provenance/conflicts, content-bound import and explicit revocation.
 - [x] Power-user workbench for scenarios, PSBT preflight and dataset lifecycle;
   the assistant uses the same evidence, source grants and computation results.
+- [x] Share graph rendering/navigation with Source Funds through presentation
+  adapters, move expert controls under Advanced/Tools and the default PSBT
+  network into Settings, preserving exact handoff scope and evidence authority.
 
 - [x] Audit existing privacy/graph correctness: source attribution, pagination,
   truthful coverage, domain isolation and cache-only reads.
