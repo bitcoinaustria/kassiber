@@ -13,15 +13,23 @@ from macos_release import APP_ZIP, INPUT_DMG, run, sha256, sign
 REPO = "bitcoinaustria/kassiber"
 
 
+def require_unsigned_draft(tag: str, *, expected_commit: str | None = None) -> None:
+    release = json.loads(run("gh", "release", "view", tag, "--repo", REPO,
+                             "--json", "isDraft,assets"))
+    if not release["isDraft"] or any(a["name"].endswith(".asc") for a in release["assets"]):
+        raise ValueError("Require an unsigned draft release")
+    if expected_commit is not None:
+        commit = json.loads(run("gh", "api", f"repos/{REPO}/commits/{tag}"))["sha"]
+        if commit != expected_commit:
+            raise ValueError("Release tag changed after build verification")
+
+
 def prepare(args: argparse.Namespace) -> None:
     if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:[.-][A-Za-z0-9.-]+)?", args.tag):
         raise ValueError("Invalid release tag")
     if not re.fullmatch(r"[0-9]+", args.run_id):
         raise ValueError("Invalid build run ID")
-    release = json.loads(run("gh", "release", "view", args.tag, "--repo", REPO,
-                             "--json", "isDraft,assets"))
-    if not release["isDraft"] or any(a["name"].endswith(".asc") for a in release["assets"]):
-        raise ValueError("Require an unsigned draft release")
+    require_unsigned_draft(args.tag)
     build = json.loads(run("gh", "api", f"repos/{REPO}/actions/runs/{args.run_id}"))
     commit = json.loads(run("gh", "api", f"repos/{REPO}/commits/{args.tag}"))["sha"]
     if (build["conclusion"] != "success" or build["head_sha"] != commit
@@ -44,10 +52,15 @@ def prepare(args: argparse.Namespace) -> None:
                             provisioning_profile=args.provisioning_profile))
     if args.submit:
         image = args.work_dir / "signed" / INPUT_DMG
+        image_digest = sha256(image)
+        # Signing and upload may take minutes. Refresh both boundaries; these
+        # checks are not atomic with GitHub writes and do not replace tag protection.
+        require_unsigned_draft(args.tag, expected_commit=commit)
         # No clobber: changing an existing handoff requires explicit operator recovery.
         run("gh", "release", "upload", args.tag, image, "--repo", REPO)
+        require_unsigned_draft(args.tag, expected_commit=commit)
         run("gh", "workflow", "run", "notarize-macos.yml", "--repo", REPO, "--ref", "main",
-            "-f", f"tag_name={args.tag}", "-f", f"input_sha256={sha256(image)}")
+            "-f", f"tag_name={args.tag}", "-f", f"input_sha256={image_digest}")
         print("Notarization dispatched. Release remains a draft pending offline manifest signing.")
 
 

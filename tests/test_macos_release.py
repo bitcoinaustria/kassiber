@@ -107,6 +107,80 @@ def test_untrusted_build_never_reaches_signer(tmp_path, field, value):
         assert not (tmp_path / "work").exists()
 
 
+@pytest.fixture
+def release_preparation(tmp_path):
+    args = argparse.Namespace(tag="v1.2.3", run_id="1", work_dir=tmp_path / "work",
+                              identity="c" * 40, provisioning_profile=tmp_path / "profile",
+                              submit=True)
+    state = {"phase": "start", "change_after": None, "change": None}
+    build = {"conclusion": "success", "event": "push", "head_sha": "a" * 40,
+             "path": ".github/workflows/prerelease-binaries.yml", "run_attempt": 1,
+             "head_repository": {"full_name": prepare.REPO}}
+
+    def fake_run(*command):
+        changed = state["phase"] == state["change_after"]
+        if command[:3] == ("gh", "release", "view"):
+            return json.dumps({"isDraft": not (changed and state["change"] == "published"),
+                               "assets": [{"name": "manifest.txt.asc"}]
+                               if changed and state["change"] == "signed" else []})
+        if command[:2] == ("gh", "api"):
+            if "/actions/runs/" in command[2]:
+                return json.dumps(build)
+            assert command[2] == f"repos/{prepare.REPO}/commits/{args.tag}"
+            return json.dumps({"sha": "b" * 40 if changed and state["change"] == "tag" else "a" * 40})
+        if command[:3] == ("gh", "release", "upload"):
+            assert "--clobber" not in command
+            state["phase"] = "upload"
+            return ""
+        assert command[:3] in (("gh", "run", "download"), ("gh", "workflow", "run"))
+        return ""
+
+    def fake_sign(_args):
+        state["phase"] = "sign"
+
+    with patch.object(prepare, "run", side_effect=fake_run) as run, \
+            patch.object(prepare, "sign", side_effect=fake_sign) as sign, \
+            patch.object(prepare, "sha256", return_value="d" * 64):
+        yield args, state, run, sign
+
+
+@pytest.mark.parametrize("change_after", ["sign", "upload"])
+@pytest.mark.parametrize("change", ["published", "signed", "tag"])
+def test_changed_submission_target_fails_closed(release_preparation, change_after, change):
+    args, state, run, sign = release_preparation
+    state.update(change_after=change_after, change=change)
+    with pytest.raises(ValueError):
+        prepare.prepare(args)
+    sign.assert_called_once()
+    uploads = [call for call in run.call_args_list if call.args[:3] == ("gh", "release", "upload")]
+    assert len(uploads) == (1 if change_after == "upload" else 0)
+    assert not any(call.args[:3] == ("gh", "workflow", "run") for call in run.call_args_list)
+
+
+@pytest.mark.parametrize("change", ["published", "signed"])
+def test_initial_release_guard_still_prevents_signing(release_preparation, change):
+    args, state, run, sign = release_preparation
+    state.update(change_after="start", change=change)
+    with pytest.raises(ValueError, match="unsigned draft"):
+        prepare.prepare(args)
+    sign.assert_not_called()
+    assert run.call_count == 1
+    assert not args.work_dir.exists()
+
+
+@pytest.mark.parametrize("submit", [False, True])
+def test_unchanged_submission_target_preserves_local_and_submit_modes(release_preparation, submit):
+    args, _state, run, sign = release_preparation
+    args.submit = submit
+    prepare.prepare(args)
+    sign.assert_called_once()
+    uploads = [call for call in run.call_args_list if call.args[:3] == ("gh", "release", "upload")]
+    dispatches = [call for call in run.call_args_list if call.args[:3] == ("gh", "workflow", "run")]
+    assert len(uploads) == len(dispatches) == int(submit)
+    draft_reads = [call for call in run.call_args_list if call.args[:3] == ("gh", "release", "view")]
+    assert len(draft_reads) == (3 if submit else 1)
+
+
 def test_workflows_keep_keys_local_and_publication_gated():
     workflows = ROOT / ".github/workflows"
     notary = (workflows / "notarize-macos.yml").read_text()
