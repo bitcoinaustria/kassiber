@@ -68,6 +68,7 @@ Out of scope unless a future design says otherwise:
 | External documents | Design | reconcile BTC evidence without becoming ERP/invoicing |
 | Source of funds | v1 landed | desktop review workstation, reviewed transaction-flow links, disclosure preview, immutable snapshots, and gated PDF export |
 | Custody lineage | Design/active | separate quantity from tax, reconcile complete policies automatically, and review durable missing-wallet bridges |
+| Local chain analysis | Audited / proposed expansion | share observed graph facts across transaction understanding and privacy; keep ownership hypotheses, observer knowledge and economic meaning separate |
 | Packaging | In progress | Unsigned prerelease desktop bundles now carry a PyInstaller CLI sidecar; signed production packaging and any `python-build-standalone` replacement are still open |
 
 ## Stack
@@ -100,6 +101,9 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
 - `16-cost-basis-pools-and-employment-compensation.md`: country-configurable
   pool scope, exact cross-pool basis carry, and compensation-as-acquisition
   handling across Kassiber and RP2
+- `17-local-chain-analysis.md`: audited current capabilities, primary-source
+  research and shared local investigation architecture for Bitcoin, Liquid
+  and the user's Lightning evidence
 
 ## Highest-Risk Drift Points
 

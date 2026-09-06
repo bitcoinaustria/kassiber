@@ -43,6 +43,49 @@ Backlog contract:
   originating review; scope, conversation and busy-state guards prevent stale
   continuation. The agent rechecks canonical cases before proposing changes.
 
+## Local chain analysis
+
+Research, audited baseline and architecture:
+[local chain analysis](docs/plan/17-local-chain-analysis.md).
+The future investigation module is not shipped by the correctness audit.
+
+- [x] Complete the current privacy/transaction-graph correctness pass:
+  preserve collaborative co-spend facts without false observer unions; keep
+  private change knowledge separate; conserve per-output source proximity;
+  derive fee tells from actual rates; fix attribution and pagination in score
+  aggregation; qualify capability claims; isolate graph references by network;
+  and permit cache-only local reads without network access. Completion requires
+  regression proofs, full quality gate and independent review.
+- [ ] Build the shared immutable observation/ownership index using existing
+  parsers and provenance. Replace caller-specific scans when callers migrate.
+  Complete when two consumers reuse it and synthetic cross-network, reorg,
+  replacement, unknown-value and stale-evidence fixtures cannot fabricate links.
+- [ ] Add bounded local forward/backward/path queries with explicit frontier,
+  budgets and revision-bound cursors. Complete when multi-hop/reconvergence
+  fixtures use independent path oracles and missing coverage is distinguishable
+  from a chain endpoint; pagination must not change aggregate results.
+- [ ] Add explicit graph-acquisition plans through configured backends, probing
+  Core/index/pruning capabilities (including optional Core 31 historical spender
+  lookup) and Esplora/Electrum limitations. Complete when local reads produce no
+  egress and partial/unavailable backend coverage survives in the result.
+- [ ] Compose all relevant cross-rail relations from native custody and reviewed
+  evidence readers. Complete with Bitcoin/Liquid/Lightning, peg and exchange
+  fixtures whose native proof, provider records, candidates and missing legs
+  remain distinguishable, including cooperative Taproot and private-payment gaps.
+- [ ] Add reversible change/peel/postmix hypotheses, versioned local label
+  provenance and bounded entropy behind the shared query interface. Complete
+  with collaborative counterexamples, conflicting labels, updated evidence and
+  entropy timeout/unsupported fixtures; no inferred owner enters accounting.
+- [ ] Extend PSBT preflight with validated input-map evidence and explicit v2
+  support. Complete with malicious/inconsistent prevouts, unknown inputs and
+  per-observer disclosure fixtures; keep raw PSBTs outside off-device AI tools.
+- [ ] Expose investigation queries, differences and saved evidence references
+  consistently in CLI/chat and transaction/privacy views, with a coverage-aware
+  summary in place of the headline grade. Complete when agents can explain a
+  path, request missing input and recompute the same case without authoring
+  facts or bypassing existing consent/accounting review, and empty/unknown data
+  cannot read as a completed privacy assessment.
+
 ## Rules for every session
 
 Use `./scripts/quality-gate.sh` before calling work ready to push. It compiles
