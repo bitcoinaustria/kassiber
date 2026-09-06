@@ -503,7 +503,13 @@ class _Builder:
                 output = self.nodes[edge["target"] if edge["kind"] == "creates" else edge["source"]]
                 edge["amount_msat"], edge["asset"] = output["amount_msat"], output["asset"]
             if edge["kind"] == "spends":
-                spends[edge["source"]].append(edge)
+                # Retain the historical edge, but an explicitly retracted
+                # spender cannot compete with a current replacement. Mark the
+                # edge itself so forward traversal does not enter that branch.
+                if self.nodes[edge["target"]]["status"] == "stale":
+                    edge["status"] = "stale"
+                else:
+                    spends[edge["source"]].append(edge)
         for output_id, edges in spends.items():
             if len({edge["target"] for edge in edges}) > 1:
                 self.nodes[output_id]["status"] = "conflicting"
@@ -517,13 +523,19 @@ class _Builder:
             for side in ("inputs", "outputs"):
                 for item in fact[side]:
                     item["amount_msat"] = self.nodes[item["output_id"]]["amount_msat"]
+            # A complete shape is insufficient for current value inference
+            # when one of its outputs has conflicting or retracted evidence.
+            # The shared entropy path consumes these facts without traversal.
+            if self.nodes[node_id]["status"] in {"conflicting", "stale"} or any(
+                self.nodes[item["output_id"]]["status"] in {"conflicting", "stale"}
+                for side in ("inputs", "outputs") for item in fact[side]
+            ):
+                fact["complete"] = False
             amounts = [item["amount_msat"] for side in ("inputs", "outputs") for item in fact[side]]
             if fact["complete"] and fact["inputs"] and all(value is not None for value in amounts):
                 value = sum(int(item["amount_msat"]) for item in fact["inputs"]) - sum(int(item["amount_msat"]) for item in fact["outputs"])
                 if value >= 0 and self.nodes[node_id]["chain"] == "bitcoin":
                     fact["fee_msat"] = str(value)
-            if self.nodes[node_id]["status"] in {"conflicting", "stale"}:
-                fact["complete"] = False
         for node in self.nodes.values():
             node["wallet_ids"].sort()
             node["evidence"].sort(key=lambda ref: (ref["source"], ref["reference"]))

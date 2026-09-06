@@ -180,6 +180,7 @@
   "error": "The operation could not be completed.",
   "dismiss": "Dismiss",
   "assistantPrompt": "Investigate the local chain evidence for subject {{subject}} using the saved query {{query}}. The visible snapshot is {{snapshot}}. Distinguish physical facts, reviewed custody, ownership hypotheses and missing coverage. Use local chain-analysis tools; ask before acquiring evidence or changing the book.",
+  "refreshFailed": "Refresh failed. These are the previous results; they do not reflect a successful new investigation.",
   "queryChanged": "Controls changed. The graph still shows the last executed query; run again to apply them.",
   "patterns": "Patterns",
   "exposure": "Label exposure",
@@ -200,6 +201,7 @@
     "unknown": "Unknown"
   },
   "workbench": {
+    "clearSelection": "Clear selection",
     "graph": "Investigation",
     "psbt": "PSBT lab",
     "datasets": "Attribution datasets",

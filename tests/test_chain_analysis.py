@@ -3,7 +3,7 @@ import json
 import sqlite3
 import unittest
 
-from kassiber.core.chain_analysis import analyze_snapshot, build_index, normalize_query, query_index, run_analysis
+from kassiber.core.chain_analysis import analyze_snapshot, build_index, normalize_query, query_index, run_analysis, run_entropy
 from kassiber.core.chain_analysis.index import output_node_id, tx_node_id
 from kassiber.core.chain_analysis.query import resolve_subject
 from kassiber.errors import AppError
@@ -140,6 +140,45 @@ class ChainAnalysisTests(unittest.TestCase):
         result = trace(build_index(self.conn, "p"), txid(1))
         self.assertEqual(len(result["nodes"]), 1)
         self.assertTrue(result["coverage"]["stale"])
+
+    def test_retained_retracted_spender_does_not_block_live_replacement(self):
+        for source, status in (("stored", {"confirmations": -1}), ("stored", {"removed": True}),
+                               ("acquired", {"conflicted": True}), ("acquired", {"removed": True})):
+            with self.subTest(source=source, status=status):
+                conn = connection()
+                try:
+                    add_tx(conn, 1)
+                    old = add_tx(conn, 2, [(1, 0)], outputs=(900,), extra=status if source == "stored" else None)
+                    if source == "acquired":
+                        conn.execute("DELETE FROM transactions WHERE id='2'")
+                        conn.execute("INSERT INTO chain_analysis_observations VALUES('p','bitcoin','main',?,?,?,'node',?)",
+                                     (txid(2), json.dumps(old), json.dumps(status), NOW))
+                    add_tx(conn, 3, [(1, 0)], outputs=(900,), extra={"confirmations": 6})
+                    index = build_index(conn, "p")
+                    result = trace(index, txid(1))
+                    self.assertEqual({node["txid"] for node in result["nodes"] if node["kind"] == "transaction"}, {txid(1), txid(3)})
+                    self.assertFalse(any(row["code"] == "competing_spends" for row in index.findings))
+                    old_id = tx_node_id("bitcoin", "main", txid(2))
+                    historical = [edge for edge in index.edges.values() if edge["kind"] == "spends" and edge["target"] == old_id]
+                    self.assertEqual(len(historical), 1)
+                    self.assertEqual(historical[0]["status"], "stale")
+                    self.assertEqual(run_entropy(conn, "p", {"subject": txid(3)})["status"], "exact")
+                    self.assertEqual(run_entropy(conn, "p", {"subject": txid(2)})["reason"], "incomplete_transaction")
+                finally:
+                    conn.close()
+
+    def test_live_competing_spends_withhold_current_entropy(self):
+        add_tx(self.conn, 1)
+        add_tx(self.conn, 2, [(1, 0)], outputs=(900,))
+        add_tx(self.conn, 3, [(1, 0)], outputs=(800,))
+        index = build_index(self.conn, "p")
+        self.assertTrue(any(row["code"] == "competing_spends" for row in index.findings))
+        for number in (2, 3):
+            with self.subTest(number=number):
+                result = run_entropy(self.conn, "p", {"subject": txid(number)})
+                self.assertEqual(result["reason"], "incomplete_transaction")
+                self.assertIsNone(result["interpretation_count"])
+                self.assertEqual(result["deterministic_links"], [])
 
     def test_confidential_values_are_unknown_and_msat_is_lossless(self):
         add_tx(self.conn, 1, chain="liquid", outputs=(None,))

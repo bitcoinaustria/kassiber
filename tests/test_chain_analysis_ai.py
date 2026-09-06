@@ -121,7 +121,9 @@ def test_case_handles_stay_usable_but_stored_titles_sources_and_identifiers_are_
 
 
 def test_entropy_links_remain_consistent_and_no_amounts_or_model_counts_are_lost(book):
-    add_tx(book, 3, [(1, 0), (1, 1)], outputs=(300, 600))
+    # Use fresh funding; the shared fixture already spends transaction 1:0.
+    add_tx(book, 4, outputs=(600, 400))
+    add_tx(book, 3, [(4, 0), (4, 1)], outputs=(300, 600))
     full = run_entropy(book, "p", {"subject": txid(3)})
     projected = project_ai_result(book, "p", full)
     assert projected["status"] == full["status"] == "exact"
@@ -132,8 +134,19 @@ def test_entropy_links_remain_consistent_and_no_amounts_or_model_counts_are_lost
     assert projected["limitations"] == full["limitations"]
     assert projected["model"] == full["model"]
     assert all(row["input_id"].startswith("ca-ref:") and row["output_id"].startswith("ca-ref:") for row in projected["link_counts"])
-    assert txid(1) not in json.dumps(projected) and txid(3) not in json.dumps(projected)
+    assert txid(4) not in json.dumps(projected) and txid(3) not in json.dumps(projected)
     assert decode_ai_args(book, "p", {"subject": projected["subject"]})["subject"] == full["subject"]
+
+
+def test_entropy_projection_preserves_unresolved_competing_spend_limits(book):
+    add_tx(book, 3, [(1, 0), (1, 1)], outputs=(300, 600))
+    full = run_entropy(book, "p", {"subject": txid(3)})
+    projected = project_ai_result(book, "p", full)
+    assert projected["status"] == full["status"] == "unsupported"
+    assert projected["reason"] == "incomplete_transaction"
+    assert projected["interpretation_count"] is None
+    assert projected["deterministic_links"] == []
+    assert txid(1) not in json.dumps(projected) and txid(3) not in json.dumps(projected)
 
 
 def test_projection_denies_unknown_fields_and_chain_identifiers_hidden_as_codes(book):

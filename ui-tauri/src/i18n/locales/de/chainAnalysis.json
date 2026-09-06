@@ -180,6 +180,7 @@
   "error": "Der Vorgang konnte nicht abgeschlossen werden.",
   "dismiss": "Schließen",
   "assistantPrompt": "Untersuche die lokalen Chain-Belege für {{subject}} mit der gespeicherten Abfrage {{query}}. Sichtbarer Snapshot: {{snapshot}}. Unterscheide physische Fakten, geprüfte Verwahrung, Eigentumshypothesen und fehlende Abdeckung. Nutze lokale Chain-Analyse-Tools; frage vor Belegabrufen oder Buchänderungen.",
+  "refreshFailed": "Aktualisierung fehlgeschlagen. Dies sind die vorherigen Ergebnisse, keine erfolgreich aktualisierte Untersuchung.",
   "queryChanged": "Optionen geändert. Der Graph zeigt noch die letzte ausgeführte Abfrage; zum Anwenden erneut starten.",
   "patterns": "Muster",
   "exposure": "Label-Bezüge",
@@ -200,6 +201,7 @@
     "unknown": "Unbekannt"
   },
   "workbench": {
+    "clearSelection": "Auswahl entfernen",
     "graph": "Untersuchung",
     "psbt": "PSBT-Prüfung",
     "datasets": "Zuordnungsdatensätze",

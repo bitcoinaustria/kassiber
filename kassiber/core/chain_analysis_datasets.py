@@ -26,6 +26,7 @@ import json
 import re
 import uuid
 from urllib.parse import urlsplit
+from typing import NoReturn
 
 from ..errors import AppError
 from ..time_utils import now_iso, parse_timestamp
@@ -44,7 +45,7 @@ _CATEGORIES = {"exchange", "merchant", "mixer", "service", "self", "other"}
 _CATEGORY_MAP = {"mining": "service", "payment": "service", "gambling": "service", "darknet": "service", "scam": "other", "p2p": "service", "historical": "service", "historic": "service", "unknown": "other"}
 
 
-def _error(message, code="validation", **details):
+def _error(message, code="validation", **details) -> NoReturn:
     raise AppError(message, code=code, details=details or None, retryable=code == "chain_analysis_stale") from None
 
 
@@ -92,7 +93,7 @@ def _domain(chain, network):
     try:
         return chain, normalize_network(chain, network)
     except (ValueError, TypeError):
-        _error("Unsupported attribution network")
+        return _error("Unsupported attribution network")
 
 
 def canonical_subject(chain, network, subject):

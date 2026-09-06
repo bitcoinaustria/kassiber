@@ -220,7 +220,7 @@ def _parse(text: str | bytes) -> _Parsed:
         tx_version = _number(global_map, b"\x02", 4, required=True)
         input_count, output_count = _count(global_map, b"\x04"), _count(global_map, b"\x05")
         fallback_locktime = _number(global_map, b"\x03", 4, default=0)
-        modifiable = _number(global_map, b"\x06", 1, default=0)
+        _number(global_map, b"\x06", 1, default=0)  # Validate optional flags before building the transaction.
     input_maps = [reader.mapping() for _ in range(input_count)]
     output_maps = [reader.mapping() for _ in range(output_count)]
     if reader.offset != len(data):

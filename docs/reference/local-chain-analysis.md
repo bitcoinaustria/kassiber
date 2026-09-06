@@ -2,7 +2,11 @@
 
 Open **Extras → Chain analysis** (`/chain-analysis`). The investigation workspace
 is available without developer mode. It reads the active book and its local
-reference observations; opening it does not contact an explorer or sync a wallet.
+reference observations. Opening the graph runs one bounded local overview; a
+transaction or Privacy Mirror investigation link runs its selected local query.
+Editing controls requires **Run investigation**. PSBT and dataset links do not
+run a graph query. None of these entry actions contacts an explorer, syncs a
+wallet, acquires evidence or starts an entropy job.
 
 [Privacy Mirror](privacy-mirror.md) is the concise public-observer summary of
 this same engine. `analyze_snapshot` composes an immutable canonical index after
@@ -67,7 +71,9 @@ are exact decimal msat strings. Asset and network domains remain distinct.
 - **Coverage and frontier:** missing observations, unavailable successor
   coverage, conflicting/retracted observations, stale custody evidence, filters
   and exhausted budgets. A branch stopping does not prove an origin or an
-  unspent output.
+  unspent output. Retracted spenders remain historical evidence but do not
+  compete with a live replacement. Unresolved current competitors block value
+  inference, including exact conditional entropy counts.
 
 Known collaborative metadata and observed equal-output shapes constrain
 heuristics. A shape detector cannot prove that every CoinJoin or Payjoin was
@@ -102,8 +108,10 @@ not a guarantee that every transaction of those dimensions is tractable.
 
 ## PSBT preflight and Payjoin proposals
 
-The PSBT workspace accepts a native-selected binary/Base64/hex PSBT v0 or v2,
-or locally pasted text, with an explicit Bitcoin network. Scripts alone cannot
+The PSBT workspace accepts a native-selected binary/Base64/hex PSBT v0 or v2
+with an explicit Bitcoin network. Investigation links preserve that network;
+either file selection can be cleared to start over or inspect only the original.
+Scripts alone cannot
 verify a network. The shared parser validates map framing, v0/v2 constraints,
 v2 locktime resolution and zero sequences, non-witness UTXO transaction hashes,
 outpoint indices and witness/non-witness amount/script consistency. Supplied

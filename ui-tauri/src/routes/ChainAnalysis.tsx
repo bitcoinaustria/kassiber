@@ -1,4 +1,4 @@
-import { useCallback, useContext, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Download, Eye, Network, Sparkles, X } from "lucide-react";
@@ -87,7 +87,9 @@ export function ChainAnalysisWorkbench({
   initialSearch?: AnalysisSearch;
 }) {
   const { t } = useTranslation("chainAnalysis");
-  const [query, setQuery] = useState<AnalysisQuery>(() => analysisSearchQuery(initialSearch));
+  const [entryQuery] = useState(() => analysisSearchQuery(initialSearch));
+  const [entryWorkspace] = useState(initialSearch.workspace ?? "graph");
+  const [query, setQuery] = useState<AnalysisQuery>(entryQuery);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [historical, setHistorical] = useState(false);
   const [selection, setSelection] = useState<GraphSelection | null>(null);
@@ -99,6 +101,8 @@ export function ChainAnalysisWorkbench({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const requestVersion = useRef(0);
+  const mounted = useRef(false);
+  const [refreshFailed, setRefreshFailed] = useState(false);
   const boundary = useContext(DaemonScopeContext);
   const run = useDaemonMutation<AnalysisResult>("ui.chain_analysis.query", {
     invalidateQueries: false,
@@ -109,7 +113,9 @@ export function ChainAnalysisWorkbench({
     [],
   );
   const assistant = useChainAnalysisAssistant(reportError);
-  const execute = async (next: AnalysisQuery = query) => {
+  const { mutateAsync } = run;
+  const execute = useCallback(async (next: AnalysisQuery) => {
+    if (!mounted.current || boundary?.isCurrent?.() === false) return;
     const version = ++requestVersion.current;
     setError(null);
     setNotice(null);
@@ -120,26 +126,47 @@ export function ChainAnalysisWorkbench({
       target: next.mode === "path" ? next.target?.trim() : undefined,
     };
     try {
-      const response = await run.mutateAsync(args);
+      const response = await mutateAsync(args);
       if (
-        version !== requestVersion.current ||
+        !mounted.current || version !== requestVersion.current ||
         boundary?.isCurrent?.() === false
       )
         return;
       if (response.data) {
         setResult(response.data);
         setHistorical(false);
+        setRefreshFailed(false);
         setSelection(null);
         setHighlighted([]);
       }
     } catch (value) {
       if (
-        version === requestVersion.current &&
+        mounted.current && version === requestVersion.current &&
         boundary?.isCurrent?.() !== false
-      )
+      ) {
+        setRefreshFailed(true);
         reportError(value);
+      }
     }
-  };
+  }, [boundary, mutateAsync, reportError]);
+  useEffect(() => {
+    mounted.current = true;
+    const requests = requestVersion;
+    let cancelled = false;
+    // Defer one microtask so StrictMode cleanup cancels its provisional mount.
+    // This is only the bounded, cache-only graph read; edits remain explicit.
+    if (entryWorkspace === "graph" && (entryQuery.mode === "overview" ||
+      (entryQuery.subject?.trim() && (entryQuery.mode !== "path" || entryQuery.target?.trim())))) {
+      void Promise.resolve().then(() => {
+        if (!cancelled) void execute(entryQuery);
+      });
+    }
+    return () => {
+      cancelled = true;
+      mounted.current = false;
+      ++requests.current;
+    };
+  }, [entryQuery, entryWorkspace, execute]);
   const select = useCallback((next: GraphSelection) => {
     setSelection(next);
   }, []);
@@ -170,6 +197,7 @@ export function ChainAnalysisWorkbench({
     setQuery(saved.query);
     setResult(saved.result);
     setHistorical(true);
+    setRefreshFailed(false);
     setSelection(null);
     setHighlighted([]);
     setError(null);
@@ -245,15 +273,17 @@ export function ChainAnalysisWorkbench({
       <nav className="flex gap-1 overflow-auto rounded-lg border bg-card p-1" aria-label={t("title")}>
         {(["graph", "psbt", "datasets"] as const).map(item => <Button key={item} size="sm" variant={workspace === item ? "secondary" : "ghost"} aria-pressed={workspace === item} onClick={() => setWorkspace(item)}>{t(`workbench.${item}`)}</Button>)}
       </nav>
-      <div hidden={workspace !== "psbt"}><PsbtPanel onError={reportError} /></div>
+      <div hidden={workspace !== "psbt"}><PsbtPanel initialNetwork={initialSearch.network} onError={reportError} /></div>
       <div hidden={workspace !== "datasets"}><DatasetsPanel onError={reportError} /></div>
       <div hidden={workspace !== "graph"} className="space-y-4">
       <QueryControls
         query={query}
         setQuery={setQuery}
         busy={run.isPending}
-        onRun={() => void execute()}
+        onRun={() => void execute(query)}
       />
+      {run.isPending && <p role="status" className="text-sm text-muted-foreground">{t("running")}</p>}
+      {result && refreshFailed && <p role="status" className="text-sm text-amber-700 dark:text-amber-300">{t("refreshFailed")}</p>}
       {result ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">

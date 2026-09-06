@@ -11,7 +11,7 @@ const boundedText = (value: unknown, limit: number): string | undefined =>
 const boundedInteger = (value: unknown, min: number, max: number): number | undefined =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= min && value <= max ? value : undefined;
 
-/** Navigation selects a local view; it never schedules acquisition or a query. */
+/** Navigation selects a bounded local view; it never authorizes acquisition. */
 export function parseAnalysisSearch(search: Record<string, unknown>): AnalysisSearch {
   const values: AnalysisSearch = {
     mode: oneOf(search.mode, ["overview", "trace", "path"]),

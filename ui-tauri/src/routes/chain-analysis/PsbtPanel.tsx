@@ -13,13 +13,13 @@ import { EntropyPanel } from "./EntropyPanel";
 import { CodeList, FeatureDetails, StructuredValue } from "./FeatureDetails";
 import { Fact } from "./EvidenceDetails";
 
-export function PsbtPanel({ onError }: { onError: (value: unknown) => void }) {
+export function PsbtPanel({ onError, initialNetwork }: { onError: (value: unknown) => void; initialNetwork?: string }) {
   const { t } = useTranslation("chainAnalysis");
   const boundary = useContext(DaemonScopeContext);
   const assistant = useContext(AssistantSessionContext);
   const [before, setBefore] = useState<AnalysisSourceSelection | null>(null);
   const [after, setAfter] = useState<AnalysisSourceSelection | null>(null);
-  const [network, setNetwork] = useState("main");
+  const [network, setNetwork] = useState(() => initialNetwork && ["main", "test", "signet", "regtest"].includes(initialNetwork) ? initialNetwork : "main");
   const [payjoin, setPayjoin] = useState(false);
   const [payment, setPayment] = useState("0");
   const [feeOutput, setFeeOutput] = useState("");
@@ -118,6 +118,17 @@ export function PsbtPanel({ onError }: { onError: (value: unknown) => void }) {
             onClick={() => void pick(side)}>
             {t("workbench.chooseFile")}
             </Button>
+          {source && <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => {
+              (side === "before" ? setBefore : setAfter)(null);
+              setEntropySide(null);
+              setEntropyJob(null);
+            }}>
+            {t("workbench.clearSelection")}
+          </Button>}
           </div>;
     })}
       </div>
