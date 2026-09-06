@@ -78,6 +78,9 @@ def render_cli_formula(
   license "AGPL-3.0-only"
 
   on_macos do
+    # Homebrew must not rewrite the Developer ID-sealed runtime or metadata.
+    preserve_rpath
+    skip_clean "libexec/Kassiber.app"
     on_arm do
       url "{RELEASE_URL_BASE}/v#{{version}}/kassiber-cli-macos-arm64.tar.gz"
       sha256 "{macos_arm64}"

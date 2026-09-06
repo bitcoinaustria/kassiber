@@ -18,6 +18,7 @@ import subprocess
 import tarfile
 import tempfile
 import zipfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
@@ -152,6 +153,110 @@ def code_files(app: Path) -> list[Path]:
     return result
 
 
+@dataclass(frozen=True)
+class MachOLinkage:
+    install_id: str | None
+    dependencies: tuple[str, ...]
+    rpaths: tuple[str, ...]
+
+
+def read_linkage(path: Path) -> list[MachOLinkage]:
+    """Read load commands per architecture; do not conflate fat-binary rpaths."""
+    output = run("/usr/bin/otool", "-arch", "all", "-l", path)
+    slices = re.split(r"(?m)^Load command 0\s*$", output)[1:]
+    if not slices:
+        raise ValueError("Missing Mach-O load commands")
+    result = []
+    dependency_commands = {"LC_LOAD_DYLIB", "LC_LOAD_WEAK_DYLIB", "LC_REEXPORT_DYLIB",
+                           "LC_LOAD_UPWARD_DYLIB", "LC_LAZY_LOAD_DYLIB"}
+    for architecture in slices:
+        identities, dependencies, rpaths = [], [], []
+        for block in re.split(r"(?m)^Load command [0-9]+\s*$", architecture):
+            command = re.search(r"(?m)^\s+cmd (LC_[A-Z0-9_]+)\s*$", block)
+            if command is None:
+                raise ValueError("Malformed Mach-O load command")
+            kind = command[1]
+            if kind not in dependency_commands | {"LC_ID_DYLIB", "LC_RPATH"}:
+                if kind.endswith("_DYLIB") or kind == "LC_DYLD_ENVIRONMENT":
+                    raise ValueError("Unsupported Mach-O linkage command")
+                continue
+            field = "path" if kind == "LC_RPATH" else "name"
+            value = re.search(rf"(?m)^\s+{field} (.+) \(offset [0-9]+\)\s*$", block)
+            if value is None:
+                raise ValueError("Malformed Mach-O linkage path")
+            target = rpaths if kind == "LC_RPATH" else identities if kind == "LC_ID_DYLIB" else dependencies
+            target.append(value[1])
+        if len(identities) > 1:
+            raise ValueError("Multiple install IDs in one Mach-O architecture")
+        result.append(MachOLinkage(identities[0] if identities else None,
+                                  tuple(dependencies), tuple(rpaths)))
+    return result
+
+
+def check_linkage_path(value: str, app: Path, path: Path, *, rpath: bool = False) -> None:
+    """Allow system dependencies and contained dyld paths, never host build paths."""
+    if not value or "\\" in value or any(ord(char) < 32 for char in value):
+        raise ValueError("Invalid Mach-O linkage path")
+    if not rpath and value.startswith(("/usr/lib/", "/System/Library/", "@rpath/")):
+        if all(part not in ("", ".", "..") for part in value.lstrip("/").split("/")):
+            return
+    for prefix, base in (("@loader_path", path.parent),
+                         ("@executable_path", app / "Contents/MacOS")):
+        if value == prefix or value.startswith(prefix + "/"):
+            suffix = value.removeprefix(prefix).removeprefix("/")
+            if (not suffix or all(part not in ("", ".") for part in suffix.split("/"))) \
+                    and (base / suffix).resolve().is_relative_to(app.resolve()):
+                return
+    raise ValueError("Unsafe or unsupported Mach-O dependency/rpath")
+
+
+def linkage_changes(app: Path) -> list[tuple[Path, str]]:
+    """Validate the whole app before returning the only permitted pre-sign edits."""
+    changes = []
+    for path in code_files(app):
+        slices = read_linkage(path)
+        normalized = set()
+        for architecture in slices:
+            if len(set(architecture.rpaths)) != len(architecture.rpaths):
+                raise ValueError("Duplicate Mach-O rpath within one architecture")
+            for dependency in architecture.dependencies:
+                check_linkage_path(dependency, app, path)
+            for rpath in architecture.rpaths:
+                check_linkage_path(rpath, app, path, rpath=True)
+            identity = architecture.install_id
+            if identity is None:
+                normalized.add(None)
+            elif identity.startswith("@rpath/"):
+                check_linkage_path(identity, app, path)
+                normalized.add(identity)
+            elif PurePosixPath(identity).name == path.name and "\\" not in identity:
+                normalized.add("@rpath/" + path.name)
+            else:
+                raise ValueError("Unsupported Mach-O install ID")
+        if len(normalized) != 1:
+            raise ValueError("Ambiguous Mach-O install IDs across architectures")
+        identity = normalized.pop()
+        if any(architecture.install_id != identity for architecture in slices):
+            assert identity is not None
+            changes.append((path, identity))
+    return changes
+
+
+def verify_linkage(app: Path) -> None:
+    if linkage_changes(app):
+        raise ValueError("Mach-O install ID would be rewritten by Homebrew")
+
+
+def prepare_linkage(app: Path) -> None:
+    # Homebrew preserve_rpath protects @rpath IDs only. Normalize before sealing;
+    # do not rewrite dependency references or try to repair unknown build layouts.
+    changes = linkage_changes(app)
+    for path, identity in changes:
+        run("/usr/bin/install_name_tool", "-id", identity, path)
+    if changes:
+        verify_linkage(app)
+
+
 def verify_code(path: Path, *, runtime: bool = True) -> None:
     requirement = (f'anchor apple generic and certificate leaf[subject.OU] = "{TEAM}" '
                    'and certificate leaf[field.1.2.840.113635.100.6.1.13] exists')
@@ -165,6 +270,7 @@ def verify_code(path: Path, *, runtime: bool = True) -> None:
 
 def verify_app(app: Path, commit: str, version: str, *, ticket: bool) -> None:
     validate_app(app, commit, version)
+    verify_linkage(app)
     profile = load_profile(app / "Contents/embedded.provisionprofile")
     verify_profile_certificate(app, profile)
     source = json.loads((app / "Contents/Resources/RELEASE_SOURCE.json").read_text())
@@ -213,6 +319,7 @@ def sign(args: argparse.Namespace) -> None:
             raise ValueError("Signing provenance does not match input")
         (app / "Contents/Resources/RELEASE_SOURCE.json").write_text(
             json.dumps(source, sort_keys=True, indent=2) + "\n")
+        prepare_linkage(app)
         # Explicit inner-to-outer signing. Never --deep sign or disable library
         # validation: every Python extension/library receives the same Team ID.
         for path in code_files(app):

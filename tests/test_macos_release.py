@@ -18,8 +18,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("macos_release", ROOT / "scripts/macos_release.py")
 release = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(release)
 sys.modules["macos_release"] = release
+spec.loader.exec_module(release)
 prepare_spec = importlib.util.spec_from_file_location("prepare_macos_release", ROOT / "scripts/prepare_macos_release.py")
 prepare = importlib.util.module_from_spec(prepare_spec)
 prepare_spec.loader.exec_module(prepare)
@@ -85,6 +85,142 @@ def test_macho_inventory_rejects_symlinks(tmp_path):
     (tmp_path / "link").symlink_to("lib")
     with pytest.raises(ValueError):
         release.code_files(tmp_path)
+
+
+def linkage_output(path, slices):
+    """The relevant real otool -arch all -l shape, including fat-binary headers."""
+    lines = []
+    for index, (install_id, dependencies, rpaths) in enumerate(slices):
+        lines.append(f"{path} (architecture {'arm64' if index == 0 else 'x86_64'}):")
+        commands = [("LC_SEGMENT_64", None)]
+        if install_id is not None:
+            commands.append(("LC_ID_DYLIB", install_id))
+        commands.extend(("LC_LOAD_DYLIB", name) for name in dependencies)
+        commands.extend(("LC_RPATH", name) for name in rpaths)
+        for number, (command, name) in enumerate(commands):
+            lines.extend([f"Load command {number}", f"          cmd {command}", "      cmdsize 64"])
+            if name is not None:
+                field = "path" if command == "LC_RPATH" else "name"
+                lines.append(f"         {field} {name} (offset 24)")
+    return "\n".join(lines) + "\n"
+
+
+@pytest.fixture
+def macho_linkage(tmp_path):
+    app = tmp_path / "Kassiber.app"
+    library = app / "Contents/Resources/sidecar/_internal/libsecp256k1_darwin_x86_64.dylib"
+    library.parent.mkdir(parents=True)
+    library.write_bytes(bytes.fromhex("cffaedfe"))
+    state = {"slices": [("build/" + library.name, ["/usr/lib/libSystem.B.dylib"], ["@loader_path"])]}
+
+    def fake_run(*command):
+        if command[:4] == ("/usr/bin/otool", "-arch", "all", "-l"):
+            assert command[4] == library
+            return linkage_output(library, state["slices"])
+        assert command[:2] == ("/usr/bin/install_name_tool", "-id")
+        assert command[3] == library
+        state["slices"] = [(command[2], deps, rpaths) for _identity, deps, rpaths in state["slices"]]
+        return ""
+
+    with patch.object(release, "run", side_effect=fake_run) as run:
+        yield app, library, state, run
+
+
+def test_normalize_embit_install_id_before_signing(macho_linkage):
+    app, library, state, run = macho_linkage
+    with pytest.raises(ValueError, match="install ID"):
+        release.verify_linkage(app)
+    release.prepare_linkage(app)
+    release.verify_linkage(app)
+    assert state["slices"][0][0] == "@rpath/" + library.name
+    changes = [call for call in run.call_args_list if call.args[0] == "/usr/bin/install_name_tool"]
+    assert len(changes) == 1
+
+
+@pytest.mark.parametrize("kind,value", [
+    ("dependency", "/opt/homebrew/opt/openssl/lib/libssl.dylib"),
+    ("dependency", "build/libsecp.dylib"),
+    ("dependency", "@rpath/../libsecp.dylib"),
+    ("dependency", "/usr/lib/../../tmp/libsecp.dylib"),
+    ("dependency", "@loader_path/../../../../../../outside.dylib"),
+    ("rpath", "/private/tmp/build/lib"),
+    ("rpath", "lib"),
+    ("rpath", "@rpath/lib"),
+    ("rpath", "@loader_path/../../../../../../outside"),
+    ("rpath", "@executable_path/../../../outside"),
+    ("rpath", "@loader_path"),  # Duplicate within one architecture.
+])
+def test_unsafe_linkage_is_rejected_before_any_mutation(macho_linkage, kind, value):
+    app, _library, state, run = macho_linkage
+    install_id, dependencies, rpaths = state["slices"][0]
+    (dependencies if kind == "dependency" else rpaths).append(value)
+    with pytest.raises(ValueError):
+        release.prepare_linkage(app)
+    assert not any(call.args[0] == "/usr/bin/install_name_tool" for call in run.call_args_list)
+
+
+def test_universal_linkage_is_validated_per_architecture(macho_linkage):
+    app, library, state, run = macho_linkage
+    state["slices"] = [("@rpath/" + library.name, ["@rpath/libother.dylib"], ["@loader_path/.."]) for _ in range(2)]
+    release.verify_linkage(app)  # Same rpath in two slices is not a duplicate.
+    assert not any(call.args[0] == "/usr/bin/install_name_tool" for call in run.call_args_list)
+    state["slices"][1][2].append("/usr/local/lib")
+    with pytest.raises(ValueError):
+        release.verify_linkage(app)
+
+
+def test_ambiguous_universal_install_ids_fail_closed(macho_linkage):
+    app, _library, state, run = macho_linkage
+    state["slices"].append(("@rpath/different.dylib", [], []))
+    with pytest.raises(ValueError):
+        release.prepare_linkage(app)
+    assert not any(call.args[0] == "/usr/bin/install_name_tool" for call in run.call_args_list)
+
+
+@pytest.mark.parametrize("output", [
+    "", "not Mach-O\n", "file:\nLoad command 0\n cmd LC_RPATH\n cmdsize 32\n",
+    "file:\nLoad command 0\n cmd LC_DYLD_ENVIRONMENT\n cmdsize 32\n",
+])
+def test_unknown_or_incomplete_linkage_output_fails_closed(output):
+    with patch.object(release, "run", return_value=output):
+        with pytest.raises(ValueError):
+            release.read_linkage(Path("library"))
+
+
+@pytest.mark.parametrize("command", ["LC_LOAD_WEAK_DYLIB", "LC_REEXPORT_DYLIB",
+                                     "LC_LOAD_UPWARD_DYLIB", "LC_LAZY_LOAD_DYLIB"])
+def test_other_dependency_commands_are_not_ignored(command):
+    output = linkage_output("library", [(None, ["/opt/local/lib/unsafe.dylib"], [])])
+    with patch.object(release, "run", return_value=output.replace("LC_LOAD_DYLIB", command)):
+        assert release.read_linkage(Path("library"))[0].dependencies == ("/opt/local/lib/unsafe.dylib",)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Apple load-command tools")
+def test_real_universal_dylib_normalization_preserves_dependencies(tmp_path):
+    app = tmp_path / "Kassiber.app"
+    library = app / "Contents/Resources/libprobe.dylib"
+    library.parent.mkdir(parents=True)
+    source = tmp_path / "probe.c"
+    source.write_text("int release_probe(void) { return 1; }\n")
+    # No certificate/key: compile only disposable, trivial code. Exercise both
+    # actual otool architecture sections and install_name_tool, not a mock format.
+    subprocess.run(["/usr/bin/clang", "-dynamiclib", "-arch", "arm64", "-arch", "x86_64",
+                    "-Wl,-headerpad_max_install_names", "-Wl,-install_name,build/libprobe.dylib",
+                    "-Wl,-rpath,@loader_path", str(source), "-o", str(library)],
+                   check=True, capture_output=True)
+    original = release.read_linkage(library)
+    assert len(original) == 2
+    assert all(item.install_id == "build/libprobe.dylib" for item in original)
+    with pytest.raises(ValueError, match="install ID"):
+        release.verify_linkage(app)
+    release.prepare_linkage(app)
+    prepared = release.read_linkage(library)
+    assert all(item.install_id == "@rpath/libprobe.dylib" for item in prepared)
+    assert [(item.dependencies, item.rpaths) for item in prepared] == [
+        (item.dependencies, item.rpaths) for item in original]
+    digest = release.sha256(library)
+    release.verify_linkage(app)
+    assert release.sha256(library) == digest
 
 
 @pytest.mark.parametrize("field,value", [
