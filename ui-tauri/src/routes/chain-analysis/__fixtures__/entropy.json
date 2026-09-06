@@ -1,0 +1,167 @@
+{
+  "origin": "Generated from analyze_transaction_entropy: inputs [10,10], outputs [9,9]; bounded inputs [10]*4 outputs [9]*4 max_states=100; unsupported payjoin.",
+  "exact": {
+    "model": "independent-flow-partitions-no-intrafees-v1",
+    "rule_version": "local-analytics-v1",
+    "status": "exact",
+    "reason": null,
+    "interpretation_count": "3",
+    "interpretation_count_lower_bound": "3",
+    "entropy_bits": 1.584962500721156,
+    "link_counts": [
+      {
+        "input_id": "i0",
+        "output_id": "o0",
+        "interpretation_count": "2"
+      },
+      {
+        "input_id": "i0",
+        "output_id": "o1",
+        "interpretation_count": "2"
+      },
+      {
+        "input_id": "i1",
+        "output_id": "o0",
+        "interpretation_count": "2"
+      },
+      {
+        "input_id": "i1",
+        "output_id": "o1",
+        "interpretation_count": "2"
+      }
+    ],
+    "deterministic_links": [],
+    "states_explored": 20,
+    "assumptions": [
+      "complete_bitcoin_values",
+      "independent_financial_flow_groups",
+      "nonnegative_mining_fee_per_group",
+      "no_intergroup_payments_or_intrafees",
+      "no_ownership_constraints",
+      "uniform_interpretations_for_log2_only"
+    ],
+    "limitations": [
+      "not_wallet_ownership_probability",
+      "not_satoshi_flow",
+      "not_composable_across_transactions",
+      "unmarked_joint_payments_may_violate_model"
+    ],
+    "fee_msat": "2000",
+    "participant_group_counts": {
+      "1": "1",
+      "2": "2"
+    },
+    "examples": [
+      [
+        {
+          "input_ids": [
+            "i0",
+            "i1"
+          ],
+          "output_ids": [
+            "o0",
+            "o1"
+          ],
+          "fee_msat": "2000"
+        }
+      ],
+      [
+        {
+          "input_ids": [
+            "i0"
+          ],
+          "output_ids": [
+            "o1"
+          ],
+          "fee_msat": "1000"
+        },
+        {
+          "input_ids": [
+            "i1"
+          ],
+          "output_ids": [
+            "o0"
+          ],
+          "fee_msat": "1000"
+        }
+      ],
+      [
+        {
+          "input_ids": [
+            "i0"
+          ],
+          "output_ids": [
+            "o0"
+          ],
+          "fee_msat": "1000"
+        },
+        {
+          "input_ids": [
+            "i1"
+          ],
+          "output_ids": [
+            "o1"
+          ],
+          "fee_msat": "1000"
+        }
+      ]
+    ],
+    "examples_truncated": false
+  },
+  "bounded": {
+    "model": "independent-flow-partitions-no-intrafees-v1",
+    "rule_version": "local-analytics-v1",
+    "status": "model_bounded",
+    "reason": "state_budget",
+    "interpretation_count": null,
+    "interpretation_count_lower_bound": "9",
+    "entropy_bits": null,
+    "link_counts": [],
+    "deterministic_links": [],
+    "states_explored": 101,
+    "assumptions": [
+      "complete_bitcoin_values",
+      "independent_financial_flow_groups",
+      "nonnegative_mining_fee_per_group",
+      "no_intergroup_payments_or_intrafees",
+      "no_ownership_constraints",
+      "uniform_interpretations_for_log2_only"
+    ],
+    "limitations": [
+      "not_wallet_ownership_probability",
+      "not_satoshi_flow",
+      "not_composable_across_transactions",
+      "unmarked_joint_payments_may_violate_model"
+    ],
+    "limits": {
+      "max_states": 100,
+      "max_duration_ms": 1000
+    }
+  },
+  "unsupported": {
+    "model": "independent-flow-partitions-no-intrafees-v1",
+    "rule_version": "local-analytics-v1",
+    "status": "unsupported",
+    "reason": "joint_payment_or_unknown_collaboration",
+    "interpretation_count": null,
+    "interpretation_count_lower_bound": "0",
+    "entropy_bits": null,
+    "link_counts": [],
+    "deterministic_links": [],
+    "states_explored": 0,
+    "assumptions": [
+      "complete_bitcoin_values",
+      "independent_financial_flow_groups",
+      "nonnegative_mining_fee_per_group",
+      "no_intergroup_payments_or_intrafees",
+      "no_ownership_constraints",
+      "uniform_interpretations_for_log2_only"
+    ],
+    "limitations": [
+      "not_wallet_ownership_probability",
+      "not_satoshi_flow",
+      "not_composable_across_transactions",
+      "unmarked_joint_payments_may_violate_model"
+    ]
+  }
+}

@@ -39,6 +39,9 @@
     },
     "assistant": {
       "subtitle": "Kassiber fragen"
+    },
+    "chain-analysis": {
+      "subtitle": "Lokaler Graph, Belege, Cluster und Untersuchung"
     }
   },
   "action": {

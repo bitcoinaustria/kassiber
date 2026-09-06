@@ -512,9 +512,11 @@ and Settings -> Privacy. GUI, CLI, and assistant read tools share redacted facts
 with `evidence_level`, without addresses, scripts, descriptors, xpubs, backend
 URLs/tokens, wallet config, raw JSON, branch/index values, or derivation paths.
 See [Privacy Mirror](docs/reference/privacy-mirror.md).
-The [local chain-analysis audit and architecture](docs/plan/17-local-chain-analysis.md)
-separates shipped functions from proposed multi-hop, entity, entropy and
-cross-rail investigations.
+The [local chain-analysis workspace](docs/reference/local-chain-analysis.md)
+adds bounded source/destination/path tracing, sourced label exposure, reversible
+clustering and multi-hop patterns, compatible-partition entropy, and immutable
+investigation comparisons. Desktop, CLI and chat share one evidence engine;
+expanding history uses a separate, explicit backend acquisition plan.
 
 ## Contributing & license
 

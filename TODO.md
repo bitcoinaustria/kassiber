@@ -45,46 +45,31 @@ Backlog contract:
 
 ## Local chain analysis
 
-Research, audited baseline and architecture:
-[local chain analysis](docs/plan/17-local-chain-analysis.md).
-The future investigation module is not shipped by the correctness audit.
+Current behavior and limits: [local chain analysis](docs/reference/local-chain-analysis.md).
+Research and the pre-implementation inventory: [architecture](docs/plan/17-local-chain-analysis.md).
 
-- [x] Complete the current privacy/transaction-graph correctness pass:
-  preserve collaborative co-spend facts without false observer unions; keep
-  private change knowledge separate; conserve per-output source proximity;
-  derive fee tells from actual rates; fix attribution and pagination in score
-  aggregation; qualify capability claims; isolate graph references by network;
-  and permit cache-only local reads without network access. Completion requires
-  regression proofs, full quality gate and independent review.
-- [ ] Build the shared immutable observation/ownership index using existing
-  parsers and provenance. Replace caller-specific scans when callers migrate.
-  Complete when two consumers reuse it and synthetic cross-network, reorg,
-  replacement, unknown-value and stale-evidence fixtures cannot fabricate links.
-- [ ] Add bounded local forward/backward/path queries with explicit frontier,
-  budgets and revision-bound cursors. Complete when multi-hop/reconvergence
-  fixtures use independent path oracles and missing coverage is distinguishable
-  from a chain endpoint; pagination must not change aggregate results.
-- [ ] Add explicit graph-acquisition plans through configured backends, probing
-  Core/index/pruning capabilities (including optional Core 31 historical spender
-  lookup) and Esplora/Electrum limitations. Complete when local reads produce no
-  egress and partial/unavailable backend coverage survives in the result.
-- [ ] Compose all relevant cross-rail relations from native custody and reviewed
-  evidence readers. Complete with Bitcoin/Liquid/Lightning, peg and exchange
-  fixtures whose native proof, provider records, candidates and missing legs
-  remain distinguishable, including cooperative Taproot and private-payment gaps.
-- [ ] Add reversible change/peel/postmix hypotheses, versioned local label
-  provenance and bounded entropy behind the shared query interface. Complete
-  with collaborative counterexamples, conflicting labels, updated evidence and
-  entropy timeout/unsupported fixtures; no inferred owner enters accounting.
+- [x] Audit existing privacy/graph correctness: source attribution, pagination,
+  truthful coverage, domain isolation and cache-only reads.
+- [x] Shared immutable observation/ownership index and bounded forward/backward/
+  alternative-path queries, reused by desktop, CLI and chat. Independent
+  topology, network, conflict/reorg, confidential-value and indexed-scale tests.
+- [x] Current native/reviewed cross-rail custody relations from the canonical
+  journal; stale relations cannot authorize traversal or accounting.
+- [x] Reversible clustering, peel/reconvergence/postmix patterns, versioned local
+  attribution claims and bounded compatible-partition entropy. No ownership,
+  guilt, taint percentage or accounting authority is inferred from these models.
+- [x] Explicit configured-backend acquisition with genesis verification,
+  Core31 spender-index capabilities, Esplora/Electrum limits and bounded partial
+  results. Disposable Core31 test proves mined intermediate-wallet paths.
+- [x] Dedicated power-user workspace, immutable saved investigations/comparisons,
+  JSON/CSV export and opaque-reference remote-agent projection; same shared core
+  and version/scope checks across interfaces.
 - [ ] Extend PSBT preflight with validated input-map evidence and explicit v2
-  support. Complete with malicious/inconsistent prevouts, unknown inputs and
-  per-observer disclosure fixtures; keep raw PSBTs outside off-device AI tools.
-- [ ] Expose investigation queries, differences and saved evidence references
-  consistently in CLI/chat and transaction/privacy views, with a coverage-aware
-  summary in place of the headline grade. Complete when agents can explain a
-  path, request missing input and recompute the same case without authoring
-  facts or bypassing existing consent/accounting review, and empty/unknown data
-  cannot read as a completed privacy assessment.
+  support, malicious/inconsistent prevout cases and observer disclosure tests.
+- [ ] Evaluate incremental/full-chain indexing and measured large-dataset limits;
+  the current index is built from local book/reference observations on demand.
+- [ ] Add optional local dataset import formats beyond the structured label
+  contract, and explicit background watchlist jobs with evidence-change alerts.
 
 ## Rules for every session
 

@@ -56,7 +56,8 @@
       "title": "Extras",
       "exitCalculator": "Exit-Calculator",
       "privacyMirror": "Privacy Mirror",
-      "egress": "Network Monitor"
+      "egress": "Network Monitor",
+      "chainAnalysis": "Chain-Analyse"
     },
     "user": {
       "fallbackWorkspace": "Meine Bücher",
@@ -175,6 +176,10 @@
     "overview": {
       "label": "Übersicht durchsuchen",
       "placeholder": "Transaktionen, Berichte suchen…"
+    },
+    "chainAnalysis": {
+      "label": "Chain-Analyse",
+      "placeholder": "Transaktion, Outpoint, Adresse suchen…"
     }
   },
   "search": {

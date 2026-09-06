@@ -93,6 +93,21 @@ function bridgePythonCommand(repoRoot: string) {
 }
 
 const ALLOWED_BRIDGE_KINDS = new Set([
+    "ui.chain_analysis.ai_context",
+    "ui.chain_analysis.query",
+    "ui.chain_analysis.entropy",
+    "ui.chain_analysis.cases.list",
+    "ui.chain_analysis.cases.get",
+    "ui.chain_analysis.cases.compare",
+    "ui.chain_analysis.labels.list",
+    "ui.chain_analysis.acquire.plan",
+    "ui.chain_analysis.cases.save",
+    "ui.chain_analysis.cases.delete",
+    "ui.chain_analysis.labels.upsert",
+    "ui.chain_analysis.labels.delete",
+    "ui.chain_analysis.labels.import",
+    "ui.chain_analysis.acquire.apply",
+
   "status",
   "ui.logs.snapshot",
   "ui.egress.snapshot",

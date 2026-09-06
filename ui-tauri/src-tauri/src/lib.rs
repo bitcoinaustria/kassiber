@@ -174,6 +174,20 @@ const DEEP_LINK_SETTINGS_SECTIONS: &[&str] = &[
 ];
 
 const ALLOWED_DAEMON_KINDS: &[&str] = &[
+    "ui.chain_analysis.ai_context",
+    "ui.chain_analysis.query",
+    "ui.chain_analysis.entropy",
+    "ui.chain_analysis.cases.list",
+    "ui.chain_analysis.cases.get",
+    "ui.chain_analysis.cases.compare",
+    "ui.chain_analysis.labels.list",
+    "ui.chain_analysis.acquire.plan",
+    "ui.chain_analysis.cases.save",
+    "ui.chain_analysis.cases.delete",
+    "ui.chain_analysis.labels.upsert",
+    "ui.chain_analysis.labels.delete",
+    "ui.chain_analysis.labels.import",
+    "ui.chain_analysis.acquire.apply",
     "status",
     "ui.egress.snapshot",
     "ui.overview.snapshot",
@@ -982,6 +996,48 @@ fn save_chat_export_as(destination_path: String, contents: String) -> Result<Str
 #[tauri::command]
 fn save_logs_export_as(destination_path: String, contents: String) -> Result<String, String> {
     write_text_export(destination_path, contents, &["jsonl", "log", "md"])
+}
+
+#[tauri::command]
+fn save_chain_analysis_export_as(
+    app: tauri::AppHandle,
+    contents: String,
+    format: String,
+    default_name: String,
+    title: String,
+) -> Result<Option<String>, String> {
+    if !matches!(format.as_str(), "json" | "csv")
+        || contents.len() > 10_000_000
+        || default_name.len() > 128
+        || !default_name.ends_with(&format!(".{format}"))
+        || !default_name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        || title.len() > 256
+    {
+        return Err("Invalid chain analysis export.".to_string());
+    }
+    // Keep the destination grant inside native code. A renderer-provided path
+    // would widen JSON export into arbitrary application-config writes.
+    let selection = app
+        .dialog()
+        .file()
+        .set_title(title)
+        .set_file_name(default_name)
+        .add_filter(format.to_ascii_uppercase(), &[format.as_str()])
+        .blocking_save_file();
+    let Some(selection) = selection else {
+        return Ok(None);
+    };
+    let destination = selection
+        .into_path()
+        .map_err(|_| "The selected investigation destination is unavailable.".to_string())?;
+    write_text_export(
+        destination.to_string_lossy().into_owned(),
+        contents,
+        &[format.as_str()],
+    )
+    .map(Some)
 }
 
 #[tauri::command]
@@ -3212,6 +3268,7 @@ pub fn run() {
             save_exported_file_as,
             save_chat_export_as,
             save_logs_export_as,
+            save_chain_analysis_export_as,
             read_ledger_preview_file_base64,
             open_external_url,
             check_app_update,

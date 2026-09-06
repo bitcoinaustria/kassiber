@@ -41,6 +41,7 @@ def _paths(value: str) -> frozenset[str]:
 
 CLI_READ_PATHS = _paths(
     """
+    chain-analysis.overview chain-analysis.trace chain-analysis.path chain-analysis.entropy chain-analysis.cases.list chain-analysis.cases.get chain-analysis.cases.compare chain-analysis.labels.list chain-analysis.acquire.plan
     status update verify-download health next-actions commands.describe projects.list projects.show
     operator.status operator.operation.status operator.touch-id.status
     chats.list chats.show secrets.status sync.status sync.transport.list
@@ -76,6 +77,7 @@ CLI_READ_PATHS = _paths(
 
 CLI_OPERATOR_PATHS = _paths(
     """
+    chain-analysis.cases.save chain-analysis.cases.delete chain-analysis.labels.upsert chain-analysis.labels.delete chain-analysis.labels.import chain-analysis.acquire.apply
     projects.select chat backends.create backends.update backends.set-default
     backends.clear-default context.set workspaces.create profiles.create
     accounts.create wallets.create wallets.update
@@ -151,6 +153,8 @@ CLI_ADMIN_PATHS = _paths(
 
 DAEMON_READ_KINDS = _paths(
     """
+    ui.chain_analysis.ai_context
+    ui.chain_analysis.query ui.chain_analysis.entropy ui.chain_analysis.cases.list ui.chain_analysis.cases.get ui.chain_analysis.cases.compare ui.chain_analysis.labels.list ui.chain_analysis.acquire.plan
     status ui.logs.snapshot ui.egress.snapshot ui.overview.snapshot
     ui.workspace.overview.snapshot ui.transactions.list
     ui.transactions.dashboard ui.transactions.extremes ui.transactions.resolve
@@ -195,6 +199,7 @@ DAEMON_READ_KINDS = _paths(
 
 DAEMON_OPERATOR_KINDS = _paths(
     """
+    ui.chain_analysis.cases.save ui.chain_analysis.cases.delete ui.chain_analysis.labels.upsert ui.chain_analysis.labels.delete ui.chain_analysis.labels.import ui.chain_analysis.acquire.apply
     ui.transactions.export_csv ui.transactions.export_xlsx
     ui.reports.capital_gains ui.reports.summary ui.reports.balance_sheet
     ui.reports.portfolio_summary ui.reports.tax_summary

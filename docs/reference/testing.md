@@ -800,3 +800,14 @@ to add a fast recorded `lightning-cli` tape lane, broaden backend parity beyond
 Core Lightning/LND as new adapters land, and eventually compare live
 Lightning-derived accounting across multiple node implementations without
 changing the contributor entrypoint.
+
+## Local chain-analysis oracle
+
+`./scripts/integration-harness.sh chain-analysis` runs the dedicated disposable
+Core31 test. It uses an ephemeral loopback port and its own container with
+`txindex` and `txospenderindex`, mines transfers through intermediate wallets,
+then proves forward paths and a saved-case difference after another mined spend.
+The script cleans up only its own container. It needs Docker and may pull the
+`bitcoin/bitcoin:31.0` image. Normal quality-gate runs skip this opt-in live test;
+unit tests exercise topology/entropy oracles, observer views, budgets, partial
+history, label/case revisions, CLI/daemon and AI projection without network.

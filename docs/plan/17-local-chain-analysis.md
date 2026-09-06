@@ -1,9 +1,17 @@
 # Local chain analysis
 
-Status: researched architecture and audited capability inventory, 2026-09-06.
-The baseline is `main` at `593285e6a`, after PRs #543, #542, #544, #548 and #549.
-This document does not claim the proposed investigation module is implemented.
-Execution and acceptance gates live in [TODO.md](../../TODO.md).
+Status: research baseline plus implemented investigation module, 2026-09-06.
+The pre-implementation audit below was made against `main` at `593285e6a`, after
+PRs #543, #542, #544, #548 and #549. It is retained as the rationale and expansion
+map; the table describes that older baseline, not the current feature set.
+
+The shared indexed engine, desktop workbench, CLI/chat queries, observer views,
+reversible hypotheses, local label exposure, bounded compatible-partition
+entropy, explicit backend acquisition and immutable saved-case comparisons are
+now implemented. Read [the current interface and limits](../reference/local-chain-analysis.md)
+for shipped behavior. PSBT v2, background watchlists, full-chain indexing and
+commercial attribution datasets remain outside this implementation. Execution
+and remaining acceptance work live in [TODO.md](../../TODO.md).
 
 ## Product outcome
 
@@ -20,7 +28,7 @@ privacy adds a particular observer's knowledge and explicitly defeasible
 inferences. A co-spend proves that inputs participate in one transaction. It
 does not, by itself, prove a common owner or a unique input-to-output value path.
 
-## Audited baseline
+## Audited baseline before implementation
 
 | Capability | What the existing code actually does | Missing capability |
 | --- | --- | --- |

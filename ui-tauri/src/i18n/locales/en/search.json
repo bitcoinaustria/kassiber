@@ -39,6 +39,9 @@
     },
     "assistant": {
       "subtitle": "Ask Kassiber"
+    },
+    "chain-analysis": {
+      "subtitle": "Local graph, evidence, clusters and investigation"
     }
   },
   "action": {

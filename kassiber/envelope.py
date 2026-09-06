@@ -56,6 +56,8 @@ def json_ready(value):
 # with `.` to form the envelope `kind`. When adding a new nested subparser
 # with `dest="<ns>_command"`, add the attr name here.
 _KIND_SUBCOMMAND_ATTRS = (
+    "chain_analysis_command",
+    "chain_analysis_action",
     "backends_command",
     "commands_command",
     "operator_command",

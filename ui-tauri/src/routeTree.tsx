@@ -57,6 +57,7 @@ const PrivacyMirror = lazyRouteComponent(
   () => import("./routes/PrivacyMirror"),
   "PrivacyMirror",
 );
+const ChainAnalysis = lazyRouteComponent(() => import("./routes/ChainAnalysis"), "ChainAnalysis");
 const ExitTax = lazyRouteComponent(() => import("./routes/ExitTax"), "ExitTax");
 const SourceFunds = lazyRouteComponent(
   () => import("./routes/source-funds"),
@@ -187,6 +188,15 @@ const privacyMirrorRoute = createRoute({
   path: "/privacy-mirror",
   beforeLoad: requireDeveloperTools,
   component: PrivacyMirror,
+});
+
+const chainAnalysisRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/chain-analysis",
+  validateSearch: (search: Record<string, unknown>): { subject?: string } => ({
+    subject: typeof search.subject === "string" && search.subject.length <= 512 ? search.subject : undefined,
+  }),
+  component: ChainAnalysis,
 });
 
 const exitTaxRoute = createRoute({
@@ -471,6 +481,7 @@ const routeTree = rootRoute.addChildren([
     activityRoute,
     reportsRoute,
     privacyMirrorRoute,
+    chainAnalysisRoute,
     exitTaxRoute,
     sourceFundsRoute,
     journalsRoute,

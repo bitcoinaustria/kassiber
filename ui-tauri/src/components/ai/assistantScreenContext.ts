@@ -128,6 +128,10 @@ export function assistantScreenContextFor(
     });
   }
 
+  if (path === "/chain-analysis") {
+    return context("/chain-analysis", ["privacy", "transactions", "transfers"]);
+  }
+
   if (path === "/privacy-mirror") {
     return context("/privacy-mirror", ["privacy"]);
   }

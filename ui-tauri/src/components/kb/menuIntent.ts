@@ -28,6 +28,7 @@ export type AppRoutePath =
   | "/activity"
   | "/reports"
   | "/privacy-mirror"
+  | "/chain-analysis"
   | "/exit-tax"
   | "/source-of-funds"
   | "/egress"
@@ -85,6 +86,7 @@ export const APP_ROUTE_PATHS: readonly AppRoutePath[] = [
   "/activity",
   "/reports",
   "/privacy-mirror",
+  "/chain-analysis",
   "/exit-tax",
   "/source-of-funds",
   "/egress",

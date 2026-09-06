@@ -26,6 +26,7 @@ from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from . import __version__
+from .core import chain_analysis_api
 from .command_capabilities import daemon_capability
 from .secrets.auth_backoff import AuthAttemptBackoff, AUTH_BACKOFF_FILENAME
 from .operator.project import (
@@ -332,6 +333,7 @@ _REQUEST_LOGGER = logging.getLogger("kassiber.daemon.request")
 _GRAPH_SEMANTICS_CACHE: dict[str, tuple[tuple[Any, ...], Any]] = {}
 
 SUPPORTED_KINDS = (
+    *sorted(chain_analysis_api.KINDS),
     "status",
     "ui.logs.snapshot",
     "ui.egress.snapshot",
@@ -667,6 +669,7 @@ _AI_SCREEN_ROUTES = frozenset(
         "/activity",
         "/reports",
         "/privacy-mirror",
+        "/chain-analysis",
         "/exit-tax",
         "/source-of-funds",
         "/journals",
@@ -711,6 +714,7 @@ AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
 AI_TOOL_ONCE_ONLY_CONSENT = frozenset(
     {
         "ui.review.apply",
+        "ui.chain_analysis.acquire.apply",
         "ui.journals.quarantine.resolve",
         "ui.transfers.components.apply",
         "ui.custody.review.apply",
@@ -5795,6 +5799,48 @@ def _validate_ai_tool_arguments(entry: Any, arguments: dict[str, Any]) -> None:
     _validate_ai_schema_value(arguments, schema, path=entry.name)
 
 
+def _chain_analysis_acquisition_consent_preview(runtime, args):
+    """Display only server-recomputed acquisition effects before consent."""
+    def preview(conn):
+        if runtime.maintenance_state.get("provider_on_device") is not True:
+            return {"status": "blocked", "code": "local_provider_required"}
+        from .core.chain_analysis_acquisition import plan_acquisition
+        from .core.chain_analysis_cases import canonical
+        _, profile = resolve_scope(conn, None, None)
+        supplied = args.get("plan") if isinstance(args, dict) else None
+        if not isinstance(supplied, dict) or not isinstance(supplied.get("args"), dict):
+            return {"status": "blocked", "code": "validation"}
+        try:
+            current = plan_acquisition(conn, profile["id"], supplied["args"])
+            if canonical(current) != canonical(supplied):
+                return {"status": "blocked", "code": "chain_analysis_stale"}
+            return {"status": "ready", "plan": current}
+        except AppError as exc:
+            return {"status": "blocked", "code": exc.code}
+    try:
+        return _run_scoped_ai_operation(runtime, preview)
+    except AppError as exc:
+        return {"status": "blocked", "code": exc.code}
+
+
+def _chain_analysis_ai_payload(conn, runtime, kind, args):
+    from .core.chain_analysis_ai import decode_ai_args, project_ai_result
+    _, profile = resolve_scope(conn, None, None)
+    on_device = runtime.maintenance_state.get("provider_on_device") is True
+    if kind in {"ui.chain_analysis.acquire.plan", "ui.chain_analysis.acquire.apply"} and not on_device:
+        raise AppError("Backend acquisition is available to on-device AI providers and the desktop workflow", code="local_provider_required")
+    try:
+        decoded = decode_ai_args(conn, profile["id"], args)
+        result = chain_analysis_api.dispatch(conn, kind, decoded)
+    except AppError as exc:
+        if on_device:
+            raise
+        # Saved-query failures can contain public subjects in their details.
+        # Error paths owe the same identity boundary as successful responses.
+        raise AppError("Local chain investigation could not complete; inspect the error code and refresh the case or query", code=exc.code, retryable=exc.retryable) from None
+    return result if on_device else project_ai_result(conn, profile["id"], result)
+
+
 def _execute_read_only_ai_tool(
     call: ParsedAiToolCall,
     runtime: AiToolRuntime,
@@ -6124,6 +6170,8 @@ def _execute_read_only_ai_tool(
                         retryable=False,
                     )
                 payload = build_review_badges_snapshot(conn)
+            elif entry.daemon_kind in chain_analysis_api.READ_KINDS:
+                payload = _chain_analysis_ai_payload(conn, runtime, entry.daemon_kind, call.arguments)
             elif entry.daemon_kind in {"ui.review.cases", "ui.review.request_input", "ui.review.plan", "ui.review.receipt"}:
                 payload = _review_workflow_payload(
                     conn, entry.daemon_kind, call.arguments, authored_source="ai_tool",
@@ -6695,6 +6743,11 @@ def _execute_mutating_ai_tool(
         return _tool_result_denied("tool_not_advertised")
     try:
         _validate_ai_tool_arguments(entry, call.arguments)
+        if entry.daemon_kind in chain_analysis_api.WRITE_KINDS:
+            def _execute_analysis(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _chain_analysis_ai_payload(conn, runtime, entry.daemon_kind, call.arguments)
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+            return _run_scoped_ai_mutation(runtime, _execute_analysis)
         if entry.name == "ui.reports.export":
             export_kind, export_args = _ai_report_export_target(call.arguments)
 
@@ -8546,6 +8599,8 @@ def _run_ai_chat_tool_loop(
         if entry is not None and entry.provider_name not in offered:
             offered.add(entry.provider_name)
             tools.append(entry.to_responses_tool())
+    if not runtime.maintenance_state.get("provider_on_device"):
+        tools = [tool for tool in tools if tool.get("name") not in {"ui_chain_analysis_acquire_plan", "ui_chain_analysis_acquire_apply"}]
     runtime.maintenance_state["advertised_tools"] = [
         function["name"]
         for function in tools
@@ -8619,6 +8674,8 @@ def _run_ai_chat_tool_loop(
             display_name = entry.name if entry is not None else call.name
             tool_session_name = entry.name if entry is not None else call.name
             preview_arguments = redact_tool_arguments(call.arguments)
+            if entry is not None and entry.name == "ui.chain_analysis.acquire.apply":
+                preview_arguments = _chain_analysis_acquisition_consent_preview(runtime, call.arguments)
             proposal_seen_at = now_iso()
             needs_consent = (
                 entry is not None
@@ -15983,6 +16040,12 @@ def handle_request(
             ),
             False,
         )
+
+    if kind in chain_analysis_api.KINDS:
+        payload = chain_analysis_api.dispatch(
+            _require_conn(ctx), kind, _coerce_args_dict(request_id, request.get("args")),
+        )
+        return _with_request_id(build_envelope(kind, payload), request_id), False
 
     if kind in {"ui.review.cases", "ui.review.request_input", "ui.review.plan", "ui.review.apply", "ui.review.receipt"}:
         payload = _review_workflow_payload(

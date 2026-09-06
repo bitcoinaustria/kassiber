@@ -9,6 +9,7 @@ import re
 import sys
 from typing import Any, Literal
 
+from .chain_analysis_tools import tool_specs as chain_analysis_tool_specs
 from ..errors import AppError
 from ..redaction import is_sensitive_key, redact_secret_text
 
@@ -3377,7 +3378,7 @@ _REVIEW_TOOL_CATALOG = (
 )
 
 
-TOOL_CATALOG: tuple[ToolEntry, ...] = (*_BASE_TOOL_CATALOG, *_EXPANDED_TOOL_CATALOG, *_REVIEW_TOOL_CATALOG)
+TOOL_CATALOG: tuple[ToolEntry, ...] = (*_BASE_TOOL_CATALOG, *_EXPANDED_TOOL_CATALOG, *_REVIEW_TOOL_CATALOG, *(ToolEntry(**spec) for spec in chain_analysis_tool_specs()))
 
 TOOL_CAPABILITY_NAMES = (
     "core",
@@ -3433,7 +3434,7 @@ def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
         "ui.connections.node.snapshot",
     }:
         capabilities.update({"wallets", "operations"})
-    if "privacy" in name or name == "ui.egress.snapshot":
+    if "privacy" in name or name == "ui.egress.snapshot" or name.startswith("ui.chain_analysis."):
         capabilities.add("privacy")
     if name.startswith("ui.source_funds."):
         capabilities.add("source_funds")
@@ -3538,7 +3539,7 @@ def select_tool_capabilities(
             "node", "channel",
         ),
         "loans": ("loan", "collateral", "borrowed", "principal", "liquidation", "darlehen", "kredit"),
-        "privacy": ("privacy", "linkable", "egress", "outbound", "psbt"),
+        "privacy": ("privacy", "linkable", "egress", "outbound", "psbt", "chain-analysis", "chain analysis", "chainanalysis", "chainanalyse", "trace", "tracing", "entropy", "clustering", "payjoin"),
         "source_funds": ("source of funds", "source-of-funds", "provenance", "audit package", "proof of funds", "mittelherkunft", "herkunftsnachweis", "herkunft der mittel"),
         "merchant": ("btcpay", "invoice", "receipt", "merchant", "commercial", "document"),
         "transfers": (

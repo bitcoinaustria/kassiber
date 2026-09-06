@@ -13,6 +13,7 @@ export type AssistantReturnPath =
   | "/activity"
   | "/reports"
   | "/privacy-mirror"
+  | "/chain-analysis"
   | "/exit-tax"
   | "/source-of-funds"
   | "/connections"

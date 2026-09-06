@@ -137,6 +137,10 @@ def reset_current_profile_data(
     )
     removed = {
         "transactions": _count_profile_rows(conn, "transactions", profile_id),
+        "chain_analysis_observations": _count_profile_rows(conn, "chain_analysis_observations", profile_id),
+        "chain_analysis_cases": _count_profile_rows(conn, "chain_analysis_cases", profile_id),
+        "chain_analysis_labels": _count_profile_rows(conn, "chain_analysis_labels", profile_id),
+        "chain_analysis_label_history": _count_sql(conn, "SELECT COUNT(*) FROM chain_analysis_label_history WHERE label_id IN (SELECT id FROM chain_analysis_labels WHERE profile_id=?)", (profile_id,)),
         "chain_observer_instances": _count_profile_rows(
             conn, "chain_observer_instances", profile_id
         ),
@@ -421,6 +425,9 @@ def reset_current_profile_data(
             (profile_id,),
         )
         for table in (
+            "chain_analysis_observations",
+            "chain_analysis_cases",
+            "chain_analysis_labels",
             "source_funds_links",
             "source_funds_cases",
             "source_funds_sources",

@@ -403,6 +403,7 @@ export function PrivacyMirrorPayloadView({
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{t("subtitle")}</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {onNavigate && <Button variant="outline" size="sm" onClick={() => onNavigate("/chain-analysis")}>{t("chainAnalysisLink")}</Button>}
           <EvidenceBadge level={summary.evidence_level} />
           {notNominal ? (
             <Badge

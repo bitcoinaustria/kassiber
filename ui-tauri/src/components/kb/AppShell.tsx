@@ -36,6 +36,7 @@ import {
   LogOut,
   MessageSquareText,
   Moon,
+  Network,
   Plane,
   Plus,
   RefreshCw,
@@ -511,6 +512,10 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: BarChart3,
       searchKey: "routeMeta.reports",
     },
+  ],
+  [
+    "/chain-analysis",
+    { titleKey: "nav:book.chainAnalysis", icon: Network, searchKey: "routeMeta.chainAnalysis" },
   ],
   [
     "/privacy-mirror",
@@ -2509,6 +2514,11 @@ function SidebarActions({
                       <Eye className="size-3.5" aria-hidden="true" />
                       <span>{t("shell.extras.privacyMirror")}</span>
                     </Link>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+                <SidebarMenuSubItem>
+                  <SidebarMenuSubButton asChild className={navSubRowClassName} isActive={pathname === "/chain-analysis"}>
+                    <Link to="/chain-analysis"><Network className="size-3.5" aria-hidden="true" /><span>{t("shell.extras.chainAnalysis")}</span></Link>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
                 {developerToolsEnabled ? (

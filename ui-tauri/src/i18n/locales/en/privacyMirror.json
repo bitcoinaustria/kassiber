@@ -236,5 +236,6 @@
   "unavailable": {
     "title": "Privacy Mirror unavailable",
     "body": "The local daemon did not return a Privacy Mirror payload."
-  }
+  },
+  "chainAnalysisLink": "Chain Analysis"
 }

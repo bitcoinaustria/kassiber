@@ -1631,6 +1631,9 @@ case "$MODE" in
   fast)
     run_fast
     ;;
+  chain-analysis)
+    bash scripts/chain-analysis-regtest.sh
+    ;;
   bitcoin-core|slow)
     run_bitcoin_core
     ;;
@@ -1677,7 +1680,7 @@ case "$MODE" in
     ( run_regtest_demo_full )
     ;;
   *)
-    echo "usage: $0 [fast|bitcoin-core|bitcoin-electrum|chain-observers [all|bitcoin|liquid]|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|custody-desktop|lightning-business|btcpay|silent-payments|all]" >&2
+    echo "usage: $0 [fast|chain-analysis|bitcoin-core|bitcoin-electrum|chain-observers [all|bitcoin|liquid]|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|custody-desktop|lightning-business|btcpay|silent-payments|all]" >&2
     exit 2
     ;;
 esac
