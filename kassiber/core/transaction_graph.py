@@ -79,7 +79,7 @@ class _ProfileSemantics(NamedTuple):
     owned_index: Any | None
     index_warnings: list[str]
     semantics: dict[str, Any]
-    outpoint_spends: dict[str, dict[str, Any]]
+    outpoint_spends: dict[tuple[str, str, str], dict[str, Any]]
 
 
 def build_transaction_graph_snapshot(
@@ -655,70 +655,71 @@ def _local_block_heights(
     conn: sqlite3.Connection,
     profile_id: str,
     txids: Sequence[str],
+    chain_network: tuple[str, str],
 ) -> dict[str, int]:
-    """Confirmation heights the profile already knows for these txids."""
+    """Unambiguous local confirmation heights in one physical chain domain."""
     normalized = sorted({str(txid).strip().lower() for txid in txids if txid})
     if not normalized:
         return {}
     placeholders = ", ".join("?" for _ in normalized)
-    heights: dict[str, int] = {}
+    observed: dict[str, set[int]] = defaultdict(set)
     for row in conn.execute(
         f"""
-        SELECT lower(t.external_id) AS txid, t.raw_json
+        SELECT lower(t.external_id) AS txid, t.raw_json, t.asset,
+               w.kind AS wallet_kind, w.config_json AS wallet_config_json
         FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ?
           AND lower(t.external_id) IN ({placeholders})
         """,
         (profile_id, *normalized),
     ).fetchall():
-        txid = _string_or_none(_row_get(row, "txid"))
-        if txid is None or txid in heights:
+        if _row_chain_network(row) != chain_network:
             continue
+        txid = _string_or_none(_row_get(row, "txid"))
         height = _row_block_height(row)
-        if height is not None:
-            heights[txid] = height
+        if txid is not None and height is not None:
+            observed[txid].add(height)
     for row in conn.execute(
         f"""
-        SELECT lower(txid) AS txid, MAX(block_height) AS block_height
+        SELECT lower(txid) AS txid, block_height, chain, network
         FROM wallet_utxos
         WHERE profile_id = ?
           AND lower(txid) IN ({placeholders})
           AND block_height IS NOT NULL
-        GROUP BY lower(txid)
         """,
         (profile_id, *normalized),
     ).fetchall():
+        if _norm_chain_network(row["chain"], row["network"]) != chain_network:
+            continue
         txid = _string_or_none(_row_get(row, "txid"))
         height = _int_or_none(_row_get(row, "block_height"))
         if txid is not None and height is not None and height > 0:
-            heights.setdefault(txid, height)
-    return heights
+            observed[txid].add(height)
+    # Retained observations can disagree after a reorg. A distance needs one
+    # recorded height, not whichever row or inventory maximum happened to win.
+    return {txid: next(iter(heights)) for txid, heights in observed.items() if len(heights) == 1}
 
 
 def _profile_outpoint_spends(
     conn: sqlite3.Connection,
     profile_id: str,
-) -> dict[str, dict[str, Any]]:
-    """Map every outpoint the profile knows was spent to what spent it.
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    """Map domain-qualified outpoints to local spend references.
 
-    Built once per profile version alongside the rest of the semantics bundle
-    rather than per graph request: the only cheap way to find a spend is to read
-    the vin of every local transaction, and doing that on each panel open cost
-    hundreds of milliseconds on a large book.
-
-    A local transaction naming the outpoint is the authoritative source, and only
-    it can supply a navigable id. ``wallet_utxos.spent_by`` fills gaps for
-    outpoints no local row spends. Both are references, never amounts, so a stale
-    row can only fail to offer a link.
-
-    ponytail: whole-profile map held in memory (~100 bytes per spent outpoint);
-    move to an indexed spent-outpoint table if a book ever makes that hurt.
+    The profile scan is cached with the other graph inputs. Local transaction
+    graphs supply navigable references; inventory only fills missing references.
+    Different retained spending transactions are conflicting observations, not
+    grounds to pick an arbitrary RBF candidate. No reference grants custody or
+    accounting authority.
     """
-    spends: dict[str, dict[str, Any]] = {}
+    candidates: dict[tuple[str, str, str], dict[str, dict[str, Any]]] = defaultdict(dict)
     for row in conn.execute(
         """
-        SELECT t.id, t.external_id, t.raw_json
+        SELECT t.id, t.external_id, t.raw_json, t.asset,
+               w.kind AS wallet_kind, w.config_json AS wallet_config_json
         FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ?
         ORDER BY t.occurred_at, t.created_at, t.id
         """,
@@ -733,23 +734,24 @@ def _profile_outpoint_spends(
         )
         if not _looks_like_txid(spending_txid):
             continue
+        chain_network = _row_chain_network(row)
         for entry in vin:
             if not isinstance(entry, Mapping):
                 continue
             outpoint = _outpoint(entry)
             if outpoint:
-                # First writer wins, so the ordering above makes the pick stable
-                # when two retained rows (an RBF pair) spend the same outpoint.
-                spends.setdefault(
-                    outpoint.lower(),
+                key = (*chain_network, outpoint.lower())
+                candidates[key].setdefault(
+                    str(spending_txid).lower(),
                     {
                         "txid": str(spending_txid).lower(),
                         "transactionId": str(_row_get(row, "id")),
                     },
                 )
+    local_keys = set(candidates)
     for row in conn.execute(
         """
-        SELECT lower(outpoint) AS outpoint, spent_by
+        SELECT lower(outpoint) AS outpoint, spent_by, chain, network
         FROM wallet_utxos
         WHERE profile_id = ?
           AND spent_by IS NOT NULL
@@ -762,10 +764,15 @@ def _profile_outpoint_spends(
         spent_by = _string_or_none(_row_get(row, "spent_by"))
         if not outpoint or not _looks_like_txid(spent_by):
             continue
-        # No transaction id: nothing local to navigate to. Never paired with
-        # another row's id, or the reference and the jump would disagree.
-        spends.setdefault(outpoint.lower(), {"txid": str(spent_by).lower()})
-    return spends
+        key = (*_norm_chain_network(row["chain"], row["network"]), outpoint.lower())
+        if key not in local_keys:
+            # Inventory cannot provide a local navigation id, or override an
+            # actual retained spend graph (including conflicting graphs).
+            candidates[key].setdefault(str(spent_by).lower(), {"txid": str(spent_by).lower()})
+    return {
+        key: next(iter(spenders.values())) if len(spenders) == 1 else {"conflicting": True}
+        for key, spenders in candidates.items()
+    }
 
 def _local_outpoint_sats(
     local_outpoint_amounts: Mapping[str, int],
@@ -974,14 +981,13 @@ def _enrich_graph_raw(
     *,
     allow_public_lookup: bool = False,
 ) -> Mapping[str, Any]:
-    if not allow_public_lookup:
-        return raw
     return _enrich_reference_graph_raw(
         conn,
         row,
         raw,
         runtime_config,
         liquid=_looks_liquid_or_confidential(row, raw),
+        allow_public_lookup=allow_public_lookup,
     )
 
 
@@ -992,8 +998,9 @@ def _enrich_reference_graph_raw(
     runtime_config: Mapping[str, Any] | None,
     *,
     liquid: bool,
+    allow_public_lookup: bool,
 ) -> Mapping[str, Any]:
-    """Fill a row's public input/output references from a configured backend.
+    """Use local cached references, optionally filling them from a chosen backend.
 
     One implementation for both chains. The chain-specific parts are the
     eligibility gate, the chain/network defaults, whether a cached graph has to
@@ -1022,7 +1029,17 @@ def _enrich_reference_graph_raw(
     if cached is not None and (
         liquid or _bitcoin_current_graph_has_required_prevouts(cached)
     ):
-        return cached
+        return {
+            **cached,
+            "_graphLookupWarning": {
+                "code": "cached_reference_graph",
+                "level": "info",
+                "message": "Uses previously fetched public transaction references. "
+                "These references do not establish wallet ownership or booked custody.",
+            },
+        }
+    if not allow_public_lookup:
+        return raw
     backends = (
         _liquid_graph_lookup_backends(conn, row, runtime_config)
         if liquid
@@ -2381,7 +2398,9 @@ def _annotate_block_heights(
     )
     if not wanted:
         return
-    heights = _local_block_heights(conn, profile_id, [txid for txid in wanted if txid])
+    heights = _local_block_heights(
+        conn, profile_id, [txid for txid in wanted if txid], _row_chain_network(row)
+    )
     if not heights:
         return
     for node in inputs:
@@ -2399,17 +2418,26 @@ def _annotate_block_heights(
 def _annotate_local_spends(
     row: Mapping[str, Any],
     graph: dict[str, Any],
-    spends: Mapping[str, Mapping[str, Any]],
+    spends: Mapping[tuple[str, str, str], Mapping[str, Any]],
 ) -> None:
     """Tag outputs the profile already knows were spent, and by what."""
     outputs = graph.get("outputs")
     if not isinstance(outputs, list) or not outputs or not spends:
         return
     row_id = str(_row_get(row, "id") or "")
+    chain_network = _row_chain_network(row)
     for node in outputs:
         outpoint = _string_or_none(node.get("outpoint"))
-        spend = spends.get(outpoint.lower()) if outpoint else None
+        spend = spends.get((*chain_network, outpoint.lower())) if outpoint else None
         if not spend:
+            continue
+        if spend.get("conflicting"):
+            graph.setdefault("_warnings", []).append({
+                "code": "conflicting_local_spends",
+                "level": "warning",
+                "message": "Local observations contain competing spends of an output. "
+                "Refresh the connection to resolve which transaction is current.",
+            })
             continue
         node["spentByTxid"] = spend["txid"]
         transaction_id = spend.get("transactionId")
