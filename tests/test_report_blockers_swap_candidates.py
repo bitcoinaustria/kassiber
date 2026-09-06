@@ -482,6 +482,23 @@ class SwapCandidateReportBlockerTests(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_cross_network_time_amount_match_does_not_block_reports(self):
+        conn = self._with_conn()
+        self.addCleanup(conn.close)
+        _seed_book(conn)
+        _wallet(conn, "chain", "Mainnet", "descriptor")
+        _wallet(conn, "lightning", "Regtest Lightning", "lnd")
+        for wallet_id, network in (("chain", "main"), ("lightning", "regtest")):
+            conn.execute("UPDATE wallets SET config_json = ? WHERE id = ?",
+                         (json.dumps({"network": network}), wallet_id))
+        _tx(conn, "out", "chain", direction="outbound")
+        _tx(conn, "in", "lightning", direction="inbound")
+        _mark_processed(conn)
+
+        payload = build_report_blockers_snapshot(conn)
+
+        self.assertNotIn("unreviewed_swap_candidates", [item["id"] for item in payload["blockers"]])
+
     def test_ordinary_unmatched_outbound_does_not_block_reports(self):
         conn = self._with_conn()
         try:

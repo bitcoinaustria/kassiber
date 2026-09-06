@@ -1362,6 +1362,35 @@ class ProviderEvidenceAdversarialTests(unittest.TestCase):
             ),
         ]
 
+    def test_provider_identity_never_connects_distinct_networks(self):
+        rows = self._rows(in_raw=self._raw(_TXID_B, network="regtest"))
+        self.assertEqual(suggest_swap_candidates(rows, include_heuristics=False), [])
+
+    def test_provider_cardinality_is_scoped_to_compatible_networks(self):
+        rows = self._rows()
+        for row in self._rows(
+            out_raw=self._raw(_TXID_A, network="regtest"),
+            in_raw=self._raw(_TXID_B, network="regtest"),
+        ):
+            row["id"] += "-regtest"
+            row["wallet_id"] += "-regtest"
+            rows.append(row)
+        candidates = suggest_swap_candidates(rows, include_heuristics=False)
+        self.assertEqual({(c.out_id, c.in_id, c.confidence) for c in candidates}, {
+            ("out", "in", CONFIDENCE_EXACT),
+            ("out-regtest", "in-regtest", CONFIDENCE_EXACT),
+        })
+
+    def test_unknown_network_provider_duplicate_still_prevents_exactness(self):
+        rows = self._rows()
+        duplicate = dict(rows[0], id="unknown-out", wallet_id="unknown-wallet")
+        duplicate["raw_json"] = {key: value for key, value in rows[0]["raw_json"].items() if key != "network"}
+        # Explicitly conflicting wallet metadata gives no trustworthy domain.
+        duplicate["config_json"] = json.dumps({"network": "unsupported"})
+        candidates = suggest_swap_candidates([*rows, duplicate], include_heuristics=False)
+        self.assertTrue(candidates)
+        self.assertTrue(all(candidate.confidence == CONFIDENCE_STRONG for candidate in candidates))
+
     def test_provider_route_must_agree_with_canonical_graph_scope(self):
         candidates = suggest_swap_candidates(
             self._rows(out_raw=self._raw(_TXID_C))
@@ -1455,6 +1484,15 @@ class ProviderEvidenceAdversarialTests(unittest.TestCase):
 
 
 class HeuristicMatchTests(unittest.TestCase):
+    def test_heuristic_never_connects_distinct_bitcoin_networks(self):
+        for network in ("regtest", "test", "signet"):
+            with self.subTest(network=network):
+                rows = [
+                    _row(id="out", wallet_id="chain", raw_json={"network": "main"}),
+                    _row(id="in", wallet_id="ln", wallet_kind="lnd", direction="inbound", raw_json={"network": network}),
+                ]
+                self.assertEqual(suggest_swap_candidates(rows), [])
+
     def test_same_txid_unknown_principal_residual_stays_reviewable(self):
         out = _row(
             id="cold-out",
@@ -2285,6 +2323,24 @@ class LightningPaymentHashSuppressionTests(unittest.TestCase):
         self.assertEqual(suggest_swap_candidates([out, inbound]), [])
 
 class RefundLinkMatchingTests(unittest.TestCase):
+    def test_legacy_refund_never_connects_distinct_networks(self):
+        rows = [
+            _row(id="lockup", external_id=_TXID_A, raw_json={"network": "main"}),
+            _row(id="refund", direction="inbound", swap_refund_funding_txid=_TXID_A,
+                 raw_json={"network": "regtest"}),
+        ]
+        self.assertEqual(suggest_swap_candidates(rows, include_heuristics=False), [])
+
+    def test_refund_funding_duplicates_on_other_network_do_not_hide_candidate(self):
+        lockup = _row(id="lockup", external_id=_TXID_A, raw_json={"network": "main"})
+        unrelated = _row(id="regtest-lockup", external_id=_TXID_A, raw_json={"network": "regtest"})
+        refund = _row(id="refund", direction="inbound", swap_refund_funding_txid=_TXID_A,
+                      raw_json={"network": "main"})
+        candidates = suggest_swap_candidates([lockup, unrelated, refund], include_heuristics=False)
+        self.assertEqual([(c.out_id, c.in_id) for c in candidates], [("lockup", "refund")])
+        unknown = dict(unrelated, raw_json={"network": "unsupported"})
+        self.assertEqual(suggest_swap_candidates([lockup, unknown, refund], include_heuristics=False), [])
+
     def test_historical_raw_witness_recovers_exact_refund_outpoint(self):
         funding_txid = "ab" * 32
         redeem_script = (
