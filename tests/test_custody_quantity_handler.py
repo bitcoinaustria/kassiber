@@ -187,6 +187,43 @@ class CustodyQuantityHandlerTests(unittest.TestCase):
                 self.assertEqual({hold.transaction_id for hold in result.quantity_state.gap_holds}, {"out", "in"})
                 self.assertIn("in", {row["transaction_id"] for row in result.finalized_tax_projection.quarantines})
 
+    def test_explicit_sell_is_not_a_samourai_gap_source(self):
+        for kind, override, gap_expected in (
+            ("sale", None, False),
+            ("sell", None, False),
+            ("withdrawal", "sell", False),
+            ("sell", "withdrawal", True),
+            ("spend", None, True),
+        ):
+            with self.subTest(kind=kind, override=override), tempfile.TemporaryDirectory() as root:
+                conn = _book(root, "FIFO")
+                self.addCleanup(conn.close)
+                conn.execute(
+                    "UPDATE wallets SET config_json = ? WHERE id = 'a'",
+                    (json.dumps({"chain": "bitcoin", "network": "main", "samourai": {
+                        "role": "child", "section": "postmix",
+                    }}),),
+                )
+                conn.execute(
+                    "UPDATE transactions SET kind = ?, kind_override = ? WHERE id = 'out'",
+                    (kind, override),
+                )
+                conn.execute("UPDATE transactions SET kind = 'deposit' WHERE id = 'in'")
+                profile = dict(conn.execute("SELECT * FROM profiles WHERE id = 'profile'").fetchone())
+
+                result = CustodyJournalBuilder(conn, profile).build_custody_projection()
+
+                self.assertFalse(result.interpretation.blocked_transaction_ids)
+                self.assertEqual(
+                    {hold.transaction_id for hold in result.quantity_state.gap_holds},
+                    {"out", "in"} if gap_expected else set(),
+                )
+                if not gap_expected:
+                    self.assertFalse(result.finalized_tax_projection.quarantines)
+                    journal = handlers.process_journals(conn, "Books", "Book")
+                    self.assertEqual(journal["quarantined"], 0)
+                    self.assertFalse(journal["custody_quantity"]["blocked"])
+
     def test_capacity_holds_preserve_explicit_external_source_classification(self):
         for source_count in (86, 87):
             with self.subTest(source_count=source_count), tempfile.TemporaryDirectory() as root:
@@ -202,7 +239,7 @@ class CustodyQuantityHandlerTests(unittest.TestCase):
                 )
                 for index in range(source_count - 1):
                     _seed_transaction(conn, f"sale-{index}", "a", "outbound", BTC, SOURCE_AT, 30_000)
-                conn.execute("UPDATE transactions SET kind = 'sale' WHERE direction = 'outbound'")
+                conn.execute("UPDATE transactions SET kind = 'sell' WHERE direction = 'outbound'")
                 conn.execute("UPDATE transactions SET kind = 'income' WHERE id = 'in'")
                 profile = dict(conn.execute("SELECT * FROM profiles WHERE id = 'profile'").fetchone())
 

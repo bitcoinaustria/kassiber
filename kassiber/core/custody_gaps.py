@@ -74,7 +74,7 @@ _SAMOURAI_TRANSACTION_KINDS = frozenset(
     }
 )
 _EXTERNAL_ORIGIN_KINDS = frozenset(
-    {"income", "revenue", "sale", "exchange_buy", "customer_payment"}
+    {"income", "revenue", "sale", "sell", "exchange_buy", "customer_payment"}
 )
 
 
