@@ -44,6 +44,7 @@ export interface PrivacyMirrorPayload {
   adversary_cards?: AdversaryCard[];
   wallet_view?: WalletPrivacyRow[];
   transaction_view?: TransactionPrivacyRow[];
+  transaction_view_truncated?: boolean;
   utxo_view?: UtxoPrivacyRow[];
   timeline?: TimelineEvent[];
   psbt_what_if_panel?: Record<string, unknown>;
@@ -248,6 +249,7 @@ export function transactionRowSeverity(row: {
   wallet_penalty_count?: number;
 }): PrivacySeverity {
   if ((row.wallet_penalty_count ?? 0) > 0) return "warning";
+  if (row.wallet_penalty_count === 0) return "info";
   if ((row.tell_count ?? 0) > 0) return "warning";
   return "info";
 }

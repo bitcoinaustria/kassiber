@@ -86,9 +86,9 @@ const GRADE_TEXT_CLASS: Record<keyof typeof GRADE_HEX, string> = {
 };
 
 const HEURISTIC_STATUS_CLASS: Record<HeuristicStatus, string> = {
-  computed: "bg-emerald-500",
-  partial: "bg-amber-500",
-  not_local: "bg-muted-foreground",
+  mirror: "bg-emerald-500",
+  transaction_detail: "bg-amber-500",
+  not_implemented: "bg-muted-foreground",
 };
 
 export function PrivacyScoreHero({ model }: { model: PrivacyScoreModel }) {
@@ -367,7 +367,7 @@ export function PrivacyFindingCard({
 
 export function HeuristicCoverage() {
   const { t } = useTranslation("privacyMirror");
-  const order: HeuristicStatus[] = ["computed", "partial", "not_local"];
+  const order: HeuristicStatus[] = ["mirror", "transaction_detail", "not_implemented"];
   const counts = AIE_HEURISTIC_COVERAGE.reduce(
     (acc, h) => ({ ...acc, [h.status]: (acc[h.status] ?? 0) + 1 }),
     {} as Record<HeuristicStatus, number>,

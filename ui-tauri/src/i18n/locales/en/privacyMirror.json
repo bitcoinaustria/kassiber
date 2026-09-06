@@ -28,7 +28,7 @@
   },
   "score": {
     "of": " / 100",
-    "local": "Computed locally from your book — no chain lookup.",
+    "local": "Heuristic priority from observed local signals, not a privacy probability or guarantee. Missing data limits what this model can see.",
     "census": "Findings by severity",
     "findings": "findings",
     "waterfall": "How this score is built",
@@ -44,24 +44,24 @@
     }
   },
   "gradeHint": {
-    "A+": "Excellent — little to link",
-    "B": "Good — minor exposure",
-    "C": "Fair — notable exposure",
-    "D": "Poor — significant exposure",
-    "F": "Critical — highly linkable"
+    "A+": "Few linking signals observed in this model",
+    "B": "Some linking signals observed in this model",
+    "C": "Several linking signals observed in this model",
+    "D": "Many linking signals observed in this model",
+    "F": "Extensive linking signals observed in this model"
   },
   "worstKind": {
-    "common_input": "Wallets linked by a shared-input spend",
+    "common_input": "Common-input heuristic may link wallets",
     "unknown_coverage": "Some coins couldn't be checked",
     "bounded_local_model": "Nothing stronger found locally"
   },
   "adversaryTier": {
     "passive_chain_watcher": "Anyone watching the blockchain",
-    "reviewed_kyc_source_funds_anchor_watcher": "An exchange that checked your ID",
+    "reviewed_kyc_source_funds_anchor_watcher": "An observer with reviewed source evidence",
     "known_counterparty_hypothetical": "Someone you paid or were paid by"
   },
   "assumption": {
-    "bitcoin_graph_facts_only": "Starts only from public blockchain facts already in your local data.",
+    "bitcoin_graph_facts_only": "Assumes common-input ownership where no collaboration boundary is known. Private wallet change metadata does not establish public linkage.",
     "reviewed_anchor_starting_knowledge": "Starts from the source-of-funds anchors you've reviewed locally.",
     "counterparty_starting_knowledge": "Starts from counterparties you've labelled locally."
   },
@@ -69,19 +69,20 @@
     "reviewOrigins": "Review coin origins"
   },
   "heuristics": {
-    "title": "Heuristics checked",
-    "note": "Mirrors the am-i-exposed heuristic set. Kassiber computes the locally-derivable subset — no chain lookup, no entity database, no entropy engine.",
+    "title": "Analysis capabilities",
+    "note": "Availability by surface, not checks performed on this book. Transaction detail uses a separate hygiene scan. Missing transaction data can prevent available checks from running.",
     "status": {
-      "computed": "Checked",
-      "partial": "Partial",
-      "not_local": "Not available locally"
+      "mirror": "Privacy Mirror",
+      "transaction_detail": "Transaction detail",
+      "not_implemented": "Not implemented"
     }
   },
   "primary": {
     "title": "What to fix first"
   },
   "finding": {
-    "empty": "No findings in the local model."
+    "empty": "No findings in the local model.",
+    "fee_fingerprint": "A rounded fee rate was observed. This weak transaction-shape signal does not identify wallet software."
   },
   "reco": {
     "sender_common_input": "Avoid spending coins from different clusters in one transaction — a shared input links them.",

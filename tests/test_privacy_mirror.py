@@ -398,10 +398,10 @@ class PrivacyMirrorTests(unittest.TestCase):
         score = core_reports._privacy_mirror_score(
             wallet_rows=[{"linkage_edge_count": 1}, {"linkage_edge_count": 0}],
             transaction_rows=[
-                {"tell_count": 2, "tell_kinds": ["sender_common_input", "fee_fingerprint"]},
-                {"tell_count": 1, "tell_kinds": ["op_return_output"]},
+                {"tell_count": 2, "wallet_penalty_count": 2, "wallet_penalty_kinds": ["sender_common_input", "fee_fingerprint"]},
+                {"tell_count": 1, "wallet_penalty_count": 1, "wallet_penalty_kinds": ["op_return_output"]},
             ],
-            hygiene_summary={"active_transaction_count": 4},
+            analysis_summary={"scored_transaction_count": 4},
             coverage_known=1,
             coverage_unknown=1,
         )
@@ -414,15 +414,15 @@ class PrivacyMirrorTests(unittest.TestCase):
         # A strong ownership tell costs more than a weak metadata tell.
         strong = core_reports._privacy_mirror_score(
             wallet_rows=[{"linkage_edge_count": 0}],
-            transaction_rows=[{"tell_count": 1, "tell_kinds": ["sender_common_input"]}],
-            hygiene_summary={"active_transaction_count": 1},
+            transaction_rows=[{"tell_count": 1, "wallet_penalty_count": 1, "wallet_penalty_kinds": ["sender_common_input"]}],
+            analysis_summary={"scored_transaction_count": 1},
             coverage_known=1,
             coverage_unknown=0,
         )
         weak = core_reports._privacy_mirror_score(
             wallet_rows=[{"linkage_edge_count": 0}],
-            transaction_rows=[{"tell_count": 1, "tell_kinds": ["op_return_output"]}],
-            hygiene_summary={"active_transaction_count": 1},
+            transaction_rows=[{"tell_count": 1, "wallet_penalty_count": 1, "wallet_penalty_kinds": ["op_return_output"]}],
+            analysis_summary={"scored_transaction_count": 1},
             coverage_known=1,
             coverage_unknown=0,
         )
@@ -434,7 +434,7 @@ class PrivacyMirrorTests(unittest.TestCase):
         clean = core_reports._privacy_mirror_score(
             wallet_rows=[{"linkage_edge_count": 0}],
             transaction_rows=[{"tell_count": 0}],
-            hygiene_summary={"active_transaction_count": 1},
+            analysis_summary={"scored_transaction_count": 1},
             coverage_known=0,
             coverage_unknown=5,
         )
@@ -548,6 +548,88 @@ class PrivacyMirrorTests(unittest.TestCase):
         self.assertIn("Non-Goals", privacy_doc)
         self.assertIn("coin selection advice", privacy_doc)
         self.assertIn("kassiber reports privacy-mirror", readme)
+
+
+    def test_inbound_context_does_not_lower_receiver_score(self):
+        graph = {"transaction_tells": [
+            {"txid": "inbound", "kind": "sender_common_input", "penalizes_wallet": False},
+            {"txid": "inbound", "kind": "sender_rbf", "penalizes_wallet": False},
+        ]}
+        rows = core_reports._privacy_mirror_transaction_rows(graph)
+        score = core_reports._privacy_mirror_score([], rows, {"scored_transaction_count": 1}, 0, 0)
+        self.assertEqual(rows[0]["tell_count"], 2)
+        self.assertEqual(rows[0]["wallet_penalty_count"], 0)
+        self.assertEqual(score["value"], 100)
+
+    def test_score_population_is_not_limited_by_display_pagination(self):
+        for count in (100, 101, 500):
+            with self.subTest(count=count):
+                rows = core_reports._privacy_mirror_transaction_rows({"transaction_tells": [
+                    {"txid": str(index), "kind": "sender_common_input", "penalizes_wallet": True}
+                    for index in range(count)
+                ]})
+                self.assertEqual(len(rows), count)
+                score = core_reports._privacy_mirror_score([], rows, {"scored_transaction_count": count}, 0, 0)
+                self.assertEqual(score["value"], 55)
+
+    def test_full_report_score_ignores_duplicate_and_graphless_observations(self):
+        self.conn.execute("UPDATE transactions SET privacy_boundary=NULL, raw_json=?", (json.dumps({
+            "vin": [{"txid": "b" * 64, "vout": 0, "sequence": 0xFFFFFFFD}],
+            "vout": [{"value": 1000}],
+        }),))
+        def score():
+            return core_reports.report_privacy_mirror(self.conn, None, None, _privacy_report_hooks("ws", "pf"))["summary"]["privacy_score"]
+        baseline = score()
+        for index in range(11):
+            self.conn.execute(
+                "INSERT INTO transactions(id, workspace_id, profile_id, wallet_id, external_id, fingerprint, occurred_at, direction, asset, amount, fee, kind, raw_json, created_at) "
+                "SELECT ?, workspace_id, profile_id, wallet_id, ?, ?, occurred_at, direction, asset, amount, fee, kind, ?, created_at FROM transactions WHERE id='tx-sensitive'",
+                (f"extra-{index}", SENSITIVE_TXID if index == 0 else f"import-{index}", f"extra-fp-{index}",
+                 json.dumps({"vin": [{"txid": "b" * 64, "vout": 0, "sequence": 0xFFFFFFFD}], "vout": [{"value": 1000}]}) if index == 0 else "{}"),
+            )
+            self.assertEqual(score()["value"], baseline["value"])
+            self.assertEqual(score()["factors"], baseline["factors"])
+
+    def test_collaboration_boundary_is_shared_across_wallet_observations(self):
+        raw = {
+            "chain": "bitcoin", "network": "main", "vsize": 100,
+            "vin": [
+                {"txid": "b" * 64, "vout": 0, "sequence": 0xFFFFFFFF, "prevout": {"value": 1100}},
+                {"txid": "c" * 64, "vout": 0, "sequence": 0xFFFFFFFF, "prevout": {"value": 1000}},
+            ],
+            "vout": [{"value": 1000}, {"value": 1000}],
+        }
+        self.conn.execute("UPDATE transactions SET privacy_boundary='payjoin', raw_json=? WHERE id='tx-sensitive'", (json.dumps(raw),))
+        def report():
+            return core_reports.report_privacy_mirror(self.conn, None, None, _privacy_report_hooks("ws", "pf"))
+        before = report()
+        self.assertEqual(before["summary"]["privacy_score"]["value"], 100)
+        self.assertEqual(before["transaction_view"], [])
+        self.conn.execute(
+            "INSERT INTO wallets(id, workspace_id, profile_id, account_id, label, kind, config_json, created_at) "
+            "SELECT 'other-wallet', workspace_id, profile_id, account_id, 'Other wallet', kind, config_json, created_at FROM wallets WHERE id='wal'"
+        )
+        self.conn.execute(
+            "INSERT INTO transactions(id, workspace_id, profile_id, wallet_id, external_id, fingerprint, occurred_at, direction, asset, amount, fee, kind, raw_json, created_at) "
+            "SELECT 'other-observation', workspace_id, profile_id, 'other-wallet', external_id, 'other-fingerprint', occurred_at, direction, asset, amount, fee, kind, raw_json, created_at FROM transactions WHERE id='tx-sensitive'"
+        )
+        after = report()
+        self.assertEqual(after["summary"]["privacy_score"], before["summary"]["privacy_score"])
+        self.assertEqual(after["summary"]["linkage_score"], 0)
+        self.assertEqual(after["transaction_view"], [])
+        # The same marker from a different network cannot suppress mainnet tells.
+        raw["network"] = "regtest"
+        self.conn.execute("UPDATE transactions SET raw_json=? WHERE id='tx-sensitive'", (json.dumps(raw),))
+        foreign_marker = report()
+        self.assertEqual(foreign_marker["summary"]["privacy_score"]["value"], 55)
+        self.assertEqual(foreign_marker["transaction_view"][0]["wallet_penalty_kinds"], ["fee_fingerprint", "sender_common_input"])
+
+    def test_private_wallet_change_is_not_a_wallet_linkage_penalty(self):
+        rows = core_reports._privacy_mirror_wallet_rows({
+            "nodes": [{"node_id": "one", "wallet_id": "wallet"}, {"node_id": "two", "wallet_id": "wallet"}],
+            "edges": [{"from_node_id": "one", "to_node_id": "two", "observer_linkage": False}],
+        })
+        self.assertEqual(rows[0]["linkage_edge_count"], 0)
 
 
 if __name__ == "__main__":

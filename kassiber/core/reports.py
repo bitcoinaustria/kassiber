@@ -1198,6 +1198,8 @@ def _privacy_mirror_wallet_rows(graph_payload: Mapping[str, Any]) -> list[dict[s
             for wallet_id in item.get("wallet_ids", []) or []:
                 clusters_by_wallet[str(wallet_id)].add(cluster_id)
     for edge in edges:
+        if not edge.get("observer_linkage", True):
+            continue
         for key in ("from_node_id", "to_node_id"):
             wallet_id = node_wallet.get(str(edge.get(key) or ""))
             if wallet_id:
@@ -1221,6 +1223,7 @@ def _privacy_mirror_transaction_rows(graph_payload: Mapping[str, Any]) -> list[d
                 "tell_count": 0,
                 "tell_kinds": [],
                 "wallet_penalty_count": 0,
+                "wallet_penalty_kinds": [],
                 "evidence_level": "exact",
                 "sources": [],
             },
@@ -1229,14 +1232,16 @@ def _privacy_mirror_transaction_rows(graph_payload: Mapping[str, Any]) -> list[d
         row["tell_kinds"].append(tell.get("kind"))
         if tell.get("penalizes_wallet"):
             row["wallet_penalty_count"] += 1
+            row["wallet_penalty_kinds"].append(tell.get("kind"))
         row["sources"].append(tell.get("source"))
         row["evidence_level"] = _mirror_evidence_level([row, tell])
     rows = []
     for row in by_txid.values():
         row["tell_kinds"] = sorted({str(kind) for kind in row["tell_kinds"] if kind})
+        row["wallet_penalty_kinds"] = sorted({str(kind) for kind in row["wallet_penalty_kinds"] if kind})
         row["sources"] = sorted({str(source) for source in row["sources"] if source})
         rows.append(row)
-    return sorted(rows, key=lambda item: (-item["tell_count"], item["txid"]))[:100]
+    return sorted(rows, key=lambda item: (-item["tell_count"], item["txid"]))
 
 
 def _privacy_mirror_utxo_rows(graph_payload: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -1279,7 +1284,8 @@ def _privacy_mirror_timeline(graph_payload: Mapping[str, Any]) -> list[dict[str,
             {
                 "id": edge.get("edge_id"),
                 "kind": edge.get("kind"),
-                "category": "linkage",
+                "category": "linkage" if edge.get("observer_linkage", True) else "local_observation",
+                "observer_linkage": edge.get("observer_linkage", True),
                 "txid": edge.get("txid"),
                 "evidence_level": edge.get("evidence_level"),
                 "detail": edge.get("heuristic"),
@@ -1354,10 +1360,10 @@ def _privacy_mirror_evidence_drilldowns(graph_payload: Mapping[str, Any]) -> lis
 _PRIVACY_SCORE_LINKAGE_WEIGHT = 0.55
 _PRIVACY_SCORE_LEAK_WEIGHT = 0.45
 
-# Per-transaction leak weights, mirroring am-i-exposed's severity-graded
+# Per-transaction prioritization weights, informed by am-i-exposed's severity-graded
 # heuristics for the tell kinds Kassiber actually emits into `tell_kinds`
-# (verified in privacy_linkage.py `_load_transaction_tells`). Ownership-proving
-# tells weigh most; wallet-software fingerprints and embedded metadata weigh
+# (verified in privacy_linkage.py `_load_transaction_tells`). Common-input
+# hypotheses weigh most; wallet-software fingerprints and embedded metadata weigh
 # little. Protective heuristics (CoinJoin, Taproot, entropy) are never leaks and
 # never appear here. Unmapped/new tells get a small non-zero floor.
 _PRIVACY_LEAK_TELL_WEIGHTS = {
@@ -1370,7 +1376,7 @@ _PRIVACY_LEAK_TELL_FLOOR = 0.2
 
 
 def _tx_leak_weight(row: Mapping[str, Any]) -> float:
-    kinds = row.get("tell_kinds") or []
+    kinds = row.get("wallet_penalty_kinds") or []
     if not kinds:
         return 0.0
     return max(_PRIVACY_LEAK_TELL_WEIGHTS.get(str(kind), _PRIVACY_LEAK_TELL_FLOOR) for kind in kinds)
@@ -1379,14 +1385,14 @@ def _tx_leak_weight(row: Mapping[str, Any]) -> float:
 def _privacy_mirror_score(
     wallet_rows: Sequence[Mapping[str, Any]],
     transaction_rows: Sequence[Mapping[str, Any]],
-    hygiene_summary: Mapping[str, Any],
+    analysis_summary: Mapping[str, Any],
     coverage_known: int,
     coverage_unknown: int,
 ) -> dict[str, Any]:
-    """Grounded 0-100 privacy score (higher = more private).
+    """Deterministic prioritization index for the bounded local model.
 
-    Derived from real local quantities via a fixed, documented formula rather
-    than an arbitrary base. Two exposure fractions drive it:
+    This is not a probability or guarantee of privacy. Two observed fractions
+    drive the fixed formula:
 
     - wallet linkage: the share of wallets that can be tied to another wallet
       (a linked wallet has at least one common-input/linkage edge);
@@ -1404,7 +1410,7 @@ def _privacy_mirror_score(
         1 for row in wallet_rows if int(row.get("linkage_edge_count") or 0) > 0
     )
     leaking_transactions = sum(
-        1 for row in transaction_rows if int(row.get("tell_count") or 0) > 0
+        1 for row in transaction_rows if int(row.get("wallet_penalty_count") or 0) > 0
     )
     # Weight each transaction's leak by its strongest tell kind (MAX, not sum)
     # rather than a flat 1.0. MAX because a transaction's tells are correlated
@@ -1412,8 +1418,8 @@ def _privacy_mirror_score(
     # would double-penalise one economic event; MAX = "this tx is at least this
     # linkable". This mirrors am-i-exposed's severity ordering locally.
     weighted_leak_sum = sum(_tx_leak_weight(row) for row in transaction_rows)
-    active_transactions = int(hygiene_summary.get("active_transaction_count") or 0)
-    transaction_total = max(active_transactions, leaking_transactions)
+    scored_transactions = int(analysis_summary.get("scored_transaction_count") or 0)
+    transaction_total = max(scored_transactions, leaking_transactions)
 
     linkage_fraction = (linked_wallets / wallet_count) if wallet_count else 0.0
     leak_fraction = (
@@ -1549,7 +1555,7 @@ def report_privacy_mirror(
         "privacy_score": _privacy_mirror_score(
             wallet_rows,
             transaction_rows,
-            hygiene_summary,
+            graph_summary,
             source_known,
             source_unknown,
         ),
@@ -1583,7 +1589,8 @@ def report_privacy_mirror(
         },
         "adversary_cards": graph_payload.get("adversary_views", []),
         "wallet_view": wallet_rows,
-        "transaction_view": transaction_rows,
+        "transaction_view": transaction_rows[:100],
+        "transaction_view_truncated": len(transaction_rows) > 100,
         "utxo_view": utxo_rows,
         "timeline": timeline,
         "psbt_what_if_panel": {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AIE_HEURISTIC_COVERAGE,
+  heuristicAvailableCount,
   SCORE_BASE,
   gradeForScore,
   privacyScoreModel,
@@ -8,6 +10,14 @@ import {
 import type { PrivacyMirrorPayload } from "./privacyMirror";
 
 describe("privacyScore", () => {
+  it("describes available surfaces without claiming checks were executed", () => {
+    expect(heuristicAvailableCount()).toBe(14);
+    expect(AIE_HEURISTIC_COVERAGE.find((item) => item.id === "h4")?.status).toBe("mirror");
+    expect(AIE_HEURISTIC_COVERAGE.find((item) => item.id === "h6")?.status).toBe("mirror");
+    expect(AIE_HEURISTIC_COVERAGE.find((item) => item.id === "peel")?.status).toBe("not_implemented");
+    expect(AIE_HEURISTIC_COVERAGE.every((item) => !["computed", "partial"].includes(item.status))).toBe(true);
+  });
+
   it("scores a clean payload at the base and grades it C", () => {
     const model = privacyScoreModel({});
     expect(model.score).toBe(SCORE_BASE);
@@ -27,11 +37,11 @@ describe("privacyScore", () => {
       coverage: { degraded: true },
     };
     const model = privacyScoreModel(payload);
-    // 2 tx tells -> warning, 1 unknown + degraded coverage -> info.
-    expect(model.census).toEqual({ alert: 0, warning: 2, info: 2 });
-    // 70 - (2 * 9) - (2 * 3) = 46 -> D. The worst risk is NOT re-added.
-    expect(model.score).toBe(46);
-    expect(model.grade).toBe("D");
+    // Only the sender tell is a warning; counterparty context stays informational.
+    expect(model.census).toEqual({ alert: 0, warning: 1, info: 3 });
+    // 70 - 9 - (3 * 3) = 52 -> C. The worst risk is NOT re-added.
+    expect(model.score).toBe(52);
+    expect(model.grade).toBe("C");
     expect(model.findings).toHaveLength(4);
   });
 

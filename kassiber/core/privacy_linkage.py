@@ -20,7 +20,7 @@ import binascii
 import json
 import sqlite3
 from collections import defaultdict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Iterable, Mapping, Sequence
 
 from ..wallet_descriptors import (
@@ -29,7 +29,13 @@ from ..wallet_descriptors import (
     normalize_chain,
     normalize_network,
 )
-from .onchain import parse_vin_outpoints
+from .onchain import (
+    input_outpoint, input_value_sats, normalized_script_hex, output_script,
+    output_value_sats, parse_vin_outpoints, stored_tx_mapping,
+)
+from .privacy_hygiene import collaborative_transaction_evidence, rounded_fee_rate
+from .custody_evidence import resolve_protocol_scope
+from ..errors import AppError
 from .source_funds_assembly import build_owned_outpoint_index
 
 EVIDENCE_EXACT = "exact"
@@ -194,6 +200,7 @@ class OwnedOutputNode:
     amount_msat: int
     asset: str
     spent_by: str | None = None
+    network: str = "main"
     branch_role: str = "unknown"
     branch_evidence_level: str = EVIDENCE_UNKNOWN
     change_evidence: str = CHANGE_EVIDENCE_UNAVAILABLE
@@ -235,9 +242,11 @@ class PrivacyLinkageEdge:
     new_linkage: bool
     merged_cluster_count: int
     evidence: Mapping[str, Any]
+    observer_linkage: bool = True
 
     def to_redacted_payload(self) -> dict[str, Any]:
         return {
+            "observer_linkage": self.observer_linkage,
             "edge_id": self.edge_id,
             "kind": self.kind,
             "heuristic": self.heuristic,
@@ -439,6 +448,9 @@ class PrivacyLinkageGraph:
     observer_entities: tuple[PassiveObserverEntity, ...]
     findings: tuple[PrivacyLinkageFinding, ...]
     limitations: tuple[Mapping[str, Any], ...]
+    analysed_transaction_count: int = 0
+    scored_transaction_count: int = 0
+    transaction_coverage_unknown_count: int = 0
 
     @property
     def linkage_score(self) -> int:
@@ -459,11 +471,16 @@ class PrivacyLinkageGraph:
             "summary": {
                 "node_count": len(self.nodes),
                 "edge_count": len(self.edges),
+                "observer_linkage_edge_count": sum(edge.observer_linkage for edge in self.edges),
+                "local_fact_edge_count": sum(not edge.observer_linkage for edge in self.edges),
                 "new_linkage_edge_count": sum(1 for edge in self.edges if edge.new_linkage),
                 "linkage_score": self.linkage_score,
                 "consequence_msat": self.consequence_msat,
                 "observer_entity_count": len(self.observer_entities),
                 "transaction_tell_count": len(self.transaction_tells),
+                "analysed_transaction_count": self.analysed_transaction_count,
+                "scored_transaction_count": self.scored_transaction_count,
+                "transaction_coverage_unknown_count": self.transaction_coverage_unknown_count,
                 "adversary_view_count": len(self.adversary_views),
                 "source_proximity_coin_count": len(self.source_proximity),
                 "source_proximity_known_coin_count": sum(
@@ -892,6 +909,40 @@ def build_privacy_linkage_graph(
             )
         return PrivacyLinkageGraph({}, (), (), adversary_views, (), (), (), tuple(limitations))
 
+    scoped_rows = _privacy_transaction_rows(conn, profile_id, next(iter(nodes.values())).network)
+    observed_ids: set[str] = set()
+    analysed_ids: set[str] = set()
+    for row in scoped_rows:
+        txid = _normalize_txid(row["external_id"])
+        observed_ids.add(txid)
+        tx = stored_tx_mapping(row["raw_json"], allow_nested=True) or {}
+        if (
+            len(txid) == 64 and all(char in "0123456789abcdef" for char in txid)
+            and isinstance(tx.get("vin"), list) and tx["vin"]
+            and isinstance(tx.get("vout"), list) and tx["vout"]
+            and all(
+                isinstance(item, Mapping) and (
+                    input_outpoint(item) is not None
+                    or (isinstance(item.get("coinbase"), str) and bool(normalized_script_hex(item["coinbase"])))
+                )
+                for item in tx["vin"]
+            )
+            and all(
+                isinstance(item, Mapping) and (
+                    output_value_sats(item) is not None
+                    or normalized_script_hex(output_script(item)) is not None
+                )
+                for item in tx["vout"]
+            )
+        ):
+            analysed_ids.add(txid)
+    if observed_ids - analysed_ids:
+        limitations.append({
+            "code": "transaction_analysis_coverage_incomplete",
+            "message": "Some local observations lack a complete Bitcoin transaction graph and do not dilute the score's analysed-transaction population.",
+            "evidence_level": EVIDENCE_UNKNOWN,
+            "evidence": {"transaction_count": len(observed_ids - analysed_ids)},
+        })
     tx_facts = _load_spend_facts(conn, profile_id, nodes, outpoint_to_node, limitations)
     transaction_tells = _load_transaction_tells(
         conn, profile_id, tx_facts, limitations
@@ -918,12 +969,13 @@ def build_privacy_linkage_graph(
         txid: str | None,
         evidence_level: str,
         evidence: Mapping[str, Any],
+        observer_linkage: bool = True,
     ) -> None:
         if left_node_id == right_node_id:
             return
         left, right = sorted((left_node_id, right_node_id))
         edge_id = f"{kind}:{source}:{txid or 'na'}:{left}->{right}:{len(edges)}"
-        merged = uf.union(left, right)
+        merged = uf.union(left, right) if observer_linkage else False
         amount_msat = min(nodes[left].amount_msat, nodes[right].amount_msat)
         edge = PrivacyLinkageEdge(
             edge_id=edge_id,
@@ -938,10 +990,11 @@ def build_privacy_linkage_graph(
             new_linkage=merged,
             merged_cluster_count=1 if merged else 0,
             evidence=dict(evidence),
+            observer_linkage=observer_linkage,
         )
         edges.append(edge)
         score_by_edge[edge.edge_id] = edge.merged_cluster_count
-        for node_id in (left, right):
+        for node_id in (left, right) if observer_linkage else ():
             edge_ids_by_node[node_id].add(edge.edge_id)
             heuristics_by_node[node_id].add(heuristic)
 
@@ -975,6 +1028,9 @@ def build_privacy_linkage_graph(
         observer_entities=tuple(observer_entities),
         findings=tuple(findings),
         limitations=tuple(limitations),
+        analysed_transaction_count=len(analysed_ids),
+        scored_transaction_count=len(analysed_ids | {tell.txid for tell in transaction_tells if tell.penalizes_wallet}),
+        transaction_coverage_unknown_count=len(observed_ids - analysed_ids),
     )
 
 
@@ -1032,7 +1088,7 @@ def analyze_psbt_privacy(
     )
     cluster_merge_delta = max(0, len(input_component_ids) - 1)
     cluster_evidence_level = (
-        EVIDENCE_UNKNOWN if unknown_input_count else EVIDENCE_EXACT
+        EVIDENCE_UNKNOWN if unknown_input_count else EVIDENCE_DERIVED
     )
 
     script_to_nodes: dict[str, list[OwnedOutputNode]] = defaultdict(list)
@@ -1263,7 +1319,7 @@ def _build_psbt_transaction_tells(
         add(
             "sender_common_input",
             "decoded_psbt_unsigned_tx",
-            EVIDENCE_UNKNOWN if unknown_input_count else EVIDENCE_EXACT,
+            EVIDENCE_UNKNOWN if unknown_input_count else EVIDENCE_DERIVED,
             bool(known_input_nodes),
             {
                 "input_count": len(decoded.inputs),
@@ -1296,10 +1352,10 @@ def _build_psbt_transaction_tells(
         and input_value_msat >= output_value_msat
     )
     add(
-        "fee_fingerprint",
+        "fee_observation",
         "decoded_psbt_amounts",
         EVIDENCE_EXACT if fee_known else EVIDENCE_UNKNOWN,
-        bool(known_input_nodes) and fee_known,
+        False,
         {
             "fee_known": fee_known,
             "fee_value_redacted": True,
@@ -1348,10 +1404,10 @@ def _build_psbt_findings(
             finding_id="psbt_cluster_merge",
             kind="cluster_merge",
             severity="warning",
-            title="PSBT merges local ownership clusters",
+            title="PSBT may link local clusters under a common-input assumption",
             detail=(
-                f"The decoded transaction would create {cluster_merge_delta} "
-                "new common-input cluster merge(s) among locally known inputs."
+                f"Assuming an ordinary non-collaborative spend, the decoded transaction "
+                f"would create {cluster_merge_delta} common-input cluster merge(s) among locally known inputs."
             ),
             evidence_level=cluster_evidence_level,
             evidence={"cluster_merge_delta": cluster_merge_delta},
@@ -1593,6 +1649,7 @@ def _load_owned_output_nodes(
             wallet_id=str(row["wallet_id"] or ""),
             amount_msat=int(row["amount"] or 0),
             asset=asset,
+            network=network,
             spent_by=_normalize_txid(row["spent_by"]) or None,
             branch_role=branch_role.role,
             branch_evidence_level=branch_role.evidence_level,
@@ -1633,6 +1690,8 @@ class _SpendFact:
     input_sources: set[str] = field(default_factory=set)
     output_node_ids: set[str] = field(default_factory=set)
     raw_vin_seen: bool = False
+    collaboration: dict[str, Any] | None = None
+    network: str | None = None
 
 
 def _load_spend_facts(
@@ -1653,17 +1712,8 @@ def _load_spend_facts(
 
     missing_vin_rows = 0
     unmatched_vin_outpoints = 0
-    rows = conn.execute(
-        """
-        SELECT external_id, raw_json
-        FROM transactions
-        WHERE profile_id = ?
-          AND external_id IS NOT NULL
-          AND trim(external_id) != ''
-        ORDER BY external_id ASC
-        """,
-        (profile_id,),
-    ).fetchall()
+    network = next(iter(nodes.values())).network if nodes else None
+    rows = _privacy_transaction_rows(conn, profile_id, network)
     seen_external_ids = set()
     for row in rows:
         txid = _normalize_txid(row["external_id"])
@@ -1673,6 +1723,9 @@ def _load_spend_facts(
         fact = facts.setdefault(txid, _SpendFact(txid=txid))
         outpoints = parse_vin_outpoints(row["raw_json"])
         payload = _safe_json_loads(row["raw_json"])
+        fact.collaboration = collaborative_transaction_evidence(
+            dict(row), payload if isinstance(payload, Mapping) else {},
+        ) or fact.collaboration
         if isinstance(payload, Mapping) and not outpoints:
             # The row had local structured data, but not enough input detail to
             # assert ownership linkage.
@@ -1692,6 +1745,16 @@ def _load_spend_facts(
         facts.setdefault(node.txid, _SpendFact(txid=node.txid)).output_node_ids.add(
             node.node_id
         )
+    for fact in facts.values():
+        fact.network = network
+    collaboration_count = sum(fact.collaboration is not None for fact in facts.values())
+    if collaboration_count:
+        limitations.append({
+            "code": "collaborative_ownership_uncertain",
+            "message": "Collaborative transaction inputs remain co-spend facts; common-input and change ownership assumptions do not cross those transactions.",
+            "evidence_level": EVIDENCE_UNKNOWN,
+            "evidence": {"transaction_count": collaboration_count},
+        })
     if missing_vin_rows:
         limitations.append(
             {
@@ -1727,29 +1790,41 @@ def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return columns
 
 
-def _transaction_rows_for_tells(
-    conn: sqlite3.Connection,
-    profile_id: str,
-) -> list[sqlite3.Row]:
+def _privacy_transaction_rows(
+    conn: sqlite3.Connection, profile_id: str, network: str | None,
+    *, include_excluded: bool = True,
+) -> list[dict[str, Any]]:
+    """Bitcoin/network evidence; accounting exclusion is not a chain tombstone."""
     columns = _table_columns(conn, "transactions")
     if "profile_id" not in columns:
         return []
-    select_parts = [
-        column if column in columns else f"NULL AS {column}"
-        for column in ("external_id", "direction", "fee", "raw_json")
-    ]
-    try:
-        return conn.execute(
-            f"""
-            SELECT {", ".join(select_parts)}
-            FROM transactions
-            WHERE profile_id = ?
-            ORDER BY external_id ASC
-            """,
-            (profile_id,),
-        ).fetchall()
-    except sqlite3.DatabaseError:
-        return []
+    wallet_columns = _table_columns(conn, "wallets")
+    joined = "wallet_id" in columns and {"id", "kind", "config_json"}.issubset(wallet_columns)
+    wallet_select = (
+        "w.kind AS wallet_kind, w.config_json AS wallet_config_json"
+        if joined else "NULL AS wallet_kind, NULL AS wallet_config_json"
+    )
+    wallet_join = "LEFT JOIN wallets w ON w.id = t.wallet_id" if joined else ""
+    excluded = "AND t.excluded = 0" if not include_excluded and "excluded" in columns else ""
+    rows = conn.execute(
+        f"SELECT t.*, {wallet_select} FROM transactions t {wallet_join} "
+        f"WHERE t.profile_id = ? {excluded} ORDER BY t.external_id ASC",
+        (profile_id,),
+    ).fetchall()
+    selected = []
+    for stored in rows:
+        row = {key: None for key in ("id", "external_id", "direction", "fee", "raw_json", "privacy_boundary", "review_status", "counterparty")}
+        row.update(dict(stored))
+        try:
+            scope = resolve_protocol_scope(row)
+        except (ValueError, AppError):
+            continue
+        if scope.protocol_chain != "bitcoin" or (network is not None and scope.network != network):
+            continue
+        if normalize_asset_code(row.get("asset") or "BTC") != "BTC":
+            continue
+        selected.append(row)
+    return selected
 
 
 def _truthy(value: Any) -> bool:
@@ -1761,19 +1836,18 @@ def _truthy(value: Any) -> bool:
     return text in {"1", "true", "yes", "y", "replaceable", "rbf"}
 
 
-def _positive_number(value: Any) -> bool:
-    try:
-        return float(value) > 0
-    except (TypeError, ValueError):
-        return False
-
-
 def _payload_rbf_signaled(payload: Any) -> bool:
     if not isinstance(payload, Mapping):
         return False
     for key in ("rbf", "replaceable", "bip125-replaceable", "bip125_replaceable"):
         if key in payload and _truthy(payload.get(key)):
             return True
+    tx = stored_tx_mapping(payload, allow_nested=True) or {}
+    for item in tx.get("vin", []) if isinstance(tx.get("vin"), list) else []:
+        if isinstance(item, Mapping):
+            sequence = item.get("sequence")
+            if isinstance(sequence, int) and not isinstance(sequence, bool) and 0 <= sequence < 0xFFFFFFFE:
+                return True
     status = payload.get("status")
     if isinstance(status, Mapping):
         for key in ("rbf", "replaceable", "bip125-replaceable", "bip125_replaceable"):
@@ -1820,20 +1894,6 @@ def _payload_has_op_return(payload: Any) -> bool:
     return any(_output_is_op_return(output) for output in _payload_outputs(payload))
 
 
-def _payload_fee_present(payload: Any) -> bool:
-    if not isinstance(payload, Mapping):
-        return False
-    for key in ("fee", "fees", "fee_sat", "fee_sats", "fee_msat"):
-        if key in payload and _positive_number(payload.get(key)):
-            return True
-    tx = payload.get("tx")
-    if isinstance(tx, Mapping):
-        for key in ("fee", "fees", "fee_sat", "fee_sats", "fee_msat"):
-            if key in tx and _positive_number(tx.get(key)):
-                return True
-    return False
-
-
 def _direction_attribution(
     txid: str,
     direction: Any,
@@ -1865,7 +1925,8 @@ def _load_transaction_tells(
     limitations: list[dict[str, Any]],
 ) -> list[PrivacyTransactionTell]:
     tells: list[PrivacyTransactionTell] = []
-    for row in _transaction_rows_for_tells(conn, profile_id):
+    network = next(iter(tx_facts.values())).network if tx_facts else None
+    for row in _privacy_transaction_rows(conn, profile_id, network):
         txid = _normalize_txid(row["external_id"])
         if not txid:
             continue
@@ -1896,7 +1957,12 @@ def _load_transaction_tells(
                 )
             )
 
-        if len(outpoints) > 1:
+        # Collaboration describes the physical transaction, not one wallet's
+        # observation of it. A second connection without the marker must not
+        # restore ownership assumptions already blocked by scoped evidence.
+        fact = tx_facts.get(txid)
+        collaboration = fact.collaboration if fact is not None else None
+        if len(outpoints) > 1 and not collaboration:
             add(
                 "sender_common_input",
                 "stored_transaction_vin",
@@ -1914,13 +1980,17 @@ def _load_transaction_tells(
                 "stored_transaction_outputs",
                 {"op_return_present": True},
             )
-        row_fee_present = _positive_number(row["fee"])
-        if row_fee_present or _payload_fee_present(payload):
-            add(
-                "fee_fingerprint",
-                "transactions.fee" if row_fee_present else "stored_transaction_fee",
-                {"fee_present": True},
-            )
+        tx = stored_tx_mapping(payload, allow_nested=True) or {}
+        vin, vout = tx.get("vin"), tx.get("vout")
+        rate = None
+        if isinstance(vin, list) and vin and isinstance(vout, list) and vout:
+            input_values = [input_value_sats(item) if isinstance(item, Mapping) else None for item in vin]
+            output_values = [output_value_sats(item) if isinstance(item, Mapping) else None for item in vout]
+            if all(value is not None for value in (*input_values, *output_values)):
+                fee_sats = sum(input_values) - sum(output_values)
+                rate = rounded_fee_rate(fee_sats, _int_or_none(tx.get("vsize")))
+        if rate is not None and not collaboration:
+            add("fee_fingerprint", "stored_transaction_fee_rate", {"sat_vb": rate, "pattern": "rounded_fee_rate"})
     if not tells:
         limitations.append(
             {
@@ -2034,6 +2104,7 @@ def _source_proximity_tables_available(conn: sqlite3.Connection) -> tuple[bool, 
 def _load_source_reaches_and_edges(
     conn: sqlite3.Connection,
     profile_id: str,
+    allowed_transaction_ids: set[str],
 ) -> tuple[list[_SourceReach], dict[str, list[_ReviewedFundingEdge]], str | None]:
     available, reason = _source_proximity_tables_available(conn)
     if not available:
@@ -2069,8 +2140,15 @@ def _load_source_reaches_and_edges(
         (profile_id,),
     ).fetchall()
     initial_reaches: list[_SourceReach] = []
+    source_by_anchor: dict[str, str] = {}
+    source_allocated: dict[str, int] = defaultdict(int)
+    source_capacity: dict[str, int] = {}
     outgoing: dict[str, list[_ReviewedFundingEdge]] = defaultdict(list)
     for row in rows:
+        if row["to_transaction_id"] not in allowed_transaction_ids:
+            continue
+        if row["from_transaction_id"] and row["from_transaction_id"] not in allowed_transaction_ids:
+            continue
         link_asset = normalize_asset_code(row["link_asset"])
         to_asset = normalize_asset_code(row["to_asset"])
         if link_asset != "BTC" or to_asset != "BTC":
@@ -2084,6 +2162,13 @@ def _load_source_reaches_and_edges(
             source_asset = normalize_asset_code(row["source_asset"])
             if source_asset != "BTC":
                 continue
+            source_id = str(row["from_source_id"])
+            anchor_key = f"source:{row['link_id']}"
+            source_by_anchor[anchor_key] = source_id
+            source_allocated[source_id] += _source_link_supported_amount(row) or 0
+            capacity = _nonnegative_int_or_none(row["source_amount"])
+            if capacity is not None:
+                source_capacity[source_id] = capacity
             initial_reaches.append(
                 _SourceReach(
                     anchor_key=f"source:{row['link_id']}",
@@ -2106,6 +2191,15 @@ def _load_source_reaches_and_edges(
                     evidence_level=evidence_level,
                 )
             )
+    overcommitted = {
+        source_id for source_id, capacity in source_capacity.items()
+        if source_allocated[source_id] > capacity
+    }
+    initial_reaches = [
+        replace(reach, supported_value_msat=None)
+        if source_by_anchor[reach.anchor_key] in overcommitted else reach
+        for reach in initial_reaches
+    ]
     return initial_reaches, outgoing, None
 
 
@@ -2129,8 +2223,17 @@ def _propagate_source_reaches(
         queue.append(reach)
     while queue:
         reach = queue.popleft()
-        for edge in outgoing.get(reach.txid, ()):
-            if edge.supported_value_msat is None or reach.supported_value_msat is None:
+        branches = outgoing.get(reach.txid, ())
+        overcommitted = (
+            len(branches) > 1
+            and reach.supported_value_msat is not None
+            and sum(edge.supported_value_msat or 0 for edge in branches) > reach.supported_value_msat
+        )
+        # A reviewed transaction-level fork cannot promise the same source
+        # capacity to multiple children. Keep it unknown; do not choose a FIFO
+        # allocation. Sequential propagation remains bounded one edge at a time.
+        for edge in branches:
+            if overcommitted or edge.supported_value_msat is None or reach.supported_value_msat is None:
                 supported_value = None
             else:
                 supported_value = min(reach.supported_value_msat, edge.supported_value_msat)
@@ -2170,6 +2273,8 @@ def _source_proximity_for_node(
 ) -> SourceProximityFact:
     if not reaches:
         return _source_proximity_unknown(node, reason="no_reviewed_source_path")
+    if all(reach.supported_value_msat is None for reach in reaches):
+        return _source_proximity_unknown(node, reason="unallocated_reviewed_source_path")
     nearest_hop = min(reach.hop_count for reach in reaches)
     nearest_reaches = [reach for reach in reaches if reach.hop_count == nearest_hop]
     supported_value = min(
@@ -2230,8 +2335,10 @@ def _build_source_proximity(
             "evidence_level": EVIDENCE_EXACT,
         }
     )
+    network = next(iter(nodes.values())).network if nodes else None
+    allowed_ids = {row["id"] for row in _privacy_transaction_rows(conn, profile_id, network, include_excluded=False)}
     initial_reaches, outgoing, unavailable_reason = _load_source_reaches_and_edges(
-        conn, profile_id
+        conn, profile_id, allowed_ids,
     )
     if unavailable_reason:
         limitations.append(
@@ -2246,10 +2353,21 @@ def _build_source_proximity(
             for node in sorted(nodes.values(), key=lambda item: item.node_id)
         )
     reaches_by_tx = _propagate_source_reaches(initial_reaches, outgoing)
-    facts = tuple(
-        _source_proximity_for_node(node, reaches_by_tx.get(node.txid, ()))
-        for node in sorted(nodes.values(), key=lambda item: item.node_id)
-    )
+    owned_by_tx: dict[str, list[OwnedOutputNode]] = defaultdict(list)
+    for node in nodes.values():
+        owned_by_tx[node.txid].append(node)
+    facts_list: list[SourceProximityFact] = []
+    for txid, siblings in sorted(owned_by_tx.items()):
+        reaches = reaches_by_tx.get(txid, ())
+        nearest = min((reach.hop_count for reach in reaches), default=None)
+        budget = sum(reach.supported_value_msat or 0 for reach in reaches if reach.hop_count == nearest)
+        ambiguous = len(siblings) > 1 and 0 < budget < sum(node.amount_msat for node in siblings)
+        for node in sorted(siblings, key=lambda item: item.node_id):
+            facts_list.append(
+                _source_proximity_unknown(node, reason="ambiguous_output_allocation")
+                if ambiguous else _source_proximity_for_node(node, reaches)
+            )
+    facts = tuple(facts_list)
     unknown_count = sum(
         1 for fact in facts if fact.provenance_status == SOURCE_PROXIMITY_UNKNOWN
     )
@@ -2314,8 +2432,10 @@ def _emit_common_input_edges(
                 left_node_id=anchor,
                 right_node_id=node_id,
                 txid=txid,
-                evidence_level=EVIDENCE_EXACT,
+                evidence_level=EVIDENCE_EXACT if fact.collaboration else EVIDENCE_DERIVED,
+                observer_linkage=fact.collaboration is None,
                 evidence={
+                    "collaboration": fact.collaboration,
                     "spending_txid": txid,
                     "owned_input_count": len(input_ids),
                     "source_count": len(fact.input_sources),
@@ -2356,7 +2476,10 @@ def _emit_change_edges(
                     right_node_id=output_id,
                     txid=txid,
                     evidence_level=output.branch_evidence_level,
+                    observer_linkage=False,
                     evidence={
+                        "knowledge_scope": "private_wallet_branch",
+                        "collaboration": fact.collaboration,
                         "spending_txid": txid,
                         "owned_input_count": len(input_ids),
                         "owned_output_count": len(output_ids),
@@ -2424,6 +2547,7 @@ def _build_inference_components(
     nodes: Mapping[str, OwnedOutputNode],
     edges: Sequence[PrivacyLinkageEdge],
 ) -> tuple[tuple[_InferenceComponent, ...], dict[str, _InferenceComponent]]:
+    edges = tuple(edge for edge in edges if edge.observer_linkage)
     uf = _UnionFind(nodes)
     for edge in edges:
         uf.union(edge.from_node_id, edge.to_node_id)
@@ -2475,6 +2599,7 @@ def _txid_to_node_ids(
 def _load_source_funds_anchor_candidates(
     conn: sqlite3.Connection,
     profile_id: str,
+    allowed_transaction_ids: set[str],
 ) -> tuple[tuple[_AnchorCandidate, ...], str | None]:
     link_columns = _table_columns(conn, "source_funds_links")
     transaction_columns = _table_columns(conn, "transactions")
@@ -2524,6 +2649,10 @@ def _load_source_funds_anchor_candidates(
         )
 
     for row in rows:
+        if row["to_transaction_id"] not in allowed_transaction_ids and row["to_external_id"] is not None:
+            continue
+        if row["from_transaction_id"] and row["from_transaction_id"] not in allowed_transaction_ids and row["from_external_id"] is not None:
+            continue
         evidence_level = _confidence_to_evidence_level(row["confidence"])
         if row["from_source_id"]:
             add(
@@ -2551,13 +2680,14 @@ def _load_source_funds_anchor_candidates(
 def _load_counterparty_anchor_candidates(
     conn: sqlite3.Connection,
     profile_id: str,
+    allowed_transaction_ids: set[str],
 ) -> tuple[tuple[_AnchorCandidate, ...], str | None]:
     columns = _table_columns(conn, "transactions")
     if not {"profile_id", "external_id", "counterparty"}.issubset(columns):
         return (), "counterparty_annotations_unavailable"
     rows = conn.execute(
         """
-        SELECT external_id
+        SELECT id, external_id
         FROM transactions
         WHERE profile_id = ?
           AND external_id IS NOT NULL
@@ -2577,6 +2707,7 @@ def _load_counterparty_anchor_candidates(
             source="local_counterparty_annotation",
         )
         for index, row in enumerate(rows, start=1)
+        if row["id"] in allowed_transaction_ids
     ]
     return tuple(candidates), None
 
@@ -2705,7 +2836,7 @@ def _passive_chain_view(
         model_assumptions=(
             _model_assumption(
                 "bitcoin_graph_facts_only",
-                "Model assumes the observer starts from public Bitcoin transaction graph facts available in local inventory.",
+                "Model assumes common-input ownership only where no collaborative boundary is known. Private wallet change metadata does not establish public observer linkage.",
                 EVIDENCE_DERIVED,
             ),
             _model_assumption(
@@ -2812,11 +2943,14 @@ def _build_adversary_views(
     components, node_to_component = _build_inference_components(nodes, edges)
     txid_nodes = _txid_to_node_ids(nodes, tx_facts)
     total_wallet_ids = {node.wallet_id for node in nodes.values()}
+    network = next(iter(nodes.values())).network if nodes else None
+    allowed_ids = {row["id"] for row in _privacy_transaction_rows(conn, profile_id, network)}
+    reviewed_ids = {row["id"] for row in _privacy_transaction_rows(conn, profile_id, network, include_excluded=False)}
     source_candidates, source_reason = _load_source_funds_anchor_candidates(
-        conn, profile_id
+        conn, profile_id, reviewed_ids,
     )
     counterparty_candidates, counterparty_reason = _load_counterparty_anchor_candidates(
-        conn, profile_id
+        conn, profile_id, allowed_ids,
     )
     return (
         _passive_chain_view(

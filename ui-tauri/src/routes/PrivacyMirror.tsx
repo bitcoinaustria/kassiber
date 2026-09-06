@@ -64,7 +64,7 @@ import {
   type PrivacyMirrorPayload,
   type PsbtPrivacyResult,
 } from "@/lib/privacyMirror";
-import { heuristicComputedCount, privacyScoreModel } from "@/lib/privacyScore";
+import { heuristicAvailableCount, privacyScoreModel } from "@/lib/privacyScore";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
@@ -695,7 +695,7 @@ export function PrivacyMirrorPayloadView({
       <Section
         title={t("heuristics.title")}
         icon={<ListChecks className="size-4 shrink-0" aria-hidden="true" />}
-        count={`${heuristicComputedCount()}/34`}
+        count={`${heuristicAvailableCount()}/34`}
       >
         <HeuristicCoverage />
       </Section>

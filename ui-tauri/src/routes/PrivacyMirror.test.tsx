@@ -124,16 +124,19 @@ describe("PrivacyMirror route", () => {
     expect(html).toContain('data-testid="privacy-mirror-worst-risk"');
     expect(html).toContain('data-testid="privacy-mirror-findings"');
     // Score hero: with weighted tells the mock payload lands at grade C.
-    expect(html).toContain("notable exposure");
+    expect(html).toContain("Several linking signals observed in this model");
+    expect(html).toContain("not a privacy probability or guarantee");
     expect(html).toContain("What to fix first");
     // The worst risk is shown in plain language, not the engine's phrasing.
-    expect(html).toContain("Wallets linked by a shared-input spend");
+    expect(html).toContain("Common-input heuristic may link wallets");
     // Machine tell tokens are humanized into readable finding titles.
     expect(html).toContain("Common input");
     // Detail sections remain as collapsible triggers.
     expect(html).toContain("Who can infer it");
     expect(html).toContain("The evidence");
     expect(html).toContain("All details");
+    expect(html).toContain("Analysis capabilities");
+    expect(html).not.toContain("Heuristics checked");
     // Grounded score: the waterfall shows real factor counts, not a made-up base.
     expect(html).toContain("Linked wallets");
     expect(html).toContain("Origin coverage");

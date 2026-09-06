@@ -509,5 +509,92 @@ class PrivacyHygieneTests(unittest.TestCase):
         self.assertEqual(caught.exception.details["transaction"], "missing-tx")
 
 
+    def test_payjoin_does_not_emit_common_input_ownership_or_unnecessary_inputs(self):
+        self._insert_transaction(tx_id="payjoin", external_id="f" * 64, privacy_boundary="payjoin", raw_json={
+            "vin": [{"txid": str(index) * 64, "vout": 0, "prevout": {"value": 100_000}} for index in (1, 2)],
+            "vout": [{"value": 50_000}, {"value": 149_000}],
+        })
+        snapshot = build_privacy_hygiene_snapshot(self.conn)
+        codes = {finding["code"] for finding in snapshot["transactions"][0]["top_findings"]}
+        self.assertIn("payjoin_boundary", codes)
+        self.assertNotIn("common_input_ownership", codes)
+        self.assertNotIn("unnecessary_input_heuristic", codes)
+
+    def test_invalid_stored_boundary_is_a_coverage_finding(self):
+        self._insert_transaction(tx_id="legacy", external_id="e" * 64, raw_json={
+            "privacy_boundary": "not-supported",
+            "vin": [{"txid": str(index) * 64, "vout": 0, "prevout": {"value": 100_000}} for index in (1, 2)],
+            "vout": [{"value": 199_000}],
+        })
+        snapshot = build_privacy_hygiene_snapshot(self.conn)
+        findings = snapshot["transactions"][0]["top_findings"]
+        self.assertIn("transaction_coverage_gap", {item["code"] for item in findings})
+        self.assertNotIn("common_input_ownership", {item["code"] for item in findings})
+
+    def test_collaboration_context_survives_display_filters_and_accounting_exclusion(self):
+        raw = {
+            "chain": "bitcoin", "network": "main", "vsize": 100,
+            "vin": [
+                {"txid": "b" * 64, "vout": 0, "sequence": 0xFFFFFFFF, "prevout": {"value": 1100}},
+                {"txid": "c" * 64, "vout": 0, "sequence": 0xFFFFFFFF, "prevout": {"value": 1000}},
+            ],
+            "vout": [{"value": 1000}, {"value": 1000}],
+        }
+        self._insert_transaction(tx_id="marked", external_id="a" * 64, privacy_boundary="payjoin", raw_json=raw)
+        self.conn.execute(
+            "INSERT INTO wallets(id, workspace_id, profile_id, account_id, label, kind, config_json, created_at) "
+            "SELECT 'other', workspace_id, profile_id, account_id, 'Other', kind, config_json, created_at FROM wallets WHERE id='wal'"
+        )
+        self._insert_transaction(tx_id="unmarked", external_id="a" * 64, raw_json=raw, wallet_id="other")
+        scopes = ({}, {"wallet": "other"}, {"transaction": "unmarked"})
+        for excluded in (0, 1):
+            self.conn.execute("UPDATE transactions SET excluded=? WHERE id='marked'", (excluded,))
+            for scope in scopes:
+                with self.subTest(scope=scope, excluded=excluded):
+                    payload = build_privacy_hygiene_snapshot(self.conn, scope)
+                    row = next(item for item in payload["transactions"] if item["id"] == "unmarked")
+                    codes = {item["code"] for item in row["top_findings"]}
+                    self.assertNotIn("common_input_ownership", codes)
+                    self.assertNotIn("unnecessary_input_heuristic", codes)
+                    self.assertEqual(row["risk_weight"], 3)
+        # Foreign or invalid protocol metadata must not hide mainnet findings.
+        for chain, network in (("bitcoin", "regtest"), ("invalid-chain", "main"), ("bitcoin", "invalid-network")):
+            raw["chain"], raw["network"] = chain, network
+            self.conn.execute("UPDATE transactions SET raw_json=? WHERE id='marked'", (json.dumps(raw),))
+            for scope in scopes:
+                with self.subTest(chain=chain, network=network, scope=scope):
+                    payload = build_privacy_hygiene_snapshot(self.conn, scope)
+                    row = next(item for item in payload["transactions"] if item["id"] == "unmarked")
+                    codes = {item["code"] for item in row["top_findings"]}
+                    self.assertIn("common_input_ownership", codes)
+                    self.assertIn("unnecessary_input_heuristic", codes)
+
+    def test_noncanonical_ids_do_not_share_collaboration_context(self):
+        raw = {"vin": [{"txid": "b" * 64, "vout": 0}, {"txid": "c" * 64, "vout": 0}], "vout": [{"value": 1000}]}
+        self._insert_transaction(tx_id="marked", external_id="provider:unknown", privacy_boundary="payjoin", raw_json=raw)
+        self._insert_transaction(tx_id="unmarked", external_id="provider:unknown", raw_json=raw)
+        payload = build_privacy_hygiene_snapshot(self.conn, {"transaction": "unmarked"})
+        codes = {item["code"] for item in payload["transactions"][0]["top_findings"]}
+        self.assertIn("common_input_ownership", codes)
+
+    def test_inventory_ownership_does_not_cross_bitcoin_networks(self):
+        parent, spend = "1" * 64, "2" * 64
+        self._insert_utxo(utxo_id="main", txid=parent, vout=0, sats=100_000, address="bc1qtest", script=P2WPKH_SCRIPT)
+        self._insert_transaction(tx_id="regtest", external_id=spend, raw_json={
+            "chain": "bitcoin", "network": "regtest", "vin": [{"txid": parent, "vout": 0}],
+            "vout": [{"value": 99_000, "scriptpubkey": P2WPKH_SCRIPT}, {"value": 500}],
+        })
+        snapshot = build_privacy_hygiene_snapshot(self.conn)
+        transaction = snapshot["transactions"][0]
+        self.assertEqual(transaction["state"], "partial")
+        self.assertEqual(transaction["support"]["known_input_values"], 0)
+        codes = {finding["code"] for finding in transaction["top_findings"]}
+        self.assertNotIn("change_position_fingerprint", codes)
+        # Identical graph scope now has exact inventory support.
+        self.conn.execute("UPDATE wallet_utxos SET network='regtest' WHERE id='main'")
+        scoped = build_privacy_hygiene_snapshot(self.conn)["transactions"][0]
+        self.assertEqual(scoped["support"]["known_input_values"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

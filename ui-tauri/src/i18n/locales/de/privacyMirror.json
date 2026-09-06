@@ -28,7 +28,7 @@
   },
   "score": {
     "of": " / 100",
-    "local": "Lokal aus deinem Buch berechnet — keine Chain-Abfrage.",
+    "local": "Heuristische Priorisierung anhand lokal beobachteter Signale, keine Privatsphäre-Wahrscheinlichkeit oder Garantie. Fehlende Daten begrenzen die Aussagekraft.",
     "census": "Befunde nach Schweregrad",
     "findings": "Befunde",
     "waterfall": "Wie dieser Score entsteht",
@@ -44,24 +44,24 @@
     }
   },
   "gradeHint": {
-    "A+": "Exzellent — kaum verknüpfbar",
-    "B": "Gut — geringe Exposure",
-    "C": "Mittel — spürbare Exposure",
-    "D": "Schlecht — erhebliche Exposure",
-    "F": "Kritisch — stark verknüpfbar"
+    "A+": "Wenige Verknüpfungssignale in diesem Modell beobachtet",
+    "B": "Einige Verknüpfungssignale in diesem Modell beobachtet",
+    "C": "Mehrere Verknüpfungssignale in diesem Modell beobachtet",
+    "D": "Viele Verknüpfungssignale in diesem Modell beobachtet",
+    "F": "Umfangreiche Verknüpfungssignale in diesem Modell beobachtet"
   },
   "worstKind": {
-    "common_input": "Wallets durch gemeinsamen Input verknüpft",
+    "common_input": "Gemeinsame Inputs können Wallets verknüpfen",
     "unknown_coverage": "Einige Coins konnten nicht geprüft werden",
     "bounded_local_model": "Lokal nichts Stärkeres gefunden"
   },
   "adversaryTier": {
     "passive_chain_watcher": "Alle, die die Blockchain beobachten",
-    "reviewed_kyc_source_funds_anchor_watcher": "Eine Börse, die deinen Ausweis geprüft hat",
+    "reviewed_kyc_source_funds_anchor_watcher": "Beobachter mit geprüften Herkunftsnachweisen",
     "known_counterparty_hypothetical": "Jemand, den du bezahlt hast oder der dich bezahlt hat"
   },
   "assumption": {
-    "bitcoin_graph_facts_only": "Startet nur von öffentlichen Blockchain-Fakten, die bereits lokal vorliegen.",
+    "bitcoin_graph_facts_only": "Nimmt bei gemeinsamen Inputs denselben Eigentümer an, solange keine Zusammenarbeit bekannt ist. Private Wechselgeld-Metadaten belegen keine öffentliche Verknüpfung.",
     "reviewed_anchor_starting_knowledge": "Startet von den lokal geprüften Herkunftsnachweisen (Anchors).",
     "counterparty_starting_knowledge": "Startet von den lokal gekennzeichneten Gegenparteien."
   },
@@ -69,19 +69,20 @@
     "reviewOrigins": "Coin-Herkunft prüfen"
   },
   "heuristics": {
-    "title": "Geprüfte Heuristiken",
-    "note": "Bildet den Heuristik-Satz von am-i-exposed ab. Kassiber berechnet die lokal ableitbare Teilmenge — keine Chain-Abfrage, keine Entitäts-Datenbank, keine Entropie-Engine.",
+    "title": "Analysefunktionen",
+    "note": "Verfügbarkeit je Ansicht, keine Liste der in diesem Buch ausgeführten Prüfungen. Die Transaktionsdetails nutzen eine eigene Hygiene-Analyse. Fehlende Transaktionsdaten können verfügbare Prüfungen verhindern.",
     "status": {
-      "computed": "Geprüft",
-      "partial": "Teilweise",
-      "not_local": "Lokal nicht verfügbar"
+      "mirror": "Privacy Mirror",
+      "transaction_detail": "Transaktionsdetails",
+      "not_implemented": "Nicht implementiert"
     }
   },
   "primary": {
     "title": "Was du zuerst beheben solltest"
   },
   "finding": {
-    "empty": "Keine Befunde im lokalen Modell."
+    "empty": "Keine Befunde im lokalen Modell.",
+    "fee_fingerprint": "Eine gerundete Gebührenrate wurde beobachtet. Dieses schwache Transaktionsmerkmal identifiziert keine Wallet-Software."
   },
   "reco": {
     "sender_common_input": "Gib Coins aus verschiedenen Clustern nicht in einer Transaktion aus — ein gemeinsamer Input verknüpft sie.",

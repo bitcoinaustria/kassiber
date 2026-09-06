@@ -157,52 +157,51 @@ export interface PrivacyScoreModel {
   worstSeverity: PrivacySeverity;
 }
 
-// The am-i-exposed heuristic catalog mirrored with Kassiber's honest local
-// coverage (verified against privacy_linkage.py / privacy_hygiene.py). Status =
-// whether the local engine computes an equivalent signal, with no chain fetch,
-// entity DB, or entropy engine. Names are proper/technical terms, kept in
+// Capability inventory, not an execution report. Mirror and transaction detail
+// currently have separate analysis surfaces. Availability does not mean a check
+// ran for this book, and it is not a measured privacy guarantee. Names are proper/technical terms, kept in
 // English (like the raw tell kinds); only the wrapper strings are localized.
-export type HeuristicStatus = "computed" | "partial" | "not_local";
+export type HeuristicStatus = "mirror" | "transaction_detail" | "not_implemented";
 
 export const AIE_HEURISTIC_COVERAGE: Array<{ id: string; name: string; status: HeuristicStatus }> = [
-  { id: "h3", name: "Common input ownership", status: "computed" },
-  { id: "h8", name: "Address reuse", status: "computed" },
-  { id: "h2", name: "Change detection", status: "computed" },
-  { id: "h1", name: "Round amounts", status: "computed" },
-  { id: "h6", name: "Fee fingerprinting", status: "computed" },
-  { id: "h7", name: "OP_RETURN metadata", status: "computed" },
-  { id: "h11", name: "Wallet fingerprinting", status: "computed" },
-  { id: "script", name: "Script type analysis", status: "computed" },
-  { id: "witness", name: "Witness data", status: "computed" },
-  { id: "dust", name: "Dust output detection", status: "computed" },
-  { id: "unnecessary", name: "Unnecessary inputs", status: "computed" },
-  { id: "h9", name: "UTXO analysis", status: "computed" },
-  { id: "h10", name: "Address type", status: "computed" },
-  { id: "h4", name: "CoinJoin detection", status: "computed" },
-  { id: "consolidation", name: "Consolidation patterns", status: "partial" },
-  { id: "utxo-age", name: "UTXO age spread", status: "partial" },
-  { id: "bip69", name: "BIP69 ordering", status: "partial" },
-  { id: "coinsel", name: "Coin selection", status: "partial" },
-  { id: "dust-spend", name: "Dust spending", status: "partial" },
-  { id: "h17", name: "Multisig / escrow", status: "partial" },
-  { id: "coinbase", name: "Coinbase", status: "partial" },
-  { id: "spending", name: "Spending patterns", status: "partial" },
-  { id: "recurring", name: "Recurring payment", status: "partial" },
-  { id: "highactivity", name: "High activity", status: "partial" },
-  { id: "h5", name: "Transaction entropy", status: "not_local" },
-  { id: "anon", name: "Anonymity sets", status: "not_local" },
-  { id: "peel", name: "Peel chain", status: "not_local" },
-  { id: "tx0", name: "CoinJoin premix", status: "not_local" },
-  { id: "postmix", name: "Post-mix consolidation", status: "not_local" },
-  { id: "ricochet", name: "Ricochet", status: "not_local" },
-  { id: "entity", name: "Known entity", status: "not_local" },
-  { id: "exchange", name: "Exchange pattern", status: "not_local" },
-  { id: "bip47", name: "BIP47 notification", status: "not_local" },
-  { id: "timing", name: "Timing analysis", status: "not_local" },
+  { id: "h3", name: "Common input ownership", status: "mirror" },
+  { id: "h8", name: "Address reuse", status: "mirror" },
+  { id: "h2", name: "Private wallet change evidence", status: "mirror" },
+  { id: "h1", name: "Round amounts", status: "transaction_detail" },
+  { id: "h6", name: "Rounded fee-rate pattern", status: "mirror" },
+  { id: "h7", name: "OP_RETURN metadata", status: "mirror" },
+  { id: "h11", name: "Wallet fingerprinting", status: "transaction_detail" },
+  { id: "script", name: "Script type analysis", status: "transaction_detail" },
+  { id: "witness", name: "Witness data", status: "transaction_detail" },
+  { id: "dust", name: "Dust output detection", status: "transaction_detail" },
+  { id: "unnecessary", name: "Unnecessary inputs", status: "transaction_detail" },
+  { id: "h9", name: "UTXO analysis", status: "mirror" },
+  { id: "h10", name: "Address type", status: "transaction_detail" },
+  { id: "h4", name: "CoinJoin boundary patterns", status: "mirror" },
+  { id: "consolidation", name: "Consolidation patterns", status: "not_implemented" },
+  { id: "utxo-age", name: "UTXO age spread", status: "not_implemented" },
+  { id: "bip69", name: "BIP69 ordering", status: "not_implemented" },
+  { id: "coinsel", name: "Coin selection", status: "not_implemented" },
+  { id: "dust-spend", name: "Dust spending", status: "not_implemented" },
+  { id: "h17", name: "Multisig / escrow", status: "not_implemented" },
+  { id: "coinbase", name: "Coinbase", status: "not_implemented" },
+  { id: "spending", name: "Spending patterns", status: "not_implemented" },
+  { id: "recurring", name: "Recurring payment", status: "not_implemented" },
+  { id: "highactivity", name: "High activity", status: "not_implemented" },
+  { id: "h5", name: "Transaction entropy", status: "not_implemented" },
+  { id: "anon", name: "Anonymity sets", status: "not_implemented" },
+  { id: "peel", name: "Peel chain", status: "not_implemented" },
+  { id: "tx0", name: "CoinJoin premix", status: "not_implemented" },
+  { id: "postmix", name: "Post-mix consolidation", status: "not_implemented" },
+  { id: "ricochet", name: "Ricochet", status: "not_implemented" },
+  { id: "entity", name: "Known entity", status: "not_implemented" },
+  { id: "exchange", name: "Exchange pattern", status: "not_implemented" },
+  { id: "bip47", name: "BIP47 notification", status: "not_implemented" },
+  { id: "timing", name: "Timing analysis", status: "not_implemented" },
 ];
 
-export function heuristicComputedCount() {
-  return AIE_HEURISTIC_COVERAGE.filter((h) => h.status === "computed").length;
+export function heuristicAvailableCount() {
+  return AIE_HEURISTIC_COVERAGE.filter((h) => h.status !== "not_implemented").length;
 }
 
 export function privacyScoreModel(payload: PrivacyMirrorPayload): PrivacyScoreModel {

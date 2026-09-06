@@ -386,7 +386,7 @@ class PrivacyLinkageTests(unittest.TestCase):
         finding = next(finding for finding in graph.findings if finding.kind == "common_input")
         self.assertEqual(finding.linkage_score, 1)
         self.assertEqual(finding.evidence["new_cluster_merges"], 1)
-        self.assertEqual(finding.evidence_level, "exact")
+        self.assertEqual(finding.evidence_level, "derived")
 
     def test_branch_label_change_uses_ground_truth_instead_of_guessing(self):
         conn = _conn()
@@ -410,14 +410,14 @@ class PrivacyLinkageTests(unittest.TestCase):
 
         change_edges = [edge for edge in graph.edges if edge.kind == "change_output"]
         self.assertEqual(len(change_edges), 1)
-        self.assertTrue(change_edges[0].new_linkage)
+        self.assertFalse(change_edges[0].new_linkage)
+        self.assertFalse(change_edges[0].observer_linkage)
         self.assertEqual(change_edges[0].source, "stored_vin")
         self.assertEqual(change_edges[0].evidence_level, "exact")
         self.assertEqual(change_edges[0].evidence["change_evidence"], "ground_truth")
         self.assertEqual(change_edges[0].evidence["change_source"], "wallet_branch_role")
-        self.assertEqual(graph.linkage_score, 1)
-        self.assertEqual(len(graph.observer_entities), 1)
-        self.assertEqual(graph.observer_entities[0].heuristics, ("change",))
+        self.assertEqual(graph.linkage_score, 0)
+        self.assertEqual(len(graph.observer_entities), 0)
 
     def test_spent_by_path_links_owned_input_without_raw_json(self):
         conn = _conn()
@@ -446,9 +446,10 @@ class PrivacyLinkageTests(unittest.TestCase):
 
         change_edges = [edge for edge in graph.edges if edge.kind == "change_output"]
         self.assertEqual(len(change_edges), 1)
-        self.assertTrue(change_edges[0].new_linkage)
+        self.assertFalse(change_edges[0].new_linkage)
+        self.assertFalse(change_edges[0].observer_linkage)
         self.assertEqual(change_edges[0].source, "spent_by")
-        self.assertEqual(graph.linkage_score, 1)
+        self.assertEqual(graph.linkage_score, 0)
 
     def test_multi_script_change_label_beats_numeric_convention(self):
         conn = _conn()
@@ -588,7 +589,7 @@ class PrivacyLinkageTests(unittest.TestCase):
 
         self.assertEqual(
             {tell.kind for tell in graph.transaction_tells},
-            {"sender_rbf", "fee_fingerprint"},
+            {"sender_rbf"},
         )
         self.assertTrue(
             all(tell.attribution == "emitted_by_you" for tell in graph.transaction_tells)
@@ -648,7 +649,6 @@ class PrivacyLinkageTests(unittest.TestCase):
                 "sender_common_input",
                 "sender_rbf",
                 "op_return_output",
-                "fee_fingerprint",
             },
         )
         self.assertTrue(
@@ -703,11 +703,11 @@ class PrivacyLinkageTests(unittest.TestCase):
 
         passive = _adversary_view(graph, ADVERSARY_PASSIVE_CHAIN)
         kyc = _adversary_view(graph, ADVERSARY_KYC_SOURCE_FUNDS)
-        self.assertEqual(passive.summary["observer_entity_count"], 2)
-        self.assertEqual(passive.summary["exposed_cluster_count"], 2)
-        self.assertEqual(passive.summary["wallet_count"], 2)
-        self.assertEqual(kyc.summary["observer_entity_count"], 1)
-        self.assertEqual(kyc.summary["exposed_cluster_count"], 1)
+        self.assertEqual(passive.summary["observer_entity_count"], 0)
+        self.assertEqual(passive.summary["exposed_cluster_count"], 0)
+        self.assertEqual(passive.summary["wallet_count"], 0)
+        self.assertEqual(kyc.summary["observer_entity_count"], 0)
+        self.assertEqual(kyc.summary["exposed_cluster_count"], 2)
         self.assertEqual(kyc.summary["wallet_count"], 1)
         self.assertEqual(
             kyc.summary["unknown_coverage"]["node_count"],
@@ -807,7 +807,7 @@ class PrivacyLinkageTests(unittest.TestCase):
             conn.close()
 
         known = _adversary_view(graph, ADVERSARY_KNOWN_COUNTERPARTY)
-        self.assertEqual(known.summary["exposed_cluster_count"], 1)
+        self.assertEqual(known.summary["exposed_cluster_count"], 2)
         self.assertEqual(known.summary["wallet_count"], 1)
         self.assertEqual(known.clusters[0].anchor_kinds, ("known_counterparty_transaction",))
         self.assertEqual(known.clusters[0].support_status, "supported_by_local_ground_truth")
@@ -1045,7 +1045,7 @@ class PrivacyLinkageTests(unittest.TestCase):
         self.assertEqual(payload["summary"]["cluster_merge_delta"], 1)
         self.assertEqual(payload["summary"]["blast_radius_score"], 1)
         self.assertEqual(payload["unknowns"]["input_count"], 0)
-        self.assertEqual(payload["cluster_merge"]["evidence_level"], "exact")
+        self.assertEqual(payload["cluster_merge"]["evidence_level"], "derived")
         self.assertEqual(payload["cluster_merge"]["owned_input_cluster_count"], 2)
         passive = next(
             item
@@ -1110,7 +1110,7 @@ class PrivacyLinkageTests(unittest.TestCase):
         common_input = next(
             tell for tell in payload["transaction_tells"] if tell["kind"] == "sender_common_input"
         )
-        self.assertEqual(common_input["evidence_level"], "exact")
+        self.assertEqual(common_input["evidence_level"], "derived")
 
     def test_psbt_unknown_inputs_degrade_without_network_egress(self):
         conn = _conn()
@@ -1143,7 +1143,7 @@ class PrivacyLinkageTests(unittest.TestCase):
             any(finding["kind"] == "unknown_inputs" for finding in payload["findings"])
         )
         fee_tell = next(
-            tell for tell in payload["transaction_tells"] if tell["kind"] == "fee_fingerprint"
+            tell for tell in payload["transaction_tells"] if tell["kind"] == "fee_observation"
         )
         self.assertEqual(fee_tell["evidence_level"], "unknown")
         self.assertFalse(fee_tell["evidence"]["fee_known"])
@@ -1253,6 +1253,233 @@ class PrivacyLinkageTests(unittest.TestCase):
         self.assertNotIn("select", serialized)
         self.assertNotIn("recommend", serialized)
         self.assertNotIn("choose", serialized)
+
+
+    def test_collaborative_cospends_remain_facts_without_observer_unions(self):
+        for boundary in ("coinjoin", "payjoin", "collaborative", "payment_in_coinjoin"):
+            with self.subTest(boundary=boundary):
+                conn = _conn()
+                conn.execute("ALTER TABLE transactions ADD COLUMN privacy_boundary TEXT")
+                first, second, spend = _txid("a1"), _txid("a2"), _txid("a3")
+                _insert_utxo(conn, wallet_id="one", txid=first, spent_by=spend)
+                _insert_utxo(conn, wallet_id="two", txid=second, spent_by=spend)
+                _insert_utxo(conn, wallet_id="one", txid=spend, branch_label="change")
+                _insert_tx(conn, spend, [(first, 0), (second, 0)], direction="outbound")
+                conn.execute("UPDATE transactions SET privacy_boundary=?", (boundary,))
+                graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+                conn.close()
+                self.assertEqual({edge.kind for edge in graph.edges}, {"common_input", "change_output"})
+                self.assertTrue(all(not edge.observer_linkage for edge in graph.edges))
+                self.assertEqual(graph.linkage_score, 0)
+                self.assertEqual(graph.observer_entities, ())
+                self.assertNotIn("sender_common_input", {tell.kind for tell in graph.transaction_tells})
+                self.assertEqual(_adversary_view(graph, ADVERSARY_PASSIVE_CHAIN).clusters, ())
+                self.assertIn("collaborative_ownership_uncertain", {item["code"] for item in graph.limitations})
+
+    def test_explicit_collaboration_applies_to_inventory_only_spends(self):
+        for raw in (None, "invalid-json", "[]"):
+            with self.subTest(raw=raw):
+                conn = _conn()
+                conn.execute("ALTER TABLE transactions ADD COLUMN privacy_boundary TEXT")
+                first, second, spend = _txid("e1"), _txid("e2"), _txid("e3")
+                for txid in (first, second):
+                    _insert_utxo(conn, wallet_id="one", txid=txid, spent_by=spend)
+                _insert_tx(conn, spend, [], direction="outbound")
+                conn.execute("UPDATE transactions SET privacy_boundary='payjoin', raw_json=?", (raw,))
+                graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+                conn.close()
+                self.assertEqual(len(graph.edges), 1)
+                self.assertFalse(graph.edges[0].observer_linkage)
+                self.assertEqual(graph.linkage_score, 0)
+
+    def test_accounting_exclusion_does_not_erase_collaborative_chain_evidence(self):
+        conn = _conn()
+        conn.execute("ALTER TABLE transactions ADD COLUMN privacy_boundary TEXT")
+        conn.execute("ALTER TABLE transactions ADD COLUMN excluded INTEGER DEFAULT 0")
+        first, second, spend = _txid("c4"), _txid("c5"), _txid("c6")
+        for txid in (first, second):
+            _insert_utxo(conn, wallet_id="one", txid=txid, spent_by=spend)
+        _insert_tx(conn, spend, [], direction="outbound")
+        conn.execute("UPDATE transactions SET privacy_boundary='payjoin', excluded=1, raw_json=NULL")
+        graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+        conn.close()
+        self.assertEqual(len(graph.edges), 1)
+        self.assertEqual(graph.linkage_score, 0)
+        self.assertFalse(graph.edges[0].observer_linkage)
+        self.assertEqual(graph.edges[0].evidence["collaboration"]["kind"], "payjoin")
+
+    def test_legacy_invalid_boundary_is_unknown_not_an_analysis_crash(self):
+        for marker in ("not-a-boundary", False):
+            with self.subTest(marker=marker):
+                conn = _conn()
+                first, second, spend = _txid("f1"), _txid("f2"), _txid("f3")
+                for txid in (first, second):
+                    _insert_utxo(conn, wallet_id="one", txid=txid)
+                _insert_tx(conn, spend, [(first, 0), (second, 0)], raw_json={
+                    "privacy_boundary": marker,
+                    "vin": [{"txid": first, "vout": 0}, {"txid": second, "vout": 0}],
+                })
+                graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+                conn.close()
+                self.assertEqual(graph.linkage_score, 0)
+                self.assertEqual(graph.edges[0].evidence["collaboration"]["source"], "invalid_privacy_metadata")
+
+    def test_single_inventory_network_rejects_foreign_transactions_and_anchors(self):
+        conn = _conn()
+        first, second, spend = _txid("e4"), _txid("e5"), _txid("e6")
+        for txid in (first, second, spend):
+            _insert_utxo(conn, wallet_id="one", txid=txid)
+        _insert_tx(conn, spend, [(first, 0), (second, 0)], direction="outbound", counterparty="test counterparty", raw_json={
+            "chain": "bitcoin", "network": "regtest",
+            "vin": [{"txid": first, "vout": 0}, {"txid": second, "vout": 0}],
+            "vout": [{"value": 1000}],
+        })
+        _insert_source_anchor(conn, to_transaction_id=spend)
+        foreign = build_privacy_linkage_graph(conn, PROFILE_ID)
+        self.assertEqual(foreign.linkage_score, 0)
+        self.assertEqual(foreign.transaction_tells, ())
+        self.assertEqual(_adversary_view(foreign, ADVERSARY_KNOWN_COUNTERPARTY).clusters, ())
+        self.assertEqual(_adversary_view(foreign, ADVERSARY_KYC_SOURCE_FUNDS).clusters, ())
+        self.assertTrue(all(fact.provenance_status == "unknown_provenance" for fact in foreign.source_proximity))
+        conn.execute("UPDATE transactions SET raw_json=replace(raw_json, 'regtest', 'main')")
+        local = build_privacy_linkage_graph(conn, PROFILE_ID)
+        conn.close()
+        self.assertEqual(local.linkage_score, 1)
+        self.assertTrue(_adversary_view(local, ADVERSARY_KNOWN_COUNTERPARTY).clusters)
+        self.assertEqual(_source_proximity_fact(local, f"{spend}:0").provenance_status, "known_source_proximity")
+
+    def test_empty_graph_placeholders_do_not_count_as_analysed_transactions(self):
+        conn = _conn()
+        txid = _txid("ba")
+        _insert_utxo(conn, wallet_id="one", txid=txid)
+        _insert_tx(conn, txid, [], raw_json={"vin": [{}], "vout": [{}]})
+        graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+        conn.close()
+        self.assertEqual(graph.analysed_transaction_count, 0)
+        self.assertEqual(graph.scored_transaction_count, 0)
+        self.assertEqual(graph.transaction_coverage_unknown_count, 1)
+
+    def test_score_population_unions_complete_graphs_and_partial_observed_leaks(self):
+        conn = _conn()
+        clean, partial = _txid("b1"), _txid("b2")
+        _insert_utxo(conn, wallet_id="one", txid=clean)
+        _insert_tx(conn, clean, [], raw_json={"vin": [{"coinbase": "00"}], "vout": [{"value": 1000}]})
+        _insert_tx(conn, partial, [], direction="outbound", raw_json={"rbf": True})
+        graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+        conn.close()
+        self.assertEqual(graph.analysed_transaction_count, 1)
+        self.assertEqual(graph.scored_transaction_count, 2)
+
+    def test_reviewed_source_forks_conserve_capacity_without_allocating_unknowns(self):
+        for child_amount in (50_000_000, 100_000_000):
+            with self.subTest(child_amount=child_amount):
+                conn = _conn()
+                parent, first, second = _txid("d2"), _txid("d3"), _txid("d4")
+                _insert_tx(conn, parent, [], amount=100_000_000)
+                _insert_source_anchor(conn, to_transaction_id=parent, source_amount=100_000_000, allocation_amount=100_000_000)
+                for txid in (first, second):
+                    _insert_tx(conn, txid, [], amount=child_amount)
+                    _insert_utxo(conn, wallet_id="one", txid=txid, amount=child_amount)
+                    _insert_source_tx_link(conn, from_transaction_id=parent, to_transaction_id=txid, allocation_amount=child_amount)
+                graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+                conn.close()
+                supported = sum(fact.supported_value_msat for fact in graph.source_proximity)
+                self.assertEqual(supported, 100_000_000 if child_amount == 50_000_000 else 0)
+                if child_amount == 100_000_000:
+                    self.assertTrue(all(fact.evidence["reason"] == "unallocated_reviewed_source_path" for fact in graph.source_proximity))
+
+    def test_sequential_source_propagation_is_not_treated_as_simultaneous_allocation(self):
+        conn = _conn()
+        parent, child, grandchild = _txid("d5"), _txid("d6"), _txid("d7")
+        for txid in (parent, child, grandchild):
+            _insert_tx(conn, txid, [], amount=100_000_000)
+            _insert_utxo(conn, wallet_id="one", txid=txid, amount=100_000_000)
+        _insert_source_anchor(conn, to_transaction_id=parent, source_amount=100_000_000, allocation_amount=100_000_000)
+        for before, after in ((parent, child), (child, grandchild)):
+            _insert_source_tx_link(conn, from_transaction_id=before, to_transaction_id=after, allocation_amount=100_000_000)
+        graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+        conn.close()
+        self.assertEqual([fact.supported_value_msat for fact in graph.source_proximity], [100_000_000] * 3)
+
+    def test_direct_source_fanout_cannot_duplicate_source_capacity(self):
+        conn = _conn()
+        first, second = _txid("d8"), _txid("d9")
+        for txid in (first, second):
+            _insert_tx(conn, txid, [], amount=100_000_000)
+            _insert_utxo(conn, wallet_id="one", txid=txid, amount=100_000_000)
+        _insert_source_anchor(conn, to_transaction_id=first, source_amount=100_000_000, allocation_amount=100_000_000)
+        conn.execute("INSERT INTO source_funds_links SELECT 'second-link', profile_id, from_source_id, from_transaction_id, ?, state, confidence, allocation_amount, asset, from_asset FROM source_funds_links", (second,))
+        graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+        conn.close()
+        self.assertEqual(sum(fact.supported_value_msat for fact in graph.source_proximity), 0)
+        self.assertTrue(all(fact.provenance_status == "unknown_provenance" for fact in graph.source_proximity))
+
+    def test_false_string_coinjoin_marker_does_not_create_a_boundary(self):
+        conn = _conn()
+        first, second, spend = _txid("f4"), _txid("f5"), _txid("f6")
+        for txid in (first, second):
+            _insert_utxo(conn, wallet_id="one", txid=txid)
+        _insert_tx(conn, spend, [(first, 0), (second, 0)], raw_json={
+            "islikelycoinjoin": "false",
+            "vin": [{"txid": first, "vout": 0}, {"txid": second, "vout": 0}],
+        })
+        graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+        conn.close()
+        self.assertEqual(graph.linkage_score, 1)
+
+    def test_shape_coinjoin_suppresses_observer_union_without_import_label(self):
+        conn = _conn()
+        spend = _txid("b9")
+        inputs = [(_txid(f"{index:02x}"), 0) for index in range(1, 6)]
+        for txid, _ in inputs:
+            _insert_utxo(conn, wallet_id="one", txid=txid)
+        _insert_tx(conn, spend, inputs, direction="outbound", raw_json={
+            "tx": {"vin": [{"txid": txid, "vout": 0} for txid, _ in inputs],
+                   "vout": [{"value": 1000, "scriptpubkey": "0014" + "11" * 20} for _ in inputs]},
+        })
+        graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+        conn.close()
+        self.assertEqual(graph.linkage_score, 0)
+        self.assertTrue(all(not edge.observer_linkage for edge in graph.edges))
+
+    def test_fee_presence_is_not_a_fingerprint_but_observed_rate_is(self):
+        for complete, vsize, expected in ((False, 100, False), (True, 100, True), (True, 97, False), (True, None, False)):
+            with self.subTest(complete=complete, vsize=vsize):
+                conn = _conn()
+                parent, spend = _txid("c1"), _txid("c2")
+                _insert_utxo(conn, wallet_id="one", txid=parent)
+                entry = {"txid": parent, "vout": 0, "sequence": 0xFFFFFFFD}
+                if complete:
+                    entry["prevout"] = {"value": 1100}
+                _insert_tx(conn, spend, [(parent, 0)], direction="outbound", fee=100_000,
+                           raw_json={"tx": {"vin": [entry], "vout": [{"value": 1000}], "vsize": vsize}})
+                graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+                conn.close()
+                kinds = {tell.kind for tell in graph.transaction_tells}
+                self.assertEqual("fee_fingerprint" in kinds, expected)
+                self.assertIn("sender_rbf", kinds)
+                if expected:
+                    fee = next(tell for tell in graph.transaction_tells if tell.kind == "fee_fingerprint")
+                    self.assertEqual(fee.evidence["sat_vb"], 1)
+                    self.assertEqual(fee.evidence_level, "derived")
+
+    def test_source_allocation_is_not_copied_to_sibling_outputs(self):
+        for budget in (100_000_000, 200_000_000):
+            with self.subTest(budget=budget):
+                conn = _conn()
+                txid = _txid("d1")
+                _insert_tx(conn, txid, [], amount=200_000_000)
+                for vout in (0, 1):
+                    _insert_utxo(conn, wallet_id="one", txid=txid, vout=vout, amount=100_000_000)
+                _insert_source_anchor(conn, to_transaction_id=txid, source_amount=budget, allocation_amount=budget)
+                graph = build_privacy_linkage_graph(conn, PROFILE_ID)
+                conn.close()
+                self.assertLessEqual(sum(fact.supported_value_msat for fact in graph.source_proximity), budget)
+                if budget < 200_000_000:
+                    self.assertTrue(all(fact.provenance_status == "unknown_provenance" for fact in graph.source_proximity))
+                    self.assertTrue(all(fact.evidence["reason"] == "ambiguous_output_allocation" for fact in graph.source_proximity))
+                else:
+                    self.assertTrue(all(fact.provenance_status == "known_source_proximity" for fact in graph.source_proximity))
 
 
 if __name__ == "__main__":
