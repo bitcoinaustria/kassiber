@@ -11,8 +11,6 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
   SheetFooter,
 } from "@/components/ui/sheet";
 import {
@@ -20,7 +18,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TransactionDetailSheetFrame } from "./TransactionDetailSheetFrame";
 import { useDaemon } from "@/daemon/client";
 import { type Currency } from "@/lib/currency";
 import type { ExplorerSettings } from "@/lib/explorer";
@@ -87,54 +85,7 @@ import type { LoanActionItem } from "./TransactionDetailTabContext";
 
 // ─── main component ────────────────────────────────────────────────────
 
-export function TransactionDetailSheet({
-  transaction,
-  draft,
-  initialTab,
-  hideSensitive,
-  currency,
-  explorerSettings,
-  isSaving,
-  saveError,
-  quarantineReasonOverride,
-  nowRate,
-  attachments,
-  journalEvents = [],
-  commercialContext,
-  commercialContextLoading,
-  historyEvents,
-  historyStale,
-  historyLoading,
-  isRevertingHistory,
-  onAddAttachmentFiles,
-  onAddAttachmentLinks,
-  onReuseEvidence,
-  onOpenAttachment,
-  onRenameAttachment,
-  onRemoveAttachment,
-  onUnpair,
-  isUnpairing,
-  onOpenPairingReview,
-  onOpenMarketDataSettings,
-  onRevertHistory,
-  onProcessJournals,
-  isProcessingJournals,
-  loanRole,
-  loanMark,
-  linkedLoanMarks,
-  loanLinkCandidates,
-  isLoanMarking,
-  isLoanLinking,
-  onMarkLoan,
-  onUnmarkLoan,
-  onLinkLoan,
-  onOpenChange,
-  onOpenExplorer,
-  onOpenTransaction,
-  onSave,
-  onSaveAndNext,
-  hasNext,
-}: {
+export type TransactionDetailSheetProps = {
   transaction: Transaction | null;
   draft: TransactionEditDraft | null;
   initialTab: string;
@@ -191,7 +142,75 @@ export function TransactionDetailSheet({
     draft: TransactionEditDraft,
   ) => void | Promise<void>;
   hasNext?: boolean;
-}) {
+  /** Keep the sheet mounted while the exact selected record is resolving. */
+  open?: boolean;
+  isLoading?: boolean;
+  onRetry?: () => void;
+};
+
+export function TransactionDetailSheet(props: TransactionDetailSheetProps) {
+  return (
+    <TransactionDetailSheetFrame
+      open={props.open ?? Boolean(props.transaction)}
+      onOpenChange={props.onOpenChange}
+      isLoading={props.isLoading}
+      onRetry={props.onRetry}
+    >
+      {props.transaction && props.draft
+        ? <TransactionDetailBody key={props.transaction.id} {...props} />
+        : null}
+    </TransactionDetailSheetFrame>
+  );
+}
+
+function TransactionDetailBody({
+  transaction,
+  draft,
+  initialTab,
+  hideSensitive,
+  currency,
+  explorerSettings,
+  isSaving,
+  saveError,
+  quarantineReasonOverride,
+  nowRate,
+  attachments,
+  journalEvents = [],
+  commercialContext,
+  commercialContextLoading,
+  historyEvents,
+  historyStale,
+  historyLoading,
+  isRevertingHistory,
+  onAddAttachmentFiles,
+  onAddAttachmentLinks,
+  onReuseEvidence,
+  onOpenAttachment,
+  onRenameAttachment,
+  onRemoveAttachment,
+  onUnpair,
+  isUnpairing,
+  onOpenPairingReview,
+  onOpenMarketDataSettings,
+  onRevertHistory,
+  onProcessJournals,
+  isProcessingJournals,
+  loanRole,
+  loanMark,
+  linkedLoanMarks,
+  loanLinkCandidates,
+  isLoanMarking,
+  isLoanLinking,
+  onMarkLoan,
+  onUnmarkLoan,
+  onLinkLoan,
+  onOpenChange,
+  onOpenExplorer,
+  onOpenTransaction,
+  onSave,
+  onSaveAndNext,
+  hasNext,
+}: TransactionDetailSheetProps) {
   const { t } = useTranslation(["transactions", "common"]);
   // "graph" and "ledger" folded into Details; remap old deep links.
   const visibleInitialTab =
@@ -841,195 +860,188 @@ export function TransactionDetailSheet({
   };
 
   return (
-    <TooltipProvider delayDuration={150}>
-      <Sheet open={Boolean(transaction)} onOpenChange={onOpenChange}>
-        <SheetContent
-          className="w-[min(100vw,1120px)] gap-0 overflow-hidden p-0 sm:max-w-none"
-          showCloseButton={false}
-        >
-          <TransactionDetailHeader
-            transaction={transaction}
-            flow={flow}
-            reviewStatus={localDraft.reviewStatus}
-            pair={pair}
-            signedPrefix={signedPrefix}
-            hideSensitive={hideSensitive}
-            amountBtc={amountBtc}
-            valueAtTimeEur={valueAtTimeEur}
-            valueNowEur={valueNowEur}
-            pricedChange={pricedChange}
-            timelineSteps={timelineSteps}
-            explorer={explorer}
-            onOpenExplorer={onOpenExplorer}
-            onClose={() => onOpenChange(false)}
-          />
+    <>
+      <TransactionDetailHeader
+        transaction={transaction}
+        flow={flow}
+        reviewStatus={localDraft.reviewStatus}
+        pair={pair}
+        signedPrefix={signedPrefix}
+        hideSensitive={hideSensitive}
+        amountBtc={amountBtc}
+        valueAtTimeEur={valueAtTimeEur}
+        valueNowEur={valueNowEur}
+        pricedChange={pricedChange}
+        timelineSteps={timelineSteps}
+        explorer={explorer}
+        onOpenExplorer={onOpenExplorer}
+        onClose={() => onOpenChange(false)}
+      />
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-              <div className="min-w-0 space-y-4">
-                {reviewBanner ? (
-                  <QuarantineBanner
-                    title={reviewBanner.title}
-                    reason={reviewBanner.reason}
-                    hint={reviewBanner.hint}
-                    primaryActionLabel={reviewBanner.primaryActionLabel}
-                    onPrimaryAction={
-                      hasJournalQuarantine && activeTab === quarantineTargetTab
-                        ? undefined
-                        : jumpToQuarantineTarget
-                    }
-                    onExclude={setExcluded}
-                  />
-                ) : null}
-
-                {isSplitTransferQuarantine ? (
-                  <TransactionSplitPayoutCard
-                    transactionId={transaction.id}
-                    sourceAsset={transaction.asset ?? "BTC"}
-                    outboundBtc={amountBtc}
-                  />
-                ) : null}
-
-                <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <TabsList className="grid w-full grid-cols-5">
-                    <TabsTrigger value="details">{t("sheet.tab.details")}</TabsTrigger>
-                    <TabsTrigger value="classify">
-                      {t("sheet.tab.classify")}
-                      {dirtyLabel || dirtyTags || dirtyNote || dirty.reviewStatus ? (
-                        <DirtyDot active />
-                      ) : null}
-                    </TabsTrigger>
-                    <TabsTrigger value="pricing">
-                      {t("sheet.tab.pricing")}
-                      {dirtyPricing ? <DirtyDot active /> : null}
-                    </TabsTrigger>
-                    <TabsTrigger value="tax">
-                      {t("sheet.tab.tax")}
-                      {dirtyExcluded || dirtyReviewTax ? <DirtyDot active /> : null}
-                    </TabsTrigger>
-                    <TabsTrigger value="linked">
-                      {t("sheet.tab.linked")}
-                      {linkedCount > 0 ? (
-                        <span className="rounded-full bg-muted px-1.5 text-2xs tabular-nums text-muted-foreground">
-                          {linkedCount}
-                        </span>
-                      ) : null}
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TransactionDetailsTab ctx={tabContext} />
-
-                  <TransactionClassifyTab ctx={tabContext} />
-
-                  <TransactionPricingTab ctx={tabContext} />
-
-                  <TransactionTaxTab ctx={tabContext} />
-
-                  <TransactionLinkedTab ctx={tabContext} />
-                </Tabs>
-              </div>
-
-              <TransactionDetailRightRail
-                transaction={transaction}
-                sourceName={sourceName}
-                sourceType={sourceType}
-                explorer={explorer}
-                reviewChecklistItems={reviewChecklistItems}
-                onJumpTab={setActiveTab}
-                hideSensitive={hideSensitive}
-                attachments={attachments}
-                onAddAttachmentFiles={onAddAttachmentFiles}
-                onAddAttachmentLinks={onAddAttachmentLinks}
-                onReuseEvidence={onReuseEvidence}
-                onOpenAttachment={onOpenAttachment}
-                onRenameAttachment={onRenameAttachment}
-                onRemoveAttachment={onRemoveAttachment}
-                historyEvents={historyEvents}
-                historyStale={historyStale}
-                historyLoading={historyLoading}
-                isRevertingHistory={isRevertingHistory}
-                onRevertHistory={onRevertHistory}
-                onProcessJournals={onProcessJournals}
-                isProcessingJournals={isProcessingJournals}
-                onOpenExplorer={onOpenExplorer}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0 space-y-4">
+            {reviewBanner ? (
+              <QuarantineBanner
+                title={reviewBanner.title}
+                reason={reviewBanner.reason}
+                hint={reviewBanner.hint}
+                primaryActionLabel={reviewBanner.primaryActionLabel}
+                onPrimaryAction={
+                  hasJournalQuarantine && activeTab === quarantineTargetTab
+                    ? undefined
+                    : jumpToQuarantineTarget
+                }
+                onExclude={setExcluded}
               />
-            </div>
+            ) : null}
+
+            {isSplitTransferQuarantine ? (
+              <TransactionSplitPayoutCard
+                transactionId={transaction.id}
+                sourceAsset={transaction.asset ?? "BTC"}
+                outboundBtc={amountBtc}
+              />
+            ) : null}
+
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="grid w-full grid-cols-5">
+                <TabsTrigger value="details">{t("sheet.tab.details")}</TabsTrigger>
+                <TabsTrigger value="classify">
+                  {t("sheet.tab.classify")}
+                  {dirtyLabel || dirtyTags || dirtyNote || dirty.reviewStatus ? (
+                    <DirtyDot active />
+                  ) : null}
+                </TabsTrigger>
+                <TabsTrigger value="pricing">
+                  {t("sheet.tab.pricing")}
+                  {dirtyPricing ? <DirtyDot active /> : null}
+                </TabsTrigger>
+                <TabsTrigger value="tax">
+                  {t("sheet.tab.tax")}
+                  {dirtyExcluded || dirtyReviewTax ? <DirtyDot active /> : null}
+                </TabsTrigger>
+                <TabsTrigger value="linked">
+                  {t("sheet.tab.linked")}
+                  {linkedCount > 0 ? (
+                    <span className="rounded-full bg-muted px-1.5 text-2xs tabular-nums text-muted-foreground">
+                      {linkedCount}
+                    </span>
+                  ) : null}
+                </TabsTrigger>
+              </TabsList>
+
+              <TransactionDetailsTab ctx={tabContext} />
+
+              <TransactionClassifyTab ctx={tabContext} />
+
+              <TransactionPricingTab ctx={tabContext} />
+
+              <TransactionTaxTab ctx={tabContext} />
+
+              <TransactionLinkedTab ctx={tabContext} />
+            </Tabs>
           </div>
 
-          <SheetFooter className="border-t p-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              {dirtyCount > 0 ? (
-                <span className="inline-flex items-center gap-1.5 font-medium text-amber-600 dark:text-amber-400">
-                  <span className="inline-block size-1.5 rounded-full bg-amber-500" />
-                  {t("sheet.footer.unsavedChanges", { count: dirtyCount })}
-                </span>
-              ) : null}
-              <span className="hidden items-center gap-1.5 whitespace-nowrap sm:inline-flex">
-                <kbd className="rounded border bg-muted px-1">⌘S</kbd> {t("sheet.footer.shortcutSave")} ·{" "}
-                <kbd className="rounded border bg-muted px-1">1-5</kbd> {t("sheet.footer.shortcutTabs")} ·{" "}
-                <kbd className="rounded border bg-muted px-1">e</kbd> {t("sheet.footer.shortcutExclude")}
-              </span>
-              {saveError ? (
-                <span className="basis-full text-destructive sm:basis-auto">
-                  {saveError}
-                </span>
-              ) : null}
-            </div>
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isSaving}
-                onClick={() => onOpenChange(false)}
-              >
-                {t("common:actions.cancel")}
-              </Button>
-              {dirtyCount > 0 ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="gap-1.5 text-muted-foreground"
-                  disabled={isSaving}
-                  onClick={() => {
-                    setLocalDraft(originalDraft);
-                    setTagInput("");
-                  }}
-                >
-                  <RotateCcw className="size-4" aria-hidden="true" />
-                  {t("sheet.footer.discard")}
-                </Button>
-              ) : null}
-              <Button
-                type="button"
-                className="gap-2"
-                disabled={isSaving || dirtyCount === 0}
-                onClick={async () => {
-                  try {
-                    if (onSaveAndNext && hasNext) {
-                      await onSaveAndNext(transaction.id, localDraft);
-                    } else {
-                      await onSave(transaction.id, localDraft);
-                      onOpenChange(false);
-                    }
-                  } catch {
-                    // The parent renders the daemon error in the footer.
-                  }
-                }}
-              >
-                <Save className="size-4" aria-hidden="true" />
-                {isSaving
-                  ? t("sheet.footer.saving")
-                  : onSaveAndNext && hasNext
-                    ? t("sheet.footer.saveAndNext")
-                    : t("sheet.footer.save")}
-                {onSaveAndNext && hasNext && !isSaving ? (
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                ) : null}
-              </Button>
-            </div>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
-    </TooltipProvider>
+          <TransactionDetailRightRail
+            transaction={transaction}
+            sourceName={sourceName}
+            sourceType={sourceType}
+            explorer={explorer}
+            reviewChecklistItems={reviewChecklistItems}
+            onJumpTab={setActiveTab}
+            hideSensitive={hideSensitive}
+            attachments={attachments}
+            onAddAttachmentFiles={onAddAttachmentFiles}
+            onAddAttachmentLinks={onAddAttachmentLinks}
+            onReuseEvidence={onReuseEvidence}
+            onOpenAttachment={onOpenAttachment}
+            onRenameAttachment={onRenameAttachment}
+            onRemoveAttachment={onRemoveAttachment}
+            historyEvents={historyEvents}
+            historyStale={historyStale}
+            historyLoading={historyLoading}
+            isRevertingHistory={isRevertingHistory}
+            onRevertHistory={onRevertHistory}
+            onProcessJournals={onProcessJournals}
+            isProcessingJournals={isProcessingJournals}
+            onOpenExplorer={onOpenExplorer}
+          />
+        </div>
+      </div>
+
+      <SheetFooter className="border-t p-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {dirtyCount > 0 ? (
+            <span className="inline-flex items-center gap-1.5 font-medium text-amber-600 dark:text-amber-400">
+              <span className="inline-block size-1.5 rounded-full bg-amber-500" />
+              {t("sheet.footer.unsavedChanges", { count: dirtyCount })}
+            </span>
+          ) : null}
+          <span className="hidden items-center gap-1.5 whitespace-nowrap sm:inline-flex">
+            <kbd className="rounded border bg-muted px-1">⌘S</kbd> {t("sheet.footer.shortcutSave")} ·{" "}
+            <kbd className="rounded border bg-muted px-1">1-5</kbd> {t("sheet.footer.shortcutTabs")} ·{" "}
+            <kbd className="rounded border bg-muted px-1">e</kbd> {t("sheet.footer.shortcutExclude")}
+          </span>
+          {saveError ? (
+            <span className="basis-full text-destructive sm:basis-auto">
+              {saveError}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isSaving}
+            onClick={() => onOpenChange(false)}
+          >
+            {t("common:actions.cancel")}
+          </Button>
+          {dirtyCount > 0 ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="gap-1.5 text-muted-foreground"
+              disabled={isSaving}
+              onClick={() => {
+                setLocalDraft(originalDraft);
+                setTagInput("");
+              }}
+            >
+              <RotateCcw className="size-4" aria-hidden="true" />
+              {t("sheet.footer.discard")}
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            className="gap-2"
+            disabled={isSaving || dirtyCount === 0}
+            onClick={async () => {
+              try {
+                if (onSaveAndNext && hasNext) {
+                  await onSaveAndNext(transaction.id, localDraft);
+                } else {
+                  await onSave(transaction.id, localDraft);
+                  onOpenChange(false);
+                }
+              } catch {
+                // The parent renders the daemon error in the footer.
+              }
+            }}
+          >
+            <Save className="size-4" aria-hidden="true" />
+            {isSaving
+              ? t("sheet.footer.saving")
+              : onSaveAndNext && hasNext
+                ? t("sheet.footer.saveAndNext")
+                : t("sheet.footer.save")}
+            {onSaveAndNext && hasNext && !isSaving ? (
+              <ArrowRight className="size-4" aria-hidden="true" />
+            ) : null}
+          </Button>
+        </div>
+      </SheetFooter>
+    </>
   );
 }

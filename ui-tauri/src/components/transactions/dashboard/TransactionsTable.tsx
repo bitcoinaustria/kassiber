@@ -39,7 +39,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   TableBody,
@@ -2323,19 +2322,10 @@ const TransactionsTable = ({
         target={explorerTarget}
         onTransactionChange={setExplorerTransaction}
       />
-      <Dialog open={Boolean(selectedDetailTransaction && !detailTransaction)} onOpenChange={(open) => {
-        if (!open) {
-          setDetailTransaction(null);
-          updateTransactionDetailParams(null);
-        }
-      }}>
-        <DialogContent>
-          <DialogTitle>{t("common:field.details")}</DialogTitle>
-          <p role="status">{detailResolution.isLoading ? t("common:state.loading") : t("common:state.error")}</p>
-          {!detailResolution.isLoading && <Button onClick={() => void detailResolution.retry()}>{t("common:actions.retry")}</Button>}
-        </DialogContent>
-      </Dialog>
       <TransactionDetailSheet
+        open={Boolean(selectedDetailTransaction)}
+        isLoading={detailResolution.isLoading}
+        onRetry={() => void detailResolution.retry()}
         transaction={detailTransaction}
         draft={detailDraft}
         initialTab={detailInitialTab}
