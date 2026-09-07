@@ -1,5 +1,6 @@
 import { useContext, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { DaemonScopeContext, useDaemon, useDaemonMutation } from "@/daemon/client";
 
@@ -19,7 +20,7 @@ export function SourceAcquisitionPanel({ subject = "", onError }: { subject?: st
   const liveScope = useRef(scope);
   liveScope.current = scope;
   const options = useDaemon<{ backends: Array<{ name: string; kind: string; network?: string }> }>("ui.backends.options");
-  const environment = useDaemon<{ environment?: string; domains: Array<{ chain: string; network: string; chain_instance_id?: string }> }>("ui.networks.binding");
+  const environment = useDaemon<{ state: "bound" | "unbound"; environment?: string; domains: Array<{ chain: string; network: string; chain_instance_id?: string }> }>("ui.networks.binding");
   const bitcoin = environment.data?.data?.domains.find(domain => domain.chain === "bitcoin");
   const sources = useDaemon<{ items: Source[] }>("ui.chain_analysis.sources.list", { limit: 100 }, { staleTime: 0, refetchInterval: 5000 });
   const [backend, setBackend] = useState("");
@@ -51,7 +52,14 @@ export function SourceAcquisitionPanel({ subject = "", onError }: { subject?: st
     <summary className="cursor-pointer text-sm font-medium">{t("sources.title")}</summary>
     <div className="mt-4 space-y-4">
       <p className="text-xs text-muted-foreground">{t("sources.lifecycle")}</p>
-      <form className="space-y-3" onSubmit={event => {
+      {(options.error || environment.error || sources.error) && <div role="alert" className="space-y-2 text-sm">
+        <p>{t("sources.loadError")}</p>
+        <Button variant="outline" size="sm" onClick={() => void act(async () => { await Promise.all([options.refetch(), environment.refetch()]); })}>{t("sources.retry")}</Button>
+      </div>}
+      {environment.isPending ? <p role="status" className="text-sm text-muted-foreground">{t("sources.loading")}</p>
+        : environment.data?.data?.state === "unbound" ? <Link className="text-sm underline underline-offset-4" to="/settings">{t("sources.bindBook")}</Link>
+        : bitcoin && !options.isPending && !options.error && !backends.length ? <Link className="text-sm underline underline-offset-4" to="/connections">{t("sources.connectCore")}</Link> : null}
+      {bitcoin && backends.length > 0 && <form className="space-y-3" onSubmit={event => {
         event.preventDefault();
         if (busy) return;
         const submittedScope = scope;
@@ -89,7 +97,7 @@ export function SourceAcquisitionPanel({ subject = "", onError }: { subject?: st
           </fieldset>
         </details>
         <Button variant="outline" size="sm" type="submit" disabled={busy || !selected}>{t("sources.preview")}</Button>
-      </form>
+      </form>}
       {ready && <div className="space-y-3 rounded-md border p-3" role="status">
         <p className="break-all font-mono text-xs">{preview.plan.spec.network} · {preview.plan.spec.mode === "subject" ? preview.plan.spec.subject : `${preview.plan.spec.start_height} → ${preview.plan.spec.end_height ?? t("sources.followTip")}`}</p>
         <p className="text-sm">{t("sources.permission", { backend: preview.plan.spec.backend, seconds: preview.plan.spec.interval_seconds, days: preview.plan.spec.duration_days })}</p>

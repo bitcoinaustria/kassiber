@@ -2,6 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, expect, it, vi } from "vitest";
 import "@/i18n";
 import { SourceAcquisitionPanel } from "./SourceAcquisitionPanel";
+import type { ReactNode } from "react";
+vi.mock("@tanstack/react-router", () => ({ Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a> }));
 
 const mock = vi.hoisted(() => ({ invoke: vi.fn(), bound: true }));
 vi.mock("@/daemon/client", async original => ({
@@ -10,7 +12,7 @@ vi.mock("@/daemon/client", async original => ({
     { name: "own-main", kind: "bitcoinrpc", network: "main" },
     { name: "own-lab", kind: "bitcoinrpc", network: "regtest" },
     { name: "explorer", kind: "esplora", network: "regtest" },
-  ] } : kind === "ui.networks.binding" ? { domains: mock.bound ? [{ chain: "bitcoin", network: "regtest", chain_instance_id: "lab-a" }] : [] } : { items: [] } }, refetch: vi.fn() }),
+  ] } : kind === "ui.networks.binding" ? { state: mock.bound ? "bound" : "unbound", domains: mock.bound ? [{ chain: "bitcoin", network: "regtest", chain_instance_id: "lab-a" }] : [] } : { items: [] } }, refetch: vi.fn() }),
   useDaemonMutation: () => ({ mutateAsync: mock.invoke, isPending: false }),
 }));
 beforeEach(() => { mock.invoke.mockClear(); mock.bound = true; });
@@ -30,5 +32,7 @@ it("does not silently choose a network for an unbound book", () => {
   const html = renderToStaticMarkup(<SourceAcquisitionPanel onError={() => {}} />);
   expect(html).not.toContain('value="own-lab"');
   expect(html).not.toContain('value="own-main"');
+  expect(html).toContain('href="/settings"');
+  expect(html).not.toContain("Review permission");
   expect(mock.invoke).not.toHaveBeenCalled();
 });

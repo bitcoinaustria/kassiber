@@ -412,6 +412,11 @@
     "limitReached": "Gesamtlimit erreicht",
     "expired": "Freigabe abgelaufen",
     "changed": "Quelle oder Netzwerk geändert; neue Freigabe prüfen",
-    "unavailable": "Letzte Prüfung konnte nicht abgeschlossen werden"
+    "unavailable": "Letzte Prüfung konnte nicht abgeschlossen werden",
+    "loadError": "Quelleneinstellungen konnten nicht geladen werden.",
+    "retry": "Erneut versuchen",
+    "loading": "Buchnetzwerk wird geladen…",
+    "bindBook": "Buchnetzwerk in den Einstellungen festlegen",
+    "connectCore": "Bitcoin Core für dieses Netzwerk verbinden"
   }
 }

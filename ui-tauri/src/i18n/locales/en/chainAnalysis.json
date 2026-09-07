@@ -412,6 +412,11 @@
     "limitReached": "Lifetime limit reached",
     "expired": "Permission expired",
     "changed": "Source or network changed; review a new permission",
-    "unavailable": "Could not complete the last check"
+    "unavailable": "Could not complete the last check",
+    "loadError": "Could not load source settings.",
+    "retry": "Try again",
+    "loading": "Loading this book’s network…",
+    "bindBook": "Set this book’s network in Settings",
+    "connectCore": "Connect Bitcoin Core for this network"
   }
 }
