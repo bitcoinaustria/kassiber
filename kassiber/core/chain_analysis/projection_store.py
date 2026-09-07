@@ -380,10 +380,14 @@ def synchronize(conn, profile_id, *, rebuild=False):
             continue
         rows = {row["_source_key"]: row for row in _rows(conn, table, profile_id, keys)}
         selected = set(rows) | {row[0] for row in conn.execute("SELECT source_key FROM chain_index_sources WHERE profile_id=? AND source_table=?", (profile_id, table))} if keys is None else keys
+        # Rejected, invalid and withheld observations can contribute no nodes
+        # while still changing source counts or uncertainty. Deletions carry
+        # only the dirty key. Publish these coverage changes for watch cursors
+        # independently of the physical graph's affected-node set.
+        changed |= bool(selected)
         for key in sorted(selected):
             affected = _contribute(conn, profile_id, table, key, rows.get(key), occurrences)
             core.update(affected)
-            changed |= bool(affected)
     if not changed:
         conn.execute("UPDATE chain_index_state SET watermark=? WHERE profile_id=?", (watermark, profile_id))
         state["watermark"] = watermark

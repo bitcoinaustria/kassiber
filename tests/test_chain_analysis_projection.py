@@ -46,6 +46,40 @@ class IncrementalProjectionTests(unittest.TestCase):
         self.conn.execute("DELETE FROM transactions WHERE id='1'")
         self.parity()
 
+    def test_invalid_only_observations_change_coverage_and_watch_revision(self):
+        add_tx(self.conn, 1)
+        revision = index_revision(self.conn, "p")
+        for table, counter in (("transactions", "invalid_observations"), ("transaction_graph_cache", "cache_rejected")):
+            with self.subTest(table=table):
+                before = run_analysis(self.conn, "p", {"direction": "backward"})
+                if table == "transactions":
+                    add_tx(self.conn, 2)
+                    self.conn.execute("UPDATE transactions SET raw_json=? WHERE id='2'", (json.dumps({"txid": "bad", "network": "unsupported"}),))
+                else:
+                    self.conn.execute("INSERT INTO transaction_graph_cache VALUES(1,'bitcoin','main',?,'{}','now','now')", (txid(2),))
+                inserted = run_analysis(self.conn, "p", {"direction": "backward"})
+                self.assertEqual(inserted["coverage"][counter], 1)
+                if counter == "invalid_observations":
+                    self.assertTrue(before["coverage"]["complete"])
+                    self.assertFalse(inserted["coverage"]["complete"])
+                self.assertEqual(inserted["coverage"]["source_rows"][table], before["coverage"]["source_rows"][table] + 1)
+                self.assertEqual(inserted["nodes"], before["nodes"])
+                self.parity()
+                changed = index_revision(self.conn, "p")
+                self.assertGreater(changed["revision"], revision["revision"])
+                self.assertNotEqual(changed["snapshot_id"], revision["snapshot_id"])
+                self.assertEqual(index_revision(self.conn, "p"), changed)
+                if table == "transactions":
+                    self.conn.execute("DELETE FROM transactions WHERE id='2'")
+                else:
+                    self.conn.execute("DELETE FROM transaction_graph_cache")
+                removed = run_analysis(self.conn, "p", {"direction": "backward"})
+                self.assertEqual(removed["coverage"], before["coverage"])
+                self.parity()
+                revision = index_revision(self.conn, "p")
+                self.assertGreater(revision["revision"], changed["revision"])
+                self.assertEqual(index_revision(self.conn, "p"), revision)
+
     def test_network_alias_without_chain_preserves_liquid_seeds(self):
         add_tx(self.conn, 1)
         add_tx(self.conn, 2, chain="liquid", network="liquidv1")
