@@ -17,12 +17,13 @@ type Source = { id: string; spec: Recipe; status: string; revision: number; curs
 export function SourceAcquisitionPanel({ subject = "", onError }: { subject?: string; onError: (error: unknown) => void }) {
   const { t } = useTranslation("chainAnalysis");
   const scope = useContext(DaemonScopeContext);
+  const [open, setOpen] = useState(false);
   const liveScope = useRef(scope);
   liveScope.current = scope;
   const options = useDaemon<{ backends: Array<{ name: string; kind: string; network?: string }> }>("ui.backends.options");
   const environment = useDaemon<{ state: "bound" | "unbound"; environment?: string; domains: Array<{ chain: string; network: string; chain_instance_id?: string }> }>("ui.networks.binding");
   const bitcoin = environment.data?.data?.domains.find(domain => domain.chain === "bitcoin");
-  const sources = useDaemon<{ items: Source[] }>("ui.chain_analysis.sources.list", { limit: 100 }, { staleTime: 0, refetchInterval: 5000 });
+  const sources = useDaemon<{ items: Source[] }>("ui.chain_analysis.sources.list", { limit: 100 }, { enabled: open, staleTime: 0, refetchInterval: open ? 5000 : false });
   const [backend, setBackend] = useState("");
   const [mode, setMode] = useState<"subject" | "blocks">("subject");
   const [txid, setTxid] = useState(subject.match(/[a-f0-9]{64}/)?.[0] || "");
@@ -48,7 +49,7 @@ export function SourceAcquisitionPanel({ subject = "", onError }: { subject?: st
   const act = async (operation: () => Promise<unknown>) => {
     try { await operation(); await sources.refetch(); } catch (error) { onError(error); }
   };
-  return <details className="border-t px-4 py-3">
+  return <details className="border-t px-4 py-3" onToggle={event => setOpen(event.currentTarget.open)}>
     <summary className="cursor-pointer text-sm font-medium">{t("sources.title")}</summary>
     <div className="mt-4 space-y-4">
       <p className="text-xs text-muted-foreground">{t("sources.lifecycle")}</p>
