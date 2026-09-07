@@ -4,8 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: Existing draft release tag
+        description: Existing draft release tag or unpublished candidate ID
         required: true
+        type: string
+      candidate:
+        description: Notarize an unpublished candidate; never publish or create a Git tag
+        required: false
+        default: false
+        type: boolean
+      source_commit:
+        description: Candidate only; full source commit already in main history
+        required: false
         type: string
       input_sha256:
         description: SHA-256 printed by the local signing helper
@@ -39,11 +48,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag_name }}
+          CANDIDATE: ${{ inputs.candidate }}
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
         run: |
           set -euo pipefail
-          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]
           test "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true
-          commit="$(git rev-parse "refs/tags/$TAG^{commit}")"
+          if [ "$CANDIDATE" = true ]; then
+            [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || exit 1
+            [[ "$TAG" =~ ^macos-candidate-${SOURCE_COMMIT}-[0-9]+$ ]] || exit 1
+            test "$(gh release view "$TAG" --json targetCommitish --jq .targetCommitish)" = "$SOURCE_COMMIT"
+            remote_tag="$(git ls-remote --tags origin "refs/tags/$TAG")"
+            test -z "$remote_tag"
+            commit="$SOURCE_COMMIT"
+            version="$(git show "$commit:pyproject.toml" | python3 -c 'import sys,tomllib; print(tomllib.loads(sys.stdin.read())["project"]["version"])')"
+            echo "candidate_id=$TAG" >> "$GITHUB_OUTPUT"
+          else
+            test -z "$SOURCE_COMMIT"
+            [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || exit 1
+            commit="$(git rev-parse "refs/tags/$TAG^{commit}")"
+            version="${TAG#v}"
+            echo 'candidate_id=' >> "$GITHUB_OUTPUT"
+          fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || exit 1
           git merge-base --is-ancestor "$commit" origin/main
           mkdir incoming
           gh release download "$TAG" --dir incoming
@@ -51,7 +77,7 @@ jobs:
           test -z "$(find incoming -name '*.asc' -print -quit)"
           test -f incoming/kassiber-macos-signing-input.dmg
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Install notarization credentials in a temporary keychain
         env:
           NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
@@ -80,13 +106,15 @@ jobs:
           EXPECTED_SHA256: ${{ inputs.input_sha256 }}
           COMMIT: ${{ steps.release.outputs.commit }}
           VERSION: ${{ steps.release.outputs.version }}
+          CANDIDATE_ID: ${{ steps.release.outputs.candidate_id }}
         run: |
           python3 scripts/macos_release.py notarize \
             --image incoming/kassiber-macos-signing-input.dmg \
             --sha256 "$EXPECTED_SHA256" --commit "$COMMIT" --version "$VERSION" \
+            --candidate-id "$CANDIDATE_ID" \
             --profile kassiber-notary --keychain "$RUNNER_TEMP/notary.keychain-db" --output notarized
           python3 scripts/macos_release.py verify \
-            --release-dir notarized --commit "$COMMIT" --version "$VERSION"
+            --release-dir notarized --commit "$COMMIT" --version "$VERSION" --candidate-id "$CANDIDATE_ID"
       - name: Preserve notarization evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -94,25 +122,43 @@ jobs:
           name: notarization-evidence
           path: notarized/notarization.json
           if-no-files-found: ignore
-      - name: Replace draft macOS artifacts and regenerate final manifest
+      - name: Update verified draft macOS artifacts
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag_name }}
           VERSION: ${{ steps.release.outputs.version }}
+          COMMIT: ${{ steps.release.outputs.commit }}
+          CANDIDATE_ID: ${{ steps.release.outputs.candidate_id }}
         run: |
           set -euo pipefail
           test "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true
-          test -z "$(gh release view "$TAG" --json assets --jq '.assets[].name' | sed -n '/\.asc$/p')"
+          if [ -n "$CANDIDATE_ID" ]; then
+            test "$TAG" = "$CANDIDATE_ID"
+            test "$(gh release view "$TAG" --json targetCommitish --jq .targetCommitish)" = "$COMMIT"
+            remote_tag="$(git ls-remote --tags origin "refs/tags/$TAG")"
+            test -z "$remote_tag"
+          else
+            test "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$COMMIT"
+          fi
+          asset_names="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+          test -z "$(printf '%s\n' "$asset_names" | sed -n '/\.asc$/p')"
           cp notarized/kassiber-macos-arm64.app.zip incoming/
           cp notarized/kassiber-macos-arm64.dmg incoming/
           cp notarized/kassiber-cli-macos-arm64.tar.gz incoming/
           rm incoming/kassiber-macos-signing-input.dmg
-          python3 scripts/release_manifest.py generate --release-dir incoming --version "$VERSION"
-          gh release upload "$TAG" --clobber \
-            incoming/kassiber-macos-arm64.app.zip incoming/kassiber-macos-arm64.dmg \
-            incoming/kassiber-cli-macos-arm64.tar.gz "incoming/kassiber-$VERSION-manifest.txt"
+          if [ -n "$CANDIDATE_ID" ]; then
+            gh release upload "$TAG" --clobber \
+              incoming/kassiber-macos-arm64.app.zip incoming/kassiber-macos-arm64.dmg \
+              incoming/kassiber-cli-macos-arm64.tar.gz
+            echo 'Notarized candidate remains unpublished in its draft. No version tag, finalizer or package-channel update was created.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            python3 scripts/release_manifest.py generate --release-dir incoming --version "$VERSION"
+            gh release upload "$TAG" --clobber \
+              incoming/kassiber-macos-arm64.app.zip incoming/kassiber-macos-arm64.dmg \
+              incoming/kassiber-cli-macos-arm64.tar.gz "incoming/kassiber-$VERSION-manifest.txt"
+            echo 'Notarized draft ready. Download and independently verify the final artifacts before offline OpenPGP signing.' >> "$GITHUB_STEP_SUMMARY"
+          fi
           gh release delete-asset "$TAG" kassiber-macos-signing-input.dmg --yes
-          echo 'Notarized draft ready. Download and independently verify the final artifacts before offline OpenPGP signing.' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove temporary credentials
         if: always()
         run: |

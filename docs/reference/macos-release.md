@@ -129,6 +129,48 @@ requiring another person's approval would deadlock the current team.
 
 ## Failure and retry
 
+### Unpublished candidates without a version tag
+
+An operator may notarize an exact main-history build for private testing without
+creating a Git tag or publishing a prerelease. This draft is only an Apple
+notarization handoff for commits already merged into main. PR and unmerged branch
+builds remain workflow artifacts and cannot use this path. Use an official successful
+`prerelease-binaries.yml` build-only run (`publish_release=false`), verify its
+repository, workflow, source commit and run attempt, and download that run's
+`kassiber-desktop-macos-arm64-preview` artifact. Read the version from the pinned
+commit's `pyproject.toml`; the signing helper also checks the embedded build
+commit/version and app bundle version.
+
+Create an **unpublished draft** whose identifier is
+`macos-candidate-<FULL_COMMIT>-<BUILD_RUN_ID>` and whose `target_commitish` is that
+full commit. Do not create a matching Git tag. Candidate signing uses the existing
+`macos_release.py sign` arguments plus `--candidate-id <IDENTIFIER>` and this
+explicit `source.json` shape (all placeholders must be replaced):
+
+```json
+{
+  "kind": "candidate",
+  "candidate_id": "macos-candidate-<FULL_COMMIT>-<BUILD_RUN_ID>",
+  "commit": "<FULL_COMMIT>",
+  "version": "<SOURCE_VERSION>",
+  "build_run": "<BUILD_RUN_ID>",
+  "build_attempt": 1,
+  "unsigned_app_sha256": "<DOWNLOADED_ZIP_SHA256>"
+}
+```
+
+Upload only the locally signed `kassiber-macos-signing-input.dmg` to that draft.
+Dispatch `notarize-macos.yml` from protected `main` with `tag_name=<IDENTIFIER>`,
+`candidate=true`, `source_commit=<FULL_COMMIT>` and `input_sha256=<SIGNED_DMG_SHA256>`.
+The workflow rechecks the draft target and absence of a Git tag before uploading
+the verified results. It leaves the three notarized macOS distributions in the
+draft; it does not generate a version-release manifest, publish, run a finalizer,
+or update package channels. Download and verify them with `macos_release.py verify`
+using the same `--candidate-id`, `--commit` and `--version` (plus `--smoke` only on
+a disposable verification Mac). Ordinary release verification rejects candidate
+provenance. The tag-based `prepare_macos_release.py` helper is for releases and
+does not prepare these candidates.
+
 Every intermediate state is a draft. A failed notarization, expired identity,
 missing ticket, mismatched version/hash or missing OpenPGP signature must never
 fall back to unsigned publication. A successful notarization leaves its JSON

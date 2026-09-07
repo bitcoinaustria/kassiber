@@ -78,6 +78,44 @@ def test_embedded_build_identity(tmp_path):
         release.validate_app(app, "a" * 40, "1.2.3")
 
 
+def candidate_source():
+    return {"kind": "candidate", "candidate_id": "macos-candidate-" + "a" * 40 + "-123",
+            "commit": "a" * 40, "version": "1.2.3", "build_run": "123",
+            "build_attempt": 1, "unsigned_app_sha256": "d" * 64}
+
+
+def test_candidate_requires_explicit_mode_and_never_satisfies_release_provenance():
+    source = candidate_source()
+    release.validate_source(source, "a" * 40, "1.2.3", candidate_id=source["candidate_id"], input_digest="d" * 64)
+    with pytest.raises(ValueError):
+        release.validate_source(source, "a" * 40, "1.2.3")
+    tagged = {"tag": "v1.2.3", "commit": "a" * 40, "build_run": "123", "build_attempt": 1,
+              "unsigned_app_sha256": "d" * 64}
+    release.validate_source(tagged, "a" * 40, "1.2.3", input_digest="d" * 64)
+    with pytest.raises(ValueError):
+        release.validate_source(tagged, "a" * 40, "1.2.3", candidate_id=source["candidate_id"])
+
+
+@pytest.mark.parametrize("field,value", [
+    ("commit", "b" * 40), ("version", "1.2.4"), ("kind", "release"),
+    ("candidate_id", "macos-candidate-" + "a" * 40 + "-124"),
+    ("build_run", "124"), ("build_attempt", 0), ("build_attempt", True),
+    ("unsigned_app_sha256", "bad"), ("tag", "v1.2.3"),
+])
+def test_candidate_provenance_mismatch_fails_closed(field, value):
+    source = candidate_source()
+    expected = source["candidate_id"]
+    source[field] = value
+    with pytest.raises(ValueError):
+        release.validate_source(source, "a" * 40, "1.2.3", candidate_id=expected, input_digest="d" * 64)
+
+
+@pytest.mark.parametrize("candidate_id", ["v1.2.3", "macos-candidate-short-123", "macos-candidate-" + "b" * 40 + "-123"])
+def test_explicit_candidate_identity_must_match_source(candidate_id):
+    with pytest.raises(ValueError):
+        release.validate_source(candidate_source(), "a" * 40, "1.2.3", candidate_id=candidate_id)
+
+
 def test_macho_inventory_rejects_symlinks(tmp_path):
     (tmp_path / "lib").write_bytes(bytes.fromhex("cffaedfe") + b"code")
     (tmp_path / "data").write_bytes(b"data")
