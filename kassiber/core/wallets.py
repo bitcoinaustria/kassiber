@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .book_network import network_write
+
 import json
 import os
 import sqlite3
@@ -548,6 +550,7 @@ def parse_wallet_config(args):
     return config
 
 
+@network_write
 def create_wallet(
     conn,
     workspace_ref,
@@ -1019,6 +1022,7 @@ def reveal_wallet_secrets(conn, workspace_ref, profile_ref, wallet_ref):
     }
 
 
+@network_write
 def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     wallet = resolve_wallet(conn, profile["id"], wallet_ref)

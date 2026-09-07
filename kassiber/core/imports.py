@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .book_network import network_write
+
 """Import orchestration helpers above the parser-only `kassiber.importers` boundary."""
 
 import json
@@ -1447,6 +1449,7 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
     }
 
 
+@network_write
 def insert_wallet_records(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],

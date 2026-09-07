@@ -74,3 +74,51 @@ class NetworkBoundaryTests(unittest.TestCase):
         self.assertEqual(config["chain_instance_id"],binding["chain_instance_id"])
         from kassiber.core.book_network import require_book_accounting
         require_book_accounting(self.conn,"profile-1")
+
+    def test_concurrent_first_binding_cannot_overtake_import_admission(self):
+        import sqlite3
+        from kassiber.core import book_network as network
+        from kassiber.cli.handlers import _import_coordinator_hooks
+        self.conn.commit()
+        peer = sqlite3.connect(self.conn.execute("PRAGMA database_list").fetchone()[2], timeout=0.01)
+        peer.row_factory = sqlite3.Row
+        self.addCleanup(peer.close)
+        original = network.guard_observations
+        def bind_between_guard_and_insert(*args, **kwargs):
+            original(*args, **kwargs)
+            scope = {"environment":"main", "declared_wallet_ids":["wallet-a","wallet-b","wallet-c"]}
+            plan = network.plan_book_network(peer,"profile-1",scope)
+            network.apply_book_network(peer,"profile-1",{**scope,"plan_id":plan["plan_id"]})
+        records = [{"txid":"a"*64,"occurred_at":fixtures.NOW,"direction":"inbound","asset":"BTC","amount":"0.01","fee":"0","raw_json":json.dumps({"network":"regtest"})}]
+        with patch.object(network,"guard_observations",side_effect=bind_between_guard_and_insert):
+            with self.assertRaises(sqlite3.OperationalError):
+                insert_wallet_records(self.conn,self.profile,self.wallet,records,"race",_import_coordinator_hooks())
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0],0)
+        self.assertFalse(self.conn.in_transaction)
+
+    def test_concurrent_first_binding_cannot_overtake_wallet_writes(self):
+        import sqlite3
+        from kassiber.core import book_network as network
+        from kassiber.core.wallets import create_wallet, update_wallet
+        self.conn.commit()
+        peer = sqlite3.connect(self.conn.execute("PRAGMA database_list").fetchone()[2], timeout=0.01)
+        peer.row_factory = sqlite3.Row
+        self.addCleanup(peer.close)
+        original = network.guard_wallet
+        def bind_between_guard_and_write(*args, **kwargs):
+            original(*args, **kwargs)
+            scope = {"environment":"main", "declared_wallet_ids":["wallet-a","wallet-b","wallet-c"]}
+            plan = network.plan_book_network(peer,"profile-1",scope)
+            network.apply_book_network(peer,"profile-1",{**scope,"plan_id":plan["plan_id"]})
+        operations = [
+            lambda: create_wallet(self.conn,"ws-1","profile-1","Racing","custom",account_ref=self.wallet["account_id"],config={"network":"regtest"}),
+            lambda: update_wallet(self.conn,"ws-1","profile-1","wallet-a",{"config":{"network":"regtest"}}),
+        ]
+        for operation in operations:
+            with self.subTest(operation=operation):
+                with patch.object(network,"guard_wallet",side_effect=bind_between_guard_and_write):
+                    with self.assertRaises(sqlite3.OperationalError):
+                        operation()
+                self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM wallets").fetchone()[0],3)
+                self.assertEqual(self.conn.execute("SELECT config_json FROM wallets WHERE id='wallet-a'").fetchone()[0],"{}")
+                self.assertFalse(self.conn.in_transaction)

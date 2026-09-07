@@ -6,6 +6,7 @@ import json
 import sqlite3
 import uuid
 from contextlib import contextmanager
+from functools import wraps
 from collections.abc import Mapping
 from typing import Any
 
@@ -349,3 +350,23 @@ def wallet_for_network_sync(conn, profile_id, wallet):
     guard_wallet(conn, profile_id, config, operation="sync")
     binding = resolve_book_environment(conn, profile_id)
     return {**dict(wallet), "config_json": json.dumps(new_wallet_config(conn, profile_id, wallet["kind"], config)), "_book_environment_id": binding["environment_id"]}
+
+
+def network_write(operation):
+    """Pin admission and publication; the wrapped service retains commit control.
+
+    No network I/O belongs inside these short wallet/import write operations.
+    Existing caller transactions remain caller-owned, including rollback.
+    """
+    @wraps(operation)
+    def guarded(conn, *args, **kwargs):
+        owns = not conn.in_transaction
+        if owns:
+            conn.execute("BEGIN IMMEDIATE")
+        try:
+            return operation(conn, *args, **kwargs)
+        except BaseException:
+            if owns:
+                conn.rollback()
+            raise
+    return guarded
