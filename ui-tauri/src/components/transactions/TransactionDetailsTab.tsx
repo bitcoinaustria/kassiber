@@ -18,6 +18,7 @@ import {
   LedgerRow,
   networkLabel,
 } from "./TransactionDetailSheetParts";
+import { exchangeTransfer } from "./ExchangeTransferModel";
 import { TransactionRecordFlow } from "./TransactionRecordFlow";
 import { TransactionGraphTechnicalDetails } from "./TransactionGraphTechnicalDetails";
 import { CommercialProvenancePanel } from "./TransactionDetailCommercialPanel";
@@ -165,7 +166,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
   useEffect(() => {
     setSelectedSwapLeg(null);
   }, [transaction.id, swapRoute?.id]);
-  const activeSwapLeg = selectedSwapLeg ?? swapRoute?.currentLeg ?? null;
+  const activeSwapLeg = selectedSwapLeg ?? exchangeTransfer(swapRoute)?.chainLeg ?? swapRoute?.currentLeg ?? null;
   const currentGraphReferences = useMemo(
     () => [
       transaction.id,

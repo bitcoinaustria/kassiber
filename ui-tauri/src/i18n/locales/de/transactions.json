@@ -1168,5 +1168,16 @@
     "valueMissing": "Nicht in der Quelle enthalten",
     "noChainTransaction": "Keine Blockchain-Transaktion verknüpft",
     "reportedFee": "Gebühr laut Quelle"
+  },
+  "exchangeTransfer": {
+    "withdrawal": "Exchange-Auszahlung",
+    "deposit": "Exchange-Einzahlung",
+    "account": "Börsenkonto",
+    "wallet": "On-chain-Wallet",
+    "chainRecord": "Blockchain-Transaktion unten",
+    "fee": "Gebühr laut Börsenbuchung",
+    "openRecord": "Börsenbuchung öffnen",
+    "reference": "Börsenreferenz",
+    "recordedAt": "Gebucht am"
   }
 }

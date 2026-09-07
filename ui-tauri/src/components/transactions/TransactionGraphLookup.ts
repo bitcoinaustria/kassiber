@@ -1,3 +1,4 @@
+import { exchangeTransfer } from "./ExchangeTransferModel";
 import type { TransactionDetailTabContext } from "./TransactionDetailTabContext";
 import type {
   TransactionSwapRoute,
@@ -49,6 +50,10 @@ export function preloadableSwapLegGraphLookupArgs(
   currentReferences: Array<string | null | undefined>,
   allowPublicLookup = false,
 ) {
+  const exchange = exchangeTransfer(route);
+  if (exchange && leg !== exchange.chainLeg) {
+    return { transaction: "", allowPublicLookup: false };
+  }
   const transaction = preloadableSwapLegGraphReference(route, leg, currentReferences);
   return {
     transaction: transaction ?? "",

@@ -7,6 +7,8 @@ import {
   Info,
   Maximize2,
 } from "lucide-react";
+import { exchangeTransfer } from "./ExchangeTransferModel";
+import { ExchangeTransferSummary } from "./ExchangeTransferSummary";
 import type { TFunction } from "i18next";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -1824,12 +1826,14 @@ export function TransactionGraphPanel({
 
   return (
     <div className="space-y-4">
-      <SwapRouteStrip
+      {graph?.swapRoute && exchangeTransfer(graph.swapRoute) ? (
+        <ExchangeTransferSummary route={graph.swapRoute} hideSensitive={hideSensitive} />
+      ) : <SwapRouteStrip
         route={graph?.swapRoute}
         hideSensitive={hideSensitive}
         selectedLeg={selectedSwapLeg}
         onSelectLeg={onSelectSwapLeg}
-      />
+      />}
       {showDiagram ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">

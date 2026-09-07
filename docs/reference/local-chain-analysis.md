@@ -30,6 +30,13 @@ must agree on chain, network, transaction identity and known physical facts;
 conflicting or over-limit sources leave the original graph unchanged. Reusing
 these references never grants wallet ownership or journal custody authority.
 
+Known same-asset transfers between an exchange account and an on-chain wallet
+show an exchange withdrawal/deposit summary with named custody endpoints.
+The default diagram follows the on-chain wallet leg; the exchange reference
+and booking date remain available in a local disclosure. Exchange-reported
+fees stay separate from miner fees. Ambiguous importer kinds retain the generic
+transfer view, and swaps keep their route selector.
+
 An exchange trade without blockchain input/output data remains an accounting
 record without a physical flow diagram. Unlinked purchases and sales show a
 compact trade receipt; fiat trade values require exact exchange-execution

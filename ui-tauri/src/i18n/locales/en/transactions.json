@@ -1168,5 +1168,16 @@
     "valueMissing": "Not in the source record",
     "noChainTransaction": "No blockchain transaction linked",
     "reportedFee": "Reported fee"
+  },
+  "exchangeTransfer": {
+    "withdrawal": "Exchange withdrawal",
+    "deposit": "Exchange deposit",
+    "account": "Exchange account",
+    "wallet": "On-chain wallet",
+    "chainRecord": "Blockchain transaction below",
+    "fee": "Reported exchange fee",
+    "openRecord": "View exchange record",
+    "reference": "Exchange reference",
+    "recordedAt": "Recorded at"
   }
 }
