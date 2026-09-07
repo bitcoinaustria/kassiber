@@ -3640,6 +3640,9 @@ def open_db(
             ensure_database_instance_id(conn)
             from .core.chain_analysis.projection_store import install as install_chain_index
             install_chain_index(conn)
+            # This newly owned connection must finish initialization before a
+            # CLI/daemon operation opens its own explicit transaction.
+            conn.commit()
             return conn
         except Exception:
             conn.close()
@@ -3677,6 +3680,7 @@ def open_db(
         ensure_database_instance_id(conn)
         from .core.chain_analysis.projection_store import install as install_chain_index
         install_chain_index(conn)
+        conn.commit()
         return conn
     except Exception:
         conn.close()

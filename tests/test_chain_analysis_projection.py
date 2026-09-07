@@ -215,5 +215,31 @@ class ProjectionDatasetTests(unittest.TestCase):
             book.tearDown()
 
 
+class ProjectionDatabaseInitializationTests(unittest.TestCase):
+    def test_open_finishes_index_installation_before_caller_transaction(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from kassiber.db import open_db
+        from kassiber.secrets.sqlcipher import sqlcipher_available
+
+        for passphrase in (None, "local-index-fixture-passphrase"):
+            if passphrase is not None and not sqlcipher_available():
+                continue
+            with self.subTest(encrypted=passphrase is not None), TemporaryDirectory() as folder:
+                for opening in range(3):
+                    conn = open_db(Path(folder), passphrase=passphrase)
+                    try:
+                        self.assertFalse(conn.in_transaction)
+                        conn.execute("BEGIN IMMEDIATE")
+                        conn.rollback()
+                        self.assertGreater(conn.execute("SELECT revision FROM chain_index_clock").fetchone()[0], 0)
+                        if opening == 1:
+                            # A later migration can install a missing source
+                            # trigger and write the change feed on reopening.
+                            conn.execute("DROP TRIGGER chain_index_track_transactions_insert")
+                    finally:
+                        conn.close()
+
+
 if __name__ == "__main__":
     unittest.main()
