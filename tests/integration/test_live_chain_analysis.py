@@ -15,12 +15,14 @@ import uuid
 
 from embit.psbt import PSBT
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 from kassiber.core.chain_analysis import build_index, run_analysis, run_entropy
 from kassiber.core.chain_analysis.psbt import analyze_psbt, compare_psbts
 from kassiber.core.chain_analysis_acquisition import apply_acquisition, plan_acquisition
 from kassiber.core.chain_analysis_cases import compare_case, get_case, save_case
 from kassiber.core.book_network import apply_book_network, plan_book_network
+from kassiber.core import chain_analysis_backfill as backfill
 from kassiber.core.privacy_mirror import build_privacy_mirror
 from kassiber.db import open_db
 from tests.integration.env import skip_unless_integration
@@ -65,7 +67,8 @@ class LiveChainAnalysisTest(unittest.TestCase):
         self.mine(101)
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
-        self.conn = open_db(self.directory.name)
+        self.passphrase = "disposable-core-integration"
+        self.conn = open_db(self.directory.name, passphrase=self.passphrase)
         self.addCleanup(self.conn.close)
         now = "2026-09-06T12:00:00Z"
         self.conn.execute("INSERT INTO workspaces VALUES('ws','Live investigation',?)", (now,))
@@ -78,8 +81,50 @@ class LiveChainAnalysisTest(unittest.TestCase):
         apply_book_network(self.conn, "p", {**binding, "plan_id": reviewed["plan_id"]})
         self.conn.commit()
 
+    def test_authorized_block_range_resumes_and_reconciles_real_core_reorg(self):
+        start = self.rpc("getblockcount")
+        self.mine(2)
+        tip = self.rpc("getblockcount")
+        previous_tip = self.rpc("getblockhash", [tip])
+        spec = {"backend": "node", "network": "regtest", "chain_instance_id": self.chain_instance,
+                "mode": "blocks", "start_height": start, "end_height": tip, "blocks_per_run": 2,
+                "max_requests": 200, "max_bytes": 100_000_000}
+        reviewed = backfill.plan(self.conn, "p", spec)
+        source = backfill.authorize(self.conn, "p", {"plan": reviewed})
+        self.conn.commit()
+        first = backfill.run(self.conn, "p", source["id"])
+        self.assertEqual(first["cursor_height"], start + 1, first)
+        final = backfill.run(self.conn, "p", source["id"])
+        self.assertEqual(final["cursor_height"], tip, final)
+        self.assertEqual(final["verified_tip_height"], tip)
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM transactions").fetchone()[0], 0)
+        self.rpc("invalidateblock", [previous_tip])
+        # A new coinbase destination forces a distinct replacement even when
+        # both blocks are mined within the same second.
+        self.mining_address = self.address(self.miner)
+        self.mine(1)
+        self.assertNotEqual(self.rpc("getblockhash", [tip]), previous_tip)
+        changed = backfill.run(self.conn, "p", source["id"])
+        self.assertEqual(changed["last_code"], "reorg_reconciling", changed)
+        self.assertIsNone(changed["verified_tip_height"])
+        self.assertEqual(self.conn.execute("SELECT active FROM chain_analysis_reference_blocks WHERE block_hash=?", (previous_tip,)).fetchone()[0], 0)
+        repaired = backfill.run(self.conn, "p", source["id"])
+        self.assertEqual(repaired["cursor_height"], tip, repaired)
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM chain_analysis_reference_blocks WHERE active=1").fetchone()[0], 3)
+        snapshot = run_analysis(self.conn, "p", {"observer": "public", "chain": "bitcoin", "network": "regtest"})
+        self.assertTrue(snapshot["nodes"])
+        self.conn.commit()
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM transactions").fetchone()[0], 0)
+
     def rpc(self, method, params=None, wallet=None):
-        return _rpc(self.url, self.username, self.password, method, params, wallet)
+        try:
+            return _rpc(self.url, self.username, self.password, method, params, wallet)
+        except HTTPError as error:
+            try:
+                detail = json.loads(error.read()).get("error")
+            except (ValueError, AttributeError):
+                detail = "No JSON-RPC error body"
+            raise AssertionError(f"Core {method} failed ({error.code}): {detail}") from error
 
     def wallet(self):
         name = f"chain-analysis-{uuid.uuid4().hex[:12]}"
@@ -242,7 +287,7 @@ class LiveChainAnalysisTest(unittest.TestCase):
         self.assertEqual(get_case(self.conn, "p", case["id"])["result"]["paths"], [])
         # Reopening the book must retain feature evidence after witness discard.
         snapshot = after["snapshot_id"]
-        other = open_db(self.directory.name)
+        other = open_db(self.directory.name, passphrase=self.passphrase)
         try:
             self.assertEqual(run_analysis(other, "p", after["query"])["snapshot_id"], snapshot)
         finally:

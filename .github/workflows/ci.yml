@@ -241,7 +241,12 @@ jobs:
           if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif git diff --quiet "$BASE_SHA"...HEAD -- \
+            .github/workflows/ci.yml \
             kassiber/core/chain_observer \
+            kassiber/core/chain_analysis \
+            'kassiber/core/chain_analysis_*.py' \
+            'kassiber/chain_analysis_*_schema.py' \
+            scripts/chain-analysis-regtest.sh \
             kassiber/core/esplora_history.py \
             kassiber/core/sync.py \
             kassiber/core/sync_backends.py \
@@ -279,6 +284,10 @@ jobs:
       - name: Dependency-backed chain-observer oracle
         if: steps.observer_paths.outputs.run == 'true'
         run: ./scripts/integration-harness.sh chain-observers
+
+      - name: Local chain-analysis Core oracle
+        if: steps.observer_paths.outputs.run == 'true'
+        run: ./scripts/integration-harness.sh chain-analysis
 
       - name: No observer-sensitive changes
         if: steps.observer_paths.outputs.run != 'true'

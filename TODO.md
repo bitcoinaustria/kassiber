@@ -1857,3 +1857,4 @@ Run these after any extraction or behavior change:
 - [x] Local evidence watches: typed preview/activation, current local baseline,
   version-bound domains/observers, atomic encrypted inbox/checkpoints, pause and
   restart catch-up, generic notifications, and shared CLI/desktop/AI operations.
+- [x] Add recurring Core source plans, revocable lifetime quotas and resumable block-occurrence ingestion. Requires the network/index/watch PR stack and a running unlocked daemon; see `docs/reference/recurring-chain-acquisition.md`.

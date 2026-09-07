@@ -269,6 +269,8 @@ class _Reader:
                 invalid("Backend returned a different transaction", "invalid_observation")
             confirmations = decoded.get("confirmations")
             status = {"confirmed": type(confirmations) is int and confirmations > 0, "conflicted": type(confirmations) is int and confirmations < 0}
+            if type(confirmations) is int and confirmations >= 0:
+                status["confirmations"] = confirmations
             if _txid(decoded.get("blockhash")):
                 status["block_hash"] = decoded["blockhash"]
             raw = graph._bitcoinrpc_decoded_to_graph_raw(decoded)

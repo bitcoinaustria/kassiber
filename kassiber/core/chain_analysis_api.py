@@ -5,10 +5,13 @@ from . import chain_analysis as engine
 from . import chain_analysis_cases as storage
 from . import chain_analysis_acquisition as acquisition
 from .repo.context import resolve_scope
+from . import chain_analysis_backfill as backfill
 
 
 READ_OPERATIONS = frozenset({"query", "entropy", "entropy.start", "jobs.get", "jobs.cancel", "psbt.analyze", "psbt.compare", "psbt.entropy", "psbt.entropy.start", "datasets.list", "datasets.get", "datasets.query", "datasets.preview", "datasets.preview.start", "ai_context", "cases.list", "cases.get", "cases.compare", "labels.list", "acquire.plan", "watches.preview", "watches.list", "watches.inbox"})
 WRITE_OPERATIONS = frozenset({"cases.save", "cases.delete", "labels.upsert", "labels.delete", "labels.import", "datasets.import", "datasets.import.start", "datasets.revoke", "datasets.discard", "datasets.discard.start", "acquire.apply", "watches.create", "watches.configure", "watches.delete", "watches.evaluate", "watches.acknowledge"})
+READ_OPERATIONS |= backfill.READ_OPERATIONS
+WRITE_OPERATIONS |= backfill.WRITE_OPERATIONS
 READ_KINDS = frozenset(f"ui.chain_analysis.{name}" for name in READ_OPERATIONS)
 WRITE_KINDS = frozenset(f"ui.chain_analysis.{name}" for name in WRITE_OPERATIONS)
 KINDS = READ_KINDS | WRITE_KINDS
@@ -32,6 +35,11 @@ def dispatch(conn, kind, args=None, *, workspace=None, profile=None, source_stre
         from .chain_analysis_watches import dispatch as dispatch_watches
         result = dispatch_watches(conn, profile_id, operation.removeprefix("watches."), args)
         if kind in WRITE_KINDS:
+            conn.commit()
+        return result
+    if operation.startswith("sources."):
+        result = backfill.dispatch(conn, profile_id, operation, args)
+        if operation in backfill.WRITE_OPERATIONS:
             conn.commit()
         return result
     if operation == "ai_context":

@@ -840,6 +840,7 @@ the script is interrupted. It needs Docker and may pull `bitcoin/bitcoin:31.0`.
 | Four independently funded legacy, nested SegWit, native SegWit and Taproot inputs | Empty PSBT amounts remain unknown; wallet-filled/signed PSBT fee and final vsize match Core; acquired transaction features match PSBT structure and signature categories after raw witness discard. |
 | Two independent wallet signers with equal inputs and equal outputs | One signer cannot finalize; both can produce a mined transaction; the financial-flow model retains three possible partitions and grants no ownership authority. This exercises collaborative transaction structure, not a CoinJoin coordinator. |
 | Original payment and receiver-signed Payjoin proposal | Added receiver contribution, fee delta, preserved output order and actual receiver signature commitments pass; reordered outputs fail; sender completion produces a Core-accepted mined transaction. The fixture constructs proposals locally and does not exercise HTTP negotiation. |
+| Reviewed, encrypted block-range acquisition and actual Core reorg | Batches resume from the durable cursor, withhold the disconnected branch, recover the canonical range and keep accounting transactions empty. |
 | Relative block lock and absolute height lock | Core rejects each transaction before its prerequisite height and accepts it afterward; structural locktime and RBF-signalling features agree. |
 
 Every scenario also checks that acquisition creates no accounting transactions,
