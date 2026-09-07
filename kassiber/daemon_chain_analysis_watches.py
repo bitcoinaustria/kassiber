@@ -13,21 +13,27 @@ from .envelope import build_event_envelope
 from .errors import AppError
 from .time_utils import now_iso
 from .core import chain_analysis_watches as watches
+from .core import chain_analysis_backfill as backfill
 
 _LOG = logging.getLogger(__name__)
 POLL_SECONDS = 5
 
 
 def has_pending_work(conn):
-    return conn.execute("SELECT 1 FROM chain_analysis_watches WHERE enabled=1 LIMIT 1").fetchone() is not None
+    return conn.execute("SELECT 1 FROM chain_analysis_watches WHERE enabled=1 UNION ALL SELECT 1 FROM chain_analysis_acquisition_grants WHERE status='active' LIMIT 1").fetchone() is not None
 
 
 def worker_tick(conn, *, cancelled=lambda: False):
-    """One catch-up pass. Root may compose backfill before this local pass."""
+    """Publish authorized source batches before evaluating dependent watches."""
     if not has_pending_work(conn):
         return
-    for row in conn.execute("SELECT DISTINCT profile_id FROM chain_analysis_watches WHERE enabled=1 ORDER BY profile_id").fetchall():
-        watches.evaluate_due(conn, row["profile_id"], cancelled=cancelled)
+    profiles = conn.execute("SELECT profile_id FROM chain_analysis_watches WHERE enabled=1 UNION SELECT profile_id FROM chain_analysis_acquisition_grants WHERE status='active' ORDER BY profile_id").fetchall()
+    for row in profiles:
+        if cancelled():
+            return
+        backfill.run_due(conn, row["profile_id"], cancelled=cancelled)
+        if not cancelled() and conn.execute("SELECT 1 FROM chain_analysis_watches WHERE profile_id=? AND enabled=1 LIMIT 1", (row["profile_id"],)).fetchone():
+            watches.evaluate_due(conn, row["profile_id"], cancelled=cancelled)
         conn.commit()
 
 
