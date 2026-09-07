@@ -57,7 +57,7 @@ export function SourceAcquisitionPanel({ subject = "", onError }: { subject?: st
         <Button variant="outline" size="sm" onClick={() => void act(async () => { await Promise.all([options.refetch(), environment.refetch()]); })}>{t("sources.retry")}</Button>
       </div>}
       {environment.isPending ? <p role="status" className="text-sm text-muted-foreground">{t("sources.loading")}</p>
-        : environment.data?.data?.state === "unbound" ? <Link className="text-sm underline underline-offset-4" to="/settings">{t("sources.bindBook")}</Link>
+        : environment.data?.data?.state === "unbound" ? <Link className="text-sm underline underline-offset-4" to="/settings/bitcoin">{t("sources.bindBook")}</Link>
         : bitcoin && !options.isPending && !options.error && !backends.length ? <Link className="text-sm underline underline-offset-4" to="/connections">{t("sources.connectCore")}</Link> : null}
       {bitcoin && backends.length > 0 && <form className="space-y-3" onSubmit={event => {
         event.preventDefault();

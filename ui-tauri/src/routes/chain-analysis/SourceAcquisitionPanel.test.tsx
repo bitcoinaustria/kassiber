@@ -32,7 +32,7 @@ it("does not silently choose a network for an unbound book", () => {
   const html = renderToStaticMarkup(<SourceAcquisitionPanel onError={() => {}} />);
   expect(html).not.toContain('value="own-lab"');
   expect(html).not.toContain('value="own-main"');
-  expect(html).toContain('href="/settings"');
+  expect(html).toContain('href="/settings/bitcoin"');
   expect(html).not.toContain("Review permission");
   expect(mock.invoke).not.toHaveBeenCalled();
 });
