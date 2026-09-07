@@ -255,6 +255,7 @@ from .daemon_swap_review import (
     SWAP_REVIEW_DEFAULT_LIMIT,
     build_swap_review_context_payload,
 )
+from .daemon_chain_analysis_watches import start_worker as _start_watch_worker, stop_worker as _stop_watch_worker
 from .daemon_freshness import (
     _apply_sync_failure_blocker,
     _auto_maintain_for_read,
@@ -1143,6 +1144,8 @@ class DaemonContext:
     select_project_on_open: bool = True
     db_passphrase: str | None = None
     freshness_worker: threading.Thread | None = None
+    watch_worker: threading.Thread | None = None
+    watch_stop_event: threading.Event = field(default_factory=threading.Event)
     project_owner: ProjectOwnerLease | None = None
     retired_project_resources: list[_RetiredProjectResource] = field(
         default_factory=list
@@ -3535,6 +3538,7 @@ def _open_daemon_connection(
         _ensure_daemon_project_owner(ctx)
         _remember_unlocked_passphrase(ctx, passphrase)
         _start_freshness_background_worker(ctx, passphrase=passphrase)
+        _start_watch_worker(ctx)
         return ctx.conn
     acquired_here = ctx.project_owner is None
     owner = _ensure_daemon_project_owner(ctx)
@@ -3567,6 +3571,7 @@ def _open_daemon_connection(
         )
     _remember_unlocked_passphrase(ctx, passphrase)
     _start_freshness_background_worker(ctx, passphrase=passphrase)
+    _start_watch_worker(ctx)
     return conn
 
 
@@ -3689,6 +3694,7 @@ def _projects_list_payload(ctx: DaemonContext) -> dict[str, Any]:
 
 
 def _close_current_project_for_switch(ctx: DaemonContext) -> None:
+    _stop_watch_worker(ctx)
     _stop_freshness_background_worker(ctx, cancel_running=True)
     ctx.document_import_sessions.clear()
     chain_analysis_runtime.clear_runtime()
@@ -3873,6 +3879,7 @@ def _select_project_payload(
                 ctx.freshness_worker is not None
                 and ctx.freshness_worker.is_alive()
             )
+            _stop_watch_worker(ctx)
             _stop_freshness_background_worker(ctx, cancel_running=True)
             try:
                 entry = set_selected_project(entry.id, last_opened_at=now_iso())
@@ -3908,6 +3915,7 @@ def _select_project_payload(
 
             try:
                 _start_freshness_background_worker(ctx, passphrase=passphrase)
+                _start_watch_worker(ctx)
             except Exception as start_error:
                 _REQUEST_LOGGER.error(
                     "freshness worker failed to start after project switch",
@@ -14783,6 +14791,7 @@ def handle_request(
         )
 
     if kind == "daemon.lock":
+        _stop_watch_worker(ctx)
         _stop_freshness_background_worker(ctx, cancel_running=True)
         ctx.document_import_sessions.clear()
         chain_analysis_runtime.clear_runtime()
@@ -14899,6 +14908,7 @@ def handle_request(
                 ctx.data_root,
                 active_owner_kind="desktop",
             ):
+                _stop_watch_worker(ctx)
                 _stop_freshness_background_worker(ctx, cancel_running=True)
                 if ctx.conn is not None:
                     ctx.conn.close()
@@ -15082,6 +15092,7 @@ def handle_request(
             )
             operator_stale_generation = invalidate_operator_native_auth(ctx.data_root)
             if ctx.conn is not None:
+                _stop_watch_worker(ctx)
                 _stop_freshness_background_worker(ctx, cancel_running=True)
                 ctx.conn.close()
                 ctx.conn = None
@@ -17797,6 +17808,7 @@ def run(
             getattr(args, "_db_passphrase_cached", None),
         )
         _start_freshness_background_worker(ctx)
+        _start_watch_worker(ctx)
 
     out.write(
         build_envelope(
@@ -17955,10 +17967,12 @@ def run(
             if response is not None:
                 out.write(response)
             _start_freshness_background_worker(ctx)
+            _start_watch_worker(ctx)
             _drain_daemon_main_thread_tasks(ctx)
             if should_shutdown:
                 return 0
     finally:
+        watches_stopped = _stop_watch_worker(ctx, require_stopped=False)
         worker_stopped = _stop_freshness_background_worker(
             ctx,
             reset_event=False,
@@ -17966,7 +17980,7 @@ def run(
         )
         _clear_unlocked_passphrase(ctx)
         _retry_retired_project_resources(ctx)
-        if worker_stopped:
+        if worker_stopped and watches_stopped:
             _retire_current_project_resources(ctx)
 
     return 0

@@ -19,6 +19,8 @@ import {
 import { copyTextWithPolicy } from "@/lib/clipboard";
 import type { GraphSelection } from "./InvestigationGraph";
 import { EvidenceDetails, Fact } from "./EvidenceDetails";
+import { WatchAction } from "./WatchControls";
+import { analysisNetworkInput } from "@/lib/chainAnalysis";
 import { FeatureDetails } from "./FeatureDetails";
 import type { FeatureSnapshot } from "@/lib/chainAnalysisWorkbench";
 
@@ -32,6 +34,7 @@ export function SelectionInspector({
   onClose,
   onError,
   features,
+  observer = "owner",
 }: {
   node?: AnalysisNode;
   edge?: AnalysisEdge;
@@ -42,6 +45,7 @@ export function SelectionInspector({
   onClose?: () => void;
   onError: (error: unknown) => void;
   features?: FeatureSnapshot;
+  observer?: AnalysisQuery["observer"];
 }) {
   const { t } = useTranslation("chainAnalysis");
   const [copied, setCopied] = useState(false);
@@ -49,6 +53,7 @@ export function SelectionInspector({
   const selectedId = node?.outpoint || node?.txid || node?.id || edge?.id;
   return (
     <aside className="ca-inspector p-4" aria-label={t("inspect")}>
+      {node?.kind === "output" && (node.chain === "bitcoin" || node.chain === "liquid") && <WatchAction output query={{ mode: "trace", subject: node.id, chain: node.chain, network: analysisNetworkInput(node.network), observer, direction: "forward", depth: 2, node_limit: 100, edge_limit: 200, include_relations: false, include_hypotheses: false }} onError={onError} />}
       <div className="flex items-start justify-between gap-2">
         <h2 className="break-words text-sm font-semibold">
           {node?.label || edge?.label || node?.kind || edge?.kind}

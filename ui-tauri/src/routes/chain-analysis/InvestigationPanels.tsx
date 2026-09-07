@@ -13,6 +13,7 @@ import {
   shortAnalysisId,
 } from "@/lib/chainAnalysis";
 import { EvidenceDetails, Fact } from "./EvidenceDetails";
+import { WatchAction } from "./WatchControls";
 import { CaseComparison } from "./CaseComparison";
 
 export function SavedInvestigations({
@@ -147,6 +148,7 @@ export function SavedInvestigations({
             >
               {t("case.compare")}
             </Button>
+            <WatchAction caseId={item.id} query={item.query} onError={onError} />
             {confirmDelete === item.id ? (
               <div className="flex items-center gap-2 text-xs">
                 <span>{t("case.deleteConfirm")}</span>

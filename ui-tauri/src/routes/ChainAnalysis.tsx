@@ -43,6 +43,7 @@ import { ResultPanels } from "./chain-analysis/ResultPanels";
 import { PsbtPanel } from "./chain-analysis/PsbtPanel";
 import { DatasetsPanel } from "./chain-analysis/DatasetsPanel";
 import "./chain-analysis/workbench.css";
+import { WatchAction, WatchInbox } from "./chain-analysis/WatchControls";
 
 export function ChainAnalysis() {
   const { t } = useTranslation("chainAnalysis");
@@ -331,6 +332,7 @@ export function ChainAnalysisWorkbench({
       <div hidden={workspace !== "psbt"}><PsbtPanel initialNetwork={initialSearch.network} onError={reportError} /></div>
       <div hidden={workspace !== "datasets"}><DatasetsPanel onError={reportError} /></div>
       <div hidden={workspace !== "graph"} className="space-y-3">
+      <WatchInbox onOpen={(next) => { setQuery(next); void execute(next); }} onError={reportError} />
       {showSaved && (
         <section className="rounded-lg border" aria-label={t("case.title")}>
           <div className="flex items-center justify-between px-4 py-3">
@@ -361,6 +363,7 @@ export function ChainAnalysisWorkbench({
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <ExecutedQueryStrip result={result} setTab={setTab} />
+            <WatchAction key={analysisQueryKey(result.query)} query={result.query} onError={reportError} />
             <div className="flex flex-wrap items-center gap-1">
               <Button
                 size="sm"
@@ -487,6 +490,7 @@ export function ChainAnalysisWorkbench({
                 edge={edge}
                 features={result.transaction_features?.find(item => item.subject === node?.id)?.features}
                 busy={run.isPending}
+                observer={result.query.observer}
                 onTrace={trace}
                 onTarget={(target) =>
                   setQuery((previous) => ({ ...previous, mode: "path", target }))

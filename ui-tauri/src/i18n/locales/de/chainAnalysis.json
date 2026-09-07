@@ -330,5 +330,52 @@
     "assistantSource": "Hilf bei der Prüfung der ausgewählten lokalen Zuordnungsquelle mit dem opaken Token {{token}}. Verwende einen lokalen Provider für Dateivorschau und Import. Verlange validierten Inhalt und ausdrückliche Zustimmung vor dem Import; rufe keine externen Daten ab."
   },
   "resultView": "Ergebnisse",
-  "backToInvestigation": "Zurück zur Untersuchung"
+  "backToInvestigation": "Zurück zur Untersuchung",
+  "watch": {
+    "action": "Beobachten",
+    "rule": "Bedingung",
+    "localOnly": "Prüft lokale Belege, solange das Buch entsperrt ist. Keine Netzwerkabfragen. Fehlende Belege bedeuten keine Entwarnung.",
+    "threshold": "Bestätigungen",
+    "preview": "Vorschau",
+    "baseline": "Ausgangslage: {{status}}",
+    "enable": "Beobachtung starten",
+    "saved": "Beobachtung gespeichert. Die Ausgangslage löst keine Meldung aus.",
+    "inbox": "Beobachtungen",
+    "empty": "Noch keine Beobachtungen. Wähle einen Ausgang oder eine Untersuchung.",
+    "open": "Öffnen",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "check": "Lokal prüfen",
+    "acknowledge": "Gelesen",
+    "latest": "Neueste",
+    "older": "Ältere",
+    "notificationTitle": "Lokale Belege geändert",
+    "notificationBody": "Öffne die Beobachtungen in der Kettenanalyse.",
+    "rules": {
+      "output_spent": "Ausgang ausgegeben",
+      "confirmations": "Bestätigungsschwelle",
+      "connection_supported": "Verbindung belegt",
+      "attribution_changed": "Zuordnung geändert",
+      "findings_changed": "Befunde geändert"
+    },
+    "status": {
+      "observed": "Beobachtet",
+      "unknown": "Unbekannt",
+      "unavailable": "Nicht verfügbar",
+      "partial": "Teilweise"
+    },
+    "events": {
+      "coverage_lost": "Belegabdeckung zurückgegangen",
+      "threshold_reached": "Bestätigungsschwelle erreicht",
+      "threshold_reversed": "Bestätigungsschwelle unterschritten",
+      "spend_observed": "Ausgabe beobachtet",
+      "connection_supported": "Verbindung lokal belegt",
+      "attribution_changed": "Zuordnung geändert",
+      "findings_changed": "Befunde geändert",
+      "evidence_changed": "Lokale Belege geändert"
+    },
+    "delete": "Entfernen",
+    "confirmDelete": "Mit Verlauf entfernen?",
+    "encryption": "Buch verschlüsseln"
+  }
 }

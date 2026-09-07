@@ -386,3 +386,47 @@ This is not a global Bitcoin index, a commercial attribution database, an
 automatic background watchlist, or an arbitrary-chain analytics platform.
 Research rationale and primary
 protocol references remain in [the architecture research](../plan/17-local-chain-analysis.md).
+
+### Local evidence watches
+
+`chain-analysis watches` and `ui.chain_analysis.watches.*` share a typed local
+watch service. Desktop actions on an output, current query or saved investigation
+preview a baseline before **Start watching**. The existing investigation screen
+contains watch status, pause/resume, manual local checking and a paginated inbox.
+No initial alert is sent. Resuming catches up from the retained baseline; removing
+a watch explicitly removes its inbox history without changing evidence.
+
+Rules cover observed spends, explicit confirmation thresholds, newly supported
+paths, direct attribution changes and findings changes. They consume the canonical
+observer-visible analysis result. They never acquire data, call a model, assert
+ownership, alter custody or book a transaction. A disappearing spend, expired
+source, incomplete search or lost subject is missing coverage, never proof of
+unspentness or a cleared finding. Confirmation counts require explicit local
+observations; a block height or elapsed time does not imply confirmation depth.
+
+Creation requires a keyed SQLCipher book, an explicit bound chain domain, the
+current book identity/environment revision, an observer and a rule version. The
+unchanged preview is verified again at activation. Changing the book/domain or
+rule version makes the watch unavailable instead of reinterpreting its subject.
+The watch definition, baseline, inbox and progress are local book data and do not
+replicate. Inbox append and baseline/cursor advancement are one atomic transaction.
+Evaluation failures/cancellation leave the previous checkpoint intact.
+
+An unlocked daemon owns a separate identity-checked database connection and checks
+committed projection revisions and time-based source expiry. Lock/project switch
+cancels and joins the worker before releasing book resources; restart catches up
+from durable checkpoints. Notification delivery has a separate receipt and is
+at least once. Both wake-up events and persisted UI notifications are generic;
+subjects, attribution text and watch history stay in the encrypted book. The UI
+also reads unread inbox state after reconnect, so a missed wake-up loses no event.
+There is no OS scheduler, network permission or background AI authorization in a
+local watch. Explicit recurring acquisition is a separate policy/service.
+
+CLI example: `chain-analysis watches preview --document @watch.json`, then
+`chain-analysis watches create --plan @preview.json`. A definition chooses one
+`query` or `case_id` and a `rule` (`output_spent`, `confirmations`,
+`connection_supported`, `attribution_changed`, `findings_changed`). Confirmation
+rules accept `threshold`. `list`, `inbox --before <cursor>`, `configure --document
+@configuration.json`, `acknowledge <id>`, `delete --document @deletion.json` and
+`evaluate` use the same daemon service. Configuration/deletion bind `id` and
+`expected_revision`; configuration also supplies `enabled`.

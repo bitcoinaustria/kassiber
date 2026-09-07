@@ -34,6 +34,7 @@ _CODE_RE = re.compile(r"[a-z][a-z0-9_]*(?:-[a-z0-9_]+)*\Z")
 _HANDLE_FIELDS = {
     "snapshot_id", "expected_snapshot_id", "base_snapshot_id", "current_snapshot_id",
     "case_id", "base_id", "other_id", "next_cursor", "cursor", "result_digest", "status_commitment",
+    "plan_id", "expected_plan_id", "watch_id",
     "job_id", "dataset_id", "source_token", "psbt_token", "expected_active_id", "content_sha256", "dataset_state_digest", "state_digest",
 }
 _REFERENCE_FIELDS = {
@@ -70,6 +71,7 @@ _SOURCE_CODES = {
 # Unknown additions are omitted until their disclosure has been considered.
 # Numeric dictionary keys are also admitted for participant-group counts.
 _FIELDS = set("""
+    definition baseline threshold enabled checked_at acknowledged_at event_count unread_count observation evaluated acknowledged sequence
     schema_version query summary nodes edges findings clusters patterns exposure
     entropy paths frontier coverage capabilities result items id created_at
     updated_at occurred_at confirmed_at observed_at confirmation_observed_at confirmations confirmed block_height deleted revision expected_revision claim
@@ -193,7 +195,7 @@ def project_ai_result(conn: sqlite3.Connection, profile_id: str, value: Any) -> 
             return item if re.fullmatch(r"-?(?:0|[1-9][0-9]*)", item) else omitted
         if field == "final_fee_rate_sat_vb":
             return item if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", item) else omitted
-        if field in {"created_at", "updated_at", "occurred_at", "confirmed_at", "observed_at", "confirmation_observed_at", "start", "end", "valid_from", "valid_until"}:
+        if field in {"created_at", "updated_at", "occurred_at", "confirmed_at", "observed_at", "checked_at", "acknowledged_at", "confirmation_observed_at", "start", "end", "valid_from", "valid_until"}:
             return item if re.fullmatch(r"[0-9T:.+Z-]{10,40}", item) else omitted
         return omitted
 

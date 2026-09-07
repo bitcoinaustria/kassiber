@@ -330,5 +330,52 @@
     "assistantSource": "Help inspect the selected local attribution source using opaque token {{token}}. Use an on-device provider for file preview/import. Require validated content and explicit consent before importing; do not fetch external data."
   },
   "resultView": "Results",
-  "backToInvestigation": "Back to investigation"
+  "backToInvestigation": "Back to investigation",
+  "watch": {
+    "action": "Watch",
+    "rule": "Condition",
+    "localOnly": "Checks local evidence while this book is unlocked. No network requests. Missing evidence does not mean a condition has cleared.",
+    "threshold": "Confirmations",
+    "preview": "Preview",
+    "baseline": "Baseline: {{status}}",
+    "enable": "Start watching",
+    "saved": "Watch saved. The baseline does not trigger a notification.",
+    "inbox": "Watches",
+    "empty": "No watches yet. Select an output or investigation.",
+    "open": "Open",
+    "pause": "Pause",
+    "resume": "Resume",
+    "check": "Check locally",
+    "acknowledge": "Mark read",
+    "latest": "Latest",
+    "older": "Older",
+    "notificationTitle": "Local evidence changed",
+    "notificationBody": "Open watches in Chain Analysis.",
+    "rules": {
+      "output_spent": "Output spent",
+      "confirmations": "Confirmation threshold",
+      "connection_supported": "Connection supported",
+      "attribution_changed": "Attribution changed",
+      "findings_changed": "Findings changed"
+    },
+    "status": {
+      "observed": "Observed",
+      "unknown": "Unknown",
+      "unavailable": "Unavailable",
+      "partial": "Partial"
+    },
+    "events": {
+      "coverage_lost": "Evidence coverage decreased",
+      "threshold_reached": "Confirmation threshold reached",
+      "threshold_reversed": "Confirmation threshold reversed",
+      "spend_observed": "Spend observed",
+      "connection_supported": "Connection locally supported",
+      "attribution_changed": "Attribution changed",
+      "findings_changed": "Findings changed",
+      "evidence_changed": "Local evidence changed"
+    },
+    "delete": "Remove",
+    "confirmDelete": "Remove with history?",
+    "encryption": "Encrypt this book"
+  }
 }

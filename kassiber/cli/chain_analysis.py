@@ -30,6 +30,19 @@ def add_parser(sub):
         parser.add_argument("--start")
         parser.add_argument("--end")
         _scope(parser)
+    watches = commands.add_parser("watches", help="Local-only evidence watches and inbox").add_subparsers(dest="chain_analysis_action", required=True)
+    for action in ("preview", "create", "list", "configure", "delete", "inbox", "acknowledge", "evaluate"):
+        parser = watches.add_parser(action)
+        _scope(parser)
+        if action in {"preview", "configure", "delete"}:
+            parser.add_argument("--document", required=True, help="Typed watch definition/configuration JSON or @path")
+        elif action == "create":
+            parser.add_argument("--plan", required=True, help="Unchanged reviewed preview JSON or @path")
+        elif action == "acknowledge":
+            parser.add_argument("id")
+        elif action == "inbox":
+            parser.add_argument("--limit", type=int, default=50)
+            parser.add_argument("--before", type=int)
     entropy = commands.add_parser("entropy")
     entropy.add_argument("subject")
     entropy.add_argument("--chain", choices=("bitcoin", "liquid"))
@@ -178,6 +191,8 @@ def dispatch(conn, args):
         action = args.chain_analysis_action
         operation = f"{command}.{action}"
         allowed = ("id", "other_id", "limit", "cursor", "title", "expected_snapshot_id", "expected_revision")
+        if command == "watches" and action == "inbox":
+            allowed = ("limit", "before")
         if command == "datasets" and action == "query":
             allowed = ("subject", "chain", "network", "dataset_id", "label", "observer", "limit", "cursor")
         if command == "acquire" and action == "plan":
