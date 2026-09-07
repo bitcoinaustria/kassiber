@@ -100,7 +100,7 @@ def tool_specs():
     watch = obj({"rule": enum("output_spent", "confirmations", "connection_supported", "attribution_changed", "findings_changed"), "query": QUERY, "case_id": string(64), "threshold": integer(1, 10000)}, ("rule",))
     entries.extend([
         ("watches.preview", "Preview a typed local evidence watch. Choose a scoped query or saved case. Records a baseline only on create; no network or model runs in background.", watch, False),
-        ("watches.create", "After consent, create the unchanged reviewed local watch preview in the encrypted book. Re-preview after evidence or book changes.", obj({"definition": watch, "expected_plan_id": string(64)}, ("definition", "expected_plan_id")), True),
+        ("watches.create", "After consent, create the unchanged reviewed local watch preview in the encrypted book. Re-preview after evidence or book changes.", obj({"definition": obj({**watch["properties"], "rule_version": integer(1, 1)}, ("rule",)), "expected_plan_id": string(64)}, ("definition", "expected_plan_id")), True),
         ("watches.list", "List local evidence watches in this book.", obj({}), False),
         ("watches.inbox", "Read durable local evidence changes; lost coverage is not resolution.", obj({"limit": integer(1, 100), "before": integer(1, 9007199254740991)}), False),
         ("watches.configure", "After consent, pause or resume a watch using its current revision. Resume catches up from its saved baseline.", obj({"id": string(64), "expected_revision": integer(1, 2147483647), "enabled": {"type": "boolean"}}, ("id", "expected_revision", "enabled")), True),

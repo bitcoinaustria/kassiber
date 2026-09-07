@@ -255,3 +255,29 @@ def test_cli_uses_shared_local_watch_surface(book):
     result=cli_dispatch(book,args)
     assert result['definition']['rule']=='output_spent'
     assert result['egress']=='none'
+
+
+@pytest.mark.parametrize('saved_case',[False,True])
+def test_canonical_preview_definition_is_directly_copyable_into_create(book,saved_case):
+    args=definition()
+    if saved_case:
+        result=dispatch(book,'ui.chain_analysis.query',args['query'])
+        saved=dispatch(book,'ui.chain_analysis.cases.save',{'title':'Source output','query':result['query'],'expected_snapshot_id':result['snapshot_id']})
+        args={'rule':'output_spent','case_id':saved['id']}
+    preview=dispatch(book,'ui.chain_analysis.watches.preview',args)
+    created=dispatch(book,'ui.chain_analysis.watches.create',{'definition':preview['definition'],'expected_plan_id':preview['plan_id']})
+    assert created['definition']==preview['definition']
+
+
+@pytest.mark.parametrize('tamper',['version','boolean_version','query','extra'])
+def test_copied_definition_requires_exact_canonical_shape(book,tamper):
+    result=dispatch(book,'ui.chain_analysis.query',definition()['query'])
+    saved=dispatch(book,'ui.chain_analysis.cases.save',{'title':'Case','query':result['query'],'expected_snapshot_id':result['snapshot_id']})
+    preview=dispatch(book,'ui.chain_analysis.watches.preview',{'rule':'output_spent','case_id':saved['id']})
+    supplied=json.loads(json.dumps(preview['definition']))
+    if tamper=='version':supplied['rule_version']=2
+    elif tamper=='boolean_version':supplied['rule_version']=True
+    elif tamper=='query':supplied['query']['observer']='public'
+    else:supplied['ignored']='not allowed'
+    with pytest.raises(AppError):dispatch(book,'ui.chain_analysis.watches.create',{'definition':supplied,'expected_plan_id':preview['plan_id']})
+    assert dispatch(book,'ui.chain_analysis.watches.list',{})['items']==[]

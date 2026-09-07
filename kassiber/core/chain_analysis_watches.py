@@ -160,8 +160,17 @@ def create(conn, profile_id, args):
     if "plan" not in args:
         arguments(args, ("definition", "expected_plan_id"), ("definition", "expected_plan_id"))
         with atomic(conn):
-            plan = preview(conn, profile_id, args["definition"])
-            if plan["plan_id"] != args["expected_plan_id"]:
+            supplied = args["definition"]
+            normalized = isinstance(supplied, dict) and "rule_version" in supplied
+            recipe = supplied
+            if normalized:
+                arguments(supplied, ("rule", "rule_version", "query", "case_id", "threshold"), ("rule", "rule_version", "query"))
+                if type(supplied["rule_version"]) is not int or supplied["rule_version"] != RULE_VERSION:
+                    invalid("Watch rule version changed; preview it again", "chain_analysis_stale")
+                recipe = {key: supplied[key] for key in ("rule", "threshold") if key in supplied}
+                recipe.update({"case_id": supplied["case_id"]} if supplied.get("case_id") else {"query": supplied["query"]})
+            plan = preview(conn, profile_id, recipe)
+            if normalized and plan["definition"] != supplied or plan["plan_id"] != args["expected_plan_id"]:
                 invalid("Evidence or book changed; preview this watch again", "chain_analysis_stale")
             return create(conn, profile_id, {"plan": plan})
     arguments(args, ("plan",), ("plan",))
