@@ -63,3 +63,12 @@ class NetworkBoundaryTests(unittest.TestCase):
         self.assertEqual(json.loads(effective["config_json"])["network"],"regtest")
         self.assertEqual(json.loads(effective["config_json"])["chain_instance_id"],binding["chain_instance_id"])
         self.assertEqual(self.conn.execute("SELECT config_json FROM wallets WHERE id='wallet-a'").fetchone()[0],"{}")
+
+    def test_wallet_update_normalization_keeps_the_bound_regtest_default(self):
+        from kassiber.core.wallets import update_wallet
+        self.conn.execute("UPDATE wallets SET kind='custom' WHERE id='wallet-a'")
+        binding = self.bind("regtest")
+        update_wallet(self.conn,"ws-1","profile-1","wallet-a",{"config":{"chain":"bitcoin"}})
+        config = json.loads(self.conn.execute("SELECT config_json FROM wallets WHERE id='wallet-a'").fetchone()[0])
+        self.assertEqual(config["network"],"regtest")
+        self.assertEqual(config["chain_instance_id"],binding["chain_instance_id"])

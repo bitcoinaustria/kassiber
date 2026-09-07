@@ -798,6 +798,7 @@
       },
       "passphrase": "Backup passphrase (at least 12 characters)",
       "confirmPassphrase": "Confirm passphrase"
-    }
+    },
+    "customBackend": "Choose a custom backend for this book’s network ({{network}}). Public mainnet presets cannot serve it."
   }
 }

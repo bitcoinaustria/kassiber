@@ -54,6 +54,12 @@ class ChainAnalysisAcquisitionTests(unittest.TestCase):
     def http(self, **routes):
         return FakeHTTP({"/block-height/0": acquisition.GENESIS[("bitcoin", "main")].encode(), **routes})
 
+    def test_backend_declared_instance_conflict_is_rejected_from_flattened_config(self):
+        self.conn.execute("UPDATE backends SET config_json=? WHERE name='node'", (json.dumps({"chain_instance_id":"foreign-instance"}),))
+        with patch.object(acquisition.transport, "urlopen_with_proxy", side_effect=AssertionError("unexpected egress")):
+            with self.assertRaisesRegex(AppError, "different local chain instance"):
+                self.plan()
+
     def test_plan_is_local_and_tampering_is_rejected_before_egress(self):
         with patch.object(acquisition.transport, "urlopen_with_proxy", side_effect=AssertionError("unexpected egress")):
             plan = self.plan()
@@ -130,7 +136,7 @@ class ChainAnalysisAcquisitionTests(unittest.TestCase):
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM chain_analysis_observations").fetchone()[0], 0)
 
     def test_wallet_change_between_validation_and_dispatch_cannot_add_query_subjects(self):
-        self.book._insert_transaction(tx_id="initial", external_id=tid(2), raw_json=raw(2))
+        self.book._insert_transaction(tx_id="initial", external_id=tid(2), raw_json={**raw(2),"network":"main","chain":"bitcoin"})
         plan = self.plan(subject="wal")
         read_index = acquisition.build_index
         reads = 0
@@ -139,7 +145,7 @@ class ChainAnalysisAcquisitionTests(unittest.TestCase):
             index = read_index(conn, profile_id)
             reads += 1
             if reads == 1:
-                self.book._insert_transaction(tx_id="added", external_id=tid(3), raw_json=raw(3))
+                self.book._insert_transaction(tx_id="added", external_id=tid(3), raw_json={**raw(3),"network":"main","chain":"bitcoin"})
             return index
         http = self.http(**{f"/tx/{tid(2)}": raw(2), f"/tx/{tid(3)}": raw(3)})
         with patch.object(acquisition, "build_index", side_effect=index_then_change), patch.object(acquisition.transport, "urlopen_with_proxy", side_effect=http):

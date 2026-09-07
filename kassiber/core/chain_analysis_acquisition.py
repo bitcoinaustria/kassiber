@@ -85,10 +85,7 @@ def _prepare_acquisition(conn, profile_id, args):
     from .book_network import resolve_book_environment, require_chain_domain
     book = resolve_book_environment(conn, profile_id)
     domain = require_chain_domain(conn, profile_id, value["chain"], value["network"], operation="acquisition")
-    backend_config = backend.get("config_json") or {}
-    if isinstance(backend_config, str):
-        backend_config = json.loads(backend_config)
-    if backend_config.get("chain_instance_id") and backend_config["chain_instance_id"] != domain["chain_instance_id"]:
+    if backend.get("chain_instance_id") and backend["chain_instance_id"] != domain["chain_instance_id"]:
         invalid("This backend is assigned to a different local chain instance")
     index = build_index(conn, profile_id)
     subject = value["subject"].lower()

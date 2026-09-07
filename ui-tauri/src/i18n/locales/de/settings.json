@@ -798,6 +798,7 @@
       },
       "passphrase": "Backup-Passphrase (mindestens 12 Zeichen)",
       "confirmPassphrase": "Passphrase bestätigen"
-    }
+    },
+    "customBackend": "Wähle einen eigenen Backend für das Netzwerk dieses Buchs ({{network}}). Öffentliche Mainnet-Vorlagen passen dazu nicht."
   }
 }

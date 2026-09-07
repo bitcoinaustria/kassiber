@@ -74,3 +74,24 @@ class NetworkPartitionTests(unittest.TestCase):
             self.assertTrue(database_instance_id(restored))
             self.assertNotEqual(database_instance_id(restored), database_instance_id(self.conn))
             self.assertEqual(restored.execute("SELECT environment FROM book_network_bindings").fetchone()[0], "main")
+
+    def test_encrypted_partition_is_keyed_before_rows_reach_disk(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from kassiber.core import book_network_migration as migration
+        from kassiber.db import open_db
+        from kassiber.secrets.sqlcipher import looks_like_plaintext_sqlite, sqlcipher_available
+        if not sqlcipher_available():
+            self.skipTest("SQLCipher unavailable")
+        plan = migration.plan_network_partition(self.conn, "profile-1", self.args)
+        opened = []
+        def keyed_target(root, **kwargs):
+            target = open_db(root, **kwargs)
+            self.assertFalse(looks_like_plaintext_sqlite(Path(root) / "kassiber.sqlite3"))
+            self.assertEqual(target.execute("SELECT COUNT(*) FROM transactions").fetchone()[0], 0)
+            opened.append(kwargs["passphrase"])
+            return target
+        with tempfile.TemporaryDirectory() as folder, patch.object(migration, "open_db", side_effect=keyed_target):
+            migration.export_network_partition(self.conn, "profile-1", {**self.args,"plan_id":plan["plan_id"]}, data_root=folder, output_path=Path(folder)/"keyed.kassiber", backup_passphrase="backup-test-password", db_passphrase="inner-project-password")
+        self.assertEqual(opened,["inner-project-password"])

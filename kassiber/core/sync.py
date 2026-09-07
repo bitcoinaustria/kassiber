@@ -526,7 +526,7 @@ def discover_wallet_backend(
         backend_config = backend.get("config_json") or {}
         if isinstance(backend_config, str):
             backend_config = json.loads(backend_config)
-        backend_instance = backend_config.get("chain_instance_id")
+        backend_instance = backend.get("chain_instance_id") or backend_config.get("chain_instance_id")
         if backend_instance is not None and backend_instance != config.get("chain_instance_id"):
             raise AppError("Backend belongs to another local chain instance", code="book_network_mismatch")
         phase = "discovery"

@@ -1064,14 +1064,15 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
         else:
             config[key] = value
 
-    from .book_network import guard_wallet
+    from .book_network import guard_wallet, new_wallet_config
+    config = new_wallet_config(conn, profile["id"], wallet["kind"], config)
+    config = _validated_wallet_config(wallet["kind"], config)
     has_history = conn.execute("SELECT 1 FROM transactions WHERE wallet_id=? LIMIT 1", (wallet["id"],)).fetchone()
     guard_wallet(conn, profile["id"], config, previous_config=json.loads(wallet["config_json"] or "{}") if has_history else None)
     if has_history:
         from .book_network import guard_observation
         for observed in conn.execute("SELECT asset,raw_json FROM transactions WHERE wallet_id=?", (wallet["id"],)):
             guard_observation(conn, profile["id"], {**dict(observed), "wallet_config_json": config}, operation="wallet_update")
-    config = _validated_wallet_config(wallet["kind"], config)
     ownership_identity_changed = (
         policy_identity_material(config) != original_ownership_identity
     )

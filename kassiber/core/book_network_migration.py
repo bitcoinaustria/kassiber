@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 from ..backup.age_cli import encrypt_age_stream
-from ..db import SCHEMA, ensure_schema_compat, ensure_database_instance_id, resolve_attachments_root
+from ..db import open_db, resolve_attachments_root
 from .attachments import _resolve_stored_path, _hash_file
 from .book_network import ENVIRONMENTS, _digest, _error, inventory_book_network, plan_book_network, apply_book_network
 from .sync_replication.schema_allowlist import SYNC_TABLES, public_wallet_config
@@ -165,14 +165,12 @@ def export_network_partition(conn, profile_id, args, *, data_root, output_path, 
         _error("An age public recipient is required", code="validation")
     if backup_passphrase is not None and (not isinstance(backup_passphrase, str) or len(backup_passphrase) < 12):
         _error("Use a backup passphrase of at least 12 characters", code="validation")
+    if conn.execute("PRAGMA cipher_version").fetchone() and not db_passphrase:
+        _error("The unlocked project key is required for an encrypted partition", code="passphrase_required")
     with tempfile.TemporaryDirectory(prefix="kassiber-network-partition-") as stage:
         root = Path(stage)
-        target = sqlite3.connect(root / "kassiber.sqlite3")
-        target.row_factory = sqlite3.Row
+        target = open_db(root, passphrase=db_passphrase)
         try:
-            target.executescript(SCHEMA)
-            ensure_schema_compat(target)
-            ensure_database_instance_id(target)
             target.execute("PRAGMA foreign_keys=OFF")
             for table, rows in kept.items():
                 for source in rows:
@@ -194,9 +192,6 @@ def export_network_partition(conn, profile_id, args, *, data_root, output_path, 
             target.commit()
         finally:
             target.close()
-        if db_passphrase:
-            from ..secrets.migration import migrate_plaintext_to_encrypted
-            migrate_plaintext_to_encrypted(root / "kassiber.sqlite3", db_passphrase)
         archive = root / "partition.tar"
         with tarfile.open(archive, "w") as tar:
             tar.add(root / "kassiber.sqlite3", arcname="kassiber.sqlite3")

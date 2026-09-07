@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useDaemonMutation } from "@/daemon/client";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
   CLN_PRESENCE_SENTINEL_COMMANDO_PEER,
   CLN_PRESENCE_SENTINEL_LIGHTNING_DIR,
@@ -476,6 +476,7 @@ export function SyncBackendSettingsModal({
   onSave,
 }: SyncBackendSettingsModalProps) {
   const { t } = useTranslation(["settings", "common"]);
+  const bookScope = useDaemon<{state:string;domains:{chain:string;network:string}[]}>("ui.networks.binding", {}, {enabled:open && !initial});
   const testElectrum = useDaemonMutation<{
     ok: boolean;
     logs: string[];
@@ -530,7 +531,9 @@ export function SyncBackendSettingsModal({
   const isEditing = Boolean(initial);
   // Editing connection details must not reinterpret the backend's chain identity.
   const chain = initial?.chain ?? (type.net === "LIQUID" ? "liquid" : "bitcoin");
-  const network = initial?.network ?? (type.net === "LIQUID" ? "liquidv1" : "main");
+  const bookDomain = bookScope.data?.data?.domains.find(domain => domain.chain === chain);
+  const network = initial?.network ?? bookDomain?.network ?? (type.net === "LIQUID" ? "liquidv1" : "main");
+  const networkBlocked = !initial && (bookScope.isLoading || bookScope.isError || (bookScope.data?.data?.state === "bound" && (!bookDomain || (backendSource === "preset" && !["main", "liquidv1"].includes(network)))));
   const scopedTypes = React.useMemo(
     () => (isEditing ? SYNC_BACKEND_NETWORKS : scopedBackendTypes(initialTypeId)),
     [initialTypeId, isEditing],
@@ -834,6 +837,7 @@ export function SyncBackendSettingsModal({
   };
 
   const testConnection = async () => {
+    if (networkBlocked) return false;
     if (!effectiveUrl) return false;
     if (isCoreLightning) {
       setTestState("ok");
@@ -955,7 +959,7 @@ export function SyncBackendSettingsModal({
   });
 
   const canAdd =
-    name.trim().length > 0 &&
+    !networkBlocked && name.trim().length > 0 &&
     effectiveUrl.length > 0 &&
     (!isCoreLightning || coreLightningModeValid);
   const save = async () => {
@@ -1133,6 +1137,7 @@ export function SyncBackendSettingsModal({
               <section className="space-y-3">
                 <div>
                   <Label>{t("backendModal.backendSourceLabel")}</Label>
+                  {networkBlocked && <p role="status" className="text-xs text-muted-foreground">{t("bookNetwork.customBackend", {network})}</p>}
                   <p className="text-xs text-muted-foreground">
                     {t("backendModal.backendSourceHint")}
                   </p>
@@ -1840,7 +1845,7 @@ export function SyncBackendSettingsModal({
                     void testConnection();
                   }}
                   disabled={
-                    !effectiveUrl || testState === "testing" || isSavingBackend
+                    networkBlocked || !effectiveUrl || testState === "testing" || isSavingBackend
                   }
                 >
                   <RefreshCw

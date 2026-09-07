@@ -592,8 +592,8 @@ export function SettingsScreen({
           label: backend.name,
           kind: "coreln",
           backend: backend.name,
-          chain: "bitcoin",
-          network: "main",
+          chain: backend.chain ?? "bitcoin",
+          network: backend.network ?? "main",
         });
       }
     }

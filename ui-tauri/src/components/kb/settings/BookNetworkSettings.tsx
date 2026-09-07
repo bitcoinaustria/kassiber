@@ -1,5 +1,5 @@
 import { NetworkPartitionSettings } from "./NetworkPartitionSettings";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ type WalletScope = { wallet_id: string; label: string; environments: string[]; t
 type Inventory = { profile_id: string; state: string; wallets: WalletScope[]; inventory_digest: string; binding: { state: string; environment?: string; chain_instance_id?: string | null; domains: { chain: string; network: string }[] } };
 type Plan = { plan_id: string; profile_id: string; inventory_digest: string; environment: string; chain_instance_id: string | null; declared_wallet_ids: string[]; can_apply: boolean; blockers: { code: string; wallet_id?: string }[] };
 
-export function BookNetworkSettings() {
+export function BookNetworkSettings({ children }: { children?: ReactNode } = {}) {
   const { t } = useTranslation(["settings", "common"]);
   const query = useDaemon<Inventory>("ui.networks.inventory");
   const preview = useDaemonMutation<Plan>("ui.networks.plan");
@@ -64,6 +64,7 @@ export function BookNetworkSettings() {
       </div>}
     </>)}
     {inventory && !bound && <NetworkPartitionSettings key={inventory.profile_id} profileId={inventory.profile_id} inventoryDigest={inventory.inventory_digest} environment={environment} instance={instance} wallets={inventory.wallets} declared={declared} />}
+    {inventory && !bound && children}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
   </section>;
 }

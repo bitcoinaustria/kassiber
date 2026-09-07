@@ -109,7 +109,7 @@ export function NetworkLayerSettingsPanel({
         </div>
       )}
 
-      {layer === "bitcoin" ? <><BookNetworkSettings /><AnalysisNetworkSettings /></> : null}
+      {layer === "bitcoin" ? <BookNetworkSettings><AnalysisNetworkSettings /></BookNetworkSettings> : null}
 
       {layer === "bitcoin" || layer === "liquid" ? (
         <p className="text-xs text-muted-foreground">
