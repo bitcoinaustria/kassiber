@@ -15,6 +15,7 @@ import uuid
 
 from embit.psbt import PSBT
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 from kassiber.core.chain_analysis import build_index, run_analysis, run_entropy
 from kassiber.core.chain_analysis.psbt import analyze_psbt, compare_psbts
@@ -98,7 +99,11 @@ class LiveChainAnalysisTest(unittest.TestCase):
         self.assertEqual(final["verified_tip_height"], tip)
         self.assertEqual(self.conn.execute("SELECT count(*) FROM transactions").fetchone()[0], 0)
         self.rpc("invalidateblock", [previous_tip])
+        # A new coinbase destination forces a distinct replacement even when
+        # both blocks are mined within the same second.
+        self.mining_address = self.address(self.miner)
         self.mine(1)
+        self.assertNotEqual(self.rpc("getblockhash", [tip]), previous_tip)
         changed = backfill.run(self.conn, "p", source["id"])
         self.assertEqual(changed["last_code"], "reorg_reconciling", changed)
         self.assertIsNone(changed["verified_tip_height"])
@@ -112,7 +117,14 @@ class LiveChainAnalysisTest(unittest.TestCase):
         self.assertEqual(self.conn.execute("SELECT count(*) FROM transactions").fetchone()[0], 0)
 
     def rpc(self, method, params=None, wallet=None):
-        return _rpc(self.url, self.username, self.password, method, params, wallet)
+        try:
+            return _rpc(self.url, self.username, self.password, method, params, wallet)
+        except HTTPError as error:
+            try:
+                detail = json.loads(error.read()).get("error")
+            except (ValueError, AttributeError):
+                detail = "No JSON-RPC error body"
+            raise AssertionError(f"Core {method} failed ({error.code}): {detail}") from error
 
     def wallet(self):
         name = f"chain-analysis-{uuid.uuid4().hex[:12]}"
