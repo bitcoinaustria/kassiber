@@ -1,4 +1,4 @@
-import { formatShortTxid } from "./model";
+import { formatShortTxid, type Transaction } from "./model";
 
 export type TransactionGraphAnnotation = {
   code: string;
@@ -283,4 +283,13 @@ export function nodeTooltipTitle(node: TransactionGraphNode) {
   if (node.outpoint && title === node.outpoint) return formatShortTxid(node.outpoint);
   if (title.length > 48) return formatShortTxid(title);
   return title;
+}
+
+/** A trade receipt is a book record, never invented UTXO topology. */
+export function graphlessTradeKind(transaction: Transaction, graph?: TransactionGraphPayload) {
+  if (graph?.supportLevel !== "graphless" || graph.swapRoute) return null;
+  if ([graph.transaction?.txid, transaction.explorerId, transaction.txnId]
+    .some(id => typeof id === "string" && /^[a-f\d]{64}$/i.test(id))) return null;
+  const kind = (transaction.kindOverride ?? transaction.kind ?? transaction.sourceType ?? "").trim().toLowerCase();
+  return kind === "buy" ? "buy" : kind === "sell" || kind === "sale" ? "sell" : null;
 }

@@ -681,22 +681,21 @@ def _ui_transaction_payment_method_sql() -> str:
           WHEN lower(t.asset) = 'lbtc'
             OR lower(w.kind) IN ('liquid')
             OR lower(w.config_json) LIKE '%"chain"%liquid%'
-            OR lower(w.label) LIKE '%liquid%'
-            OR lower(w.label) LIKE '%lbtc%'
             THEN 'Liquid'
           WHEN lower(w.kind) IN ('lnd', 'core-ln', 'coreln', 'nwc', 'phoenix')
-            OR lower(w.label) LIKE '%lightning%'
-            OR lower(w.label) LIKE '%phoenix%'
-            OR lower(w.label) LIKE '% ln%'
-            OR lower(w.label) LIKE 'ln %'
-            OR lower(w.label) LIKE '%(ln)%'
             THEN 'Lightning'
           WHEN lower(w.kind) IN (
-              'kraken', 'bitstamp', 'coinbase', 'bitpanda', 'river',
-              'bullbitcoin', 'coinfinity', 'strike', 'exchange'
+              'kraken', 'bitstamp', 'coinbase', 'bitpanda', 'river', 'binance',
+              'bullbitcoin', 'coinfinity', 'strike', 'exchange', '21bitcoin', 'pocketbitcoin'
             )
-            OR lower(w.label) LIKE '%exchange%'
             THEN 'Exchange'
+          WHEN lower(w.label) LIKE '%liquid%' OR lower(w.label) LIKE '%lbtc%'
+            THEN 'Liquid'
+          WHEN lower(w.label) LIKE '%lightning%' OR lower(w.label) LIKE '%phoenix%'
+            OR lower(w.label) LIKE '% ln%' OR lower(w.label) LIKE 'ln %'
+            OR lower(w.label) LIKE '%(ln)%'
+            THEN 'Lightning'
+          WHEN lower(w.label) LIKE '%exchange%' THEN 'Exchange'
           ELSE 'On-chain'
         END
     """.strip()
@@ -1792,7 +1791,7 @@ def _connections(
 
 def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, Any]]:
     rows = conn.execute(
-        """
+        f"""
         SELECT
             t.id,
             t.external_id AS external_id,
@@ -1800,6 +1799,7 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
             t.confirmed_at,
             w.label AS wallet,
             w.kind AS wallet_kind,
+            {_ui_transaction_payment_method_sql()} AS payment_method,
             w.config_json AS wallet_config_json,
             t.direction,
             t.asset,
@@ -1848,7 +1848,7 @@ def _activity_transactions(
     has_book_state: bool,
 ) -> list[dict[str, Any]]:
     rows = conn.execute(
-        """
+        f"""
         SELECT
             t.id,
             t.external_id AS external_id,
@@ -1856,6 +1856,7 @@ def _activity_transactions(
             t.confirmed_at,
             w.label AS wallet,
             w.kind AS wallet_kind,
+            {_ui_transaction_payment_method_sql()} AS payment_method,
             w.config_json AS wallet_config_json,
             t.direction,
             t.asset,
@@ -1939,6 +1940,7 @@ def _activity_transactions(
         "asset",
         "chain",
         "network",
+        "paymentMethod",
         "account",
         "counter",
         "amountSat",
@@ -2396,6 +2398,7 @@ def _transaction_row_to_ui(
         "asset": row["asset"] if "asset" in row_keys else None,
         "chain": chain,
         "network": network,
+        "paymentMethod": row["payment_method"] if "payment_method" in row_keys else None,
         "account": account,
         "counter": counter,
         "amountSat": _ui_sat_amount(amount_msat),
@@ -4034,6 +4037,7 @@ def _build_transactions_page_snapshot(
             t.created_at AS _created_at,
             w.label AS wallet,
             w.kind AS wallet_kind,
+            {_ui_transaction_payment_method_sql()} AS payment_method,
             w.config_json AS wallet_config_json,
             t.direction,
             t.asset,
@@ -4469,6 +4473,7 @@ def build_transactions_dashboard_snapshot(
         f"""
         SELECT t.id, t.external_id AS external_id, t.occurred_at, t.confirmed_at,
                w.label AS wallet, w.kind AS wallet_kind,
+               {_ui_transaction_payment_method_sql()} AS payment_method,
                w.config_json AS wallet_config_json, t.direction, t.asset,
                t.amount, t.fee, t.fiat_currency, t.fiat_value, t.fiat_rate,
                t.pricing_source_kind, t.pricing_quality, t.pricing_external_ref,
@@ -4605,13 +4610,7 @@ def build_transactions_dashboard_snapshot(
 
     payment_methods = sorted(
         {
-            "Lightning"
-            if "lightning" in str(tx.get("account") or "").lower()
-            or "phoenix" in str(tx.get("account") or "").lower()
-            else "Liquid"
-            if str(tx.get("chain") or "").lower() == "liquid"
-            or "liquid" in str(tx.get("account") or "").lower()
-            else "On-chain"
+            str(tx.get("paymentMethod") or "On-chain")
             for tx in transactions
         }
     )
@@ -4752,7 +4751,7 @@ def build_transactions_resolve_snapshot(
     external_id_candidates = list(id_candidates)
     if query.upper() not in external_id_candidates:
         external_id_candidates.append(query.upper())
-    select_sql = """
+    select_sql = f"""
         SELECT
             t.id,
             t.external_id AS external_id,
@@ -4760,6 +4759,7 @@ def build_transactions_resolve_snapshot(
             t.confirmed_at,
             w.label AS wallet,
             w.kind AS wallet_kind,
+            {_ui_transaction_payment_method_sql()} AS payment_method,
             w.config_json AS wallet_config_json,
             t.direction,
             t.asset,

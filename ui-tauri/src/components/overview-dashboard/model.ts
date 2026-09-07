@@ -315,7 +315,7 @@ export type Transaction = {
   scopeLabel?: string;
   counterparty: string;
   counterpartyInitials: string;
-  paymentMethod?: "On-chain" | "Lightning" | "Liquid" | "Other";
+  paymentMethod?: "On-chain" | "Lightning" | "Liquid" | "Exchange" | "Other";
   tags: string[];
   status: TransactionStatus;
   flow?: OverviewTransactionFlow;
@@ -2460,7 +2460,7 @@ export function toDashboardTransaction(
     typeof t === "function" ? t("recentTx.unassigned") : "Unassigned";
   const account = tx.account || tx.counter || unassignedLabel;
   const accountLower = account.toLowerCase();
-  const paymentMethod = accountLower.includes("liquid")
+  const paymentMethod = tx.paymentMethod ?? (accountLower.includes("liquid")
     ? "Liquid"
     : accountLower.includes("lightning") ||
         accountLower.includes("ln") ||
@@ -2473,7 +2473,7 @@ export function toDashboardTransaction(
           accountLower.includes("vault") ||
           accountLower.includes("multisig")
         ? "On-chain"
-        : "Other";
+        : "Other");
   const status: TransactionStatus = tx.internal
     ? "pending"
     : tx.conf > 0

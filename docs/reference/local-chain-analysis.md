@@ -23,6 +23,21 @@ handoff network takes precedence, and each inspection pins its network at mount;
 changing the default never relabels existing results. The graph's chain/network
 filters remain query scope, not permission to access any backend.
 
+Transaction details keep their Mempool-style input/output diagram. They also
+reuse compatible transaction references already stored in the same profile,
+including Chain Analysis acquisitions, without a network request. References
+must agree on chain, network, transaction identity and known physical facts;
+conflicting or over-limit sources leave the original graph unchanged. Reusing
+these references never grants wallet ownership or journal custody authority.
+
+An exchange trade without blockchain input/output data remains an accounting
+record without a physical flow diagram. Unlinked purchases and sales show a
+compact trade receipt; fiat trade values require exact exchange-execution
+provenance and never substitute a market valuation. Missing counts stay unknown, imported
+fees do not become miner fees, and the detail view omits empty technical fields.
+The investigation link follows the displayed transaction and requires a scoped
+blockchain identity.
+
 [Privacy Mirror](privacy-mirror.md) is the concise public-observer summary of
 this same engine. `analyze_snapshot` composes an immutable canonical index after
 observer projection; Mirror adds personal relevance, executed-check coverage and

@@ -32,6 +32,7 @@ import {
   marketRateSyncLabel,
   normalizeTimePeriodParam,
   overviewTransactions,
+  toDashboardTransaction,
   positiveLogDomain,
   powerLawDaysFor,
   powerLawXDomain,
@@ -232,6 +233,13 @@ describe("overview market rate display", () => {
 });
 
 describe("overview transaction rows", () => {
+  it("prefers canonical exchange classification over wallet-name guesses", () => {
+    const tx = { id: "strike", date: "2026-01-01", type: "Sell" as const,
+      account: "Lightning savings", counter: "", amountSat: -1000,
+      eur: null, rate: null, tag: "", conf: 1, paymentMethod: "Exchange" as const };
+    expect(toDashboardTransaction(tx, 0).paymentMethod).toBe("Exchange");
+    expect(toDashboardTransaction({ ...tx, account: "Exchange", paymentMethod: "Lightning" }, 0).paymentMethod).toBe("Lightning");
+  });
   it("does not substitute demo rows for an empty live snapshot", () => {
     const snapshot: OverviewSnapshot = {
       ...MOCK_OVERVIEW,

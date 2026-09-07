@@ -31,6 +31,7 @@ from ..time_utils import now_iso
 from ..wallet_descriptors import default_policy_asset_id, liquid_asset_code
 from . import custody_journal
 from . import ownership as core_ownership
+from .transaction_references import load_local_transaction_reference, reference_scope
 from .ownership_transfers import (
     _norm_chain_network,
     _parse_onchain_tx,
@@ -826,10 +827,10 @@ def _parse_graph(
         return {
             "supportLevel": "graphless",
             "unsupportedReason": reason,
-            "metadata": {**metadata, "inputCount": 0, "outputCount": 0},
+            "metadata": metadata,
             "inputs": [],
             "outputs": [],
-            "fee": _fee_from_graph_or_row(row, [], [], metadata),
+            "fee": None,
             "_warnings": graphless_warnings,
         }
 
@@ -959,8 +960,8 @@ def _parse_graph(
         "inputCount": len(inputs),
         "outputCount": len(outputs),
     }
-    fee = _fee_from_graph_or_row(
-        row, inputs, outputs, metadata, explicit_fee_sats=liquid_fee_sats
+    fee = _fee_from_graph(
+        inputs, outputs, metadata, explicit_fee_sats=liquid_fee_sats
     )
     return {
         "supportLevel": support,
@@ -1025,6 +1026,27 @@ def _enrich_reference_graph_raw(
         if liquid
         else _row_chain_network(row)
     )
+    if chain == "unknown":
+        return _with_graph_lookup_warning(raw, "invalid_reference_scope", "Conflicting or unsupported network metadata prevents transaction reference lookup.")
+    local = load_local_transaction_reference(
+        conn, profile_id=str(_row_get(row, "profile_id") or ""),
+        chain=chain, network=network, txid=str(txid).lower(), current=raw,
+    )
+    if local.conflict:
+        return _with_graph_lookup_warning(
+            raw, "local_reference_conflict",
+            "Local transaction references disagree or exceed the inspection limit; the stored transaction is shown unchanged.",
+        )
+    if local.payload is not None:
+        raw = {
+            **local.payload,
+            "_graphLookupWarning": {
+                "code": "local_transaction_reference", "level": "info",
+                "message": "Uses transaction references already stored in this book. References do not establish wallet ownership or booked custody.",
+            },
+        }
+        if liquid or _bitcoin_current_graph_has_required_prevouts(raw):
+            return raw
     cached = _load_graph_lookup_cache(conn, chain, network, str(txid))
     if cached is not None and (
         liquid or _bitcoin_current_graph_has_required_prevouts(cached)
@@ -2830,8 +2852,7 @@ def _public_node(node: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _fee_from_graph_or_row(
-    row: Mapping[str, Any],
+def _fee_from_graph(
     inputs: Sequence[Mapping[str, Any]],
     outputs: Sequence[Mapping[str, Any]],
     metadata: Mapping[str, Any],
@@ -2853,10 +2874,9 @@ def _fee_from_graph_or_row(
             if computed >= 0:
                 value_sats = computed
     if value_sats is None:
-        fee_msat = int(_row_get(row, "fee") or 0)
-        if fee_msat <= 0:
-            return None
-        value_sats = fee_msat // SATS_TO_MSAT
+        # An imported fee belongs to the focused account and may be an exchange
+        # fee or one participant's contribution. It cannot price the whole tx.
+        return None
     fee = {
         "id": "fee",
         "label": "Miner fee",
@@ -3198,8 +3218,9 @@ def _row_chain_network(
     default_network: str = "main",
 ) -> tuple[str, str]:
     config = _json_obj(_row_get(row, "wallet_config_json"))
-    chain = str(config.get("chain") or default_chain).lower()
-    network = str(config.get("network") or default_network).lower()
+    raw = _json_obj(_row_get(row, "raw_json"))
+    chain = str(raw.get("chain") or config.get("chain") or default_chain).lower()
+    network = str(raw.get("network") or config.get("network") or default_network).lower()
     asset = str(_row_get(row, "asset") or "").upper()
     wallet_kind = str(_row_get(row, "wallet_kind") or "").lower()
     if "liquid" in wallet_kind or asset in {"LBTC", "L-BTC", "LIQUID-BTC"}:
@@ -3208,7 +3229,7 @@ def _row_chain_network(
             network = "liquidv1"
     elif chain in {"", "btc"}:
         chain = "bitcoin"
-    return _norm_chain_network(chain, network)
+    return reference_scope(row, default_chain=chain, default_network=network) or ("unknown", "unknown")
 
 
 def _json_obj(value: Any) -> dict[str, Any]:

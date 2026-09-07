@@ -715,7 +715,7 @@
     "feeRate": "Gebührensatz",
     "fullSupport": "Bewerteter Bitcoin-Input/Output-Graph",
     "graphless": "Kein Graph für diese Quelle",
-    "graphlessBody": "Diese Zeile wurde ohne bewertete Bitcoin-vin/vout-Daten importiert; Kassiber kann die Buchungszeile, aber kein Flussdiagramm anzeigen.",
+    "graphlessBody": "Für diesen Datensatz sind keine Blockchain-Ein- oder -Ausgänge gespeichert. Börsenkäufe, Verkäufe und andere Off-Chain-Buchungen können ohne Blockchain-Transaktion stattfinden.",
     "hidden": "Verborgen",
     "hiddenReferences": "Graph-Referenzen verborgen",
     "inputCount": "Inputs",
@@ -808,6 +808,8 @@
     "transferRouteTitle": "Manuelle Transfer-Route",
     "unsupported": "Nicht unterstützte Graphform",
     "warnings": {
+      "invalid_reference_scope": "Widersprüchliche Netzwerkangaben verhindern die Graph-Abfrage.",
+      "local_reference_conflict": "Lokale Referenzen widersprechen sich oder überschreiten das Prüflimit. Der ursprüngliche Graph wird angezeigt.",
       "bitcoin_reference_lookup_failed": "Die Bitcoin-Transaktions-Referenzen konnten von keinem konfigurierten Backend abgerufen werden.",
       "bitcoin_reference_lookup_failed_bitcoinrpc": "Die Bitcoin-Transaktions-Referenzen konnten nicht vom konfigurierten Bitcoin-Core-Backend abgerufen werden.",
       "bitcoin_reference_lookup_failed_electrum": "Die Bitcoin-Transaktions-Referenzen konnten nicht vom konfigurierten Electrum-Backend abgerufen werden.",
@@ -1155,5 +1157,16 @@
     "fieldMeaning": "Was bedeutet „{{label}}“?",
     "quarantineMeaning": "Was bedeutet „in Quarantäne“?",
     "copy": "{{label}} kopieren"
+  },
+  "recordFlow": {
+    "title": "Handel",
+    "sale": "Verkauf",
+    "purchase": "Kauf",
+    "sold": "Verkauft",
+    "bought": "Gekauft",
+    "reportedValue": "Handelswert laut Quelle",
+    "valueMissing": "Nicht in der Quelle enthalten",
+    "noChainTransaction": "Keine Blockchain-Transaktion verknüpft",
+    "reportedFee": "Gebühr laut Quelle"
   }
 }

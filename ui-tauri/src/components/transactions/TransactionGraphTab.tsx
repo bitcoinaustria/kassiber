@@ -8,7 +8,7 @@ import {
   Maximize2,
 } from "lucide-react";
 import type { TFunction } from "i18next";
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
@@ -1804,8 +1804,10 @@ export function TransactionGraphPanel({
   onSelectSwapLeg,
   onResolveIssue,
   onOpenTransaction,
+  graphlessContent,
 }: {
   graph?: TransactionGraphPayload;
+  graphlessContent?: ReactNode;
   loading?: boolean;
   error?: string | null;
   hideSensitive: boolean;
@@ -1863,6 +1865,11 @@ export function TransactionGraphPanel({
             hideSensitive={hideSensitive}
             onOpenTransaction={onOpenTransaction}
           />
+          <GraphWarnings graph={graph} onResolveIssue={onResolveIssue} />
+        </>
+      ) : !loading && !error && graph?.supportLevel === "graphless" && graphlessContent ? (
+        <>
+          {graphlessContent}
           <GraphWarnings graph={graph} onResolveIssue={onResolveIssue} />
         </>
       ) : (

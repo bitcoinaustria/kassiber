@@ -18,11 +18,12 @@ import {
   LedgerRow,
   networkLabel,
 } from "./TransactionDetailSheetParts";
+import { TransactionRecordFlow } from "./TransactionRecordFlow";
+import { TransactionGraphTechnicalDetails } from "./TransactionGraphTechnicalDetails";
 import { CommercialProvenancePanel } from "./TransactionDetailCommercialPanel";
 import {
   blurClass,
   currencyFormatter,
-  formatBtcAmount,
   formatShortTxid,
   SATS_PER_BTC,
 } from "./model";
@@ -39,6 +40,7 @@ import {
   transactionGraphLookupReferenceArgs,
 } from "./TransactionGraphLookup";
 import {
+  graphlessTradeKind,
   classifyRouteKind,
   classifyRouteOutRole,
   routeNetworkLabel,
@@ -265,41 +267,10 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
         ? activeSwapGraphQuery.error.message
         : null
       : graphError;
-  const graphTx = activeGraphData?.transaction;
-  const graphNetworkFeeBtc =
-    typeof activeGraphData?.fee?.valueBtc === "number"
-      ? activeGraphData.fee.valueBtc
-      : typeof activeGraphData?.fee?.valueSats === "number"
-        ? activeGraphData.fee.valueSats / SATS_PER_BTC
-        : 0;
-  const hiddenGraphValue = t("graph.hidden");
-  const technicalRows = graphTx
-    ? [
-        [t("details.inputCount"), graphTx.inputCount ?? activeGraphData.inputs.length],
-        [t("details.outputCount"), graphTx.outputCount ?? activeGraphData.outputs.length],
-        [
-          t("details.networkFee"),
-          graphNetworkFeeBtc
-            ? hideSensitive
-              ? hiddenGraphValue
-              : formatBtcAmount(graphNetworkFeeBtc)
-            : t("details.unknown"),
-        ],
-        [
-          t("details.feeRate"),
-          graphTx.feeRateSatVb
-            ? hideSensitive
-              ? hiddenGraphValue
-              : `${graphTx.feeRateSatVb} sat/vB`
-            : t("details.unknown"),
-        ],
-        [t("details.version"), graphTx.version ?? t("details.unknown")],
-        [t("details.locktime"), graphTx.locktime ?? t("details.unknown")],
-        [t("details.size"), graphTx.size ? `${graphTx.size} B` : t("details.unknown")],
-        [t("details.vsize"), graphTx.vsize ? `${graphTx.vsize} vB` : t("details.unknown")],
-        [t("details.weight"), graphTx.weight ? `${graphTx.weight} WU` : t("details.unknown")],
-      ]
-    : [];
+  const tradeKind = !graphPanelLoading && !graphPanelError ? graphlessTradeKind(transaction, activeGraphData) : null;
+  const analysisSearch = transactionAnalysisSearch(
+    activeGraphData?.transaction ?? (activeSwapTransactionRef ? {} : transaction),
+  );
   return (
     <>
                   {/* Details — read-only source-of-record + book metadata */}
@@ -449,7 +420,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                     </div>
                     <div className="overflow-hidden rounded-md border">
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        {t("graph.sectionTitle")}
+                        {t(tradeKind ? "recordFlow.title" : "graph.sectionTitle")}
                         {canPublicGraphLookup && !publicGraphLookup ? (
                           <Button
                             type="button"
@@ -464,6 +435,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                       </div>
                       <div className="p-3">
                         <TransactionGraphPanel
+                          graphlessContent={tradeKind ? <TransactionRecordFlow transaction={transaction} kind={tradeKind} hideSensitive={hideSensitive} /> : undefined}
                           graph={activeGraphData}
                           loading={graphPanelLoading}
                           error={graphPanelError}
@@ -475,31 +447,16 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         />
                       </div>
                     </div>
-                    <Button
+                    {analysisSearch.subject ? <Button
                       variant="outline"
                       size="sm"
                       className="self-start"
-                      onClick={() => void navigate({ to: "/chain-analysis", search: transactionAnalysisSearch(transaction) })}
+                      onClick={() => void navigate({ to: "/chain-analysis", search: analysisSearch })}
                     >
                       <Eye className="size-3.5" aria-hidden="true" />
                       {tPrivacy("investigateTransaction")}
-                    </Button>
-                    {technicalRows.length ? (
-                      <div className="overflow-hidden rounded-md border">
-                        <div className="border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          {t("details.technical")}
-                        </div>
-                        <div className="grid sm:grid-cols-2">
-                          {technicalRows.map(([label, value]) => (
-                            <LedgerRow
-                              key={String(label)}
-                              label={String(label)}
-                              value={value}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
+                    </Button> : null}
+                    <TransactionGraphTechnicalDetails graph={activeGraphData} hideSensitive={hideSensitive} />
                     <CommercialProvenancePanel
                       context={commercialContext}
                       loading={commercialContextLoading}

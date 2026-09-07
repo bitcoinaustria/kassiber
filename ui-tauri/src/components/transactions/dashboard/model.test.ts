@@ -77,6 +77,12 @@ function rawTx(overrides: Partial<Tx> = {}): Tx {
 }
 
 describe("transaction dashboard chart selection", () => {
+  it("uses daemon payment method instead of misleading account names", () => {
+    for (const account of ["Strike", "Lightning savings", "Liquid exchange"]) {
+      expect(toDashboardTransaction(rawTx({ account, chain: "bitcoin", paymentMethod: "Exchange" }), 0).paymentMethod).toBe("Exchange");
+    }
+    expect(toDashboardTransaction(rawTx({ account: "Exchange", paymentMethod: "Lightning" }), 0).paymentMethod).toBe("Lightning");
+  });
   it("preserves quarantine row ids in transaction detail deep links", () => {
     vi.stubGlobal("window", {
       location: {

@@ -696,7 +696,7 @@
     "feeRate": "Fee rate",
     "fullSupport": "Valued Bitcoin input/output graph",
     "graphless": "No graph for this source",
-    "graphlessBody": "This row was imported without valued Bitcoin vin/vout data, so Kassiber can show the accounting row but not a flow diagram.",
+    "graphlessBody": "No blockchain inputs or outputs are stored for this record. Exchange trades and other off-chain entries may have no blockchain transaction.",
     "hidden": "Hidden",
     "hiddenReferences": "Hidden graph references",
     "inputCount": "Inputs",
@@ -789,6 +789,8 @@
     "transferRouteTitle": "Manual transfer route",
     "unsupported": "Unsupported graph shape",
     "warnings": {
+      "invalid_reference_scope": "Conflicting network information prevents graph lookup.",
+      "local_reference_conflict": "Local references disagree or exceed the inspection limit. The original graph is shown.",
       "bitcoin_reference_lookup_failed": "Could not fetch Bitcoin transaction references from a configured backend.",
       "bitcoin_reference_lookup_failed_bitcoinrpc": "Could not fetch Bitcoin transaction references from the configured Bitcoin Core backend.",
       "bitcoin_reference_lookup_failed_electrum": "Could not fetch Bitcoin transaction references from the configured Electrum backend.",
@@ -1155,5 +1157,16 @@
     "fieldMeaning": "What does \"{{label}}\" mean?",
     "quarantineMeaning": "What does quarantined mean?",
     "copy": "Copy {{label}}"
+  },
+  "recordFlow": {
+    "title": "Trade",
+    "sale": "Sale",
+    "purchase": "Purchase",
+    "sold": "Sold",
+    "bought": "Bought",
+    "reportedValue": "Reported trade value",
+    "valueMissing": "Not in the source record",
+    "noChainTransaction": "No blockchain transaction linked",
+    "reportedFee": "Reported fee"
   }
 }

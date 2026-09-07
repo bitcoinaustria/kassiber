@@ -47,3 +47,10 @@ describe("Chain Analysis navigation", () => {
     }
   });
 });
+
+it("opens the displayed graph transaction with its own network scope", () => {
+  const metadata = { id: "swap-other-leg", txid: "B".repeat(64), chain: "bitcoin", network: "signet" };
+  expect(transactionAnalysisSearch(metadata)).toMatchObject({
+    subject: "b".repeat(64), chain: "bitcoin", network: "signet", mode: "trace",
+  });
+});

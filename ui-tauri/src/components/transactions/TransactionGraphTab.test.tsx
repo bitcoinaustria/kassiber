@@ -1319,7 +1319,7 @@ describe("TransactionGraphPanel", () => {
     );
 
     expect(html).toContain("No graph for this source");
-    expect(html).toContain("without valued Bitcoin vin/vout data");
+    expect(html).toContain("Exchange trades and other off-chain entries");
   });
 
   it("keeps graphless Liquid rows inside Kassiber instead of linking out", () => {
@@ -1546,4 +1546,15 @@ describe("route classifiers", () => {
     expect(routeNetworkLabel("USDT")).toBe("USDT");
     expect(routeNetworkLabel(null)).toBeUndefined();
   });
+});
+
+it("keeps graph warnings beside a graphless trade receipt", () => {
+  const graphless: TransactionGraphPayload = {
+    transaction: { id: "sale" }, supportLevel: "graphless", inputs: [], outputs: [],
+    warnings: [{ code: "custom_warning", level: "warning", message: "Review pending" }],
+  };
+  const html = renderToStaticMarkup(<TransactionGraphPanel graph={graphless} hideSensitive={false} graphlessContent={<div>Trade receipt</div>} />);
+  expect(html).toContain("Trade receipt");
+  expect(html).toContain("Review pending");
+  expect(html).not.toContain("No graph for this source");
 });

@@ -62,9 +62,9 @@ export function analysisInvestigationSearch(query: AnalysisQuery, workspace: Ana
 }
 
 /** Public views accept physical identities only; private record aliases never cross the observer boundary. */
-export function transactionAnalysisSearch(record: { explorerId?: string; txnId?: string; chain?: string | null; network?: string | null }): AnalysisSearch {
+export function transactionAnalysisSearch(record: { explorerId?: string; txnId?: string; txid?: string | null; chain?: string | null; network?: string | null }): AnalysisSearch {
   const domain = parseAnalysisSearch({ chain: record.chain, network: record.network });
-  const txid = [record.explorerId, record.txnId].find(value => typeof value === "string" && /^[a-fA-F0-9]{64}$/.test(value));
+  const txid = [record.txid, record.explorerId, record.txnId].find(value => typeof value === "string" && /^[a-fA-F0-9]{64}$/.test(value));
   return parseAnalysisSearch({
     ...domain,
     ...(txid && domain.chain && domain.network ? { subject: txid.toLowerCase(), mode: "trace" } : { mode: "overview" }),

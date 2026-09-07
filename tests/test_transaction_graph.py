@@ -308,8 +308,17 @@ class TransactionGraphTest(unittest.TestCase):
 
         self.assertEqual(payload["supportLevel"], "graphless")
         self.assertEqual(payload["unsupportedReason"], "graphless_import")
+        self.assertIsNone(payload["transaction"]["inputCount"])
+        self.assertIsNone(payload["transaction"]["outputCount"])
         self.assertEqual(payload["inputs"], [])
         self.assertEqual(payload["outputs"], [])
+
+    def test_graphless_exchange_fee_is_not_a_miner_fee(self):
+        self._tx("sale-fee", "wallet-a", "outbound", 100_000_000,
+                 "exchange:sale", "{}", fee_msat=2_000_000)
+        payload = self._graph("sale-fee")
+        self.assertIsNone(payload["fee"])
+        self.assertEqual(payload["transaction"]["feeMsat"], 2_000_000)
 
     def test_decimal_btc_output_values_are_converted_to_sats(self):
         raw = {

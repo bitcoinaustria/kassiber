@@ -273,7 +273,7 @@ function toDashboardTransaction(
   const status: TransactionStatus = tx.conf > 0 ? "completed" : "pending";
   const accountLabel = tx.account.toLowerCase();
   const chain = tx.chain?.trim().toLowerCase();
-  const paymentMethod =
+  const paymentMethod = tx.paymentMethod ?? (
     accountLabel.includes("lightning") ||
     accountLabel.includes("ln") ||
     accountLabel.includes("phoenix")
@@ -284,7 +284,7 @@ function toDashboardTransaction(
         ? "Liquid"
         : chain === "bitcoin"
           ? "On-chain"
-        : "On-chain";
+        : "On-chain");
   return {
     id: tx.id,
     txnId: tx.externalId || tx.id || `TX-${index + 1}`,
