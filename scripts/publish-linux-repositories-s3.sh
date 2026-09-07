@@ -58,10 +58,15 @@ done
 
 destination="${destination%/}"
 base_url="${base_url%/}"
-aws_args=()
-if [ -n "$endpoint" ]; then
-  aws_args+=(--endpoint-url "$endpoint")
-fi
+# Bash 3.2 treats an empty array as unset under nounset. Keep optional
+# endpoint arguments in a wrapper so every AWS call preserves its argv.
+aws_request() {
+  if [ -n "$endpoint" ]; then
+    aws --endpoint-url "$endpoint" "$@"
+  else
+    aws "$@"
+  fi
+}
 
 release_dir="$apt_repository/dists/$suite"
 by_hash_manifest="$(mktemp)"
@@ -137,26 +142,26 @@ done < "$by_hash_manifest"
 # Publish immutable payloads and hashed metadata first. APT switches through
 # one InRelease object. DNF publishes a complete immutable snapshot and then
 # changes its one-object mirrorlist pointer.
-aws "${aws_args[@]}" s3 sync \
+aws_request s3 sync \
   "$apt_repository/pool" "$destination/apt/pool"
-aws "${aws_args[@]}" s3 sync \
+aws_request s3 sync \
   "$apt_repository/dists/$suite" "$destination/apt/dists/$suite" \
   --exclude "*" --include "*/by-hash/SHA256/*"
-aws "${aws_args[@]}" s3 sync \
+aws_request s3 sync \
   "$apt_repository/dists/$suite" "$destination/apt/dists/$suite" \
   --exclude InRelease --exclude Release --exclude Release.gpg \
   --exclude "*/by-hash/*"
 # Detached Release/Release.gpg are compatibility copies and cannot switch as
 # one object. Atomic clients must use InRelease with Acquire-By-Hash.
-aws "${aws_args[@]}" s3 cp \
+aws_request s3 cp \
   "$apt_repository/dists/$suite/Release" \
   "$destination/apt/dists/$suite/Release" \
   --content-type text/plain --cache-control no-cache
-aws "${aws_args[@]}" s3 cp \
+aws_request s3 cp \
   "$apt_repository/dists/$suite/Release.gpg" \
   "$destination/apt/dists/$suite/Release.gpg" \
   --content-type application/pgp-signature --cache-control no-cache
-aws "${aws_args[@]}" s3 cp \
+aws_request s3 cp \
   "$apt_repository/dists/$suite/InRelease" \
   "$destination/apt/dists/$suite/InRelease" \
   --content-type text/plain --cache-control no-cache
@@ -170,13 +175,13 @@ snapshot_id="$(
     | awk '{print $1}'
 )"
 snapshot_destination="$destination/dnf/$suite/snapshots/$snapshot_id"
-aws "${aws_args[@]}" s3 sync \
+aws_request s3 sync \
   "$dnf_repository/packages" "$snapshot_destination/packages"
-aws "${aws_args[@]}" s3 sync \
+aws_request s3 sync \
   "$dnf_repository/repodata" "$snapshot_destination/repodata"
 mirrorlist="$(mktemp)"
 printf '%s\n' "$base_url/dnf/$suite/snapshots/$snapshot_id" > "$mirrorlist"
-aws "${aws_args[@]}" s3 cp \
+aws_request s3 cp \
   "$mirrorlist" "$destination/dnf/$suite/mirrorlist" \
   --content-type text/plain --cache-control no-cache
 

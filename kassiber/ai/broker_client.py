@@ -157,6 +157,7 @@ class BrokerAIClient:
         self.timeout = timeout
         self.last_provider_session_id: str | None = None
         self._lock = threading.Lock()
+        self._cancelled = threading.Event()
         self._process: subprocess.Popen[str] | None = None
         self._pending_call_ids: set[str] = set()
 
@@ -227,11 +228,37 @@ class BrokerAIClient:
             return
 
     def cancel(self) -> None:
+        # A scope change may arrive during binary lookup/Popen, before a child
+        # can be registered. Keep cancellation latched for this client lifetime.
+        self._cancelled.set()
         with self._lock:
             process = self._process
         if process is None or process.poll() is not None:
             return
         self._signal_group(process, signal.SIGTERM)
+
+    def _finish_process(self, process: subprocess.Popen[str]) -> None:
+        self._pending_call_ids.clear()
+        with self._lock:
+            if self._process is process:
+                self._process = None
+        if process.poll() is None:
+            self._signal_group(process, signal.SIGTERM)
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            self._signal_group(process, signal.SIGKILL)
+            process.wait()
+        for pipe in (process.stdin, process.stdout):
+            if pipe is not None:
+                try:
+                    pipe.close()
+                except OSError:
+                    pass
+
+    def _check_cancelled(self) -> None:
+        if self._cancelled.is_set():
+            raise AppError("AI request cancelled", code="ai_cancelled", retryable=False)
 
     def stream_chat(
         self,
@@ -244,8 +271,30 @@ class BrokerAIClient:
         context: ResponsesRequestContext | None = None,
     ) -> Iterator[ChatDelta]:
         del tool_choice
+        self._check_cancelled()
+        sensitive = (options or {}).get("sensitive_context", False)
+        if not isinstance(sensitive, bool) or (
+            sensitive and (tools or (options or {}).get("provider_session_id"))
+        ):
+            raise AppError(
+                "Sensitive context must be stateless and tool-free",
+                code="ai_request_invalid", retryable=False,
+            )
+        if sensitive:
+            if os.name == "nt":
+                raise AppError(
+                    "Private CLI assistance requires verified process-tree cancellation; use a configured HTTP provider on this platform",
+                    code="ai_sensitive_provider_unavailable", retryable=False,
+                )
+            self.last_provider_session_id = None
+            if self._pending_call_ids:
+                raise AppError(
+                    "Sensitive context cannot continue an active tool session",
+                    code="ai_request_invalid", retryable=False,
+                )
         node = _node_executable()
         script = _broker_script()
+        self._check_cancelled()
         if not node or not script.is_file():
             raise _broker_unavailable()
         with self._lock:
@@ -259,6 +308,7 @@ class BrokerAIClient:
             self._pending_call_ids.clear()
             if process is not None and process.poll() is None:
                 self._signal_group(process, signal.SIGTERM)
+            self._check_cancelled()
             try:
                 process = subprocess.Popen(
                     [node, str(script)],
@@ -272,10 +322,13 @@ class BrokerAIClient:
                 raise _broker_unavailable() from exc
             with self._lock:
                 self._process = process
+            if self._cancelled.is_set():
+                self._finish_process(process)
+                self._check_cancelled()
             safe_options = {
                 key: value
                 for key, value in (options or {}).items()
-                if key in {"reasoning_effort", "provider_session_id"}
+                if key in {"reasoning_effort", "provider_session_id", "sensitive_context"}
             }
             broker_messages = (
                 _broker_messages_for_context(context)
@@ -340,9 +393,17 @@ class BrokerAIClient:
         try:
             assert process.stdin is not None
             assert process.stdout is not None
-            process.stdin.write(json.dumps(outbound) + "\n")
+            # Do not hold _lock across pipe I/O: cancellation must be able to
+            # signal a child that has stopped reading. This check rejects new
+            # sends; a write already in flight is interrupted by cancel().
+            encoded_outbound = json.dumps(outbound) + "\n"
+            with self._lock:
+                self._check_cancelled()
+            process.stdin.write(encoded_outbound)
             process.stdin.flush()
+            self._check_cancelled()
             for line in process.stdout:
+                self._check_cancelled()
                 try:
                     event = json.loads(line)
                 except json.JSONDecodeError:
@@ -351,6 +412,11 @@ class BrokerAIClient:
                     continue
                 event_type = event.get("type")
                 if event_type == "error":
+                    if sensitive:
+                        raise AppError(
+                            "The CLI provider could not complete the private selected-context request",
+                            code="ai_unavailable", retryable=False,
+                        )
                     raise _broker_event_error(event)
                 if event_type == "delta":
                     delta = {
@@ -368,6 +434,11 @@ class BrokerAIClient:
                             raw={"provider": self.provider},
                         )
                 elif event_type == "tool_call":
+                    if sensitive:
+                        raise AppError(
+                            "Sensitive context cannot execute provider tools",
+                            code="ai_request_invalid", retryable=False,
+                        )
                     call_id = event.get("call_id")
                     name = event.get("name")
                     arguments = event.get("arguments")
@@ -431,7 +502,7 @@ class BrokerAIClient:
                     saw_terminal = True
                     session_id = event.get("provider_session_id")
                     self.last_provider_session_id = (
-                        session_id if isinstance(session_id, str) and session_id else None
+                        session_id if not sensitive and isinstance(session_id, str) and session_id else None
                     )
                     finish_reason = str(event.get("finish_reason") or "stop")
                     yield ChatDelta(
@@ -444,6 +515,7 @@ class BrokerAIClient:
             # exit status. `returncode` is still None here until the process is
             # reaped, so testing it alone treated a crashed or silent broker as a
             # complete answer and emitted finish_reason=null downstream.
+            self._check_cancelled()
             if not saw_terminal:
                 try:
                     process.wait(timeout=2)
@@ -460,21 +532,10 @@ class BrokerAIClient:
                     code="ai_unavailable",
                     retryable=True,
                 )
+        except OSError:
+            self._check_cancelled()
+            raise
         finally:
             watchdog.cancel()
             if not keep_alive:
-                self._pending_call_ids.clear()
-                with self._lock:
-                    if self._process is process:
-                        self._process = None
-                if process.poll() is None:
-                    self._signal_group(process, signal.SIGTERM)
-                try:
-                    process.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    self._signal_group(process, signal.SIGKILL)
-                    process.wait()
-                if process.stdin is not None:
-                    process.stdin.close()
-                if process.stdout is not None:
-                    process.stdout.close()
+                self._finish_process(process)
