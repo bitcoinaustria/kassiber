@@ -42,4 +42,7 @@ while time.monotonic() < deadline:
 else:
     raise SystemExit('Disposable Core31 did not become ready within 45 seconds')
 PY
+# Mining 101 maturity blocks synchronously can exceed 10s on the capped CI node.
+# This timeout applies only to the fixture RPC client, not acquisition budgets.
+export KASSIBER_REGTEST_RPC_TIMEOUT=60
 uv run --locked python -m unittest tests.integration.test_live_chain_analysis -v
