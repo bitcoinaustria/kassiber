@@ -382,9 +382,10 @@ parity, two independently signing collaborative wallets, a receiver-signed
 Payjoin, and actual relative/absolute lock enforcement. It removes only its own
 container on exit; see [the live oracle contract](testing.md#local-chain-analysis-oracle).
 
-This is not a global Bitcoin index, a commercial attribution database, an
-automatic background watchlist, or an arbitrary-chain analytics platform.
-Research rationale and primary
+Coverage is limited to locally retained Bitcoin and Liquid observations; the
+index makes no whole-chain coverage claim. It does not provide a commercial
+attribution database or arbitrary-chain analytics. Explicitly enabled local
+watches evaluate while the book is unlocked. Research rationale and primary
 protocol references remain in [the architecture research](../plan/17-local-chain-analysis.md).
 
 ### Local evidence watches
