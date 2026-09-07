@@ -3380,10 +3380,20 @@ _REVIEW_TOOL_CATALOG = (
 )
 
 
-TOOL_CATALOG: tuple[ToolEntry, ...] = (*_BASE_TOOL_CATALOG, *_EXPANDED_TOOL_CATALOG, *_REVIEW_TOOL_CATALOG, *(ToolEntry(**spec) for spec in [*chain_analysis_tool_specs(), *source_tool_specs()]))
+from .accounting_tasks import catalog as accounting_task_catalog
+
+TOOL_CATALOG: tuple[ToolEntry, ...] = (
+    *_BASE_TOOL_CATALOG,
+    *_EXPANDED_TOOL_CATALOG,
+    *_REVIEW_TOOL_CATALOG,
+    *(ToolEntry(**spec) for spec in chain_analysis_tool_specs()),
+    *(ToolEntry(**spec) for spec in source_tool_specs()),
+    *accounting_task_catalog(ToolEntry),
+)
 
 TOOL_CAPABILITY_NAMES = (
     "core",
+    "accounting_tasks",
     "review",
     "workspace",
     "transactions",
@@ -3412,6 +3422,8 @@ def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
 
     name = tool.name
     capabilities: set[str] = set()
+    if name.startswith("ui.accounting.task_"):
+        capabilities.add("accounting_tasks")
     if name in REVIEW_TOOL_NAMES:
         capabilities.add("review")
     if name in _CORE_TOOL_NAMES:
@@ -3513,6 +3525,8 @@ def select_tool_capabilities(
         selected.update(str(item) for item in requested if str(item) in TOOL_CAPABILITY_NAMES)
 
     haystack = f"{route} {' '.join(recent_user_messages)}"
+    if any(word in haystack for word in ("accounting task", "buchhaltungsauftrag", "buchhaltungsaufgabe")):
+        selected.add("accounting_tasks")
     if _continues_review_checkpoint(messages, latest) or any(
         word in haystack for word in ("quarantine", "quarantäne", "quarantaene", "review cases", "review receipt", "accounting review")
     ):

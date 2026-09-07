@@ -425,7 +425,23 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
   in commits whenever practical. Mark generated files clearly when the generator
   supports it, and avoid editing generated output by hand unless that exception
   is documented near the change.
-- Keep Kassiber as the BTC-side subledger and reconciliation layer; invoice issuance, VAT workflow, and the company general ledger stay outside Kassiber.
+- Preserve the existing BTC subledger and personal workflows. The explicitly
+  authorized general-accounting expansion is an opt-in, separate ledger under
+  `docs/plan/17-general-accounting-and-private-ai-spec.md`; do not reinterpret
+  wallet `accounts` or RP2 `journal_entries` as general-ledger records. Invoice
+  issuance, payment initiation, EBICS, and FinanzOnline transmission remain out
+  of scope. This supersedes the former product-wide general-ledger exclusion.
+  General accounting is CLI/Agent-only; do not rebuild dedicated accounting
+  routes, navigation, Settings switches or forms. Keep the full deterministic
+  CLI and minimal exact action review in the existing Assistant. Ordinary AI
+  receives opaque task state, not financial previews; preserve explicit
+  per-step mutation consent. #545 owns the complete deterministic core/CLI;
+  #546 owns ordinary opaque task execution and exact local consent. This
+  dependent `codex/accounting-selected-ai` cut (#550) adds selected financial
+  disclosure/proposals with their provider protections and tests. Keep
+  disclosure authorization separate from task-mutation consent. Missing pilot
+  data or measured productivity does not block code merge; unresolved security,
+  correctness and reliability failures do. See the stack and acceptance records.
 - For merchant and document-linked flows, keep provenance capture, commercial matching, and RP2-facing tax normalization as separate layers.
 - Prefer standard-library solutions unless a dependency clearly buys a lot.
 - Keep `--machine` output deterministic — add a `kind` to every new envelope.

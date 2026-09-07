@@ -1,0 +1,125 @@
+{
+  "pack_id": "AT-K2-2025-v1",
+  "country": "AT",
+  "tax_year": 2025,
+  "version": 1,
+  "currency": "EUR",
+  "minor_unit_exponent": 2,
+  "purpose": "Reviewed K2 filing preparation; not electronic submission or legal certification",
+  "sources": [
+    {"id":"K2","version":"2025-09-29","sha256":"436e6f4e3a7773d1f4609a42a7d985535f15f3c04050c9d596295fb9f02ef28d","url":"https://formulare.bmf.gv.at/service/formulare/inter-Steuern/pdfs/2025/K2.pdf?open=download"},
+    {"id":"K2kv","version":"2025-07-30","sha256":"6ccb0b9bca14207019feac48ceac9732d92a3ba2e938a03af0a3d4b992e01443","url":"https://formulare.bmf.gv.at/service/formulare/inter-Steuern/pdfs/2025/K2kv.pdf?open=download"},
+    {"id":"K2a","version":"2025-10-20","sha256":"b4cc066e0cecf27235b2ee8c73dcaba63bf491aad30a791de2877b79ef1d7491","url":"https://formulare.bmf.gv.at/service/formulare/inter-Steuern/pdfs/2025/K2a.pdf?open=download"},
+    {"id":"K2b","version":"2025-09-29","sha256":"88b0003bca2f8301f400c56f17c216757acee3e7943f3b824423dd40b57a1513","url":"https://formulare.bmf.gv.at/service/formulare/inter-Steuern/pdfs/2025/K2b.pdf?open=download"},
+    {"id":"K11","version":"2025-08-18","sha256":"0ae325b33687a6515b13342edc94f16446999bf0731b3455c3db15cf6cdf6dc3","url":"https://formulare.bmf.gv.at/service/formulare/inter-Steuern/pdfs/2025/K11.pdf?open=download"},
+    {"id":"K12","version":"2025-03-21","sha256":"b6929ada6782683ea66e3e037a4f7ded37d53fd2be9e1a1a6322966497b1dbaa","url":"https://formulare.bmf.gv.at/service/formulare/inter-Steuern/pdfs/2025/K12.pdf?open=download"},
+    {"id":"K12a","version":"2025-11-26","sha256":"4ecf64efedc35d700b72bccf1ab19dddd221f9af8bac4d6eb29379b437d4d19e","url":"https://formulare.bmf.gv.at/service/formulare/inter-Steuern/pdfs/2025/K12a.pdf?open=download"},
+    {"id":"K4","version":"2025-08-18","sha256":"6da6abc908cb68ad8cac305a958a8c3f00bafeaf9e7b62c8eaff0aa42f23d406","url":"https://formulare.bmf.gv.at/service/formulare/inter-Steuern/pdfd/2025/K4.pdf"},
+    {"id":"XSD","version":"2025-11-21","sha256":"18009dd10a05d40c95e98ad70437ca8abfd2c80a87e979d7cc013cec9db571ad","url":"https://www.bmf.gv.at/dam/jcr:7206213b-d350-4799-b630-48de1b2f82b4/BMF_XSD_Jahreserklaerungen_2025.xsd"},
+    {"id":"validation","version":"2026-04-24","sha256":"fc313fabdc1190e59a54215f99f4dbf600291fb4067d949781433dc7b27e937f","url":"https://www.bmf.gv.at/dam/jcr:471d8edf-fd44-4089-ba97-0468a995cec0/BMF_Pruefungen_Jahreserklaerungen_2025.pdf"},
+    {"id":"income_validation","version":"2025-12-23","sha256":"5b4e6336c85033b9d21390c2835595b2b4f0cbe001c741ae1f8634e72ffa392b","url":"https://www.bmf.gv.at/dam/jcr:1a193991-6a3b-468a-85f5-fbff9d0607fd/BMF_Pruefungen_Einkuenfte_Jahreserklaerung_2025.pdf"}
+  ],
+  "law_sources": [
+    {"id":"KStG7","url":"https://ris.bka.gv.at/eli/bgbl/1988/401/P7/NOR40254334"},
+    {"id":"KStG22_2025","url":"https://ris.bka.gv.at/eli/bgbl/1988/401/P22/NOR40241735"},
+    {"id":"KStG23","url":"https://www.ris.bka.gv.at/eli/bgbl/1988/401/P23/NOR40153803"},
+    {"id":"EStG6","url":"https://ris.bka.gv.at/eli/bgbl/1988/400/P6/NOR40254928"},
+    {"id":"KStG12a","url":"https://www.ris.bka.gv.at/eli/bgbl/1988/401/P12a/NOR40230612"}
+  ],
+  "source_resolutions": [
+    "K2kv notes refer to superseded foundation fields832/834/838; current2025 K2 fields take precedence.",
+    "K4p3 says half once for property losses; dated EStG6 and printed K2a agree60% deductible and40% addback.",
+    "Shared XSD business blocks contain fields belonging only to other forms. Only the printed K2a allowlist is exposed.",
+    "XSD optionality is lexical transport optionality, not permission to omit an applicable financial fact.",
+    "K12a 3 MEUR allowance is per assessment period, not independently per fiscal-year annex.",
+    "BMF validation2025 page84 still prints a25% K12 credit ceiling; page71 K2 parent checks and the2025 corporate rate use23%. Working-paper controls use the stricter23% parent limit and the evidenced foreign-burden limit; no personal tax rate is substituted.",
+    "No personal27.5% rate is used as the corporate income-tax rate. Specialist tax charges remain reviewed inputs."
+  ],
+  "forms": {
+    "K2": {
+      "title": "Körperschaftsteuererklärung K2",
+      "money_groups": {
+        "1–2 Betriebliche Einkünfte": "825:Freibetrag §23|917:Ausländische Kapitalerträge Land-/Forstwirtschaft|919:Ausländische Kapitalerträge Gewerbebetrieb|610:Summe Land-/Forstwirtschaft|636:Summe Gewerbebetrieb|869:KESt Land-/Forstwirtschaft|870:KESt Gewerbebetrieb|923:Quellensteuer Land-/Forstwirtschaft|925:Quellensteuer Gewerbebetrieb|866:ImmoESt Land-/Forstwirtschaft|867:ImmoESt Gewerbebetrieb|589:Besondere Vorauszahlung Land-/Forstwirtschaft|591:Besondere Vorauszahlung Gewerbebetrieb|586:Ausländische Immobiliensteuer Land-/Forstwirtschaft|588:Ausländische Immobiliensteuer Gewerbebetrieb|286:Abzugsteuer Leitungsrechte Land-/Forstwirtschaft|288:Abzugsteuer Leitungsrechte Gewerbebetrieb",
+        "4 Vermietung und Verpachtung": "546:Veräußerung von Miet-/Pachtzinsforderungen|547:Leitungsrechte und Hochwasserschutz|818:Sonstige Vermietungseinkünfte|650:Summe Vermietung und Verpachtung|973:Fünfzehntel Grundstücksverlust|974:Beantragter sofortiger Grundstücksverlustausgleich",
+        "5 Grundstücksveräußerungen": "572:Altvermögen pauschal14%|573:Umgewidmetes Altvermögen60%|574:Nicht pauschal ermittelte Einkünfte|575:Grundstücksveräußerung gegen Rente|576:Anrechenbare private ImmoESt|579:Besondere private Vorauszahlung|578:Anrechenbare ausländische Immobiliensteuer",
+        "6–9 Sonstige und ausländische Einkünfte": "660:Sonstige Einkünfte|638:Nicht ausgleichsfähige Verluste laufendes Jahr|639:Verrechnung nicht ausgleichsfähiger Vorjahresverluste|792:Nachversteuerung ausländischer Verluste|599:Hinzurechnung ausländischer Passiveinkünfte|318:Anrechenbare tatsächliche Steuer CFC|319:Anrechenbare vorgelagerte Hinzurechnungssteuer|289:Steuerpflichtige Beteiligungserträge|290:Anrechenbare ausländische Körperschaftsteuer|291:Anrechenbare ausländische Quellensteuer|840:Sonstige ausländische Einkünfte|841:Darauf anrechenbare ausländische Steuer|678:DBA-befreite positive Einkünfte|746:Ausländische Verluste mit Amtshilfe|944:Ausländische Verluste ohne Amtshilfe",
+        "11 Zinsschranke": "168:Nicht abzugsfähiger Zinsüberhang|177:Abzugsfähiger Zinsvortrag|170:Beantragter EBITDA-Vortrag|178:Verbrauch EBITDA-Vortrag",
+        "13 Sonderausgaben": "619:Offene Verlustabzüge aus Vorjahren|624:Ausnahmen Vortragsgrenze|713:Renten und dauernde Lasten|714:Steuerberatungskosten|715:Spenden Forschung/Kultur|451:Spenden mildtätige Organisationen|562:Spenden Umwelt/Tierschutz|563:Spenden Feuerwehren|104:Spenden Sport|105:Spenden Kindergärten|106:Spenden Schulen|107:Spenden andere begünstigte Einrichtungen|564:Vermögensausstattung gemeinnützige Stiftung|567:Innovationsstiftung Bildung|117:Vortrag Stiftungszuwendungen|118:Vortrag Bildungsstiftungszuwendungen",
+        "14–15 Sonderfälle": "669:Sanierungsgewinn|978:Ratenzahlung betriebliche Entstrickung|559:Anlagevermögen fünf Raten|991:Umlaufvermögen zwei Raten|980:Ratenzahlung Kapitalvermögen|153:Nichtfestsetzung Anteilstausch",
+        "16 Privatstiftungen": "830:Steuerfreie inländische Beteiligungserträge|845:Darauf anrechenbare KESt|831:Steuerfreie ausländische Beteiligungserträge|293:Steuerpflichtige Beteiligungserträge|294:Ausländische Körperschaftsteuer|295:Ausländische Quellensteuer|113:Inländische Kapitalerträge ohne Verlustausgleich|114:Ausländische Kapitalerträge ohne Verlustausgleich|882:Inländische Kapitalerträge mit Verlustausgleich|883:Ausländische Kapitalerträge mit Verlustausgleich|884:Inländische Substanzgewinne/Derivate|996:Ausländische Substanzgewinne/Derivate|179:Kryptowährungen Privatstiftung|885:Grundstücksveräußerungen Privatstiftung|702:Zuwendungen mit endgültiger KESt|703:Übertragene stille Reserven|161:Spenden Forschung/Kultur|162:Spenden mildtätige Organisationen|163:Spenden Umwelt/Tierschutz|164:Spenden Feuerwehren|108:Spenden Sport|109:Spenden Kindergärten|111:Spenden Schulen|112:Andere begünstigte Spenden|165:Vermögensausstattung Stiftung|166:Innovationsstiftung Bildung|708:Ausländische Quellensteuer Zwischensteuer|821:Zwischensteuergutschrift bei Auflösung",
+        "17 Sonstiges": "849:Bemessungsgrundlage25%-Zuschlag|850:Anrechnung ausländischer Körperschaftsteuer aus Vorjahren|296:Abzugsteuer private Leitungsrechte|670:Begünstigte EnFG-Einkünfte"
+      },
+      "extra_money": "LF_A:Ergebnis K2a Land-/Forstwirtschaft|GW_A:Ergebnis K2a Gewerbebetrieb|LF_B:Ergebnis K11 Land-/Forstwirtschaft|GW_B:Ergebnis K11 Gewerbebetrieb|UWZU_LF:Enthaltener Umwidmungszuschlag Land-/Forstwirtschaft|UWZU_GW:Enthaltener Umwidmungszuschlag Gewerbebetrieb|KV_LF:Mitveranlagte Kapitalerträge Land-/Forstwirtschaft|KV_GW:Mitveranlagte Kapitalerträge Gewerbebetrieb|VV_A:Ergebnis K2b|VV_B:Ergebnis K11 Vermietung|UWZU_573:Umwidmungszuschlag in573|UWZU_574:Umwidmungszuschlag in574|UWZU_575:Umwidmungszuschlag in575|PROPERTY_SUM:Summe572/573/574|INCOME_BEFORE_INTEREST:Gesamtbetrag vor Zinsschranke|INCOME_AFTER_INTEREST:Gesamtbetrag nach Zinsschranke",
+      "text": "MANAGEMENT:Anschrift und Telefonnummer Geschäftsleitung|SEAT:Sitz der Körperschaft|DIRECTOR:Vorsitz/Geschäftsführung Name Anschrift Telefon",
+      "boolean": "REORGANIZATION:Umgründung im Veranlagungszeitraum|REVOKE_COOPERATIVE:Widerruf Rechnungslegungsoption Genossenschaft|CONSTITUTION_FILED:Rechtsgrundlage bereits eingereicht|CONSTITUTION_ATTACHED:Rechtsgrundlage wird vorgelegt|PIPELINE_FLAT:Leitungsrechte33%-Ermittlung|PIPELINE_EXPERT:Leitungsrechte Gutachten|PROPERTY_IMMEDIATE:Antrag sofortiger Grundstücksverlustausgleich|PROPERTY_WITHDRAWN:Grundstück zuvor zum Buchwert entnommen|INTEREST_STANDALONE:Eigenständige Körperschaft §12a(2)|INTEREST_EQUITY:Eigenkapitalvergleich §12a(5)|INTEREST_CARRY_REQUEST:Antrag Zinsvortrag|EBITDA_CARRY_REQUEST:Antrag EBITDA-Vortrag|EXIT_BUSINESS_REQUEST:Antrag Ratenzahlung betriebliche Entstrickung|EXIT_CAPITAL_REQUEST:Antrag Ratenzahlung Kapitalvermögen|EXCHANGE_DEFERRAL_REQUEST:Antrag Nichtfestsetzung Anteilstausch|FOUNDATION_REVOKED:Stiftungsauflösung Widerruf|FOUNDATION_OTHER:Stiftungsauflösung anderer Grund",
+      "percent": "668:Sanierungsquote",
+      "date": "FOUNDATION_DISSOLUTION:Datum Auflösungsbeschluss"
+    },
+    "K2kv": {
+      "title": "Kapitalvermögen K2kv",
+      "xml_parent": "EINKUENFTE_KAPITALVERMOEGEN_K2",
+      "money_groups": {
+        "1 Kapital außerhalb besonderer Steuersätze": "856:Stille Beteiligung ohne929|857:Sonstige Kapitalerträge ohne929|929:Weitere ausländische Kapitalerträge mit Steueranrechnung",
+        "2 Kein Verlustausgleich": "858:Stiftungszuwendungen mit KESt|859:Stiftungszuwendungen ohne KESt|860:Bankzinsen mit KESt|861:Bankzinsen ohne KESt|934:Alte Forderungswertpapiere mit KESt|935:Alte Forderungswertpapiere ohne KESt",
+        "3 Verlustausgleich": "862:Laufende Kapitalerträge mit KESt|863:Laufende Kapitalerträge ohne KESt|864:Substanzgewinne mit KESt|865:Substanzgewinne ohne KESt|891:Substanzverluste mit KESt|892:Substanzverluste ohne KESt|893:Derivategewinne mit KESt|894:Derivategewinne ohne KESt|895:Derivateverluste mit KESt|896:Derivateverluste ohne KESt|897:Fondsausschüttungen mit KESt|898:Fondsausschüttungen ohne KESt|936:Ausschüttungsgleiche Erträge mit KESt|937:Ausschüttungsgleiche Erträge ohne KESt|189:Inländische Fondsdividenden Quellen-KESt|171:Laufende Kryptoeinkünfte mit KESt|172:Laufende Kryptoeinkünfte ohne KESt|173:Kryptosubstanzgewinne mit KESt|174:Kryptosubstanzgewinne ohne KESt|175:Kryptoverluste mit KESt|176:Kryptoverluste ohne KESt",
+        "4–5 Steueranrechnung/Beteiligungen": "899:Anrechenbare KESt|900:Anrechenbare Quellensteuer mit KESt|901:Anrechenbare Quellensteuer ohne KESt|902:Steuerfreie Beteiligungserträge|297:Steuerpflichtige Beteiligungserträge §10a(7)|298:Ausländische Körperschaftsteuer|299:Ausländische Quellensteuer"
+      },
+      "extra_money": "POOL_WITH_KEST:Saldo Verlustausgleich mit KESt|POOL_WITHOUT_KEST:Saldo Verlustausgleich ohne KESt",
+      "negative_fields": ["891","892","895","896","175","176"],
+      "pdf_fields": {"856":"Zahl101","857":"Zahl101a","929":"Zahl101b","858":"Zahl101c.0","859":"Zahl101d.0","860":"Zahl101c.1","861":"Zahl101d.1","934":"Zahl101c.2","935":"Zahl101d.2","862":"Zahl101c.3","863":"Zahl101d.3","864":"Zahl106.3.0","865":"Zahl106.3.1","891":"Zahl106.4.0","892":"Zahl106.4.1","893":"Zahl106.5.0","894":"Zahl106.5.1","895":"Zahl106.6.0","896":"Zahl106.6.1","897":"Zahl106.7.0","898":"Zahl106.7.1","936":"Zahl106a.7.0","937":"Zahl106a.7.1","189":"ZahlKZ189","171":"Zahl106b.7.0","172":"Zahl106b.7.1","173":"Zahl106c.7.0","174":"Zahl106c.7.1","175":"Zahl106d.7.0","176":"Zahl106d.7.1","899":"Zahl110","900":"Zahl111","901":"Zahl112","902":"Zahl113","297":"Zahl114","298":"Zahl115","299":"Zahl116","POOL_WITH_KEST":"Zahl107_sum","POOL_WITHOUT_KEST":"Zahl108_sum"}
+    },
+    "K2a": {
+      "title": "Betrieb K2a",
+      "xml_parent": "EINZELUNTERNEHMER_K2",
+      "money_groups": {
+        "3 Erträge": "9040:Waren-/Leistungserlöse einschließlich Eigenverbrauch|9060:Anlagenentnahmen/Verkäufe|9070:Aktivierte Eigenleistungen|9080:Bestandsveränderungen|9081:Steuerpflichtige Beteiligungserträge|9090:Sonstige Erträge|9093:Vereinnahmte Umsatzsteuer im Bruttosystem",
+        "3 Steueranrechnung": "9088:Ausländische Körperschaftsteuer auf9081|9089:Ausländische Quellensteuer auf9081",
+        "3 Aufwendungen": "9100:Wareneinsatz|9110:Fremdpersonal und Fremdleistungen|9120:Eigenes Personal|9130:AfA|9134:Degressive AfA|9135:Beschleunigte Gebäude-AfA|9140:Außergewöhnliche Umlaufvermögens-Abschreibung/Einzelwertberichtigung|9142:Pauschale Forderungswertberichtigung|9150:Gebäudeinstandhaltung|9160:Reise- und Fahrtspesen|9170:Tatsächliche Kfz-Kosten|9180:Miete/Pacht/Leasing|9190:Provisionen/Lizenzen|9200:Werbung/Repräsentation|9210:Buchwert Anlagenabgänge|9220:Zinsen und ähnliche Aufwendungen|9258:Gewinnanteile echter stiller Gesellschafter|9248:Pensionskassenbeiträge|9243:Forschungs-/Kulturspenden|9244:Mildtätige Spenden|9245:Umwelt-/Tierschutzspenden|9246:Feuerwehrspenden|9206:Sportspenden|9207:Kindergartenspenden|9208:Schulspenden|9209:Sonstige begünstigte Spenden|9261:Stiftungszuwendungen|9262:Bildungsstiftungszuwendungen|9230:Sonstige Aufwendungen|9233:Bezahlte Umsatzsteuer im Bruttosystem|9259:Pauschalierte Betriebsausgaben",
+        "3 Beteiligungen": "9237:Beteiligungsergebnis im Betriebsvermögen|9249:Darin berücksichtigte Spenden",
+        "4 Mehr-/Weniger-Rechnung": "9276:Investitionsfreibetrag10%|9277:Ökologischer Investitionsfreibetrag15%|9344:Erhöhter Investitionsfreibetrag20%|9345:Erhöhter ökologischer Investitionsfreibetrag22%|9337:Nachversteuerung Investitionsfreibetrag|9338:Öko-Zuschlag Wohngebäude|9240:AfA-Korrektur|9269:Korrektur beschleunigte Gebäude-AfA|9268:Korrektur degressive AfA|9273:Fünftel Alt-Forderungswertberichtigung|9274:Fünftel Alt-Rückstellung|9260:Kfz-Korrektur|9270:Miet-/Pacht-/Leasingkorrektur|9280:Werbe-/Repräsentationskorrektur|9317:Spendenkorrektur|9322:Korrektur Stiftungszuwendungen|9325:Korrektur Bildungsstiftungszuwendungen|9257:Korrektur Entgelte Arbeits-/Werkleistungen|9333:Hinzurechnung Aufwendungen hybride Gestaltungen|9334:Hinzurechnung Erträge hybride Gestaltungen|9279:Zuwendungsvortrag Stiftung|9339:Zuwendungsvortrag Bildungsstiftung|9299:Auszuscheidende endbesteuerungsfähige Kapital-/laufende Kryptoeinkünfte|9305:Korrektur Kapital- und Kryptosubstanzgewinne|9301:45%-Hinzurechnung negativer Kapitalpool|9285:Korrektur Grundstücksgewinne|9309:40%-Hinzurechnung negativer Grundstückspool|9326:Leitungsrechte/Hochwasserschutz|9010:Übergangsgewinn/-verlust|9242:Siebentel Übergangsverlust|9247:Zuschlag/Abschlag §4(2)|9267:CFC-Hinzurechnung|9290:Sonstige Korrekturen|9020:Veräußerungs-/Aufgabegewinn|9021:Freibetrag Veräußerung|9030:Auszuscheidender Gewinn-/Verlustteil",
+        "5 Bilanz": "9300:Entnahmen abzüglich Einlagen|9310:Grund und Boden|9320:Gebäude auf eigenem Grund|9330:Finanzanlagen|9340:Vorräte|9350:Forderungen Lieferungen/Leistungen|9360:Sonstige Rückstellungen|9363:Pauschale Rückstellungen|9370:Verbindlichkeiten Kredit-/Finanzinstitute",
+        "6–7 Pauschalierung": "9027:Kleinunternehmer Betriebseinnahmen|9028:Kleinunternehmer gesonderte Betriebsausgaben|9006:Lebensmittelhandel Vollpauschalierung"
+      },
+      "extra_money": "REVENUE_SUM:Summe Erträge|EXPENSE_SUM:Summe Aufwendungen|BOOK_PROFIT:Gewinn/Verlust vor MWR|SUBGEW_1:Positive Kapital-/Kryptosubstanzgewinne|SUBVER_1:Negative Kapital-/Kryptosubstanzverluste|SALDO_1:Kapitalpool-Saldo|SUBGEW_2:Positive Grundstücksgewinne|SUBVER_2:Negative Grundstücksverluste|SALDO_2:Grundstückspool-Saldo|ADJUSTED_PROFIT:Gewinn/Verlust nach Korrekturen|MWR_TOTAL:Gesamte Mehr-/Weniger-Rechnung|TAX_PROFIT:Steuerlicher Gewinn/Verlust|SMALL_FLAT_ALLOWANCE:Geprüfte Kleinunternehmer-Pauschalausgaben|SMALL_PROFIT:Vorläufiger Kleinunternehmergewinn",
+      "text": "INCOME_CLASS:Einkunftsart LF/GW|BUSINESS_ADDRESS:Betriebsanschrift|POSTCODE:Postleitzahl|CITY:Ort|COUNTRY:Staat|ONACE:ÖNACE2025 dreistellig|REGIME:Gewinnermittlung §4(1)/§5/§4(3)/kameral|FLAT_REGIME:Pauschalierungsregelung",
+      "boolean": "BETR:Betrieb|WIBETR:Wirtschaftlicher Geschäftsbetrieb|BETRGW:Betrieb gewerblicher Art|VAT_GROSS:USt-Bruttosystem|VAT_NET:USt-Nettosystem|MIXED:Gemischter Betrieb|CONTINUE_5_2:Fortführung §5(2)|REVOKE_5_2:Widerruf §5(2)|TREATY_RELIEF:DBA-Verordnungsentlastung|REORGANIZATION:Umgründung|PIPELINE_FLAT:Leitungsrechte33%|PIPELINE_EXPERT:Leitungsrechte Gutachten|REGIME_CHANGED:Gewinnermittlungswechsel|DISPOSAL:Veräußerung/Aufgabe|DISPOSAL_24_6:Begünstigung §24(6)|SMALL_PARTNERSHIP:NOCH nicht anderweitig beanspruchte Pauschalierung",
+      "date": "FISCAL_START:Wirtschaftsjahr Beginn|FISCAL_END:Wirtschaftsjahr Ende"
+    },
+    "K2b": {
+      "title": "Vermietung K2b",
+      "xml_parent": "GRUNDSTUECKE_GEBAEUDE",
+      "money_groups": {
+        "Objekt und Anschaffung": "9030:Auszuscheidender Überschuss/Verlust|9407:Fiktive Anschaffungskosten|9409:Tatsächliche Anschaffungskosten|9410:Gebäudekosten ohne Grundanteil|9416:Ursprüngliche AfA-Basis|9417:Entnahmewert",
+        "Aufwandsverteilung": "9430:Aufwendungen §28(2)|9440:Herstellungsaufwendungen §28(3)|9450:Aufwendungen §28(4)",
+        "Einkünfte": "9460:Einnahmen|9470:Jahresaufwand §28(2)|9480:Jahresaufwand §28(3)|9490:Jahresaufwand §28(4)|9500:AfA|9134:Degressive AfA|9135:Beschleunigte Gebäude-AfA|9505:Substanzabgeltung Fruchtgenuss|9510:Fremdfinanzierung|9520:Sofortige Instandhaltung/-setzung|9521:Öko-Zuschlag sofort|9522:Öko-Zuschlag Jahresanteil|9530:Sonstige Werbungskosten|9414:Zu-/Abschlag §28(7)"
+      },
+      "extra_money": "EXPENSE_SUM:Summe Werbungskosten|TAX_PROFIT:Einnahmenüberschuss/Verlust",
+      "text": "POSTCODE:Postleitzahl|CITY:Ort|STREET:Straße/Platz|HOUSE:Hausnummer|STAIR:Stiege|DOOR:Türnummer|COUNTRY:Staat|EWAZ:Einheitswert-Aktenzeichen|TITLE:Eigentümer/Fruchtgenuss/sonstige Nutzung",
+      "boolean": "BUILT:Bebautes Grundstück|UNBUILT:Unbebautes Grundstück|VAT_GROSS:USt-Bruttosystem|VAT_NET:USt-Nettosystem|TREATY_RELIEF:DBA-Verordnungsentlastung|FIRST_OLD:Erstvermietung Altvermögen|FIRST_NEW:Erstvermietung Neuvermögen|BUILDING_60:Gebäudeanteil60%|BUILDING_70:Gebäudeanteil70%|BUILDING_80:Gebäudeanteil80%|CONTINUED:Fortsetzung Rechtsvorgänger|INHERITED_SPREAD:Zehntel/Fünfzehntel übernommen|RESUMED:Wiederaufnahme Vermietung|BASIS_ADJUSTED:Anpassung AfA-Basis|FROM_BUSINESS:Erstvermietung nach Entnahme|GIFT:Unentgeltliche Übertragung|SALE:Veräußerung|CEASED:Vermietung beendet|SPREAD_28_2:Antrag Aufteilung §28(2)|SPREAD_28_3:Antrag Aufteilung §28(3)|SPREAD_28_4:Antrag Aufteilung §28(4)",
+      "percent": "BUILDING_OTHER:Abweichender Gebäudeanteil",
+      "integer": "SPREAD_YEARS:Verteilungszeitraum10–15Jahre"
+    },
+    "K11": {
+      "title": "Personengesellschaft/-gemeinschaft K11",
+      "xml_parent": "BETEILIGUNG",
+      "money_groups": {"Beteiligung": "615:Nicht ausgleichsfähige Verluste|616:Verrechnung Vorjahresverluste"},
+      "extra_money": "BETRAG_B:Einkünfte aus der Beteiligung|KAPVM_B:Auszuscheidende Kapitalerträge|LTGBET_B:Leitungsrechte betriebliche Einkünfte|BUSINESS_RESULT:Betriebliche Einkünfte nach Korrekturen|LTGVV_B:Leitungsrechte Vermietung|RENT_RESULT:Vermietung nach Korrekturen|KEST_B:Anrechenbare KESt|QEST_B:Anrechenbare Quellensteuer|IMMO_B:Anrechenbare ImmoESt|SPENDE_B:Enthaltene Spenden",
+      "text": "FIRMBEZ_B:Name und Anschrift Beteiligung|FASTNR_B:Steuernummer Beteiligung|INCOME_CLASS:Einkunftsart LF/GW/VV",
+      "date": "BILANZ_B:Bilanzstichtag",
+      "boolean": "BVM:Im Betriebsvermögen gehalten|MORE:Weitere Beteiligungen"
+    },
+    "K12": {
+      "title": "Ausländische Beteiligung K12",
+      "xml_parent": "BETEILIGUNG_AUSLAND",
+      "extra_money": "BETR_K12:Steuerpflichtiger Beteiligungsertrag|KOESTVB:Körperschaftsteuer-Vorbelastung|QUELLST:Anrechenbare Quellensteuer|HINZUBET:Hinzuzurechnender Betrag|VORBEL:Steuervorbelastung|ANRECH:Insgesamt anrechenbare Steuer",
+      "text": "NAME_K12:Bezeichnung und Anschrift|LAND_K12:Kfz-Nationalitätszeichen|STNR_K12:Ausländische Steuernummer|RGNR_K12:Ausländische Registernummer|INCOME_CLASS:Zuordnung LF/GW/KV/Stiftung",
+      "boolean": "BET_10A7:Qualifizierte Portfoliobeteiligung|BET_102:Internationale Schachtelbeteiligung|BEH_10A4:Beherrschte Körperschaft|BST_10A6:Betriebsstätte|MORE:Weitere Beteiligungen"
+    },
+    "K12a": {
+      "title": "Zinsschranke K12a",
+      "xml_parent": "ZINSSCHRANKE_K12A",
+      "extra_money": "ZAW_12A:1 Zinsaufwand|ZER_12A:2 Zinserträge|ZUEB_12A:3 Zinsüberhang ohne Vortrag|ZIVORVJ:4 Vorjahres-Zinsvortrag|UMUEBZI:5 Umgründung Zinsvortrag Zugang|UMUNTZI:6 Umgründung Zinsvortrag Abgang|ZIUEBERH:7 Zinsüberhang inklusive Vortrag|GBE_12A:8 Einkünfte vor §12a|ZU_AFA:9 AfA-Zuschlag|ZU_TEILW:10 Teilwert-Zuschlag|ZU_ZINS:11 Zinsen-Zuschlag|AB_ZUSCH:12 Zuschreibungs-Abschlag|AB_ZINS:13 Zinsen-Abschlag|AB_INFRA:14 Infrastruktur-Abschlag|ST_EBIT:15 Steuerliches EBITDA|VER_EBIT:16 Verrechenbares EBITDA|NABZ_VOR:17 Nicht abzugsfähiger Zins vor EBITDA-Vortrag|NAB_ZINS:18 Hinzuzurechnender Zinsüberhang|ZINS_WJA:19 Zinsvortrag Anfang|ABZ_ZIVT:20 Abzugsfähiger Zinsvortrag|ZINS_WJE:21 Zinsvortrag Ende|EBIT_VJ:22 EBITDA-Vortrag Vorjahr|UMUEB_EB:23 Umgründung EBITDA Zugang|UMUNT_EB:24 Umgründung EBITDA Abgang|VERR_EVT:25 Verbrauch EBITDA-Vortrag|EBIT_K12:26 Neuer EBITDA-Vortrag|WEG_WJ5:27 Ablauf EBITDA-Vortrag|EBIT_END:28 EBITDA-Vortrag Ende",
+      "date": "WJA_12A:Wirtschaftsjahr Beginn|WJE_12A:Wirtschaftsjahr Ende"
+    }
+  }
+}

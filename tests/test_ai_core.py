@@ -186,6 +186,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_chain_analysis_datasets_preview", "ui_chain_analysis_datasets_import", "ui_chain_analysis_datasets_revoke",
             "ui_chain_analysis_datasets_preview_start", "ui_chain_analysis_datasets_import_start",
             "ui_chain_analysis_datasets_discard", "ui_chain_analysis_datasets_discard_start",
+            "ui_accounting_task_get", "ui_accounting_task_preview", "ui_accounting_task_apply", "ui_accounting_task_cancel",
             "ui_review_cases", "ui_review_request_input", "ui_review_plan", "ui_review_apply", "ui_review_receipt",
             "status",
             "ui_overview_snapshot",
