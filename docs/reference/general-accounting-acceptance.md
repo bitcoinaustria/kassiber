@@ -1,13 +1,22 @@
 # Organizational accounting acceptance record
 
-Status: three-cut draft stack published and full local gates passed;
-the technical reliability hold and separate product/pilot acceptance remain
-open (2026-09-06). No accounting PR is merged.
+Status (2026-09-07): three-cut stack in technical closeout. Historical full
+local gates are recorded below; exact-head checks and merge state live on the
+linked PRs. Separate product/pilot acceptance remains open.
 The full UI prototype is preserved, not part of this delivery.
 This is a technical coverage record, not a statement of the organization's
 actual legal obligations or complete source population. The scope is defined in
 [plan 17](../plan/17-general-accounting-and-private-ai-spec.md); the executable
 contracts are documented in [general accounting](general-accounting.md).
+
+## Superseding risk decision (2026-09-06)
+
+The owner explicitly accepted the non-reproduced SQLCipher observation as a
+residual risk for #545/#546/#550. It is no longer a technical merge blocker;
+it is not marked fixed or disproven. Encryption guards, tests, exact consent
+and independent correctness/security gates remain unchanged. This supersedes
+earlier hold statements retained below as diagnostic history. #551 remains
+outside this closeout. See the [recorded approval](https://github.com/bitcoinaustria/kassiber/pull/545#issuecomment-5561648220).
 
 ## Current split and acceptance policy (2026-09-06)
 
@@ -38,8 +47,9 @@ documentation retains the approved split and acceptance-policy updates.
 **Code merge:** passing per-cut contracts and integration/security/reliability
 checks, including retained financial correctness, exact consent, durable writes
 and private-user regressions. The intermittent `accounting_requires_encryption`
-rejection remains a technical hold until resolved; green repeats alone do not
-explain it. Passing split verification below does not waive that hold.
+rejection is an owner-accepted residual risk under the superseding decision
+above; green repeats alone still do not explain it. Other concrete failures
+and failing required checks retain their normal closeout requirements.
 
 Bounded diagnosis on frozen full-agent source `32312f0e` (2026-09-06,
 Python 3.13.13 / sqlcipher3 0.6.2 / SQLCipher 4.12.0, updated RP2 pin):
@@ -386,7 +396,7 @@ must not be represented as the organization's confirmed pilot population.
 
 | Gate | Required proof | Current status |
 | --- | --- | --- |
-| AF-1: Whole period | At least 100 mixed source records; complete selected-population coverage; correct routine proposals without repeated data entry; exceptions and user effort measured | Actual tool-loop fixture `mixed-june-v1`: 104 selected records, 97 correct routine proposals including raw BTC preparation, 5 named exceptions, 2 approvals, exact manual financial equivalence. Intermittent encrypted-handle rejection under diagnosis; human time/provider inference/pilot remain pending. |
+| AF-1: Whole period | At least 100 mixed source records; complete selected-population coverage; correct routine proposals without repeated data entry; exceptions and user effort measured | Actual tool-loop fixture `mixed-june-v1`: 104 selected records, 97 correct routine proposals including raw BTC preparation, 5 named exceptions, 2 approvals, exact manual financial equivalence. Historical encrypted-handle observation is accepted residual risk; human time/provider inference/pilot remain pending. |
 | AF-2: Actual artifacts | Approved agent actions produce and verify the close, finalized K2/annex working papers and selected package; missing facts/denials remain honest partial outcomes | Synthetic annual tool/consent flow produces retained close/K2/HTML; CLI-only exact-destination delivery verifies hashes/arithmetic and actual saved bytes. Independent reopen proves mutation durability. Final combined/interactive acceptance pending. |
 | AF-3: Reused decisions | Explicit rule approval; next matching case cites the rule; nonmatches, conflicting rules, another book, revocation and stale proposals fail safely | Actual tool-loop rule reuse, nonmatch/conflict/revocation/stale-consent fixtures implemented. Rule creation/correction stays explicit local input, not invisible agent learning; measured interactive/pilot outcome pending. |
 | AF-4: Same-task exceptions | Answer/new evidence resolves affected items and continues work; independent results survive; restart does not duplicate actions or resurrect consent | Same-task additive evidence and Bitcoin-classification answers retain history; actual agent resumes after fresh-process CLI amendment/assignment. Independent completed work and expired-grant boundaries tested; interactive/pilot outcome pending. |
@@ -399,7 +409,7 @@ counted as autonomous agent work. The mixed fixture compares against 98 manual
 posting operations; it reports zero missed/wrong routine cases and zero repeated
 routine data entries, not a human productivity percentage. Active human time and
 provider inference are deliberately unmeasured. A successful fixture execution
-does not resolve the technical intermittent-failure hold or complete pilot acceptance.
+does not establish a SQLCipher fix or complete pilot acceptance.
 
 ### Other open gates and scope limits
 
@@ -439,8 +449,8 @@ does not resolve the technical intermittent-failure hold or complete pilot accep
   Historically #542 and #543 were still open when their exact heads were first
   integrated locally. Both have since merged, as recorded in the latest
   checkpoint; #545/#546 are extracted draft PRs. The owner authorizes merge
-  after review. The unresolved encrypted-handle failure remains a technical
-  merge hold. Final organizational/agent pilot acceptance separately prevents
+  after review. The historical encrypted-handle observation is an accepted
+  residual risk, not a merge hold. Final organizational/agent pilot acceptance prevents
   calling the full product delivery complete, not independently safe code merge.
 - EBICS, payment initiation, FinanzOnline transmission, automatic official-PDF
   filling, invoice issuing, consolidation and speculative further countries are
