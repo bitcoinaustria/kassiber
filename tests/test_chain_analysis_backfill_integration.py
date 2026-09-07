@@ -38,13 +38,16 @@ def test_worker_acquires_then_notifies_once_without_touching_accounting(encrypte
         definition = {"rule": "output_spent", "query": {"subject": f"{txid}:0", "chain": "bitcoin", "network": "main", "observer": "public"}}
         preview = dispatch(conn, "ui.chain_analysis.watches.preview", definition)
         dispatch(conn, "ui.chain_analysis.watches.create", {"plan": preview})
+        confirmation = {"rule": "confirmations", "threshold": 2, "query": {"subject": txid, "chain": "bitcoin", "network": "main", "observer": "public"}}
+        preview = dispatch(conn, "ui.chain_analysis.watches.preview", confirmation)
+        dispatch(conn, "ui.chain_analysis.watches.create", {"plan": preview})
         spend = Transaction(vin=[TransactionInput(first[2][0].txid(), 0)], vout=[TransactionOutput(900, Script(bytes.fromhex("0014" + "22" * 20)))])
         core.blocks.append(block(first[0], [spend], nonce=1))
         conn.execute("UPDATE chain_analysis_acquisition_grants SET next_run_at=0")
         conn.commit()
         worker_tick(conn)
         inbox = dispatch(conn, "ui.chain_analysis.watches.inbox", {})
-        assert [item["code"] for item in inbox["items"]] == ["spend_observed"]
+        assert sorted(item["code"] for item in inbox["items"]) == ["spend_observed", "threshold_reached"]
         result = run_analysis(conn, "profile", definition["query"])
         assert any(node.get("txid") == spend.txid().hex() for node in result["nodes"])
         conn.commit()
