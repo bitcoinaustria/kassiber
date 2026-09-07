@@ -84,6 +84,7 @@ _SENSITIVE_KEY_TOKENS = {
     "workspace",
 }
 _SENSITIVE_EXACT_KEYS = {
+    "payload",
     "account",
     "asset",
     "backend",

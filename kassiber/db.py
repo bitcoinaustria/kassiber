@@ -5405,6 +5405,36 @@ def ensure_schema_compat(conn):
     _ensure_freshness_schema(conn)
     _ensure_transaction_graph_cache_schema(conn)
 
+    # Additive opt-in ledger storage; schema creation neither enrolls a book
+    # nor migrates personal users to encryption. No accounting module commits.
+    from .core.accounting import schema as accounting_schema
+    from .core.accounting import evidence as accounting_evidence
+    from .core.accounting import bank as accounting_bank
+    from .core.accounting import schedules as accounting_schedules
+    from .core.accounting import document_text as accounting_document_text
+    from .core.accounting import tax_workpapers as accounting_tax_workpapers
+    from .core.accounting import sources as accounting_sources
+    from .core.accounting import artifacts as accounting_artifacts
+    from .core.accounting import projection as accounting_projection
+    from .core.accounting import posting_batch as accounting_posting_batch
+    from .core.accounting import valuation as accounting_valuation
+    from .core.accounting import cashbook as accounting_cashbook
+    from .core.accounting import task_schema as accounting_tasks
+
+    accounting_schema.ensure_schema(conn)
+    accounting_evidence.ensure_schema(conn)
+    accounting_bank.ensure_schema(conn)
+    accounting_schedules.ensure_schema(conn)
+    accounting_document_text.ensure_schema(conn)
+    accounting_tax_workpapers.ensure_schema(conn)
+    accounting_sources.ensure_schema(conn)
+    accounting_artifacts.ensure_schema(conn)
+    accounting_projection.ensure_schema(conn)
+    accounting_posting_batch.ensure_schema(conn)
+    accounting_valuation.ensure_schema(conn)
+    accounting_cashbook.ensure_schema(conn)
+    accounting_tasks.ensure_schema(conn)
+
 
 def _ensure_custody_economic_term_review_notes(conn):
     """Add immutable per-review notes and backfill them before reader cutover."""
