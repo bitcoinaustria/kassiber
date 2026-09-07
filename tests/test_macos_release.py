@@ -384,6 +384,34 @@ def test_real_codesign_rejects_non_bitcoin_austria_identity():
         release.verify_code(Path("/usr/bin/true"))
 
 
+@pytest.mark.parametrize("authorized", [False, True])
+def test_certificate_extraction_checks_profile_membership(authorized):
+    leaf = b"synthetic certificate bytes"
+    def extract(*command):
+        assert command[:2] == ("/usr/bin/codesign", "-d")
+        assert len(command) == 4
+        assert str(command[2]).startswith("--extract-certificates=")
+        prefix = Path(str(command[2]).split("=", 1)[1])
+        prefix.with_name(prefix.name + "0").write_bytes(leaf)
+        return ""
+    profile = {"DeveloperCertificates": [leaf if authorized else b"another certificate"]}
+    with patch.object(release, "run", side_effect=extract):
+        if authorized:
+            release.verify_profile_certificate(Path("sealed.app"), profile)
+        else:
+            with pytest.raises(ValueError, match="not authorized"):
+                release.verify_profile_certificate(Path("sealed.app"), profile)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Apple certificate extraction")
+def test_real_codesign_accepts_attached_extraction_prefix(tmp_path):
+    # No keys or signing: exercise Apple's parser against signed system code.
+    # Some OS versions omit the public cert chain, so only check the CLI result.
+    prefix = tmp_path / "public-cert"
+    subprocess.run(["/usr/bin/codesign", "-d", f"--extract-certificates={prefix}", "/usr/bin/true"],
+                   check=True, capture_output=True)
+
+
 @pytest.mark.parametrize("mutation", [None, "bytes", "mode", "launcher", "missing", "extra"])
 def test_cli_distribution_is_exact_sealed_app(tmp_path, mutation):
     root = tmp_path / "kassiber-cli-macos-arm64"

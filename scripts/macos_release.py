@@ -88,7 +88,7 @@ def verify_entitlements(path: Path, expected: dict) -> None:
 def verify_profile_certificate(app: Path, profile: dict) -> None:
     with tempfile.TemporaryDirectory(prefix="kassiber-public-cert-") as tmp:
         prefix = Path(tmp) / "cert"
-        run("/usr/bin/codesign", "-d", "--extract-certificates", prefix, app)
+        run("/usr/bin/codesign", "-d", f"--extract-certificates={prefix}", app)
         leaf = prefix.with_name("cert0").read_bytes()
         if leaf not in profile.get("DeveloperCertificates", []):
             raise ValueError("App signing certificate is not authorized by the profile")
