@@ -112,6 +112,10 @@ def test_retried_custody_review_never_reposts_existing_general_ledger_entry(book
     assert conn.execute('SELECT COUNT(*) FROM gl_projection_publications').fetchone()[0] == 1
     assert conn.execute('SELECT COUNT(*) FROM review_workflow_receipts').fetchone()[0] == 1
     assert conn.execute("SELECT COUNT(*) FROM custody_components WHERE state='active'").fetchone()[0] == 1
+    # Multiple stale captures require the close check to continue its cursor
+    # after a nested network inventory read; use the actual encrypted book.
+    assert conn.execute('SELECT COUNT(*) FROM gl_calculation_artifacts').fetchone()[0] >= 2
+    assert not conn.in_transaction
     assert projection.validate_close(conn, scope, '2025-01-01', '2025-12-31')['blockers']
 
 
