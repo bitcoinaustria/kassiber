@@ -102,3 +102,22 @@ class BookNetworkTests(unittest.TestCase):
         self.assertFalse(plan["can_apply"])
         self.assertIn("reference_domain_mismatch", [item["code"] for item in plan["blockers"]])
         self.assertEqual(plan["inventory"]["state"], "mixed")
+
+    def test_onchain_txid_without_network_does_not_guess_main(self):
+        self.conn.execute("UPDATE wallets SET config_json='{}'")
+        self.bind("regtest", str(uuid.uuid4()))
+        guard_observation(self.conn, "profile-1", {"asset":"BTC", "external_id":"a" * 64, "raw_json":{}})
+
+    def test_bullbitcoin_rail_column_is_not_network_evidence(self):
+        self.bind("main")
+        for rail in ("bitcoin", "liquid", "lightning"):
+            guard_observation(self.conn, "profile-1", {"raw_json":{"source":"bullbitcoin_wallet_csv", "network":rail}})
+
+    def test_canonical_source_columns_are_scope_evidence_without_overriding_raw(self):
+        self.conn.execute("UPDATE wallets SET config_json='{}'")
+        instance = str(uuid.uuid4())
+        binding = self.bind("regtest", instance)
+        row = {"chain":"bitcoin", "network":"regtest", "raw_json":{"chain_instance_id":instance}}
+        self.assertTrue(observation_matches_binding(binding, row, unscoped=True))
+        row["raw_json"]["network"] = "main"
+        self.assertFalse(observation_matches_binding(binding, row, unscoped=True))

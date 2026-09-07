@@ -5,6 +5,7 @@ import hashlib
 import json
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from collections.abc import Mapping
 from typing import Any
 
@@ -51,17 +52,46 @@ def _binding(conn, profile_id):
 
 def _instance_evidence(row):
     raw, config = _json(row.get("raw_json")), _json(row.get("wallet_config_json") or row.get("config_json"))
-    values = {str(value).strip() for value in (raw.get("chain_instance_id"), config.get("chain_instance_id")) if value}
+    values = {str(value).strip() for value in (row.get("chain_instance_id"), raw.get("chain_instance_id"), config.get("chain_instance_id")) if value}
     return (next(iter(values)) if len(values) == 1 else None), len(values) <= 1
 
 
 def _evidence(row):
-    environment, valid = bitcoin_network_domain_evidence(row)
+    # Importer network columns can describe a payment rail. Keep the original
+    # raw record; only omit that known importer field from environment evidence.
+    raw = _json(row.get("raw_json"))
+    if raw.get("source") == "bullbitcoin_wallet_csv" and str(raw.get("network", "")).lower() in {"bitcoin", "liquid", "lightning"}:
+        raw.pop("network", None)
+        row = {**row, "raw_json": raw}
+    environment, valid = bitcoin_network_domain_evidence(row, allow_implicit_main=False)
+    columns = {key: row[key] for key in ("chain", "network", "bitcoin_network", "chain_network") if row.get(key) not in (None, "")}
+    if columns:
+        for payload in (raw, _json(row.get("wallet_config_json") or row.get("config_json"))):
+            column_environment, column_valid = bitcoin_network_domain_evidence({"asset": row.get("asset"), "raw_json": columns, "config_json": payload}, allow_implicit_main=False)
+            valid = valid and column_valid and (environment is None or column_environment is None or environment == column_environment)
+            environment = environment or column_environment
     instance, instance_valid = _instance_evidence(row)
     return environment, instance, valid and instance_valid
 
 
+@contextmanager
+def read_network_snapshot(conn):
+    owns = not conn.in_transaction
+    if owns:
+        conn.execute("BEGIN")
+    try:
+        yield
+    finally:
+        if owns:
+            conn.rollback()
+
+
 def inventory_book_network(conn, profile_id):
+    with read_network_snapshot(conn):
+        return _inventory_book_network(conn, profile_id)
+
+
+def _inventory_book_network(conn, profile_id):
     profile = conn.execute("SELECT id, journal_input_version FROM profiles WHERE id=?", (profile_id,)).fetchone()
     if profile is None:
         _error("Book not found", code="not_found")
@@ -125,6 +155,11 @@ def _domains(environment, instance):
 
 
 def plan_book_network(conn, profile_id, args):
+    with read_network_snapshot(conn):
+        return _plan_book_network(conn, profile_id, args)
+
+
+def _plan_book_network(conn, profile_id, args):
     environment = args.get("environment")
     if environment not in ENVIRONMENTS:
         _error("Choose a supported book environment", code="validation")
@@ -162,6 +197,19 @@ def plan_book_network(conn, profile_id, args):
 
 
 def apply_book_network(conn, profile_id, args):
+    savepoint = "network_bind_" + uuid.uuid4().hex
+    conn.execute(f"SAVEPOINT {savepoint}")
+    try:
+        result = _apply_book_network(conn, profile_id, args)
+    except BaseException:
+        conn.execute(f"ROLLBACK TO {savepoint}")
+        conn.execute(f"RELEASE {savepoint}")
+        raise
+    conn.execute(f"RELEASE {savepoint}")
+    return result
+
+
+def _apply_book_network(conn, profile_id, args):
     plan = plan_book_network(conn, profile_id, args)
     if args.get("plan_id") != plan["plan_id"]:
         _error("Book network preview is stale", code="stale_context")
@@ -249,3 +297,33 @@ def observation_matches_binding(binding, row, *, unscoped=False):
     if instance is not None and instance != expected_instance:
         return False
     return not (unscoped and expected_instance and instance != expected_instance)
+
+
+def validate_replicated_binding(conn, profile_id, row):
+    """Validate signed authored scope without trusting transported domain IDs."""
+    environment = row.get("environment")
+    instance = row.get("chain_instance_id")
+    if environment not in ENVIRONMENTS or row.get("revision") != 1:
+        _error("Invalid replicated network binding", code="sync_schema_forbidden")
+    try:
+        uuid.UUID(str(row.get("environment_id")))
+        if environment == "regtest":
+            if str(uuid.UUID(str(instance))) != instance:
+                raise ValueError("noncanonical instance")
+        elif instance is not None:
+            raise ValueError("unexpected instance")
+    except (ValueError, TypeError, AttributeError):
+        _error("Invalid replicated chain instance", code="sync_schema_forbidden")
+    if json.loads(row["domains_json"]) != _domains(environment, instance):
+        _error("Replicated domains do not match the environment", code="sync_schema_forbidden")
+    declarations = json.loads(row["acknowledgements_json"])
+    if not isinstance(declarations, list) or any(not isinstance(value, str) for value in declarations):
+        _error("Invalid replicated network declarations", code="sync_schema_forbidden")
+    inventory = inventory_book_network(conn, profile_id)
+    for wallet in inventory["wallets"]:
+        if wallet["conflict_count"] or any(value != environment for value in wallet["environments"]) or any(value != instance for value in wallet["chain_instances"]):
+            _error("Replicated network binding conflicts with local history")
+        if wallet["requires_declaration"] and wallet["wallet_id"] not in declarations:
+            _error("Replicated network binding has unreviewed local sources")
+    if any(not item["valid"] or item["environment"] not in (None, environment) or item["chain_instance_id"] not in (None, instance) for item in inventory["reference_scopes"]):
+        _error("Replicated network binding conflicts with local observations")
