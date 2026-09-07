@@ -725,6 +725,8 @@ AI_TOOL_ONCE_ONLY_CONSENT = frozenset(
     {
         "ui.review.apply",
         "ui.chain_analysis.acquire.apply",
+        "ui.chain_analysis.sources.authorize",
+        "ui.chain_analysis.sources.run",
         "ui.chain_analysis.datasets.import",
         "ui.chain_analysis.datasets.import.start",
         "ui.journals.quarantine.resolve",
@@ -5822,19 +5824,21 @@ def _validate_ai_tool_arguments(entry: Any, arguments: dict[str, Any]) -> None:
     _validate_ai_schema_value(arguments, schema, path=entry.name)
 
 
-def _chain_analysis_acquisition_consent_preview(runtime, args):
+def _chain_analysis_acquisition_consent_preview(runtime, args, *, recurring=False):
     """Display only server-recomputed acquisition effects before consent."""
     def preview(conn):
         if runtime.maintenance_state.get("provider_on_device") is not True:
             return {"status": "blocked", "code": "local_provider_required"}
         from .core.chain_analysis_acquisition import plan_acquisition
+        from .core.chain_analysis_backfill import plan as plan_source
         from .core.chain_analysis_cases import canonical
         _, profile = resolve_scope(conn, None, None)
         supplied = args.get("plan") if isinstance(args, dict) else None
-        if not isinstance(supplied, dict) or not isinstance(supplied.get("args"), dict):
+        field = "spec" if recurring else "args"
+        if not isinstance(supplied, dict) or not isinstance(supplied.get(field), dict):
             return {"status": "blocked", "code": "validation"}
         try:
-            current = plan_acquisition(conn, profile["id"], supplied["args"])
+            current = (plan_source if recurring else plan_acquisition)(conn, profile["id"], supplied[field])
             if canonical(current) != canonical(supplied):
                 return {"status": "blocked", "code": "chain_analysis_stale"}
             return {"status": "ready", "plan": current}
@@ -5869,7 +5873,7 @@ def _chain_analysis_ai_payload(conn, runtime, kind, args):
     from .core.chain_analysis_ai import decode_ai_args, project_ai_result
     _, profile = resolve_scope(conn, None, None)
     on_device = runtime.maintenance_state.get("provider_on_device") is True
-    if kind in {"ui.chain_analysis.acquire.plan", "ui.chain_analysis.acquire.apply", "ui.chain_analysis.datasets.preview", "ui.chain_analysis.datasets.import", "ui.chain_analysis.datasets.preview.start", "ui.chain_analysis.datasets.import.start"} and not on_device:
+    if (kind.startswith("ui.chain_analysis.sources.") or kind in {"ui.chain_analysis.acquire.plan", "ui.chain_analysis.acquire.apply", "ui.chain_analysis.datasets.preview", "ui.chain_analysis.datasets.import", "ui.chain_analysis.datasets.preview.start", "ui.chain_analysis.datasets.import.start"}) and not on_device:
         raise AppError("Source acquisition and dataset imports are available to on-device AI providers and the desktop workflow", code="local_provider_required")
     try:
         decoded = decode_ai_args(conn, profile["id"], args)
@@ -8646,7 +8650,7 @@ def _run_ai_chat_tool_loop(
             offered.add(entry.provider_name)
             tools.append(entry.to_responses_tool())
     if not runtime.maintenance_state.get("provider_on_device"):
-        tools = [tool for tool in tools if tool.get("name") not in {"ui_chain_analysis_acquire_plan", "ui_chain_analysis_acquire_apply", "ui_chain_analysis_datasets_preview", "ui_chain_analysis_datasets_import", "ui_chain_analysis_datasets_preview_start", "ui_chain_analysis_datasets_import_start"}]
+        tools = [tool for tool in tools if not str(tool.get("name", "")).startswith("ui_chain_analysis_sources_") and tool.get("name") not in {"ui_chain_analysis_acquire_plan", "ui_chain_analysis_acquire_apply", "ui_chain_analysis_datasets_preview", "ui_chain_analysis_datasets_import", "ui_chain_analysis_datasets_preview_start", "ui_chain_analysis_datasets_import_start"}]
     runtime.maintenance_state["advertised_tools"] = [
         function["name"]
         for function in tools
@@ -8720,8 +8724,8 @@ def _run_ai_chat_tool_loop(
             display_name = entry.name if entry is not None else call.name
             tool_session_name = entry.name if entry is not None else call.name
             preview_arguments = redact_tool_arguments(call.arguments)
-            if entry is not None and entry.name == "ui.chain_analysis.acquire.apply":
-                preview_arguments = _chain_analysis_acquisition_consent_preview(runtime, call.arguments)
+            if entry is not None and entry.name in {"ui.chain_analysis.acquire.apply", "ui.chain_analysis.sources.authorize"}:
+                preview_arguments = _chain_analysis_acquisition_consent_preview(runtime, call.arguments, recurring=entry.name.endswith("sources.authorize"))
             if entry is not None and entry.name in {"ui.chain_analysis.datasets.import", "ui.chain_analysis.datasets.import.start"}:
                 preview_arguments = _chain_analysis_dataset_consent_preview(runtime, call.arguments)
             proposal_seen_at = now_iso()

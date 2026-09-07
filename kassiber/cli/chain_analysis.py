@@ -43,6 +43,21 @@ def add_parser(sub):
         elif action == "inbox":
             parser.add_argument("--limit", type=int, default=50)
             parser.add_argument("--before", type=int)
+    sources = commands.add_parser("sources", help="Authorize and inspect recurring local-node acquisition").add_subparsers(dest="chain_analysis_action", required=True)
+    for action in ("plan", "authorize", "list", "revoke", "run"):
+        parser = sources.add_parser(action)
+        _scope(parser)
+        if action == "plan":
+            parser.add_argument("--document", required=True, help="Source, mode, network, lifetime request/byte budgets and block range or txid; JSON or @path")
+        elif action == "authorize":
+            parser.add_argument("--plan", required=True, help="Unchanged reviewed plan; authorizes recurring requests while unlocked")
+        elif action in {"revoke", "run"}:
+            parser.add_argument("id")
+            if action == "revoke":
+                parser.add_argument("--expected-revision", type=int, required=True)
+        else:
+            parser.add_argument("--limit", type=int, default=50)
+            parser.add_argument("--after-id")
     entropy = commands.add_parser("entropy")
     entropy.add_argument("subject")
     entropy.add_argument("--chain", choices=("bitcoin", "liquid"))
@@ -190,7 +205,7 @@ def dispatch(conn, args):
     else:
         action = args.chain_analysis_action
         operation = f"{command}.{action}"
-        allowed = ("id", "other_id", "limit", "cursor", "title", "expected_snapshot_id", "expected_revision")
+        allowed = ("id", "other_id", "limit", "cursor", "after_id", "title", "expected_snapshot_id", "expected_revision")
         if command == "watches" and action == "inbox":
             allowed = ("limit", "before")
         if command == "datasets" and action == "query":

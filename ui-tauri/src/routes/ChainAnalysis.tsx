@@ -44,6 +44,7 @@ import { PsbtPanel } from "./chain-analysis/PsbtPanel";
 import { DatasetsPanel } from "./chain-analysis/DatasetsPanel";
 import "./chain-analysis/workbench.css";
 import { WatchAction, WatchInbox } from "./chain-analysis/WatchControls";
+import { SourceAcquisitionPanel } from "./chain-analysis/SourceAcquisitionPanel";
 
 export function ChainAnalysis() {
   const { t } = useTranslation("chainAnalysis");
@@ -349,6 +350,7 @@ export function ChainAnalysisWorkbench({
             <Button variant="ghost" size="icon" aria-label={t("dismiss")} onClick={() => setShowAcquire(false)}><X className="size-4" /></Button>
           </div>
           <AcquisitionPanel query={query} onError={reportError} onAcquired={() => setHistorical(true)} />
+          <SourceAcquisitionPanel subject={query.subject} onError={reportError} />
         </section>
       )}
       <QueryControls

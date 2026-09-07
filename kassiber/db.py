@@ -3227,6 +3227,8 @@ SCHEMA += CUSTODY_COMPONENT_SCHEMA
 
 from .chain_analysis_watches_schema import WATCH_SCHEMA
 SCHEMA += WATCH_SCHEMA
+from .chain_analysis_backfill_schema import SCHEMA as CHAIN_ANALYSIS_BACKFILL_SCHEMA
+SCHEMA += CHAIN_ANALYSIS_BACKFILL_SCHEMA
 
 
 def ensure_data_root(data_root):

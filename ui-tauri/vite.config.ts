@@ -128,6 +128,11 @@ const ALLOWED_BRIDGE_KINDS = new Set([
     "ui.chain_analysis.labels.delete",
     "ui.chain_analysis.labels.import",
     "ui.chain_analysis.acquire.apply",
+    "ui.chain_analysis.sources.plan",
+    "ui.chain_analysis.sources.authorize",
+    "ui.chain_analysis.sources.list",
+    "ui.chain_analysis.sources.revoke",
+    "ui.chain_analysis.sources.run",
 
   "status",
   "ui.logs.snapshot",

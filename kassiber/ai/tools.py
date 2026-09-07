@@ -10,6 +10,7 @@ import sys
 from typing import Any, Literal
 
 from .chain_analysis_tools import tool_specs as chain_analysis_tool_specs
+from .chain_analysis_sources_tools import source_tool_specs
 from ..errors import AppError
 from ..redaction import is_sensitive_key, redact_secret_text
 
@@ -3379,7 +3380,7 @@ _REVIEW_TOOL_CATALOG = (
 )
 
 
-TOOL_CATALOG: tuple[ToolEntry, ...] = (*_BASE_TOOL_CATALOG, *_EXPANDED_TOOL_CATALOG, *_REVIEW_TOOL_CATALOG, *(ToolEntry(**spec) for spec in chain_analysis_tool_specs()))
+TOOL_CATALOG: tuple[ToolEntry, ...] = (*_BASE_TOOL_CATALOG, *_EXPANDED_TOOL_CATALOG, *_REVIEW_TOOL_CATALOG, *(ToolEntry(**spec) for spec in [*chain_analysis_tool_specs(), *source_tool_specs()]))
 
 TOOL_CAPABILITY_NAMES = (
     "core",
