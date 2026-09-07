@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .book_network import network_write
+
 """Import orchestration helpers above the parser-only `kassiber.importers` boundary."""
 
 import json
@@ -1447,6 +1449,7 @@ def normalize_import_record(record: ImportRow, source_label: str = "") -> dict[s
     }
 
 
+@network_write
 def insert_wallet_records(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],
@@ -1483,8 +1486,13 @@ def insert_wallet_records(
             processed=0,
             total=total,
         )
-    for index, record in enumerate(records, start=1):
-        normalized = normalize_import_record(record, source_label=source_label)
+    from .book_network import guard_observations
+    scoped_wallet = conn.execute("SELECT kind,config_json FROM wallets WHERE id=? AND profile_id=?", (wallet["id"], profile["id"])).fetchone()
+    if scoped_wallet is None:
+        raise AppError("Import wallet does not belong to the selected book", code="not_found")
+    normalized_records = [normalize_import_record(record, source_label=source_label) for record in records]
+    guard_observations(conn, profile["id"], ({**normalized, "wallet_kind": scoped_wallet["kind"], "wallet_config_json": scoped_wallet["config_json"]} for normalized in normalized_records))
+    for index, (record, normalized) in enumerate(zip(records, normalized_records), start=1):
         if authoritative_chain_observer:
             external_id = canonical_txid(normalized["external_id"])
             if external_id is not None:

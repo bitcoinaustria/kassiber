@@ -188,6 +188,7 @@ class WalletBackendFetch:
     skip_outcome: Mapping[str, Any] | None = None
     observer_updates: tuple[PreparedObserverUpdate, ...] = ()
     authoritative_chain_observer: bool = False
+    book_environment_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -522,6 +523,12 @@ def discover_wallet_backend(
     phase = "resolve_backend"
     try:
         backend = hooks.resolve_backend(runtime_config, config.get("backend"))
+        backend_config = backend.get("config_json") or {}
+        if isinstance(backend_config, str):
+            backend_config = json.loads(backend_config)
+        backend_instance = backend.get("chain_instance_id") or backend_config.get("chain_instance_id")
+        if backend_instance is not None and backend_instance != config.get("chain_instance_id"):
+            raise AppError("Backend belongs to another local chain instance", code="book_network_mismatch")
         phase = "discovery"
         _emit_wallet_sync_progress(wallet, {"phase": "discovery"})
         sync_state = hooks.resolve_sync_state(backend, resolver_wallet)
@@ -870,6 +877,9 @@ def sync_wallet_from_backend(
     prefetched: "WalletBackendFetch | BaseException | None" = None,
     _allow_negative_balance_rescan: bool = True,
 ) -> SyncOutcome:
+    from .book_network import wallet_for_network_sync, resolve_book_environment, guard_observation
+    if conn is not None:
+        wallet = wallet_for_network_sync(conn, profile["id"], wallet)
     # `prefetched` lets the caller run the network fetch ahead of time (e.g. in
     # parallel across wallets). When omitted, fetch inline as before. A captured
     # AppError is re-raised here so it surfaces under this wallet's own savepoint.
@@ -903,9 +913,15 @@ def sync_wallet_from_backend(
                 else None
             ),
         )
+        prefetched = replace(prefetched, book_environment_id=dict(wallet).get("_book_environment_id"))
     if isinstance(prefetched, BaseException):
         raise prefetched
     fetch = prefetched
+    if conn is not None:
+        if fetch.book_environment_id != resolve_book_environment(conn, profile["id"])["environment_id"]:
+            raise AppError("Book network changed during refresh; retry in the selected scope", code="stale_context", retryable=True)
+        if fetch.sync_state is not None:
+            guard_observation(conn, profile["id"], {"chain":fetch.sync_state.chain, "network":fetch.sync_state.network, "wallet_config_json":wallet["config_json"]}, operation="sync_publish")
     dependency_prepared = bool(fetch.observer_updates)
     if fetch.skip_outcome is not None:
         return dict(fetch.skip_outcome)
@@ -1371,6 +1387,9 @@ def sync_wallets(
     force_full: bool = False,
     prefetched: Mapping[str, "WalletBackendFetch | BaseException"] | None = None,
 ) -> list[SyncOutcome]:
+    from .book_network import wallet_for_network_sync
+    if conn is not None:
+        wallets = [wallet_for_network_sync(conn, profile["id"], wallet) for wallet in wallets]
     results = []
     for wallet in wallets:
         wallet_checkpoint = (checkpoints or {}).get(str(wallet["id"]))

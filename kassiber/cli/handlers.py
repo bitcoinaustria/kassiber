@@ -2055,6 +2055,8 @@ def _prefetch_chain_wallets(
 ):
     """Finish chain discovery and backend I/O before any write savepoint."""
 
+    from ..core.book_network import wallet_for_network_sync
+    wallets = [wallet_for_network_sync(conn, profile["id"], candidate) for candidate in wallets]
     backend_wallet_rows = [
         wallet
         for wallet in wallets
@@ -2105,7 +2107,7 @@ def _prefetch_chain_wallets(
                 else None
             ),
         )
-        return _prepare_negative_balance_repairs(
+        prepared = _prepare_negative_balance_repairs(
             conn,
             runtime_config,
             profile,
@@ -2114,6 +2116,8 @@ def _prefetch_chain_wallets(
             prefetched,
             source_overlap_index=source_overlap_index,
         )
+        scope_by_wallet = {str(row["id"]): row.get("_book_environment_id") for row in wallets}
+        return {wallet_id: replace(result, book_environment_id=scope_by_wallet.get(wallet_id)) if isinstance(result, core_sync.WalletBackendFetch) else result for wallet_id, result in prepared.items()}
 
 
 def _stored_wallet_chain_history(conn, profile_id, wallets):

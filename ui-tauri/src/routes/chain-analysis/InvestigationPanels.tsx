@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { Button } from "@/components/ui/button";
@@ -227,28 +228,55 @@ interface AcquisitionResult {
   frontier: unknown[];
 }
 
-export function AcquisitionPanel({
-  query,
-  onError,
-  onAcquired,
-}: {
+interface BookBinding {
+  profile_id: string;
+  state: "bound" | "unbound";
+  environment_id?: string;
+  revision?: number;
+  chain_instance_id?: string | null;
+  domains: Array<{ chain: string; network: string }>;
+}
+type AcquisitionProps = {
   query: AnalysisQuery;
   onError: (error: unknown) => void;
   onAcquired: () => void;
-}) {
+};
+
+export function AcquisitionPanel(props: AcquisitionProps) {
+  const { t } = useTranslation(["settings", "common"]);
+  const binding = useDaemon<BookBinding>("ui.networks.binding");
+  if (binding.isLoading) return <p className="px-4 pb-4 text-sm">{t("common:state.loading")}</p>;
+  const book = binding.data?.data;
+  const supported = book?.domains.filter(domain => ["bitcoin", "liquid"].includes(domain.chain)) ?? [];
+  if (binding.isError || book?.state !== "bound" || !supported.length) {
+    return <div className="space-y-2 px-4 pb-4 text-sm">
+      <p role={binding.isError ? "alert" : undefined}>{binding.isError ? binding.error.message : t("bookNetwork.help")}</p>
+      <Link className="underline" to="/settings/bitcoin">{t("bookNetwork.title")}</Link>
+      {binding.isError && <Button variant="outline" onClick={() => void binding.refetch()}>{t("common:actions.retry")}</Button>}
+    </div>;
+  }
+  return <AcquisitionPanelContent key={`${book.profile_id}:${book.environment_id}:${book.revision}`} {...props} book={book} />;
+}
+
+function AcquisitionPanelContent({ query, onError, onAcquired, book }: AcquisitionProps & { book: BookBinding }) {
   const { t } = useTranslation("chainAnalysis");
+  const { t: settingsT } = useTranslation("settings");
   const options = useDaemon<{
     backends: Array<{
       name: string;
       kind: string;
       chain?: string;
       network?: string;
+      chain_instance_id?: string;
     }>;
   }>("ui.backends.options");
   const [backend, setBackend] = useState("");
   const [subject, setSubject] = useState(query.subject || "");
-  const [chain, setChain] = useState(query.chain || "bitcoin");
-  const [network, setNetwork] = useState(analysisNetworkInput(query.network));
+  const domains = book.domains.filter(domain => ["bitcoin", "liquid"].includes(domain.chain));
+  const [chain, setChain] = useState(domains.find(domain => domain.chain === query.chain)?.chain ?? domains[0].chain);
+  const domain = domains.find(item => item.chain === chain);
+  const network = analysisNetworkInput(domain?.network);
+  const needsGenesis = chain === "liquid" && network !== "main";
   const [depth, setDepth] = useState(Math.min(query.depth, 10));
   const [limit, setLimit] = useState(50);
   const [genesis, setGenesis] = useState("");
@@ -270,13 +298,18 @@ export function AcquisitionPanel({
     direction: query.direction,
     depth,
     max_transactions: limit,
-    ...(genesis.trim() ? { genesis_hash: genesis.trim() } : {}),
+    ...(needsGenesis && genesis.trim() ? { genesis_hash: genesis.trim() } : {}),
   };
-  const input = JSON.stringify(args);
+  const input = JSON.stringify({ args, environment_id: book.environment_id, revision: book.revision, chain_instance_id: book.chain_instance_id });
   const backends = (options.data?.data?.backends || []).filter((item) =>
-    ["bitcoinrpc", "esplora", "liquid-esplora", "electrum"].includes(item.kind),
+    ["bitcoinrpc", "esplora", "liquid-esplora", "electrum"].includes(item.kind)
+      && item.chain === chain && !!item.network && analysisNetworkInput(item.network) === network
+      && (!item.chain_instance_id || item.chain_instance_id === book.chain_instance_id),
   );
   const busy = preview.isPending || apply.isPending;
+  const compatibleBackend = backends.some(item => item.name === backend);
+  const ready = !!domain && compatibleBackend && !options.isError && !options.isLoading && !!subject.trim()
+    && (!needsGenesis || /^[a-f0-9]{64}$/.test(genesis.trim()));
   return (
     <div className="px-4 pb-4">
       <p className="max-w-3xl text-xs leading-relaxed text-muted-foreground">
@@ -286,7 +319,7 @@ export function AcquisitionPanel({
         className="mt-3 space-y-3"
         onSubmit={async (event) => {
           event.preventDefault();
-          if (busy) return;
+          if (busy || !ready) return;
           setPlan(null);
           setOutcome(null);
           try {
@@ -339,22 +372,14 @@ export function AcquisitionPanel({
                 setChain(event.target.value as "bitcoin" | "liquid")
               }
             >
-              <option value="bitcoin">Bitcoin</option>
-              <option value="liquid">Liquid</option>
+              {domains.map(item => <option key={item.chain} value={item.chain}>{item.chain === "bitcoin" ? "Bitcoin" : "Liquid"}</option>)}
             </select>
           </label>
-          <label className="ca-field">
-            {t("network")}
-            <select
-              className="ca-select"
-              value={network}
-              onChange={(event) => setNetwork(event.target.value)}
-            >
-              {["main", "test", "signet", "regtest"].map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
+          <div className="ca-field">
+            <Fact label={t("network")} value={domain?.network} />
+            <Link className="text-xs underline" to="/settings/bitcoin">{settingsT("bookNetwork.title")}</Link>
+            {book.chain_instance_id && <Fact label={settingsT("bookNetwork.instance")} value={book.chain_instance_id} />}
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <label className="ca-field">
               {t("acquire.depth")}
@@ -381,17 +406,17 @@ export function AcquisitionPanel({
               />
             </label>
           </div>
-          <label className="ca-field sm:col-span-2 lg:col-span-3">
+          {needsGenesis && <label className="ca-field sm:col-span-2 lg:col-span-3">
             {t("acquire.genesis")}
             <input
               className="ca-input font-mono"
               value={genesis}
-              required={chain === "liquid" && network !== "main"}
+              required
               pattern="[a-fA-F0-9]{64}"
               maxLength={64}
               onChange={(event) => setGenesis(event.target.value.toLowerCase())}
             />
-          </label>
+          </label>}
         </fieldset>
         {options.isError && (
           <p className="text-xs text-destructive" role="alert">
@@ -399,13 +424,13 @@ export function AcquisitionPanel({
           </p>
         )}
         {!backends.length && !options.isFetching && (
-          <p className="text-xs text-muted-foreground">{t("acquire.none")}</p>
+          <p className="text-xs text-muted-foreground">{t("acquire.none")} <Link className="underline" to={chain === "liquid" ? "/settings/liquid" : "/settings/bitcoin"}>{t("acquire.backend")}</Link></p>
         )}
         <Button
           type="submit"
           variant="outline"
           size="sm"
-          disabled={busy || !backend || !subject.trim()}
+          disabled={busy || !ready}
         >
           {t("acquire.preview")}
         </Button>
@@ -446,9 +471,9 @@ export function AcquisitionPanel({
           )}
           <Button
             size="sm"
-            disabled={busy || input !== plannedInput}
+            disabled={busy || !ready || input !== plannedInput}
             onClick={async () => {
-              if (busy || input !== plannedInput) return;
+              if (busy || !ready || input !== plannedInput) return;
               try {
                 const response = await apply.mutateAsync({ plan });
                 setOutcome(response.data || null);

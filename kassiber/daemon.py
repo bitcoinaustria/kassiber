@@ -482,6 +482,12 @@ SUPPORTED_KINDS = (
     "ui.saved_views.list",
     "ui.saved_views.create",
     "ui.saved_views.delete",
+    "ui.networks.partition_plan",
+    "ui.networks.partition_export",
+    "ui.networks.binding",
+    "ui.networks.inventory",
+    "ui.networks.plan",
+    "ui.networks.bind",
     "ui.profiles.snapshot",
     "ui.onboarding.complete",
     "ui.profiles.create",
@@ -16323,6 +16329,28 @@ def handle_request(
             ),
             False,
         )
+
+    if kind in {"ui.networks.binding", "ui.networks.inventory", "ui.networks.plan", "ui.networks.bind", "ui.networks.partition_plan", "ui.networks.partition_export"}:
+        from .core.book_network import inventory_book_network, resolve_book_environment, plan_book_network, apply_book_network
+        connection = _require_conn(ctx)
+        _, profile = resolve_scope(connection)
+        args = request.get("args") or {}
+        if kind in {"ui.networks.partition_plan", "ui.networks.partition_export"}:
+            from .core.book_network_migration import plan_network_partition, export_network_partition
+            if kind == "ui.networks.partition_plan":
+                result = plan_network_partition(connection, profile["id"], args)
+            else:
+                result = export_network_partition(connection, profile["id"], args, data_root=ctx.data_root, output_path=args.get("file_path"), recipient=args.get("recipient"), backup_passphrase=args.get("backup_passphrase"), db_passphrase=ctx.db_passphrase)
+        elif kind == "ui.networks.binding":
+            result = resolve_book_environment(connection, profile["id"])
+        elif kind == "ui.networks.inventory":
+            result = {**inventory_book_network(connection, profile["id"]), "binding": resolve_book_environment(connection, profile["id"])}
+        elif kind == "ui.networks.plan":
+            result = plan_book_network(connection, profile["id"], args)
+        else:
+            with connection:
+                result = apply_book_network(connection, profile["id"], args)
+        return (_with_request_id(build_envelope(kind, result), request_id), False)
 
     if kind == "ui.profiles.snapshot":
         return (

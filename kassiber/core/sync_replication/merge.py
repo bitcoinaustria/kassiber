@@ -1010,6 +1010,27 @@ def _prepare_actual_row(
         ).fetchone()
         if existing_relation is not None:
             actual["id"] = str(existing_relation["id"])
+    if spec.table == "book_network_bindings":
+        from ..book_network import validate_replicated_binding
+        actual["profile_id"] = profile_id
+        existing_binding = conn.execute("SELECT * FROM book_network_bindings WHERE profile_id=?", (profile_id,)).fetchone()
+        if existing_binding is None:
+            validate_replicated_binding(conn, profile_id, actual)
+        elif any(existing_binding[column] != actual[column] for column in spec.columns):
+            raise AppError("A book network binding cannot be replaced by replication", code="book_network_mismatch")
+    elif spec.table == "wallets":
+        from ..book_network import guard_wallet, guard_observation
+        previous = conn.execute("SELECT config_json FROM wallets WHERE id=?", (actual["id"],)).fetchone()
+        history = conn.execute("SELECT asset,raw_json FROM transactions WHERE wallet_id=?", (actual["id"],)).fetchall()
+        config = json.loads(actual["config_json"])
+        guard_wallet(conn, profile_id, config, previous_config=json.loads(previous["config_json"]) if previous and history else None, operation="replication")
+        for observation in history:
+            guard_observation(conn, profile_id, {**dict(observation), "wallet_config_json": config, "wallet_kind": actual["kind"]}, operation="replication")
+    elif spec.table == "transactions":
+        from ..book_network import guard_observation
+        wallet = conn.execute("SELECT kind,config_json FROM wallets WHERE id=?", (actual["wallet_id"],)).fetchone()
+        if wallet:
+            guard_observation(conn, profile_id, {**actual, "wallet_kind": wallet["kind"], "wallet_config_json": wallet["config_json"]}, operation="replication")
     local_pk = tuple(actual[column] for column in spec.primary_key)
     if len(spec.primary_key) == 1 and local_pk[0] is not None:
         _record_id_map(
@@ -1309,6 +1330,8 @@ def _apply_row_upsert(
             existing_relation is not None
             and all(existing_relation[column] == actual[column] for column in spec.columns)
         )
+    if spec.table == "book_network_bindings":
+        identical_immutable_replay = conn.execute("SELECT 1 FROM book_network_bindings WHERE profile_id=?", (book["profile_id"],)).fetchone() is not None
     if not identical_immutable_replay:
         _insert_or_update_with_collision_notice(
             conn,
@@ -1472,6 +1495,8 @@ def _has_other_active_alias(
 
 
 def _apply_row_delete(conn, *, book, event: Mapping[str, Any]) -> tuple[bool, int]:
+    if event["entity_table"] == "book_network_bindings" and conn.execute("SELECT 1 FROM profiles WHERE id=?", (book["profile_id"],)).fetchone():
+        raise AppError("Replication cannot remove an active book's network binding", code="book_network_mismatch")
     spec = SYNC_TABLE_MAP.get(str(event["entity_table"]))
     if not spec:
         raise AppError("delete targets table outside sync allowlist", code="sync_schema_forbidden")

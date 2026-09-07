@@ -755,5 +755,51 @@
     "label": "Default network for new inspections",
     "help": "Used when an imported file has no network context. Existing inspections and connection networks stay unchanged.",
     "effective": "Network: {{network}}"
+  },
+  "bookNetwork": {
+    "title": "Book network",
+    "environment": "Environment",
+    "environments": {
+      "main": "Production",
+      "test": "Testnet",
+      "signet": "Signet",
+      "regtest": "Local regtest"
+    },
+    "help": "Bind this book to one environment. Bitcoin, Lightning and Liquid remain separate networks within it.",
+    "immutable": "To use another environment, switch or create a book. Existing history keeps its identity.",
+    "instance": "Local instance UUID",
+    "newInstance": "New instance",
+    "unknown": "Network not recorded",
+    "declare": "I assign this connection to the selected environment. Missing source evidence remains unknown.",
+    "preview": "Review binding",
+    "confirmHelp": "This binding is permanent. Source records and past reports will not be rewritten.",
+    "bind": "Confirm book network",
+    "blockers": {
+      "already_bound": "Book already bound.",
+      "contradictory_evidence": "Contradictory network evidence.",
+      "different_environment": "Different environment: split this history into another book.",
+      "different_instance": "Different local chain instance.",
+      "scope_declaration_required": "Confirm the scope of this connection.",
+      "reference_domain_mismatch": "Local chain observations belong to another network or chain instance."
+    },
+    "inspectionMismatch": "This inspection belongs to another network. Switch to a compatible book.",
+    "partition": {
+      "title": "Split history into a separate book",
+      "help": "Export selected connections for the environment above. IDs and relationships stay intact. Original reports stay here; reconnect sources and rebuild journals in the new book.",
+      "counts": "{{wallets}} connections · {{transactions}} transactions",
+      "destination": "New archive file (.age)",
+      "export": "Export encrypted book",
+      "saved": "Encrypted backup saved. Restore it as a separate project through Settings → Backup, reconnect the selected sources, and rebuild journals. The original book is unchanged.",
+      "blockers": {
+        "relation_crosses_partition": "A reviewed relationship crosses the selected connections. Include its complete history.",
+        "incompatible_wallet_history": "This connection contains incompatible history.",
+        "unresolved_relation": "A required related record cannot be copied safely.",
+        "scope_declaration_required": "Confirm this connection’s environment above.",
+        "accounting_partition_unsupported": "This book has general accounting enabled and cannot be split by connection. Use a complete project backup to preserve its ledger and evidence."
+      },
+      "passphrase": "Backup passphrase (at least 12 characters)",
+      "confirmPassphrase": "Confirm passphrase"
+    },
+    "customBackend": "Choose a custom backend for this book’s network ({{network}}). Public mainnet presets cannot serve it."
   }
 }

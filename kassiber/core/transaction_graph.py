@@ -1030,6 +1030,10 @@ def _enrich_reference_graph_raw(
     )
     if chain == "unknown":
         return _with_graph_lookup_warning(raw, "invalid_reference_scope", "Conflicting or unsupported network metadata prevents transaction reference lookup.")
+    from .book_network import resolve_book_environment, observation_matches_binding
+    binding = resolve_book_environment(conn, str(_row_get(row, "profile_id") or ""))
+    if not observation_matches_binding(binding, dict(row)):
+        return _with_graph_lookup_warning(raw, "book_network_mismatch", "This observation does not match the active book network; no reference lookup was performed.")
     local = load_local_transaction_reference(
         conn, profile_id=str(_row_get(row, "profile_id") or ""),
         chain=chain, network=network, txid=str(txid).lower(), current=raw,
@@ -1898,6 +1902,10 @@ def _load_graph_lookup_cache(
     payload = _json_obj(row["payload_json"])
     if not isinstance(payload.get("vin"), list) or not isinstance(payload.get("vout"), list):
         return None
+    from .book_network import resolve_book_environment, observation_matches_binding
+    binding = resolve_book_environment(conn, current_context_snapshot(conn)["profile_id"])
+    if not observation_matches_binding(binding, {"config_json": {"chain": chain, "network": network}, "raw_json": payload}, unscoped=True):
+        return None
     cached_txid = _string_or_none(payload.get("txid"))
     if cached_txid and cached_txid.lower() != normalized_txid:
         return None
@@ -1921,6 +1929,13 @@ def _store_graph_lookup_cache(
     sanitized = _sanitize_graph_lookup_raw(raw, chain, normalized_txid)
     if not isinstance(sanitized.get("vin"), list) or not isinstance(sanitized.get("vout"), list):
         return sanitized
+    from .book_network import resolve_book_environment, require_chain_domain
+    profile_id = current_context_snapshot(conn)["profile_id"]
+    binding = resolve_book_environment(conn, profile_id)
+    if binding["state"] == "bound":
+        domain = require_chain_domain(conn, profile_id, chain, network, operation="graph_lookup")
+        if domain["chain_instance_id"]:
+            sanitized["chain_instance_id"] = domain["chain_instance_id"]
     timestamp = now_iso()
     conn.execute(
         """

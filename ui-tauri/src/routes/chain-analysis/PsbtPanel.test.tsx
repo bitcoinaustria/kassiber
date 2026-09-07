@@ -5,13 +5,14 @@ import { DaemonScopeContext } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
 import { PsbtPanel } from "./PsbtPanel";
 
-const mock = vi.hoisted(() => ({ invoke: vi.fn(), pick: vi.fn(), effects: [] as Array<() => void | (() => void)> }));
+const mock = vi.hoisted(() => ({ invoke: vi.fn(), pick: vi.fn(), binding: { environment_id: null as string | null, domains: [] as {chain:string;network:string}[] }, effects: [] as Array<() => void | (() => void)> }));
 vi.mock("react", async original => ({
   ...await original<typeof import("react")>(),
   useEffect: (effect: () => void | (() => void)) => { mock.effects.push(effect); },
 }));
 vi.mock("@/daemon/client", async original => ({
   ...await original<typeof import("@/daemon/client")>(),
+  useDaemon: () => ({ data: { data: mock.binding } }),
   useDaemonMutation: () => ({ mutateAsync: mock.invoke, isPending: false }),
 }));
 vi.mock("@/lib/filePicker", async original => ({
@@ -22,7 +23,7 @@ vi.mock("@/lib/filePicker", async original => ({
 function render(initialNetwork?: string) {
   return renderToStaticMarkup(<DaemonScopeContext.Provider value={{ expectedScope: { workspace_id: "w", profile_id: "p" }, daemonSession: 1, isCurrent: () => true }}><PsbtPanel initialNetwork={initialNetwork} onError={() => {}} /></DaemonScopeContext.Provider>);
 }
-beforeEach(() => { useUiStore.setState({ analysisNetwork: "signet" }); mock.invoke.mockReset(); mock.pick.mockReset(); mock.effects.length = 0; });
+beforeEach(() => { mock.binding = {environment_id:null, domains:[]}; useUiStore.setState({ analysisNetwork: "signet" }); mock.invoke.mockReset(); mock.pick.mockReset(); mock.effects.length = 0; });
 
 describe("PSBT workbench entry", () => {
   it.each(["main", "test", "signet", "regtest"])("preserves the explicit %s network without starting work", async network => {
@@ -44,4 +45,17 @@ describe("PSBT workbench entry", () => {
     expect(render(network)).toContain("Network: signet");
     expect(mock.invoke).not.toHaveBeenCalled();
   });
+});
+
+it("uses the bound book domain instead of an unrelated device default", () => {
+  mock.binding = { environment_id: "book-main", domains: [{chain:"bitcoin",network:"main"}] };
+  expect(render()).toContain("Network: main");
+  expect(mock.invoke).not.toHaveBeenCalled();
+});
+it("rejects a handoff from another network instead of reinterpreting it", () => {
+  mock.binding = { environment_id: "book-main", domains: [{chain:"bitcoin",network:"main"}] };
+  const html = render("regtest");
+  expect(html).not.toContain("Inspect original");
+  expect(html).toContain("role=\"alert\"");
+  expect(mock.invoke).not.toHaveBeenCalled();
 });

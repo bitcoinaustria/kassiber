@@ -739,6 +739,21 @@ CREATE TABLE IF NOT EXISTS profiles (
     UNIQUE (workspace_id, label)
 );
 
+CREATE TABLE IF NOT EXISTS book_network_bindings (
+    profile_id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+    environment_id TEXT NOT NULL UNIQUE,
+    environment TEXT NOT NULL CHECK(environment IN ('main','test','signet','regtest')),
+    revision INTEGER NOT NULL DEFAULT 1 CHECK(revision = 1),
+    chain_instance_id TEXT,
+    domains_json TEXT NOT NULL,
+    acknowledgements_json TEXT NOT NULL,
+    inventory_digest TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS trg_book_network_binding_immutable
+BEFORE UPDATE ON book_network_bindings
+BEGIN SELECT RAISE(ABORT, 'book_network_binding_immutable'); END;
+
 CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

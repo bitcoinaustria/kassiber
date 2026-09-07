@@ -7,6 +7,7 @@ const hooks = vi.hoisted(() => ({
   states: [] as unknown[], cursor: 0,
   effects: [] as Array<() => void>,
   invoke: vi.fn(),
+  binding: {state:"unbound", domains:[] as {chain:string;network:string}[]},
 }));
 // Replay the modal's mount effects and inspect its real button callbacks without
 // a DOM. Only React scheduling is replaced; test/save payloads run unchanged.
@@ -22,6 +23,7 @@ vi.mock("react", async original => ({
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@/daemon/client", () => ({
+  useDaemon: () => ({data:{data:hooks.binding}}),
   useDaemonMutation: (kind: string) => ({
     mutateAsync: (args: unknown) => hooks.invoke(kind, args),
   }),
@@ -47,6 +49,7 @@ function mount(initial?: Backend) {
 }
 
 beforeEach(() => {
+  hooks.binding = {state:"unbound",domains:[]};
   hooks.states.length = 0;
   hooks.effects.length = 0;
   hooks.cursor = 0;
@@ -116,4 +119,12 @@ describe("backend settings network identity", () => {
     await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ chain: "liquid", network: "liquidv1" }));
   });
+});
+
+it("blocks public mainnet presets when adding a backend to a regtest book", () => {
+  hooks.binding = {state:"bound",domains:[{chain:"bitcoin",network:"regtest"}]};
+  const {tree} = mount();
+  expect(button(tree,"backendModal.testConnection")?.disabled).toBe(true);
+  expect(button(tree,"backendModal.connectAndSave")?.disabled).toBe(true);
+  expect(hooks.invoke).not.toHaveBeenCalled();
 });

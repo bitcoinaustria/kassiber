@@ -1,3 +1,4 @@
+import { BookNetworkSettings } from "./BookNetworkSettings";
 import { AlertTriangle, CheckCircle2, Pencil, Plus, ShieldCheck } from "lucide-react";
 
 import { useTranslation } from "react-i18next";
@@ -67,6 +68,8 @@ export function NetworkLayerSettingsPanel({
       : layerBackends.map(backendExplorerBaseUrl).find(Boolean) ?? null;
   return (
     <section className="space-y-4">
+      {layer === "bitcoin" ? <BookNetworkSettings><AnalysisNetworkSettings /></BookNetworkSettings> : null}
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <p className="max-w-2xl text-sm text-muted-foreground">{meta.blurb}</p>
         <Button type="button" size="sm" className="shrink-0" onClick={onAdd}>
@@ -107,8 +110,6 @@ export function NetworkLayerSettingsPanel({
           ))}
         </div>
       )}
-
-      {layer === "bitcoin" ? <AnalysisNetworkSettings /> : null}
 
       {layer === "bitcoin" || layer === "liquid" ? (
         <p className="text-xs text-muted-foreground">

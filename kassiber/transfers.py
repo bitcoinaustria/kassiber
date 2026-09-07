@@ -377,7 +377,7 @@ def onchain_transfer_scope(row):
     return (chain, network, txid, asset_identity)
 
 
-def bitcoin_network_domain_evidence(row):
+def bitcoin_network_domain_evidence(row, *, allow_implicit_main=True):
     """Return ``(domain, valid)`` for an L1/Liquid/Lightning row.
 
     ``valid=False`` distinguishes contradictory/unsupported explicit metadata
@@ -386,7 +386,7 @@ def bitcoin_network_domain_evidence(row):
     regtest; read-only matchers continue to treat both cases as non-exact.
     """
 
-    scope = onchain_transfer_scope(row)
+    scope = onchain_transfer_scope(row) if allow_implicit_main else None
     if scope is not None:
         chain, network = scope[:2]
         if chain == "bitcoin":
