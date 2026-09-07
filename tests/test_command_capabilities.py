@@ -28,6 +28,14 @@ class CommandCapabilityRegistryTest(unittest.TestCase):
         for kind in SUPPORTED_KINDS:
             self.assertIsInstance(daemon_capability(kind), Capability)
 
+    def test_local_watch_commands_share_read_and_mutation_capabilities(self):
+        for action in ("preview", "list", "inbox"):
+            self.assertIs(cli_capability(f"chain-analysis.watches.{action}"), Capability.READ)
+            self.assertIs(daemon_capability(f"ui.chain_analysis.watches.{action}"), Capability.READ)
+        for action in ("create", "configure", "delete", "acknowledge", "evaluate"):
+            self.assertIs(cli_capability(f"chain-analysis.watches.{action}"), Capability.OPERATOR)
+            self.assertIs(daemon_capability(f"ui.chain_analysis.watches.{action}"), Capability.OPERATOR)
+
     def test_unknown_operations_fail_closed(self):
         with self.assertRaises(KeyError):
             cli_capability("reports.future-unreviewed-export")

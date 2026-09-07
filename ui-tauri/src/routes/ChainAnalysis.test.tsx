@@ -33,6 +33,7 @@ vi.mock("@/daemon/client", async original => ({
 vi.mock("@/hooks/useChainAnalysisAssistant", () => ({ useChainAnalysisAssistant: () => ({ available: false, busy: false }) }));
 vi.mock("./chain-analysis/QueryControls", () => ({ QueryControls: (props: NonNullable<typeof mock.controls>) => { mock.controls = props; return null; } }));
 vi.mock("./chain-analysis/InvestigationPanels", () => ({ AcquisitionPanel: () => null, SavedInvestigations: () => null }));
+vi.mock("./chain-analysis/WatchControls", () => ({ WatchAction: () => null, WatchInbox: () => null }));
 vi.mock("./chain-analysis/PsbtPanel", () => ({ PsbtPanel: () => null }));
 vi.mock("./chain-analysis/DatasetsPanel", () => ({ DatasetsPanel: () => null }));
 

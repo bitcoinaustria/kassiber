@@ -237,7 +237,10 @@ class _Builder:
             key = (node["id"], field)
             previous_rank = self.field_ranks.get(key, -1)
             previous = node.get(field)
-            if rank == previous_rank and previous is not None and previous != value and field in {"amount_msat", "asset", "address"}:
+            if field == "confirmations" and rank == previous_rank and previous is not None and previous != value:
+                node[field] = None
+                self.field_ranks[key] = 100
+            elif rank == previous_rank and previous is not None and previous != value and field in {"amount_msat", "asset", "address"}:
                 node["status"] = "conflicting"
                 self.finding("conflicting_output_observations", [node["id"]], f"Retained local observations disagree about {field}; traversal stops at this output.", refs=[ref])
                 # Do not arbitrarily select one value as fact.
@@ -268,6 +271,7 @@ class _Builder:
         self.alias(txid, parent["id"])
         ident = parent_id.rsplit(":tx:", 1)[0] + f":out:{txid}:{vout}"
         node = self.node(ident, chain, network, "output", txid=txid)
+        self.merge(node, {"confirmations": parent.get("confirmations")}, rank, ref)
         outpoint = f"{txid}:{vout}"
         node.update(outpoint=outpoint, label=f"{txid[:10]}:{vout}")
         value = output_value_sats(entry)
@@ -348,6 +352,12 @@ class _Builder:
             return
         self.alias(txid, node_id)
         confirmations = raw.get("confirmations")
+        status = raw.get("status") if isinstance(raw.get("status"), Mapping) else {}
+        if type(confirmations) is int and confirmations >= 0:
+            self.merge(node, {"confirmations": confirmations}, rank, ref)
+        elif status.get("confirmed") is False:
+            self.merge(node, {"confirmations": 0}, rank, ref)
+        # A block height alone does not establish a current tip or depth.
         if isinstance(confirmations, int) and confirmations < 0 or raw.get("removed") is True:
             node["status"] = "stale"
             self.finding("retracted_transaction", [node_id], "Stored transaction is removed or conflicted; it cannot prove current reachability.")
@@ -454,6 +464,9 @@ class _Builder:
         source = self.occurrences.source(row, scope.protocol_chain, scope.network) if self.occurrences is not None else None
         node = self.output(scope.protocol_chain, scope.network, txid, vout, entry, ref, 3, source=source)
         self.merge(node, {"amount_msat": str(amount) if amount is not None else None}, 3, ref)
+        confirmations = row.get("confirmations")
+        if type(confirmations) is int and confirmations >= 0:
+            self.merge(node, {"confirmations": confirmations}, 3, ref)
         self.own(node, row.get("wallet_id"))
         self.profile_seeds.add(node["id"])
         facts = self.output_facts[node["id"]]

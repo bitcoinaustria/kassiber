@@ -3225,6 +3225,9 @@ CREATE INDEX IF NOT EXISTS idx_direct_swap_payouts_component
 
 SCHEMA += CUSTODY_COMPONENT_SCHEMA
 
+from .chain_analysis_watches_schema import WATCH_SCHEMA
+SCHEMA += WATCH_SCHEMA
+
 
 def ensure_data_root(data_root):
     """Create `data_root` (and any missing parents) and return it as `Path`."""

@@ -618,7 +618,9 @@ class OperatorProjectTest(unittest.TestCase):
             "kassiber.daemon._remember_unlocked_passphrase"
         ), mock.patch(
             "kassiber.daemon._start_freshness_background_worker"
-        ):
+        ), mock.patch(
+            "kassiber.daemon._start_watch_worker"
+        ) as start_watch_worker:
             broker = acquire_project_ownership(
                 canonical_project(tmp),
                 owner_kind="broker",
@@ -638,6 +640,7 @@ class OperatorProjectTest(unittest.TestCase):
                 opened = daemon_runtime._open_daemon_connection(ctx)
                 self.assertIs(opened, ctx.conn)
                 open_database.assert_called_once()
+                start_watch_worker.assert_called_once_with(ctx)
             finally:
                 daemon_runtime._release_daemon_project_owner(ctx)
                 broker.release()
@@ -670,7 +673,9 @@ class OperatorProjectTest(unittest.TestCase):
                 "kassiber.daemon._remember_unlocked_passphrase"
             ), mock.patch(
                 "kassiber.daemon._start_freshness_background_worker"
-            ):
+            ), mock.patch(
+                "kassiber.daemon._start_watch_worker"
+            ) as start_watch_worker:
                 try:
                     opened = daemon_runtime._open_daemon_connection(ctx)
                     self.assertIs(opened, connection)
@@ -680,6 +685,7 @@ class OperatorProjectTest(unittest.TestCase):
                         canonical_root,
                     )
                     self.assertEqual(ctx.data_root, canonical_root)
+                    start_watch_worker.assert_called_once_with(ctx)
                 finally:
                     daemon_runtime._release_daemon_project_owner(ctx)
 

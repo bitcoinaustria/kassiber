@@ -1,3 +1,4 @@
+import { useLocalWatchNotifications } from "@/hooks/useLocalWatchNotifications";
 import {
   useIsFetching,
   useIsMutating,
@@ -620,7 +621,7 @@ function identityFromProject(
 }
 
 export function AppShell() {
-  const { t } = useTranslation(["chrome", "overview"]);
+  const { t } = useTranslation(["chrome", "overview", "chainAnalysis"]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -719,6 +720,7 @@ export function AppShell() {
     : true;
   const importRootBlocked = !importRootReady || !importedProjectActive;
   const daemonEnabled = !locked && !importRootBlocked;
+  useLocalWatchNotifications(daemonEnabled);
   const shellProgress =
     routeProgressFromActiveMaintenance(activeMaintenanceProgress) ??
     routeProgressFromNotifications(appNotifications);
@@ -1647,6 +1649,12 @@ export function AppShell() {
       .then(({ listen }) =>
         listen<unknown>(DAEMON_EVENT_CHANNEL, (event) => {
           if (disposed) return;
+          const value = event.payload;
+          if (value && typeof value === "object" && "event" in value && value.event === true && "kind" in value && value.kind === "ui.chain_analysis.watches.changed" && !("request_id" in value)) {
+            void queryClient.invalidateQueries({ queryKey: ["daemon"] });
+            addNotification({ title: t("chainAnalysis:watch.notificationTitle"), body: t("chainAnalysis:watch.notificationBody"), tone: "info", dedupeKey: "local-evidence-watches", target: "/chain-analysis" });
+            return;
+          }
           const signal = classifyDaemonFreshnessEvent(event.payload);
           if (!signal) return;
 

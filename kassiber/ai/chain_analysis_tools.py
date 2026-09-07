@@ -97,6 +97,17 @@ def tool_specs():
         ("acquire.plan", "On-device providers only: prepare a bounded reference acquisition from an explicitly selected configured backend. This is local preview only; no network or save occurs. Present the effects and limitations before apply.", ACQUIRE, False),
         ("acquire.apply", "On-device providers only: after once-only consent, fetch the unchanged reviewed plan from its selected backend and save sanitized reference observations locally. Egress is explicit; partial history remains a frontier. Does not sync wallets or authorize accounting.", obj({"plan": {"type": "object"}}, ("plan",)), True),
     ]
+    watch = obj({"rule": enum("output_spent", "confirmations", "connection_supported", "attribution_changed", "findings_changed"), "query": QUERY, "case_id": string(64), "threshold": integer(1, 10000)}, ("rule",))
+    entries.extend([
+        ("watches.preview", "Preview a typed local evidence watch. Choose a scoped query or saved case. Records a baseline only on create; no network or model runs in background.", watch, False),
+        ("watches.create", "After consent, create the unchanged reviewed local watch preview in the encrypted book. Re-preview after evidence or book changes.", obj({"definition": obj({**watch["properties"], "rule_version": integer(1, 1)}, ("rule",)), "expected_plan_id": string(64)}, ("definition", "expected_plan_id")), True),
+        ("watches.list", "List local evidence watches in this book.", obj({}), False),
+        ("watches.inbox", "Read durable local evidence changes; lost coverage is not resolution.", obj({"limit": integer(1, 100), "before": integer(1, 9007199254740991)}), False),
+        ("watches.configure", "After consent, pause or resume a watch using its current revision. Resume catches up from its saved baseline.", obj({"id": string(64), "expected_revision": integer(1, 2147483647), "enabled": {"type": "boolean"}}, ("id", "expected_revision", "enabled")), True),
+        ("watches.delete", "After consent, delete a local watch and its inbox history. Leaves evidence and accounting unchanged.", obj({"id": string(64), "expected_revision": integer(1, 2147483647)}, ("id", "expected_revision")), True),
+        ("watches.acknowledge", "After consent, acknowledge one inbox event; this never changes evidence or accounting.", obj({"id": string(64)}, ("id",)), True),
+        ("watches.evaluate", "After consent, evaluate enabled local watches against committed local evidence now; no acquisition or model call.", obj({}), True),
+    ])
     entries.append(("datasets.discard", "After consent, remove only incomplete failed/staging dataset imports in bounded batches. Complete versions retain their provenance; revoke them instead.", obj({"id": string(64)}, ("id",)), True))
     for operation in ("datasets.preview", "datasets.import", "datasets.discard"):
         name, description, schema, write = next(entry for entry in entries if entry[0] == operation)

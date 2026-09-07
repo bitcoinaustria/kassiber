@@ -748,7 +748,7 @@ SYNC_TABLE_MAP: Mapping[str, TableSpec] = {spec.table: spec for spec in SYNC_TAB
 
 # Explicit assertions document the privilege boundary. Adding one of these to
 # ``SYNC_TABLES`` must fail loudly in tests/review.
-NEVER_SYNC_TABLES = PRIVATE_OBSERVER_TABLES | frozenset(
+NEVER_SYNC_TABLES = PRIVATE_OBSERVER_TABLES | frozenset({"chain_analysis_watches", "chain_analysis_watch_inbox"}) | frozenset(
     {
         "gl_books", "gl_accounts", "gl_periods", "gl_entries", "gl_lines",
         "gl_period_events", "gl_evidence", "gl_bank_statements", "gl_bank_rows",

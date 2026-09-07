@@ -168,6 +168,9 @@ class ToolCatalogPromptTest(unittest.TestCase):
 
     def test_tool_catalog_stability(self):
         expected_tool_names = {
+            "ui_chain_analysis_watches_preview", "ui_chain_analysis_watches_list", "ui_chain_analysis_watches_inbox",
+            "ui_chain_analysis_watches_create", "ui_chain_analysis_watches_configure", "ui_chain_analysis_watches_delete",
+            "ui_chain_analysis_watches_acknowledge", "ui_chain_analysis_watches_evaluate",
             "ui_chain_analysis_query", "ui_chain_analysis_entropy",
             "ui_chain_analysis_cases_list", "ui_chain_analysis_cases_get",
             "ui_chain_analysis_cases_compare", "ui_chain_analysis_cases_save",

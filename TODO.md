@@ -1853,3 +1853,7 @@ Run these after any extraction or behavior change:
 - `uv run --locked python -m kassiber journals events --help`
 - `uv run --locked python -m kassiber reports balance-history --help`
 - `uv run --locked python -m kassiber rates --help`
+
+- [x] Local evidence watches: typed preview/activation, current local baseline,
+  version-bound domains/observers, atomic encrypted inbox/checkpoints, pause and
+  restart catch-up, generic notifications, and shared CLI/desktop/AI operations.
