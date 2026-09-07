@@ -32,7 +32,7 @@ async function click(label: string) {
     expect(button!.disabled).not.toBe(true);
     await button!.onClick?.();
 }
-beforeEach(() => { mock.states = []; mock.cursor = 0; mock.buttons = []; mock.mutate.mockReset(); mock.data = {}; error.mockReset(); });
+beforeEach(() => { mock.states = []; mock.cursor = 0; mock.buttons = []; mock.mutate.mockReset(); mock.data = { "ui.networks.binding": { state: "bound", environment: "main", domains: [{ chain: "bitcoin", network: "main" }, { chain: "liquid", network: "liquidv1" }] } }; error.mockReset(); });
 describe("local watch controls", () => {
     it("requires preview then explicit activation with unchanged facts and public observer", async () => {
         const plan = { plan_id: "reviewed", definition: { rule: "output_spent", query }, baseline: { status: "unknown" } };
@@ -60,6 +60,14 @@ describe("local watch controls", () => {
         await click("Start watching");
         expect(error).toHaveBeenCalled();
         expect(render(element)).not.toContain("Start watching");
+    });
+    it("offers a settings handoff for an unbound book instead of an unusable preview", async () => {
+        mock.data["ui.networks.binding"] = { state: "unbound", domains: [] };
+        const element = <WatchAction output query={query} onError={error}/>;
+        render(element); await click("Watch");
+        expect(render(element)).toContain("Set this book’s network");
+        expect(mock.buttons.find(button => button.children === "Preview")?.disabled).toBe(true);
+        expect(mock.mutate).not.toHaveBeenCalled();
     });
     it("binds saved case identity", async () => {
         const element = <WatchAction caseId="saved" query={query} onError={error}/>;

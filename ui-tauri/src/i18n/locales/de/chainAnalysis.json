@@ -376,6 +376,8 @@
     },
     "delete": "Entfernen",
     "confirmDelete": "Mit Verlauf entfernen?",
-    "encryption": "Buch verschlüsseln"
+    "encryption": "Buch verschlüsseln",
+    "bindBook": "Buchnetzwerk festlegen",
+    "bookScope": "Alle Ketten im Buch ({{environment}})"
   }
 }

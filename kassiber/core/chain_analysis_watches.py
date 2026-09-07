@@ -32,8 +32,16 @@ def require_encrypted(conn):
 
 
 def domain_for(conn, profile_id, query):
-    from .book_network import require_chain_domain
-    return require_chain_domain(conn, profile_id, query["chain"], query["network"], operation="analysis")
+    from .book_network import require_chain_domain, resolve_book_environment
+    if query.get("chain"):
+        return require_chain_domain(conn, profile_id, query["chain"], query["network"], operation="analysis")
+    binding = resolve_book_environment(conn, profile_id)
+    if binding["state"] != "bound" or not binding["domains"]:
+        raise AppError("Bind this book to a network environment first", code="book_network_unbound")
+    # Generic saved investigations retain all original filters and both chains.
+    # Freeze and validate every domain, never silently narrow to Bitcoin.
+    domains = [require_chain_domain(conn, profile_id, domain["chain"], domain["network"], operation="analysis") for domain in binding["domains"]]
+    return {"scope": "book_environment", "environment_id": binding["environment_id"], "revision": binding["revision"], "domains": sorted(domains, key=lambda item: item["domain_id"])}
 
 
 def revision_for(conn, profile_id):
@@ -49,8 +57,26 @@ def normalize_definition(conn, profile_id, args):
         invalid("Choose one investigation or query")
     query = get_case(conn, profile_id, args["case_id"])["query"] if args.get("case_id") else args["query"]
     query = normalize_query(query)
-    if not query.get("chain") or not query.get("network"):
-        invalid("Select an explicit chain and network before watching")
+    # A fully qualified physical subject already declares its domain. Preserve
+    # generic saved-query filters; missing chain does not mean Bitcoin.
+    subject = query.get("subject", "")
+    parts = subject.split(":")
+    physical = len(parts) >= 4 and parts[0] in {"bitcoin", "liquid"} and parts[2] in {"tx", "out"}
+    if physical:
+        from ..wallet_descriptors import normalize_network
+        if query.get("chain") not in (None, parts[0]) or query.get("network") and normalize_network(parts[0], query["network"]) != normalize_network(parts[0], parts[1]):
+            invalid("Watch subject contradicts its selected domain")
+    if not query.get("chain") and physical:
+        query["chain"] = parts[0]
+        query.setdefault("network", {"liquidv1": "main", "liquidtestnet": "test", "elementsregtest": "regtest"}.get(parts[1], parts[1]))
+    if query.get("chain") and not query.get("network"):
+        from .book_network import resolve_book_environment
+        binding = resolve_book_environment(conn, profile_id)
+        domain = next((item for item in binding["domains"] if item["chain"] == query["chain"]), None)
+        if binding["state"] != "bound" or domain is None:
+            raise AppError("Bind this book to a compatible network environment first", code="book_network_unbound")
+        query["network"] = {"liquidv1": "main", "liquidtestnet": "test", "elementsregtest": "regtest"}.get(domain["network"], domain["network"])
+    query = normalize_query(query)
     rule = args["rule"]
     if rule in {"output_spent", "confirmations", "attribution_changed"} and not query.get("subject"):
         invalid("This watch requires a subject")
@@ -76,13 +102,15 @@ def _subject_nodes(result, subject):
     return [node for node in result["nodes"] if subject in {node["id"], node.get("txid") if node["kind"] == "transaction" else None, node.get("outpoint"), node.get("address")}]
 
 
-def observe(conn, profile_id, definition):
+def observe(conn, profile_id, definition, *, previewing=False):
     """Evidence disappearance is unknown, never evidence of absence."""
     if definition["rule_version"] != RULE_VERSION:
         return {"status": "unavailable", "reason": "rule_version_changed", "values": []}
     try:
         result = run_analysis(conn, profile_id, definition["query"])
     except AppError as error:
+        if error.code == "subject_ambiguous" and previewing:
+            raise
         if error.code in {"not_found", "subject_ambiguous"}:
             return {"status": "unavailable", "reason": "subject_unavailable", "values": []}
         raise
@@ -122,7 +150,7 @@ def preview(conn, profile_id, args):
         definition = normalize_definition(conn, profile_id, args)
         domain = domain_for(conn, profile_id, definition["query"])
         revision = revision_for(conn, profile_id)
-        observation = observe(conn, profile_id, definition)
+        observation = observe(conn, profile_id, definition, previewing=True)
         plan = {"definition": definition, "domain": domain, "book_id": database_instance_id(conn), "profile_id": profile_id, "revision": revision, "baseline": observation}
         return {**plan, "plan_id": digest(plan), "local_only": True, "egress": "none"}
 

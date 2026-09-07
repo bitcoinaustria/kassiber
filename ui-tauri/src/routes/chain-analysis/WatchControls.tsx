@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { DaemonRequestError, useDaemon, useDaemonMutation } from "@/daemon/client";
 import { Button } from "@/components/ui/button";
 import { shortAnalysisId } from "@/lib/chainAnalysis";
+import { watchQueryScope, type WatchBinding } from "@/lib/chainAnalysisWatchScope";
 import type { AnalysisQuery } from "@/lib/chainAnalysis";
 type Rule = "output_spent" | "confirmations" | "connection_supported" | "attribution_changed" | "findings_changed";
 type Definition = {
@@ -58,19 +59,24 @@ export function WatchAction({ query, caseId, output = false, onError }: {
     const [needsEncryption, setNeedsEncryption] = useState(false);
     const preview = useDaemonMutation<Preview>("ui.chain_analysis.watches.preview", { invalidateQueries: false });
     const create = useDaemonMutation("ui.chain_analysis.watches.create");
+    const binding = useDaemon<WatchBinding>("ui.networks.binding", undefined, { enabled: open });
+    const scopedQuery = watchQueryScope(query, binding.data?.data);
+    const bound = binding.data?.data?.state === "bound";
     const busy = preview.isPending || create.isPending;
     const options: Rule[] = output ? ["output_spent", "confirmations", "attribution_changed", "findings_changed"] : query?.mode === "path" ? ["connection_supported", "findings_changed"] : ["findings_changed"];
     return <div className="text-xs">
     <Button size="sm" variant="ghost" onClick={() => { setOpen(!open); setPlan(null); }}>{t("watch.action")}</Button>
     {open && <div className="my-2 flex flex-wrap items-center gap-2 rounded border p-3">
       <p className="basis-full text-muted-foreground">{t("watch.localOnly")}</p>
+      {!bound && <p className="basis-full">{binding.isFetching ? t("scopeLoading") : binding.isError ? binding.error.message : <Link to="/settings" className="underline">{t("watch.bindBook")}</Link>}</p>}
+      {bound && <p className="basis-full text-muted-foreground">{scopedQuery?.chain ? `${scopedQuery.chain} / ${scopedQuery.network}` : t("watch.bookScope", { environment: binding.data?.data?.environment })}</p>}
       <select className="ca-input" aria-label={t("watch.rule")} value={rule} disabled={busy} onChange={event => { setRule(event.target.value as Rule); setPlan(null); setSaved(false); }}>
         {options.map(value => <option value={value} key={value}>{t(`watch.rules.${value}`)}</option>)}
       </select>
       {rule === "confirmations" && <input className="ca-input w-24" type="number" min={1} max={10000} value={threshold} aria-label={t("watch.threshold")} onChange={event => { setThreshold(Number(event.target.value)); setPlan(null); setSaved(false); }}/>}
-      {!plan ? <Button size="sm" variant="outline" disabled={busy || saved} onClick={async () => {
+      {!plan ? <Button size="sm" variant="outline" disabled={busy || saved || !bound} onClick={async () => {
                     try {
-                        const response = await preview.mutateAsync({ rule, ...(caseId ? { case_id: caseId } : { query }), ...(rule === "confirmations" ? { threshold } : {}) });
+                        const response = await preview.mutateAsync({ rule, ...(caseId ? { case_id: caseId } : { query: scopedQuery }), ...(rule === "confirmations" ? { threshold } : {}) });
                         setPlan(response.data ?? null);
                     }
                     catch (error) {

@@ -404,8 +404,11 @@ source, incomplete search or lost subject is missing coverage, never proof of
 unspentness or a cleared finding. Confirmation counts require explicit local
 observations; a block height or elapsed time does not imply confirmation depth.
 
-Creation requires a keyed SQLCipher book, an explicit bound chain domain, the
-current book identity/environment revision, an observer and a rule version. The
+Creation requires a keyed SQLCipher book, a bound chain domain or whole-book environment, the
+current book identity/environment revision, an observer and a rule version. Generic
+saved investigations keep their original cross-chain filters; selected physical
+subjects retain their specific domain. Missing network values derive from the
+bound domain, and ambiguous bare subjects require disambiguation. The
 unchanged preview is verified again at activation. Changing the book/domain or
 rule version makes the watch unavailable instead of reinterpreting its subject.
 The watch definition, baseline, inbox and progress are local book data and do not

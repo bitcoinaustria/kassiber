@@ -376,6 +376,8 @@
     },
     "delete": "Remove",
     "confirmDelete": "Remove with history?",
-    "encryption": "Encrypt this book"
+    "encryption": "Encrypt this book",
+    "bindBook": "Set this book’s network",
+    "bookScope": "All chains in this book ({{environment}})"
   }
 }
