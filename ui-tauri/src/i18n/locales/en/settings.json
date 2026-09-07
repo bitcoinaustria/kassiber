@@ -794,7 +794,8 @@
         "relation_crosses_partition": "A reviewed relationship crosses the selected connections. Include its complete history.",
         "incompatible_wallet_history": "This connection contains incompatible history.",
         "unresolved_relation": "A required related record cannot be copied safely.",
-        "scope_declaration_required": "Confirm this connection’s environment above."
+        "scope_declaration_required": "Confirm this connection’s environment above.",
+        "accounting_partition_unsupported": "This book has general accounting enabled and cannot be split by connection. Use a complete project backup to preserve its ledger and evidence."
       },
       "passphrase": "Backup passphrase (at least 12 characters)",
       "confirmPassphrase": "Confirm passphrase"
