@@ -237,6 +237,38 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(apply.call_args.kwargs["freshness_checkpoints"], {})
         self.assertIs(apply.call_args.kwargs["force_full"], True)
 
+    def test_full_cli_and_daemon_refresh_preserve_only_esplora_membership(self):
+        conn, profile_id, _job = self._seed_network_job()
+        membership = {"version": 1, "backend_key": "11" * 32, "scripts": {"22" * 32: {
+            "txids": ["33" * 32], "complete": False,
+        }}}
+        checkpoint = {"esplora_history_memberships": membership,
+                      "esplora_scripthashes": {"cached": True}, "highest_used": {"0": 42}}
+        retained = {"esplora_history_memberships": membership}
+        freshness.upsert_source_state(
+            conn, profile_id=profile_id, source_key=freshness.source_key(freshness.SOURCE_ONCHAIN, "cold"),
+            source_type=freshness.SOURCE_ONCHAIN, source_label="Cold", status=freshness.STATUS_FRESH,
+            checkpoint=checkpoint,
+        )
+        conn.commit()
+        with patch.object(cli_handlers, "_prefetch_chain_wallets", return_value={}) as prefetch, patch.object(
+            cli_handlers, "_apply_wallet_sync_atomically", return_value=[{"wallet": "Cold", "status": "synced"}],
+        ) as apply:
+            cli_handlers.sync_wallet(conn, {}, "ws", profile_id, wallet_ref="cold", force_full=True)
+        self.assertEqual(prefetch.call_args.kwargs["freshness_checkpoints"], {"cold": retained})
+        self.assertEqual(apply.call_args.kwargs["freshness_checkpoints"], {"cold": retained})
+
+        with patch.object(daemon_freshness, "prefetch_wallets_from_backend", return_value={}) as prefetch, patch.object(
+            daemon_freshness, "sync_wallet_from_backend", return_value={"freshness_checkpoint": retained},
+        ) as sync:
+            result = daemon_freshness._freshness_run_payload(
+                conn, {}, {"wallet": "Cold", "force_full": True, "rates": False, "journals": False},
+            )
+        self.assertEqual(prefetch.call_args.kwargs["freshness_checkpoints"], {"cold": retained})
+        self.assertEqual(sync.call_args.kwargs["checkpoint"], retained)
+        self.assertTrue(sync.call_args.kwargs["force_full"])
+        self.assertEqual(result["completed"][0]["status"], freshness.JOB_DONE)
+
     def test_electrum_prefetch_loads_only_trusted_current_stored_graphs(self):
         conn = self._db()
         profile_id = _seed_profile(conn)
@@ -822,6 +854,42 @@ class FreshnessTest(unittest.TestCase):
         self.assertNotIn("/rpc", encoded)
         self.assertIn("<backend-url>", encoded)
 
+    def test_private_observer_checkpoint_persists_but_never_enters_ui_ai_or_job_result(self):
+        from kassiber.ai.tools import redact_ai_tool_result
+
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        private = {
+            "esplora_scripthashes": {"ab" * 32: {"tx_count": 1}},
+            "esplora_history_memberships": {"backend_key": "cd" * 32,
+                                            "scripts": {"ab" * 32: {"txids": ["ef" * 32]}}},
+        }
+        job = freshness.enqueue_job(
+            conn, profile_id=profile_id, job_type=freshness.JOB_ONCHAIN_WALLET,
+            source_key="onchain_wallet:cold", source_type=freshness.SOURCE_ONCHAIN,
+            source_label="Cold wallet",
+        )
+        result = freshness.run_job(conn, job["id"], {
+            freshness.JOB_ONCHAIN_WALLET: lambda *_args: {
+                "freshness_checkpoint": private, "scripts_changed": 1,
+            },
+        })
+        state = freshness.get_source_state(conn, profile_id, "onchain_wallet:cold")
+        self.assertEqual(state["checkpoint"], private)
+        self.assertEqual(result["result"], {"scripts_changed": 1})
+        ui = daemon_freshness._freshness_snapshot_for_ui(conn, profile_id)
+        for payload in (ui, redact_ai_tool_result(ui), result):
+            encoded = json.dumps(payload)
+            for hidden in ("checkpoint", "esplora_history_memberships", "ab" * 32, "cd" * 32, "ef" * 32):
+                self.assertNotIn(hidden, encoded)
+        self.assertEqual(
+            freshness.redact_freshness_payload({"nested": {
+                "freshness_checkpoint": private, "esplora_history_memberships": private,
+                "checkpoint_json": json.dumps(private), "_freshness_checkpoint": private,
+                "records": 2,
+            }}), {"nested": {"records": 2}},
+        )
+
     def test_sync_text_scrubber_redacts_schemeless_host(self):
         # Defense in depth: an HTTP-client connection-error repr (urllib3/httpx)
         # embeds the host schemeless as host='…', which the scheme-form URL
@@ -1291,6 +1359,258 @@ class FreshnessTest(unittest.TestCase):
             freshness.SOURCE_RATES,
             {job["source_type"] for job in payload["enqueued"]},
         )
+
+    def _seed_network_job(self, *, source_type=freshness.SOURCE_ONCHAIN):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        set_setting(conn, "context_workspace", "ws")
+        set_setting(conn, "context_profile", profile_id)
+        conn.execute(
+            """
+            INSERT INTO wallets(id, workspace_id, profile_id, label, kind, config_json, created_at)
+            VALUES('cold', 'ws', ?, 'Cold', 'address', ?, '2026-06-04T00:00:00Z')
+            """,
+            (profile_id, json.dumps({"addresses": ["bc1qexample"]})),
+        )
+        job_type = {
+            freshness.SOURCE_ONCHAIN: freshness.JOB_ONCHAIN_WALLET,
+            freshness.SOURCE_BTCPAY_WALLET: freshness.JOB_BTCPAY_WALLET,
+            freshness.SOURCE_BTCPAY_PROVENANCE: freshness.JOB_BTCPAY_PROVENANCE,
+            freshness.SOURCE_RATES: freshness.JOB_MARKET_RATES,
+        }[source_type]
+        freshness.set_policy(
+            conn, profile_id,
+            background_enabled=True,
+            report_read_sync=True,
+            source_classes={source_type: True, freshness.SOURCE_JOURNALS: False},
+        )
+        job = freshness.enqueue_job(
+            conn, profile_id=profile_id, job_type=job_type,
+            source_key=freshness.source_key(source_type, "cold"),
+            source_type=source_type, source_label="Cold",
+            payload={"wallet_id": "cold"}, priority=0,
+        )
+        conn.commit()
+        return conn, profile_id, job
+
+    def test_background_revoked_sources_cancel_queued_and_recovered_jobs_without_network(self):
+        for source_type, transport in (
+            (freshness.SOURCE_ONCHAIN, "sync_wallet_from_backend"),
+            (freshness.SOURCE_BTCPAY_WALLET, "sync_configured_btcpay_wallet"),
+            (freshness.SOURCE_BTCPAY_PROVENANCE, "enrich_wallet_from_btcpay_provenance"),
+        ):
+            for interrupted in (False, True):
+                with self.subTest(source_type=source_type, interrupted=interrupted):
+                    conn, profile_id, job = self._seed_network_job(source_type=source_type)
+                    if interrupted:
+                        conn.execute(
+                            "UPDATE freshness_jobs SET status = ? WHERE id = ?",
+                            (freshness.JOB_RUNNING, job["id"]),
+                        )
+                        conn.commit()
+                    daemon_freshness._freshness_configure_payload(
+                        conn, {"source_classes": {source_type: False}},
+                    )
+                    with patch.object(daemon_freshness, transport) as network:
+                        daemon_freshness._freshness_background_tick(conn, {}, _Out())
+                    network.assert_not_called()
+                    actual = freshness.list_jobs(conn, profile_id)[0]
+                    self.assertEqual(actual["id"], job["id"])
+                    self.assertEqual(actual["status"], freshness.JOB_CANCELLED)
+
+    def test_automatic_permission_is_rechecked_after_progress_before_network(self):
+        for trigger, feature in (("background", "background_enabled"), ("report_read", "report_read_sync")):
+            for revoke in (feature, "source"):
+                with self.subTest(trigger=trigger, revoke=revoke):
+                    conn, _profile_id, job = self._seed_network_job()
+
+                    def revoke_permission(payload):
+                        if payload.get("phase") == freshness.PHASE_BACKEND_FETCH:
+                            change = (
+                                {"source_classes": {freshness.SOURCE_ONCHAIN: False}}
+                                if revoke == "source" else {feature: False}
+                            )
+                            daemon_freshness._freshness_configure_payload(conn, change)
+
+                    with patch.object(daemon_freshness, "sync_wallet_from_backend") as network:
+                        result = freshness.run_job(
+                            conn, job["id"],
+                            daemon_freshness._freshness_handlers({}, automatic_trigger=trigger),
+                            progress_observer=revoke_permission,
+                        )
+                    network.assert_not_called()
+                    self.assertEqual(result["status"], freshness.JOB_CANCELLED)
+
+    def test_background_revocation_also_blocks_btcpay_account_route_provenance(self):
+        conn, _profile_id, job = self._seed_network_job(source_type=freshness.SOURCE_BTCPAY_PROVENANCE)
+        conn.execute(
+            """
+            INSERT INTO btcpay_account_routes(
+                id, workspace_id, profile_id, backend_name, store_id,
+                payment_method_id, action, created_at, updated_at
+            ) VALUES('route', 'ws', 'profile', 'merchant', 'store',
+                     'BTC-LN', 'provenance_only', '2026-06-04T00:00:00Z', '2026-06-04T00:00:00Z')
+            """
+        )
+        conn.execute(
+            "UPDATE freshness_jobs SET payload_json = ? WHERE id = ?",
+            (json.dumps({"account_route_id": "route"}), job["id"]),
+        )
+        daemon_freshness._freshness_configure_payload(
+            conn, {"source_classes": {freshness.SOURCE_BTCPAY_PROVENANCE: False}},
+        )
+        with patch.object(daemon_freshness, "sync_btcpay_commercial_provenance") as network:
+            daemon_freshness._freshness_background_tick(conn, {}, _Out())
+        network.assert_not_called()
+        self.assertEqual(freshness.list_jobs(conn, "profile")[0]["status"], freshness.JOB_CANCELLED)
+
+    def test_background_with_current_source_permission_still_syncs(self):
+        conn, profile_id, job = self._seed_network_job()
+        with patch.object(daemon_freshness, "sync_wallet_from_backend", return_value={}) as network:
+            daemon_freshness._freshness_background_tick(conn, {}, _Out())
+        network.assert_called_once()
+        self.assertEqual(freshness.list_jobs(conn, profile_id)[0]["id"], job["id"])
+        self.assertEqual(freshness.list_jobs(conn, profile_id)[0]["status"], freshness.JOB_DONE)
+
+    def test_report_read_revocation_blocks_queued_jobs_and_legacy_sync_fallback(self):
+        for runtime_config in ({}, {"default_backend": "configured"}):
+            with self.subTest(runtime_config=runtime_config):
+                conn, profile_id, _job = self._seed_network_job()
+                daemon_freshness._freshness_configure_payload(
+                    conn, {"source_classes": {freshness.SOURCE_ONCHAIN: False}},
+                )
+                with (
+                    patch.dict(daemon_freshness._AUTO_SYNC_PROFILE_LAST_ATTEMPT, {}, clear=True),
+                    patch.dict(daemon_freshness._AUTO_SYNC_PROFILE_LAST_RESULT, {}, clear=True),
+                    patch.object(daemon_freshness, "sync_wallet_from_backend") as network,
+                    patch.object(daemon_freshness, "prefetch_wallets_from_backend") as prefetch,
+                    patch.object(daemon_freshness, "sync_wallet") as legacy_network,
+                ):
+                    daemon_freshness._auto_sync_wallets_if_enabled(conn, runtime_config, state={})
+                network.assert_not_called()
+                prefetch.assert_not_called()
+                legacy_network.assert_not_called()
+                self.assertFalse(freshness.get_policy(conn, profile_id).source_classes[freshness.SOURCE_ONCHAIN])
+
+    def test_explicit_wallet_refresh_only_authorizes_its_selected_jobs_and_prefetch(self):
+        conn, profile_id, unrelated = self._seed_network_job()
+        conn.execute(
+            """
+            INSERT INTO wallets(id, workspace_id, profile_id, label, kind, config_json, created_at)
+            VALUES('hot', 'ws', ?, 'Hot', 'address', ?, '2026-06-04T00:00:00Z')
+            """,
+            (profile_id, json.dumps({"addresses": ["bc1qhot"]})),
+        )
+        daemon_freshness._freshness_configure_payload(
+            conn, {"background_enabled": False, "report_read_sync": False,
+                   "source_classes": {freshness.SOURCE_ONCHAIN: False}},
+        )
+        with (
+            patch.object(daemon_freshness, "sync_wallet_from_backend", return_value={}) as network,
+            patch.object(daemon_freshness, "prefetch_wallets_from_backend", return_value={}) as prefetch,
+        ):
+            result = daemon_freshness._freshness_run_payload(
+                conn, {}, {"wallet": "Hot", "rates": False, "journals": False},
+            )
+        self.assertEqual([wallet["id"] for wallet in prefetch.call_args.args[4]], ["hot"])
+        network.assert_called_once()
+        self.assertEqual(network.call_args.args[4]["id"], "hot")
+        self.assertEqual([job["payload"]["wallet_id"] for job in result["completed"]], ["hot"])
+        old_job = next(job for job in freshness.list_jobs(conn, profile_id) if job["id"] == unrelated["id"])
+        self.assertEqual(old_job["status"], freshness.JOB_QUEUED)
+
+    def test_market_rates_recheck_permission_before_second_network_call(self):
+        for trigger, revoke in ((None, "source"), ("background", "background_enabled")):
+            with self.subTest(trigger=trigger, revoke=revoke):
+                conn, _profile_id, job = self._seed_network_job(source_type=freshness.SOURCE_RATES)
+
+                def latest(*_args, **_kwargs):
+                    change = (
+                        {"source_classes": {freshness.SOURCE_RATES: False}}
+                        if revoke == "source" else {revoke: False}
+                    )
+                    daemon_freshness._freshness_configure_payload(conn, change)
+                    return []
+
+                with (
+                    patch.object(core_rates, "ensure_bundled_kraken_btc_hourly_seed", return_value=("bundled", [])),
+                    patch.object(core_rates, "sync_latest_rates", side_effect=latest) as latest_network,
+                    patch.object(core_rates, "sync_rates") as history_network,
+                ):
+                    result = freshness.run_job(
+                        conn, job["id"],
+                        daemon_freshness._freshness_handlers({}, automatic_trigger=trigger),
+                    )
+                latest_network.assert_called_once()
+                history_network.assert_not_called()
+                self.assertEqual(result["status"], freshness.JOB_CANCELLED)
+
+    def test_workspace_refresh_does_not_borrow_queued_rates_permission(self):
+        conn, profile_id, old_rates = self._seed_network_job(source_type=freshness.SOURCE_RATES)
+        with (
+            patch.object(daemon_freshness, "sync_wallet_from_backend", return_value={}) as wallet_network,
+            patch.object(core_rates, "sync_latest_rates") as rates_network,
+        ):
+            daemon_freshness._workspace_freshness_run_payload(
+                conn, {}, {"workspace_id": "ws", "rates": False, "journals": False},
+            )
+        wallet_network.assert_called_once()
+        rates_network.assert_not_called()
+        actual = next(job for job in freshness.list_jobs(conn, profile_id) if job["id"] == old_rates["id"])
+        self.assertEqual(actual["status"], freshness.JOB_QUEUED)
+
+    def test_explicit_refresh_rechecks_pause_and_cooldown_before_each_selected_job(self):
+        for action in ("profile", "workspace", "maintenance"):
+            for change in ("pause", "cooldown"):
+                with self.subTest(action=action, change=change):
+                    conn, profile_id, _cold = self._seed_network_job()
+                    conn.execute(
+                        """
+                        INSERT INTO wallets(id, workspace_id, profile_id, label, kind, config_json, created_at)
+                        VALUES('hot', 'ws', ?, 'Hot', 'address', ?, '2026-06-04T00:00:00Z')
+                        """,
+                        (profile_id, json.dumps({"addresses": ["bc1qhot"]})),
+                    )
+                    hot_key = freshness.source_key(freshness.SOURCE_ONCHAIN, "hot")
+                    calls = []
+
+                    def first_wallet_finishes(*args, **_kwargs):
+                        wallet_id = args[4]["id"]
+                        calls.append(wallet_id)
+                        if wallet_id == "cold":
+                            if change == "pause":
+                                freshness.pause_source(conn, profile_id, hot_key)
+                            else:
+                                conn.execute(
+                                    "UPDATE freshness_jobs SET status=?, cooldown_until='2099-01-01T00:00:00Z' WHERE source_key=?",
+                                    (freshness.JOB_RATE_LIMITED, hot_key),
+                                )
+                            conn.commit()
+                        return {}
+
+                    with (
+                        patch.object(daemon_freshness, "sync_wallet_from_backend", side_effect=first_wallet_finishes),
+                        # Foreground batching happens before the first job. The
+                        # subsequent pause cannot undo any traffic already sent;
+                        # an empty prefetch result exercises deferred job I/O.
+                        patch.object(daemon_freshness, "prefetch_wallets_from_backend", return_value={}),
+                    ):
+                        if action == "workspace":
+                            daemon_freshness._workspace_freshness_run_payload(
+                                conn, {}, {"workspace_id": "ws", "rates": False, "journals": False},
+                            )
+                        elif action == "maintenance":
+                            daemon_freshness._auto_sync_wallets_if_enabled(
+                                conn, {"default_backend": "configured"}, force=True,
+                            )
+                        else:
+                            daemon_freshness._freshness_run_payload(
+                                conn, {}, {"all": True, "rates": False, "journals": False},
+                            )
+                    self.assertEqual(calls, ["cold"])
+                    hot_job = next(job for job in freshness.list_jobs(conn, profile_id) if job["source_key"] == hot_key)
+                    self.assertEqual(hot_job["status"], freshness.JOB_QUEUED if change == "pause" else freshness.JOB_RATE_LIMITED)
+                    self.assertEqual(hot_job["attempts"], 0)
 
     def test_desktop_sync_prefetches_wallets_together_before_serial_job_apply(self):
         conn = self._db()

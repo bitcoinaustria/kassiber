@@ -2,9 +2,11 @@ from __future__ import annotations
 
 """Proxy helpers shared by wallet sync, BTCPay sync, and rate fetches."""
 
+import base64
 import http.client
 import io
 import ipaddress
+import os
 import socket
 import ssl
 from urllib import error as urlerror
@@ -13,6 +15,16 @@ from urllib import request as urlrequest
 
 from .egress_ledger import get_egress_ledger, http_request_bytes_out
 from .errors import AppError
+
+
+def require_egress_enabled():
+    """Check the operator's process override before opening a transport."""
+    if str(os.environ.get("KASSIBER_NO_EGRESS") or "").strip().lower() in {"1", "true", "yes", "on"}:
+        raise AppError(
+            "Outbound requests are disabled by KASSIBER_NO_EGRESS",
+            code="network_egress_disabled",
+            retryable=False,
+        )
 
 
 def _with_default_proxy_scheme(proxy_url, default_scheme="socks5h"):
@@ -70,14 +82,6 @@ def _is_loopback_proxy_host(host):
         return False
 
 
-def _tcp_endpoint_open(host, port, timeout):
-    try:
-        with socket.create_connection((host, int(port)), timeout=timeout):
-            return True
-    except OSError:
-        return False
-
-
 def _exception_chain(exc):
     seen = set()
     current = exc
@@ -99,7 +103,7 @@ def _exception_indicates_proxy_unreachable(exc):
     return False
 
 
-def onion_proxy_failure_hints(endpoint, proxy_url, exc=None, *, tcp_probe=None):
+def onion_proxy_failure_hints(endpoint, proxy_url, exc=None):
     if not is_onion_endpoint(endpoint):
         return []
     if not str(proxy_url or "").strip():
@@ -116,11 +120,10 @@ def onion_proxy_failure_hints(endpoint, proxy_url, exc=None, *, tcp_probe=None):
     hints = [
         f"Tor proxy not reachable at {host}:{port}. Start Tor or edit this backend's proxy."
     ]
-    probe = tcp_probe or _tcp_endpoint_open
-    if port == 9050 and _is_loopback_proxy_host(host) and probe(host, 9150, 0.2):
+    if port == 9050 and _is_loopback_proxy_host(host):
         hints.append(
-            f"Tor Browser's SOCKS proxy appears reachable at {host}:9150. "
-            "To use it, edit this backend's proxy port to 9150."
+            "If you use Tor Browser, its SOCKS proxy normally uses port 9150. "
+            "Edit this backend's proxy port to use it; no alternate port was probed."
         )
     return hints
 
@@ -216,6 +219,7 @@ def _authenticate_socks5(sock, username, password):
 
 
 def _connect_via_socks5(proxy_url, host, port, timeout):
+    require_egress_enabled()
     scheme, proxy_host, proxy_port, username, password = _parse_proxy_url(proxy_url)
     if scheme not in {"socks5", "socks5h"}:
         raise AppError(f"Unsupported SOCKS proxy transport '{scheme}'")
@@ -256,6 +260,28 @@ def connect_via_socks5(proxy_url, host, port, timeout=30):
     return _connect_via_socks5(proxy_url, host, port, timeout)
 
 
+class _NoRedirectHandler(urlrequest.HTTPRedirectHandler):
+    """A consented endpoint must not silently forward credentials elsewhere."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+class _ExplicitProxyHandler(urlrequest.ProxyHandler):
+    """Apply the configured proxy without environment/OS bypass rules."""
+
+    def proxy_open(self, req, proxy, protocol):
+        original_protocol = req.type
+        parsed = urlparse.urlsplit(proxy)
+        if parsed.username is not None and parsed.password is not None:
+            credentials = f"{urlparse.unquote(parsed.username)}:{urlparse.unquote(parsed.password)}"
+            encoded = base64.b64encode(credentials.encode()).decode("ascii")
+            req.add_header("Proxy-authorization", "Basic " + encoded)
+        req.set_proxy(urlparse.unquote(parsed.netloc.rsplit("@", 1)[-1]), parsed.scheme)
+        if original_protocol == parsed.scheme or original_protocol == "https":
+            return None
+        return self.parent.open(req, timeout=req.timeout)
+
+
 def urlopen_with_proxy(
     request,
     url=None,
@@ -264,8 +290,23 @@ def urlopen_with_proxy(
     *,
     source_label="backend",
     ssl_context=None,
+    follow_redirects=False,
+    max_error_bytes=None,
+    raise_http_errors=True,
 ):
+    require_egress_enabled()
     proxy = str(proxy_url or "").strip()
+    normalized_proxy = _with_default_proxy_scheme(proxy)
+    scheme = urlparse.urlsplit(normalized_proxy).scheme.lower()
+    if scheme == "https":
+        # urllib does not establish TLS to an HTTPS proxy before CONNECT.
+        # Treating it as HTTP would disclose proxy credentials in plaintext.
+        raise AppError(
+            "HTTPS proxy transport is not supported",
+            code="network_proxy_unsupported",
+            hint="Configure a SOCKS5 proxy, or an HTTP CONNECT proxy on a trusted route. Kassiber will not downgrade an HTTPS proxy to plaintext.",
+            retryable=False,
+        )
     target_url = url or request.full_url
     source = str(source_label or "").strip().lower()
     if "rate" in source or "price" in source:
@@ -290,20 +331,25 @@ def urlopen_with_proxy(
                     "connect to .onion hosts directly."
                 ),
             )
-        kwargs = {"timeout": timeout}
+        # A saved backend's reviewed route includes only its explicit proxy.
+        # urllib otherwise installs an environment/OS ProxyHandler, which can
+        # send credentials and query subjects to an unreviewed intermediary.
+        handlers = [urlrequest.ProxyHandler({})]
+        if not follow_redirects:
+            handlers.append(_NoRedirectHandler())
         if ssl_context is not None:
-            kwargs["context"] = ssl_context
-        return urlrequest.urlopen(request, **kwargs)
-    normalized_proxy = _with_default_proxy_scheme(proxy)
-    scheme = urlparse.urlsplit(normalized_proxy).scheme.lower()
-    if scheme in {"http", "https"}:
+            handlers.append(urlrequest.HTTPSHandler(context=ssl_context))
+        return urlrequest.build_opener(*handlers).open(request, timeout=timeout)
+    if scheme == "http":
         handlers = [
-            urlrequest.ProxyHandler(
+            _ExplicitProxyHandler(
                 {"http": normalized_proxy, "https": normalized_proxy}
             )
         ]
         if ssl_context is not None:
             handlers.append(urlrequest.HTTPSHandler(context=ssl_context))
+        if not follow_redirects:
+            handlers.append(_NoRedirectHandler())
         opener = urlrequest.build_opener(*handlers)
         return opener.open(request, timeout=timeout)
     if scheme not in {"socks5", "socks5h"}:
@@ -311,7 +357,7 @@ def urlopen_with_proxy(
             f"Unsupported {source_label} proxy transport '{scheme or proxy}'",
             code="validation",
             hint=(
-                "Use http://, https://, socks5://, socks5h://, or HOST:PORT "
+                "Use http://, socks5://, socks5h://, or HOST:PORT "
                 "for proxy settings."
             ),
         )
@@ -323,6 +369,8 @@ def urlopen_with_proxy(
         method=request.get_method(),
         data=getattr(request, "data", None),
         ssl_context=ssl_context,
+        max_error_bytes=max_error_bytes,
+        raise_http_errors=raise_http_errors,
     )
 
 
@@ -337,6 +385,8 @@ class SocksUrlResponse:
         method="GET",
         data=None,
         ssl_context=None,
+        max_error_bytes=None,
+        raise_http_errors=True,
     ):
         self._url = url
         self._proxy_url = proxy_url
@@ -345,6 +395,8 @@ class SocksUrlResponse:
         self._method = method
         self._data = data
         self._ssl_context = ssl_context
+        self._max_error_bytes = max_error_bytes
+        self._raise_http_errors = raise_http_errors
         self._connection = None
         self._response = None
 
@@ -396,8 +448,11 @@ class SocksUrlResponse:
                 request_kwargs["body"] = self._data
             self._connection.request(self._method, target, **request_kwargs)
             self._response = self._connection.getresponse()
-            if self._response.status >= 400:
-                body = self._response.read()
+            if self._response.status >= 400 and self._raise_http_errors:
+                body = self._response.read(self._max_error_bytes + 1) if self._max_error_bytes is not None else self._response.read()
+                if self._max_error_bytes is not None and len(body) > self._max_error_bytes:
+                    self.close()
+                    raise AppError("Proxy HTTP error response exceeds the byte limit", code="invalid_observation")
                 raise urlerror.HTTPError(
                     self._url,
                     self._response.status,
@@ -418,6 +473,11 @@ class SocksUrlResponse:
             return b""
         return self._response.read(*args)
 
+    def read1(self, *args):
+        if self._response is None:
+            return b""
+        return self._response.read1(*args)
+
     @property
     def status(self):
         return getattr(self._response, "status", None)
@@ -431,9 +491,15 @@ class SocksUrlResponse:
         return getattr(self._response, "headers", {})
 
     def close(self):
-        if self._connection is not None:
-            self._connection.close()
-            self._connection = None
+        try:
+            close_response = getattr(self._response, "close", None)
+            if close_response is not None:
+                close_response()
+        finally:
+            self._response = None
+            if self._connection is not None:
+                self._connection.close()
+                self._connection = None
 
     def __exit__(self, exc_type, exc, traceback):
         self.close()
@@ -467,6 +533,7 @@ __all__ = [
     "_socks5_address",
     "build_proxy_opener",
     "is_onion_endpoint",
+    "require_egress_enabled",
     "connect_via_socks5",
     "onion_proxy_failure_hints",
     "urlopen_with_proxy",

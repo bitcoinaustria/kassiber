@@ -1,5 +1,8 @@
 import { AlertTriangle, CheckCircle2, Pencil, Plus, ShieldCheck } from "lucide-react";
 
+import { useTranslation } from "react-i18next";
+import { ANALYSIS_NETWORKS, type AnalysisNetwork, useUiStore } from "@/store/ui";
+
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -104,6 +107,8 @@ export function NetworkLayerSettingsPanel({
           ))}
         </div>
       )}
+
+      {layer === "bitcoin" ? <AnalysisNetworkSettings /> : null}
 
       {layer === "bitcoin" || layer === "liquid" ? (
         <p className="text-xs text-muted-foreground">
@@ -214,5 +219,27 @@ export function BackendLayerCard({
       </div>
       <p className="mt-2 text-xs text-muted-foreground">{trust.note}</p>
     </div>
+  );
+}
+
+/** Offline defaults never alter connection networks or authorize requests. */
+function AnalysisNetworkSettings() {
+  const { t } = useTranslation("settings");
+  const network = useUiStore((state) => state.analysisNetwork);
+  const setNetwork = useUiStore((state) => state.setAnalysisNetwork);
+  return (
+    <details className="rounded-md border bg-background p-4">
+      <summary className="cursor-pointer text-sm font-medium">{t("analysisNetwork.title")}</summary>
+      <div className="mt-3 space-y-2">
+        <label className="flex max-w-sm flex-col gap-2 text-sm">
+          {t("analysisNetwork.label")}
+          <select className="rounded-md border bg-background px-3 py-2" value={network}
+            onChange={(event) => setNetwork(event.target.value as AnalysisNetwork)}>
+            {ANALYSIS_NETWORKS.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>
+        <p className="max-w-2xl text-xs text-muted-foreground">{t("analysisNetwork.help")}</p>
+      </div>
+    </details>
   );
 }

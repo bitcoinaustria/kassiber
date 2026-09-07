@@ -131,26 +131,32 @@ temporary SQLCipher database. The runner injects and rolls back a failed state
 write, reopens the encrypted project, and rejects BDK/LWK-looking sidecar files.
 For Bitcoin/all selections, the lane then creates a real Core descriptor wallet,
 funds both low and gap-edge receive indices, and refreshes its public descriptor
-through Fulcrum using BDK. It asserts the BDK route, transaction/UTXO projection,
-per-branch coverage, SQLCipher-only state, process restart, and byte-stable
-immediate no-op state.
+through Fulcrum using BDK and through the local Esplora-compatible service using
+Kassiber's explicit HTTP transport. It asserts native Electrum state and
+per-branch coverage, the HTTP `http_route_policy` compatibility reason,
+transaction/UTXO parity, SQLCipher-only persistence, process restart, and
+byte-stable immediate no-op native state.
 For Liquid/all selections, the lane creates a real Elements descriptor wallet
 with private SLIP77 view material and public spending keys, then refreshes it
-through both the local Electrum and Esplora-compatible services using LWK. It
-asserts the LWK-only route, opaque `ForeignStore` bytes in the main database,
-restart and immediate no-op stability, confidential LBTC receive/spend and fee
-normalization, issued-asset history, transport parity, confirmation, block
-invalidation and unconfirmed resurrection.
+through local Electrum using LWK and the Esplora-compatible service using
+Kassiber's explicit HTTP transport. It asserts opaque native `ForeignStore`
+bytes only for Electrum, the HTTP compatibility reason, restart and immediate
+no-op stability, confidential LBTC receive/spend and fee normalization,
+issued-asset history, transport parity, confirmation, block invalidation and
+unconfirmed resurrection.
 Only loopback RPC, Electrum and HTTP targets are accepted. Routing metadata
 pins pre-connect compatibility selection for this phase, forbids runtime
 fallback, and records that `.onion` endpoints may not connect directly.
-The transport oracle also drives the pinned clients themselves: BDK crosses
+Separately, the transport oracle drives the pinned clients themselves: BDK crosses
 plain Electrum, Esplora, insecure test TLS and SOCKS5h; LWK crosses plain
 Electrum, Esplora, explicit insecure test TLS and an authentication-enforcing
 Esplora reverse proxy. Focused routing and SSL-context tests cover custom-CA and
 explicitly insecure Esplora rows through Kassiber's compatibility HTTP transport
 because neither pinned dependency accepts a per-client trust root; the selected
-TLS policy is exercised instead of being silently ignored.
+TLS policy is exercised instead of being silently ignored. Direct SDK HTTP
+probes establish the binding's capabilities; they do not authorize its use by
+Kassiber. Production Esplora routing stays on the explicit compatibility
+transport until the SDK exposes enforceable redirect and proxy controls.
 
 Pull requests and main-branch pushes expose a required
 `Chain observers (Linux Docker)` job in `.github/workflows/ci.yml`. It runs the
@@ -668,6 +674,20 @@ What `demo-up` does:
 - keeps the demo Core wallets loaded (`--keep-core-wallets`) so incremental
   syncs from the app keep seeing new activity.
 
+The embedded Lightning bootstrap funds its faucet from this demo's generated
+external actor when mature funds are low. This avoids relying on regtest block
+subsidies after the historical scenario has crossed many halvings. Standalone
+Lightning runs mine their own faucet funds; an explicit
+`KASSIBER_REGTEST_LIGHTNING_FUNDING_WALLET` selects a known regtest funding
+wallet for an older chain. Failed funding aborts immediately.
+
+Persistent demos also seed two explicitly synthetic source-of-funds cases:
+a reviewed Strike CSV purchase through its exchange withdrawal into the observed
+regtest wallet receipt, and a separate receipt whose origin evidence remains
+missing. The attached CSV and `exports/source-funds-synthetic.pdf` are generated
+test artifacts, not proof of a real exchange purchase. `source-funds-seed.json`
+records the case IDs; restarts reuse them and preserve manual demo edits.
+
 The `fulcrum` container is provisioned and exposed as the
 `bitcoin-electrum-regtest` backend row. The full-accounting demo assigns the
 active `treasury_2020`, `merchant_2022`, and `cold_2024` wallets to Fulcrum while
@@ -764,9 +784,10 @@ mode.
   sets it before collection for every non-integration run. It blocks Python
   DNS, TCP connects, and UDP sends to non-loopback hosts. A `sitecustomize` on
   `PYTHONPATH` carries it into spawned Python children and stops a child if the
-  guard cannot start. `KASSIBER_NO_EGRESS=1` also tells BDK/LWK observers to
-  refuse chain observation outright, including loopback, so it is not used
-  suite-wide.
+  guard cannot start. The separate product override `KASSIBER_NO_EGRESS=1`
+  blocks BDK/LWK observer construction, shared backend HTTP/SOCKS and Python
+  Electrum connections, and chain-analysis acquisition, including loopback.
+  It is not used suite-wide and is not an OS-wide network firewall.
 - Tapes must include provenance (`backend_kind`, network, regtest anchor, and
   issue number) and fail closed: an adapter request absent from the tape raises
   `TapeMiss`, while unused recorded interactions fail the replay test.
@@ -800,3 +821,59 @@ to add a fast recorded `lightning-cli` tape lane, broaden backend parity beyond
 Core Lightning/LND as new adapters land, and eventually compare live
 Lightning-derived accounting across multiple node implementations without
 changing the contributor entrypoint.
+
+## Local chain-analysis oracle
+
+`./scripts/integration-harness.sh chain-analysis` runs the dedicated disposable
+Core31 consensus/index oracle. It uses an ephemeral loopback RPC port, generated
+credentials, its own container with `txindex` and `txospenderindex`, and temporary
+Kassiber books. P2P networking is disabled; the node is limited to two CPUs and
+1 GiB RAM. Cleanup removes only that container, including when a test fails or
+the script is interrupted. It needs Docker and may pull `bitcoin/bitcoin:31.0`.
+
+`tests.integration.test_live_chain_analysis` covers:
+
+| Real Core fixture | Required result |
+| --- | --- |
+| Transfers through three intermediate wallets; only endpoints initially acquired | No invented path, explicit acquisition frontier, then exact create/spend path after acquiring the missing transaction; saved-case difference preserves the original incomplete evidence. |
+| Another confirmed spend after saving a complete local trace | Current case comparison includes the new transaction; the saved snapshot remains unchanged. |
+| Four independently funded legacy, nested SegWit, native SegWit and Taproot inputs | Empty PSBT amounts remain unknown; wallet-filled/signed PSBT fee and final vsize match Core; acquired transaction features match PSBT structure and signature categories after raw witness discard. |
+| Two independent wallet signers with equal inputs and equal outputs | One signer cannot finalize; both can produce a mined transaction; the financial-flow model retains three possible partitions and grants no ownership authority. This exercises collaborative transaction structure, not a CoinJoin coordinator. |
+| Original payment and receiver-signed Payjoin proposal | Added receiver contribution, fee delta, preserved output order and actual receiver signature commitments pass; reordered outputs fail; sender completion produces a Core-accepted mined transaction. The fixture constructs proposals locally and does not exercise HTTP negotiation. |
+| Relative block lock and absolute height lock | Core rejects each transaction before its prerequisite height and accepts it afterward; structural locktime and RBF-signalling features agree. |
+
+Every scenario also checks that acquisition creates no accounting transactions,
+watch-only wallets, custody components or ownership provenance. Public observation
+payloads retain categorical features while discarding raw witnesses, scriptSig,
+derivations and credentials. The lane waits for confirmed outpoints and both
+indexes at the exact mined tip rather than using fixed startup sleeps. Normal
+quality-gate runs skip these live tests; the dedicated lane additionally sets
+`KASSIBER_DISPOSABLE_CHAIN_ANALYSIS=1` to avoid running them against another test
+stack. Unit tests cover official BIP174/370 vectors, BIP78 hostile proposals,
+observer views, acquisition budgets, conditional entropy scenarios, labels,
+case revisions, CLI/daemon and AI projection without network.
+
+`tests/test_chain_analysis_consent.py` runs the actual assistant tool loop and
+consent broker with synthetic provider turns and node responses. It checks
+approval, denial, cancellation, timeout, once-only scope and stale plans while
+forbidding even loopback DNS/socket attempts. Transport tests in
+`tests/test_proxy.py`, `tests/test_ai_core.py`, `tests/test_lnd_adapter.py` and
+`tests/test_update_check.py` separately exercise real urllib handler chains,
+including vulnerable redirect controls, explicit proxy routing and TLS checks.
+
+[Cashu-regtest](https://github.com/callebtc/cashu-regtest) is a useful reference
+for later cross-rail fixtures: its
+[startup checks](https://github.com/callebtc/cashu-regtest/blob/main/start.sh)
+exercise channel readiness and settled payments, and its optional stacks cover
+Arkade, Bark and Spark alongside LND, CLN and LDK. Reuse the evidence/readiness
+pattern: bind a funding outpoint to confirmation, compare both payment endpoints
+by payment hash, and check principal plus fees at each custody boundary. Starting
+that entire environment is not part of this lane; its reset behavior and large
+optional builds require a separately isolated project.
+
+This Bitcoin-only lane does not validate exchange export reconciliation, Liquid
+confidential amounts, live Lightning routing, Cashu proofs or Ark/Spark exits.
+Existing accounting/Lightning/Elements lanes cover their stated adapters. LDK,
+Ark and Spark still need Kassiber observation adapters and real protocol evidence
+before a cross-rail edge can claim more than a reviewed custody relation. A
+successful payment in an external demo alone does not establish that integration.

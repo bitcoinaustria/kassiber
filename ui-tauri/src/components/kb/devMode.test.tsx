@@ -40,7 +40,6 @@ describe("pre-release dev mode", () => {
       "/activity",
       "/custody-gaps",
       "/exit-tax",
-      "/privacy-mirror",
       "/source-of-funds",
     ]);
     expect([...DEV_HIDDEN_ROUTES]).toEqual([

@@ -16,7 +16,8 @@
     "activity": "Aktivität",
     "logs": "Protokoll",
     "exitTax": "Wegzugsbesteuerung",
-    "settings": "Einstellungen"
+    "settings": "Einstellungen",
+    "chainAnalysis": "Chain-Analyse"
   },
   "section": {
     "main": "Allgemein",

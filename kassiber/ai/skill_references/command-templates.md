@@ -352,3 +352,40 @@ consent, pagination and uncertain retries. Both CLI chat's default `core` profil
 and built-in chat expose the bounded review pack for quarantine investigations.
 Portable plans are reviewable local artifacts; applying them is explicit and
 returns a durable verification receipt. This is not a background agent run.
+
+## Local chain investigations
+
+```bash
+kassiber --machine chain-analysis overview
+kassiber --machine chain-analysis trace TXID --direction backward --depth 8
+kassiber --machine chain-analysis path SOURCE_TXID TARGET_TXID --direction forward
+kassiber --machine chain-analysis entropy TXID --max-states 200000
+kassiber --machine chain-analysis psbt analyze --file proposal.psbt --network regtest
+kassiber --machine chain-analysis psbt compare --before original.psbt --after proposal.psbt --network regtest
+kassiber --machine chain-analysis datasets list
+kassiber --machine chain-analysis cases list
+kassiber --machine chain-analysis cases compare CASE_ID
+kassiber --machine --output plan.json chain-analysis acquire plan TXID --backend my-core --chain bitcoin --network main --direction both
+kassiber --machine chain-analysis acquire apply --plan @plan.json
+kassiber chat --tool-profile scoped "Investigate the locally observed chain paths and explain the frontier."
+```
+
+Reads use stored observations only. Backend expansion is a separate plan/apply
+action. Inspect physical versus custody versus hypothesis edges; neither graph
+connectivity nor label exposure proves common ownership or uniquely traced
+satoshis. Check entropy status and assumptions before using a count. Remote AI
+uses opaque graph references; on-device AI alone can receive acquisition plans.
+Save immutable investigations using the query and snapshot_id from the result;
+changed inputs require a fresh query. Global flags remain before the command.
+
+Chain-analysis workbench tools use native-selected opaque source tokens, never
+model-selected paths or raw PSBT bytes. Start long computations and dataset
+validation/import through `.start`, then poll `ui.chain_analysis.jobs.get` or
+cancel with `jobs.cancel`; CLI commands are synchronous. Reuse the completed
+dataset preview with its exact source token, normalized manifest and SHA-256
+before requesting import consent. Dataset validation/import and backend
+acquisition require an on-device provider. Public pack labels remain sourced
+claims; neither they nor conditional entropy establish custody or tax facts.
+For Payjoin compare both original and proposal tokens with the actual negotiated
+constraints. A passed supported check is not a complete consensus or signing
+authorization.

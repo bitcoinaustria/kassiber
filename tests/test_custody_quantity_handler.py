@@ -1,11 +1,13 @@
 import tempfile
 import unittest
+import json
 
 from kassiber.cli import handlers
 from kassiber.core.chain_observer.provenance import (
     persist_chain_observation_provenance,
 )
 from kassiber.core.custody_components import activate_component, create_component
+from kassiber.core.custody_journal import CustodyJournalBuilder
 from kassiber.core import report_context as core_report_context
 from kassiber.core.ui_snapshot import build_report_blockers_snapshot
 from kassiber.db import open_db
@@ -125,6 +127,134 @@ def _prepare_same_txid_roll(conn):
 
 
 class CustodyQuantityHandlerTests(unittest.TestCase):
+    def test_explicit_acquisition_is_not_a_samourai_gap_return(self):
+        for kind, override in (
+            ("income", None),
+            ("buy", None),
+            ("wages", None),
+            ("mining", None),
+            ("lending interest", None),
+            ("deposit", "income"),
+            ("deposit", "buy"),
+            ("deposit", "wages"),
+        ):
+            with self.subTest(kind=kind, override=override), tempfile.TemporaryDirectory() as root:
+                conn = _book(root, "FIFO")
+                self.addCleanup(conn.close)
+                conn.execute(
+                    "UPDATE wallets SET config_json = ? WHERE id = 'a'",
+                    (json.dumps({"chain": "bitcoin", "network": "main", "samourai": {
+                        "role": "child", "section": "postmix",
+                    }}),),
+                )
+                conn.execute(
+                    "UPDATE transactions SET kind = ?, kind_override = ? WHERE id = 'in'",
+                    (kind, override),
+                )
+                profile = dict(conn.execute("SELECT * FROM profiles WHERE id = 'profile'").fetchone())
+
+                result = CustodyJournalBuilder(conn, profile).build_custody_projection()
+
+                self.assertFalse(result.interpretation.blocked_transaction_ids)
+                self.assertFalse(result.quantity_state.gap_holds)
+                self.assertFalse(result.finalized_tax_projection.quarantines)
+                self.assertIn("in", {row["journal_transaction_id"] for row in result.finalized_tax_projection.rows})
+                if kind in {"buy", "wages", "income"} and override is None:
+                    journal = handlers.process_journals(conn, "Books", "Book")
+                    self.assertEqual(journal["quarantined"], 0)
+                    self.assertFalse(journal["custody_quantity"]["blocked"])
+
+    def test_economic_override_and_taxability_do_not_hide_unknown_gap_returns(self):
+        for kind, override, taxable in (("income", "deposit", None), ("deposit", None, 0)):
+            with self.subTest(kind=kind, override=override), tempfile.TemporaryDirectory() as root:
+                conn = _book(root, "FIFO")
+                self.addCleanup(conn.close)
+                conn.execute(
+                    "UPDATE wallets SET config_json = ? WHERE id = 'a'",
+                    (json.dumps({"chain": "bitcoin", "network": "main", "samourai": {
+                        "role": "child", "section": "postmix",
+                    }}),),
+                )
+                conn.execute(
+                    "UPDATE transactions SET kind = ?, kind_override = ?, taxability_override = ?, "
+                    "note = 'income buy wages' WHERE id = 'in'",
+                    (kind, override, taxable),
+                )
+                profile = dict(conn.execute("SELECT * FROM profiles WHERE id = 'profile'").fetchone())
+
+                result = CustodyJournalBuilder(conn, profile).build_custody_projection()
+
+                self.assertEqual({hold.transaction_id for hold in result.quantity_state.gap_holds}, {"out", "in"})
+                self.assertIn("in", {row["transaction_id"] for row in result.finalized_tax_projection.quarantines})
+
+    def test_explicit_sell_is_not_a_samourai_gap_source(self):
+        for kind, override, gap_expected in (
+            ("sale", None, False),
+            ("sell", None, False),
+            ("withdrawal", "sell", False),
+            ("sell", "withdrawal", True),
+            ("spend", None, True),
+        ):
+            with self.subTest(kind=kind, override=override), tempfile.TemporaryDirectory() as root:
+                conn = _book(root, "FIFO")
+                self.addCleanup(conn.close)
+                conn.execute(
+                    "UPDATE wallets SET config_json = ? WHERE id = 'a'",
+                    (json.dumps({"chain": "bitcoin", "network": "main", "samourai": {
+                        "role": "child", "section": "postmix",
+                    }}),),
+                )
+                conn.execute(
+                    "UPDATE transactions SET kind = ?, kind_override = ? WHERE id = 'out'",
+                    (kind, override),
+                )
+                conn.execute("UPDATE transactions SET kind = 'deposit' WHERE id = 'in'")
+                profile = dict(conn.execute("SELECT * FROM profiles WHERE id = 'profile'").fetchone())
+
+                result = CustodyJournalBuilder(conn, profile).build_custody_projection()
+
+                self.assertFalse(result.interpretation.blocked_transaction_ids)
+                self.assertEqual(
+                    {hold.transaction_id for hold in result.quantity_state.gap_holds},
+                    {"out", "in"} if gap_expected else set(),
+                )
+                if not gap_expected:
+                    self.assertFalse(result.finalized_tax_projection.quarantines)
+                    journal = handlers.process_journals(conn, "Books", "Book")
+                    self.assertEqual(journal["quarantined"], 0)
+                    self.assertFalse(journal["custody_quantity"]["blocked"])
+
+    def test_capacity_holds_preserve_explicit_external_source_classification(self):
+        for source_count in (86, 87):
+            with self.subTest(source_count=source_count), tempfile.TemporaryDirectory() as root:
+                conn = _book(root, "FIFO")
+                self.addCleanup(conn.close)
+                conn.execute("DELETE FROM transactions WHERE id = 'later-sale'")
+                conn.execute("UPDATE transactions SET amount = ? WHERE id = 'buy-old'", ((source_count + 10) * BTC,))
+                conn.execute(
+                    "UPDATE wallets SET config_json = ? WHERE id = 'a'",
+                    (json.dumps({"chain": "bitcoin", "network": "main", "samourai": {
+                        "role": "child", "section": "postmix",
+                    }}),),
+                )
+                for index in range(source_count - 1):
+                    _seed_transaction(conn, f"sale-{index}", "a", "outbound", BTC, SOURCE_AT, 30_000)
+                conn.execute("UPDATE transactions SET kind = 'sell' WHERE direction = 'outbound'")
+                conn.execute("UPDATE transactions SET kind = 'income' WHERE id = 'in'")
+                profile = dict(conn.execute("SELECT * FROM profiles WHERE id = 'profile'").fetchone())
+
+                result = CustodyJournalBuilder(conn, profile).build_custody_projection()
+
+                self.assertFalse(result.quantity_state.gap_holds)
+                self.assertFalse(result.finalized_tax_projection.quarantines)
+
+                # Capacity still cannot classify a genuinely unresolved typed
+                # source as a sale, even if all sampled returns are income.
+                conn.execute("UPDATE transactions SET kind = 'withdrawal' WHERE id = 'out'")
+                result = CustodyJournalBuilder(conn, profile).build_custody_projection()
+                held = {hold.transaction_id for hold in result.quantity_state.gap_holds}
+                self.assertEqual(held, set() if source_count == 86 else {"out"})
+
     def test_same_txid_rows_remain_external_without_observer_or_review(self):
         with tempfile.TemporaryDirectory() as root:
             conn = _book(root, "FIFO")

@@ -1,743 +1,203 @@
-import { useState, type ReactNode } from "react";
-import {
-  BadgeCheck,
-  ChevronDown,
-  FileSearch,
-  Layers,
-  ListChecks,
-  Loader2,
-  Network,
-  RefreshCw,
-  ShieldAlert,
-} from "lucide-react";
-import { useTranslation } from "react-i18next";
+import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-
+import { useTranslation } from "react-i18next";
+import { ArrowUpRight, Eye, RefreshCw, Sparkles } from "lucide-react";
 import { ScreenNotice, ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
-import {
-  HeuristicCoverage,
-  LinkageGraph,
-  PrivacyFindingCard,
-  PrivacyScoreHero,
-  ScoreWaterfall,
-  SeverityRing,
-} from "@/components/privacy/PrivacyScore";
-import {
-  TransactionGraphPanel,
-  type TransactionGraphPayload,
-} from "@/components/transactions/TransactionGraphTab";
-import { transactionGraphLookupReferenceArgs } from "@/components/transactions/TransactionGraphLookup";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { DaemonScopeContext, useDaemon } from "@/daemon/client";
+import { analysisInvestigationSearch, type AnalysisTab, type AnalysisWorkspace } from "@/lib/chainAnalysisNavigation";
+import { formatUiNumber } from "@/lib/localeFormat";
+import { PERSONAL_RELEVANCE, groupPrivacyFindings, privacyHeadline, type PrivacyFinding, type PrivacyInvestigation, type PrivacyMirrorPayload } from "@/lib/privacyMirror";
 import { screenShellClassName } from "@/lib/screen-layout";
-import {
-  formatPrivacyInt as fmtInt,
-  formatPrivacyMsat as fmtMsat,
-  privacyEvidenceTone as evidenceTone,
-  privacySeverity,
-  privacySeverityTone,
-  shortPrivacyId as shortId,
-  transactionRowSeverity,
-  type EvidenceLevel,
-  type PrivacyMirrorPayload,
-  type PsbtPrivacyResult,
-} from "@/lib/privacyMirror";
-import { heuristicComputedCount, privacyScoreModel } from "@/lib/privacyScore";
 import { cn } from "@/lib/utils";
-import { useUiStore } from "@/store/ui";
+import { useChainAnalysisAssistant } from "@/hooks/useChainAnalysisAssistant";
+import { bookIdentityKey, useUiStore } from "@/store/ui";
 
-export function EvidenceBadge({ level }: { level?: EvidenceLevel }) {
-  const { t } = useTranslation("privacyMirror");
-  const key = level || "unknown";
-  const label =
-    key === "exact"
-      ? t("evidence.exact")
-      : key === "derived"
-        ? t("evidence.derived")
-        : key === "unknown"
-          ? t("evidence.unknown")
-          : key;
-  return (
-    <Badge variant="outline" className={cn("rounded-md", evidenceTone(key))}>
-      {label}
-    </Badge>
-  );
-}
+const readableCode = (code: string) => code.replace(/_/g, " ");
+type Investigate = (investigation: PrivacyInvestigation, workspace?: AnalysisWorkspace, tab?: AnalysisTab) => void;
 
-export function SeverityMark({
-  severity,
-  dotOnly = false,
-}: {
-  severity?: string | null;
-  dotOnly?: boolean;
+function ExposureFinding({ finding, onInvestigate, onAsk, asking }: {
+  finding: PrivacyFinding;
+  onInvestigate?: Investigate;
+  onAsk?: (investigation?: PrivacyInvestigation) => void;
+  asking?: boolean;
 }) {
   const { t } = useTranslation("privacyMirror");
-  const key = privacySeverity(severity);
-  const tone = privacySeverityTone(key);
-  if (dotOnly) {
-    return (
-      <span
-        className={cn("inline-block size-2 shrink-0 rounded-full", tone.dot)}
-        aria-label={t(`severity.${key}`)}
-      />
-    );
-  }
+  const contextOnly = finding.relevance === "received_context" || finding.relevance === "nearby_context";
   return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-0.5 font-mono text-2xs font-semibold uppercase tracking-wide",
-        tone.text,
-        tone.bg,
+    <article className={cn("rounded-lg border bg-card p-4", !contextOnly && finding.severity === "warning" && "border-amber-500/35")} data-testid="privacy-finding" data-relevance={finding.relevance}>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span>{t(`category.${finding.category}`)}</span>
+        <span aria-hidden="true">·</span>
+        <span>{t(`relevance.${finding.relevance}`)}</span>
+        <Badge variant="outline" className="ml-auto text-[10px]">{t(`authority.${finding.authority}`, { defaultValue: readableCode(finding.authority) })}</Badge>
+      </div>
+      <h3 className="mt-2 text-sm font-semibold">{t(`findingTitle.${finding.code}`, { defaultValue: finding.title })}</h3>
+      <p className="mt-1 max-w-4xl text-sm text-muted-foreground">{t(`findingDetail.${finding.code}`, { defaultValue: finding.detail })}</p>
+      {finding.affected_output_count > 0 && <p className="mt-2 text-xs text-muted-foreground">{t("affectedOutputs", { count: finding.affected_output_count })}</p>}
+      {(finding.assumptions.length > 0 || finding.limitations.length > 0) && (
+        <details className="mt-3 text-xs">
+          <summary className="cursor-pointer font-medium text-muted-foreground">{t("findingBasis")}</summary>
+          <ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
+            {[...finding.assumptions, ...finding.limitations].map((statement, index) => <li key={index}>{t(`statement.${statement}`, { defaultValue: statement })}</li>)}
+          </ul>
+        </details>
       )}
-    >
-      <span className={cn("size-1.5 rounded-full", tone.dot)} aria-hidden="true" />
-      {t(`severity.${key}`)}
-    </span>
+      {(onInvestigate || onAsk) && <div className="mt-3 flex flex-wrap gap-2">
+        {onInvestigate && <Button variant="outline" size="sm" onClick={() => onInvestigate(finding.investigation, "graph", finding.category === "attribution" ? "exposure" : finding.category === "pattern" ? "patterns" : "findings")}><ArrowUpRight className="size-3.5" />{t("investigate")}</Button>}
+        {onAsk && <Button variant="ghost" size="sm" disabled={asking} onClick={() => onAsk(finding.investigation)}><Sparkles className="size-3.5" />{t("explain")}</Button>}
+      </div>}
+    </article>
   );
 }
 
-function Section({
-  title,
-  icon,
-  count,
-  defaultOpen = false,
-  testId,
-  children,
-}: {
-  title: string;
-  icon?: ReactNode;
-  count?: ReactNode;
-  defaultOpen?: boolean;
-  testId?: string;
-  children: ReactNode;
-}) {
-  return (
-    <Collapsible
-      defaultOpen={defaultOpen}
-      data-testid={testId}
-      className="rounded-md border bg-card text-card-foreground"
-    >
-      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 border-b px-4 py-3 text-left data-[state=closed]:border-b-0 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-        <span className="flex min-w-0 items-center gap-2">
-          {icon}
-          <span className="truncate text-sm font-semibold">{title}</span>
-        </span>
-        <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-          {count != null ? (
-            <span className="font-mono tabular-nums">{count}</span>
-          ) : null}
-          <ChevronDown
-            className="size-4 transition-transform group-data-[state=open]:rotate-180"
-            aria-hidden="true"
-          />
-        </span>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="p-4">{children}</CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-function Metric({ label, value, level }: { label: string; value: ReactNode; level?: EvidenceLevel }) {
-  return (
-    <div className="min-w-0 rounded-md border bg-background p-3">
-      <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 text-xs text-muted-foreground">{label}</p>
-        {level ? <EvidenceBadge level={level} /> : null}
-      </div>
-      <p className="mt-2 truncate font-mono text-lg tabular-nums sm:text-xl">{value}</p>
-    </div>
-  );
-}
-
-function FindingList({ findings }: { findings?: Array<{ id?: string; title?: string; detail?: string; evidence_level?: EvidenceLevel; severity?: string }> }) {
-  const rows = findings ?? [];
-  if (!rows.length) return null;
-  return (
-    <div className="grid gap-2">
-      {rows.map((finding) => (
-        <div
-          key={finding.id || finding.title}
-          className={cn(
-            "rounded-md border border-l-2 bg-muted/20 p-3",
-            privacySeverityTone(privacySeverity(finding.severity)).stripe,
-          )}
-        >
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <SeverityMark severity={finding.severity} dotOnly />
-                <p className="truncate text-sm font-medium">{finding.title || finding.id}</p>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">{finding.detail}</p>
-            </div>
-            <EvidenceBadge level={finding.evidence_level} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function PrivacyTable({ columns, rows }: { columns: string[]; rows: ReactNode[][] }) {
-  const { t } = useTranslation("privacyMirror");
-  return (
-    <div className="overflow-hidden rounded-md border bg-card">
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {columns.map((column, index) => (
-                <TableHead key={column || `col-${index}`}>{column}</TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length ? (
-              rows.map((row, rowIndex) => (
-                <TableRow key={rowIndex}>
-                  {row.map((cell, cellIndex) => (
-                    <TableCell key={cellIndex} className="max-w-[260px] truncate">
-                      {cell}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={columns.length} className="text-muted-foreground">
-                  {t("table.empty")}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
-// Lazy, LOCAL-ONLY drill-in reusing the transaction flow diagram.
-function TransactionFlowSheet({
-  txid,
-  onClose,
-}: {
-  txid: string;
-  onClose: () => void;
+/** Repeated presentation rows fold into one disclosure; evidence and counts stay per finding. */
+function FindingList({ findings, onInvestigate, onAsk, asking }: {
+  findings: PrivacyFinding[];
+  onInvestigate?: Investigate;
+  onAsk?: (investigation?: PrivacyInvestigation) => void;
+  asking?: boolean;
 }) {
   const { t } = useTranslation("privacyMirror");
-  const hideSensitive = useUiStore((state) => state.hideSensitive);
-  const query = useDaemon<TransactionGraphPayload>(
-    "ui.transactions.graph",
-    transactionGraphLookupReferenceArgs(txid),
-  );
-  return (
-    <Sheet open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <SheetContent side="right" className="w-full gap-0 sm:max-w-2xl md:max-w-3xl">
-        <SheetHeader className="border-b">
-          <SheetTitle>{t("flow.title")}</SheetTitle>
-          <SheetDescription>{t("flow.subtitle")}</SheetDescription>
-        </SheetHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <TransactionGraphPanel
-            graph={query.data?.data}
-            loading={query.isLoading}
-            error={query.error instanceof Error ? query.error.message : null}
-            hideSensitive={hideSensitive}
-          />
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
+  return <>{groupPrivacyFindings(findings).map(group => group.length === 1 ? (
+    <ExposureFinding key={group[0].id} finding={group[0]} onInvestigate={onInvestigate} onAsk={onAsk} asking={asking} />
+  ) : (
+    <details key={group[0].id} className="rounded-lg border bg-card">
+      <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+        {t(`findingTitle.${group[0].code}`, { defaultValue: group[0].title })}
+        <span className="ml-2 text-xs font-normal text-muted-foreground">{t("repeatedFindings", { count: group.length })}</span>
+      </summary>
+      <div className="space-y-2 border-t p-3">
+        {group.map(finding => <ExposureFinding key={finding.id} finding={finding} onInvestigate={onInvestigate} onAsk={onAsk} asking={asking} />)}
+      </div>
+    </details>
+  ))}</>;
 }
 
-function PrivacyMirrorPsbtPanel() {
-  const { t } = useTranslation("privacyMirror");
-  const [psbt, setPsbt] = useState("");
-  const [result, setResult] = useState<PsbtPrivacyResult | null>(null);
-  const mutation = useDaemonMutation<PsbtPrivacyResult>("ui.reports.psbt_privacy");
-  const canRun = psbt.trim().length > 0 && !mutation.isPending;
-
-  async function runAnalysis() {
-    const envelope = await mutation.mutateAsync({ psbt });
-    setResult(envelope.data ?? null);
-  }
-
-  return (
-    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.7fr)]">
-      <div className="space-y-2">
-        <Textarea
-          value={psbt}
-          onChange={(event) => setPsbt(event.target.value)}
-          rows={7}
-          spellCheck={false}
-          placeholder={t("psbt.placeholder")}
-          aria-label={t("psbt.inputAria")}
-          className="font-mono text-xs"
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" onClick={() => void runAnalysis()} disabled={!canRun}>
-            {mutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" /> : null}
-            {t("psbt.analyze")}
-          </Button>
-          {mutation.error ? (
-            <p className="text-sm text-destructive">
-              {mutation.error instanceof Error ? mutation.error.message : String(mutation.error)}
-            </p>
-          ) : null}
-        </div>
-      </div>
-      <div className="space-y-3">
-        <div className="grid gap-2 sm:grid-cols-3">
-          <Metric
-            label={t("psbt.metric.merge")}
-            value={fmtInt(result?.summary?.cluster_merge_delta)}
-            level={result?.summary?.evidence_level}
-          />
-          <Metric
-            label={t("psbt.metric.unknown")}
-            value={fmtInt(result?.summary?.unknown_input_count)}
-            level={result?.summary?.unknown_input_count ? "unknown" : undefined}
-          />
-          <Metric
-            label={t("psbt.metric.blast")}
-            value={fmtInt(result?.summary?.blast_radius_score)}
-            level={result?.summary?.evidence_level}
-          />
-        </div>
-        <FindingList findings={result?.findings} />
-        <div className="rounded-md border bg-background p-3">
-          <p className="text-xs font-medium text-muted-foreground">{t("psbt.whatIf")}</p>
-          <div className="mt-2 grid gap-1.5">
-            {(result?.what_if ?? []).map((item) => (
-              <div key={item.scenario} className="flex items-center justify-between gap-2 text-sm">
-                <span className="truncate">
-                  {t(`psbt.scenario.${item.scenario}`, { defaultValue: item.scenario ?? "" })}
-                </span>
-                <span className="font-mono tabular-nums">{item.cluster_merge_delta ?? 0}</span>
-              </div>
-            ))}
-            {!result?.what_if?.length ? (
-              <p className="text-sm text-muted-foreground">{t("psbt.empty")}</p>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function PrivacyMirrorPayloadView({
-  payload,
-  onRefresh,
-  refreshing = false,
-  onNavigate,
-}: {
+export function PrivacyMirrorPayloadView({ payload, onRefresh, refreshing = false, refreshError, onInvestigate, onAsk, onConnect, asking = false, actionError }: {
   payload: PrivacyMirrorPayload;
   onRefresh?: () => void;
   refreshing?: boolean;
-  onNavigate?: (to: string) => void;
+  refreshError?: string | null;
+  onInvestigate?: Investigate;
+  onAsk?: (investigation?: PrivacyInvestigation) => void;
+  onConnect?: () => void;
+  asking?: boolean;
+  actionError?: string | null;
 }) {
   const { t } = useTranslation("privacyMirror");
-  const [flowTxid, setFlowTxid] = useState<string | null>(null);
-
-  // Map a finding to where the user would act on it, so advice leads somewhere.
-  const findingAction = (kind: string) => {
-    if (
-      kind === "source_proximity_coverage_gaps" ||
-      kind === "unknown_provenance" ||
-      kind === "coverage_degraded"
-    ) {
-      return onNavigate
-        ? { label: t("action.reviewOrigins"), icon: <BadgeCheck className="size-3.5" aria-hidden="true" />, onClick: () => onNavigate("/source-of-funds") }
-        : undefined;
-    }
-    return undefined;
-  };
-  const summary = payload.summary ?? {};
-  const worst = summary.worst_risk;
-  const worstSeverity = privacySeverity(worst?.severity);
-  const model = privacyScoreModel(payload);
-  const adversaries = payload.adversary_cards ?? [];
-  const wallets = payload.wallet_view ?? [];
-  const transactions = payload.transaction_view ?? [];
-  const utxos = payload.utxo_view ?? [];
-  const timeline = payload.timeline ?? [];
-  const evidence = payload.evidence_drilldowns ?? [];
-  const coverage = payload.coverage ?? {};
-
-  const tellLabel = (kind?: string) =>
-    kind ? t(`tellKind.${kind}`, { defaultValue: kind.replace(/_/g, " ") }) : "-";
-
-  const notNominal =
-    payload.local_only === false ||
-    payload.advisory_only === false ||
-    Boolean(coverage.degraded);
-
+  const summary = payload.summary;
+  const coverage = payload.coverage;
+  const headline = privacyHeadline(summary, payload.findings);
+  const reasonText = (code: string) => t(`reason.${code}`, { defaultValue: t(`reason.${code.replace(/^entropy_/, "")}`, { defaultValue: readableCode(code) }) });
+  const attention = payload.findings.filter(finding => PERSONAL_RELEVANCE.has(finding.relevance));
+  const context = payload.findings.filter(finding => !PERSONAL_RELEVANCE.has(finding.relevance));
+  const investigate = (workspace: AnalysisWorkspace = "graph", tab: AnalysisTab = "findings") => onInvestigate?.(payload.investigation, workspace, tab);
+  const population = [
+    t("population.outputs", { count: summary.owned_output_count }),
+    t("population.transactions", { examined: formatUiNumber(summary.analyzed_transaction_count), available: formatUiNumber(summary.local_transaction_count) }),
+  ].join(" · ");
+  // Only headlines that need a caveat get a body; the others would repeat themselves.
+  const body = headline === "nothing_found" || headline === "unavailable" ? t(`headlineBody.${headline}`) : null;
+  const gaps = coverage.missing_nodes > 0 || coverage.stale_nodes > 0 || coverage.conflicting_nodes > 0;
   return (
-    <div data-testid="privacy-mirror-page" className={screenShellClassName}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className={screenShellClassName} data-testid="privacy-mirror-page">
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-normal">{t("title")}</h1>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{t("subtitle")}</p>
+          <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground"><Eye className="size-3.5" />{t("observer")}</div>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <EvidenceBadge level={summary.evidence_level} />
-          {notNominal ? (
-            <Badge
-              variant="outline"
-              className="rounded-md border-amber-500/40 text-amber-700 dark:text-amber-300"
-            >
-              {t("guardrail.degraded")}
-            </Badge>
-          ) : null}
-          {onRefresh ? (
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              aria-label={t("refresh")}
-              onClick={onRefresh}
-              disabled={refreshing}
-            >
-              <RefreshCw className={cn("size-4", refreshing && "animate-spin")} aria-hidden="true" />
-            </Button>
-          ) : null}
+        <div className="flex flex-wrap gap-2">
+          {onAsk && <Button variant="outline" size="sm" disabled={asking} onClick={() => onAsk()}><Sparkles className="size-3.5" />{t("ask")}</Button>}
+          {onInvestigate && <Button variant="outline" size="sm" onClick={() => investigate()}><ArrowUpRight className="size-3.5" />{t("workbench")}</Button>}
+          {onRefresh && <Button variant="ghost" size="icon-sm" aria-label={t("refresh")} disabled={refreshing} onClick={onRefresh}><RefreshCw className={cn("size-4", refreshing && "animate-spin")} /></Button>}
         </div>
-      </div>
-
-      {/* Score hero + severity ring + waterfall. */}
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(260px,1fr)]">
-        <PrivacyScoreHero model={model} />
-        <div className="grid gap-3">
-          <SeverityRing census={model.census} />
-          <ScoreWaterfall
-            factors={model.factors}
-            score={model.score}
-            base={model.base}
-            coverageRatio={model.coverageRatio}
-          />
+      </header>
+      {refreshError && <div role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm"><p className="font-medium">{t("refreshFailed")}</p><p className="mt-1 text-muted-foreground">{refreshError}</p></div>}
+      {actionError && <p role="alert" className="text-sm text-destructive">{actionError}</p>}
+      <section className="rounded-xl border bg-card p-5" data-testid="privacy-mirror-summary" data-headline={headline}>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <h2 className="text-lg font-semibold">{t(`headline.${headline}`)}</h2>
+          <Badge variant="outline">{t(`coverage.status.${coverage.status}`)}</Badge>
         </div>
-      </div>
-
-      {/* Primary recommendation — the worst risk, what to fix first. */}
-      <section
-        data-testid="privacy-mirror-worst-risk"
-        className={cn("rounded-md border border-l-2 bg-card text-card-foreground", privacySeverityTone(worstSeverity).stripe)}
-      >
-        <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <ShieldAlert
-              className={cn("size-4 shrink-0", privacySeverityTone(worstSeverity).text)}
-              aria-hidden="true"
-            />
-            <h2 className="truncate text-sm font-semibold">{t("primary.title")}</h2>
-          </div>
-          <SeverityMark severity={worst?.severity} />
-        </div>
-        <div className="flex flex-col gap-3 p-4 md:flex-row md:items-start md:justify-between">
-          <div className="min-w-0">
-            <p className="text-base font-medium">
-              {worst?.kind
-                ? t(`worstKind.${worst.kind}`, { defaultValue: worst.title || t("worst.fallback") })
-                : worst?.title || t("worst.fallback")}
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {worst?.kind
-                ? t(`reco.${worst.kind}`, { defaultValue: worst.answer || t("worst.empty") })
-                : worst?.answer || t("worst.empty")}
-            </p>
-          </div>
-          <EvidenceBadge level={worst?.evidence_level} />
-        </div>
+        {body && <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{body}</p>}
+        <p className="mt-3 text-xs tabular-nums text-muted-foreground">{population}</p>
+        {(gaps || coverage.truncated) && <p className="mt-1 text-xs text-muted-foreground">{gaps ? t("coverage.gaps", { missing: coverage.missing_nodes, stale: coverage.stale_nodes, conflicting: coverage.conflicting_nodes }) : ""}{coverage.truncated ? `${gaps ? " " : ""}${t("coverage.truncated")}` : ""}</p>}
+        {onConnect && (headline === "no_local_evidence" || headline === "no_owned_outputs") && <Button className="mt-3" variant="outline" size="sm" onClick={onConnect}>{t("connect")}<ArrowUpRight className="size-3.5" /></Button>}
       </section>
-
-      {/* Ranked, severity-colored finding cards. */}
-      <section className="space-y-2" data-testid="privacy-mirror-findings">
-        <h2 className="text-sm font-semibold">
-          {t("question.findings")}{" "}
-          <span className="font-mono text-muted-foreground">({model.findings.length})</span>
-        </h2>
-        {model.findings.length ? (
-          <div className="grid gap-2">
-            {model.findings.map((finding) => (
-              <PrivacyFindingCard
-                key={finding.id}
-                finding={finding}
-                onViewFlow={setFlowTxid}
-                action={findingAction(finding.kind)}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">{t("finding.empty")}</p>
-        )}
-      </section>
-
-      {/* Pre-broadcast check — prevent a leak before you spend. Elevated, not buried. */}
-      <section className="rounded-md border border-l-2 border-l-sky-500 bg-card text-card-foreground" data-testid="privacy-mirror-psbt">
-        <div className="flex items-center gap-2 border-b px-4 py-3">
-          <ShieldAlert className="size-4 shrink-0 text-sky-500" aria-hidden="true" />
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold">{t("section.psbt")}</h2>
-            <p className="text-xs text-muted-foreground">{t("psbt.intent")}</p>
-          </div>
+      {attention.length > 0 && <section className="space-y-2" data-testid="privacy-mirror-attention">
+        <h2 className="text-sm font-semibold">{t("groups.attention")} <span className="font-mono text-muted-foreground">{attention.length}</span></h2>
+        <FindingList findings={attention} onInvestigate={onInvestigate} onAsk={onAsk} asking={asking} />
+      </section>}
+      {context.length > 0 && <details className="rounded-lg border bg-card" data-testid="privacy-mirror-context">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+          {t("groups.context")} <span className="font-mono text-muted-foreground">{context.length}</span>
+          <span className="ml-2 text-xs font-normal text-muted-foreground">{t("groups.contextNote")}</span>
+        </summary>
+        <div className="space-y-2 border-t p-3">
+          <FindingList findings={context} onInvestigate={onInvestigate} asking={asking} />
         </div>
-        <div className="p-4">
-          <PrivacyMirrorPsbtPanel />
+      </details>}
+      <details className="rounded-lg border bg-card" data-testid="privacy-mirror-coverage">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium">{t("coverage.title")}</summary>
+        <div className="border-t px-4 pb-4">
+          <p className="pt-3 text-xs text-muted-foreground">{t("population.domains", { count: summary.domain_count })}</p>
+          <div className="divide-y">
+            {coverage.checks.map(check => <div key={check.code} className="flex flex-wrap items-start justify-between gap-2 py-2.5 text-sm">
+              <div className="min-w-0"><p>{t(`checks.${check.code}`, { defaultValue: readableCode(check.code) })}</p>{check.reason && <p className="mt-1 text-xs text-muted-foreground">{t(`reason.${check.reason}`, { defaultValue: readableCode(check.reason) })}</p>}</div>
+              <div className="flex shrink-0 items-center gap-3 text-xs"><span className="font-mono text-muted-foreground">{formatUiNumber(check.evaluated)} / {formatUiNumber(check.eligible)}</span><Badge variant="outline">{t(`checkStatus.${check.status}`)}</Badge></div>
+            </div>)}
+          </div>
+          {coverage.stopped_reasons.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">{coverage.stopped_reasons.map(reason => <li key={reason}>{reasonText(reason)}</li>)}</ul>}
+          {payload.entropy.results.length > 0 && <details className="mt-3 border-t pt-3">
+            <summary className="cursor-pointer text-xs font-medium">{t("entropy.title", { count: payload.entropy.evaluated })}</summary>
+            <p className="mt-2 text-xs text-muted-foreground">{t("entropy.body")}</p>
+            <div className="mt-2 space-y-2">{payload.entropy.results.map((result, index) => <div key={`${result.subject}:${index}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/30 p-2 text-xs">
+              <span>{result.status === "exact" && result.interpretation_count != null ? t("entropy.interpretations", { countText: result.interpretation_count }) : ["budget_exhausted", "timeout", "model_bounded"].includes(result.status) && result.interpretation_count == null && result.interpretation_count_lower_bound != null ? t("entropy.lowerBound", { countText: result.interpretation_count_lower_bound }) : t(`reason.${result.reason || result.status}`, { defaultValue: readableCode(result.reason || result.status) })}</span>
+              {onInvestigate && <Button size="sm" variant="ghost" onClick={() => onInvestigate(result.investigation, "graph", "entropy")}>{t("entropy.inspect")}<ArrowUpRight className="size-3" /></Button>}
+            </div>)}</div>
+            {payload.entropy.omitted > 0 && <p className="mt-2 text-xs text-muted-foreground">{t("entropy.omitted", { count: payload.entropy.omitted })}</p>}
+          </details>}
+          <details className="mt-3 border-t pt-3">
+            <summary className="cursor-pointer text-xs font-medium">{t("assumptions")}</summary>
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">{payload.assumptions.map((statement, index) => <li key={index}>{t(`statement.${statement}`, { defaultValue: statement })}</li>)}</ul>
+          </details>
         </div>
-      </section>
-
-      {/* Linkage map. */}
-      <Section
-        title={t("linkage.title")}
-        icon={<Network className="size-4 shrink-0" aria-hidden="true" />}
-        count={fmtInt(wallets.length)}
-        defaultOpen
-      >
-        <LinkageGraph wallets={wallets} evidenceLevel={summary.evidence_level} />
-      </Section>
-
-      {/* Who can infer it. */}
-      <Section
-        title={t("question.infer")}
-        icon={<Network className="size-4 shrink-0" aria-hidden="true" />}
-        count={fmtInt(adversaries.length)}
-      >
-        <div className="grid gap-3 lg:grid-cols-3">
-          {adversaries.map((card) => (
-            <div key={card.tier} className="rounded-md border bg-card text-card-foreground">
-              <div className="flex items-center gap-2 border-b px-4 py-3">
-                <h3 className="text-sm font-semibold break-words">
-                  {t(`adversaryTier.${card.tier}`, {
-                    defaultValue: card.label || card.tier || t("adversary.unknown"),
-                  })}
-                </h3>
-              </div>
-              <div className="grid gap-3 p-4">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Metric label={t("adversary.clusters")} value={fmtInt(card.summary?.exposed_cluster_count)} level={card.evidence_level} />
-                  <Metric label={t("adversary.wallets")} value={fmtInt(card.summary?.wallet_count)} level={card.evidence_level} />
-                </div>
-                <div className="space-y-2">
-                  {(card.model_assumptions ?? []).slice(0, 3).map((assumption) => (
-                    <div key={assumption.code} className="rounded-md border bg-background p-2 text-xs">
-                      <div className="flex items-start justify-between gap-2">
-                        <span>
-                          {t(`assumption.${assumption.code}`, {
-                            defaultValue: assumption.statement || assumption.code || "",
-                          })}
-                        </span>
-                        <EvidenceBadge level={assumption.evidence_level} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      {/* The evidence / why. */}
-      <Section
-        title={t("question.evidence")}
-        icon={<FileSearch className="size-4 shrink-0" aria-hidden="true" />}
-        count={fmtInt(evidence.length + timeline.length)}
-      >
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {t("section.evidenceItems")}
-            </p>
-            <PrivacyTable
-              columns={[t("table.section"), t("table.item"), t("table.kind"), t("table.evidence")]}
-              rows={evidence.map((row) => [
-                row.section || "-",
-                shortId(row.id),
-                tellLabel(row.kind),
-                <EvidenceBadge key="e" level={row.evidence_level} />,
-              ])}
-            />
-          </div>
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {t("section.timeline")}
-            </p>
-            <PrivacyTable
-              columns={[t("table.event"), t("table.category"), t("table.transaction"), t("table.detail"), t("table.evidence")]}
-              rows={timeline.map((row) => [
-                tellLabel(row.kind || row.id || undefined),
-                row.category || "-",
-                shortId(row.txid),
-                row.detail ? tellLabel(row.detail) : row.new_linkage ? t("timeline.newLinkage") : "-",
-                <EvidenceBadge key="e" level={row.evidence_level} />,
-              ])}
-            />
-          </div>
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {t("section.coverage")}
-            </p>
-            <div className="grid gap-2 rounded-md border bg-background p-3">
-              <div className="flex items-center justify-between gap-2 text-sm">
-                <span>{t("coverage.known")}</span>
-                <span className="font-mono tabular-nums">{fmtInt(coverage.source_proximity_known_coin_count)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2 text-sm">
-                <span>{t("coverage.unknown")}</span>
-                <span className="font-mono tabular-nums">{fmtInt(coverage.source_proximity_unknown_coin_count)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-2 text-sm">
-                <span>{t("coverage.degraded")}</span>
-                <span>{coverage.degraded ? t("yes") : t("bounded")}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Section>
-
-      {/* Raw records — full tabular data. */}
-      <Section
-        title={t("section.records")}
-        icon={<Layers className="size-4 shrink-0" aria-hidden="true" />}
-        count={fmtInt(wallets.length + transactions.length + utxos.length)}
-      >
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {t("section.wallets")}
-            </p>
-            <PrivacyTable
-              columns={[t("table.wallet"), t("table.coins"), t("table.amount"), t("table.edges"), t("table.evidence")]}
-              rows={wallets.map((row) => [
-                shortId(row.wallet_id),
-                fmtInt(row.coin_count),
-                fmtMsat(row.amount_msat),
-                fmtInt(row.linkage_edge_count),
-                <EvidenceBadge key="e" level={row.evidence_level} />,
-              ])}
-            />
-          </div>
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {t("section.transactionTells")}
-            </p>
-            <PrivacyTable
-              columns={[t("table.transaction"), t("table.tells"), t("table.kinds"), t("table.evidence"), ""]}
-              rows={transactions.map((row) => [
-                <span key="tx" className="flex items-center gap-2">
-                  <SeverityMark severity={transactionRowSeverity(row)} dotOnly />
-                  {shortId(row.txid)}
-                </span>,
-                fmtInt(row.tell_count),
-                (row.tell_kinds ?? []).map((kind) => tellLabel(kind)).join(", ") || "-",
-                <EvidenceBadge key="e" level={row.evidence_level} />,
-                row.txid ? (
-                  <Button
-                    key="flow"
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 gap-1 px-2 text-xs"
-                    onClick={() => setFlowTxid(row.txid ?? null)}
-                  >
-                    <Network className="size-3.5" aria-hidden="true" />
-                    {t("flow.view")}
-                  </Button>
-                ) : (
-                  "-"
-                ),
-              ])}
-            />
-          </div>
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {t("section.coins")}
-            </p>
-            <PrivacyTable
-              columns={[t("table.coin"), t("table.wallet"), t("table.amount"), t("table.role"), t("table.proximity"), t("table.evidence")]}
-              rows={utxos.map((row) => [
-                shortId(row.coin_id),
-                shortId(row.wallet_id),
-                fmtMsat(row.amount_msat),
-                row.branch_role || "-",
-                tellLabel(row.source_proximity),
-                <EvidenceBadge key="e" level={row.evidence_level} />,
-              ])}
-            />
-          </div>
-        </div>
-      </Section>
-
-      {/* Heuristics checked — mirrors the am-i-exposed catalog with honest coverage. */}
-      <Section
-        title={t("heuristics.title")}
-        icon={<ListChecks className="size-4 shrink-0" aria-hidden="true" />}
-        count={`${heuristicComputedCount()}/34`}
-      >
-        <HeuristicCoverage />
-      </Section>
-
-      {flowTxid ? (
-        <TransactionFlowSheet txid={flowTxid} onClose={() => setFlowTxid(null)} />
-      ) : null}
+      </details>
+      {onInvestigate && <footer className="flex flex-wrap items-center gap-x-4 gap-y-2 pb-2 text-xs text-muted-foreground">
+        <span>{t("toolsElsewhere")}</span>
+        <Button variant="link" size="sm" className="h-auto p-0" onClick={() => investigate("psbt")}>{t("checkSpend")}<ArrowUpRight className="size-3" /></Button>
+        <Button variant="link" size="sm" className="h-auto p-0" onClick={() => investigate("datasets")}>{t("datasets")}<ArrowUpRight className="size-3" /></Button>
+      </footer>}
     </div>
   );
+}
+
+function ScopedPrivacyMirror() {
+  const { t } = useTranslation("privacyMirror");
+  const navigate = useNavigate();
+  const [actionError, setActionError] = useState<string | null>(null);
+  const query = useDaemon<PrivacyMirrorPayload>("ui.reports.privacy_mirror", undefined, { refetchOnMount: "always" });
+  const assistant = useChainAnalysisAssistant(error => setActionError(error instanceof Error ? error.message : String(error)), t("assistantPrompt"));
+  const payload = query.data?.data;
+  if (query.isLoading && !payload) return <ScreenSkeleton titleWidth="w-48" />;
+  if (!payload || payload.payload_schema_version !== 2) return <ScreenNotice title={t("unavailable.title")} body={query.error instanceof Error ? query.error.message : t("unavailable.body")} />;
+  return <PrivacyMirrorPayloadView payload={payload} onRefresh={() => void query.refetch()} refreshing={query.isFetching} refreshError={query.isError ? query.error instanceof Error ? query.error.message : t("unavailable.body") : null} onInvestigate={(investigation, workspace, tab) => void navigate({ to: "/chain-analysis", search: analysisInvestigationSearch(investigation.query, workspace, tab) })} onConnect={() => void navigate({ to: "/connections" })} onAsk={assistant.available ? investigation => { setActionError(null); void assistant.ask(investigation); } : undefined} asking={assistant.busy} actionError={actionError} />;
 }
 
 export function PrivacyMirror() {
   const { t } = useTranslation("privacyMirror");
-  const navigate = useNavigate();
-  const query = useDaemon<PrivacyMirrorPayload>("ui.reports.privacy_mirror", undefined, {
-    refetchOnMount: "always",
-  });
-  const payload = query.data?.data;
-
-  if (query.isLoading && !payload) {
-    return <ScreenSkeleton titleWidth="w-48" />;
-  }
-
-  if (query.isError && !payload) {
-    return (
-      <ScreenNotice
-        title={t("unavailable.title")}
-        body={query.error instanceof Error ? query.error.message : t("unavailable.body")}
-      />
-    );
-  }
-
-  if (!payload) {
-    return <ScreenNotice title={t("unavailable.title")} body={t("unavailable.body")} />;
-  }
-
-  return (
-    <PrivacyMirrorPayloadView
-      payload={payload}
-      onRefresh={() => void query.refetch()}
-      refreshing={query.isFetching}
-      onNavigate={(to) => void navigate({ to } as never)}
-    />
-  );
+  const identity = useUiStore(state => state.identity);
+  const daemonSession = useUiStore(state => state.daemonSession);
+  const health = useDaemon<{ workspace: { id: string }; profile: { id: string } }>("ui.workspace.health");
+  const databaseIdentity = bookIdentityKey(identity) ?? "local";
+  const workspaceId = health.data?.data?.workspace?.id, profileId = health.data?.data?.profile?.id;
+  const boundary = useMemo(() => workspaceId && profileId ? {
+    expectedScope: { workspace_id: workspaceId, profile_id: profileId },
+    daemonSession,
+    isCurrent: () => useUiStore.getState().daemonSession === daemonSession && (bookIdentityKey(useUiStore.getState().identity) ?? "local") === databaseIdentity,
+  } : null, [workspaceId, profileId, daemonSession, databaseIdentity]);
+  if (!boundary) return health.isError ? <ScreenNotice title={t("unavailable.title")} body={t("unavailable.body")} /> : <ScreenSkeleton titleWidth="w-48" />;
+  return <DaemonScopeContext.Provider value={boundary}><ScopedPrivacyMirror key={`${databaseIdentity}:${workspaceId}:${profileId}:${daemonSession}`} /></DaemonScopeContext.Provider>;
 }

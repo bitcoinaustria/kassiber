@@ -76,9 +76,9 @@ complete K2 or organization-wide bookkeeping support claim.
 
 ## Highlights
 
-- **Dependency-backed chain sync** — BDK-backed Bitcoin Esplora/Electrum and
-  LWK-backed Liquid Esplora/Electrum descriptor observation, explicit Bitcoin
-  Core RPC and Silent Payments paths, BTCPay Greenfield, plus watch-only UTXO
+- **Watch-only chain sync** — BDK-backed Bitcoin and LWK-backed Liquid Electrum
+  descriptor observation, Esplora through Kassiber's controlled HTTP transport,
+  explicit Bitcoin Core RPC and Silent Payments paths, BTCPay Greenfield, plus watch-only UTXO
   inventory. Observer state stays inside the project SQLCipher database and a
   refresh commits chain state and accounting projections atomically.
 - **Imports** — BTCPay CSV/JSON, Phoenix, River, Bull Bitcoin, Coinfinity,
@@ -417,11 +417,13 @@ from default cookie paths or `bitcoin.conf`; it reports wallet-RPC and BIP158
 filter-index availability, but Kassiber's current Core sync path is still
 watch-only descriptor import, not filter-first P2P sync.
 
-Supported Esplora/Electrum descriptor wallets use the pinned BDK/LWK observers.
+Supported Electrum descriptor wallets use the pinned BDK/LWK observers.
+Esplora uses the existing compatibility observer with `http_route_policy`
+because the SDK bindings cannot disable redirects or enforce the explicit
+proxy route. More specific configuration reasons retain precedence.
 Private spending descriptors are rejected before any connection; Liquid view
-or blinding material may be accepted but remains sensitive. BDK/LWK are the
-default indexer-backed descriptor observers, while Bitcoin address scripts,
-Bitcoin Core RPC and Silent Payments remain first-class specialized routes.
+or blinding material may be accepted but remains sensitive. Bitcoin address
+scripts, Bitcoin Core RPC and Silent Payments remain first-class specialized routes.
 Unsupported transport capabilities fail before egress or select an explicitly
 named protocol route; dependency failures never trigger runtime fallback. See the complete
 [chain-observer capability matrix](docs/reference/chain-observers.md).
@@ -511,14 +513,24 @@ descriptors, private keys, recovery phrases, API keys, passwords, and bearer
 tokens. Report security-impacting issues privately, not in the public tracker —
 see [SECURITY.md](SECURITY.md).
 
-For the north-star local privacy view, open Privacy Mirror or run
-`kassiber reports privacy-mirror`. It shows what is linkable, who can infer it,
-what proves it, what is unknown, and what a future spend would worsen. The
-posture-only snapshot remains available with `kassiber reports privacy-hygiene`
-and Settings -> Privacy. GUI, CLI, and assistant read tools share redacted facts
-with `evidence_level`, without addresses, scripts, descriptors, xpubs, backend
-URLs/tokens, wallet config, raw JSON, branch/index values, or derivation paths.
+For the local privacy view, open Privacy Mirror or run
+`kassiber reports privacy-mirror`. It summarizes personal linkage findings,
+counterparty context and executed checks from the shared Chain Analysis engine,
+with explicit evidence gaps and computation limits. Findings open the same
+workbench for deeper investigation; there is no separate grade or graph model.
+The posture-only snapshot remains available with `kassiber reports privacy-hygiene`
+and Settings → Privacy. CLI and assistant results use opaque scoped graph
+references; physical identities remain local to the desktop investigation.
 See [Privacy Mirror](docs/reference/privacy-mirror.md).
+The [local chain-analysis workspace](docs/reference/local-chain-analysis.md)
+adds bounded source/destination/path tracing, sourced label exposure, reversible
+clustering and multi-hop patterns, and immutable investigation comparisons.
+Its workbench includes exact conditional entropy with explicit participant-fee
+scenarios, PSBT v0/v2 inspection and Payjoin proposal checks, and versioned
+local attribution datasets with preserved provenance. Long computations and
+imports expose progress and cancellation. Desktop, CLI and chat share one
+evidence engine; expanding history uses a separate, explicit backend
+acquisition plan.
 
 ## Contributing & license
 

@@ -256,10 +256,10 @@ the daemon protocol; chat streaming is wired through Tauri events
 (`daemon://stream`) so the UI can render loading status, reasoning
 (`<think>`), and the answer in real time without blocking navigation.
 
-The picker uses a provider rail plus a searchable model list. Its
-`ai.provider_runtime.status` snapshot shows Codex, Claude, and OpenCode
-readiness, authentication state, native model inventory, and the explicitly
-remote privacy posture beside Ollama, oMLX, and configured HTTP providers.
+The picker uses a provider rail plus a searchable model list. **Check models**
+discovers only the selected provider through `ai.list_models`; checking one
+native CLI must not refresh global runtime status or start other providers.
+Stored configuration and cached models remain visible without discovery.
 First use still requires Kassiber's off-device acknowledgement.
 
 The **All / Local** control filters the inventory by the posture Kassiber can
@@ -280,11 +280,23 @@ configuration, never guessed from a provider's name.
 Provider and model discovery uses a daemon-owned, in-memory last-good cache.
 Snapshots include `checked_at`, `stale`, and sanitized `error` metadata, and
 concurrent refreshes for the same provider share one probe. Failed refreshes
-keep the last successful inventory visible. Proven-local loopback HTTP
-providers refresh automatically every five minutes and whenever the picker
-opens; remote HTTP and native CLI providers refresh only after the user opens
-an AI surface. Provider configuration changes invalidate the daemon cache.
-There is intentionally no manual refresh button.
+keep the last successful inventory visible. Opening an AI surface or its model
+picker does not contact any provider, including loopback HTTP services and
+native CLIs. Refresh requires **Check models** for that provider; testing a
+provider in Settings is also an explicit action. Provider configuration changes
+invalidate the daemon cache but do not authorize a probe.
+
+Assistant answers, reasoning and restored transcripts render Markdown image
+references as inert buttons, with no image or preload resource. Opening an image
+requires an explicit click and uses the existing external-browser action; only
+absolute HTTP(S) URLs without embedded credentials are accepted. Unsupported
+image references remain text. This applies in the native app and the supported
+browser development UI, independently of the native Content Security Policy.
+
+Kassiber's HTTP AI client ignores operating-system and environment proxy
+settings and rejects redirects outside the configured provider origin. Route a
+remote HTTP provider through its explicitly configured base URL. Native CLI
+providers retain their own executable transport settings, as described below.
 
 Each broker probe or chat runs from a fresh Kassiber-owned empty temporary
 directory that is removed afterward. Provider subprocesses receive only their
@@ -726,13 +738,20 @@ smuggle a hidden network or mutation argument into a narrower tool.
   tool receives only this redacted payload.
 - `ui_reports_privacy_mirror` maps to daemon kind
   `ui.reports.privacy_mirror`; it returns the redacted Privacy Mirror payload
-  used by the dedicated page and `kassiber reports privacy-mirror`, including
-  exposure summary, adversary cards, wallet/transaction/UTXO views, timeline,
-  coverage, unknowns, evidence drilldowns, and the computed worst local privacy
-  risk. It is read-only, local-only, advisory-only, and every result carries
-  `evidence_level`. The AI tool does not receive raw PSBT text; PSBT preflight
-  is reduced locally in the GUI/CLI before any assistant-facing summary can be
-  discussed. See [`privacy-mirror.md`](privacy-mirror.md).
+  projected from the same immutable public-observer snapshot as Chain Analysis:
+  personal linkage findings, counterparty context, executed checks, coverage and
+  bounded conditional interpretation counts. CLI exports use the same opaque
+  scoped references; desktop navigation retains physical references locally.
+  There is no aggregate grade or inferred ownership probability. Finding-specific
+  assistant handoffs require `ui.chain_analysis.ai_context` with the displayed
+  snapshot; raw graph identities must not be interpolated into prompts.
+  The read is local-only and advisory-only. The chain-analysis workbench
+  can inspect and compare PSBT v0/v2 sources through native-selected opaque
+  grants; structured facts, explicit Payjoin constraints and job receipts pass
+  through the same provider projection. Long work uses cancellable `.start`
+  jobs. Local dataset import requires a completed source/recipe/hash-bound
+  preview, an on-device provider and once-only consent; consent reuses that
+  validation receipt while the worker verifies bytes again before activation. See [`privacy-mirror.md`](privacy-mirror.md).
 - `ui_journals_snapshot` maps to daemon kind `ui.journals.snapshot`; recent
   rows include reviewed pair context for swap/peg journal rows when available
 - `ui_journals_quarantine` maps to daemon kind `ui.journals.quarantine`

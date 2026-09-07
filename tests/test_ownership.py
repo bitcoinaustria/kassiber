@@ -27,7 +27,7 @@ def _engine_conn():
         CREATE TABLE wallet_utxos (
             profile_id TEXT, wallet_id TEXT, txid TEXT, vout INTEGER,
             address TEXT, branch_label TEXT, branch_index INTEGER,
-            address_index INTEGER, chain TEXT, network TEXT
+            address_index INTEGER, chain TEXT, network TEXT, script_pubkey TEXT
         );
         CREATE TABLE transactions (
             profile_id TEXT, wallet_id TEXT, external_id TEXT, raw_json TEXT
@@ -97,6 +97,24 @@ class ParseTokensTests(unittest.TestCase):
 
 
 class OwnedIndexPhysicalScopeTests(unittest.TestCase):
+    def test_addressless_inventory_retains_its_script_and_physical_domain(self):
+        conn = _engine_conn()
+        script = "0014" + "ab" * 20
+        conn.execute("INSERT INTO wallets(id, profile_id, label, kind, config_json) VALUES('vault','p1','Vault','custom','{}')")
+        conn.execute(
+            "INSERT INTO wallet_utxos(profile_id,wallet_id,txid,vout,address,script_pubkey,chain,network) VALUES(?,?,?,?,?,?,?,?)",
+            ("p1", "vault", "ab" * 32, 0, None, script.upper(), "bitcoin", "regtest"),
+        )
+        wallets = ownership.load_profile_wallets(conn, "p1")
+        index, warnings = ownership.build_owned_index(conn, "p1", wallets, derive=False)
+        self.assertEqual(warnings, [])
+        matches = index.lookup_script(script)
+        self.assertEqual([(match.wallet_id, match.chain, match.network, match.source) for match in matches],
+                         [("vault", "bitcoin", "regtest", "inventory")])
+        self.assertEqual(index.lookup_outpoint("ab" * 32 + ":0", chain="bitcoin", network="main"), [])
+        self.assertEqual(len(index.lookup_outpoint("ab" * 32 + ":0", chain="bitcoin", network="regtest")), 1)
+        conn.close()
+
     def test_imported_core_receive_history_preserves_spent_outpoint_owner(self):
         conn = _engine_conn()
         txid = "ab" * 32

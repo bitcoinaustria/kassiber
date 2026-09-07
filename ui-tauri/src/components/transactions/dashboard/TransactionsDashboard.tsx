@@ -37,6 +37,7 @@ import {
   buildTransactionListFilterArgs,
   DEFAULT_TRANSACTION_TABLE_FILTER_STATE,
   dashboardRecordsFromTxs,
+  toDashboardTransaction,
   historyYearsForBounds,
   initialPeriodFromUrl,
   recordsForPeriod,
@@ -209,30 +210,16 @@ const TransactionsDashboard = ({
       },
     );
   };
-  // A deep-linked transaction may sit outside the fetched page; prepend it so
-  // both the workbench and the table can resolve it.
+  // Table and chart rows retain the daemon's accounting projection. An exact
+  // source record resolved for detail is passed separately below.
   const buildRecords = React.useCallback(
     (list: TransactionsList) => {
-      const txs = [...list.txs];
-      if (
-        focusedTransaction &&
-        !txs.some(
-          (tx) =>
-            tx.id === focusedTransaction.id ||
-            (Boolean(tx.externalId) &&
-              tx.externalId === focusedTransaction.externalId) ||
-            (Boolean(tx.explorerId) &&
-              tx.explorerId === focusedTransaction.explorerId),
-        )
-      ) {
-        txs.unshift(focusedTransaction);
-      }
       return dashboardRecordsFromTxs(
-        txs,
+        list.txs,
         t as (key: string, opts?: Record<string, unknown>) => string,
       );
     },
-    [focusedTransaction, t],
+    [t],
   );
   const records = React.useMemo(
     () => buildRecords(transactions),
@@ -350,15 +337,11 @@ const TransactionsDashboard = ({
   );
   const focusedRecord = React.useMemo(() => {
     if (!focusedTransaction) return null;
-    return records.find(
-      (record) =>
-        record.id === focusedTransaction.id ||
-        (Boolean(focusedTransaction.externalId) &&
-          record.txnId === focusedTransaction.externalId) ||
-        (Boolean(focusedTransaction.explorerId) &&
-          record.explorerId === focusedTransaction.explorerId),
-    ) ?? null;
-  }, [focusedTransaction, records]);
+    return toDashboardTransaction(
+      focusedTransaction, 0,
+      t as (key: string, opts?: Record<string, unknown>) => string,
+    );
+  }, [focusedTransaction, t]);
   // Real table pages are already scoped by the canonical daemon request. A
   // second client-side period pass would erase exact txid/chart-bucket results
   // that intentionally override the broad period (the original empty-table
@@ -367,15 +350,7 @@ const TransactionsDashboard = ({
     () => sortTransactionsByDateDesc(records),
     [records],
   );
-  const tableRecords = React.useMemo(() => {
-    if (
-      !focusedRecord ||
-      tablePeriodRecords.some((record) => record.id === focusedRecord.id)
-    ) {
-      return tablePeriodRecords;
-    }
-    return [focusedRecord, ...tablePeriodRecords];
-  }, [focusedRecord, tablePeriodRecords]);
+  const tableRecords = tablePeriodRecords;
   const tableCandidateFlows = React.useMemo(
     () => buildCandidateFlowOverrides(tableRecords, effectiveCandidateRefs),
     [tableRecords, effectiveCandidateRefs],
@@ -610,6 +585,7 @@ const TransactionsDashboard = ({
       >
         <TransactionsTable
           records={tableRecords}
+          focusedRecord={focusedRecord}
           transactionSetRecords={records}
           hideSensitive={hideSensitive}
           currency={currency}

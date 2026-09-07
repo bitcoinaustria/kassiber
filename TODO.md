@@ -30,6 +30,9 @@ Backlog contract:
   desktop case page, fingerprint-bound missing-input handoffs, book-isolated
   drafts and refreshed case results after evidence changes. ZIP evidence stays
   bound to the saved snapshot; coverage reuses one request's immutable inputs.
+- [x] Guided target → trace/resolve → disclosure review → PDF/ZIP journey with
+  explicit fingerprint-bound preview approval. Persistent regtest includes an
+  attached synthetic purchase-to-wallet proof and a blocked missing-origin case.
 
 - [x] Shared canonical case pagination, portable mixed-operation previews,
   atomic application and verification receipts for CLI and built-in chat.
@@ -42,6 +45,56 @@ Backlog contract:
   imports and durable transaction attachments. Successful input resumes the
   originating review; scope, conversation and busy-state guards prevent stale
   continuation. The agent rechecks canonical cases before proposing changes.
+
+## Local chain analysis
+
+Current behavior and limits: [local chain analysis](docs/reference/local-chain-analysis.md).
+Research and the pre-implementation inventory: [architecture](docs/plan/17-local-chain-analysis.md).
+
+Current expansion (completion includes shared CLI/daemon/AI/UI contracts and
+independent adversarial verification):
+
+- [x] Unify Privacy Mirror with the shared observer snapshot and analytics;
+  remove duplicate scoring/graphs/editors, preserve local/AI audience boundaries,
+  and verify desktop, CLI, model handoffs and regression coverage.
+
+- [x] Exact value-class partition solver, explicit participant-fee scenarios,
+  large repeated-value transactions and cancellable computation receipts.
+- [x] Shared public structure/rule pipeline for chain observations and PSBT
+  v0/v2, complete UTXO validation and original/proposal Payjoin comparisons.
+- [x] Versioned local dataset packs with exact indexed lookup, preserved
+  provenance/conflicts, content-bound import and explicit revocation.
+- [x] Power-user workbench for scenarios, PSBT preflight and dataset lifecycle;
+  the assistant uses the same evidence, source grants and computation results.
+- [x] Share graph rendering/navigation with Source Funds through presentation
+  adapters, move expert controls under Advanced/Tools and the default PSBT
+  network into Settings, preserving exact handoff scope and evidence authority.
+
+- [x] Audit existing privacy/graph correctness: source attribution, pagination,
+  truthful coverage, domain isolation and cache-only reads.
+- [x] Shared immutable observation/ownership index and bounded forward/backward/
+  alternative-path queries, reused by desktop, CLI and chat. Independent
+  topology, network, conflict/reorg, confidential-value and indexed-scale tests.
+- [x] Current native/reviewed cross-rail custody relations from the canonical
+  journal; stale relations cannot authorize traversal or accounting.
+- [x] Reversible clustering, peel/reconvergence/postmix patterns, versioned local
+  attribution claims and bounded compatible-partition entropy. No ownership,
+  guilt, taint percentage or accounting authority is inferred from these models.
+- [x] Explicit configured-backend acquisition with genesis verification,
+  Core31 spender-index capabilities, Esplora/Electrum limits and bounded partial
+  results. Disposable Core31 test proves mined intermediate-wallet paths.
+- [x] Egress/consent audit: bind acquisition routes and seeds through dispatch,
+  prove once-only AI approvals, prevent implicit proxy/redirect destinations,
+  stop revoked automatic sync jobs, restrict manual refresh/model-discovery
+  scope, and keep Markdown images inert. Native Esplora uses the controlled
+  compatibility transport until its bindings expose the required HTTP policy.
+- [x] Dedicated power-user workspace, immutable saved investigations/comparisons,
+  JSON/CSV export and opaque-reference remote-agent projection; same shared core
+  and version/scope checks across interfaces.
+- [ ] Evaluate incremental/full-chain observation indexing; the graph is built
+  from local book/reference observations on demand. Attribution lookup already
+  uses persistent exact indexes (one-million-record benchmark documented).
+- [ ] Add explicit background watchlist jobs with evidence-change alerts.
 
 ## Rules for every session
 

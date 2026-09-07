@@ -242,8 +242,10 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif git diff --quiet "$BASE_SHA"...HEAD -- \
             kassiber/core/chain_observer \
+            kassiber/core/esplora_history.py \
             kassiber/core/sync.py \
             kassiber/core/sync_backends.py \
+            kassiber/proxy.py \
             kassiber/wallet_descriptors.py \
             kassiber/wallet_security.py \
             kassiber/db.py \

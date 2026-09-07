@@ -20,7 +20,6 @@ from kassiber.core.chain_observer.lwk import (
     _fee_sats_by_asset,
     _lwk_coverage,
     _lwk_electrum_connection,
-    _lwk_esplora_auth_options,
     _lwk_scan_to_index,
     _require_lwk_tip_not_behind,
     lwk_compatibility_reason,
@@ -252,7 +251,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
         if partial:
             targets = targets[1:]
         wallet = wallet_row(config)
-        resolved = backend or {"name": "native", "kind": "esplora", "url": "http://127.0.0.1:3002"}
+        resolved = backend or {"name": "native", "kind": "electrum", "url": "tcp://127.0.0.1:50001"}
         state = core_sync.WalletSyncState(
             chain="liquid", network="elementsregtest", descriptor_plan=plan,
             policy_asset_id=POLICY_ASSET, targets=targets,
@@ -372,7 +371,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
         state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
         self.assertIsNone(
             lwk_compatibility_reason(
-                {"kind": "esplora", "url": "http://127.0.0.1:3002"},
+                {"kind": "electrum", "url": "tcp://127.0.0.1:50001"},
                 state,
             )
         )
@@ -383,8 +382,11 @@ class LwkDescriptorContractTest(unittest.TestCase):
         )
         state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
         self.assertIsNone(lwk_compatibility_reason(
-            {"kind": "esplora", "url": "http://127.0.0.1:3002"}, state
+            {"kind": "electrum", "url": "tcp://127.0.0.1:50001"}, state
         ))
+        self.assertEqual(lwk_compatibility_reason(
+            {"kind": "esplora", "url": "http://127.0.0.1:3002"}, state,
+        ), "http_route_policy")
         self.assertEqual(lwk_compatibility_reason(
             {"kind": "esplora", "url": "http://example.onion", "proxy": "socks5://127.0.0.1:9050"}, state
         ), "proxy_transport")
@@ -392,7 +394,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
             {"kind": "electrum", "url": "ssl://host:50002", "certificate": "ca.pem"}, state
         ), "custom_ca")
 
-    def test_esplora_auth_is_passed_to_lwk_instead_of_compatibility(self):
+    def test_esplora_auth_uses_compatible_http_route(self):
         plan = load_descriptor_plan(
             {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
         )
@@ -403,16 +405,10 @@ class LwkDescriptorContractTest(unittest.TestCase):
             "auth_header": "Bearer secret",
             "token": "api-key",
         }
-        self.assertIsNone(lwk_compatibility_reason(backend, state))
-        fake_lwk = SimpleNamespace(
-            TokenProvider=SimpleNamespace(STATIC=lambda value: ("static", value))
-        )
+        self.assertEqual(lwk_compatibility_reason(backend, state), "http_route_policy")
         self.assertEqual(
-            _lwk_esplora_auth_options(fake_lwk, backend),
-            {
-                "headers": {"Authorization": "Bearer secret"},
-                "token_provider": ("static", "api-key"),
-            },
+            sync_backends._esplora_auth_headers(backend),
+            {"Authorization": "Bearer secret"},
         )
 
     def test_esplora_custom_ca_routes_to_compatible_verified_transport(self):
@@ -462,13 +458,13 @@ class LwkDescriptorContractTest(unittest.TestCase):
             "insecure_tls",
         )
 
-    def test_discovered_host_ca_keeps_custom_esplora_native(self):
+    def test_discovered_host_ca_keeps_http_route_policy(self):
         plan = load_descriptor_plan(
             {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
         )
         state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
         with patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "1"}):
-            self.assertIsNone(
+            self.assertEqual(
                 lwk_compatibility_reason(
                     {
                         "name": "private-node",
@@ -476,7 +472,8 @@ class LwkDescriptorContractTest(unittest.TestCase):
                         "url": "https://node.example",
                     },
                     state,
-                )
+                ),
+                "http_route_policy",
             )
 
     def test_operator_ca_override_routes_custom_esplora_to_python_transport(self):
@@ -528,13 +525,13 @@ class LwkDescriptorContractTest(unittest.TestCase):
                 "insecure_tls",
             )
 
-    def test_operator_ca_override_keeps_plain_http_esplora_native(self):
+    def test_operator_ca_override_keeps_plain_http_route_policy(self):
         plan = load_descriptor_plan(
             {"chain": "liquid", "network": "elementsregtest", "descriptor": descriptor()}
         )
         state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
         with patch.dict(os.environ, {"KASSIBER_HOST_CA_BUNDLE": "explicit"}):
-            self.assertIsNone(
+            self.assertEqual(
                 lwk_compatibility_reason(
                     {
                         "name": "local-esplora",
@@ -542,7 +539,8 @@ class LwkDescriptorContractTest(unittest.TestCase):
                         "url": "http://127.0.0.1:3002",
                     },
                     state,
-                )
+                ),
+                "http_route_policy",
             )
 
     def test_explicit_electrum_constructor_honors_tls_validation(self):
@@ -630,7 +628,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
         self.assertEqual(points[0].highest_used, 12)
         self.assertEqual(points[1].scanned_to, 8)
 
-    def test_native_client_receives_auth_and_explicit_tls_policy(self):
+    def test_native_client_refuses_http_and_preserves_electrum_tls_policy(self):
         network = object()
         builder = object()
         esplora_client = object()
@@ -655,15 +653,12 @@ class LwkDescriptorContractTest(unittest.TestCase):
         ), patch(
             "kassiber.core.chain_observer.lwk._truthy_env", return_value=False
         ):
-            self.assertIs(observer._client(network), esplora_client)
-        fake_lwk.EsploraClientBuilder.assert_called_once_with(
-            base_url="https://example.invalid/api",
-            network=network,
-            concurrency=4,
-            timeout=12,
-            headers={"Authorization": "Bearer secret"},
-            token_provider="static-token",
-        )
+            with self.assertRaises(AppError) as raised:
+                observer._client(network)
+        self.assertEqual(raised.exception.code, "observer_capability_unsupported")
+        self.assertEqual(raised.exception.details["capability"], "http_route_policy")
+        fake_lwk.EsploraClientBuilder.assert_not_called()
+        fake_lwk.EsploraClient.from_builder.assert_not_called()
 
         observer.backend = {
             "name": "tls",
@@ -693,7 +688,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
         state = SimpleNamespace(chain="liquid", descriptor_plan=plan)
         self.assertIsNone(
             lwk_compatibility_reason(
-                {"kind": "esplora", "url": "http://127.0.0.1:3002"}, state
+                {"kind": "electrum", "url": "tcp://127.0.0.1:50001"}, state
             )
         )
         parsed = lwk_descriptor_for_plan(plan)
@@ -782,7 +777,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
         wallet, discovery = self._discovery()
         compatibility = unittest.mock.Mock(side_effect=AssertionError("embit observer called"))
         prepared = object()
-        with patch.object(sync_backends, "COMPATIBILITY_SYNC_BACKEND_ADAPTERS", {"esplora": compatibility}), patch(
+        with patch.object(sync_backends, "COMPATIBILITY_SYNC_BACKEND_ADAPTERS", {"electrum": compatibility}), patch(
             "kassiber.core.chain_observer.prepare_observer_update", return_value=prepared,
         ), patch("kassiber.core.chain_observer.store.load_observer_values", return_value={}):
             fetched = sync_backends.prepare_dependency_observer_fetch(unittest.mock.Mock(), {}, wallet, discovery)
@@ -790,7 +785,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
         self.assertEqual(fetched.observer_updates, (prepared,))
         compatibility.assert_not_called()
 
-        with patch.object(sync_backends, "COMPATIBILITY_SYNC_BACKEND_ADAPTERS", {"esplora": compatibility}), patch(
+        with patch.object(sync_backends, "COMPATIBILITY_SYNC_BACKEND_ADAPTERS", {"electrum": compatibility}), patch(
             "kassiber.core.chain_observer.prepare_observer_update",
             side_effect=AppError("native failed", code="backend_sync_failed"),
         ), patch("kassiber.core.chain_observer.store.load_observer_values", return_value={}):
@@ -800,8 +795,9 @@ class LwkDescriptorContractTest(unittest.TestCase):
 
     def test_overlap_and_proxy_choose_named_compatibility_before_lwk(self):
         for expected, backend, partial in (
-            ("source_overlap_partial_descriptor", {"name": "overlap", "kind": "esplora", "url": "http://host"}, True),
+            ("source_overlap_partial_descriptor", {"name": "overlap", "kind": "electrum", "url": "tcp://host:50001"}, True),
             ("proxy_transport", {"name": "tor", "kind": "esplora", "url": "http://hidden.onion", "proxy": "socks5://127.0.0.1:9050"}, False),
+            ("http_route_policy", {"name": "http", "kind": "esplora", "url": "http://127.0.0.1:3002"}, False),
         ):
             wallet, discovery = self._discovery(backend=backend, partial=partial)
             online_targets = [
@@ -813,7 +809,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
                 },
             ]
             compatibility = unittest.mock.Mock(return_value=([], {}))
-            with patch.object(sync_backends, "COMPATIBILITY_SYNC_BACKEND_ADAPTERS", {"esplora": compatibility}), patch(
+            with patch.object(sync_backends, "COMPATIBILITY_SYNC_BACKEND_ADAPTERS", {backend["kind"]: compatibility}), patch(
                 "kassiber.core.sync_backends.discover_compatibility_descriptor_targets",
                 return_value={"targets": online_targets, "history_cache": {}},
             ) as online_discovery, patch(

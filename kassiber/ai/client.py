@@ -54,7 +54,7 @@ def _url_origin(url: str) -> tuple[str, str, int | None]:
 
 
 class _SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Allow redirects only within the configured direct provider origin."""
+    """Provider acknowledgement never authorizes a different origin."""
 
     def __init__(self, origin_url: str):
         super().__init__()
@@ -62,8 +62,10 @@ class _SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         if _url_origin(newurl) != self._origin:
+            if fp is not None:
+                fp.close()
             raise AppError(
-                "Direct local AI provider attempted an off-origin redirect",
+                "AI provider attempted an off-origin redirect",
                 code="ai_request_invalid",
                 retryable=False,
             )
@@ -695,7 +697,6 @@ class OpenAIResponsesClient:
     api_key: str | None = None
     timeout: float = DEFAULT_TIMEOUT_SECONDS
     user_agent: str = "kassiber/ai"
-    direct_connection: bool = False
     _cancelled: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
     _active_response: Any = field(default=None, init=False, repr=False)
 
@@ -749,14 +750,14 @@ class OpenAIResponsesClient:
         )
         try:
             request_timeout = timeout if timeout is not None else self.timeout
-            if self.direct_connection:
-                opener = urllib.request.build_opener(
-                    urllib.request.ProxyHandler({}),
-                    _SameOriginRedirectHandler(self.base_url),
-                )
-                response = opener.open(request, timeout=request_timeout)
-            else:
-                response = urllib.request.urlopen(request, timeout=request_timeout)
+            # The configured provider is the complete approved HTTP route.
+            # Neither OS/environment proxies nor another redirect origin may
+            # receive prompts, private tool context or provider credentials.
+            opener = urllib.request.build_opener(
+                urllib.request.ProxyHandler({}),
+                _SameOriginRedirectHandler(self.base_url),
+            )
+            response = opener.open(request, timeout=request_timeout)
             self._active_response = response
             if self._cancelled.is_set():
                 response.close()
@@ -1035,7 +1036,6 @@ def ai_client_for_locator(
     *,
     api_key: str | None = None,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
-    direct_connection: bool = False,
 ):
     if is_cli_provider_locator(base_url):
         return BrokerAIClient(locator=base_url, timeout=timeout)
@@ -1043,5 +1043,4 @@ def ai_client_for_locator(
         base_url=base_url,
         api_key=api_key,
         timeout=timeout,
-        direct_connection=direct_connection,
     )

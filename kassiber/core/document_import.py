@@ -1304,7 +1304,6 @@ def _client_for_provider(provider: dict[str, Any]) -> Any:
     return ai_client_for_locator(
         base_url=provider["base_url"],
         api_key=get_ai_provider_api_key_for_use(provider),
-        direct_connection=True,
     )
 
 

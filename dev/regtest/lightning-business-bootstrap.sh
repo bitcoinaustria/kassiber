@@ -54,7 +54,10 @@ fund_node_if_needed() {
     echo "Could not get a funding address from $service." >&2
     return 2
   fi
-  btc -rpcwallet="$FAUCET_WALLET" sendtoaddress "$address" "$NODE_FUND_BTC" >/dev/null
+  if ! btc -rpcwallet="$FAUCET_WALLET" sendtoaddress "$address" "$NODE_FUND_BTC" >/dev/null; then
+    echo "Failed to fund the regtest Lightning node." >&2
+    return 2
+  fi
   echo "Funded $service with $NODE_FUND_BTC BTC."
   return 0
 }
@@ -76,7 +79,10 @@ fund_lnd_if_needed() {
     echo "Could not get a funding address from lnd_merchant_backup." >&2
     return 2
   fi
-  btc -rpcwallet="$FAUCET_WALLET" sendtoaddress "$address" "$NODE_FUND_BTC" >/dev/null
+  if ! btc -rpcwallet="$FAUCET_WALLET" sendtoaddress "$address" "$NODE_FUND_BTC" >/dev/null; then
+    echo "Failed to fund the regtest Lightning node." >&2
+    return 2
+  fi
   echo "Funded lnd_merchant_backup with $NODE_FUND_BTC BTC."
   return 0
 }
@@ -114,10 +120,13 @@ ensure_channel_funding_utxo() {
     echo "Could not get a channel funding address from $service." >&2
     return 2
   fi
-  btc -rpcwallet="$FAUCET_WALLET" sendtoaddress "$address" "$(sat_to_btc "$CHANNEL_FUNDING_UTXO_SAT")" >/dev/null
+  if ! btc -rpcwallet="$FAUCET_WALLET" sendtoaddress "$address" "$(sat_to_btc "$CHANNEL_FUNDING_UTXO_SAT")" >/dev/null; then
+    echo "Failed to fund the regtest channel UTXO." >&2
+    return 2
+  fi
   echo "Funded $service with an additional $CHANNEL_FUNDING_UTXO_SAT sat channel UTXO."
-  mine_to_faucet 6
-  wait_for_node_funds "$service" "$min_sat"
+  mine_to_faucet 6 || return 2
+  wait_for_node_funds "$service" "$min_sat" || return 2
   return 0
 }
 
@@ -333,10 +342,16 @@ main() {
   for service in cln_merchant cln_customer cln_supplier cln_router; do
     if fund_node_if_needed "$service"; then
       funded=1
+    else
+      local status=$?
+      if [ "$status" -gt 1 ]; then return "$status"; fi
     fi
   done
   if fund_lnd_if_needed; then
     funded=1
+  else
+    local status=$?
+    if [ "$status" -gt 1 ]; then return "$status"; fi
   fi
   if [ "$funded" -eq 1 ]; then
     mine_to_faucet 6
@@ -353,7 +368,12 @@ main() {
     mine_to_faucet 6
   fi
   if ensure_channel cln_customer cln_merchant cln_merchant; then opened=1; fi
-  ensure_channel_funding_utxo cln_merchant "$CHANNEL_FUNDING_UTXO_SAT" || true
+  if ensure_channel_funding_utxo cln_merchant "$CHANNEL_FUNDING_UTXO_SAT"; then
+    :
+  else
+    local status=$?
+    if [ "$status" -gt 1 ]; then return "$status"; fi
+  fi
   if ensure_channel cln_merchant cln_router cln_router; then opened=1; fi
   if ensure_channel cln_router cln_supplier cln_supplier; then opened=1; fi
   if [ "$opened" -eq 1 ]; then

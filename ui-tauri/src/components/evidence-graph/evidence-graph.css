@@ -1,0 +1,137 @@
+.ca-graph-container {
+  --ca-physical: #168ca6;
+  --ca-custody: #9674da;
+  --ca-hypothesis: #c08325;
+  --ca-owned: #259e79;
+  --ca-muted: #9297a0;
+  --ca-grid: color-mix(in srgb, var(--foreground) 13%, transparent);
+}
+.ca-graph-container {
+  position: relative;
+  min-width: 0;
+  height: 520px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--background) 85%, var(--muted));
+}
+.ca-graph {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+  outline-offset: -3px;
+}
+.ca-graph:active {
+  cursor: grabbing;
+}
+.ca-node,
+.ca-edge {
+  cursor: pointer;
+  outline: none;
+}
+.ca-node-body {
+  fill: var(--card);
+  stroke: color-mix(in srgb, var(--foreground) 18%, transparent);
+  stroke-width: 1;
+}
+.ca-node-subject {
+  fill: none;
+  stroke: var(--ca-owned);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+.ca-node:hover .ca-node-body,
+.ca-node:focus-visible .ca-node-body,
+.ca-node.is-highlighted .ca-node-body {
+  stroke: var(--ca-physical);
+  stroke-width: 2;
+}
+.ca-node.is-selected .ca-node-body {
+  fill: color-mix(in srgb, var(--ca-physical) 12%, var(--card));
+  stroke: var(--ca-physical);
+  stroke-width: 2.5;
+}
+.ca-node[data-status="missing"] .ca-node-body {
+  stroke-dasharray: 4 3;
+}
+.ca-node[data-status="conflicting"] .ca-node-body,
+.ca-node[data-status="stale"] .ca-node-body {
+  stroke: var(--ca-hypothesis);
+  stroke-dasharray: 4 3;
+}
+.ca-node-label {
+  fill: var(--foreground);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-mono, monospace);
+}
+.ca-node-detail {
+  fill: var(--muted-foreground);
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+}
+.ca-edge:hover path:last-child,
+.ca-edge:focus-visible path:last-child {
+  stroke-width: 3;
+  opacity: 1;
+}
+.ca-graph-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--card) 95%, transparent);
+}
+.ca-graph-controls button {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+}
+.ca-graph-controls .ca-fit-button {
+  width: auto;
+  padding: 0 6px;
+  gap: 4px;
+  font-size: 11px;
+}
+.ca-graph-overview {
+  position: absolute;
+  right: 12px;
+  bottom: 60px;
+  width: 164px;
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--card) 95%, transparent);
+}
+.ca-graph-overview svg {
+  display: block;
+  width: 100%;
+  cursor: crosshair;
+  outline-offset: -3px;
+}
+.ca-graph-overview span {
+  display: block;
+  padding: 0 6px 6px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.ca-graph-help {
+  position: absolute;
+  bottom: 10px;
+  left: 12px;
+  right: 12px;
+  pointer-events: none;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+@media (max-width: 760px) { .ca-graph-container { height: 430px; } }

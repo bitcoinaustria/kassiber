@@ -174,6 +174,33 @@ const DEEP_LINK_SETTINGS_SECTIONS: &[&str] = &[
 ];
 
 const ALLOWED_DAEMON_KINDS: &[&str] = &[
+    "ui.chain_analysis.ai_context",
+    "ui.chain_analysis.query",
+    "ui.chain_analysis.entropy",
+    "ui.chain_analysis.entropy.start",
+    "ui.chain_analysis.jobs.get",
+    "ui.chain_analysis.jobs.cancel",
+    "ui.chain_analysis.psbt.analyze",
+    "ui.chain_analysis.psbt.compare",
+    "ui.chain_analysis.psbt.entropy.start",
+    "ui.chain_analysis.datasets.query",
+    "ui.chain_analysis.datasets.list",
+    "ui.chain_analysis.datasets.get",
+    "ui.chain_analysis.datasets.preview.start",
+    "ui.chain_analysis.datasets.import.start",
+    "ui.chain_analysis.datasets.revoke",
+    "ui.chain_analysis.datasets.discard.start",
+    "ui.chain_analysis.cases.list",
+    "ui.chain_analysis.cases.get",
+    "ui.chain_analysis.cases.compare",
+    "ui.chain_analysis.labels.list",
+    "ui.chain_analysis.acquire.plan",
+    "ui.chain_analysis.cases.save",
+    "ui.chain_analysis.cases.delete",
+    "ui.chain_analysis.labels.upsert",
+    "ui.chain_analysis.labels.delete",
+    "ui.chain_analysis.labels.import",
+    "ui.chain_analysis.acquire.apply",
     "status",
     "ui.egress.snapshot",
     "ui.overview.snapshot",
@@ -727,6 +754,60 @@ async fn pick_chat_attachment_source(
     .await
 }
 
+/// The native picker grants access to one analysis file; the renderer only
+/// receives its opaque token. Dataset rows and PSBT private maps stay local.
+#[tauri::command]
+async fn pick_chain_analysis_source(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<DaemonSupervisor>>,
+    purpose: String,
+    expected_scope: Option<Value>,
+) -> Result<Option<Value>, String> {
+    let extensions: &[&str] = match purpose.as_str() {
+        "psbt" => &["psbt", "txt"],
+        "dataset" => &["csv", "jsonl"],
+        _ => return Err("Unsupported analysis source purpose.".to_string()),
+    };
+    let selection = app
+        .dialog()
+        .file()
+        .add_filter("Analysis source", extensions)
+        .blocking_pick_file();
+    let Some(selection) = selection else {
+        return Ok(None);
+    };
+    let path = selection
+        .into_path()
+        .map_err(|_| "Selected analysis source is unavailable.".to_string())?;
+    let supervisor = Arc::clone(state.inner());
+    let response = tauri::async_runtime::spawn_blocking(move || {
+        let mut args = json!({"source_file": path.to_string_lossy(), "purpose": purpose});
+        if let Some(scope) = expected_scope {
+            args["expected_scope"] = scope;
+        }
+        supervisor.invoke(
+            "internal.chain_analysis.stage",
+            Some(args),
+            &app,
+            false,
+            None,
+        )
+    })
+    .await
+    .map_err(|_| "Could not stage selected analysis source.".to_string())?
+    .map_err(|_| "Could not stage selected analysis source.".to_string())?;
+    if response.get("kind").and_then(Value::as_str) == Some("internal.chain_analysis.stage") {
+        Ok(response.get("data").cloned())
+    } else {
+        Err(response
+            .get("error")
+            .and_then(|error| error.get("message"))
+            .and_then(Value::as_str)
+            .unwrap_or("Could not stage selected analysis source.")
+            .to_string())
+    }
+}
+
 async fn pick_staged_source(
     app: tauri::AppHandle,
     state: State<'_, Arc<DaemonSupervisor>>,
@@ -982,6 +1063,48 @@ fn save_chat_export_as(destination_path: String, contents: String) -> Result<Str
 #[tauri::command]
 fn save_logs_export_as(destination_path: String, contents: String) -> Result<String, String> {
     write_text_export(destination_path, contents, &["jsonl", "log", "md"])
+}
+
+#[tauri::command]
+fn save_chain_analysis_export_as(
+    app: tauri::AppHandle,
+    contents: String,
+    format: String,
+    default_name: String,
+    title: String,
+) -> Result<Option<String>, String> {
+    if !matches!(format.as_str(), "json" | "csv")
+        || contents.len() > 10_000_000
+        || default_name.len() > 128
+        || !default_name.ends_with(&format!(".{format}"))
+        || !default_name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+        || title.len() > 256
+    {
+        return Err("Invalid chain analysis export.".to_string());
+    }
+    // Keep the destination grant inside native code. A renderer-provided path
+    // would widen JSON export into arbitrary application-config writes.
+    let selection = app
+        .dialog()
+        .file()
+        .set_title(title)
+        .set_file_name(default_name)
+        .add_filter(format.to_ascii_uppercase(), &[format.as_str()])
+        .blocking_save_file();
+    let Some(selection) = selection else {
+        return Ok(None);
+    };
+    let destination = selection
+        .into_path()
+        .map_err(|_| "The selected investigation destination is unavailable.".to_string())?;
+    write_text_export(
+        destination.to_string_lossy().into_owned(),
+        contents,
+        &[format.as_str()],
+    )
+    .map(Some)
 }
 
 #[tauri::command]
@@ -3206,12 +3329,14 @@ pub fn run() {
             daemon_invoke,
             pick_document_import_source,
             pick_chat_attachment_source,
+            pick_chain_analysis_source,
             daemon_lifecycle_snapshot,
             open_exported_file,
             open_attachment_file,
             save_exported_file_as,
             save_chat_export_as,
             save_logs_export_as,
+            save_chain_analysis_export_as,
             read_ledger_preview_file_base64,
             open_external_url,
             check_app_update,

@@ -93,6 +93,34 @@ function bridgePythonCommand(repoRoot: string) {
 }
 
 const ALLOWED_BRIDGE_KINDS = new Set([
+    "ui.chain_analysis.ai_context",
+    "ui.chain_analysis.query",
+    "ui.chain_analysis.entropy",
+    "ui.chain_analysis.entropy.start",
+    "ui.chain_analysis.jobs.get",
+    "ui.chain_analysis.jobs.cancel",
+    "ui.chain_analysis.psbt.analyze",
+    "ui.chain_analysis.psbt.compare",
+    "ui.chain_analysis.psbt.entropy.start",
+    "ui.chain_analysis.datasets.query",
+    "ui.chain_analysis.datasets.list",
+    "ui.chain_analysis.datasets.get",
+    "ui.chain_analysis.datasets.preview.start",
+    "ui.chain_analysis.datasets.import.start",
+    "ui.chain_analysis.datasets.revoke",
+    "ui.chain_analysis.datasets.discard.start",
+    "ui.chain_analysis.cases.list",
+    "ui.chain_analysis.cases.get",
+    "ui.chain_analysis.cases.compare",
+    "ui.chain_analysis.labels.list",
+    "ui.chain_analysis.acquire.plan",
+    "ui.chain_analysis.cases.save",
+    "ui.chain_analysis.cases.delete",
+    "ui.chain_analysis.labels.upsert",
+    "ui.chain_analysis.labels.delete",
+    "ui.chain_analysis.labels.import",
+    "ui.chain_analysis.acquire.apply",
+
   "status",
   "ui.logs.snapshot",
   "ui.egress.snapshot",
@@ -901,16 +929,20 @@ async function handleBridgeFilePicker(
 
   const stagingPurpose =
     request.purpose === "document_import" ||
-    request.purpose === "chat_attachment";
+    request.purpose === "chat_attachment" ||
+    request.purpose === "chain_analysis_psbt" ||
+    request.purpose === "chain_analysis_dataset";
   try {
     if (stagingPurpose) {
       const forChat = request.purpose === "chat_attachment";
+      const analysisPurpose = request.purpose === "chain_analysis_psbt" ? "psbt" : request.purpose === "chain_analysis_dataset" ? "dataset" : null;
+      const stageKind = analysisPurpose ? "internal.chain_analysis.stage" : DOCUMENT_IMPORT_STAGE_KIND;
       const paths = await pickFileViaNativeBridge({
-        title: forChat
+        title: analysisPurpose ? "Choose an analysis source" : forChat
           ? "Choose an export, statement or image"
           : "Choose a receipt or statement",
         filters: [
-          forChat
+          analysisPurpose ? { name: "Analysis source", extensions: analysisPurpose === "psbt" ? ["psbt", "txt"] : ["csv", "jsonl"] } : forChat
             ? {
                 name: "Exports, statements and images",
                 extensions: [
@@ -938,16 +970,17 @@ async function handleBridgeFilePicker(
         return;
       }
       const staged = await supervisor.invoke({
-        kind: DOCUMENT_IMPORT_STAGE_KIND,
+        kind: stageKind,
         args: {
           source_file: paths[0],
+          ...(analysisPurpose ? {purpose: analysisPurpose} : {}),
           ...(request.expected_scope === undefined ? {} : { expected_scope: request.expected_scope }),
           ...(request.review_case_id === undefined ? {} : { review_case_id: request.review_case_id }),
           ...(request.review_recipe === undefined ? {} : { review_recipe: request.review_recipe }),
           ...(request.expected_review_fingerprint === undefined ? {} : { expected_review_fingerprint: request.expected_review_fingerprint }),
         },
       });
-      if (staged.kind !== DOCUMENT_IMPORT_STAGE_KIND || !staged.data) {
+      if (staged.kind !== stageKind || !staged.data) {
         const error = staged.error;
         const message =
           error && typeof error === "object" && !Array.isArray(error)

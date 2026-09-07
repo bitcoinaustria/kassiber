@@ -276,6 +276,7 @@ export interface Tx {
   chain?: string | null;
   network?: string | null;
   account: string;
+  paymentMethod?: "On-chain" | "Lightning" | "Liquid" | "Exchange" | null;
   counter: string;
   amountSat: number;
   feeSat?: number;

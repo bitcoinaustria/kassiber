@@ -9,6 +9,7 @@
  * under the AppShell layout and require a persisted identity; otherwise
  * the layout redirects to `/`.
  */
+import { parseAnalysisSearch } from "./lib/chainAnalysisNavigation";
 import { custodyGapRedirectSearch, parseTransfersCustodySearch } from "./routes/transfers-custody/routeSearch";
 import {
   createRootRoute,
@@ -57,6 +58,7 @@ const PrivacyMirror = lazyRouteComponent(
   () => import("./routes/PrivacyMirror"),
   "PrivacyMirror",
 );
+const ChainAnalysis = lazyRouteComponent(() => import("./routes/ChainAnalysis"), "ChainAnalysis");
 const ExitTax = lazyRouteComponent(() => import("./routes/ExitTax"), "ExitTax");
 const SourceFunds = lazyRouteComponent(
   () => import("./routes/source-funds"),
@@ -185,8 +187,14 @@ const reportsRoute = createRoute({
 const privacyMirrorRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/privacy-mirror",
-  beforeLoad: requireDeveloperTools,
   component: PrivacyMirror,
+});
+
+const chainAnalysisRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: "/chain-analysis",
+  validateSearch: parseAnalysisSearch,
+  component: ChainAnalysis,
 });
 
 const exitTaxRoute = createRoute({
@@ -471,6 +479,7 @@ const routeTree = rootRoute.addChildren([
     activityRoute,
     reportsRoute,
     privacyMirrorRoute,
+    chainAnalysisRoute,
     exitTaxRoute,
     sourceFundsRoute,
     journalsRoute,

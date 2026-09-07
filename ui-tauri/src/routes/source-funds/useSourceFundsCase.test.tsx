@@ -56,7 +56,7 @@ describe("source-funds canonical case reads", () => {
   it("renders the target, disclosure and export controls in German", async () => {
     await i18n.changeLanguage("de"); renderToStaticMarkup(<Capture />);
     const html = renderToStaticMarkup(<><TargetStage state={state} /><DiscloseStage state={state} /><ExportStage state={state} /></>);
-    expect(html).toContain("Was soll erklärt werden?"); expect(html).toContain("Genaue Transaktionsreferenz"); expect(html).toContain("Ein Empfänger ist optional");
+    expect(html).toContain("Was soll erklärt werden?"); expect(html).toContain("Genaue Transaktionsreferenz"); expect(html).toContain("Du kannst auch ohne Empfänger exportieren.");
     expect(html).not.toContain("Report options"); expect(html).not.toContain("No recipients defined"); expect(html).not.toContain("Saving case");
   });
   it("restores only the explicitly scoped draft and flattens all loaded pages", () => {

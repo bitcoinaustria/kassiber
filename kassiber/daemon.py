@@ -26,6 +26,9 @@ from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from . import __version__
+from .core import chain_analysis_api
+from .core import chain_analysis_runtime
+from .daemon_chain_analysis import job_starter as chain_analysis_job_starter
 from . import daemon_accounting_tasks
 from .command_capabilities import daemon_capability
 from .secrets.auth_backoff import AuthAttemptBackoff, AUTH_BACKOFF_FILENAME
@@ -336,6 +339,7 @@ _REQUEST_LOGGER = logging.getLogger("kassiber.daemon.request")
 _GRAPH_SEMANTICS_CACHE: dict[str, tuple[tuple[Any, ...], Any]] = {}
 
 SUPPORTED_KINDS = (
+    *sorted(chain_analysis_api.KINDS),
     *ACCOUNTING_UI_KINDS,
     *daemon_accounting_ai.KINDS,
     *daemon_accounting_documents.KINDS,
@@ -525,6 +529,7 @@ SUPPORTED_KINDS = (
     "ui.wallets.create",
     "ui.wallets.import_file",
     "internal.document_import.stage",
+    "internal.chain_analysis.stage",
     "ui.wallets.document_import.preview",
     "ui.wallets.document_import.import",
     "ui.wallets.import_samourai",
@@ -674,6 +679,7 @@ _AI_SCREEN_ROUTES = frozenset(
         "/activity",
         "/reports",
         "/privacy-mirror",
+        "/chain-analysis",
         "/exit-tax",
         "/source-of-funds",
         "/journals",
@@ -719,6 +725,9 @@ AI_TOOL_ONCE_ONLY_CONSENT = frozenset(
     {
         "ui.accounting.task_apply", "ui.accounting.task_cancel",
         "ui.review.apply",
+        "ui.chain_analysis.acquire.apply",
+        "ui.chain_analysis.datasets.import",
+        "ui.chain_analysis.datasets.import.start",
         "ui.journals.quarantine.resolve",
         "ui.transfers.components.apply",
         "ui.custody.review.apply",
@@ -3717,6 +3726,7 @@ def _projects_list_payload(ctx: DaemonContext) -> dict[str, Any]:
 def _close_current_project_for_switch(ctx: DaemonContext) -> None:
     _stop_freshness_background_worker(ctx, cancel_running=True)
     ctx.document_import_sessions.clear()
+    chain_analysis_runtime.clear_runtime()
     if ctx.conn is not None:
         ctx.conn.close()
         ctx.conn = None
@@ -3918,6 +3928,7 @@ def _select_project_payload(
             old_conn = ctx.conn
             old_owner = ctx.project_owner
             ctx.document_import_sessions.clear()
+            chain_analysis_runtime.clear_runtime()
             ctx.project_id = entry.id
             ctx.project_root = str(entry.root)
             ctx.data_root = target_data_root
@@ -5064,6 +5075,8 @@ def _reports_privacy_hygiene_payload(
 def _reports_privacy_mirror_payload(
     conn: sqlite3.Connection,
     raw_args: dict[str, Any] | None = None,
+    *,
+    redacted: bool = False,
 ) -> dict[str, Any]:
     args = raw_args or {}
     unknown = sorted(set(args))
@@ -5074,7 +5087,7 @@ def _reports_privacy_mirror_payload(
             details={"unknown": unknown},
             retryable=False,
         )
-    return core_reports.report_privacy_mirror(conn, None, None, _report_hooks())
+    return core_reports.report_privacy_mirror(conn, None, None, _report_hooks(), redacted=redacted)
 
 
 def _reports_psbt_privacy_payload(
@@ -5837,6 +5850,71 @@ def _validate_ai_tool_arguments(entry: Any, arguments: dict[str, Any]) -> None:
     _validate_ai_schema_value(arguments, schema, path=entry.name)
 
 
+def _chain_analysis_acquisition_consent_preview(runtime, args):
+    """Display only server-recomputed acquisition effects before consent."""
+    def preview(conn):
+        if runtime.maintenance_state.get("provider_on_device") is not True:
+            return {"status": "blocked", "code": "local_provider_required"}
+        from .core.chain_analysis_acquisition import plan_acquisition
+        from .core.chain_analysis_cases import canonical
+        _, profile = resolve_scope(conn, None, None)
+        supplied = args.get("plan") if isinstance(args, dict) else None
+        if not isinstance(supplied, dict) or not isinstance(supplied.get("args"), dict):
+            return {"status": "blocked", "code": "validation"}
+        try:
+            current = plan_acquisition(conn, profile["id"], supplied["args"])
+            if canonical(current) != canonical(supplied):
+                return {"status": "blocked", "code": "chain_analysis_stale"}
+            return {"status": "ready", "plan": current}
+        except AppError as exc:
+            return {"status": "blocked", "code": exc.code}
+    try:
+        return _run_scoped_ai_operation(runtime, preview)
+    except AppError as exc:
+        return {"status": "blocked", "code": exc.code}
+
+
+def _chain_analysis_dataset_consent_preview(runtime, args):
+    """Bind consent to actual local source bytes and their declared provenance."""
+    def preview(conn):
+        if runtime.maintenance_state.get("provider_on_device") is not True:
+            return {"status": "blocked", "code": "local_provider_required"}
+        try:
+            from .core.chain_analysis_datasets import normalize_manifest
+            _, profile = resolve_scope(conn, None, None)
+            recipe = {"manifest": normalize_manifest(args.get("manifest")), "format": args.get("format", "csv"), "adapter": args.get("adapter", "generic")}
+            result = chain_analysis_runtime.SOURCES.preview(chain_analysis_runtime.scope_key(conn, profile["id"]), args.get("source_token"), recipe, args.get("expected_sha256"))
+            return {"status": "ready", "manifest": result["manifest"], "row_count": result["row_count"], "byte_count": result["byte_count"], "sha256": result["sha256"]}
+        except AppError as exc:
+            return {"status": "blocked", "code": exc.code}
+    try:
+        return _run_scoped_ai_operation(runtime, preview)
+    except AppError as exc:
+        return {"status": "blocked", "code": exc.code}
+
+
+def _chain_analysis_ai_payload(conn, runtime, kind, args):
+    from .core.chain_analysis_ai import decode_ai_args, project_ai_result
+    _, profile = resolve_scope(conn, None, None)
+    on_device = runtime.maintenance_state.get("provider_on_device") is True
+    if kind in {"ui.chain_analysis.acquire.plan", "ui.chain_analysis.acquire.apply", "ui.chain_analysis.datasets.preview", "ui.chain_analysis.datasets.import", "ui.chain_analysis.datasets.preview.start", "ui.chain_analysis.datasets.import.start"} and not on_device:
+        raise AppError("Source acquisition and dataset imports are available to on-device AI providers and the desktop workflow", code="local_provider_required")
+    try:
+        decoded = decode_ai_args(conn, profile["id"], args)
+        if kind in {"ui.chain_analysis.datasets.import", "ui.chain_analysis.datasets.import.start"}:
+            from .core.chain_analysis_datasets import normalize_manifest
+            recipe = {"manifest": normalize_manifest(decoded.get("manifest")), "format": decoded.get("format", "csv"), "adapter": decoded.get("adapter", "generic")}
+            chain_analysis_runtime.SOURCES.preview(chain_analysis_runtime.scope_key(conn, profile["id"]), decoded.get("source_token"), recipe, decoded.get("expected_sha256"))
+        result = chain_analysis_api.dispatch(conn, kind, decoded, job_starter=runtime.maintenance_state.get("chain_analysis_job_starter"))
+    except AppError as exc:
+        if on_device:
+            raise
+        # Saved-query failures can contain public subjects in their details.
+        # Error paths owe the same identity boundary as successful responses.
+        raise AppError("Local chain investigation could not complete; inspect the error code and refresh the case or query", code=exc.code, retryable=exc.retryable) from None
+    return result if on_device else project_ai_result(conn, profile["id"], result)
+
+
 def _execute_read_only_ai_tool(
     call: ParsedAiToolCall,
     runtime: AiToolRuntime,
@@ -5996,7 +6074,7 @@ def _execute_read_only_ai_tool(
             elif entry.daemon_kind == "ui.reports.privacy_hygiene":
                 payload = _reports_privacy_hygiene_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.reports.privacy_mirror":
-                payload = _reports_privacy_mirror_payload(conn, call.arguments)
+                payload = _reports_privacy_mirror_payload(conn, call.arguments, redacted=True)
             elif entry.daemon_kind == "ui.reports.exit_tax_preview":
                 payload = core_reports.report_exit_tax(
                     conn,
@@ -6166,6 +6244,8 @@ def _execute_read_only_ai_tool(
                         retryable=False,
                     )
                 payload = build_review_badges_snapshot(conn)
+            elif entry.daemon_kind in chain_analysis_api.READ_KINDS:
+                payload = _chain_analysis_ai_payload(conn, runtime, entry.daemon_kind, call.arguments)
             elif entry.daemon_kind in daemon_accounting_tasks.READ_KINDS:
                 with daemon_accounting_tasks.owned_read_transaction(conn):
                     _, profile = resolve_scope(conn, None, None)
@@ -6754,6 +6834,11 @@ def _execute_mutating_ai_tool(
         return _tool_result_denied("tool_not_advertised")
     try:
         _validate_ai_tool_arguments(entry, call.arguments)
+        if entry.daemon_kind in chain_analysis_api.WRITE_KINDS:
+            def _execute_analysis(conn: sqlite3.Connection) -> dict[str, Any]:
+                payload = _chain_analysis_ai_payload(conn, runtime, entry.daemon_kind, call.arguments)
+                return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
+            return _run_scoped_ai_mutation(runtime, _execute_analysis)
         if entry.name == "ui.reports.export":
             export_kind, export_args = _ai_report_export_target(call.arguments)
 
@@ -8630,6 +8715,8 @@ def _run_ai_chat_tool_loop(
         if entry is not None and entry.provider_name not in offered:
             offered.add(entry.provider_name)
             tools.append(entry.to_responses_tool())
+    if not runtime.maintenance_state.get("provider_on_device"):
+        tools = [tool for tool in tools if tool.get("name") not in {"ui_chain_analysis_acquire_plan", "ui_chain_analysis_acquire_apply", "ui_chain_analysis_datasets_preview", "ui_chain_analysis_datasets_import", "ui_chain_analysis_datasets_preview_start", "ui_chain_analysis_datasets_import_start"}]
     runtime.maintenance_state["advertised_tools"] = [
         function["name"]
         for function in tools
@@ -8703,6 +8790,10 @@ def _run_ai_chat_tool_loop(
             display_name = entry.name if entry is not None else call.name
             tool_session_name = entry.name if entry is not None else call.name
             preview_arguments = redact_tool_arguments(call.arguments)
+            if entry is not None and entry.name == "ui.chain_analysis.acquire.apply":
+                preview_arguments = _chain_analysis_acquisition_consent_preview(runtime, call.arguments)
+            if entry is not None and entry.name in {"ui.chain_analysis.datasets.import", "ui.chain_analysis.datasets.import.start"}:
+                preview_arguments = _chain_analysis_dataset_consent_preview(runtime, call.arguments)
             proposal_seen_at = now_iso()
             needs_consent = (
                 entry is not None
@@ -8960,7 +9051,6 @@ def _run_ai_chat_stream(
                 base_url=provider_snapshot["base_url"],
                 api_key=provider_snapshot.get("api_key"),
                 timeout=validated["timeout_seconds"],
-                **({"direct_connection": True} if validated.get("accounting_context") is not None else {}),
             )
             cancel = getattr(client, "cancel", None)
             if callable(cancel):
@@ -14810,6 +14900,7 @@ def handle_request(
     if kind == "daemon.lock":
         _stop_freshness_background_worker(ctx, cancel_running=True)
         ctx.document_import_sessions.clear()
+        chain_analysis_runtime.clear_runtime()
         if ctx.conn is not None:
             ctx.conn.close()
             ctx.conn = None
@@ -16106,6 +16197,24 @@ def handle_request(
             False,
         )
 
+    if kind in chain_analysis_api.KINDS:
+        payload = chain_analysis_api.dispatch(
+            _require_conn(ctx), kind, _coerce_args_dict(request_id, request.get("args")),
+            job_starter=chain_analysis_job_starter(ctx.data_root, getattr(ctx, "db_passphrase", None)),
+        )
+        return _with_request_id(build_envelope(kind, payload), request_id), False
+
+    if kind == "internal.chain_analysis.stage":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        from .core.chain_analysis_cases import arguments
+        arguments(args, ("source_file", "purpose", "expected_scope"), ("source_file", "purpose"))
+        conn = _require_conn(ctx)
+        workspace, profile = resolve_scope(conn, None, None)
+        if args.get("expected_scope") is not None and args["expected_scope"] != {"workspace_id": workspace["id"], "profile_id": profile["id"]}:
+            raise AppError("The active book changed; choose the analysis source again", code="scope_changed")
+        payload = chain_analysis_runtime.SOURCES.stage(chain_analysis_runtime.scope_key(conn, profile["id"]), args["source_file"], args["purpose"])
+        return _with_request_id(build_envelope(kind, payload), request_id), False
+
     if kind in {"ui.review.cases", "ui.review.request_input", "ui.review.plan", "ui.review.apply", "ui.review.receipt"}:
         payload = _review_workflow_payload(
             _require_conn(ctx), kind,
@@ -16293,6 +16402,7 @@ def handle_request(
             _coerce_args_dict(request_id, request.get("args")),
         )
         ctx.document_import_sessions.clear()
+        chain_analysis_runtime.clear_runtime()
         return (
             _with_request_id(
                 build_envelope(
@@ -17598,6 +17708,7 @@ def handle_request(
                 "provider_on_device": _provider_is_on_device(provider),
                 "scope_workspace_id": chat_scope.get("workspace_id"),
                 "scope_profile_id": chat_scope.get("profile_id"),
+                "chain_analysis_job_starter": chain_analysis_job_starter(ctx.data_root, ctx.db_passphrase),
                 **attachment_state,
             },
         )

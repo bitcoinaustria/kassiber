@@ -1,3 +1,4 @@
+import { transactionDetailSaveArgs, useTransactionDetailRecord } from "./useTransactionDetailRecord";
 import {
   AlertTriangle,
   ArrowDown,
@@ -38,6 +39,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   TableBody,
@@ -77,7 +79,6 @@ import {
   copyText,
   currencyFormatter,
   draftForTransaction,
-  metadataUpdateArgs,
   explorerForTransaction,
   formatCounterDisplayMoney,
   formatDisplayMoney,
@@ -110,6 +111,7 @@ import {
   isRedundantTransactionLabel,
   matchesFlowChartSelection,
   matchesTransactionDeepLink,
+  resolveTransactionDeepLink,
   pairRailLabel,
   quickFilterLabel,
   readTransactionDetailParams,
@@ -189,6 +191,7 @@ function sortableTransactionDateValue(label: string) {
 
 const TransactionsTable = ({
   records,
+  focusedRecord,
   hideSensitive,
   currency,
   nowRate,
@@ -216,6 +219,7 @@ const TransactionsTable = ({
   onExpandedChange,
 }: {
   records: Transaction[];
+  focusedRecord?: Transaction | null;
   hideSensitive: boolean;
   currency: Currency;
   nowRate: number | null;
@@ -242,7 +246,7 @@ const TransactionsTable = ({
   isExpanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
 }) => {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation(["transactions", "common"]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const {
@@ -275,8 +279,13 @@ const TransactionsTable = ({
   );
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
-  const [detailTransaction, setDetailTransaction] =
+  const [selectedDetailTransaction, setDetailTransaction] =
     React.useState<Transaction | null>(null);
+  const detailResolution = useTransactionDetailRecord(
+    selectedDetailTransaction,
+    t as (key: string, opts?: Record<string, unknown>) => string,
+  );
+  const detailTransaction = detailResolution.record;
   const [detailInitialTab, setDetailInitialTab] = React.useState("details");
   const [expandedActionsHost, setExpandedActionsHost] =
     React.useState<HTMLElement | null>(null);
@@ -288,6 +297,7 @@ const TransactionsTable = ({
   const [reuseSourceTransactionId, setReuseSourceTransactionId] =
     React.useState("");
   const pendingDetailLinkRef = React.useRef(readTransactionDetailParams());
+  const openedDetailLinkRef = React.useRef<string | null>(null);
   const tableRef = React.useRef<HTMLDivElement>(null);
   const tableScrollRef = React.useRef<HTMLDivElement>(null);
   const lastAutoLoadRowCountRef = React.useRef<number | null>(null);
@@ -415,27 +425,22 @@ const TransactionsTable = ({
     (txn: Transaction) => drafts[txn.id] ?? draftForTransaction(txn),
     [drafts],
   );
+  const detailDraft = React.useMemo(
+    () => detailTransaction ? getDraft(detailTransaction) : null,
+    [detailTransaction, getDraft],
+  );
   const saveTransactionDraft = React.useCallback(
     async (transactionId: string, draft: TransactionEditDraft) => {
       setSaveError(null);
-      const sourceTransaction = records.find((txn) => txn.id === transactionId);
-      const baseline = sourceTransaction
-        ? drafts[transactionId] ?? draftForTransaction(sourceTransaction)
-        : null;
       await metadataUpdate.mutateAsync(
-        metadataUpdateArgs({
-          transactionId,
-          draft,
-          baseline,
-          sourceTags: sourceTransaction?.tags ?? [],
-        }),
+        transactionDetailSaveArgs(transactionId, draft, records, detailTransaction, drafts),
       );
       setDrafts((current) => ({
         ...current,
         [transactionId]: draft,
       }));
     },
-    [drafts, metadataUpdate, records],
+    [detailTransaction, drafts, metadataUpdate, records],
   );
 
   const openTransactionDetail = React.useCallback(
@@ -448,17 +453,21 @@ const TransactionsTable = ({
     [],
   );
   React.useEffect(() => {
-    if (!deepLinkedTransactionId) return;
+    if (!deepLinkedTransactionId) {
+      openedDetailLinkRef.current = null;
+      return;
+    }
+    const linkKey = `${deepLinkedTransactionId}:${deepLinkedTransactionTab}`;
+    if (openedDetailLinkRef.current === linkKey) return;
     if (
       detailTransaction &&
       matchesTransactionDeepLink(detailTransaction, deepLinkedTransactionId)
     ) {
       return;
     }
-    const transaction = records.find((txn) =>
-      matchesTransactionDeepLink(txn, deepLinkedTransactionId),
-    );
+    const transaction = resolveTransactionDeepLink(records, deepLinkedTransactionId, focusedRecord);
     if (transaction) {
+      openedDetailLinkRef.current = linkKey;
       pendingDetailLinkRef.current = { transactionId: null, tab: "details" };
       openTransactionDetail(transaction, deepLinkedTransactionTab);
       return;
@@ -471,6 +480,7 @@ const TransactionsTable = ({
     deepLinkedTransactionId,
     deepLinkedTransactionTab,
     detailTransaction,
+    focusedRecord,
     openTransactionDetail,
     records,
   ]);
@@ -699,13 +709,11 @@ const TransactionsTable = ({
   React.useEffect(() => {
     const pending = pendingDetailLinkRef.current;
     if (!pending.transactionId) return;
-    const transaction = records.find((txn) =>
-      matchesTransactionDeepLink(txn, pending.transactionId ?? ""),
-    );
+    const transaction = resolveTransactionDeepLink(records, pending.transactionId, focusedRecord);
     if (!transaction) return;
     pendingDetailLinkRef.current = { transactionId: null, tab: "details" };
     openTransactionDetail(transaction, pending.tab);
-  }, [records, openTransactionDetail]);
+  }, [records, focusedRecord, openTransactionDetail]);
 
   const dateSortDirection =
     tableSort?.key === "date" ? tableSort.direction : null;
@@ -2315,9 +2323,21 @@ const TransactionsTable = ({
         target={explorerTarget}
         onTransactionChange={setExplorerTransaction}
       />
+      <Dialog open={Boolean(selectedDetailTransaction && !detailTransaction)} onOpenChange={(open) => {
+        if (!open) {
+          setDetailTransaction(null);
+          updateTransactionDetailParams(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogTitle>{t("common:field.details")}</DialogTitle>
+          <p role="status">{detailResolution.isLoading ? t("common:state.loading") : t("common:state.error")}</p>
+          {!detailResolution.isLoading && <Button onClick={() => void detailResolution.retry()}>{t("common:actions.retry")}</Button>}
+        </DialogContent>
+      </Dialog>
       <TransactionDetailSheet
         transaction={detailTransaction}
-        draft={detailTransaction ? getDraft(detailTransaction) : null}
+        draft={detailDraft}
         initialTab={detailInitialTab}
         hideSensitive={hideSensitive}
         currency={currency}

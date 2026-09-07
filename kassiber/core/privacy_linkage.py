@@ -1,36 +1,29 @@
-"""Local Bitcoin UTXO linkage spine for the Privacy Mirror.
+"""Private inventory and PSBT views over the shared local evidence engine.
 
-This module is advisory-only. It reads facts Kassiber already stores locally
-about watch-only Bitcoin outputs and transaction inputs; it never queries an
-explorer, entity database, wallet backend, or remote API. It also does not
-offer coin-selection advice. The output is intended to explain what passive
-observers can already link from common-input, change-output, and address-reuse
-heuristics.
+Chain parsing, public-control hypotheses, structural features, and component
+composition live in chain_analysis. This module projects those results onto
+locally owned outputs, adds explicitly hypothetical counterparty/source-funds
+anchors, and compares read-only PSBT proposals against that observer baseline.
+Private wallet branch evidence never creates a public ownership edge.
 
-The public payload is AI/export-safe: addresses, scripts, descriptors, xpubs,
-wallet config, raw transaction JSON, branch/index values, and derivation paths
-are not emitted. Exact address/script values are used only in-memory to detect
-local reuse.
+Reduced payloads omit addresses, scripts, descriptors, config, raw transactions,
+and derivation material. Nothing here refreshes observations or contacts a node.
 """
 
 from __future__ import annotations
 
-import base64
-import binascii
-import json
 import sqlite3
 from collections import defaultdict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Iterable, Mapping, Sequence
 
-from ..wallet_descriptors import (
-    SCRIPT_TYPE_BRANCH_BASE,
-    normalize_asset_code,
-    normalize_chain,
-    normalize_network,
-)
-from .onchain import parse_vin_outpoints
-from .source_funds_assembly import build_owned_outpoint_index
+from ..wallet_descriptors import normalize_asset_code
+from .chain_analysis import AnalysisIndex, analyze_snapshot, build_index
+from .chain_analysis.index import thaw
+from .chain_analysis.components import Components
+from .chain_analysis.features import evaluate_features, extract_transaction_features
+from .custody_evidence import resolve_protocol_scope
+from ..errors import AppError
 
 EVIDENCE_EXACT = "exact"
 EVIDENCE_DERIVED = "derived"
@@ -53,130 +46,8 @@ PRIVACY_LINKAGE_SCHEMA_VERSION = 1
 PSBT_PRIVACY_SCHEMA_VERSION = 1
 
 
-def _str_or_none(value: Any) -> str | None:
-    if value is None:
-        return None
-    text = str(value).strip()
-    return text or None
-
-
 def _normalize_txid(value: Any) -> str:
     return str(value or "").strip().lower()
-
-
-def _outpoint(txid: Any, vout: Any) -> tuple[str, int] | None:
-    txid_text = _normalize_txid(txid)
-    if not txid_text:
-        return None
-    try:
-        vout_int = int(vout)
-    except (TypeError, ValueError):
-        return None
-    if vout_int < 0:
-        return None
-    return (txid_text, vout_int)
-
-
-def _outpoint_id(outpoint: tuple[str, int]) -> str:
-    return f"{outpoint[0]}:{outpoint[1]}"
-
-
-def _normalize_chain_or_none(value: Any) -> str | None:
-    try:
-        return normalize_chain(value)
-    except ValueError:
-        return None
-
-
-def _safe_json_loads(value: Any) -> Any:
-    if value is None or value == "":
-        return None
-    if isinstance(value, (dict, list)):
-        return value
-    try:
-        return json.loads(str(value))
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return None
-
-
-_CHANGE_LABEL_TOKENS = {"change", "internal"}
-_RECEIVE_LABEL_TOKENS = {"receive", "external", "deposit"}
-_KNOWN_BRANCH_ROLES: dict[int, str] = {}
-_KNOWN_SCRIPT_LABEL_TOKENS: set[str] = set()
-for _script_type, _base in SCRIPT_TYPE_BRANCH_BASE.items():
-    _KNOWN_BRANCH_ROLES[_base] = "receive"
-    _KNOWN_BRANCH_ROLES[_base + 1] = "change"
-    _KNOWN_SCRIPT_LABEL_TOKENS.add(_script_type.replace("-", ""))
-    _KNOWN_SCRIPT_LABEL_TOKENS.update(_script_type.split("-"))
-
-
-@dataclass(frozen=True)
-class _BranchRole:
-    role: str
-    change_evidence: str
-    evidence_level: str
-    source: str
-
-
-def _label_tokens(label: Any) -> set[str]:
-    text = str(label or "").strip().lower()
-    if not text:
-        return set()
-    normalized = "".join(ch if ch.isalnum() else " " for ch in text)
-    tokens = set(normalized.split())
-    compact = normalized.replace(" ", "")
-    if compact:
-        tokens.add(compact)
-    return tokens
-
-
-def _classify_branch_role(branch_label: Any, branch_index: Any) -> _BranchRole:
-    tokens = _label_tokens(branch_label)
-    role = ""
-    if tokens & _CHANGE_LABEL_TOKENS:
-        role = "change"
-    elif tokens & _RECEIVE_LABEL_TOKENS:
-        role = "receive"
-    if role:
-        evidence = (
-            CHANGE_EVIDENCE_IMPORTED
-            if tokens & _KNOWN_SCRIPT_LABEL_TOKENS
-            else CHANGE_EVIDENCE_GROUND_TRUTH
-        )
-        source = (
-            "imported_branch_role"
-            if evidence == CHANGE_EVIDENCE_IMPORTED
-            else "wallet_branch_role"
-        )
-        return _BranchRole(
-            role=role,
-            change_evidence=evidence,
-            evidence_level=EVIDENCE_EXACT,
-            source=source,
-        )
-    try:
-        branch_index_int = int(branch_index)
-    except (TypeError, ValueError):
-        return _BranchRole(
-            role="unknown",
-            change_evidence=CHANGE_EVIDENCE_UNAVAILABLE,
-            evidence_level=EVIDENCE_UNKNOWN,
-            source="branch_metadata_unavailable",
-        )
-    fallback_role = _KNOWN_BRANCH_ROLES.get(branch_index_int)
-    if fallback_role is None:
-        return _BranchRole(
-            role="unknown",
-            change_evidence=CHANGE_EVIDENCE_UNAVAILABLE,
-            evidence_level=EVIDENCE_UNKNOWN,
-            source="branch_metadata_unavailable",
-        )
-    return _BranchRole(
-        role=fallback_role,
-        change_evidence=CHANGE_EVIDENCE_HEURISTIC,
-        evidence_level=EVIDENCE_DERIVED,
-        source="numeric_branch_convention",
-    )
 
 
 @dataclass(frozen=True)
@@ -194,6 +65,7 @@ class OwnedOutputNode:
     amount_msat: int
     asset: str
     spent_by: str | None = None
+    network: str = "main"
     branch_role: str = "unknown"
     branch_evidence_level: str = EVIDENCE_UNKNOWN
     change_evidence: str = CHANGE_EVIDENCE_UNAVAILABLE
@@ -235,9 +107,11 @@ class PrivacyLinkageEdge:
     new_linkage: bool
     merged_cluster_count: int
     evidence: Mapping[str, Any]
+    observer_linkage: bool = True
 
     def to_redacted_payload(self) -> dict[str, Any]:
         return {
+            "observer_linkage": self.observer_linkage,
             "edge_id": self.edge_id,
             "kind": self.kind,
             "heuristic": self.heuristic,
@@ -439,6 +313,9 @@ class PrivacyLinkageGraph:
     observer_entities: tuple[PassiveObserverEntity, ...]
     findings: tuple[PrivacyLinkageFinding, ...]
     limitations: tuple[Mapping[str, Any], ...]
+    analysed_transaction_count: int = 0
+    scored_transaction_count: int = 0
+    transaction_coverage_unknown_count: int = 0
 
     @property
     def linkage_score(self) -> int:
@@ -459,11 +336,16 @@ class PrivacyLinkageGraph:
             "summary": {
                 "node_count": len(self.nodes),
                 "edge_count": len(self.edges),
+                "observer_linkage_edge_count": sum(edge.observer_linkage for edge in self.edges),
+                "local_fact_edge_count": sum(not edge.observer_linkage for edge in self.edges),
                 "new_linkage_edge_count": sum(1 for edge in self.edges if edge.new_linkage),
                 "linkage_score": self.linkage_score,
                 "consequence_msat": self.consequence_msat,
                 "observer_entity_count": len(self.observer_entities),
                 "transaction_tell_count": len(self.transaction_tells),
+                "analysed_transaction_count": self.analysed_transaction_count,
+                "scored_transaction_count": self.scored_transaction_count,
+                "transaction_coverage_unknown_count": self.transaction_coverage_unknown_count,
                 "adversary_view_count": len(self.adversary_views),
                 "source_proximity_coin_count": len(self.source_proximity),
                 "source_proximity_known_coin_count": sum(
@@ -661,321 +543,167 @@ class _DecodedPsbt:
     outputs: tuple[_DecodedPsbtOutput, ...]
     unsigned_tx_clean: bool
     signature_material_present: bool
-
-
-class _UnionFind:
-    def __init__(self, node_ids: Iterable[str]):
-        self.parent = {node_id: node_id for node_id in node_ids}
-        self.rank = {node_id: 0 for node_id in node_ids}
-
-    def find(self, node_id: str) -> str:
-        parent = self.parent[node_id]
-        if parent != node_id:
-            self.parent[node_id] = self.find(parent)
-        return self.parent[node_id]
-
-    def union(self, left: str, right: str) -> bool:
-        left_root = self.find(left)
-        right_root = self.find(right)
-        if left_root == right_root:
-            return False
-        if self.rank[left_root] < self.rank[right_root]:
-            left_root, right_root = right_root, left_root
-        self.parent[right_root] = left_root
-        if self.rank[left_root] == self.rank[right_root]:
-            self.rank[left_root] += 1
-        return True
-
-
-def _read_compact_size(data: bytes, offset: int) -> tuple[int, int]:
-    if offset >= len(data):
-        raise ValueError("Unexpected end of compact-size value")
-    prefix = data[offset]
-    offset += 1
-    if prefix < 0xFD:
-        return prefix, offset
-    if prefix == 0xFD:
-        width = 2
-    elif prefix == 0xFE:
-        width = 4
-    else:
-        width = 8
-    if offset + width > len(data):
-        raise ValueError("Unexpected end of compact-size value")
-    return int.from_bytes(data[offset : offset + width], "little"), offset + width
-
-
-def _read_bytes(data: bytes, offset: int, length: int, label: str) -> tuple[bytes, int]:
-    if length < 0 or offset + length > len(data):
-        raise ValueError(f"Unexpected end of {label}")
-    return data[offset : offset + length], offset + length
-
-
-def _read_uint32(data: bytes, offset: int, label: str) -> tuple[int, int]:
-    raw, offset = _read_bytes(data, offset, 4, label)
-    return int.from_bytes(raw, "little"), offset
-
-
-def _read_uint64(data: bytes, offset: int, label: str) -> tuple[int, int]:
-    raw, offset = _read_bytes(data, offset, 8, label)
-    return int.from_bytes(raw, "little"), offset
-
-
-def _decode_unsigned_transaction(raw_tx: bytes) -> _DecodedPsbt:
-    offset = 0
-    version, offset = _read_uint32(raw_tx, offset, "transaction version")
-    witness_encoded = False
-    if offset + 2 <= len(raw_tx) and raw_tx[offset] == 0 and raw_tx[offset + 1] != 0:
-        witness_encoded = True
-        offset += 2
-    input_count, offset = _read_compact_size(raw_tx, offset)
-    if input_count > 100_000:
-        raise ValueError("PSBT unsigned transaction has too many inputs")
-    inputs: list[_DecodedPsbtInput] = []
-    unsigned_tx_clean = not witness_encoded
-    for _ in range(input_count):
-        raw_prev_txid, offset = _read_bytes(raw_tx, offset, 32, "input prevout")
-        vout, offset = _read_uint32(raw_tx, offset, "input vout")
-        script_len, offset = _read_compact_size(raw_tx, offset)
-        script_sig, offset = _read_bytes(raw_tx, offset, script_len, "input script")
-        sequence, offset = _read_uint32(raw_tx, offset, "input sequence")
-        if script_sig:
-            unsigned_tx_clean = False
-        inputs.append(
-            _DecodedPsbtInput(
-                prev_txid=raw_prev_txid[::-1].hex(),
-                vout=vout,
-                sequence=sequence,
-            )
-        )
-    output_count, offset = _read_compact_size(raw_tx, offset)
-    if output_count > 100_000:
-        raise ValueError("PSBT unsigned transaction has too many outputs")
-    outputs: list[_DecodedPsbtOutput] = []
-    for _ in range(output_count):
-        value_sats, offset = _read_uint64(raw_tx, offset, "output value")
-        script_len, offset = _read_compact_size(raw_tx, offset)
-        script, offset = _read_bytes(raw_tx, offset, script_len, "output script")
-        outputs.append(
-            _DecodedPsbtOutput(
-                value_msat=value_sats * 1000,
-                script_key=script.hex(),
-                is_op_return=script.startswith(b"\x6a"),
-            )
-        )
-    if witness_encoded:
-        for _ in range(input_count):
-            item_count, offset = _read_compact_size(raw_tx, offset)
-            if item_count:
-                unsigned_tx_clean = False
-            for _ in range(item_count):
-                item_len, offset = _read_compact_size(raw_tx, offset)
-                _item, offset = _read_bytes(raw_tx, offset, item_len, "witness item")
-    locktime, offset = _read_uint32(raw_tx, offset, "transaction locktime")
-    if offset != len(raw_tx):
-        raise ValueError("PSBT unsigned transaction has trailing bytes")
-    return _DecodedPsbt(
-        version=version,
-        locktime=locktime,
-        inputs=tuple(inputs),
-        outputs=tuple(outputs),
-        unsigned_tx_clean=unsigned_tx_clean,
-        signature_material_present=False,
-    )
-
-
-_PSBT_SIGNATURE_KEY_TYPES = {0x02, 0x08, 0x09, 0x13, 0x14}
-
-
-def _read_psbt_map(data: bytes, offset: int) -> tuple[list[tuple[int, bytes]], int]:
-    entries: list[tuple[int, bytes]] = []
-    while True:
-        key_len, offset = _read_compact_size(data, offset)
-        if key_len == 0:
-            return entries, offset
-        key, offset = _read_bytes(data, offset, key_len, "PSBT key")
-        value_len, offset = _read_compact_size(data, offset)
-        _value, offset = _read_bytes(data, offset, value_len, "PSBT value")
-        if not key:
-            raise ValueError("PSBT map contains an empty key")
-        entries.append((key[0], key))
+    features: Mapping[str, Any]
 
 
 def _decode_psbt(psbt_text: str) -> _DecodedPsbt:
-    compact = "".join(str(psbt_text or "").split())
-    if not compact:
-        raise ValueError("PSBT payload is empty")
+    # Keep inventory/privacy policy here; framing, v2 reconstruction and UTXO
+    # validation belong to the same read-only decoder used by chain analysis.
+    from .chain_analysis.psbt import decode_psbt_structure
+
     try:
-        data = base64.b64decode(compact, validate=True)
-    except (binascii.Error, ValueError) as exc:
-        raise ValueError("PSBT payload is not valid base64") from exc
-    if not data.startswith(b"psbt\xff"):
-        raise ValueError("PSBT magic bytes are missing")
-    offset = 5
-    unsigned_tx: bytes | None = None
-    while True:
-        key_len, offset = _read_compact_size(data, offset)
-        if key_len == 0:
-            break
-        key, offset = _read_bytes(data, offset, key_len, "PSBT global key")
-        value_len, offset = _read_compact_size(data, offset)
-        value, offset = _read_bytes(data, offset, value_len, "PSBT global value")
-        if not key:
-            raise ValueError("PSBT global map contains an empty key")
-        if key[0] == 0x00 and len(key) == 1:
-            unsigned_tx = value
-    if unsigned_tx is None:
-        raise ValueError("PSBT unsigned transaction is missing")
-    decoded = _decode_unsigned_transaction(unsigned_tx)
-    signature_material_present = False
-    for _ in decoded.inputs:
-        input_entries, offset = _read_psbt_map(data, offset)
-        if any(key_type in _PSBT_SIGNATURE_KEY_TYPES for key_type, _key in input_entries):
-            signature_material_present = True
-    for _ in decoded.outputs:
-        _output_entries, offset = _read_psbt_map(data, offset)
-    if offset != len(data):
-        raise ValueError("PSBT has trailing bytes")
+        decoded = decode_psbt_structure(psbt_text)
+    except AppError as exc:
+        raise ValueError("PSBT structure or supplied prevout evidence is invalid") from exc
     return _DecodedPsbt(
-        version=decoded.version,
-        locktime=decoded.locktime,
-        inputs=decoded.inputs,
-        outputs=decoded.outputs,
-        unsigned_tx_clean=decoded.unsigned_tx_clean,
-        signature_material_present=signature_material_present,
+        version=decoded["version"], locktime=decoded["locktime"],
+        inputs=tuple(_DecodedPsbtInput(**row) for row in decoded["inputs"]),
+        outputs=tuple(_DecodedPsbtOutput(**row) for row in decoded["outputs"]),
+        unsigned_tx_clean=decoded["unsigned_tx_clean"],
+        signature_material_present=decoded["signature_material_present"],
+        features=extract_transaction_features({
+            "version": decoded["version"], "locktime": decoded["locktime"],
+            "vin": [{"txid": row["prev_txid"], "vout": row["vout"], "sequence": row["sequence"]} for row in decoded["inputs"]],
+            "vout": [{"value": row["value_msat"] // 1000, "scriptpubkey": row["script_key"]} for row in decoded["outputs"]],
+        }, source="psbt_proposal"),
     )
 
 
 def build_privacy_linkage_graph(
     conn: sqlite3.Connection,
     profile_id: str,
+    *,
+    index: AnalysisIndex | None = None,
+    analysis: Mapping[str, Any] | None = None,
 ) -> PrivacyLinkageGraph:
-    """Build a redaction-aware local linkage graph for one profile.
+    """Read shared analysis and private authored scenarios in one snapshot.
 
-    The score is the count of newly merged passive-observer clusters. Input
-    count and value do not create score on their own; value is reported only as
-    consequence for the edges that actually merge clusters.
+    Callers supplying an existing index keep the surrounding read snapshot
+    open while composing other projections, as the Privacy Mirror report does.
     """
+    conn.execute("SAVEPOINT privacy_linkage_read")
+    try:
+        return _project_privacy_linkage_graph(conn, profile_id, index=index, analysis=analysis)
+    finally:
+        conn.execute("RELEASE SAVEPOINT privacy_linkage_read")
 
+
+def _project_privacy_linkage_graph(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    index: AnalysisIndex | None,
+    analysis: Mapping[str, Any] | None,
+) -> PrivacyLinkageGraph:
+    """Project the shared public analysis onto private owned-output relevance.
+
+    This compatibility payload serves PSBT deltas and authored source-funds
+    scenarios. Physical parsing, ownership hypotheses and structural findings
+    are computed exclusively by the same engine as the investigation workbench.
+    """
+    index = index if index is not None else build_index(conn, profile_id)
     limitations: list[dict[str, Any]] = [
-        {
-            "code": "local_only_no_probe",
-            "message": "No network request was made; linkage uses local Bitcoin UTXO facts only.",
-            "evidence_level": EVIDENCE_EXACT,
-        },
-        {
-            "code": "advisory_no_coin_selection",
-            "message": "This graph is advisory and does not recommend which coins to spend.",
-            "evidence_level": EVIDENCE_EXACT,
-        },
+        {"code": "local_only_no_probe", "message": "No network request was made; analysis uses the immutable local observation snapshot.", "evidence_level": EVIDENCE_EXACT},
+        {"code": "advisory_no_coin_selection", "message": "This graph is advisory and does not recommend which coins to spend.", "evidence_level": EVIDENCE_EXACT},
     ]
-    nodes, outpoint_to_node = _load_owned_output_nodes(conn, profile_id, limitations)
+    nodes, canonical = _owned_nodes_from_index(index, limitations)
     if not nodes:
-        adversary_views = _build_adversary_views(
-            conn,
-            profile_id,
-            {},
-            (),
-            (),
-            {},
-        )
-        if not any(
-            limitation.get("code") == "mixed_bitcoin_networks_require_selection"
-            for limitation in limitations
-        ):
-            limitations.append(
-                {
-                    "code": "no_owned_bitcoin_outputs",
-                    "message": "No owned Bitcoin UTXO inventory rows are available for this profile.",
-                    "evidence_level": EVIDENCE_UNKNOWN,
-                }
-            )
-        return PrivacyLinkageGraph({}, (), (), adversary_views, (), (), (), tuple(limitations))
-
-    tx_facts = _load_spend_facts(conn, profile_id, nodes, outpoint_to_node, limitations)
-    transaction_tells = _load_transaction_tells(
-        conn, profile_id, tx_facts, limitations
-    )
-    source_proximity = _build_source_proximity(
-        conn,
-        profile_id,
-        nodes,
-        limitations,
-    )
-    uf = _UnionFind(nodes)
+        if not any(item["code"] == "mixed_bitcoin_networks_require_selection" for item in limitations):
+            limitations.append({"code": "no_owned_bitcoin_outputs", "message": "No unambiguous owned Bitcoin outputs are available.", "evidence_level": EVIDENCE_UNKNOWN})
+        views = _build_adversary_views(conn, profile_id, {}, (), (), {})
+        return PrivacyLinkageGraph({}, (), (), views, (), (), (), tuple(limitations))
+    network = next(iter(nodes.values())).network
+    if analysis is None:
+        analysis = analyze_snapshot(index, {"observer": "public", "chain": "bitcoin", "network": network,
+                                           "include_hypotheses": True, "include_relations": False,
+                                           "node_limit": 2000, "edge_limit": 6000, "depth": 12})
+    if analysis.get("snapshot_id") != index.snapshot_id or analysis.get("query", {}).get("observer") != "public":
+        raise ValueError("Privacy linkage requires public analysis of the same immutable snapshot")
+    selected = {row["id"] for row in analysis.get("nodes", ())}
+    facts = _spend_facts_from_index(index, canonical, network)
+    unavailable_roles = {node_id for fact in facts.values() if fact.input_node_ids for node_id in fact.output_node_ids
+                         if nodes[node_id].branch_role == "unknown"}
+    if unavailable_roles:
+        limitations.append({"code": "change_role_unavailable", "message": "Private inventory branch evidence is unavailable for some outputs; no change role is invented.",
+                            "evidence_level": EVIDENCE_UNKNOWN, "evidence": {"owned_output_count": len(unavailable_roles)}})
+    observed = {index.nodes[ident]["txid"] for ident, fact in index.transaction_facts.items()
+                if fact.get("transaction_ids") and index.nodes[ident].get("chain") == "bitcoin" and index.nodes[ident].get("network") == network}
+    analysed = {index.nodes[ident]["txid"] for ident, fact in index.transaction_facts.items()
+                if ident in selected and fact.get("complete") and fact.get("transaction_ids")
+                and index.nodes[ident].get("chain") == "bitcoin" and index.nodes[ident].get("network") == network}
+    if observed - analysed:
+        limitations.append({"code": "transaction_analysis_coverage_incomplete", "message": "Some observations lack a complete selected Bitcoin graph; they do not count as analysed transactions.", "evidence_level": EVIDENCE_UNKNOWN, "evidence": {"transaction_count": len(observed - analysed)}})
+    coverage = analysis.get("coverage", {})
+    stopped = coverage.get("analytics", {}).get("stopped_reasons", ())
+    if coverage.get("budget_exhausted") or stopped:
+        limitations.append({"code": "shared_analysis_bounded", "message": "The shared graph analysis reached a work or result bound. Absence of another link is not proven.", "evidence_level": EVIDENCE_UNKNOWN,
+                            "evidence": {"stopped_reasons": list(stopped), "budget_exhausted": bool(coverage.get("budget_exhausted"))}})
+    collaboration_count = sum(fact.collaboration is not None for fact in facts.values())
+    if collaboration_count:
+        limitations.append({"code": "collaborative_ownership_uncertain", "message": "Collaborative co-spends remain physical facts; common-control assumptions do not cross them.", "evidence_level": EVIDENCE_UNKNOWN, "evidence": {"transaction_count": collaboration_count}})
+    components = Components(nodes)
     edges: list[PrivacyLinkageEdge] = []
-    edge_ids_by_node: dict[str, set[str]] = defaultdict(set)
-    heuristics_by_node: dict[str, set[str]] = defaultdict(set)
-    score_by_edge: dict[str, int] = {}
+    by_node: dict[str, set[str]] = defaultdict(set)
+    heuristics: dict[str, set[str]] = defaultdict(set)
+    scores: dict[str, int] = {}
 
-    def emit_edge(
-        *,
-        kind: str,
-        heuristic: str,
-        source: str,
-        left_node_id: str,
-        right_node_id: str,
-        txid: str | None,
-        evidence_level: str,
-        evidence: Mapping[str, Any],
-    ) -> None:
-        if left_node_id == right_node_id:
+    def project_edge(row: Mapping[str, Any], *, kind: str, left: str, right: str,
+                     observer_linkage: bool = True, txid: str | None = None) -> None:
+        a, b = canonical[left], canonical[right]
+        if a == b:
             return
-        left, right = sorted((left_node_id, right_node_id))
-        edge_id = f"{kind}:{source}:{txid or 'na'}:{left}->{right}:{len(edges)}"
-        merged = uf.union(left, right)
-        amount_msat = min(nodes[left].amount_msat, nodes[right].amount_msat)
-        edge = PrivacyLinkageEdge(
-            edge_id=edge_id,
-            kind=kind,
-            heuristic=heuristic,
-            from_node_id=left,
-            to_node_id=right,
-            evidence_level=evidence_level,
-            source=source,
-            txid=txid,
-            amount_msat=amount_msat if merged else 0,
-            new_linkage=merged,
-            merged_cluster_count=1 if merged else 0,
-            evidence=dict(evidence),
-        )
+        a, b = sorted((a, b))
+        merged = components.union(a, b) if observer_linkage else False
+        ident = str(row["id"]) + ":" + a + ":" + b
+        edge = PrivacyLinkageEdge(ident, kind, str(row.get("rule") or row.get("code") or kind), a, b,
+                                  EVIDENCE_DERIVED if observer_linkage else EVIDENCE_EXACT,
+                                  "shared_chain_analysis", txid, min(nodes[a].amount_msat, nodes[b].amount_msat) if merged else 0,
+                                  merged, int(merged), {"shared_evidence_id": row["id"], "rule_version": row.get("rule_version"),
+                                  "premises": list(row.get("premises", ())), "collaboration": facts.get(txid).collaboration if txid in facts else None}, observer_linkage)
         edges.append(edge)
-        score_by_edge[edge.edge_id] = edge.merged_cluster_count
-        for node_id in (left, right):
-            edge_ids_by_node[node_id].add(edge.edge_id)
-            heuristics_by_node[node_id].add(heuristic)
+        scores[ident] = int(merged)
+        if observer_linkage:
+            for member in (a, b):
+                by_node[member].add(ident)
+                heuristics[member].add(edge.heuristic)
 
-    _emit_address_reuse_edges(nodes, emit_edge)
-    _emit_common_input_edges(tx_facts, emit_edge)
-    _emit_change_edges(tx_facts, nodes, emit_edge, limitations)
-
-    observer_entities = _build_observer_entities(
-        nodes,
-        edges,
-        uf,
-        edge_ids_by_node,
-        heuristics_by_node,
-        score_by_edge,
-    )
-    findings = _build_findings(edges)
-    adversary_views = _build_adversary_views(
-        conn,
-        profile_id,
-        nodes,
-        edges,
-        observer_entities,
-        tx_facts,
-    )
-    return PrivacyLinkageGraph(
-        nodes=nodes,
-        edges=tuple(edges),
-        transaction_tells=tuple(transaction_tells),
-        adversary_views=tuple(adversary_views),
-        source_proximity=tuple(source_proximity),
-        observer_entities=tuple(observer_entities),
-        findings=tuple(findings),
-        limitations=tuple(limitations),
-    )
+    kinds = {"reused_script_control": "address_reuse", "common_input_control": "common_input", "change_script_return": "change_output"}
+    # Reuse precedes co-spend in this legacy delta view so a previously linked
+    # pair is not described as a newly exposed pair when subsequently co-spent.
+    hypothesis_edges = [row for row in analysis.get("edges", ()) if row.get("kind") == "hypothesis"]
+    for row in sorted(hypothesis_edges, key=lambda row: (0 if row.get("rule") == "reused_script_control" else 1, row["id"])):
+        if row["source"] in canonical and row["target"] in canonical:
+            txid = None
+            for ref in row.get("evidence", ()):
+                subject = str(ref.get("reference") or "")
+                if subject in index.nodes and index.nodes[subject].get("kind") == "transaction":
+                    txid = index.nodes[subject]["txid"]
+                    break
+            project_edge(row, kind=kinds.get(row.get("rule"), "shared_cluster"), left=row["source"], right=row["target"], txid=txid)
+    # Canonical clusters can connect two owned outputs through other observed
+    # outputs. Preserve that transitive projection without re-running a rule.
+    for cluster in analysis.get("clusters", ()):
+        owned = [ident for ident in cluster["node_ids"] if ident in canonical]
+        for other in owned[1:]:
+            if components.find(canonical[owned[0]]) != components.find(canonical[other]):
+                project_edge(cluster, kind="shared_cluster", left=owned[0], right=other)
+    for finding in analysis.get("findings", ()):
+        if finding.get("code") != "observed_co_spend":
+            continue
+        transaction_ids = [ident for ident in finding["node_ids"] if index.nodes[ident].get("kind") == "transaction"]
+        txid = index.nodes[transaction_ids[0]]["txid"] if transaction_ids else None
+        if txid not in facts or not facts[txid].collaboration:
+            continue
+        owned = [ident for ident in finding["node_ids"] if ident in canonical]
+        for other in owned[1:]:
+            project_edge(finding, kind="common_input", left=owned[0], right=other, observer_linkage=False, txid=txid)
+    tells = _transaction_tells_from_analysis(index, analysis, facts, network)
+    entities = _build_observer_entities(nodes, edges, components, by_node, heuristics, scores)
+    source_proximity = _build_source_proximity(conn, profile_id, nodes, limitations)
+    views = _build_adversary_views(conn, profile_id, nodes, edges, entities, facts)
+    return PrivacyLinkageGraph(nodes, tuple(edges), tuple(tells), tuple(views), tuple(source_proximity), tuple(entities),
+                               tuple(_build_findings(edges)), tuple(limitations), len(analysed),
+                               len(analysed | {tell.txid for tell in tells if tell.penalizes_wallet}), len(observed - analysed))
 
 
 def analyze_psbt_privacy(
@@ -1004,6 +732,12 @@ def analyze_psbt_privacy(
         },
     ]
     graph = build_privacy_linkage_graph(conn, profile_id)
+    baseline_bounded = any(item.get("code") == "shared_analysis_bounded" and (
+        item.get("evidence", {}).get("budget_exhausted")
+        or "hypothesis_budget" in item.get("evidence", {}).get("stopped_reasons", ())
+    ) for item in graph.limitations)
+    if baseline_bounded:
+        limitations.append({"code": "historical_linkage_bounded", "message": "The historical observer model reached an analysis bound; additional existing links can change the proposed merge delta.", "evidence_level": EVIDENCE_UNKNOWN})
     outpoint_to_node = {
         (node.txid, node.vout): node for node in graph.nodes.values()
     }
@@ -1032,7 +766,7 @@ def analyze_psbt_privacy(
     )
     cluster_merge_delta = max(0, len(input_component_ids) - 1)
     cluster_evidence_level = (
-        EVIDENCE_UNKNOWN if unknown_input_count else EVIDENCE_EXACT
+        EVIDENCE_UNKNOWN if unknown_input_count or baseline_bounded else EVIDENCE_DERIVED
     )
 
     script_to_nodes: dict[str, list[OwnedOutputNode]] = defaultdict(list)
@@ -1183,14 +917,14 @@ def analyze_psbt_privacy(
         "items": change_items,
     }
     unknowns = {
-        "evidence_level": EVIDENCE_UNKNOWN if unknown_input_count else EVIDENCE_EXACT,
+        "evidence_level": EVIDENCE_UNKNOWN if unknown_input_count or baseline_bounded else EVIDENCE_EXACT,
         "input_count": unknown_input_count,
         "output_without_local_match_count": unknown_output_count,
-        "coverage_complete": unknown_input_count == 0,
+        "coverage_complete": unknown_input_count == 0 and not baseline_bounded,
     }
     summary = {
         "evidence_level": (
-            EVIDENCE_UNKNOWN if unknown_input_count else EVIDENCE_DERIVED
+            EVIDENCE_UNKNOWN if unknown_input_count or baseline_bounded else EVIDENCE_DERIVED
         ),
         "decode_status": "decoded",
         "input_count": len(decoded.inputs),
@@ -1263,7 +997,7 @@ def _build_psbt_transaction_tells(
         add(
             "sender_common_input",
             "decoded_psbt_unsigned_tx",
-            EVIDENCE_UNKNOWN if unknown_input_count else EVIDENCE_EXACT,
+            EVIDENCE_UNKNOWN if unknown_input_count else EVIDENCE_DERIVED,
             bool(known_input_nodes),
             {
                 "input_count": len(decoded.inputs),
@@ -1271,7 +1005,8 @@ def _build_psbt_transaction_tells(
                 "unknown_input_count": unknown_input_count,
             },
         )
-    if any(psbt_input.sequence < 0xFFFFFFFE for psbt_input in decoded.inputs):
+    structural = {row["code"] for row in evaluate_features(decoded.features)}
+    if "explicit_rbf_signal" in structural:
         add(
             "sender_rbf",
             "decoded_psbt_unsigned_tx",
@@ -1279,7 +1014,7 @@ def _build_psbt_transaction_tells(
             bool(known_input_nodes),
             {"rbf_signaled": True},
         )
-    if any(output.is_op_return for output in decoded.outputs):
+    if "op_return_output" in structural:
         add(
             "op_return_output",
             "decoded_psbt_unsigned_tx",
@@ -1296,10 +1031,10 @@ def _build_psbt_transaction_tells(
         and input_value_msat >= output_value_msat
     )
     add(
-        "fee_fingerprint",
+        "fee_observation",
         "decoded_psbt_amounts",
         EVIDENCE_EXACT if fee_known else EVIDENCE_UNKNOWN,
-        bool(known_input_nodes) and fee_known,
+        False,
         {
             "fee_known": fee_known,
             "fee_value_redacted": True,
@@ -1348,10 +1083,10 @@ def _build_psbt_findings(
             finding_id="psbt_cluster_merge",
             kind="cluster_merge",
             severity="warning",
-            title="PSBT merges local ownership clusters",
+            title="PSBT may link local clusters under a common-input assumption",
             detail=(
-                f"The decoded transaction would create {cluster_merge_delta} "
-                "new common-input cluster merge(s) among locally known inputs."
+                f"Assuming an ordinary non-collaborative spend, the decoded transaction "
+                f"would create {cluster_merge_delta} common-input cluster merge(s) among locally known inputs."
             ),
             evidence_level=cluster_evidence_level,
             evidence={"cluster_merge_delta": cluster_merge_delta},
@@ -1507,209 +1242,57 @@ def _build_psbt_what_if(
     ]
 
 
-def _load_owned_output_nodes(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    limitations: list[dict[str, Any]],
-) -> tuple[dict[str, OwnedOutputNode], dict[tuple[str, int], OwnedOutputNode]]:
-    owned_index = build_owned_outpoint_index(conn, profile_id)
-    network_select = (
-        "network"
-        if "network" in _table_columns(conn, "wallet_utxos")
-        else "NULL AS network"
-    )
-    rows = conn.execute(
-        f"""
-        SELECT wallet_id, txid, vout, amount, address, script_pubkey,
-               branch_label, branch_index, spent_by, asset, chain,
-               {network_select}
-        FROM wallet_utxos
-        WHERE profile_id = ?
-        ORDER BY txid ASC, vout ASC, wallet_id ASC
-        """,
-        (profile_id,),
-    ).fetchall()
-    bitcoin_networks: set[str] = set()
-    for row in rows:
-        if (
-            _normalize_chain_or_none(row["chain"]) != "bitcoin"
-            or normalize_asset_code(row["asset"]) != "BTC"
-        ):
-            continue
-        try:
-            bitcoin_networks.add(normalize_network("bitcoin", row["network"]))
-        except ValueError:
-            continue
-    if len(bitcoin_networks) > 1:
-        # The privacy API currently has no target-network argument, and raw
-        # transaction/PSBT evidence does not always identify its network.
-        # Flattening several networks into txid:vout graph identifiers would
-        # let identical outpoints overwrite or cross-link.  Fail closed until
-        # the caller can select one network explicitly.
-        limitations.append(
-            {
-                "code": "mixed_bitcoin_networks_require_selection",
-                "message": (
-                    "Privacy linkage was not computed because this profile "
-                    "contains Bitcoin outputs from more than one network and "
-                    "the privacy API has no target-network selection."
-                ),
-                "evidence_level": EVIDENCE_EXACT,
-                "evidence": {"network_count": len(bitcoin_networks)},
-            }
-        )
+def _owned_nodes_from_index(index: AnalysisIndex, limitations: list[dict[str, Any]]) -> tuple[dict[str, OwnedOutputNode], dict[str, str]]:
+    inventory = {ident: node for ident, node in index.nodes.items() if node.get("kind") == "output" and index.output_facts.get(ident, {}).get("inventory_observation_count")}
+    networks = {node["network"] for node in inventory.values() if node.get("chain") == "bitcoin" and node.get("asset") == "BTC"}
+    if len(networks) > 1:
+        limitations.append({"code": "mixed_bitcoin_networks_require_selection", "message": "The PSBT/privacy inventory projection requires one Bitcoin network; the chain workbench retains all separate domains.", "evidence_level": EVIDENCE_EXACT, "evidence": {"network_count": len(networks)}})
         return {}, {}
-    nodes: dict[str, OwnedOutputNode] = {}
-    outpoint_to_node: dict[tuple[str, int], OwnedOutputNode] = {}
-    ignored_non_bitcoin = 0
-    ambiguous = 0
-    for row in rows:
-        outpoint = _outpoint(row["txid"], row["vout"])
-        if outpoint is None:
+    nodes, canonical = {}, {}
+    ambiguous = ignored = 0
+    for ident, row in inventory.items():
+        if row.get("chain") != "bitcoin" or row.get("asset") != "BTC":
+            ignored += 1
             continue
-        asset = normalize_asset_code(row["asset"])
-        chain = _normalize_chain_or_none(row["chain"])
-        if chain != "bitcoin" or asset != "BTC":
-            ignored_non_bitcoin += 1
-            continue
-        try:
-            network = normalize_network(chain, row["network"])
-        except ValueError:
+        facts = index.output_facts[ident]
+        if not facts.get("ownership_known") or facts.get("ownership_ambiguous") or len(row.get("wallet_ids", ())) != 1 or row.get("status") in {"conflicting", "stale"} or row.get("amount_msat") is None:
             ambiguous += 1
             continue
-        info = owned_index.get((chain, network, outpoint[0], outpoint[1]))
-        if not info or info.get("ambiguous"):
-            ambiguous += 1
-            continue
-        address = _str_or_none(row["address"])
-        script = _str_or_none(row["script_pubkey"])
-        branch_role = _classify_branch_role(
-            row["branch_label"], row["branch_index"]
-        )
-        node = OwnedOutputNode(
-            node_id=_outpoint_id(outpoint),
-            txid=outpoint[0],
-            vout=outpoint[1],
-            wallet_id=str(row["wallet_id"] or ""),
-            amount_msat=int(row["amount"] or 0),
-            asset=asset,
-            spent_by=_normalize_txid(row["spent_by"]) or None,
-            branch_role=branch_role.role,
-            branch_evidence_level=branch_role.evidence_level,
-            change_evidence=branch_role.change_evidence,
-            branch_source=branch_role.source,
-            has_address=address is not None,
-            has_script=script is not None,
-            address_key=address.lower() if address else None,
-            script_key=script.lower() if script else None,
-        )
-        nodes[node.node_id] = node
-        outpoint_to_node[outpoint] = node
-    if ignored_non_bitcoin:
-        limitations.append(
-            {
-                "code": "non_bitcoin_utxos_ignored",
-                "message": "Non-Bitcoin or non-BTC output inventory rows were ignored.",
-                "evidence_level": EVIDENCE_EXACT,
-                "evidence": {"ignored_count": ignored_non_bitcoin},
-            }
-        )
+        txid, vout = row["outpoint"].rsplit(":", 1)
+        spends = [index.edges[eid]["target"] for eid in index.outgoing.get(ident, ()) if index.edges[eid]["kind"] == "spends" and index.edges[eid].get("status") not in {"conflicting", "stale"}]
+        spent_by = index.nodes[spends[0]].get("txid") if len(spends) == 1 else None
+        node_id = row["outpoint"]
+        nodes[node_id] = OwnedOutputNode(node_id, txid, int(vout), row["wallet_ids"][0], int(row["amount_msat"]), "BTC", spent_by,
+                                        row["network"], facts.get("branch_role") or "unknown", facts.get("branch_evidence_level") or EVIDENCE_UNKNOWN,
+                                        facts.get("change_evidence") or CHANGE_EVIDENCE_UNAVAILABLE, facts.get("branch_source") or "branch_metadata_unavailable",
+                                        bool(row.get("address")), bool(facts.get("script")), row.get("address"), facts.get("script"))
+        canonical[ident] = node_id
+    if ignored:
+        limitations.append({"code": "non_bitcoin_utxos_ignored", "message": "The PSBT inventory projection covers Bitcoin outputs only.", "evidence_level": EVIDENCE_EXACT, "evidence": {"ignored_count": ignored}})
     if ambiguous:
-        limitations.append(
-            {
-                "code": "ambiguous_owned_outpoints_ignored",
-                "message": "Duplicate owned outpoints were ignored because ownership is ambiguous.",
-                "evidence_level": EVIDENCE_UNKNOWN,
-                "evidence": {"ignored_count": ambiguous},
-            }
-        )
-    return nodes, outpoint_to_node
+        limitations.append({"code": "ambiguous_owned_outpoints_ignored", "message": "Ambiguous or conflicting owned outputs cannot establish a private wallet match.", "evidence_level": EVIDENCE_UNKNOWN, "evidence": {"ignored_count": ambiguous}})
+    return nodes, canonical
 
 
 @dataclass
 class _SpendFact:
     txid: str
     input_node_ids: set[str] = field(default_factory=set)
-    input_sources: set[str] = field(default_factory=set)
     output_node_ids: set[str] = field(default_factory=set)
-    raw_vin_seen: bool = False
+    collaboration: dict[str, Any] | None = None
+    network: str | None = None
 
 
-def _load_spend_facts(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    nodes: Mapping[str, OwnedOutputNode],
-    outpoint_to_node: Mapping[tuple[str, int], OwnedOutputNode],
-    limitations: list[dict[str, Any]],
-) -> dict[str, _SpendFact]:
-    facts: dict[str, _SpendFact] = {}
-    for node in nodes.values():
-        if node.spent_by:
-            fact = facts.setdefault(node.spent_by, _SpendFact(txid=node.spent_by))
-            fact.input_node_ids.add(node.node_id)
-            fact.input_sources.add("spent_by")
-        fact = facts.setdefault(node.txid, _SpendFact(txid=node.txid))
-        fact.output_node_ids.add(node.node_id)
-
-    missing_vin_rows = 0
-    unmatched_vin_outpoints = 0
-    rows = conn.execute(
-        """
-        SELECT external_id, raw_json
-        FROM transactions
-        WHERE profile_id = ?
-          AND external_id IS NOT NULL
-          AND trim(external_id) != ''
-        ORDER BY external_id ASC
-        """,
-        (profile_id,),
-    ).fetchall()
-    seen_external_ids = set()
-    for row in rows:
-        txid = _normalize_txid(row["external_id"])
-        if not txid:
+def _spend_facts_from_index(index: AnalysisIndex, canonical: Mapping[str, str], network: str) -> dict[str, _SpendFact]:
+    facts = {}
+    for ident, row in index.nodes.items():
+        if row.get("kind") != "transaction" or row.get("chain") != "bitcoin" or row.get("network") != network:
             continue
-        seen_external_ids.add(txid)
-        fact = facts.setdefault(txid, _SpendFact(txid=txid))
-        outpoints = parse_vin_outpoints(row["raw_json"])
-        payload = _safe_json_loads(row["raw_json"])
-        if isinstance(payload, Mapping) and not outpoints:
-            # The row had local structured data, but not enough input detail to
-            # assert ownership linkage.
-            missing_vin_rows += 1
-        if outpoints:
-            fact.raw_vin_seen = True
-        for outpoint in outpoints:
-            node = outpoint_to_node.get(outpoint)
-            if node is None:
-                unmatched_vin_outpoints += 1
-                continue
-            fact.input_node_ids.add(node.node_id)
-            fact.input_sources.add("stored_vin")
-    for node in nodes.values():
-        if node.txid not in seen_external_ids:
-            continue
-        facts.setdefault(node.txid, _SpendFact(txid=node.txid)).output_node_ids.add(
-            node.node_id
-        )
-    if missing_vin_rows:
-        limitations.append(
-            {
-                "code": "vin_ownership_unavailable",
-                "message": "Some transaction rows did not include usable vin outpoints.",
-                "evidence_level": EVIDENCE_UNKNOWN,
-                "evidence": {"transaction_row_count": missing_vin_rows},
-            }
-        )
-    if unmatched_vin_outpoints:
-        limitations.append(
-            {
-                "code": "vin_prevouts_not_owned",
-                "message": "Some vin prevouts did not match local owned output inventory.",
-                "evidence_level": EVIDENCE_EXACT,
-                "evidence": {"prevout_count": unmatched_vin_outpoints},
-            }
-        )
+        fact = index.transaction_facts.get(ident, {})
+        facts[row["txid"]] = _SpendFact(row["txid"],
+            {canonical[index.edges[eid]["source"]] for eid in index.incoming.get(ident, ()) if index.edges[eid]["kind"] == "spends" and index.edges[eid]["source"] in canonical},
+            {canonical[index.edges[eid]["target"]] for eid in index.outgoing.get(ident, ()) if index.edges[eid]["kind"] == "creates" and index.edges[eid]["target"] in canonical},
+            thaw(fact.get("collaboration")), network)
     return facts
 
 
@@ -1727,208 +1310,71 @@ def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return columns
 
 
-def _transaction_rows_for_tells(
-    conn: sqlite3.Connection,
-    profile_id: str,
-) -> list[sqlite3.Row]:
+def _privacy_transaction_rows(
+    conn: sqlite3.Connection, profile_id: str, network: str | None,
+    *, include_excluded: bool = True,
+) -> list[dict[str, Any]]:
+    """Bitcoin/network evidence; accounting exclusion is not a chain tombstone."""
     columns = _table_columns(conn, "transactions")
     if "profile_id" not in columns:
         return []
-    select_parts = [
-        column if column in columns else f"NULL AS {column}"
-        for column in ("external_id", "direction", "fee", "raw_json")
-    ]
-    try:
-        return conn.execute(
-            f"""
-            SELECT {", ".join(select_parts)}
-            FROM transactions
-            WHERE profile_id = ?
-            ORDER BY external_id ASC
-            """,
-            (profile_id,),
-        ).fetchall()
-    except sqlite3.DatabaseError:
-        return []
-
-
-def _truthy(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return value != 0
-    text = str(value or "").strip().lower()
-    return text in {"1", "true", "yes", "y", "replaceable", "rbf"}
-
-
-def _positive_number(value: Any) -> bool:
-    try:
-        return float(value) > 0
-    except (TypeError, ValueError):
-        return False
-
-
-def _payload_rbf_signaled(payload: Any) -> bool:
-    if not isinstance(payload, Mapping):
-        return False
-    for key in ("rbf", "replaceable", "bip125-replaceable", "bip125_replaceable"):
-        if key in payload and _truthy(payload.get(key)):
-            return True
-    status = payload.get("status")
-    if isinstance(status, Mapping):
-        for key in ("rbf", "replaceable", "bip125-replaceable", "bip125_replaceable"):
-            if key in status and _truthy(status.get(key)):
-                return True
-    return False
-
-
-def _payload_outputs(payload: Any) -> Sequence[Any]:
-    if not isinstance(payload, Mapping):
-        return ()
-    for key in ("vout", "outputs"):
-        outputs = payload.get(key)
-        if isinstance(outputs, list):
-            return outputs
-    tx = payload.get("tx")
-    if isinstance(tx, Mapping):
-        outputs = tx.get("vout") or tx.get("outputs")
-        if isinstance(outputs, list):
-            return outputs
-    return ()
-
-
-def _output_is_op_return(output: Any) -> bool:
-    if not isinstance(output, Mapping):
-        return False
-    for key in ("scriptpubkey_type", "script_type", "type"):
-        value = str(output.get(key) or "").strip().lower()
-        if value in {"op_return", "nulldata", "nonstandard"}:
-            return value != "nonstandard" or "op_return" in str(output).lower()
-    script_pubkey = output.get("scriptPubKey") or output.get("script_pubkey")
-    if isinstance(script_pubkey, Mapping):
-        for key in ("type", "scriptpubkey_type"):
-            if str(script_pubkey.get(key) or "").strip().lower() in {"op_return", "nulldata"}:
-                return True
-        asm = str(script_pubkey.get("asm") or "").strip().lower()
-        if asm.startswith("op_return") or asm.startswith("return"):
-            return True
-    asm = str(output.get("asm") or "").strip().lower()
-    return asm.startswith("op_return") or asm.startswith("return")
-
-
-def _payload_has_op_return(payload: Any) -> bool:
-    return any(_output_is_op_return(output) for output in _payload_outputs(payload))
-
-
-def _payload_fee_present(payload: Any) -> bool:
-    if not isinstance(payload, Mapping):
-        return False
-    for key in ("fee", "fees", "fee_sat", "fee_sats", "fee_msat"):
-        if key in payload and _positive_number(payload.get(key)):
-            return True
-    tx = payload.get("tx")
-    if isinstance(tx, Mapping):
-        for key in ("fee", "fees", "fee_sat", "fee_sats", "fee_msat"):
-            if key in tx and _positive_number(tx.get(key)):
-                return True
-    return False
-
-
-def _direction_attribution(
-    txid: str,
-    direction: Any,
-    tx_facts: Mapping[str, _SpendFact],
-) -> tuple[str, str, str]:
-    normalized = str(direction or "").strip().lower()
-    if normalized in {"inbound", "receive", "received", "deposit", "income", "buy"}:
-        return (
-            ATTRIBUTION_OBSERVED_FROM_COUNTERPARTY,
-            "transactions.direction",
-            EVIDENCE_EXACT,
-        )
-    if normalized in {"outbound", "send", "sent", "withdrawal", "sell"}:
-        return (ATTRIBUTION_EMITTED_BY_YOU, "transactions.direction", EVIDENCE_EXACT)
-    fact = tx_facts.get(txid)
-    if fact is not None and fact.input_node_ids:
-        return (ATTRIBUTION_EMITTED_BY_YOU, "owned_input_match", EVIDENCE_DERIVED)
-    return (
-        ATTRIBUTION_OBSERVED_FROM_COUNTERPARTY,
-        "owned_input_absent",
-        EVIDENCE_DERIVED,
+    wallet_columns = _table_columns(conn, "wallets")
+    joined = "wallet_id" in columns and {"id", "kind", "config_json"}.issubset(wallet_columns)
+    wallet_select = (
+        "w.kind AS wallet_kind, w.config_json AS wallet_config_json"
+        if joined else "NULL AS wallet_kind, NULL AS wallet_config_json"
     )
-
-
-def _load_transaction_tells(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    tx_facts: Mapping[str, _SpendFact],
-    limitations: list[dict[str, Any]],
-) -> list[PrivacyTransactionTell]:
-    tells: list[PrivacyTransactionTell] = []
-    for row in _transaction_rows_for_tells(conn, profile_id):
-        txid = _normalize_txid(row["external_id"])
-        if not txid:
+    wallet_join = "LEFT JOIN wallets w ON w.id = t.wallet_id" if joined else ""
+    excluded = "AND t.excluded = 0" if not include_excluded and "excluded" in columns else ""
+    rows = conn.execute(
+        f"SELECT t.*, {wallet_select} FROM transactions t {wallet_join} "
+        f"WHERE t.profile_id = ? {excluded} ORDER BY t.external_id ASC",
+        (profile_id,),
+    ).fetchall()
+    selected = []
+    for stored in rows:
+        row = {key: None for key in ("id", "external_id", "direction", "fee", "raw_json", "privacy_boundary", "review_status", "counterparty")}
+        row.update(dict(stored))
+        try:
+            scope = resolve_protocol_scope(row)
+        except (ValueError, AppError):
             continue
-        payload = _safe_json_loads(row["raw_json"])
-        outpoints = parse_vin_outpoints(row["raw_json"])
-        if not isinstance(payload, Mapping) and not outpoints:
+        if scope.protocol_chain != "bitcoin" or (network is not None and scope.network != network):
             continue
-        attribution, attribution_source, attribution_level = _direction_attribution(
-            txid, row["direction"], tx_facts
-        )
-        penalizes_wallet = attribution == ATTRIBUTION_EMITTED_BY_YOU
+        if normalize_asset_code(row.get("asset") or "BTC") != "BTC":
+            continue
+        selected.append(row)
+    return selected
 
-        def add(kind: str, source: str, evidence: Mapping[str, Any]) -> None:
-            tells.append(
-                PrivacyTransactionTell(
-                    tell_id=f"{kind}:{txid}:{len(tells)}",
-                    txid=txid,
-                    kind=kind,
-                    attribution=attribution,
-                    evidence_level=EVIDENCE_DERIVED,
-                    source=source,
-                    penalizes_wallet=penalizes_wallet,
-                    evidence={
-                        **dict(evidence),
-                        "attribution_source": attribution_source,
-                        "attribution_evidence_level": attribution_level,
-                    },
-                )
-            )
 
-        if len(outpoints) > 1:
-            add(
-                "sender_common_input",
-                "stored_transaction_vin",
-                {"input_count": len(outpoints)},
-            )
-        if _payload_rbf_signaled(payload):
-            add(
-                "sender_rbf",
-                "stored_transaction_rbf",
-                {"rbf_signaled": True},
-            )
-        if _payload_has_op_return(payload):
-            add(
-                "op_return_output",
-                "stored_transaction_outputs",
-                {"op_return_present": True},
-            )
-        row_fee_present = _positive_number(row["fee"])
-        if row_fee_present or _payload_fee_present(payload):
-            add(
-                "fee_fingerprint",
-                "transactions.fee" if row_fee_present else "stored_transaction_fee",
-                {"fee_present": True},
-            )
-    if not tells:
-        limitations.append(
-            {
-                "code": "transaction_tells_unavailable_or_absent",
-                "message": "No local transaction tell facts were available from stored transaction rows.",
-                "evidence_level": EVIDENCE_UNKNOWN,
-            }
-        )
+def _transaction_tells_from_analysis(index: AnalysisIndex, analysis: Mapping[str, Any], facts: Mapping[str, _SpendFact], network: str) -> list[PrivacyTransactionTell]:
+    tells = []
+    kinds = {"explicit_rbf_signal": "sender_rbf", "op_return_output": "op_return_output", "rounded_fee_rate": "fee_fingerprint", "observed_co_spend": "sender_common_input"}
+    for finding in analysis.get("findings", ()):
+        kind = kinds.get(finding.get("code"))
+        if not kind:
+            continue
+        for ident in finding.get("node_ids", ()):
+            node = index.nodes.get(ident, {})
+            if node.get("kind") != "transaction" or node.get("chain") != "bitcoin" or node.get("network") != network:
+                continue
+            fact = index.transaction_facts.get(ident, {})
+            if not fact.get("transaction_ids"):
+                continue
+            if kind == "sender_common_input" and fact.get("collaboration"):
+                continue
+            txid = node["txid"]
+            directions = set(fact.get("directions", ()))
+            incoming = bool(directions & {"inbound", "receive", "received", "deposit", "income", "buy"})
+            outgoing = bool(directions & {"outbound", "send", "sent", "withdrawal", "sell"})
+            emitted = outgoing if incoming != outgoing else bool(facts.get(txid) and facts[txid].input_node_ids)
+            attribution = ATTRIBUTION_EMITTED_BY_YOU if emitted else ATTRIBUTION_OBSERVED_FROM_COUNTERPARTY
+            evidence = {"shared_finding_id": finding["id"], "attribution_source": "local_owner_observation", "attribution_evidence_level": EVIDENCE_DERIVED}
+            if kind == "fee_fingerprint":
+                rate = next((row["value"] for row in fact.get("features", {}).get("features", ()) if row["code"] == "fee_rate"), {})
+                if rate.get("vsize"):
+                    evidence.update(sat_vb=(rate["fee_sats"] + rate["vsize"] // 2) // rate["vsize"], pattern="rounded_fee_rate")
+            tells.append(PrivacyTransactionTell(str(finding["id"]), txid, kind, attribution, EVIDENCE_DERIVED, "shared_chain_analysis", emitted, evidence))
     return tells
 
 
@@ -2034,6 +1480,7 @@ def _source_proximity_tables_available(conn: sqlite3.Connection) -> tuple[bool, 
 def _load_source_reaches_and_edges(
     conn: sqlite3.Connection,
     profile_id: str,
+    allowed_transaction_ids: set[str],
 ) -> tuple[list[_SourceReach], dict[str, list[_ReviewedFundingEdge]], str | None]:
     available, reason = _source_proximity_tables_available(conn)
     if not available:
@@ -2069,8 +1516,15 @@ def _load_source_reaches_and_edges(
         (profile_id,),
     ).fetchall()
     initial_reaches: list[_SourceReach] = []
+    source_by_anchor: dict[str, str] = {}
+    source_allocated: dict[str, int] = defaultdict(int)
+    source_capacity: dict[str, int] = {}
     outgoing: dict[str, list[_ReviewedFundingEdge]] = defaultdict(list)
     for row in rows:
+        if row["to_transaction_id"] not in allowed_transaction_ids:
+            continue
+        if row["from_transaction_id"] and row["from_transaction_id"] not in allowed_transaction_ids:
+            continue
         link_asset = normalize_asset_code(row["link_asset"])
         to_asset = normalize_asset_code(row["to_asset"])
         if link_asset != "BTC" or to_asset != "BTC":
@@ -2084,6 +1538,13 @@ def _load_source_reaches_and_edges(
             source_asset = normalize_asset_code(row["source_asset"])
             if source_asset != "BTC":
                 continue
+            source_id = str(row["from_source_id"])
+            anchor_key = f"source:{row['link_id']}"
+            source_by_anchor[anchor_key] = source_id
+            source_allocated[source_id] += _source_link_supported_amount(row) or 0
+            capacity = _nonnegative_int_or_none(row["source_amount"])
+            if capacity is not None:
+                source_capacity[source_id] = capacity
             initial_reaches.append(
                 _SourceReach(
                     anchor_key=f"source:{row['link_id']}",
@@ -2106,6 +1567,15 @@ def _load_source_reaches_and_edges(
                     evidence_level=evidence_level,
                 )
             )
+    overcommitted = {
+        source_id for source_id, capacity in source_capacity.items()
+        if source_allocated[source_id] > capacity
+    }
+    initial_reaches = [
+        replace(reach, supported_value_msat=None)
+        if source_by_anchor[reach.anchor_key] in overcommitted else reach
+        for reach in initial_reaches
+    ]
     return initial_reaches, outgoing, None
 
 
@@ -2129,8 +1599,17 @@ def _propagate_source_reaches(
         queue.append(reach)
     while queue:
         reach = queue.popleft()
-        for edge in outgoing.get(reach.txid, ()):
-            if edge.supported_value_msat is None or reach.supported_value_msat is None:
+        branches = outgoing.get(reach.txid, ())
+        overcommitted = (
+            len(branches) > 1
+            and reach.supported_value_msat is not None
+            and sum(edge.supported_value_msat or 0 for edge in branches) > reach.supported_value_msat
+        )
+        # A reviewed transaction-level fork cannot promise the same source
+        # capacity to multiple children. Keep it unknown; do not choose a FIFO
+        # allocation. Sequential propagation remains bounded one edge at a time.
+        for edge in branches:
+            if overcommitted or edge.supported_value_msat is None or reach.supported_value_msat is None:
                 supported_value = None
             else:
                 supported_value = min(reach.supported_value_msat, edge.supported_value_msat)
@@ -2170,6 +1649,8 @@ def _source_proximity_for_node(
 ) -> SourceProximityFact:
     if not reaches:
         return _source_proximity_unknown(node, reason="no_reviewed_source_path")
+    if all(reach.supported_value_msat is None for reach in reaches):
+        return _source_proximity_unknown(node, reason="unallocated_reviewed_source_path")
     nearest_hop = min(reach.hop_count for reach in reaches)
     nearest_reaches = [reach for reach in reaches if reach.hop_count == nearest_hop]
     supported_value = min(
@@ -2230,8 +1711,10 @@ def _build_source_proximity(
             "evidence_level": EVIDENCE_EXACT,
         }
     )
+    network = next(iter(nodes.values())).network if nodes else None
+    allowed_ids = {row["id"] for row in _privacy_transaction_rows(conn, profile_id, network, include_excluded=False)}
     initial_reaches, outgoing, unavailable_reason = _load_source_reaches_and_edges(
-        conn, profile_id
+        conn, profile_id, allowed_ids,
     )
     if unavailable_reason:
         limitations.append(
@@ -2246,10 +1729,21 @@ def _build_source_proximity(
             for node in sorted(nodes.values(), key=lambda item: item.node_id)
         )
     reaches_by_tx = _propagate_source_reaches(initial_reaches, outgoing)
-    facts = tuple(
-        _source_proximity_for_node(node, reaches_by_tx.get(node.txid, ()))
-        for node in sorted(nodes.values(), key=lambda item: item.node_id)
-    )
+    owned_by_tx: dict[str, list[OwnedOutputNode]] = defaultdict(list)
+    for node in nodes.values():
+        owned_by_tx[node.txid].append(node)
+    facts_list: list[SourceProximityFact] = []
+    for txid, siblings in sorted(owned_by_tx.items()):
+        reaches = reaches_by_tx.get(txid, ())
+        nearest = min((reach.hop_count for reach in reaches), default=None)
+        budget = sum(reach.supported_value_msat or 0 for reach in reaches if reach.hop_count == nearest)
+        ambiguous = len(siblings) > 1 and 0 < budget < sum(node.amount_msat for node in siblings)
+        for node in sorted(siblings, key=lambda item: item.node_id):
+            facts_list.append(
+                _source_proximity_unknown(node, reason="ambiguous_output_allocation")
+                if ambiguous else _source_proximity_for_node(node, reaches)
+            )
+    facts = tuple(facts_list)
     unknown_count = sum(
         1 for fact in facts if fact.provenance_status == SOURCE_PROXIMITY_UNKNOWN
     )
@@ -2266,120 +1760,6 @@ def _build_source_proximity(
             }
         )
     return facts
-
-
-def _emit_address_reuse_edges(
-    nodes: Mapping[str, OwnedOutputNode],
-    emit_edge: Any,
-) -> None:
-    by_address: dict[str, list[OwnedOutputNode]] = defaultdict(list)
-    for node in nodes.values():
-        if node.address_key:
-            by_address[node.address_key].append(node)
-    for address, group in sorted(by_address.items(), key=lambda item: item[0]):
-        if len(group) < 2:
-            continue
-        ordered = sorted(group, key=lambda node: node.node_id)
-        anchor = ordered[0]
-        for node in ordered[1:]:
-            emit_edge(
-                kind="address_reuse",
-                heuristic="reuse",
-                source="wallet_utxos.address",
-                left_node_id=anchor.node_id,
-                right_node_id=node.node_id,
-                txid=None,
-                evidence_level=EVIDENCE_EXACT,
-                evidence={
-                    "output_count": len(group),
-                },
-            )
-
-
-def _emit_common_input_edges(
-    tx_facts: Mapping[str, _SpendFact],
-    emit_edge: Any,
-) -> None:
-    for txid, fact in sorted(tx_facts.items()):
-        input_ids = sorted(fact.input_node_ids)
-        if len(input_ids) < 2:
-            continue
-        source = "+".join(sorted(fact.input_sources)) or "unknown"
-        anchor = input_ids[0]
-        for node_id in input_ids[1:]:
-            emit_edge(
-                kind="common_input",
-                heuristic="common_input",
-                source=source,
-                left_node_id=anchor,
-                right_node_id=node_id,
-                txid=txid,
-                evidence_level=EVIDENCE_EXACT,
-                evidence={
-                    "spending_txid": txid,
-                    "owned_input_count": len(input_ids),
-                    "source_count": len(fact.input_sources),
-                },
-            )
-
-
-def _emit_change_edges(
-    tx_facts: Mapping[str, _SpendFact],
-    nodes: Mapping[str, OwnedOutputNode],
-    emit_edge: Any,
-    limitations: list[dict[str, Any]],
-) -> None:
-    unavailable_outputs = 0
-    unavailable_transactions: set[str] = set()
-    for txid, fact in sorted(tx_facts.items()):
-        input_ids = sorted(fact.input_node_ids)
-        output_ids = sorted(fact.output_node_ids)
-        if not input_ids or not output_ids:
-            continue
-        source = "+".join(sorted(fact.input_sources)) or "unknown"
-        for output_id in output_ids:
-            output = nodes[output_id]
-            if output.branch_role == "receive":
-                continue
-            if output.branch_role != "change":
-                unavailable_outputs += 1
-                unavailable_transactions.add(txid)
-                continue
-            for input_id in input_ids:
-                if input_id == output_id:
-                    continue
-                emit_edge(
-                    kind="change_output",
-                    heuristic="change",
-                    source=source,
-                    left_node_id=input_id,
-                    right_node_id=output_id,
-                    txid=txid,
-                    evidence_level=output.branch_evidence_level,
-                    evidence={
-                        "spending_txid": txid,
-                        "owned_input_count": len(input_ids),
-                        "owned_output_count": len(output_ids),
-                        "change_role": output.branch_role,
-                        "change_evidence": output.change_evidence,
-                        "change_source": output.branch_source,
-                    },
-                )
-    if unavailable_outputs:
-        limitations.append(
-            {
-                "code": "change_role_unavailable",
-                "message": (
-                    "Some owned outputs in spending transactions lacked receive/change "
-                    "branch evidence, so Kassiber did not classify them as change."
-                ),
-                "evidence_level": EVIDENCE_UNKNOWN,
-                "evidence": {
-                    "owned_output_count": unavailable_outputs,
-                    "transaction_count": len(unavailable_transactions),
-                },
-            }
-        )
 
 
 @dataclass(frozen=True)
@@ -2424,22 +1804,19 @@ def _build_inference_components(
     nodes: Mapping[str, OwnedOutputNode],
     edges: Sequence[PrivacyLinkageEdge],
 ) -> tuple[tuple[_InferenceComponent, ...], dict[str, _InferenceComponent]]:
-    uf = _UnionFind(nodes)
+    edges = tuple(edge for edge in edges if edge.observer_linkage)
+    uf = Components(nodes)
     for edge in edges:
         uf.union(edge.from_node_id, edge.to_node_id)
     edge_by_id = {edge.edge_id: edge for edge in edges}
     edge_ids_by_root: dict[str, set[str]] = defaultdict(set)
-    nodes_by_root: dict[str, list[str]] = defaultdict(list)
-    for node_id in nodes:
-        root = uf.find(node_id)
-        nodes_by_root[root].append(node_id)
     for edge in edges:
         root = uf.find(edge.from_node_id)
         edge_ids_by_root[root].add(edge.edge_id)
     components: list[_InferenceComponent] = []
     node_to_component: dict[str, _InferenceComponent] = {}
     for index, node_ids in enumerate(
-        sorted((sorted(group) for group in nodes_by_root.values())),
+        uf.groups(include_singletons=True),
         start=1,
     ):
         root = uf.find(node_ids[0])
@@ -2475,6 +1852,7 @@ def _txid_to_node_ids(
 def _load_source_funds_anchor_candidates(
     conn: sqlite3.Connection,
     profile_id: str,
+    allowed_transaction_ids: set[str],
 ) -> tuple[tuple[_AnchorCandidate, ...], str | None]:
     link_columns = _table_columns(conn, "source_funds_links")
     transaction_columns = _table_columns(conn, "transactions")
@@ -2524,6 +1902,10 @@ def _load_source_funds_anchor_candidates(
         )
 
     for row in rows:
+        if row["to_transaction_id"] not in allowed_transaction_ids and row["to_external_id"] is not None:
+            continue
+        if row["from_transaction_id"] and row["from_transaction_id"] not in allowed_transaction_ids and row["from_external_id"] is not None:
+            continue
         evidence_level = _confidence_to_evidence_level(row["confidence"])
         if row["from_source_id"]:
             add(
@@ -2551,13 +1933,14 @@ def _load_source_funds_anchor_candidates(
 def _load_counterparty_anchor_candidates(
     conn: sqlite3.Connection,
     profile_id: str,
+    allowed_transaction_ids: set[str],
 ) -> tuple[tuple[_AnchorCandidate, ...], str | None]:
     columns = _table_columns(conn, "transactions")
     if not {"profile_id", "external_id", "counterparty"}.issubset(columns):
         return (), "counterparty_annotations_unavailable"
     rows = conn.execute(
         """
-        SELECT external_id
+        SELECT id, external_id
         FROM transactions
         WHERE profile_id = ?
           AND external_id IS NOT NULL
@@ -2577,6 +1960,7 @@ def _load_counterparty_anchor_candidates(
             source="local_counterparty_annotation",
         )
         for index, row in enumerate(rows, start=1)
+        if row["id"] in allowed_transaction_ids
     ]
     return tuple(candidates), None
 
@@ -2705,7 +2089,7 @@ def _passive_chain_view(
         model_assumptions=(
             _model_assumption(
                 "bitcoin_graph_facts_only",
-                "Model assumes the observer starts from public Bitcoin transaction graph facts available in local inventory.",
+                "Model assumes common-input ownership only where no collaborative boundary is known. Private wallet change metadata does not establish public observer linkage.",
                 EVIDENCE_DERIVED,
             ),
             _model_assumption(
@@ -2812,11 +2196,14 @@ def _build_adversary_views(
     components, node_to_component = _build_inference_components(nodes, edges)
     txid_nodes = _txid_to_node_ids(nodes, tx_facts)
     total_wallet_ids = {node.wallet_id for node in nodes.values()}
+    network = next(iter(nodes.values())).network if nodes else None
+    allowed_ids = {row["id"] for row in _privacy_transaction_rows(conn, profile_id, network)}
+    reviewed_ids = {row["id"] for row in _privacy_transaction_rows(conn, profile_id, network, include_excluded=False)}
     source_candidates, source_reason = _load_source_funds_anchor_candidates(
-        conn, profile_id
+        conn, profile_id, reviewed_ids,
     )
     counterparty_candidates, counterparty_reason = _load_counterparty_anchor_candidates(
-        conn, profile_id
+        conn, profile_id, allowed_ids,
     )
     return (
         _passive_chain_view(
@@ -2879,17 +2266,14 @@ def _build_adversary_views(
 def _build_observer_entities(
     nodes: Mapping[str, OwnedOutputNode],
     edges: Sequence[PrivacyLinkageEdge],
-    uf: _UnionFind,
+    uf: Components,
     edge_ids_by_node: Mapping[str, set[str]],
     heuristics_by_node: Mapping[str, set[str]],
     score_by_edge: Mapping[str, int],
 ) -> list[PassiveObserverEntity]:
-    by_root: dict[str, list[str]] = defaultdict(list)
-    for node_id in nodes:
-        by_root[uf.find(node_id)].append(node_id)
     entities: list[PassiveObserverEntity] = []
     for index, node_ids in enumerate(
-        sorted((sorted(group) for group in by_root.values() if len(group) > 1)),
+        uf.groups(),
         start=1,
     ):
         edge_ids = sorted(set().union(*(edge_ids_by_node[node_id] for node_id in node_ids)))

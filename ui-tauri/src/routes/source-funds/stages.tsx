@@ -12,6 +12,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Sparkles,
   ShieldAlert,
   SlidersHorizontal,
   X,
@@ -54,19 +55,19 @@ import {
   CaseBrief,
   CoveragePanel,
   DisclosureList,
-  DisclosureNarrative,
+  DisclosureSummary,
   DisclosureNodeOverrides,
   DisclosureTxidList,
   EmptyState,
   EvidenceSelect,
   Field,
   FlowLevelDetailPreview,
+  FlowPathPreview,
   GateRow,
   OptionalSection,
   PurposeButton,
   RecipientPicker,
   RecipientPreferenceAdvisory,
-  ReportControlFields,
   ReportDiagram,
   SelectField,
   StatusPill,
@@ -89,7 +90,7 @@ function StageHeader({
   return (
     <header className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
       <div className="min-w-0">
-        <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
+        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
         <p className="mt-0.5 max-w-2xl text-sm text-muted-foreground">{lede}</p>
       </div>
       {children && <div className="flex flex-wrap gap-2">{children}</div>}
@@ -114,6 +115,8 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
         lede={t("workstation.everyDossierIsAnchoredTo")}
       />
 
+      {state.selectedTarget && <Field label={amountLabel} htmlFor="source-funds-amount"><Input id="source-funds-amount" value={state.targetAmount} onChange={event => state.setTargetAmount(event.target.value)} placeholder={t("case.fullAmount")} inputMode="decimal" /></Field>}
+      <details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm text-muted-foreground">{t("journey.targetOptions")}</summary><div className="space-y-4 pt-4">
       <div className="grid gap-3 md:grid-cols-2">
         <PurposeButton
           active={planned}
@@ -136,17 +139,6 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
             {t("purpose.plannedHint")}</p>
         </div>
       )}
-
-      <div className="grid gap-3 sm:grid-cols-[180px_150px]">
-        <ReportControlFields
-          amountLabel={amountLabel}
-          targetAmount={state.targetAmount}
-          selectedTx={state.selectedTx}
-          revealMode={state.revealMode}
-          onAmountChange={state.setTargetAmount}
-          onRevealModeChange={state.setRevealMode}
-        />
-      </div>
 
       {planned && (
         <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
@@ -174,6 +166,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
       <Field label={t("case.targetReference")} htmlFor="source-funds-target-reference">
         <Input id="source-funds-target-reference" value={state.target} onChange={(event) => state.setTarget(event.target.value)} placeholder={t("case.targetReferenceHint")} />
       </Field>
+      </div></details>
       {state.selectedTarget && state.resolvedTarget.isError && <p role="alert" className="text-sm text-destructive">{t("case.targetUnavailable")}</p>}
       <div className="kb-surface-inset overflow-hidden">
         <div className="flex flex-col gap-3 border-b p-3 lg:flex-row lg:items-center lg:justify-between">
@@ -343,7 +336,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
                   key={txRef(row)}
                   row={row}
                   active={txRef(row) === state.selectedTarget}
-                  onSelect={() => { state.setTarget(txRef(row)); state.setStage("trace"); }}
+                  onSelect={() => { state.setTarget(txRef(row)); }}
                   onOpenDetails={() => {
                     state.openTxDetailById(txRef(row));
                   }}
@@ -377,7 +370,7 @@ export function TargetStage({ state }: { state: SourceFundsCaseState }) {
 /* Stage 2 — Trace                                                     */
 /* ------------------------------------------------------------------ */
 
-export function TraceStage({ state }: { state: SourceFundsCaseState }) {
+export function TraceStage({ state, onInvestigate, assistantAvailable }: { state: SourceFundsCaseState; onInvestigate?: () => void; assistantAvailable?: boolean }) {
   const { t } = useTranslation("sourceFunds");
   const assembled = state.assembleLinks.data?.data;
   const gaps: SourceFundsFinding[] = [...state.blockers, ...state.warnings];
@@ -410,31 +403,10 @@ export function TraceStage({ state }: { state: SourceFundsCaseState }) {
 
   return (
     <div className="space-y-5">
-      <StageHeader
-        title={t("caseStages.trace.hint")}
-        lede={t("workstation.kassiberProvesEveryHopIt")}
-      >
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => void state.runAssembly()}
-          disabled={!state.selectedTarget || state.assembleLinks.isPending}
-        >
-          <GitBranch className="mr-2 size-4" aria-hidden="true" />
-          {t(state.assembleLinks.isPending ? "actionsBar.assembling" : "actionsBar.assemble")}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            state.prefillGapForm();
-            state.setShowAdvancedReview(true);
-          }}
-        >
-          <AlertTriangle className="mr-2 size-4" aria-hidden="true" />
-          {t("actionsBar.markGap")}</Button>
+      <StageHeader title={t("journey.traceTitle")} lede={t("journey.traceHint")}>
+        {onInvestigate && <Button onClick={onInvestigate} disabled={!assistantAvailable}><Sparkles className="size-4" />{t(gaps.length ? "journey.resolveWithAssistant" : "journey.reviewWithAssistant")}</Button>}
       </StageHeader>
-
+      {state.report && <FlowPathPreview flow={state.report.simplified_flow} onOpenTransaction={state.openTxDetailById} />}
       {assembled && (
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-sm">
           <span className="font-semibold">
@@ -453,17 +425,10 @@ export function TraceStage({ state }: { state: SourceFundsCaseState }) {
         </div>
       )}
 
-      <details className="rounded-md border p-3"><summary className="cursor-pointer text-sm font-medium">{t("case.evidenceSection")}</summary><div className="pt-3"><CaseBrief
-        report={state.report}
-        bulkReviewable={state.bulkReviewableSuggestions.length}
-        manualReview={state.manualSuggestionCount}
-        onOpenTransaction={state.openTxDetailById}
-      /></div></details>
-
       <section id="source-funds-findings" aria-label={t("case.findingsTitle")} className="space-y-2">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-            {t("workstation.workLedger")}</h2>
+            {t("journey.openQuestions")}</h2>
           <span className="text-xs text-muted-foreground">
             {t("case.findings", { blockers: state.blockers.length, warnings: state.warnings.length })}
           </span>
@@ -507,6 +472,17 @@ export function TraceStage({ state }: { state: SourceFundsCaseState }) {
         title={t("advancedReview.title")}
         summary={t("advancedReview.summary", { links: state.reviewQueueLinks.length, sources: state.sources.length, evidence: state.evidence.length })}
       >
+      <div className="flex flex-wrap gap-2 pb-3">
+        <Button variant="outline" disabled={!state.selectedTarget || state.assembleLinks.isPending} onClick={() => void state.runAssembly()}><GitBranch className="size-4" />{t(state.assembleLinks.isPending ? "actionsBar.assembling" : "actionsBar.assemble")}</Button>
+        <Button variant="outline" onClick={() => { state.prefillGapForm(); state.setShowAdvancedReview(true); }}><AlertTriangle className="size-4" />{t("actionsBar.markGap")}</Button>
+      </div>
+      <details className="rounded-md border p-3"><summary className="cursor-pointer text-sm font-medium">{t("case.evidenceSection")}</summary><div className="pt-3"><CaseBrief
+        report={state.report}
+        bulkReviewable={state.bulkReviewableSuggestions.length}
+        manualReview={state.manualSuggestionCount}
+        onOpenTransaction={state.openTxDetailById}
+      /></div></details>
+
         <AdvancedReviewEditor state={state} />
       </OptionalSection>
 
@@ -985,102 +961,78 @@ export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
   const { t } = useTranslation("sourceFunds");
   return (
     <div className="space-y-5">
-      <StageHeader
-        title={t("caseStages.disclose.hint")}
-        lede={t("workstation.everythingBelowIsExactlyWhat")}
-      />
-
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="space-y-4">
-          <DisclosureNarrative report={state.report} />
-          <DisclosureTxidList report={state.report} />
-          <DisclosureNodeOverrides
-            report={state.report}
-            overrides={state.revealOverrides}
-            onChange={(id, decision) =>
-              state.setRevealOverrides((current) => {
-                const next = { ...current };
-                if (decision) {
-                  next[id] = decision;
-                } else {
-                  delete next[id];
-                }
-                return next;
-              })
-            }
-          />
-          <DisclosureList
-            label={t("evidence.label")}
-            values={(state.report?.disclosure_preview.attachments ?? []).map(
-              (item) => item.label,
-            )}
-          />
-          <DisclosureList
-            label={t("disclosure.excluded")}
-            values={state.report?.disclosure_preview.excluded ?? []}
-          />
-          {state.report?.disclosure_preview.privacy_note && (
-            <p className="rounded-md border px-3 py-2 text-xs text-muted-foreground">
-              {state.report.disclosure_preview.privacy_note}
-            </p>
-          )}
-          <FlowLevelDetailPreview
-            report={state.report}
-            omitted={state.omitSections.includes("transaction_details")}
-          />
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <h2 className="text-lg font-semibold">{t("review.title")}</h2>
+        <div className="w-44">
+          <Field label={t("disclosure.revealMode")} htmlFor="disclose-reveal">
+            <Select
+              value={state.revealMode}
+              onValueChange={state.setRevealMode}
+            >
+              <SelectTrigger id="disclose-reveal" className="h-9 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {["labels_only", "minimal", "standard", "full"].map(
+                  (mode) => (
+                    <SelectItem key={mode} value={mode}>
+                      {t(`reveal.${mode}`, { defaultValue: pretty(mode) })}
+                    </SelectItem>
+                  ),
+                )}
+              </SelectContent>
+            </Select>
+          </Field>
         </div>
-
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="border-b">
-              <CardTitle className="text-base">{t("recipient.ariaLabel")}</CardTitle>
-              <CardDescription>
-                {t("workstation.whoReceivesThisDossierTheir")}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 p-4">
-              <RecipientPicker
-                recipients={
-                  state.recipientsQuery.data?.data?.recipients ?? []
-                }
-                selectedRecipientId={state.selectedRecipientId}
-                onSelectRecipient={(recipient) => {
-                  state.setSelectedRecipientId(recipient?.id ?? "");
-                }}
-              />
-              <RecipientPreferenceAdvisory
-                recipient={state.selectedRecipient}
-                currentRevealMode={state.revealMode}
-                onApply={(mode) => state.setRevealMode(mode)}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="border-b">
-              <CardTitle className="text-base">{t("workstation.reportOptions")}</CardTitle>
-              <CardDescription>
-                {t("workstation.frozenIntoTheCaseAt")}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 p-4 text-sm">
-              <Field label={t("disclosure.revealMode")} htmlFor="disclose-reveal">
-                <Select
-                  value={state.revealMode}
-                  onValueChange={state.setRevealMode}
-                >
-                  <SelectTrigger id="disclose-reveal" className="h-9 w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["labels_only", "minimal", "standard", "full"].map(
-                      (mode) => (
-                        <SelectItem key={mode} value={mode}>
-                          {t(`reveal.${mode}`, { defaultValue: pretty(mode) })}
-                        </SelectItem>
-                      ),
-                    )}
-                  </SelectContent>
-                </Select>
-              </Field>
+      </div>
+      <DisclosureSummary report={state.report} />
+      <FlowPathPreview flow={state.report?.simplified_flow} />
+      <div className="divide-y border-t">
+        <details className="py-4">
+          <summary className="cursor-pointer text-sm font-medium">{t("journey.previewDetails")}</summary>
+          <div className="space-y-4 pt-4">
+            <DisclosureTxidList report={state.report} />
+            <DisclosureNodeOverrides
+              report={state.report}
+              overrides={state.revealOverrides}
+              onChange={(id, decision) =>
+                state.setRevealOverrides((current) => {
+                  const next = { ...current };
+                  if (decision) {
+                    next[id] = decision;
+                  } else {
+                    delete next[id];
+                  }
+                  return next;
+                })
+              }
+            />
+            <DisclosureList
+              label={t("evidence.label")}
+              values={(state.report?.disclosure_preview.attachments ?? []).map(
+                (item) => item.label,
+              )}
+            />
+            <DisclosureList
+              label={t("disclosure.excluded")}
+              values={state.report?.disclosure_preview.excluded ?? []}
+            />
+            {state.report?.disclosure_preview.privacy_note && (
+              <p className="rounded-md border px-3 py-2 text-xs text-muted-foreground">
+                {state.report.disclosure_preview.privacy_note}
+              </p>
+            )}
+            {state.report?.disclosure_preview.ownership_note && <p className="text-sm text-muted-foreground">{state.report.disclosure_preview.ownership_note}</p>}
+            <FlowLevelDetailPreview
+              report={state.report}
+              omitted={state.omitSections.includes("transaction_details")}
+            />
+          </div>
+        </details>
+        <details className="py-4">
+          <summary className="cursor-pointer text-sm font-medium">{t("journey.reportOptions")}</summary>
+          <div className="grid gap-6 pt-4 sm:grid-cols-2">
+            <div className="space-y-4">
               <Field label={t("workstation.diagramDetail")} htmlFor="disclose-diagram">
                 <Select
                   value={state.diagramDetail}
@@ -1152,35 +1104,36 @@ export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
                   </label>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-
-          {state.report?.diagrams?.flow_svg && (
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle className="text-base">{t("workstation.reportVisuals")}</CardTitle>
-                <CardDescription>
-                  {t("workstation.renderedOnThisDeviceIdentical")}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4 p-4">
-                <ReportDiagram
-                  svg={state.report.diagrams.flow_svg}
-                  label={t("flowPath.title")}
-                />
-                <ReportDiagram
-                  svg={state.report.diagrams.source_mix_ring_svg}
-                  label={t("workstation.sourceMix")}
-                />
-                <ReportDiagram
-                  svg={state.report.diagrams.data_source_ring_svg}
-                  label={t("workstation.dataSources")}
-                />
-              </CardContent>
-            </Card>
-          )}
-        </div>
+            </div>
+            <div className="space-y-4">
+              <RecipientPicker
+                recipients={
+                  state.recipientsQuery.data?.data?.recipients ?? []
+                }
+                selectedRecipientId={state.selectedRecipientId}
+                onSelectRecipient={(recipient) => {
+                  state.setSelectedRecipientId(recipient?.id ?? "");
+                }}
+              />
+              <RecipientPreferenceAdvisory
+                recipient={state.selectedRecipient}
+                currentRevealMode={state.revealMode}
+                onApply={(mode) => state.setRevealMode(mode)}
+              />
+            </div>
+          </div>
+        </details>
+        {state.report?.diagrams?.flow_svg && <details className="py-4">
+          <summary className="cursor-pointer text-sm font-medium">{t("review.printGraphics")}</summary>
+          <div className="space-y-4 pt-4">
+            <ReportDiagram svg={state.report.diagrams.flow_svg} label={t("flowPath.title")} wide />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <ReportDiagram svg={state.report.diagrams.source_mix_ring_svg} label={t("workstation.sourceMix")} />
+              <ReportDiagram svg={state.report.diagrams.data_source_ring_svg} label={t("workstation.dataSources")} />
+            </div>
+          </div>
+        </details>}
       </div>
-
     </div>
   );
 }
@@ -1191,15 +1144,15 @@ export function DiscloseStage({ state }: { state: SourceFundsCaseState }) {
 
 export function ExportStage({ state }: { state: SourceFundsCaseState }) {
   const { t } = useTranslation("sourceFunds");
-  const exportable = Boolean(state.report?.explain_gates.exportable) && !state.preview.isFetching;
+  const exportable = Boolean(state.report?.explain_gates.exportable) && !state.preview.isFetching && !state.preview.isError && !state.resolvedTarget.isError;
   return (
     <div className="space-y-5">
       <StageHeader
-        title={t("exportStage.title")}
-        lede={t("exportStage.lede")}
+        title={t("journey.exportTitle")}
+        lede={t("journey.exportHint")}
       />
 
-      {!exportable && (
+      {!exportable && !state.preview.isFetching && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
           <div className="flex items-center gap-2 font-medium">
             <ShieldAlert className="size-4" aria-hidden="true" />
@@ -1208,7 +1161,7 @@ export function ExportStage({ state }: { state: SourceFundsCaseState }) {
           <button
             type="button"
             className="mt-1 text-xs font-medium underline-offset-2 hover:underline"
-            onClick={() => document.getElementById("source-funds-findings")?.scrollIntoView({ block: "center" })}
+            onClick={() => state.goToStage("trace")}
           >
             {t("workstation.goToTheTraceWork")}</button>
         </div>
@@ -1299,11 +1252,7 @@ export function ExportStage({ state }: { state: SourceFundsCaseState }) {
                 {t("case.exported", { filename: state.exportedBundle.filename })}
               </p>
             )}
-            <code className="block rounded-md border bg-muted/40 px-3 py-2 font-mono text-xs">
-              kassiber reports export-source-funds-bundle --case{" "}
-              {state.savedCase ? state.savedCase.id : "<case-id>"} --file
-              bundle.zip
-            </code>
+
           </CardContent>
         </Card>
       </div>

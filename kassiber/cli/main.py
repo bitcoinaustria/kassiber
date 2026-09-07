@@ -211,6 +211,7 @@ from ..update_check import (
     update_checks_enabled,
 )
 from ..wallet_descriptors import MAX_DESCRIPTOR_GAP_LIMIT
+from .chain_analysis import add_parser as add_chain_analysis_parser, dispatch as dispatch_chain_analysis
 from .review import add_review_parser, dispatch_review
 from .source_funds_review import add_source_funds_review_parsers, dispatch_source_funds_review
 from .chat import run_chat_command
@@ -1245,6 +1246,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_secrets_parser(sub)
     add_backup_parser(sub)
     add_sync_parser(sub)
+    add_chain_analysis_parser(sub)
     add_review_parser(sub)
     add_accounting_parser(sub)
 
@@ -3524,6 +3526,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         return emit(args, dispatch_backup(args))
     if args.command == "sync":
         return emit(args, dispatch_sync(conn, args))
+    if args.command == "chain-analysis":
+        return emit(args, dispatch_chain_analysis(conn, args))
     if args.command == "review":
         return emit(args, dispatch_review(conn, args))
     if args.command == "accounting":

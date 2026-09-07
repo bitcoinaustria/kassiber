@@ -25,6 +25,7 @@ import {
   removeAttachmentRecord,
   replaceAttachmentRecord,
   resolveAutoPeriodForRecords,
+  resolveTransactionDeepLink,
   toDashboardTransaction,
   transactionListPeriodFilter,
   transactionPeriodDateWindow,
@@ -77,6 +78,26 @@ function rawTx(overrides: Partial<Tx> = {}): Tx {
 }
 
 describe("transaction dashboard chart selection", () => {
+  it("resolves exact wallet identity before shared txid peers without changing table records", () => {
+    const txid = "f".repeat(64);
+    const fee = transaction({ id: "fee", txnId: txid, explorerId: txid, amountBtc: 0 });
+    const incoming = transaction({ id: "incoming", txnId: txid, explorerId: txid, amountBtc: 0.006 });
+    const table = [fee];
+    expect(resolveTransactionDeepLink(table, "incoming", incoming)).toBe(incoming);
+    expect(table).toEqual([fee]);
+    expect(resolveTransactionDeepLink([fee, incoming], "incoming")).toBe(incoming);
+    const aggregate = { ...incoming, amountBtc: 0 };
+    expect(resolveTransactionDeepLink([aggregate], "incoming", incoming)).toBe(incoming);
+    expect(aggregate.amountBtc).toBe(0);
+    expect(resolveTransactionDeepLink([fee], "fee", incoming)).toBe(fee);
+    expect(resolveTransactionDeepLink([fee], txid)).toBe(fee);
+  });
+  it("uses daemon payment method instead of misleading account names", () => {
+    for (const account of ["Strike", "Lightning savings", "Liquid exchange"]) {
+      expect(toDashboardTransaction(rawTx({ account, chain: "bitcoin", paymentMethod: "Exchange" }), 0).paymentMethod).toBe("Exchange");
+    }
+    expect(toDashboardTransaction(rawTx({ account: "Exchange", paymentMethod: "Lightning" }), 0).paymentMethod).toBe("Lightning");
+  });
   it("preserves quarantine row ids in transaction detail deep links", () => {
     vi.stubGlobal("window", {
       location: {

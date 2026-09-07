@@ -20,13 +20,46 @@ through descriptor discovery.
 ## Target boundary
 
 Pinned `bdkpython` 3.0.0 (`bdk_wallet`) owns supported Bitcoin
-descriptor-wallet chain state for Esplora and Electrum on CPython 3.10–3.13
+descriptor-wallet chain state for Electrum on CPython 3.10–3.13
 macOS, Linux x86-64, and Windows AMD64, where the release ships native wheels.
 Other runtimes use the named Bitcoin compatibility observer. Pinned `lwk` 0.18.0
 (`lwk_wollet`) owns supported Liquid descriptor-wallet chain state for
-Esplora and Electrum on macOS arm64, Linux x86-64, and Windows AMD64, matching
+Electrum on macOS arm64, Linux x86-64, and Windows AMD64, matching
 the published wheel set. Other runtimes use the named Liquid compatibility
-observer. Kassiber continues to own:
+observer.
+
+Bitcoin and Liquid Esplora use the existing named compatibility observer and
+Kassiber's explicit HTTP transport. The installed BDK 3.0.0 and LWK 0.18.0
+clients follow cross-origin HTTP redirects, while their Python bindings expose
+no control that enforces the approved endpoint and proxy route. Otherwise
+supported Esplora descriptors therefore select `observer_route=compatibility`
+with `observer_compatibility_reason=http_route_policy` before any connection.
+Existing more specific reasons retain precedence. Direct SDK client creation
+also rejects Esplora, including aliases, rather than bypassing this decision.
+
+Re-enabling an SDK Esplora route requires a packaged binding that exposes and
+passes executable no-redirect and no-ambient-proxy tests, alongside the existing
+authentication, TLS, timeout and parity gates. Updating or rebuilding the SDK
+alone is not evidence that these controls exist. Earlier native Esplora
+restart/authentication results remain historical migration evidence; the
+current integration oracle compares native Electrum with compatibility Esplora.
+
+The compatibility Esplora observer retains versioned, source-bound transaction
+membership locally. Complete histories with matching before/after counters can
+withdraw replaced or dropped transactions through the canonical retraction
+service. Page limits, missing counters, visible races, unrelated scripts and
+uncovered earlier scope withhold absence authority; incomplete rounds retain
+earlier positive observations for later verification. A full scan clears fetch
+caches while preserving these observation candidates. The configured backend
+remains the source of this evidence; counter checks are not a cryptographic or
+atomic snapshot guarantee against a malicious server.
+
+Widened discovery runs only for a provable inventory deficit. Missing occurrence
+times and equal-time movements cannot acquire an order from row IDs or import
+timing. The shared rescan check preserves their uncertainty and still detects
+genuine quantity shortages without granting accounting authority.
+
+Kassiber continues to own:
 
 - wallet/source configuration and the SQLCipher security boundary;
 - normalized accounting transactions, graph evidence, retractions and review;
@@ -45,8 +78,9 @@ Authority is scoped by connection model, not by chain alone:
 
 | Configuration | Authoritative observer |
 | --- | --- |
-| Bitcoin descriptor + Esplora/Electrum | BDK where the pinned binding ships; named compatibility observer elsewhere |
-| Liquid descriptor + Esplora/Electrum | LWK on macOS arm64, Linux x86-64, and Windows AMD64; named compatibility observer elsewhere |
+| Bitcoin descriptor + Electrum | BDK where the pinned binding ships and transport capabilities permit; named compatibility observer elsewhere |
+| Liquid descriptor + Electrum | LWK on macOS arm64, Linux x86-64, and Windows AMD64 where transport capabilities permit; named compatibility observer elsewhere |
+| Bitcoin/Liquid descriptor + Esplora | Named compatibility observer with explicit HTTP endpoint/proxy policy |
 | Bitcoin Core backend | Bitcoin Core RPC adapter |
 | Silent Payments wallet | BIP352/BIP392 Silent Payments scanner |
 
@@ -156,35 +190,38 @@ metadata, every row below that is not the pinned dependency reports
 compatibility adapter *is* the explicit Electrum client — except address-list
 Bitcoin wallets, which report `bitcoin_script`, and Silent Payments, which
 report `silent_payments`. `observer_compatibility_reason` is what distinguishes
-them (`custom_ca`, `insecure_tls`, `proxy_transport`, `custom_timeout`, ...).
+them (`http_route_policy`, `custom_ca`, `insecure_tls`, `proxy_transport`,
+`custom_timeout`, ...). More specific configuration limitations take precedence
+over the general Esplora `http_route_policy` reason.
 
 | Chain/source | Configuration | Observer | Status |
 | --- | --- | --- | --- |
-| Bitcoin Esplora | supported watch-only descriptor, normal platform trust | BDK | enabled; BDK owns scan, canonical transaction, chain-position and output state |
+| Bitcoin Esplora | supported watch-only descriptor, normal platform trust | named compatibility observer | `http_route_policy`; redirects and ambient proxy routing are disabled by the explicit HTTP client |
 | Bitcoin Electrum | supported watch-only descriptor over TCP or normal TLS | BDK | enabled; live descriptor restart/no-op coverage runs in the regtest observer lane |
 | Bitcoin Esplora/Electrum | SOCKS proxy configured or `.onion` endpoint | named compatibility observer | BDK accepts only `socks5://`; Kassiber does not downgrade `socks5h://` and leak DNS outside Tor |
 | Bitcoin Electrum | custom CA unsupported by BDK | Bitcoin script-protocol observer | the explicit Electrum client loads the configured CA; selected before connect |
 | Bitcoin Esplora | custom CA or explicit insecure TLS opt-in unsupported by BDK | named compatibility observer | the explicit HTTP client applies the per-backend SSL context before connect; custom CA keeps verification enabled while insecure mode is restricted to an explicit unsafe opt-in |
-| Bitcoin Esplora | operator-pinned `SSL_CERT_FILE` with an HTTPS endpoint | named compatibility observer | BDK's Rustls/WebPKI client does not consume `SSL_CERT_FILE`; an auto-discovered host bundle is not a routing signal, so use a per-backend CA to reroute one backend |
+| Bitcoin Esplora | operator-pinned `SSL_CERT_FILE` with an HTTPS endpoint | named compatibility observer | retains `system_ca_trust` precedence because BDK's Rustls/WebPKI client does not consume `SSL_CERT_FILE`; an auto-discovered host bundle does not select this reason; per-backend CA scopes trust to one backend |
 | Bitcoin Esplora | custom HTTP authorization unsupported by the binding | named compatibility observer | selected before connect; never a runtime fallback |
 | Bitcoin Esplora | non-default caller timeout unsupported by the binding | named compatibility observer | selected before connect so the configured timeout remains enforceable |
 | Bitcoin Esplora/Electrum | finite source-overlap exclusion would require a partial descriptor scan | named compatibility observer | selected after local overlap policy and before connect |
 | Bitcoin Esplora/Electrum | address-list source | Bitcoin script observer | BDK cannot reconstruct key semantics from an address; prefer descriptor migration when more wallet material exists |
 | Bitcoin Core RPC | descriptor, xpub or address watch source | Bitcoin Core RPC observer | first-class Core route; BDK Python has no Bitcoin RPC chain source |
 | Bitcoin Silent Payments | BIP352/BIP392 material | Silent Payments observer | first-class BIP352/BIP392 discovery route |
-| Bitcoin `mempool` backend alias | supported descriptor | BDK Esplora | normalized once for capability selection, client construction, remote-tip checks and initial/incremental scans; the live restart oracle uses this alias |
+| Bitcoin `mempool` backend alias | supported descriptor | named compatibility observer | normalized to Esplora before capability selection; the same `http_route_policy` restriction applies |
 | Bitcoin | spending-private descriptor/key material | none | always rejected before network access |
-| Liquid Electrum/Esplora | watch-only confidential SegWit v0 (including nested `elsh(wpkh(...))`), Taproot, executable legacy P2SH, fixed or canonical `<0;1>` ranged descriptor; private view/blinding material with public spend keys | LWK 0.18.0 | enabled; only the outer Elements script wrapper is translated, while nested miniscript keeps Bitcoin spelling |
+| Liquid Electrum | watch-only confidential SegWit v0 (including nested `elsh(wpkh(...))`), Taproot, executable legacy P2SH, fixed or canonical `<0;1>` ranged descriptor; private view/blinding material with public spend keys | LWK 0.18.0 | enabled; only the outer Elements script wrapper is translated, while nested miniscript keeps Bitcoin spelling |
+| Liquid Esplora | otherwise supported watch-only descriptor | named compatibility observer | `http_route_policy`; the native builder cannot enforce endpoint and proxy-route restrictions |
 | Liquid Electrum/Esplora | platform without an LWK 0.18.0 wheel | named compatibility observer | the dependency marker is limited to macOS arm64, Linux x86-64, and Windows AMD64; other architectures retain the existing observer |
 | Liquid address-list source | any | none | rejected locally because confidential outputs require descriptor-backed private view/blinding material |
 | Liquid | unsupported general pre-SegWit descriptor | named compatibility observer | selected when executable LWK descriptor construction rejects the form; remove as upstream support becomes executable |
-| Liquid | structurally equivalent separate `/0/*` receive + `/1/*` change descriptors | LWK 0.18.0 | canonicalized to `<0;1>` only when every ranged key has the same blinding policy, script, origins, keys, order and wildcard geometry |
+| Liquid Electrum | structurally equivalent separate `/0/*` receive + `/1/*` change descriptors | LWK 0.18.0 | canonicalized to `<0;1>` only when every ranged key has the same blinding policy, script, origins, keys, order and wildcard geometry |
 | Liquid | genuinely different change policy or noncanonical multipath | named compatibility observer | retained because accepting a constructed descriptor is not proof of equivalent ownership |
 | Liquid Esplora/Electrum | SOCKS proxy configured or `.onion` endpoint | named compatibility observer | LWK 0.18.0 Python transport cannot carry Kassiber's proxy policy; compatibility preserves it until the binding exposes proxy configuration |
 | Liquid Electrum | custom CA unsupported by LWK | named script-protocol observer | the explicit Electrum client loads the configured CA; selected before connect |
 | Liquid Esplora | custom CA or explicit insecure TLS opt-in unsupported by LWK | named compatibility observer | the explicit HTTP client applies the per-backend SSL context before connect; custom CA keeps verification enabled while insecure mode is restricted to an explicit unsafe opt-in |
-| Liquid Esplora | operator-pinned `SSL_CERT_FILE` with an HTTPS endpoint | named compatibility observer | LWK's Rustls/WebPKI client does not consume `SSL_CERT_FILE`; an auto-discovered host bundle is not a routing signal, so use a per-backend CA to reroute one backend |
-| Liquid Esplora | bearer header or static token | LWK 0.18.0 | passed through `EsploraClientBuilder.headers` / `token_provider`; credentials remain inside SQLCipher and redacted errors |
+| Liquid Esplora | operator-pinned `SSL_CERT_FILE` with an HTTPS endpoint | named compatibility observer | retains `system_ca_trust` precedence because LWK's Rustls/WebPKI client does not consume `SSL_CERT_FILE`; an auto-discovered host bundle does not select this reason; per-backend CA scopes trust to one backend |
+| Liquid Esplora | bearer header or static token | named compatibility observer | `_esplora_auth_headers` applies the explicit authorization header, otherwise the bearer token; the native builder is disabled by `http_route_policy` |
 | Liquid Electrum | platform-trusted TLS | LWK 0.18.0 | uses the explicit TLS/domain-validation constructor with validation enabled |
 | Liquid Electrum | explicit `insecure` TLS opt-in | named script-protocol observer | retained because LWK 0.18.0 pins rust-electrum-client 0.21.0, whose Rustls no-verification implementation advertises no signature schemes and fails a real TLS handshake; remove after the packaged binding includes the upstream verifier fix and the local dependency-direct probe passes |
 | Liquid Electrum | non-default timeout | named compatibility observer | selected before connect so the configured bound remains enforceable; remove when the binding exposes a timeout |
@@ -283,8 +320,8 @@ backend from retracting newer facts.
   `resolve_wallet_sync_targets` and `detect_active_script_types` turn that
   geometry into backend scan targets.
 
-Compatibility parsing may remain, but supported BDK/LWK descriptors must be
-validated as watch-only and converted once at the wrapper boundary. Kassiber's
+Compatibility parsing may remain, but descriptors using supported BDK/LWK
+routes must be validated as watch-only and converted once at the wrapper boundary. Kassiber's
 manual derived-target list must not remain the production state engine for
 those routes.
 
@@ -292,7 +329,8 @@ those routes.
 
 - The former `scan_descriptor_targets` network gap walker and the
   Esplora/Electrum branches of `discover_descriptor_targets` are deleted.
-  Supported BDK/LWK observers now own gap discovery and chain position.
+  Supported BDK/LWK Electrum observers own gap discovery and chain position;
+  Esplora uses `scan_compatibility_descriptor_targets` on its named route.
 - `discover_bitcoinrpc_descriptor_targets` remains a local range calculation
   for the explicitly separate Bitcoin Core adapter; it performs no RPC call.
 - `_highest_used_branch_index`, `_merge_highest_used`,
@@ -306,13 +344,12 @@ BDK/LWK replace this machinery for supported routes. Kassiber persists a
 redacted coverage projection for inventory/ownership UI, not a competing scan
 checkpoint.
 
-The remaining manual history/UTXO helpers are reachable only through named
-capability routes in the matrix above: Bitcoin address scripts, Electrum custom
-CA, Bitcoin Esplora authorization/timeout, finite source-overlap filtering,
-plus the explicitly labelled Liquid proxy, Electrum timeout/custom-CA/insecure
-TLS and
-genuinely different descriptor-policy limitations. Liquid Esplora auth is LWK
-native; Esplora custom CA fails closed on both chains.
+The manual history/UTXO helpers are reachable through the named capability
+routes in the matrix above: all Bitcoin/Liquid Esplora, Bitcoin address scripts,
+Electrum custom CA, proxy, finite source-overlap filtering and the remaining
+binding-specific timeout, TLS and descriptor-policy limitations. Esplora
+authorization, custom CA and explicit insecure TLS settings are applied by
+Kassiber's HTTP transport before connection on both chains.
 Dependency-contract tests fail if an ordinary supported BDK route calls one of
 those adapters or retries through one after a BDK error.
 
@@ -406,7 +443,7 @@ possible.
 - `wallet_policy_asset_id`, `liquid_asset_code`, and the DB compatibility
   backfills map policy-asset identifiers to `LBTC`.
 
-LWK is the authoritative supported-route wollet state and unblinding
+LWK is the authoritative supported Electrum-route wollet state and unblinding
 engine. Private view/blinding material stays inside SQLCipher and must never
 enter logs, diagnostics, audit packages, AI tools, daemon/event payloads or
 replication.
@@ -506,11 +543,12 @@ source installs without the wheel.
 
 ## Production cleanup inventory
 
-The migration removed the production manual Esplora/Electrum descriptor gap
-engine: `scan_descriptor_targets` and the network branches of
-`discover_descriptor_targets`, together with their test-only checkpoint/gap
+The migration removed the former `scan_descriptor_targets` gap engine and the
+network branches of `discover_descriptor_targets`, together with their test-only checkpoint/gap
 fixtures. The surviving manual fetchers are named `compatibility_*` and can be
-reached only after a capability reason is selected before connection. Address
+reached only after a capability reason is selected before connection. All
+Esplora descriptor routes now use these helpers because the pinned SDK HTTP
+clients cannot enforce the approved endpoint and proxy route. Address
 lists report `observer_route=bitcoin_script`, Core reports
 `observer_route=bitcoin_core_rpc`, and Silent Payments reports
 `observer_route=silent_payments`; these are first-class responsibilities rather
@@ -519,8 +557,9 @@ protocol decoding, HTLC evidence,
 normalization, and Kassiber's ownership/tax domain logic remain intentionally
 separate.
 
-Descriptor configurations that BDK/LWK cannot faithfully express (for example
-remote-DNS Tor, custom CA/auth, or binding-specific custom timeouts) use
+Descriptor configurations that BDK/LWK cannot faithfully express, including
+all Esplora HTTP routes, remote-DNS Tor, custom CA/auth and binding-specific
+custom timeouts, use
 `observer_route=compatibility` with an explicit
 `observer_compatibility_reason`. CLI/daemon payloads retain both fields and the
 desktop refresh summary displays the reason.
@@ -538,6 +577,11 @@ x86_64 sidecars before desktop bundling.
 - Sync/discovery/checkpoints: `tests/test_sync_backends.py`,
   `tests/test_sync_backends_legs.py`, `tests/test_daemon_detect_script_types.py`,
   and `tests/test_source_overlap.py`.
+- HTTP route policy: `tests/test_bdk_observer.py` and `tests/test_lwk_observer.py`
+  reject SDK Esplora before client construction; `tests/test_proxy.py` exercises routing,
+  redirects and TLS with fake transports. The live observer oracle retains
+  semantic restart/reorg/replacement comparisons with compatibility Esplora
+  and native Electrum; it does not assert native Esplora usage.
 - RBF, reorg and replacement: Bitcoin Core conflicted/retracted/checkpoint
   cases in `tests/test_sync_backends.py`, live RBF/reorg assertions in
   `tests/integration/test_live_bitcoin_core_regtest.py`, regtest tapes, and the

@@ -961,6 +961,99 @@ CREATE TABLE IF NOT EXISTS transaction_graph_cache (
 CREATE INDEX IF NOT EXISTS idx_transaction_graph_cache_updated
     ON transaction_graph_cache(updated_at DESC);
 
+-- Local investigations are separate from accounting and authored replication.
+-- Fetched observations never grant wallet ownership or custody authority.
+CREATE TABLE IF NOT EXISTS chain_analysis_observations (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    txid TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    status_json TEXT NOT NULL DEFAULT '{}',
+    source_name TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, chain, network, txid)
+);
+
+CREATE TABLE IF NOT EXISTS chain_analysis_cases (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    query_json TEXT NOT NULL,
+    result_json TEXT NOT NULL,
+    snapshot_id TEXT NOT NULL,
+    result_digest TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chain_analysis_cases_profile
+    ON chain_analysis_cases(profile_id, created_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS chain_analysis_labels (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    label TEXT NOT NULL,
+    category TEXT NOT NULL,
+    source TEXT NOT NULL,
+    confidence TEXT NOT NULL,
+    cluster_defining INTEGER NOT NULL DEFAULT 0 CHECK (cluster_defining IN (0, 1)),
+    revision INTEGER NOT NULL DEFAULT 1,
+    deleted INTEGER NOT NULL DEFAULT 0 CHECK (deleted IN (0, 1)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chain_analysis_labels_profile
+    ON chain_analysis_labels(profile_id, deleted, chain, network, subject);
+CREATE TABLE IF NOT EXISTS chain_analysis_label_history (
+    label_id TEXT NOT NULL REFERENCES chain_analysis_labels(id) ON DELETE CASCADE,
+    revision INTEGER NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (label_id, revision)
+);
+
+-- Attribution packs are imported reference claims, never wallet authority.
+-- Claims stage in bounded commits; only a final metadata switch activates them.
+CREATE TABLE IF NOT EXISTS chain_analysis_datasets (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    dataset_key TEXT NOT NULL,
+    version TEXT NOT NULL,
+    chain TEXT NOT NULL,
+    network TEXT NOT NULL,
+    visibility TEXT NOT NULL CHECK (visibility IN ('public', 'private')),
+    status TEXT NOT NULL CHECK (status IN ('staging', 'active', 'superseded', 'revoked', 'failed')),
+    revision INTEGER NOT NULL DEFAULT 1,
+    manifest_json TEXT NOT NULL,
+    content_sha256 TEXT,
+    claims_sha256 TEXT,
+    row_count INTEGER NOT NULL DEFAULT 0,
+    byte_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_chain_analysis_dataset_active
+    ON chain_analysis_datasets(profile_id, dataset_key) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_chain_analysis_dataset_profile
+    ON chain_analysis_datasets(profile_id, created_at DESC, id DESC);
+CREATE TABLE IF NOT EXISTS chain_analysis_dataset_claims (
+    dataset_id TEXT NOT NULL REFERENCES chain_analysis_datasets(id) ON DELETE CASCADE,
+    record_number INTEGER NOT NULL,
+    subject TEXT NOT NULL,
+    label TEXT NOT NULL,
+    category TEXT NOT NULL,
+    source_record_json TEXT NOT NULL,
+    valid_from TEXT,
+    valid_until TEXT,
+    PRIMARY KEY (dataset_id, record_number)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_chain_analysis_dataset_subject
+    ON chain_analysis_dataset_claims(dataset_id, subject, record_number);
+CREATE INDEX IF NOT EXISTS idx_chain_analysis_dataset_entity
+    ON chain_analysis_dataset_claims(dataset_id, label, record_number);
+
 CREATE TABLE IF NOT EXISTS tags (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

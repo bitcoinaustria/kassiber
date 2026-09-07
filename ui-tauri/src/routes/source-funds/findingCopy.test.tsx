@@ -17,7 +17,7 @@ describe("canonical finding localization", () => {
     const html = renderToStaticMarkup(<GateRow finding={missing} onAction={() => {}} />);
     expect(html).toContain("Fehlende Historie");
     expect(html).toContain("ohne geprüfte Ursprungsquelle");
-    expect(html).toContain("Ursprungsquelle verknüpfen oder die Lücke bestätigen");
+    expect(html).not.toContain("Ursprungsquelle verknüpfen oder die Lücke bestätigen"); // The direct action replaces duplicate next-step prose.
     expect(html).toContain("Diese Lücke dokumentieren");
     expect(html).not.toContain("The path stops"); expect(html).not.toContain("Attach a root source");
   });

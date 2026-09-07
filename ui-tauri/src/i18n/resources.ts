@@ -17,6 +17,8 @@ import enAccountingReview from "./locales/en/accountingReview.json";
  */
 
 import deAssistant from "./locales/de/assistant.json";
+import deChainAnalysis from "./locales/de/chainAnalysis.json";
+import enChainAnalysis from "./locales/en/chainAnalysis.json";
 import deChrome from "./locales/de/chrome.json";
 import deCommon from "./locales/de/common.json";
 import deConnections from "./locales/de/connections.json";
@@ -59,6 +61,7 @@ export const resources = {
     settings: enSettings,
     overview: enOverview,
     privacyMirror: enPrivacyMirror,
+    chainAnalysis: enChainAnalysis,
     transactions: enTransactions,
     connections: enConnections,
     custodyGaps: enCustodyGaps,
@@ -77,6 +80,7 @@ export const resources = {
     settings: deSettings,
     overview: deOverview,
     privacyMirror: dePrivacyMirror,
+    chainAnalysis: deChainAnalysis,
     transactions: deTransactions,
     connections: deConnections,
     custodyGaps: deCustodyGaps,

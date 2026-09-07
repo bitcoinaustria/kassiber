@@ -1,10 +1,23 @@
 # Source-of-funds review
 
-The desktop flow starts with an explicit transaction and amount. It presents
-the current origin evidence and unresolved findings for that target, then
-offers investigation through the existing assistant. Manual source/link edits,
-disclosure controls and PDF/ZIP export remain available. A preview is not a
-completed review, and a saved export is not current after the case changes.
+The desktop follows one case through four steps: choose funds, trace and resolve,
+review the report, and export. It starts with an existing transaction and the
+full amount; a partial amount, planned-sale purpose or exact reference can be
+set explicitly. Only the current step is shown. The canonical recorded flow
+is the primary trace view, with expandable stations and transaction details;
+open findings and an assistant action lead to missing evidence. Manual source
+and link tools remain available on demand.
+
+The report step shows a concise disclosure summary and the shared interactive
+evidence graph, using only the report's disclosure-filtered flow. Exact references,
+recipient and detail controls, and original PDF graphics are expandable. Print
+graphics retain their original palette in either app theme. Continuing to export requires
+a current exportable review, an available printable preview and explicit preview
+confirmation. Approval is bound to the review fingerprint: changed evidence,
+amount or disclosure options require another review. A restored draft step is
+not approval. Truncated reviews, stale/error responses and preview rendering
+errors cannot authorize export. Saved PDF and ZIP receipts describe the frozen
+case, not future edits. No step sends information to a bank or external service.
 
 `core/source_funds_review.py` composes the existing source-funds report with
 target-reachable links, sources and attachments under one database read
@@ -64,3 +77,10 @@ ZIP exports compare copied evidence with the saved file hashes and
 retain frozen URLs. Missing or changed disclosed files block export, while
 withheld modes never read those files. Publication replaces a prior ZIP only
 after the complete verified archive is ready.
+
+The interactive route uses the same `EvidenceGraph` canvas, camera, keyboard
+navigation and layered layout as Chain Analysis. Its adapter accepts only the
+report's canonical `simplified_flow` nodes and explicit edges; adjacent levels
+never imply a connection. CoinJoin/PayJoin boundaries remain marked boundaries.
+The printable SVG/PDF stays server-rendered from that same frozen report, so
+interactive selection and zoom cannot alter disclosure or evidence authority.

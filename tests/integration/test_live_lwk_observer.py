@@ -110,15 +110,25 @@ class LiveLwkObserverTest(unittest.TestCase):
                 roots = {"electrum": Path(tmp) / "electrum", "esplora": Path(tmp) / "esplora"}
                 _create_book(roots["electrum"], "electrum", electrum, descriptor)
                 _create_book(roots["esplora"], "esplora", esplora, descriptor)
-                first_hashes = {}
                 for kind, root in roots.items():
                     result = _sync(root, "LWK watch")
-                    self.assertEqual(result["observer_route"], "lwk", result)
-                    first_hashes[kind], value_count, coverage = _state_hash(root)
-                    self.assertGreater(value_count, 0)
-                    self.assertEqual(coverage, 2)
+                    self.assertEqual(result["observer_route"], "lwk" if kind == "electrum" else "compatibility", result)
+                    if kind == "electrum":
+                        first_hash, value_count, coverage = _state_hash(root)
+                        self.assertGreater(value_count, 0)
+                        self.assertEqual(coverage, 2)
+                    else:
+                        self.assertEqual(result["observer_compatibility_reason"], "http_route_policy")
+                        conn = open_db(root)
+                        try:
+                            self.assertEqual(conn.execute("SELECT COUNT(*) FROM chain_observer_instances").fetchone()[0], 0)
+                        finally:
+                            conn.close()
+                    projection_before = _semantic_transactions(root)
                     _sync(root, "LWK watch")
-                    self.assertEqual(_state_hash(root)[0], first_hashes[kind])
+                    if kind == "electrum":
+                        self.assertEqual(_state_hash(root)[0], first_hash)
+                    self.assertEqual(_semantic_transactions(root), projection_before)
                 self.assertEqual(_semantic_transactions(roots["electrum"]), _semantic_transactions(roots["esplora"]))
                 self.assertEqual(_utxo_projection(roots["electrum"]), _utxo_projection(roots["esplora"]))
 

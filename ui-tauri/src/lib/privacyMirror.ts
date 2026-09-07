@@ -1,268 +1,115 @@
-import { formatSats, formatUiNumber } from "@/lib/localeFormat";
+import type { AnalysisQuery } from "./chainAnalysis";
 
-export type EvidenceLevel = "exact" | "derived" | "unknown" | string;
-
-export interface PrivacyScoreFactor {
-  key?: string;
-  linked?: number;
-  leaking?: number;
-  total?: number;
-  weight?: number;
-  points?: number;
+export interface PrivacyInvestigation {
+  query: AnalysisQuery;
+  snapshot_id: string;
 }
-
-export interface PrivacyScoreSummary {
-  value?: number;
-  base?: number;
-  evidence_level?: EvidenceLevel;
-  coverage_ratio?: number;
-  factors?: PrivacyScoreFactor[];
+export interface PrivacyFinding {
+  id: string;
+  code: string;
+  category: "linkage" | "structure" | "pattern" | "attribution";
+  severity: "warning" | "info";
+  authority: string;
+  relevance: "own_spend" | "owned_output" | "received_context" | "nearby_context";
+  title: string;
+  detail: string;
+  assumptions: string[];
+  limitations: string[];
+  affected_output_count: number;
+  investigation: PrivacyInvestigation;
 }
-
+export interface PrivacyCheck {
+  code: string;
+  status: "complete" | "partial" | "unavailable" | "not_applicable" | "bounded";
+  evaluated: number;
+  eligible: number;
+  reason?: string;
+}
 export interface PrivacyMirrorPayload {
-  local_only?: boolean;
-  read_only?: boolean;
-  advisory_only?: boolean;
-  summary?: {
-    evidence_level?: EvidenceLevel;
-    privacy_score?: PrivacyScoreSummary;
-    linkage_score?: number;
-    linkable_cluster_count?: number;
-    adversary_view_count?: number;
-    wallet_count?: number;
-    transaction_tell_count?: number;
-    utxo_count?: number;
-    unknown_count?: number;
-    finding_count?: number;
-    worst_risk?: WorstRisk;
+  payload_schema_version: 2;
+  local_only: true;
+  read_only: true;
+  advisory_only: true;
+  observer: "public";
+  investigation: PrivacyInvestigation;
+  summary: {
+    status: "findings" | "no_observed_exposure" | "unavailable";
+    finding_count: number;
+    attention_count: number;
+    owned_output_count: number;
+    analyzed_transaction_count: number;
+    local_transaction_count: number;
+    domain_count: number;
   };
-  exposure_summary?: {
-    evidence_level?: EvidenceLevel;
-    linkage?: Record<string, unknown>;
-    hygiene?: Record<string, unknown>;
+  findings: PrivacyFinding[];
+  coverage: {
+    status: "complete" | "partial" | "unavailable";
+    examined_transactions: number;
+    available_transactions: number;
+    missing_nodes: number;
+    stale_nodes: number;
+    conflicting_nodes: number;
+    truncated: boolean;
+    stopped_reasons: string[];
+    checks: PrivacyCheck[];
   };
-  adversary_cards?: AdversaryCard[];
-  wallet_view?: WalletPrivacyRow[];
-  transaction_view?: TransactionPrivacyRow[];
-  utxo_view?: UtxoPrivacyRow[];
-  timeline?: TimelineEvent[];
-  psbt_what_if_panel?: Record<string, unknown>;
-  coverage?: {
-    evidence_level?: EvidenceLevel;
-    source_proximity_known_coin_count?: number;
-    source_proximity_unknown_coin_count?: number;
-    unknown_coverage_count?: number;
-    degraded?: boolean;
+  entropy: {
+    evaluated: number;
+    eligible: number;
+    omitted: number;
+    results: Array<{
+      subject: string;
+      status: string;
+      reason?: string | null;
+      interpretation_count?: string | null;
+      interpretation_count_lower_bound?: string | null;
+      entropy_bits?: number | null;
+      conditional_on_model?: boolean;
+      investigation: PrivacyInvestigation;
+    }>;
   };
-  unknowns?: UnknownRow[];
-  evidence_drilldowns?: EvidenceDrilldown[];
-  limitations?: UnknownRow[];
+  assumptions: string[];
 }
 
-export interface WorstRisk {
-  kind?: string | null;
-  severity?: string | null;
-  title?: string | null;
-  answer?: string | null;
-  evidence_level?: EvidenceLevel;
-  source?: string | null;
-  finding_id?: string | null;
-}
+export type PrivacyHeadline =
+  | "personal_findings"
+  | "context_only"
+  | "no_local_evidence"
+  | "no_owned_outputs"
+  | "nothing_found"
+  | "unavailable";
 
-export interface AdversaryCard {
-  tier?: string;
-  label?: string;
-  evidence_level?: EvidenceLevel;
-  summary?: {
-    exposed_cluster_count?: number;
-    wallet_count?: number;
-    observer_entity_count?: number;
-    unknown_coverage?: {
-      status?: string;
-      node_count?: number;
-      wallet_count?: number;
-      evidence_level?: EvidenceLevel;
-    };
-  };
-  model_assumptions?: Array<{
-    code?: string;
-    statement?: string;
-    evidence_level?: EvidenceLevel;
-  }>;
-}
-
-export interface WalletPrivacyRow {
-  wallet_id?: string;
-  coin_count?: number;
-  amount_msat?: number;
-  linkage_edge_count?: number;
-  cluster_count?: number;
-  unknown_role_coin_count?: number;
-  evidence_level?: EvidenceLevel;
-}
-
-export interface TransactionPrivacyRow {
-  txid?: string;
-  tell_count?: number;
-  tell_kinds?: string[];
-  wallet_penalty_count?: number;
-  evidence_level?: EvidenceLevel;
-}
-
-export interface UtxoPrivacyRow {
-  coin_id?: string;
-  wallet_id?: string;
-  amount_msat?: number;
-  branch_role?: string;
-  source_proximity?: string;
-  evidence_level?: EvidenceLevel;
-}
-
-export interface TimelineEvent {
-  id?: string;
-  category?: string;
-  kind?: string;
-  txid?: string | null;
-  evidence_level?: EvidenceLevel;
-  detail?: string | null;
-  new_linkage?: boolean;
-}
-
-export interface UnknownRow {
-  source?: string;
-  code?: string;
-  title?: string;
-  message?: string;
-  evidence_level?: EvidenceLevel;
-}
-
-export interface EvidenceDrilldown {
-  section?: string;
-  id?: string;
-  kind?: string;
-  evidence_level?: EvidenceLevel;
-  evidence?: Record<string, unknown>;
-}
-
-export interface PsbtPrivacyResult {
-  summary?: {
-    cluster_merge_delta?: number;
-    unknown_input_count?: number;
-    blast_radius_score?: number;
-    evidence_level?: EvidenceLevel;
-  };
-  findings?: Array<{
-    id?: string;
-    kind?: string;
-    severity?: string;
-    title?: string;
-    detail?: string;
-    evidence_level?: EvidenceLevel;
-  }>;
-  adversary_deltas?: Array<{
-    tier?: string;
-    cluster_merge_delta?: number;
-    newly_exposed_component_count?: number;
-    evidence_level?: EvidenceLevel;
-  }>;
-  what_if?: Array<{
-    scenario?: string;
-    cluster_merge_delta?: number;
-    support_status?: string;
-    evidence_level?: EvidenceLevel;
-  }>;
-  unknowns?: Record<string, unknown>;
-}
-
-export function formatPrivacyInt(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value)
-    ? formatUiNumber(value)
-    : "0";
-}
-
-export function formatPrivacyMsat(value: unknown) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "0 sats";
-  return formatSats(Math.round(value / 1000));
-}
-
-export function shortPrivacyId(value: unknown) {
-  const text = String(value || "");
-  if (text.length <= 24) return text || "unknown";
-  return `${text.slice(0, 12)}...${text.slice(-8)}`;
-}
-
-export function privacyEvidenceTone(level: EvidenceLevel | undefined) {
-  if (level === "exact") {
-    return "border-foreground/20 text-foreground";
-  }
-  if (level === "derived") {
-    return "border-sky-500/30 text-sky-700 dark:text-sky-300";
-  }
-  return "border-amber-500/30 text-amber-800 dark:text-amber-300";
-}
-
-export type PrivacySeverity = "info" | "warning" | "alert";
+export const PERSONAL_RELEVANCE: ReadonlySet<PrivacyFinding["relevance"]> = new Set(["own_spend", "owned_output"]);
 
 /**
- * Severity is the "how bad" axis (info < warning < alert), orthogonal to the
- * evidence "how sure" axis. It uses a SEPARATE visual channel (a left stripe +
- * a mono chip) so the two never collide (both would otherwise reach for amber).
+ * Pick the one-line answer for the report. Personal relevance comes from the
+ * findings themselves (attention_count is a severity count); the backend summary
+ * stays authoritative for population and status, and partial coverage never turns
+ * "nothing found" into a clean result; the coverage badge carries that.
  */
-export function privacySeverity(value: unknown): PrivacySeverity {
-  return value === "alert" || value === "warning" ? value : "info";
-}
-
-export function privacySeverityTone(severity: PrivacySeverity) {
-  if (severity === "alert") {
-    return {
-      text: "text-destructive",
-      dot: "bg-destructive",
-      bg: "bg-destructive/10",
-      stripe: "border-l-destructive",
-    };
+export function privacyHeadline(
+  summary: PrivacyMirrorPayload["summary"],
+  findings: ReadonlyArray<Pick<PrivacyFinding, "relevance">>,
+): PrivacyHeadline {
+  if (findings.some(finding => PERSONAL_RELEVANCE.has(finding.relevance))) return "personal_findings";
+  // Surrounding findings never upgrade an unassessed snapshot: the backend's
+  // unavailable status and empty populations stay unknown, not "nothing personal".
+  if (summary.local_transaction_count === 0) return "no_local_evidence";
+  if (summary.status === "unavailable") {
+    return summary.owned_output_count === 0 ? "no_owned_outputs" : "unavailable";
   }
-  if (severity === "warning") {
-    return {
-      text: "text-amber-700 dark:text-amber-300",
-      dot: "bg-amber-500",
-      bg: "bg-amber-500/10",
-      stripe: "border-l-amber-500",
-    };
+  if (summary.owned_output_count === 0) return "no_owned_outputs";
+  return summary.finding_count > 0 ? "context_only" : "nothing_found";
+}
+
+/** Group repeated presentation rows without combining evidence, counts or assumptions. */
+export function groupPrivacyFindings(findings: PrivacyFinding[]): PrivacyFinding[][] {
+  const groups = new Map<string, PrivacyFinding[]>();
+  for (const finding of findings) {
+    const key = JSON.stringify([finding.code, finding.relevance, finding.authority]);
+    const group = groups.get(key);
+    if (group) group.push(finding);
+    else groups.set(key, [finding]);
   }
-  return {
-    text: "text-sky-700 dark:text-sky-300",
-    dot: "bg-sky-500",
-    bg: "bg-sky-500/10",
-    stripe: "border-l-sky-500",
-  };
-}
-
-/**
- * Count -> severity policy for rows that carry no explicit `severity` field
- * (wallet/transaction/timeline rows). Deliberately conservative: any positive
- * leak signal escalates to `warning` so a real finding is never under-stated;
- * a clean row stays `info`. Kept in one place so the threshold is testable.
- */
-export function transactionRowSeverity(row: {
-  tell_count?: number;
-  wallet_penalty_count?: number;
-}): PrivacySeverity {
-  if ((row.wallet_penalty_count ?? 0) > 0) return "warning";
-  if ((row.tell_count ?? 0) > 0) return "warning";
-  return "info";
-}
-
-function normalizedRef(value: unknown) {
-  return String(value || "").trim().toLowerCase();
-}
-
-export function findPrivacyTransactionRow(
-  payload: PrivacyMirrorPayload | undefined,
-  refs: Array<string | null | undefined>,
-) {
-  const candidates = new Set(refs.map(normalizedRef).filter(Boolean));
-  if (!candidates.size) return undefined;
-  return (payload?.transaction_view ?? []).find((row) =>
-    candidates.has(normalizedRef(row.txid)),
-  );
+  return [...groups.values()];
 }

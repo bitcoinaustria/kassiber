@@ -27,6 +27,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from . import custody_quantity_store as core_custody_quantity_store
 from .custody_evidence import normalize_boundary_amounts, resolve_protocol_scope
+from .transaction_kinds import INBOUND_KIND_TO_RP2_TYPE, normalized_transaction_kind
 
 from ..errors import AppError
 from ..time_utils import parse_iso_datetime_or_none
@@ -73,7 +74,7 @@ _SAMOURAI_TRANSACTION_KINDS = frozenset(
     }
 )
 _EXTERNAL_ORIGIN_KINDS = frozenset(
-    {"income", "revenue", "sale", "exchange_buy", "customer_payment"}
+    {"income", "revenue", "sale", "sell", "exchange_buy", "customer_payment"}
 )
 
 
@@ -248,7 +249,12 @@ def _compute_custody_gap_search(
             # remain in the worklist; skipped ordinary hints keep the search
             # explicitly incomplete rather than creating a global empty cliff.
             structured = [leg for leg in sources if leg.signal_codes]
-            blocking_source_ids.update(leg.id for leg in structured)
+            # A bounded search cannot undo an explicit external classification.
+            # Unknown typed sources still require suspense; classified sources
+            # remain advisory competitors but can never become capacity holds.
+            blocking_source_ids.update(
+                leg.id for leg in structured if not leg.disqualifier_codes
+            )
             structured_worklist = structured[:max_source_groups]
             ordinary_budget = max_source_groups - len(structured_worklist)
             ordinary = [leg for leg in sources if not leg.signal_codes]
@@ -305,7 +311,8 @@ def _compute_custody_gap_search(
                 if return_pool_limited:
                     capacity_limited_search = True
                     blocking_source_ids.update(
-                        leg.id for leg in source_group if leg.signal_codes
+                        leg.id for leg in source_group
+                        if leg.signal_codes and not leg.disqualifier_codes
                     )
                 return_pool = _bounded_return_pool(
                     eligible_returns,
@@ -347,7 +354,8 @@ def _compute_custody_gap_search(
                 # stays explicitly capacity-limited and therefore review-only.
                 capacity_limited_search = True
                 blocking_source_ids.update(
-                    leg.id for leg in source_group if leg.signal_codes
+                    leg.id for leg in source_group
+                    if leg.signal_codes and not leg.disqualifier_codes
                 )
             return_groups = _dedupe_groups((*return_groups, *aggregate_groups))
             for return_group in return_groups:
@@ -743,7 +751,7 @@ def load_gap_search_result(
         SELECT t.id, t.profile_id, t.wallet_id, w.label AS wallet_label,
                w.kind AS wallet_kind, t.occurred_at, t.direction, t.asset,
                t.amount, t.fee, t.amount_includes_fee, t.excluded,
-               t.kind, t.privacy_boundary, t.external_id, t.raw_json
+               t.kind, t.kind_override, t.privacy_boundary, t.external_id, t.raw_json
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
     """
@@ -1090,7 +1098,11 @@ def _structured_evidence_codes(
     transaction_kind = str(_get(row, "kind") or "").strip().lower()
     if transaction_kind in _SAMOURAI_TRANSACTION_KINDS:
         signals.add("structured_samourai_transaction")
-    if transaction_kind in _EXTERNAL_ORIGIN_KINDS:
+    economic_kind = normalized_transaction_kind(row)
+    if economic_kind in _EXTERNAL_ORIGIN_KINDS or (
+        str(_get(row, "direction") or "").strip().lower() == "inbound"
+        and economic_kind in INBOUND_KIND_TO_RP2_TYPE
+    ):
         disqualifiers.add("structured_external_origin")
 
     config = _json_mapping(_get(row, "wallet_config_json"))

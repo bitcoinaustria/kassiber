@@ -1171,6 +1171,7 @@ class CustodyGapSnapshotTests(unittest.TestCase):
                 amount_includes_fee INTEGER NOT NULL DEFAULT 0,
                 excluded INTEGER NOT NULL DEFAULT 0,
                 kind TEXT,
+                kind_override TEXT,
                 privacy_boundary TEXT,
                 raw_json TEXT NOT NULL DEFAULT '{}'
             );

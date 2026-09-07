@@ -1,3 +1,4 @@
+import { SourceFundsFlowGraph } from "./SourceFundsFlowGraph";
 import { findingTranslationKeys } from "./findingCopy";
 import { Trans, useTranslation } from "react-i18next";
 // Leaf panels of the source-of-funds workstation. Presentation only:
@@ -13,7 +14,7 @@ import {
   Eye,
   ExternalLink,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -390,74 +391,15 @@ export function CaseBrief({
   );
 }
 
-// Maps the on-device (light, print-matching) diagram palette to a dark-mode
-// palette. The frozen SVG stays light so it matches the exported PDF; the app
-// recolours it for the dark theme on screen only.
-
-
-const DARK_SVG_SUBS: ReadonlyArray<readonly [RegExp, string]> = [
-  [/#222222/gi, "#e5e7eb"], // ink / text
-  [/#666666/gi, "#9ca3af"], // muted text
-  [/#d9d9d9/gi, "#3f3f46"], // hairlines
-  [/#ffffff/gi, "#09090b"], // surfaces / donut hole / neutral fills
-  [/#f7f7f7/gi, "#18181b"], // soft surface
-  [/#ecfdf5/gi, "#06281f"], // root-source fill
-  [/#16a34a/gi, "#34d399"], // root-source / income
-  [/#fffbeb/gi, "#2a1d07"], // attestation fill
-  [/#d97706/gi, "#fbbf24"], // attestation / manual
-  [/#fff7ed/gi, "#2a1607"], // privacy fill
-  [/#ea580c/gi, "#fb923c"], // privacy stroke / edge
-  [/#e3000f/gi, "#f87171"], // target / accent
-  [/#2563eb/gi, "#60a5fa"], // swap edge / fiat purchase / wallet
-  [/#dbeafe/gi, "#1e3a5f"], // swap legend chip
-  [/#0ea5e9/gi, "#38bdf8"], // exchange
-  [/#65a30d/gi, "#a3e635"], // mining
-  [/#a855f7/gi, "#c084fc"], // gift
-  [/#0891b2/gi, "#22d3ee"], // blockchain
-  [/#6b7280/gi, "#9ca3af"], // unknown
-  [/#dc2626/gi, "#f87171"], // fallback red
-];
-
-
-function toDarkSvg(svg: string): string {
-  return DARK_SVG_SUBS.reduce((acc, [pattern, color]) => acc.replace(pattern, color), svg);
-}
-
-
-function useIsDark(): boolean {
-  const [dark, setDark] = useState(
-    () =>
-      typeof document !== "undefined" &&
-      document.documentElement.classList.contains("dark"),
-  );
-  useEffect(() => {
-    const root = document.documentElement;
-    const sync = () => setDark(root.classList.contains("dark"));
-    sync();
-    const observer = new MutationObserver(sync);
-    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, []);
-  return dark;
-}
-
-
-export function ReportDiagram({ svg, label }: { svg?: string; label: string }) {
-  const dark = useIsDark();
-  if (!svg) {
-    return null;
-  }
-  // Rendered on-device; embedded as a sandboxed <img> so any user-supplied
-  // label text in the SVG can never execute as markup. Recoloured for dark mode.
-  const themed = dark ? toDarkSvg(svg) : svg;
-  const src = `data:image/svg+xml;utf8,${encodeURIComponent(themed)}`;
+/** Original print palette; an inert image preserves SVG labels without executing markup. */
+export function ReportDiagram({ svg, label, wide = false }: { svg?: string; label: string; wide?: boolean }) {
+  if (!svg) return null;
   return (
-    <figure className="space-y-1">
-      <img
-        src={src}
-        alt={label}
-        className="w-full rounded-md border bg-white dark:bg-zinc-950"
-      />
+    <figure className="space-y-2">
+      <div className="overflow-x-auto rounded-md border bg-white">
+        <img src={`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`} alt={label}
+          className={wide ? "w-full min-w-[900px]" : "w-full"} />
+      </div>
       <figcaption className="text-xs text-muted-foreground">{label}</figcaption>
     </figure>
   );
@@ -486,87 +428,9 @@ export function FlowPathPreview({
         ) : null}
       </div>
       {flow?.note && (
-        <p className="text-xs text-muted-foreground">{flow.note}</p>
+        <details className="text-xs text-muted-foreground"><summary className="cursor-pointer">{t("journey.flowLimits")}</summary><p className="mt-2">{flow.note}</p></details>
       )}
-      <div className="overflow-x-auto pb-1">
-        <div className="flex min-w-max items-stretch gap-2">
-          {levels.map((level, levelIndex) => {
-            const nodes = level.nodes.slice(0, 3);
-            const hidden = Math.max(0, level.nodes.length - nodes.length);
-            return (
-              <div
-                key={`${level.role ?? "level"}-${levelIndex}`}
-                className="flex items-center gap-2"
-              >
-                <div className="w-44 rounded-md border bg-background p-2">
-                  <div className="mb-2 text-2xs font-semibold uppercase text-muted-foreground">
-                    {pretty(level.role || "flow")}
-                  </div>
-                  <div className="space-y-1">
-                    {nodes.map((node) => {
-                      const transactionId = stringValue(node.transaction_id);
-                      const clickable =
-                        node.node_type === "transaction" &&
-                        Boolean(transactionId) &&
-                        Boolean(onOpenTransaction);
-                      const nodeClassName = [
-                        "block w-full rounded border px-2 py-1 text-left",
-                        node.deferred_privacy_hop
-                          ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100"
-                          : level.role === "target"
-                            ? "border-primary/35 bg-primary/5"
-                            : "bg-muted/25",
-                        clickable
-                          ? "cursor-pointer transition-colors hover:border-primary/50"
-                          : "",
-                      ].join(" ");
-                      const nodeContent = (
-                        <>
-                          <div className="truncate text-xs font-medium">
-                            {node.label || node.id}
-                          </div>
-                          <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                            {pretty(node.kind || node.node_type || "")}
-                            {node.amount != null
-                              ? ` · ${formatBtc(node.amount, node.asset || "BTC")}`
-                              : ""}
-                          </div>
-                        </>
-                      );
-                      return clickable ? (
-                        <button
-                          key={node.id}
-                          type="button"
-                          className={nodeClassName}
-                          onClick={() => onOpenTransaction?.(transactionId)}
-                          title={t("workstation.openTransactionDetails")}
-                        >
-                          {nodeContent}
-                        </button>
-                      ) : (
-                        <div key={node.id} className={nodeClassName}>
-                          {nodeContent}
-                        </div>
-                      );
-                    })}
-                    {hidden > 0 && (
-                      <div className="rounded border border-dashed px-2 py-1 text-xs text-muted-foreground">
-                        +{hidden} more
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {levelIndex < levels.length - 1 && (
-                  <ArrowRight
-                    className="size-4 shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <SourceFundsFlowGraph flow={flow!} onOpenTransaction={onOpenTransaction} />
     </div>
   );
 }
@@ -979,7 +843,6 @@ export function GateRow({
   const blocker = finding.severity === "blocker";
   const rawHeadline = finding.next_step?.headline?.trim();
   const headline = copy.nextStep ? t(copy.nextStep, { defaultValue: rawHeadline ?? "" }) : rawHeadline;
-  const docAnchor = finding.next_step?.doc_anchor?.trim();
   const action = finding.next_step?.action?.trim();
   const actionLabel = action && ["open_source_creator", "open_link_review", "open_review_queue", "open_source", "open_transaction"].includes(action) ? t(`gapAction.${action}`, { defaultValue: action }) : undefined;
   return (
@@ -993,12 +856,10 @@ export function GateRow({
     >
       <div className="font-medium">{copy.title ? t(copy.title, { defaultValue: pretty(finding.code) }) : pretty(finding.code)}</div>
       <div className="mt-1 text-xs opacity-80">{copy.message ? t(copy.message, { defaultValue: finding.message }) : finding.message}</div>
-      {headline && (
+      {headline && (!onAction || !actionLabel || !copy.nextStep) && (
         <div className="mt-2 text-xs font-medium opacity-90">
           {t("gates.nextStep", { headline })}
-          {docAnchor && (
-            <span className="ml-1 opacity-70">{t("gates.seeDocs", { anchor: docAnchor })}</span>
-          )}
+
         </div>
       )}
       <div className="flex flex-wrap gap-3">
@@ -1195,78 +1056,19 @@ export function FlowLevelDetailPreview({
 }
 
 
-export function DisclosureNarrative({ report }: { report?: SourceFundsPreview }) {
+export function DisclosureSummary({ report }: { report?: SourceFundsPreview }) {
   const { t } = useTranslation("sourceFunds");
-  const txidCount = report?.disclosure_preview.txids.length ?? 0;
-  const evidenceCount = report?.disclosure_preview.attachments.length ?? 0;
-  const hiddenCount = report?.disclosure_preview.excluded.length ?? 0;
-  const sourceCount = report?.source_mix.length ?? 0;
-    const reviewedLinkCount = report?.graph.edges.length ?? 0;
-  const walletLabels =
-    report?.disclosure_preview.wallets_named ??
-    uniqueSorted(
-      (report?.graph.nodes ?? [])
-        .map((node) => stringValue(node.wallet))
-        .filter(Boolean),
-    );
-  const targetLabel = report?.target.label || t("disclosure.narrativeTarget");
-  const purposeLabel = report?.purpose?.label || t("disclosure.narrativePurpose");
-  const revealMode = t(`reveal.${report?.reveal_mode || "standard"}`, { defaultValue: report?.reveal_mode || "standard" });
-
-  return (
-    <section className="space-y-3 rounded-md border bg-muted/20 p-4">
-      <div className="space-y-1">
-        <h2 className="text-base font-semibold">{t("disclosure.summaryTitle")}</h2>
-        <p className="text-sm text-muted-foreground">
-          {t("disclosure.narrative", { purpose: purposeLabel, target: targetLabel, txids: t("disclosure.txidCount", { count: txidCount }), evidence: t("disclosure.evidenceCount", { count: evidenceCount }), links: t("disclosure.linkCount", { count: reviewedLinkCount }), sources: t("disclosure.sourceCount", { count: sourceCount }) })}
-        </p>
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        <DisclosureMetric label={t("disclosure.txids")} value={txidCount} />
-        <DisclosureMetric label={t("evidence.label")} value={evidenceCount} />
-        <DisclosureMetric label={t("caseBrief.metric.reviewedLinks")} value={reviewedLinkCount} />
-        <DisclosureMetric label={t("caseBrief.metric.sources")} value={sourceCount} />
-        <DisclosureMetric label={t("disclosure.metric.hidden")} value={hiddenCount} />
-      </div>
-
-      <div className="grid gap-3 lg:grid-cols-2">
-        <div className="rounded-md border bg-background px-3 py-2">
-          <div className="text-xs font-medium text-muted-foreground">
-            {t("disclosure.revealMode")}</div>
-          <div className="mt-1 font-medium">{revealMode}</div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {report?.disclosure_preview.privacy_note ||
-              t("disclosure.noPreview")}
-          </p>
-        </div>
-        <div className="rounded-md border bg-background px-3 py-2">
-          <div className="text-xs font-medium text-muted-foreground">
-            {t("disclosure.walletLabels")}</div>
-          <div className="mt-1 text-sm">
-            {walletLabels.length > 0 ? walletLabels.join(", ") : t("disclosure.none")}
-          </div>
-          {report?.disclosure_preview.ownership_note && (
-            <p className="mt-1 text-xs text-amber-600 dark:text-amber-500">
-              {report.disclosure_preview.ownership_note}
-            </p>
-          )}
-          <p className="mt-1 text-xs text-muted-foreground">
-            {t("disclosure.walletPrivacyNote")}</p>
-        </div>
-      </div>
-    </section>
+  const preview = report?.disclosure_preview;
+  const walletLabels = preview?.wallets_named ?? uniqueSorted(
+    (report?.graph.nodes ?? []).map(node => stringValue(node.wallet)).filter(Boolean),
   );
-}
-
-
-export function DisclosureMetric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-md border bg-background px-3 py-2">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 font-mono text-lg font-semibold tabular-nums">
-        {formatCount(value)}
-      </div>
+    <div className="space-y-2 text-sm">
+      <p className="text-muted-foreground">
+        {t("review.contents", { references: preview?.txids.length ?? 0, evidence: preview?.attachments.length ?? 0 })}
+      </p>
+      <p><span className="text-muted-foreground">{t("disclosure.walletLabels")}: </span>{walletLabels.length ? walletLabels.join(", ") : t("disclosure.none")}</p>
+      {preview?.ownership_note && <p className="text-xs text-muted-foreground">{t("review.ownership")}</p>}
     </div>
   );
 }

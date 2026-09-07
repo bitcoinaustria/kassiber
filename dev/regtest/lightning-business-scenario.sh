@@ -641,11 +641,14 @@ ensure_actor_wallet_funds() {
   fi
   topup_sat=$((needed_sat - balance_sat + 1000000))
   address="$(btc -rpcwallet="$wallet" getnewaddress "kassiber lightning actor funding" bech32)"
-  btc -rpcwallet="$FAUCET_WALLET" sendtoaddress \
+  if ! btc -rpcwallet="$FAUCET_WALLET" sendtoaddress \
     "$address" \
     "$(sat_to_btc "$topup_sat")" \
     "fund $wallet" \
-    "fund $wallet for lightning business scenario" >/dev/null
+    "fund $wallet for lightning business scenario" >/dev/null; then
+    echo "Failed to fund the regtest mainchain actor." >&2
+    return 2
+  fi
   echo "Funded mainchain actor wallet $wallet with $topup_sat sat."
   return 0
 }
@@ -669,6 +672,9 @@ run_mainchain_topups() {
     fi
     if ensure_actor_wallet_funds "$wallet" "$((amount_sat + buffer_sat))"; then
       funded=1
+    else
+      local status=$?
+      if [ "$status" -gt 1 ]; then return "$status"; fi
     fi
   done < "$PLAN_ROWS_FILE"
 

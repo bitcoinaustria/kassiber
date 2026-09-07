@@ -14,7 +14,7 @@ Scope, so the ledger is not read as more than it is:
   Those are deliberately not recorded rather than recorded with a fabricated
   endpoint, because a row here is meant to name a real host.
 - Records are written at the call site, not intercepted at the socket, so a
-  new egress path is invisible until it records. The `KASSIBER_NO_EGRESS`
+  new egress path is invisible until it records. The `KASSIBER_TEST_NO_EGRESS`
   socket guard in the test suite is what catches the ones that forget.
 - The BDK and LWK observers record once per client construction; the Rust
   client then makes its own requests, so a wide rescan appears as one row.

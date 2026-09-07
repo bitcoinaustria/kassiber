@@ -41,6 +41,8 @@ def _paths(value: str) -> frozenset[str]:
 
 CLI_READ_PATHS = _paths(
     """
+    chain-analysis.psbt.analyze chain-analysis.psbt.compare chain-analysis.psbt.entropy chain-analysis.datasets.query chain-analysis.datasets.list chain-analysis.datasets.get chain-analysis.datasets.preview
+    chain-analysis.overview chain-analysis.trace chain-analysis.path chain-analysis.entropy chain-analysis.cases.list chain-analysis.cases.get chain-analysis.cases.compare chain-analysis.labels.list chain-analysis.acquire.plan
     accounting.capabilities accounting.snapshot accounting.journal accounting.reports
     accounting.account-ledger accounting.document-capabilities accounting.document-get accounting.document-search
     accounting.tax-packs accounting.tax-list accounting.tax-get accounting.tax-preview
@@ -90,6 +92,8 @@ CLI_READ_PATHS = _paths(
 
 CLI_OPERATOR_PATHS = _paths(
     """
+    chain-analysis.datasets.import chain-analysis.datasets.revoke chain-analysis.datasets.discard
+    chain-analysis.cases.save chain-analysis.cases.delete chain-analysis.labels.upsert chain-analysis.labels.delete chain-analysis.labels.import chain-analysis.acquire.apply
     projects.select chat backends.create backends.update backends.set-default
     backends.clear-default context.set workspaces.create profiles.create
     accounts.create wallets.create wallets.update
@@ -183,6 +187,11 @@ CLI_ADMIN_PATHS = _paths(
 
 DAEMON_READ_KINDS = _paths(
     """
+    ui.chain_analysis.entropy.start ui.chain_analysis.jobs.get ui.chain_analysis.jobs.cancel
+    ui.chain_analysis.psbt.analyze ui.chain_analysis.psbt.compare ui.chain_analysis.psbt.entropy ui.chain_analysis.psbt.entropy.start ui.chain_analysis.datasets.query
+    ui.chain_analysis.datasets.list ui.chain_analysis.datasets.get ui.chain_analysis.datasets.preview ui.chain_analysis.datasets.preview.start
+    ui.chain_analysis.ai_context
+    ui.chain_analysis.query ui.chain_analysis.entropy ui.chain_analysis.cases.list ui.chain_analysis.cases.get ui.chain_analysis.cases.compare ui.chain_analysis.labels.list ui.chain_analysis.acquire.plan
     ui.accounting.capabilities ui.accounting.snapshot ui.accounting.journal ui.accounting.reports
     ui.accounting.account_ledger ui.accounting.document_capabilities ui.accounting.document_get ui.accounting.document_search
     ui.accounting.tax_packs ui.accounting.tax_list ui.accounting.tax_get ui.accounting.tax_preview
@@ -244,6 +253,8 @@ DAEMON_READ_KINDS = _paths(
 
 DAEMON_OPERATOR_KINDS = _paths(
     """
+    ui.chain_analysis.datasets.import ui.chain_analysis.datasets.import.start ui.chain_analysis.datasets.revoke ui.chain_analysis.datasets.discard ui.chain_analysis.datasets.discard.start
+    ui.chain_analysis.cases.save ui.chain_analysis.cases.delete ui.chain_analysis.labels.upsert ui.chain_analysis.labels.delete ui.chain_analysis.labels.import ui.chain_analysis.acquire.apply
     ui.transactions.export_csv ui.transactions.export_xlsx
     ui.reports.capital_gains ui.reports.summary ui.reports.balance_sheet
     ui.reports.portfolio_summary ui.reports.tax_summary
@@ -276,7 +287,7 @@ DAEMON_OPERATOR_KINDS = _paths(
     ui.freshness.run ui.freshness.cancel ui.freshness.pause
     ui.freshness.resume ui.workspace.freshness.run ui.workspace.create
     ui.workspace.rename ui.wallets.create ui.wallets.import_file
-    internal.document_import.stage ui.wallets.document_import.preview
+    internal.chain_analysis.stage internal.document_import.stage ui.wallets.document_import.preview
     ui.wallets.document_import.import ui.wallets.import_samourai
     ui.connections.btcpay.create ui.connections.bullbitcoin_wallet.create
     ui.connections.btcpay.discover ui.connections.btcpay.test

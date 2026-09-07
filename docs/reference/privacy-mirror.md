@@ -1,149 +1,98 @@
 # Privacy Mirror
 
-Privacy Mirror is Kassiber's local privacy-analysis surface. It answers four
-questions from the same reduced facts in the desktop GUI, CLI, and assistant:
+Privacy Mirror summarizes the locally observable exposure of the active profile.
+[Chain Analysis](local-chain-analysis.md) is the investigation workbench. They use
+one immutable observation index and one implementation of structural rules,
+clustering, multi-hop patterns, public attribution and conditional entropy.
+Mirror does not maintain its own graph interpreter, weighted score or detector
+catalog. Settings → Privacy retains the separate configuration-posture report.
 
-- what is linkable
-- who can plausibly infer it
-- what local evidence supports that result
-- what is unknown or would worsen in a future spend
+## Surfaces and boundaries
 
-It is advisory-only. It never signs, broadcasts, syncs wallets, fetches chain
-data, refreshes tax journals, selects coins, or mutates accounting data.
-The BDK/LWK observer stores are not inputs to this surface: Privacy Mirror reads
-only Kassiber's reduced transaction, ownership, coverage, and UTXO projections.
+- Desktop: Privacy Mirror (Extras, no developer gate) opens with one headline
+  without counts. Any finding whose relevance is your spend or your output wins
+  (severity plays no role); otherwise the backend summary decides between no
+  local transactions, an unavailable assessment, no owned outputs, surrounding
+  activity only, or no findings within the examined evidence. Surrounding
+  findings never upgrade an unassessed book. Personal findings stay primary;
+  surrounding activity and the executed checks are collapsed disclosures, while
+  coverage status, gaps and truncation remain visible in the headline card.
+  Findings open Chain Analysis with the public observer, physical subject and
+  chain/network preserved and land on the matching subview. Transaction details
+  use the same focused workbench link rather than loading the entire profile's
+  Mirror report.
+- CLI: `kassiber reports privacy-mirror` returns the same report through the
+  shared report service. JSON is schema version 2 inside the existing envelope;
+  table/CSV output lists findings and executed-check coverage.
+- Assistant: `ui_reports_privacy_mirror` is a read-only local tool. The general
+  page prompt reads this safe projection; finding-specific prompts first use
+  `ui.chain_analysis.ai_context` to bind opaque references to the displayed
+  snapshot. A changed snapshot requires a fresh report.
+- PSBT v0/v2 preflight, Payjoin comparison, local dataset management, graph
+  exploration and detailed partition scenarios live in Chain Analysis. The
+  CLI `reports psbt-privacy` retains its reduced local-inventory what-if adapter
+  over the shared parser, features and observer components.
 
-## Surfaces
+These reads do not sync, discover endpoints, contact nodes, fetch missing
+history, select coins, sign, broadcast, rebuild journals or change accounting.
+Network acquisition stays an explicit, consented workbench operation. Selecting
+an existing connection is not permission to contact it implicitly.
 
-- Desktop: the dedicated Privacy Mirror page plus wallet-detail and
-  transaction-detail panels.
-- CLI: `kassiber reports privacy-mirror`.
-- Daemon: `ui.reports.privacy_mirror`.
-- Assistant tool: `ui_reports_privacy_mirror`, a read-only AI tool over the
-  AI/export-redacted payload.
+## Evidence and relevance
 
-PSBT preflight analysis is available locally through the desktop PSBT panel and
-CLI `kassiber reports psbt-privacy`. The AI tool does not receive raw PSBT
-contents. Assistant answers may refer only to the redacted findings already in
-the Privacy Mirror payload unless a future tool explicitly reduces a PSBT to
-redacted findings first.
+`core.privacy_mirror` projects `chain_analysis.analyze_snapshot` using the public
+observer. Observer visibility is applied before traversal and analytics. Private
+wallet ownership only selects relevance: **own spend**, **owned output**,
+**received context**, or **nearby context**. Private branch/change metadata,
+source-funds narratives and private labels do not become public links.
 
-## Methodology
+Mirror groups canonical findings and hypothesis edges by their transaction
+anchor. Each result keeps its rule code, evidence authority, assumptions,
+limitations, canonical source references and snapshot-bound investigation query.
+Counterparty structure is contextual information, not a warning against the
+receiving wallet. Own-spend common-input/change hypotheses and script reuse can
+need attention, but they remain conditional. Physical spends establish
+connectivity, not common ownership, input-to-output allocation or taint.
 
-Privacy Mirror combines two existing local models:
+CoinJoin/Payjoin evidence suppresses common-input and change ownership
+assumptions. An imported private collaboration marker is an observer exclusion,
+not proof that a passive observer can identify the protocol. Public structural
+candidates remain hypotheses. Missing, stale and conflicting observations are
+coverage limitations rather than current actionable findings. Duplicate wallet
+observations do not multiply physical transactions or linkage findings.
 
-- the watch-only linkage graph from local transaction and UTXO inventory
-- the privacy-hygiene posture snapshot for backend, AI-provider, journal, and
-  coverage facts
+Public attribution uses only locally imported public dataset claims. A sourced
+label or path to one is inspectable context, not verified identity, payment or
+misconduct. No labels available locally means attribution is unavailable; it
+never means an outside analyst has no labels.
 
-The linkage graph contributes cluster counts, adversary views, wallet rows,
-transaction tells, UTXO rows, timeline events, evidence drilldowns, and
-coverage gaps. The hygiene snapshot contributes local configuration posture,
-privacy quarantines, off-device AI/backend counts, and limitations. The report
-selects the worst current risk by severity first and then by available evidence,
-so it can answer "what should I look at first?".
+## Coverage and computation limits
 
-## Privacy score
+The report compares examined transactions with locally available transactions,
+not the whole blockchain. It lists missing, stale and conflicting nodes, actual
+rule-family coverage and stopping reasons. It returns at most 100 findings from
+an overview bounded to 2,000 nodes, 6,000 edges and depth 12; counts and omitted
+work stay visible. Empty or unowned evidence is unavailable. A report without
+priority findings is not a privacy guarantee.
 
-The desktop surface leads with an at-a-glance **privacy score (0–100) and letter
-grade (A+ ≥90 / B ≥75 / C ≥50 / D ≥25 / F <25)**. It is computed in the daemon
-(`_privacy_mirror_score`) from real local quantities, deterministic, and never
-performs a chain lookup:
+Conditional partition counts use the shared solver on at most 12 selected
+transactions, prioritizing own spends. Computation is capped at 5,000 states and
+25 ms per transaction, and 300 ms overall. Exact results, proved lower bounds,
+unsupported models and omissions remain distinct. Liquid confidential values,
+unknown amounts and joint-payment assumptions cannot be filled in by a score.
+These counts describe an explicit model, never ownership probabilities. The
+workbench can inspect the same transaction with a larger explicit budget and
+participant-fee scenarios.
 
-```
-score = 100 − 100 × (0.55 × wallet_linkage_fraction + 0.45 × leak_fraction)   (clamped 0–100)
-```
+## Audience projection
 
-- `wallet_linkage_fraction` — share of wallets that carry at least one linkage
-  edge (common-input / change / address-reuse edges).
-- `leak_fraction` — each transaction contributes the **weight of its strongest
-  tell** (not a flat 1.0), averaged over the active-transaction count. Tell
-  weights mirror am-i-exposed's heuristic severity: `sender_common_input` 1.0
-  (h3), `fee_fingerprint` 0.3 (h6), `sender_rbf` 0.3 (h11), `op_return_output`
-  0.25 (h7); unmapped tells get a 0.2 floor. MAX (not sum) per transaction
-  because a transaction's tells are correlated.
+The desktop daemon receives local physical references for navigation. CLI
+exports and AI dispatch instead receive book/process-scoped `ca-ref:` handles
+through the existing Chain Analysis provider projection. They preserve rule
+codes, counts and limitations while excluding raw chain identities and dataset
+prose. Descriptors, xpubs, raw wallet configuration, endpoints, credentials,
+derivation paths and raw PSBT bytes are not part of this report.
 
-Uncertainty is kept **separate** from the score: coins whose origin is unknown
-lower a `coverage_ratio`, never the score itself, so a confident grade cannot
-hide missing data. The score never stands alone — the worst risk, the ranked
-severity-graded findings, per-item evidence levels, and unknown/degraded
-coverage are all shown alongside it.
-
-### Heuristic coverage
-
-The surface mirrors am-i-exposed's heuristic catalog (33/34 heuristics) with an
-honest **"Heuristics checked"** panel: each heuristic is marked `computed` (the
-local engine emits an equivalent signal), `partial` (locally derivable with
-modest work), or `not_local`. Roughly 14 are computed locally. The `not_local`
-set — transaction entropy / anonymity sets (Boltzmann), known-entity and
-exchange attribution, timing, and multi-hop lineage (peel / tx0 / ricochet /
-post-mix / BIP47) — stays out of scope by design: it would require an entropy
-engine, an entity database, or a chain fetch, none of which Kassiber ships.
-These are shown as unavailable rather than faked.
-
-PSBT preflight uses the same local graph to score unsigned transaction inputs
-and outputs: cluster-merge delta, per-adversary delta, blast-radius score,
-change/fingerprint tells, and unknown inputs. What-if rows are bounded
-simulations: receive reuse versus fresh receive and hypothetical consolidation.
-They do not recommend which coins to spend.
-
-## Evidence Levels
-
-Every finding, row, unknown, and summary carries `evidence_level`:
-
-- `exact`: directly counted from local stored rows, such as current UTXO rows or
-  a known same-cluster spend.
-- `derived`: inferred from deterministic local rules, such as common-input
-  linkage or adversary summaries over the reduced graph.
-- `unknown`: the local model cannot prove the claim because an input, source,
-  branch role, graph edge, or coverage area is missing.
-
-Assistant and CLI output keep these English values deterministic. The desktop UI
-translates their labels in English and German.
-
-## Degraded States
-
-Unknown or degraded rows are first-class output. Common causes include:
-
-- wallet sources without watch-only UTXO inventory
-- imports that lack vin/vout detail
-- unknown PSBT inputs
-- stale or missing local sync coverage
-- unsupported Liquid unblinding or source-proximity data
-- privacy quarantines that need review
-
-The UI should show the degraded state near the affected wallet, transaction,
-UTXO, timeline row, or PSBT result. It should not hide uncertainty behind a
-general "all clear" badge.
-
-## Redaction
-
-`ui.reports.privacy_mirror`, `kassiber reports privacy-mirror`, and
-`ui_reports_privacy_mirror` are AI/export-safe by construction. They omit:
-
-- addresses
-- scripts and scriptPubKeys
-- descriptors and xpubs
-- backend URLs, tokens, auth headers, and cookies
-- wallet config JSON and wallet files
-- raw importer JSON and raw transaction JSON
-- branch labels, branch/index values, and derivation paths
-
-The local desktop GUI may still use existing first-party permissions elsewhere,
-for example reveal flows that require local user acknowledgement or backend
-settings screens that show operator-facing endpoint rows. Those local UI
-permissions are separate from the Privacy Mirror payload and are never what the
-assistant receives.
-
-## Non-Goals
-
-Privacy Mirror is not:
-
-- coin selection advice
-- a signing or broadcasting path
-- a tax/accounting mutation
-- an external lookup service
-- a privacy guarantee
-- a replacement for reviewing raw wallet software before spending
-
-It is a local mirror over the evidence Kassiber already has.
+Legacy private provenance and reviewed source-funds projections remain separate
+from this public-observer report. They do not grant public attribution or
+accounting authority. See [source-of-funds review](source-of-funds-review.md).

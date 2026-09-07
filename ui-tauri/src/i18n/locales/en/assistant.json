@@ -71,6 +71,9 @@
     "scrollToTop": "Scroll to top"
   },
   "message": {
+    "imageReference": "Image reference",
+    "openImage": "Open image: {{name}}",
+    "imageOpenFailed": "The image could not be opened.",
     "toolUsage": "Tool usage",
     "thinking": "Thinking",
     "thoughts": "Thoughts",

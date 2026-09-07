@@ -16,7 +16,9 @@ from .onchain import (
     output_value_sats,
     stored_tx_mapping,
 )
+from .custody_evidence import resolve_protocol_scope
 from .repo import current_context_snapshot
+from .privacy_hops import normalize_privacy_boundary, privacy_boundary_from_import_record
 
 
 BASE_SCORE = 70
@@ -30,6 +32,7 @@ INBOUND_COUNTERPARTY_FINDINGS = {
     "change_position_fingerprint",
     "change_type_fingerprint",
     "common_input_ownership",
+    "op_return_metadata",
     "rbf_signal",
     "round_fee_rate",
     "round_output_amount",
@@ -38,6 +41,11 @@ INBOUND_COUNTERPARTY_FINDINGS = {
     "wallet_fingerprint_locktime",
     "wallet_fingerprint_version",
     "wallet_fingerprint_witness",
+    "unusual_transaction_version",
+    "ineffective_absolute_locktime",
+    "relative_lock_constraints",
+    "consistent_low_r_encoding",
+    "nondefault_sighash",
 }
 ROUND_BTC_DENOMINATIONS_SATS = {
     100_000,
@@ -211,8 +219,17 @@ def build_privacy_hygiene_snapshot(
             retryable=False,
         )
 
+    # A wallet/transaction filter is a presentation scope, not an evidence
+    # boundary. Another connection may retain the collaboration marker for the
+    # same physical transaction, even when excluded from accounting.
+    collaboration_context = _collaboration_context(
+        _load_transactions(
+            conn, profile_id, wallet_id=None, transaction_ref=None,
+            include_excluded=True,
+        )
+    )
     tx_results = [
-        _score_transaction(row, inventory_index)
+        _score_transaction(row, inventory_index, collaboration_context)
         for row in transactions
     ]
     wallet_results = _score_wallets(wallets, inventory, tx_results)
@@ -417,9 +434,12 @@ def _load_transactions(
     *,
     wallet_id: str | None,
     transaction_ref: str | None,
+    include_excluded: bool = False,
 ) -> list[sqlite3.Row]:
     params: list[Any] = [profile_id]
-    filters = ["t.profile_id = ?", "t.excluded = 0"]
+    filters = ["t.profile_id = ?"]
+    if not include_excluded:
+        filters.append("t.excluded = 0")
     if wallet_id is not None:
         filters.append("t.wallet_id = ?")
         params.append(wallet_id)
@@ -431,7 +451,8 @@ def _load_transactions(
         SELECT
             t.*,
             w.label AS wallet_label,
-            w.kind AS wallet_kind
+            w.kind AS wallet_kind,
+            w.config_json AS wallet_config_json
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         WHERE {" AND ".join(filters)}
@@ -445,18 +466,23 @@ def _inventory_indexes(
     rows: list[sqlite3.Row],
     wallet_by_id: Mapping[str, sqlite3.Row],
 ) -> dict[str, Any]:
-    outpoints: dict[tuple[str, int], dict[str, Any]] = {}
-    scripts: dict[str, dict[str, Any]] = {}
+    outpoints: dict[tuple[str, str, str, int], dict[str, Any]] = {}
+    scripts: dict[tuple[str, str, str], dict[str, Any]] = {}
     wallet_inventory: dict[str, list[sqlite3.Row]] = defaultdict(list)
     for row in rows:
         wallet_inventory[row["wallet_id"]].append(row)
+        try:
+            protocol = resolve_protocol_scope({key: row[key] for key in ("chain", "network", "asset")})
+            domain = (protocol.protocol_chain, protocol.network)
+        except (ValueError, AppError):
+            continue
         txid = _txid_or_none(row["txid"])
         try:
             vout = int(row["vout"])
         except (TypeError, ValueError):
             vout = -1
         if txid and vout >= 0:
-            key = (txid, vout)
+            key = (*domain, txid, vout)
             if key in outpoints:
                 outpoints[key]["ambiguous"] = True
             else:
@@ -464,11 +490,12 @@ def _inventory_indexes(
         script = _hex_or_none(row["script_pubkey"])
         if script:
             owner = _inventory_owner(row, wallet_by_id)
-            existing = scripts.get(script)
+            script_key = (*domain, script)
+            existing = scripts.get(script_key)
             if existing is None:
-                scripts[script] = owner
+                scripts[script_key] = owner
             elif existing.get("wallet_id") != owner.get("wallet_id"):
-                scripts[script] = {
+                scripts[script_key] = {
                     "wallet_id": None,
                     "wallet_label": "",
                     "amount_sats": 0,
@@ -503,9 +530,41 @@ def _inventory_owner(
     }
 
 
+def _transaction_identity(row: Mapping[str, Any]) -> tuple[str, str, str] | None:
+    try:
+        scope = resolve_protocol_scope(row)
+    except (ValueError, AppError):
+        return None
+    if scope.protocol_chain not in {"bitcoin", "liquid"}:
+        return None
+    tx = stored_tx_mapping(row.get("raw_json"), allow_nested=True) or {}
+    raw_txid = _txid_or_none(tx.get("txid"))
+    external_txid = _txid_or_none(row.get("external_id"))
+    if raw_txid and external_txid and raw_txid != external_txid:
+        return None
+    txid = raw_txid or external_txid
+    return (scope.protocol_chain, scope.network, txid) if txid else None
+
+
+def _collaboration_context(
+    rows: list[sqlite3.Row],
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    context: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for stored in rows:
+        row = dict(stored)
+        identity = _transaction_identity(row)
+        if identity is None:
+            continue
+        evidence = collaborative_transaction_evidence(row, _json_obj(row["raw_json"]))
+        if evidence:
+            context[identity] = evidence
+    return context
+
+
 def _score_transaction(
     row: sqlite3.Row,
     inventory_index: Mapping[str, Any],
+    collaboration_context: Mapping[tuple[str, str, str], Mapping[str, Any]],
 ) -> dict[str, Any]:
     raw = _json_obj(row["raw_json"])
     parsed = _parse_local_transaction(row, raw, inventory_index)
@@ -552,15 +611,26 @@ def _score_transaction(
             )
         )
 
-    if not coinjoin:
+    identity = _transaction_identity(dict(row))
+    collaboration = (
+        collaboration_context.get(identity) if identity is not None else None
+    ) or collaborative_transaction_evidence(dict(row), raw)
+    if collaboration and collaboration["kind"] == "unknown":
+        findings.append(_finding(
+            "transaction_coverage_gap", "info", 0, scope="transaction", count=1,
+            details={"reason": "invalid_privacy_metadata"},
+        ))
+    if not collaboration:
         findings.extend(_common_input_findings(parsed))
         findings.extend(_round_output_findings(parsed))
         findings.extend(_unnecessary_input_findings(parsed))
 
     findings.extend(_fee_findings(parsed))
     findings.extend(_script_type_findings(parsed))
-    findings.extend(_change_fingerprint_findings(parsed))
-    findings.extend(_wallet_fingerprint_findings(parsed))
+    if not collaboration:
+        findings.extend(_change_fingerprint_findings(parsed))
+    if identity is not None and identity[0] == "bitcoin":
+        findings.extend(_structural_feature_findings(raw, collaboration=collaboration))
     findings.extend(_metadata_findings(parsed))
     findings.extend(_taproot_findings(parsed))
     findings = _apply_direction_attribution(row, findings)
@@ -612,6 +682,13 @@ def _parse_local_transaction(
     raw: Mapping[str, Any],
     inventory_index: Mapping[str, Any],
 ) -> dict[str, Any]:
+    try:
+        protocol = resolve_protocol_scope(dict(row))
+        domain = (protocol.protocol_chain, protocol.network)
+    except (ValueError, AppError):
+        return _empty_parsed("none", "unsupported_protocol_scope")
+    if protocol.protocol_chain not in {"bitcoin", "liquid"}:
+        return _empty_parsed("none", "unsupported_protocol_scope")
     raw = stored_tx_mapping(raw, allow_nested=True) or {}
     vin = raw.get("vin")
     vout = raw.get("vout")
@@ -620,16 +697,20 @@ def _parse_local_transaction(
 
     current_txid = _txid_or_none(raw.get("txid")) or _txid_or_none(row["external_id"])
     inputs = []
+    ambiguous_ownership = 0
     for index, entry in enumerate(vin):
         if not isinstance(entry, Mapping):
             continue
         outpoint = input_outpoint(entry)
         txid, vout_index = outpoint if outpoint is not None else (None, None)
         owner = (
-            inventory_index["outpoints"].get(outpoint)
+            inventory_index["outpoints"].get((*domain, *outpoint))
             if outpoint is not None
             else None
         )
+        if owner is not None and owner.get("ambiguous"):
+            ambiguous_ownership += 1
+            owner = None
         prevout = entry.get("prevout") if isinstance(entry.get("prevout"), Mapping) else {}
         script = normalized_script_hex(input_script(entry))
         address = output_address(prevout)
@@ -653,7 +734,6 @@ def _parse_local_transaction(
         )
 
     outputs = []
-    ambiguous_ownership = 0
     for index, entry in enumerate(vout):
         if not isinstance(entry, Mapping):
             continue
@@ -665,9 +745,12 @@ def _parse_local_transaction(
         value_sats = output_value_sats(entry)
         owner = None
         if current_txid is not None:
-            owner = inventory_index["outpoints"].get((current_txid, n))
+            owner = inventory_index["outpoints"].get((*domain, current_txid, n))
+        if owner is not None and owner.get("ambiguous"):
+            ambiguous_ownership += 1
+            owner = None
         if owner is None and script is not None:
-            owner = inventory_index["scripts"].get(script)
+            owner = inventory_index["scripts"].get((*domain, script))
             if owner is not None and owner.get("ambiguous"):
                 ambiguous_ownership += 1
                 owner = None
@@ -742,7 +825,7 @@ def _coinjoin_signal(
     )
     most_common_count = value_counts.most_common(1)[0][1] if value_counts else 0
     boundary = str(row["privacy_boundary"] or "").strip().lower()
-    raw_likely = bool(raw.get("islikelycoinjoin") or raw.get("is_likely_coinjoin"))
+    raw_likely = _stored_privacy_boundary(raw) == "coinjoin"
     if boundary == "coinjoin" or raw_likely:
         return {
             "pattern": "reviewed_or_imported_coinjoin",
@@ -754,7 +837,7 @@ def _coinjoin_signal(
                 else "imported"
             ),
         }
-    if 5 <= len(outputs) <= 12 and most_common_count >= 5:
+    if parsed["input_count"] >= 5 and 5 <= len(outputs) <= 12 and most_common_count >= 5:
         return {
             "pattern": "equal_output_coinjoin",
             "participant_count": most_common_count,
@@ -768,6 +851,61 @@ def _coinjoin_signal(
             "impact": 20,
             "evidence_level": "heuristic",
         }
+    return None
+
+
+def _stored_privacy_boundary(raw: Mapping[str, Any]) -> str | None:
+    # Importers reject invalid markers. A read of legacy stored data must instead
+    # preserve uncertainty without preventing inspection of the remaining book.
+    try:
+        return privacy_boundary_from_import_record(raw)
+    except AppError:
+        return "unknown"
+
+
+def collaborative_transaction_evidence(
+    row: Mapping[str, Any], raw: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Return an explicit or shape-based collaboration boundary, never ownership."""
+    marker = row.get("privacy_boundary")
+    boundary = normalize_privacy_boundary(marker)
+    if marker not in (None, "") and boundary is None:
+        boundary = "unknown"
+    if boundary is None:
+        boundary = _stored_privacy_boundary(raw)
+    if boundary == "unknown":
+        return {"kind": "unknown", "source": "invalid_privacy_metadata", "evidence_level": "unavailable"}
+    if boundary in {"coinjoin", "payjoin", "collaborative", "payment_in_coinjoin"}:
+        return {
+            "kind": boundary,
+            "source": "reviewed_or_imported_privacy_boundary",
+            "evidence_level": "reviewed" if row.get("review_status") in {"accepted", "completed", "reviewed"} else "imported",
+        }
+    tx = stored_tx_mapping(raw, allow_nested=True) or {}
+    vin, vout = tx.get("vin"), tx.get("vout")
+    if not isinstance(vin, list) or not isinstance(vout, list):
+        return None
+    parsed = {
+        "input_count": len(vin),
+        "outputs": [
+            {"value_sats": output_value_sats(item), "op_return": _is_op_return(item, normalized_script_hex(output_script(item)))}
+            for item in vout if isinstance(item, Mapping)
+        ],
+    }
+    signal = _coinjoin_signal({"privacy_boundary": None, "review_status": None}, {}, parsed)
+    if signal:
+        return {"kind": "coinjoin", "source": signal["pattern"], "evidence_level": "heuristic"}
+    return None
+
+
+def rounded_fee_rate(fee_sats: int | None, vsize: int | None) -> int | None:
+    """One weak observed rate pattern; fee presence alone is not a fingerprint."""
+    if fee_sats is None or not vsize or vsize <= 0:
+        return None
+    rate = fee_sats / vsize
+    rounded = int(round(rate))
+    if abs(rate - rounded) < 0.01 and rounded in {1, 2, 3, 5, 10, 15, 20, 25, 50, 100}:
+        return rounded
     return None
 
 
@@ -900,20 +1038,14 @@ def _fee_findings(parsed: Mapping[str, Any]) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     fee_sats = parsed["fee_sats"]
     vsize = parsed["vsize"]
-    if fee_sats is not None and vsize and vsize > 0:
-        fee_rate = fee_sats / vsize
-        rounded = int(round(fee_rate))
-        if abs(fee_rate - rounded) < 0.01 and rounded in {1, 2, 3, 5, 10, 15, 20, 25, 50, 100}:
-            findings.append(
-                _finding(
-                    "round_fee_rate",
-                    "low",
-                    -3,
-                    scope="transaction",
-                    count=1,
-                    details={"sat_vb": rounded},
-                )
+    rounded = rounded_fee_rate(fee_sats, vsize)
+    if rounded is not None:
+        findings.append(
+            _finding(
+                "round_fee_rate", "low", -3, scope="transaction",
+                count=1, details={"sat_vb": rounded},
             )
+        )
     sequences = [
         item["sequence"] for item in parsed["inputs"] if item["sequence"] is not None
     ]
@@ -996,49 +1128,30 @@ def _change_fingerprint_findings(parsed: Mapping[str, Any]) -> list[dict[str, An
     return findings
 
 
-def _wallet_fingerprint_findings(parsed: Mapping[str, Any]) -> list[dict[str, Any]]:
-    findings: list[dict[str, Any]] = []
-    locktime = parsed["locktime"]
-    if locktime not in (None, 0):
-        findings.append(
-            _finding(
-                "wallet_fingerprint_locktime",
-                "low",
-                -3,
-                scope="transaction",
-                count=1,
-                details={},
-            )
-        )
-    version = parsed["version"]
-    if version is not None and version not in {1, 2}:
-        findings.append(
-            _finding(
-                "wallet_fingerprint_version",
-                "low",
-                -3,
-                scope="transaction",
-                count=1,
-                details={"version": version},
-            )
-        )
-    witness_counts = [
-        item["witness_items"]
-        for item in parsed["inputs"]
-        if item["witness_items"] is not None and item["witness_items"] > 0
-    ]
-    if len(witness_counts) >= 2 and len(set(witness_counts)) == 1:
-        findings.append(
-            _finding(
-                "wallet_fingerprint_witness",
-                "low",
-                -2,
-                scope="transaction",
-                count=len(witness_counts),
-                details={"witness_items": witness_counts[0]},
-            )
-        )
-    return findings
+def _structural_feature_findings(raw: Mapping[str, Any], *, collaboration: Mapping | None) -> list[dict[str, Any]]:
+    # Imported lazily to preserve the core's existing privacy/index dependency
+    # direction. The shared extractor never returns raw scripts or witnesses.
+    from .chain_analysis.features import (
+        PERSISTED_FEATURE_KEY, extract_transaction_features, evaluate_features,
+        normalize_persisted_features,
+    )
+
+    transaction = stored_tx_mapping(raw, allow_nested=True) or {}
+    features = normalize_persisted_features(
+        transaction.get(PERSISTED_FEATURE_KEY), subject_id=None, source="stored_transaction",
+    ) or extract_transaction_features(transaction, subject_id=None)
+    # Other hygiene rules already cover RBF, mixed scripts and equal-output
+    # patterns. New structural tells are evidence context and carry no score.
+    selected = {
+        "unusual_transaction_version", "ineffective_absolute_locktime",
+        "relative_lock_constraints", "consistent_low_r_encoding", "nondefault_sighash",
+    }
+    return [_finding(
+        item["code"], "info", 0, scope="transaction", count=1,
+        evidence_level="heuristic" if item["authority"] == "hypothesis" else "ground_truth",
+        details={"rule_version": item["rule_version"], "feature_codes": item["feature_codes"],
+                 "assumptions": item["assumptions"], "contradictions": item["contradictions"]},
+    ) for item in evaluate_features(features, collaboration=collaboration) if item["code"] in selected]
 
 
 def _metadata_findings(parsed: Mapping[str, Any]) -> list[dict[str, Any]]:

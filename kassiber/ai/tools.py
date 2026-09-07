@@ -9,6 +9,7 @@ import re
 import sys
 from typing import Any, Literal
 
+from .chain_analysis_tools import tool_specs as chain_analysis_tool_specs
 from ..errors import AppError
 from ..redaction import is_sensitive_key, redact_secret_text
 
@@ -1076,13 +1077,14 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.reports.privacy_mirror",
         description=(
-            "Read the active profile's redacted Privacy Mirror payload and its "
-            "precomputed worst-risk answer. Use this for questions such as what "
-            "is linkable, who can infer it, what proves it, what is unknown, or "
-            "what future PSBT/what-if analysis would worsen. The payload is "
-            "local-only, advisory-only, read-only, and omits addresses, scripts, "
-            "descriptors, xpubs, backend URLs/tokens, wallet config, raw_json, "
-            "branch/index values, derivation paths, and raw PSBT bytes."
+            "Read the active profile's public-observer Privacy Mirror: personal "
+            "linkage findings, counterparty context, executed checks, missing "
+            "evidence and bounded conditional interpretation counts from the "
+            "shared local Chain Analysis engine. No privacy grade or ownership "
+            "probability is inferred. Use Chain Analysis tools for deeper queries "
+            "and PSBT analysis. Graph handoffs use opaque scoped references; raw "
+            "chain identities, private labels and wallet configuration are omitted. "
+            "This read is local-only, advisory-only and does not contact a node."
         ),
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
@@ -3379,7 +3381,13 @@ _REVIEW_TOOL_CATALOG = (
 
 from .accounting_tasks import catalog as accounting_task_catalog
 
-TOOL_CATALOG: tuple[ToolEntry, ...] = (*_BASE_TOOL_CATALOG, *_EXPANDED_TOOL_CATALOG, *_REVIEW_TOOL_CATALOG, *accounting_task_catalog(ToolEntry))
+TOOL_CATALOG: tuple[ToolEntry, ...] = (
+    *_BASE_TOOL_CATALOG,
+    *_EXPANDED_TOOL_CATALOG,
+    *_REVIEW_TOOL_CATALOG,
+    *(ToolEntry(**spec) for spec in chain_analysis_tool_specs()),
+    *accounting_task_catalog(ToolEntry),
+)
 
 TOOL_CAPABILITY_NAMES = (
     "core",
@@ -3438,7 +3446,7 @@ def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
         "ui.connections.node.snapshot",
     }:
         capabilities.update({"wallets", "operations"})
-    if "privacy" in name or name == "ui.egress.snapshot":
+    if "privacy" in name or name == "ui.egress.snapshot" or name.startswith("ui.chain_analysis."):
         capabilities.add("privacy")
     if name.startswith("ui.source_funds."):
         capabilities.add("source_funds")
@@ -3545,7 +3553,7 @@ def select_tool_capabilities(
             "node", "channel",
         ),
         "loans": ("loan", "collateral", "borrowed", "principal", "liquidation", "darlehen", "kredit"),
-        "privacy": ("privacy", "linkable", "egress", "outbound", "psbt"),
+        "privacy": ("privacy", "linkable", "egress", "outbound", "psbt", "chain-analysis", "chain analysis", "chainanalysis", "chainanalyse", "trace", "tracing", "entropy", "clustering", "payjoin"),
         "source_funds": ("source of funds", "source-of-funds", "provenance", "audit package", "proof of funds", "mittelherkunft", "herkunftsnachweis", "herkunft der mittel"),
         "merchant": ("btcpay", "invoice", "receipt", "merchant", "commercial", "document"),
         "transfers": (

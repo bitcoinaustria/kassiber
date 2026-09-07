@@ -273,7 +273,7 @@ function toDashboardTransaction(
   const status: TransactionStatus = tx.conf > 0 ? "completed" : "pending";
   const accountLabel = tx.account.toLowerCase();
   const chain = tx.chain?.trim().toLowerCase();
-  const paymentMethod =
+  const paymentMethod = tx.paymentMethod ?? (
     accountLabel.includes("lightning") ||
     accountLabel.includes("ln") ||
     accountLabel.includes("phoenix")
@@ -284,7 +284,7 @@ function toDashboardTransaction(
         ? "Liquid"
         : chain === "bitcoin"
           ? "On-chain"
-        : "On-chain";
+        : "On-chain");
   return {
     id: tx.id,
     txnId: tx.externalId || tx.id || `TX-${index + 1}`,
@@ -1724,6 +1724,18 @@ function matchesTransactionDeepLink(txn: Transaction, transactionId: string) {
   return [txn.id, txn.txnId, txn.explorerId]
     .filter(Boolean)
     .some((value) => value?.toLowerCase() === target);
+}
+
+export function resolveTransactionDeepLink(
+  records: Transaction[], targetId: string, focusedRecord?: Transaction | null,
+): Transaction | undefined {
+  const target = targetId.trim().toLowerCase();
+  // A chain txid may belong to several wallet legs. It is an alias, never the
+  // identity of the record being inspected or edited.
+  if (focusedRecord?.id.toLowerCase() === target) return focusedRecord;
+  return records.find(record => record.id.toLowerCase() === target)
+    ?? (focusedRecord && matchesTransactionDeepLink(focusedRecord, target) ? focusedRecord : undefined)
+    ?? records.find(record => matchesTransactionDeepLink(record, target));
 }
 
 function flowChartSelectionLabel(

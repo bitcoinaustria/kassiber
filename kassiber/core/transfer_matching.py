@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import bisect
 import json
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, Mapping, Optional, Sequence
@@ -771,6 +772,11 @@ def _payment_hash_amounts_conserve(out_row: Mapping, in_row: Mapping) -> bool:
     )
 
 
+def _compatible_network_domains(left: str | None, right: str | None) -> bool:
+    """Unknown scope stays reviewable; known distinct networks cannot move funds."""
+    return left is None or right is None or left == right
+
+
 def _match_by_refund_link(
     out_rows: Sequence[Mapping], in_rows: Sequence[Mapping]
 ) -> list[tuple[Mapping, Mapping, "_ProviderSwapEvidence"]]:
@@ -801,7 +807,11 @@ def _match_by_refund_link(
         if not funding_txid:
             continue
         in_asset = str(_record_get(in_row, "asset") or "").upper()
-        funding_rows = out_by_external_id.get(str(funding_txid).lower(), [])
+        in_domain = bitcoin_network_domain(in_row)
+        funding_rows = [
+            row for row in out_by_external_id.get(str(funding_txid).lower(), [])
+            if _compatible_network_domains(bitcoin_network_domain(row), in_domain)
+        ]
         # One transaction row cannot distinguish two separate HTLC lockups in
         # the same funding transaction.  Do not manufacture exact candidates
         # when the imported source has duplicate funding rows.
@@ -1016,12 +1026,28 @@ def _match_by_provider_swap_id(
     pairs: list[tuple[Mapping, Mapping, _ProviderSwapEvidence, bool]] = []
     for key, outs in out_by_key.items():
         ins = in_by_key.get(key, [])
-        unique_key = len(outs) == 1 and len(ins) == 1
+        out_domains = {id(row): bitcoin_network_domain(row) for row, _ in outs}
+        in_domains = {id(row): bitcoin_network_domain(row) for row, _ in ins}
+        out_counts = Counter(out_domains[id(row)] for row, _ in outs)
+        in_counts = Counter(in_domains[id(row)] for row, _ in ins)
         for out_row, out_evidence in outs:
+            out_domain = out_domains[id(out_row)]
             for in_row, in_evidence in ins:
-            # Failed-swap refunds can legitimately return to the same wallet that
-            # funded the lockup, so provider evidence intentionally does not apply
-            # the same-wallet skip used by payment-hash swap claims.
+                in_domain = in_domains[id(in_row)]
+                if not _compatible_network_domains(out_domain, in_domain):
+                    continue
+                # Unknown-network duplicates still compete with every matching
+                # domain. A known unrelated network must not demote a unique pair.
+                compatible_outs = (
+                    len(outs) if in_domain is None
+                    else out_counts[in_domain] + out_counts[None]
+                )
+                compatible_ins = (
+                    len(ins) if out_domain is None
+                    else in_counts[out_domain] + in_counts[None]
+                )
+                unique_key = compatible_outs == 1 and compatible_ins == 1
+                # Failed-swap refunds can return to the funding wallet.
                 evidence = _merge_provider_evidence(out_evidence, in_evidence)
                 if not _provider_route_matches_row(evidence, out_row, side="out"):
                     continue
@@ -1376,7 +1402,7 @@ def _match_heuristic(
     is fine: ``suggest_swap_candidates`` applies a total-order sort and
     conflict clustering is order-independent.
     """
-    in_entries: list[tuple[float, Mapping, int, str | None]] = []
+    in_entries: list[tuple[float, Mapping, int, str | None, str | None]] = []
     for in_row in in_rows:
         in_seconds = _occurred_at_seconds(_record_get(in_row, "occurred_at"))
         if in_seconds is None:
@@ -1388,7 +1414,7 @@ def _match_heuristic(
             # absolute fee floor.
             continue
         in_entries.append(
-            (in_seconds, in_row, in_amount, _observed_onchain_txid(in_row))
+            (in_seconds, in_row, in_amount, _observed_onchain_txid(in_row), bitcoin_network_domain(in_row))
         )
     in_entries.sort(key=lambda entry: entry[0])
     in_times = [entry[0] for entry in in_entries]
@@ -1411,7 +1437,10 @@ def _match_heuristic(
         out_route_asset = canonical_bitcoin_asset(out_asset)
         out_wallet_kind = str(_record_get(out_row, "wallet_kind") or "")
         out_txid = _observed_onchain_txid(out_row)
-        for _, in_row, in_amount, in_txid in in_entries[lo:hi]:
+        out_domain = bitcoin_network_domain(out_row)
+        for _, in_row, in_amount, in_txid, in_domain in in_entries[lo:hi]:
+            if not _compatible_network_domains(out_domain, in_domain):
+                continue
             if out_wallet_id == _record_get(in_row, "wallet_id"):
                 continue
             delta = out_amount - in_amount

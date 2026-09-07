@@ -36,6 +36,7 @@ import {
   LogOut,
   MessageSquareText,
   Moon,
+  Network,
   Plane,
   Plus,
   RefreshCw,
@@ -395,7 +396,7 @@ function notificationProgressValue(value: number | undefined) {
 }
 
 const appMainClassName =
-  "relative min-h-0 w-full flex-1 overflow-auto overscroll-contain bg-background text-foreground";
+  "relative min-h-0 w-full min-w-0 flex-1 overflow-auto overscroll-contain bg-background text-foreground";
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -511,6 +512,10 @@ const ROUTE_META: Array<[string, RouteMeta]> = [
       icon: BarChart3,
       searchKey: "routeMeta.reports",
     },
+  ],
+  [
+    "/chain-analysis",
+    { titleKey: "nav:book.chainAnalysis", icon: Network, searchKey: "routeMeta.chainAnalysis" },
   ],
   [
     "/privacy-mirror",
@@ -1762,7 +1767,7 @@ export function AppShell() {
           >
             {t("shell.skipToContent")}
           </a>
-          <div className="flex min-h-0 flex-1">
+          <div className="flex min-h-0 min-w-0 flex-1">
             <AppSidebar
               pathname={pathname}
               meta={routeMeta}
@@ -1774,8 +1779,8 @@ export function AppShell() {
             />
             {/* `pl-3` is two gutters: the nav card is shifted right by one, so
                 this is what leaves a matching gap on the seam between them. */}
-            <div className="min-h-0 w-full overflow-hidden lg:pt-1.5 lg:pr-1.5 lg:pb-1.5 lg:pl-3">
-              <div className="relative flex h-full w-full flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl">
+            <div className="min-h-0 w-full min-w-0 overflow-hidden lg:pt-1.5 lg:pr-1.5 lg:pb-1.5 lg:pl-3">
+              <div className="relative flex h-full w-full min-w-0 flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl">
                 <ShellFloatingControls
                   meta={routeMeta}
                   onLock={lockApp}
@@ -2497,18 +2502,16 @@ function SidebarActions({
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
                 <SidebarMenuSubItem>
-                  <SidebarMenuSubButton
-                    asChild
-                    className={cn(
-                      navSubRowClassName,
-                      rowLocked("/privacy-mirror") && navLockClassName,
-                    )}
-                    isActive={pathname === "/privacy-mirror"}
-                  >
-                    <Link to="/privacy-mirror" {...lockRow("/privacy-mirror", t("shell.extras.privacyMirror"))}>
+                  <SidebarMenuSubButton asChild className={navSubRowClassName} isActive={pathname === "/privacy-mirror"}>
+                    <Link to="/privacy-mirror">
                       <Eye className="size-3.5" aria-hidden="true" />
                       <span>{t("shell.extras.privacyMirror")}</span>
                     </Link>
+                  </SidebarMenuSubButton>
+                </SidebarMenuSubItem>
+                <SidebarMenuSubItem>
+                  <SidebarMenuSubButton asChild className={navSubRowClassName} isActive={pathname === "/chain-analysis"}>
+                    <Link to="/chain-analysis"><Network className="size-3.5" aria-hidden="true" /><span>{t("shell.extras.chainAnalysis")}</span></Link>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
                 {developerToolsEnabled ? (

@@ -308,8 +308,17 @@ class TransactionGraphTest(unittest.TestCase):
 
         self.assertEqual(payload["supportLevel"], "graphless")
         self.assertEqual(payload["unsupportedReason"], "graphless_import")
+        self.assertIsNone(payload["transaction"]["inputCount"])
+        self.assertIsNone(payload["transaction"]["outputCount"])
         self.assertEqual(payload["inputs"], [])
         self.assertEqual(payload["outputs"], [])
+
+    def test_graphless_exchange_fee_is_not_a_miner_fee(self):
+        self._tx("sale-fee", "wallet-a", "outbound", 100_000_000,
+                 "exchange:sale", "{}", fee_msat=2_000_000)
+        payload = self._graph("sale-fee")
+        self.assertIsNone(payload["fee"])
+        self.assertEqual(payload["transaction"]["feeMsat"], 2_000_000)
 
     def test_decimal_btc_output_values_are_converted_to_sats(self):
         raw = {
@@ -1116,9 +1125,117 @@ class TransactionGraphTest(unittest.TestCase):
 
         self.assertEqual(payload["outputs"][0]["role"], "incoming_payment")
         self.assertNotIn("change", {annotation["code"] for annotation in payload["outputs"][0]["annotations"]})
-        self.assertEqual(payload["outputs"][1]["role"], "external_recipient")
+        self.assertEqual(payload["outputs"][1]["role"], "output")
 
-    def test_inbound_graph_infers_payment_output_from_recorded_amount(self):
+    def test_exchange_batch_keeps_unrecognized_legs_unknown(self):
+        txid = "a1" * 32
+        self._utxo("wallet-b", ADDR_B, txid, 0, amount=600_000)
+        self._tx("exchange-batch", "wallet-b", "inbound", 600_000_000, txid, {
+            "txid": txid, "vin": [{"txid": "a2" * 32, "vout": 0}],
+            "vout": [{"scriptpubkey": SCRIPT_B, "value": 600_000},
+                     {"scriptpubkey": SCRIPT_A, "value": 400_000},
+                     {"scriptpubkey": SCRIPT_C, "value": 998_000}],
+        })
+        payload = self._graph("exchange-batch")
+        self.assertEqual(payload["inputs"][0]["ownership"], "unknown")
+        self.assertEqual(payload["inputs"][0]["scriptType"], "unknown")
+        self.assertEqual([node["ownership"] for node in payload["outputs"]], ["owned", "unknown", "unknown"])
+        self.assertEqual([node["role"] for node in payload["outputs"]], ["incoming_payment", "output", "output"])
+        self.assertIsNone(payload["transaction"]["feeRateSatVb"])
+
+    def test_unique_amount_cannot_add_ownership_to_another_participants_output(self):
+        txid = "a3" * 32
+        self._utxo("wallet-b", ADDR_B, txid, 0, amount=300_000)
+        self._utxo("wallet-b", ADDR_C, txid, 1, amount=300_000)
+        self._tx("split-receipt", "wallet-b", "inbound", 600_000_000, txid, {
+            "txid": txid, "vin": [{"txid": "a4" * 32, "vout": 0}],
+            "vout": [{"scriptpubkey": SCRIPT_B, "value": 300_000},
+                     {"scriptpubkey": SCRIPT_C, "value": 300_000},
+                     {"scriptpubkey": SCRIPT_A, "value": 600_000}],
+        })
+        payload = self._graph("split-receipt")
+        self.assertEqual([node["ownership"] for node in payload["outputs"]], ["owned", "owned", "unknown"])
+        self.assertNotIn("walletId", payload["outputs"][2])
+
+    def test_exact_output_outpoint_survives_absent_address_and_script(self):
+        txid = "a5" * 32
+        self._utxo("wallet-b", None, txid, 0, amount=600_000)
+        self._tx("outpoint-only", "wallet-b", "inbound", 123_000_000, txid, {
+            "txid": txid, "vin": [{"txid": "a6" * 32, "vout": 0}],
+            "vout": [{"value": 600_000}],
+        })
+        node = self._graph("outpoint-only")["outputs"][0]
+        self.assertEqual(node["ownership"], "owned")
+        self.assertEqual(node["walletId"], "wallet-b")
+        self.assertEqual(node["role"], "incoming_payment")
+        self.assertEqual(node["scriptType"], "unknown")
+
+    def test_addressless_inventory_script_recognizes_a_later_receive_output(self):
+        self._utxo("wallet-b", None, "a0" * 32, 0, amount=600_000)
+        self.conn.execute("UPDATE wallet_utxos SET script_pubkey=?", (SCRIPT_B,))
+        txid = "af" * 32
+        self._tx("later-receive", "wallet-b", "inbound", 123_000_000, txid, {
+            "txid": txid, "vin": [{"txid": "ae" * 32, "vout": 0}],
+            "vout": [{"scriptpubkey": SCRIPT_B, "value": 600_000}],
+        })
+        node = self._graph("later-receive")["outputs"][0]
+        self.assertEqual(node["ownership"], "owned")
+        self.assertEqual(node["walletId"], "wallet-b")
+        self.assertEqual(node["role"], "incoming_payment")
+
+    def test_same_wallet_output_needs_explicit_branch_and_ordinary_spend_for_change(self):
+        txid = "a7" * 32
+        self._utxo("wallet-a", ADDR_A, "a8" * 32, 0, amount=1_000_000)
+        self._utxo("wallet-a", ADDR_B, txid, 0, amount=900_000)
+        self._tx("own-return", "wallet-a", "outbound", 900_000_000, txid, {
+            "txid": txid,
+            "vin": [{"txid": "a8" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 1_000_000}}],
+            "vout": [{"scriptpubkey": SCRIPT_B, "value": 900_000}],
+        })
+        self.assertEqual(self._graph("own-return")["outputs"][0]["role"], "owned_return")
+        self.conn.execute("UPDATE wallet_utxos SET branch_label='change' WHERE txid=?", (txid,))
+        self.assertEqual(self._graph("own-return")["outputs"][0]["role"], "change")
+        self.conn.execute("UPDATE transactions SET privacy_boundary='payjoin' WHERE id='own-return'")
+        self.assertEqual(self._graph("own-return")["outputs"][0]["role"], "owned_return")
+
+    def test_foreign_outpoint_match_does_not_hide_a_local_script_match(self):
+        prev = "a9" * 32
+        self._utxo("wallet-b", ADDR_B, prev, 0, network="test")
+        self._utxo("wallet-a", ADDR_A, "aa" * 32, 0)
+        self._tx("scoped-input", "wallet-a", "outbound", 900_000_000, "ab" * 32, {
+            "txid": "ab" * 32,
+            "vin": [{"txid": prev, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 1_000_000}}],
+            "vout": [{"scriptpubkey": SCRIPT_C, "value": 900_000}],
+        })
+        self.assertEqual(self._graph("scoped-input")["inputs"][0]["walletId"], "wallet-a")
+
+    def test_local_reference_enrichment_preserves_imported_collaboration_marker(self):
+        txid, prev = "b1" * 32, "b2" * 32
+        self._utxo("wallet-a", ADDR_A, prev, 0, amount=1_000_000)
+        self._utxo("wallet-a", ADDR_B, txid, 0, amount=900_000)
+        self.conn.execute("UPDATE wallet_utxos SET branch_label='change' WHERE txid=?", (txid,))
+        raw = {"txid": txid, "privacy_boundary": "payjoin", "vin": [{"txid": prev, "vout": 0}],
+               "vout": [{"scriptpubkey": SCRIPT_B, "value": 900_000}]}
+        self._tx("cached-payjoin", "wallet-a", "outbound", 900_000_000, txid, raw)
+        self.assertEqual(self._graph("cached-payjoin")["outputs"][0]["role"], "owned_return")
+        reference = {**raw, "vin": [{"txid": prev, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 1_000_000}}]}
+        reference.pop("privacy_boundary")
+        tg._store_graph_lookup_cache(self.conn, "bitcoin", "main", txid, reference)
+        with patch.object(tg, "_graph_lookup_backends", side_effect=AssertionError("no backend selection")):
+            payload = self._graph("cached-payjoin")
+        self.assertEqual(payload["outputs"][0]["role"], "owned_return")
+
+    def test_empty_bitcoin_locking_script_is_not_op_return(self):
+        self._tx("empty-script", "wallet-a", "outbound", 1_000_000, "ac" * 32, {
+            "txid": "ac" * 32, "vin": [{"txid": "ad" * 32, "vout": 0}],
+            "vout": [{"scriptpubkey": "", "value": 1000}],
+        })
+        node = self._graph("empty-script")["outputs"][0]
+        self.assertEqual(node["scriptType"], "empty")
+        self.assertEqual(node["role"], "output")
+        self.assertEqual(node["ownership"], "unknown")
+
+    def test_inbound_graph_marks_amount_match_as_unverified_candidate(self):
         txid = "82" * 32
         raw = {
             "txid": txid,
@@ -1153,13 +1270,13 @@ class TransactionGraphTest(unittest.TestCase):
 
         payload = self._graph("inbound-amount-row")
 
-        self.assertEqual(payload["outputs"][0]["role"], "incoming_payment")
-        self.assertEqual(payload["outputs"][0]["ownership"], "owned")
+        self.assertEqual(payload["outputs"][0]["role"], "incoming_payment_candidate")
+        self.assertEqual(payload["outputs"][0]["ownership"], "unknown")
         self.assertIn(
             "recorded_incoming_amount",
             {annotation["code"] for annotation in payload["outputs"][0]["annotations"]},
         )
-        self.assertEqual(payload["outputs"][1]["role"], "external_recipient")
+        self.assertEqual(payload["outputs"][1]["role"], "output")
 
     def test_inbound_amount_inference_skips_ambiguous_equal_outputs(self):
         txid = "83" * 32
@@ -1193,7 +1310,7 @@ class TransactionGraphTest(unittest.TestCase):
 
         self.assertEqual(
             [output["role"] for output in payload["outputs"]],
-            ["external_recipient", "external_recipient"],
+            ["output", "output"],
         )
 
     def test_bitcoin_missing_prevout_values_are_enriched_from_public_lookup(self):
@@ -3554,8 +3671,8 @@ class TransactionGraphTest(unittest.TestCase):
 
         payload = self._graph("network-filter-row")
 
-        self.assertEqual(payload["outputs"][0]["ownership"], "external")
-        self.assertEqual(payload["outputs"][0]["role"], "external_recipient")
+        self.assertEqual(payload["outputs"][0]["ownership"], "unknown")
+        self.assertEqual(payload["outputs"][0]["role"], "output")
 
     def test_reviewed_swap_pair_route_is_curated(self):
         raw = {
@@ -3765,7 +3882,7 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["supportLevel"], "partial")
         self.assertEqual(payload["unsupportedReason"], "confidential_values_hidden")
         self.assertEqual(payload["transaction"]["outputCount"], 1)
-        self.assertEqual([node["role"] for node in payload["outputs"]], ["external_recipient"])
+        self.assertEqual([node["role"] for node in payload["outputs"]], ["output"])
         self.assertNotIn("op_return", [node.get("role") for node in payload["outputs"]])
         self.assertEqual(payload["fee"]["valueSats"], 250)
         self.assertEqual(payload["fee"]["valueBtc"], 250 / 100_000_000)
@@ -3937,6 +4054,214 @@ class TransactionGraphTest(unittest.TestCase):
         # A partial sum must not masquerade as the full aggregate.
         self.assertNotIn("valueSats", overflow)
         self.assertNotIn("valueBtc", overflow)
+
+    def test_local_spends_and_heights_stay_in_their_chain_domain(self):
+        for chain, network, asset in (
+            ("bitcoin", "testnet", "BTC"),
+            ("liquid", "liquidv1", "LBTC"),
+        ):
+            with self.subTest(chain=chain, network=network):
+                self.conn.execute("DELETE FROM transactions")
+                self.conn.execute(
+                    "UPDATE wallets SET config_json = ? WHERE id = 'wallet-b'",
+                    (json.dumps({"chain": chain, "network": network}),),
+                )
+                txid, previous, spender = "01" * 32, "02" * 32, "03" * 32
+                self._tx("domain-source", "wallet-a", "outbound", 100_000_000, txid, {
+                    "txid": txid,
+                    "vin": [{"txid": previous, "vout": 0,
+                             "prevout": {"scriptpubkey": SCRIPT_A, "value": 110_000}}],
+                    "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 100_000}],
+                })
+                self._tx("foreign-parent", "wallet-b", "inbound", 110_000_000, previous, {
+                    "txid": previous, "vin": [], "vout": [],
+                    "status": {"confirmed": True, "block_height": 2_000_000},
+                }, asset=asset)
+                self._tx("foreign-spender", "wallet-b", "outbound", 90_000_000, spender, {
+                    "txid": spender, "vin": [{"txid": txid, "vout": 0}], "vout": [],
+                    "status": {"confirmed": True, "block_height": 2_000_100},
+                }, asset=asset)
+                graph = self._graph("domain-source")
+                self.assertNotIn("prevoutBlockHeight", graph["inputs"][0])
+                self.assertNotIn("spentByTxid", graph["outputs"][0])
+                self.assertNotIn("spentByTransactionId", graph["outputs"][0])
+                self.assertNotIn("spentByBlockHeight", graph["outputs"][0])
+
+    def test_inventory_spends_and_heights_stay_in_their_chain_domain(self):
+        txid, previous, spender = "04" * 32, "05" * 32, "06" * 32
+        self._utxo("wallet-b", ADDR_B, txid, 0, network="testnet")
+        self._utxo("wallet-b", ADDR_A, previous, 0, network="testnet")
+        self.conn.execute(
+            "UPDATE wallet_utxos SET spent_by = ?, block_height = ?",
+            (spender, 2_000_000),
+        )
+        self._tx("inventory-domain-source", "wallet-a", "outbound", 100_000_000, txid, {
+            "txid": txid,
+            "vin": [{"txid": previous, "vout": 0,
+                     "prevout": {"scriptpubkey": SCRIPT_A, "value": 110_000}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 100_000}],
+        })
+        graph = self._graph("inventory-domain-source")
+        self.assertNotIn("prevoutBlockHeight", graph["inputs"][0])
+        self.assertNotIn("spentByTxid", graph["outputs"][0])
+
+    def test_spend_domain_aliases_keep_same_chain_navigation(self):
+        txid, spender = "07" * 32, "08" * 32
+        self.conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = 'wallet-b'",
+            (json.dumps({"chain": "btc", "network": "mainnet"}),),
+        )
+        self._tx("alias-source", "wallet-a", "inbound", 100_000_000, txid, {
+            "txid": txid, "vin": [],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_A, "value": 100_000}],
+        })
+        self._tx("alias-spender", "wallet-b", "outbound", 90_000_000, spender, {
+            "txid": spender, "vin": [{"txid": txid, "vout": 0}], "vout": [],
+            "status": {"confirmed": True, "block_height": 800_000},
+        })
+        output = self._graph("alias-source")["outputs"][0]
+        self.assertEqual(output["spentByTransactionId"], "alias-spender")
+        self.assertEqual(output["spentByBlockHeight"], 800_000)
+
+    def test_competing_local_spends_do_not_choose_an_arbitrary_successor(self):
+        txid = "09" * 32
+        self._tx("conflict-source", "wallet-a", "inbound", 100_000_000, txid, {
+            "txid": txid, "vin": [],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_A, "value": 100_000}],
+        })
+        for row_id, spender in (("first-spender", "0a" * 32), ("replacement", "0b" * 32)):
+            self._tx(row_id, "wallet-b", "outbound", 90_000_000, spender, {
+                "txid": spender, "vin": [{"txid": txid, "vout": 0}], "vout": [],
+            })
+        graph = self._graph("conflict-source")
+        self.assertNotIn("spentByTxid", graph["outputs"][0])
+        self.assertNotIn("spentByTransactionId", graph["outputs"][0])
+        self.assertIn("conflicting_local_spends", {item["code"] for item in graph["warnings"]})
+        # Accounting exclusion does not erase the observed physical conflict.
+        self.conn.execute("UPDATE transactions SET excluded = 1 WHERE id = 'first-spender'")
+        self.assertNotIn("spentByTxid", self._graph("conflict-source")["outputs"][0])
+        # Observer retraction deletes the old row; the remaining successor is usable.
+        self.conn.execute("DELETE FROM transactions WHERE id = 'first-spender'")
+        refreshed = self._graph("conflict-source")
+        self.assertEqual(refreshed["outputs"][0]["spentByTransactionId"], "replacement")
+        self.assertNotIn("conflicting_local_spends", {item["code"] for item in refreshed["warnings"]})
+
+    def test_duplicate_wallet_observations_of_one_spend_are_not_conflicting(self):
+        txid, spender = "0c" * 32, "0d" * 32
+        self._tx("duplicate-source", "wallet-a", "inbound", 100_000_000, txid, {
+            "txid": txid, "vin": [],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_A, "value": 100_000}],
+        })
+        for row_id, wallet in (("duplicate-a", "wallet-b"), ("duplicate-b", "wallet-c")):
+            self._tx(row_id, wallet, "outbound", 90_000_000, spender, {
+                "txid": spender, "vin": [{"txid": txid, "vout": 0}], "vout": [],
+            })
+        graph = self._graph("duplicate-source")
+        self.assertEqual(graph["outputs"][0]["spentByTxid"], spender)
+        self.assertNotIn("conflicting_local_spends", {item["code"] for item in graph["warnings"]})
+
+    def test_conflicting_parent_heights_do_not_fabricate_block_distance(self):
+        txid, previous = "0e" * 32, "0f" * 32
+        self._tx("height-conflict-source", "wallet-a", "outbound", 100_000_000, txid, {
+            "txid": txid,
+            "vin": [{"txid": previous, "vout": 0,
+                     "prevout": {"scriptpubkey": SCRIPT_A, "value": 110_000}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 100_000}],
+        })
+        self._tx("height-conflict-parent", "wallet-b", "inbound", 110_000_000, previous, {
+            "txid": previous, "vin": [], "vout": [],
+            "status": {"confirmed": True, "block_height": 800_000},
+        })
+        self._utxo("wallet-b", ADDR_A, previous, 0)
+        self.conn.execute("UPDATE wallet_utxos SET block_height = ?", (800_001,))
+        self.assertNotIn("prevoutBlockHeight", self._graph("height-conflict-source")["inputs"][0])
+
+    def test_local_graph_reads_reuse_valid_reference_cache_without_egress_or_authority(self):
+        txid = "10" * 32
+        self._tx("local-cache", "wallet-a", "outbound", 100_000_000, txid, "{}")
+        tg._store_graph_lookup_cache(self.conn, "bitcoin", "main", txid, {
+            "txid": txid,
+            "vin": [{"txid": "11" * 32, "vout": 0,
+                     "prevout": {"scriptpubkey": SCRIPT_A, "value": 110_000}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 100_000}],
+        })
+        changes = self.conn.total_changes
+        with patch.object(tg, "_graph_lookup_backends", side_effect=AssertionError("no backend selection")):
+            graph = self._graph("local-cache")
+        self.assertEqual(graph["supportLevel"], "full")
+        self.assertEqual(graph["inputs"][0]["valueSats"], 110_000)
+        self.assertIn("cached_reference_graph", {item["code"] for item in graph["warnings"]})
+        self.assertEqual(self.conn.total_changes, changes)
+        self.assertEqual(graph["annotations"], [])
+        self.assertEqual(graph["accounting"]["linkedPairs"], [])
+        self.assertIsNone(graph["swapRoute"])
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM chain_observation_provenance").fetchone()[0], 0)
+
+    def test_local_graph_cache_rejects_wrong_domain_schema_and_identity(self):
+        txid = "12" * 32
+        self._tx("invalid-cache", "wallet-a", "outbound", 100_000_000, txid, "{}")
+        valid = {
+            "txid": txid,
+            "vin": [{"txid": "13" * 32, "vout": 0,
+                     "prevout": {"scriptpubkey": SCRIPT_A, "value": 110_000}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 100_000}],
+        }
+        for invalidation in ("network", "chain", "schema", "identity", "partial"):
+            with self.subTest(invalidation=invalidation):
+                self.conn.execute("DELETE FROM transaction_graph_cache")
+                tg._store_graph_lookup_cache(self.conn, "bitcoin", "main", txid, valid)
+                if invalidation == "network":
+                    self.conn.execute("UPDATE transaction_graph_cache SET network = 'testnet'")
+                elif invalidation == "chain":
+                    self.conn.execute("UPDATE transaction_graph_cache SET chain = 'liquid'")
+                elif invalidation == "schema":
+                    self.conn.execute("UPDATE transaction_graph_cache SET schema_version = 0")
+                else:
+                    invalid = dict(valid)
+                    if invalidation == "identity":
+                        invalid["txid"] = "14" * 32
+                    else:
+                        invalid["vin"] = [{"txid": "13" * 32, "vout": 0}]
+                    self.conn.execute("UPDATE transaction_graph_cache SET payload_json = ?", (json.dumps(invalid),))
+                with patch.object(tg, "_graph_lookup_backends", side_effect=AssertionError("no backend selection")):
+                    graph = self._graph("invalid-cache")
+                self.assertEqual(graph["supportLevel"], "graphless")
+                self.assertNotIn("cached_reference_graph", {item["code"] for item in graph["warnings"]})
+
+    def test_local_liquid_cache_stays_reference_only_and_never_selects_backend(self):
+        txid = "15" * 32
+        self.conn.execute(
+            "UPDATE wallets SET config_json = ? WHERE id = 'wallet-a'",
+            (json.dumps({"chain": "liquid", "network": "liquidv1"}),),
+        )
+        self._tx("liquid-local-cache", "wallet-a", "inbound", 100_000_000, txid, "{}", asset="LBTC")
+        tg._store_graph_lookup_cache(self.conn, "liquid", "liquidv1", txid, {
+            "txid": txid,
+            "vin": [{"txid": "16" * 32, "vout": 0}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value_state": "confidential"}],
+        })
+        with patch.object(tg, "_liquid_graph_lookup_backends", side_effect=AssertionError("no backend selection")):
+            graph = self._graph("liquid-local-cache")
+        self.assertEqual(graph["supportLevel"], "partial")
+        self.assertEqual(graph["unsupportedReason"], "confidential_values_hidden")
+        self.assertNotIn("valueSats", graph["outputs"][0])
+        self.assertIn("cached_reference_graph", {item["code"] for item in graph["warnings"]})
+
+    def test_local_observed_graph_is_not_replaced_with_cached_reference_values(self):
+        txid = "17" * 32
+        raw = {
+            "txid": txid,
+            "vin": [{"txid": "18" * 32, "vout": 0,
+                     "prevout": {"scriptpubkey": SCRIPT_A, "value": 110_000}}],
+            "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 100_000}],
+        }
+        self._tx("local-preferred", "wallet-a", "outbound", 100_000_000, txid, raw)
+        tg._store_graph_lookup_cache(self.conn, "bitcoin", "main", txid, {
+            **raw, "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 1}],
+        })
+        graph = self._graph("local-preferred")
+        self.assertEqual(graph["outputs"][0]["valueSats"], 100_000)
+        self.assertNotIn("cached_reference_graph", {item["code"] for item in graph["warnings"]})
 
 
 if __name__ == "__main__":

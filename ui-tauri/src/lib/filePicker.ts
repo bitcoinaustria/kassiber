@@ -65,6 +65,30 @@ const isBridgeRuntime =
 export const isFilePickerAvailable = isTauriRuntime || isBridgeRuntime;
 export const isFileSaveAvailable = isTauriRuntime;
 
+export interface AnalysisSourceSelection {
+  source_token: string;
+  purpose: "psbt" | "dataset";
+  size_bytes: number;
+  filename: string;
+}
+
+/** Native selection is the only way a renderer can mint an analysis file grant. */
+export async function pickChainAnalysisSource(
+  purpose: "psbt" | "dataset",
+  expectedScope?: {workspace_id: string; profile_id: string},
+): Promise<AnalysisSourceSelection | null> {
+  if (isTauriRuntime) {
+    const {invoke} = await import("@tauri-apps/api/core");
+    return invoke<AnalysisSourceSelection | null>("pick_chain_analysis_source", {purpose, expectedScope});
+  }
+  if (isBridgeRuntime) {
+    const result = await callFilePickerBridge({purpose: `chain_analysis_${purpose}`, expected_scope: expectedScope});
+    if (result.error) throw new Error(String(result.error));
+    return (result.documentImportSource as AnalysisSourceSelection | null) || null;
+  }
+  return null;
+}
+
 async function callFilePickerBridge(
   body: Record<string, unknown>,
 ): Promise<{

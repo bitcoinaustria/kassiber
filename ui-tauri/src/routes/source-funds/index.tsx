@@ -1,7 +1,7 @@
-import { useContext, useMemo } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { AssistantSessionContext } from "@/components/ai/assistantSession";
 import { TransactionDetailController } from "@/components/transactions/dashboard/TransactionDetailController";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ import { DaemonScopeContext, useDaemon } from "@/daemon/client";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
+import { formatBtc } from "./model";
+import { canApproveSourceFundsPreview, isReviewedSourceFundsPreview } from "./journey";
 import { sourceFundsDraftKey } from "./caseScope";
 import { DiscloseStage, ExportStage, TargetStage, TraceStage } from "./stages";
 import { useSourceFundsCase } from "./useSourceFundsCase";
@@ -49,29 +51,64 @@ function SourceFundsCase({ draftKey, initialTarget }: { draftKey: string; initia
     if (assistant.selection?.model) assistant.sendPrompt(prompt);
     else useAssistantDraftStore.getState().setDraft(prompt);
   };
+  const [reviewedFingerprint, setReviewedFingerprint] = useState<string | null>(null);
+  const fingerprint = context?.review_fingerprint;
+  const current = Boolean(state.report && context && !state.preview.isFetching && !state.preview.isError && !state.resolvedTarget.isError && !context?.scope_truncated);
+  const previewReady = canApproveSourceFundsPreview({ current, exportable: Boolean(state.report?.explain_gates.exportable), diagramLoading: state.diagramQuery.isFetching || !state.diagramQuery.data, diagramError: state.diagramQuery.isError, fingerprint });
+  const canExport = isReviewedSourceFundsPreview(current, Boolean(state.report?.explain_gates.exportable), fingerprint, reviewedFingerprint);
+  // Refetching after save disables actions without bouncing between steps. A changed
+  // fingerprint, failed refresh or persisted navigation still requires a fresh review.
+  const reviewStillMatches = isReviewedSourceFundsPreview(!state.preview.isError && !state.resolvedTarget.isError && !context?.scope_truncated, Boolean(state.report?.explain_gates.exportable), fingerprint, reviewedFingerprint);
+  const stage = !state.selectedTarget ? "target" : state.stage === "export" && !reviewStillMatches ? "disclose" : state.stage;
+  const { setShowDisclosure } = state;
+  useEffect(() => { setShowDisclosure(stage === "disclose" || stage === "export"); }, [stage, setShowDisclosure]);
+  const steps = ["target", "trace", "disclose", "export"] as const;
+  const position = steps.indexOf(stage);
+  const forward = () => {
+    if (stage === "target" && state.selectedTxId) state.goToStage("trace");
+    else if (stage === "trace" && current) state.goToStage("disclose");
+    else if (stage === "disclose" && previewReady && fingerprint) {
+      setReviewedFingerprint(fingerprint);
+      state.goToStage("export");
+    }
+  };
   const status = !state.selectedTarget ? "selectTarget" : state.resolvedTarget.isError || (state.resolvedTarget.isSuccess && !state.selectedTxId) ? "targetUnavailable" : state.preview.isError ? "reviewUnavailable" : state.preview.isFetching || !state.report ? "loading" : state.report.explain_gates.exportable ? "exportable" : "needsEvidence";
-  return <div className={`${screenShellClassName} space-y-5`}>
-    <header className="flex flex-wrap items-start justify-between gap-4">
-      <div><h1 className="text-xl font-semibold tracking-tight">{t("header.title")}</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">{t("case.description")}</p></div>
-      <Button onClick={investigate} disabled={!context || state.preview.isFetching || !assistant || assistant.isStreaming}>
-        <Sparkles className="size-4" aria-hidden="true" />{t("case.investigate")}
-      </Button>
+  return <div className={`${screenShellClassName} mx-auto max-w-6xl space-y-5`}>
+    <header className="flex flex-wrap items-start justify-between gap-3">
+      <div><h1 className="text-xl font-semibold tracking-tight">{t("header.title")}</h1><p className="mt-1 text-sm text-muted-foreground">{t("journey.description")}</p></div>
     </header>
-    <div className="rounded-lg border bg-muted/20 px-4 py-3" role="status">
-      <p className="text-sm font-medium">{t(`case.${status}`)}</p>
-      {state.selectedTarget && <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{state.selectedTarget}{state.targetAmount ? ` · ${state.targetAmount} ${state.selectedTx?.asset ?? "BTC"}` : ` · ${t("case.fullAmount")}`}</p>}
-      {state.report && <p className="mt-1 text-xs text-muted-foreground">{t("case.findings", { blockers: state.blockers.length, warnings: state.warnings.length })}</p>}
-    </div>
-    <details className="rounded-lg border p-4" open={!state.selectedTarget || state.stage === "target"}>
-      <summary className="cursor-pointer text-sm font-medium">{t("case.targetSection")}</summary><div className="pt-4"><TargetStage state={state} /></div>
-    </details>
+    <nav aria-label={t("header.title")}>
+      <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {steps.map((step, index) => <li key={step}><button type="button" aria-current={stage === step ? "step" : undefined}
+          disabled={index > 0 && !state.selectedTxId || step === "export" && !canExport}
+          onClick={() => state.goToStage(step)}
+          className={`flex w-full items-center gap-2 rounded-lg border px-3 py-3 text-left text-sm disabled:opacity-40 ${stage === step ? "border-primary/40 bg-primary/5 font-semibold" : "border-transparent text-muted-foreground hover:bg-muted"}`}>
+          <span className="flex size-6 shrink-0 items-center justify-center rounded-full border text-xs">{index < position ? <Check className="size-3" /> : index + 1}</span>{t(`journey.${step}`)}
+        </button></li>)}
+      </ol>
+    </nav>
+    {stage !== "target" && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/30 px-4 py-3">
+      <div><p className="text-sm font-medium">{state.selectedTx?.note || state.selectedTx?.description || state.selectedTx?.wallet || state.report?.target.wallet || t("case.targetSection")}</p>
+        <p className="text-xs text-muted-foreground">{formatBtc(state.report?.target.required_amount ?? state.selectedTx?.amount, state.selectedTx?.asset ?? "BTC")} · {t(`case.${status}`)}</p></div>
+      <Button variant="ghost" size="sm" onClick={() => state.goToStage("target")}>{t("journey.changeTarget")}</Button>
+    </div>}
     {context?.scope_truncated && <p role="status" className="text-sm text-amber-700 dark:text-amber-300">{t("case.scopeTruncated")}</p>}
+    {state.selectedTarget && state.preview.isError && <div role="alert" className="rounded-lg border border-destructive/30 p-4 text-sm"><p>{t("journey.targetError")}</p><Button variant="outline" size="sm" className="mt-2" onClick={() => void state.preview.refetch()}>{t("journey.retry")}</Button></div>}
+    {stage === "disclose" && (state.diagramQuery.isError ? <div role="alert" className="rounded-lg border p-4 text-sm"><p>{t("journey.previewError")}</p><Button variant="outline" size="sm" onClick={() => void state.diagramQuery.refetch()}>{t("journey.retry")}</Button></div> : state.diagramQuery.isFetching && <p role="status" className="text-sm text-muted-foreground">{t("case.loading")}</p>)}
+    {stage === "disclose" && state.report && !state.report.explain_gates.exportable && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm" role="status"><p>{t("case.exportBlocked")}</p><Button variant="outline" size="sm" onClick={() => state.goToStage("trace")}>{t("journey.resolveQuestions")}</Button></div>}
     {state.exportError && <p role="alert" className="text-sm text-destructive">{t("case.exportError")}</p>}
-    {state.selectedTarget && <>
-      <section className="rounded-lg border p-4"><TraceStage state={state} /></section>
-      <details className="rounded-lg border p-4" onToggle={(event) => state.setShowDisclosure(event.currentTarget.open)}><summary className="cursor-pointer text-sm font-medium">{t("case.disclosureSection")}</summary><div className="pt-4"><DiscloseStage state={state} /></div></details>
-      <details className="rounded-lg border p-4"><summary className="cursor-pointer text-sm font-medium">{t("case.exportSection")}</summary><div className="pt-4"><ExportStage state={state} /></div></details>
-    </>}
+    <section className="rounded-xl border bg-card p-4 sm:p-6" aria-label={t(`journey.${stage}`)}>
+      {stage === "target" && <TargetStage state={state} />}
+      {stage === "trace" && <TraceStage state={state} onInvestigate={investigate} assistantAvailable={Boolean(context && !state.preview.isFetching && assistant && !assistant.isStreaming)} />}
+      {stage === "disclose" && <DiscloseStage state={state} />}
+      {stage === "export" && <ExportStage state={state} />}
+    </section>
+    <footer className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+      <Button variant="ghost" disabled={position === 0} onClick={() => state.goToStage(steps[position - 1])}><ArrowLeft className="size-4" />{t("journey.back")}</Button>
+      {stage !== "export" && <Button onClick={forward} disabled={stage === "target" ? !state.selectedTxId || state.resolvedTarget.isFetching : !current || stage === "disclose" && !previewReady}>
+        {t(stage === "disclose" ? "journey.approvePreview" : stage === "trace" ? "journey.openPreview" : "journey.traceTarget")}<ArrowRight className="size-4" />
+      </Button>}
+    </footer>
     <TransactionDetailController transaction={state.detailTransaction} hideSensitive={state.hideSensitive} currency={state.currency} explorerSettings={state.explorerSettings} onOpenChange={(open) => { if (!open) state.setDetailTransaction(null); }} />
   </div>;
 }

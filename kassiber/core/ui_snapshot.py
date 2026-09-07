@@ -681,22 +681,26 @@ def _ui_transaction_payment_method_sql() -> str:
           WHEN lower(t.asset) = 'lbtc'
             OR lower(w.kind) IN ('liquid')
             OR lower(w.config_json) LIKE '%"chain"%liquid%'
-            OR lower(w.label) LIKE '%liquid%'
-            OR lower(w.label) LIKE '%lbtc%'
             THEN 'Liquid'
           WHEN lower(w.kind) IN ('lnd', 'core-ln', 'coreln', 'nwc', 'phoenix')
-            OR lower(w.label) LIKE '%lightning%'
-            OR lower(w.label) LIKE '%phoenix%'
-            OR lower(w.label) LIKE '% ln%'
-            OR lower(w.label) LIKE 'ln %'
-            OR lower(w.label) LIKE '%(ln)%'
             THEN 'Lightning'
           WHEN lower(w.kind) IN (
-              'kraken', 'bitstamp', 'coinbase', 'bitpanda', 'river',
-              'bullbitcoin', 'coinfinity', 'strike', 'exchange'
+              'kraken', 'bitstamp', 'coinbase', 'bitpanda', 'river', 'binance',
+              'bullbitcoin', 'coinfinity', 'strike', 'exchange', '21bitcoin', 'pocketbitcoin'
             )
-            OR lower(w.label) LIKE '%exchange%'
             THEN 'Exchange'
+          WHEN lower(w.kind) IN (
+              'address', 'descriptor', 'xpub', 'samourai', 'wasabi',
+              'silent-payment', 'ledgerlive'
+            )
+            THEN 'On-chain'
+          WHEN lower(w.label) LIKE '%liquid%' OR lower(w.label) LIKE '%lbtc%'
+            THEN 'Liquid'
+          WHEN lower(w.label) LIKE '%lightning%' OR lower(w.label) LIKE '%phoenix%'
+            OR lower(w.label) LIKE '% ln%' OR lower(w.label) LIKE 'ln %'
+            OR lower(w.label) LIKE '%(ln)%'
+            THEN 'Lightning'
+          WHEN lower(w.label) LIKE '%exchange%' THEN 'Exchange'
           ELSE 'On-chain'
         END
     """.strip()
@@ -1792,7 +1796,7 @@ def _connections(
 
 def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, Any]]:
     rows = conn.execute(
-        """
+        f"""
         SELECT
             t.id,
             t.external_id AS external_id,
@@ -1800,6 +1804,7 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
             t.confirmed_at,
             w.label AS wallet,
             w.kind AS wallet_kind,
+            {_ui_transaction_payment_method_sql()} AS payment_method,
             w.config_json AS wallet_config_json,
             t.direction,
             t.asset,
@@ -1848,7 +1853,7 @@ def _activity_transactions(
     has_book_state: bool,
 ) -> list[dict[str, Any]]:
     rows = conn.execute(
-        """
+        f"""
         SELECT
             t.id,
             t.external_id AS external_id,
@@ -1856,6 +1861,7 @@ def _activity_transactions(
             t.confirmed_at,
             w.label AS wallet,
             w.kind AS wallet_kind,
+            {_ui_transaction_payment_method_sql()} AS payment_method,
             w.config_json AS wallet_config_json,
             t.direction,
             t.asset,
@@ -1939,6 +1945,7 @@ def _activity_transactions(
         "asset",
         "chain",
         "network",
+        "paymentMethod",
         "account",
         "counter",
         "amountSat",
@@ -2285,6 +2292,8 @@ def _transaction_row_to_ui(
     row: sqlite3.Row,
     metadata_tags: list[str],
     pair_meta: dict[str, Any] | None = None,
+    *,
+    focused_leg: bool = False,
 ) -> dict[str, Any]:
     fee_msat = int(row["fee"] or 0)
     rate = _positive_float_or_none(row["fiat_rate"])
@@ -2323,6 +2332,17 @@ def _transaction_row_to_ui(
         note = row["note"] or ""
         excluded = bool(row["excluded"])
         include_empty_tags = False
+        if focused_leg:
+            # Detail resolves one source record. The list/chart's net pair
+            # presentation must not replace that wallet's principal with fees.
+            sign = 1 if row["direction"] == "inbound" else -1
+            amount_msat = sign * int(row["amount"] or 0)
+            fee_sat = _ui_sat_amount(fee_msat)
+            rate = _positive_float_or_none(row["fiat_rate"])
+            raw_fiat = _positive_float_or_none(row["fiat_value"])
+            fiat_value = sign * abs(raw_fiat) if raw_fiat is not None else None
+            account = row["wallet"]
+            counter = f"{pair_meta['label']} {pair_meta['out_asset']} -> {pair_meta['in_asset']}"
     else:
         sign = 1 if row["direction"] == "inbound" else -1
         amount_msat = sign * int(row["amount"] or 0)
@@ -2396,6 +2416,7 @@ def _transaction_row_to_ui(
         "asset": row["asset"] if "asset" in row_keys else None,
         "chain": chain,
         "network": network,
+        "paymentMethod": row["payment_method"] if "payment_method" in row_keys else None,
         "account": account,
         "counter": counter,
         "amountSat": _ui_sat_amount(amount_msat),
@@ -4034,6 +4055,7 @@ def _build_transactions_page_snapshot(
             t.created_at AS _created_at,
             w.label AS wallet,
             w.kind AS wallet_kind,
+            {_ui_transaction_payment_method_sql()} AS payment_method,
             w.config_json AS wallet_config_json,
             t.direction,
             t.asset,
@@ -4469,6 +4491,7 @@ def build_transactions_dashboard_snapshot(
         f"""
         SELECT t.id, t.external_id AS external_id, t.occurred_at, t.confirmed_at,
                w.label AS wallet, w.kind AS wallet_kind,
+               {_ui_transaction_payment_method_sql()} AS payment_method,
                w.config_json AS wallet_config_json, t.direction, t.asset,
                t.amount, t.fee, t.fiat_currency, t.fiat_value, t.fiat_rate,
                t.pricing_source_kind, t.pricing_quality, t.pricing_external_ref,
@@ -4605,13 +4628,7 @@ def build_transactions_dashboard_snapshot(
 
     payment_methods = sorted(
         {
-            "Lightning"
-            if "lightning" in str(tx.get("account") or "").lower()
-            or "phoenix" in str(tx.get("account") or "").lower()
-            else "Liquid"
-            if str(tx.get("chain") or "").lower() == "liquid"
-            or "liquid" in str(tx.get("account") or "").lower()
-            else "On-chain"
+            str(tx.get("paymentMethod") or "On-chain")
             for tx in transactions
         }
     )
@@ -4752,7 +4769,7 @@ def build_transactions_resolve_snapshot(
     external_id_candidates = list(id_candidates)
     if query.upper() not in external_id_candidates:
         external_id_candidates.append(query.upper())
-    select_sql = """
+    select_sql = f"""
         SELECT
             t.id,
             t.external_id AS external_id,
@@ -4760,6 +4777,7 @@ def build_transactions_resolve_snapshot(
             t.confirmed_at,
             w.label AS wallet,
             w.kind AS wallet_kind,
+            {_ui_transaction_payment_method_sql()} AS payment_method,
             w.config_json AS wallet_config_json,
             t.direction,
             t.asset,
@@ -4813,7 +4831,9 @@ def build_transactions_resolve_snapshot(
             + order_limit_sql,
             (context["profile_id"], *external_id_candidates),
         ).fetchone()
-    transaction = _transaction_rows_to_ui(conn, [row])[0] if row else None
+    transaction = _transaction_rows_to_ui(
+        conn, [row], focused_leg=str(row["id"]).lower() == query.lower(),
+    )[0] if row else None
     return {"transaction": transaction, "query": query}
 
 
@@ -7861,6 +7881,8 @@ def build_next_actions_snapshot(
 def _transaction_rows_to_ui(
     conn: sqlite3.Connection,
     rows: list[sqlite3.Row],
+    *,
+    focused_leg: bool = False,
 ) -> list[dict[str, Any]]:
     pair_meta_by_transaction = _transaction_pair_display_meta(conn, rows)
     tags_by_transaction = _transaction_tags_by_transaction(
@@ -7880,7 +7902,7 @@ def _transaction_rows_to_ui(
             if pair_id in rendered_pair_ids:
                 continue
             rendered_pair_ids.add(pair_id)
-        output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta))
+        output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta, focused_leg=focused_leg))
     return output
 
 

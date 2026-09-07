@@ -31,6 +31,9 @@ from ..time_utils import now_iso
 from ..wallet_descriptors import default_policy_asset_id, liquid_asset_code
 from . import custody_journal
 from . import ownership as core_ownership
+from .chain_analysis.ownership import branch_evidence
+from .privacy_hygiene import collaborative_transaction_evidence
+from .transaction_references import load_local_transaction_reference, reference_scope
 from .ownership_transfers import (
     _norm_chain_network,
     _parse_onchain_tx,
@@ -79,7 +82,7 @@ class _ProfileSemantics(NamedTuple):
     owned_index: Any | None
     index_warnings: list[str]
     semantics: dict[str, Any]
-    outpoint_spends: dict[str, dict[str, Any]]
+    outpoint_spends: dict[tuple[str, str, str], dict[str, Any]]
 
 
 def build_transaction_graph_snapshot(
@@ -141,7 +144,7 @@ def build_transaction_graph_snapshot(
             enriched_raw,
         ),
     )
-    _annotate_graph(graph, row, owned_index, semantics)
+    _annotate_graph(graph, row, owned_index, semantics, raw=enriched_raw)
     _annotate_local_spends(row, graph, bundle.outpoint_spends)
     _annotate_block_heights(conn, profile_id, row, graph)
     warnings = list(graph.pop("_warnings", []))
@@ -655,70 +658,71 @@ def _local_block_heights(
     conn: sqlite3.Connection,
     profile_id: str,
     txids: Sequence[str],
+    chain_network: tuple[str, str],
 ) -> dict[str, int]:
-    """Confirmation heights the profile already knows for these txids."""
+    """Unambiguous local confirmation heights in one physical chain domain."""
     normalized = sorted({str(txid).strip().lower() for txid in txids if txid})
     if not normalized:
         return {}
     placeholders = ", ".join("?" for _ in normalized)
-    heights: dict[str, int] = {}
+    observed: dict[str, set[int]] = defaultdict(set)
     for row in conn.execute(
         f"""
-        SELECT lower(t.external_id) AS txid, t.raw_json
+        SELECT lower(t.external_id) AS txid, t.raw_json, t.asset,
+               w.kind AS wallet_kind, w.config_json AS wallet_config_json
         FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ?
           AND lower(t.external_id) IN ({placeholders})
         """,
         (profile_id, *normalized),
     ).fetchall():
-        txid = _string_or_none(_row_get(row, "txid"))
-        if txid is None or txid in heights:
+        if _row_chain_network(row) != chain_network:
             continue
+        txid = _string_or_none(_row_get(row, "txid"))
         height = _row_block_height(row)
-        if height is not None:
-            heights[txid] = height
+        if txid is not None and height is not None:
+            observed[txid].add(height)
     for row in conn.execute(
         f"""
-        SELECT lower(txid) AS txid, MAX(block_height) AS block_height
+        SELECT lower(txid) AS txid, block_height, chain, network
         FROM wallet_utxos
         WHERE profile_id = ?
           AND lower(txid) IN ({placeholders})
           AND block_height IS NOT NULL
-        GROUP BY lower(txid)
         """,
         (profile_id, *normalized),
     ).fetchall():
+        if _norm_chain_network(row["chain"], row["network"]) != chain_network:
+            continue
         txid = _string_or_none(_row_get(row, "txid"))
         height = _int_or_none(_row_get(row, "block_height"))
         if txid is not None and height is not None and height > 0:
-            heights.setdefault(txid, height)
-    return heights
+            observed[txid].add(height)
+    # Retained observations can disagree after a reorg. A distance needs one
+    # recorded height, not whichever row or inventory maximum happened to win.
+    return {txid: next(iter(heights)) for txid, heights in observed.items() if len(heights) == 1}
 
 
 def _profile_outpoint_spends(
     conn: sqlite3.Connection,
     profile_id: str,
-) -> dict[str, dict[str, Any]]:
-    """Map every outpoint the profile knows was spent to what spent it.
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    """Map domain-qualified outpoints to local spend references.
 
-    Built once per profile version alongside the rest of the semantics bundle
-    rather than per graph request: the only cheap way to find a spend is to read
-    the vin of every local transaction, and doing that on each panel open cost
-    hundreds of milliseconds on a large book.
-
-    A local transaction naming the outpoint is the authoritative source, and only
-    it can supply a navigable id. ``wallet_utxos.spent_by`` fills gaps for
-    outpoints no local row spends. Both are references, never amounts, so a stale
-    row can only fail to offer a link.
-
-    ponytail: whole-profile map held in memory (~100 bytes per spent outpoint);
-    move to an indexed spent-outpoint table if a book ever makes that hurt.
+    The profile scan is cached with the other graph inputs. Local transaction
+    graphs supply navigable references; inventory only fills missing references.
+    Different retained spending transactions are conflicting observations, not
+    grounds to pick an arbitrary RBF candidate. No reference grants custody or
+    accounting authority.
     """
-    spends: dict[str, dict[str, Any]] = {}
+    candidates: dict[tuple[str, str, str], dict[str, dict[str, Any]]] = defaultdict(dict)
     for row in conn.execute(
         """
-        SELECT t.id, t.external_id, t.raw_json
+        SELECT t.id, t.external_id, t.raw_json, t.asset,
+               w.kind AS wallet_kind, w.config_json AS wallet_config_json
         FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ?
         ORDER BY t.occurred_at, t.created_at, t.id
         """,
@@ -733,23 +737,24 @@ def _profile_outpoint_spends(
         )
         if not _looks_like_txid(spending_txid):
             continue
+        chain_network = _row_chain_network(row)
         for entry in vin:
             if not isinstance(entry, Mapping):
                 continue
             outpoint = _outpoint(entry)
             if outpoint:
-                # First writer wins, so the ordering above makes the pick stable
-                # when two retained rows (an RBF pair) spend the same outpoint.
-                spends.setdefault(
-                    outpoint.lower(),
+                key = (*chain_network, outpoint.lower())
+                candidates[key].setdefault(
+                    str(spending_txid).lower(),
                     {
                         "txid": str(spending_txid).lower(),
                         "transactionId": str(_row_get(row, "id")),
                     },
                 )
+    local_keys = set(candidates)
     for row in conn.execute(
         """
-        SELECT lower(outpoint) AS outpoint, spent_by
+        SELECT lower(outpoint) AS outpoint, spent_by, chain, network
         FROM wallet_utxos
         WHERE profile_id = ?
           AND spent_by IS NOT NULL
@@ -762,10 +767,15 @@ def _profile_outpoint_spends(
         spent_by = _string_or_none(_row_get(row, "spent_by"))
         if not outpoint or not _looks_like_txid(spent_by):
             continue
-        # No transaction id: nothing local to navigate to. Never paired with
-        # another row's id, or the reference and the jump would disagree.
-        spends.setdefault(outpoint.lower(), {"txid": str(spent_by).lower()})
-    return spends
+        key = (*_norm_chain_network(row["chain"], row["network"]), outpoint.lower())
+        if key not in local_keys:
+            # Inventory cannot provide a local navigation id, or override an
+            # actual retained spend graph (including conflicting graphs).
+            candidates[key].setdefault(str(spent_by).lower(), {"txid": str(spent_by).lower()})
+    return {
+        key: next(iter(spenders.values())) if len(spenders) == 1 else {"conflicting": True}
+        for key, spenders in candidates.items()
+    }
 
 def _local_outpoint_sats(
     local_outpoint_amounts: Mapping[str, int],
@@ -819,10 +829,10 @@ def _parse_graph(
         return {
             "supportLevel": "graphless",
             "unsupportedReason": reason,
-            "metadata": {**metadata, "inputCount": 0, "outputCount": 0},
+            "metadata": metadata,
             "inputs": [],
             "outputs": [],
-            "fee": _fee_from_graph_or_row(row, [], [], metadata),
+            "fee": None,
             "_warnings": graphless_warnings,
         }
 
@@ -952,8 +962,8 @@ def _parse_graph(
         "inputCount": len(inputs),
         "outputCount": len(outputs),
     }
-    fee = _fee_from_graph_or_row(
-        row, inputs, outputs, metadata, explicit_fee_sats=liquid_fee_sats
+    fee = _fee_from_graph(
+        inputs, outputs, metadata, explicit_fee_sats=liquid_fee_sats
     )
     return {
         "supportLevel": support,
@@ -974,14 +984,13 @@ def _enrich_graph_raw(
     *,
     allow_public_lookup: bool = False,
 ) -> Mapping[str, Any]:
-    if not allow_public_lookup:
-        return raw
     return _enrich_reference_graph_raw(
         conn,
         row,
         raw,
         runtime_config,
         liquid=_looks_liquid_or_confidential(row, raw),
+        allow_public_lookup=allow_public_lookup,
     )
 
 
@@ -992,8 +1001,9 @@ def _enrich_reference_graph_raw(
     runtime_config: Mapping[str, Any] | None,
     *,
     liquid: bool,
+    allow_public_lookup: bool,
 ) -> Mapping[str, Any]:
-    """Fill a row's public input/output references from a configured backend.
+    """Use local cached references, optionally filling them from a chosen backend.
 
     One implementation for both chains. The chain-specific parts are the
     eligibility gate, the chain/network defaults, whether a cached graph has to
@@ -1018,11 +1028,42 @@ def _enrich_reference_graph_raw(
         if liquid
         else _row_chain_network(row)
     )
+    if chain == "unknown":
+        return _with_graph_lookup_warning(raw, "invalid_reference_scope", "Conflicting or unsupported network metadata prevents transaction reference lookup.")
+    local = load_local_transaction_reference(
+        conn, profile_id=str(_row_get(row, "profile_id") or ""),
+        chain=chain, network=network, txid=str(txid).lower(), current=raw,
+    )
+    if local.conflict:
+        return _with_graph_lookup_warning(
+            raw, "local_reference_conflict",
+            "Local transaction references disagree or exceed the inspection limit; the stored transaction is shown unchanged.",
+        )
+    if local.payload is not None:
+        raw = {
+            **local.payload,
+            "_graphLookupWarning": {
+                "code": "local_transaction_reference", "level": "info",
+                "message": "Uses transaction references already stored in this book. References do not establish wallet ownership or booked custody.",
+            },
+        }
+        if liquid or _bitcoin_current_graph_has_required_prevouts(raw):
+            return raw
     cached = _load_graph_lookup_cache(conn, chain, network, str(txid))
     if cached is not None and (
         liquid or _bitcoin_current_graph_has_required_prevouts(cached)
     ):
-        return cached
+        return {
+            **cached,
+            "_graphLookupWarning": {
+                "code": "cached_reference_graph",
+                "level": "info",
+                "message": "Uses previously fetched public transaction references. "
+                "These references do not establish wallet ownership or booked custody.",
+            },
+        }
+    if not allow_public_lookup:
+        return raw
     backends = (
         _liquid_graph_lookup_backends(conn, row, runtime_config)
         if liquid
@@ -2256,6 +2297,8 @@ def _annotate_graph(
     row: Mapping[str, Any],
     owned_index: Any | None,
     semantics: Mapping[str, Any],
+    *,
+    raw: Mapping[str, Any],
 ) -> None:
     if owned_index is None:
         return
@@ -2263,10 +2306,8 @@ def _annotate_graph(
     row_chain_network = _norm_chain_network(*_row_chain_network(row))
     input_owner_ids: set[str] = set()
     for node in graph["inputs"]:
-        matches = _filter_matches_to_chain_network(
-            _input_matches(node, owned_index), row_chain_network
-        )
-        _apply_match_annotation(node, matches, "owned_input", "external_input")
+        matches = _node_matches(node, owned_index, row_chain_network)
+        _apply_match_annotation(node, matches, "owned_input")
         input_owner_ids.update(str(match.wallet_id) for match in matches)
         if node.get("_coinbase"):
             # Newly issued supply: there is no previous owner, so "external
@@ -2283,11 +2324,18 @@ def _annotate_graph(
                 _node_annotation("peg_in", "Peg-in from Bitcoin")
             )
 
-    contributor_ids = (
-        input_owner_ids
-        if input_owner_ids or not _row_is_outbound(row)
-        else {source_wallet_id}
+    # Reference enrichment replaces the public graph shape and deliberately
+    # drops private metadata. Preserve a marker from the original observation.
+    collaboration = (
+        collaborative_transaction_evidence(dict(row), _json_obj(_row_get(row, "raw_json")))
+        or collaborative_transaction_evidence(dict(row), raw)
     )
+    # A transaction-wide wallet association is not input ownership. An exact
+    # owned return is still not economic change without ordinary spend context
+    # and explicit wallet branch evidence.
+    ordinary_owned_spend = bool(graph["inputs"]) and collaboration is None and all(
+        node.get("ownership") == "owned" for node in graph["inputs"]
+    ) and len(input_owner_ids) == 1
     inferred_incoming_payment_ids = _inferred_incoming_payment_output_ids(
         row, graph["outputs"]
     )
@@ -2307,37 +2355,38 @@ def _annotate_graph(
             node["role"] = "op_return"
             node["annotations"].append(_node_annotation("op_return", "OP_RETURN / non-address output"))
             continue
-        matches = _filter_matches_to_chain_network(
-            owned_index.lookup_script(script), row_chain_network
-        )
+        matches = _node_matches(node, owned_index, row_chain_network)
         owner_ids = {str(match.wallet_id) for match in matches}
         if not matches:
             if node.get("id") in inferred_incoming_payment_ids:
-                node["ownership"] = "owned"
-                node["role"] = "incoming_payment"
-                node["annotations"].append(
-                    _node_annotation(
-                        "incoming_payment", "Incoming payment to this wallet"
-                    )
-                )
+                node["ownership"] = "unknown"
+                node["role"] = "incoming_payment_candidate"
                 node["annotations"].append(
                     _node_annotation(
                         "recorded_incoming_amount",
-                        "Matches imported incoming amount",
+                        "Matches imported incoming amount; output ownership is unverified",
                     )
                 )
                 continue
-            node["ownership"] = "external"
-            node["role"] = "external_recipient"
-            node["annotations"].append(_node_annotation("external_recipient", "External recipient"))
+            # A bounded local ownership index cannot establish that an output
+            # belongs to someone else, nor whether it is payment or change.
+            node["ownership"] = "unknown"
+            node["role"] = "output"
             continue
-        _apply_match_annotation(node, matches, "owned_output", "external_recipient")
+        _apply_match_annotation(node, matches, "owned_output")
         if len(owner_ids) > 1:
             node["role"] = "ambiguous_owned_output"
             node["annotations"].append(_node_annotation("ambiguous_owned_output", "Owned by multiple wallets"))
-        elif owner_ids & contributor_ids:
-            node["role"] = "change"
-            node["annotations"].append(_node_annotation("change", "Change back to an owned source wallet"))
+        elif owner_ids & input_owner_ids:
+            branches = [branch_evidence(match.branch_label, None) for match in matches]
+            known_change = ordinary_owned_spend and all(
+                branch["branch_role"] == "change" and branch["branch_evidence_level"] == "exact"
+                for branch in branches
+            )
+            node["role"] = "change" if known_change else "owned_return"
+            node["annotations"].append(_node_annotation(
+                node["role"], "Change to an observed wallet change branch" if known_change else "Output to a wallet that owns an observed input",
+            ))
         elif _row_is_inbound(row) and source_wallet_id in owner_ids:
             node["role"] = "incoming_payment"
             node["annotations"].append(_node_annotation("incoming_payment", "Incoming payment to this wallet"))
@@ -2381,7 +2430,9 @@ def _annotate_block_heights(
     )
     if not wanted:
         return
-    heights = _local_block_heights(conn, profile_id, [txid for txid in wanted if txid])
+    heights = _local_block_heights(
+        conn, profile_id, [txid for txid in wanted if txid], _row_chain_network(row)
+    )
     if not heights:
         return
     for node in inputs:
@@ -2399,17 +2450,26 @@ def _annotate_block_heights(
 def _annotate_local_spends(
     row: Mapping[str, Any],
     graph: dict[str, Any],
-    spends: Mapping[str, Mapping[str, Any]],
+    spends: Mapping[tuple[str, str, str], Mapping[str, Any]],
 ) -> None:
     """Tag outputs the profile already knows were spent, and by what."""
     outputs = graph.get("outputs")
     if not isinstance(outputs, list) or not outputs or not spends:
         return
     row_id = str(_row_get(row, "id") or "")
+    chain_network = _row_chain_network(row)
     for node in outputs:
         outpoint = _string_or_none(node.get("outpoint"))
-        spend = spends.get(outpoint.lower()) if outpoint else None
+        spend = spends.get((*chain_network, outpoint.lower())) if outpoint else None
         if not spend:
+            continue
+        if spend.get("conflicting"):
+            graph.setdefault("_warnings", []).append({
+                "code": "conflicting_local_spends",
+                "level": "warning",
+                "message": "Local observations contain competing spends of an output. "
+                "Refresh the connection to resolve which transaction is current.",
+            })
             continue
         node["spentByTxid"] = spend["txid"]
         transaction_id = spend.get("transactionId")
@@ -2439,13 +2499,14 @@ def _inferred_incoming_payment_output_ids(
     return {candidates[0]}
 
 
-def _input_matches(node: Mapping[str, Any], owned_index: Any) -> list[Any]:
+def _node_matches(node: Mapping[str, Any], owned_index: Any, chain_network: tuple[str, str]) -> list[Any]:
+    """Resolve exact output identity first, within the same physical domain."""
     outpoint = node.get("outpoint")
     if outpoint:
-        matches = _lookup_outpoint(owned_index, outpoint)
+        matches = _filter_matches_to_chain_network(_lookup_outpoint(owned_index, outpoint), chain_network)
         if matches:
             return matches
-    return owned_index.lookup_script(node.get("_script"))
+    return _filter_matches_to_chain_network(owned_index.lookup_script(node.get("_script")), chain_network)
 
 
 def _lookup_outpoint(owned_index: Any, outpoint: Any) -> list[Any]:
@@ -2468,11 +2529,6 @@ def _filter_matches_to_chain_network(
     ]
 
 
-def _row_is_outbound(row: Mapping[str, Any]) -> bool:
-    direction = str(_row_get(row, "direction") or "").lower()
-    return direction in {"outbound", "send", "sent", "withdrawal", "sell"}
-
-
 def _row_is_inbound(row: Mapping[str, Any]) -> bool:
     direction = str(_row_get(row, "direction") or "").lower()
     return direction in {"inbound", "receive", "received", "deposit", "income", "buy"}
@@ -2482,10 +2538,9 @@ def _apply_match_annotation(
     node: dict[str, Any],
     matches: Sequence[Any],
     owned_code: str,
-    fallback_code: str,
 ) -> None:
     if not matches:
-        node["ownership"] = "external" if fallback_code.startswith("external") else "unknown"
+        node["ownership"] = "unknown"
         return
     wallets = sorted({str(match.wallet_label) for match in matches})
     wallet_ids = sorted({str(match.wallet_id) for match in matches})
@@ -2802,8 +2857,7 @@ def _public_node(node: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _fee_from_graph_or_row(
-    row: Mapping[str, Any],
+def _fee_from_graph(
     inputs: Sequence[Mapping[str, Any]],
     outputs: Sequence[Mapping[str, Any]],
     metadata: Mapping[str, Any],
@@ -2825,10 +2879,9 @@ def _fee_from_graph_or_row(
             if computed >= 0:
                 value_sats = computed
     if value_sats is None:
-        fee_msat = int(_row_get(row, "fee") or 0)
-        if fee_msat <= 0:
-            return None
-        value_sats = fee_msat // SATS_TO_MSAT
+        # An imported fee belongs to the focused account and may be an exchange
+        # fee or one participant's contribution. It cannot price the whole tx.
+        return None
     fee = {
         "id": "fee",
         "label": "Miner fee",
@@ -3043,7 +3096,7 @@ def _script_type(source: Mapping[str, Any], script: Any) -> str:
         return explicit
     script_text = str(script or "").lower()
     if not script_text:
-        return "empty"
+        return "empty" if output_script(source) == "" else "unknown"
     if script_text.startswith("6a"):
         return "op_return"
     if script_text.startswith("0014"):
@@ -3057,7 +3110,7 @@ def _script_type(source: Mapping[str, Any], script: Any) -> str:
 
 def _is_unspendable(script: Any) -> bool:
     text = str(script or "").strip().lower()
-    return not text or text.startswith("6a")
+    return text.startswith("6a")
 
 
 def _txid_from_row(row: Mapping[str, Any]) -> str | None:
@@ -3170,8 +3223,9 @@ def _row_chain_network(
     default_network: str = "main",
 ) -> tuple[str, str]:
     config = _json_obj(_row_get(row, "wallet_config_json"))
-    chain = str(config.get("chain") or default_chain).lower()
-    network = str(config.get("network") or default_network).lower()
+    raw = _json_obj(_row_get(row, "raw_json"))
+    chain = str(raw.get("chain") or config.get("chain") or default_chain).lower()
+    network = str(raw.get("network") or config.get("network") or default_network).lower()
     asset = str(_row_get(row, "asset") or "").upper()
     wallet_kind = str(_row_get(row, "wallet_kind") or "").lower()
     if "liquid" in wallet_kind or asset in {"LBTC", "L-BTC", "LIQUID-BTC"}:
@@ -3180,7 +3234,7 @@ def _row_chain_network(
             network = "liquidv1"
     elif chain in {"", "btc"}:
         chain = "bitcoin"
-    return _norm_chain_network(chain, network)
+    return reference_scope(row, default_chain=chain, default_network=network) or ("unknown", "unknown")
 
 
 def _json_obj(value: Any) -> dict[str, Any]:

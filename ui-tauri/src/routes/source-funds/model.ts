@@ -214,7 +214,16 @@ export type SourceFundsPreview = {
         deferred_privacy_hop?: boolean;
       }[];
     }[];
-    edges?: Record<string, unknown>[];
+    edges?: {
+      id: string;
+      from: string;
+      to: string;
+      link_type?: string;
+      asset?: string;
+      amount?: number | null;
+      amount_msat?: number | string | null;
+      deferred_privacy_hop?: boolean;
+    }[];
   };
   flow_levels?: {
     level: number;

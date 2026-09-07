@@ -10,7 +10,7 @@ import threading
 import time
 from collections.abc import Mapping as AbcMapping
 from datetime import datetime, timezone
-from typing import Any, Callable, Mapping, Protocol
+from typing import Any, Callable, Literal, Mapping, Protocol
 
 from .backends import merge_db_backends
 from .cli.handlers import (
@@ -32,7 +32,7 @@ from .core import rates as core_rates
 from .core import sync_backends as core_sync_backends
 from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot
-from .core.sync import sync_progress_emitter
+from .core.sync import full_scan_checkpoint, sync_progress_emitter
 from .core.ui_snapshot import build_report_blockers_snapshot
 from .db import open_db
 from .envelope import build_envelope, build_event_envelope
@@ -137,6 +137,7 @@ def _wallets_sync_payload(
     *,
     strict: bool,
     progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
+    automatic_trigger: Literal["background", "report_read"] | None = None,
 ) -> dict[str, Any]:
     args = _coerce_wallets_sync_args(raw_args, strict=strict)
     context = current_context_snapshot(conn)
@@ -154,9 +155,10 @@ def _wallets_sync_payload(
             "force_full": args["force_full"],
         },
         progress_observer=progress_observer,
+        automatic_trigger=automatic_trigger,
     )
     payload["results"] = payload.get("results") or []
-    if not payload["results"] and not payload.get("enqueued"):
+    if automatic_trigger is None and not payload["results"] and not payload.get("enqueued"):
         payload["results"] = sync_wallet(
             conn,
             runtime_config,
@@ -610,7 +612,8 @@ def _source_checkpoint_for_job(
     source_key: str,
     job: Mapping[str, Any],
 ) -> dict[str, Any]:
-    return {} if _job_force_full(job) else _source_checkpoint(conn, profile_id, source_key)
+    checkpoint = _source_checkpoint(conn, profile_id, source_key)
+    return full_scan_checkpoint(checkpoint) if _job_force_full(job) else checkpoint
 
 
 def _wallet_with_freshness_checkpoint(
@@ -703,7 +706,31 @@ def _freshness_handlers(
     runtime_config: dict[str, object],
     *,
     prefetched_onchain: Mapping[str, Any] | None = None,
+    automatic_trigger: Literal["background", "report_read"] | None = None,
 ) -> Mapping[str, core_freshness.JobHandler]:
+    def require_network_permission(
+        conn: sqlite3.Connection,
+        job: Mapping[str, Any],
+        source_type: str,
+    ) -> None:
+        # Explicit callers execute only the jobs selected by the current action.
+        # A queued/recovered job is not a durable grant for automatic work: both
+        # its source and the triggering feature must still be enabled at I/O.
+        if automatic_trigger is None and source_type != core_freshness.SOURCE_RATES:
+            return
+        policy = core_freshness.get_policy(conn, str(job["profile_id"]))
+        trigger_enabled = True
+        if automatic_trigger == "background":
+            trigger_enabled = policy.background_enabled
+        elif automatic_trigger == "report_read":
+            trigger_enabled = policy.report_read_sync
+        if not trigger_enabled or not policy.source_classes.get(source_type, False):
+            raise AppError(
+                "Freshness network permission was disabled",
+                code="cancelled",
+                retryable=False,
+            )
+
     def onchain_wallet(
         conn: sqlite3.Connection,
         job: Mapping[str, Any],
@@ -726,6 +753,11 @@ def _freshness_handlers(
         progress({"phase": core_freshness.PHASE_BACKEND_FETCH, "wallet": wallet["label"]})
         token = sync_progress_emitter.set(progress)
         try:
+            def check_permitted() -> None:
+                check_cancelled()
+                require_network_permission(conn, job, core_freshness.SOURCE_ONCHAIN)
+
+            check_permitted()
             outcome = sync_wallet_from_backend(
                 conn,
                 runtime_config,
@@ -734,7 +766,7 @@ def _freshness_handlers(
                 wallet_with_checkpoint,
                 checkpoint=checkpoint,
                 force_full=force_full,
-                check_cancelled=check_cancelled,
+                check_cancelled=check_permitted,
                 prefetched=prefetched_fetches,
             )
         finally:
@@ -760,6 +792,7 @@ def _freshness_handlers(
         progress({"phase": core_freshness.PHASE_BACKEND_FETCH, "wallet": wallet["label"]})
         token = sync_progress_emitter.set(progress)
         try:
+            require_network_permission(conn, job, core_freshness.SOURCE_BTCPAY_WALLET)
             outcome = sync_configured_btcpay_wallet(
                 conn,
                 runtime_config,
@@ -813,6 +846,8 @@ def _freshness_handlers(
             )
             token = sync_progress_emitter.set(progress)
             try:
+                check_cancelled()
+                require_network_permission(conn, job, core_freshness.SOURCE_BTCPAY_PROVENANCE)
                 outcome = sync_btcpay_commercial_provenance(
                     conn,
                     runtime_config,
@@ -849,6 +884,8 @@ def _freshness_handlers(
         progress({"phase": core_freshness.PHASE_BACKEND_FETCH, "wallet": wallet["label"]})
         token = sync_progress_emitter.set(progress)
         try:
+            check_cancelled()
+            require_network_permission(conn, job, core_freshness.SOURCE_BTCPAY_PROVENANCE)
             outcome = enrich_wallet_from_btcpay_provenance(
                 conn,
                 runtime_config,
@@ -906,6 +943,7 @@ def _freshness_handlers(
                 "latest": [],
                 "sync": [],
             }
+        require_network_permission(conn, job, core_freshness.SOURCE_RATES)
         latest_summary = core_rates.sync_latest_rates(
             conn,
             source=provider,
@@ -916,6 +954,7 @@ def _freshness_handlers(
             core_rates.RATE_SOURCE_COINBASE_EXCHANGE,
             core_rates.RATE_SOURCE_MEMPOOL,
         }
+        require_network_permission(conn, job, core_freshness.SOURCE_RATES)
         summary = (
             core_rates.sync_rates(
                 conn,
@@ -1382,7 +1421,7 @@ def _freshness_background_tick(
 
     completed = core_freshness.run_due_jobs(
         conn,
-        _freshness_handlers(runtime_config),
+        _freshness_handlers(runtime_config, automatic_trigger="background"),
         profile_id=profile_id,
         limit=1,
         progress_observer=_progress,
@@ -1576,12 +1615,57 @@ def _source_class_included_for_run(
     return bool(requested) and policy_enabled
 
 
+def _due_jobs_for_refresh(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    enqueued: list[dict[str, Any]],
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Keep cooldown/order semantics without borrowing unrelated queued work."""
+    requested_ids = {job["id"] for job in enqueued}
+    if not requested_ids:
+        return []
+    active_count = len(core_freshness.list_jobs(conn, profile_id, active_only=True))
+    due = core_freshness.list_due_jobs(conn, profile_id=profile_id, limit=active_count)
+    return [job for job in due if job["id"] in requested_ids][:max(0, limit)]
+
+
+def _run_requested_freshness_jobs(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    requested_jobs: list[dict[str, Any]],
+    handlers: Mapping[str, core_freshness.JobHandler],
+    *,
+    limit: int,
+    progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
+) -> list[dict[str, Any]]:
+    """Recheck eligibility at dispatch without taking another action's jobs.
+
+    A prior job or concurrent control request can pause a source or extend its
+    cooldown after the initial selection. Already completed prefetch traffic
+    cannot be recalled; this gates each subsequent job execution.
+    """
+    remaining = list(requested_jobs)
+    completed = []
+    for _ in range(max(0, limit)):
+        due = _due_jobs_for_refresh(conn, profile_id, remaining, 1)
+        if not due:
+            break
+        job_id = due[0]["id"]
+        remaining = [job for job in remaining if job["id"] != job_id]
+        completed.append(core_freshness.run_job(
+            conn, job_id, handlers, progress_observer=progress_observer,
+        ))
+    return completed
+
+
 def _freshness_run_payload(
     conn: sqlite3.Connection,
     runtime_config: dict[str, object],
     raw_args: dict[str, Any] | None = None,
     *,
     progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
+    automatic_trigger: Literal["background", "report_read"] | None = None,
 ) -> dict[str, Any]:
     args = raw_args or {}
     unknown = sorted(
@@ -1648,6 +1732,8 @@ def _freshness_run_payload(
         auto_pair_before_journals=auto_pair,
         force_full=force_full,
     )
+    if automatic_trigger is not None:
+        specs = _filter_freshness_specs_by_policy(specs, policy)
     enqueued = _enqueue_freshness_jobs(conn, profile["id"], specs)
     completed: list[dict[str, Any]] = []
     if args.get("run", True):
@@ -1686,17 +1772,16 @@ def _freshness_run_payload(
             else None
         )
         try:
-            selected_jobs = core_freshness.list_due_jobs(
-                conn,
-                profile_id=profile["id"],
-                limit=run_limit,
+            selected_jobs = _due_jobs_for_refresh(
+                conn, profile["id"], enqueued, run_limit,
             )
             try:
-                prefetched_onchain = _prefetch_onchain_freshness_jobs(
-                    conn,
-                    runtime_config,
-                    profile,
-                    selected_jobs,
+                prefetched_onchain = (
+                    _prefetch_onchain_freshness_jobs(
+                        conn, runtime_config, profile, selected_jobs,
+                    )
+                    if automatic_trigger is None
+                    else {}
                 )
             except Exception as exc:
                 _LOGGER.warning(
@@ -1707,18 +1792,15 @@ def _freshness_run_payload(
         finally:
             if token is not None:
                 sync_progress_emitter.reset(token)
-        completed = core_freshness.run_due_jobs(
-            conn,
-            _freshness_handlers(
-                runtime_config,
-                prefetched_onchain=prefetched_onchain,
-            ),
-            profile_id=profile["id"],
-            limit=run_limit,
+        handlers = _freshness_handlers(
+            runtime_config,
+            prefetched_onchain=prefetched_onchain,
+            automatic_trigger=automatic_trigger,
+        )
+        completed = _run_requested_freshness_jobs(
+            conn, profile["id"], enqueued, handlers, limit=run_limit,
             progress_observer=(
-                _progress_with_run_context
-                if progress_observer is not None
-                else None
+                _progress_with_run_context if progress_observer is not None else None
             ),
         )
     snapshot = _freshness_snapshot_for_ui(conn, profile["id"])
@@ -1839,11 +1921,8 @@ def _workspace_freshness_run_payload(
         completed: list[dict[str, Any]] = []
         if run_now:
             limit = int(requested_limit or max(1, len(enqueued)))
-            completed = core_freshness.run_due_jobs(
-                conn,
-                handlers,
-                profile_id=profile["id"],
-                limit=limit,
+            completed = _run_requested_freshness_jobs(
+                conn, profile["id"], enqueued, handlers, limit=limit,
                 progress_observer=_book_progress,
             )
         snapshot = _freshness_snapshot_for_ui(conn, profile["id"])
@@ -2105,6 +2184,7 @@ def _auto_sync_wallets_if_enabled(
                 runtime_config,
                 {"all": True},
                 strict=False,
+                automatic_trigger=None if force else "report_read",
             )
             payload = _freshness_payload_for_ui(payload)
             ok = not _sync_payload_has_errors(payload)
@@ -2122,12 +2202,21 @@ def _auto_sync_wallets_if_enabled(
         )
         specs = _filter_freshness_specs_by_policy(specs, policy, force=force)
         enqueued = _enqueue_freshness_jobs(conn, profile["id"], specs)
-        completed = core_freshness.run_due_jobs(
-            conn,
-            _freshness_handlers(runtime_config),
-            profile_id=profile["id"],
-            limit=max(1, len(enqueued)),
+        handlers = _freshness_handlers(
+            runtime_config, automatic_trigger=None if force else "report_read",
         )
+        if force:
+            completed = _run_requested_freshness_jobs(
+                conn, profile["id"], enqueued, handlers,
+                limit=max(1, len(enqueued)),
+            )
+        else:
+            completed = core_freshness.run_due_jobs(
+                conn,
+                handlers,
+                profile_id=profile["id"],
+                limit=max(1, len(enqueued)),
+            )
         payload = {
             "results": _sync_results_from_freshness_jobs(completed),
             "enqueued": enqueued,

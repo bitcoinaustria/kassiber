@@ -528,6 +528,9 @@ export function SyncBackendSettingsModal({
       ? null
       : type.presets.find((candidate) => candidate.id === presetId) ?? null;
   const isEditing = Boolean(initial);
+  // Editing connection details must not reinterpret the backend's chain identity.
+  const chain = initial?.chain ?? (type.net === "LIQUID" ? "liquid" : "bitcoin");
+  const network = initial?.network ?? (type.net === "LIQUID" ? "liquidv1" : "main");
   const scopedTypes = React.useMemo(
     () => (isEditing ? SYNC_BACKEND_NETWORKS : scopedBackendTypes(initialTypeId)),
     [initialTypeId, isEditing],
@@ -881,7 +884,7 @@ export function SyncBackendSettingsModal({
           ...(initial ? { backend: initial.id } : {}),
           url: effectiveUrl,
           proxy: proxyValue,
-          network: type.net === "BTC" ? "main" : type.net.toLowerCase(),
+          network,
           config,
         });
         const data = envelope.data;
@@ -981,18 +984,8 @@ export function SyncBackendSettingsModal({
         url: normalizedUrl,
         net: type.net,
         kind: selectedBackendKind,
-        chain:
-          type.net === "LIQUID"
-            ? "liquid"
-            : type.net === "LN"
-              ? "bitcoin"
-              : "bitcoin",
-        network:
-          type.net === "LIQUID"
-            ? "liquidv1"
-            : type.net === "LN"
-              ? "main"
-              : "main",
+        chain,
+        network,
         health: initial
           ? t("backendModal.healthJustChecked")
           : t("backendModal.healthJustAdded"),

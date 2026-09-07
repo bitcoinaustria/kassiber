@@ -1891,7 +1891,7 @@ def _prospective_negative_balance_events(conn, profile, wallet, fetch):
         dict(row)
         for row in conn.execute(
             """
-            SELECT id, external_id, occurred_at, direction, asset,
+            SELECT id, external_id, occurred_at, confirmed_at, raw_json, direction, asset,
                    amount, fee, created_at
             FROM transactions
             WHERE profile_id = ? AND wallet_id = ? AND excluded = 0
@@ -1911,6 +1911,7 @@ def _prospective_negative_balance_events(conn, profile, wallet, fetch):
         str(value).strip().lower()
         for value in (
             list(fetch.adapter_meta.get("bitcoinrpc_retracted_txids", []))
+            + list(fetch.adapter_meta.get("observer_retracted_external_ids", []))
             + observer_retractions
         )
         if str(value).strip()
@@ -1937,6 +1938,8 @@ def _prospective_negative_balance_events(conn, profile, wallet, fetch):
             "id": f"prefetched:{external_id or index}",
             "external_id": normalized.get("external_id"),
             "occurred_at": normalized["occurred_at"],
+            "confirmed_at": normalized["confirmed_at"],
+            "raw_json": normalized["raw_json"],
             "direction": normalized["direction"],
             "asset": normalized["asset"],
             "amount": btc_to_msat(normalized["amount"]),
@@ -1952,37 +1955,7 @@ def _prospective_negative_balance_events(conn, profile, wallet, fetch):
             candidate["id"] = rows[existing_index]["id"]
             candidate["created_at"] = rows[existing_index]["created_at"]
             rows[existing_index] = candidate
-    balances = {}
-    first_negative = {}
-    for row in sorted(
-        rows,
-        key=lambda item: (
-            str(item.get("occurred_at") or ""),
-            str(item.get("created_at") or ""),
-            str(item.get("id") or ""),
-        ),
-    ):
-        asset = str(row.get("asset") or "")
-        amount = int(row.get("amount") or 0)
-        fee = int(row.get("fee") or 0)
-        if row.get("direction") == "inbound":
-            delta = amount
-        elif row.get("direction") == "outbound":
-            delta = -amount - fee
-        else:
-            delta = 0
-        running = balances.get(asset, 0) + delta
-        balances[asset] = running
-        if running < 0 and asset not in first_negative:
-            first_negative[asset] = {
-                "asset": asset,
-                "transaction_id": row.get("id"),
-                "external_id": row.get("external_id"),
-                "occurred_at": row.get("occurred_at"),
-                "delta_msat": delta,
-                "running_balance_msat": running,
-            }
-    return list(first_negative.values())
+    return core_sync.negative_balance_events(rows)
 
 
 def _prepare_negative_balance_repairs(
@@ -2028,7 +2001,7 @@ def _prepare_negative_balance_repairs(
                 profile,
                 repair_wallet,
                 hooks,
-                checkpoint={},
+                checkpoint=core_sync.full_scan_checkpoint(fetch.sync_state.checkpoint),
                 force_full=True,
                 source_overlap_preflight=(
                     lambda candidate, state: core_source_overlap.filter_sync_state_for_canonical_owner(
@@ -2391,15 +2364,17 @@ def sync_wallet(
             if core_sync.classify_wallet_sync(wallet, hooks.normalize_addresses)
             == "backend"
         ]
-        freshness_checkpoints = (
-            {}
-            if force_full
-            else _stored_wallet_freshness_checkpoints(
-                conn,
-                profile["id"],
-                checkpoint_wallets,
-            )
+        freshness_checkpoints = _stored_wallet_freshness_checkpoints(
+            conn,
+            profile["id"],
+            checkpoint_wallets,
         )
+        if force_full:
+            freshness_checkpoints = {
+                wallet_id: retained
+                for wallet_id, checkpoint in freshness_checkpoints.items()
+                if (retained := core_sync.full_scan_checkpoint(checkpoint))
+            }
     prefetched = _prefetch_chain_wallets(
         conn,
         runtime_config,

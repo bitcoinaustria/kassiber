@@ -74,6 +74,7 @@ const DEFAULT_CONNECTION_NETWORK_ALIAS_TEMPLATES = ["{{network}} wallet"];
  * names the surface. Pages with no nav key fall back to `search:page.<id>.title`.
  */
 const PAGE_NAV_TITLE_KEYS: Record<string, string> = {
+  "page:chain-analysis": "nav:book.chainAnalysis",
   "page:overview": "nav:book.overview",
   "page:transactions": "nav:book.transactions",
   "page:connections": "nav:book.wallets",
@@ -91,6 +92,7 @@ const PAGE_NAV_TITLE_KEYS: Record<string, string> = {
 };
 
 const PAGE_RESULTS: SearchResult[] = [
+  { id: "page:chain-analysis", category: "page", title: "Chain Analysis", subtitle: "Local graph, evidence, clusters and investigation", keywords: ["chain", "graph", "trace", "investigation", "entropy", "outpoint", "analyse", "herkunft"], iconKey: "transaction", route: { to: "/chain-analysis" }, privacyTier: "public" },
   {
     id: "page:overview",
     category: "page",

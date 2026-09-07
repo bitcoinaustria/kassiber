@@ -81,6 +81,7 @@ configurable.
 | `wallets sync` against a user-configured Esplora backend | your configured URL | Esplora over HTTP(S) | same categories as `mempool` above |
 | `wallets sync` against a user-configured Electrum backend | your configured `ssl://` or `tcp://` URL | Electrum JSON-RPC over raw TCP/TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against a `bitcoinrpc` backend | your configured URL | HTTP(S) POST with Basic auth | nothing leaves your machine if the node is local |
+| Explicit **Acquire observations** confirmation, CLI `chain-analysis acquire apply --plan …`, or once-only consent to the on-device Assistant's acquisition tool | only the backend and proxy bound into that plan | bounded, genesis-checked Esplora HTTP(S), Core RPC, or Electrum requests; HTTP redirects refused | selected transaction IDs and queried ancestors/spenders, query timing and IP; the plan itself, local graph queries, PSBT analysis and dataset imports make no network requests |
 | `wallets sync` for a `silent-payment` wallet with a local scanner file | local filesystem path configured by you | local file read | no network request by Kassiber; scanner output and detected Taproot outputs stay local; on POSIX the scanner file must be user-owned and `0600` |
 | `wallets sync` for a `silent-payment` wallet in server-assisted mode | your explicitly configured HTTP(S) SP-capable backend URL/path | HTTP(S) POST through that backend's proxy setting, if any | IP, User-Agent, scan request timing, scan birthday/range, the watch-only `sp()` scan material needed by that backend, and scan completeness depends on that backend not omitting candidates |
 | Explicit CLI `rates sync`; desktop **Refresh BTC price** / **Rebuild pricing cache** after **Settings → Market data → Allow live minute-rate lookups** is enabled; or background freshness after that same narrowly scoped setting enables it | configured provider (`mempool` backend, Coinbase Exchange, or CoinGecko) | unauthenticated HTTP(S) GET | IP, User-Agent, which fiat pair and window. Dashboard display, report generation, and cached-rate reads never fetch a rate |
@@ -90,6 +91,21 @@ configurable.
 | Explicit cross-device sync/pairing after configuring and enabling replication | the configured folder, WebDAV, S3, LAN peer, or Tor onion transport | local filesystem, HTTPS/S3, authenticated LAN TCP, or Tor | transport endpoint sees encrypted mailbox objects and request timing; replication remains disabled by default |
 | Clicking an external documentation, explorer, release, or evidence link | the selected URL in the system browser | browser HTTP(S) | normal browser IP, cookies, referrer policy, and request metadata; Kassiber never preloads those pages |
 | consented AI tools inside `chat` or the desktop Assistant: those that mutate the book (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`, `ui.rates.latest`) and those that only read but do so off-machine (`ui.connections.node.snapshot`, `ui.reports.lightning_profitability`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row. A tool that leaves the machine always prompts, even when it changes nothing, and is never chosen by the assistant's automatic context reads |
+
+Pending or recovered sync jobs are not stored network permission. Automatic
+jobs recheck the current source-class and triggering-feature settings before
+starting transport work; disabling either cancels that work. A manual refresh
+executes only the jobs selected by that action, including its prefetch stage.
+An already transmitted request cannot be recalled.
+
+Raw transport checkpoints, including cached script and transaction memberships,
+remain in local source state. Sanitized job results and desktop/AI freshness
+responses omit these containers before projection.
+
+Chat Markdown never loads remote images. Image references stay inert until
+the user explicitly opens the link in the browser, including in Vite preview
+and restored chat history. Checking models for one provider contacts only that
+provider; it does not refresh the other installed CLI runtimes.
 
 The app-wide consent at `<state-root>/config/update-checks.json` is owner-only
 and contains only a schema version and boolean. Missing, malformed, symlinked,
@@ -144,31 +160,58 @@ prove repository provenance, so no package-manager command is offered until a
 live signed origin and archive-key fingerprint are pinned and verified in
 code.
 
-Both update clients honor the process's standard system proxy environment. A
-configured proxy can therefore observe the GitHub destination and request
-timing and may receive proxy credentials from its own configuration. Per-backend
-`tor_proxy` settings do not route the global update checker. Opening the release
+The desktop and CLI share one permission-gated update transport. It connects
+directly to the fixed GitHub API, ignores environment/OS proxies, and refuses
+redirects. Per-backend `tor_proxy` settings do not route the global update
+checker. Opening the release
 link is explicit and hands control to the default browser, including that
 browser's normal GitHub cookies and privacy context.
 
 No other Kassiber-owned path makes network calls. CLI `rates set`, `rates
 latest`, `rates range`, and `rates pairs`; journal processing; metadata CRUD;
-and reports are fully offline. The desktop daemon kind `ui.rates.latest` is a
+and reports are fully offline unless the user enabled their documented
+report-read sync feature. The desktop daemon kind `ui.rates.latest` is a
 different, explicitly live refresh operation and is rejected unless the
 per-book market-rate permission is enabled.
 
 Backend `tor_proxy` values are a deliberate per-backend routing choice. They
 are honored by Electrum sockets, Esplora / Explorer-API HTTP reads (Bitcoin and
 Liquid), BTCPay Greenfield HTTP sync, Bitcoin Core RPC HTTP calls, and
-mempool-rate fetches that use a configured mempool backend. Partial routing is
+mempool-rate fetches that use a configured mempool backend, LND REST, and
+chain-analysis acquisition. These HTTP transports ignore OS/environment proxy
+discovery and refuse redirects. A selected HTTP proxy also ignores environment
+`NO_PROXY` bypass rules. The pinned BDK/LWK Esplora clients cannot enforce this
+policy, so those sources use the named compatibility transport
+(`http_route_policy`); native Electrum observation remains available.
+Partial routing is
 supported: configuring a proxy on one backend does not route any other backend,
 AI provider, or standalone rate provider. Proxy values may be `HOST:PORT`,
 `socks5://...`, `socks5h://...`, `socks5h://USER:PASS@HOST:PORT`, or
-`http(s)://...`; encode special characters in usernames/passwords. Standalone
+`http://...`; encode special characters in usernames/passwords. An `https://`
+proxy is rejected before connecting because Python's HTTP CONNECT path does
+not establish TLS to that proxy; Kassiber never silently downgrades it. This
+restriction concerns the proxy transport, not HTTPS target nodes: their TLS
+and certificate verification remain intact. Standalone
 Coinbase/CoinGecko providers do not yet have a per-provider proxy setting. The
 desktop setup forms detect `.onion` backend hosts and prefill the standard local
 Tor SOCKS proxy (`127.0.0.1:9050`) for that backend only; Kassiber does not
 start or bundle Tor, so the user still needs an existing Tor service.
+Failure hints never probe an alternate Tor port.
+
+HTTP AI clients also disable ambient proxies and limit redirects to the
+configured provider origin, including scheme and port. Use the configured
+provider base URL for an explicit gateway. Native CLI providers and the
+permission-gated GitHub update checker retain their separately documented
+transport configuration.
+
+`KASSIBER_NO_EGRESS=1` blocks the shared backend HTTP/SOCKS and Python Electrum
+connect boundaries, native BDK/LWK observer construction, and chain-analysis
+acquisition, including loopback nodes. Acquisition rechecks it for every
+request. It is not an OS firewall and does not govern external browsers or
+provider CLI processes. The update checker has its own
+`KASSIBER_DISABLE_UPDATE_CHECK` override. The test-suite socket guard uses the
+separate `KASSIBER_TEST_NO_EGRESS` variable and cannot intercept native-library
+sockets; native transport policy therefore also needs explicit routing tests.
 
 ## Local storage
 

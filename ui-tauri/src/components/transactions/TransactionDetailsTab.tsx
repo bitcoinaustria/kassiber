@@ -1,23 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ShieldAlert } from "lucide-react";
+import { Eye } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TabsContent } from "@/components/ui/tabs";
 import { useDaemon } from "@/daemon/client";
-import {
-  findPrivacyTransactionRow,
-  formatPrivacyInt,
-  privacyEvidenceTone,
-  shortPrivacyId,
-  type EvidenceLevel,
-  type PrivacyMirrorPayload,
-} from "@/lib/privacyMirror";
+import { transactionAnalysisSearch } from "@/lib/chainAnalysisNavigation";
 import { transactionTypeLabel } from "@/lib/transactionTypeLabel";
 import { cn } from "@/lib/utils";
-import { isDevLockedRoute } from "@/components/kb/devMode";
 import { useUiStore } from "@/store/ui";
 
 import {
@@ -26,11 +18,13 @@ import {
   LedgerRow,
   networkLabel,
 } from "./TransactionDetailSheetParts";
+import { exchangeTransfer } from "./ExchangeTransferModel";
+import { TransactionRecordFlow } from "./TransactionRecordFlow";
+import { TransactionGraphTechnicalDetails } from "./TransactionGraphTechnicalDetails";
 import { CommercialProvenancePanel } from "./TransactionDetailCommercialPanel";
 import {
   blurClass,
   currencyFormatter,
-  formatBtcAmount,
   formatShortTxid,
   SATS_PER_BTC,
 } from "./model";
@@ -47,6 +41,7 @@ import {
   transactionGraphLookupReferenceArgs,
 } from "./TransactionGraphLookup";
 import {
+  graphlessTradeKind,
   classifyRouteKind,
   classifyRouteOutRole,
   routeNetworkLabel,
@@ -137,92 +132,9 @@ function fallbackRouteKind(pair: PairRow) {
   return classifyRouteKind(pairRouteArgs(pair));
 }
 
-function PrivacyEvidencePill({ level }: { level?: EvidenceLevel }) {
-  const { t } = useTranslation("privacyMirror");
-  const key = level || "unknown";
-  const label =
-    key === "exact"
-      ? t("evidence.exact")
-      : key === "derived"
-        ? t("evidence.derived")
-        : key === "unknown"
-          ? t("evidence.unknown")
-          : key;
-  return (
-    <Badge variant="outline" className={cn("rounded-md", privacyEvidenceTone(key))}>
-      {label}
-    </Badge>
-  );
-}
-
-function TransactionPrivacyMirrorPanel({
-  payload,
-  loading,
-  errorMessage,
-  transactionRefs,
-}: {
-  payload?: PrivacyMirrorPayload;
-  loading: boolean;
-  errorMessage: string | null;
-  transactionRefs: Array<string | null | undefined>;
-}) {
-  const { t } = useTranslation("privacyMirror");
-  const row = findPrivacyTransactionRow(payload, transactionRefs);
-  const tellKinds = row?.tell_kinds ?? [];
-  const degraded = Boolean(errorMessage) || (!loading && !row);
-
-  return (
-    <div className="overflow-hidden rounded-md border" data-testid="transaction-privacy-mirror-panel">
-      <div className="flex items-center justify-between gap-3 border-b bg-muted px-3 py-1.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <ShieldAlert className="size-4 text-amber-600" aria-hidden="true" />
-          <span className="truncate text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {t("detail.transactionTitle")}
-          </span>
-        </div>
-        <PrivacyEvidencePill level={row?.evidence_level ?? (degraded ? "unknown" : "derived")} />
-      </div>
-      <div className="grid gap-3 p-3 sm:grid-cols-3">
-        <div>
-          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            {t("detail.transactionTells")}
-          </p>
-          <p className="font-mono text-lg tabular-nums">
-            {loading && !row ? "..." : formatPrivacyInt(row?.tell_count)}
-          </p>
-        </div>
-        <div>
-          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            {t("detail.transactionPenalties")}
-          </p>
-          <p className="font-mono text-lg tabular-nums">
-            {loading && !row ? "..." : formatPrivacyInt(row?.wallet_penalty_count)}
-          </p>
-        </div>
-        <div className="min-w-0">
-          <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            {t("detail.transactionKinds")}
-          </p>
-          <p className="truncate text-sm">
-            {tellKinds.length ? tellKinds.join(", ") : t("detail.none")}
-          </p>
-        </div>
-      </div>
-      <div className="border-t px-3 py-2 text-xs text-muted-foreground">
-        {errorMessage
-          ? t("detail.queryError", { message: errorMessage })
-          : row
-            ? t("detail.transactionMatched", { id: shortPrivacyId(row.txid) })
-            : loading
-              ? t("detail.loading")
-              : t("detail.degraded")}
-      </div>
-    </div>
-  );
-}
-
 export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContext }) {
   const { t } = useTranslation("transactions");
+  const { t: tPrivacy } = useTranslation("privacyMirror");
   const navigate = useNavigate();
   const setDeferredConnectionSetup = useUiStore(
     (state) => state.setDeferredConnectionSetup,
@@ -254,7 +166,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
   useEffect(() => {
     setSelectedSwapLeg(null);
   }, [transaction.id, swapRoute?.id]);
-  const activeSwapLeg = selectedSwapLeg ?? swapRoute?.currentLeg ?? null;
+  const activeSwapLeg = selectedSwapLeg ?? exchangeTransfer(swapRoute)?.chainLeg ?? swapRoute?.currentLeg ?? null;
   const currentGraphReferences = useMemo(
     () => [
       transaction.id,
@@ -311,17 +223,6 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     ),
     { enabled: Boolean(swapInGraphArgs.transaction) },
   );
-  // The embedded Privacy Mirror panel is the same early-stage feature as the
-  // /privacy-mirror page (see devMode.ts) — don't render it, and don't ask the
-  // daemon for the report either, while the switch is off.
-  const privacyMirrorAvailable =
-    useUiStore((state) => state.developerToolsEnabled) ||
-    !isDevLockedRoute("/privacy-mirror");
-  const privacyMirrorQuery = useDaemon<PrivacyMirrorPayload>(
-    "ui.reports.privacy_mirror",
-    undefined,
-    { enabled: privacyMirrorAvailable },
-  );
   const activeSwapGraphQuery =
     activeSwapLeg === "out"
       ? swapOutGraphQuery
@@ -367,43 +268,10 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
         ? activeSwapGraphQuery.error.message
         : null
       : graphError;
-  const privacyMirrorError =
-    privacyMirrorQuery.error instanceof Error ? privacyMirrorQuery.error.message : null;
-  const graphTx = activeGraphData?.transaction;
-  const graphNetworkFeeBtc =
-    typeof activeGraphData?.fee?.valueBtc === "number"
-      ? activeGraphData.fee.valueBtc
-      : typeof activeGraphData?.fee?.valueSats === "number"
-        ? activeGraphData.fee.valueSats / SATS_PER_BTC
-        : 0;
-  const hiddenGraphValue = t("graph.hidden");
-  const technicalRows = graphTx
-    ? [
-        [t("details.inputCount"), graphTx.inputCount ?? activeGraphData.inputs.length],
-        [t("details.outputCount"), graphTx.outputCount ?? activeGraphData.outputs.length],
-        [
-          t("details.networkFee"),
-          graphNetworkFeeBtc
-            ? hideSensitive
-              ? hiddenGraphValue
-              : formatBtcAmount(graphNetworkFeeBtc)
-            : t("details.unknown"),
-        ],
-        [
-          t("details.feeRate"),
-          graphTx.feeRateSatVb
-            ? hideSensitive
-              ? hiddenGraphValue
-              : `${graphTx.feeRateSatVb} sat/vB`
-            : t("details.unknown"),
-        ],
-        [t("details.version"), graphTx.version ?? t("details.unknown")],
-        [t("details.locktime"), graphTx.locktime ?? t("details.unknown")],
-        [t("details.size"), graphTx.size ? `${graphTx.size} B` : t("details.unknown")],
-        [t("details.vsize"), graphTx.vsize ? `${graphTx.vsize} vB` : t("details.unknown")],
-        [t("details.weight"), graphTx.weight ? `${graphTx.weight} WU` : t("details.unknown")],
-      ]
-    : [];
+  const tradeKind = !graphPanelLoading && !graphPanelError ? graphlessTradeKind(transaction, activeGraphData) : null;
+  const analysisSearch = transactionAnalysisSearch(
+    activeGraphData?.transaction ?? (activeSwapTransactionRef ? {} : transaction),
+  );
   return (
     <>
                   {/* Details — read-only source-of-record + book metadata */}
@@ -553,7 +421,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                     </div>
                     <div className="overflow-hidden rounded-md border">
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        {t("graph.sectionTitle")}
+                        {t(tradeKind ? "recordFlow.title" : "graph.sectionTitle")}
                         {canPublicGraphLookup && !publicGraphLookup ? (
                           <Button
                             type="button"
@@ -568,6 +436,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                       </div>
                       <div className="p-3">
                         <TransactionGraphPanel
+                          graphlessContent={tradeKind ? <TransactionRecordFlow transaction={transaction} kind={tradeKind} hideSensitive={hideSensitive} /> : undefined}
                           graph={activeGraphData}
                           loading={graphPanelLoading}
                           error={graphPanelError}
@@ -579,30 +448,16 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         />
                       </div>
                     </div>
-                    {privacyMirrorAvailable ? (
-                      <TransactionPrivacyMirrorPanel
-                        payload={privacyMirrorQuery.data?.data}
-                        loading={privacyMirrorQuery.isLoading}
-                        errorMessage={privacyMirrorError}
-                        transactionRefs={currentGraphReferences}
-                      />
-                    ) : null}
-                    {technicalRows.length ? (
-                      <div className="overflow-hidden rounded-md border">
-                        <div className="border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          {t("details.technical")}
-                        </div>
-                        <div className="grid sm:grid-cols-2">
-                          {technicalRows.map(([label, value]) => (
-                            <LedgerRow
-                              key={String(label)}
-                              label={String(label)}
-                              value={value}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
+                    {analysisSearch.subject ? <Button
+                      variant="outline"
+                      size="sm"
+                      className="self-start"
+                      onClick={() => void navigate({ to: "/chain-analysis", search: analysisSearch })}
+                    >
+                      <Eye className="size-3.5" aria-hidden="true" />
+                      {tPrivacy("investigateTransaction")}
+                    </Button> : null}
+                    <TransactionGraphTechnicalDetails graph={activeGraphData} hideSensitive={hideSensitive} />
                     <CommercialProvenancePanel
                       context={commercialContext}
                       loading={commercialContextLoading}

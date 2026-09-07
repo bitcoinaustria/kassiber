@@ -16,7 +16,8 @@
     "activity": "Activity",
     "logs": "Logs",
     "exitTax": "Exit Tax",
-    "settings": "Settings"
+    "settings": "Settings",
+    "chainAnalysis": "Chain Analysis"
   },
   "section": {
     "main": "Main",
