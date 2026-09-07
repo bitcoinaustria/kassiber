@@ -31,9 +31,16 @@ def _domain(conn, profile_id, spec):
 
 
 def _source(conn, spec):
-    backend = get_db_backend(conn, spec["backend"])
+    try:
+        backend = get_db_backend(conn, spec["backend"])
+    except AppError as exc:
+        if exc.code != "not_found":
+            raise
+        invalid("Source was removed; authorize a new connection", "acquisition_source_changed")
     if backend["kind"] != "bitcoinrpc" or backend.get("chain") != "bitcoin" or backend.get("network") != spec["network"]:
-        invalid("Recurring acquisition requires a matching Bitcoin Core connection", "capability_unavailable")
+        invalid("Recurring acquisition requires a matching Bitcoin Core connection", "acquisition_source_changed")
+    if backend.get("chain_instance_id") and backend["chain_instance_id"] != spec.get("chain_instance_id"):
+        invalid("Source belongs to another local chain instance", "book_network_mismatch")
     revision = conn.execute("SELECT updated_at FROM backends WHERE name=?", (backend["name"],)).fetchone()[0]
     return backend, digest([revision, acquisition._routing_identity(backend), backend["kind"], backend.get("chain"), backend.get("network")])
 
@@ -105,7 +112,7 @@ def _row(conn, profile_id, ident):
 def get(conn, profile_id, ident):
     row = _row(conn, profile_id, ident)
     # Do not expose endpoint fingerprints or internal lease identifiers.
-    return {key: row[key] for key in ("id", "status", "revision", "requests_used", "bytes_used", "next_run_at", "expires_at", "cursor_height", "last_code", "created_at")} | {"spec": json.loads(row["spec_json"]), "binding": json.loads(row["binding_json"])}
+    return {key: row[key] for key in ("id", "status", "revision", "requests_used", "bytes_used", "next_run_at", "expires_at", "cursor_height", "verified_tip_height", "verified_tip_at", "last_code", "created_at")} | {"spec": json.loads(row["spec_json"]), "binding": json.loads(row["binding_json"])}
 
 
 def list_sources(conn, profile_id, args):
@@ -246,12 +253,16 @@ def _blocks(conn, profile_id, row, reader, validate):
     tip = reader.rpc("getblockcount")
     if type(tip) is not int or tip < 0:
         invalid("Invalid chain height", "invalid_observation")
+    tip_hash = reader.rpc("getblockhash", [tip])
+    if not acquisition._txid(tip_hash):
+        invalid("Invalid chain tip", "invalid_observation")
     cursor = row["cursor_height"]
     # Disconnect one bounded suffix per run. Membership history is retained and
     # will be reactivated when the same block reappears.
     if cursor is not None and (cursor > tip or reader.rpc("getblockhash", [cursor]) != row["cursor_hash"]):
         with atomic(conn):
             validate()
+            conn.execute("UPDATE chain_analysis_acquisition_grants SET verified_tip_height=NULL,verified_tip_hash=NULL,verified_tip_at=NULL WHERE id=?", (row["id"],))
             # Withhold the whole uncertain source until a common ancestor has
             # been checked. Old branch evidence must not trigger watch clears.
             conn.execute("UPDATE chain_analysis_reference_blocks SET active=2 WHERE grant_id=? AND active=1", (row["id"],))
@@ -305,6 +316,12 @@ def _blocks(conn, profile_id, row, reader, validate):
             conn.execute("UPDATE chain_analysis_acquisition_grants SET cursor_height=?,cursor_hash=?,last_code=NULL WHERE id=?", (height, block_hash, row["id"]))
         conn.commit()
         parent = block_hash
+    if reader.rpc("getblockhash", [tip]) != tip_hash:
+        invalid("Chain tip changed during acquisition", "chain_analysis_stale")
+    with atomic(conn):
+        validate()
+        conn.execute("UPDATE chain_analysis_acquisition_grants SET verified_tip_height=?,verified_tip_hash=?,verified_tip_at=? WHERE id=?", (tip, tip_hash, now_iso(), row["id"]))
+    conn.commit()
     return "range_complete" if spec.get("end_height") is not None and end >= spec["end_height"] else "caught_up" if end >= tip else "backfilling"
 
 

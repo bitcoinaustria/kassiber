@@ -90,6 +90,34 @@ def test_plan_and_authorization_are_offline_and_bound(book):
     assert book.execute("SELECT COUNT(*) FROM chain_analysis_acquisition_grants").fetchone()[0] == 0
 
 
+def test_removed_source_pauses_without_starving_other_work(book):
+    ident = grant(book)
+    book.execute("DELETE FROM backends WHERE name='core'")
+    book.commit()
+    with patch.object(backfill.acquisition.transport, "urlopen_with_proxy", side_effect=AssertionError("egress")):
+        backfill.run_due(book, "pf")
+    assert backfill.get(book, "pf", ident)["status"] == "paused"
+    assert backfill.get(book, "pf", ident)["last_code"] == "acquisition_source_changed"
+
+
+def test_explicit_backend_instance_cannot_be_reassigned_by_plan(book):
+    book.execute("UPDATE backends SET config_json=? WHERE name='core'", (json.dumps({"chain_instance_id": "another-lab"}),))
+    with pytest.raises(AppError) as caught:
+        reviewed(book, chain_instance_id="this-lab")
+    assert caught.value.code == "book_network_mismatch"
+
+
+def test_tip_refresh_does_not_rewrite_all_transaction_assertions(book):
+    first = block()
+    ident = grant(book, end_height=0)
+    run(book, ident, Core([first]))
+    before = [dict(row) for row in book.execute("SELECT * FROM chain_analysis_reference_assertions")]
+    second = block(first[0], nonce=7)
+    result = run(book, ident, Core([first, second]))
+    assert result["verified_tip_height"] == 1
+    assert [dict(row) for row in book.execute("SELECT * FROM chain_analysis_reference_assertions")] == before
+
+
 def test_blocks_resume_preserve_duplicate_txid_occurrences_and_sanitize(book):
     first = block()
     second = block(first[0], first[2], nonce=1)
