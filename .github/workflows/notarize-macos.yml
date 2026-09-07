@@ -17,8 +17,12 @@ on:
         required: false
         type: string
       input_sha256:
-        description: SHA-256 printed by the local signing helper
-        required: true
+        description: Recovery only; SHA-256 printed by the local signing helper
+        required: false
+        type: string
+      build_run_id:
+        description: Normal release path; successful prerelease-binaries run to sign in CI
+        required: false
         type: string
 
 permissions:
@@ -50,6 +54,8 @@ jobs:
           TAG: ${{ inputs.tag_name }}
           CANDIDATE: ${{ inputs.candidate }}
           SOURCE_COMMIT: ${{ inputs.source_commit }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          INPUT_SHA256: ${{ inputs.input_sha256 }}
         run: |
           set -euo pipefail
           test "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true
@@ -75,11 +81,24 @@ jobs:
           gh release download "$TAG" --dir incoming
           # Never rewrite a set an operator has already OpenPGP-signed.
           test -z "$(find incoming -name '*.asc' -print -quit)"
-          test -f incoming/kassiber-macos-signing-input.dmg
+          if [ -n "$BUILD_RUN_ID" ]; then
+            test "$CANDIDATE" = false
+            test -z "$SOURCE_COMMIT"
+            test -z "$INPUT_SHA256"
+            [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+            test ! -e incoming/kassiber-macos-signing-input.dmg
+          else
+            test -n "$INPUT_SHA256"
+            test -f incoming/kassiber-macos-signing-input.dmg
+          fi
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-      - name: Install notarization credentials in a temporary keychain
+      - name: Install signing and notarization credentials in a temporary keychain
+        id: credentials
         env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.MACOS_PROVISIONING_PROFILE_BASE64 }}
           NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
@@ -96,18 +115,55 @@ jobs:
           security unlock-keychain -p "$keychain_unlock" "$keychain"
           security set-keychain-settings -lut 3600 "$keychain"
           security list-keychains -d user -s "$keychain"
+          if [ -n "${{ inputs.build_run_id }}" ]; then
+            test -n "$MACOS_CERTIFICATE_P12_BASE64"
+            test -n "$MACOS_CERTIFICATE_PASSWORD"
+            test -n "$MACOS_PROVISIONING_PROFILE_BASE64"
+            printf '%s' "$MACOS_CERTIFICATE_P12_BASE64" | base64 -D > "$RUNNER_TEMP/developer-id.p12"
+            printf '%s' "$MACOS_PROVISIONING_PROFILE_BASE64" | base64 -D > "$RUNNER_TEMP/DeveloperID.provisionprofile"
+            security import "$RUNNER_TEMP/developer-id.p12" -k "$keychain" \
+              -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+            security set-key-partition-list -S apple-tool:,apple: -s \
+              -k "$keychain_unlock" "$keychain"
+            identities="$(security find-identity -v -p codesigning "$keychain")"
+            identity="$(printf '%s\n' "$identities" | sed -nE \
+              '/Developer ID Application: .*\(6Q4R2C3GJK\)/s/.* ([0-9A-F]{40}) .*/\1/p')"
+            test "$(printf '%s\n' "$identity" | sed '/^$/d' | wc -l | tr -d ' ')" = 1
+            echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          fi
           printf '%s' "$NOTARY_KEY_P8" > "$RUNNER_TEMP/notary.p8"
           xcrun notarytool store-credentials kassiber-notary \
             --key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" \
             --issuer "$NOTARY_ISSUER_ID" --keychain "$keychain"
           rm "$RUNNER_TEMP/notary.p8"
+      - name: Sign exact release build in CI
+        if: inputs.build_run_id != ''
+        id: sign
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag_name }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          IDENTITY: ${{ steps.credentials.outputs.identity }}
+        run: |
+          set -euo pipefail
+          python3 scripts/prepare_macos_release.py \
+            --tag "$TAG" --run-id "$BUILD_RUN_ID" --identity "$IDENTITY" \
+            --provisioning-profile "$RUNNER_TEMP/DeveloperID.provisionprofile" \
+            --work-dir "$RUNNER_TEMP/release-signing"
+          cp "$RUNNER_TEMP/release-signing/signed/kassiber-macos-signing-input.dmg" incoming/
+          digest="$(shasum -a 256 incoming/kassiber-macos-signing-input.dmg | awk '{print $1}')"
+          echo "sha256=$digest" >> "$GITHUB_OUTPUT"
       - name: Notarize and verify sealed distributions
         env:
-          EXPECTED_SHA256: ${{ inputs.input_sha256 }}
+          LOCAL_SHA256: ${{ inputs.input_sha256 }}
+          CI_SHA256: ${{ steps.sign.outputs.sha256 }}
           COMMIT: ${{ steps.release.outputs.commit }}
           VERSION: ${{ steps.release.outputs.version }}
           CANDIDATE_ID: ${{ steps.release.outputs.candidate_id }}
         run: |
+          set -euo pipefail
+          EXPECTED_SHA256="${CI_SHA256:-$LOCAL_SHA256}"
+          test -n "$EXPECTED_SHA256"
           python3 scripts/macos_release.py notarize \
             --image incoming/kassiber-macos-signing-input.dmg \
             --sha256 "$EXPECTED_SHA256" --commit "$COMMIT" --version "$VERSION" \
@@ -162,5 +218,6 @@ jobs:
       - name: Remove temporary credentials
         if: always()
         run: |
-          rm -f "$RUNNER_TEMP/notary.p8"
+          rm -f "$RUNNER_TEMP/notary.p8" "$RUNNER_TEMP/developer-id.p12" \
+            "$RUNNER_TEMP/DeveloperID.provisionprofile"
           security delete-keychain "$RUNNER_TEMP/notary.keychain-db" || true

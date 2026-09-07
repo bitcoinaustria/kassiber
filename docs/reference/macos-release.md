@@ -1,18 +1,21 @@
 # macOS release runbook
 
-Kassiber separates build, local Developer ID signing, automated notarization,
-and offline OpenPGP release authentication. No Apple signing private key is
-uploaded to GitHub. The Apple team is `6Q4R2C3GJK` (Bitcoin Austria); changing
+Kassiber separates build, protected-CI Developer ID signing and notarization,
+and offline OpenPGP release authentication. The Developer ID identity is stored
+only as an encrypted GitHub environment secret and imported into an ephemeral
+runner keychain. The Apple team is `6Q4R2C3GJK` (Bitcoin Austria); changing
 that trust root requires a reviewed code change in `scripts/macos_release.py`.
 
 ## One-time operator setup
 
-1. Install Xcode command-line tools, Python 3.11+, and authenticated GitHub CLI
-   on the signing Mac. Use a clean, reviewed checkout of current `main`.
-2. Keep the Developer ID Application certificate and corresponding private
-   key in the login keychain. Select its exact SHA-1 certificate fingerprint
-   from `security find-identity -v -p codesigning`. This fingerprint selects a
-   local identity; it is not a file-integrity hash or an SSH key.
+1. Export the dedicated Developer ID Application identity once as password-
+   protected PKCS#12. Store its base64 as `MACOS_CERTIFICATE_P12_BASE64`, its
+   export password as `MACOS_CERTIFICATE_PASSWORD`, and the base64 Developer ID
+   provisioning profile as `MACOS_PROVISIONING_PROFILE_BASE64` in the protected
+   GitHub environment `macos-notarization`. Never commit these values.
+2. Keep an independently recoverable copy of the Developer ID identity. CI
+   discovers its exact SHA-1 fingerprint after import and requires exactly one
+   Developer ID Application identity for Apple team `6Q4R2C3GJK`.
 3. Maintain an encrypted, recovery-tested backup of the identity outside Git.
    Record certificate expiry and renew before then. The initially inspected
    certificate expires 2027-02-01. Never revoke an old certificate merely to
@@ -41,8 +44,8 @@ that trust root requires a reviewed code change in `scripts/macos_release.py`.
    maintainers. No PR job receives these credentials. Use hosted ephemeral
    runners, not a general Actions runner on the signing Mac.
 6. Configure `release-production` for the current **single maintainer**:
-   allow only the `main` branch and manually dispatch finalization after
-   local signing/verification. Do not require a second reviewer or enable
+   allow only the `main` branch and manually dispatch finalization after CI
+   signing/notarization and independent local verification. Do not require a second reviewer or enable
    prevent-self-review while only one operator is available. This is explicit
    single-person authorization, not a four-eyes process. A second independent
    reviewer can be added later without changing the signing pipeline.
@@ -55,9 +58,10 @@ The repository implements the workflow, not account administration. Confirm
 the environments, secret names, protection rules and actual key validity before
 calling a release production-ready. An API key may permit other App Store
 Connect operations according to its role; treat it as a sensitive credential.
-Setup verification on 2026-09-05 confirmed the production provisioning profile
-and all three secret names in `macos-notarization`, restricted to branch `main`.
-Secret values and live notarization authentication have not been tested.
+Setup verification on 2026-09-07 confirmed the production provisioning profile,
+the notarization secret names, and `macos-notarization` restricted to branch
+`main`. The three CI-signing secrets must be installed and exercised once before
+calling the automated path production-ready.
 Final-publication environment and branch/tag protection still need verification;
 these account settings are not silently applied by this code change.
 Decide solo-compatible branch rules before activation;
@@ -69,31 +73,25 @@ requiring another person's approval would deadlock the current team.
    its protected `v<VERSION>` tag. The existing `prerelease-binaries` workflow
    builds with locked dependencies and leaves a **draft**, never a public
    unsigned release. Branch/test builds remain workflow artifacts.
-2. Record the successful build run ID. From the reviewed tooling checkout run:
+2. Record the successful build run ID and dispatch the protected workflow:
 
    ```sh
-   python3 scripts/prepare_macos_release.py \
-     --tag v<VERSION> --run-id <BUILD_RUN_ID> \
-     --identity <40_HEX_CERTIFICATE_FINGERPRINT> \
-     --provisioning-profile /absolute/path/DeveloperID.provisionprofile \
-     --work-dir /absolute/new/private/release-directory --submit
+   gh workflow run notarize-macos.yml --repo bitcoinaustria/kassiber --ref main \
+     -f tag_name=v<VERSION> -f build_run_id=<BUILD_RUN_ID>
    ```
 
-   The directory must not exist. The helper checks the official repository,
+   CI uses a new private temporary directory. The helper checks the official repository,
    workflow, successful run, event and exact tag commit before downloading.
    It parses embedded metadata without executing downloaded binaries, prepares
    and checks Mach-O linkage that Homebrew can preserve without rewriting,
    and signs every Mach-O from inside out with secure timestamps and hardened runtime,
-   seals the app and DMG, uploads the signed input to the draft and dispatches
-   `notarize-macos`. Omitting `--submit` stops after local signing.
-   Immediately before upload and again before dispatch, it rechecks that the
-   release is an unsigned draft and the tag still names the verified commit.
-   These checks close the long signing/upload window; they are not an atomic
-   GitHub transaction and do not replace tag protection. If a later check
-   fails, inspect the draft before retrying; the helper never clobbers an input
-   or automatically deletes a completed upload.
-   Keychain access may require your local approval. Do not enable blanket
-   access for arbitrary tools or disable library validation to pass a build.
+   then seals the app and DMG before notarization in the same protected job.
+   Before signing it rechecks that the release is an unsigned draft and that
+   the successful official build names the exact tag commit. Promotion repeats
+   the draft/tag checks before replacing assets. These checks do not replace
+   tag protection; a failed job leaves the draft unpublished for inspection.
+   The PKCS#12, password and profile are unavailable to pull-request jobs and
+   removed with the temporary keychain even when the job fails.
 3. CI checks the input hash, Apple signature/team and source/version, submits
    the signed DMG, immediately preserves its Apple submission ID, and polls
    until **Accepted**. The evidence artifact remains useful even if Apple is

@@ -57,6 +57,7 @@ else: raise AssertionError(tool)
         executable.chmod(0o755)
     environment = {**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}",
         "TAG": CANDIDATE, "CANDIDATE": "true", "SOURCE_COMMIT": COMMIT,
+        "BUILD_RUN_ID": "", "INPUT_SHA256": "0" * 64,
         "GITHUB_OUTPUT": str(tmp_path / "outputs"), "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
         "MOCK_LOG": str(tmp_path / "commands")}
 

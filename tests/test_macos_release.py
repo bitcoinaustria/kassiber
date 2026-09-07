@@ -355,7 +355,7 @@ def test_unchanged_submission_target_preserves_local_and_submit_modes(release_pr
     assert len(draft_reads) == (3 if submit else 1)
 
 
-def test_workflows_keep_keys_local_and_publication_gated():
+def test_workflows_keep_signing_keys_in_protected_ci_and_publication_gated():
     workflows = ROOT / ".github/workflows"
     notary = (workflows / "notarize-macos.yml").read_text()
     final = (workflows / "finalize-signed-release.yml").read_text()
@@ -369,10 +369,14 @@ def test_workflows_keep_keys_local_and_publication_gated():
     assert final.index("Require unchanged release assets and tag") < final.index("Publish the verified draft")
     assert final.index("Publish the verified draft") < final.index("Commit Homebrew tap update")
     assert final.index("Authenticate the complete release set") < final.index("Verify actual macOS release bytes")
-    assert "APPLE_CERTIFICATE" not in notary
+    assert "MACOS_CERTIFICATE_P12_BASE64" in notary
+    assert "MACOS_CERTIFICATE_PASSWORD" in notary
+    assert "MACOS_PROVISIONING_PROFILE_BASE64" in notary
     assert "NOTARY_KEY_P8" in notary
     assert "--keychain" in notary
-    assert "--identity" not in notary
+    assert '--run-id "$BUILD_RUN_ID"' in notary
+    assert '--identity "$IDENTITY"' in notary
+    assert "security delete-keychain" in notary
     assert "release-seal-${{ inputs.tag_name }}" in notary and "release-seal-${{ inputs.tag_name }}" in final
 
 
