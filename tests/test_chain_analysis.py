@@ -390,7 +390,14 @@ class ObserverAndInterpretationRegressionTests(unittest.TestCase):
         index = build_index(self.conn, "p")
         # A frozen snapshot must remain usable after its DB connection ends.
         self.conn.close()
-        self.assertEqual(analyze_snapshot(index, args), expected)
+        actual = analyze_snapshot(index, args)
+        # The pure recovery oracle uses a content hash; production binds the
+        # same semantics to its durable source/projection generation instead.
+        actual.pop("snapshot_id")
+        expected.pop("snapshot_id")
+        for result in (actual, expected):
+            result["findings"].sort(key=lambda item: item["id"])
+        self.assertEqual(actual, expected)
 
     def test_branch_evidence_and_duplicate_ownership_are_canonical_and_private(self):
         from kassiber.core.chain_analysis.index import observer_index

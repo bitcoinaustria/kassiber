@@ -3638,6 +3638,8 @@ def open_db(
             conn.executescript(SCHEMA)
             ensure_schema_compat(conn)
             ensure_database_instance_id(conn)
+            from .core.chain_analysis.projection_store import install as install_chain_index
+            install_chain_index(conn)
             return conn
         except Exception:
             conn.close()
@@ -3673,6 +3675,8 @@ def open_db(
         conn.executescript(SCHEMA)
         ensure_schema_compat(conn)
         ensure_database_instance_id(conn)
+        from .core.chain_analysis.projection_store import install as install_chain_index
+        install_chain_index(conn)
         return conn
     except Exception:
         conn.close()

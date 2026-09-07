@@ -173,6 +173,8 @@ class _Traversal:
             if self.admit(seed):
                 queue.append(seed)
                 distance[seed] = 0
+            if self.budget:
+                break
         while queue:
             node_id = queue.popleft()
             depth = distance[node_id]
@@ -225,7 +227,7 @@ def query_index(index: AnalysisIndex, args: Mapping[str, Any] | None) -> dict[st
     if query.get("subject"):
         seeds = resolve_subject(index, query["subject"], query)
     else:
-        seeds = tuple(node_id for node_id in index.profile_seeds if _domain(index.nodes[node_id], query))
+        seeds = index.seed_nodes(query) if hasattr(index, "seed_nodes") else tuple(node_id for node_id in index.profile_seeds if _domain(index.nodes[node_id], query))
     traversal = _Traversal(index, query)
     paths = []
     if query["mode"] == "path":
@@ -257,7 +259,8 @@ def query_index(index: AnalysisIndex, args: Mapping[str, Any] | None) -> dict[st
                 edge = index.edges[edge_id]
                 if edge["kind"] == "custody" and edge["target"] in traversal.nodes and edge_id not in edge_ids and len(edges) < query["edge_limit"]:
                     edges.append(thaw(edge)); edge_ids.add(edge_id)
-    findings = [thaw(item) for item in index.findings if not item["node_ids"] or set(item["node_ids"]) & traversal.nodes]
+    candidates = index.findings_for_nodes(traversal.nodes) if hasattr(index, "findings_for_nodes") else index.findings
+    findings = [thaw(item) for item in candidates if not item["node_ids"] or set(item["node_ids"]) & traversal.nodes]
     coverage = thaw(index.coverage)
     coverage["observer_knowledge"] = {"public": "public_chain_facts", "owner": "local_owner_evidence", "disclosed": "assumes_all_local_owner_evidence_disclosed"}[query["observer"]]
     frontier = sorted(traversal.frontier.values(), key=lambda item: (item["node_id"], item["reason"]))

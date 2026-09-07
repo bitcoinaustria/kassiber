@@ -99,6 +99,8 @@ def thaw(value: Any) -> Any:
 
 def observer_index(index: AnalysisIndex, observer: str) -> AnalysisIndex:
     """Apply knowledge boundaries before filters, traversal and analytics."""
+    if hasattr(index, "for_observer"):
+        return index.for_observer(observer)
     if observer != "public" or index.coverage.get("observer_knowledge") == "public_chain_facts":
         return index
     nodes = {}
@@ -458,6 +460,34 @@ class _Builder:
             if not fact["complete"] and node["id"] not in {item["output_id"] for item in fact["inputs"]}:
                 fact["inputs"].append({"output_id": node["id"], "amount_msat": None})
 
+    def reference(self, row: dict, *, acquired: bool):
+        """Normalize cache/acquisition through the same closed reference seam."""
+        payload = stored_tx_mapping(row.get("payload_json"))
+        txid = canonical_txid(row.get("txid"))
+        try:
+            scope = resolve_protocol_scope({"chain": row.get("chain"), "network": row.get("network")})
+            payload_scope = resolve_protocol_scope({"chain": scope.protocol_chain, "network": scope.network, "raw_json": payload})
+        except (ValueError, AppError):
+            scope = None
+            payload_scope = None
+        if (scope is None or payload is None or txid is None or scope.protocol_chain not in {"bitcoin", "liquid"}
+            or payload_scope != scope or canonical_txid(payload.get("txid")) not in (None, txid)
+            or not acquired and (row.get("schema_version") != 1 or not isinstance(payload.get("vin"), list) or not isinstance(payload.get("vout"), list))):
+            self.coverage["invalid_observations" if acquired else "cache_rejected"] += 1
+            return
+        reference = f"{'acquired' if acquired else 'cache'}:{scope.protocol_chain}:{scope.network}:{txid}"
+        if row.get("grant_id"):
+            reference += f":{row['grant_id']}:{row['occurrence_id']}"
+        node_id = tx_node_id(scope.protocol_chain, scope.network, txid)
+        self.transaction({"id": reference, "chain": scope.protocol_chain, "network": scope.network, "external_id": txid, "raw_json": payload}, cached=True)
+        if acquired and node_id in self.nodes:
+            self.profile_seeds.add(node_id)
+            status = stored_tx_mapping(row.get("status_json")) or {}
+            node = self.nodes[node_id]
+            node["evidence"].append({"source": "local_acquisition", "reference": node_id, "level": "reference", "observed_at": row.get("observed_at"), "source_name": row.get("source_name"), "confirmed": status.get("confirmed") is True, "block_height": integer(status.get("block_height")), "status_commitment": digest(status)})
+            if status.get("removed") is True or status.get("conflicted") is True:
+                node["status"] = "stale"
+
     def relations(self, decisions: list[dict], economics: list[dict], fresh: bool):
         self.coverage["custody_fresh"] = fresh
         for table, rows, id_key in (("journal_custody_decisions", decisions, "decision_id"), ("journal_custody_economic_relations", economics, "relation_id")):
@@ -569,47 +599,16 @@ def build_index(conn: sqlite3.Connection, profile_id: str, *, observer: str = "o
             row.update(wallet_kind=wallet.get("kind"), wallet_config_json=wallet.get("config_json"))
             builder.transaction(row)
         for row in read("transaction_graph_cache", scoped=False):
-            payload = stored_tx_mapping(row.get("payload_json"))
-            txid = canonical_txid(row.get("txid"))
-            try:
-                scope = resolve_protocol_scope({"chain": row.get("chain"), "network": row.get("network")})
-            except (ValueError, AppError):
-                scope = None
-            if row.get("schema_version") != 1 or txid is None or payload is None or scope is None or scope.protocol_chain not in {"bitcoin", "liquid"} or not isinstance(payload.get("vin"), list) or not isinstance(payload.get("vout"), list) or payload.get("txid") is not None and canonical_txid(payload["txid"]) != txid or payload.get("chain") not in (None, scope.protocol_chain) or payload.get("network") not in (None, scope.network):
-                builder.coverage["cache_rejected"] += 1
-                continue
-            builder.transaction({"id": f"cache:{scope.protocol_chain}:{scope.network}:{txid}", "chain": scope.protocol_chain, "network": scope.network, "external_id": txid, "raw_json": payload}, cached=True)
+            builder.reference(row, acquired=False)
         for row in read("wallet_utxos"):
             builder.inventory(row)
-        # Explicitly acquired reference observations are profile-scoped. Their
-        # acquisition timestamp/status remain reference provenance, not current
-        # wallet ownership or an automatic custody decision.
         if "chain_analysis_observations" in tables:
             for row in read("chain_analysis_observations"):
-                payload = stored_tx_mapping(row.get("payload_json"))
-                txid = canonical_txid(row.get("txid"))
-                if payload is None or txid is None:
-                    builder.coverage["invalid_observations"] += 1
-                    continue
-                try:
-                    scope = resolve_protocol_scope(row)
-                    payload_scope = resolve_protocol_scope({"chain": scope.protocol_chain, "network": scope.network, "raw_json": payload})
-                except (ValueError, AppError):
-                    builder.coverage["invalid_observations"] += 1
-                    continue
-                if payload_scope != scope or canonical_txid(payload.get("txid")) not in (None, txid) or scope.protocol_chain not in {"bitcoin", "liquid"}:
-                    builder.coverage["invalid_observations"] += 1
-                    continue
-                node_id = tx_node_id(scope.protocol_chain, scope.network, txid)
-                builder.transaction({"id": f"acquired:{scope.protocol_chain}:{scope.network}:{txid}", "chain": scope.protocol_chain, "network": scope.network, "external_id": txid, "raw_json": payload}, cached=True)
-                if node_id in builder.nodes:
-                    builder.profile_seeds.add(node_id)
-                    # Closed source metadata only; never arbitrary status blobs.
-                    status = stored_tx_mapping(row.get("status_json")) or {}
-                    node = builder.nodes[node_id]
-                    node["evidence"].append({"source": "local_acquisition", "reference": node_id, "level": "reference", "observed_at": row.get("observed_at"), "source_name": row.get("source_name"), "confirmed": status.get("confirmed") if isinstance(status.get("confirmed"), bool) else None, "block_height": integer(status.get("block_height")), "status_commitment": digest(status)})
-                    if status.get("removed") is True or status.get("conflicted") is True:
-                        node["status"] = "stale"
+                builder.reference(row, acquired=True)
+        if "chain_analysis_reference_assertions" in tables:
+            for row in read("chain_analysis_reference_assertions"):
+                if row.get("active") == 1:
+                    builder.reference(row, acquired=True)
         if "chain_analysis_labels" in tables:
             for row in read("chain_analysis_labels"):
                 if row.get("deleted"):

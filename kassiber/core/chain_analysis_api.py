@@ -39,7 +39,9 @@ def dispatch(conn, kind, args=None, *, workspace=None, profile=None, source_stre
             context = {"query": result["query"], "snapshot_id": result["snapshot_id"]}
             if args.get("subject"):
                 storage.text_value(args["subject"], "subject", 1024)
-                resolve_subject(engine.build_index(conn, profile_id), args["subject"], result["query"])
+                from .chain_analysis.projection import read_index
+                with read_index(conn, profile_id, observer=result["query"]["observer"]) as index:
+                    resolve_subject(index, args["subject"], result["query"])
                 context["subject"] = args["subject"]
             return project_ai_result(conn, profile_id, context)
     if operation == "query":
