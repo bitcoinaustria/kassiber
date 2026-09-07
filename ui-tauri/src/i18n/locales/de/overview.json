@@ -92,6 +92,7 @@
     "journalsIncluded": "Journale eingeschlossen",
     "autoPairIncluded": "Sicheres Auto-Pairing eingeschlossen",
     "needsAttentionTitle": "Buch-Aktualisierung braucht Aufmerksamkeit",
+    "pendingTitle": "Buch-Aktualisierung hat noch ausstehende Quellen",
     "backendRequiredTitle": "Backend hinzufügen, um Wallets zu synchronisieren",
     "quarantineTitle_one": "{{count}} Transaktion in Quarantäne prüfen",
     "quarantineTitle_other": "{{count}} Transaktionen in Quarantäne prüfen",

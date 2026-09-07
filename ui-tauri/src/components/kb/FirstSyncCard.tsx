@@ -30,6 +30,7 @@ interface FirstSyncCardProps {
   isFirstSync?: boolean;
   failed?: boolean;
   failedPhase?: string;
+  failureDetail?: string;
   onDismiss: () => void;
 }
 
@@ -64,6 +65,7 @@ export function FirstSyncCard({
   isFirstSync = true,
   failed = false,
   failedPhase,
+  failureDetail,
   onDismiss,
 }: FirstSyncCardProps) {
   const { t } = useTranslation("chrome");
@@ -130,9 +132,9 @@ export function FirstSyncCard({
                   ? t("firstSync.defaultTitle")
                   : t("firstSync.defaultTitleRefresh"))}
             </h2>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+            <p role={failed && failureDetail ? "alert" : undefined} className="mt-0.5 break-words text-xs leading-relaxed text-muted-foreground">
               {failed
-                ? t("firstSync.bodyFailed")
+                ? failureDetail || t("firstSync.bodyFailed")
                 : isFirstSync
                   ? t("firstSync.body")
                   : t("firstSync.bodyRefresh")}

@@ -929,7 +929,7 @@ function ConnectionDetailView({
           const result = envelope.data?.results?.find(
             (item) => item.wallet === connection.label,
           );
-          const status = result?.status ?? "synced";
+          const status = result?.status ?? "error";
           const message = describeWalletSyncResult(result, connection.label);
           if (status === "error") {
             setSyncErrorMessage(message);

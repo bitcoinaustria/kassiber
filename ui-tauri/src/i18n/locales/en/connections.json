@@ -290,6 +290,7 @@
       "failedTitle": "Connection refresh failed",
       "finishedTitle": "Connection refresh finished",
       "failedFallback": "Connection refresh failed.",
+      "missingResult": "{{label}}: no refresh result was returned. Check the connection status.",
       "backendRequiredTitle": "Offline — wallet sync is off",
       "backendRequiredBody": "Add a backend to sync this wallet. Kassiber will not add one automatically.",
       "addBackend": "Add backend",
