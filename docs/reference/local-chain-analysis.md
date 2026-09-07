@@ -1,5 +1,25 @@
 # Local chain analysis
 
+The shared query path maintains a rebuildable local graph projection in the
+book's SQLite/SQLCipher database. Transactional source triggers cover imports,
+sync, inventory, reference replacement/retraction and authored interpretation
+changes. Only affected graph contributions are normalized again. Warm queries
+read indexed nodes and adjacency with observer visibility applied before
+traversal; opening a public query does not copy the entire owner graph.
+
+`chain_analysis.projection.index_revision` exposes the committed local revision,
+snapshot identifier and next attribution-validity transition for local watches.
+No source refresh or network access occurs. Initial reads and changed sources
+may write derived index tables, never authored observations or accounting state.
+Projection publication participates in the caller's transaction and rolls back
+with it. `rebuild_index` atomically recovers derived state; `build_index` remains
+the independent full-build correctness oracle. Frozen saved cases remain valid.
+
+The synthetic, local-only `scripts/benchmark-chain-index.py` measures cold
+projection, warm bounded public queries and one-transaction updates against the
+full rebuild. It uses unencrypted in-memory fixtures, not a full-chain capacity
+or production throughput estimate.
+
 Open **Extras → Chain analysis** (`/chain-analysis`). The investigation workspace
 is available without developer mode. It reads the active book and its local
 reference observations. Opening the graph runs one bounded local overview; a

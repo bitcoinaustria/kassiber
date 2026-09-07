@@ -75,10 +75,12 @@ def _finding(code: str, ids: Sequence[str], *, evidence: Sequence[Mapping] = (),
 def analyze_index(index: Any, query: Mapping[str, Any], selected_node_ids: set[str]) -> dict[str, Any]:
     """Analyze only the supplied query subgraph; never mutate or rescan sources."""
     all_nodes = _get(index, "nodes", {})
-    selected = set(selected_node_ids) & set(all_nodes)
+    selected = {ident for ident in selected_node_ids if ident in all_nodes}
     nodes = {ident: all_nodes[ident] for ident in sorted(selected)}
     selected_edges = frozenset(query["_selected_edge_ids"]) if "_selected_edge_ids" in query else None
-    edges = {ident: row for ident, row in _get(index, "edges", {}).items()
+    all_edges = _get(index, "edges", {})
+    candidates = ((ident, all_edges[ident]) for ident in sorted(selected_edges) if ident in all_edges) if selected_edges is not None else all_edges.items()
+    edges = {ident: row for ident, row in candidates
              if row.get("source") in selected and row.get("target") in selected
              and (selected_edges is None or ident in selected_edges)}
     txfacts = _get(index, "transaction_facts", {})
@@ -104,7 +106,7 @@ def analyze_index(index: Any, query: Mapping[str, Any], selected_node_ids: set[s
         adjacency[edge["source"]].append((edge["target"], ident))
         reverse[edge["target"]].append((edge["source"], ident))
     txids = sorted(ident for ident in safe if nodes[ident].get("kind") == "transaction" and ident in txfacts)
-    labels = _get(index, "labels", ())
+    labels = index.labels_for_nodes(selected) if hasattr(index, "labels_for_nodes") else _get(index, "labels", ())
     if isinstance(labels, Mapping):
         labels = list(labels.values())
     visible_labels = []

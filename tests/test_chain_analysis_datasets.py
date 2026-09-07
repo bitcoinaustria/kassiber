@@ -161,15 +161,16 @@ class ChainAnalysisDatasetTests(unittest.TestCase):
 
     def test_public_snapshot_handoff_uses_same_commitment_with_private_packs(self):
         from kassiber.core.chain_analysis import analyze_snapshot, build_index, prepare_entropy, run_analysis
+        from kassiber.core.chain_analysis.projection import read_index
         self.book._insert_transaction(tx_id="snapshot", external_id=TXID, raw_json={
             "txid": TXID, "vin": [{"coinbase": "0101"}], "vout": [{"value": 1000, "scriptpubkey": SCRIPT}],
         })
         self.conn.commit()
         self.pack(changes={"dataset_key": "public-claim"}, rows=[{"subject": TXID, "label": "Public claim"}])
         self.pack(changes={"dataset_key": "private-claim", "visibility": "private"}, rows=[{"subject": TXID, "label": "PRIVATE ANCHOR"}])
-        index = build_index(self.conn, "pf")
         args = {"observer": "public", "include_hypotheses": True}
-        mirror = analyze_snapshot(index, args)
+        with read_index(self.conn, "pf") as index:
+            mirror = analyze_snapshot(index, args)
         workbench = run_analysis(self.conn, "pf", args)
         entropy_context, _, _ = prepare_entropy(self.conn, "pf", {"subject": TXID, "observer": "public"})
         self.assertEqual(mirror, workbench)
@@ -318,10 +319,13 @@ class ChainAnalysisDatasetTests(unittest.TestCase):
         self.assertTrue(index.coverage["datasets"]["visibility_coverage"]["private"]["truncated"])
         self.assertEqual(index.coverage["datasets"]["visibility_coverage"]["private"]["match_count"], 5000)
         args = {"observer": "public", "include_hypotheses": True}
-        snapshot = analyze_snapshot(index, args)
+        from kassiber.core.chain_analysis.projection import read_index
+        with read_index(self.conn, "pf") as current:
+            snapshot = analyze_snapshot(current, args)
+            snapshot_id = current.snapshot_id
         workbench = run_analysis(self.conn, "pf", args)
         self.assertEqual(snapshot, workbench)
-        self.assertEqual(snapshot["snapshot_id"], index.snapshot_id)
+        self.assertEqual(snapshot["snapshot_id"], snapshot_id)
         self.assertEqual(snapshot["coverage"]["analytics"]["label_count"], 1)
         self.assertEqual(snapshot["coverage"]["datasets"]["match_count"], 1)
         self.assertEqual(snapshot["coverage"]["datasets"]["active_dataset_count"], 1)
@@ -334,7 +338,7 @@ class ChainAnalysisDatasetTests(unittest.TestCase):
         check = next(row for row in mirror["coverage"]["checks"] if row["code"] == "public_attribution")
         self.assertEqual((check["evaluated"], check["eligible"]), (1, 1))
         self.assertNotEqual(check.get("reason"), "no_local_public_claims")
-        self.assertEqual(mirror["investigation"]["snapshot_id"], index.snapshot_id)
+        self.assertEqual(mirror["investigation"]["snapshot_id"], snapshot_id)
 
     def test_public_and_private_match_limits_are_independent_in_owner_view(self):
         self.pack(rows=[{"subject": TXID, "label": f"Public {number}"} for number in range(3)])

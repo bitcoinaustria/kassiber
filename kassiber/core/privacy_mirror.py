@@ -10,7 +10,8 @@ from copy import deepcopy
 import time
 from typing import Any, Mapping
 
-from .chain_analysis import analyze_snapshot, build_index
+from .chain_analysis import analyze_snapshot
+from .chain_analysis.projection import read_index
 from .chain_analysis.entropy import analyze_transaction_entropy
 from .chain_analysis.index import AnalysisIndex, digest, observer_index, thaw
 
@@ -51,6 +52,8 @@ def _investigation(index: AnalysisIndex, subjects=()) -> dict:
 def _owned_outputs(index: AnalysisIndex) -> set[str]:
     # This is only a relevance overlay. Ambiguous private ownership cannot
     # identify which wallet should act, and never adds public cluster edges.
+    if hasattr(index, "owned_output_ids"):
+        return index.owned_output_ids()
     return {
         ident for ident, fact in index.output_facts.items()
         if fact.get("ownership_known") and not fact.get("ownership_ambiguous")
@@ -165,9 +168,9 @@ def _findings(owner: AnalysisIndex, public: AnalysisIndex, analysis: Mapping) ->
 
 def _entropy(owner: AnalysisIndex, public: AnalysisIndex, selected: set[str]) -> dict:
     owned = _owned_outputs(owner)
-    candidates = [ident for ident, fact in public.transaction_facts.items()
-                  if ident in selected and public.nodes[ident].get("status") not in _UNSAFE
-                  and fact.get("inputs")]
+    candidates = [ident for ident in selected
+                  if public.nodes[ident].get("status") not in _UNSAFE
+                  and public.transaction_facts.get(ident, {}).get("inputs")]
     candidates.sort(key=lambda ident: (
         _relevance(owner, owned, [ident])[0] != "own_spend",
         len(public.transaction_facts[ident].get("inputs", ())) < 2, ident,
@@ -192,7 +195,7 @@ def _entropy(owner: AnalysisIndex, public: AnalysisIndex, selected: set[str]) ->
 def _coverage(public: AnalysisIndex, analysis: Mapping, entropy: Mapping, finding_count: int) -> dict:
     nodes = analysis["nodes"]
     selected = {row["id"] for row in nodes if row["kind"] == "transaction"}
-    available = {ident for ident, node in public.nodes.items() if node["kind"] == "transaction" and node["status"] != "missing"}
+    available = public.available_transaction_ids() if hasattr(public, "available_transaction_ids") else {ident for ident, node in public.nodes.items() if node["kind"] == "transaction" and node["status"] != "missing"}
     safe = {ident for ident in selected if public.nodes[ident]["status"] not in _UNSAFE}
     coverage = analysis["coverage"]
     analytics = coverage.get("analytics", {})
@@ -209,6 +212,8 @@ def _coverage(public: AnalysisIndex, analysis: Mapping, entropy: Mapping, findin
         reasons.add("dataset_match_budget")
     if coverage.get("invalid_observations"):
         reasons.add("invalid_observations")
+    if coverage.get("reference_reconciling_count"):
+        reasons.add("reference_source_reconciling")
     if coverage.get("missing_tables"):
         reasons.add("missing_local_tables")
     for result in entropy["results"]:
@@ -246,7 +251,11 @@ def _coverage(public: AnalysisIndex, analysis: Mapping, entropy: Mapping, findin
 
 def build_privacy_mirror(conn, profile_id: str, *, redacted: bool = True) -> dict[str, Any]:
     """One read snapshot, bounded analysis, then an explicit audience projection."""
-    owner = build_index(conn, profile_id)
+    with read_index(conn, profile_id) as owner:
+        return _mirror_snapshot(conn, profile_id, owner, redacted=redacted)
+
+
+def _mirror_snapshot(conn, profile_id, owner, *, redacted):
     public = observer_index(owner, "public")
     analysis = analyze_snapshot(owner, QUERY)
     findings = _findings(owner, public, analysis)

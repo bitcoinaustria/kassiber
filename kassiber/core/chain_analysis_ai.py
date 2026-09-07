@@ -9,20 +9,27 @@ an exact, version-bound acquisition plan through this interface.
 """
 from __future__ import annotations
 
+from collections import OrderedDict
 import hashlib
 import hmac
 import re
 import secrets
 import sqlite3
+import threading
 from typing import Any, Mapping
 import uuid
 
 from ..errors import AppError
-from .chain_analysis import build_index
+from .chain_analysis.projection import read_index
 from .chain_analysis_runtime import scope_key as _scope
 
 _PROCESS_KEY = secrets.token_bytes(32)
 _REFERENCE_PREFIX = "ca-ref:"
+# Only issued handles can be replayed. Bounded, RAM-only reverse lookup avoids
+# hashing a whole book for every model follow-up. Eviction requests a refresh.
+_REFERENCE_CAPACITY = 32768
+_REFERENCES = OrderedDict()
+_REFERENCE_LOCK = threading.RLock()
 _CODE_RE = re.compile(r"[a-z][a-z0-9_]*(?:-[a-z0-9_]+)*\Z")
 _HANDLE_FIELDS = {
     "snapshot_id", "expected_snapshot_id", "base_snapshot_id", "current_snapshot_id",
@@ -65,7 +72,7 @@ _SOURCE_CODES = {
 _FIELDS = set("""
     schema_version query summary nodes edges findings clusters patterns exposure
     entropy paths frontier coverage capabilities result items id created_at
-    updated_at occurred_at confirmed_at observed_at confirmed block_height deleted revision expected_revision claim
+    updated_at occurred_at confirmed_at observed_at confirmation_observed_at confirmations confirmed block_height deleted revision expected_revision claim
     hidden_private_node_count hidden_private_relation_count private_labels_withheld
     evidence boundary_evidence conditional_on_boundary_interpretation
     amount_msat target_amount_msat fee_msat min_amount_msat asset target_asset
@@ -77,7 +84,7 @@ _FIELDS = set("""
     selected_node_count hypotheses_enabled hypothesis_count pattern_count label_count
     source_rows node_count edge_count transaction_count output_count record_count
     path_count visited_node_count inspected_edge_count invalid_observations
-    cache_rejected custody_fresh missing_node_count conflicting_node_count
+    cache_rejected custody_fresh missing_node_count conflicting_node_count reference_reconciling_count
     complete_transaction_count reference_node_count frontier_omitted_count
     pruning count analytics depth node_limit edge_limit include_relations
     include_hypotheses start end reversible accounting_authority taint_inference
@@ -116,8 +123,18 @@ _FIELDS = set("""
 """.split()) | _REFERENCE_FIELDS | _REFERENCE_LISTS | _HANDLE_FIELDS | _CODE_FIELDS | _CODE_LISTS | {"source"}
 
 
-def _reference(scope: bytes, value: str) -> str:
+def _token(scope: bytes, value: str) -> str:
     return _REFERENCE_PREFIX + hmac.new(_PROCESS_KEY, scope + b"\x00" + value.encode(), hashlib.sha256).hexdigest()
+
+
+def _reference(scope: bytes, value: str) -> str:
+    token = _token(scope, value)
+    with _REFERENCE_LOCK:
+        _REFERENCES[token] = (scope, value)
+        _REFERENCES.move_to_end(token)
+        while len(_REFERENCES) > _REFERENCE_CAPACITY:
+            _REFERENCES.popitem(last=False)
+    return token
 
 
 def _handle(value: Any) -> bool:
@@ -176,7 +193,7 @@ def project_ai_result(conn: sqlite3.Connection, profile_id: str, value: Any) -> 
             return item if re.fullmatch(r"-?(?:0|[1-9][0-9]*)", item) else omitted
         if field == "final_fee_rate_sat_vb":
             return item if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", item) else omitted
-        if field in {"created_at", "updated_at", "occurred_at", "confirmed_at", "observed_at", "start", "end", "valid_from", "valid_until"}:
+        if field in {"created_at", "updated_at", "occurred_at", "confirmed_at", "observed_at", "confirmation_observed_at", "start", "end", "valid_from", "valid_until"}:
             return item if re.fullmatch(r"[0-9T:.+Z-]{10,40}", item) else omitted
         return omitted
 
@@ -213,13 +230,17 @@ def decode_ai_args(conn: sqlite3.Connection, profile_id: str, args: Mapping[str,
     lookup = {}
     if refs:
         scope = _scope(conn, profile_id)
-        index = build_index(conn, profile_id)
-        subjects = set(index.subjects) | set(index.nodes)
-        subjects.update(row["subject"] for row in index.labels if isinstance(row.get("subject"), str) and not row.get("deleted"))
-        for subject in subjects:
-            reference = _reference(scope, subject)
-            if reference in refs:
-                lookup[reference] = subject
+        with _REFERENCE_LOCK:
+            for reference in refs:
+                remembered = _REFERENCES.get(reference)
+                if remembered and remembered[0] == scope and hmac.compare_digest(_token(*remembered), reference):
+                    lookup[reference] = remembered[1]
+                    _REFERENCES.move_to_end(reference)
+        # A remembered subject is never authority. Revalidate exactly these
+        # keys against the current index, including source/label retractions.
+        if lookup:
+            with read_index(conn, profile_id) as index:
+                lookup = {reference: subject for reference, subject in lookup.items() if index.has_subject(subject)}
         if refs - set(lookup):
             raise AppError("Analysis reference expired or is not available in this book; refresh the investigation", code="chain_analysis_reference_stale", retryable=True)
 

@@ -385,18 +385,19 @@ class PrivacyMirrorTests(unittest.TestCase):
         self.assertTrue(graphless["coverage"]["missing_nodes"] or graphless["coverage"]["stopped_reasons"])
 
     def test_mirror_and_workbench_share_the_same_public_snapshot_and_findings(self):
-        from kassiber.core.chain_analysis import analyze_snapshot, build_index
+        from kassiber.core.chain_analysis import run_analysis
+        from kassiber.core.chain_analysis.projection import read_index
         self._clear_observations()
         self._tx(1, outputs=(2000,))
         self._own(1)
         self._tx(2, [(1, 0)], outputs=(1700, 200), extra={"vin": [{"txid": f"{1:064x}", "vout": 0, "sequence": 0xFFFFFFFD, "prevout": {"value": 2000}}]})
-        with patch("kassiber.core.privacy_mirror.build_index", wraps=build_index) as build:
+        with patch("kassiber.core.privacy_mirror.read_index", wraps=read_index) as build:
             mirror = self._report()
         self.assertEqual(build.call_count, 1, "Mirror must freeze one index, not compose independent report reads")
         investigation = mirror["investigation"]
         self.assertEqual(investigation["query"]["observer"], "public")
         self.assertFalse(investigation["query"]["include_relations"])
-        workbench = analyze_snapshot(build_index(self.conn, "pf"), investigation["query"])
+        workbench = run_analysis(self.conn, "pf", investigation["query"])
         self.assertEqual(investigation["snapshot_id"], workbench["snapshot_id"])
         structural = next(row for row in mirror["findings"] if row["code"] == "explicit_rbf_signal")
         original = next(row for row in workbench["findings"] if row["code"] == "explicit_rbf_signal")
@@ -474,7 +475,8 @@ class PrivacyMirrorTests(unittest.TestCase):
         for row in rbf:
             query = row["investigation"]["query"]
             self.assertRegex(query["subject"], r"^bitcoin:(main|regtest):tx:[0-9a-f]{64}$")
-            result = analyze_snapshot(build_index(self.conn, "pf"), query)
+            from kassiber.core.chain_analysis import run_analysis
+            result = run_analysis(self.conn, "pf", query)
             self.assertEqual(len({node["network"] for node in result["nodes"]}), 1)
             self.assertEqual(result["snapshot_id"], row["investigation"]["snapshot_id"])
 
@@ -676,7 +678,7 @@ class PrivacyMirrorTests(unittest.TestCase):
         self._own(1)
         self._tx(2, [(1, 0)], outputs=(1900,), extra={"version": 3})
         self.conn.commit()
-        before = self.conn.total_changes
+        before = {table: [tuple(row) for row in self.conn.execute(f"SELECT * FROM {table}")] for table in ("transactions", "wallet_utxos", "wallets")}
         runtime = daemon.AiToolRuntime(str(self.data_root), {}, queue.Queue(), {"scope_workspace_id": "ws", "scope_profile_id": "pf", "provider_kind": "remote"})
         with (patch.object(daemon, "_run_on_daemon_main_thread", side_effect=lambda _runtime, callback: callback(self.conn)),
               patch("socket.getaddrinfo", side_effect=AssertionError("unexpected DNS")) as dns,
@@ -702,7 +704,12 @@ class PrivacyMirrorTests(unittest.TestCase):
         self.assertNotIn(f"{2:064x}", json.dumps(follow_up))
         ai = result["envelope"]["data"]
         cli = _run_cli(self.data_root, "reports", "privacy-mirror")["data"]
-        self.assertEqual(self.conn.total_changes, before)
+        # First reads may materialize the rebuildable SQLCipher graph index.
+        # Source observations remain unchanged; warm reads are SQL read-only.
+        self.assertEqual({table: [tuple(row) for row in self.conn.execute(f"SELECT * FROM {table}")] for table in before}, before)
+        before_warm = self.conn.total_changes
+        self._report()
+        self.assertEqual(self.conn.total_changes, before_warm)
         dns.assert_not_called()
         connect.assert_not_called()
         for projected in (ai, cli):

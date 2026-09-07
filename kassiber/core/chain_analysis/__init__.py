@@ -11,14 +11,17 @@ from .query import normalize_query, query_index, resolve_subject
 
 def run_analysis(conn: sqlite3.Connection, profile_id: str, args: Mapping[str, Any] | None = None) -> dict[str, Any]:
     query = normalize_query(args)
-    return analyze_snapshot(build_index(conn, profile_id), query)
+    from .projection import read_index
+    with read_index(conn, profile_id, observer=query["observer"]) as index:
+        return analyze_snapshot(index, query)
 
 
 def analyze_snapshot(index: AnalysisIndex, args: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Compose one observer's bounded findings from an immutable local index.
 
-    Pure: no database reads, source refreshes, or network requests. Both the
-    workbench and Privacy Mirror use this same interpretation of the evidence.
+    No source refreshes or network requests. Mappings are either frozen values
+    (the recovery oracle) or scoped SQL lookups within one read transaction.
+    Workbench and Privacy Mirror use this same interpretation of the evidence.
     """
     query = normalize_query(args)
     index = observer_index(index, query["observer"])
@@ -79,21 +82,22 @@ def prepare_entropy(conn: sqlite3.Connection, profile_id: str, args: Mapping[str
         raise AppError("max_duration_ms must be between 1 and 30000", code="validation", retryable=False)
     from .entropy import normalize_scenario
     scenario = normalize_scenario(args.get("scenario"))
-    index = observer_index(build_index(conn, profile_id), query["observer"])
-    context = {"schema_version": 1, "snapshot_id": index.snapshot_id, "subject": query.get("subject"), "observer": query["observer"]}
-    try:
-        subjects = resolve_subject(index, query["subject"], query)
-    except AppError as error:
-        if error.code != "subject_ambiguous":
-            raise
-        return context, None, {"status": "unavailable", "reason": "ambiguous_domain"}
-    if len(subjects) != 1 or index.nodes[subjects[0]]["kind"] != "transaction":
-        return context, None, {"status": "unavailable", "reason": "single_physical_transaction_required"}
-    node_id = subjects[0]
-    context["subject"] = node_id
-    options = {"chain": index.nodes[node_id]["chain"], "max_states": states, "max_duration_ms": duration}
-    options["scenario"] = scenario
-    return context, thaw(index.transaction_facts.get(node_id, {})), options
+    from .projection import read_index
+    with read_index(conn, profile_id, observer=query["observer"]) as index:
+        context = {"schema_version": 1, "snapshot_id": index.snapshot_id, "subject": query.get("subject"), "observer": query["observer"]}
+        try:
+            subjects = resolve_subject(index, query["subject"], query)
+        except AppError as error:
+            if error.code != "subject_ambiguous":
+                raise
+            return context, None, {"status": "unavailable", "reason": "ambiguous_domain"}
+        if len(subjects) != 1 or index.nodes[subjects[0]]["kind"] != "transaction":
+            return context, None, {"status": "unavailable", "reason": "single_physical_transaction_required"}
+        node_id = subjects[0]
+        context["subject"] = node_id
+        options = {"chain": index.nodes[node_id]["chain"], "max_states": states, "max_duration_ms": duration}
+        options["scenario"] = scenario
+        return context, thaw(index.transaction_facts.get(node_id, {})), options
 
 
 def run_entropy(conn: sqlite3.Connection, profile_id: str, args: Mapping[str, Any]) -> dict[str, Any]:

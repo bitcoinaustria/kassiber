@@ -17,7 +17,7 @@ from ..backends import get_db_backend, backend_timeout
 from ..errors import AppError
 from ..time_utils import now_iso
 from ..wallet_descriptors import normalize_network
-from .chain_analysis import build_index
+from .chain_analysis.projection import index_revision
 from .chain_analysis.query import resolve_subject
 from .chain_analysis_cases import arguments, atomic, canonical, digest, invalid, text_value, validate_domain
 from . import sync_backends as transport
@@ -87,20 +87,22 @@ def _prepare_acquisition(conn, profile_id, args):
     domain = require_chain_domain(conn, profile_id, value["chain"], value["network"], operation="acquisition")
     if backend.get("chain_instance_id") and backend["chain_instance_id"] != domain["chain_instance_id"]:
         invalid("This backend is assigned to a different local chain instance")
-    index = build_index(conn, profile_id)
-    subject = value["subject"].lower()
-    bare = subject.split(":tx:", 1)[-1].split(":out:", 1)[-1].split(":", 1)[0]
-    if _txid(bare) and (subject == bare or subject.startswith(f"{value['chain']}:{normalize_network(value['chain'], value['network'])}:") or re.fullmatch(r"[a-f0-9]{64}:[0-9]+", subject)):
-        seeds = [bare]
-    else:
-        ids = resolve_subject(index, value["subject"], value)
-        seeds = sorted({index.nodes[node].get("txid") for node in ids if _txid(index.nodes[node].get("txid"))})
+    from .chain_analysis.projection import read_index
+    with read_index(conn, profile_id) as index:
+        snapshot_id = index.snapshot_id
+        subject = value["subject"].lower()
+        bare = subject.split(":tx:", 1)[-1].split(":out:", 1)[-1].split(":", 1)[0]
+        if _txid(bare) and (subject == bare or subject.startswith(f"{value['chain']}:{normalize_network(value['chain'], value['network'])}:") or re.fullmatch(r"[a-f0-9]{64}:[0-9]+", subject)):
+            seeds = [bare]
+        else:
+            ids = resolve_subject(index, value["subject"], value)
+            seeds = sorted({index.nodes[node].get("txid") for node in ids if _txid(index.nodes[node].get("txid"))})
     if not seeds:
         invalid("Acquisition needs a txid, outpoint or a locally resolved wallet/address", "not_found")
     if len(seeds) > value["max_transactions"]:
         invalid("Subject has more transactions than this acquisition budget; narrow the subject")
     safe_backend = {key: backend.get(key) for key in ("name", "kind", "chain", "network")}
-    result = {"args": value, "snapshot_id": index.snapshot_id, "backend": safe_backend, "effects": {"egresses": True, "max_transactions": value["max_transactions"], "max_requests": 6 + 2 * value["max_transactions"], "scheduling_deadline_seconds": 45, "request_timeout_seconds": 8, "max_response_bytes": MAX_RESPONSE_BYTES, "max_total_response_bytes": MAX_TOTAL_BYTES}, "limitations": ["Reference observations do not grant ownership or custody.", "Only the chosen backend is contacted; missing or pruned history remains a frontier.", "Confirmation and spend status are observations at acquisition time.", "The 45 second deadline stops new requests and response chunks; a pending network read has an inactivity timeout of at most 8 seconds."]}
+    result = {"args": value, "snapshot_id": snapshot_id, "backend": safe_backend, "effects": {"egresses": True, "max_transactions": value["max_transactions"], "max_requests": 6 + 2 * value["max_transactions"], "scheduling_deadline_seconds": 45, "request_timeout_seconds": 8, "max_response_bytes": MAX_RESPONSE_BYTES, "max_total_response_bytes": MAX_TOTAL_BYTES}, "limitations": ["Reference observations do not grant ownership or custody.", "Only the chosen backend is contacted; missing or pruned history remains a frontier.", "Confirmation and spend status are observations at acquisition time.", "The 45 second deadline stops new requests and response chunks; a pending network read has an inactivity timeout of at most 8 seconds."]}
     if kind == "electrum":
         result["limitations"].append("Electrum supplies ancestors, but no universal historical spender index or confirmation proof in this query.")
     if kind == "bitcoinrpc":
@@ -434,4 +436,4 @@ def apply_acquisition(conn, profile_id, args):
         network = normalize_network(value["chain"], value["network"])
         for txid, (raw, status) in observations.items():
             conn.execute("INSERT INTO chain_analysis_observations VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(profile_id,chain,network,txid) DO UPDATE SET payload_json=excluded.payload_json,status_json=excluded.status_json,source_name=excluded.source_name,observed_at=excluded.observed_at", (profile_id, value["chain"], network, txid, canonical(raw), canonical(status), backend["name"], observed_at))
-    return {"acquired_count": len(observations), "request_count": budget.count, "response_bytes": budget.bytes_read, "transaction_ids": sorted(observations), "frontier": [{"txid": txid, "reason": reason} for txid, reason in sorted({(item["txid"], item["reason"]) for item in frontier})], "complete": not frontier, "backend": safe_backend, "snapshot_id": build_index(conn, profile_id).snapshot_id}
+    return {"acquired_count": len(observations), "request_count": budget.count, "response_bytes": budget.bytes_read, "transaction_ids": sorted(observations), "frontier": [{"txid": txid, "reason": reason} for txid, reason in sorted({(item["txid"], item["reason"]) for item in frontier})], "complete": not frontier, "backend": safe_backend, "snapshot_id": index_revision(conn, profile_id)["snapshot_id"]}

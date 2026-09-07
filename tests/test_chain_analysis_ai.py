@@ -81,7 +81,7 @@ def test_process_restart_wrong_book_wrong_profile_and_stale_refs_fail_closed(boo
 
 
 def test_only_subject_and_target_are_decoded_and_raw_arguments_need_no_scan(book):
-    with patch("kassiber.core.chain_analysis_ai.build_index", side_effect=AssertionError("unexpected scan")):
+    with patch("kassiber.core.chain_analysis_ai.read_index", side_effect=AssertionError("unexpected scan")):
         args = {"subject": txid(1), "title": "ca-ref:unknown", "query": {"target": txid(2)}}
         assert decode_ai_args(book, "p", args) == args
     projected = project_ai_result(book, "p", {"subject": txid(1), "target": txid(2)})
@@ -156,8 +156,45 @@ def test_projection_denies_unknown_fields_and_chain_identifiers_hidden_as_codes(
     assert projected["coverage"] == {"depth": 3, "complete": False}
 
 
-def test_projection_and_reference_decoding_do_not_write(book):
+def test_projection_and_warm_reference_decoding_do_not_write(book):
+    run_analysis(book, "p", {})  # Establish the rebuildable derived projection.
     before = book.total_changes
     result = project_ai_result(book, "p", {"subject": txid(1)})
     decode_ai_args(book, "p", {"subject": result["subject"]})
     assert book.total_changes == before
+
+
+def test_reference_decode_queries_only_issued_subject_and_revalidates_label_deletion(book):
+    for number in range(3, 103):
+        add_tx(book, number)
+    projected = project_ai_result(book, "p", run_analysis(book, "p", {"mode": "trace", "subject": txid(1)}))
+    statements = []
+    book.set_trace_callback(statements.append)
+    with patch("kassiber.core.chain_analysis.index._Builder.transaction", side_effect=AssertionError("decoded handle rebuilt graph")):
+        assert decode_ai_args(book, "p", {"subject": projected["query"]["subject"]})["subject"] == txid(1)
+    book.set_trace_callback(None)
+    assert not any("SELECT DISTINCT alias" in sql or "SELECT id FROM chain_index_nodes" in sql for sql in statements)
+    assert len(statements) < 35
+    unknown = txid(999)
+    book.execute("INSERT INTO chain_analysis_labels VALUES('label','p','bitcoin','main',?,'Private','exchange','Statement','user_confirmed',0,1,0,'now','now')", (unknown,))
+    from kassiber.core.chain_analysis.projection import read_index
+    with read_index(book, "p", observer="public") as index:
+        assert not index.has_subject(unknown)
+    handle = project_ai_result(book, "p", {"subject": unknown})["subject"]
+    assert decode_ai_args(book, "p", {"subject": handle})["subject"] == unknown
+    book.execute("UPDATE chain_analysis_labels SET deleted=1 WHERE id='label'")
+    with pytest.raises(AppError) as caught:
+        decode_ai_args(book, "p", {"subject": handle})
+    assert caught.value.code == "chain_analysis_reference_stale"
+
+
+def test_reference_memory_is_bounded_and_evicted_handles_request_refresh(book):
+    import kassiber.core.chain_analysis_ai as module
+    with patch.object(module, "_REFERENCE_CAPACITY", 2):
+        first = project_ai_result(book, "p", {"subject": txid(1)})["subject"]
+        project_ai_result(book, "p", {"subject": txid(2)})
+        project_ai_result(book, "p", {"subject": txid(3)})
+        assert len(module._REFERENCES) <= 2
+        with pytest.raises(AppError) as caught:
+            decode_ai_args(book, "p", {"subject": first})
+        assert caught.value.code == "chain_analysis_reference_stale"
