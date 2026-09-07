@@ -64,6 +64,11 @@ def _evidence(row):
     if raw.get("source") == "bullbitcoin_wallet_csv" and str(raw.get("network", "")).lower() in {"bitcoin", "liquid", "lightning"}:
         raw.pop("network", None)
         row = {**row, "raw_json": raw}
+    if row.get("wallet_kind") == "coinbase" and isinstance(raw.get("network"), Mapping):
+        # Coinbase's transaction network object contains hash/fee/status data,
+        # not a main/test/regtest declaration. Other explicit scope stays live.
+        raw.pop("network", None)
+        row = {**row, "raw_json": raw}
     environment, valid = bitcoin_network_domain_evidence(row, allow_implicit_main=False)
     columns = {key: row[key] for key in ("chain", "network", "bitcoin_network", "chain_network") if row.get(key) not in (None, "")}
     if columns:

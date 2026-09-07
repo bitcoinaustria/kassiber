@@ -121,3 +121,11 @@ class BookNetworkTests(unittest.TestCase):
         self.assertTrue(observation_matches_binding(binding, row, unscoped=True))
         row["raw_json"]["network"] = "main"
         self.assertFalse(observation_matches_binding(binding, row, unscoped=True))
+
+    def test_coinbase_network_receipt_object_is_not_a_chain_environment(self):
+        self.bind("main")
+        row = {"wallet_kind":"coinbase", "raw_json":{"network":{"hash":"a"*64}}, "wallet_config_json":{"network":"main"}}
+        guard_observation(self.conn,"profile-1",row)
+        row["raw_json"]["chain_network"] = "regtest"
+        with self.assertRaises(AppError):
+            guard_observation(self.conn,"profile-1",row)
