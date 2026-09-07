@@ -1,5 +1,9 @@
 # Release Signing
 
+For local Apple signing and automated notarization, follow the
+[macOS release runbook](macos-release.md). Build workflows now stage drafts;
+final publication requires both macOS validation and the OpenPGP policy below.
+
 Kassiber follows Sparrow's OpenPGP release-verification shape: one versioned
 SHA-256 manifest covers every downloadable artifact, and one detached OpenPGP
 signature authenticates that manifest. The signed manifest header also binds
@@ -52,8 +56,10 @@ Before using the key for a Kassiber release:
    Austria channel.
 4. Add the public key at `packaging/release/kassiber-release.asc`, set the full
    primary fingerprint in `packaging/release/signing-policy.json`, and enable
-   that policy in a reviewed commit. Create the protected `release-production`
-   GitHub environment with named human approvers.
+   that policy in a reviewed commit. Configure the `release-production`
+   GitHub environment as described in the macOS runbook. The current sole
+   maintainer explicitly dispatches finalization; a second approver is optional
+   until another operator is available.
 5. Add the public key to packaged Kassiber builds only after reviewers have
    compared those independent publications.
 6. Sign and publish a key-transition statement whenever the release key is
@@ -84,7 +90,8 @@ kassiber-0.23.0-manifest.txt.asc
 ```
 
 Upload the signature next to the manifest and packages. For production signed
-releases, build into a GitHub draft. A second operator runs
+releases, build into a GitHub draft. The release operator (or, when available,
+an independent second operator) runs
 `finalize-signed-release.yml`; it downloads the existing assets, verifies the
 signature and every manifest entry, rejects missing or unexpected assets,
 renders Homebrew hashes from that authenticated manifest, and publishes the
@@ -133,8 +140,9 @@ manifest or signature format.
 - Manifest was generated after all artifacts and contains each artifact once.
 - Detached signature validates against the independently published full
   primary-key fingerprint.
-- A second operator independently verifies one artifact with
-  `kassiber verify-download`.
+- The operator verifies the final artifacts with `kassiber verify-download`;
+  use an independent second operator when one is available. Do not describe
+  single-maintainer verification as independent human review.
 - Release notes identify the manifest, signature, and fingerprint locations.
 - Draft is published only after all checks pass.
 - Homebrew and Linux channel hashes came from the authenticated manifest.

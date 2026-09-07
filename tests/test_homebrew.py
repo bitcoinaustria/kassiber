@@ -108,6 +108,25 @@ class HomebrewCliFormulaRenderTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.render(renderer, **{field: "not-a-sha"})
 
+    def test_macos_formula_preserves_sealed_bundle_metadata(self):
+        formula = self.render(load_renderer())
+        macos = formula.split("  on_macos do\n", 1)[1].split("  on_linux do\n", 1)[0]
+        # Homebrew's metadata cleanup traverses libexec too; without this
+        # exact subtree exemption it removes signed RECORD/direct_url files.
+        self.assertIn('skip_clean "libexec/Kassiber.app"', macos)
+        self.assertEqual(formula.count("skip_clean"), 1)
+        self.assertNotIn("skip_clean :all", formula)
+
+    def test_macos_formula_preserves_signed_library_install_names(self):
+        formula = self.render(load_renderer())
+        macos = formula.split("  on_macos do\n", 1)[1].split("  on_linux do\n", 1)[0]
+        # Homebrew otherwise rewrites bundled @rpath IDs and ad-hoc re-signs
+        # those libraries, invalidating the Developer ID app seal.
+        self.assertIn("    preserve_rpath\n", macos)
+        self.assertEqual(formula.count("preserve_rpath"), 1)
+        self.assertIn('libexec.install "Kassiber.app"', formula)
+        self.assertIn('bin.install "kassiber"', formula)
+
     def test_render_formula_validates_version(self):
         renderer = load_renderer()
 
