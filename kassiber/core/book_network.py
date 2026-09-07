@@ -89,8 +89,28 @@ def inventory_book_network(conn, profile_id):
         all_environments.update(known)
         all_instances.update(instances)
         rows.append({"wallet_id": wallet["id"], "label": wallet["label"], "environments": sorted(known), "chain_instances": sorted(instances), "transaction_count": len(by_wallet[wallet["id"]]), "unknown_count": len(unknown), "conflict_count": len(conflicts), "conflicting_transaction_ids": [value for value in conflicts if value], "requires_declaration": bool(unknown) or ("regtest" in known and not instances)})
-    state = "conflicted" if any(row["conflict_count"] for row in rows) else "mixed" if len(all_environments) > 1 or len(all_instances) > 1 else "unbound"
-    return {"profile_id": profile_id, "state": state, "environments": sorted(all_environments), "chain_instances": sorted(all_instances), "wallets": rows, "inventory_digest": _digest(fingerprint), "transaction_count": len(observations)}
+    references = []
+    reference_conflicts = 0
+    for table in ("chain_analysis_observations", "chain_observer_instances", "chain_observation_provenance", "wallet_policy_epochs", "wallet_utxos"):
+        if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+            continue
+        columns = {row["name"] for row in conn.execute(f'PRAGMA table_info("{table}")')}
+        if not {"profile_id", "chain", "network"} <= columns:
+            continue
+        source_rows = [dict(row) for row in conn.execute(f'SELECT * FROM "{table}" WHERE profile_id=?', (profile_id,))]
+        fingerprint.append([table, source_rows])
+        for source in source_rows:
+            evidence = {"raw_json": _json(source.get("payload_json")), "config_json": {"chain": source["chain"], "network": source["network"]}}
+            environment, instance, valid = _evidence(evidence)
+            if not valid:
+                reference_conflicts += 1
+            elif environment:
+                all_environments.add(environment)
+                if instance:
+                    all_instances.add(instance)
+            references.append({"source": table, "environment": environment, "chain_instance_id": instance, "valid": valid})
+    state = "conflicted" if reference_conflicts or any(row["conflict_count"] for row in rows) else "mixed" if len(all_environments) > 1 or len(all_instances) > 1 else "unbound"
+    return {"profile_id": profile_id, "state": state, "environments": sorted(all_environments), "chain_instances": sorted(all_instances), "wallets": rows, "reference_scopes": references, "inventory_digest": _digest(fingerprint), "transaction_count": len(observations)}
 
 
 def resolve_book_environment(conn, profile_id):
@@ -135,6 +155,8 @@ def plan_book_network(conn, profile_id, args):
             blockers.append({"code": "different_instance", "wallet_id": row["wallet_id"]})
         if row["requires_declaration"] and row["wallet_id"] not in declared:
             blockers.append({"code": "scope_declaration_required", "wallet_id": row["wallet_id"]})
+    if any(not item["valid"] or item["environment"] not in (None, environment) or item["chain_instance_id"] not in (None, instance) for item in inventory["reference_scopes"]):
+        blockers.append({"code": "reference_domain_mismatch"})
     recipe = {"profile_id": profile_id, "environment": environment, "chain_instance_id": instance, "declared_wallet_ids": sorted(set(declared)), "inventory_digest": inventory["inventory_digest"]}
     return {**recipe, "plan_id": _digest(recipe), "domains": _domains(environment, instance), "blockers": blockers, "can_apply": not blockers, "inventory": inventory}
 
@@ -190,6 +212,8 @@ def guard_wallet(conn, profile_id, config, *, previous_config=None, operation="w
 
 
 def require_book_accounting(conn, profile_id):
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='book_network_bindings'").fetchone():
+        return
     inventory = inventory_book_network(conn, profile_id)
     binding = _binding(conn, profile_id)
     if inventory["state"] in {"mixed", "conflicted"}:
@@ -212,3 +236,16 @@ def new_wallet_config(conn, profile_id, kind, config):
         if binding["chain_instance_id"]:
             config.setdefault("chain_instance_id", binding["chain_instance_id"])
     return config
+
+
+def observation_matches_binding(binding, row, *, unscoped=False):
+    """Fast read filter. Shared caches cannot borrow a local instance identity."""
+    if binding.get("state") != "bound":
+        return True
+    environment, instance, valid = _evidence(dict(row))
+    if not valid or environment != binding["environment"]:
+        return False
+    expected_instance = binding.get("chain_instance_id")
+    if instance is not None and instance != expected_instance:
+        return False
+    return not (unscoped and expected_instance and instance != expected_instance)

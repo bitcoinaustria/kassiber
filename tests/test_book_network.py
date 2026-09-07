@@ -2,7 +2,7 @@ import json
 import unittest
 import uuid
 
-from kassiber.core.book_network import apply_book_network, guard_observation, guard_wallet, inventory_book_network, plan_book_network, require_book_accounting, require_chain_domain
+from kassiber.core.book_network import apply_book_network, guard_observation, guard_wallet, inventory_book_network, plan_book_network, require_book_accounting, require_chain_domain, observation_matches_binding
 from kassiber.errors import AppError
 from tests import test_transaction_graph as fixtures
 
@@ -82,3 +82,23 @@ class BookNetworkTests(unittest.TestCase):
         with self.assertRaises(Exception):
             self.conn.execute("UPDATE book_network_bindings SET environment='main'")
 
+
+    def test_shared_regtest_cache_requires_the_exact_declared_instance(self):
+        self.conn.execute("UPDATE wallets SET config_json='{}'")
+        instance = str(uuid.uuid4())
+        binding = self.bind("regtest", instance)
+        row = {"config_json": {"chain": "bitcoin", "network": "regtest"}}
+        self.assertTrue(observation_matches_binding(binding, row))
+        self.assertFalse(observation_matches_binding(binding, row, unscoped=True))
+        row["raw_json"] = {"chain_instance_id": instance}
+        self.assertTrue(observation_matches_binding(binding, row, unscoped=True))
+        row["raw_json"] = {"chain_instance_id": str(uuid.uuid4())}
+        self.assertFalse(observation_matches_binding(binding, row))
+
+    def test_acquired_reference_network_is_part_of_binding_inventory(self):
+        self.book._tx("main", "wallet-a", "inbound", 1000, "b" * 64, {"network": "main"})
+        self.conn.execute("INSERT INTO chain_analysis_observations VALUES(?,?,?,?,?,?,?,?)", ("profile-1", "bitcoin", "regtest", "a" * 64, "{}", "{}", "local", "2026-01-01"))
+        plan = plan_book_network(self.conn, "profile-1", {"environment": "main", "declared_wallet_ids": ["wallet-a", "wallet-b", "wallet-c"]})
+        self.assertFalse(plan["can_apply"])
+        self.assertIn("reference_domain_mismatch", [item["code"] for item in plan["blockers"]])
+        self.assertEqual(plan["inventory"]["state"], "mixed")
