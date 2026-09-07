@@ -28,7 +28,7 @@ def require_encrypted(conn):
     row = conn.execute("PRAGMA cipher_version").fetchone()
     keyed = conn.execute("PRAGMA cipher_salt").fetchone() if row else None
     if not keyed or not keyed[0]:
-        raise AppError("Encrypt this book before enabling local watches", code="watch_requires_encrypted_database", hint="Open Settings > Lock & encryption, or run secrets init for this book")
+        raise AppError("Encrypt this book before enabling background evidence work", code="watch_requires_encrypted_database", hint="Open Settings > Lock & encryption, or run secrets init for this book")
 
 
 def domain_for(conn, profile_id, query):
