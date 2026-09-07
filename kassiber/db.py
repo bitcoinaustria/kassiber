@@ -3581,6 +3581,16 @@ def _preflight_schema_index_columns(conn):
             )
 
 
+def _install_base_schema(conn):
+    # A pristine schema has hundreds of DDL statements. Without a transaction,
+    # rollback journaling durably commits each one separately. Check the keyed
+    # connection: encrypted onboarding already creates a nonempty, empty-schema
+    # file. Existing schemas keep their current migration transaction boundaries.
+    empty_schema = conn.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone() is None
+    schema = "BEGIN;\n" + SCHEMA + "\nCOMMIT;" if empty_schema else SCHEMA
+    conn.executescript(schema)
+
+
 def open_db(
     data_root,
     *,
@@ -3640,7 +3650,7 @@ def open_db(
                 require_database_instance_id(conn, expected_database_identity)
             _configure_connection_pragmas(conn)
             _preflight_schema_index_columns(conn)
-            conn.executescript(SCHEMA)
+            _install_base_schema(conn)
             ensure_schema_compat(conn)
             ensure_database_instance_id(conn)
             from .core.chain_analysis.projection_store import install as install_chain_index
@@ -3680,7 +3690,7 @@ def open_db(
             require_database_instance_id(conn, expected_database_identity)
         _configure_connection_pragmas(conn, encrypted=True)
         _preflight_schema_index_columns(conn)
-        conn.executescript(SCHEMA)
+        _install_base_schema(conn)
         ensure_schema_compat(conn)
         ensure_database_instance_id(conn)
         from .core.chain_analysis.projection_store import install as install_chain_index
