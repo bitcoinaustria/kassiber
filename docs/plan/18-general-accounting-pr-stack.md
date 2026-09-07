@@ -1,9 +1,20 @@
 # General accounting: dependency triage and three-cut stack
 
-Updated: 2026-09-06. This supersedes the earlier seven-cut and two-cut breakdowns.
+Updated: 2026-09-07. This supersedes the earlier seven-cut and two-cut breakdowns.
 The accepted full scope remains [spec 17](17-general-accounting-and-private-ai-spec.md),
 but publication is not merge approval or completed organizational acceptance.
 EBICS, payment initiation, payroll and FinanzOnline transmission remain excluded.
+
+## Current merge policy (2026-09-07)
+
+The owner explicitly accepted the non-reproduced SQLCipher observation as a
+residual risk on 2026-09-06. It is no longer a merge blocker for #545/#546/#550;
+this is not a fix or proof that the observation was invalid. Encryption guards,
+tests and independent correctness/consent gates remain unchanged. This decision
+supersedes the historical hold statements below. #551 remains excluded.
+The [recorded decision](https://github.com/bitcoinaustria/kassiber/pull/545#issuecomment-5561648220)
+and each linked PR contain live merge/check status; historical test checkpoints
+are not substituted for exact-head verification.
 
 ## Live triage
 
@@ -17,7 +28,7 @@ EBICS, payment initiation, payroll and FinanzOnline transmission remain excluded
 | [Kassiber #544](https://github.com/bitcoinaustria/kassiber/pull/544) | Narrow cash-currency validation salvage merged at `f43d27f88bb9fd3f7c3acd141b6ae3145f43c029` after exact-head CI passed. Not an accounting-stack dependency. |
 | [Kassiber #431](https://github.com/bitcoinaustria/kassiber/pull/431) | Separate native macOS client; defer outside CLI/Agent accounting. |
 | [Kassiber #136](https://github.com/bitcoinaustria/kassiber/pull/136) | Separate modular overview layout; defer outside this stack. |
-| [Kassiber #547](https://github.com/bitcoinaustria/kassiber/pull/547) | Separate release/signing lane on main, not an accounting dependency. Bounded Standards/Spec reviews found no code blocker at `70309f7`; actual notary credentials, OpenPGP enrollment, production protections and clean-Mac/Touch ID activation remain unverified. |
+| [Kassiber #547](https://github.com/bitcoinaustria/kassiber/pull/547) | Merged as `add3a104c3682490c84cb9794cd37fda117b9375`; inherited by the accounting landing candidates. Production notary/signing activation, OpenPGP enrollment, production protections and clean-Mac/Touch ID acceptance remain separate. |
 | [Kassiber #548](https://github.com/bitcoinaustria/kassiber/pull/548) | Independent dependency security patch merged as `115a5186a6ea6ea888b9bb87562c547288fc54cb` after the full local gate, independent Standards/Spec review and 25 successful hosted checks. Keeps frontend release quarantine; remaining `fast-uri`/`qs` patches await explicit exception or maturity. Restacked accounting inherits this patch. |
 
 The original reproductions are retained on
@@ -56,7 +67,7 @@ PR #543 landed independently. #542 is merged after the dependency correction;
 the published stack is `main -> #545 -> #546 -> #550`, at code checkpoints
 `780f2da9`, `9ef535f1` and `2d5ab45f` respectively. All three are draft,
 unmerged PRs. Per-cut full local gates and independent split reviews passed;
-the unresolved encrypted-handle rejection remains a technical merge hold.
+the encrypted-handle observation is now an explicitly accepted residual risk.
 Missing organization data and measured pilot outcomes are product/pilot
 acceptance, not blanket code-merge blockers; they remain mandatory before
 claiming the organization's workflow complete. No auto-merge is armed here.
@@ -113,7 +124,8 @@ Independent split reviews found no actionable code issue. Shared native tests
 pass 112 cases; the selected broker passes seven isolation tests; exact-source
 selected CLI and sidecar each pass three packaged smoke cases. Details and
 limits are in the [acceptance record](../reference/general-accounting-acceptance.md).
-The reliability hold remains; external CLI model review is not completed.
+The historical reliability hold is superseded above; external CLI model review
+is not completed. Independent in-session review remains separate evidence.
 Older results below describe preserved candidates, not the new gate runs.
 
 The pre-split follow-up combined candidate was `c6ce832c` over core `0568757e`, including
@@ -158,5 +170,5 @@ Record exact final gate results and published PR links in the
 [acceptance record](../reference/general-accounting-acceptance.md). The real
 organization's confirmed facts, measured mixed-source user effort and full
 AF-1 through AF-5 product acceptance remain open independently of code merge.
-Passing current-cut technical/package checks do not resolve the reliability
-hold. A synthetic K2 export is not a completed real filing.
+Passing current-cut technical/package checks does not establish a SQLCipher fix.
+A synthetic K2 export is not a completed real filing.
