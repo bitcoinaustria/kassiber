@@ -180,19 +180,32 @@ class LiveChainAnalysisTest(unittest.TestCase):
         self.conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('alice','ws','p','Alice','descriptor','{}',?)", (now,))
         self.conn.execute("INSERT INTO wallet_utxos(id,workspace_id,profile_id,wallet_id,chain,network,asset,amount,txid,vout,outpoint,confirmation_status,script_pubkey,spent_by,first_seen_at,last_seen_at) VALUES('owned','ws','p','alice','bitcoin','regtest','BTC',?,?,?,?, 'confirmed',?,?,?,?)", (int(_msat(output["value"])), owned["txid"], owned["vout"], f"{owned['txid']}:{owned['vout']}", output["scriptPubKey"]["hex"], txid, now, now))
         self.conn.commit()
-        before = self.conn.total_changes
-        with patch("socket.getaddrinfo", side_effect=AssertionError("implicit DNS")), patch("socket.socket.connect", side_effect=AssertionError("implicit network")):
+        tables = [row[0] for row in self.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                  if not row[0].startswith(("chain_index_", "sqlite_"))]
+        def source_state():
+            return {table: sorted((tuple(row) for row in self.conn.execute(
+                'SELECT * FROM "' + table.replace('"', '""') + '"')), key=repr) for table in tables}
+        before = source_state()
+        with patch("socket.getaddrinfo", side_effect=AssertionError("implicit DNS")) as dns, patch("socket.socket.connect", side_effect=AssertionError("implicit network")) as connect:
             mirror = build_privacy_mirror(self.conn, "p", redacted=False)
             common_input = next(row for row in mirror["findings"] if row["code"] == "common_input_control")
             self.assertEqual(common_input["relevance"], "own_spend")
             self.assertIn("assumes_no_undetected_collaboration", common_input["assumptions"])
             self.assertEqual(mirror["summary"]["owned_output_count"], 1)
-            self.assertEqual(self.conn.total_changes, before)
+            # A cold read may materialize the derived index, never source data.
+            self.assertEqual(source_state(), before)
+            before_warm = self.conn.total_changes
+            warm = build_privacy_mirror(self.conn, "p", redacted=False)
+            self.assertEqual(warm["investigation"]["snapshot_id"], mirror["investigation"]["snapshot_id"])
             # We know this fixture is collaborative because both Core wallets
             # signed it. The public observer only gets a conditional hypothesis.
             self.assertNotEqual(common_input["authority"], "observed")
             reopened = run_analysis(self.conn, "p", common_input["investigation"]["query"])
             self.assertEqual(reopened["snapshot_id"], common_input["investigation"]["snapshot_id"])
+            self.assertEqual(self.conn.total_changes, before_warm)
+            self.assertEqual(source_state(), before)
+            dns.assert_not_called()
+            connect.assert_not_called()
 
     def test_missing_intermediate_is_a_frontier_then_acquisition_recovers_exact_path_and_case(self):
         middle, destination, final_wallet = self.wallet(), self.wallet(), self.wallet()
