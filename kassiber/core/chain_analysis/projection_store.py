@@ -68,6 +68,7 @@ def install(conn):
         # A missing derived table is recoverable from source observations. Do
         # not leave surviving state rows claiming the materialization is whole.
         conn.execute("UPDATE chain_index_state SET version=0")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_chain_index_label_subject ON chain_index_labels(profile_id,json_extract(payload_json,'$.subject'))")
     if "chain_analysis_dataset_claims" in objects:
         for field in ("valid_from", "valid_until"):
             conn.execute(f"CREATE INDEX IF NOT EXISTS idx_chain_index_claim_{field} ON chain_analysis_dataset_claims({field},dataset_id) WHERE {field} IS NOT NULL")

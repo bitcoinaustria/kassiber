@@ -132,6 +132,16 @@ class _View:
         rows = self.conn.execute(f"SELECT id,json_extract(payload_json,'$.chain'),json_extract(payload_json,'$.network') FROM chain_index_nodes WHERE profile_id=? AND seed=1 AND {self.edge_column} IS NOT NULL ORDER BY id", (self.profile_id,))
         return tuple(ident for ident, chain, network in rows if _domain({"chain": chain, "network": network}, query))
 
+    def has_subject(self, subject):
+        """Validate an issued AI handle without enumerating aliases or nodes."""
+        self.check()
+        if self.conn.execute("SELECT 1 FROM chain_index_aliases WHERE profile_id=? AND observer=? AND alias=? LIMIT 1", (self.profile_id, self.visibility, subject)).fetchone():
+            return True
+        # An authored label may name a subject with no observed graph node.
+        # Such a label remains editable; it does not invent chain connectivity.
+        public = " AND json_extract(payload_json,'$.visibility')='public' AND json_extract(payload_json,'$.dataset_id') IS NOT NULL" if self.visibility == "public" else ""
+        return self.conn.execute(f"SELECT 1 FROM chain_index_labels WHERE profile_id=? AND json_extract(payload_json,'$.subject')=?{public} LIMIT 1", (self.profile_id, subject)).fetchone() is not None
+
     def _related(self, table, link, link_id, nodes, *, include_global=False):
         self.check()
         column = self.edge_column if table == "chain_index_findings" else "payload_json"

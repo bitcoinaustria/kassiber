@@ -9,20 +9,27 @@ an exact, version-bound acquisition plan through this interface.
 """
 from __future__ import annotations
 
+from collections import OrderedDict
 import hashlib
 import hmac
 import re
 import secrets
 import sqlite3
+import threading
 from typing import Any, Mapping
 import uuid
 
 from ..errors import AppError
-from .chain_analysis import build_index
+from .chain_analysis.projection import read_index
 from .chain_analysis_runtime import scope_key as _scope
 
 _PROCESS_KEY = secrets.token_bytes(32)
 _REFERENCE_PREFIX = "ca-ref:"
+# Only issued handles can be replayed. Bounded, RAM-only reverse lookup avoids
+# hashing a whole book for every model follow-up. Eviction requests a refresh.
+_REFERENCE_CAPACITY = 32768
+_REFERENCES = OrderedDict()
+_REFERENCE_LOCK = threading.RLock()
 _CODE_RE = re.compile(r"[a-z][a-z0-9_]*(?:-[a-z0-9_]+)*\Z")
 _HANDLE_FIELDS = {
     "snapshot_id", "expected_snapshot_id", "base_snapshot_id", "current_snapshot_id",
@@ -116,8 +123,18 @@ _FIELDS = set("""
 """.split()) | _REFERENCE_FIELDS | _REFERENCE_LISTS | _HANDLE_FIELDS | _CODE_FIELDS | _CODE_LISTS | {"source"}
 
 
-def _reference(scope: bytes, value: str) -> str:
+def _token(scope: bytes, value: str) -> str:
     return _REFERENCE_PREFIX + hmac.new(_PROCESS_KEY, scope + b"\x00" + value.encode(), hashlib.sha256).hexdigest()
+
+
+def _reference(scope: bytes, value: str) -> str:
+    token = _token(scope, value)
+    with _REFERENCE_LOCK:
+        _REFERENCES[token] = (scope, value)
+        _REFERENCES.move_to_end(token)
+        while len(_REFERENCES) > _REFERENCE_CAPACITY:
+            _REFERENCES.popitem(last=False)
+    return token
 
 
 def _handle(value: Any) -> bool:
@@ -213,13 +230,17 @@ def decode_ai_args(conn: sqlite3.Connection, profile_id: str, args: Mapping[str,
     lookup = {}
     if refs:
         scope = _scope(conn, profile_id)
-        index = build_index(conn, profile_id)
-        subjects = set(index.subjects) | set(index.nodes)
-        subjects.update(row["subject"] for row in index.labels if isinstance(row.get("subject"), str) and not row.get("deleted"))
-        for subject in subjects:
-            reference = _reference(scope, subject)
-            if reference in refs:
-                lookup[reference] = subject
+        with _REFERENCE_LOCK:
+            for reference in refs:
+                remembered = _REFERENCES.get(reference)
+                if remembered and remembered[0] == scope and hmac.compare_digest(_token(*remembered), reference):
+                    lookup[reference] = remembered[1]
+                    _REFERENCES.move_to_end(reference)
+        # A remembered subject is never authority. Revalidate exactly these
+        # keys against the current index, including source/label retractions.
+        if lookup:
+            with read_index(conn, profile_id) as index:
+                lookup = {reference: subject for reference, subject in lookup.items() if index.has_subject(subject)}
         if refs - set(lookup):
             raise AppError("Analysis reference expired or is not available in this book; refresh the investigation", code="chain_analysis_reference_stale", retryable=True)
 
