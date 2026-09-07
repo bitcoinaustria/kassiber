@@ -1,3 +1,4 @@
+import { BookNetworkSettings } from "./BookNetworkSettings";
 import { AlertTriangle, CheckCircle2, Pencil, Plus, ShieldCheck } from "lucide-react";
 
 import { useTranslation } from "react-i18next";
@@ -108,7 +109,7 @@ export function NetworkLayerSettingsPanel({
         </div>
       )}
 
-      {layer === "bitcoin" ? <AnalysisNetworkSettings /> : null}
+      {layer === "bitcoin" ? <><BookNetworkSettings /><AnalysisNetworkSettings /></> : null}
 
       {layer === "bitcoin" || layer === "liquid" ? (
         <p className="text-xs text-muted-foreground">

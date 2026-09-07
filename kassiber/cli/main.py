@@ -1402,6 +1402,25 @@ def build_parser() -> argparse.ArgumentParser:
     ws_create = ws_sub.add_parser("create")
     ws_create.add_argument("label")
 
+    networks = sub.add_parser("networks", help="Inspect and bind a book's network environment")
+    networks_sub = networks.add_subparsers(dest="networks_command", required=True)
+    for action in ("inventory", "plan", "bind", "split-plan", "split"):
+        network_parser = networks_sub.add_parser(action)
+        network_parser.add_argument("--workspace")
+        network_parser.add_argument("--profile")
+        if action != "inventory":
+            network_parser.add_argument("--environment", choices=("main", "test", "signet", "regtest"), required=True)
+            network_parser.add_argument("--chain-instance-id")
+            network_parser.add_argument("--declare-wallet", action="append", default=[])
+        if action in {"bind", "split"}:
+            network_parser.add_argument("--plan-id", required=True)
+        if action in {"split-plan", "split"}:
+            network_parser.add_argument("--wallet", action="append", required=True)
+        if action == "split":
+            network_parser.add_argument("--file", required=True)
+            network_parser.add_argument("--recipient")
+            network_parser.add_argument("--backup-passphrase-fd", type=int)
+
     profiles = sub.add_parser("profiles")
     profiles_sub = profiles.add_subparsers(dest="profiles_command", required=True)
     profiles_list = profiles_sub.add_parser("list")
@@ -3577,6 +3596,25 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             return emit(args, core_accounts.list_workspaces(conn))
         if args.workspaces_command == "create":
             return emit(args, dict(core_accounts.create_workspace(conn, args.label)))
+    if args.command == "networks":
+        from ..core.book_network import inventory_book_network, plan_book_network, apply_book_network, resolve_book_environment
+        _, profile = resolve_scope(conn, args.workspace, args.profile)
+        if args.networks_command == "inventory":
+            return emit(args, {**inventory_book_network(conn, profile["id"]), "binding": resolve_book_environment(conn, profile["id"])})
+        payload = {"environment": args.environment, "chain_instance_id": args.chain_instance_id, "declared_wallet_ids": args.declare_wallet}
+        if args.networks_command in {"split-plan", "split"}:
+            from ..core.book_network_migration import plan_network_partition, export_network_partition
+            payload["wallet_ids"] = args.wallet
+            if args.networks_command == "split-plan":
+                return emit(args, plan_network_partition(conn, profile["id"], payload))
+            from ..secrets.prompt import read_passphrase_from_fd
+            password = read_passphrase_from_fd(args.backup_passphrase_fd) if args.backup_passphrase_fd is not None else None
+            return emit(args, export_network_partition(conn, profile["id"], {**payload, "plan_id": args.plan_id}, data_root=args.data_root, output_path=args.file, recipient=args.recipient, backup_passphrase=password, db_passphrase=getattr(args, "_db_passphrase_cached", None)))
+        if args.networks_command == "plan":
+            return emit(args, plan_book_network(conn, profile["id"], payload))
+        with conn:
+            result = apply_book_network(conn, profile["id"], {**payload, "plan_id": args.plan_id})
+        return emit(args, result)
     if args.command == "profiles":
         if args.profiles_command == "list":
             return emit(args, core_accounts.list_profiles(conn, args.workspace))

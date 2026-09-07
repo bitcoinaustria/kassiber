@@ -50,6 +50,8 @@ def require_report_context(
     """Resolve scope once and fail closed unless its projection is reportable."""
 
     workspace, resolved_profile = resolve_scope(conn, workspace_ref, profile_ref)
+    from .book_network import require_book_accounting
+    require_book_accounting(conn, resolved_profile["id"])
     require_tax_processing_supported(resolved_profile)
     profile = conn.execute(
         "SELECT * FROM profiles WHERE id = ?",

@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { FileSearch, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AssistantSessionContext } from "@/components/ai/assistantSession";
-import { DaemonScopeContext, useDaemonMutation } from "@/daemon/client";
+import { DaemonScopeContext, useDaemon, useDaemonMutation } from "@/daemon/client";
 import { isFilePickerAvailable, pickChainAnalysisSource, type AnalysisSourceSelection } from "@/lib/filePicker";
 import { DEFAULT_ANALYSIS_QUERY, formatAnalysisAmount } from "@/lib/chainAnalysis";
 import { payjoinOptions, psbtAssistantContext, type PsbtAnalysis, type PsbtComparison } from "@/lib/chainAnalysisWorkbench";
@@ -13,7 +13,17 @@ import { EntropyPanel } from "./EntropyPanel";
 import { CodeList, FeatureDetails, StructuredValue } from "./FeatureDetails";
 import { Fact } from "./EvidenceDetails";
 
-export function PsbtPanel({ onError, initialNetwork }: { onError: (value: unknown) => void; initialNetwork?: string }) {
+export function PsbtPanel(props: { onError: (value: unknown) => void; initialNetwork?: string }) {
+  const { t } = useTranslation(["settings", "common"]);
+  const query = useDaemon<{ environment_id: string | null; domains: { chain: string; network: string }[] }>("ui.networks.binding");
+  if (query.isLoading) return <p>{t("common:state.loading")}</p>;
+  if (query.isError) return <Button onClick={() => void query.refetch()}>{t("common:actions.retry")}</Button>;
+  const bookNetwork = query.data?.data?.domains.find(domain => domain.chain === "bitcoin")?.network;
+  if (bookNetwork && props.initialNetwork && props.initialNetwork !== bookNetwork) return <p role="alert">{t("bookNetwork.inspectionMismatch")}</p>;
+  return <PsbtPanelContent key={query.data?.data?.environment_id ?? "unbound"} {...props} initialNetwork={bookNetwork ?? props.initialNetwork} />;
+}
+
+function PsbtPanelContent({ onError, initialNetwork }: { onError: (value: unknown) => void; initialNetwork?: string }) {
   const { t } = useTranslation("chainAnalysis");
   const { t: settingsT } = useTranslation("settings");
   const boundary = useContext(DaemonScopeContext);

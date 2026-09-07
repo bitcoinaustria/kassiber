@@ -327,3 +327,11 @@ def validate_replicated_binding(conn, profile_id, row):
             _error("Replicated network binding has unreviewed local sources")
     if any(not item["valid"] or item["environment"] not in (None, environment) or item["chain_instance_id"] not in (None, instance) for item in inventory["reference_scopes"]):
         _error("Replicated network binding conflicts with local observations")
+
+
+def wallet_for_network_sync(conn, profile_id, wallet):
+    """Choose routing from authored book scope without rewriting wallet history."""
+    config = _json(wallet["config_json"])
+    guard_wallet(conn, profile_id, config, operation="sync")
+    binding = resolve_book_environment(conn, profile_id)
+    return {**dict(wallet), "config_json": json.dumps(new_wallet_config(conn, profile_id, wallet["kind"], config)), "_book_environment_id": binding["environment_id"]}

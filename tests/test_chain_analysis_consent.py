@@ -28,6 +28,10 @@ def book(tmp_path, monkeypatch):
     set_setting(conn, "context_workspace", "ws")
     set_setting(conn, "context_profile", "profile")
     conn.execute("INSERT INTO backends(name,kind,chain,network,url,created_at,updated_at) VALUES('node','esplora','bitcoin','main','http://127.0.0.1:18443/api',?,?)", (NOW, NOW))
+    from kassiber.core.book_network import plan_book_network, apply_book_network
+    scope = {"environment":"main", "declared_wallet_ids":[row[0] for row in conn.execute("SELECT id FROM wallets WHERE profile_id='profile'")]}
+    preview = plan_book_network(conn, "profile", scope)
+    apply_book_network(conn, "profile", {**scope, "plan_id":preview["plan_id"]})
     conn.commit()
     runtime = daemon.AiToolRuntime(str(tmp_path), {}, queue.Queue(), {
         "scope_workspace_id": "ws", "scope_profile_id": "profile",

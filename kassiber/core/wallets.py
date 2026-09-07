@@ -563,7 +563,11 @@ def create_wallet(
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     account = resolve_account(conn, profile["id"], account_ref or "treasury")
     normalized_kind = normalize_wallet_kind(kind)
-    config = _validated_wallet_config(normalized_kind, config or {})
+    from .book_network import guard_wallet, new_wallet_config
+    config = new_wallet_config(conn, profile["id"], normalized_kind, config or {})
+    guard_wallet(conn, profile["id"], config)
+    config = _validated_wallet_config(normalized_kind, config)
+    guard_wallet(conn, profile["id"], config)
     wallet_id = str(wallet_id or uuid.uuid4())
     try:
         conn.execute(
@@ -1060,6 +1064,13 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
         else:
             config[key] = value
 
+    from .book_network import guard_wallet
+    has_history = conn.execute("SELECT 1 FROM transactions WHERE wallet_id=? LIMIT 1", (wallet["id"],)).fetchone()
+    guard_wallet(conn, profile["id"], config, previous_config=json.loads(wallet["config_json"] or "{}") if has_history else None)
+    if has_history:
+        from .book_network import guard_observation
+        for observed in conn.execute("SELECT asset,raw_json FROM transactions WHERE wallet_id=?", (wallet["id"],)):
+            guard_observation(conn, profile["id"], {**dict(observed), "wallet_config_json": config}, operation="wallet_update")
     config = _validated_wallet_config(wallet["kind"], config)
     ownership_identity_changed = (
         policy_identity_material(config) != original_ownership_identity

@@ -82,6 +82,14 @@ def _prepare_acquisition(conn, profile_id, args):
         invalid("Selected backend belongs to a different chain or network")
     if kind == "bitcoinrpc" and value["chain"] != "bitcoin":
         invalid("The Bitcoin Core observer supports Bitcoin only", "capability_unavailable")
+    from .book_network import resolve_book_environment, require_chain_domain
+    book = resolve_book_environment(conn, profile_id)
+    domain = require_chain_domain(conn, profile_id, value["chain"], value["network"], operation="acquisition")
+    backend_config = backend.get("config_json") or {}
+    if isinstance(backend_config, str):
+        backend_config = json.loads(backend_config)
+    if backend_config.get("chain_instance_id") and backend_config["chain_instance_id"] != domain["chain_instance_id"]:
+        invalid("This backend is assigned to a different local chain instance")
     index = build_index(conn, profile_id)
     subject = value["subject"].lower()
     bare = subject.split(":tx:", 1)[-1].split(":out:", 1)[-1].split(":", 1)[0]
@@ -100,6 +108,9 @@ def _prepare_acquisition(conn, profile_id, args):
         result["limitations"].append("Electrum supplies ancestors, but no universal historical spender index or confirmation proof in this query.")
     if kind == "bitcoinrpc":
         result["limitations"].append("Historical forward expansion requires a synchronized Core 31 txospenderindex; arbitrary raw transaction reads may require txindex.")
+    result["book_environment"] = {"environment_id": book["environment_id"], "revision": book["revision"], "chain_instance_id": book.get("chain_instance_id")}
+    if book.get("chain_instance_id"):
+        result["limitations"].append("Approval assigns the selected source to this local chain instance. Its genesis hash verifies the network, not the identity of a particular local chain history.")
     # A configuration change invalidates consent without exposing a hash of
     # secrets. Backend CRUD maintains updated_at; bind every safe plan field.
     revision = conn.execute("SELECT updated_at FROM backends WHERE name=?", (backend["name"],)).fetchone()[0]

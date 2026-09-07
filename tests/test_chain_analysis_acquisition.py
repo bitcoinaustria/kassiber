@@ -39,6 +39,10 @@ class FakeHTTP:
 class ChainAnalysisAcquisitionTests(unittest.TestCase):
     def setUp(self):
         self.book = hygiene_fixture.PrivacyHygieneTests(); self.book.setUp(); self.conn = self.book.conn
+        from kassiber.core.book_network import plan_book_network, apply_book_network
+        scope = {"environment":"main", "declared_wallet_ids":["wal"]}
+        preview = plan_book_network(self.conn, "pf", scope)
+        apply_book_network(self.conn, "pf", {**scope, "plan_id":preview["plan_id"]})
         self.conn.execute("INSERT INTO backends(name,kind,chain,network,url,auth_header,created_at,updated_at) VALUES('node','esplora','bitcoin','main','https://node.example/api','Bearer synthetic-secret',?,?)", (NOW, NOW))
 
     def tearDown(self):

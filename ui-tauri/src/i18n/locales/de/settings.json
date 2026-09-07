@@ -755,5 +755,49 @@
     "label": "Standardnetzwerk für neue Untersuchungen",
     "help": "Gilt, wenn eine importierte Datei keinen Netzwerkkontext hat. Bestehende Untersuchungen und Netzwerke der Verbindungen bleiben unverändert.",
     "effective": "Netzwerk: {{network}}"
+  },
+  "bookNetwork": {
+    "title": "Netzwerk des Buchs",
+    "environment": "Umgebung",
+    "environments": {
+      "main": "Produktiv",
+      "test": "Testnet",
+      "signet": "Signet",
+      "regtest": "Lokales Regtest"
+    },
+    "help": "Dieses Buch einer Umgebung zuordnen. Bitcoin, Lightning und Liquid bleiben darin getrennte Netzwerke.",
+    "immutable": "Für eine andere Umgebung ein Buch wechseln oder anlegen. Bestehende Historie behält ihre Identität.",
+    "instance": "UUID der lokalen Instanz",
+    "newInstance": "Neue Instanz",
+    "unknown": "Netzwerk nicht aufgezeichnet",
+    "declare": "Ich ordne diese Connection der gewählten Umgebung zu. Fehlende Quellbelege bleiben unbekannt.",
+    "preview": "Zuordnung prüfen",
+    "confirmHelp": "Diese Zuordnung ist dauerhaft. Quelldaten und frühere Berichte werden nicht umgeschrieben.",
+    "bind": "Buchnetzwerk bestätigen",
+    "blockers": {
+      "already_bound": "Buch bereits zugeordnet.",
+      "contradictory_evidence": "Widersprüchliche Netzwerkbelege.",
+      "different_environment": "Andere Umgebung: Diese Historie in ein eigenes Buch aufteilen.",
+      "different_instance": "Andere lokale Chain-Instanz.",
+      "scope_declaration_required": "Umgebung dieser Connection bestätigen.",
+      "reference_domain_mismatch": "Lokale Blockchain-Beobachtungen gehören zu einem anderen Netzwerk oder einer anderen Instanz."
+    },
+    "inspectionMismatch": "Diese Inspektion gehört zu einem anderen Netzwerk. Zu einem passenden Buch wechseln.",
+    "partition": {
+      "title": "Historie in ein eigenes Buch aufteilen",
+      "help": "Gewählte Connections für die obige Umgebung exportieren. IDs und Beziehungen bleiben erhalten. Frühere Berichte bleiben hier; im neuen Buch Quellen verbinden und Journale neu berechnen.",
+      "counts": "{{wallets}} Connections · {{transactions}} Transaktionen",
+      "destination": "Neue Archivdatei (.age)",
+      "export": "Verschlüsseltes Buch exportieren",
+      "saved": "Verschlüsseltes Backup gespeichert. Über Einstellungen → Backup als separates Projekt wiederherstellen, ausgewählte Quellen neu verbinden und Journale neu erstellen. Das Original bleibt unverändert.",
+      "blockers": {
+        "relation_crosses_partition": "Eine geprüfte Beziehung reicht über die Auswahl hinaus. Ihre gesamte Historie einbeziehen.",
+        "incompatible_wallet_history": "Diese Connection enthält unvereinbare Historie.",
+        "unresolved_relation": "Ein erforderlicher verknüpfter Datensatz kann nicht sicher kopiert werden.",
+        "scope_declaration_required": "Umgebung dieser Connection oben bestätigen."
+      },
+      "passphrase": "Backup-Passphrase (mindestens 12 Zeichen)",
+      "confirmPassphrase": "Passphrase bestätigen"
+    }
   }
 }

@@ -529,3 +529,6 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md); run `./scripts/quality-gate.sh`
 before pushing.
 
 GNU Affero General Public License v3.0 only (`AGPL-3.0-only`).
+
+Book-wide network binding and safe mixed-history partition export are documented in
+[Book network scope](docs/reference/book-networks.md).

@@ -734,6 +734,16 @@ SYNC_TABLES: tuple[TableSpec, ...] = (
 )
 
 
+# Immutable authored scope follows the source rows in a fresh snapshot. It
+# carries no node credentials, descriptors, or physical ownership authority.
+SYNC_TABLES += (TableSpec(
+    "book_network_bindings",
+    ("profile_id", "environment_id", "environment", "revision", "chain_instance_id", "domains_json", "acknowledgements_json", "inventory_digest", "created_at"),
+    ("profile_id",), _profile_scope("book_network_bindings"),
+    high_stakes_fields=frozenset({"environment", "chain_instance_id", "domains_json"}),
+    json_columns=frozenset({"domains_json", "acknowledgements_json"}),
+),)
+
 SYNC_TABLE_MAP: Mapping[str, TableSpec] = {spec.table: spec for spec in SYNC_TABLES}
 
 # Explicit assertions document the privilege boundary. Adding one of these to
@@ -796,6 +806,7 @@ _SYNC_WALLET_CONFIG_FIELDS = frozenset(
         "addresses",
         "chain",
         "network",
+        "chain_instance_id",
         "gap_limit",
         "policy_asset",
         "altbestand",

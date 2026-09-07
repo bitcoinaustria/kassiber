@@ -47,6 +47,7 @@ CLI_READ_PATHS = _paths(
     operator.status operator.operation.status operator.touch-id.status
     chats.list chats.show secrets.status sync.status sync.transport.list
     sync.gc.status sync.members.list sync.devices.list sync.conflicts.list
+    networks.inventory networks.plan networks.split-plan
     backends.list backends.kinds backends.get context.show context.current
     workspaces.list profiles.list profiles.get accounts.list wallets.list
     wallets.kinds wallets.get wallets.preview-document wallets.identify
@@ -80,6 +81,7 @@ CLI_OPERATOR_PATHS = _paths(
     """
     chain-analysis.datasets.import chain-analysis.datasets.revoke chain-analysis.datasets.discard
     chain-analysis.cases.save chain-analysis.cases.delete chain-analysis.labels.upsert chain-analysis.labels.delete chain-analysis.labels.import chain-analysis.acquire.apply
+    networks.bind networks.split
     projects.select chat backends.create backends.update backends.set-default
     backends.clear-default context.set workspaces.create profiles.create
     accounts.create wallets.create wallets.update
@@ -185,6 +187,7 @@ DAEMON_READ_KINDS = _paths(
     ui.custody.lineage.snapshot ui.custody.gaps.list
     ui.custody.gaps.review_context ui.custody.gaps.history
     ui.custody.review.plan ui.transfers.rules.list ui.saved_views.list
+    ui.networks.binding ui.networks.inventory ui.networks.plan ui.networks.partition_plan
     ui.profiles.snapshot ui.rates.summary ui.rates.coverage
     ui.audit.changes_since_last_answer
     ui.audit.evidence.summary ui.review.worklist ui.maintenance.settings
@@ -232,6 +235,7 @@ DAEMON_OPERATOR_KINDS = _paths(
     ui.documents.create ui.documents.attach ui.documents.import_report
     ui.journals.process
     ui.saved_views.create ui.saved_views.delete ui.onboarding.complete
+    ui.networks.bind ui.networks.partition_export
     ui.profiles.create ui.profiles.rename
     ui.profiles.switch ui.rates.kraken_csv.import ui.rates.rebuild
     ui.maintenance.configure ui.maintenance.run ui.freshness.configure

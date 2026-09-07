@@ -543,6 +543,8 @@ class CustodyJournalBuilder:
         return roles, pairs
 
     def build_custody_decisions(self) -> CustodyJournalDecisions:
+        from .book_network import require_book_accounting
+        require_book_accounting(self.conn, self.profile_id)
         require_tax_processing_supported(self.profile)
         rows = self._transactions()
         rates = latest_transaction_rates_for_profile(
