@@ -95,7 +95,9 @@ requiring another person's approval would deadlock the current team.
    Keychain access may require your local approval. Do not enable blanket
    access for arbitrary tools or disable library validation to pass a build.
 3. CI checks the input hash, Apple signature/team and source/version, submits
-   the signed DMG, and waits for **Accepted**. It staples/verifies both DMG
+   the signed DMG, immediately preserves its Apple submission ID, and polls
+   until **Accepted**. The evidence artifact remains useful even if Apple is
+   still processing when the bounded CI wait expires. CI staples/verifies both DMG
    and app, creates the final ZIP and CLI archive from the same sealed app,
    replaces only draft macOS assets, and regenerates the complete manifest.
    The original CI onefile macOS CLI is a preview only: its embedded libraries

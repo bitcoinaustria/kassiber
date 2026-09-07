@@ -17,6 +17,7 @@ import stat
 import subprocess
 import tarfile
 import tempfile
+import time
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -28,6 +29,8 @@ APP_ZIP = "kassiber-macos-arm64.app.zip"
 DMG = "kassiber-macos-arm64.dmg"
 CLI_TAR = "kassiber-cli-macos-arm64.tar.gz"
 INPUT_DMG = "kassiber-macos-signing-input.dmg"
+NOTARY_POLL_SECONDS = 30
+NOTARY_TIMEOUT_SECONDS = 50 * 60
 APP_ENTITLEMENTS = {
     "com.apple.application-identifier": f"{TEAM}.{APP_ID}",
     "com.apple.developer.team-identifier": TEAM,
@@ -52,6 +55,37 @@ def sha256(path: Path) -> str:
 def check_digest(path: Path, expected: str) -> None:
     if not re.fullmatch(r"[0-9a-f]{64}", expected) or sha256(path) != expected:
         raise ValueError("Artifact SHA-256 mismatch")
+
+
+def submit_and_wait_for_notarization(args: argparse.Namespace, evidence: Path) -> dict:
+    """Persist the submission ID before polling Apple's asynchronous service."""
+    result = json.loads(run(
+        "/usr/bin/xcrun", "notarytool", "submit", args.image,
+        "--keychain-profile", args.profile, "--keychain", args.keychain,
+        "--output-format", "json",
+    ))
+    submission_id = result.get("id")
+    if not isinstance(submission_id, str) or not submission_id:
+        raise ValueError("Notary submission did not return an ID")
+    evidence.write_text(json.dumps(result, indent=2) + "\n")
+    print(f"Apple notary submission: {submission_id}", flush=True)
+
+    deadline = time.monotonic() + NOTARY_TIMEOUT_SECONDS
+    while result.get("status") not in ("Accepted", "Invalid", "Rejected"):
+        if time.monotonic() >= deadline:
+            raise ValueError(
+                f"Notarization still pending after {NOTARY_TIMEOUT_SECONDS // 60} minutes; "
+                f"submission {submission_id} is preserved in evidence"
+            )
+        time.sleep(NOTARY_POLL_SECONDS)
+        result = json.loads(run(
+            "/usr/bin/xcrun", "notarytool", "info", submission_id,
+            "--keychain-profile", args.profile, "--keychain", args.keychain,
+            "--output-format", "json",
+        ))
+        evidence.write_text(json.dumps(result, indent=2) + "\n")
+        print(f"Apple notary status: {result.get('status', 'unknown')}", flush=True)
+    return result
 
 
 def validate_profile_data(data: dict) -> None:
@@ -385,11 +419,7 @@ def notarize(args: argparse.Namespace) -> None:
         app = app_from_image(args.image.resolve(), Path(tmp))
         verify_app(app, args.commit, args.version, ticket=False, candidate_id=getattr(args, "candidate_id", None))
         # Apple creates tickets for both this signed image and its inner app.
-        result = json.loads(run("/usr/bin/xcrun", "notarytool", "submit", args.image,
-                                "--keychain-profile", args.profile, "--wait",
-                                "--keychain", args.keychain,
-                                "--timeout", "45m", "--output-format", "json"))
-        (args.output / "notarization.json").write_text(json.dumps(result, indent=2) + "\n")
+        result = submit_and_wait_for_notarization(args, args.output / "notarization.json")
         if result.get("status") != "Accepted":
             raise ValueError("Notarization was not Accepted; no release files are ready")
         image = args.output / DMG

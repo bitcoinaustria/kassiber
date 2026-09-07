@@ -376,6 +376,42 @@ def test_workflows_keep_keys_local_and_publication_gated():
     assert "release-seal-${{ inputs.tag_name }}" in notary and "release-seal-${{ inputs.tag_name }}" in final
 
 
+def test_notary_submission_id_is_preserved_before_polling(tmp_path):
+    args = argparse.Namespace(image=tmp_path / "input.dmg", profile="profile",
+                              keychain=tmp_path / "notary.keychain")
+    evidence = tmp_path / "notarization.json"
+    responses = [
+        {"id": "submission-123", "status": "In Progress"},
+        {"id": "submission-123", "status": "Accepted"},
+    ]
+
+    def fake_run(*command):
+        if command[1:3] == ("notarytool", "info"):
+            assert json.loads(evidence.read_text())["id"] == "submission-123"
+        return json.dumps(responses.pop(0))
+
+    with patch.object(release, "run", side_effect=fake_run), \
+            patch.object(release.time, "sleep"):
+        result = release.submit_and_wait_for_notarization(args, evidence)
+
+    assert result["status"] == "Accepted"
+    assert json.loads(evidence.read_text()) == result
+
+
+def test_pending_notary_submission_times_out_with_evidence(tmp_path):
+    args = argparse.Namespace(image=tmp_path / "input.dmg", profile="profile",
+                              keychain=tmp_path / "notary.keychain")
+    evidence = tmp_path / "notarization.json"
+    now = iter((0.0, release.NOTARY_TIMEOUT_SECONDS))
+    with patch.object(release, "run", return_value=json.dumps(
+            {"id": "submission-456", "status": "In Progress"})), \
+            patch.object(release.time, "monotonic", side_effect=lambda: next(now)):
+        with pytest.raises(ValueError, match="submission-456 is preserved"):
+            release.submit_and_wait_for_notarization(args, evidence)
+
+    assert json.loads(evidence.read_text())["id"] == "submission-456"
+
+
 @pytest.mark.skipif(sys.platform != "darwin", reason="Apple tool contract")
 def test_real_codesign_rejects_non_bitcoin_austria_identity():
     # Apple's system binary is validly signed, but not by our Developer ID.
