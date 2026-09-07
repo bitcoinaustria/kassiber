@@ -72,3 +72,5 @@ class NetworkBoundaryTests(unittest.TestCase):
         config = json.loads(self.conn.execute("SELECT config_json FROM wallets WHERE id='wallet-a'").fetchone()[0])
         self.assertEqual(config["network"],"regtest")
         self.assertEqual(config["chain_instance_id"],binding["chain_instance_id"])
+        from kassiber.core.book_network import require_book_accounting
+        require_book_accounting(self.conn,"profile-1")

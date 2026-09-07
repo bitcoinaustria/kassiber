@@ -131,6 +131,11 @@ def _inventory_book_network(conn, profile_id):
         fingerprint.append([table, source_rows])
         for source in source_rows:
             evidence = {"raw_json": _json(source.get("payload_json")), "config_json": {"chain": source["chain"], "network": source["network"]}}
+            if table == "wallet_policy_epochs" and not _json(source.get("private_material_json")) and not conn.execute("SELECT 1 FROM wallet_policy_sources WHERE epoch_id=? LIMIT 1", (source["id"],)).fetchone():
+                # Rotating an empty exchange config creates a retired epoch
+                # with the historical main default, but no watch policy or
+                # source. That placeholder cannot prove a physical network.
+                evidence = {}
             environment, instance, valid = _evidence(evidence)
             if not valid:
                 reference_conflicts += 1
