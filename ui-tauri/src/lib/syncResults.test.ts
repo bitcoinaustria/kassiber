@@ -7,6 +7,7 @@ import {
   freshnessRunTransferReviewCount,
   describeWalletSyncResult,
   freshnessRunNeedsAttention,
+  freshnessRunHasPendingJobs,
   freshnessRunNeedsBackend,
   summarizeFreshnessRun,
   summarizeSyncResults,
@@ -14,6 +15,23 @@ import {
 } from "./syncResults";
 
 describe("syncResults", () => {
+  it("keeps requested jobs pending until a terminal result exists", () => {
+    const enqueued = [{ id: "a" }, { id: "b" }];
+    expect(freshnessRunHasPendingJobs({ enqueued, completed: [] })).toBe(true);
+    expect(freshnessRunHasPendingJobs({ enqueued, completed: [{ id: "a", status: "done" }] })).toBe(true);
+    expect(freshnessRunHasPendingJobs({ enqueued, completed: [{ id: "a", status: "done" }, { id: "b", status: "running" }] })).toBe(true);
+    expect(freshnessRunHasPendingJobs({ enqueued, completed: [{ id: "a", status: "done" }, { id: "b", status: "done" }] })).toBe(false);
+  });
+  it("does not claim success when the wallet result is missing", () => {
+    expect(describeWalletSyncResult(undefined, "Cold")).toBe(
+      "Cold: no refresh result was returned. Check the connection status.",
+    );
+  });
+  it("retains a failure code when no error message was supplied", () => {
+    expect(summarizeFreshnessRun({ completed: [{
+      status: "error", source_label: "Cold", error: { code: "observer_state_invalid" },
+    }] })).toContain("observer_state_invalid");
+  });
   it("keeps the wallet-specific error message in all-sync summaries", () => {
     expect(
       summarizeSyncResults([

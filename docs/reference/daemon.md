@@ -709,6 +709,15 @@ retries, pauses, resumes, and cancels jobs, but it never performs network sync
 itself. Persistent state lives in SQLite under `freshness_jobs` and
 `freshness_source_states`.
 
+Within the daemon, refresh execution is serialized across recovery, queueing,
+batch fetch and apply. A background tick skips an occupied execution slot; an
+explicit competing refresh returns retryable `project_operation_in_progress`.
+Report-read sync preserves its opt-out/no-op behavior, and reports contention
+through its existing failed maintenance result. Cancellation controls remain
+available while a refresh owns the slot. Exact selected jobs completed by
+another executor are returned within the requested limit; running jobs are
+never represented as completed.
+
 Job types are separate so partial success stays usable:
 
 - `onchain_wallet_history` for descriptor/address wallet history through

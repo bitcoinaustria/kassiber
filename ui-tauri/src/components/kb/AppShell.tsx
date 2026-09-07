@@ -1906,6 +1906,7 @@ export function AppShell() {
                         isFirstSync={isFirstSync}
                         failed={bookRefreshFailed}
                         failedPhase={activeMaintenanceProgress?.phase}
+                        failureDetail={activeMaintenanceProgress?.body}
                         onDismiss={minimizeSyncCard}
                       />
                     ) : null}

@@ -140,6 +140,17 @@ message.
 - **Background workers** — the freshness worker and AI chat worker stamp
   their own correlation ids; their failures are logged to the ring in
   addition to the envelopes they already emit.
+- **Handled freshness failures** — a failed/deferred job logs its categorical
+  job type, last recognized processing phase, allowlisted error code, and known
+  exception class, with the request correlation id. Known SQLite error names
+  and observer-conflict kinds provide additional discriminators. These records
+  omit source labels, wallet identities, exception messages, and arbitrary
+  exception details. Unrecognized codes use `freshness_job_failed` in the log;
+  the scoped job result retains its original code for UI inspection. Cached batch
+  failures use `batch_prefetch`: shared batch progress cannot establish which
+  wallet was in its last reported decode phase.
+  A completed refresh request also logs categorical job counts, distinguishing
+  selected, attempted, deferred, cancelled and failed jobs without result blobs.
 - **Operator broker** — unlock, lock, expiry, rejection, queue admission,
   dispatch, cancellation, and crash/result-unknown state enter only the
   broker's bounded Python ring. Fields contain opaque project ids, exact

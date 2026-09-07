@@ -1,3 +1,5 @@
+import i18n from "@/i18n";
+
 export interface SyncResult {
   wallet: string;
   status: "synced" | "skipped" | "error" | string;
@@ -178,8 +180,9 @@ export function describeWalletSyncResult(
   result: SyncResult | undefined,
   walletLabel: string,
 ): string {
+  if (!result) return i18n.t("connections:detail.sync.missingResult", { label: walletLabel });
   const wallet = result?.wallet || walletLabel;
-  const status = result?.status ?? "synced";
+  const status = result.status;
   const detail = syncResultDetail(result);
 
   if (status === "error") {
@@ -225,6 +228,13 @@ export function syncResultsAreTrustedForReports(results: SyncResult[]): boolean 
   return !results.some((result) =>
     ["error", "failed", "blocking_reports"].includes(result.status),
   );
+}
+
+export function freshnessRunHasPendingJobs(data: FreshnessRunData | null | undefined): boolean {
+  const terminalIds = new Set((data?.completed ?? [])
+    .filter((job) => ["done", "error", "cancelled"].includes(job.status ?? ""))
+    .map((job) => job.id));
+  return (data?.enqueued ?? []).some((job) => !job.id || !terminalIds.has(job.id));
 }
 
 export function freshnessRunNeedsAttention(data: FreshnessRunData | null | undefined): boolean {
@@ -341,7 +351,7 @@ export function summarizeFreshnessRun(data: FreshnessRunData | null | undefined)
   const autoPairDetail = autoPairProblem
     ? autoPairSummary(autoPairProblem)?.error?.message
     : null;
-  const detail = [firstProblem?.error?.message, firstProblem?.error?.hint]
+  const detail = [firstProblem?.error?.message || firstProblem?.error?.code, firstProblem?.error?.hint]
     .filter(Boolean)
     .join(" ");
   return firstProblem && detail

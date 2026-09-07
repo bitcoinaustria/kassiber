@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import hashlib
 import json
 import logging
@@ -78,12 +79,46 @@ JOB_RATE_LIMITED = "rate_limited"
 
 PHASE_DISCOVERY = "discovery"
 PHASE_BACKEND_FETCH = "backend_fetch"
+PHASE_BATCH_PREFETCH = "batch_prefetch"
 PHASE_DECODE_ENRICH = "decode_enrich"
 PHASE_IMPORT = "import"
 PHASE_RATE_COVERAGE = "rate_coverage"
 PHASE_JOURNAL_REFRESH = "journal_refresh"
 PHASE_DONE = "done"
 PHASE_ERROR = "error"
+
+_LOG_PHASES = frozenset({
+    PHASE_DISCOVERY, PHASE_BACKEND_FETCH, PHASE_BATCH_PREFETCH, PHASE_DECODE_ENRICH, PHASE_IMPORT,
+    PHASE_RATE_COVERAGE, PHASE_JOURNAL_REFRESH, PHASE_DONE, PHASE_ERROR,
+})
+# These are application-owned categories, not remotely supplied strings. Unknown
+# codes stay in the scoped job result but cannot smuggle values into the RAM log.
+_LOG_ERROR_CODES = frozenset("""
+    app_error auth_error backend_sync_failed backend_tip_behind backend_tls_config_invalid
+    bitcoinrpc_birthday_required bitcoinrpc_inconsistent_wallet_details
+    bitcoinrpc_unexpected_response book_network_mismatch book_network_review_required
+    config_error database_busy dependency_missing dependency_version_mismatch
+    electrum_rpc_error freshness_job_failed internal internal_error network_error
+    network_egress_disabled network_proxy_required not_found observer_accounting_ambiguous
+    observer_apply_outside_transaction observer_capability_unsupported observer_identity_invalid
+    observer_prepare_in_transaction observer_projection_conflict observer_scan_limit
+    observer_state_invalid observer_state_rebuild_required observer_state_stale
+    observer_update_already_applied observer_update_discarded protocol_error rate_limited
+    report_freshness_blocked silent_payment_scanner_invalid silent_payment_scanner_unavailable
+    source_overlap source_overlap_retry stale_context state_not_ready sync_conflicts_open
+    sync_state_missing tax_failed unsupported upstream_error validation
+""".split())
+_LOG_SQLITE_NAMES = frozenset(name for name in dir(sqlite3) if name.startswith("SQLITE_"))
+
+
+def log_exception_class(exc: Exception) -> str:
+    """Return a known category without logging user-defined class names."""
+    for cls in type(exc).__mro__:
+        if cls is AppError:
+            return "kassiber.errors.AppError"
+        if getattr(builtins, cls.__name__, None) is cls:
+            return f"builtins.{cls.__name__}"
+    return "builtins.Exception"
 
 POLICY_SETTING_PREFIX = "freshness.policy.profile."
 LEGACY_AUTO_SYNC_PREFIX = "ai.auto_sync_before_report_reads.profile."
@@ -606,7 +641,7 @@ def _set_cancelled(
         last_phase=job.get("phase"),
         checkpoint=(state or {}).get("checkpoint", {}),
     )
-    return _load_job(conn, job["id"])
+    return get_job(conn, job["id"])
 
 
 def enqueue_job(
@@ -727,11 +762,12 @@ def cancel_job(conn: sqlite3.Connection, job_id: str) -> dict[str, Any]:
             job,
             {"phase": job.get("phase") or PHASE_BACKEND_FETCH, "cancellation_requested": True},
         )
-        return _load_job(conn, job_id)
+        return get_job(conn, job_id)
     return _set_cancelled(conn, job)
 
 
-def _load_job(conn: sqlite3.Connection, job_id: str) -> dict[str, Any]:
+def get_job(conn: sqlite3.Connection, job_id: str) -> dict[str, Any]:
+    """Read one exact job, including terminal outcomes from another executor."""
     row = conn.execute("SELECT * FROM freshness_jobs WHERE id = ?", (job_id,)).fetchone()
     if row is None:
         raise AppError("Freshness job was not found", code="not_found")
@@ -909,7 +945,7 @@ def _mark_running(conn: sqlite3.Connection, job: Mapping[str, Any]) -> dict[str,
         (JOB_RUNNING, PHASE_DISCOVERY, now, now, job["id"]),
     )
     update_job_progress(conn, {**job, "status": JOB_RUNNING}, {"phase": PHASE_DISCOVERY})
-    return _load_job(conn, job["id"])
+    return get_job(conn, job["id"])
 
 
 def _retry_after_from_error(exc: AppError, job: Mapping[str, Any]) -> tuple[str | None, str | None]:
@@ -980,71 +1016,48 @@ def _mark_success(
         progress={"phase": PHASE_DONE},
         checkpoint=checkpoint,
     )
-    return _load_job(conn, job["id"])
+    return get_job(conn, job["id"])
 
 
 def _mark_error(
     conn: sqlite3.Connection,
     job: Mapping[str, Any],
     exc: AppError,
+    *,
+    failure_phase: str,
+    original_exception: Exception,
 ) -> dict[str, Any]:
     cooldown_until, cooldown_reason = _retry_after_from_error(exc, job)
     status = JOB_RATE_LIMITED if cooldown_until else JOB_ERROR
     source_status = STATUS_RATE_LIMITED if cooldown_until else STATUS_FAILED
-    source_name = job.get("source_label") or job.get("source_key") or "source"
-    # Log only the source label + error code, never str(exc): the raw message
-    # can carry operational data (e.g. backend URLs / inline credentials). The
-    # message is still persisted for the UI snapshot, but URLs embedded in it are
-    # scrubbed at the render boundary (daemon_freshness._freshness_snapshot_for_ui);
-    # redact_freshness_payload below only scrubs secret *keys*, not URLs inside a
-    # free-text value. The RAM log ring has no render step, so the message must
-    # never reach it.
-    error_code = exc.code or "freshness_job_failed"
-    # The exception TYPE (set by run_job for swallowed non-AppErrors) is a code
-    # identifier, never runtime data, so it is safe for the RAM log ring and
-    # makes an otherwise-opaque "freshness_job_failed" diagnosable.
-    error_class = exc.details.get("error_class") if isinstance(exc.details, dict) else None
-    sqlite_error_name = (
-        exc.details.get("sqlite_error_name") if isinstance(exc.details, dict) else None
-    )
+    # Log categories only. In particular, source labels and exception details
+    # are wallet/backend-controlled; neither belongs in this operational record.
+    error_code = exc.code if isinstance(exc.code, str) and exc.code in _LOG_ERROR_CODES else "freshness_job_failed"
+    error_class = log_exception_class(original_exception)
+    fields = {
+        "job_type": job["job_type"] if job.get("job_type") in JOB_TYPES else "unknown",
+        "phase": failure_phase if failure_phase in _LOG_PHASES else "unknown",
+        "error_code": error_code,
+        "error_class": error_class,
+    }
+    sqlite_error_name = getattr(original_exception, "sqlite_errorname", None)
+    if isinstance(sqlite_error_name, str) and sqlite_error_name in _LOG_SQLITE_NAMES:
+        fields["sqlite_error_name"] = sqlite_error_name
     conflict_kind = (
         exc.details.get("conflict_kind")
         if error_code == "observer_projection_conflict"
         and isinstance(exc.details, dict)
         else None
     )
-    if conflict_kind not in _SAFE_OBSERVER_PROJECTION_CONFLICT_KINDS:
-        conflict_kind = None
-    if cooldown_until:
-        if sqlite_error_name:
-            _LOGGER.warning(
-                "Freshness %s deferred (%s; %s)",
-                source_name,
-                error_code,
-                sqlite_error_name,
-            )
-        else:
-            _LOGGER.warning("Freshness %s rate-limited (%s)", source_name, error_code)
-    elif error_class:
-        if sqlite_error_name:
-            _LOGGER.error(
-                "Freshness %s failed (%s; %s; %s)",
-                source_name,
-                error_code,
-                error_class,
-                sqlite_error_name,
-            )
-        else:
-            _LOGGER.error("Freshness %s failed (%s; %s)", source_name, error_code, error_class)
-    elif conflict_kind:
-        _LOGGER.error(
-            "Freshness %s failed (%s; %s)",
-            source_name,
-            error_code,
-            conflict_kind,
-        )
-    else:
-        _LOGGER.error("Freshness %s failed (%s)", source_name, error_code)
+    if isinstance(conflict_kind, str) and conflict_kind in _SAFE_OBSERVER_PROJECTION_CONFLICT_KINDS:
+        fields["conflict_kind"] = conflict_kind
+    _LOGGER.log(
+        logging.WARNING if cooldown_until else logging.ERROR,
+        "Freshness job %s (%s)",
+        "deferred" if cooldown_until else "failed",
+        "; ".join(f"{key}={value}" for key, value in fields.items()),
+        extra={"kb_fields": fields},
+    )
     now = now_iso()
     # This is a disk write (freshness_jobs.error_json), so pseudonymize txids /
     # amounts the backend exception may have interpolated before they are
@@ -1103,7 +1116,7 @@ def _mark_error(
         progress={"phase": PHASE_ERROR},
         checkpoint=(state or {}).get("checkpoint", {}),
     )
-    return _load_job(conn, job["id"])
+    return get_job(conn, job["id"])
 
 
 def run_job(
@@ -1113,7 +1126,7 @@ def run_job(
     *,
     progress_observer: ProgressObserver | None = None,
 ) -> dict[str, Any]:
-    job = _load_job(conn, job_id)
+    job = get_job(conn, job_id)
     if job["status"] in {JOB_DONE, JOB_ERROR, JOB_CANCELLED}:
         return job
     handler = handlers.get(job["job_type"])
@@ -1124,9 +1137,13 @@ def run_job(
         )
     job = _mark_running(conn, job)
     conn.commit()
+    last_phase = PHASE_DISCOVERY
 
     def progress(payload: Mapping[str, Any]) -> None:
+        nonlocal last_phase
         _check_cancelled(conn, job["id"])
+        if isinstance(payload.get("phase"), str) and payload["phase"] in _LOG_PHASES:
+            last_phase = payload["phase"]
         update_job_progress(conn, job, payload)
         if progress_observer is not None:
             progress_observer(
@@ -1153,7 +1170,7 @@ def run_job(
             updated = _set_cancelled(conn, job)
             conn.commit()
             return updated
-        updated = _mark_error(conn, job, exc)
+        updated = _mark_error(conn, job, exc, failure_phase=last_phase, original_exception=exc)
         conn.commit()
         return updated
     except Exception as exc:
@@ -1195,6 +1212,8 @@ def run_job(
             conn,
             job,
             wrapped,
+            failure_phase=last_phase,
+            original_exception=exc,
         )
         conn.commit()
         return updated

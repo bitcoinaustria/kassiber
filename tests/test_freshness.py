@@ -504,12 +504,13 @@ class FreshnessTest(unittest.TestCase):
             )
 
         self.assertEqual(results[0]["status"], freshness.JOB_ERROR)
-        # The source label + error code reach the ring (so /logs shows which
-        # source failed and why)...
+        # The categorical job type + error code reach the ring. Source labels
+        # stay in the scoped UI state rather than the operational log.
         self.assertTrue(
-            any("Journal refresh" in line for line in captured.output),
+            any(freshness.JOB_ONCHAIN_WALLET in line for line in captured.output),
             captured.output,
         )
+        self.assertFalse(any("Journal refresh" in line for line in captured.output))
         self.assertTrue(
             any("tax_failed" in line for line in captured.output),
             captured.output,

@@ -10,6 +10,7 @@ import threading
 import time
 from collections.abc import Mapping as AbcMapping
 from datetime import datetime, timezone
+from functools import wraps
 from typing import Any, Callable, Literal, Mapping, Protocol
 
 from .backends import merge_db_backends
@@ -69,6 +70,38 @@ FRESHNESS_BACKGROUND_TERMINAL_RETRY_INTERVAL_SECONDS = 60 * 60
 _AUTO_SYNC_PROFILE_LAST_ATTEMPT: dict[str, float] = {}
 _AUTO_SYNC_PROFILE_LAST_RESULT: dict[str, dict[str, Any]] = {}
 _AUTO_SYNC_PROFILE_LOCK = threading.Lock()
+# Foreground and background refreshes use separate database connections. Admission must cover recovery and prefetch as well as apply.
+# Reentrancy permits maintenance/report-read paths to call a foreground helper.
+_FRESHNESS_EXECUTION_LOCK = threading.RLock()
+
+
+def _freshness_execution(mode: Literal["foreground", "background", "automatic"]):
+    def decorate(function):
+        @wraps(function)
+        def execute(*args, **kwargs):
+            if not _FRESHNESS_EXECUTION_LOCK.acquire(blocking=False):
+                if mode == "background":
+                    return None
+                error = AppError(
+                    "Another refresh is still running",
+                    code="project_operation_in_progress",
+                    hint="Wait for the current refresh to finish, then retry.",
+                    retryable=True,
+                )
+                if mode == "automatic":
+                    payload = {"ok": False, "reason": error.code, "message": str(error)}
+                    state = kwargs.get("state")
+                    if isinstance(state, dict):
+                        state["auto_sync"] = payload
+                    return payload
+                raise error
+            try:
+                return function(*args, **kwargs)
+            finally:
+                _FRESHNESS_EXECUTION_LOCK.release()
+        return execute
+    return decorate
+
 
 
 def _remember_unlocked_passphrase(
@@ -769,6 +802,12 @@ def _freshness_handlers(
                 check_cancelled=check_permitted,
                 prefetched=prefetched_fetches,
             )
+        except Exception as exc:
+            if prefetched_fetches is not None and prefetched_fetches.get(str(wallet["id"])) is exc:
+                # Batch progress can span multiple wallets. Preserve the known
+                # origin without attributing another wallet's last decode phase.
+                progress({"phase": core_freshness.PHASE_BATCH_PREFETCH})
+            raise
         finally:
             sync_progress_emitter.reset(token)
         check_cancelled()
@@ -1388,6 +1427,7 @@ def _emit_background_freshness_event(
     out.write(build_event_envelope(kind, _freshness_payload_for_ui(dict(payload))))
 
 
+@_freshness_execution("background")
 def _freshness_background_tick(
     conn: sqlite3.Connection,
     runtime_config: dict[str, object],
@@ -1648,6 +1688,20 @@ def _run_requested_freshness_jobs(
     remaining = list(requested_jobs)
     completed = []
     for _ in range(max(0, limit)):
+        # Another executor may have finished a selected, committed job while
+        # this request was fetching. Preserve that exact job's outcome, within
+        # the request's limit; queued, running and deferred work is not complete.
+        finished = next((
+            current for requested in remaining
+            if (current := core_freshness.get_job(conn, str(requested["id"]))).get("profile_id") == profile_id
+            and current.get("status") in {
+                core_freshness.JOB_DONE, core_freshness.JOB_ERROR, core_freshness.JOB_CANCELLED,
+            }
+        ), None)
+        if finished is not None:
+            remaining = [job for job in remaining if job["id"] != finished["id"]]
+            completed.append(finished)
+            continue
         due = _due_jobs_for_refresh(conn, profile_id, remaining, 1)
         if not due:
             break
@@ -1659,6 +1713,7 @@ def _run_requested_freshness_jobs(
     return completed
 
 
+@_freshness_execution("foreground")
 def _freshness_run_payload(
     conn: sqlite3.Connection,
     runtime_config: dict[str, object],
@@ -1736,6 +1791,7 @@ def _freshness_run_payload(
         specs = _filter_freshness_specs_by_policy(specs, policy)
     enqueued = _enqueue_freshness_jobs(conn, profile["id"], specs)
     completed: list[dict[str, Any]] = []
+    selected_jobs: list[dict[str, Any]] = []
     if args.get("run", True):
         run_limit = int(args.get("limit") or max(1, len(enqueued)))
         run_total = max(1, min(run_limit, max(1, len(enqueued))))
@@ -1786,7 +1842,7 @@ def _freshness_run_payload(
             except Exception as exc:
                 _LOGGER.warning(
                     "Freshness batch prefetch fell back to isolated jobs (%s)",
-                    f"{exc.__class__.__module__}.{exc.__class__.__qualname__}",
+                    core_freshness.log_exception_class(exc),
                 )
                 prefetched_onchain = {}
         finally:
@@ -1798,16 +1854,35 @@ def _freshness_run_payload(
             automatic_trigger=automatic_trigger,
         )
         completed = _run_requested_freshness_jobs(
-            conn, profile["id"], enqueued, handlers, limit=run_limit,
+            conn, profile["id"], selected_jobs, handlers, limit=run_limit,
             progress_observer=(
                 _progress_with_run_context if progress_observer is not None else None
             ),
         )
     snapshot = _freshness_snapshot_for_ui(conn, profile["id"])
+    results = _sync_results_from_freshness_jobs(completed)
+    # A normal terminal envelope does not imply every requested source ran.
+    # Retain only counts, so skipped dispatch/cancellation and handled failures
+    # remain distinguishable without logging source identities or result blobs.
+    counts = {
+        "jobs_requested": len(enqueued),
+        "jobs_selected": len(selected_jobs),
+        "jobs_completed": len(completed),
+        "jobs_deferred": max(0, len(enqueued) - len(completed)),
+        "jobs_failed": sum(job.get("status") == core_freshness.JOB_ERROR for job in completed),
+        "jobs_rate_limited": sum(job.get("status") == core_freshness.JOB_RATE_LIMITED for job in completed),
+        "jobs_cancelled": sum(job.get("status") == core_freshness.JOB_CANCELLED for job in completed),
+        "result_errors": len(_sync_error_rows({"results": results})),
+    }
+    _LOGGER.log(
+        logging.WARNING if counts["jobs_failed"] or counts["result_errors"] else logging.INFO,
+        "Freshness refresh finished",
+        extra={"kb_fields": counts},
+    )
     return _freshness_payload_for_ui(
         {
             "profile": {"id": profile["id"], "label": profile["label"]},
-            "results": _sync_results_from_freshness_jobs(completed),
+            "results": results,
             "force_full": force_full,
             "recovered": recovered,
             "enqueued": enqueued,
@@ -1817,6 +1892,7 @@ def _freshness_run_payload(
     )
 
 
+@_freshness_execution("foreground")
 def _workspace_freshness_run_payload(
     conn: sqlite3.Connection,
     runtime_config: dict[str, object],
@@ -2150,6 +2226,21 @@ def _auto_sync_wallets_if_enabled(
     enabled = policy.report_read_sync
     if not enabled and not force:
         return None
+    return _run_auto_sync_wallets(
+        conn, runtime_config, state=state, force=force, profile=profile, policy=policy,
+    )
+
+
+@_freshness_execution("automatic")
+def _run_auto_sync_wallets(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    *,
+    state: dict[str, Any],
+    force: bool,
+    profile: Mapping[str, Any],
+    policy: core_freshness.FreshnessPolicy,
+) -> dict[str, Any]:
     state["auto_sync_attempted"] = True
     if not force:
         now = time.monotonic()
