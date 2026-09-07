@@ -78,6 +78,14 @@ class IncrementalProjectionTests(unittest.TestCase):
         self.assertEqual(index_revision(self.conn, "p"), first)
         self.parity()
 
+    def test_missing_derived_table_recovers_from_authoritative_sources(self):
+        add_tx(self.conn, 1)
+        self.parity()
+        raw = self.conn.execute("SELECT raw_json FROM transactions").fetchone()[0]
+        self.conn.execute("DROP TABLE chain_index_aliases")
+        self.parity(txid(1))
+        self.assertEqual(self.conn.execute("SELECT raw_json FROM transactions").fetchone()[0], raw)
+
     def test_fault_during_publication_rolls_back_and_replays(self):
         add_tx(self.conn, 1)
         self.conn.commit()

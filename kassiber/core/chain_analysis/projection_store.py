@@ -15,9 +15,9 @@ from ..onchain import stored_tx_mapping
 from .index import _Builder, canonical_txid, digest, observer_index, thaw
 
 
-VERSION = 1
+VERSION = 2
 PHYSICAL = ("transactions", "transaction_graph_cache", "wallet_utxos", "chain_analysis_observations", "chain_analysis_reference_assertions")
-OVERLAYS = ("wallets", "profiles", "journal_custody_decisions", "journal_custody_economic_relations", "chain_analysis_labels", "chain_analysis_datasets", "chain_analysis_dataset_claims", "book_network_bindings")
+OVERLAYS = ("wallets", "profiles", "journal_custody_decisions", "journal_custody_economic_relations", "chain_analysis_labels", "chain_analysis_datasets", "chain_analysis_dataset_claims", "book_network_bindings", "chain_analysis_acquisition_grants")
 SOURCE_TABLES = PHYSICAL + OVERLAYS
 DDL = (
     "CREATE TABLE IF NOT EXISTS chain_index_clock(id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL)",
@@ -59,11 +59,15 @@ def install(conn):
     import/review transaction. Triggers capture ordinary SQL and replication too.
     """
     objects = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type IN ('table','trigger')")}
-    if "chain_index_clock" not in objects:
+    required = {statement.split()[5].split("(", 1)[0] for statement in DDL if statement.startswith("CREATE TABLE")}
+    if not required <= objects:
         for statement in DDL:
             statement = statement.replace("profile_id TEXT NOT NULL", "profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE")
             statement = statement.replace("profile_id TEXT PRIMARY KEY", "profile_id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE")
             conn.execute(statement)
+        # A missing derived table is recoverable from source observations. Do
+        # not leave surviving state rows claiming the materialization is whole.
+        conn.execute("UPDATE chain_index_state SET version=0")
     if "chain_analysis_dataset_claims" in objects:
         for field in ("valid_from", "valid_until"):
             conn.execute(f"CREATE INDEX IF NOT EXISTS idx_chain_index_claim_{field} ON chain_analysis_dataset_claims({field},dataset_id) WHERE {field} IS NOT NULL")
@@ -82,7 +86,13 @@ def install(conn):
                 f"INSERT INTO chain_index_dirty VALUES('{table}',{key},(SELECT revision FROM chain_index_clock WHERE id=1)) ON CONFLICT(source_table,source_key) DO UPDATE SET revision=excluded.revision;"
                 for key in keys
             )
-            conn.execute(f"CREATE TRIGGER {name} AFTER {operation} ON {table} BEGIN UPDATE chain_index_clock SET revision=revision+1 WHERE id=1; {writes} END")
+            when = ""
+            if table == "chain_analysis_acquisition_grants" and operation == "UPDATE":
+                from .confirmations import TIP_FIELDS
+                columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+                fields = [field for field in TIP_FIELDS if field in columns]
+                when = " WHEN " + " OR ".join(f"OLD.{field} IS NOT NEW.{field}" for field in fields)
+            conn.execute(f"CREATE TRIGGER {name} AFTER {operation} ON {table}{when} BEGIN UPDATE chain_index_clock SET revision=revision+1 WHERE id=1; {writes} END")
             added = True
         if added:
             conn.execute("UPDATE chain_index_clock SET revision=revision+1 WHERE id=1")
@@ -347,6 +357,13 @@ def synchronize(conn, profile_id, *, rebuild=False):
         for txid in ids:
             for table, key in conn.execute("SELECT DISTINCT s.source_table,s.source_key FROM chain_index_aliases a JOIN chain_index_source_nodes s ON s.profile_id=a.profile_id AND s.node_id=a.node_id WHERE a.profile_id=? AND a.observer='owner' AND a.alias=?", (profile_id, txid)):
                 dirty[table].add(key)
+    # A verified-tip change affects selected-node reads only. No graph source,
+    # custody relation or label contribution changed; retain their materialization.
+    if not full and not expired and set(dirty) == {"chain_analysis_acquisition_grants"}:
+        revision = state["revision"] + 1
+        snapshot = digest([state["instance_id"], profile_id, VERSION, revision])
+        conn.execute("UPDATE chain_index_state SET watermark=?,revision=?,snapshot_id=? WHERE profile_id=?", (watermark, revision, snapshot, profile_id))
+        return dict(conn.execute("SELECT * FROM chain_index_state WHERE profile_id=?", (profile_id,)).fetchone())
     from .occurrences import OccurrenceResolver
     occurrences = OccurrenceResolver(conn, profile_id)
     core = set()

@@ -601,6 +601,10 @@ class _Builder:
                 value = sum(int(item["amount_msat"]) for item in fact["inputs"]) - sum(int(item["amount_msat"]) for item in fact["outputs"])
                 if value >= 0 and self.nodes[node_id]["chain"] == "bitcoin":
                     fact["fee_msat"] = str(value)
+        if self.occurrences is not None:
+            from .confirmations import ConfirmationOverlay
+            confirmations = ConfirmationOverlay(self.occurrences.conn, self.profile_id)
+            self.nodes = {ident: confirmations.apply(node) for ident, node in self.nodes.items()}
         for node in self.nodes.values():
             node["wallet_ids"].sort()
             node["evidence"].sort(key=lambda ref: (ref["source"], ref["reference"]))

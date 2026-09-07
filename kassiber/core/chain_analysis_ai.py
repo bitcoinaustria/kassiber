@@ -65,7 +65,7 @@ _SOURCE_CODES = {
 _FIELDS = set("""
     schema_version query summary nodes edges findings clusters patterns exposure
     entropy paths frontier coverage capabilities result items id created_at
-    updated_at occurred_at confirmed_at observed_at confirmed block_height deleted revision expected_revision claim
+    updated_at occurred_at confirmed_at observed_at confirmation_observed_at confirmations confirmed block_height deleted revision expected_revision claim
     hidden_private_node_count hidden_private_relation_count private_labels_withheld
     evidence boundary_evidence conditional_on_boundary_interpretation
     amount_msat target_amount_msat fee_msat min_amount_msat asset target_asset
@@ -176,7 +176,7 @@ def project_ai_result(conn: sqlite3.Connection, profile_id: str, value: Any) -> 
             return item if re.fullmatch(r"-?(?:0|[1-9][0-9]*)", item) else omitted
         if field == "final_fee_rate_sat_vb":
             return item if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", item) else omitted
-        if field in {"created_at", "updated_at", "occurred_at", "confirmed_at", "observed_at", "start", "end", "valid_from", "valid_until"}:
+        if field in {"created_at", "updated_at", "occurred_at", "confirmed_at", "observed_at", "confirmation_observed_at", "start", "end", "valid_from", "valid_until"}:
             return item if re.fullmatch(r"[0-9T:.+Z-]{10,40}", item) else omitted
         return omitted
 

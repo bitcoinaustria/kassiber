@@ -24,7 +24,10 @@ class _Rows(Mapping):
         self.view.check()
         if key not in self.cache:
             row = self.view.conn.execute(f"SELECT {self.column} FROM {self.table} WHERE profile_id=? AND id=?", (self.view.profile_id, key)).fetchone()
-            self.cache[key] = _freeze(json.loads(row[0])) if row and row[0] is not None else None
+            value = json.loads(row[0]) if row and row[0] is not None else None
+            if value is not None and self.table == "chain_index_nodes" and self.column in {"payload_json", "public_json"}:
+                value = self.view.confirmations.apply(value)
+            self.cache[key] = _freeze(value) if value is not None else None
         if self.cache[key] is None:
             raise KeyError(key)
         return self.cache[key]
@@ -82,6 +85,8 @@ class _View:
         self.visibility = "public" if observer == "public" else "owner"
         self.lifetime = lifetime if lifetime is not None else [True]
         self.snapshot_id = state["snapshot_id"]
+        from .confirmations import ConfirmationOverlay
+        self.confirmations = ConfirmationOverlay(conn, profile_id)
         self.edge_column = "public_json" if self.visibility == "public" else "payload_json"
         public = self.visibility == "public"
         self.nodes = _Rows(self, "chain_index_nodes", self.edge_column)
