@@ -282,7 +282,7 @@ def prepare_linkage(app: Path) -> None:
 def verify_code(path: Path, *, runtime: bool = True) -> None:
     requirement = (f'anchor apple generic and certificate leaf[subject.OU] = "{TEAM}" '
                    'and certificate leaf[field.1.2.840.113635.100.6.1.13] exists')
-    run("/usr/bin/codesign", "--verify", "--strict", "-R", requirement, path)
+    run("/usr/bin/codesign", "--verify", "--strict", "-R", "=" + requirement, path)
     result = subprocess.run(["/usr/bin/codesign", "-d", "--verbose=4", str(path)],
                             check=True, capture_output=True, text=True)
     details = result.stderr

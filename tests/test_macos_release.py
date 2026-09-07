@@ -380,8 +380,9 @@ def test_workflows_keep_keys_local_and_publication_gated():
 def test_real_codesign_rejects_non_bitcoin_austria_identity():
     # Apple's system binary is validly signed, but not by our Developer ID.
     # This exercises the actual platform requirement without any private key.
-    with pytest.raises(subprocess.CalledProcessError):
+    with pytest.raises(subprocess.CalledProcessError) as error:
         release.verify_code(Path("/usr/bin/true"))
+    assert "code failed to satisfy specified code requirement(s)" in error.value.stderr
 
 
 @pytest.mark.parametrize("authorized", [False, True])
