@@ -170,7 +170,7 @@ def create(conn, profile_id, args):
                 recipe = {key: supplied[key] for key in ("rule", "threshold") if key in supplied}
                 recipe.update({"case_id": supplied["case_id"]} if supplied.get("case_id") else {"query": supplied["query"]})
             plan = preview(conn, profile_id, recipe)
-            if normalized and plan["definition"] != supplied or plan["plan_id"] != args["expected_plan_id"]:
+            if (normalized and canonical(plan["definition"]) != canonical(supplied)) or plan["plan_id"] != args["expected_plan_id"]:
                 invalid("Evidence or book changed; preview this watch again", "chain_analysis_stale")
             return create(conn, profile_id, {"plan": plan})
     arguments(args, ("plan",), ("plan",))
@@ -182,7 +182,7 @@ def create(conn, profile_id, args):
     fields.update({"case_id": supplied["case_id"]} if supplied.get("case_id") else {"query": supplied.get("query")})
     with atomic(conn):
         current = preview(conn, profile_id, fields)
-        if current != plan:
+        if canonical(current) != canonical(plan):
             invalid("Evidence or book changed; preview this watch again", "chain_analysis_stale")
         if conn.execute("SELECT COUNT(*) FROM chain_analysis_watches WHERE profile_id=?", (profile_id,)).fetchone()[0] >= 250:
             invalid("This book has reached its 250 watch limit")

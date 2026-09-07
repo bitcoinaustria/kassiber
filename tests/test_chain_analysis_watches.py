@@ -269,7 +269,7 @@ def test_canonical_preview_definition_is_directly_copyable_into_create(book,save
     assert created['definition']==preview['definition']
 
 
-@pytest.mark.parametrize('tamper',['version','boolean_version','query','extra'])
+@pytest.mark.parametrize('tamper',['version','boolean_version','query','boolean_coercion','extra'])
 def test_copied_definition_requires_exact_canonical_shape(book,tamper):
     result=dispatch(book,'ui.chain_analysis.query',definition()['query'])
     saved=dispatch(book,'ui.chain_analysis.cases.save',{'title':'Case','query':result['query'],'expected_snapshot_id':result['snapshot_id']})
@@ -278,6 +278,7 @@ def test_copied_definition_requires_exact_canonical_shape(book,tamper):
     if tamper=='version':supplied['rule_version']=2
     elif tamper=='boolean_version':supplied['rule_version']=True
     elif tamper=='query':supplied['query']['observer']='public'
+    elif tamper=='boolean_coercion':supplied['query']['include_relations']=0
     else:supplied['ignored']='not allowed'
     with pytest.raises(AppError):dispatch(book,'ui.chain_analysis.watches.create',{'definition':supplied,'expected_plan_id':preview['plan_id']})
     assert dispatch(book,'ui.chain_analysis.watches.list',{})['items']==[]
