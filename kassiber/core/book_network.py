@@ -83,13 +83,18 @@ def _evidence(row):
 @contextmanager
 def read_network_snapshot(conn):
     owns = not conn.in_transaction
+    savepoint = "network_read_" + uuid.uuid4().hex
     if owns:
-        conn.execute("BEGIN")
+        conn.execute(f"SAVEPOINT {savepoint}")
     try:
         yield
     finally:
         if owns:
-            conn.rollback()
+            # SQLCipher's Connection.rollback() resets every active cursor,
+            # including a caller's SELECT that predates this read transaction.
+            # Roll back only our scope without invalidating those cursors.
+            conn.execute(f"ROLLBACK TO {savepoint}")
+            conn.execute(f"RELEASE {savepoint}")
 
 
 def inventory_book_network(conn, profile_id):
