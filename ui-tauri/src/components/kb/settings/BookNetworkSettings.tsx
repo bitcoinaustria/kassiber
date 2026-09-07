@@ -5,12 +5,16 @@ import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { Button } from "@/components/ui/button";
 
 type WalletScope = { wallet_id: string; label: string; environments: string[]; transaction_count: number; unknown_count: number; conflict_count: number; requires_declaration: boolean };
-type Inventory = { profile_id: string; state: string; wallets: WalletScope[]; inventory_digest: string; binding: { state: string; environment?: string; chain_instance_id?: string | null; domains: { chain: string; network: string }[] } };
+type Binding = { profile_id: string; state: "unbound" | "bound"; environment?: string; chain_instance_id?: string | null; domains: { chain: string; network: string }[] };
+type Inventory = { profile_id: string; state: string; wallets: WalletScope[]; inventory_digest: string; binding: Binding };
 type Plan = { plan_id: string; profile_id: string; inventory_digest: string; environment: string; chain_instance_id: string | null; declared_wallet_ids: string[]; can_apply: boolean; blockers: { code: string; wallet_id?: string }[] };
 
 export function BookNetworkSettings({ children }: { children?: ReactNode } = {}) {
   const { t } = useTranslation(["settings", "common"]);
-  const query = useDaemon<Inventory>("ui.networks.inventory");
+  const bindingQuery = useDaemon<Binding>("ui.networks.binding");
+  const binding = bindingQuery.data?.data;
+  const needsInventory = binding?.state === "unbound" && !bindingQuery.isError;
+  const query = useDaemon<Inventory>("ui.networks.inventory", {}, { enabled: needsInventory });
   const preview = useDaemonMutation<Plan>("ui.networks.plan");
   const bind = useDaemonMutation("ui.networks.bind");
   const [environment, setEnvironment] = useState("main");
@@ -18,10 +22,11 @@ export function BookNetworkSettings({ children }: { children?: ReactNode } = {})
   const [declared, setDeclared] = useState<string[]>([]);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const inventory = query.data?.data;
+  const inventory = needsInventory && query.data?.data?.binding.state === "unbound" && query.data.data.profile_id === binding?.profile_id
+    ? query.data.data : undefined;
   const recipe = { environment, chain_instance_id: environment === "regtest" ? instance : null, declared_wallet_ids: declared };
   const current = plan && inventory && plan.profile_id === inventory.profile_id && plan.inventory_digest === inventory.inventory_digest && JSON.stringify({ environment: plan.environment, chain_instance_id: plan.chain_instance_id, declared_wallet_ids: [...plan.declared_wallet_ids].sort() }) === JSON.stringify({ ...recipe, declared_wallet_ids: [...declared].sort() });
-  const bound = inventory?.binding.state === "bound";
+  const bound = binding?.state === "bound";
   const invoke = async (apply: boolean) => {
     setError(null);
     try {
@@ -36,14 +41,15 @@ export function BookNetworkSettings({ children }: { children?: ReactNode } = {})
   };
   return <section className="space-y-3 rounded-md border bg-background p-4">
     <h3 className="text-sm font-medium">{t("bookNetwork.title")}</h3>
-    {query.isLoading && <p>{t("common:state.loading")}</p>}
-    {query.isError && <Button variant="outline" onClick={() => void query.refetch()}>{t("common:actions.retry")}</Button>}
-    {inventory && (bound ? <>
-      <p>{t(`bookNetwork.environments.${inventory.binding.environment as "main" | "test" | "signet" | "regtest"}`)}</p>
-      <p className="text-xs text-muted-foreground">{inventory.binding.domains.map(domain => `${domain.chain}: ${domain.network}`).join(" · ")}</p>
-      {inventory.binding.chain_instance_id && <p className="break-all font-mono text-xs">{inventory.binding.chain_instance_id}</p>}
+    {(bindingQuery.isLoading || needsInventory && query.isLoading) && <p>{t("common:state.loading")}</p>}
+    {bindingQuery.isError && <Button variant="outline" onClick={() => void bindingQuery.refetch()}>{t("common:actions.retry")}</Button>}
+    {needsInventory && query.isError && <Button variant="outline" onClick={() => void query.refetch()}>{t("common:actions.retry")}</Button>}
+    {bound ? <>
+      <p>{t(`bookNetwork.environments.${binding.environment as "main" | "test" | "signet" | "regtest"}`)}</p>
+      <p className="text-xs text-muted-foreground">{binding.domains.map(domain => `${domain.chain}: ${domain.network}`).join(" · ")}</p>
+      {binding.chain_instance_id && <p className="break-all font-mono text-xs">{binding.chain_instance_id}</p>}
       <p className="text-xs text-muted-foreground">{t("bookNetwork.immutable")}</p>
-    </> : <>
+    </> : inventory && <>
       <p className="text-xs text-muted-foreground">{t("bookNetwork.help")}</p>
       <label className="flex max-w-sm flex-col gap-1 text-sm">{t("bookNetwork.environment")}
         <select className="rounded border bg-background p-2" value={environment} onChange={event => setEnvironment(event.target.value)}>
@@ -62,7 +68,7 @@ export function BookNetworkSettings({ children }: { children?: ReactNode } = {})
         {plan.blockers.map((blocker, index) => <p className="text-sm text-destructive" key={index}>{t(`bookNetwork.blockers.${blocker.code as "already_bound" | "contradictory_evidence" | "different_environment" | "different_instance" | "scope_declaration_required" | "reference_domain_mismatch"}`)} {inventory.wallets.find(wallet => wallet.wallet_id === blocker.wallet_id)?.label}</p>)}
         {plan.can_apply && <><p className="text-xs text-muted-foreground">{t("bookNetwork.confirmHelp")}</p><Button disabled={bind.isPending} onClick={() => void invoke(true)}>{t("bookNetwork.bind")}</Button></>}
       </div>}
-    </>)}
+    </>}
     {inventory && !bound && <NetworkPartitionSettings key={inventory.profile_id} profileId={inventory.profile_id} inventoryDigest={inventory.inventory_digest} environment={environment} instance={instance} wallets={inventory.wallets} declared={declared} />}
     {inventory && !bound && children}
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
