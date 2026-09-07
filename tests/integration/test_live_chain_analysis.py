@@ -66,7 +66,8 @@ class LiveChainAnalysisTest(unittest.TestCase):
         self.mine(101)
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
-        self.conn = open_db(self.directory.name, passphrase="disposable-core-integration")
+        self.passphrase = "disposable-core-integration"
+        self.conn = open_db(self.directory.name, passphrase=self.passphrase)
         self.addCleanup(self.conn.close)
         now = "2026-09-06T12:00:00Z"
         self.conn.execute("INSERT INTO workspaces VALUES('ws','Live investigation',?)", (now,))
@@ -274,7 +275,7 @@ class LiveChainAnalysisTest(unittest.TestCase):
         self.assertEqual(get_case(self.conn, "p", case["id"])["result"]["paths"], [])
         # Reopening the book must retain feature evidence after witness discard.
         snapshot = after["snapshot_id"]
-        other = open_db(self.directory.name)
+        other = open_db(self.directory.name, passphrase=self.passphrase)
         try:
             self.assertEqual(run_analysis(other, "p", after["query"])["snapshot_id"], snapshot)
         finally:

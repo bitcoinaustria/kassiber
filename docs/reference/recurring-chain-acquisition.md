@@ -29,3 +29,5 @@ Confirmation depth comes from a verified tip and retained block membership, with
 The derived tables and execution permissions are not replicated. Existing saved cases and PDFs remain frozen. Source assertions enter the shared incremental index without entering wallet imports, journals or owned-output inventory.
 
 Verification lives in `tests/test_chain_analysis_backfill.py`: durable quota, scope/source fencing, revocation during transport, crash-conservative reservations, wrong genesis, repeated TXIDs, input occurrence resolution, Merkle mismatch, multi-step reorg and CLI/agent boundaries. `tests/test_chain_analysis_backfill_integration.py` exercises a real encrypted book, shared worker, index and watch inbox, including lock cancellation and confirmation thresholds. The disposable Core lane in `tests/integration/test_live_chain_analysis.py` also covers bounded range resumption and a real node reorg.
+
+CI runs the disposable Core lane alongside the dependency-backed chain observers whenever their source, schema, harness or integration tests change. This covers the actual Core resumption and reorg scenario on Linux runners.
