@@ -90,15 +90,19 @@ CLI/daemon stay English and machine-deterministic — do not localize them.
 ## Prerelease binaries
 
 `.github/workflows/prerelease-binaries.yml` builds unsigned CLI binaries on
-macOS Apple Silicon, macOS Intel, and Linux. Manual workflow runs upload
-`.tar.gz` artifacts; `v*` tag pushes also attach those artifacts and their
-SHA-256 files to a GitHub prerelease. Linux CLI binaries are built on Ubuntu
+macOS Apple Silicon, Linux, and Windows. Manual workflow runs upload
+archives (`.tar.gz`, or `.zip` on Windows); `v*` tag pushes stage a GitHub draft.
+Public releases require local macOS signing, CI notarization, and offline OpenPGP verification;
+see [`docs/reference/macos-release.md`](docs/reference/macos-release.md).
+Linux CLI binaries are built on Ubuntu
 22.04 to match the AppImage portability floor. CLI archives use
-`kassiber-cli-<target>.tar.gz` filenames and contain an executable named
-`kassiber`. The workflow also builds unsigned desktop previews for Apple
-Silicon macOS (`.app` zip / `.dmg`), Linux (`.AppImage`), and Windows (`.msi` plus
+`kassiber-cli-<target>.tar.gz` filenames (`.zip` on Windows) and contain an
+executable named `kassiber` (`kassiber.exe` on Windows). The workflow also builds
+unsigned desktop previews for Apple Silicon macOS (`.app` zip / `.dmg`), Linux
+(`.AppImage`), and Windows (`.msi` plus
 NSIS setup `.exe`) with `kassiber-desktop-<target>-...` filenames. Desktop
-previews bundle a one-file Kassiber CLI sidecar, so they do not expect an
+previews bundle the Kassiber CLI runtime (onedir on macOS, onefile elsewhere),
+so they do not expect an
 external Kassiber-capable Python environment for normal daemon calls. The GUI
 executable also forwards `--cli ...` to the bundled CLI sidecar for
 installed-app CLI use. Raw bundled sidecar files are internal to desktop
@@ -106,10 +110,10 @@ packages and must not be published as release assets. The desktop shell
 displays the build commit beside the version number; CLI artifact filenames and
 `.sha256` sidecars still do not embed the commit hash.
 
-Pull requests intentionally do not build binaries automatically. If a maintainer
-asks for binaries for a PR or branch, run `prerelease-binaries` manually against
-that branch and leave the result as workflow artifacts. Only publish to GitHub
-Releases for real `v*` prerelease tags. See
+Pull requests touching the workflow's narrow packaging-input path filter build
+binaries without publishing. For other PR or branch tester builds, run
+`prerelease-binaries` manually and leave the result as workflow artifacts.
+Only publish verified GitHub Releases for real `v*` tags. See
 [`docs/reference/prerelease-binaries.md`](docs/reference/prerelease-binaries.md)
 for the exact commands and commit-hash caveats.
 

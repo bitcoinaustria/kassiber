@@ -464,13 +464,17 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
 
 ## Prerelease binary workflow
 
-- `.github/workflows/prerelease-binaries.yml` is intentionally not a normal PR
-  workflow. Do not add PR-triggered binary builds unless the user explicitly
-  asks for that policy change.
-- `v*` tag pushes build CLI and desktop artifacts and publish them to a GitHub
-  prerelease. Manual `workflow_dispatch` runs build/upload artifacts for the
-  selected ref; they only publish when `publish_release=true` and `tag_name`
-  names an existing tag.
+- `.github/workflows/prerelease-binaries.yml` runs for PRs only through its
+  narrow packaging-input path filter. Do not broaden PR-triggered binary
+  builds unless the user explicitly asks for that policy change.
+- `v*` tag pushes build CLI and desktop artifacts and stage a GitHub draft.
+  Public releases require local Developer ID signing, CI notarization, and
+  offline OpenPGP verification through `finalize-signed-release.yml`; see
+  [docs/reference/macos-release.md](docs/reference/macos-release.md).
+  Never put the Apple signing private key in CI or publish failed platform checks.
+  Manual `workflow_dispatch` runs build/upload artifacts for the
+  selected ref; they only stage a release draft when `publish_release=true`
+  and `tag_name` names an existing tag.
 - If the user asks for binaries for a PR or branch, run the workflow manually
   against that branch and leave the result as workflow artifacts. Do not create
   a release for PR/tester builds.
@@ -478,7 +482,8 @@ List endpoints with `--limit` also accept `--cursor`. The cursor is an opaque ba
   executable is named `kassiber`. Desktop preview files are named with the
   `kassiber-desktop-<target>-...` prefix. Raw bundled sidecar files use Rust
   target triples internally and must not be published as release assets.
-- Desktop preview artifacts bundle one-file `kassiber-cli-*` sidecars and
+- Desktop preview artifacts bundle `kassiber-cli-*` runtimes (onedir on macOS,
+  onefile elsewhere) and
   should not require an external Python checkout for normal daemon calls. The
   GUI executable forwards `--cli ...` to the bundled CLI sidecar.
 - The workflow run and release tag identify the source commit, and the desktop
