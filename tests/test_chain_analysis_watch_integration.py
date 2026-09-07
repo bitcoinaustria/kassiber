@@ -97,11 +97,12 @@ def test_acquisition_revision_inbox_and_encrypted_reopen_are_exactly_once(encryp
 
 
 @pytest.mark.parametrize('decision',['allow_once','deny'])
-def test_real_agent_loop_requires_mutation_consent_for_watch(encrypted_book,decision):
+@pytest.mark.parametrize('on_device',[True,False])
+def test_real_agent_loop_requires_mutation_consent_for_watch(encrypted_book,decision,on_device):
     conn,root=encrypted_book
     preview=dispatch(conn,'ui.chain_analysis.watches.preview',watch_definition())
     conn.commit()
-    runtime=daemon.AiToolRuntime(str(root),{},queue.Queue(),{'scope_workspace_id':'ws','scope_profile_id':'profile','provider_kind':'local','provider_on_device':True})
+    runtime=daemon.AiToolRuntime(str(root),{},queue.Queue(),{'scope_workspace_id':'ws','scope_profile_id':'profile','provider_kind':'local' if on_device else 'remote','provider_on_device':on_device})
     chats=daemon.ActiveAiChats();_,active=chats.register('watch-consent')
     entry=daemon.get_tool('ui.chain_analysis.watches.create')
     validated=daemon._ai_chat_args({'model':'synthetic-local','tools_enabled':True,'messages':[{'role':'user','content':'Use chain analysis to create a local evidence watch for this output after asking permission.'}]})
@@ -118,7 +119,7 @@ def test_real_agent_loop_requires_mutation_consent_for_watch(encrypted_book,deci
             return daemon.AiToolTurnResult([],'Done.','','stop',[])
         calls+=1
         assert entry.provider_name in {tool['name'] for tool in args[4]}
-        call={'id':'watch-create','function':{'name':entry.provider_name,'arguments':json.dumps({'definition':watch_definition(),'expected_plan_id':preview['plan_id']})}}
+        call={'id':'watch-create','function':{'name':entry.provider_name,'arguments':json.dumps({'definition':preview['definition'],'expected_plan_id':preview['plan_id']})}}
         return daemon.AiToolTurnResult([call],'','','tool_calls',[])
     with patch.object(daemon,'_run_on_daemon_main_thread',side_effect=lambda _,callback:callback(conn)),patch.object(daemon,'_stream_ai_chat_tool_turn',side_effect=provider),patch.object(daemon,'_write_ai_chat_terminal'),patch('socket.getaddrinfo',side_effect=AssertionError('DNS')),patch('socket.socket.connect',side_effect=AssertionError('socket')):
         daemon._run_ai_chat_tool_loop('watch-consent',SimpleNamespace(last_provider_session_id=None),{'name':'synthetic','kind':'local','base_url':'http://localhost'},validated,output,active,runtime,chats)
