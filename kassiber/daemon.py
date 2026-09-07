@@ -231,6 +231,7 @@ from .envelope import build_envelope, build_error_envelope, build_event_envelope
 from .errors import AppError
 from .daemon_sync_replication import SYNC_UI_KINDS, dispatch_sync_ui
 from .daemon_accounting import ACCOUNTING_UI_KINDS, dispatch_accounting_ui
+from . import daemon_accounting_ai
 from . import daemon_accounting_documents
 from .projects import (
     create_project,
@@ -336,6 +337,7 @@ _GRAPH_SEMANTICS_CACHE: dict[str, tuple[tuple[Any, ...], Any]] = {}
 
 SUPPORTED_KINDS = (
     *ACCOUNTING_UI_KINDS,
+    *daemon_accounting_ai.KINDS,
     *daemon_accounting_documents.KINDS,
     "status",
     "ui.logs.snapshot",
@@ -801,6 +803,7 @@ class ActiveAiChat:
     cancel_event: threading.Event
     consent: AiToolConsentState
     cancel_handler: Callable[[], None] | None = None
+    accounting_guard: Callable[[], None] | None = None
 
 
 class ActiveAiChats:
@@ -867,6 +870,18 @@ class ActiveAiChats:
             already_cancelled = chat.cancel_event.is_set()
         if already_cancelled and handler is not None:
             handler()
+
+    def validate_accounting_scopes(self, *, cancel_all: bool = False) -> None:
+        """Main-thread only: revoke sensitive turns on lock/book/provider changes."""
+        with self._lock:
+            active = [(key, chat) for key, chat in self._chats.items() if chat.accounting_guard is not None]
+        for key, chat in active:
+            try:
+                if cancel_all:
+                    raise AppError("Accounting disclosure revoked", code="stale_context")
+                chat.accounting_guard()
+            except Exception:
+                self.cancel(key)
 
     def provider_session(
         self,
@@ -1147,6 +1162,9 @@ class DaemonContext:
     ai_discovery_cache: ProviderDiscoveryCache = field(
         default_factory=ProviderDiscoveryCache
     )
+    accounting_ai_grants: daemon_accounting_ai.DisclosureGrants = field(
+        default_factory=daemon_accounting_ai.DisclosureGrants
+    )
     accounting_document_jobs: daemon_accounting_documents.DocumentJobs = field(
         default_factory=daemon_accounting_documents.DocumentJobs
     )
@@ -1157,6 +1175,12 @@ def _clear_unlocked_passphrase(ctx):
     jobs = getattr(ctx, "accounting_document_jobs", None)
     if jobs is not None:
         jobs.cancel_all()
+    grants = getattr(ctx, "accounting_ai_grants", None)
+    if grants is not None:
+        grants.clear()
+    chats = getattr(ctx, "active_ai_chats", None)
+    if chats is not None:
+        chats.validate_accounting_scopes(cancel_all=True)
 
 
 @dataclass
@@ -4814,6 +4838,7 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
         "seed_history": bool(seed_history),
         "screen_context": screen_context,
         "attachment": attachment,
+        "accounting_context": args.get("accounting_context"),
         "_desktop_secret_store_bridge": args.get("_desktop_secret_store_bridge"),
     }
 
@@ -7321,6 +7346,7 @@ def _ai_answer_provenance(
             "egress_gap": bool(egress.get("gap")),
             "history_intent": validated.get("persist"),
             "hostnames_disclosed_to_model": False,
+            "accounting_disclosure_digest": state.get("accounting_disclosure_digest"),
             "cross_book_data_disclosed": bool(
                 {
                     "ui.profiles.snapshot",
@@ -8460,6 +8486,10 @@ def _write_ai_chat_terminal(
         assistant_content=assistant_content,
         provenance=provenance,
     )
+    accounting_result_token = None
+    result_buffer = runtime.maintenance_state.get('accounting_result_buffer')
+    if result_buffer is not None and finish_reason != 'cancelled':
+        accounting_result_token = _run_on_daemon_main_thread(runtime, lambda conn: result_buffer(assistant_content))
     out.write(
         _with_request_id(
             build_envelope(
@@ -8470,6 +8500,7 @@ def _write_ai_chat_terminal(
                     "finish_reason": finish_reason,
                     "provenance": provenance,
                     "session_id": session_id,
+                    **({'accounting_result_token': accounting_result_token} if accounting_result_token else {}),
                 },
             ),
             request_id,
@@ -8917,6 +8948,7 @@ def _run_ai_chat_stream(
     try:
         finish_reason = None
         content_parts: list[str] = []
+        accounting_output_bytes = 0
         if not cancel_event.is_set():
             _write_ai_chat_status(
                 out,
@@ -8928,6 +8960,7 @@ def _run_ai_chat_stream(
                 base_url=provider_snapshot["base_url"],
                 api_key=provider_snapshot.get("api_key"),
                 timeout=validated["timeout_seconds"],
+                **({"direct_connection": True} if validated.get("accounting_context") is not None else {}),
             )
             cancel = getattr(client, "cancel", None)
             if callable(cancel):
@@ -8970,6 +9003,11 @@ def _run_ai_chat_stream(
                 label="Loading model",
             )
             stream_options = dict(validated["options"])
+            accounting_guard = runtime.maintenance_state.get("accounting_guard")
+            if accounting_guard is not None:
+                _run_on_daemon_main_thread(runtime, lambda conn: accounting_guard())
+                if cancel_event.is_set():
+                    raise AppError("Accounting disclosure cancelled", code="accounting_ai_cancelled")
             provider_session_id = active_ai_chats.provider_session(
                 chat_session_id=validated["session_id"],
                 provider_name=provider_snapshot["name"],
@@ -8988,6 +9026,12 @@ def _run_ai_chat_stream(
                     finish_reason = "cancelled"
                     break
                 delta_payload = {"delta": chunk.delta}
+                if validated.get("accounting_context") is not None:
+                    accounting_output_bytes += len(json.dumps(chunk.delta, ensure_ascii=False).encode('utf-8'))
+                    if accounting_output_bytes > 1024 * 1024:
+                        if callable(getattr(client, 'cancel', None)):
+                            client.cancel()
+                        raise AppError('Selected accounting response exceeded its output budget', code='accounting_ai_output_limit')
                 if isinstance(chunk.delta, dict) and isinstance(
                     chunk.delta.get("content"), str
                 ):
@@ -9030,6 +9074,12 @@ def _run_ai_chat_stream(
             assistant_content="".join(content_parts),
         )
     except AppError as exc:
+        if validated.get("accounting_context") is not None:
+            exc = AppError("Selected accounting assistance did not complete", code=exc.code or "accounting_ai_failed")
+        if cancel_event.is_set():
+            _write_ai_chat_terminal(out, request_id, provider_snapshot, validated,
+                "cancelled", runtime, assistant_content="".join(content_parts))
+            return
         out.write(
             _error_envelope(
                 exc.code or "app_error",
@@ -9041,9 +9091,13 @@ def _run_ai_chat_stream(
             )
         )
     except Exception as exc:
-        traceback.print_exc(file=sys.stderr)
-        sys.stderr.flush()
-        _REQUEST_LOGGER.error("ai chat crashed", exc_info=exc)
+        if validated.get("accounting_context") is not None:
+            exc = RuntimeError("Selected accounting assistance did not complete")
+            _REQUEST_LOGGER.error("selected accounting assistance failed")
+        else:
+            traceback.print_exc(file=sys.stderr)
+            sys.stderr.flush()
+            _REQUEST_LOGGER.error("ai chat crashed", exc_info=exc)
         out.write(
             _error_envelope(
                 "internal_error",
@@ -16396,6 +16450,10 @@ def handle_request(
             False,
         )
 
+    if kind in daemon_accounting_ai.KINDS:
+        result = daemon_accounting_ai.dispatch(ctx, kind, _coerce_args_dict(request_id, request.get("args")))
+        return (_with_request_id(build_envelope(kind, result), request_id), False)
+
     if kind == "ui.accounting.document_cancel":
         result = ctx.accounting_document_jobs.cancel(ctx, _coerce_args_dict(request_id, request.get("args")))
         return (_with_request_id(build_envelope(kind, result), request_id), False)
@@ -17511,6 +17569,11 @@ def handle_request(
         # bound to the thread that opened them).
         provider = resolve_ai_provider(ctx.conn, validated["provider"])
         require_ai_provider_acknowledged(provider)
+        accounting_disclosure = None
+        if validated["accounting_context"] is not None:
+            if _request_id_registry_key(request_id) is None:
+                raise AppError("Selected accounting assistance requires a cancellable request ID", code="validation")
+            accounting_disclosure = daemon_accounting_ai.prepare(ctx, validated, provider)
         provider_snapshot = {
             "name": provider["name"],
             "base_url": provider["base_url"],
@@ -17539,6 +17602,12 @@ def handle_request(
             },
         )
         registry_key, active_chat = ctx.active_ai_chats.register(request_id)
+        if accounting_disclosure is not None:
+            guard = lambda: daemon_accounting_ai.recheck(ctx, accounting_disclosure)
+            active_chat.accounting_guard = guard
+            runtime.maintenance_state["accounting_guard"] = guard
+            runtime.maintenance_state["accounting_disclosure_digest"] = accounting_disclosure["disclosure_digest"]
+            runtime.maintenance_state['accounting_result_buffer'] = lambda content: daemon_accounting_ai.buffer_result(ctx, accounting_disclosure, content)
         thread = threading.Thread(
             target=_run_ai_chat_stream,
             args=(
@@ -17757,6 +17826,7 @@ def run(
     try:
         while True:
             _drain_daemon_main_thread_tasks(ctx)
+            ctx.active_ai_chats.validate_accounting_scopes()
             ctx.accounting_document_jobs.poll(ctx, out)
             try:
                 line = _next_input_line(ctx, timeout=0.05)

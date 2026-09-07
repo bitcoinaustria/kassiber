@@ -27,10 +27,10 @@ hash-bound CLI selection and tool-free/no-history provider isolation move to
 dependent `codex/accounting-selected-ai`, published as
 [#550](https://github.com/bitcoinaustria/kassiber/pull/550).
 The owner explicitly approved moving selected assistance with its protections
-and tests. This second cut excludes that lane. Published stack code checkpoints
-are #545 `780f2da9` → #546 `9ef535f1` → #550 `2d5ab45f`; the last restores
-selected assistance and its protections together. Current split gates are
-recorded below; older historical evidence does not change feature availability.
+and tests. This third cut restores that lane above the task-only second cut.
+Published stack code checkpoints are #545 `780f2da9` → #546 `9ef535f1` →
+#550 `2d5ab45f`. Current split gates are recorded below; older historical
+evidence is not substituted for the new extraction gates.
 
 Recovery references: core `780f2da9` on
 `codex/accounting-core-presplit-20260906`; complete agent `32312f0e` on
@@ -40,7 +40,9 @@ binds to exact code checkpoints `9ef535f1` and `2d5ab45f`.
 Unused native accounting-export scope scaffolding was also removed following
 independent review; the former dedicated accounting export UI was already absent.
 Recovery preserves the full former implementation. CLI task-export consent,
-destination and durable-delivery protections remain part of this second cut.
+destination and durable-delivery protections are inherited from the second cut.
+Recombined code/tests match `32312f0e` except the unused native scaffold;
+documentation retains the approved split and acceptance-policy updates.
 
 **Code merge:** passing per-cut contracts and integration/security/reliability
 checks, including retained financial correctness, exact consent, durable writes
@@ -248,6 +250,7 @@ before calling the organization's workflow complete.
 | Cash basis | Selected liquidity accounts, physical counts, exact partial payment allocations, income/expenditure distinct from accrual P&L | `test_accounting_cashbook`, `test_accounting_cash_adversarial` |
 | Multi-year close | Shared close-readiness controls, immutable prior snapshots, reopen cascades, independent arithmetic verifier | `test_accounting_close_readiness`, `test_accounting_ledger`, `test_accounting_integration` |
 | Retained evidence | SQLCipher bytes/text/reviews, bounded uploads, explicit local OCR or manual transcription, no remote fallback | `test_accounting_evidence`, `test_accounting_document_text`, `test_accounting_document_ocr`, `test_accounting_document_jobs` |
+| Selected financial AI (third cut) | Exact disclosure, provider/book/revision binding, one-use tokens, no history/tools, separate approval for drafts/fields; never posting | `test_accounting_ai_context`, `test_accounting_daemon_ai`, `test_accounting_ai_proposals`, `test_accounting_ai_result_tokens`, `test_cli_accounting_assist`, provider broker tests; full local gate passed at `2d5ab45f` |
 | AT filing preparation | 2025 K2 + K2kv/K2a/K2b/K11/K12/K12a; applicability/unknown/N/A states; specialist review; assessment-year aggregation | `test_accounting_jurisdiction`, `test_accounting_tax_workpapers` |
 | Portable recovery | Real encrypted tar/age archive restores bytes, extraction, open items, source artifacts, projections and two close revisions | `test_accounting_backup_roundtrip` |
 | Packaged runtime | Built PyInstaller sidecar launches; bundled AT resources load against encrypted fixture; real Poppler worker uses only pipes | `test_accounting_packaged_smoke` with explicit `KASSIBER_FROZEN_SMOKE_BIN` |
@@ -257,12 +260,11 @@ exact Assistant consent have additional tests under `ui-tauri/`. A passing row
 demonstrates its fixture only, not arbitrary legal compliance or missing-source
 completeness. Core support remains usable with AI disabled.
 
-Selected financial AI is absent from this second cut and ships in dependent
-#550. Its historical
+Selected financial AI is restored in this dependent third cut. Its historical
 `test_accounting_ai_context`, `test_accounting_daemon_ai`,
 `test_accounting_ai_proposals`, `test_accounting_ai_result_tokens`, CLI selection
-and provider-broker proofs traveled with that third cut and passed its full
-local gate. One-use provider/book/revision-bound disclosure and separate draft/field
+and provider-broker proofs are restored with the feature and passed this cut's
+full local gate. One-use provider/book/revision-bound disclosure and separate draft/field
 approval remain required; ordinary task consent cannot substitute for them.
 
 ## Historical pre-stack verification checkpoint (2026-09-05)
@@ -438,9 +440,9 @@ does not establish a SQLCipher fix or complete pilot acceptance.
   it is not installed; synthetic worker and real Poppler tests are separate.
 - Native PDF/OCR parsing remains fail-closed on Windows until process-tree
   cancellation is tested there; UTF-8 and reviewed manual transcription remain
-  alternatives. The dependent selected-AI lane must separately preserve its
-  sensitive CLI-provider Windows guard. Neither selected assistance nor its
-  provider guard is part of this local second cut; restoration must be atomic.
+  alternatives. This selected-AI lane retains its sensitive CLI-provider
+  Windows guard alongside the feature. Explicit HTTP providers remain an
+  alternative; there is no hidden hosted fallback.
 - The canonical bank interchange is not a verified adapter for the unknown
   pilot bank export. Confirm that format before claiming the pilot import is done.
 - Delivery now uses the [dependency-aware PR stack](../plan/18-general-accounting-pr-stack.md).

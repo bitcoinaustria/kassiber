@@ -589,13 +589,14 @@ top of the monolith.
     route, sidebar, Settings switch and forms from `codex/accounting-cli-agent`.
     Keep all financial data/core and exact approval in the existing Assistant.
     Explicit CLI configuration replaces UI enrollment; no automatic encryption.
-  - [x] Restore and verify selected financial AI assistance in the dependent
-    third cut only, from preserved complete agent `32312f0e` on
+  - [x] Verify selected financial AI assistance restored in the dependent
+    third cut from preserved complete agent `32312f0e` on
     `codex/accounting-agent-presplit-20260906`. Keep the hash-bound interactive
     request, tool-free/no-history grants and separate disclosure/draft approvals.
     No blanket approval, output capture, implicit context switch,
-    ordinary-agent financial read or model fallback. Absent from this second
-    cut; published in #550 with passing full local and provider-isolation gates.
+    ordinary-agent financial read or model fallback. Available in this third
+    cut, not #546's ordinary-task cut; published in #550 with passing full
+    local and provider-isolation gates.
   - [ ] **Implementation checkpoint (2026-09-05):** country-neutral ledger,
     encrypted evidence, canonical bank interchange, partial settlements,
     manual schedules, revisioned close and portable arithmetic verifier are
@@ -605,8 +606,8 @@ top of the monolith.
     historical opening, lot-bound book-only valuation, cash-book controls,
     K2/2025 and six annex working papers, local extraction/optional OCR,
     and reviewed atomic batch posting. Scoped no-history AI proposals are
-    absent from this second cut and restored with their security/tests in #550;
-    the owner explicitly approved that atomic move.
+    restored with their security/tests in this dependent third cut after the
+    owner-approved atomic extraction from #546.
     Real encrypted backup/restore covers two closes and retained source data.
     Split verification/reviews passed. The reliability hold, separate CLI/agent
     product acceptance and real pilot facts remain open; this is not the completed

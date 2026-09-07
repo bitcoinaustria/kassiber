@@ -12,8 +12,22 @@ import {
   providerStatus,
   safeErrorMessage,
   safeSessionCursor,
+  sensitiveContext,
   writeEvent,
 } from "./protocol.js";
+
+export function sensitiveClaudeEnvironment(): NodeJS.ProcessEnv {
+  const env = providerEnvironment("claude");
+  for (const key of Object.keys(env)) {
+    if (/(?:DEBUG|TRACE|LOGGING|TELEMETRY|OTEL)/.test(key)) delete env[key];
+  }
+  return {
+    ...env,
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+    DISABLE_TELEMETRY: "1",
+    DISABLE_ERROR_REPORTING: "1",
+  };
+}
 
 /**
  * The Claude CLI has no model-enumeration command, so this list is maintained
@@ -157,7 +171,7 @@ type ClaudeStreamLine = {
  * MCP server. `--bare` would preserve explicit MCP, but deliberately skips the
  * OAuth/keychain login users already configured and suppresses stream events.
  */
-async function chatArgs(
+export async function chatArgs(
   request: ChatRequest,
   cwd: string,
   toolBridge?: NativeToolBridge,
@@ -183,6 +197,7 @@ async function chatArgs(
     "--tools",
     "",
   ];
+  if (sensitiveContext(request)) args.push("--no-session-persistence");
   if (toolBridge && request.tools?.length) {
     const [command, ...commandArgs] = await mcpCommand(cwd, request.tools, toolBridge);
     args.push(
@@ -215,11 +230,18 @@ export async function claudeChat(
 ): Promise<void> {
   const executable = await resolveExecutable("claude");
   if (!executable) throw new Error("Claude is not installed.");
+  const sensitive = sensitiveContext(request);
+  if (sensitive) {
+    const help = await runProvider("claude", executable, ["--help"], { limit: 100_000 });
+    if (help.code !== 0 || !help.stdout.includes("--no-session-persistence")) {
+      throw new Error("Claude does not support stateless sensitive context; update the CLI.");
+    }
+  }
   const resumed = safeSessionCursor(request.options?.provider_session_id) !== undefined;
 
   const child = spawn(executable, await chatArgs(request, cwd, toolBridge), {
     cwd,
-    env: providerEnvironment("claude"),
+    env: sensitive ? sensitiveClaudeEnvironment() : providerEnvironment("claude"),
     stdio: ["pipe", "pipe", "pipe"],
   });
 
@@ -285,7 +307,7 @@ export async function claudeChat(
         writeEvent({
           type: "done",
           finish_reason: "stop",
-          provider_session_id: providerSessionId,
+          ...(sensitive ? {} : { provider_session_id: providerSessionId }),
         });
         return;
       }
@@ -296,6 +318,9 @@ export async function claudeChat(
       const detail = safeErrorMessage(stderrPreview || `Claude exited with code ${code}`);
       throw new Error(`Claude ended without a terminal response. ${detail}`);
     }
+  } catch (error) {
+    if (sensitive) throw new Error("Claude sensitive-context request failed; no provider diagnostic content was retained.");
+    throw error;
   } finally {
     if (child.exitCode === null && child.signalCode === null) child.kill();
   }

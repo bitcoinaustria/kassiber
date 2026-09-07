@@ -45,12 +45,12 @@ rewriting immutable history. This does not establish organizational acceptance.
 
 ## Published accounting cuts
 
-This #546 cut contains ordinary task execution only. The owner-approved
-extraction is published at `9ef535f1`; selected assistance, its protections
-and tests are restored together in dependent #550 at `2d5ab45f`. Recombined
-code/tests match preserved full candidate `32312f0e` except the intentionally
-removed unused native export scaffold; docs retain the approved split and
-acceptance-policy updates.
+Published #546 at `9ef535f1` contains ordinary task execution only. This
+dependent third cut is published as #550 at `2d5ab45f`, restoring selected
+assistance, its security protections and tests together as explicitly approved
+by the owner. Recombined code/tests match full candidate `32312f0e`
+except the intentionally removed unused native export scaffold; docs retain
+the approved split and acceptance-policy updates.
 
 | Order | Branch | Responsibility |
 | --- | --- | --- |
@@ -86,7 +86,7 @@ If any base changes, restack and rerun scope/basis/consent integration tests.
 - Pre-third-cut core: `codex/accounting-core-presplit-20260906` at `780f2da9`.
 - Pre-third-cut complete agent: `codex/accounting-agent-presplit-20260906` at
   `32312f0e`. The selected-assistance lane is restored from this reference in
-  dependent #550, retaining documentation decisions.
+  the dependent third cut, retaining documentation decisions.
 
 The original preview checkout and its live book are untouched. The old combined
 dependency branch is a local recovery checkpoint, not a replacement PR.
@@ -101,8 +101,8 @@ silently grant either custody review or accounting task application.
 
 Ordinary agent tools return opaque task state, not the local financial approval
 payload. The third cut's selected-financial-disclosure grants must stay separate:
-tool-free, no-history, one-use and provider/book/revision-bound. This #546 cut
-neither implements nor implicitly authorizes that disclosure lane.
+tool-free, no-history, one-use and provider/book/revision-bound. #546 neither
+implements nor implicitly authorizes the disclosure lane added by this third cut.
 Accounting evidence stays inside SQLCipher; do not copy it into ordinary
 plaintext attachments or disclose it implicitly to remote providers.
 

@@ -1080,6 +1080,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="One-shot prompt; pass '-' to read it from stdin. Omit for REPL mode.",
     )
     chat.add_argument("--prompt", dest="prompt_text", help="One-shot prompt text.")
+    chat.add_argument("--accounting-selection", metavar="PATH", help=(
+        "Opt-in selected financial assistance: bounded local JSON with profile_id, question, purpose and selection. "
+        "Requires --accounting-selection-sha256 and an interactive terminal; fresh tool-free no-history turn, "
+        "separate disclosure and draft/field approvals. Select the matching book with context set first."))
+    chat.add_argument("--accounting-selection-sha256", metavar="SHA256", help="SHA-256 of exact --accounting-selection file bytes.")
     chat.add_argument(
         "--file",
         metavar="PATH",

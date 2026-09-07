@@ -10,13 +10,13 @@ Private portfolio and personal-tax use does not require accounting setup.
 This branch is **not the completed organizational-accounting delivery** in
 [the consolidated specification](../plan/17-general-accounting-and-private-ai-spec.md).
 The integrated branch includes retained Bitcoin/RP2 projections, Austrian 2025
-K2/annex working papers, and ordinary opaque accounting-task tools. This
-second cut does not contain selected financial AI assistance: its implementation,
-security protections and tests were extracted together with explicit owner
-approval and restored together in dependent
-[#550](https://github.com/bitcoinaustria/kassiber/pull/550). This task cut is
-published in #546 at `9ef535f1`; its full local gate and independent split
-reviews passed. The intermittent encrypted-handle rejection remains unresolved.
+K2/annex working papers, ordinary opaque accounting-task tools and selected
+financial AI assistance. This dependent third cut restores selected assistance
+with its security protections and tests; #546 remains the separate ordinary-task
+cut. This lane is published in
+[#550](https://github.com/bitcoinaustria/kassiber/pull/550) at `2d5ab45f`;
+full local gates and independent split reviews passed. The intermittent
+encrypted-handle rejection remains unresolved.
 The organization's actual coverage and measured pilot outcomes are separate product acceptance,
 not blanket code-merge blockers or a filing certification.
 An accounting period lock is not a tax-ready declaration or evidence that all
@@ -49,7 +49,7 @@ external sources have been imported.
 - New accounting tables are never replicated and are absent from default
   diagnostics and ordinary audit packages. The general in-app AI catalog
   exposes only four opaque task tools, never the tables or financial previews.
-  Selected disclosure is destined for the dependent third cut; neither lane
+  Selected disclosure uses the separate explicit workflow below; neither lane
   permits generic SQL, shell, filesystem or unrestricted accounting tools.
 - Evidence bytes live inside SQLCipher, are immutable, and survive database
   backup/restore. Legacy attachment files are **not** retroactively encrypted.
@@ -357,13 +357,12 @@ from a complete annual statement. Such gaps block a cash-basis close.
 `batch-preview`/`batch-post` bind up to 50 reviewed drafts and atomically post
 all or none. This deterministic CLI contract does not require selected AI.
 
-## Separate dependent lane: selected financial assistance
+## Selected financial assistance
 
-This section describes the contract retained for `codex/accounting-selected-ai`.
-It is **not implemented in this second cut**. Commands, grant lifecycle,
-provider protections and tests are restored and verified together in dependent
-[#550](https://github.com/bitcoinaustria/kassiber/pull/550), from preserved
-complete candidate `32312f0e`.
+This optional lane is implemented in `codex/accounting-selected-ai`, above the
+ordinary task cut. Commands, grant lifecycle, provider protections and tests
+were restored together from preserved complete candidate `32312f0e` and passed
+the split's full local gate at `2d5ab45f`.
 Ordinary task tools above do not depend on this lane or release financial context.
 
 Selected accounting AI must work only with explicitly selected pages, fields,
@@ -391,10 +390,9 @@ it cannot post entries. Redacted pages cannot supply unreliable original-span
 offsets. Posting remains a separate guarded operation. AI remains optional for
 every accounting step.
 
-### CLI contract (#550 only)
+### Selected financial assistance from the CLI
 
-The following example is not a runnable command in this second cut.
-In the dependent lane, select the intended book with `context set --workspace … --profile …`.
+Select the intended book with `context set --workspace … --profile …`.
 Create a UTF-8 JSON selection file containing only this explicit request:
 
 ```json
