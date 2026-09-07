@@ -271,8 +271,9 @@ def test_new_tables_never_sync_and_ai_not_implicitly_enabled(book):
         with pytest.raises(AppError) as exc:
             validate_wire_row(table, {})
         assert exc.value.code == "sync_schema_forbidden"
-    # The CLI/core cut exposes no ledger operation to ordinary AI.
-    allowed = set()
+    # Only explicitly reviewed, opaque task tools enter ordinary AI.
+    allowed = {"ui.accounting.task_get", "ui.accounting.task_preview",
+               "ui.accounting.task_apply", "ui.accounting.task_cancel"}
     exposed = {kind for kind in ACCOUNTING_UI_KINDS if tools.get_tool(kind) is not None}
     assert exposed == allowed
 

@@ -1,0 +1,32 @@
+{
+  "preview": "Preview consequences",
+  "hidden": "Sensitive data is hidden. Reveal it before reviewing records or approving accounting actions.",
+  "error": "Could not load or complete this operation. Refresh and review the current state before retrying.",
+  "steps": {
+    "prepare": "Prepare drafts",
+    "post": "Post reviewed drafts",
+    "close": "Close period",
+    "tax_finalize": "Finalize tax working paper",
+    "export_close": "Export close",
+    "export_tax": "Export tax working paper"
+  },
+  "ready": "This step is ready for your review.",
+  "blocked": "This step cannot proceed until its blockers are resolved.",
+  "previewRevision": "Preview bound to book revision {{revision}}",
+  "partial": "Preparation can process the ready subset; remaining exceptions stay in the task.",
+  "closeConsequence": "Creates an immutable close snapshot and locks this fiscal period against normal posting. Corrections require an explicit, reasoned reopening. This does not certify external completeness or file a tax return.",
+  "taxConsequence": "Finalizes the exact reviewed working-paper values below. This does not transmit or file a tax return.",
+  "exportConsequence": "Prepares this artifact for plaintext export outside the encrypted book. The next save dialog is separate; cancelling it does not erase the prepared artifact and does not mean a file was saved.",
+  "account": "Account",
+  "debit": "Debit",
+  "credit": "Credit",
+  "balance": "Balance",
+  "empty": "No records yet.",
+  "trialBalance": "Trial balance",
+  "balanced": "Balanced",
+  "unbalanced": "Enter equal debit and credit totals; each line needs one side only.",
+  "profitLoss": "Profit and loss",
+  "profit": "Period result",
+  "balanceSheet": "Balance sheet",
+  "unappropriated": "Unappropriated result carried forward"
+}

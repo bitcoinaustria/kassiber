@@ -1,0 +1,32 @@
+{
+  "preview": "Auswirkungen prüfen",
+  "hidden": "Sensible Daten sind ausgeblendet. Blende sie ein, bevor du Unterlagen prüfst oder Buchhaltungsaktionen freigibst.",
+  "error": "Die Aktion konnte nicht geladen oder abgeschlossen werden. Aktualisiere und prüfe den aktuellen Stand vor einem erneuten Versuch.",
+  "steps": {
+    "prepare": "Entwürfe vorbereiten",
+    "post": "Geprüfte Entwürfe buchen",
+    "close": "Periode abschließen",
+    "tax_finalize": "Steuer-Arbeitspapier finalisieren",
+    "export_close": "Abschluss exportieren",
+    "export_tax": "Steuer-Arbeitspapier exportieren"
+  },
+  "ready": "Dieser Schritt ist bereit für deine Prüfung.",
+  "blocked": "Dieser Schritt wartet auf die Behebung seiner Blocker.",
+  "previewRevision": "Vorschau an Buchrevision {{revision}} gebunden",
+  "partial": "Die Vorbereitung kann den bereiten Teil verarbeiten; übrige Ausnahmen bleiben in der Aufgabe.",
+  "closeConsequence": "Erzeugt einen unveränderlichen Abschlussstand und sperrt diese Geschäftsperiode für normale Buchungen. Korrekturen brauchen eine ausdrückliche, begründete Wiedereröffnung. Das bestätigt weder externe Vollständigkeit noch reicht es eine Steuererklärung ein.",
+  "taxConsequence": "Finalisiert genau die unten geprüften Arbeitspapierwerte. Es wird keine Steuererklärung übermittelt oder eingereicht.",
+  "exportConsequence": "Bereitet dieses Artefakt für den Klartextexport außerhalb des verschlüsselten Buchs vor. Der anschließende Speicherdialog ist getrennt; ein Abbruch löscht das vorbereitete Artefakt nicht und bedeutet nicht, dass eine Datei gespeichert wurde.",
+  "account": "Konto",
+  "debit": "Soll",
+  "credit": "Haben",
+  "balance": "Saldo",
+  "empty": "Noch keine Einträge.",
+  "trialBalance": "Saldenliste",
+  "balanced": "Ausgeglichen",
+  "unbalanced": "Soll und Haben müssen gleich sein. Jede Zeile darf nur auf einer Seite einen Betrag enthalten.",
+  "profitLoss": "Gewinn- und Verlustrechnung",
+  "profit": "Jahresergebnis",
+  "balanceSheet": "Bilanz",
+  "unappropriated": "Vorgetragenes, noch nicht zugewiesenes Ergebnis"
+}

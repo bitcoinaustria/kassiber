@@ -376,6 +376,19 @@
     "deny": "Ablehnen",
     "allowSession": "Für diese Sitzung erlauben",
     "allowOnce": "Einmal erlauben",
+    "accountingTask": {
+      "title": "Diesen Buchhaltungsschritt freigeben?",
+      "description": "Diese Auswirkungen wurden von Kassiber berechnet und werden nur auf diesem Gerät angezeigt. Die Freigabe gilt nur für diesen Schritt; weitere Schritte benötigen eine eigene Prüfung.",
+      "acknowledge": "Ich habe alle angezeigten Buchungen und die Auswirkungen dieses Schritts geprüft.",
+      "unavailable": "Kassiber konnte keine vollständige aktuelle Vorschau bestätigen. Fordere vor der Freigabe eine neue Vorschau an.",
+      "hidden": "Finanzdaten sind ausgeblendet. Deaktiviere „Sensible Daten ausblenden“, um diesen Schritt zu prüfen und freizugeben.",
+      "prepare": "Geprüfte Entwürfe erstellen",
+      "post": "Geprüfte Buchungen festschreiben",
+      "close": "Geprüftes Geschäftsjahr abschließen",
+      "tax_finalize": "Geprüftes Steuerarbeitspapier finalisieren",
+      "export_close": "Geprüftes Abschlusspaket exportieren",
+      "export_tax": "Geprüftes Steuerpaket exportieren"
+    },
     "apply": {
       "title": "Diese Korrekturen anwenden?",
       "description": "Prüfe die von Kassiber neu berechneten Auswirkungen. Diese Freigabe gilt für den gesamten unten gezeigten Plan.",
