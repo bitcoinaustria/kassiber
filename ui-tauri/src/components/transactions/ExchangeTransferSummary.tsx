@@ -16,6 +16,9 @@ export function ExchangeTransferSummary({ route, hideSensitive }: {
   const chain = route[transfer.chainLeg];
   const txid = chain.txid && /^[a-f\d]{64}$/i.test(chain.txid) ? chain.txid : null;
   const fee = exchange.feeBtc;
+  const reference = exchange.externalId?.trim();
+  const distinctReference = reference && reference.toLowerCase() !== txid?.toLowerCase()
+    ? reference : null;
   return (
     <div className="space-y-3" data-testid="exchange-transfer-summary">
       <div className="text-sm font-medium">{t(`exchangeTransfer.${transfer.direction}`)}</div>
@@ -47,20 +50,10 @@ export function ExchangeTransferSummary({ route, hideSensitive }: {
             {t("exchangeTransfer.fee")}: {hideSensitive ? hidden : formatAssetAmount(fee, exchange.asset || "BTC")}
           </div> : null}
         </div>
-
       </div>
-      <details className="rounded-md border px-3 py-2 text-xs">
-        <summary className="cursor-pointer font-medium">{t("exchangeTransfer.openRecord")}</summary>
-        <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-          {[
-            [t("exchangeTransfer.reference"), exchange.externalId || exchange.id],
-            [t("exchangeTransfer.recordedAt"), exchange.occurredAt],
-          ].filter(([, value]) => value).map(([label, value]) => <div key={label} className="min-w-0">
-            <dt className="text-muted-foreground">{label}</dt>
-            <dd className="mt-1 break-all font-mono">{hideSensitive ? hidden : value}</dd>
-          </div>)}
-        </dl>
-      </details>
+      {distinctReference ? <div className="break-all text-xs text-muted-foreground">
+        {t("exchangeTransfer.reference")}: <span className="font-mono">{hideSensitive ? hidden : distinctReference}</span>
+      </div> : null}
     </div>
   );
 }

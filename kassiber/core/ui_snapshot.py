@@ -689,6 +689,11 @@ def _ui_transaction_payment_method_sql() -> str:
               'bullbitcoin', 'coinfinity', 'strike', 'exchange', '21bitcoin', 'pocketbitcoin'
             )
             THEN 'Exchange'
+          WHEN lower(w.kind) IN (
+              'address', 'descriptor', 'xpub', 'samourai', 'wasabi',
+              'silent-payment', 'ledgerlive'
+            )
+            THEN 'On-chain'
           WHEN lower(w.label) LIKE '%liquid%' OR lower(w.label) LIKE '%lbtc%'
             THEN 'Liquid'
           WHEN lower(w.label) LIKE '%lightning%' OR lower(w.label) LIKE '%phoenix%'
@@ -2287,6 +2292,8 @@ def _transaction_row_to_ui(
     row: sqlite3.Row,
     metadata_tags: list[str],
     pair_meta: dict[str, Any] | None = None,
+    *,
+    focused_leg: bool = False,
 ) -> dict[str, Any]:
     fee_msat = int(row["fee"] or 0)
     rate = _positive_float_or_none(row["fiat_rate"])
@@ -2325,6 +2332,17 @@ def _transaction_row_to_ui(
         note = row["note"] or ""
         excluded = bool(row["excluded"])
         include_empty_tags = False
+        if focused_leg:
+            # Detail resolves one source record. The list/chart's net pair
+            # presentation must not replace that wallet's principal with fees.
+            sign = 1 if row["direction"] == "inbound" else -1
+            amount_msat = sign * int(row["amount"] or 0)
+            fee_sat = _ui_sat_amount(fee_msat)
+            rate = _positive_float_or_none(row["fiat_rate"])
+            raw_fiat = _positive_float_or_none(row["fiat_value"])
+            fiat_value = sign * abs(raw_fiat) if raw_fiat is not None else None
+            account = row["wallet"]
+            counter = f"{pair_meta['label']} {pair_meta['out_asset']} -> {pair_meta['in_asset']}"
     else:
         sign = 1 if row["direction"] == "inbound" else -1
         amount_msat = sign * int(row["amount"] or 0)
@@ -4813,7 +4831,9 @@ def build_transactions_resolve_snapshot(
             + order_limit_sql,
             (context["profile_id"], *external_id_candidates),
         ).fetchone()
-    transaction = _transaction_rows_to_ui(conn, [row])[0] if row else None
+    transaction = _transaction_rows_to_ui(
+        conn, [row], focused_leg=str(row["id"]).lower() == query.lower(),
+    )[0] if row else None
     return {"transaction": transaction, "query": query}
 
 
@@ -7861,6 +7881,8 @@ def build_next_actions_snapshot(
 def _transaction_rows_to_ui(
     conn: sqlite3.Connection,
     rows: list[sqlite3.Row],
+    *,
+    focused_leg: bool = False,
 ) -> list[dict[str, Any]]:
     pair_meta_by_transaction = _transaction_pair_display_meta(conn, rows)
     tags_by_transaction = _transaction_tags_by_transaction(
@@ -7880,7 +7902,7 @@ def _transaction_rows_to_ui(
             if pair_id in rendered_pair_ids:
                 continue
             rendered_pair_ids.add(pair_id)
-        output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta))
+        output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta, focused_leg=focused_leg))
     return output
 
 

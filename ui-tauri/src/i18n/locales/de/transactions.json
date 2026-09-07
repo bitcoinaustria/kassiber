@@ -782,6 +782,8 @@
       "externalRecipient": "Externer Empfänger",
       "fee": "Gebühr",
       "incomingPayment": "Eingehende Zahlung",
+      "incomingPaymentCandidate": "Möglicher Eingang · gleicher Betrag",
+      "ownedReturn": "Rückfluss zur Quellwallet",
       "input": "Input",
       "leg": "Strang",
       "opReturn": "OP_RETURN / keine Adresse",
@@ -1176,8 +1178,6 @@
     "wallet": "On-chain-Wallet",
     "chainRecord": "Blockchain-Transaktion unten",
     "fee": "Gebühr laut Börsenbuchung",
-    "openRecord": "Börsenbuchung öffnen",
-    "reference": "Börsenreferenz",
-    "recordedAt": "Gebucht am"
+    "reference": "Börsenreferenz"
   }
 }

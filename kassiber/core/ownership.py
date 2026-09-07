@@ -39,7 +39,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from ..errors import AppError
 from ..wallet_descriptors import derive_descriptor_targets, normalize_chain, normalize_network
 from .address_scripts import address_to_scriptpubkey
-from .onchain import parse_identification_legs
+from .onchain import normalized_script_hex, parse_identification_legs
 from .ownership_policy_epochs import retired_policy_materials
 from .wallets import (
     OWNERSHIP_SCAN_TO_INDEX_CONFIG_KEY,
@@ -763,7 +763,7 @@ def _seed_from_inventory(
     address index per wallet/branch for ceiling computation."""
     highest: dict[str, dict[str, int]] = {}
     rows = conn.execute(
-        "SELECT wallet_id, txid, vout, address, branch_label, branch_index, "
+        "SELECT wallet_id, txid, vout, address, script_pubkey, branch_label, branch_index, "
         "address_index, chain, network FROM wallet_utxos WHERE profile_id = ?",
         (profile_id,),
     ).fetchall()
@@ -793,7 +793,11 @@ def _seed_from_inventory(
             wallet_kind=str(wallet_summary.get("kind") or ""),
         )
         index.add_address(row["address"], match)
-        index.add_script(_script_hex_for_address(row["address"]) if row["address"] else None, match)
+        # Native watch-only inventory may retain a locking script without a
+        # displayable address. Keep that evidence; arbitrary transaction graph
+        # metadata does not enter this ownership seed.
+        script = (_script_hex_for_address(row["address"]) if row["address"] else None) or normalized_script_hex(row["script_pubkey"])
+        index.add_script(script, match)
         index.add_outpoint(row["txid"], row["vout"], match)
         index.note_txid(
             row["txid"],

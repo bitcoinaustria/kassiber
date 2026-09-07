@@ -30,11 +30,22 @@ must agree on chain, network, transaction identity and known physical facts;
 conflicting or over-limit sources leave the original graph unchanged. Reusing
 these references never grants wallet ownership or journal custody authority.
 
+Ownership in transaction diagrams requires locally matched scripts or exact
+outpoints within the same chain and network. An unmatched leg stays unknown;
+an amount match is only a possible receipt. A return to an input-owning wallet
+is distinct from change, which also requires explicit change-branch evidence
+and an ordinary spend without a known collaborative boundary. These annotations
+do not change accounting.
+
+An exact transaction-row detail shows that wallet leg's principal and fee.
+The table and chart keep their net transfer projection; they are not substituted
+for the source record when following a row link.
+
 Known same-asset transfers between an exchange account and an on-chain wallet
 show an exchange withdrawal/deposit summary with named custody endpoints.
-The default diagram follows the on-chain wallet leg; the exchange reference
-and booking date remain available in a local disclosure. Exchange-reported
-fees stay separate from miner fees. Ambiguous importer kinds retain the generic
+The default diagram follows the on-chain wallet leg. A distinct exchange reference
+appears inline; duplicate blockchain references and booking timestamps are omitted.
+Exchange-reported fees stay separate from miner fees. Ambiguous importer kinds retain the generic
 transfer view, and swaps keep their route selector.
 
 An exchange trade without blockchain input/output data remains an accounting

@@ -19,8 +19,8 @@ it("distinguishes account withdrawal from a chain-to-chain transfer", () => {
   const html = renderToStaticMarkup(<TransactionGraphPanel graph={{
     transaction: { id: "wallet-row" }, supportLevel: "graphless", inputs: [], outputs: [], swapRoute: route,
   }} hideSensitive={false} onOpenTransaction={() => {}} />);
-  for (const label of ["Exchange withdrawal", "Exchange account", "On-chain wallet", "Strike savings", "Exchange self custody", "Reported exchange fee", "View exchange record", "Exchange reference", "withdrawal-reference", "2025-11-09T17:48:17Z"]) expect(html).toContain(label);
-  expect(html).toContain("<details");
+  for (const label of ["Exchange withdrawal", "Exchange account", "On-chain wallet", "Strike savings", "Exchange self custody", "Reported exchange fee", "Exchange reference", "withdrawal-reference"]) expect(html).toContain(label);
+  expect(html).not.toContain("<details");
   expect(html).not.toContain("swap-route-strip");
   expect(html).not.toContain("Carrying value");
 });
@@ -53,4 +53,13 @@ it("masks wallet names, transaction identity, quantities and fees", () => {
   const html = renderToStaticMarkup(<ExchangeTransferSummary route={route} hideSensitive />);
   expect(html).toContain("Hidden");
   for (const secret of ["Strike savings", "Exchange self custody", "aaaa", "0.006", "0.0001", "withdrawal-reference", "2025-11-09"]) expect(html).not.toContain(secret);
+});
+
+it("omits duplicate blockchain references and an empty exchange disclosure", () => {
+  const html = renderToStaticMarkup(<ExchangeTransferSummary route={{ ...route,
+    out: { ...route.out, externalId: "a".repeat(64) },
+  }} hideSensitive={false} />);
+  expect(html).not.toContain("Exchange reference");
+  expect(html).not.toContain("<details");
+  expect(html).not.toContain("Recorded at");
 });

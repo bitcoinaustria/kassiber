@@ -116,6 +116,8 @@ function roleLabel(role: string | undefined, t: TFunction<"transactions">) {
     change: t("graph.roles.change"),
     external_recipient: t("graph.roles.externalRecipient"),
     incoming_payment: t("graph.roles.incomingPayment"),
+    incoming_payment_candidate: t("graph.roles.incomingPaymentCandidate"),
+    owned_return: t("graph.roles.ownedReturn"),
     owned_destination: t("graph.roles.ownedDestination"),
     op_return: t("graph.roles.opReturn"),
     coinbase: t("graph.roles.coinbase"),
@@ -169,6 +171,7 @@ function conciseScriptType(scriptType: string | undefined) {
   if (!scriptType) return "";
   const normalized = scriptType.replace(/[_-]/g, " ").replace(/\s+/g, " ").trim();
   const lower = normalized.toLowerCase();
+  if (lower === "unknown") return "";
   if (lower.includes("taproot")) return "taproot";
   if (lower.includes("witness v0") && lower.includes("keyhash")) return "segwit v0";
   if (lower.includes("witness v0") && lower.includes("scripthash")) return "segwit script";

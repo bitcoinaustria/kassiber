@@ -31,6 +31,8 @@ from ..time_utils import now_iso
 from ..wallet_descriptors import default_policy_asset_id, liquid_asset_code
 from . import custody_journal
 from . import ownership as core_ownership
+from .chain_analysis.ownership import branch_evidence
+from .privacy_hygiene import collaborative_transaction_evidence
 from .transaction_references import load_local_transaction_reference, reference_scope
 from .ownership_transfers import (
     _norm_chain_network,
@@ -142,7 +144,7 @@ def build_transaction_graph_snapshot(
             enriched_raw,
         ),
     )
-    _annotate_graph(graph, row, owned_index, semantics)
+    _annotate_graph(graph, row, owned_index, semantics, raw=enriched_raw)
     _annotate_local_spends(row, graph, bundle.outpoint_spends)
     _annotate_block_heights(conn, profile_id, row, graph)
     warnings = list(graph.pop("_warnings", []))
@@ -2295,6 +2297,8 @@ def _annotate_graph(
     row: Mapping[str, Any],
     owned_index: Any | None,
     semantics: Mapping[str, Any],
+    *,
+    raw: Mapping[str, Any],
 ) -> None:
     if owned_index is None:
         return
@@ -2302,10 +2306,8 @@ def _annotate_graph(
     row_chain_network = _norm_chain_network(*_row_chain_network(row))
     input_owner_ids: set[str] = set()
     for node in graph["inputs"]:
-        matches = _filter_matches_to_chain_network(
-            _input_matches(node, owned_index), row_chain_network
-        )
-        _apply_match_annotation(node, matches, "owned_input", "external_input")
+        matches = _node_matches(node, owned_index, row_chain_network)
+        _apply_match_annotation(node, matches, "owned_input")
         input_owner_ids.update(str(match.wallet_id) for match in matches)
         if node.get("_coinbase"):
             # Newly issued supply: there is no previous owner, so "external
@@ -2322,11 +2324,18 @@ def _annotate_graph(
                 _node_annotation("peg_in", "Peg-in from Bitcoin")
             )
 
-    contributor_ids = (
-        input_owner_ids
-        if input_owner_ids or not _row_is_outbound(row)
-        else {source_wallet_id}
+    # Reference enrichment replaces the public graph shape and deliberately
+    # drops private metadata. Preserve a marker from the original observation.
+    collaboration = (
+        collaborative_transaction_evidence(dict(row), _json_obj(_row_get(row, "raw_json")))
+        or collaborative_transaction_evidence(dict(row), raw)
     )
+    # A transaction-wide wallet association is not input ownership. An exact
+    # owned return is still not economic change without ordinary spend context
+    # and explicit wallet branch evidence.
+    ordinary_owned_spend = bool(graph["inputs"]) and collaboration is None and all(
+        node.get("ownership") == "owned" for node in graph["inputs"]
+    ) and len(input_owner_ids) == 1
     inferred_incoming_payment_ids = _inferred_incoming_payment_output_ids(
         row, graph["outputs"]
     )
@@ -2346,37 +2355,38 @@ def _annotate_graph(
             node["role"] = "op_return"
             node["annotations"].append(_node_annotation("op_return", "OP_RETURN / non-address output"))
             continue
-        matches = _filter_matches_to_chain_network(
-            owned_index.lookup_script(script), row_chain_network
-        )
+        matches = _node_matches(node, owned_index, row_chain_network)
         owner_ids = {str(match.wallet_id) for match in matches}
         if not matches:
             if node.get("id") in inferred_incoming_payment_ids:
-                node["ownership"] = "owned"
-                node["role"] = "incoming_payment"
-                node["annotations"].append(
-                    _node_annotation(
-                        "incoming_payment", "Incoming payment to this wallet"
-                    )
-                )
+                node["ownership"] = "unknown"
+                node["role"] = "incoming_payment_candidate"
                 node["annotations"].append(
                     _node_annotation(
                         "recorded_incoming_amount",
-                        "Matches imported incoming amount",
+                        "Matches imported incoming amount; output ownership is unverified",
                     )
                 )
                 continue
-            node["ownership"] = "external"
-            node["role"] = "external_recipient"
-            node["annotations"].append(_node_annotation("external_recipient", "External recipient"))
+            # A bounded local ownership index cannot establish that an output
+            # belongs to someone else, nor whether it is payment or change.
+            node["ownership"] = "unknown"
+            node["role"] = "output"
             continue
-        _apply_match_annotation(node, matches, "owned_output", "external_recipient")
+        _apply_match_annotation(node, matches, "owned_output")
         if len(owner_ids) > 1:
             node["role"] = "ambiguous_owned_output"
             node["annotations"].append(_node_annotation("ambiguous_owned_output", "Owned by multiple wallets"))
-        elif owner_ids & contributor_ids:
-            node["role"] = "change"
-            node["annotations"].append(_node_annotation("change", "Change back to an owned source wallet"))
+        elif owner_ids & input_owner_ids:
+            branches = [branch_evidence(match.branch_label, None) for match in matches]
+            known_change = ordinary_owned_spend and all(
+                branch["branch_role"] == "change" and branch["branch_evidence_level"] == "exact"
+                for branch in branches
+            )
+            node["role"] = "change" if known_change else "owned_return"
+            node["annotations"].append(_node_annotation(
+                node["role"], "Change to an observed wallet change branch" if known_change else "Output to a wallet that owns an observed input",
+            ))
         elif _row_is_inbound(row) and source_wallet_id in owner_ids:
             node["role"] = "incoming_payment"
             node["annotations"].append(_node_annotation("incoming_payment", "Incoming payment to this wallet"))
@@ -2489,13 +2499,14 @@ def _inferred_incoming_payment_output_ids(
     return {candidates[0]}
 
 
-def _input_matches(node: Mapping[str, Any], owned_index: Any) -> list[Any]:
+def _node_matches(node: Mapping[str, Any], owned_index: Any, chain_network: tuple[str, str]) -> list[Any]:
+    """Resolve exact output identity first, within the same physical domain."""
     outpoint = node.get("outpoint")
     if outpoint:
-        matches = _lookup_outpoint(owned_index, outpoint)
+        matches = _filter_matches_to_chain_network(_lookup_outpoint(owned_index, outpoint), chain_network)
         if matches:
             return matches
-    return owned_index.lookup_script(node.get("_script"))
+    return _filter_matches_to_chain_network(owned_index.lookup_script(node.get("_script")), chain_network)
 
 
 def _lookup_outpoint(owned_index: Any, outpoint: Any) -> list[Any]:
@@ -2518,11 +2529,6 @@ def _filter_matches_to_chain_network(
     ]
 
 
-def _row_is_outbound(row: Mapping[str, Any]) -> bool:
-    direction = str(_row_get(row, "direction") or "").lower()
-    return direction in {"outbound", "send", "sent", "withdrawal", "sell"}
-
-
 def _row_is_inbound(row: Mapping[str, Any]) -> bool:
     direction = str(_row_get(row, "direction") or "").lower()
     return direction in {"inbound", "receive", "received", "deposit", "income", "buy"}
@@ -2532,10 +2538,9 @@ def _apply_match_annotation(
     node: dict[str, Any],
     matches: Sequence[Any],
     owned_code: str,
-    fallback_code: str,
 ) -> None:
     if not matches:
-        node["ownership"] = "external" if fallback_code.startswith("external") else "unknown"
+        node["ownership"] = "unknown"
         return
     wallets = sorted({str(match.wallet_label) for match in matches})
     wallet_ids = sorted({str(match.wallet_id) for match in matches})
@@ -3091,7 +3096,7 @@ def _script_type(source: Mapping[str, Any], script: Any) -> str:
         return explicit
     script_text = str(script or "").lower()
     if not script_text:
-        return "empty"
+        return "empty" if output_script(source) == "" else "unknown"
     if script_text.startswith("6a"):
         return "op_return"
     if script_text.startswith("0014"):
@@ -3105,7 +3110,7 @@ def _script_type(source: Mapping[str, Any], script: Any) -> str:
 
 def _is_unspendable(script: Any) -> bool:
     text = str(script or "").strip().lower()
-    return not text or text.startswith("6a")
+    return text.startswith("6a")
 
 
 def _txid_from_row(row: Mapping[str, Any]) -> str | None:

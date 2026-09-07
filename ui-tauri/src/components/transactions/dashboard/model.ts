@@ -1726,6 +1726,18 @@ function matchesTransactionDeepLink(txn: Transaction, transactionId: string) {
     .some((value) => value?.toLowerCase() === target);
 }
 
+export function resolveTransactionDeepLink(
+  records: Transaction[], targetId: string, focusedRecord?: Transaction | null,
+): Transaction | undefined {
+  const target = targetId.trim().toLowerCase();
+  // A chain txid may belong to several wallet legs. It is an alias, never the
+  // identity of the record being inspected or edited.
+  if (focusedRecord?.id.toLowerCase() === target) return focusedRecord;
+  return records.find(record => record.id.toLowerCase() === target)
+    ?? (focusedRecord && matchesTransactionDeepLink(focusedRecord, target) ? focusedRecord : undefined)
+    ?? records.find(record => matchesTransactionDeepLink(record, target));
+}
+
 function flowChartSelectionLabel(
   selection: FlowChartSelection,
   t: Translator,

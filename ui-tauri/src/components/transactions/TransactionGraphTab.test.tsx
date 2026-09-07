@@ -1558,3 +1558,24 @@ it("keeps graph warnings beside a graphless trade receipt", () => {
   expect(html).toContain("Review pending");
   expect(html).not.toContain("No graph for this source");
 });
+
+
+it("keeps amount candidates and source-wallet returns distinct from proved ownership and change", () => {
+  const uncertain: TransactionGraphPayload = {
+    transaction: { id: "uncertain-transfer" }, supportLevel: "partial",
+    inputs: [{ id: "input", role: "input", ownership: "unknown", valueState: "missing" }],
+    outputs: [
+      { id: "candidate", role: "incoming_payment_candidate", ownership: "unknown", valueSats: 600000, valueBtc: 0.006 },
+      { id: "return", role: "owned_return", ownership: "owned", wallet: "Savings", valueSats: 100000, valueBtc: 0.001 },
+      { id: "other", role: "output", ownership: "unknown", valueSats: 400000, valueBtc: 0.004 },
+    ],
+  };
+  const html = renderToStaticMarkup(<TooltipProvider>
+    <TransactionInputsOutputsPanel graph={uncertain} hideSensitive={false} />
+  </TooltipProvider>);
+  expect(html).toContain("Possible receipt · amount match");
+  expect(html).toContain("Return to source wallet");
+  expect(html.match(/Ownership unknown/g)).toHaveLength(3);
+  expect(html).not.toContain("External recipient");
+  expect(html).not.toContain("Internal change output");
+});

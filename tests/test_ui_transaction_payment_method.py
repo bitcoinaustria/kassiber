@@ -14,6 +14,8 @@ class TransactionPaymentMethodTests(unittest.TestCase):
             ("21bitcoin", "Savings", "Exchange"),
             ("pocketbitcoin", "Savings", "Exchange"),
             ("lnd", "Exchange account", "Lightning"),
+            ("address", "Exchange self custody", "On-chain"),
+            ("descriptor", "Lightning and Liquid savings", "On-chain"),
         ):
             with self.subTest(kind=kind, label=label):
                 book = fixtures.TransactionGraphTest()

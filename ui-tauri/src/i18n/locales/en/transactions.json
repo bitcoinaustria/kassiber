@@ -763,6 +763,8 @@
       "externalRecipient": "External recipient",
       "fee": "Fee",
       "incomingPayment": "Incoming payment",
+      "incomingPaymentCandidate": "Possible receipt · amount match",
+      "ownedReturn": "Return to source wallet",
       "input": "Input",
       "leg": "Leg",
       "opReturn": "OP_RETURN / non-address",
@@ -1176,8 +1178,6 @@
     "wallet": "On-chain wallet",
     "chainRecord": "Blockchain transaction below",
     "fee": "Reported exchange fee",
-    "openRecord": "View exchange record",
-    "reference": "Exchange reference",
-    "recordedAt": "Recorded at"
+    "reference": "Exchange reference"
   }
 }
