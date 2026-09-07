@@ -23,7 +23,7 @@ def book():
     conn.execute("INSERT INTO backends(name,kind,chain,network,url,created_at,updated_at) VALUES('core','bitcoinrpc','bitcoin','regtest','http://127.0.0.1:18443',?,?)", (NOW, NOW))
     conn.execute("UPDATE backends SET config_json=?", (json.dumps({"username": "synthetic", "password": "synthetic"}),))
     conn.commit()
-    with patch.object(backfill, "_domain", return_value={"domain_id": "lab-a", "environment_id": "lab", "revision": 1}), patch.object(backfill, "_require_protected_book"):
+    with patch.object(backfill, "_domain", return_value={"domain_id": "lab-a", "environment_id": "lab", "revision": 1}), patch.object(backfill, "_require_protected_book"), patch.dict(backfill.acquisition.GENESIS, {("bitcoin", "regtest"): block()[0]}):
         # Domain and keyed-book boundaries get end-to-end coverage after their prerequisite PRs.
         yield conn
     fixture.tearDown()

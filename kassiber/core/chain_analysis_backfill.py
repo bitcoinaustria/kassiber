@@ -270,10 +270,16 @@ def _blocks(conn, profile_id, row, reader, validate):
     start = spec["start_height"] if cursor is None else cursor + 1
     end = min(tip, spec.get("end_height", tip), start + spec["blocks_per_run"] - 1)
     parent = row["cursor_hash"]
+    if parent is None and start > 0 and start <= end:
+        parent = reader.rpc("getblockhash", [start - 1])
+        if not acquisition._txid(parent):
+            invalid("Invalid range predecessor", "invalid_observation")
     for height in range(start, end + 1):
         block_hash = reader.rpc("getblockhash", [height])
         if not acquisition._txid(block_hash):
             invalid("Invalid block identity", "invalid_observation")
+        if height == 0 and block_hash != acquisition.GENESIS[("bitcoin", spec["network"])]:
+            invalid("Genesis changed during block acquisition", "backend_network_mismatch")
         previous, transactions = _clean_block(reader.rpc("getblock", [block_hash, 0]), block_hash)
         if parent is not None and previous != parent or reader.rpc("getblockhash", [height]) != block_hash:
             invalid("Chain changed during block acquisition", "chain_analysis_stale")
