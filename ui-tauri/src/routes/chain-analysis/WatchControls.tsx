@@ -68,7 +68,7 @@ export function WatchAction({ query, caseId, output = false, onError }: {
     <Button size="sm" variant="ghost" onClick={() => { setOpen(!open); setPlan(null); }}>{t("watch.action")}</Button>
     {open && <div className="my-2 flex flex-wrap items-center gap-2 rounded border p-3">
       <p className="basis-full text-muted-foreground">{t("watch.localOnly")}</p>
-      {!bound && <p className="basis-full">{binding.isFetching ? t("scopeLoading") : binding.isError ? binding.error.message : <Link to="/settings" className="underline">{t("watch.bindBook")}</Link>}</p>}
+      {!bound && <p className="basis-full">{binding.isFetching ? t("scopeLoading") : binding.isError ? binding.error.message : <Link to="/settings/bitcoin" className="underline">{t("watch.bindBook")}</Link>}</p>}
       {bound && <p className="basis-full text-muted-foreground">{scopedQuery?.chain ? `${scopedQuery.chain} / ${scopedQuery.network}` : t("watch.bookScope", { environment: binding.data?.data?.environment })}</p>}
       <select className="ca-input" aria-label={t("watch.rule")} value={rule} disabled={busy} onChange={event => { setRule(event.target.value as Rule); setPlan(null); setSaved(false); }}>
         {options.map(value => <option value={value} key={value}>{t(`watch.rules.${value}`)}</option>)}

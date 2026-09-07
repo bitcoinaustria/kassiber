@@ -15,9 +15,10 @@ vi.mock("react", async (original) => ({ ...await original<typeof import("react")
             mock.states[index] = initial;
         return [mock.states[index], (value: unknown) => { mock.states[index] = value; }];
     } }));
-vi.mock("@tanstack/react-router", () => ({ Link: ({ children }: {
+vi.mock("@tanstack/react-router", () => ({ Link: ({ children, to }: {
         children: ReactNode;
-    }) => <span>{children}</span> }));
+        to: string;
+    }) => <a href={to}>{children}</a> }));
 vi.mock("@/components/ui/button", () => ({ Button: (props: typeof mock.buttons[number]) => { mock.buttons.push(props); return <button disabled={props.disabled}>{props.children}</button>; } }));
 vi.mock("@/daemon/client", async (original) => ({ ...await original<typeof import("@/daemon/client")>(),
     useDaemonMutation: (kind: string) => ({ isPending: false, mutateAsync: (args: unknown) => mock.mutate(kind, args) }),
@@ -65,6 +66,7 @@ describe("local watch controls", () => {
         mock.data["ui.networks.binding"] = { state: "unbound", domains: [] };
         const element = <WatchAction output query={query} onError={error}/>;
         render(element); await click("Watch");
+        expect(render(element)).toContain('href="/settings/bitcoin"');
         expect(render(element)).toContain("Set this book’s network");
         expect(mock.buttons.find(button => button.children === "Preview")?.disabled).toBe(true);
         expect(mock.mutate).not.toHaveBeenCalled();
