@@ -13,6 +13,58 @@ class NetworkPartitionTests(unittest.TestCase):
         self.book._tx("regtest", "wallet-b", "inbound", 1000000, "b" * 64, {"network": "regtest"})
         self.args = {"environment": "main", "wallet_ids": ["wallet-a"], "declared_wallet_ids": ["wallet-a"]}
 
+    def _configure_accounting(self, profile_id="profile-1"):
+        self.conn.execute(
+            """INSERT INTO gl_books(profile_id,currency,minor_unit_exponent,timezone,
+               entity_kind,accounting_regime,created_at) VALUES(?, 'EUR', 2,
+               'Europe/Vienna', 'organization', 'accrual', ?)""",
+            (profile_id, fixtures.NOW),
+        )
+
+    def test_accounting_book_blocks_partition_before_creating_files(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from kassiber.core.book_network_migration import plan_network_partition, export_network_partition
+        from kassiber.errors import AppError
+
+        self._configure_accounting()
+        before = self.conn.total_changes
+        plan = plan_network_partition(self.conn, "profile-1", self.args)
+        self.assertFalse(plan["can_apply"])
+        self.assertIn({"code": "accounting_partition_unsupported"}, plan["blockers"])
+        with TemporaryDirectory() as folder:
+            with self.assertRaises(AppError) as raised:
+                export_network_partition(self.conn, "profile-1", {**self.args, "plan_id": plan["plan_id"]},
+                    data_root=folder, output_path=Path(folder) / "partition.kassiber",
+                    backup_passphrase="partition-test-password")
+            self.assertEqual(raised.exception.code, "book_network_review_required")
+            self.assertIn({"code": "accounting_partition_unsupported"}, raised.exception.details["blockers"])
+            self.assertEqual(list(Path(folder).iterdir()), [])
+        self.assertEqual(self.conn.total_changes, before)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM gl_books").fetchone()[0], 1)
+
+    def test_accounting_configuration_invalidates_existing_partition_plan(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from kassiber.core.book_network_migration import plan_network_partition, export_network_partition
+        from kassiber.errors import AppError
+
+        plan = plan_network_partition(self.conn, "profile-1", self.args)
+        self._configure_accounting()
+        with TemporaryDirectory() as folder, self.assertRaises(AppError) as raised:
+            export_network_partition(self.conn, "profile-1", {**self.args, "plan_id": plan["plan_id"]},
+                data_root=folder, output_path=Path(folder) / "partition.kassiber",
+                backup_passphrase="partition-test-password")
+        self.assertEqual(raised.exception.code, "stale_context")
+
+    def test_accounting_in_another_profile_does_not_block_partition(self):
+        from kassiber.core.book_network_migration import plan_network_partition
+
+        self.conn.execute("INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('other','ws-1','Other',?)", (fixtures.NOW,))
+        self._configure_accounting("other")
+        plan = plan_network_partition(self.conn, "profile-1", self.args)
+        self.assertTrue(plan["can_apply"], plan["blockers"])
+
     def test_partition_preserves_ids_and_excludes_other_wallets_and_private_backends(self):
         import io
         import sqlite3

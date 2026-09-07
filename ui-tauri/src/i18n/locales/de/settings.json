@@ -794,7 +794,8 @@
         "relation_crosses_partition": "Eine geprüfte Beziehung reicht über die Auswahl hinaus. Ihre gesamte Historie einbeziehen.",
         "incompatible_wallet_history": "Diese Connection enthält unvereinbare Historie.",
         "unresolved_relation": "Ein erforderlicher verknüpfter Datensatz kann nicht sicher kopiert werden.",
-        "scope_declaration_required": "Umgebung dieser Connection oben bestätigen."
+        "scope_declaration_required": "Umgebung dieser Connection oben bestätigen.",
+        "accounting_partition_unsupported": "Für dieses Buch ist die allgemeine Buchhaltung aktiviert. Es kann nicht nach Connections aufgeteilt werden. Ein vollständiges Projekt-Backup bewahrt das Hauptbuch und seine Belege."
       },
       "passphrase": "Backup-Passphrase (mindestens 12 Zeichen)",
       "confirmPassphrase": "Passphrase bestätigen"

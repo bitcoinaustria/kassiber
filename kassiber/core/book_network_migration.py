@@ -109,7 +109,10 @@ def _partition_snapshot(conn, profile_id, args):
     for index, (table, _, row) in enumerate(entries):
         if table == "wallets":
             component_wallets.setdefault(root(index), set()).add(row["id"])
-    blockers = []
+    # Every retained accounting workflow requires this immutable enrollment.
+    # Its ledger/evidence cannot be split by wallet without losing commitments.
+    accounting_configured = conn.execute("SELECT 1 FROM gl_books WHERE profile_id=?", (profile_id,)).fetchone() is not None
+    blockers = [{"code": "accounting_partition_unsupported"}] if accounting_configured else []
     for wallets in component_wallets.values():
         if wallets & selected and wallets - selected:
             blockers.append({"code": "relation_crosses_partition", "wallet_ids": sorted(wallets)})
@@ -138,7 +141,7 @@ def _partition_snapshot(conn, profile_id, args):
             for fk in fks:
                 if fk["to"] == "id" and row.get(fk["from"]) and str(row[fk["from"]]) not in kept_ids.get(fk["table"], set()):
                     blockers.append({"code": "unresolved_relation", "table": table, "field": fk["from"]})
-    recipe = {"profile_id": profile_id, "environment": environment, "chain_instance_id": instance, "wallet_ids": sorted(selected), "declared_wallet_ids": sorted(declared), "inventory_digest": inventory["inventory_digest"], "authored_digest": _digest(tables)}
+    recipe = {"profile_id": profile_id, "environment": environment, "chain_instance_id": instance, "wallet_ids": sorted(selected), "declared_wallet_ids": sorted(declared), "inventory_digest": inventory["inventory_digest"], "authored_digest": _digest(tables), "accounting_configured": accounting_configured}
     plan = {**recipe, "plan_id": _digest(recipe), "can_apply": not blockers, "blockers": blockers, "counts": {table: len(rows) for table, rows in kept.items() if rows}, "historical_reports_remain_in_original": True, "requires_source_reconnection": True}
     return plan, kept
 
