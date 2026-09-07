@@ -20,6 +20,7 @@ from kassiber.core.chain_analysis import build_index, run_analysis, run_entropy
 from kassiber.core.chain_analysis.psbt import analyze_psbt, compare_psbts
 from kassiber.core.chain_analysis_acquisition import apply_acquisition, plan_acquisition
 from kassiber.core.chain_analysis_cases import compare_case, get_case, save_case
+from kassiber.core.book_network import apply_book_network, plan_book_network
 from kassiber.core.privacy_mirror import build_privacy_mirror
 from kassiber.db import open_db
 from tests.integration.env import skip_unless_integration
@@ -70,6 +71,11 @@ class LiveChainAnalysisTest(unittest.TestCase):
         self.conn.execute("INSERT INTO workspaces VALUES('ws','Live investigation',?)", (now,))
         self.conn.execute("INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('p','ws','Regtest',?)", (now,))
         self.conn.execute("INSERT INTO backends(name,kind,chain,network,url,config_json,created_at,updated_at) VALUES('node','bitcoinrpc','bitcoin','regtest',?,?,?,?)", (self.url, json.dumps({"username": self.username, "password": self.password}), now, now))
+        self.conn.commit()
+        self.chain_instance = str(uuid.uuid4())
+        binding = {"environment": "regtest", "chain_instance_id": self.chain_instance}
+        reviewed = plan_book_network(self.conn, "p", binding)
+        apply_book_network(self.conn, "p", {**binding, "plan_id": reviewed["plan_id"]})
         self.conn.commit()
 
     def rpc(self, method, params=None, wallet=None):
