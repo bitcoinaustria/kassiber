@@ -46,6 +46,12 @@ class IncrementalProjectionTests(unittest.TestCase):
         self.conn.execute("DELETE FROM transactions WHERE id='1'")
         self.parity()
 
+    def test_network_alias_without_chain_preserves_liquid_seeds(self):
+        add_tx(self.conn, 1)
+        add_tx(self.conn, 2, chain="liquid", network="liquidv1")
+        query = {"network": "main", "observer": "public"}
+        self.assertEqual(semantic(run_analysis(self.conn, "p", query)), semantic(analyze_snapshot(build_index(self.conn, "p"), query)))
+
     def test_inventory_ownership_replacement_does_not_leave_private_or_public_aliases(self):
         add_tx(self.conn, 1)
         self.parity()
@@ -115,6 +121,24 @@ class IncrementalProjectionTests(unittest.TestCase):
             self.assertTrue(view.nodes)
         with self.assertRaisesRegex(RuntimeError, "outside its read snapshot"):
             len(view.nodes)
+
+    def test_late_reference_source_install_and_reconciliation_are_visible(self):
+        add_tx(self.conn, 1)
+        initial = index_revision(self.conn, "p")
+        self.conn.execute("CREATE TABLE chain_analysis_reference_assertions(grant_id TEXT,profile_id TEXT,domain_id TEXT,chain TEXT,network TEXT,occurrence_id TEXT,txid TEXT,payload_json TEXT,status_json TEXT,active INTEGER,observed_at TEXT,PRIMARY KEY(grant_id,occurrence_id))")
+        raw = {"txid": txid(2), "vin": [{"txid": txid(1), "vout": 0}], "vout": [{"value": 900, "scriptpubkey": "0014" + "22" * 20}]}
+        self.conn.execute("INSERT INTO chain_analysis_reference_assertions VALUES('grant','p','domain','bitcoin','main','occurrence',?,?,?,1,'2026-09-07T12:00:00Z')", (txid(2), json.dumps(raw), '{}'))
+        self.parity()
+        self.assertGreater(index_revision(self.conn, "p")["revision"], initial["revision"])
+        self.conn.execute("UPDATE chain_analysis_reference_assertions SET active=2")
+        self.parity()
+        result = run_analysis(self.conn, "p", {"observer": "public"})
+        self.assertEqual(result["coverage"]["reference_reconciling_count"], 1)
+        self.assertTrue(result["coverage"]["stale"])
+        self.assertFalse(result["coverage"]["complete"])
+        self.assertFalse(any(node.get("txid") == txid(2) for node in result["nodes"]))
+        self.conn.execute("UPDATE chain_analysis_reference_assertions SET active=1")
+        self.parity()
 
 
 class ProjectionDatasetTests(unittest.TestCase):

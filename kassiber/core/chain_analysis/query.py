@@ -69,9 +69,13 @@ def resolve_subject(index: AnalysisIndex, subject: str, query: Mapping[str, Any]
     domains = {(index.nodes[node_id]["chain"], index.nodes[node_id]["network"]) for node_id in candidates}
     # Wallets and authored relation records intentionally span rails. A bare
     # physical identifier must be disambiguated instead of bridging networks.
-    physical = len(subject.split(":")) <= 2 and (len(subject.split(":")[0]) == 64 or any(index.nodes[node_id].get("address") == subject for node_id in candidates))
+    transaction_key = bool(re.fullmatch(r"(?:tx:|out:)?[a-fA-F0-9]{64}(?::[0-9]+)?", subject))
+    physical = transaction_key or len(subject.split(":")) <= 2 and any(index.nodes[node_id].get("address") == subject for node_id in candidates)
     if physical and len(domains) > 1:
         raise AppError("Subject is observed in multiple chain/network domains", code="subject_ambiguous", details={"domains": [{"chain": chain, "network": network} for chain, network in sorted(domains)]}, retryable=False)
+    instances = {match.group(1) if (match := re.search(r":domain:([^:]+):", node_id)) else None for node_id in candidates}
+    if physical and (len(instances) > 1 or transaction_key and len(candidates) > 1):
+        raise AppError("Subject is observed in multiple chain instances or block occurrences", code="subject_ambiguous", details={"subjects": list(candidates)}, retryable=False)
     return candidates
 
 
@@ -265,7 +269,7 @@ def query_index(index: AnalysisIndex, args: Mapping[str, Any] | None) -> dict[st
     coverage["observer_knowledge"] = {"public": "public_chain_facts", "owner": "local_owner_evidence", "disclosed": "assumes_all_local_owner_evidence_disclosed"}[query["observer"]]
     frontier = sorted(traversal.frontier.values(), key=lambda item: (item["node_id"], item["reason"]))
     missing = any(node["status"] == "missing" for node in nodes) or any(item["reason"] in {"missing_observation", "incomplete_transaction", "unobserved_successor"} for item in frontier)
-    stale = any(node["status"] == "stale" for node in nodes) or any("stale" in item["reason"] for item in frontier)
+    stale = any(node["status"] == "stale" for node in nodes) or any("stale" in item["reason"] for item in frontier) or bool(coverage.get("reference_reconciling_count"))
     coverage.update(complete=not frontier and not missing and not stale and not coverage["missing_tables"] and not coverage["invalid_observations"], budget_exhausted=traversal.budget, missing=missing, stale=stale, frontier_omitted_count=traversal.frontier_omitted, pruning=[{"filter": key, "count": value} for key, value in sorted(traversal.filtered.items())], depth_unit="graph_edges", scope="locally_observed_subgraph", unobserved_successors="An output without a local spend observation is not proven unspent.", unknown_filter_values="Unknown amounts and times remain visible; filters prune known values only.", path_semantics="Connectivity only. No input-to-output allocation or common ownership is implied.", alternative_paths="Up to three distinct bounded alternatives; absence is not proof that no other path exists.")
     result = {"schema_version": 1, "snapshot_id": index.snapshot_id, "query": query, "summary": {"node_count": len(nodes), "edge_count": len(edges), "transaction_count": sum(node["kind"] == "transaction" for node in nodes), "output_count": sum(node["kind"] == "output" for node in nodes), "record_count": sum(node["kind"] == "record" for node in nodes), "path_count": len(paths), "visited_node_count": len(traversal.nodes), "inspected_edge_count": traversal.inspections}, "nodes": nodes, "edges": edges, "findings": findings, "clusters": [], "paths": paths, "frontier": frontier, "coverage": coverage, "capabilities": {"local_graph": True, "backward_forward_trace": True, "bounded_alternative_paths": True, "cross_rail_custody_relations": True, "network_acquisition": False, "taint_attribution": False, "global_chain_completeness": False}}
     return result

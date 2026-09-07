@@ -109,17 +109,17 @@ def _apply(builder, table, row):
         builder.reference(row, acquired=table != "transaction_graph_cache")
 
 
-def _contribute(conn, profile_id, table, key, row):
+def _contribute(conn, profile_id, table, key, row, occurrences):
     old = {value[0] for value in conn.execute("SELECT node_id FROM chain_index_source_nodes WHERE profile_id=? AND source_table=? AND source_key=?", (profile_id, table, key))}
     conn.execute("DELETE FROM chain_index_source_nodes WHERE profile_id=? AND source_table=? AND source_key=?", (profile_id, table, key))
     conn.execute("DELETE FROM chain_index_sources WHERE profile_id=? AND source_table=? AND source_key=?", (profile_id, table, key))
-    if row is None or table != "transaction_graph_cache" and row.get("profile_id") != profile_id or row.get("active") == 0:
+    if row is None or table != "transaction_graph_cache" and row.get("profile_id") != profile_id or table == "chain_analysis_reference_assertions" and row.get("active") != 1:
         return old
     if table == "transactions":
         wallet = conn.execute("SELECT * FROM wallets WHERE id=?", (row.get("wallet_id"),)).fetchone()
         wallet = dict(wallet) if wallet else {}
         row.update(wallet_kind=wallet.get("kind"), wallet_config_json=wallet.get("config_json"))
-    builder = _Builder(profile_id)
+    builder = _Builder(profile_id, occurrences=occurrences)
     _apply(builder, table, row)
     conn.execute("INSERT INTO chain_index_sources VALUES(?,?,?,?,?,?)", (profile_id, table, key, encoded(row), builder.coverage["invalid_observations"], builder.coverage["cache_rejected"]))
     conn.executemany("INSERT INTO chain_index_source_nodes VALUES(?,?,?,?)", ((profile_id, table, key, node) for node in builder.nodes))
@@ -161,7 +161,7 @@ def _relations(conn, builder, tables):
         builder.finding("custody_projection_stale", [], "Canonical custody relations require a current journal rebuild before they can be traversed.", severity="info")
 
 
-def _assemble(conn, profile_id, core, tables, full=False):
+def _assemble(conn, profile_id, core, tables, occurrences, full=False):
     if not full:
         # Changing an output changes value/completeness facts of its creator and
         # all spenders. This is one dependency step, not an entire component walk.
@@ -169,7 +169,7 @@ def _assemble(conn, profile_id, core, tables, full=False):
             if ":out:" in node:
                 core.update(row[0] for row in conn.execute("SELECT target FROM chain_index_edges WHERE profile_id=? AND source=?", (profile_id, node)))
     sources = _contributors(conn, profile_id, None if full else core)
-    builder = _Builder(profile_id)
+    builder = _Builder(profile_id, occurrences=occurrences)
     for (table, key), row in sorted(sources.items(), key=lambda value: (PHYSICAL.index(value[0][0]), value[0][1])):
         _apply(builder, table, row)
     if full:
@@ -186,7 +186,7 @@ def _assemble(conn, profile_id, core, tables, full=False):
     more = _contributors(conn, profile_id, core)
     if more.keys() - sources.keys():
         sources.update(more)
-        builder = _Builder(profile_id)
+        builder = _Builder(profile_id, occurrences=occurrences)
         for (table, key), row in sorted(sources.items(), key=lambda value: (PHYSICAL.index(value[0][0]), value[0][1])):
             _apply(builder, table, row)
         _relations(conn, builder, tables)
@@ -332,6 +332,23 @@ def synchronize(conn, profile_id, *, rebuild=False):
         # Configuration changes can affect every observation in the wallet;
         # retain source identity and re-normalize rather than relabel old nodes.
         dirty["transactions"].update(row[0] for row in conn.execute("SELECT rowid FROM transactions WHERE profile_id=?", (profile_id,)))
+    if "book_network_bindings" in dirty:
+        for table in PHYSICAL:
+            dirty[table].add(-1)
+    if "chain_analysis_reference_assertions" in dirty and not full:
+        # An occurrence appearing/disappearing can disambiguate an existing
+        # wallet row or prevout. Rebind just sources contributing that TXID.
+        keys = sorted(dirty["chain_analysis_reference_assertions"])
+        ids = {row.get("txid") for row in _rows(conn, "chain_analysis_reference_assertions", profile_id, None if -1 in keys else keys)}
+        for key in keys:
+            old = conn.execute("SELECT payload_json FROM chain_index_sources WHERE profile_id=? AND source_table='chain_analysis_reference_assertions' AND source_key=?", (profile_id, key)).fetchone()
+            if old:
+                ids.add(json.loads(old[0]).get("txid"))
+        for txid in ids:
+            for table, key in conn.execute("SELECT DISTINCT s.source_table,s.source_key FROM chain_index_aliases a JOIN chain_index_source_nodes s ON s.profile_id=a.profile_id AND s.node_id=a.node_id WHERE a.profile_id=? AND a.observer='owner' AND a.alias=?", (profile_id, txid)):
+                dirty[table].add(key)
+    from .occurrences import OccurrenceResolver
+    occurrences = OccurrenceResolver(conn, profile_id)
     core = set()
     if full:
         for table in ("chain_index_sources", "chain_index_source_nodes", "chain_index_nodes", "chain_index_edges", "chain_index_aliases", "chain_index_findings", "chain_index_finding_nodes"):
@@ -346,17 +363,17 @@ def synchronize(conn, profile_id, *, rebuild=False):
         rows = {row["_source_key"]: row for row in _rows(conn, table, profile_id, keys)}
         selected = set(rows) | {row[0] for row in conn.execute("SELECT source_key FROM chain_index_sources WHERE profile_id=? AND source_table=?", (profile_id, table))} if keys is None else keys
         for key in sorted(selected):
-            affected = _contribute(conn, profile_id, table, key, rows.get(key))
+            affected = _contribute(conn, profile_id, table, key, rows.get(key), occurrences)
             core.update(affected)
             changed |= bool(affected)
     if not changed:
         conn.execute("UPDATE chain_index_state SET watermark=? WHERE profile_id=?", (watermark, profile_id))
         state["watermark"] = watermark
         return state
-    index, core = _assemble(conn, profile_id, core, tables, full=full)
+    index, core = _assemble(conn, profile_id, core, tables, occurrences, full=full)
     _save(conn, profile_id, index, core)
     coverage = thaw(index.coverage)
-    coverage["source_rows"] = {table: conn.execute(f"SELECT count(*) FROM {table}" + (" WHERE profile_id=?" if table != "transaction_graph_cache" else ""), (profile_id,) if table != "transaction_graph_cache" else ()).fetchone()[0] for table in ("wallets", *PHYSICAL[:4], "chain_analysis_labels", "journal_custody_decisions", "journal_custody_economic_relations") if table in tables}
+    coverage["source_rows"] = {table: conn.execute(f"SELECT count(*) FROM {table}" + (" WHERE profile_id=?" if table != "transaction_graph_cache" else ""), (profile_id,) if table != "transaction_graph_cache" else ()).fetchone()[0] for table in ("wallets", *PHYSICAL, "chain_analysis_labels", "journal_custody_decisions", "journal_custody_economic_relations") if table in tables}
     coverage["missing_tables"] = [table for table in ("wallets", "transactions", "transaction_graph_cache", "wallet_utxos", "journal_custody_decisions", "journal_custody_economic_relations") if table not in tables]
     totals = conn.execute("SELECT coalesce(sum(invalid_count),0),coalesce(sum(rejected_count),0) FROM chain_index_sources WHERE profile_id=?", (profile_id,)).fetchone()
     coverage["invalid_observations"], coverage["cache_rejected"] = totals
@@ -364,6 +381,8 @@ def synchronize(conn, profile_id, *, rebuild=False):
     for key, value in zip(("node_count", "missing_node_count", "conflicting_node_count", "reference_node_count", "complete_transaction_count"), counts):
         coverage[key] = value or 0
     coverage["edge_count"] = conn.execute("SELECT count(*) FROM chain_index_edges WHERE profile_id=?", (profile_id,)).fetchone()[0]
+    if "chain_analysis_reference_assertions" in tables:
+        coverage["reference_reconciling_count"] = conn.execute("SELECT count(*) FROM chain_analysis_reference_assertions WHERE profile_id=? AND active=2", (profile_id,)).fetchone()[0]
     _labels(conn, profile_id, tables, coverage)
     revision = (state["revision"] if state else 0) + int(not rebuild or state is None or state["watermark"] != watermark or expired)
     identity = state["instance_id"] if state else uuid.uuid4().hex

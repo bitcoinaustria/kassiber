@@ -77,7 +77,7 @@ _FIELDS = set("""
     selected_node_count hypotheses_enabled hypothesis_count pattern_count label_count
     source_rows node_count edge_count transaction_count output_count record_count
     path_count visited_node_count inspected_edge_count invalid_observations
-    cache_rejected custody_fresh missing_node_count conflicting_node_count
+    cache_rejected custody_fresh missing_node_count conflicting_node_count reference_reconciling_count
     complete_transaction_count reference_node_count frontier_omitted_count
     pruning count analytics depth node_limit edge_limit include_relations
     include_hypotheses start end reversible accounting_authority taint_inference

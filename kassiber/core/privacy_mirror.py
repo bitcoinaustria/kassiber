@@ -212,6 +212,8 @@ def _coverage(public: AnalysisIndex, analysis: Mapping, entropy: Mapping, findin
         reasons.add("dataset_match_budget")
     if coverage.get("invalid_observations"):
         reasons.add("invalid_observations")
+    if coverage.get("reference_reconciling_count"):
+        reasons.add("reference_source_reconciling")
     if coverage.get("missing_tables"):
         reasons.add("missing_local_tables")
     for result in entropy["results"]:

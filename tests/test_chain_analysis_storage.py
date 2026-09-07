@@ -2,7 +2,7 @@ import base64
 import json
 import unittest
 
-from kassiber.core.chain_analysis import build_index
+from kassiber.core.chain_analysis.projection import index_revision
 from kassiber.core import chain_analysis_cases as cases
 from kassiber.errors import AppError
 from tests import test_privacy_hygiene as hygiene_fixture
@@ -22,7 +22,7 @@ class ChainAnalysisStorageTests(unittest.TestCase):
         self.book.tearDown()
 
     def save(self, title="Investigation"):
-        return cases.save_case(self.conn, "pf", {"title": title, "query": {}, "expected_snapshot_id": build_index(self.conn, "pf").snapshot_id})
+        return cases.save_case(self.conn, "pf", {"title": title, "query": {}, "expected_snapshot_id": index_revision(self.conn, "pf")["snapshot_id"]})
 
     def label(self, **kwargs):
         return {"subject": "a" * 64, "chain": "bitcoin", "network": "main", "label": "Counterparty", "category": "exchange", "source": "Reviewed statement", "confidence": "user_confirmed", **kwargs}
@@ -42,7 +42,7 @@ class ChainAnalysisStorageTests(unittest.TestCase):
         self.assertFalse(cases.compare_case(self.conn, "pf", {"id": saved["id"], "other_id": saved["id"]})["changed"])
 
     def test_stale_save_refuses_all_writes(self):
-        snapshot = build_index(self.conn, "pf").snapshot_id
+        snapshot = index_revision(self.conn, "pf")["snapshot_id"]
         cases.upsert_label(self.conn, "pf", self.label())
         with self.assertRaises(AppError) as caught:
             cases.save_case(self.conn, "pf", {"title": "Stale", "query": {}, "expected_snapshot_id": snapshot})

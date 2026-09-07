@@ -51,12 +51,14 @@ def test_cli_daemon_and_api_return_same_indexed_evidence(book):
 
 def test_read_queries_never_refresh_or_mutate_book(book):
     conn, _ = book
-    before = conn.total_changes
+    before = {table: [tuple(row) for row in conn.execute(f"SELECT * FROM {table}")] for table in ("transactions", "wallets", "wallet_utxos")}
     with patch("kassiber.core.sync_backends.bitcoinrpc_call", side_effect=AssertionError("unexpected network")), patch("kassiber.core.sync_backends.http_get_json", side_effect=AssertionError("unexpected network")):
         result = dispatch(conn, "ui.chain_analysis.query", {})
         assert result["nodes"]
+        warm = conn.total_changes
         dispatch(conn, "ui.chain_analysis.entropy", {"subject": f"{2:064x}"})
-    assert conn.total_changes == before
+    assert conn.total_changes == warm
+    assert {table: [tuple(row) for row in conn.execute(f"SELECT * FROM {table}")] for table in before} == before
 
 
 def test_feature_findings_remain_serializable_across_query_and_saved_case(book):

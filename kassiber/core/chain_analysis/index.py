@@ -10,6 +10,7 @@ from collections import defaultdict
 from dataclasses import dataclass, replace
 import hashlib
 import json
+import re
 import sqlite3
 from types import MappingProxyType
 from typing import Any, Mapping
@@ -195,8 +196,9 @@ def observer_index(index: AnalysisIndex, observer: str) -> AnalysisIndex:
 
 
 class _Builder:
-    def __init__(self, profile_id: str):
+    def __init__(self, profile_id: str, *, occurrences=None):
         self.profile_id = profile_id
+        self.occurrences = occurrences
         self.nodes: dict[str, dict] = {}
         self.edges: dict[str, dict] = {}
         self.subjects: dict[str, set[str]] = defaultdict(set)
@@ -260,10 +262,12 @@ class _Builder:
             edge["evidence"].append(ref)
         return edge
 
-    def output(self, chain: str, network: str, txid: str, vout: int, entry: Mapping[str, Any], ref: dict, rank: int) -> dict:
-        parent = self.node(tx_node_id(chain, network, txid), chain, network, "transaction", txid=txid)
+    def output(self, chain: str, network: str, txid: str, vout: int, entry: Mapping[str, Any], ref: dict, rank: int, *, source=None, occurrence=None, resolve=True) -> dict:
+        parent_id = self.occurrences.transaction_id(chain, network, txid, source, occurrence=occurrence, resolve=resolve) if self.occurrences is not None and source is not None else tx_node_id(chain, network, txid)
+        parent = self.node(parent_id, chain, network, "transaction", txid=txid)
         self.alias(txid, parent["id"])
-        node = self.node(output_node_id(chain, network, txid, vout), chain, network, "output", txid=txid)
+        ident = parent_id.rsplit(":tx:", 1)[0] + f":out:{txid}:{vout}"
+        node = self.node(ident, chain, network, "output", txid=txid)
         outpoint = f"{txid}:{vout}"
         node.update(outpoint=outpoint, label=f"{txid[:10]}:{vout}")
         value = output_value_sats(entry)
@@ -306,6 +310,9 @@ class _Builder:
         return node
 
     def transaction(self, row: dict, *, cached: bool = False):
+        if self.occurrences is not None and not self.occurrences.accepts(row):
+            self.coverage["invalid_observations"] += 1
+            return
         try:
             scope = resolve_protocol_scope(row)
         except (ValueError, AppError):
@@ -320,7 +327,8 @@ class _Builder:
             return
         txid = raw_id or external
         is_chain = chain in {"bitcoin", "liquid"} and txid is not None
-        node_id = tx_node_id(chain, network, txid) if is_chain else f"{chain}:{network}:record:{row['id']}"
+        source = self.occurrences.source(row, chain, network) if self.occurrences is not None else None
+        node_id = (self.occurrences.transaction_id(chain, network, txid, source, occurrence=source.occurrence_id) if source else tx_node_id(chain, network, txid)) if is_chain else f"{chain}:{network}:record:{row['id']}"
         node = self.node(node_id, chain, network, "transaction" if is_chain else "record", txid=txid if is_chain else None)
         ref = evidence("reference_cache" if cached else "stored_transaction", str(row["id"]), "reference" if cached else "observed")
         rank = 1 if cached else 2
@@ -353,9 +361,9 @@ class _Builder:
                 fact["directions"].append(direction)
         if chain == "bitcoin":
             from .features import extract_transaction_features, normalize_persisted_features, PERSISTED_FEATURE_KEY
-            source = "reference_cache" if cached else "stored_transaction"
-            snapshot = normalize_persisted_features(raw.get(PERSISTED_FEATURE_KEY), source=source, subject_id=node_id)
-            snapshot = snapshot or extract_transaction_features(raw, source=source, subject_id=node_id)
+            feature_source = "reference_cache" if cached else "stored_transaction"
+            snapshot = normalize_persisted_features(raw.get(PERSISTED_FEATURE_KEY), source=feature_source, subject_id=node_id)
+            snapshot = snapshot or extract_transaction_features(raw, source=feature_source, subject_id=node_id)
             previous = fact.get("features")
             if previous:
                 old = {item["code"]: item for item in previous["features"]}
@@ -388,7 +396,8 @@ class _Builder:
                     valid_inputs = False
                 continue
             prevout = item.get("prevout") if isinstance(item.get("prevout"), Mapping) else {}
-            output = self.output(chain, network, *point, prevout, ref, rank)
+            hint = item.get("reference_occurrence_id") if source and source.trusted_reference else None
+            output = self.output(chain, network, *point, prevout, ref, rank, source=source, occurrence=hint, resolve=not (source and source.trusted_reference and source.occurrence_id and hint is None))
             input_ids.append(output["id"])
             self.edge(output["id"], node_id, "spends", ref)
         valid_outputs = bool(vout)
@@ -402,7 +411,7 @@ class _Builder:
                 continue
             if output_value_sats(item) is None and normalized_script_hex(output_script(item)) is None and not item.get("valuecommitment"):
                 valid_outputs = False
-            output = self.output(chain, network, txid, number, item, ref, rank)
+            output = self.output(chain, network, txid, number, item, ref, rank, source=source, occurrence=source.occurrence_id if source else None)
             output_ids.append(output["id"])
         complete = valid_inputs and valid_outputs and len(set(input_ids)) == len(input_ids) and len(set(output_ids)) == len(output_ids)
         if complete:
@@ -427,6 +436,9 @@ class _Builder:
             self.finding("partial_observation_conflicts_with_complete_shape", [node_id], "A partial observation names inputs or outputs absent from a complete observation. They cannot form one synthetic transaction.", refs=[ref])
 
     def inventory(self, row: dict):
+        if self.occurrences is not None and not self.occurrences.accepts(row):
+            self.coverage["invalid_observations"] += 1
+            return
         try:
             scope = resolve_protocol_scope(row)
         except (ValueError, AppError):
@@ -439,7 +451,8 @@ class _Builder:
         ref = evidence("wallet_inventory", str(row.get("id") or digest(row)), "wallet_observed")
         amount = integer(row.get("amount"))
         entry = {"scriptpubkey": row.get("script_pubkey"), "address": row.get("address"), "asset": row.get("asset")}
-        node = self.output(scope.protocol_chain, scope.network, txid, vout, entry, ref, 3)
+        source = self.occurrences.source(row, scope.protocol_chain, scope.network) if self.occurrences is not None else None
+        node = self.output(scope.protocol_chain, scope.network, txid, vout, entry, ref, 3, source=source)
         self.merge(node, {"amount_msat": str(amount) if amount is not None else None}, 3, ref)
         self.own(node, row.get("wallet_id"))
         self.profile_seeds.add(node["id"])
@@ -452,7 +465,8 @@ class _Builder:
             facts.update(branch_role="unknown", branch_evidence_level="unknown", change_evidence="unavailable", branch_source="ambiguous_inventory_ownership")
         spent = canonical_txid(row.get("spent_by"))
         if spent:
-            target = self.node(tx_node_id(scope.protocol_chain, scope.network, spent), scope.protocol_chain, scope.network, "transaction", txid=spent)
+            target_id = self.occurrences.transaction_id(scope.protocol_chain, scope.network, spent, source) if source else tx_node_id(scope.protocol_chain, scope.network, spent)
+            target = self.node(target_id, scope.protocol_chain, scope.network, "transaction", txid=spent)
             self.alias(spent, target["id"])
             self.edge(node["id"], target["id"], "spends", ref, level="wallet_observed")
             fact = self.tx_facts.setdefault(target["id"], {"inputs": [], "outputs": [], "fee_msat": None, "complete": False, "collaboration": None,
@@ -464,6 +478,9 @@ class _Builder:
         """Normalize cache/acquisition through the same closed reference seam."""
         payload = stored_tx_mapping(row.get("payload_json"))
         txid = canonical_txid(row.get("txid"))
+        if self.occurrences is not None and not self.occurrences.accepts({**row, "raw_json": payload}, unscoped=not acquired):
+            self.coverage["invalid_observations" if acquired else "cache_rejected"] += 1
+            return
         try:
             scope = resolve_protocol_scope({"chain": row.get("chain"), "network": row.get("network")})
             payload_scope = resolve_protocol_scope({"chain": scope.protocol_chain, "network": scope.network, "raw_json": payload})
@@ -475,11 +492,21 @@ class _Builder:
             or not acquired and (row.get("schema_version") != 1 or not isinstance(payload.get("vin"), list) or not isinstance(payload.get("vout"), list))):
             self.coverage["invalid_observations" if acquired else "cache_rejected"] += 1
             return
+        if row.get("grant_id"):
+            occurrence = str(row.get("occurrence_id") or "")
+            status = stored_tx_mapping(row.get("status_json")) or {}
+            # Only a block-hash-bound source may assert a historical occurrence.
+            if re.fullmatch(r"[0-9a-f]{64}:[0-9]+", occurrence) and status.get("block_hash") != occurrence.split(":", 1)[0]:
+                self.coverage["invalid_observations"] += 1
+                return
         reference = f"{'acquired' if acquired else 'cache'}:{scope.protocol_chain}:{scope.network}:{txid}"
         if row.get("grant_id"):
             reference += f":{row['grant_id']}:{row['occurrence_id']}"
-        node_id = tx_node_id(scope.protocol_chain, scope.network, txid)
-        self.transaction({"id": reference, "chain": scope.protocol_chain, "network": scope.network, "external_id": txid, "raw_json": payload}, cached=True)
+        source_row = {"id": reference, "chain": scope.protocol_chain, "network": scope.network, "external_id": txid, "raw_json": payload,
+                      "_index_domain_id": row.get("domain_id"), "_index_occurrence_id": row.get("occurrence_id"), "_index_reference": bool(row.get("grant_id"))}
+        source = self.occurrences.source(source_row, scope.protocol_chain, scope.network) if self.occurrences is not None else None
+        node_id = self.occurrences.transaction_id(scope.protocol_chain, scope.network, txid, source, occurrence=source.occurrence_id) if source else tx_node_id(scope.protocol_chain, scope.network, txid)
+        self.transaction(source_row, cached=True)
         if acquired and node_id in self.nodes:
             self.profile_seeds.add(node_id)
             status = stored_tx_mapping(row.get("status_json")) or {}
@@ -523,6 +550,14 @@ class _Builder:
                     self.alias(row["component_id"], target)
 
     def finish(self) -> AnalysisIndex:
+        if self.occurrences is not None:
+            for ident in self.occurrences.ambiguous & self.nodes.keys():
+                self.nodes[ident]["status"] = "conflicting"
+                self.finding("ambiguous_transaction_occurrence", [ident], "The retained transaction identifier names multiple block occurrences; select an occurrence before tracing historical outputs.")
+                prefix = ident.rsplit(":tx:", 1)[0] + ":out:" + self.nodes[ident]["txid"] + ":"
+                for output in self.nodes.values():
+                    if output["id"].startswith(prefix):
+                        output["status"] = "conflicting"
         outgoing: dict[str, list[str]] = defaultdict(list)
         incoming: dict[str, list[str]] = defaultdict(list)
         spends: dict[str, list[dict]] = defaultdict(list)
@@ -578,9 +613,10 @@ class _Builder:
 
 def build_index(conn: sqlite3.Connection, profile_id: str, *, observer: str = "owner") -> AnalysisIndex:
     """Read one consistent local snapshot; never refresh, mutate, or egress."""
-    builder = _Builder(profile_id)
     conn.execute("SAVEPOINT chain_analysis_read")
     try:
+        from .occurrences import OccurrenceResolver
+        builder = _Builder(profile_id, occurrences=OccurrenceResolver(conn, profile_id))
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         def read(table: str, *, scoped: bool = True) -> list[dict]:
             if table not in tables:
@@ -606,7 +642,9 @@ def build_index(conn: sqlite3.Connection, profile_id: str, *, observer: str = "o
             for row in read("chain_analysis_observations"):
                 builder.reference(row, acquired=True)
         if "chain_analysis_reference_assertions" in tables:
-            for row in read("chain_analysis_reference_assertions"):
+            assertions = read("chain_analysis_reference_assertions")
+            builder.coverage["reference_reconciling_count"] = sum(row.get("active") == 2 for row in assertions)
+            for row in assertions:
                 if row.get("active") == 1:
                     builder.reference(row, acquired=True)
         if "chain_analysis_labels" in tables:

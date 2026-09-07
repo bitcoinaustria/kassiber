@@ -121,14 +121,11 @@ class _View:
 
     def seed_nodes(self, query):
         self.check()
-        clause, values = "", [self.profile_id]
-        for field in ("chain", "network"):
-            if field in query:
-                from ...util import normalize_network
-                value = normalize_network(query.get("chain") or "bitcoin", query[field]) if field == "network" else query[field]
-                clause += f" AND json_extract(payload_json,'$.{field}')=?"
-                values.append(value)
-        return tuple(row[0] for row in self.conn.execute(f"SELECT id FROM chain_index_nodes WHERE profile_id=? AND seed=1 AND {self.edge_column} IS NOT NULL{clause} ORDER BY id", values))
+        from .query import _domain
+        # Network aliases depend on the node's rail ("main" also names Liquid
+        # mainnet). Read seed identity columns, never the full graph payload.
+        rows = self.conn.execute(f"SELECT id,json_extract(payload_json,'$.chain'),json_extract(payload_json,'$.network') FROM chain_index_nodes WHERE profile_id=? AND seed=1 AND {self.edge_column} IS NOT NULL ORDER BY id", (self.profile_id,))
+        return tuple(ident for ident, chain, network in rows if _domain({"chain": chain, "network": network}, query))
 
     def _related(self, table, link, link_id, nodes, *, include_global=False):
         self.check()
