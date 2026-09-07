@@ -78,6 +78,44 @@ def test_embedded_build_identity(tmp_path):
         release.validate_app(app, "a" * 40, "1.2.3")
 
 
+def candidate_source():
+    return {"kind": "candidate", "candidate_id": "macos-candidate-" + "a" * 40 + "-123",
+            "commit": "a" * 40, "version": "1.2.3", "build_run": "123",
+            "build_attempt": 1, "unsigned_app_sha256": "d" * 64}
+
+
+def test_candidate_requires_explicit_mode_and_never_satisfies_release_provenance():
+    source = candidate_source()
+    release.validate_source(source, "a" * 40, "1.2.3", candidate_id=source["candidate_id"], input_digest="d" * 64)
+    with pytest.raises(ValueError):
+        release.validate_source(source, "a" * 40, "1.2.3")
+    tagged = {"tag": "v1.2.3", "commit": "a" * 40, "build_run": "123", "build_attempt": 1,
+              "unsigned_app_sha256": "d" * 64}
+    release.validate_source(tagged, "a" * 40, "1.2.3", input_digest="d" * 64)
+    with pytest.raises(ValueError):
+        release.validate_source(tagged, "a" * 40, "1.2.3", candidate_id=source["candidate_id"])
+
+
+@pytest.mark.parametrize("field,value", [
+    ("commit", "b" * 40), ("version", "1.2.4"), ("kind", "release"),
+    ("candidate_id", "macos-candidate-" + "a" * 40 + "-124"),
+    ("build_run", "124"), ("build_attempt", 0), ("build_attempt", True),
+    ("unsigned_app_sha256", "bad"), ("tag", "v1.2.3"),
+])
+def test_candidate_provenance_mismatch_fails_closed(field, value):
+    source = candidate_source()
+    expected = source["candidate_id"]
+    source[field] = value
+    with pytest.raises(ValueError):
+        release.validate_source(source, "a" * 40, "1.2.3", candidate_id=expected, input_digest="d" * 64)
+
+
+@pytest.mark.parametrize("candidate_id", ["v1.2.3", "macos-candidate-short-123", "macos-candidate-" + "b" * 40 + "-123"])
+def test_explicit_candidate_identity_must_match_source(candidate_id):
+    with pytest.raises(ValueError):
+        release.validate_source(candidate_source(), "a" * 40, "1.2.3", candidate_id=candidate_id)
+
+
 def test_macho_inventory_rejects_symlinks(tmp_path):
     (tmp_path / "lib").write_bytes(bytes.fromhex("cffaedfe") + b"code")
     (tmp_path / "data").write_bytes(b"data")
@@ -342,8 +380,37 @@ def test_workflows_keep_keys_local_and_publication_gated():
 def test_real_codesign_rejects_non_bitcoin_austria_identity():
     # Apple's system binary is validly signed, but not by our Developer ID.
     # This exercises the actual platform requirement without any private key.
-    with pytest.raises(subprocess.CalledProcessError):
+    with pytest.raises(subprocess.CalledProcessError) as error:
         release.verify_code(Path("/usr/bin/true"))
+    assert "code failed to satisfy specified code requirement(s)" in error.value.stderr
+
+
+@pytest.mark.parametrize("authorized", [False, True])
+def test_certificate_extraction_checks_profile_membership(authorized):
+    leaf = b"synthetic certificate bytes"
+    def extract(*command):
+        assert command[:2] == ("/usr/bin/codesign", "-d")
+        assert len(command) == 4
+        assert str(command[2]).startswith("--extract-certificates=")
+        prefix = Path(str(command[2]).split("=", 1)[1])
+        prefix.with_name(prefix.name + "0").write_bytes(leaf)
+        return ""
+    profile = {"DeveloperCertificates": [leaf if authorized else b"another certificate"]}
+    with patch.object(release, "run", side_effect=extract):
+        if authorized:
+            release.verify_profile_certificate(Path("sealed.app"), profile)
+        else:
+            with pytest.raises(ValueError, match="not authorized"):
+                release.verify_profile_certificate(Path("sealed.app"), profile)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Apple certificate extraction")
+def test_real_codesign_accepts_attached_extraction_prefix(tmp_path):
+    # No keys or signing: exercise Apple's parser against signed system code.
+    # Some OS versions omit the public cert chain, so only check the CLI result.
+    prefix = tmp_path / "public-cert"
+    subprocess.run(["/usr/bin/codesign", "-d", f"--extract-certificates={prefix}", "/usr/bin/true"],
+                   check=True, capture_output=True)
 
 
 @pytest.mark.parametrize("mutation", [None, "bytes", "mode", "launcher", "missing", "extra"])

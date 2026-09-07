@@ -88,7 +88,7 @@ def verify_entitlements(path: Path, expected: dict) -> None:
 def verify_profile_certificate(app: Path, profile: dict) -> None:
     with tempfile.TemporaryDirectory(prefix="kassiber-public-cert-") as tmp:
         prefix = Path(tmp) / "cert"
-        run("/usr/bin/codesign", "-d", "--extract-certificates", prefix, app)
+        run("/usr/bin/codesign", "-d", f"--extract-certificates={prefix}", app)
         leaf = prefix.with_name("cert0").read_bytes()
         if leaf not in profile.get("DeveloperCertificates", []):
             raise ValueError("App signing certificate is not authorized by the profile")
@@ -127,7 +127,7 @@ def validate_app(app: Path, commit: str, version: str) -> None:
     if info.get("CFBundleIdentifier") != APP_ID:
         raise ValueError("Unexpected app identity (dev builds cannot be released)")
     if info.get("CFBundleShortVersionString") != version:
-        raise ValueError("App version does not match release tag")
+        raise ValueError("App version does not match expected source version")
     metadata = list(app.rglob("BUILD_INFO.json"))
     if not metadata:
         raise ValueError("Missing embedded build provenance")
@@ -137,6 +137,28 @@ def validate_app(app: Path, commit: str, version: str) -> None:
             raise ValueError("Embedded build provenance does not match release")
         if data.get("channel") not in ("release", "prerelease"):
             raise ValueError("Development artifact cannot be released")
+
+
+def validate_source(source: dict, commit: str, version: str, *,
+                    candidate_id: str | None = None, input_digest: str | None = None) -> None:
+    """Candidate provenance requires explicit opt-in and cannot pass release verification."""
+    if (source.get("commit") != commit
+            or not re.fullmatch(r"[0-9]+", str(source.get("build_run", "")))
+            or type(source.get("build_attempt")) is not int or source["build_attempt"] < 1):
+        raise ValueError("Missing or mismatched signed source provenance")
+    if candidate_id:
+        expected = f"macos-candidate-{commit}-{source['build_run']}"
+        if (not re.fullmatch(r"macos-candidate-[0-9a-f]{40}-[0-9]+", candidate_id)
+                or candidate_id != expected or source.get("candidate_id") != candidate_id
+                or source.get("kind") != "candidate" or source.get("version") != version
+                or set(source) != {"kind", "candidate_id", "commit", "version", "build_run",
+                                   "build_attempt", "unsigned_app_sha256"}
+                or not re.fullmatch(r"[0-9a-f]{64}", str(source.get("unsigned_app_sha256", "")))):
+            raise ValueError("Candidate provenance does not match the explicit candidate")
+    elif source.get("tag") != "v" + version or source.get("kind") == "candidate" or "candidate_id" in source:
+        raise ValueError("Release provenance must name the expected version tag")
+    if input_digest is not None and source.get("unsigned_app_sha256") != input_digest:
+        raise ValueError("Signing provenance does not match input")
 
 
 def code_files(app: Path) -> list[Path]:
@@ -260,7 +282,7 @@ def prepare_linkage(app: Path) -> None:
 def verify_code(path: Path, *, runtime: bool = True) -> None:
     requirement = (f'anchor apple generic and certificate leaf[subject.OU] = "{TEAM}" '
                    'and certificate leaf[field.1.2.840.113635.100.6.1.13] exists')
-    run("/usr/bin/codesign", "--verify", "--strict", "-R", requirement, path)
+    run("/usr/bin/codesign", "--verify", "--strict", "-R", "=" + requirement, path)
     result = subprocess.run(["/usr/bin/codesign", "-d", "--verbose=4", str(path)],
                             check=True, capture_output=True, text=True)
     details = result.stderr
@@ -268,16 +290,13 @@ def verify_code(path: Path, *, runtime: bool = True) -> None:
         raise ValueError("Missing secure timestamp or hardened runtime")
 
 
-def verify_app(app: Path, commit: str, version: str, *, ticket: bool) -> None:
+def verify_app(app: Path, commit: str, version: str, *, ticket: bool, candidate_id: str | None = None) -> None:
     validate_app(app, commit, version)
     verify_linkage(app)
     profile = load_profile(app / "Contents/embedded.provisionprofile")
     verify_profile_certificate(app, profile)
     source = json.loads((app / "Contents/Resources/RELEASE_SOURCE.json").read_text())
-    if (source.get("commit") != commit or source.get("tag") != "v" + version
-            or not re.fullmatch(r"[0-9]+", str(source.get("build_run", "")))
-            or not isinstance(source.get("build_attempt"), int)):
-        raise ValueError("Missing or mismatched signed source provenance")
+    validate_source(source, commit, version, candidate_id=candidate_id)
     for path in code_files(app):
         verify_code(path)
         expected = APP_ENTITLEMENTS if path == app / "Contents/MacOS/kassiber-ui" else {}
@@ -314,9 +333,8 @@ def sign(args: argparse.Namespace) -> None:
         entitlements = Path(tmp) / "entitlements.plist"
         entitlements.write_bytes(plistlib.dumps(APP_ENTITLEMENTS))
         source = json.loads(args.source.read_text())
-        if (source.get("commit") != args.commit or source.get("tag") != "v" + args.version
-                or source.get("unsigned_app_sha256") != args.sha256):
-            raise ValueError("Signing provenance does not match input")
+        validate_source(source, args.commit, args.version,
+                        candidate_id=getattr(args, "candidate_id", None), input_digest=args.sha256)
         (app / "Contents/Resources/RELEASE_SOURCE.json").write_text(
             json.dumps(source, sort_keys=True, indent=2) + "\n")
         prepare_linkage(app)
@@ -328,7 +346,7 @@ def sign(args: argparse.Namespace) -> None:
         run("/usr/bin/codesign", "--force", "--sign", args.identity,
             "--timestamp", "--options", "runtime", "--identifier", APP_ID,
             "--entitlements", entitlements, app)
-        verify_app(app, args.commit, args.version, ticket=False)
+        verify_app(app, args.commit, args.version, ticket=False, candidate_id=getattr(args, "candidate_id", None))
         (stage / "Applications").symlink_to("/Applications")
         image = args.output.resolve() / INPUT_DMG
         run("/usr/bin/hdiutil", "create", "-volname", "Kassiber", "-srcfolder", stage,
@@ -365,7 +383,7 @@ def notarize(args: argparse.Namespace) -> None:
     args.output.mkdir(parents=True, exist_ok=False)
     with tempfile.TemporaryDirectory(prefix="kassiber-notary-") as tmp:
         app = app_from_image(args.image.resolve(), Path(tmp))
-        verify_app(app, args.commit, args.version, ticket=False)
+        verify_app(app, args.commit, args.version, ticket=False, candidate_id=getattr(args, "candidate_id", None))
         # Apple creates tickets for both this signed image and its inner app.
         result = json.loads(run("/usr/bin/xcrun", "notarytool", "submit", args.image,
                                 "--keychain-profile", args.profile, "--wait",
@@ -379,7 +397,7 @@ def notarize(args: argparse.Namespace) -> None:
         for path in (image, app):
             run("/usr/bin/xcrun", "stapler", "staple", path)
             run("/usr/bin/xcrun", "stapler", "validate", path)
-        verify_app(app, args.commit, args.version, ticket=True)
+        verify_app(app, args.commit, args.version, ticket=True, candidate_id=getattr(args, "candidate_id", None))
         verify_code(image, runtime=False)
         run("/usr/sbin/spctl", "--assess", "--type", "open", "--context",
             "context:primary-signature", "--verbose=4", image)
@@ -439,7 +457,7 @@ def verify(args: argparse.Namespace) -> None:
     with tempfile.TemporaryDirectory(prefix="kassiber-verify-") as tmp:
         stage = Path(tmp)
         app = extract_app(args.release_dir / APP_ZIP, stage / "zip")
-        verify_app(app, args.commit, args.version, ticket=True)
+        verify_app(app, args.commit, args.version, ticket=True, candidate_id=getattr(args, "candidate_id", None))
         image = args.release_dir / DMG
         verify_code(image, runtime=False)
         run("/usr/bin/xcrun", "stapler", "validate", image)
@@ -450,7 +468,7 @@ def verify(args: argparse.Namespace) -> None:
         dmg_stage = stage / "dmg"
         dmg_stage.mkdir()
         dmg_app = app_from_image(image, dmg_stage)
-        verify_app(dmg_app, args.commit, args.version, ticket=False)
+        verify_app(dmg_app, args.commit, args.version, ticket=False, candidate_id=getattr(args, "candidate_id", None))
         def payload(root: Path) -> dict[str, str]:
             return {str(p.relative_to(root)): sha256(p) for p in root.rglob("*")
                     if p.is_file() and str(p.relative_to(root)) != "Contents/CodeResources"}
@@ -477,6 +495,7 @@ def main() -> int:
         p = sub.add_parser(command)
         p.add_argument("--commit", required=True)
         p.add_argument("--version", required=True)
+        p.add_argument("--candidate-id", help="Explicit unpublished candidate identity; never a version tag")
         if command == "verify":
             p.add_argument("--release-dir", type=Path, required=True)
             p.add_argument("--smoke", action="store_true", help="Execute verified CLI on a disposable Mac")
