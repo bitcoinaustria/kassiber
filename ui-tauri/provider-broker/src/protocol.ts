@@ -59,8 +59,20 @@ export type ChatRequest = {
   messages: Array<{ role: string; content: string }>;
   instructions?: string;
   tools?: BrokerToolDefinition[];
-  options?: { reasoning_effort?: string; provider_session_id?: string };
+  options?: { reasoning_effort?: string; provider_session_id?: string; sensitive_context?: boolean };
 };
+
+/** A selected-data grant is a single stateless exchange, never an agent session. */
+export function sensitiveContext(request: ChatRequest): boolean {
+  const value = request.options?.sensitive_context;
+  if (value !== undefined && typeof value !== "boolean") {
+    throw new Error("Invalid sensitive context mode.");
+  }
+  if (value === true && (request.tools?.length || request.options?.provider_session_id)) {
+    throw new Error("Sensitive context cannot use tools or resume a provider session.");
+  }
+  return value === true;
+}
 
 export type BrokerToolDefinition = {
   name: string;

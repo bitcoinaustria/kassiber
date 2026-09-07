@@ -58,6 +58,7 @@ def json_ready(value):
 _KIND_SUBCOMMAND_ATTRS = (
     "chain_analysis_command",
     "chain_analysis_action",
+    "accounting_command",
     "backends_command",
     "commands_command",
     "operator_command",

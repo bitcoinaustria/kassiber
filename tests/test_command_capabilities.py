@@ -34,6 +34,14 @@ class CommandCapabilityRegistryTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             daemon_capability("ui.future.unreviewed")
 
+    def test_task_source_amendments_keep_exact_read_and_decision_capabilities(self):
+        for action in ("task-amend-preview", "task-projection-assign-preview"):
+            with self.subTest(action=action):
+                self.assertIs(cli_capability("accounting." + action), Capability.READ)
+                self.assertIs(daemon_capability("ui.accounting." + action.replace("-", "_")), Capability.READ)
+        self.assertIs(cli_capability("accounting.task-amend"), Capability.ACCOUNTING_DECISIONS)
+        self.assertIs(daemon_capability("ui.accounting.task_amend"), Capability.ACCOUNTING_DECISIONS)
+
     def test_grants_are_cumulative_but_admin_is_never_leased(self):
         self.assertTrue(
             capability_allows(Capability.ACCOUNTING_DECISIONS, Capability.READ)

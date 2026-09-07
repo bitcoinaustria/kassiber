@@ -36,6 +36,13 @@ Tax math runs locally through the open-source
 reviews, and explains; RP2 computes. The Kassiber-maintained RP2 fork
 carries a working Austrian (§ 27b EStG) plugin with E 1kv exports.
 
+An opt-in [general-accounting workflow](docs/reference/general-accounting.md)
+is under implementation for organizational books, delivered through CLI and
+scoped agent tools, with exact approval in the existing Assistant—not a new
+accounting UI. It is separate from Bitcoin tax journals and requires an
+encrypted project. Private portfolio use remains unchanged. This is not yet a
+complete K2 or organization-wide bookkeeping support claim.
+
 ## Why local-first
 
 - **Bitcoin Native** — descriptors, xpubs, BIP329, Lightning, and Liquid as
@@ -446,8 +453,10 @@ daily flow can move freely between them.
 Kassiber is the local-first accounting layer: watch-only source refresh,
 storage and provenance, metadata, attachments, transfer pairing, review
 and quarantine. [RP2](https://github.com/bitcoinaustria/rp2) is the tax
-core — Kassiber prepares and explains, RP2 computes. Invoicing, VAT/RKSV,
-and the company general ledger stay out of scope. See
+core — Kassiber prepares and explains, RP2 computes. The optional encrypted
+general ledger is separate from these tax journals. Invoice issuing, RKSV,
+bank payment execution and FinanzOnline transmission remain out of scope;
+reviewed VAT/tax supporting records do not imply an automatic VAT filing engine. See
 [AGENTS.md](AGENTS.md) for the module map and
 [docs/plan/00-overview.md](docs/plan/00-overview.md) for the architecture
 overview.
