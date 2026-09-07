@@ -242,7 +242,16 @@ def require_chain_domain(conn, profile_id, chain, network, *, chain_instance_id=
 
 
 def guard_observation(conn, profile_id, row, *, operation="import"):
+    _guard_observation(_binding(conn, profile_id), row, operation=operation)
+
+
+def guard_observations(conn, profile_id, rows, *, operation="import"):
     binding = _binding(conn, profile_id)
+    for row in rows:
+        _guard_observation(binding, row, operation=operation)
+
+
+def _guard_observation(binding, row, *, operation):
     environment, instance, valid = _evidence(dict(row))
     if not valid:
         _error("Observation contradicts its configured network", details={"operation": operation})
