@@ -96,7 +96,10 @@ def stop_worker(ctx, *, require_stopped=True):
     if worker is None:
         return True
     ctx.watch_stop_event.set()
-    worker.join(timeout=2)
+    # An authorized source read has an eight-second inactivity timeout. Wait
+    # for that bounded read to observe cancellation before releasing the key,
+    # rather than making ordinary lock/switch actions require a second click.
+    worker.join(timeout=10)
     if worker.is_alive():
         if require_stopped:
             raise AppError("Local evidence work is stopping; try again", code="project_operation_in_progress", retryable=True)

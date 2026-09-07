@@ -3,6 +3,8 @@
 Only the explicitly selected Core transport is synthetic.
 """
 from unittest.mock import patch
+from types import SimpleNamespace
+import threading
 
 from embit.script import Script
 from embit.transaction import Transaction, TransactionInput, TransactionOutput
@@ -10,7 +12,7 @@ from embit.transaction import Transaction, TransactionInput, TransactionOutput
 from kassiber.core import chain_analysis_backfill as backfill
 from kassiber.core.chain_analysis import run_analysis
 from kassiber.core.chain_analysis_api import dispatch
-from kassiber.daemon_chain_analysis_watches import worker_tick
+from kassiber.daemon_chain_analysis_watches import worker_tick, start_worker, stop_worker
 from tests.test_chain_analysis_backfill import Core, block
 from tests.test_chain_analysis_watch_integration import encrypted_book  # noqa: F401
 
@@ -55,3 +57,33 @@ def test_worker_acquires_then_notifies_once_without_touching_accounting(encrypte
         worker_tick(conn)
         assert len(core.calls) == calls
     assert [tuple(row) for row in conn.execute("SELECT * FROM transactions")] == before
+
+
+def test_lock_waits_for_cancelled_source_read_and_prevents_publication(encrypted_book):
+    conn, root = encrypted_book
+    conn.execute("UPDATE backends SET kind='bitcoinrpc',config_json='{\"username\":\"synthetic\",\"password\":\"synthetic\"}' WHERE name='node'")
+    first = block()
+    entered, release = threading.Event(), threading.Event()
+    def response_pending(method, params):
+        entered.set()
+        assert release.wait(5)
+    core = Core([first], response_pending)
+    ctx = SimpleNamespace(conn=conn, data_root=str(root), out=SimpleNamespace(write=lambda value: None))
+    with patch.dict(backfill.acquisition.GENESIS, {("bitcoin", "main"): first[0], ("bitcoin", "regtest"): first[0]}), patch.object(backfill.acquisition.transport, "urlopen_with_proxy", side_effect=core):
+        spec = {"backend": "node", "network": "main", "mode": "blocks", "start_height": 0,
+                "max_requests": 100, "max_bytes": 100_000_000}
+        backfill.authorize(conn, "profile", {"plan": backfill.plan(conn, "profile", spec)})
+        conn.commit()
+        start_worker(ctx, passphrase="local-watch-integration-passphrase")
+        try:
+            assert entered.wait(5)
+            release_later = threading.Timer(2.2, release.set)
+            release_later.start()
+            assert stop_worker(ctx)
+            release_later.join()
+            assert ctx.watch_worker is None
+            assert len(core.calls) == 1
+            assert conn.execute("SELECT count(*) FROM chain_analysis_reference_assertions").fetchone()[0] == 0
+        finally:
+            release.set()
+            stop_worker(ctx)
