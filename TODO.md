@@ -279,6 +279,19 @@ same verification surface.
     reviews. Preserve reviewed provenance through current local certificates,
     aggregate branching source-funds demand before evaluating ancestors, and
     remove the repeated full-decision scan from tax finalization.
+  - [x] Batch optional accounting schema initialization in one savepoint,
+    preserving caller transactions and rollback while avoiding a separate
+    durable commit for every new schema object.
+  - [ ] Preserve native chain evidence during supporting CSV price enrichment.
+    A matched generic-ledger import can replace the native `raw_json` with its
+    CSV fields while quantity and identity stay unchanged; the next journal
+    build loses an exact claim/refund transfer and books a disposal without a
+    hold. Keep pricing provenance separate from observer authority.
+  - [ ] Reconcile obsolete native rows when a wallet's watched scripts expand.
+    The same physical transaction can change from a receipt to a spend, but
+    direction-qualified import matching leaves the old receipt active. Verify
+    incremental history has the same quantity and basis as complete history,
+    while retaining authored metadata and review references.
   - [x] Replace heuristic transfer claims with independently scoped
     source/return holds; delete `CUSTODY_CANDIDATE` / `HEURISTIC_CANDIDATE`
     arbitration so suggestions cannot contain a basis-carrying target edge.
