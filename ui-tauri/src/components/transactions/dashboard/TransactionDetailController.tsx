@@ -167,9 +167,12 @@ export function TransactionDetailController({
     ? explorerForTransaction(explorerTransaction, explorerSettings)
     : null;
 
-  const getDraft = React.useCallback(
-    (txn: Transaction) => drafts[txn.id] ?? draftForTransaction(txn),
-    [drafts],
+  // Detail reads must not replace the editable draft when they finish.
+  const detailDraft = React.useMemo(
+    () => workingTransaction
+      ? drafts[workingTransaction.id] ?? draftForTransaction(workingTransaction)
+      : null,
+    [drafts, workingTransaction],
   );
 
   // Optimistic attachment-list state: mutations patch the list shown in the
@@ -327,7 +330,7 @@ export function TransactionDetailController({
       />
       <TransactionDetailSheet
         transaction={workingTransaction}
-        draft={workingTransaction ? getDraft(workingTransaction) : null}
+        draft={detailDraft}
         initialTab={initialTab}
         hideSensitive={hideSensitive}
         currency={currency}
