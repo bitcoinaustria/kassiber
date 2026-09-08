@@ -70,6 +70,7 @@ FRESHNESS_BACKGROUND_TERMINAL_RETRY_INTERVAL_SECONDS = 60 * 60
 _AUTO_SYNC_PROFILE_LAST_ATTEMPT: dict[str, float] = {}
 _AUTO_SYNC_PROFILE_LAST_RESULT: dict[str, dict[str, Any]] = {}
 _AUTO_SYNC_PROFILE_LOCK = threading.Lock()
+_AUTO_SYNC_CONNECTION: sqlite3.Connection | None = None
 # Foreground and background refreshes use separate database connections. Admission must cover recovery and prefetch as well as apply.
 # Reentrancy permits maintenance/report-read paths to call a foreground helper.
 _FRESHNESS_EXECUTION_LOCK = threading.RLock()
@@ -114,7 +115,12 @@ def _remember_unlocked_passphrase(
 
 
 def _clear_unlocked_passphrase(ctx: FreshnessDaemonContext) -> None:
+    global _AUTO_SYNC_CONNECTION
     ctx.db_passphrase = None
+    with _AUTO_SYNC_PROFILE_LOCK:
+        _AUTO_SYNC_CONNECTION = None
+        _AUTO_SYNC_PROFILE_LAST_ATTEMPT.clear()
+        _AUTO_SYNC_PROFILE_LAST_RESULT.clear()
 
 
 def _coerce_wallets_sync_args(raw_args: dict[str, Any], *, strict: bool) -> dict[str, Any]:
@@ -1685,31 +1691,35 @@ def _run_requested_freshness_jobs(
     cooldown after the initial selection. Already completed prefetch traffic
     cannot be recalled; this gates each subsequent job execution.
     """
-    remaining = list(requested_jobs)
+    # Read the selected population once. A source can disappear during prefetch
+    # (for example when a concurrent CLI edit deprecates its wallet).
+    current = core_freshness.get_selected_jobs(
+        conn, profile_id, [str(job["id"]) for job in requested_jobs],
+    )
+    requested_order = {str(job["id"]): index for index, job in enumerate(requested_jobs)}
+    terminal = {core_freshness.JOB_DONE, core_freshness.JOB_ERROR, core_freshness.JOB_CANCELLED}
+    current.sort(key=lambda job: (
+        (0, requested_order[job["id"]]) if job["status"] in terminal
+        else (1, job["priority"], job["created_at"], job["id"])
+    ))
     completed = []
-    for _ in range(max(0, limit)):
-        # Another executor may have finished a selected, committed job while
-        # this request was fetching. Preserve that exact job's outcome, within
-        # the request's limit; queued, running and deferred work is not complete.
-        finished = next((
-            current for requested in remaining
-            if (current := core_freshness.get_job(conn, str(requested["id"]))).get("profile_id") == profile_id
-            and current.get("status") in {
-                core_freshness.JOB_DONE, core_freshness.JOB_ERROR, core_freshness.JOB_CANCELLED,
-            }
-        ), None)
-        if finished is not None:
-            remaining = [job for job in remaining if job["id"] != finished["id"]]
-            completed.append(finished)
-            continue
-        due = _due_jobs_for_refresh(conn, profile_id, remaining, 1)
-        if not due:
+    for requested in current:
+        if len(completed) >= max(0, limit):
             break
-        job_id = due[0]["id"]
-        remaining = [job for job in remaining if job["id"] != job_id]
-        completed.append(core_freshness.run_job(
-            conn, job_id, handlers, progress_observer=progress_observer,
-        ))
+        # Recheck the exact selected job at dispatch, including source pause
+        # and cooldown changes made by an earlier handler or control request.
+        job = core_freshness.get_dispatchable_job(conn, profile_id, requested["id"])
+        if job is None:
+            continue
+        if job["status"] in terminal:
+            completed.append(job)
+        else:
+            outcome = core_freshness.run_job(
+                conn, job["id"], handlers, progress_observer=progress_observer,
+                missing_ok=True,
+            )
+            if outcome is not None:
+                completed.append(outcome)
     return completed
 
 
@@ -2241,7 +2251,15 @@ def _run_auto_sync_wallets(
     profile: Mapping[str, Any],
     policy: core_freshness.FreshnessPolicy,
 ) -> dict[str, Any]:
+    global _AUTO_SYNC_CONNECTION
     state["auto_sync_attempted"] = True
+    with _AUTO_SYNC_PROFILE_LOCK:
+        if _AUTO_SYNC_CONNECTION is not conn:
+            # Retain the object, not id(conn): closed/reopened books must never
+            # inherit a prior session's private results or its rate limit.
+            _AUTO_SYNC_PROFILE_LAST_ATTEMPT.clear()
+            _AUTO_SYNC_PROFILE_LAST_RESULT.clear()
+            _AUTO_SYNC_CONNECTION = conn
     if not force:
         now = time.monotonic()
         with _AUTO_SYNC_PROFILE_LOCK:
