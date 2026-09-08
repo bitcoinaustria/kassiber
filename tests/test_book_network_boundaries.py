@@ -40,7 +40,7 @@ class NetworkBoundaryTests(unittest.TestCase):
     def test_regtest_cache_is_not_reused_in_another_declared_instance(self):
         binding = self.bind("regtest")
         txid = "a" * 64
-        payload = {"txid":txid,"vin":[{"coinbase":"0101"}],"vout":[{"value":1000,"scriptpubkey":"0014"+"11"*20}]}
+        payload = {"txid":txid,"vin":[{"is_coinbase": True}],"vout":[{"value":1000,"scriptpubkey":"0014"+"11"*20}]}
         graph._store_graph_lookup_cache(self.conn,"bitcoin","regtest",txid,payload)
         self.assertIsNotNone(graph._load_graph_lookup_cache(self.conn,"bitcoin","regtest",txid))
         self.conn.execute("UPDATE transaction_graph_cache SET payload_json=?",(json.dumps({**payload,"chain_instance_id":str(uuid.uuid4())}),))
