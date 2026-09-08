@@ -58,8 +58,28 @@ def check_digest(path: Path, expected: str) -> None:
 
 
 def submit_and_wait_for_notarization(args: argparse.Namespace, evidence: Path) -> dict:
-    """Persist the submission ID before polling Apple's asynchronous service."""
-    result = json.loads(run(
+    """Submit once, or resume an explicit ID; retain bytes/identity binding."""
+    resume_id = getattr(args, "submission_id", "")
+    if resume_id and not re.fullmatch(
+            r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", resume_id):
+        raise ValueError("Invalid Apple submission ID")
+
+    def query(*operation: str) -> dict:
+        # Retrying reads is safe; never automatically retry an ambiguous submit.
+        for attempt in range(3):
+            try:
+                return json.loads(run(
+                    "/usr/bin/xcrun", "notarytool", *operation,
+                    "--keychain-profile", args.profile, "--keychain", args.keychain,
+                    "--output-format", "json",
+                ))
+            except subprocess.CalledProcessError:
+                if attempt == 2:
+                    raise
+                time.sleep(5 * (attempt + 1))
+        raise AssertionError("unreachable")
+
+    result = query("info", resume_id) if resume_id else json.loads(run(
         "/usr/bin/xcrun", "notarytool", "submit", args.image,
         "--keychain-profile", args.profile, "--keychain", args.keychain,
         "--output-format", "json",
@@ -67,23 +87,34 @@ def submit_and_wait_for_notarization(args: argparse.Namespace, evidence: Path) -
     submission_id = result.get("id")
     if not isinstance(submission_id, str) or not submission_id:
         raise ValueError("Notary submission did not return an ID")
-    evidence.write_text(json.dumps(result, indent=2) + "\n")
+    def persist() -> None:
+        if result.get("id") != submission_id:
+            raise ValueError("Apple response changed submission ID")
+        evidence.write_text(json.dumps(result, indent=2) + "\n")
+        # Retain a separate receipt: Apple's response remains unmodified.
+        if hasattr(args, "sha256"):
+            receipt = {"submission_id": submission_id, "sha256": args.sha256,
+                       "commit": args.commit, "version": args.version,
+                       "candidate_id": getattr(args, "candidate_id", "")}
+            evidence.with_name("submission.json").write_text(json.dumps(receipt, indent=2) + "\n")
+
+    if resume_id and submission_id != resume_id:
+        raise ValueError("Apple response does not match requested submission")
+    persist()
     print(f"Apple notary submission: {submission_id}", flush=True)
 
-    deadline = time.monotonic() + NOTARY_TIMEOUT_SECONDS
+    deadline = time.monotonic() + getattr(args, "wait_seconds", NOTARY_TIMEOUT_SECONDS)
     while result.get("status") not in ("Accepted", "Invalid", "Rejected"):
         if time.monotonic() >= deadline:
+            if getattr(args, "pending_ok", False):
+                return result
             raise ValueError(
                 f"Notarization still pending after {NOTARY_TIMEOUT_SECONDS // 60} minutes; "
                 f"submission {submission_id} is preserved in evidence"
             )
         time.sleep(NOTARY_POLL_SECONDS)
-        result = json.loads(run(
-            "/usr/bin/xcrun", "notarytool", "info", submission_id,
-            "--keychain-profile", args.profile, "--keychain", args.keychain,
-            "--output-format", "json",
-        ))
-        evidence.write_text(json.dumps(result, indent=2) + "\n")
+        result = query("info", submission_id)
+        persist()
         print(f"Apple notary status: {result.get('status', 'unknown')}", flush=True)
     return result
 
@@ -420,7 +451,16 @@ def notarize(args: argparse.Namespace) -> None:
         verify_app(app, args.commit, args.version, ticket=False, candidate_id=getattr(args, "candidate_id", None))
         # Apple creates tickets for both this signed image and its inner app.
         result = submit_and_wait_for_notarization(args, args.output / "notarization.json")
+        if result.get("status") == "In Progress" and getattr(args, "pending_ok", False):
+            print("Apple submission pending; resume the same ID and SHA-256. No artifacts promoted.", flush=True)
+            return
         if result.get("status") != "Accepted":
+            try:
+                log = run("/usr/bin/xcrun", "notarytool", "log", result["id"],
+                          "--keychain-profile", args.profile, "--keychain", args.keychain)
+                (args.output / "notarization-log.json").write_text(log)
+            except subprocess.CalledProcessError:
+                print("Apple rejection log unavailable; submission ID retained.", flush=True)
             raise ValueError("Notarization was not Accepted; no release files are ready")
         image = args.output / DMG
         shutil.copy2(args.image, image)
@@ -541,6 +581,9 @@ def main() -> int:
             p.add_argument("--image", type=Path, required=True)
             p.add_argument("--profile", required=True)
             p.add_argument("--keychain", type=Path, required=True)
+            p.add_argument("--submission-id", default="", help="Resume an existing Apple submission without uploading")
+            p.add_argument("--wait-seconds", type=int, default=NOTARY_TIMEOUT_SECONDS)
+            p.add_argument("--pending-ok", action="store_true", help="Return successfully while pending; produces evidence only")
     args = parser.parse_args()
     try:
         {"sign": sign, "notarize": notarize, "verify": verify}[args.command](args)

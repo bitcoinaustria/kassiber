@@ -43,7 +43,8 @@ elif tool == 'gh':
         elif field == 'targetCommitish': print(os.environ.get('MOCK_TARGET', 'a' * 40))
         elif field == 'assets':
             if os.environ.get('MOCK_ASSET_FAILURE'): sys.exit(1)
-            print('manifest.asc' if os.environ.get('MOCK_SIGNED') else '')
+            print('manifest.asc' if os.environ.get('MOCK_SIGNED') else (
+                '' if os.environ.get('MOCK_NO_INPUT') else 'kassiber-macos-signing-input.dmg'))
         else: raise AssertionError(args)
     elif args[:2] == ['release', 'download']:
         pathlib.Path('incoming/kassiber-macos-signing-input.dmg').write_text('signed input')
@@ -58,6 +59,7 @@ else: raise AssertionError(tool)
     environment = {**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}",
         "TAG": CANDIDATE, "CANDIDATE": "true", "SOURCE_COMMIT": COMMIT,
         "BUILD_RUN_ID": "", "INPUT_SHA256": "0" * 64,
+        "SUBMISSION_ID": "",
         "GITHUB_OUTPUT": str(tmp_path / "outputs"), "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
         "MOCK_LOG": str(tmp_path / "commands")}
 
@@ -129,3 +131,29 @@ def test_workflow_forwards_candidate_mode_to_notary_and_verifier():
     assert "finalize-signed-release" not in str(WORKFLOW)
     assert "gh release create" not in str(WORKFLOW)
     assert "gh release edit" not in str(WORKFLOW)
+
+
+def test_promotion_succeeds_without_remote_handoff_asset(runner):
+    root, run = runner
+    (root / "incoming").mkdir()
+    (root / "incoming/kassiber-macos-signing-input.dmg").write_text("input")
+    (root / "notarized").mkdir()
+    for name in ("kassiber-macos-arm64.app.zip", "kassiber-macos-arm64.dmg", "kassiber-cli-macos-arm64.tar.gz"):
+        (root / "notarized" / name).write_text("sealed")
+    result = run("Update verified draft macOS artifacts", COMMIT=COMMIT,
+                 CANDIDATE_ID=CANDIDATE, VERSION="1.2.3", MOCK_NO_INPUT="1")
+    assert result.returncode == 0, result.stderr
+    assert '"delete-asset"' not in (root / "commands").read_text()
+
+
+def test_invalid_resume_fails_before_downloading(runner):
+    root, run = runner
+    assert run("Download draft and bind source commit", SUBMISSION_ID="invalid").returncode != 0
+    assert not (root / "incoming").exists()
+
+
+def test_pending_workflow_cannot_promote_and_retains_receipt():
+    assert STEPS["Update verified draft macOS artifacts"]["if"] == "steps.notary.outputs.status == 'Accepted'"
+    assert "notarized/submission.json" in STEPS["Preserve notarization evidence"]["with"]["path"]
+    assert "gh release upload" in STEPS["Sign exact release build in CI"]["run"]
+    assert WORKFLOW["permissions"]["actions"] == "read"

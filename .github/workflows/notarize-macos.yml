@@ -24,9 +24,14 @@ on:
         description: Normal release path; successful prerelease-binaries run to sign in CI
         required: false
         type: string
+      submission_id:
+        description: Resume an existing Apple submission; requires its exact input_sha256 and retained signed DMG
+        required: false
+        type: string
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   group: release-seal-${{ inputs.tag_name }}
@@ -56,8 +61,13 @@ jobs:
           SOURCE_COMMIT: ${{ inputs.source_commit }}
           BUILD_RUN_ID: ${{ inputs.build_run_id }}
           INPUT_SHA256: ${{ inputs.input_sha256 }}
+          SUBMISSION_ID: ${{ inputs.submission_id }}
         run: |
           set -euo pipefail
+          if [ -n "$SUBMISSION_ID" ]; then
+            [[ "$SUBMISSION_ID" =~ ^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$ ]] || exit 1
+            test -z "$BUILD_RUN_ID"
+          fi
           test "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true
           if [ "$CANDIDATE" = true ]; then
             [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || exit 1
@@ -85,7 +95,7 @@ jobs:
             test "$CANDIDATE" = false
             test -z "$SOURCE_COMMIT"
             test -z "$INPUT_SHA256"
-            [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+            [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]] || exit 1
             test ! -e incoming/kassiber-macos-signing-input.dmg
           else
             test -n "$INPUT_SHA256"
@@ -102,6 +112,7 @@ jobs:
           NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
         run: |
           set -euo pipefail
           umask 077
@@ -115,7 +126,7 @@ jobs:
           security unlock-keychain -p "$keychain_unlock" "$keychain"
           security set-keychain-settings -lut 3600 "$keychain"
           security list-keychains -d user -s "$keychain"
-          if [ -n "${{ inputs.build_run_id }}" ]; then
+          if [ -n "$BUILD_RUN_ID" ]; then
             test -n "$MACOS_CERTIFICATE_P12_BASE64"
             test -n "$MACOS_CERTIFICATE_PASSWORD"
             test -n "$MACOS_PROVISIONING_PROFILE_BASE64"
@@ -153,13 +164,20 @@ jobs:
           cp "$RUNNER_TEMP/release-signing/signed/kassiber-macos-signing-input.dmg" incoming/
           digest="$(shasum -a 256 incoming/kassiber-macos-signing-input.dmg | awk '{print $1}')"
           echo "sha256=$digest" >> "$GITHUB_OUTPUT"
+          # Persist the exact signed bytes before contacting Apple. No clobber.
+          test "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true
+          asset_names="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+          test -z "$(printf '%s\n' "$asset_names" | sed -n '/\.asc$/p')"
+          gh release upload "$TAG" incoming/kassiber-macos-signing-input.dmg
       - name: Notarize and verify sealed distributions
+        id: notary
         env:
           LOCAL_SHA256: ${{ inputs.input_sha256 }}
           CI_SHA256: ${{ steps.sign.outputs.sha256 }}
           COMMIT: ${{ steps.release.outputs.commit }}
           VERSION: ${{ steps.release.outputs.version }}
           CANDIDATE_ID: ${{ steps.release.outputs.candidate_id }}
+          SUBMISSION_ID: ${{ inputs.submission_id }}
         run: |
           set -euo pipefail
           EXPECTED_SHA256="${CI_SHA256:-$LOCAL_SHA256}"
@@ -168,7 +186,15 @@ jobs:
             --image incoming/kassiber-macos-signing-input.dmg \
             --sha256 "$EXPECTED_SHA256" --commit "$COMMIT" --version "$VERSION" \
             --candidate-id "$CANDIDATE_ID" \
+            --submission-id "$SUBMISSION_ID" --wait-seconds 120 --pending-ok \
             --profile kassiber-notary --keychain "$RUNNER_TEMP/notary.keychain-db" --output notarized
+          status="$(python3 -c 'import json; print(json.load(open("notarized/notarization.json"))["status"])')"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          if [ "$status" = 'In Progress' ]; then
+            echo 'Apple is still processing. No artifacts promoted. Resume with submission_id from notarization-evidence and the same input_sha256; omit build_run_id.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          test "$status" = Accepted
           python3 scripts/macos_release.py verify \
             --release-dir notarized --commit "$COMMIT" --version "$VERSION" --candidate-id "$CANDIDATE_ID"
       - name: Preserve notarization evidence
@@ -176,9 +202,13 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: notarization-evidence
-          path: notarized/notarization.json
+          path: |
+            notarized/notarization.json
+            notarized/submission.json
+            notarized/notarization-log.json
           if-no-files-found: ignore
       - name: Update verified draft macOS artifacts
+        if: steps.notary.outputs.status == 'Accepted'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag_name }}
@@ -214,7 +244,9 @@ jobs:
               incoming/kassiber-cli-macos-arm64.tar.gz "incoming/kassiber-$VERSION-manifest.txt"
             echo 'Notarized draft ready. Download and independently verify the final artifacts before offline OpenPGP signing.' >> "$GITHUB_STEP_SUMMARY"
           fi
-          gh release delete-asset "$TAG" kassiber-macos-signing-input.dmg --yes
+          if printf '%s\n' "$asset_names" | grep -Fxq kassiber-macos-signing-input.dmg; then
+            gh release delete-asset "$TAG" kassiber-macos-signing-input.dmg --yes
+          fi
       - name: Remove temporary credentials
         if: always()
         run: |

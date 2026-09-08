@@ -380,6 +380,75 @@ def test_workflows_keep_signing_keys_in_protected_ci_and_publication_gated():
     assert "release-seal-${{ inputs.tag_name }}" in notary and "release-seal-${{ inputs.tag_name }}" in final
 
 
+@pytest.mark.parametrize("status", ["In Progress", "Invalid"])
+def test_unaccepted_submission_never_staples_or_produces_distributions(tmp_path, status):
+    args = argparse.Namespace(image=tmp_path / "input.dmg", sha256="a" * 64,
+                              output=tmp_path / "result", commit="b" * 40,
+                              version="1.2.3", profile="profile", keychain="keychain",
+                              pending_ok=True)
+    with patch.object(release, "check_digest"), patch.object(release, "verify_code"), \
+            patch.object(release, "app_from_image", return_value=tmp_path / "App.app"), \
+            patch.object(release, "verify_app"), \
+            patch.object(release, "submit_and_wait_for_notarization", return_value={"id": "id", "status": status}), \
+            patch.object(release, "run", return_value='{"issues": []}') as command:
+        if status == "Invalid":
+            with pytest.raises(ValueError, match="not Accepted"):
+                release.notarize(args)
+            assert (args.output / "notarization-log.json").exists()
+            assert command.call_args.args[1:3] == ("notarytool", "log")
+        else:
+            release.notarize(args)
+            command.assert_not_called()
+    assert not (args.output / release.DMG).exists()
+    assert not (args.output / release.APP_ZIP).exists()
+
+
+def test_resume_queries_existing_submission_and_retains_binding(tmp_path):
+    submission_id = "b5e759d9-5951-453c-9462-e0275ff19a3d"
+    args = argparse.Namespace(image=tmp_path / "input.dmg", profile="profile",
+                              keychain=tmp_path / "notary.keychain", submission_id=submission_id,
+                              sha256="a" * 64, commit="b" * 40, version="1.2.3",
+                              wait_seconds=0, pending_ok=True)
+    evidence = tmp_path / "notarization.json"
+    with patch.object(release, "run", return_value=json.dumps(
+            {"id": submission_id, "status": "In Progress"})) as command:
+        result = release.submit_and_wait_for_notarization(args, evidence)
+    assert result["status"] == "In Progress"
+    assert command.call_count == 1
+    assert command.call_args.args[1:4] == ("notarytool", "info", submission_id)
+    receipt = json.loads((tmp_path / "submission.json").read_text())
+    assert receipt == {"submission_id": submission_id, "sha256": "a" * 64,
+                       "commit": "b" * 40, "version": "1.2.3", "candidate_id": ""}
+
+
+def test_resume_retries_failed_read_without_submitting(tmp_path):
+    submission_id = "b5e759d9-5951-453c-9462-e0275ff19a3d"
+    args = argparse.Namespace(image=tmp_path / "input.dmg", profile="profile",
+                              keychain=tmp_path / "keychain", submission_id=submission_id)
+    with patch.object(release, "run", side_effect=[
+            subprocess.CalledProcessError(1, ["notarytool"]),
+            json.dumps({"id": submission_id, "status": "Accepted"})]) as command, \
+            patch.object(release.time, "sleep"):
+        assert release.submit_and_wait_for_notarization(args, tmp_path / "evidence.json")["status"] == "Accepted"
+    assert all(call.args[2] == "info" for call in command.call_args_list)
+
+
+def test_failed_submit_is_never_retried(tmp_path):
+    args = argparse.Namespace(image=tmp_path / "input.dmg", profile="profile", keychain="keychain")
+    with patch.object(release, "run", side_effect=subprocess.CalledProcessError(1, ["notarytool"])) as command:
+        with pytest.raises(subprocess.CalledProcessError):
+            release.submit_and_wait_for_notarization(args, tmp_path / "evidence.json")
+    assert command.call_count == 1
+
+
+def test_resume_rejects_wrong_response_id(tmp_path):
+    args = argparse.Namespace(image=tmp_path / "input.dmg", profile="profile", keychain="keychain",
+                              submission_id="b5e759d9-5951-453c-9462-e0275ff19a3d")
+    with patch.object(release, "run", return_value=json.dumps({"id": "wrong", "status": "Accepted"})):
+        with pytest.raises(ValueError, match="does not match"):
+            release.submit_and_wait_for_notarization(args, tmp_path / "evidence.json")
+
+
 def test_notary_submission_id_is_preserved_before_polling(tmp_path):
     args = argparse.Namespace(image=tmp_path / "input.dmg", profile="profile",
                               keychain=tmp_path / "notary.keychain")

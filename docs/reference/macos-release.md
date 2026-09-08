@@ -92,10 +92,12 @@ requiring another person's approval would deadlock the current team.
    tag protection; a failed job leaves the draft unpublished for inspection.
    The PKCS#12, password and profile are unavailable to pull-request jobs and
    removed with the temporary keychain even when the job fails.
-3. CI checks the input hash, Apple signature/team and source/version, submits
-   the signed DMG, immediately preserves its Apple submission ID, and polls
-   until **Accepted**. The evidence artifact remains useful even if Apple is
-   still processing when the bounded CI wait expires. CI staples/verifies both DMG
+3. CI retains the exact signed input DMG in the draft before submitting it.
+   It checks the input hash, Apple signature/team and source/version, submits
+   once, preserves the Apple submission ID and a SHA-256/source-bound receipt,
+   and polls for up to two minutes. A pending run ends successfully with an
+   explicit pending summary; it does not verify, promote or publish artifacts.
+   Resume the same submission as described below. After **Accepted**, CI staples/verifies both DMG
    and app, creates the final ZIP and CLI archive from the same sealed app,
    replaces only draft macOS assets, and regenerates the complete manifest.
    The original CI onefile macOS CLI is a preview only: its embedded libraries
@@ -128,6 +130,29 @@ requiring another person's approval would deadlock the current team.
    The sealed-artifact checks reject linkage that would still require rewriting.
 
 ## Failure and retry
+
+### Resume an Apple submission
+
+Download `notarization-evidence` from the previous run. `submission.json` records
+the submission ID, exact signed input SHA-256, source commit and version.
+The signed `kassiber-macos-signing-input.dmg` stays in the draft until promotion.
+For the older evidence format, take the ID from `notarization.json` and the
+input SHA-256 from that run's dispatch inputs. Use the same draft/tag:
+
+```sh
+gh workflow run notarize-macos.yml --repo bitcoinaustria/kassiber --ref main \
+  -f tag_name=v<VERSION> -f input_sha256=<EXACT_SIGNED_INPUT_SHA256> \
+  -f submission_id=<APPLE_SUBMISSION_UUID>
+```
+
+Omit `build_run_id`: resuming must not rebuild, re-sign or upload a new Apple
+submission. Candidate resumes also retain their `candidate=true` and
+`source_commit` inputs. Resume reads retry three times on tool errors; a failed
+submit is never blindly retried because Apple may already have received it.
+Apple's `Accepted` status alone is insufficient: stapling, ticket validation,
+code signatures and source/version checks must succeed for these exact bytes.
+Rejections preserve `notarization-log.json` when Apple makes it available.
+Pending runs require a later dispatch; the workflow does not schedule itself.
 
 ### Unpublished candidates without a version tag
 
