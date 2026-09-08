@@ -192,6 +192,7 @@ def http_post_json(
     _rng=None,
     _max_attempts=None,
     _http_error_handler=None,
+    deadline=None,
 ):
     def _opener():
         request = urlrequest.Request(
@@ -209,7 +210,7 @@ def http_post_json(
             with urlopen_with_proxy(
                 request,
                 url,
-                timeout,
+                http_client.remaining_timeout(deadline, timeout),
                 proxy_url=proxy_url,
                 source_label="backend",
                 ssl_context=ssl_context,
@@ -227,6 +228,7 @@ def http_post_json(
         rng=_rng,
         max_attempts=_max_attempts,
         on_retry=_emit_http_backoff,
+        deadline=deadline,
     )
 
 
@@ -3186,7 +3188,7 @@ def _bitcoinrpc_http_error(exc, expected_id):
     return {"error": {"code": error["code"], "category": category}}
 
 
-def bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None):
+def bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None, *, deadline=None):
     payload = {
         "jsonrpc": "1.0",
         "id": f"{APP_NAME}-{method}",
@@ -3201,6 +3203,7 @@ def bitcoinrpc_call(backend, method, params=None, wallet_name=None, timeout=None
         proxy_url=_backend_proxy_url(backend),
         ssl_context=_backend_ssl_context(backend),
         _http_error_handler=lambda exc: _bitcoinrpc_http_error(exc, payload["id"]),
+        **({"deadline": deadline} if deadline is not None else {}),
     )
     if response.get("error"):
         error = response["error"]

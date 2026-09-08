@@ -1573,6 +1573,12 @@ class TransactionGraphTest(unittest.TestCase):
 
         _FakeElectrumClient.calls = []
         _FakeElectrumClient.responses = {}
+        # Older Core graph caches discarded the coinbase marker. They must not
+        # suppress an explicit lookup that can recover its known origin.
+        tg._store_graph_lookup_cache(self.conn, "bitcoin", "regtest", txid, {
+            "txid": txid, "vin": [{}],
+            "vout": [{"value": 1_250_000_000, "scriptpubkey": SCRIPT_A}],
+        })
         with patch("kassiber.core.transaction_graph.ElectrumClient", _FakeElectrumClient), patch(
             "kassiber.core.transaction_graph.bitcoinrpc_call",
             side_effect=fake_rpc,
@@ -1588,6 +1594,12 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertEqual(payload["unsupportedReason"], "input_prevout_values_missing")
         self.assertEqual(payload["transaction"]["outputCount"], 1)
         self.assertEqual(payload["outputs"][0]["valueSats"], 1_250_000_000)
+        self.assertEqual(payload["inputs"][0]["role"], "coinbase")
+        cached = tg._load_graph_lookup_cache(self.conn, "bitcoin", "regtest", txid)
+        self.assertTrue(cached["vin"][0]["is_coinbase"])
+        with patch.object(tg, "bitcoinrpc_call", side_effect=AssertionError("cache should suffice")):
+            reopened = self._graph("mining-row", allow_public_lookup=True)
+        self.assertEqual(reopened["inputs"][0]["role"], "coinbase")
         self.assertNotIn(
             "graphless_import",
             {warning["code"] for warning in payload["warnings"]},
@@ -3971,6 +3983,127 @@ class TransactionGraphTest(unittest.TestCase):
             tg.build_transaction_graph_snapshot(self.conn, {"transaction": "nocache-row"})
             tg.build_transaction_graph_snapshot(self.conn, {"transaction": "nocache-row"})
             self.assertEqual(spy.call_count, 2)
+
+    def test_profile_semantics_cache_isolated_between_copied_books(self):
+        txid = "ab" * 32
+        self._utxo("wallet-a", ADDR_A, txid, 0, 99000)
+        self._tx("copied-row", "wallet-a", "inbound", 99000000, txid, {
+            "txid": txid,
+            "vin": [{"txid": "cd" * 32, "vout": 0,
+                     "prevout": {"value": 100000, "scriptpubkey": SCRIPT_B}}],
+            "vout": [{"value": 99000, "scriptpubkey": SCRIPT_A}],
+        })
+        self.conn.commit()
+        other = open_db(Path(self.tmp.name) / "copied")
+        try:
+            self.conn.backup(other)
+            other.execute("UPDATE wallets SET label = 'Copied wallet' WHERE id = 'wallet-a'")
+            other.commit()
+            self.assertEqual(tg._profile_semantics_signature(self.conn, "profile-1"),
+                             tg._profile_semantics_signature(other, "profile-1"))
+            cache = {}
+            first = tg.build_transaction_graph_snapshot(
+                self.conn, {"transaction": "copied-row"}, semantics_cache=cache)
+            copied = tg.build_transaction_graph_snapshot(
+                other, {"transaction": "copied-row"}, semantics_cache=cache)
+            fresh = tg.build_transaction_graph_snapshot(other, {"transaction": "copied-row"})
+            self.assertNotEqual(first["outputs"][0], fresh["outputs"][0])
+            self.assertEqual(copied["outputs"][0], fresh["outputs"][0])
+            self.assertEqual(len(cache), 1)
+        finally:
+            other.close()
+
+    def test_core_prevout_acquisition_has_one_total_budget(self):
+        txid = "ef" * 32
+        parents = [f"{index:064x}" for index in range(1, 251)]
+        clock = [0.0]
+        calls = []
+
+        def rpc(_backend, _method, params, *, timeout, deadline):
+            calls.append((params[0], timeout))
+            if params[0] == txid:
+                clock[0] += 1
+                return {"txid": txid,
+                        "vin": [{"txid": parent, "vout": 0} for parent in parents],
+                        "vout": [{"value": 1, "scriptPubKey": {"hex": SCRIPT_A}}]}
+            clock[0] += timeout
+            raise TimeoutError("synthetic timeout")
+
+        with patch.object(tg, "monotonic", side_effect=lambda: clock[0], create=True), \
+             patch.object(tg, "bitcoinrpc_call", side_effect=rpc):
+            raw = tg._fetch_bitcoinrpc_transaction_graph(
+                self.conn, {"timeout": 5}, "bitcoin", "main", txid)
+        self.assertLessEqual(clock[0], 10)
+        self.assertLessEqual(len(calls), 3)
+        self.assertIn("_graphLookupWarning", raw)
+
+    def test_core_prevout_lookup_keeps_known_parents_after_rpc_not_found(self):
+        txid = "ef" * 32
+        parents = ["aa" * 32, "bb" * 32]
+
+        def rpc(_backend, _method, params, **_kwargs):
+            if params[0] == txid:
+                return {"txid": txid,
+                        "vin": [{"txid": parent, "vout": 0} for parent in parents],
+                        "vout": [{"value": 1, "scriptPubKey": {"hex": SCRIPT_A}}]}
+            if params[0] == parents[0]:
+                raise AppError("Transaction unavailable", details={"rpc_error_code": -5})
+            return {"txid": parents[1], "vin": [],
+                    "vout": [{"value": 2, "scriptPubKey": {"hex": SCRIPT_B}}]}
+
+        with patch.object(tg, "bitcoinrpc_call", side_effect=rpc):
+            raw = tg._fetch_bitcoinrpc_transaction_graph(
+                self.conn, {"timeout": 5}, "bitcoin", "main", txid)
+        self.assertNotIn("prevout", raw["vin"][0])
+        self.assertEqual(raw["vin"][1]["prevout"]["value"], 2)
+        self.assertIn("_graphLookupWarning", raw)
+
+    def test_core_prevout_budget_caps_slow_successful_requests(self):
+        txid = "ef" * 32
+        parents = [f"{index:064x}" for index in range(1, 251)]
+        clock = [0.0]
+        timeouts = []
+
+        def rpc(_backend, _method, params, *, timeout, deadline):
+            timeouts.append(timeout)
+            clock[0] += min(4, timeout)
+            if params[0] == txid:
+                return {"txid": txid,
+                        "vin": [{"txid": parent, "vout": 0} for parent in parents],
+                        "vout": [{"value": 1.0, "scriptPubKey": {"hex": SCRIPT_A}}]}
+            return {"txid": params[0], "vin": [],
+                    "vout": [{"value": 2.0, "scriptPubKey": {"hex": SCRIPT_B}}]}
+
+        with patch.object(tg, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(tg, "bitcoinrpc_call", side_effect=rpc):
+            raw = tg._fetch_bitcoinrpc_transaction_graph(
+                self.conn, {"timeout": 5}, "bitcoin", "main", txid)
+        self.assertEqual(timeouts, [5, 5, 2])
+        self.assertEqual(clock[0], 10)
+        self.assertEqual(sum("prevout" in entry for entry in raw["vin"]), 2)
+        self.assertIn("_graphLookupWarning", raw)
+
+    def test_core_fallback_does_not_restart_exhausted_budget(self):
+        txid = "ef" * 32
+        self._tx("budget-row", "wallet-a", "inbound", 100000000000, txid, {})
+        clock = [0.0]
+        calls = []
+
+        def rpc(backend, _method, params, **kwargs):
+            calls.append(backend["name"])
+            clock[0] += 5
+            if params[0] == txid:
+                return {"txid": txid, "vin": [{"txid": "aa" * 32, "vout": 0}],
+                        "vout": [{"value": 1.0, "scriptPubKey": {"hex": SCRIPT_A}}]}
+            raise TimeoutError("synthetic timeout")
+
+        backends = [{"kind": "bitcoinrpc", "name": name} for name in ("first", "second")]
+        with patch.object(tg, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(tg, "_graph_lookup_backends", return_value=backends), \
+             patch.object(tg, "bitcoinrpc_call", side_effect=rpc):
+            payload = self._graph("budget-row", allow_public_lookup=True)
+        self.assertEqual(calls, ["first", "first"])
+        self.assertIn("bitcoin_reference_lookup_incomplete", {w["code"] for w in payload["warnings"]})
 
     def test_profile_semantics_cache_invalidates_on_owned_set_change(self):
         # Adding a wallet or observing a UTXO changes the owned index but does not

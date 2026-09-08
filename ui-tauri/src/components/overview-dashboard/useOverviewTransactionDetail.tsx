@@ -7,7 +7,6 @@ import {
   TransactionDetailSheet,
   TransactionEvidenceReuseDialog,
   draftForTransaction,
-  metadataUpdateArgs,
   explorerForTransaction,
   type Transaction,
   type TransactionEditDraft,
@@ -29,6 +28,7 @@ import {
   type AttachmentsListData,
   type JournalEventsData,
 } from "@/components/transactions/dashboard/model";
+import { transactionDetailSaveArgs } from "@/components/transactions/dashboard/useTransactionDetailRecord";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
   openAttachmentFile,
@@ -144,33 +144,27 @@ export function useOverviewTransactionDetail({
         .map((tx) => tx.id),
     );
   }, [extraTransactions, snapshot.activityTxs, snapshot.txs]);
-  const getDraft = React.useCallback(
-    (txn: Transaction) => drafts[txn.id] ?? draftForTransaction(txn),
-    [drafts],
+  // Detail reads must not replace the editable draft when they finish.
+  const detailDraft = React.useMemo(
+    () => detailTransaction
+      ? drafts[detailTransaction.id] ?? draftForTransaction(detailTransaction)
+      : null,
+    [drafts, detailTransaction],
   );
   const saveTransactionDraft = React.useCallback(
     async (transactionId: string, draft: TransactionEditDraft) => {
       setSaveError(null);
-      const sourceTransaction = transactions.find(
-        (txn) => txn.id === transactionId,
-      );
-      const baseline = sourceTransaction
-        ? drafts[transactionId] ?? draftForTransaction(sourceTransaction)
-        : null;
       await metadataUpdate.mutateAsync(
-        metadataUpdateArgs({
-          transactionId,
-          draft,
-          baseline,
-          sourceTags: sourceTransaction?.tags ?? [],
-        }),
+        transactionDetailSaveArgs(
+          transactionId, draft, transactions, detailTransaction, drafts,
+        ),
       );
       setDrafts((current) => ({
         ...current,
         [transactionId]: draft,
       }));
     },
-    [drafts, metadataUpdate, transactions],
+    [detailTransaction, drafts, metadataUpdate, transactions],
   );
   const openTransactionDetail = React.useCallback(
     (transactionId: string, tab = "details", fromPendingLink = false) => {
@@ -383,7 +377,7 @@ export function useOverviewTransactionDetail({
       />
       <TransactionDetailSheet
         transaction={detailTransaction}
-        draft={detailTransaction ? getDraft(detailTransaction) : null}
+        draft={detailDraft}
         initialTab={detailInitialTab}
         hideSensitive={hideSensitive}
         currency={currency}

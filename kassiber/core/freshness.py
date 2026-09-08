@@ -26,6 +26,13 @@ from ..time_utils import now_iso, parse_iso_datetime_or_none
 # living only in structured job state.
 _LOGGER = logging.getLogger(__name__)
 
+
+class _JobRemoved(AppError):
+    """The exact executing job was deleted with its source, not a handler error."""
+
+    def __init__(self):
+        super().__init__("Freshness job disappeared", code="state_not_ready")
+
 _SAFE_OBSERVER_PROJECTION_CONFLICT_KINDS = frozenset(
     {
         "bdk_conflicting_prevouts",
@@ -613,7 +620,7 @@ def _set_cancelled(
     job: Mapping[str, Any],
 ) -> dict[str, Any]:
     now = now_iso()
-    conn.execute(
+    updated = conn.execute(
         """
         UPDATE freshness_jobs
         SET cancel_requested = 1, status = ?, phase = ?, finished_at = ?,
@@ -628,6 +635,8 @@ def _set_cancelled(
             job["id"],
         ),
     )
+    if not updated.rowcount:
+        raise _JobRemoved
     state = get_source_state(conn, job["profile_id"], job["source_key"])
     upsert_source_state(
         conn,
@@ -774,6 +783,54 @@ def get_job(conn: sqlite3.Connection, job_id: str) -> dict[str, Any]:
     return _row_payload(row)
 
 
+def get_selected_jobs(
+    conn: sqlite3.Connection, profile_id: str, job_ids: list[str],
+) -> list[dict[str, Any]]:
+    """Read existing selected jobs without borrowing another profile's work."""
+    result = []
+    unique_ids = list(dict.fromkeys(job_ids))
+    # Stay below SQLite's variable limit even for large workspace refreshes.
+    for offset in range(0, len(unique_ids), 500):
+        batch = unique_ids[offset:offset + 500]
+        placeholders = ",".join("?" for _ in batch)
+        rows = conn.execute(
+            f"SELECT * FROM freshness_jobs WHERE profile_id = ? AND id IN ({placeholders})",
+            [profile_id, *batch],
+        ).fetchall()
+        result.extend(_row_payload(row) for row in rows)
+    return result
+
+
+# Shared by queue selection and exact selected-job dispatch. Rechecking this
+# predicate must not require loading every other pending job's JSON payload.
+_DUE_JOB_PREDICATE = """
+    status IN (?, ?)
+    AND (run_after IS NULL OR run_after <= ?)
+    AND (cooldown_until IS NULL OR cooldown_until <= ?)
+    AND NOT EXISTS (
+        SELECT 1 FROM freshness_source_states
+        WHERE freshness_source_states.profile_id = freshness_jobs.profile_id
+          AND freshness_source_states.source_key = freshness_jobs.source_key
+          AND freshness_source_states.paused = 1
+    )
+"""
+
+
+def get_dispatchable_job(
+    conn: sqlite3.Connection, profile_id: str, job_id: str,
+) -> dict[str, Any] | None:
+    """Return a terminal outcome or a currently due job; missing means deferred."""
+    now = now_iso()
+    row = conn.execute(
+        f"""SELECT * FROM freshness_jobs
+        WHERE id = ? AND profile_id = ?
+          AND (status IN (?, ?, ?) OR ({_DUE_JOB_PREDICATE}))""",
+        (job_id, profile_id, JOB_DONE, JOB_ERROR, JOB_CANCELLED,
+         JOB_QUEUED, JOB_RATE_LIMITED, now, now),
+    ).fetchone()
+    return _row_payload(row) if row is not None else None
+
+
 def recover_interrupted_jobs(
     conn: sqlite3.Connection,
     *,
@@ -863,16 +920,7 @@ def list_due_jobs(
         f"""
         SELECT *
         FROM freshness_jobs
-        WHERE status IN (?, ?)
-          AND (run_after IS NULL OR run_after <= ?)
-          AND (cooldown_until IS NULL OR cooldown_until <= ?)
-          AND NOT EXISTS (
-            SELECT 1
-            FROM freshness_source_states
-            WHERE freshness_source_states.profile_id = freshness_jobs.profile_id
-              AND freshness_source_states.source_key = freshness_jobs.source_key
-              AND freshness_source_states.paused = 1
-          )
+        WHERE {_DUE_JOB_PREDICATE}
           {profile_filter}
         ORDER BY priority ASC, created_at ASC, id ASC
         LIMIT ?
@@ -895,7 +943,7 @@ def update_job_progress(
     redacted = redact_freshness_payload(progress)
     phase = str(redacted.get("phase") or job.get("phase") or PHASE_BACKEND_FETCH)
     now = now_iso()
-    conn.execute(
+    updated = conn.execute(
         """
         UPDATE freshness_jobs
         SET phase = ?, progress_json = ?, updated_at = ?
@@ -903,6 +951,8 @@ def update_job_progress(
         """,
         (phase, _json_dump(redacted), now, job["id"]),
     )
+    if not updated.rowcount:
+        raise _JobRemoved
     state = get_source_state(conn, job["profile_id"], job["source_key"])
     upsert_source_state(
         conn,
@@ -924,7 +974,7 @@ def _check_cancelled(conn: sqlite3.Connection, job_id: str) -> None:
         (job_id,),
     ).fetchone()
     if row is None:
-        raise AppError("Freshness job disappeared", code="state_not_ready")
+        raise _JobRemoved
     if row["cancel_requested"] or row["status"] == JOB_CANCELLED:
         raise AppError(
             "Freshness job was cancelled",
@@ -944,6 +994,7 @@ def _mark_running(conn: sqlite3.Connection, job: Mapping[str, Any]) -> dict[str,
         """,
         (JOB_RUNNING, PHASE_DISCOVERY, now, now, job["id"]),
     )
+    # Progress performs the existing-row check before publishing source state.
     update_job_progress(conn, {**job, "status": JOB_RUNNING}, {"phase": PHASE_DISCOVERY})
     return get_job(conn, job["id"])
 
@@ -988,7 +1039,7 @@ def _mark_success(
         state = get_source_state(conn, job["profile_id"], job["source_key"])
         checkpoint = (state or {}).get("checkpoint", {})
     now = now_iso()
-    conn.execute(
+    updated = conn.execute(
         """
         UPDATE freshness_jobs
         SET status = ?, phase = ?, result_json = ?, finished_at = ?,
@@ -997,6 +1048,8 @@ def _mark_success(
         """,
         (JOB_DONE, PHASE_DONE, _json_dump(redacted), now, now, job["id"]),
     )
+    if not updated.rowcount:
+        raise _JobRemoved
     status = STATUS_PARTIALLY_STALE if redacted.get("partial_success") else STATUS_FRESH
     upsert_source_state(
         conn,
@@ -1076,7 +1129,7 @@ def _mark_error(
             "rate_limited_until": cooldown_until,
         }
     )
-    conn.execute(
+    updated = conn.execute(
         """
         UPDATE freshness_jobs
         SET status = ?, phase = ?, error_json = ?, cooldown_until = ?,
@@ -1096,6 +1149,8 @@ def _mark_error(
             job["id"],
         ),
     )
+    if not updated.rowcount:
+        raise _JobRemoved
     state = get_source_state(conn, job["profile_id"], job["source_key"])
     upsert_source_state(
         conn,
@@ -1125,8 +1180,35 @@ def run_job(
     handlers: Mapping[str, JobHandler],
     *,
     progress_observer: ProgressObserver | None = None,
+    missing_ok: bool = False,
+) -> dict[str, Any] | None:
+    """Run one exact job; selected batches may defer a concurrently removed source."""
+    try:
+        job = get_job(conn, job_id)
+    except AppError as exc:
+        # Only this exact lookup may turn not_found into a deferred outcome.
+        # A handler's unrelated not_found still becomes a normal failed job.
+        if not missing_ok or exc.code != "not_found":
+            raise
+        return None
+    try:
+        return _run_existing_job(conn, job, handlers, progress_observer=progress_observer)
+    except _JobRemoved:
+        # Discard any uncommitted progress/apply work. Never resurrect the
+        # source state that the concurrent wallet edit intentionally removed.
+        conn.rollback()
+        if missing_ok:
+            return None
+        raise AppError("Freshness job disappeared", code="state_not_ready") from None
+
+
+def _run_existing_job(
+    conn: sqlite3.Connection,
+    job: dict[str, Any],
+    handlers: Mapping[str, JobHandler],
+    *,
+    progress_observer: ProgressObserver | None = None,
 ) -> dict[str, Any]:
-    job = get_job(conn, job_id)
     if job["status"] in {JOB_DONE, JOB_ERROR, JOB_CANCELLED}:
         return job
     handler = handlers.get(job["job_type"])
@@ -1165,6 +1247,8 @@ def run_job(
         check_cancelled()
         result = handler(conn, job, progress, check_cancelled)
         check_cancelled()
+    except _JobRemoved:
+        raise
     except AppError as exc:
         if exc.code == "cancelled":
             updated = _set_cancelled(conn, job)

@@ -242,12 +242,23 @@ function TransactionDetailBody({
     setActiveTab(visibleInitialTab);
   }, [visibleInitialTab, transaction?.id]);
 
+  const receivedDraft = React.useRef(draft);
   React.useEffect(() => {
+    const previous = receivedDraft.current;
+    receivedDraft.current = draft;
+    // A refetched row can be a new object with unchanged editable metadata.
+    // Keep in-progress edits until the baseline actually changes. The keyed
+    // body already resets all local state when another transaction opens.
+    if (previous === draft || (
+      previous && draft && countDirty(diffDraft(previous, draft)) === 0
+    )) return;
     setLocalDraft(draft);
     setOriginalDraft(draft);
     setTagInput("");
+  }, [draft]);
+  React.useEffect(() => {
     setBalanceCurrency(currency);
-  }, [currency, draft, transaction?.id]);
+  }, [currency]);
 
   const tagInputRef = React.useRef<HTMLInputElement | null>(null);
   const dirty = React.useMemo(

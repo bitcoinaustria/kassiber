@@ -1192,6 +1192,7 @@ class DaemonContext:
 
 def _clear_unlocked_passphrase(ctx):
     _clear_unlocked_passphrase_base(ctx)
+    _GRAPH_SEMANTICS_CACHE.clear()
     jobs = getattr(ctx, "accounting_document_jobs", None)
     if jobs is not None:
         jobs.cancel_all()

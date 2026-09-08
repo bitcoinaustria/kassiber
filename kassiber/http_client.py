@@ -114,6 +114,7 @@ def request_with_retry(
     rng=None,
     max_attempts=None,
     on_retry=None,
+    deadline=None,
 ):
     """Run ``opener()`` under the per-host limiter with bounded 429/503 retry.
 
@@ -122,6 +123,9 @@ def request_with_retry(
     given) fires on the main/worker thread just before each backoff sleep so a
     caller can surface "rate limited, retrying" progress instead of appearing to
     hang.
+
+    An optional monotonic ``deadline`` bounds host-slot waits and retry sleeps.
+    The opener must also cap its transport timeout using ``remaining_timeout``.
     """
     sleeper = sleeper if sleeper is not None else time.sleep
     rng = rng if rng is not None else random
@@ -130,7 +134,10 @@ def request_with_retry(
     cumulative = 0.0
     last_error = None
     for attempt in range(attempts):
-        limiter.acquire()
+        if deadline is None:
+            limiter.acquire()
+        elif not limiter.acquire(timeout=remaining_timeout(deadline)):
+            raise AppError("Backend request budget exhausted", code="backend_timeout", retryable=True)
         try:
             return opener()
         except urlerror.HTTPError as exc:
@@ -163,11 +170,23 @@ def request_with_retry(
         is_last = attempt + 1 >= attempts
         if is_last or cumulative + delay > MAX_CUMULATIVE_WAIT_SECONDS:
             raise _rate_limited_error(url, last_error, source_label)
+        if deadline is not None and delay >= remaining_timeout(deadline):
+            raise AppError("Backend request budget exhausted", code="backend_timeout", retryable=True)
         if on_retry is not None:
             on_retry(attempt + 1, attempts - 1, delay)
         sleeper(delay)
         cumulative += delay
     raise _rate_limited_error(url, last_error, source_label)
+
+
+def remaining_timeout(deadline, timeout=None):
+    """Cap one blocking step to an optional monotonic acquisition deadline."""
+    if deadline is None:
+        return timeout
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise AppError("Backend request budget exhausted", code="backend_timeout", retryable=True)
+    return remaining if timeout is None else min(timeout, remaining)
 
 
 __all__ = [
@@ -176,4 +195,5 @@ __all__ = [
     "RETRY_STATUS",
     "host_limiter",
     "request_with_retry",
+    "remaining_timeout",
 ]
