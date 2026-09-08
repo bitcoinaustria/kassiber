@@ -34,6 +34,8 @@ def test_custody_scalability_smoke_preserves_structural_invariants():
     assert results["builder"]["metrics"]["invariants"][
         "all_outbounds_decided"
     ]
+    assert results["builder"]["metrics"]["invariants"]["all_tax_rows_projected"]
+    assert results["builder"]["metrics"]["tax_finalization_seconds"] >= 0
     assert results["atomic"]["metrics"]["invariants"][
         "constant_decision_traversals"
     ]

@@ -550,13 +550,26 @@ def component_native_support_status(
         # retaining distinct owned outputs.
         unique = {item.quantity_hash: item for item in compatible}
         recovered_amount = sum(item.principal_msat for item in unique.values())
+        # An N:M event shares its opposite-side capacity across all contributing
+        # wallets. Comparing the whole receipt with each individual source
+        # falsely contradicts a reviewed A1+B1 -> C2 consolidation. This is a
+        # capacity check, not a replacement for the component's exact reviewed
+        # allocations and anchor-coverage validation.
+        same_direction = {
+            item.quantity_hash: item
+            for item in observations.values()
+            if item.event_key == anchor.event_key
+            and item.direction == anchor.direction
+            and item.asset == anchor.asset
+        }
+        event_capacity = sum(item.principal_msat for item in same_direction.values())
         # Guided source legs include the separately reviewed network fee in
         # their debit amount. Native owned counterparts cover principal; the
         # fee remains its own component/observation fact.
-        if recovered_amount > anchor.principal_msat:
+        if recovered_amount > event_capacity:
             contradicted += 1
             continue
-        if recovered_amount == anchor.principal_msat:
+        if recovered_amount == event_capacity:
             supported += 1
         else:
             partially_supported += 1

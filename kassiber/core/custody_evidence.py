@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import json
 from typing import Any, Mapping, Sequence
@@ -58,6 +58,7 @@ _EVIDENCE_ROW_FIELDS = frozenset(
         "observation_quantity_hash",
         "observation_fee_attribution",
         "observation_application_revision",
+        "observation_observed_at",
     }
 )
 
@@ -920,6 +921,9 @@ def _event_issue(
 
 def build_canonical_quantity_input(
     rows: Sequence[Mapping[str, Any]],
+    *,
+    receipt_reconciliations: Mapping[str, Mapping[str, Any] | None] | None = None,
+    non_event_transaction_ids: Sequence[str] = (),
 ) -> CanonicalQuantityInput:
     """Deduplicate wallet-event aggregate rows without losing location legs.
 
@@ -933,7 +937,10 @@ def build_canonical_quantity_input(
 
     grouped: dict[CanonicalEventKey, list[Mapping[str, Any]]] = {}
     rejected: list[CanonicalEventIssue] = []
+    non_events = set(non_event_transaction_ids)
     for ordinal, row in enumerate(rows):
+        if str(_field(row, "id")) in non_events:
+            continue
         try:
             key = canonical_event_key(row)
         except (TypeError, ValueError) as exc:
@@ -950,12 +957,41 @@ def build_canonical_quantity_input(
         grouped.setdefault(key, []).append(row)
 
     events: list[CanonicalQuantityEvent] = []
+    reconciliations = receipt_reconciliations or {}
     for key, event_rows in sorted(grouped.items()):
+        if any(
+            str(_field(row, "id")) in reconciliations
+            and reconciliations[str(_field(row, "id"))] is None
+            for row in event_rows
+        ):
+            rejected.append(_event_issue(
+                key, "source_overlap_quantity_unresolved",
+                "overlapping wallet receipts lack complete disjoint output coverage",
+                event_rows,
+            ))
+            continue
         observations: list[QuantityObservation] = []
         invalid_messages: list[str] = []
         for row in event_rows:
             try:
-                observations.append(QuantityObservation.from_transaction(row, key))
+                observation = QuantityObservation.from_transaction(row, key)
+                proof = reconciliations.get(str(_field(row, "id")))
+                if proof is not None:
+                    quantity_hash, _ = _hash_payload({
+                        "observed_quantity_hash": observation.quantity_hash,
+                        "receipt_reconciliation": proof,
+                    })
+                    payload = json.loads(observation.evidence_payload_json)
+                    payload["receipt_reconciliation"] = proof
+                    detail_hash, payload_json = _hash_payload(payload)
+                    observation = replace(
+                        observation, amount_msat=proof["amount_msat"],
+                        quantity_hash=quantity_hash,
+                        evidence_detail_hash=detail_hash,
+                        evidence_payload_json=payload_json,
+                    )
+                    observation._validate()
+                observations.append(observation)
             except (TypeError, ValueError) as exc:
                 invalid_messages.append(str(exc))
         if invalid_messages:

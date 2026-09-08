@@ -1772,6 +1772,18 @@ CREATE TABLE IF NOT EXISTS journal_custody_decisions (
     PRIMARY KEY(profile_id, decision_id)
 );
 
+-- Local derived evidence that a still-authored component is fully realized by
+-- selected native history. It is not an additional economic/carry relation.
+CREATE TABLE IF NOT EXISTS journal_custody_reconciliations (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    component_id TEXT NOT NULL REFERENCES custody_components(id) ON DELETE CASCADE,
+    input_version INTEGER NOT NULL,
+    component_revision INTEGER NOT NULL,
+    proof_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, component_id)
+);
+
 -- Stored non-quantity custody relations. Conversions and reviewed payouts are
 -- economic links, not assertions that unlike native quantities are the same
 -- conserved object, so they complement rather than overload MOVE decisions.
@@ -5536,6 +5548,11 @@ def ensure_schema_compat(conn):
     _ensure_freshness_schema(conn)
     _ensure_transaction_graph_cache_schema(conn)
 
+    _ensure_accounting_schema(conn)
+
+
+def _ensure_accounting_schema(conn):
+    """Install opt-in ledger storage atomically without committing caller work."""
     # Additive opt-in ledger storage; schema creation neither enrolls a book
     # nor migrates personal users to encryption. No accounting module commits.
     from .core.accounting import schema as accounting_schema
@@ -5553,20 +5570,27 @@ def ensure_schema_compat(conn):
     from .core.accounting import cashbook as accounting_cashbook
     from .core.accounting import task_schema as accounting_tasks
 
-    accounting_schema.ensure_schema(conn)
-    accounting_evidence.ensure_schema(conn)
-    accounting_bank.ensure_schema(conn)
-    accounting_schedules.ensure_schema(conn)
-    accounting_document_text.ensure_schema(conn)
-    accounting_tax_workpapers.ensure_schema(conn)
-    accounting_sources.ensure_schema(conn)
-    accounting_artifacts.ensure_schema(conn)
-    accounting_projection.ensure_schema(conn)
-    accounting_ai_proposals.ensure_schema(conn)
-    accounting_posting_batch.ensure_schema(conn)
-    accounting_valuation.ensure_schema(conn)
-    accounting_cashbook.ensure_schema(conn)
-    accounting_tasks.ensure_schema(conn)
+    conn.execute("SAVEPOINT accounting_schema_bootstrap")
+    try:
+        accounting_schema.ensure_schema(conn)
+        accounting_evidence.ensure_schema(conn)
+        accounting_bank.ensure_schema(conn)
+        accounting_schedules.ensure_schema(conn)
+        accounting_document_text.ensure_schema(conn)
+        accounting_tax_workpapers.ensure_schema(conn)
+        accounting_sources.ensure_schema(conn)
+        accounting_artifacts.ensure_schema(conn)
+        accounting_projection.ensure_schema(conn)
+        accounting_ai_proposals.ensure_schema(conn)
+        accounting_posting_batch.ensure_schema(conn)
+        accounting_valuation.ensure_schema(conn)
+        accounting_cashbook.ensure_schema(conn)
+        accounting_tasks.ensure_schema(conn)
+    except BaseException:
+        conn.execute("ROLLBACK TO SAVEPOINT accounting_schema_bootstrap")
+        conn.execute("RELEASE SAVEPOINT accounting_schema_bootstrap")
+        raise
+    conn.execute("RELEASE SAVEPOINT accounting_schema_bootstrap")
 
 
 def _ensure_custody_economic_term_review_notes(conn):

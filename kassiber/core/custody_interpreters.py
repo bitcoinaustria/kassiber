@@ -45,7 +45,9 @@ from .ownership_transfers import (
     OwnershipDeriveResult,
     ProfileTransferDerivation,
     derive_profile_transfers,
+    detect_pending_onchain_ids,
 )
+from .custody_native_reconciliation import NativeComponentReconciliation, reconcile_native_components
 from .privacy_hops import privacy_hop_evidence_from_row
 from .custody_native_transitions import (
     NATIVE_TRANSITION_SOURCE,
@@ -76,6 +78,11 @@ class CustodyInterpreterCompilation:
     non_event_transaction_ids: tuple[str, ...]
     blocked_transaction_ids: tuple[str, ...] = ()
     quarantines: tuple[Mapping[str, Any], ...] = ()
+    native_component_reconciliations: tuple[NativeComponentReconciliation, ...] = ()
+
+    @property
+    def native_reconciled_component_ids(self) -> tuple[str, ...]:
+        return tuple(item.component_id for item in self.native_component_reconciliations)
 
     @property
     def blocking_quarantines(self) -> tuple[Mapping[str, Any], ...]:
@@ -961,6 +968,7 @@ def compile_custody_interpreters(
     channel_roles: Mapping[str, str] | None = None,
     loan_legs: Sequence[Mapping[str, Any]] = (),
     component_transaction_ids: Sequence[str] = (),
+    components: Sequence[Mapping[str, Any]] = (),
 ) -> CustodyInterpreterCompilation:
     """Compile every non-component custody interpreter before arbitration."""
 
@@ -1274,21 +1282,54 @@ def compile_custody_interpreters(
         *derived_pairs,
         *native_transition_pairs,
     ]
+    native_reconciliations: tuple[NativeComponentReconciliation, ...] = ()
+    physical_scopes = {
+        _anchor_id(row): scope
+        for row in rows
+        if (scope := onchain_transfer_scope(row)) is not None
+    } if pair_inputs else {}
+    if any(
+        item.get("effective_state") == "active"
+        and item.get("conservation_mode") == "quantity"
+        and not item.get("economic_terms")
+        for item in components
+    ):
+        # Compile the same guarded candidates without authored reservations to
+        # verify a complete recovered route. Only proved whole components yield
+        # their reservations; final claims still use the ordinary compiler.
+        candidate_claims, candidate_blocked, _candidate_quarantines = _pair_claims(
+            pair_inputs,
+            observations,
+            excluded_transaction_ids=set(),
+            wallet_refs_by_id=wallet_refs_by_id,
+            native_transition_proofs=native_transition_proofs,
+            physical_scopes_by_anchor=physical_scopes,
+        )
+        native_reconciliations = reconcile_native_components(
+            components, observations, candidate_claims,
+            rows_by_transaction=rows_by_id,
+            blocked_transaction_ids=(
+                set(candidate_blocked) | channel_blocked_ids | derivation_blocked_ids
+                | privacy_blocked_ids | samourai_unverified_ids | native_transition_blocked_ids
+                | detect_pending_onchain_ids(rows)
+            ),
+        )
+        if native_reconciliations:
+            native_reconciled_ids = {item.component_id for item in native_reconciliations}
+            released = {
+                str(leg.get("anchor_transaction_id") or leg.get("transaction_id") or "")
+                for component in components
+                if str(component.get("id")) in native_reconciled_ids
+                for leg in component.get("legs", ())
+            } - {""}
+            excluded.difference_update(released)
     claims, blocked_transaction_ids, pair_quarantines = _pair_claims(
         pair_inputs,
         observations,
         excluded_transaction_ids=excluded,
         wallet_refs_by_id=wallet_refs_by_id,
         native_transition_proofs=native_transition_proofs,
-        physical_scopes_by_anchor=(
-            {
-                _anchor_id(row): scope
-                for row in rows
-                if (scope := onchain_transfer_scope(row)) is not None
-            }
-            if pair_inputs
-            else {}
-        ),
+        physical_scopes_by_anchor=physical_scopes,
     )
     claims = tuple(
         (
@@ -1322,6 +1363,7 @@ def compile_custody_interpreters(
     return CustodyInterpreterCompilation(
         claims=claims,
         native_audits=native_audits,
+        native_component_reconciliations=native_reconciliations,
         non_event_transaction_ids=non_event_ids,
         blocked_transaction_ids=tuple(
             sorted(

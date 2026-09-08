@@ -433,7 +433,7 @@ class CustodyJournalBuilder:
         self.profile_id = str(profile["id"])
 
     def _transactions(self):
-        return self.conn.execute(
+        rows = self.conn.execute(
             """
             SELECT
                 t.*,
@@ -447,6 +447,7 @@ class CustodyJournalBuilder:
                 observation.quantity_hash AS observation_quantity_hash,
                 observation.fee_attribution AS observation_fee_attribution,
                 observation.application_revision AS observation_application_revision,
+                observation.observed_at AS observation_observed_at,
                 COALESCE(a.code, 'treasury') AS account_code,
                 COALESCE(a.label, 'Treasury') AS account_label
             FROM transactions t
@@ -459,6 +460,14 @@ class CustodyJournalBuilder:
             """,
             (self.profile_id,),
         ).fetchall()
+
+        return [
+            {
+                **dict(row),
+                "_closed_confirmation_observation": ownership_transfers.capture_confirmation_observation(row),
+            }
+            for row in rows
+        ]
 
     def _wallet_refs(self) -> dict[str, dict[str, Any]]:
         refs: dict[str, dict[str, Any]] = {}
@@ -556,8 +565,7 @@ class CustodyJournalBuilder:
 
         owned_index = None
         if any(
-            row["direction"] == "outbound"
-            and row["observation_authority_version"] is not None
+            row["observation_authority_version"] is not None
             for row in rows
         ):
             index_wallets = ownership.load_profile_wallets(self.conn, self.profile_id)
@@ -629,8 +637,16 @@ class CustodyJournalBuilder:
                 }
             )
         )
+        native_non_event_ids = ownership_transfers.native_zero_delta_ids(rows, owned_index)
         enriched_rows = enriched_quantity_rows(rows, evidence_only=True)
-        canonical_input = build_canonical_quantity_input(enriched_rows)
+        from .source_overlap import reconcile_receipt_quantities
+        canonical_input = build_canonical_quantity_input(
+            enriched_rows,
+            non_event_transaction_ids=tuple(sorted(native_non_event_ids)),
+            receipt_reconciliations=reconcile_receipt_quantities(
+                self.conn, self.profile_id, rows, owned_index=owned_index,
+            ),
+        )
         swap_dismissals = self.conn.execute(
             "SELECT * FROM transaction_pair_dismissals WHERE profile_id = ?",
             (self.profile_id,),
@@ -646,7 +662,15 @@ class CustodyJournalBuilder:
             channel_roles=channel_roles,
             loan_legs=loan_legs,
             component_transaction_ids=component_transaction_ids,
+            components=active_components,
         )
+        if native_non_event_ids:
+            interpretation = replace(
+                interpretation,
+                non_event_transaction_ids=tuple(sorted({
+                    *interpretation.non_event_transaction_ids, *native_non_event_ids,
+                })),
+            )
         if migration_quarantines:
             interpretation = replace(
                 interpretation,
@@ -709,7 +733,10 @@ class CustodyJournalBuilder:
             enriched_rows,
             canonical_input=canonical_input,
             interpreter_claims=interpretation.claims,
-            effective_components=active_components,
+            effective_components=[
+                component for component in active_components
+                if str(component["id"]) not in interpretation.native_reconciled_component_ids
+            ],
             native_evidence=interpretation.native_audits,
             interpreter_blockers=interpretation.blocking_quarantines,
             ignored_gap_transaction_ids=runtime_ignored_transaction_ids,
@@ -829,6 +856,9 @@ class CustodyJournalBuilder:
             "ownership_review_counts": ownership_reviews["counts"],
             "ownership_review_candidates": ownership_reviews["candidates"],
             "custody_component_blockers": custody.component_blockers,
+            "custody_native_reconciliations": [
+                asdict(item) for item in custody.interpretation.native_component_reconciliations
+            ],
             "custody_quantity": custody.quantity_state,
             "custody_transfers": custody.custody_transfers,
             "quantity_differences": quantity_differences,
@@ -922,6 +952,11 @@ def store_ledger_state(
     )
 
     custody_quantity = state.get("custody_quantity")
+    from .custody_reconciliation_store import replace_reconciliations
+    replace_reconciliations(
+        conn, profile, custody_quantity, state.get("custody_native_reconciliations", ()),
+        created_at=stored_at,
+    )
     quantity_counts = {"postings": 0, "issues": 0, "balances": 0, "decisions": 0}
     if custody_quantity is not None:
         quantity_counts = custody_quantity_store.replace_canonical_quantity_state(

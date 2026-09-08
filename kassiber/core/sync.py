@@ -49,6 +49,57 @@ ProgressCallback = Callable[[Mapping[str, Any]], None]
 ImportFile = Callable[[sqlite3.Connection, ProfileRow, WalletRow, str, str], SyncOutcome]
 
 
+def _observed_accounting_inputs(conn, profile_id, entries):
+    """Read only affected transaction peers using the indexed wallet identity.
+
+    This runs above the observer boundary, reusing journal confirmation rules
+    without making low-level provenance persistence depend on accounting.
+    """
+    from .ownership_transfers import _current_confirmation_states
+
+    txids = sorted({
+        txid for entry in entries
+        if (txid := canonical_txid(entry.get("external_id"))) is not None
+    })
+    states = {}
+    bindings = {}
+    for offset in range(0, len(txids), 400):
+        batch = txids[offset:offset + 400]
+        placeholders = ",".join("?" for _ in batch)
+        rows = conn.execute(
+            f"""SELECT t.*, w.kind AS wallet_kind, w.config_json AS wallet_config_json,
+                observation.authority_version AS observation_authority_version,
+                observation.graph_hash AS observation_graph_hash,
+                observation.quantity_hash AS observation_quantity_hash,
+                observation.observed_at AS observation_observed_at,
+                observation.observer_ids_json AS observation_observer_ids,
+                observation.observer_kinds_json AS observation_observer_kinds,
+                observation.fee_attribution AS observation_fee_attribution,
+                observation.chain AS observation_chain,
+                observation.network AS observation_network
+            FROM wallets w
+            CROSS JOIN transactions t INDEXED BY idx_transactions_wallet_external_ci_match
+                ON t.wallet_id = w.id
+            LEFT JOIN chain_observation_provenance observation ON observation.transaction_id = t.id
+            WHERE w.profile_id = ? AND t.profile_id = ? AND t.excluded = 0
+                AND t.external_id IS NOT NULL AND LOWER(t.external_id) IN ({placeholders})""",
+            (profile_id, profile_id, *batch),
+        ).fetchall()
+        states.update(_current_confirmation_states(rows))
+        for row in rows:
+            # Bind the accounting-relevant closed facts too: gaining/rebinding
+            # native authority can enable a MOVE even when confirmation agrees.
+            # Refresh timestamps and application revisions are intentionally
+            # absent; they change on steady-state observations.
+            bindings[row["id"]] = tuple(row[field] for field in (
+                "observation_authority_version", "observation_graph_hash",
+                "observation_quantity_hash", "observation_observer_ids",
+                "observation_observer_kinds", "observation_fee_attribution",
+                "observation_chain", "observation_network",
+            ))
+    return states, bindings
+
+
 class InsertRecords(Protocol):
     def __call__(
         self,
@@ -1009,6 +1060,19 @@ def sync_wallet_from_backend(
     )
     observer_resolved_records = outcome.pop("_observer_resolved_records", ())
     if isinstance(observation_provenance, Mapping):
+        provenance_entries = tuple(observation_provenance.get("entries") or ())
+        # A deduplicated row can still become the newest contradictory chain
+        # observation. Only compare when the journal has not already gone stale
+        # from imported changes, and leave steady-state refreshes current.
+        journal_current = conn is not None and conn.execute(
+            """SELECT 1 FROM profiles WHERE id = ? AND last_processed_at IS NOT NULL
+                AND journal_input_version = last_processed_input_version""",
+            (profile["id"],),
+        ).fetchone() is not None
+        previous_observation_inputs = (
+            _observed_accounting_inputs(conn, profile["id"], provenance_entries)
+            if journal_current else None
+        )
         persist_chain_observation_provenance(
             conn,
             profile,
@@ -1018,9 +1082,15 @@ def sync_wallet_from_backend(
             ),
             chain=str(sync_state.chain),
             network=str(sync_state.network),
-            entries=tuple(observation_provenance.get("entries") or ()),
+            entries=provenance_entries,
             resolved_records=tuple(observer_resolved_records),
         )
+        if journal_current and previous_observation_inputs != _observed_accounting_inputs(
+            conn, profile["id"], provenance_entries,
+        ):
+            from .repo import invalidate_journals
+            invalidate_journals(conn, profile["id"])
+            outcome["journal_invalidated"] = True
     notify_apply_stage(hooks, APPLY_STAGE_TRANSACTION_INSERTION)
     if observed_utxos is not None and hooks.update_output_inventory is not None:
         outcome["output_inventory"] = dict(

@@ -13,10 +13,12 @@ import type { QuarantineItem, QuarantineReason, QuarantineSnapshot } from "./typ
 
 function custodyReasonKey(
   reason: string,
-): "nativeTransitionFeeTiming" | "nativeTransitionAmountMismatch" | "collaborativeReview" | undefined {
+): "nativeTransitionFeeTiming" | "nativeTransitionAmountMismatch" | "nativeTransitionAmbiguous" | "ownershipSourceMissing" | "collaborativeReview" | undefined {
   if (reason === "privacy_hop_unresolved") return "collaborativeReview";
   if (reason === "native_transition_fee_timing_unresolved") return "nativeTransitionFeeTiming";
   if (reason === "native_transition_amount_mismatch") return "nativeTransitionAmountMismatch";
+  if (reason === "native_transition_ambiguous") return "nativeTransitionAmbiguous";
+  if (reason === "ownership_transfer_source_missing") return "ownershipSourceMissing";
   return undefined;
 }
 
@@ -266,11 +268,15 @@ function resolveStepIdForReason(reason: string): QuarantineResolveStepId {
   if (normalized.includes("pending_onchain_confirmation")) {
     return "sync-wallets";
   }
-  if (normalized.includes("ownership_transfer_amount_mismatch")) {
+  if (
+    normalized.includes("ownership_transfer_amount_mismatch") ||
+    normalized === "ownership_transfer_source_missing"
+  ) {
     return "sync-wallets";
   }
   if (
     normalized.includes("transfer_fee_implausible") ||
+    normalized === "native_transition_ambiguous" ||
     normalized.includes("ownership_transfer") ||
     normalized.includes("owned_fanout_unresolved") ||
     normalized.includes("derived_transfer") ||
@@ -797,6 +803,8 @@ function actionTab(
   if (normalized.includes("transfer_fee_implausible")) return "details";
   if (normalized.includes("conflicting_spend")) return "details";
   if (normalized.includes("pending_onchain_confirmation")) return "details";
+  if (normalized === "ownership_transfer_source_missing") return "details";
+  if (normalized === "native_transition_ambiguous") return "linked";
   if (normalized.includes("owned_fanout_unresolved")) return "linked";
   if (original.includes("ownership_transfer_amount_mismatch")) return "details";
   if (normalized.includes("pricing_review")) return "pricing";

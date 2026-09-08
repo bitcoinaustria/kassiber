@@ -1146,3 +1146,135 @@ __all__ = [
     "raise_for_sync_source_overlap",
     "scripts_from_sync_state",
 ]
+
+
+def reconcile_receipt_quantities(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    owned_index: Any = None,
+) -> dict[str, dict[str, Any] | None]:
+    """Project overlapping, completely valued external receipts once per output.
+
+    Raw wallet observations remain untouched. Only a proved receipt-only event
+    can be apportioned; any overlapping event lacking that proof is held. The
+    same finite script authority and owner preference used at sync admission
+    chooses each output among wallets actually reporting this event.
+    """
+    from ..transfers import onchain_transfer_scope
+    from .onchain import parse_ownership_tx
+    from .custody_evidence import assess_authoritative_chain_observation
+    from .ownership_transfers import _input_owner_ids
+
+    groups = {}
+    for row in rows:
+        scope = onchain_transfer_scope(row)
+        if scope is not None:
+            groups.setdefault(scope, []).append(row)
+    candidates = [
+        group for scope, group in groups.items()
+        if scope[0] == "bitcoin" and scope[3] == "BTC"
+        and len({
+            str(_row_get(row, "wallet_id")) for row in group
+            if _row_get(row, "direction") == "inbound"
+        }) > 1
+    ]
+    if not candidates:
+        return {}
+    index = build_profile_source_index(conn, profile_id)
+    by_script = {}
+    for source in index.sources:
+        by_script.setdefault((source.chain, source.network, source.script_pubkey), []).append(source)
+    result = {}
+    for group in candidates:
+        scope = onchain_transfer_scope(group[0])
+        wallet_ids = {str(_row_get(row, "wallet_id")) for row in group}
+        parsed = [parse_ownership_tx(_row_get(row, "raw_json")) for row in group]
+        outputs = next((item["outputs"] for item in parsed if item), ())
+        owners = {}
+        for output in outputs:
+            sources = by_script.get((scope[0], scope[1], output["script"]), ())
+            owners[output["n"]] = [source for source in sources if source.wallet_id in wallet_ids]
+        overlap = any(
+            len({source.wallet_id for source in sources}) > 1
+            for sources in owners.values()
+        )
+        valued = bool(outputs) and all(output.get("value_sats") is not None for output in outputs)
+        observed_receipts = sum(
+            int(_row_get(row, "amount") or 0)
+            for row in group if _row_get(row, "direction") == "inbound"
+        )
+        covered_receipts = sum(
+            int(output["value_sats"]) * 1000
+            for output in outputs if valued and owners[output["n"]]
+        )
+        # Trimming an old address list does not rewrite its imported aggregate.
+        # Lost attribution cannot make an over-counted physical receipt safe.
+        kinds = {str(_row_get(row, "wallet_kind")) for row in group}
+        historical_overcount = (
+            "address" in kinds and bool(kinds & _CANONICAL_WALLET_KINDS)
+            and valued and covered_receipts > 0
+            and observed_receipts > covered_receipts
+        )
+        if not overlap and not historical_overcount:
+            continue
+        ids = [str(_row_get(row, "id")) for row in group]
+        # Default to a targeted hold; subsequent checks must prove the whole
+        # overlapping receipt before replacing this with normalized quantities.
+        result.update({row_id: None for row_id in ids})
+        if scope[0] != "bitcoin" or scope[3] != "BTC" or any(
+            _row_get(row, "direction") != "inbound" or int(_row_get(row, "fee") or 0) != 0
+            for row in group
+        ):
+            continue
+        if len(wallet_ids) != len(group) or any(item is None for item in parsed):
+            continue
+        if owned_index is None or not all(
+            assess_authoritative_chain_observation(row).authoritative for row in group
+        ):
+            continue
+        def physical_shape(item):
+            return (item.get("inputs"), item.get("outputs"), item.get("evidence_conflicts"))
+        if any(physical_shape(item) != physical_shape(parsed[0]) for item in parsed[1:]):
+            continue
+        if parsed[0].get("evidence_conflicts") or any(output.get("value_sats") is None for output in outputs):
+            continue
+        inputs = parsed[0].get("inputs", ())
+        if not inputs or any(
+            not entry.get("script") or not entry.get("outpoint")
+            or entry.get("value_sats") is None
+            for entry in inputs
+        ):
+            continue
+        if any(
+            _input_owner_ids(owned_index, entry, physical_scope=scope[:2])
+            for entry in inputs
+        ):
+            continue
+        full = dict.fromkeys(wallet_ids, 0)
+        canonical = dict.fromkeys(wallet_ids, 0)
+        assignments = []
+        for output in outputs:
+            sources = owners[output["n"]]
+            if not sources:
+                continue
+            amount = int(output["value_sats"]) * 1000
+            for wallet_id in {source.wallet_id for source in sources}:
+                full[wallet_id] += amount
+            owner = _overlap_payload((profile_id, scope[0], scope[1], output["script"]), sources)["recommended_canonical_wallet_id"]
+            canonical[owner] += amount
+            assignments.append({"vout": output["n"], "wallet_id": owner, "amount_msat": amount})
+        if any(
+            canonical[str(_row_get(row, "wallet_id"))] <= 0
+            or int(_row_get(row, "amount") or 0) not in {
+                full[str(_row_get(row, "wallet_id"))], canonical[str(_row_get(row, "wallet_id"))]
+            }
+            for row in group
+        ):
+            continue
+        for row in group:
+            row_id = str(_row_get(row, "id"))
+            amount = canonical[str(_row_get(row, "wallet_id"))]
+            result[row_id] = {"schema_version": 1, "amount_msat": amount, "outputs": assignments}
+    return result

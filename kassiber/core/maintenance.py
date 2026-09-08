@@ -239,6 +239,9 @@ def reset_current_profile_data(
         "journal_custody_gap_inputs": _count_profile_rows(
             conn, "journal_custody_gap_inputs", profile_id
         ),
+        "journal_custody_reconciliations": _count_profile_rows(
+            conn, "journal_custody_reconciliations", profile_id
+        ),
         "custody_authored_evidence_snapshots": _count_profile_rows(
             conn, "custody_authored_evidence_snapshots", profile_id
         ),
@@ -455,6 +458,7 @@ def reset_current_profile_data(
             "journal_quantity_balances",
             "journal_custody_decisions",
             "journal_custody_economic_relations",
+            "journal_custody_reconciliations",
             "journal_custody_gap_inputs",
             "journal_quantity_issues",
             "journal_quantity_postings",
