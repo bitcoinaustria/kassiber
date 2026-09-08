@@ -473,14 +473,15 @@ function TransactionDetailBody({
   const quarantineReason =
     quarantineReasonOverride ?? transaction.quarantineReason ?? null;
   const quarantineReasonCode = quarantineReason?.toLowerCase() ?? "";
-  const isSyncQuarantine = quarantineReasonCode.includes(
-    "ownership_transfer_amount_mismatch",
-  );
+  const isSyncQuarantine =
+    quarantineReasonCode.includes("ownership_transfer_amount_mismatch") ||
+    quarantineReasonCode === "ownership_transfer_source_missing";
   const isBasisQuarantine =
     quarantineReasonCode.includes("basis") ||
     quarantineReasonCode.includes("lot") ||
     quarantineReasonCode.includes("insufficient");
   const isTransferQuarantine =
+    quarantineReasonCode === "native_transition_ambiguous" ||
     quarantineReasonCode.includes("ownership_transfer") ||
     quarantineReasonCode.includes("transfer") ||
     quarantineReasonCode.includes("pair") ||

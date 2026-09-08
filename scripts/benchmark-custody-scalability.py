@@ -3,7 +3,8 @@
 
 The normal test suite proves query-plan and traversal invariants without hard
 wall-clock thresholds.  This script adds comparable timings at realistic book
-sizes.  It creates disposable Kassiber databases under the system temporary
+sizes. The builder stage times decision compilation and final tax projection
+separately; it does not include RP2 lot calculation. It creates disposable Kassiber databases under the system temporary
 directory, inserts in fixed-size batches, and emits one JSON object per line so
 an interrupted long run still leaves machine-readable results.
 
@@ -45,6 +46,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from kassiber.core.custody_gaps import build_gap_snapshot
 from kassiber.core.custody_journal import CustodyJournalBuilder
+from kassiber.core.custody_tax_projection import compile_finalized_tax_projection
 from kassiber.core.custody_quantity import (
     ArbitratedSlice,
     ClaimPriority,
@@ -252,6 +254,18 @@ def benchmark_builder(transaction_count: int, batch_size: int) -> dict[str, Any]
             decisions, elapsed = _timed(
                 lambda: CustodyJournalBuilder(conn, profile).build_custody_decisions()
             )
+            finalized, finalization_seconds = _timed(
+                lambda: compile_finalized_tax_projection(
+                    profile, decisions.rows, decisions.quantity_state,
+                    non_event_transaction_ids=(
+                        *decisions.interpretation.non_event_transaction_ids,
+                        *decisions.channel_non_event_ids,
+                    ),
+                    blocked_transaction_ids=decisions.interpretation.blocked_transaction_ids,
+                    interpreter_quarantines=decisions.interpretation.quarantines,
+                    direct_payout_records=decisions.direct_payout_records,
+                )
+            )
             rss_after = (
                 resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
                 if resource is not None
@@ -264,11 +278,15 @@ def benchmark_builder(transaction_count: int, batch_size: int) -> dict[str, Any]
                 "elapsed_seconds": round(elapsed, 6),
                 "transactions_per_second": round(transaction_count / elapsed, 2),
                 "observation_count": observation_count,
+                "tax_finalization_seconds": round(finalization_seconds, 6),
+                "tax_projection_rows": len(finalized.rows),
                 "decision_count": len(quantity_state.projection.decisions),
                 "quantity_issue_count": len(quantity_state.issues),
                 "max_rss_before_kib": rss_before,
                 "max_rss_after_kib": rss_after,
                 "invariants": {
+                    "all_tax_rows_projected": len(finalized.rows) == transaction_count,
+                    "tax_projection_has_no_quarantines": not finalized.quarantines,
                     "all_observations_projected": observation_count
                     == transaction_count,
                     "quantity_projection_conserves": (

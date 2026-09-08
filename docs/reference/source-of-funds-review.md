@@ -32,6 +32,21 @@ with exact millisatoshi ratios; this changes only the report projection, not
 the authored allocation. Multiple possible sources and ratios requiring
 rounding remain unresolved.
 
+Reviewed branching paths are evaluated in dependency order: every downstream
+allocation reaches a shared ancestor before its root sources are consumed.
+An additional intermediate wallet therefore cannot change coverage merely by
+changing traversal order. The planner reads only the bounded target graph;
+cycles, depth/size limits, insufficient source amounts and ambiguous partial
+source selection still block export.
+
+When complete native history realizes an existing reviewed custody shortcut,
+the journal stores a local reconciliation certificate against that component
+revision and input version. Every native claim must be fully selected by the
+quantity arbiter. The report can then retain the user's already reviewed
+compressed disclosure without creating a second MOVE or adding intermediate
+wallet identities to it. A stale journal, retired component or retracted route
+invalidates the certificate. These derived records never replicate.
+
 The CLI and built-in assistant cross the same interface:
 
 ```sh

@@ -273,6 +273,12 @@ same verification surface.
   - [x] Centralize boundary-leg principal/fee/wallet-movement normalization and
     deterministic FIFO N:M allocation; make gap claims and reviewed bridge
     plans consume the same exact-msat cells and residuals.
+  - [x] Harden observation consistency with partial-overlap quantity proofs,
+    receiving-first holds, current confirmation chronology and full hash
+    competition; reconcile complete recovered native routes against immutable
+    reviews. Preserve reviewed provenance through current local certificates,
+    aggregate branching source-funds demand before evaluating ancestors, and
+    remove the repeated full-decision scan from tax finalization.
   - [x] Replace heuristic transfer claims with independently scoped
     source/return holds; delete `CUSTODY_CANDIDATE` / `HEURISTIC_CANDIDATE`
     arbitration so suggestions cannot contain a basis-carrying target edge.

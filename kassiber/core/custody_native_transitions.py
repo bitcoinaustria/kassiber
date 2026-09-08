@@ -7,6 +7,7 @@ transient interpretations; it never authors a reviewed component or pair.
 
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from datetime import timezone
 import hashlib
@@ -26,6 +27,12 @@ from .transfer_matching import (
     METHOD_PAYMENT_HASH,
     SwapCandidate,
     active_dismissed_pairs,
+    payment_hash_populations,
+    _payment_hash_role,
+    fee_threshold_msat,
+    DEFAULT_FEE_PCT_MAX,
+    DEFAULT_FEE_SATS_MIN,
+    _payment_hash_amounts_conserve,
     suggest_swap_candidates,
 )
 
@@ -101,6 +108,82 @@ def _native_endpoint(row: Mapping[str, Any], observation: QuantityObservation) -
     )
 
 
+def _ambiguous_hash_quarantines(
+    rows: Sequence[Mapping[str, Any]],
+    observations: Mapping[str, QuantityObservation],
+    candidates: Sequence[SwapCandidate],
+    occupied_ids: set[str],
+    dismissed: set[tuple[str, str]],
+) -> list[Mapping[str, Any]]:
+    """Keep real but unassignable HTLC routes out of external tax defaults."""
+    exact = {
+        (candidate.out_id, candidate.in_id)
+        for candidate in candidates
+        if candidate.method == METHOD_PAYMENT_HASH
+        and candidate.confidence == CONFIDENCE_EXACT and candidate.conflict_size == 1
+    }
+    native = {
+        str(row["id"]): row for row in rows
+        if (observation := observations.get(str(row["id"]))) is not None
+        and canonical_bitcoin_asset(observation.asset) is not None
+        and _native_endpoint(row, observation)
+    }
+    roles = {transaction_id: _payment_hash_role(row) for transaction_id, row in native.items()}
+    held = set()
+    for outs, ins in payment_hash_populations(
+        [row for row in rows if row["direction"] == "outbound"],
+        [row for row in rows if row["direction"] == "inbound"],
+    ):
+        for out_role, in_role in (("lightning_node", "chain_htlc"), ("chain_htlc", "lightning_node")):
+            sources = sorted(
+                (row for row in outs if roles.get(str(row["id"])) == out_role
+                 and row["id"] not in occupied_ids and int(row["amount"] or 0) > 0),
+                key=lambda row: int(row["amount"]),
+            )
+            targets = sorted(
+                (row for row in ins if roles.get(str(row["id"])) == in_role
+                 and row["id"] not in occupied_ids and int(row["amount"] or 0) > 0),
+                key=lambda row: int(row["amount"]),
+            )
+            if not sources or not targets:
+                continue
+            source_amounts = [int(row["amount"]) for row in sources]
+            target_amounts = [int(row["amount"]) for row in targets]
+            # The conservation window is monotonic in source amount. Locate
+            # plausible peers without materializing a duplicate hash's N:M
+            # Cartesian product; review vetoes are checked on the actual pair.
+            minimum_receipts = [
+                amount - fee_threshold_msat(amount, DEFAULT_FEE_PCT_MAX, DEFAULT_FEE_SATS_MIN)
+                for amount in source_amounts
+            ]
+
+            def available(out_row, in_row):
+                key = str(out_row["id"]), str(in_row["id"])
+                return (key not in exact and key not in dismissed
+                        and out_row["wallet_id"] != in_row["wallet_id"]
+                        and _payment_hash_amounts_conserve(out_row, in_row))
+
+            for index, out_row in enumerate(sources):
+                start = bisect_left(target_amounts, minimum_receipts[index])
+                end = bisect_right(target_amounts, source_amounts[index])
+                if any(available(out_row, targets[i]) for i in range(start, end)):
+                    held.add(str(out_row["id"]))
+            for index, in_row in enumerate(targets):
+                start = bisect_left(source_amounts, target_amounts[index])
+                end = bisect_right(minimum_receipts, target_amounts[index])
+                if any(available(sources[i], in_row) for i in range(start, end)):
+                    held.add(str(in_row["id"]))
+    return [{
+        "transaction_id": transaction_id,
+        "workspace_id": native[transaction_id]["workspace_id"],
+        "profile_id": native[transaction_id]["profile_id"],
+        "reason": "native_transition_ambiguous",
+        "detail_json": json.dumps({
+            "required_for": "unique_scoped_native_transition",
+        }, sort_keys=True),
+    } for transaction_id in sorted(held)]
+
+
 def compile_native_transitions(
     rows: Sequence[Mapping[str, Any]],
     observations: Mapping[str, QuantityObservation],
@@ -123,7 +206,9 @@ def compile_native_transitions(
     rows_by_id = {str(row["id"]): row for row in rows}
     pairs: list[dict[str, Any]] = []
     proofs: dict[tuple[str, str], NativeTransitionProof] = {}
-    quarantines: list[Mapping[str, Any]] = []
+    quarantines: list[Mapping[str, Any]] = _ambiguous_hash_quarantines(
+        rows, observations, candidates, occupied_ids, dismissed,
+    )
     for candidate in candidates:
         key = (candidate.out_id, candidate.in_id)
         if (

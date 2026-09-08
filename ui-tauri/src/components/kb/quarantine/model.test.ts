@@ -32,6 +32,24 @@ const baseItem: QuarantineItem = {
 };
 
 describe("quarantine row model", () => {
+  it.each(["en", "de"])("routes missing source history and ambiguous swaps to their actual repair in %s", (lang) => {
+    const translate = i18n.getFixedT(lang, "journals");
+    const missing = quarantineItemToRow(
+      { ...baseItem, direction: "inbound", reason: "ownership_transfer_source_missing" },
+      "Book", translate,
+    );
+    expect(missing.event).toMatch(lang === "en" ? /Sending wallet history/ : /Historie der sendenden Wallet/);
+    expect(missing.nextAction).toMatch(lang === "en" ? /sending wallet or import/ : /sendende Wallet oder importiere/);
+    expect(missing.transactionAction?.tab).toBe("details");
+    const ambiguous = quarantineItemToRow(
+      { ...baseItem, reason: "native_transition_ambiguous" }, "Book", translate,
+    );
+    expect(ambiguous.event).toMatch(lang === "en" ? /Several records/ : /Mehrere Datensätze/);
+    expect(ambiguous.nextAction).toMatch(lang === "en" ? /networks/ : /Netzwerke/);
+    expect(ambiguous.transactionAction?.tab).toBe("linked");
+    expect(ambiguous.nextAction).not.toMatch(/price|Preis|exclu|ausschließ/i);
+  });
+
   it.each(["coinjoin", "payjoin", "collaborative"])(
     "explains unresolved %s economics without suggesting exclusion",
     (boundary) => {
@@ -503,6 +521,19 @@ describe("quarantine resolve plan", () => {
     expect(plan.summary).toBe(
       "5 quarantined rows · 5 repair steps before journal processing",
     );
+  });
+
+  it("asks for missing sender history before resolving ambiguous swaps", () => {
+    const snapshot = snapshotWith([
+      { ...baseItem, transaction_id: "missing-source", reason: "ownership_transfer_source_missing" },
+      { ...baseItem, transaction_id: "ambiguous-swap", reason: "native_transition_ambiguous" },
+    ]);
+    const plan = quarantineResolvePlan(snapshot, quarantineRows(snapshot, t), t);
+    expect(plan.steps.map((step) => step.id)).toEqual([
+      "sync-wallets", "review-transfers", "process-journals",
+    ]);
+    expect(plan.steps[0].primaryAction?.tab).toBe("details");
+    expect(plan.steps[1].primaryAction?.tab).toBe("linked");
   });
 
   it("attaches the first actionable row to each repair category", () => {

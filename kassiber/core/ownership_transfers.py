@@ -12,9 +12,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal
+from datetime import datetime
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from ..msat import msat_to_btc
+from ..time_utils import parse_iso_datetime_or_none
 from ..transfers import (
     bitcoin_network_domain_evidence,
     canonical_txid,
@@ -394,6 +396,60 @@ def derive_ownership_review_proofs(
     return proofs
 
 
+def native_wallet_delta_msat(
+    row: Mapping[str, Any], index: Any, wallet_id: str,
+) -> int | None:
+    """Prove one Bitcoin wallet's net debit from closed, complete evidence.
+
+    A spent owned input is not itself a debit: the wallet may receive its full
+    value back while a peer funds another receipt or pays the network fee.
+    Ambiguous ownership, missing values and inconsistent fees remain unknown.
+    """
+    if index is None or not row_has_current_authoritative_observation(row):
+        return None
+    parsed = _parse_onchain_tx(_get(row, "raw_json"), allow_partial=True)
+    scope = _ownership_onchain_scope(row, index=index, parsed=parsed)
+    if parsed is None or scope is None or scope[0] != "bitcoin" or scope[3] != "BTC":
+        return None
+    fee = exact_onchain_fee_msat_from_parsed(parsed, asset="BTC")
+    if fee is None:
+        return None
+    payload = stored_tx_mapping(_get(row, "raw_json"), allow_nested=True) or {}
+    if payload.get("fee") is not None and payload["fee"] != fee // SATS_TO_MSAT:
+        return None
+    delta = 0
+    for direction, entries in ((1, parsed["inputs"]), (-1, parsed["outputs"])):
+        for entry in entries:
+            if not entry.get("script") or entry.get("value_sats") is None:
+                return None
+            if direction == 1:
+                if not entry.get("outpoint"):
+                    return None
+                owners = _input_owner_ids(index, entry, physical_scope=scope[:2])
+            else:
+                owners = {
+                    str(match.wallet_id) for match in _matches_in_physical_scope(
+                        index.lookup_script(entry["script"]), scope[:2],
+                    )
+                }
+            if wallet_id in owners:
+                if owners != {wallet_id}:
+                    return None
+                delta += direction * int(entry["value_sats"]) * SATS_TO_MSAT
+    return delta
+
+
+def native_zero_delta_ids(rows: Sequence[Mapping[str, Any]], index: Any) -> set[str]:
+    """Non-economic observer rows whose zero wallet movement is fully proved."""
+    return {
+        str(_get(row, "id")) for row in rows
+        if _get(row, "direction") == "outbound"
+        and int(_get(row, "amount") or 0) == 0
+        and int(_get(row, "fee") or 0) == 0
+        and native_wallet_delta_msat(row, index, str(_get(row, "wallet_id"))) == 0
+    }
+
+
 def derive_ownership_transfers(
     rows: Sequence[Mapping[str, Any]],
     *,
@@ -458,6 +514,37 @@ def derive_ownership_transfers(
                     },
                 )
         return result
+    # A receiving wallet can sync before its funding wallet. A missing owned
+    # debit cannot become a new acquisition or mint an absent source leg.
+    recorded_sources: dict[tuple[str, str, str, str], set[str]] = {}
+    for candidate in rows:
+        scope = onchain_transfer_scope(candidate)
+        if scope is not None and _get(candidate, "direction") == "outbound":
+            recorded_sources.setdefault(scope, set()).add(str(_get(candidate, "wallet_id")))
+    for candidate in rows:
+        if (_get(candidate, "direction") != "inbound"
+                or str(_get(candidate, "id")) in already_paired_ids
+                or not row_has_current_authoritative_observation(candidate)):
+            continue
+        parsed = _parse_onchain_tx(_get(candidate, "raw_json"), allow_partial=True)
+        scope = _ownership_onchain_scope(candidate, index=index, parsed=parsed)
+        if parsed is None or scope is None:
+            continue
+        component_inputs, _complete = _component_inputs(parsed, candidate)
+        owners = set().union(*(
+            _input_owner_ids(index, entry, physical_scope=scope[:2])
+            for entry in component_inputs
+        ))
+        missing = owners - recorded_sources.get(scope, set()) - {str(_get(candidate, "wallet_id"))}
+        missing = {
+            wallet_id for wallet_id in missing
+            if (delta := native_wallet_delta_msat(candidate, index, wallet_id)) is None or delta > 0
+        }
+        if missing:
+            _block_source(result, candidate, "ownership_transfer_source_missing", {
+                "missing_source_wallet_ids": sorted(missing),
+            })
+
     inbound_by_wallet: dict[str, list[Mapping[str, Any]]] = {}
     for row in rows:
         if _get(row, "direction") != "inbound":
@@ -1345,7 +1432,7 @@ def detect_conflicting_spend_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
     pass; it is purely a quarantine signal and never books anything.
     """
     row_txid: dict[str, tuple[str, str, str]] = {}
-    txid_confirmed: dict[tuple[str, str, str], bool] = {}
+    txid_confirmed = _current_confirmation_states(rows)
     outpoint_txids: dict[
         tuple[str, str, str], set[tuple[str, str, str]]
     ] = {}
@@ -1361,13 +1448,6 @@ def detect_conflicting_spend_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
             continue
         physical = scope[:3]
         row_txid[str(_get(row, "id"))] = physical
-        # Confirmation can land on ANY leg of a transaction — when wallets sync at
-        # different times a destination inbound may be confirmed while the source's
-        # outbound row is still unconfirmed — so fold every row's state into the
-        # per-txid confirmation, not just outbound rows.
-        txid_confirmed[physical] = txid_confirmed.get(physical, False) or bool(
-            _get(row, "confirmed_at")
-        )
         # Collect input outpoints from ANY leg carrying the graph, not just
         # outbound rows: a conflict whose loser was synced only as a
         # destination INBOUND still has the full vin in its raw_json. Chain and
@@ -1392,17 +1472,71 @@ def detect_conflicting_spend_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
     return {rid for rid, txid in row_txid.items() if txid in loser_txids}
 
 
+@dataclass(frozen=True)
+class ChainConfirmationObservation:
+    physical_scope: tuple[str, str, str]
+    observed_at: datetime
+    confirmed: bool
+
+
+def capture_confirmation_observation(row: Mapping[str, Any]) -> ChainConfirmationObservation | None:
+    """Capture closed provenance before derived rows change wallet amounts."""
+    if not row_has_current_authoritative_observation(row):
+        return None
+    payload = stored_tx_mapping(_get(row, "raw_json"), allow_nested=True)
+    status = (payload or {}).get("status")
+    if not isinstance(status, Mapping) or not isinstance(status.get("confirmed"), bool):
+        return None
+    scope = _physical_conflict_scope(row, _parse_onchain_tx(_get(row, "raw_json"), allow_partial=True))
+    timestamp = parse_iso_datetime_or_none(_get(row, "observation_observed_at"))
+    if scope is None or timestamp is None:
+        return None
+    return ChainConfirmationObservation(scope[:3], timestamp, status["confirmed"])
+
+
+def _current_confirmation_states(rows: Sequence[Mapping[str, Any]]) -> dict[tuple[str, str, str], bool]:
+    """Use closed observation chronology, never a timestamp inside raw evidence.
+
+    Legacy rows have no ordering proof and retain their existing confirmation
+    fallback. Once current persisted observations exist, older imports cannot
+    override them. Contradictory observations at the latest instant fail closed.
+    """
+    legacy: dict[tuple[str, str, str], bool] = {}
+    observed: dict[tuple[str, str, str], list[tuple[datetime, bool]]] = {}
+    for row in rows:
+        payload = stored_tx_mapping(_get(row, "raw_json"), allow_nested=True)
+        parsed = _parse_onchain_tx(_get(row, "raw_json"), allow_partial=True)
+        scope = _physical_conflict_scope(row, parsed)
+        if scope is None:
+            continue
+        physical = scope[:3]
+        status = (payload or {}).get("status")
+        explicit = isinstance(status, Mapping) and isinstance(status.get("confirmed"), bool)
+        confirmed = bool(status["confirmed"]) if explicit else bool(_get(row, "confirmed_at"))
+        legacy[physical] = legacy.get(physical, False) or confirmed
+        evidence = _get(row, "_closed_confirmation_observation")
+        if not isinstance(evidence, ChainConfirmationObservation):
+            evidence = capture_confirmation_observation(row)
+        if evidence is not None and evidence.physical_scope == physical:
+            observed.setdefault(physical, []).append((evidence.observed_at, evidence.confirmed))
+    for physical, evidence in observed.items():
+        latest = max(timestamp for timestamp, _ in evidence)
+        legacy[physical] = all(confirmed for timestamp, confirmed in evidence if timestamp == latest)
+    return legacy
+
+
 def detect_pending_onchain_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
     """Rows belonging to a transaction explicitly reported as unconfirmed.
 
     ``confirmed_at IS NULL`` is not sufficient: CSV/provider imports commonly
     have no confirmation timestamp. Chain sync payloads, however, persist an
     explicit ``status.confirmed`` boolean. Hold only those explicit mempool
-    transactions out of tax booking until any synced leg proves confirmation.
+    transactions out of tax booking until current closed evidence proves confirmation.
     """
 
     row_txid: dict[str, tuple[str, str, str]] = {}
-    txid_state: dict[tuple[str, str, str], tuple[bool, bool]] = {}
+    txid_state = _current_confirmation_states(rows)
+    explicit_txids: set[tuple[str, str, str]] = set()
     for row in rows:
         payload = stored_tx_mapping(_get(row, "raw_json"), allow_nested=True)
         if payload is None:
@@ -1418,12 +1552,11 @@ def detect_pending_onchain_ids(rows: Sequence[Mapping[str, Any]]) -> set[str]:
             continue
         physical = scope[:3]
         row_txid[str(_get(row, "id"))] = physical
-        _explicit, confirmed = txid_state.get(physical, (False, False))
-        txid_state[physical] = (True, confirmed or bool(status["confirmed"]))
+        explicit_txids.add(physical)
     pending_txids = {
         txid
-        for txid, (explicit, confirmed) in txid_state.items()
-        if explicit and not confirmed
+        for txid, confirmed in txid_state.items()
+        if txid in explicit_txids and not confirmed
     }
     # Include graphless sibling legs sharing the same txid once any leg supplied
     # the explicit mempool state.

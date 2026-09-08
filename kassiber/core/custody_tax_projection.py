@@ -686,6 +686,15 @@ def compile_finalized_tax_projection(
                 )
             projection_rows.append(projected)
 
+    # Index the same complete decision population once. Selecting targets by
+    # rescanning it for every receipt made finalization quadratic in book size.
+    targets_by_observation: dict[str, list[QuantitySlice]] = {}
+    for decision in decisions:
+        if decision.target is not None:
+            targets_by_observation.setdefault(
+                decision.target.observation_hash, [],
+            ).append(decision.target)
+
     # Inbound slices not consumed by a selected custody move are genuine tax
     # acquisition candidates.  A rowless virtual target is never promoted into
     # an acquisition if its native claim failed/was blocked.
@@ -705,12 +714,7 @@ def compile_finalized_tax_projection(
             continue
         cursor = 0
         targets = sorted(
-            (
-                item.target
-                for item in decisions
-                if item.target is not None
-                and item.target.observation_hash == observation.quantity_hash
-            ),
+            targets_by_observation.get(observation.quantity_hash, ()),
             key=lambda item: (item.start_msat, item.end_msat),
         )
         for target in targets:

@@ -595,6 +595,37 @@ def _select_eligible_rows(rows: Sequence[Mapping], paired_ids: set[str]) -> list
     return eligible
 
 
+def payment_hash_populations(
+    out_rows: Sequence[Mapping], in_rows: Sequence[Mapping],
+) -> list[tuple[list[Mapping], list[Mapping]]]:
+    """Full compatible populations before pairing, occupancy or review vetoes.
+
+    A missing scope is not proof of a different network. Unknown rows compete
+    in every known domain for their hash, without joining two known networks.
+    Native custody also consumes these populations to hold unresolved routes.
+    """
+    grouped: dict[str, dict[str | None, tuple[list[Mapping], list[Mapping]]]] = {}
+    for side, rows in enumerate((out_rows, in_rows)):
+        for row in rows:
+            payment_hash = _normalized_payment_hash(_record_get(row, "payment_hash"))
+            if not payment_hash or _record_get(row, "excluded"):
+                continue
+            domains = grouped.setdefault(payment_hash, {})
+            pair = domains.setdefault(bitcoin_network_domain(row), ([], []))
+            pair[side].append(row)
+    populations = []
+    for domains in grouped.values():
+        unknown = domains.get(None, ([], []))
+        known = [domain for domain in domains if domain is not None]
+        for domain in known or [None]:
+            outs, ins = domains.get(domain, ([], []))
+            if domain is not None:
+                outs, ins = [*outs, *unknown[0]], [*ins, *unknown[1]]
+            if outs and ins:
+                populations.append((outs, ins))
+    return populations
+
+
 def _match_by_payment_hash(
     out_rows: Sequence[Mapping], in_rows: Sequence[Mapping]
 ) -> list[tuple[Mapping, Mapping, bool]]:
@@ -607,25 +638,8 @@ def _match_by_payment_hash(
     conservation delta.  Duplicate MPP/attempt/import rows remain unresolved
     instead of becoming a Cartesian product of exact candidates.
     """
-    out_by_hash: dict[tuple[str, str | None], list[Mapping]] = {}
-    for row in out_rows:
-        payment_hash = _normalized_payment_hash(_record_get(row, "payment_hash"))
-        if not payment_hash:
-            continue
-        out_by_hash.setdefault(
-            (payment_hash, bitcoin_network_domain(row)), []
-        ).append(row)
-    in_by_hash: dict[tuple[str, str | None], list[Mapping]] = {}
-    for row in in_rows:
-        payment_hash = _normalized_payment_hash(_record_get(row, "payment_hash"))
-        if not payment_hash:
-            continue
-        in_by_hash.setdefault(
-            (payment_hash, bitcoin_network_domain(row)), []
-        ).append(row)
     pairs: list[tuple[Mapping, Mapping, bool]] = []
-    for (_payment_hash, network_domain), outs in out_by_hash.items():
-        ins = in_by_hash.get((_payment_hash, network_domain), [])
+    for outs, ins in payment_hash_populations(out_rows, in_rows):
         if len(outs) != 1 or len(ins) != 1:
             continue
         out_row, in_row = outs[0], ins[0]

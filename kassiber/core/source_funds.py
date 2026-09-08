@@ -7,6 +7,7 @@ import sqlite3
 import uuid
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from heapq import heappop, heappush
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Sequence
 
@@ -21,6 +22,7 @@ from . import custody_journal
 from .attachments import attachment_display_label
 from .privacy_hops import privacy_hop_type_from_row
 from .source_funds_hints import enrich_findings_with_next_steps
+from .source_funds_traversal import load_report_traversal
 
 
 REVEAL_MODES = ("labels_only", "minimal", "standard", "full")
@@ -1152,6 +1154,7 @@ class _StoredCustodyAllocation:
     from_allocation_msat: int
     projection_ids: tuple[str, ...]
     component_ids: tuple[str, ...]
+    reconciled_review: bool = False
 
 
 def _stored_custody_link_type(
@@ -1252,7 +1255,7 @@ def _stored_custody_allocation_map(
         entry["projection_ids"].add(str(projection["projection_id"]))
         if projection["component_id"]:
             entry["component_ids"].add(str(projection["component_id"]))
-    return {
+    allocations = {
         key: _StoredCustodyAllocation(
             from_transaction_id=key[0],
             to_transaction_id=key[1],
@@ -1264,6 +1267,40 @@ def _stored_custody_allocation_map(
         )
         for key, value in grouped.items()
     }
+    # Preserve a previously reviewed compressed disclosure when the journal
+    # proves that its unchanged component is fully realized by native history.
+    # This is provenance only: no extra MOVE or economic relation is created.
+    from .custody_reconciliation_store import load_current_reconciliations
+    reconciliations = load_current_reconciliations(conn, profile_id)
+    if reconciliations:
+        reviewed_links = conn.execute(
+            """SELECT * FROM source_funds_links WHERE profile_id = ?
+            AND state = 'reviewed' AND method = 'custody_component'""", (profile_id,),
+        ).fetchall()
+        by_endpoints = defaultdict(list)
+        for link in reviewed_links:
+            by_endpoints[(link["from_transaction_id"], link["to_transaction_id"])].append(link)
+        for proof in reconciliations:
+            for cell in proof["allocations"]:
+                if cell["destination_kind"] != "wallet":
+                    continue
+                source_id, target_id = cell["source_transaction_id"], cell["target_transaction_id"]
+                source, target = rows_by_id.get(source_id), rows_by_id.get(target_id)
+                if source is None or target is None:
+                    continue
+                for link in by_endpoints.get((source_id, target_id), ()):
+                    amount = int(cell["amount_msat"])
+                    if (int(link["allocation_amount"] or 0) != amount
+                            or int(link["from_allocation_amount"] or 0) != amount
+                            or normalize_asset_code(link["asset"]) != cell["asset"]
+                            or normalize_asset_code(link["from_asset"]) != cell["asset"]):
+                        continue
+                    key = source_id, target_id, link["link_type"]
+                    allocations.setdefault(key, _StoredCustodyAllocation(
+                        source_id, target_id, link["link_type"], amount, amount,
+                        (), (proof["component_id"],), reconciled_review=True,
+                    ))
+    return allocations
 
 
 def _stored_custody_still_deterministic(
@@ -1826,6 +1863,10 @@ def suggest_links(
         profile["id"],
         rows_by_id,
     )
+    reviewed_targets = {
+        item.to_transaction_id for item in custody_allocations.values()
+        if item.reconciled_review
+    }
     for allocation in sorted(
         custody_allocations.values(),
         key=lambda item: (
@@ -1836,6 +1877,8 @@ def suggest_links(
     ):
         out_tx = rows_by_id[allocation.from_transaction_id]
         in_tx = rows_by_id[allocation.to_transaction_id]
+        if allocation.to_transaction_id in reviewed_targets and not allocation.reconciled_review:
+            continue
         if not in_scope(out_tx, in_tx):
             continue
         projection_refs = ", ".join(allocation.projection_ids)
@@ -2642,8 +2685,18 @@ def build_report(
     tx_depths = {target["id"]: 0}
     tx_paths = {target["id"]: (target["id"],)}
     tx_requirements_msat[target["id"]] = target_amount_msat
-    queue = deque([target["id"]])
+    traversal = load_report_traversal(
+        conn, profile["id"], target["id"], max_depth=max_depth,
+        node_limit=_MAX_BUILD_REPORT_NODES, edge_limit=_MAX_BUILD_REPORT_EDGES,
+    )
+    queue = [(traversal.rank[target["id"]], target["id"])]
     truncated_by_size = False
+    if traversal.cycle_link_id:
+        _add_finding(
+            findings, "path_cycle", "blocker",
+            "A reviewed source-funds path forms a cycle.",
+            ref=traversal.cycle_link_id,
+        )
 
     def _graph_over_budget() -> bool:
         return (
@@ -2669,7 +2722,7 @@ def build_report(
         if truncated_by_size or _graph_over_budget():
             _emit_size_truncation()
             break
-        tx_id = queue.popleft()
+        _rank, tx_id = heappop(queue)
         queued.discard(tx_id)
         required_msat = int(tx_requirements_msat[tx_id])
         required_asset = tx_required_assets[tx_id]
@@ -2737,15 +2790,7 @@ def build_report(
         if tx_id in visited:
             continue
         visited.add(tx_id)
-        link_rows = conn.execute(
-            """
-            SELECT *
-            FROM source_funds_links
-            WHERE profile_id = ? AND to_transaction_id = ? AND state != 'rejected'
-            ORDER BY state DESC, created_at ASC, id ASC
-            """,
-            (profile["id"], tx_id),
-        ).fetchall()
+        link_rows = traversal.links.get(tx_id, ())
         suggestions = [row for row in link_rows if row["state"] == "suggested"]
         for suggestion in suggestions:
             _add_finding(
@@ -3026,7 +3071,7 @@ def build_report(
                     elif from_tx_id not in queued:
                         tx_depths[from_tx_id] = depth + 1
                         tx_paths[from_tx_id] = (*path, from_tx_id)
-                        queue.append(from_tx_id)
+                        heappush(queue, (traversal.rank[from_tx_id], from_tx_id))
                         queued.add(from_tx_id)
                     else:
                         tx_depths[from_tx_id] = max(tx_depths[from_tx_id], depth + 1)
@@ -3072,6 +3117,8 @@ def build_report(
                 ref=tx_id,
             )
 
+    if traversal.truncated:
+        _emit_size_truncation()
     enrich_findings_with_next_steps(findings)
     blockers = [finding for finding in findings if finding["severity"] == "blocker"]
     warnings = [finding for finding in findings if finding["severity"] == "warning"]

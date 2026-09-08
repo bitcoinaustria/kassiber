@@ -1772,6 +1772,18 @@ CREATE TABLE IF NOT EXISTS journal_custody_decisions (
     PRIMARY KEY(profile_id, decision_id)
 );
 
+-- Local derived evidence that a still-authored component is fully realized by
+-- selected native history. It is not an additional economic/carry relation.
+CREATE TABLE IF NOT EXISTS journal_custody_reconciliations (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    component_id TEXT NOT NULL REFERENCES custody_components(id) ON DELETE CASCADE,
+    input_version INTEGER NOT NULL,
+    component_revision INTEGER NOT NULL,
+    proof_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, component_id)
+);
+
 -- Stored non-quantity custody relations. Conversions and reviewed payouts are
 -- economic links, not assertions that unlike native quantities are the same
 -- conserved object, so they complement rather than overload MOVE decisions.

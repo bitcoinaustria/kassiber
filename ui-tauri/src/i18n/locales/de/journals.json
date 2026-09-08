@@ -200,6 +200,8 @@
       "missingBasis": "Fehlende {{asset}}-Anschaffungskosten in {{wallet}}",
       "nativeTransitionFeeTiming": "Nachgewiesener Transfer: Gebührenzeitpunkt fehlt",
       "nativeTransitionAmountMismatch": "Beträge des nachgewiesenen Transfers stimmen nicht überein",
+      "nativeTransitionAmbiguous": "Mehrere Datensätze passen zu diesem Swap",
+      "ownershipSourceMissing": "Historie der sendenden Wallet fehlt",
       "collaborativeReview": "Eigene Bewegungen brauchen Belege"
     },
     "basis": {
@@ -216,6 +218,8 @@
       "pendingConfirmation": "Ausständige On-Chain-Bestätigung",
       "nativeTransitionFeeTiming": "Gebührenzeitpunkt braucht einen Beleg",
       "nativeTransitionAmountMismatch": "Transferbeträge brauchen einen Beleg",
+      "nativeTransitionAmbiguous": "Swap-Ursprung ist nicht eindeutig",
+      "ownershipSourceMissing": "Eigene Mittel empfangen, zugehöriger Abgang fehlt",
       "collaborativeReview": "Eigene Zahlungen und Gebühren noch ungeklärt"
     },
     "evidence": {
@@ -239,6 +243,8 @@
       "pendingConfirmation": "Die synchronisierten Chain-Daten melden diese Transaktion ausdrücklich als unbestätigt",
       "nativeTransitionFeeTiming": "Die Verwahrungsverbindung ist nachgewiesen. Abgang und Eingang liegen aber an verschiedenen UTC-Tagen oder ihre Zeitangaben fehlen. Kassiber kann die Gebührendifferenz keinem Zeitpunkt automatisch zuordnen.",
       "nativeTransitionAmountMismatch": "Die Verbindung zwischen den Transaktionen ist nachgewiesen. Die erfassten Beträge und Gebühren ergeben aber keinen positiven, mengenmäßig ausgeglichenen Transfer.",
+      "nativeTransitionAmbiguous": "Native Zahlungsbelege passen zu mehreren Datensätzen. Für die Übernahme der Anschaffungskosten braucht Kassiber einen eindeutigen Ursprung.",
+      "ownershipSourceMissing": "Der Eingang gibt einen Output einer anderen verbundenen Wallet aus. Deren zugehöriger Abgang fehlt noch.",
       "collaborativeReview": "Die Wallet-Daten zeigen deine Ein- und Ausgänge. Sie erklären noch nicht, welcher Unterschied deine Gebühr, eine Zahlung oder ein weiterer Eingang in dieser gemeinsamen Transaktion ist."
     },
     "nextAction": {
@@ -256,6 +262,8 @@
       "pendingConfirmation": "Bestätigung abwarten oder die Wallet erneut synchronisieren, dann Journale verarbeiten",
       "nativeTransitionFeeTiming": "Prüfe anhand deiner Belege, wann die Gebührendifferenz angefallen ist.",
       "nativeTransitionAmountMismatch": "Prüfe anhand deiner Belege den Ausgangsbetrag und die Gebührenbehandlung gegenüber dem vollständigen Eingangsbetrag.",
+      "nativeTransitionAmbiguous": "Prüfe die passenden Datensätze und ihre Netzwerke. Kläre Duplikate oder ergänze Belege, die die Zahlung eindeutig zuordnen.",
+      "ownershipSourceMissing": "Synchronisiere die sendende Wallet oder importiere ihre fehlende Historie. Verarbeite danach die Journale.",
       "collaborativeReview": "Prüfe die verbundenen Wallet-Verläufe und ergänzenden Belege. Erfasse danach die belegten Bewegungen und Gebühren in einer Verwahrungskomponente."
     },
     "action": {
@@ -268,6 +276,8 @@
       "openTaxReview": "Kostenbasis ergänzen",
       "nativeTransitionFeeTiming": "Gebührenbelege prüfen",
       "nativeTransitionAmountMismatch": "Transferbeträge prüfen",
+      "nativeTransitionAmbiguous": "Passende Datensätze prüfen",
+      "ownershipSourceMissing": "Wallet-Sync prüfen",
       "collaborativeReview": "Bewegungsbelege prüfen"
     },
     "resolvePlan": {

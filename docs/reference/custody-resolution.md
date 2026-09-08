@@ -25,7 +25,11 @@ missing historical meaning with explicit quantities and durable provenance.
 Swap and refund candidates cannot connect known different Bitcoin network
 domains. Provider-ID and refund-funding uniqueness is checked within compatible
 networks; unknown-network duplicates remain competing evidence rather than
-promoting a candidate to exact. This also applies to time/amount suggestions
+promoting a candidate to exact. Payment-hash cardinality uses the same compatible
+population before occupancy and pair dismissals. A native HTLC route that still
+has several possible payment records receives `native_transition_ambiguous`;
+it cannot fall through to an arbitrary disposal and fresh acquisition.
+This also applies to time/amount suggestions
 used by report-readiness checks.
 
 Missing-wallet discovery uses the same explicit inbound classification and
@@ -41,6 +45,10 @@ establish an external origin.
 | Situation | Result |
 | --- | --- |
 | Same scoped transaction observed by both own wallets, exact quantities | Automatic MOVE; no manual pairing required. |
+| The recipient synced first and its native inputs imply a missing debit from another connected wallet | `ownership_transfer_source_missing` holds the receipt until the sender's history is available. It does not invent a new acquisition or an absent debit. |
+| A collaborative transaction returns a wallet's entire contribution while another participant funds the recipient or pays the fee | Complete native wallet-net evidence rules out a missing debit. A proven zero-movement observer row is non-economic; foreign-paid fees are not attributed to the owner. |
+| An address list and a later descriptor overlap on some receipt outputs | Complete current native evidence and canonical script ownership apportion the receipt once per output. Imported rows remain unchanged. Incomplete or conflicting evidence produces a targeted quantity hold. |
+| Wallets disagree on confirmation | The newest closed observation determines the physical transaction's state. Equal-time disagreement remains pending; an older confirmed row cannot override a newer unconfirmed observation. |
 | Known owned scripts/outpoints explain a fan-out or consolidation | Automatic conserving allocations where the complete native proof is available. |
 | Multiple own source and destination wallets in one fully owned transaction | Automatic N:M allocations, with one network fee, when all inputs/sinks and amounts reconcile. The FIFO cells are accounting allocations, not physical tracing of individual satoshis. |
 | Collaborative transaction with foreign participants and a complete, exactly conserving set of own wallet movements | Automatic own-wallet allocations when current native graphs prove every own contribution and receipt. Foreign participants' fees do not become the owner's fees. |
@@ -62,6 +70,11 @@ attestation into an import does not establish proof.
 It does not add witnesses or preimages to normalized transaction `raw_json`.
 LWK's existing opaque dependency state is a separate storage boundary.
 
+An unchanged sync still invalidates journals if its newly published observer
+authority or effective confirmation changes the accounting inputs. Refreshes
+with the same facts keep journals current; timestamp updates alone do not
+trigger a rebuild.
+
 ## CoinJoin, Payjoin and intermediate wallets
 
 Kassiber can follow proven own-wallet movements inside collaborative Bitcoin
@@ -77,6 +90,14 @@ and receipts. Complete native observations can explain conserving 1:1, 1:N and
 N:M own-wallet flows even when other participants appear in the same transaction.
 Allocation cells carry accounting basis; they do not assert a physical mapping
 from a particular input's satoshis to a particular output.
+
+When a reviewed shortcut is later explained by complete native intermediate
+history, the journal uses that native route only when it reproduces every
+reviewed source-to-return allocation and accounts for each fee. Exact native
+fees may resolve a previously unexplained reviewed remainder. Missing steps,
+competing wallet activity or different allocations retain the reviewed
+interpretation and its remaining holds. This changes the effective projection,
+never the immutable authored review.
 
 The whole transaction fee is a chain fact; the owner's share can still be
 unknown. If the owner contributes 1 BTC and receives 0.9999 BTC while another
