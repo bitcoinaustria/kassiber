@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections import defaultdict
+from time import monotonic
 from typing import Any, Collection, Mapping, NamedTuple, Sequence
 
 from ..asset_codes import canonical_bitcoin_asset
@@ -56,6 +57,7 @@ from .sync_backends import (
 
 
 GRAPH_LOOKUP_TIMEOUT_SECONDS = 5
+GRAPH_LOOKUP_BUDGET_SECONDS = 10
 GRAPH_CACHE_SCHEMA_VERSION = 1
 SATS_TO_MSAT = 1000
 COINBASE_PREVOUT_TXID = "00" * 32
@@ -298,7 +300,10 @@ def _load_profile_semantics(
     forcing a journal reprocess on the high-frequency sync path. ``cache=None``
     (one-shot CLI and tests) recomputes every call, preserving prior behaviour.
     """
-    signature = _profile_semantics_signature(conn, profile_id)
+    # Profile UUIDs and version counters survive a copied/restored book. Retain
+    # the connection itself (not id(conn), which can be reused after close) so a
+    # new book/session can never reuse the previous session's ownership bundle.
+    signature = (conn, *_profile_semantics_signature(conn, profile_id))
     if cache is not None:
         cached = cache.get(profile_id)
         if cached is not None and cached[0] == signature:
@@ -1081,7 +1086,10 @@ def _enrich_reference_graph_raw(
             " transaction references.",
         )
     fallback: Mapping[str, Any] | None = None
+    deadline = monotonic() + GRAPH_LOOKUP_BUDGET_SECONDS
     for backend in backends:
+        if monotonic() >= deadline:
+            break
         fetched = _fetch_reference_graph_from_backend(
             conn,
             backend,
@@ -1090,6 +1098,7 @@ def _enrich_reference_graph_raw(
             str(txid),
             raw,
             liquid=liquid,
+            deadline=deadline,
         )
         if fetched.get("_graphLookupWarning"):
             fallback = fetched
@@ -1111,6 +1120,7 @@ def _fetch_reference_graph_from_backend(
     raw: Mapping[str, Any],
     *,
     liquid: bool,
+    deadline: float,
 ) -> Mapping[str, Any]:
     label, prefix = ("Liquid", "liquid") if liquid else ("Bitcoin", "bitcoin")
     kind = normalize_backend_kind(backend.get("kind"))
@@ -1140,6 +1150,7 @@ def _fetch_reference_graph_from_backend(
                 chain,
                 network,
                 txid,
+                deadline=deadline,
             )
         except Exception:
             return _with_graph_lookup_warning(
@@ -1234,12 +1245,17 @@ def _fetch_bitcoinrpc_transaction_graph(
     chain: str,
     network: str,
     txid: str,
+    *,
+    deadline: float | None = None,
 ) -> Mapping[str, Any]:
+    if deadline is None:
+        deadline = monotonic() + GRAPH_LOOKUP_BUDGET_SECONDS
     decoded = bitcoinrpc_call(
         dict(backend),
         "getrawtransaction",
         [txid, True],
         timeout=_graph_lookup_timeout(backend),
+        deadline=deadline,
     )
     if not isinstance(decoded, Mapping):
         raise AppError("Bitcoin Core returned an invalid transaction response")
@@ -1249,7 +1265,9 @@ def _fetch_bitcoinrpc_transaction_graph(
         chain,
         network,
         raw,
-        fetch_missing=lambda missing: _bitcoinrpc_missing_prevout_graphs(backend, missing),
+        fetch_missing=lambda missing: _bitcoinrpc_missing_prevout_graphs(
+            backend, missing, deadline=deadline
+        ),
         source_label="Bitcoin Core",
     )
     if not _bitcoin_current_graph_has_required_prevouts(raw):
@@ -1286,6 +1304,8 @@ def _bitcoinrpc_decoded_to_graph_raw(
             "vout": input_entry.get("vout"),
             "sequence": input_entry.get("sequence"),
         }
+        if isinstance(input_entry.get("coinbase"), str) and input_entry["coinbase"]:
+            graph_input["is_coinbase"] = True
         # Core only inlines prevout at verbosity 2 (v25+); when present, keep it.
         # Otherwise the missing previous outputs are resolved once, deduplicated,
         # by _attach_bitcoin_prevouts.
@@ -1376,20 +1396,31 @@ def _attach_bitcoin_prevouts(
 def _bitcoinrpc_missing_prevout_graphs(
     backend: Mapping[str, Any],
     missing: Sequence[str],
+    *,
+    deadline: float,
 ) -> dict[str, Mapping[str, Any]]:
     fetched: dict[str, Mapping[str, Any]] = {}
     for prev_txid in missing:
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            break
         try:
             previous = bitcoinrpc_call(
                 dict(backend),
                 "getrawtransaction",
                 [prev_txid, True],
-                timeout=_graph_lookup_timeout(backend),
+                timeout=min(_graph_lookup_timeout(backend), remaining),
+                deadline=deadline,
             )
-        except Exception:
-            # Best-effort: a single unfetchable prevout degrades the graph to a
-            # warning rather than aborting the whole lookup.
+        except AppError as exc:
+            # A pruned/missing transaction does not make other parents useless.
+            # Connectivity, authentication and other backend failures do: stop
+            # rather than retrying the same broken backend for every input.
+            if not isinstance(exc.details, dict) or exc.details.get("rpc_error_code") != -5:
+                break
             continue
+        except Exception:
+            break
         if isinstance(previous, Mapping):
             fetched[prev_txid] = _bitcoinrpc_decoded_to_graph_raw(previous)
     return fetched
@@ -1901,6 +1932,16 @@ def _load_graph_lookup_cache(
         return None
     payload = _json_obj(row["payload_json"])
     if not isinstance(payload.get("vin"), list) or not isinstance(payload.get("vout"), list):
+        return None
+    # Legacy Core coinbase caches lost their marker and retained an empty input.
+    # Its origin cannot be inferred locally. Let an explicitly authorized lookup
+    # replace it, instead of treating the incomplete reference as authoritative.
+    if chain == "bitcoin" and any(
+        isinstance(entry, Mapping)
+        and not _is_coinbase_leg(entry)
+        and (not _looks_like_txid(entry.get("txid")) or _int_or_none(entry.get("vout")) is None)
+        for entry in payload["vin"]
+    ):
         return None
     from .book_network import resolve_book_environment, observation_matches_binding
     binding = resolve_book_environment(conn, current_context_snapshot(conn)["profile_id"])

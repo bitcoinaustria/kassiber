@@ -50,6 +50,18 @@ must agree on chain, network, transaction identity and known physical facts;
 conflicting or over-limit sources leave the original graph unchanged. Reusing
 these references never grants wallet ownership or journal custody authority.
 
+Explicit Bitcoin Core detail lookups share a ten-second acquisition budget
+across the transaction, missing parents and backend fallback. Connection-slot
+waits and retry backoff respect that deadline, and each RPC socket timeout is
+capped at five seconds or the remaining budget. This prevents repeated requests
+from extending the wait; it cannot forcibly interrupt DNS or an active response
+that keeps delivering bytes. A backend failure stops parent acquisition;
+an unavailable individual transaction may be skipped. Already fetched parents
+remain usable and incomplete coverage stays visible. Coinbase origins survive
+the normalized cache; older entries that lost their input identity require an
+explicit lookup to recover it. In-memory ownership bundles are scoped to the
+open database connection, including when copied books share profile IDs.
+
 Ownership in transaction diagrams requires locally matched scripts or exact
 outpoints within the same chain and network. An unmatched leg stays unknown;
 an amount match is only a possible receipt. A return to an input-owning wallet
