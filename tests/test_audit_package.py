@@ -1387,7 +1387,14 @@ class AuditPackageCoreTest(unittest.TestCase):
                 "filed_report_impact_count": 1,
             },
         )
-        self.assertEqual(summary["summary"]["schema_migration_audit_count"], 3)
+        self.assertEqual(summary["summary"]["schema_migration_audit_count"], 4)
+        valuation_migration_audit = next(
+            audit
+            for audit in summary["schema_migration_audits"]
+            if audit["migration_name"] == "at-acquisition-valuation-support-v1"
+        )
+        self.assertEqual(valuation_migration_audit["scope"], "database_schema_only")
+        self.assertNotIn("affected_profile_count", valuation_migration_audit["impact"])
         custody_migration_audit = next(
             audit
             for audit in summary["schema_migration_audits"]

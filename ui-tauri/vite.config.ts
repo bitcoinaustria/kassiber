@@ -278,6 +278,8 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.next_actions",
   "ui.review.badges",
   "ui.review.cases",
+  "ui.review.plan",
+  "ui.review.apply",
   "ui.review.request_input",
   "ui.wallets.utxos",
   "ui.privacy_hygiene.snapshot",

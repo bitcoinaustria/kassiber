@@ -358,6 +358,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.next_actions",
     "ui.review.badges",
     "ui.review.cases",
+    "ui.review.plan",
+    "ui.review.apply",
     "ui.review.request_input",
     "ui.wallets.utxos",
     "ui.privacy_hygiene.snapshot",
