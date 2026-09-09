@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from kassiber import daemon
+from kassiber.daemon_backup import BackupSessions
 from kassiber.ai.tools import get_tool, select_tool_capabilities, tool_capabilities
 from kassiber.cli.main import build_parser, dispatch as cli_dispatch
 from kassiber.core.chain_analysis_api import dispatch
@@ -41,7 +42,7 @@ def test_cli_daemon_and_api_return_same_indexed_evidence(book):
     result = json.loads(output.getvalue())
     assert result["kind"] == "chain-analysis.path"
     assert result["data"] == api
-    ctx = SimpleNamespace(conn=conn, data_root=str(root), runtime_config={})
+    ctx = SimpleNamespace(conn=conn, data_root=str(root), runtime_config={}, backup_sessions=BackupSessions())
     response, stopped = daemon.handle_request(ctx, {"kind": "ui.chain_analysis.query", "request_id": "actual-query", "args": request}, None)
     assert not stopped
     assert response["request_id"] == "actual-query"

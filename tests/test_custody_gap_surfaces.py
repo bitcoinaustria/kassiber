@@ -6,6 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from kassiber.daemon_backup import BackupSessions
 from kassiber.ai.tools import get_tool
 from kassiber.ai.prompt import build_responses_tools
 from kassiber.core.ui_snapshot import build_custody_lineage_snapshot
@@ -205,7 +206,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
             return_value=expected,
         ) as snapshot:
             envelope, shutdown = handle_request(
-                SimpleNamespace(conn=conn),
+                SimpleNamespace(conn=conn, backup_sessions=BackupSessions()),
                 {
                     "kind": "ui.custody.lineage.snapshot",
                     "request_id": "lineage-1",
