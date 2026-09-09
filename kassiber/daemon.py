@@ -6571,6 +6571,9 @@ def _validate_ai_review_operations(operations: Any) -> None:
     for operation in operations:
         if not isinstance(operation, dict):
             raise AppError("Review operation must be an object", code="validation")
+        if operation.get("type") == "kind_override":
+            raise AppError("Acquisition effect review is a local desktop/CLI workflow",
+                           code="interaction_required")
         if operation.get("type") != "custody_component":
             continue
         request = operation.get("request")
@@ -6623,7 +6626,13 @@ def _review_workflow_payload(
         safe_args = redact_ai_tool_result(args) if authored_source == "ai_tool" else args
         return core_review_workflow.request_input(conn, profile, **safe_args)
     if kind == "ui.review.receipt":
-        return core_review_workflow.get_receipt(conn, profile, **args)
+        receipt = core_review_workflow.get_receipt(conn, profile, **args)
+        if authored_source == "ai_tool" and any(
+            operation.get("type") == "kind_override" for operation in receipt.get("proposed_operations", [])
+        ):
+            raise AppError("Acquisition effect receipts are local desktop/CLI only",
+                           code="interaction_required")
+        return receipt
     operations = (
         args.get("artifact", {}).get("operations")
         if isinstance(args.get("artifact"), dict)

@@ -53,10 +53,28 @@ unambiguous earn-like kinds:
 - `staking` -> `STAKING`
 - `interest`, `lending_interest` -> `INTEREST`
 - `mining`, `mining_reward` -> `MINING`
-- `airdrop` -> `AIRDROP`
-- `hardfork`, `hard_fork` -> `HARDFORK`
+- `airdrop`, `hardfork`, `hard_fork`: blocked by `acquisition_valuation_unsupported`
+  for Austrian profiles; the generic-country adapter still maps these to RP2
+  `AIRDROP` / `HARDFORK`.
 - `income`, `routing_income` -> `INCOME`
 - `wages` -> `BUY` (raw `kind=wages` remains provenance)
+
+Austrian zero-cost acquisitions (including qualifying airdrops, hardforks and
+validation staking) are not supported by the current adapter/report section 3.2.
+A label does not prove eligibility. Austrian airdrop/hardfork rows are quarantined
+before RP2, including imported classifications and metadata overrides; later
+same-asset disposals fail closed while that basis remains uncertain. Existing
+processed books containing these rows are marked stale once on upgrade. Saved
+historical outputs remain unchanged.
+
+`STAKING` / `INTEREST` retain the pinned RP2 country's documented meaning of
+taxable lending-style returns. Do not declare validation staking as this supported
+lending type: an explicit `valuation_mode=zero_cost` acquisition review request
+fails with `acquisition_valuation_unsupported`. `wages` remains a basis acquisition
+without employment-income reporting. This distinction follows the
+[BMF cryptocurrency treatment](https://www.bmf.gv.at/themen/steuern/sparen-veranlagen/steuerliche-behandlung-von-kryptowaehrungen.html)
+and the pinned RP2 AT adapter contract; no new Austrian computation is implemented
+in Kassiber.
 
 Generic source-refresh / CSV receives such as `deposit`, `buy`, or Phoenix
 transport types still go through rp2 as `BUY`. Kassiber does not invent

@@ -655,7 +655,7 @@ def _journal_transaction_id(row: Mapping[str, Any] | None, fallback: str) -> str
     return str(_row_get(row, "journal_transaction_id", fallback))
 
 
-def _earliest_lot_contamination(dropped_acquisition_at, events) -> str | None:
+def _earliest_lot_contamination(dropped_acquisition_at, events, *, austrian=False) -> str | None:
     """Earliest instant the asset's lot state becomes uncertain.
 
     Combines normalize's earliest dropped-acquisition timestamp (missing/coarse
@@ -671,8 +671,9 @@ def _earliest_lot_contamination(dropped_acquisition_at, events) -> str | None:
         kind = _normalized_event_kind(event)
         contaminates = (
             event.direction == "inbound"
-            and kind not in _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE
-            and _kind_has_token(kind, _INCOME_LIKE_KIND_TOKENS)
+            and ((kind not in _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE
+                  and _kind_has_token(kind, _INCOME_LIKE_KIND_TOKENS))
+                 or (austrian and kind in {"airdrop", "hardfork", "hard_fork"}))
         ) or (
             event.direction == "outbound"
             and _kind_has_token(kind, _NON_SALE_DISPOSAL_KIND_TOKENS)
@@ -728,6 +729,7 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
     first_drop_at = _earliest_lot_contamination(
         normalized_inputs.earliest_lot_contamination_at,
         normalized_inputs.events,
+        austrian=include_austrian_markers,
     )
     quarantines = list(normalized_inputs.quarantines)
     intra_audit = []
@@ -1022,6 +1024,14 @@ def _prepare_rp2_asset_input(profile, normalized_inputs: NormalizedTaxAssetInput
                 # emission and leave availability untouched.
                 continue
             kind = _normalized_event_kind(event)
+            if include_austrian_markers and kind in {"airdrop", "hardfork", "hard_fork"}:
+                quarantines.append(build_tax_quarantine(
+                    profile, event.raw_row, "acquisition_valuation_unsupported",
+                    {"wallet": event.wallet_label, "asset": asset, "kind": kind,
+                     "tax_country": "at", "valuation_mode": "zero_cost",
+                     "detail": "Austrian airdrop/hardfork valuation requires unsupported zero-cost semantics; a label does not prove eligibility."},
+                ))
+                continue
             if (
                 kind not in _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE
                 and _kind_has_token(kind, _INCOME_LIKE_KIND_TOKENS)
