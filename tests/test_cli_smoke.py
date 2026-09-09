@@ -1783,6 +1783,13 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn("quantity_msat", row)
             self.assertIsInstance(row["quantity_msat"], int)
             self.assertEqual(row["entry_type"], "disposal")
+            explanation = self._cli(
+                "reports", "explain-capital-gain", "--workspace", "Main",
+                "--profile", "Default", "--reference", json.dumps(row["explanation_reference"]),
+            )
+            self._assert_kind(explanation, "reports.explain-capital-gain")
+            self.assertEqual(explanation["data"]["status"], "available")
+            self.assertEqual(explanation["data"]["reference"], row["explanation_reference"])
 
     def test_09_balance_sheet_totals(self):
         payload = self._cli(

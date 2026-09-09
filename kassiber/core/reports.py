@@ -1565,6 +1565,7 @@ def report_capital_gains(
     rows = conn.execute(
         f"""
         SELECT
+            je.id AS journal_entry_id,
             je.occurred_at,
             w.label AS wallet,
             je.transaction_id,
@@ -1595,6 +1596,8 @@ def report_capital_gains(
         ):
             continue
         entry = dict(row)
+        from .report_explanation import result_reference
+        entry["explanation_reference"] = result_reference(conn, profile, entry.pop("journal_entry_id"))
         entry["quantity_msat"] = int(entry["quantity"])
         entry["quantity"] = float(msat_to_btc(entry["quantity"]))
         if entry.get("at_category") is None:
