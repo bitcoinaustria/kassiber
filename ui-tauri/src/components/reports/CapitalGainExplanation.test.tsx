@@ -29,6 +29,31 @@ describe("capital-gains explanation", () => {
     expect(html).toContain("another book");
     expect(html).not.toContain("20.01");
   });
+  it("renders retained historical calculations and source links under a carrying acquisition", () => {
+    const response = invoke.getMockImplementation()!();
+    const fragment = response.data.data.calculation.fragments[0];
+    fragment.lot = { ...source, inherited_basis: {
+      status: "available",
+      relations: [{ decision_id: "carry", source_transaction_id: "swap-out", target_transaction_id: "swap-in", policy: "carrying-value", basis_state: "eligible", source_quantity_msat_exact: "10000000000", source_asset: "BTC", target_quantity_msat_exact: "10000000000", target_asset: "LBTC", swap_fee_msat_exact: "10000000" }],
+      source_calculations: [{ transaction_id: "swap-out", asset: "BTC", status: "available", totals: { proceeds_exact: "8008", cost_basis_exact: "8008.0000", gain_loss_exact: "0.0000", quantity_msat_exact: "10010000000" }, calculation: { method: "FIFO", fragments: [{ ...fragment, lot: { ...source, transaction_id: "original-buy", spot_price_exact: "80000" }, event: { ...source, crypto_fee_msat_exact: "10000000", fiat_fee_exact: "8.0080" } }] } }],
+    } };
+    invoke.mockReturnValue(response);
+    const html = renderToStaticMarkup(<ExplanationBody reference={reference} hideSensitive={false} />);
+    expect(html).toContain("explanation.inheritedContext");
+    expect(html).toContain("original-buy");
+    expect(html).toContain("8008 − 8008.0000 = 0.0000 EUR");
+    expect(html).toContain("8.0080 · 10000000 msat");
+    expect(html).toContain("#carry-0-0-lot-0");
+    expect(html).toContain("carrying-value");
+  });
+  it("names unavailable inherited sources while keeping the reconciled sale visible", () => {
+    const response = invoke.getMockImplementation()!();
+    response.data.data.calculation.fragments[0].lot = { ...source, inherited_basis: { status: "engine_detail_unavailable", relations: [], source_calculations: [] } };
+    invoke.mockReturnValue(response);
+    const html = renderToStaticMarkup(<ExplanationBody reference={reference} hideSensitive={false} />);
+    expect(html).toContain("explanation.inheritedUnavailable");
+    expect(html).toContain("20.01 − 10.00 = 10.01 EUR");
+  });
   it("keeps exact financial content sensitive", () => {
     const html = renderToStaticMarkup(<ExplanationBody reference={reference} hideSensitive />);
     expect(html).toContain("sensitive");

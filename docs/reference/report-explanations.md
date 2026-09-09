@@ -41,3 +41,18 @@ and custody blockers are errors; existing quarantines remain explicit in the
 response, including price gaps. An explanation reconciles its displayed row,
 not transactions excluded by quarantine. This first path does not explain every
 aggregate report cell or produce financial AI narration.
+
+For synthetic carrying-value acquisitions, the explanation follows eligible
+reviewed relations from `journal_custody_projection_relations`, including
+cross-rail economic conversions. Each acquisition's `inherited_basis` includes
+those relations and the outgoing disposal's reconciled, retained RP2 calculation,
+recursively following further synthetic acquisitions. This exposes the original
+acquisition price and whole-source fees even when the later sale names only a
+synthetic rail-entry lot. These are complete historical source calculations;
+Kassiber does not allocate their individual lots or fees to the later sale.
+
+Inherited detail can be unavailable or fail reconciliation independently of the
+displayed sale. It is never substituted with a same-asset pool or inferred from a
+zero gain. Reads share the result's pinned journal snapshot and stop at eight
+carry levels or 100 relation/calculation records, with explicit truncation. No
+additional calculation or source data is persisted by the explanation read.

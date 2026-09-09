@@ -22,6 +22,15 @@ interface Source {
   crypto_fee_msat: number;
   crypto_fee_msat_exact: string;
   pricing: Record<string, string | null>;
+  inherited_basis?: {
+    status: string;
+    relations: Array<Record<string, string | null>>;
+    source_calculations: Array<{
+      transaction_id: string; asset: string; status: string;
+      calculation: Calculation | null;
+      totals: { proceeds_exact: string; cost_basis_exact: string; gain_loss_exact: string; quantity_msat_exact: string } | null;
+    }>;
+  };
 }
 interface Fragment {
   quantity_msat: number;
@@ -36,6 +45,7 @@ interface Fragment {
   event: Source;
   lot: Source | null;
 }
+interface Calculation { method: string; fragments: Fragment[] }
 interface Explanation {
   reference: ResultReference;
   status: "available" | "engine_detail_unavailable" | "engine_detail_mismatch";
@@ -43,7 +53,7 @@ interface Explanation {
   book_label: string;
   quarantines: number;
   totals: { cost_basis_exact: string; proceeds_exact: string; gain_loss_exact: string };
-  calculation: { method: string; fragments: Fragment[] } | null;
+  calculation: Calculation | null;
   custody_decisions: Array<Record<string, string | null>>;
   custody_truncated: boolean;
 }
@@ -74,22 +84,41 @@ export function ExplanationBody({ reference, hideSensitive }: { reference: Resul
     <p className="font-mono break-all">{result.totals.proceeds_exact} − {result.totals.cost_basis_exact} = {result.totals.gain_loss_exact} {result.currency}</p>
     {result.quarantines > 0 && <p role="status">{t("explanation.quarantines", { count: result.quarantines })}</p>}
     <p className="text-muted-foreground">{t("explanation.poolNote")}</p>
-    {result.calculation.fragments.map((fragment, index) => <section key={index} className="space-y-2 rounded-md border p-3">
-      <h3 className="font-medium">{t("explanation.fragment", { index: index + 1 })} · {fragment.quantity_msat_exact} msat</h3>
-      <p className="font-mono break-all">{fragment.proceeds_exact} − {fragment.cost_basis_exact} = {fragment.gain_loss_exact} {result.currency}</p>
-      {fragment.unit_basis_override_exact !== null && <p>{t("explanation.unitBasis")}: <span className="font-mono">{fragment.unit_basis_override_exact}</span> {result.currency}/BTC</p>}
-      <SourceEvidence source={fragment.event} label={t("explanation.disposal")} reference={reference} node={`event-${index}`} />
-      {fragment.lot && <>
-        <p>{t("explanation.acquisitionBasis")}: <span className="font-mono">{fragment.acquisition_basis_exact}</span> {result.currency} / {fragment.acquisition_quantity_msat_exact} msat</p>
-        <SourceEvidence source={fragment.lot} label={t("explanation.acquisition")} reference={reference} node={`lot-${index}`} />
-      </>}
-    </section>)}
+    <CalculationEvidence calculation={result.calculation} currency={result.currency} reference={reference} prefix="" />
     <section><h3 className="font-medium">{t("explanation.custody")}</h3>
       <p className="text-muted-foreground">{t("explanation.custodyContext")}</p>
       {result.custody_decisions.length ? result.custody_decisions.map((decision, index) => <p key={index} className="break-all font-mono text-xs">{decision.source_transaction_id} → {decision.target_transaction_id} · {decision.custody_state} · {decision.basis_state} · {decision.reason}</p>) : <p>{t("explanation.noCustody")}</p>}
       {result.custody_truncated && <p>{t("explanation.custodyTruncated")}</p>}
     </section>
   </div>;
+}
+
+function CalculationEvidence({ calculation, currency, reference, prefix }: { calculation: Calculation; currency: string; reference: ResultReference; prefix: string }) {
+  const { t } = useTranslation("journals");
+  return <>{calculation.fragments.map((fragment, index) => <section key={index} className="space-y-2 rounded-md border p-3">
+    <h3 className="font-medium">{t("explanation.fragment", { index: index + 1 })} · {fragment.quantity_msat_exact} msat</h3>
+    <p className="font-mono break-all">{fragment.proceeds_exact} − {fragment.cost_basis_exact} = {fragment.gain_loss_exact} {currency}</p>
+    {fragment.unit_basis_override_exact !== null && <p>{t("explanation.unitBasis")}: <span className="font-mono">{fragment.unit_basis_override_exact}</span> {currency}/{fragment.event.asset}</p>}
+    <SourceEvidence source={fragment.event} label={t("explanation.disposal")} reference={reference} node={`${prefix}event-${index}`} />
+    {fragment.lot && <>
+      <p>{t("explanation.acquisitionBasis")}: <span className="font-mono">{fragment.acquisition_basis_exact}</span> {currency} / {fragment.acquisition_quantity_msat_exact} msat</p>
+      <SourceEvidence source={fragment.lot} label={t("explanation.acquisition")} reference={reference} node={`${prefix}lot-${index}`} />
+      {fragment.lot.inherited_basis && <div className="space-y-2 border-l-2 pl-3">
+        <h4 className="font-medium">{t("explanation.inheritedBasis")}</h4>
+        <p className="text-muted-foreground">{t("explanation.inheritedContext")}</p>
+        {fragment.lot.inherited_basis.relations.map((relation) => <p key={relation.decision_id} className="break-all font-mono text-xs">
+          {relation.source_transaction_id} → {relation.target_transaction_id} · {relation.reason} · {relation.policy} · {relation.basis_state}<br />
+          {relation.source_quantity_msat_exact} {relation.source_asset} msat → {relation.target_quantity_msat_exact} {relation.target_asset} msat · {t("explanation.fee")}: {relation.swap_fee_msat_exact ?? "—"} msat
+        </p>)}
+        {fragment.lot.inherited_basis.status !== "available" && <p role="status">{t(fragment.lot.inherited_basis.status === "inherited_detail_truncated" ? "explanation.inheritedTruncated" : fragment.lot.inherited_basis.status === "engine_detail_mismatch" ? "explanation.mismatch" : "explanation.inheritedUnavailable")}</p>}
+        {fragment.lot.inherited_basis.source_calculations.map((source, sourceIndex) => <div key={sourceIndex} className="space-y-2">
+          <h5>{source.transaction_id} · {source.asset} · {source.calculation?.method}</h5>
+          {source.totals && <p className="font-mono break-all">{source.totals.proceeds_exact} − {source.totals.cost_basis_exact} = {source.totals.gain_loss_exact} {currency} · {source.totals.quantity_msat_exact} msat</p>}
+          {source.calculation && <CalculationEvidence calculation={source.calculation} currency={currency} reference={reference} prefix={`${prefix}carry-${index}-${sourceIndex}-`} />}
+        </div>)}
+      </div>}
+    </>}
+  </section>)}</>;
 }
 
 function SourceEvidence({ source, label, reference, node }: { source: Source; label: string; reference: ResultReference; node: string }) {

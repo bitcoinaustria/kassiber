@@ -1,8 +1,6 @@
 """Version-bound, read-only explanations of stored capital-gains results."""
 from __future__ import annotations
 
-import json
-from decimal import Decimal, localcontext
 from collections import deque
 
 from ..db import database_instance_id
@@ -10,6 +8,7 @@ from ..errors import AppError
 from ..time_utils import parse_iso_datetime_or_none
 from . import custody_journal, custody_quantity_store
 from .book_network import require_book_accounting
+from .report_explanation_carry import attach_inherited_basis, retained_calculation
 from ..tax_policy import require_tax_processing_supported
 
 
@@ -66,24 +65,18 @@ def _explain(conn, profile, reference):
     payload = {"reference": reference, "book_label": profile["label"], "currency": profile["fiat_currency"], "totals": totals,
                "quarantines": quarantine_count, "status": "engine_detail_unavailable",
                "calculation": None, "custody_decisions": [], "custody_truncated": False}
-    if not row["calculation_json"] or any(totals[field] is None for field in fields):
+    status, calculation = retained_calculation(row)
+    if calculation is None:
+        payload["status"] = status
         return payload
-    calculation = json.loads(row["calculation_json"])
     fragments = calculation["fragments"]
-    # Match the existing RP2 calculation precision; this validates stored
-    # contributions, never reconstructs selection, pool evolution or tax rules.
-    with localcontext() as context:
-        context.prec = 32
-        reconciled = all(sum((Decimal(item[field]) for item in fragments), Decimal(0)) == Decimal(totals[field]) for field in fields)
-    reconciled = reconciled and sum(item["quantity_msat"] for item in fragments) == totals["quantity_msat"]
-    if not reconciled:
-        payload["status"] = "engine_detail_mismatch"
-        return payload
+    inherited_relations, inherited_truncated = attach_inherited_basis(conn, str(profile["id"]), calculation)
     ids = {source["transaction_id"] for fragment in fragments for source in (fragment["event"], fragment["lot"])
            if source and source["transaction_id"]}
     custody, truncated = _custody_context(conn, str(profile["id"]), row, fragments, ids)
-    payload["custody_decisions"] = custody
-    payload["custody_truncated"] = truncated
+    seen = {item["decision_id"] for item in custody}
+    payload["custody_decisions"] = custody + [item for item in inherited_relations if item["decision_id"] not in seen]
+    payload["custody_truncated"] = truncated or inherited_truncated
     payload.update(status="available", calculation=calculation)
     return payload
 
