@@ -14,6 +14,7 @@ import time
 from typing import Any, Callable
 
 from .backup.install import install_staged_backup, restore_targets
+from .core.chain_analysis_runtime import JOBS
 from .backup.pack import BACKUP_DB_NAME, export_backup, import_backup
 from .db import resolve_effective_state_root
 from .errors import AppError
@@ -177,7 +178,7 @@ def handle_backup(
         ensure_owner()
         # Keep the desktop lease while closing connections, so a second process
         # cannot open the old database during installation.
-        with exclusive_project_maintenance(ctx.data_root, active_owner_kind="desktop"):
+        with exclusive_project_maintenance(ctx.data_root, active_owner_kind="desktop"), JOBS.quiesce():
             sessions.preview = None
             try:
                 def require_current() -> None:
@@ -192,6 +193,17 @@ def handle_backup(
                 except Exception:
                     warning = "restore_unlock_settings_failed"
                 return {"warning": warning, "restored": True, "locked": True, "pre_restore_backup": str(recovery) if recovery else None, "unavailable_secrets": preview.unavailable_secrets}
+            except Exception as failure:
+                if ctx.conn is None:
+                    # Rollback can preserve every file while the old session
+                    # still needs unlocking. Tell the UI that lifecycle fact.
+                    if isinstance(failure, AppError):
+                        raise AppError(str(failure), code=failure.code, hint=failure.hint,
+                                       details={**(failure.details or {}), "locked": True},
+                                       retryable=failure.retryable) from failure
+                    raise AppError("Restore failed after closing the database", code="restore_failed",
+                                   details={"locked": True}) from failure
+                raise
             finally:
                 shutil.rmtree(preview.staging.parent, ignore_errors=True)
                 if ctx.conn is None:

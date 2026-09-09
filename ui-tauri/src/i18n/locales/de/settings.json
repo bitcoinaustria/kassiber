@@ -803,6 +803,19 @@
     "customBackend": "Wähle einen eigenen Backend für das Netzwerk dieses Buchs ({{network}}). Öffentliche Mainnet-Vorlagen passen dazu nicht."
   },
   "backup": {
+    "errors": {
+      "invalid": "Das Backup konnte nicht geprüft werden. Prüfe die Backup-Passphrase und die ursprüngliche Datenbank-Passphrase und wähle ein gültiges Archiv.",
+      "passphrase": "Gib die benötigten Passphrasen ein.",
+      "destination": "Das Ziel ist nicht sicher oder beschreibbar. Wähle einen lokalen Speicherort außerhalb des aktiven Containers und prüfe freien Speicherplatz und Berechtigungen.",
+      "encryption": "Verschlüssle diesen Container, bevor du ein Backup exportierst.",
+      "stale": "Der Container oder die Vorschau hat sich geändert. Erstelle vor der Wiederherstellung eine neue Vorschau.",
+      "confirmation": "Gib RESTORE ein, um das Ersetzen zu bestätigen.",
+      "busy": "Datenbankarbeiten laufen noch. Warte auf deren Abschluss und erstelle eine neue Backup-Vorschau.",
+      "locked": "Entsperre den Container, um Backups zu verwalten.",
+      "rolledBack": "Die Installation ist fehlgeschlagen. Die ursprünglichen Daten wurden wiederhergestellt. Entsperre sie mit ihrer ursprünglichen Datenbank-Passphrase und prüfe Berechtigungen und freien Speicherplatz am Ziel.",
+      "recovery": "Installation und automatisches Zurücksetzen sind fehlgeschlagen. Bewahre die Sicherungskopie auf und stelle sie wieder her, bevor du diesen Container erneut öffnest.",
+      "failedLocked": "Die Wiederherstellung ist nach dem Schließen der Datenbank fehlgeschlagen. Prüfe den Container und die Sicherungskopie vor dem Entsperren."
+    },
     "recoverySaved": "Deine Sicherung vor der Wiederherstellung liegt unter {{path}}.",
     "description": "Exportiere ein verschlüsseltes Backup oder stelle eines über die lokale Dateiauswahl wieder her. Zum Wiederherstellen brauchst du die Backup-Passphrase und die Datenbank-Passphrase zum Zeitpunkt des Exports.",
     "scope": "Ein Backup enthält diesen gesamten Container: alle Buchgruppen und Bücher, Anhänge und aufbewahrte Daten sowie lokale Einstellungen. Exportierte Berichte und Zugangsdaten des Betriebssystems sind nicht enthalten.",

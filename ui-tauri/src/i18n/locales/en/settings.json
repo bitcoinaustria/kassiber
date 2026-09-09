@@ -803,6 +803,19 @@
     "customBackend": "Choose a custom backend for this book’s network ({{network}}). Public mainnet presets cannot serve it."
   },
   "backup": {
+    "errors": {
+      "invalid": "The backup could not be validated. Check the backup and original database passphrases, then choose a valid archive.",
+      "passphrase": "Enter the required passphrases.",
+      "destination": "The destination is not safe or writable. Choose a local location outside the active container and check free space and permissions.",
+      "encryption": "Encrypt this container before exporting a backup.",
+      "stale": "The container or preview changed. Preview the backup again before restoring.",
+      "confirmation": "Type RESTORE to confirm replacement.",
+      "busy": "Database work is still running. Wait for it to finish, then preview the backup again.",
+      "locked": "Unlock the container before managing backups.",
+      "rolledBack": "Installation failed. The original data was restored. Unlock it with its original database passphrase and check destination permissions and free space.",
+      "recovery": "Installation and automatic rollback failed. Keep the recovery copy and restore it before reopening this container.",
+      "failedLocked": "Restore failed after the database was closed. Check the container and recovery copy before unlocking."
+    },
     "recoverySaved": "Your pre-restore recovery copy is at {{path}}.",
     "description": "Export an encrypted backup or restore one using local file pickers. You need both the backup passphrase and the database passphrase from the time of export to restore.",
     "scope": "A backup contains this entire container: all book sets and books, attachments and retained data, plus local configuration. Exported report files and operating-system credentials are not included.",

@@ -81,3 +81,32 @@ it("discards a late preview when the book switches during the request", async ()
   await vi.waitFor(() => expect(state.invoke).toHaveBeenLastCalledWith({kind: "ui.backup.cancel", args: {token: "late"}}));
   expect(button("backup.replace")).toBeUndefined();
 });
+
+it("returns to unlock with a localized notification after rollback closes the database", async () => {
+  click("backup.restore");
+  input("backup-passphrase", "outer"); input("backup-second-passphrase", "inner");
+  state.pick.mockResolvedValue("/tmp/example.kassiber");
+  state.invoke.mockResolvedValueOnce({kind: "ui.backup.preview", data: {token: "token", target_data_root: "/target/data", target: {books: ["Original"], book_count: 1}, incoming: {books: ["Recovered"], book_count: 1}, attachments_files: 1, replaces: []}});
+  click("backup.preview");
+  await vi.waitFor(() => expect(button("backup.replace")).toBeDefined());
+  input("backup-confirmation", "RESTORE");
+  state.invoke.mockResolvedValueOnce({kind: "error", error: {code: "restore_install_failed", message: "Raw English error", details: {locked: true}}});
+  click("backup.replace");
+  await vi.waitFor(() => expect(state.session).toBe(2));
+  expect(window.dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({type: "kassiber:lock-app"}));
+  expect(state.notify).toHaveBeenCalledWith(expect.objectContaining({body: "backup.errors.rolledBack", tone: "error"}));
+  expect(button("backup.replace")).toBeUndefined();
+  expect(JSON.stringify(render())).not.toContain("Raw English error");
+});
+
+it("keeps pre-close validation errors in the localized preview flow", async () => {
+  click("backup.restore");
+  input("backup-passphrase", "outer"); input("backup-second-passphrase", "wrong");
+  state.pick.mockResolvedValue("/tmp/example.kassiber");
+  state.invoke.mockResolvedValue({kind: "error", error: {code: "invalid_backup", message: "Raw English error"}});
+  click("backup.preview");
+  await vi.waitFor(() => expect(JSON.stringify(render())).toContain("backup.errors.invalid"));
+  expect(state.session).toBe(1);
+  expect(window.dispatchEvent).not.toHaveBeenCalled();
+  expect(state.notify).not.toHaveBeenCalled();
+});

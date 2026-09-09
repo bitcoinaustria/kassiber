@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getTransport } from "@/daemon/transport";
-import { formatDaemonEnvelopeError } from "@/daemon/client";
 import { isFilePickerAvailable, isFileSaveAvailable, pickFile, saveFile } from "@/lib/filePicker";
 import { useUiStore } from "@/store/ui";
 
@@ -19,10 +18,40 @@ interface BackupPreview {
   unavailable_secrets: boolean;
 }
 
+const backupErrorKeys = {
+  invalid_backup: "backup.errors.invalid",
+  missing_backup: "backup.errors.invalid",
+  backup_passphrase_required: "backup.errors.passphrase",
+  invalid_backup_destination: "backup.errors.destination",
+  backup_export_failed: "backup.errors.destination",
+  plaintext_database: "backup.errors.encryption",
+  stale_backup_preview: "backup.errors.stale",
+  backup_confirmation_required: "backup.errors.confirmation",
+  unsafe_restore_target: "backup.errors.destination",
+  project_in_use: "backup.errors.busy",
+  backup_target_locked: "backup.errors.locked",
+  restore_install_failed: "backup.errors.rolledBack",
+  restore_rollback_failed: "backup.errors.recovery",
+  restore_failed: "backup.errors.failedLocked",
+} as const;
+
+class BackupError extends Error {
+  readonly code: string;
+  readonly locked: boolean;
+  readonly recoveryPath: string | null;
+  constructor(code: string, details?: unknown) {
+    super(code);
+    this.code = code;
+    const data = details && typeof details === "object" ? details as Record<string, unknown> : {};
+    this.locked = data.locked === true || code === "backup_target_locked";
+    this.recoveryPath = typeof data.recovery_path === "string" ? data.recovery_path : null;
+  }
+}
+
 async function backupCall<T>(kind: string, args: Record<string, unknown>): Promise<T> {
   const result = await getTransport().invoke<T>({ kind, args });
   if (result.error || result.kind !== kind || !result.data) {
-    throw new Error(formatDaemonEnvelopeError(result) ?? "Backup action failed");
+    throw new BackupError(result.error?.code ?? "backup_failed", result.error?.details);
   }
   return result.data;
 }
@@ -99,7 +128,23 @@ export function BackupSettings() {
         window.dispatchEvent(new CustomEvent("kassiber:lock-app"));
       }
     } catch (failure) {
-      if (current()) setError(failure instanceof Error ? failure.message : t("backup.failed"));
+      if (current()) {
+        const key = failure instanceof BackupError
+          ? backupErrorKeys[failure.code as keyof typeof backupErrorKeys] : undefined;
+        const text = key ? t(key) : t("backup.failed");
+        if (failure instanceof BackupError && failure.locked) {
+          token.current = null;
+          reset();
+          useUiStore.getState().addNotification({
+            title: t("backup.failed"), tone: "error",
+            body: failure.recoveryPath ? `${text} ${t("backup.recoverySaved", { path: failure.recoveryPath })}` : text,
+          });
+          useUiStore.getState().bumpDaemonSession();
+          window.dispatchEvent(new CustomEvent("kassiber:lock-app"));
+        } else {
+          setError(text);
+        }
+      }
     } finally {
       if (mounted.current) {
         setBusy(false);

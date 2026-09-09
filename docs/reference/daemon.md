@@ -930,6 +930,14 @@ The installer prepares all copies before replacement, preserves current data
 installation failures. The restored session stays locked; credential settings
 are invalidated and never enrolled implicitly. Post-install unlock-setting
 failures return `restored: true` with `warning: restore_unlock_settings_failed`.
+Analysis-job admission remains closed during installation. Cancellation waits
+up to five seconds for computations to finish and close their dedicated
+SQLCipher handles, including jobs whose receipts were already cleared. A
+timeout returns `project_in_use` before closing or replacing the active DB.
+Post-close failures carry `error.details.locked: true`; the desktop discards
+the consumed preview and returns to unlock with a localized notification. An
+incomplete rollback also provides `recovery_path` so the original copy can be
+recovered before reopening.
 
 `ui.backup.cancel` accepts the token and removes its staging tree. File-picker
 cancellation sends no export/restore action. Once an explicitly confirmed

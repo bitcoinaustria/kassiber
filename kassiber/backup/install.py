@@ -86,6 +86,7 @@ def install_staged_backup(staging: Path, data_root: Path) -> Path | None:
                 raise AppError(
                     "Restore failed and automatic recovery could not finish",
                     code="restore_rollback_failed",
+                    details={"recovery_path": str(recovery)},
                     hint=f"Keep the recovery copy at {recovery}; restore it before reopening this container.",
                 ) from rollback_failure
             raise AppError(

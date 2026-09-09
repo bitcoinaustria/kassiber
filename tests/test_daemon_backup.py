@@ -39,6 +39,8 @@ def desktop(tmp_path, monkeypatch):
         ctx.db_passphrase = None
 
     def ensure():
+        if ctx.owner is not None:
+            return
         ctx.owner = acquire_project_ownership(canonical_project(ctx.data_root), owner_kind="desktop", generation="test-backup")
 
     def release():
@@ -202,6 +204,7 @@ def test_install_failure_rolls_back_database_attachments_and_exports(desktop, mo
     with pytest.raises(AppError) as exc:
         call(desktop, "apply", token=shown["token"], confirm="RESTORE")
     assert exc.value.code == "restore_install_failed"
+    assert exc.value.details["locked"] is True
     assert ctx.conn is None
     restored = open_db(ctx.data_root, passphrase="database-secret")
     assert restored.execute("SELECT label FROM profiles").fetchone()[0] == "Original book"
@@ -260,3 +263,49 @@ def test_restore_target_symlink_is_rejected_without_modifying_target(tmp_path):
     assert exc.value.code == "unsafe_restore_target"
     assert (target / "kassiber.sqlite3").read_bytes() == b"original"
     assert not list(external.iterdir())
+
+
+def test_restore_waits_for_worker_connections_even_after_receipts_are_cleared(desktop, monkeypatch):
+    import threading
+    from kassiber.core.chain_analysis_runtime import AnalysisJobs
+    from kassiber.secrets.sqlcipher import open_encrypted
+
+    ctx, _, _ = desktop
+    shown = preview(desktop, exported(desktop))
+    jobs = AnalysisJobs()
+    monkeypatch.setattr(backup, "JOBS", jobs)
+    entered, release, closed = threading.Event(), threading.Event(), threading.Event()
+
+    def compute(progress, cancelled):
+        conn = open_encrypted(Path(ctx.data_root) / "kassiber.sqlite3", "database-secret",
+                              enforce_operator_identity=False)
+        try:
+            conn.execute("SELECT COUNT(*) FROM profiles").fetchone()
+            entered.set()
+            assert release.wait(10)
+            return {"status": "cancelled" if cancelled() else "completed"}
+        finally:
+            conn.close()
+            closed.set()
+
+    jobs.start(b"original", {}, compute)
+    try:
+        assert entered.wait(5)
+        jobs.clear()
+        # A cleared receipt cannot hide its live SQLCipher connection.
+        with pytest.raises(AppError) as error:
+            call(desktop, "apply", token=shown["token"], confirm="RESTORE")
+        assert error.value.code == "project_in_use"
+        assert not closed.is_set() and ctx.conn is not None
+        assert ctx.backup_sessions.preview is not None
+        assert ctx.conn.execute("SELECT label FROM profiles").fetchone()[0] == "Original book"
+    finally:
+        release.set()
+        with jobs.quiesce():
+            assert closed.is_set()
+            with pytest.raises(AppError) as error:
+                jobs.start(b"new", {}, compute)
+            assert error.value.code == "chain_analysis_busy"
+    shown = preview(desktop, exported(desktop))
+    result = call(desktop, "apply", token=shown["token"], confirm="RESTORE")
+    assert result["restored"] and closed.is_set()
