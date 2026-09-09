@@ -5,6 +5,16 @@ The existing saved/filed snapshot remains the report's immutable authority.
 """
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS filed_report_chain_captures (
+ snapshot_id TEXT PRIMARY KEY REFERENCES filed_report_snapshots(id) ON DELETE CASCADE,
+ profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+ source_snapshot_id TEXT REFERENCES filed_report_snapshots(id),
+ captured_at TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS trg_report_chain_captures_immutable
+ BEFORE UPDATE ON filed_report_chain_captures BEGIN
+ SELECT RAISE(ABORT, 'report_chain_captures_immutable'); END;
+
 CREATE TABLE IF NOT EXISTS filed_report_chain_dependencies (
  snapshot_id TEXT NOT NULL REFERENCES filed_report_snapshots(id) ON DELETE CASCADE,
  profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,

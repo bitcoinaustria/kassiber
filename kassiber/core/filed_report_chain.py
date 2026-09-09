@@ -17,6 +17,7 @@ from ..time_utils import now_iso
 from . import custody_filed_reports as reports
 from .ownership_transfers import capture_confirmation_observation
 from .onchain import stored_tx_mapping
+from .chain_analysis.occurrences import OccurrenceResolver, SourceIdentity, parse_transaction_identity
 
 
 _OBSERVATION_SELECT = """
@@ -42,8 +43,10 @@ def _observation(row: sqlite3.Row) -> dict[str, Any] | None:
     payload = stored_tx_mapping(row["raw_json"], allow_nested=True) or {}
     status = payload.get("status") or {}
     block_hash = status.get("block_hash")
-    if not isinstance(block_hash, str) or len(block_hash) != 64:
+    if not isinstance(block_hash, str) or len(block_hash) != 64 or any(character not in "0123456789abcdefABCDEF" for character in block_hash):
         block_hash = None
+    elif block_hash:
+        block_hash = block_hash.lower()
     height = status.get("block_height")
     return {
         "status": "observed", "confirmed": closed.confirmed,
@@ -58,7 +61,8 @@ def capture_export_dependencies(conn: sqlite3.Connection, snapshot: dict[str, An
 
     A wallet/date filter selects report assets, not an independent tax pool.
     All booked inputs of those assets through the report end can affect its
-    deterministic engine result. Excluded and unbooked rows never qualify.
+    deterministic engine result. Reviewed carrying relations also retain their
+    earlier source-asset pools. Excluded and unbooked rows never qualify.
     Legacy/external snapshots are deliberately not retroactively reconstructed.
     """
     profile_id = snapshot["profile_id"]
@@ -83,6 +87,34 @@ def capture_export_dependencies(conn: sqlite3.Connection, snapshot: dict[str, An
         if (row["asset"] in assets and year is not None and year <= snapshot["period_end_year"]
             and (not scope.get("occurred_at_end") or row["occurred_at"] <= scope["occurred_at_end"])):
             included.add(row["transaction_id"])
+    # A target rail inherits source-pool basis only through a selected eligible
+    # canonical carrying relation. Follow that relation backwards, including
+    # its earlier source-asset pool, never every unrelated asset in the book.
+    relations = conn.execute("""SELECT out_transaction_id,in_transaction_id,out_asset,occurred_at
+        FROM journal_custody_projection_relations WHERE profile_id=?
+        AND policy='carrying-value' AND basis_state='eligible'
+        AND in_transaction_id IS NOT NULL AND out_asset != in_asset
+        ORDER BY occurred_at DESC,id""", (profile_id,)).fetchall()
+    booked = {row["transaction_id"] for row in entries}
+    by_asset = {}
+    for entry in entries:
+        by_asset.setdefault(entry["asset"], []).append(entry)
+    changed = True
+    while changed:
+        changed = False
+        for relation in relations:
+            if (relation["in_transaction_id"] not in included or relation["out_transaction_id"] not in booked
+                or relation["out_transaction_id"] in included):
+                continue
+            cutoff = relation["occurred_at"]
+            if not cutoff:
+                continue
+            for entry in by_asset.get(relation["out_asset"], ()):
+                if entry["occurred_at"] <= cutoff:
+                    if entry["transaction_id"] not in included:
+                        included.add(entry["transaction_id"])
+                        changed = True
+    resolver = OccurrenceResolver(conn, profile_id)
     for row in conn.execute(_OBSERVATION_SELECT + " WHERE t.profile_id=? AND t.excluded=0", (profile_id,)):
         if row["id"] not in included:
             continue
@@ -90,12 +122,27 @@ def capture_export_dependencies(conn: sqlite3.Connection, snapshot: dict[str, An
         closed = capture_confirmation_observation(row)
         if observation is None or closed is None:
             continue
+        observation["domain_id"] = resolver.source(dict(row), *closed.physical_scope[:2]).domain_id
         conn.execute("""INSERT INTO filed_report_chain_dependencies
             (snapshot_id,profile_id,transaction_id,wallet_id,chain,network,txid,observation_json)
             VALUES(?,?,?,?,?,?,?,?)""", (
                 snapshot["id"], profile_id, row["id"], row["wallet_id"], *closed.physical_scope,
                 _json(observation),
             ))
+
+    conn.execute("INSERT INTO filed_report_chain_captures(snapshot_id,profile_id,captured_at) VALUES(?,?,?)",
+                 (snapshot["id"], profile_id, now_iso()))
+
+
+def copy_export_dependencies(conn, source_snapshot, target_snapshot_id):
+    """Copy frozen local provenance; never recapture the now-current journal."""
+    conn.execute("""INSERT INTO filed_report_chain_dependencies
+        (snapshot_id,profile_id,transaction_id,wallet_id,chain,network,txid,observation_json)
+        SELECT ?,profile_id,transaction_id,wallet_id,chain,network,txid,observation_json
+        FROM filed_report_chain_dependencies WHERE snapshot_id=? AND profile_id=?""",
+        (target_snapshot_id, source_snapshot["id"], source_snapshot["profile_id"]))
+    conn.execute("INSERT INTO filed_report_chain_captures(snapshot_id,profile_id,source_snapshot_id,captured_at) VALUES(?,?,?,?)",
+                 (target_snapshot_id, source_snapshot["profile_id"], source_snapshot["id"], now_iso()))
 
 
 def _current(conn: sqlite3.Connection, dependency: sqlite3.Row) -> dict[str, Any]:
@@ -116,7 +163,11 @@ def _current(conn: sqlite3.Connection, dependency: sqlite3.Row) -> dict[str, Any
     closed = capture_confirmation_observation(rows[0])
     if closed is None or closed.physical_scope != (dependency["chain"], dependency["network"], dependency["txid"]):
         return {"status": "unavailable", "reason": "authority_unavailable"}
-    return _observation(rows[0]) or {"status": "unavailable", "reason": "authority_unavailable"}
+    observed = _observation(rows[0])
+    if observed is not None:
+        observed["domain_id"] = OccurrenceResolver(conn, dependency["profile_id"]).source(
+            dict(rows[0]), dependency["chain"], dependency["network"]).domain_id
+    return observed or {"status": "unavailable", "reason": "authority_unavailable"}
 
 
 def _last_observation(conn: sqlite3.Connection, dependency: sqlite3.Row) -> dict[str, Any]:
@@ -172,13 +223,36 @@ def record_watch_change(conn: sqlite3.Connection, profile_id: str, definition: d
     """
     if definition["rule"] != "confirmations" or code not in {"coverage_lost", "threshold_reversed"}:
         return
-    parts = str(definition["query"].get("subject", "")).split(":")
-    if len(parts) == 1 and len(parts[0]) == 64:
-        query = definition["query"]
-        parts = [query.get("chain"), query.get("network"), "tx", parts[0]]
-    if len(parts) != 4 or parts[2] != "tx":
+    query = definition["query"]
+    subject = str(query.get("subject", "")).strip().lower()
+    identity = parse_transaction_identity(subject, chain=query.get("chain"), network=query.get("network"))
+    if identity is None:
         return
-    for dependency in conn.execute("SELECT * FROM filed_report_chain_dependencies WHERE profile_id=? AND chain=? AND network=? AND txid=?", (profile_id, parts[0], parts[1], parts[3])).fetchall():
+    chain, network, txid, domain, occurrence = identity
+    from .custody_evidence import resolve_protocol_scope
+    try:
+        physical = resolve_protocol_scope({"chain": chain, "network": network})
+        filtered = resolve_protocol_scope({"chain": query.get("chain", chain), "network": query.get("network", network)})
+    except (AppError, ValueError):
+        return
+    if physical != filtered:
+        return
+    network = physical.network
+    resolver = OccurrenceResolver(conn, profile_id)
+    for dependency in conn.execute("SELECT * FROM filed_report_chain_dependencies WHERE profile_id=? AND chain=? AND network=? AND txid=?", (profile_id, chain, network, txid)).fetchall():
+        captured = json.loads(dependency["observation_json"])
+        captured_domain = captured.get("domain_id")
+        if not resolver.accepts({"chain": chain, "network": network, "domain_id": captured_domain}):
+            continue
+        if domain is not None:
+            if domain != captured_domain:
+                continue
+            namespace = f"domain:{domain}:"
+            canonical = resolver.transaction_id(chain, network, txid, SourceIdentity(domain, namespace), occurrence=occurrence, resolve=False)
+            if canonical != subject:
+                continue
+        if occurrence is not None and occurrence.split(":", 1)[0] != captured.get("block_hash"):
+            continue
         uncertain = {"status": "unavailable", "reason": "watch_coverage_lost" if code == "coverage_lost" else "watch_confirmation_reversed"}
         _append(conn, dependency, _last_observation(conn, dependency), uncertain, code)
 

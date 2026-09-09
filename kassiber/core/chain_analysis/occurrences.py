@@ -88,3 +88,17 @@ class OccurrenceResolver:
                             values.add(occurrence)
             self.cache[key] = tuple(sorted(values))
         return self.cache[key]
+
+
+def parse_transaction_identity(subject, *, chain=None, network=None):
+    """Parse only canonical physical transaction subjects, retaining qualifiers."""
+    if re.fullmatch(r"[0-9a-f]{64}", subject or ""):
+        return (chain, network, subject, None, None) if chain and network else None
+    match = re.fullmatch(
+        r"(bitcoin|liquid):([^:]+):(?:domain:([^:]+):(?:occ:([0-9a-f]{64}:(?:0|[1-9][0-9]*)):)?)?tx:([0-9a-f]{64})",
+        subject or "",
+    )
+    if match is None:
+        return None
+    actual_chain, actual_network, domain, occurrence, txid = match.groups()
+    return actual_chain, actual_network, txid, domain, occurrence

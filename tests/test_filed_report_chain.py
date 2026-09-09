@@ -193,13 +193,19 @@ def test_sync_rollback_rolls_back_report_items_and_authority(book):
 def test_inbox_paging_scope_read_and_filed_state_never_mutate(book):
     conn, state, sync, export, _ = book
     saved = export()
-    # Register the same already-computed result explicitly as filed. Dependency
-    # capture is explicit here; arbitrary external reports cannot gain it.
-    filed = reports.create_filed_report_snapshot(conn, workspace_id="ws-1", profile_id=PROFILE,
-        report_kind=saved["report_kind"], report_state="filed", period_start_year=2026,
-        period_end_year=2026, content_sha256=saved["content_sha256"],
-        classification_summary=saved["classification_summary"], gain_summary=saved["gain_summary"])
-    impacts.capture_export_dependencies(conn, filed)
+    # Use the real CLI path to bind the exact existing saved export as filed.
+    from contextlib import redirect_stdout
+    import io
+    from kassiber.cli.main import build_parser, dispatch
+    args = build_parser().parse_args(["--machine", "reports", "filed-snapshots", "create",
+        "--workspace", "Main", "--profile", "Default", "--state", "filed", "--saved-snapshot-id", saved["id"]])
+    output = io.StringIO()
+    args.format = "json"
+    args.non_interactive = True
+    with redirect_stdout(output):
+        dispatch(conn, args)
+    filed = json.loads(output.getvalue())["data"]
+    assert conn.execute("SELECT source_snapshot_id FROM filed_report_chain_captures WHERE snapshot_id=?", (filed["id"],)).fetchone()[0] == saved["id"]
     state["retracted"] = True
     assert sync()["saved_report_impacts"] == 2
     page = watches.inbox(conn, PROFILE, {"limit": 1})
@@ -266,3 +272,86 @@ def test_legacy_inbox_migration_with_complete_new_schema():
     assert conn.execute("SELECT 1 FROM sqlite_master WHERE name='trg_report_chain_impacts_delete_inbox'").fetchone()
     assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
     conn.close()
+
+
+@pytest.mark.parametrize("field,value", [("content_sha256", "ff" * 32), ("report_kind", "different"),
+    ("period_start_year", 2025), ("period_end_year", 2027), ("report_scope", {"wallet_ids":["other"]}),
+    ("classification_summary", {}), ("gain_summary", {})])
+def test_filed_reference_rejects_mismatched_identity_before_writing(book, field, value):
+    from kassiber.errors import AppError
+    conn, _, _, export, _ = book
+    saved = export()
+    before = conn.execute("SELECT count(*) FROM filed_report_snapshots").fetchone()[0]
+    with pytest.raises(AppError):
+        reports.create_filed_report_snapshot(conn, workspace_id="ws-1", profile_id=PROFILE,
+            report_state="filed", saved_snapshot_id=saved["id"], **{field: value})
+    assert conn.execute("SELECT count(*) FROM filed_report_snapshots").fetchone()[0] == before
+
+
+def test_filed_reference_copies_original_capture_after_source_changes_and_rejects_external(book):
+    from kassiber.errors import AppError
+    conn, state, sync, export, _ = book
+    saved = export()
+    state["retracted"] = True
+    sync()
+    process_journals(conn,"Main","Default")
+    filed = reports.create_filed_report_snapshot(conn, workspace_id="ws-1", profile_id=PROFILE,
+        report_state="filed", saved_snapshot_id=saved["id"])
+    captured = conn.execute("SELECT observation_json FROM filed_report_chain_dependencies WHERE snapshot_id=?", (filed["id"],)).fetchone()[0]
+    assert json.loads(captured)["confirmed"] is True
+    assert filed["gain_summary"] == saved["gain_summary"]
+    external = reports.create_filed_report_snapshot(conn, workspace_id="ws-1", profile_id=PROFILE,
+        report_state="saved", report_kind="external.pdf", period_start_year=2026, content_sha256="ee"*32)
+    with pytest.raises(AppError):
+        reports.create_filed_report_snapshot(conn, workspace_id="ws-1", profile_id=PROFILE,
+            report_state="filed", saved_snapshot_id=external["id"])
+    with pytest.raises(AppError):
+        reports.create_filed_report_snapshot(conn, workspace_id="ws-1", profile_id="another",
+            report_state="filed", saved_snapshot_id=saved["id"])
+
+
+def test_filed_reference_supports_a_real_empty_export_without_inventing_dependencies(book):
+    conn, _, _, export, _ = book
+    saved = export(report_scope={"wallet_ids":["wallet-b"]})
+    filed = reports.create_filed_report_snapshot(conn, workspace_id="ws-1", profile_id=PROFILE,
+        report_state="filed", saved_snapshot_id=saved["id"])
+    assert filed["report_scope"] == saved["report_scope"]
+    assert conn.execute("SELECT count(*) FROM filed_report_chain_dependencies WHERE snapshot_id=?", (filed["id"],)).fetchone()[0] == 0
+    assert conn.execute("SELECT 1 FROM filed_report_chain_captures WHERE snapshot_id=?", (filed["id"],)).fetchone()
+
+
+@pytest.mark.parametrize("qualification", ["domain", "occurrence", "wrong-domain", "wrong-occurrence", "conflicting-filter"])
+def test_qualified_watch_subjects_retain_captured_domain_and_occurrence(book, qualification):
+    conn, _, _, export, _ = book
+    export()
+    captured = json.loads(conn.execute("SELECT observation_json FROM filed_report_chain_dependencies").fetchone()[0])
+    domain = captured["domain_id"] if qualification != "wrong-domain" else "99"*32
+    subject = f"bitcoin:main:domain:{domain}:"
+    if qualification in {"occurrence", "wrong-occurrence"}:
+        block = captured["block_hash"] if qualification == "occurrence" else "44"*32
+        subject += f"occ:{block}:0:"
+    subject += f"tx:{TX}"
+    query = {"subject":subject}
+    if qualification == "conflicting-filter":
+        query["chain"] = "liquid"
+    impacts.record_watch_change(conn,PROFILE,{"rule":"confirmations","query":query},{"status":"unavailable"},"coverage_lost")
+    items = watches.inbox(conn,PROFILE,{})["items"]
+    assert len(items) == (1 if qualification in {"domain", "occurrence"} else 0)
+    if items:
+        assert items[0]["observation"]["after"] == {"status":"unavailable","reason":"watch_coverage_lost"}
+
+
+
+def test_filed_reference_copy_failure_rolls_back_marker_without_committing_caller(book):
+    conn, _, _, export, _ = book
+    saved = export()
+    conn.execute("UPDATE profiles SET label='Uncommitted edit' WHERE id=?", (PROFILE,))
+    count = conn.execute("SELECT count(*) FROM filed_report_snapshots").fetchone()[0]
+    with patch.object(impacts, "copy_export_dependencies", side_effect=RuntimeError("copy failed")):
+        with pytest.raises(RuntimeError):
+            reports.create_filed_report_snapshot(conn,workspace_id="ws-1",profile_id=PROFILE,
+                report_state="filed",saved_snapshot_id=saved["id"])
+    assert conn.in_transaction
+    assert conn.execute("SELECT count(*) FROM filed_report_snapshots").fetchone()[0] == count
+    conn.rollback()
+    assert conn.execute("SELECT label FROM profiles WHERE id=?",(PROFILE,)).fetchone()[0] == "Default"

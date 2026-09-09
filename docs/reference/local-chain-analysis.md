@@ -453,11 +453,23 @@ Completed accounting exports capture installation-local chain dependencies in
 `core/filed_report_chain.py`, attached to the existing immutable saved/filed
 report snapshot. Dependencies include authoritative observations for booked
 journal inputs of the report's assets through its end date. Earlier inputs from
-other wallets remain relevant because basis is pooled at profile scope. This
-is a conservative engine-input dependency set, not a claim that a particular
-lot supplied a disposal. Excluded, unbooked, other-asset and future inputs do not
-qualify. Old exports and arbitrary externally registered reports have no
+other wallets remain relevant because basis is pooled at profile scope. Eligible
+reviewed carrying relations extend this set backwards across rails: an LBTC
+result can depend on the original BTC acquisition and its source-pool inputs
+through the carry date. Taxable conversions do not inherit that source basis.
+This is a conservative engine-input dependency set, not a claim that a particular
+lot supplied a disposal. Excluded, unbooked, unrelated-asset and future inputs do
+not qualify. Old exports and arbitrary externally registered reports have no
 reconstructed dependency history; re-export to capture current observations.
+
+To explicitly mark the exact captured export as filed, use
+`reports filed-snapshots create --state filed --saved-snapshot-id SNAPSHOT_ID`.
+The original hash, kind, period, wallet/date scope and bounded summaries are
+inherited; supplying conflicting values is rejected. Frozen local dependencies
+are copied from that saved export, even if current history has since changed.
+A local capture record distinguishes an actual export with no chain inputs from
+an arbitrary external marker; absent local provenance cannot be reconstructed
+through this reference. The original saved marker remains unchanged.
 
 Successful wallet sync publication compares only closed observation facts and
 appends linked items to **Chain analysis → Watches**. Confirmed block replacement,
@@ -465,7 +477,9 @@ confirmation reversal and explicit observer retraction retain before/after
 evidence. The item identifies the original report hash, period and scope.
 Repeated observations do not repeat an item; a failed wallet publication rolls
 back its items with the source changes. Existing physical confirmation watches
-also attach coverage-loss/reversal warnings to dependent reports. Missing graph
+also attach coverage-loss/reversal warnings to dependent reports. Qualified
+subjects retain their captured domain and block occurrence; a different domain
+or occurrence cannot flag an unrelated report. Missing graph
 or wallet coverage is uncertainty, never proof that a transaction disappeared.
 
 The existing report-ready journal rebuild appends exact classification/gain
