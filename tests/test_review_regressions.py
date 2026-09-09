@@ -300,7 +300,8 @@ def _normalize_engine_entries(entries):
             {
                 key: _json_decimal(value)
                 for key, value in entry.items()
-                if key not in {"id", "capital_gains_type"}
+                # Additive explanation evidence has its own exact-fragment tests.
+                if key not in {"id", "capital_gains_type", "calculation"}
             }
             for entry in entries
         ],

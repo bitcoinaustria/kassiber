@@ -394,6 +394,7 @@ SUPPORTED_KINDS = (
     "ui.backends.http.test",
     "ui.backends.lightning.test",
     "ui.reports.capital_gains",
+    "ui.reports.explain_capital_gain",
     "ui.reports.summary",
     "ui.reports.balance_sheet",
     "ui.reports.portfolio_summary",
@@ -6080,6 +6081,8 @@ def _execute_read_only_ai_tool(
                 payload = _profiles_snapshot_for_ai(conn, runtime)
             elif entry.daemon_kind == "ui.reports.capital_gains":
                 payload = build_capital_gains_snapshot(conn)
+                for lot in payload.get("lots", []):
+                    lot.pop("explanationReference", None)
             elif entry.daemon_kind == "ui.reports.summary":
                 payload = _reports_summary_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.reports.balance_sheet":
@@ -15932,6 +15935,16 @@ def handle_request(
             ctx.runtime_config,
             state={},
         )
+
+    if kind == "ui.reports.explain_capital_gain":
+        from .core.report_explanation import explain_capital_gain
+        from .core.ui_snapshot import _active_context_and_profile
+        _, profile = _active_context_and_profile(ctx.conn)
+        if profile is None:
+            raise AppError("Select a book before explaining a report", code="not_found")
+        args = _coerce_args_dict(request_id, request.get("args")) or {}
+        payload = explain_capital_gain(ctx.conn, profile, args.get("reference"))
+        return (_with_request_id(build_envelope(kind, payload), request_id), False)
 
     if kind == "ui.reports.capital_gains":
         args = _coerce_args_dict(request_id, request.get("args"))

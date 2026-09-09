@@ -1,0 +1,40 @@
+# Capital-gains explanations
+
+The capital-gains report's **Explain** action shows the exact RP2 gain fragments
+that contributed to one persisted result. Each fragment includes proceeds,
+consumed basis, gain, quantity, source pricing provenance and whole-source fees.
+Amounts are decimal strings, never recalculated from rounded display values.
+Source fees describe the complete source event; they must not be summed once per
+fragment. The contribution proceeds are RP2's fee-inclusive fragment result.
+
+RP2 selects lots and computes any pool unit-basis override. The explanation
+retains that output in `journal_entries.calculation_json` while the canonical
+journal is built. It does not replay the engine on read. In pooled methods the
+selected acquisition is a matching anchor, not a claim that its original price
+is the pool's consumed basis. Acquisition basis and the unit override remain
+separate. Custody decisions are the existing semantic lineage projection;
+physical wallet outputs are not asserted to correspond to tax lots.
+
+Each row carries an explanation reference binding the database instance,
+workspace, profile, journal input version, processed timestamp and journal entry.
+The desktop offers links to the calculation and individual frozen source nodes.
+These links open the explanation directly, without the report screen's automatic
+journal refresh. A different book, changed input or rebuilt journal fails closed;
+links do not silently follow a new calculation. Source nodes display the retained
+transaction evidence for that calculation version. Custody links are bounded to
+500 decisions, with truncation explicit.
+
+CLI: use `reports capital-gains --machine`, then pass a row's exact
+`explanation_reference` JSON to
+`reports explain-capital-gain --reference '<JSON>' --machine`.
+The desktop daemon kind is `ui.reports.explain_capital_gain`, taking
+`{"reference": {...}}`. It is not an AI tool, performs no automatic maintenance
+or external requests, and reads within one SQLite snapshot. The existing AI
+capital-gains summary omits these local references.
+
+Legacy journals report `engine_detail_unavailable` until explicitly rebuilt.
+Mismatched contributions report `engine_detail_mismatch`. Missing/stale journals
+and custody blockers are errors; existing quarantines remain explicit in the
+response, including price gaps. An explanation reconciles its displayed row,
+not transactions excluded by quarantine. This first path does not explain every
+aggregate report cell or produce financial AI narration.

@@ -542,3 +542,8 @@ GNU Affero General Public License v3.0 only (`AGPL-3.0-only`).
 Book-wide network binding and safe mixed-history partition export are documented in
 [Book network scope](docs/reference/book-networks.md).
 Recurring local-node acquisition uses revocable book-bound permissions; see [the workflow and limits](docs/reference/recurring-chain-acquisition.md).
+
+Capital-gains rows offer an **Explain** action with the retained engine
+calculation and source evidence. The same version-bound, read-only result is
+available through `reports explain-capital-gain`; see
+[report explanations](docs/reference/report-explanations.md).

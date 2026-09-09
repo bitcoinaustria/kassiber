@@ -1877,3 +1877,8 @@ Run these after any extraction or behavior change:
   version-bound domains/observers, atomic encrypted inbox/checkpoints, pause and
   restart catch-up, generic notifications, and shared CLI/desktop/AI operations.
 - [x] Add recurring Core source plans, revocable lifetime quotas and resumable block-occurrence ingestion. Requires the network/index/watch PR stack and a running unlocked daemon; see `docs/reference/recurring-chain-acquisition.md`.
+
+- [x] #298: Explain one capital-gains result from retained RP2 fragments with
+  exact amounts, source pricing/fees, custody links and a version-bound local
+  desktop/CLI read. Old journals explicitly require a rebuild for engine detail.
+  Aggregate tax-summary and E 1kv derivations remain deferred.

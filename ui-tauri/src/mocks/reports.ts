@@ -85,6 +85,7 @@ export const JURISDICTIONS: Record<string, Jurisdiction> = {
 export type LotType = "LT" | "ST";
 
 export interface DisposedLot {
+  explanationReference?: import("@/components/reports/CapitalGainExplanation").ResultReference;
   acquired: string;
   disposed: string;
   sats: number;

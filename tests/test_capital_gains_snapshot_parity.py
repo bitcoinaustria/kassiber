@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from kassiber.core import ui_snapshot
+from kassiber.db import DATABASE_INSTANCE_ID_SETTING
 
 
 class CapitalGainsSnapshotParityTests(unittest.TestCase):
@@ -20,7 +21,7 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
               tax_country TEXT, fiat_currency TEXT, gains_algorithm TEXT,
               tax_long_term_days INTEGER,
               last_processed_at TEXT, last_processed_tx_count INTEGER,
-              last_processed_input_version TEXT
+              last_processed_input_version TEXT, journal_input_version INTEGER DEFAULT 1
             );
             CREATE TABLE workspaces (id TEXT PRIMARY KEY, label TEXT);
             CREATE TABLE wallets (
@@ -51,7 +52,7 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
         )
         conn.execute("INSERT INTO workspaces VALUES ('ws1', 'Main')")
         conn.execute(
-            "INSERT INTO profiles VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO profiles VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (
                 "p1",
                 "ws1",
@@ -62,9 +63,11 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
                 365,
                 "now",
                 1,
-                "v1",
+                "1",
+                1,
             ),
         )
+        conn.execute("INSERT INTO settings VALUES (?, ?)", (DATABASE_INSTANCE_ID_SETTING, "1" * 32))
         conn.execute("INSERT INTO settings VALUES ('context_workspace', 'ws1')")
         conn.execute("INSERT INTO settings VALUES ('context_profile', 'p1')")
         return conn
