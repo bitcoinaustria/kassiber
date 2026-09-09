@@ -497,3 +497,8 @@ For reports containing balances, asset selection also includes booked holdings
 from before the displayed period. Impact resolutions compare only the existing
 bounded classification and gain summaries; `no_change` does not claim byte-for-
 byte equivalence, unchanged holdings, or a complete replay of every report cell.
+
+Native wallet refreshes retain validated block-hash/height changes even when
+confirmation time is unchanged. Such changes generate report-evidence review
+items without discarding timestamp-based pricing or replacing unrelated stored
+transaction evidence. Generic imports do not gain this observation authority.

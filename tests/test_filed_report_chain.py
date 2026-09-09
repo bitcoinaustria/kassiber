@@ -36,7 +36,7 @@ def book(tmp_path):
             return [], {"observer_retracted_external_ids": [TX]}
         status = {"confirmed": state["confirmed"]}
         if state["confirmed"]:
-            status.update(block_time=1767225600, block_height=100, block_hash=state["block_hash"])
+            status.update(block_time=1767225600, block_height=state.get("block_height", 100), block_hash=state["block_hash"])
         return [record_from_bitcoin_esplora_tx({**graph, "status": status}, sync_state.tracked_scripts, "esplora")], {}
 
     hooks = replace(_wallet_sync_hooks(commit=False), prepare_observer_fetch=None,
@@ -355,3 +355,51 @@ def test_filed_reference_copy_failure_rolls_back_marker_without_committing_calle
     assert conn.execute("SELECT count(*) FROM filed_report_snapshots").fetchone()[0] == count
     conn.rollback()
     assert conn.execute("SELECT label FROM profiles WHERE id=?",(PROFILE,)).fetchone()[0] == "Default"
+
+
+@pytest.mark.parametrize("change", [{"block_hash": "22" * 32}, {"block_height": 101}])
+def test_same_timestamp_block_occurrence_refreshes_evidence_and_report_impact(book, change):
+    conn, state, sync, export, _hooks = book
+    saved = export()
+    original = dict(conn.execute("SELECT * FROM transactions").fetchone())
+    state.update(change)
+    outcome = sync()
+    assert outcome["updated"] == 1
+    assert outcome["saved_report_impacts"] == 1
+    current = dict(conn.execute("SELECT * FROM transactions").fetchone())
+    assert current["occurred_at"] == original["occurred_at"]
+    assert current["confirmed_at"] == original["confirmed_at"]
+    assert current["fiat_rate"] == original["fiat_rate"]
+    item = watches.inbox(conn, PROFILE, {})["items"][0]
+    assert item["code"] == "evidence_changed"
+    assert item["report_impact"]["snapshot_id"] == saved["id"]
+    for key, value in change.items():
+        assert json.loads(current["raw_json"])["status"][key] == value
+        assert item["observation"]["after"][key] == value
+    assert sync()["saved_report_impacts"] == 0
+
+
+def test_block_only_refresh_requires_native_authority_and_preserves_other_evidence(book):
+    from kassiber.core.imports import _transaction_merge_updates, normalize_import_record
+    from kassiber.msat import msat_to_btc
+    conn, _state, _sync, _export, _hooks = book
+    old = dict(conn.execute("SELECT * FROM transactions").fetchone())
+    payload = json.loads(old["raw_json"])
+    incoming = {**payload, "status": {**payload["status"], "block_hash": "22" * 32}, "unexpected": "not merged"}
+    record = {**old, "amount": str(msat_to_btc(old["amount"])), "fee": "0", "raw_json": incoming}
+    # Isolate a raw-only observation: pricing is retained, not reimported.
+    for key in list(record):
+        if key.startswith("fiat_") or key.startswith("pricing_"):
+            record[key] = None
+    normalized = normalize_import_record(record, source_label="backend:fixture")
+    normalized["external_id"] = old["external_id"]
+    normalized["external_id_kind"] = "txid"
+    assert _transaction_merge_updates(old, normalized, old["fingerprint"]) == {}
+    changed = _transaction_merge_updates(old, normalized, old["fingerprint"], authoritative_chain_observer=True)
+    assert set(changed) == {"raw_json"}
+    assert "unexpected" not in json.loads(changed["raw_json"])
+    for overrides in ({"block_hash": "invalid"}, {"block_height": -1}, {"block_height": True}):
+        invalid = {**normalized, "raw_json": json.dumps({**incoming, "status": {**incoming["status"], **overrides}})}
+        assert _transaction_merge_updates(old, invalid, old["fingerprint"], authoritative_chain_observer=True) == {}
+    wrong_scope = {**normalized, "raw_json": json.dumps({**incoming, "network": "test"})}
+    assert _transaction_merge_updates(old, wrong_scope, old["fingerprint"], authoritative_chain_observer=True) == {}
