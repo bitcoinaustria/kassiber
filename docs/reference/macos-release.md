@@ -69,6 +69,16 @@ requiring another person's approval would deadlock the current team.
 
 ## Each release
 
+Before tagging, write and review the new `## <VERSION>` section in
+`CHANGELOG.md`, using concise Added/Fixed bullets with PR links (and Breaking
+Changes when necessary). Derive it from first-parent history since the previous
+release; include each merged PR once. Commit it with the version bump. The
+publish job reads the changelog from the tagged source and copies that section
+unchanged into the GitHub draft. Missing, duplicate or empty sections stop
+publication. Keep transient CI/notarization status out of this historical text.
+Preview locally with `python3 scripts/release_notes.py --version v<VERSION>
+--output /private/tmp/kassiber-release-notes.md`. No personal skill is required.
+
 1. Review/test the exact commit on `main`, set the package version, and create
    its protected `v<VERSION>` tag. The existing `prerelease-binaries` workflow
    builds with locked dependencies and leaves a **draft**, never a public

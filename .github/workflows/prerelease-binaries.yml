@@ -863,6 +863,10 @@ jobs:
             echo 'Draft already exists; use a new tag/build rather than overwriting a signing handoff.' >&2
             exit 1
           fi
+      - name: Extract reviewed release notes
+        env:
+          RELEASE_TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+        run: python scripts/release_notes.py --version "$RELEASE_TAG_NAME" --output "$RUNNER_TEMP/release-notes.md"
       - name: Create or update release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
@@ -870,28 +874,7 @@ jobs:
           prerelease: ${{ github.event_name != 'workflow_dispatch' || inputs.release_channel == 'prerelease' }}
           draft: true
           fail_on_unmatched_files: true
-          body: |
-            Automated Kassiber release artifacts.
-
-            Each release includes a versioned SHA-256 manifest. A release is
-            PGP-authenticated only when the matching `.txt.asc` detached
-            signature is also attached and verifies against Kassiber's
-            independently published release-key fingerprint.
-
-            Platform code signing is separate from the PGP manifest. While
-            this release is a draft, its artifacts are not ready for use.
-            The finalize-signed-release workflow requires macOS Developer ID
-            signing, notarization and offline OpenPGP verification before
-            publication. This does not claim Windows Authenticode signing.
-            CLI-only archives are published for macOS, Linux, and Windows;
-            Linux also gets GUI-free CLI-only Debian/RPM packages and a
-            desktop RPM.
-            Desktop bundles use the exact same CLI executable, so normal daemon
-            calls do not require a separate Python checkout. Native desktop
-            installers integrate `kassiber` with the terminal; portable builds
-            can install a user-local launcher from Settings. Set
-            `KASSIBER_PYTHON` only when intentionally overriding the bundled
-            sidecar for debugging.
+          body_path: ${{ runner.temp }}/release-notes.md
           files: |
             release/*
 
