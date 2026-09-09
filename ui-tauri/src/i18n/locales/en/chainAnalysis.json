@@ -372,13 +372,36 @@
       "connection_supported": "Connection locally supported",
       "attribution_changed": "Attribution changed",
       "findings_changed": "Findings changed",
-      "evidence_changed": "Local evidence changed"
+      "evidence_changed": "Local evidence changed",
+      "report_input_retracted": "Report input retracted by wallet observer"
     },
     "delete": "Remove",
     "confirmDelete": "Remove with history?",
     "encryption": "Encrypt this book",
     "bindBook": "Set this book’s network",
-    "bookScope": "All chains in this book ({{environment}})"
+    "bookScope": "All chains in this book ({{environment}})",
+    "report": {
+      "title": "Report impact: {{start}}–{{end}}",
+      "saved": "Saved",
+      "filed": "Filed",
+      "identity": "Saved snapshot:",
+      "confirmed": "Confirmed (block {{height}})",
+      "unconfirmed": "Unconfirmed",
+      "unavailable": "Coverage unavailable, not proof of removal",
+      "retracted": "Authoritative wallet retraction",
+      "evidence": "Evidence: {{before}} → {{after}}",
+      "gainBefore": "Saved gain/loss: {{value}} {{currency}}",
+      "gainAfter": "Rebuilt gain/loss: {{value}} {{currency}}",
+      "pending": "Refresh the affected wallet, review its evidence and rebuild journals. The exact report impact is still pending.",
+      "no_change": "Rebuilt classification and gain summaries match. Other report content is not compared.",
+      "saved_report_changed": "Rebuilt totals differ from the saved report.",
+      "review_required": "Rebuilt totals differ. Review whether an amended filing is required.",
+      "filingAuthority": "The original export and filed state stay unchanged. Marking this item read does not amend a filing.",
+      "transaction": "Review transaction",
+      "journals": "Review and rebuild journals",
+      "reports": "Open reports",
+      "blocks": "Block hashes:"
+    }
   },
   "sources": {
     "title": "Keep local evidence up to date",

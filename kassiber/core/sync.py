@@ -1091,6 +1091,11 @@ def sync_wallet_from_backend(
             from .repo import invalidate_journals
             invalidate_journals(conn, profile["id"])
             outcome["journal_invalidated"] = True
+    if conn is not None and sync_state is not None:
+        from .filed_report_chain import record_wallet_changes
+        outcome["saved_report_impacts"] = record_wallet_changes(
+            conn, profile["id"], wallet["id"], retracted_txids=retracted_external_ids,
+        )
     notify_apply_stage(hooks, APPLY_STAGE_TRANSACTION_INSERTION)
     if observed_utxos is not None and hooks.update_output_inventory is not None:
         outcome["output_inventory"] = dict(

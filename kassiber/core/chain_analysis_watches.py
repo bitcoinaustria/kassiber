@@ -279,6 +279,8 @@ def evaluate_due(conn, profile_id, *, cancelled=lambda: False):
             sequence = row["sequence"] + int(code is not None)
             if code:
                 conn.execute("INSERT INTO chain_analysis_watch_inbox(id,watch_id,profile_id,sequence,code,observation_json,created_at) VALUES(?,?,?,?,?,?,?)", (str(uuid.uuid4()), row["id"], profile_id, sequence, code, canonical({"before": before, "after": after}), now_iso()))
+                from .filed_report_chain import record_watch_change
+                record_watch_change(conn, profile_id, definition, after, code)
                 emitted += 1
             conn.execute("UPDATE chain_analysis_watches SET baseline_json=?,checkpoint=?,sequence=?,checked_at=? WHERE id=?", (canonical(after), canonical(revision) if valid else "", sequence, now_iso(), row["id"]))
         if cancelled():
@@ -297,6 +299,11 @@ def inbox(conn, profile_id, args):
         invalid("before must be a positive inbox cursor")
     rows = conn.execute("SELECT rowid AS cursor,* FROM chain_analysis_watch_inbox WHERE profile_id=? AND rowid<? ORDER BY rowid DESC LIMIT ?", (profile_id, before, limit + 1)).fetchall()
     items = [{key: row[key] for key in ("id", "watch_id", "code", "created_at", "acknowledged_at", "cursor")} | {"observation": json.loads(row["observation_json"])} for row in rows[:limit]]
+    from .filed_report_chain import inbox_report_impact
+    for item in items:
+        impact = inbox_report_impact(conn, profile_id, item["id"])
+        if impact is not None:
+            item["report_impact"] = impact
     unread = conn.execute("SELECT COUNT(*) FROM chain_analysis_watch_inbox WHERE profile_id=? AND acknowledged_at IS NULL", (profile_id,)).fetchone()[0]
     return {"items": items, "next_cursor": items[-1]["cursor"] if len(rows) > limit else None, "unread_count": unread}
 

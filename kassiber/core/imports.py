@@ -724,6 +724,35 @@ def _same_lnd_settlement_identity(existing: Mapping[str, Any], normalized: Mappi
         return False
 
 
+def _refreshed_block_occurrence(existing: Mapping[str, Any], normalized: Mapping[str, Any]) -> str | None:
+    """Refresh native block identity without replacing unrelated raw evidence."""
+    txid = canonical_txid(existing["external_id"])
+    if (txid is None or txid != canonical_txid(normalized["external_id"])
+        or existing["direction"] != normalized["direction"] or existing["asset"] != normalized["asset"]):
+        return None
+    old, new = _raw_json_payload(existing) or {}, _raw_json_payload(normalized) or {}
+    chain = old.get("chain")
+    if (chain not in {"bitcoin", "liquid"} or chain != new.get("chain")
+        or not old.get("network") or not new.get("network")
+        or old.get("chain_instance_id") != new.get("chain_instance_id")):
+        return None
+    try:
+        if normalize_network(chain, old["network"]) != normalize_network(chain, new["network"]):
+            return None
+    except ValueError:
+        return None
+    old_status, new_status = old.get("status"), new.get("status")
+    if (not isinstance(old_status, Mapping) or not isinstance(new_status, Mapping)
+        or old_status.get("confirmed") is not True or new_status.get("confirmed") is not True):
+        return None
+    block_hash, height = canonical_txid(new_status.get("block_hash")), new_status.get("block_height")
+    if block_hash is None or type(height) is not int or not 0 <= height <= 2**63 - 1:
+        return None
+    if (canonical_txid(old_status.get("block_hash")), old_status.get("block_height")) == (block_hash, height):
+        return None
+    return json.dumps({**old, "status": {**old_status, "block_hash": block_hash, "block_height": height}}, sort_keys=True)
+
+
 def _transaction_merge_updates(
     existing: Mapping[str, Any],
     normalized: Mapping[str, Any],
@@ -954,6 +983,12 @@ def _transaction_merge_updates(
         and normalized["raw_json"] != existing["raw_json"]
     ):
         updates["raw_json"] = normalized["raw_json"]
+    elif authoritative_chain_observer:
+        # Re-mining can change block identity without changing block time. Keep
+        # pricing and stronger stored graph evidence when only that fact changes.
+        refreshed = _refreshed_block_occurrence(existing, normalized)
+        if refreshed is not None:
+            updates["raw_json"] = refreshed
     return updates
 
 

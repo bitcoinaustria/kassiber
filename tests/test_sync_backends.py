@@ -1265,6 +1265,10 @@ class SyncBackendsTest(unittest.TestCase):
             )
             """
         )
+        # Sync publication also checks optional saved-report dependencies.
+        # This minimal transport fixture has none, but owns the same table contract.
+        from kassiber.filed_report_chain_schema import SCHEMA as REPORT_CHAIN_SCHEMA
+        conn.executescript(REPORT_CHAIN_SCHEMA)
         wallet = {
             "id": "wallet-1",
             "kind": "descriptor",

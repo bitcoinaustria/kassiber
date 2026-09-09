@@ -89,4 +89,24 @@ describe("local watch controls", () => {
         await click("Pause");
         expect(mock.mutate).toHaveBeenCalledWith("ui.chain_analysis.watches.configure", { id: "watch", expected_revision: 4, enabled: false });
     });
+    it("shows report impact evidence and exact rebuilt values without a user watch", async () => {
+        mock.data["ui.chain_analysis.watches.list"] = { items: [] };
+        mock.data["ui.chain_analysis.watches.inbox"] = { unread_count: 1, items: [{
+            id: "report-event", watch_id: null, code: "report_input_retracted", created_at: "2026-09-09", acknowledged_at: null,
+            observation: { before: { status: "observed", confirmed: true, block_height: 100 }, after: { status: "retracted" } },
+            report_impact: { snapshot_id: "saved-report", report_state: "filed", period_start_year: 2025, period_end_year: 2025,
+                content_sha256: "a".repeat(64), transaction_id: "removed", transaction_available: false,
+                before_gain_summary: { fiat_currency: "EUR", gain_loss_exact: "10.00000001" },
+                resolution: { amendment_status: "review_required", after_gain_summary: { fiat_currency: "EUR", gain_loss_exact: "0" } } },
+        }] };
+        const markup = render(<WatchInbox onOpen={vi.fn()} onError={error} />);
+        expect(markup).toContain("saved-report");
+        expect(markup).toContain("10.00000001 EUR");
+        expect(markup).toContain("Authoritative wallet retraction");
+        expect(markup).toContain("Review whether an amended filing is required");
+        expect(markup).not.toContain("Review transaction");
+        await click("Mark read");
+        expect(mock.mutate).toHaveBeenCalledWith("ui.chain_analysis.watches.acknowledge", { id: "report-event" });
+    });
+
 });
