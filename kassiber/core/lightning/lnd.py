@@ -582,7 +582,8 @@ def _sanitize_payment(row: Mapping[str, Any]) -> dict[str, Any]:
         if key not in _PAYMENT_DROP_FIELDS
     }
     htlcs = []
-    for htlc in row.get("htlcs") or []:
+    attempts = row.get("htlcs")
+    for htlc in attempts if isinstance(attempts, list) else []:
         if not isinstance(htlc, Mapping):
             continue
         htlc_clean = dict(htlc)
@@ -928,6 +929,38 @@ def _lnd_invoice_import(invoice: Mapping[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _lnd_payment_settled_at(payment: Mapping[str, Any]) -> str | None:
+    """Return completed successful HTLC timing, without retaining route data.
+
+    A failed attempt's resolution is not a payment settlement. For multipart
+    payments, all successful parts must have timing before their latest
+    resolution can replace the legacy creation-time fallback.
+    """
+    attempts = payment.get("htlcs")
+    if not isinstance(attempts, list):
+        return None
+    successful = [
+        attempt for attempt in attempts
+        if isinstance(attempt, Mapping) and attempt.get("status") == "SUCCEEDED"
+    ]
+    if not successful:
+        return None
+    resolved = []
+    for attempt in successful:
+        value = attempt.get("resolve_time_ns")
+        if isinstance(value, bool) or not isinstance(value, (str, int)):
+            return None
+        text = str(value)
+        if len(text) > 19 or not text.isascii() or not text.isdecimal():
+            return None
+        nanos = int(text)
+        # LND exposes an int64 Unix timestamp in nanoseconds.
+        if not 1_000_000_000 <= nanos <= 2**63 - 1:
+            return None
+        resolved.append(nanos)
+    return _timestamp(max(resolved) // 1_000_000_000)
+
+
 def _lnd_payment_import(payment: Mapping[str, Any]) -> dict[str, Any] | None:
     """Promote a succeeded LND payment to an outbound wallet transaction.
 
@@ -955,7 +988,7 @@ def _lnd_payment_import(payment: Mapping[str, Any]) -> dict[str, Any] | None:
     created = payment.get("creation_date")
     if not created and payment.get("creation_time_ns"):
         created = _int(payment.get("creation_time_ns")) // 1_000_000_000
-    occurred_at = _timestamp(created) or UNKNOWN_OCCURRED_AT
+    occurred_at = _lnd_payment_settled_at(payment) or _timestamp(created) or UNKNOWN_OCCURRED_AT
     return {
         "id": f"lnd:pay:{external_id}",
         "occurred_at": occurred_at,
@@ -1489,6 +1522,13 @@ def sync_lnd_wallet(
     import_records = _stamp_lightning_import_network(
         lnd_import_records(invoices, payments, forwards), node_network
     )
+    # Only live native settlement evidence can correct a previous import date.
+    # This authority is out of band: serialized import fields cannot opt in.
+    settlement_ids = {
+        record["id"] for payment in payments
+        if _lnd_payment_settled_at(payment) is not None
+        and (record := _lnd_payment_import(payment)) is not None
+    }
     import_outcome = core_imports.insert_wallet_records(
         conn,
         profile,
@@ -1497,6 +1537,7 @@ def sync_lnd_wallet(
         LND_IMPORT_SOURCE,
         hooks,
         commit=False,
+        authoritative_settlement_ids=settlement_ids,
     )
 
     # Channel funding/closing txids, so a separately synced on-chain wallet's
