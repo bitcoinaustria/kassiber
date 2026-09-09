@@ -22,11 +22,14 @@ These links open the explanation directly, without the report screen's automatic
 journal refresh. A different book, changed input or rebuilt journal fails closed;
 links do not silently follow a new calculation. Source nodes display the retained
 transaction evidence for that calculation version. Custody links are bounded to
-500 decisions, with truncation explicit.
+500 inspected decisions, with truncation explicit. Context includes incoming
+canonical eligible custody moves back through the result wallet history to the
+earliest retained engine source. Later moves and unrelated wallet branches are
+excluded. These links describe custody context, not physical ownership of tax lots.
 
-CLI: use `reports capital-gains --machine`, then pass a row's exact
+CLI: use `kassiber --machine reports capital-gains`, then pass a row's exact
 `explanation_reference` JSON to
-`reports explain-capital-gain --reference '<JSON>' --machine`.
+`kassiber --machine reports explain-capital-gain --reference '<JSON>'`.
 The desktop daemon kind is `ui.reports.explain_capital_gain`, taking
 `{"reference": {...}}`. It is not an AI tool, performs no automatic maintenance
 or external requests, and reads within one SQLite snapshot. The existing AI

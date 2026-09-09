@@ -85,6 +85,7 @@ export function ExplanationBody({ reference, hideSensitive }: { reference: Resul
       </>}
     </section>)}
     <section><h3 className="font-medium">{t("explanation.custody")}</h3>
+      <p className="text-muted-foreground">{t("explanation.custodyContext")}</p>
       {result.custody_decisions.length ? result.custody_decisions.map((decision, index) => <p key={index} className="break-all font-mono text-xs">{decision.source_transaction_id} → {decision.target_transaction_id} · {decision.custody_state} · {decision.basis_state} · {decision.reason}</p>) : <p>{t("explanation.noCustody")}</p>}
       {result.custody_truncated && <p>{t("explanation.custodyTruncated")}</p>}
     </section>

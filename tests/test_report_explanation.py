@@ -88,3 +88,56 @@ def test_corrupt_detail_does_not_claim_reconciliation(tmp_path):
         assert result['calculation'] is None
     finally:
         conn.close()
+
+
+def test_custody_context_includes_intervening_moves_but_not_future_or_unrelated(tmp_path):
+    from tests.test_custody_lineage_flagship import _FlagshipTreasury
+    book = _FlagshipTreasury(str(tmp_path))
+    try:
+        book.insert(book.complete_history())
+        book.process()
+        profile = book.conn.execute("SELECT * FROM profiles").fetchone()
+        row = book.conn.execute("SELECT * FROM journal_entries WHERE transaction_id='2023-vendor' AND entry_type='disposal'").fetchone()
+        result = explain_capital_gain(book.conn, profile, result_reference(book.conn, profile, row['id']))
+        assert result['status'] == 'available'
+        assert not result['custody_truncated']
+        decisions = result['custody_decisions']
+        assert {(d['source_wallet_id'], d['target_wallet_id']) for d in decisions} == {
+            ('a', 'b'), ('b', 'deposit'), ('deposit', 'premix'), ('premix', 'postmix'), ('postmix', 'c')}
+        assert all(d['decision_id'] for d in decisions)
+        assert all(d['target_wallet_id'] != 'd' for d in decisions)
+    finally:
+        book.close()
+
+
+def test_production_cli_and_daemon_explanation_dispatch(tmp_path):
+    import queue
+    import subprocess
+    import sys
+    import threading
+    from kassiber import daemon
+    from kassiber.command_capabilities import Capability, cli_capability, daemon_capability
+    assert cli_capability("reports.explain-capital-gain") is Capability.READ
+    assert daemon_capability("ui.reports.explain_capital_gain") is Capability.READ
+    conn, profile, reference = _book(tmp_path)
+    try:
+        conn.execute("INSERT INTO settings(key,value) VALUES('context_workspace','w'),('context_profile','p')")
+        conn.commit()
+        ctx = daemon.DaemonContext(conn=conn, data_root=str(tmp_path), runtime_config={},
+            active_ai_chats=daemon.ActiveAiChats(), main_thread_tasks=queue.Queue(),
+            auth_backoff=daemon.AuthAttemptBackoff(), input_lines=queue.Queue(),
+            deferred_input_lines=[], out=object(), freshness_stop_event=threading.Event())
+        before = conn.total_changes
+        envelope, shutdown = daemon.handle_request(ctx, {'request_id': 'explain',
+            'kind': 'ui.reports.explain_capital_gain', 'args': {'reference': reference}}, object())
+        assert not shutdown
+        assert envelope['kind'] == 'ui.reports.explain_capital_gain', envelope
+        assert envelope['data']['status'] == 'available'
+        assert conn.total_changes == before
+        process = subprocess.run([sys.executable, '-m', 'kassiber', '--data-root', str(tmp_path),
+            '--machine', 'reports', 'explain-capital-gain', '--workspace', 'W', '--profile', 'P',
+            '--reference', json.dumps(reference)], capture_output=True, text=True, timeout=60)
+        assert process.returncode == 0, process.stdout + process.stderr
+        assert json.loads(process.stdout)['data']['status'] == 'available'
+    finally:
+        conn.close()
