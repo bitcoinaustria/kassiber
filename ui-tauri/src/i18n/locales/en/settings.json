@@ -801,5 +801,33 @@
       "confirmPassphrase": "Confirm passphrase"
     },
     "customBackend": "Choose a custom backend for this book’s network ({{network}}). Public mainnet presets cannot serve it."
+  },
+  "backup": {
+    "recoverySaved": "Your pre-restore recovery copy is at {{path}}.",
+    "description": "Export an encrypted backup or restore one using local file pickers. You need both the backup passphrase and the database passphrase from the time of export to restore.",
+    "scope": "A backup contains this entire container: all book sets and books, attachments and retained data, plus local configuration. Exported report files and operating-system credentials are not included.",
+    "export": "Export encrypted backup",
+    "restore": "Restore backup",
+    "choose": "Choose a Kassiber backup",
+    "passphrase": "Backup passphrase",
+    "confirmPassphrase": "Confirm backup passphrase",
+    "databasePassphrase": "Database passphrase at time of backup",
+    "preview": "Choose file and preview restore",
+    "working": "Working…",
+    "exported": "Backup saved to {{path}}",
+    "replaceTarget_one": "Replace the current container ({{count}} book)",
+    "replaceTarget_other": "Replace the current container ({{count}} books)",
+    "incoming_one": "Restore {{count}} book and {{attachments}} attachment files:",
+    "incoming_other": "Restore {{count}} books and {{attachments}} attachment files:",
+    "replaces": "Existing content moved to recovery: {{paths}}",
+    "recovery": "Your current database, attachments, configuration and exports will be retained in a local pre-restore recovery folder. The restored container will be locked. This preview expires after 10 minutes or when the current data changes.",
+    "confirmRestore": "Type RESTORE to confirm replacement",
+    "replace": "Replace container and lock",
+    "cancel": "Cancel",
+    "secretWarning": "Some provider credentials cannot be restored. Re-enter them in Settings after unlocking.",
+    "restored": "Backup restored. Unlock with the database passphrase from the backup.",
+    "unlockWarning": "Restore completed, but unlock settings could not be reset. Use the backup database passphrase and review remembered unlock settings.",
+    "failed": "Backup action failed",
+    "desktopOnly": "Backup export requires the desktop app’s native save dialog."
   }
 }

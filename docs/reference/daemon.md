@@ -906,3 +906,33 @@ The daemon also redacts secret-shaped strings and sensitive detail keys at the
 error-envelope boundary before responses cross into Tauri, the Vite bridge, or
 UI state. Provider-controlled AI error bodies are treated as hostile and are
 size-limited plus redacted before they become `error.details.body`.
+
+
+### Desktop backup and restore
+
+`ui.backup.export` accepts a native-selected absolute `.kassiber` `path` outside
+the active container and `backup_passphrase_secret`; it uses the unlocked
+SQLCipher session and atomically writes the age archive.
+
+`ui.backup.preview` accepts `path`, `backup_passphrase_secret` and
+`database_passphrase_secret` (the database password at backup time). It decrypts
+and validates a snapshot, checks database integrity, and returns target/source
+book summaries, replaced paths and a ten-minute opaque `token`. No passphrase
+is retained in the preview. Each daemon retains at most one preview; cancel,
+lock, project switch, shutdown and expiry remove its temporary files.
+
+`ui.backup.apply` requires that token and `confirm: "RESTORE"`. The target
+container, database generation and staged contents must still match. The daemon
+quiesces workers, rechecks the target under exclusive project maintenance,
+checkpoints and closes the database before using the shared staged installer.
+The installer prepares all copies before replacement, preserves current data
+(including exports and SQLite sidecars) in `pre-restore-*`, and rolls back
+installation failures. The restored session stays locked; credential settings
+are invalidated and never enrolled implicitly. Post-install unlock-setting
+failures return `restored: true` with `warning: restore_unlock_settings_failed`.
+
+`ui.backup.cancel` accepts the token and removes its staging tree. File-picker
+cancellation sends no export/restore action. Once an explicitly confirmed
+installation starts it runs to completion or rollback; it is not interruptible
+halfway through replacement. These actions are desktop-only, absent from AI
+tools, and never synchronize backup files or credentials.

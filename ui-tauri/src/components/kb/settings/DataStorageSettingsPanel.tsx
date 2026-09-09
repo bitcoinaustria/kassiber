@@ -1,8 +1,10 @@
 import { AlertTriangle, Archive, FileInput, HardDrive, RefreshCw } from "lucide-react";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import { CommandLine, PathField } from "./SettingsControls";
+import { PathField } from "./SettingsControls";
+import { useUiStore } from "@/store/ui";
+import { BackupSettings } from "./BackupSettings";
 import type { StatusData } from "./SettingsModel";
 
 export function DataSettingsPanel({
@@ -13,6 +15,7 @@ export function DataSettingsPanel({
   onOpenImports: () => void;
 }) {
   const { t } = useTranslation("settings");
+  const daemonSession = useUiStore((state) => state.daemonSession);
   return (
     <div className="space-y-6">
       <section className="space-y-3">
@@ -41,17 +44,7 @@ export function DataSettingsPanel({
           <Archive className="size-4 text-muted-foreground" aria-hidden="true" />
           <h3 className="text-sm font-semibold">{t("data.backupHeading")}</h3>
         </div>
-        <div className="space-y-2 rounded-md border bg-background p-4">
-          <p className="max-w-prose text-sm text-muted-foreground">
-            <Trans
-              i18nKey="data.backupDescription"
-              ns="settings"
-              components={[<span className="font-mono" />]}
-            />
-          </p>
-          <CommandLine command="kassiber backup export" />
-          <CommandLine command="kassiber backup import <file.age>" />
-        </div>
+        <BackupSettings key={daemonSession} />
       </section>
 
       <section className="space-y-3">

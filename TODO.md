@@ -1028,8 +1028,9 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   plaintext-ack), and Settings fixture replacement (folded into the line below).
   Remaining: (a) destructive single-**book** deletion UX + a `ui.profiles.delete`
   daemon kind (today only `ui.profiles.reset_data` exists, which clears data but
-  keeps the book); (b) a GUI backup/restore action behind `ui.backup.*` daemon
-  kinds (currently CLI-only command hints in the Data settings panel).
+  keeps the book). Native encrypted backup/restore now ships through
+  `ui.backup.*` with container preview, explicit confirmation and recovery copies.
+  Scheduled backups and retention remain deferred.
 - [x] Welcome/onboarding screen refreshed with a shadcn-style, SQLCipher-aware
   setup flow that captures books/tax defaults and database
   protection by initializing the local SQLCipher database through the daemon,
@@ -1080,12 +1081,11 @@ and [docs/plan/04-desktop-ui.md](docs/plan/04-desktop-ui.md).
   one-shot worker handoff, and bound repeat BTCPay page scans with stable-id
   fingerprints, explicit stop reasons, and rotating deep audits for older
   metadata edits.
-- [ ] Finish the remaining live-action worker surfaces. Now wired (daemon kind +
+- [x] Finish the remaining live-action worker surfaces. Now wired (daemon kind +
   UI mutation): file/import flows, metadata edits, transfer pairing, attachments,
   quarantine resolve (via the per-transaction metadata editor's price-override +
-  exclude), and profile/wallet/backend CRUD. Genuinely unbuilt as a UI/daemon
-  surface: **backup/restore** (CLI-only via `kassiber/backup/cli.py`; Settings
-  explicitly defers to the terminal).
+  exclude), profile/wallet/backend CRUD, and native encrypted backup/restore
+  with staged validation, container-bound confirmation and rollback.
 - [ ] Expand the dedicated progress + cancellation UI beyond sync/freshness
   helpers into every long-running live action.
 - [x] Separate secret-entry IPC channel (daemon-only
