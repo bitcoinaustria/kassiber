@@ -3239,6 +3239,8 @@ SCHEMA += CUSTODY_COMPONENT_SCHEMA
 
 from .chain_analysis_watches_schema import WATCH_SCHEMA
 SCHEMA += WATCH_SCHEMA
+from .filed_report_chain_schema import SCHEMA as FILED_REPORT_CHAIN_SCHEMA
+SCHEMA += FILED_REPORT_CHAIN_SCHEMA
 from .chain_analysis_backfill_schema import SCHEMA as CHAIN_ANALYSIS_BACKFILL_SCHEMA
 SCHEMA += CHAIN_ANALYSIS_BACKFILL_SCHEMA
 
@@ -5134,6 +5136,8 @@ def ensure_schema_compat(conn):
     Anything added after the initial schema shipped belongs here so
     existing databases pick it up on the next `open_db`.
     """
+    from .chain_analysis_watches_schema import ensure_inbox_sources
+    ensure_inbox_sources(conn)
     migrated_ownership_history = _migrate_inline_ownership_history(conn)
     migrated_source_links = conn.execute(
         "UPDATE source_funds_links SET method = 'custody_component' "

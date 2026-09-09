@@ -446,3 +446,40 @@ rules accept `threshold`. `list`, `inbox --before <cursor>`, `configure --docume
 @configuration.json`, `acknowledge <id>`, `delete --document @deletion.json` and
 `evaluate` use the same daemon service. Configuration/deletion bind `id` and
 `expected_revision`; configuration also supplies `enabled`.
+
+## Saved reports affected by chain changes
+
+Completed accounting exports capture installation-local chain dependencies in
+`core/filed_report_chain.py`, attached to the existing immutable saved/filed
+report snapshot. Dependencies include authoritative observations for booked
+journal inputs of the report's assets through its end date. Earlier inputs from
+other wallets remain relevant because basis is pooled at profile scope. This
+is a conservative engine-input dependency set, not a claim that a particular
+lot supplied a disposal. Excluded, unbooked, other-asset and future inputs do not
+qualify. Old exports and arbitrary externally registered reports have no
+reconstructed dependency history; re-export to capture current observations.
+
+Successful wallet sync publication compares only closed observation facts and
+appends linked items to **Chain analysis → Watches**. Confirmed block replacement,
+confirmation reversal and explicit observer retraction retain before/after
+evidence. The item identifies the original report hash, period and scope.
+Repeated observations do not repeat an item; a failed wallet publication rolls
+back its items with the source changes. Existing physical confirmation watches
+also attach coverage-loss/reversal warnings to dependent reports. Missing graph
+or wallet coverage is uncertainty, never proof that a transaction disappeared.
+
+The existing report-ready journal rebuild appends exact classification/gain
+comparison results. Unconfirmed or unavailable observations remain pending;
+authoritative wallet refresh must restore coverage first, or an explicit
+observer retraction must establish removal. Marking an item read is only an
+inbox receipt. Neither refresh, rebuild nor acknowledgement rewrites the original
+export, changes its saved/filed state, or asserts an amended filing. The desktop
+item links to the current transaction when it still exists and to journals and
+reports for review. Dependencies, chain impact attachments and their resolutions
+stay local and do not enter replication; no watcher, acquisition permission,
+background network call or additional report snapshot system is introduced.
+
+For reports containing balances, asset selection also includes booked holdings
+from before the displayed period. Impact resolutions compare only the existing
+bounded classification and gain summaries; `no_change` does not claim byte-for-
+byte equivalence, unchanged holdings, or a complete replay of every report cell.

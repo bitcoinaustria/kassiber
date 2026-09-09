@@ -469,6 +469,8 @@ def register_saved_report_export(
         snapshot_id=snapshot_id,
         created_at=timestamp,
     )
+    from .filed_report_chain import capture_export_dependencies
+    capture_export_dependencies(conn, get_filed_report_snapshot(conn, snapshot_id, profile_id=profile_id))
     conn.commit()
     return get_filed_report_snapshot(conn, snapshot_id, profile_id=profile_id)
 
@@ -835,6 +837,22 @@ def _public_impact_resolution(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def compare_report_summaries(snapshot: Mapping[str, Any], summaries: Mapping[str, Any]) -> dict[str, Any]:
+    """Shared exact saved/filed impact semantics, independent of its cause."""
+    classification_changed = snapshot["classification_summary"] != summaries["classification_summary"]
+    gain_changed = snapshot["gain_summary"] != summaries["gain_summary"]
+    changed = classification_changed or gain_changed
+    return {
+        "after_classification_summary": summaries["classification_summary"],
+        "after_gain_summary": summaries["gain_summary"],
+        "classification_changed": classification_changed,
+        "gain_changed": gain_changed,
+        "amendment_status": ("no_change" if not changed else
+                             "review_required" if snapshot["report_state"] == "filed" else
+                             "saved_report_changed"),
+    }
+
+
 def resolve_pending_custody_impacts(
     conn: sqlite3.Connection,
     *,
@@ -879,15 +897,14 @@ def resolve_pending_custody_impacts(
         before_gain = _json_object(row["before_gain_summary_json"])
         after_classification = summaries["classification_summary"]
         after_gain = summaries["gain_summary"]
-        classification_changed = before_classification != after_classification
-        gain_changed = before_gain != after_gain
-        changed = classification_changed or gain_changed
-        if not changed:
-            amendment_status = "no_change"
-        elif str(row["report_state"]) == "filed":
-            amendment_status = "review_required"
-        else:
-            amendment_status = "saved_report_changed"
+        comparison = compare_report_summaries({
+            "classification_summary": before_classification,
+            "gain_summary": before_gain,
+            "report_state": row["report_state"],
+        }, summaries)
+        classification_changed = comparison["classification_changed"]
+        gain_changed = comparison["gain_changed"]
+        amendment_status = comparison["amendment_status"]
         if amendment_status not in _AMENDMENT_STATUSES:
             raise AssertionError("unsupported custody amendment status")
         resolution_id = str(

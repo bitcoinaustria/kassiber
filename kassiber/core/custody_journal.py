@@ -1164,6 +1164,7 @@ def store_ledger_state(
         ),
     )
     filed_impact_resolutions = []
+    chain_impact_resolution_count = 0
     if (
         not state.get("custody_component_blockers")
         and not deduped_quarantines
@@ -1175,13 +1176,15 @@ def store_ledger_state(
             profile_id=profile_id,
             rebuilt_at=stored_at,
         )
+        from .filed_report_chain import resolve_pending_chain_impacts
+        chain_impact_resolution_count = resolve_pending_chain_impacts(conn, profile_id, stored_at)
     return {
         "processed_at": stored_at,
         "processed_transactions": tx_count,
         "quarantines": deduped_quarantines,
         "custody_quantity": custody_quantity,
         "quantity_counts": quantity_counts,
-        "filed_report_impacts_resolved": len(filed_impact_resolutions),
+        "filed_report_impacts_resolved": len(filed_impact_resolutions) + chain_impact_resolution_count,
     }
 
 

@@ -1877,3 +1877,9 @@ Run these after any extraction or behavior change:
   version-bound domains/observers, atomic encrypted inbox/checkpoints, pause and
   restart catch-up, generic notifications, and shared CLI/desktop/AI operations.
 - [x] Add recurring Core source plans, revocable lifetime quotas and resumable block-occurrence ingestion. Requires the network/index/watch PR stack and a running unlocked daemon; see `docs/reference/recurring-chain-acquisition.md`.
+
+- [x] **#303: saved-report chain impacts.** Completed exports retain booked
+  observation dependencies; sync and confirmation-watch changes append scoped
+  inbox reviews. Report-ready rebuilds append exact effects while preserving
+  saved/filed history and explicit filing authority. See
+  [local chain analysis](docs/reference/local-chain-analysis.md#saved-reports-affected-by-chain-changes).
