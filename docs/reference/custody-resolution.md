@@ -153,11 +153,36 @@ The shared `core/review_workflow.py` module exposes four operations:
 | `review receipt` / `ui.review.receipt` | Retrieve the historical execution and verification result by receipt ID or idempotency key in the active book. |
 
 Supported batch operations are exact price overrides, explicitly justified
-exclusions, and typed custody components. The CLI accepts the existing component
+exclusions, typed custody components, and local inbound `kind_override` declarations. The CLI accepts the existing component
 create/revise/state actions. AI batches create components; conversion components
 remain drafts until separately reviewed. Missing-wallet gap investigation keeps
 its existing local-provider-only tools (`ui.custody.review.plan/apply`) and is
 not smuggled into the general batch interface.
+
+Acquisition review is available in the desktop Tax tab and the local CLI. It
+accepts a non-quarantined inbound transaction, using existing authored metadata
+and append-only history; clearing `kind` restores the importer's classification.
+It does not rewrite import evidence or use loan markers. Active custody legs must
+be reviewed through their custody workflow. Desktop classification applies
+separately from the ordinary Save action; other dirty fields must be saved or
+discarded first.
+
+For example, use this operation with the same `review plan/apply` commands:
+`{"type":"kind_override","transaction_id":"…","kind":"income","reason":"Source reviewed"}`.
+Set `kind` to null to clear it. The optional `valuation_mode` currently accepts
+only `market_value`; `zero_cost` produces `acquisition_valuation_unsupported`.
+The canonical Austrian gate also rejects airdrop/hardfork FMV interpretation,
+including existing imports; see [Austrian support](../austrian-handoff.md).
+Existing `metadata records kind set/clear` remains available for direct authored
+metadata editing; use review plan/apply when approving an exact economic effect.
+
+Acquisition artifacts bind the database instance, profile policy, input version
+and canonical economic output, with exact before/after whole-book acquisition
+basis, recognized income, disposal basis/proceeds and realized gain/loss by asset
+in the profile currency. These are accounting amounts, not estimated tax due;
+quarantine means the shown totals are incomplete. They are read-only until the
+explicit atomic apply, which rechecks the same evidence and appends a receipt.
+This financial preview is local desktop/CLI only, not a new AI tool surface.
 
 An external agent can save and inspect the same portable proposal:
 

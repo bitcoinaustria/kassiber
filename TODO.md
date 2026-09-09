@@ -46,6 +46,10 @@ Backlog contract:
   originating review; scope, conversation and busy-state guards prevent stale
   continuation. The agent rechecks canonical cases before proposing changes.
 
+- [x] Reviewed inbound classification uses canonical RAM preview/atomic apply,
+  exact accounting effects and authored kind history. Austrian zero-cost
+  acquisitions remain explicitly unsupported with a report/basis barrier.
+
 ## Local chain analysis
 
 Current behavior and limits: [local chain analysis](docs/reference/local-chain-analysis.md).

@@ -940,7 +940,21 @@
     },
     "kind": "Recorded as",
     "kindHint": "What this transaction is for tax purposes. Income kinds declare earnings at market value; a plain acquisition only records cost basis. Unlike tags, this drives the tax report. Gift, donation, lost and stolen are dispositions but not sales, so they are held for review instead of booked at market value.",
-    "kindUnclassified": "Unclassified"
+    "kindUnclassified": "Unclassified",
+    "acquisition": {
+      "help": "Preview the effect of an acquisition classification before applying it. This changes only your classification; the imported record stays intact. Zero-cost Austrian acquisitions are not supported. Staking means taxable lending-style returns, and wages add basis without employment-income reporting.",
+      "dirty": "Save or discard your other edits before reviewing this classification.",
+      "preview": "Preview classification",
+      "apply": "Apply reviewed classification",
+      "invalidPreview": "The acquisition preview is invalid. Try again.",
+      "scope": "Whole-book accounting totals in {{currency}}, input version {{version}}. Blocked totals are incomplete; these are accounting amounts, not estimated tax due.",
+      "acquisition_basis": "Acquisition basis added",
+      "income": "Income recognized",
+      "disposal_basis": "Disposal basis",
+      "proceeds": "Disposal proceeds",
+      "gain_loss": "Realized gain/loss",
+      "blocked": "The resulting book has unresolved blockers. Applying records the classification and preserves these report barriers."
+    }
   },
   "classify": {
     "label": "Label",

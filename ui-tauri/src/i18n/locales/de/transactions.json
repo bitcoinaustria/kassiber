@@ -959,7 +959,21 @@
     },
     "kind": "Erfasst als",
     "kindHint": "Was diese Transaktion steuerlich ist. Einkunftsarten erklären Einnahmen zum Marktwert, eine reine Anschaffung erfasst nur die Anschaffungskosten. Anders als Tags wirkt das direkt auf den Steuerbericht. Geschenk, Spende, Verloren und Gestohlen sind Abgänge, aber keine Verkäufe — sie werden zur Prüfung zurückgehalten statt zum Marktwert verbucht.",
-    "kindUnclassified": "Nicht klassifiziert"
+    "kindUnclassified": "Nicht klassifiziert",
+    "acquisition": {
+      "help": "Prüfe die Auswirkungen einer Zugangsklassifizierung vor dem Anwenden. Nur deine Klassifizierung wird geändert; der importierte Datensatz bleibt erhalten. Österreichische Zugänge mit Anschaffungskosten null werden nicht unterstützt. Staking bezeichnet steuerpflichtige Erträge aus Überlassung; Arbeitslohn erhöht die Anschaffungskosten ohne Lohnsteuerbericht.",
+      "dirty": "Speichere oder verwirf deine anderen Änderungen, bevor du diese Klassifizierung prüfst.",
+      "preview": "Klassifizierung prüfen",
+      "apply": "Geprüfte Klassifizierung anwenden",
+      "invalidPreview": "Die Vorschau ist ungültig. Versuche es erneut.",
+      "scope": "Buchweite Buchungsbeträge in {{currency}}, Eingabeversion {{version}}. Gesperrte Summen sind unvollständig; dies sind keine geschätzten Steuerbeträge.",
+      "acquisition_basis": "Neue Anschaffungskosten",
+      "income": "Erfasste Einkünfte",
+      "disposal_basis": "Anschaffungskosten der Abgänge",
+      "proceeds": "Veräußerungserlöse",
+      "gain_loss": "Realisierter Gewinn/Verlust",
+      "blocked": "Das Buch enthält noch offene Sperren. Beim Anwenden wird die Klassifizierung gespeichert; die Berichtssperren bleiben bestehen."
+    }
   },
   "classify": {
     "label": "Label",
