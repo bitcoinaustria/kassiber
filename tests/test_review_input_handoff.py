@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from kassiber import daemon
+from kassiber.daemon_backup import BackupSessions
 from kassiber.ai.tools import get_tool, select_tool_capabilities
 from kassiber.core import review_workflow
 from kassiber.errors import AppError
@@ -101,7 +102,7 @@ def test_remote_handoff_has_no_private_gap_or_location_payload(book):
 ])
 def test_expected_scope_prevents_setup_before_egress_or_write(book, kind, handler):
     conn, _runtime = book
-    ctx = SimpleNamespace(conn=conn)
+    ctx = SimpleNamespace(conn=conn, backup_sessions=BackupSessions())
     request = {"request_id": "setup", "kind": kind, "args": {
         "expected_scope": {"workspace_id": "ws", "profile_id": "different-book"},
     }}
@@ -146,14 +147,14 @@ def test_expected_scope_rejects_redirected_same_database_mutation(book, selector
         "surface": "swap_candidates", "name": "review handoff", **selector,
     }
     with pytest.raises(AppError) as raised:
-        daemon.handle_request(SimpleNamespace(conn=conn), {
+        daemon.handle_request(SimpleNamespace(conn=conn, backup_sessions=BackupSessions()), {
             "request_id": "redirect", "kind": "ui.saved_views.create", "args": args,
         }, Mock())
     assert raised.value.code == "stale_context"
     assert conn.execute("SELECT COUNT(*) FROM saved_views").fetchone()[0] == 0
     args.pop("profile_id", None)
     args.update(workspace="Main", profile="Book")
-    daemon.handle_request(SimpleNamespace(conn=conn), {
+    daemon.handle_request(SimpleNamespace(conn=conn, backup_sessions=BackupSessions()), {
         "request_id": "same-book", "kind": "ui.saved_views.create", "args": args,
     }, Mock())
     assert conn.execute("SELECT profile_id FROM saved_views").fetchone()[0] == "profile"
@@ -167,7 +168,7 @@ def test_expected_scope_cannot_be_malformed(book, scope):
     conn, _runtime = book
     with patch.object(daemon, "_test_bitcoinrpc_backend_payload") as probe:
         with pytest.raises(AppError) as raised:
-            daemon.handle_request(SimpleNamespace(conn=conn), {
+            daemon.handle_request(SimpleNamespace(conn=conn, backup_sessions=BackupSessions()), {
                 "request_id": "bad", "kind": "ui.backends.bitcoinrpc.test",
                 "args": {"expected_scope": scope},
             }, Mock())
@@ -180,6 +181,7 @@ def staging_context(book):
     return SimpleNamespace(
         conn=conn, data_root=runtime.data_root,
         document_import_sessions=daemon.DocumentImportSessions(),
+        backup_sessions=BackupSessions(),
     )
 
 

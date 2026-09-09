@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from kassiber.daemon_backup import BackupSessions
 from kassiber.ai.tools import get_tool, responses_tool_definitions
 from kassiber.core import reports as core_reports
 from kassiber.db import open_db, set_setting
@@ -684,7 +685,7 @@ class PrivacyMirrorTests(unittest.TestCase):
               patch("socket.getaddrinfo", side_effect=AssertionError("unexpected DNS")) as dns,
               patch("socket.socket.connect", side_effect=AssertionError("unexpected socket, including loopback")) as connect):
             desktop_envelope, shutdown = daemon.handle_request(
-                SimpleNamespace(conn=self.conn, runtime_config={}, data_root=str(self.data_root)),
+                SimpleNamespace(conn=self.conn, runtime_config={}, data_root=str(self.data_root), backup_sessions=BackupSessions()),
                 {"kind": MIRROR_KIND, "request_id": "desktop-mirror", "args": {}},
                 daemon._OutputChannel(io.StringIO()),
             )

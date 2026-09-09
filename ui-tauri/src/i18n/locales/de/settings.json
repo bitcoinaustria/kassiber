@@ -801,5 +801,46 @@
       "confirmPassphrase": "Passphrase bestätigen"
     },
     "customBackend": "Wähle einen eigenen Backend für das Netzwerk dieses Buchs ({{network}}). Öffentliche Mainnet-Vorlagen passen dazu nicht."
+  },
+  "backup": {
+    "errors": {
+      "invalid": "Das Backup konnte nicht geprüft werden. Prüfe die Backup-Passphrase und die ursprüngliche Datenbank-Passphrase und wähle ein gültiges Archiv.",
+      "passphrase": "Gib die benötigten Passphrasen ein.",
+      "destination": "Das Ziel ist nicht sicher oder beschreibbar. Wähle einen lokalen Speicherort außerhalb des aktiven Containers und prüfe freien Speicherplatz und Berechtigungen.",
+      "encryption": "Verschlüssle diesen Container, bevor du ein Backup exportierst.",
+      "stale": "Der Container oder die Vorschau hat sich geändert. Erstelle vor der Wiederherstellung eine neue Vorschau.",
+      "confirmation": "Gib RESTORE ein, um das Ersetzen zu bestätigen.",
+      "busy": "Datenbankarbeiten laufen noch. Warte auf deren Abschluss und erstelle eine neue Backup-Vorschau.",
+      "locked": "Entsperre den Container, um Backups zu verwalten.",
+      "rolledBack": "Die Installation ist fehlgeschlagen. Die ursprünglichen Daten wurden wiederhergestellt. Entsperre sie mit ihrer ursprünglichen Datenbank-Passphrase und prüfe Berechtigungen und freien Speicherplatz am Ziel.",
+      "recovery": "Installation und automatisches Zurücksetzen sind fehlgeschlagen. Bewahre die Sicherungskopie auf und stelle sie wieder her, bevor du diesen Container erneut öffnest.",
+      "failedLocked": "Die Wiederherstellung ist nach dem Schließen der Datenbank fehlgeschlagen. Prüfe den Container und die Sicherungskopie vor dem Entsperren."
+    },
+    "recoverySaved": "Deine Sicherung vor der Wiederherstellung liegt unter {{path}}.",
+    "description": "Exportiere ein verschlüsseltes Backup oder stelle eines über die lokale Dateiauswahl wieder her. Zum Wiederherstellen brauchst du die Backup-Passphrase und die Datenbank-Passphrase zum Zeitpunkt des Exports.",
+    "scope": "Ein Backup enthält diesen gesamten Container: alle Buchgruppen und Bücher, Anhänge und aufbewahrte Daten sowie lokale Einstellungen. Exportierte Berichte und Zugangsdaten des Betriebssystems sind nicht enthalten.",
+    "export": "Verschlüsseltes Backup exportieren",
+    "restore": "Backup wiederherstellen",
+    "choose": "Kassiber-Backup auswählen",
+    "passphrase": "Backup-Passphrase",
+    "confirmPassphrase": "Backup-Passphrase bestätigen",
+    "databasePassphrase": "Datenbank-Passphrase zum Zeitpunkt des Backups",
+    "preview": "Datei auswählen und Wiederherstellung prüfen",
+    "working": "Wird verarbeitet…",
+    "exported": "Backup unter {{path}} gespeichert",
+    "replaceTarget_one": "Aktuellen Container ersetzen ({{count}} Buch)",
+    "replaceTarget_other": "Aktuellen Container ersetzen ({{count}} Bücher)",
+    "incoming_one": "{{count}} Buch und {{attachments}} Anhangdateien wiederherstellen:",
+    "incoming_other": "{{count}} Bücher und {{attachments}} Anhangdateien wiederherstellen:",
+    "replaces": "Bestehende Inhalte werden zur Wiederherstellung gesichert: {{paths}}",
+    "recovery": "Deine aktuelle Datenbank, Anhänge, Einstellungen und Exporte bleiben in einem lokalen Sicherungsordner erhalten. Der wiederhergestellte Container wird gesperrt. Diese Vorschau verfällt nach 10 Minuten oder wenn sich die aktuellen Daten ändern.",
+    "confirmRestore": "Gib RESTORE ein, um das Ersetzen zu bestätigen",
+    "replace": "Container ersetzen und sperren",
+    "cancel": "Abbrechen",
+    "secretWarning": "Einige Anbieter-Zugangsdaten können nicht wiederhergestellt werden. Gib sie nach dem Entsperren in den Einstellungen erneut ein.",
+    "restored": "Backup wiederhergestellt. Entsperre mit der Datenbank-Passphrase des Backups.",
+    "unlockWarning": "Wiederherstellung abgeschlossen, aber die Entsperreinstellungen konnten nicht zurückgesetzt werden. Verwende die Datenbank-Passphrase des Backups und prüfe gespeicherte Entsperreinstellungen.",
+    "failed": "Backup-Aktion fehlgeschlagen",
+    "desktopOnly": "Für den Backup-Export brauchst du den nativen Speicherdialog der Desktop-App."
   }
 }

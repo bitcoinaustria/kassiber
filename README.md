@@ -114,6 +114,13 @@ complete K2 or organization-wide bookkeeping support claim.
   optional SQLCipher 4 passphrase encryption; single-project `tar | age`
   backups recoverable with stock `age` + `tar` + `sqlcipher` even if
   Kassiber disappears.
+- Desktop Settings → Data provides encrypted backup export and restore using
+  native file pickers. A backup covers the selected container's books and
+  retained attachments; restoring requires its backup and database passphrases.
+  Review the target container before replacing it: the previous data and report
+  exports remain in a local `pre-restore-*` recovery folder. The restored
+  container locks and requires its original database passphrase. Scheduling
+  and retention are not automated.
 - **Encrypted device and team sync** — opt-in authored-event replication over
   sealed courier files, a shared folder, WebDAV, or S3-compatible storage;
   signed owner/editor/auditor membership, blocking financial-edit conflicts,

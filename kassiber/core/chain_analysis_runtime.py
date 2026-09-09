@@ -48,6 +48,9 @@ class AnalysisJobs:
         self._jobs: dict[str, _Job] = {}
         self._running = 0
         self._lock = threading.RLock()
+        self._condition = threading.Condition(self._lock)
+        self._active: dict[str, _Job] = {}
+        self._quiescing = 0
 
     def _prune(self):
         now = self._clock()
@@ -60,7 +63,7 @@ class AnalysisJobs:
     def start(self, scope: bytes, request: dict, compute: Callable) -> dict:
         with self._lock:
             self._prune()
-            if self._running >= self._concurrent:
+            if self._quiescing or self._running >= self._concurrent:
                 raise AppError("Analysis workers are busy; finish or cancel a running computation", code="chain_analysis_busy", retryable=True)
             while len(self._jobs) >= self._capacity:
                 completed = [(job.created, ident) for ident, job in self._jobs.items() if job.status != "running"]
@@ -70,6 +73,7 @@ class AnalysisJobs:
             ident = secrets.token_urlsafe(32)
             job = _Job(scope, copy.deepcopy(request), self._clock())
             self._jobs[ident] = job
+            self._active[ident] = job
             self._running += 1
 
         def progress(value):
@@ -94,7 +98,9 @@ class AnalysisJobs:
             finally:
                 with self._lock:
                     self._running -= 1
+                    self._active.pop(ident, None)
                     job.finished = self._clock()
+                    self._condition.notify_all()
 
         threading.Thread(target=work, name="chain-analysis", daemon=True).start()
         return self.get(scope, ident)
@@ -117,10 +123,42 @@ class AnalysisJobs:
 
     def clear(self, scope: bytes | None = None):
         with self._lock:
+            # Receipts may already have been cleared while their workers still
+            # own database connections. Cancellation must reach those too.
+            for job in self._active.values():
+                if scope is None or job.scope == scope:
+                    job.cancel.set()
             for ident, job in list(self._jobs.items()):
                 if scope is None or job.scope == scope:
                     job.cancel.set()
                     del self._jobs[ident]
+
+    @contextlib.contextmanager
+    def quiesce(self, *, timeout_seconds=5):
+        """Reserve a replacement window only after worker computations exit.
+
+        Import computations close their dedicated SQLCipher connection in
+        ``finally`` before the running count is decremented. Clearing receipts
+        alone cannot establish this boundary. Keep admission closed throughout
+        the caller's installation, and leave the database untouched on timeout.
+        """
+        with self._condition:
+            self._quiescing += 1
+        try:
+            with self._condition:
+                for job in self._active.values():
+                    job.cancel.set()
+                deadline = time.monotonic() + timeout_seconds
+                while self._running:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise AppError("Wait for analysis workers to finish before restoring",
+                                       code="project_in_use", retryable=True)
+                    self._condition.wait(remaining)
+            yield
+        finally:
+            with self._condition:
+                self._quiescing -= 1
 
 
 JOBS = AnalysisJobs()
