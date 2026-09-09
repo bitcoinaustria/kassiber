@@ -40,7 +40,7 @@ from ..msat import btc_to_msat, dec
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..transfers import canonical_txid
 from ..util import str_or_none
-from ..wallet_descriptors import normalize_asset_code
+from ..wallet_descriptors import normalize_asset_code, normalize_network
 from . import import_batches
 from . import output_inventory as core_output_inventory
 from . import wallets as core_wallets
@@ -696,12 +696,41 @@ def _ownership_graph_is_strict_enrichment(
     return enriched
 
 
+def _same_lnd_settlement_identity(existing: Mapping[str, Any], normalized: Mapping[str, Any]) -> bool:
+    """A date refresh cannot repair or reinterpret conflicting native identity."""
+    if not (
+        existing["kind"] == normalized["kind"] == "lnd_pay"
+        and existing["external_id"] == normalized["external_id"]
+        and existing["direction"] == normalized["direction"] == "outbound"
+        and existing["asset"] == normalized["asset"] == "BTC"
+        and existing["payment_hash"]
+        and existing["payment_hash"] == normalized["payment_hash"]
+        and existing["payment_hash_source"] == normalized["payment_hash_source"] == "lnd"
+        and int(existing["amount"] or 0) == btc_to_msat(normalized["amount"])
+        and int(existing["fee"] or 0) == btc_to_msat(normalized["fee"])
+    ):
+        return False
+    old = _raw_json_payload(existing) or {}
+    new = _raw_json_payload(normalized) or {}
+    if not (
+        old.get("chain") == new.get("chain") == "lightning"
+        and old.get("network") and new.get("network")
+        and old.get("chain_instance_id") == new.get("chain_instance_id")
+    ):
+        return False
+    try:
+        return normalize_network("bitcoin", old["network"]) == normalize_network("bitcoin", new["network"])
+    except ValueError:
+        return False
+
+
 def _transaction_merge_updates(
     existing: Mapping[str, Any],
     normalized: Mapping[str, Any],
     fingerprint: str,
     *,
     authoritative_chain_observer: bool = False,
+    authoritative_settlement: bool = False,
 ):
     updates = {}
     existing_external_id_kind = (
@@ -770,9 +799,12 @@ def _transaction_merge_updates(
         and normalized["confirmed_at"] is not None
     )
     authoritative_confirmation_changed = (
-        authoritative_chain_observer
+        (authoritative_chain_observer or authoritative_settlement)
         and normalized["confirmed_at"] is not None
-        and existing["confirmed_at"] != normalized["confirmed_at"]
+        and (
+            existing["confirmed_at"] != normalized["confirmed_at"]
+            or (authoritative_settlement and existing["occurred_at"] != normalized["occurred_at"])
+        )
     )
     confirmed_at_removed = (
         existing["confirmed_at"] not in (None, "")
@@ -781,10 +813,9 @@ def _transaction_merge_updates(
     )
     if confirmed_at_added or authoritative_confirmation_changed:
         updates["confirmed_at"] = normalized["confirmed_at"]
-        if authoritative_chain_observer:
-            # Dependency observers use block time for confirmed rows. Refresh
-            # it both on first confirmation and when a reorg moves the tx to a
-            # different block so pricing and fingerprint identity stay aligned.
+        if authoritative_chain_observer or authoritative_settlement:
+            # Native block/settlement time corrections keep occurrence time,
+            # timestamp-derived pricing and fingerprint identity aligned.
             if existing["occurred_at"] != normalized["occurred_at"]:
                 updates["occurred_at"] = normalized["occurred_at"]
             if existing["fingerprint"] != fingerprint:
@@ -810,6 +841,12 @@ def _transaction_merge_updates(
         or existing["fiat_value_exact"] is not None
     )
     has_import_price = normalized["pricing_source_kind"] is not None
+    cached_time_price = existing["fiat_price_source"] == FIAT_PRICE_SOURCE_RATES_CACHE
+    if authoritative_settlement and existing["pricing_source_kind"]:
+        # Typed provenance wins over a missing or inconsistent legacy label.
+        cached_time_price = existing["pricing_source_kind"] in (
+            pricing.SOURCE_FMV_PROVIDER, pricing.SOURCE_MANUAL_RATE_CACHE,
+        )
     incoming_priority = pricing.priority_for(normalized["pricing_source_kind"])
     existing_priority = pricing.priority_for(
         existing["pricing_source_kind"],
@@ -819,7 +856,7 @@ def _transaction_merge_updates(
         updates.update({column: normalized[column] for column in PRICE_COLUMNS})
     elif (
         (confirmed_at_added or authoritative_confirmation_changed or confirmed_at_removed)
-        and existing["fiat_price_source"] == FIAT_PRICE_SOURCE_RATES_CACHE
+        and cached_time_price
     ):
         # Rate-cache pricing is timestamp-derived. Both confirmation and
         # demotion change the authoritative pricing timestamp, so discard the
@@ -1462,6 +1499,7 @@ def insert_wallet_records(
     match_existing_only: bool = False,
     report_updates: bool = False,
     authoritative_chain_observer: bool = False,
+    authoritative_settlement_ids: frozenset[str] | set[str] = frozenset(),
 ) -> dict[str, Any]:
     """Insert parsed records and optionally enrich matching transactions.
 
@@ -1469,6 +1507,8 @@ def insert_wallet_records(
     new transaction, so they stay in the skipped total for import accounting.
     Confirmation demotion requires the sync coordinator's out-of-band observer
     authority flag; serialized import payloads never grant that authority.
+    Native LND settlement IDs permit only a date correction on an otherwise
+    identical payment; incomplete/legacy sync responses cannot downgrade it.
     """
     imported = 0
     skipped = 0
@@ -1558,6 +1598,12 @@ def insert_wallet_records(
                 normalized,
                 fingerprint,
                 authoritative_chain_observer=authoritative_chain_observer,
+                authoritative_settlement=(
+                    normalized["external_id"] in authoritative_settlement_ids
+                    and scoped_wallet["kind"] == "lnd"
+                    and existing["wallet_id"] == wallet["id"]
+                    and _same_lnd_settlement_identity(existing, normalized)
+                ),
             )
             if updates:
                 changed_fields = sorted(updates)
