@@ -972,6 +972,9 @@
       "disposal_basis": "Anschaffungskosten der Abgänge",
       "proceeds": "Veräußerungserlöse",
       "gain_loss": "Realisierter Gewinn/Verlust",
+      "unsupportedValuation": "Diese Anschaffungsbewertung wird für das gewählte Steuerregime nicht unterstützt. Prüfe die Quelldaten und Einordnung.",
+      "incompleteBasis": "Die Anschaffungskosten sind unvollständig. Betroffene Veräußerungen bleiben bis zur Klärung des Zugangs gesperrt.",
+      "otherBlocker": "Ein weiteres Buchhaltungsproblem muss geprüft werden. Öffne die Prüfliste des Buchs für Details.",
       "blocked": "Das Buch enthält noch offene Sperren. Beim Anwenden wird die Klassifizierung gespeichert; die Berichtssperren bleiben bestehen."
     }
   },

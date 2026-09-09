@@ -953,6 +953,9 @@
       "disposal_basis": "Disposal basis",
       "proceeds": "Disposal proceeds",
       "gain_loss": "Realized gain/loss",
+      "unsupportedValuation": "This acquisition valuation is not supported for the selected tax regime. Review the source evidence and classification.",
+      "incompleteBasis": "The acquisition basis is incomplete. Affected disposals remain blocked until the source acquisition is resolved.",
+      "otherBlocker": "Another accounting issue needs review. Open the book review queue for details.",
       "blocked": "The resulting book has unresolved blockers. Applying records the classification and preserves these report barriers."
     }
   },

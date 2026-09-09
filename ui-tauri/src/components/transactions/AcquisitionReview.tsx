@@ -80,9 +80,17 @@ export function AcquisitionReview({ transaction, dirty, hideSensitive }: { trans
         <p className="font-medium">{asset} · {currency}</p>
         {fields.map((field) => <div key={field} className="flex justify-between gap-2"><span>{t(`tax.acquisition.${field}`)}</span><span className="font-mono">{before?.find((row) => row.asset === asset)?.[field] ?? "0"} → {after?.find((row) => row.asset === asset)?.[field] ?? "0"}</span></div>)}
       </div>)}</div>
-      {!artifact.after.report_ready ? <div className="text-xs text-amber-700"><p>{t("tax.acquisition.blocked")}</p><ul>{artifact.after.quarantines.map((value, index) => <li key={index}>{String((value as { reason?: string }).reason ?? "")}</li>)}</ul></div> : null}
+      {!artifact.after.report_ready ? <div className="text-xs text-amber-700"><p>{t("tax.acquisition.blocked")}</p><ul>{artifact.after.quarantines.map((value, index) => <li key={index}><AcquisitionBlocker reason={(value as { reason?: string }).reason} /></li>)}</ul></div> : null}
       <Button disabled={busy || dirty} onClick={() => void confirm()}>{t("tax.acquisition.apply")}</Button>
     </div> : null}
     {error ? <p role="alert" className="text-xs text-destructive">{error}</p> : null}
   </section>;
+}
+
+
+export function AcquisitionBlocker({ reason }: { reason?: string }) {
+  const { t } = useTranslation("transactions");
+  const key = reason === "acquisition_valuation_unsupported" ? "unsupportedValuation"
+    : reason === "basis_provenance_incomplete" ? "incompleteBasis" : "otherBlocker";
+  return <>{t(`tax.acquisition.${key}`)}</>;
 }

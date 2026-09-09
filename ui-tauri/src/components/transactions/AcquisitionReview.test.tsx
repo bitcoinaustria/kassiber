@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { AcquisitionReview } from "./AcquisitionReview";
+import { AcquisitionReview, AcquisitionBlocker } from "./AcquisitionReview";
 import { toDashboardTransaction } from "./dashboard/model";
 
 vi.mock("@/daemon/client", () => ({ useDaemonMutation: () => ({ isPending: false, mutateAsync: vi.fn() }) }));
@@ -19,4 +19,11 @@ describe("separate acquisition review control", () => {
     expect(html).toContain("Save or discard your other edits");
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Preview classification<\/button>/);
   });
+});
+
+
+it("explains acquisition blockers with an explicit fallback", () => {
+  expect(renderToStaticMarkup(<AcquisitionBlocker reason="acquisition_valuation_unsupported" />)).toContain("not supported for the selected tax regime");
+  expect(renderToStaticMarkup(<AcquisitionBlocker reason="basis_provenance_incomplete" />)).toContain("acquisition basis is incomplete");
+  expect(renderToStaticMarkup(<AcquisitionBlocker reason="future_internal_code" />)).toContain("Open the book review queue");
 });
