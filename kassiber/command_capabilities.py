@@ -349,7 +349,8 @@ DAEMON_ADMIN_KINDS = _paths(
     ui.sync.pull ui.sync.join_request ui.sync.invite ui.sync.join
     ui.sync.members.revoke ui.sync.devices.revoke ui.sync.conflicts.resolve
     ui.workspace.delete ui.profiles.reset_data ui.projects.create
-    ui.projects.select ui.secrets.init ui.secrets.change_passphrase
+    ui.projects.select ui.backup.export ui.backup.preview ui.backup.apply ui.backup.cancel
+    ui.secrets.init ui.secrets.change_passphrase
     ui.secrets.forget_cli_unlock ui.wallets.delete ui.imports.rollback daemon.lock daemon.unlock
     ai.providers.create ai.providers.update ai.providers.set_api_key
     ai.providers.move_api_key ai.providers.delete ai.providers.set_default
