@@ -270,6 +270,8 @@
     "noPreview": "Local case data is not available yet.",
     "manualReview_one": "{{count}} manual review item.",
     "manualReview_other": "{{count}} manual review items.",
+    "batchableBeyondInspection_one": "{{count}} more sits upstream of this view and is reviewed by the same action.",
+    "batchableBeyondInspection_other": "{{count}} more sit upstream of this view and are reviewed by the same action.",
     "unresolved": "unresolved"
   },
   "flowPath": {
@@ -521,6 +523,13 @@
         "reviewedParentTransactionIsMissing": "Reviewed parent transaction is missing."
       }
     },
+    "unknown_origin": {
+      "title": "Origin unknown",
+      "nextStep": "Record where these funds came from",
+      "messages": {
+        "aReviewedRootSourceEndsTheTrace": "A reviewed root source ends the trace without stating the economic origin of the funds."
+      }
+    },
     "missing_pricing": {
       "title": "Missing valuation",
       "nextStep": "Add a fiat price for this transaction",
@@ -585,7 +594,7 @@
     },
     "stale_custody_component_lineage": {
       "title": "Custody evidence changed",
-      "nextStep": "Open the relevant link or source to resolve this finding",
+      "nextStep": "Re-review this link against the current custody projection",
       "messages": {
         "aReviewedCustodyLinkIsAbsentOr": "A reviewed custody link is absent or stale in the current stored projection."
       }

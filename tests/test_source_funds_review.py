@@ -419,32 +419,60 @@ def test_a_deliberate_amount_edit_is_still_bounds_checked_without_a_state_change
     assert review(conn, link=link["id"], allocation_amount="0.00000002")["allocation_amount_msat"] == 2000
 
 
-def test_bulk_eligibility_has_exactly_one_definition(book):
+def seed_bulk_eligible_and_manual_links(conn):
+    """One batch-eligible custody suggestion plus one that must stay manual."""
+    hooks = daemon._source_funds_hooks()
+    eligible = daemon.core_source_funds.create_link(
+        conn, "ws", "profile", hooks, from_transaction_ref="out", to_transaction_ref="in",
+        link_type="self_transfer", state="suggested", method="custody_component",
+        confidence="exact", allocation_amount="0.00000050", from_allocation_amount="0.00000050",
+    )
+    manual = daemon.core_source_funds.create_link(
+        conn, "ws", "profile", hooks, from_transaction_ref="out", to_transaction_ref="in",
+        link_type="self_transfer", state="suggested", method="provider_trade_id",
+        confidence="strong", allocation_amount="0.00000050", from_allocation_amount="0.00000050",
+    )
+    return eligible, manual
+
+
+def test_bulk_eligibility_names_the_links_the_validator_accepts(book):
+    conn, _runtime = book
+    eligible, manual = seed_bulk_eligible_and_manual_links(conn)
+    published = context(conn)["bulk_review"]["eligible_link_ids"]
+
+    # A provider-id suggestion is scoped and suggested but never batch-eligible,
+    # so the published set is a real verdict rather than "everything suggested".
+    assert manual["id"] not in published
+    assert published == [] or published == [eligible["id"]]
+
+
+def test_the_wire_no_longer_carries_the_preliminary_eligibility_flag(book):
     conn, _runtime = book
     seed_source(conn)
-    inspected = context(conn)
-    published = inspected["bulk_review"]["eligible_link_ids"]
-    from kassiber.core import source_funds as core
-
-    assert published == core.bulk_review_eligible_link_ids(conn, "profile", "in")
-    # The preliminary server flag no longer travels on the wire as eligibility.
-    assert all("requires_review" not in item for item in inspected["links"])
+    assert all("requires_review" not in item for item in context(conn)["links"])
 
 
 def test_bulk_apply_is_bound_to_the_ids_the_preview_published(book):
     conn, _runtime = book
-    seed_source(conn)
-    result = daemon._ui_source_funds_payload_from_conn(
-        conn, "ui.source_funds.links.bulk_review",
-        {"target_transaction": "in", "link_ids": []},
-    )
-    # A missing eligibility verdict is unknown, not permission.
-    assert result["reviewed"] == 0
-    with pytest.raises(AppError):
-        daemon._ui_source_funds_payload_from_conn(
-            conn, "ui.source_funds.links.bulk_review",
-            {"target_transaction": "in", "link_ids": "not-a-list"},
+    _eligible, manual = seed_bulk_eligible_and_manual_links(conn)
+
+    def apply(**args):
+        return daemon._ui_source_funds_payload_from_conn(
+            conn, "ui.source_funds.links.bulk_review", {"target_transaction": "in", **args},
         )
+
+    # A missing eligibility verdict is unknown, not permission.
+    assert apply(link_ids=[])["reviewed"] == 0
+    # An id the validator rejects stays manual even when the caller names it.
+    assert apply(link_ids=[manual["id"]])["reviewed"] == 0
+    assert conn.execute(
+        "SELECT state FROM source_funds_links WHERE id=?", (manual["id"],)
+    ).fetchone()[0] == "suggested"
+    # `skipped` uses the whole scoped-suggested population on either path, so a
+    # bounded apply cannot understate what is left.
+    assert apply(link_ids=[])["skipped"] == apply()["skipped"] + apply()["reviewed"]
+    with pytest.raises(AppError):
+        apply(link_ids="not-a-list")
 
 
 def test_eligibility_is_advisory_and_never_invalidates_a_pending_save(book):

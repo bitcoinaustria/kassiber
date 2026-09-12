@@ -186,11 +186,14 @@ Lightning event, an exchange record, another wallet's leg or a hand-authored row
 therefore never qualifies. When a book already holds two active projections of
 one transaction (left behind by the earlier direction-qualified matcher), the
 next refresh retires the obsolete one by excluding it -- never deleting it --
-and reports it as `observer_superseded`. Narrowing the watched scripts again
-re-adopts the projection this observer retired itself, so widen/narrow round
-trips keep converging.
+and reports it as `observer_superseded`. Widening and narrowing a watched set
+keeps converging because reinterpretation happens in place; no exclusion is
+created along the way.
 
-Refresh still never merges or deletes transaction rows, and it stops rather than
+Refresh still never merges or deletes transaction rows, and never re-includes an
+excluded one: `excluded` is outside the observation commitment, so a row the user
+excluded deliberately is indistinguishable from one the observer retired, and
+guessing either way would silently overturn a decision. It also stops rather than
 deciding for the user when authored meaning is at stake. It fails closed with
 `observer_projection_conflict` when a row it would retire carries a note, review
 status, tags or overrides (`authored_superseded_transaction_row`), when an

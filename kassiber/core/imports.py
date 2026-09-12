@@ -334,16 +334,13 @@ def _find_authoritative_chain_transaction(
     active_other = [row for row in other if not bool(row["excluded"])]
     # Only this observer's own current projections may be reinterpreted.
     obsolete = [row for row in active_other if _is_superseded_native_projection(conn, row)]
-    retired_same = [
-        row
-        for row in same
-        if bool(row["excluded"]) and _is_superseded_native_projection(conn, row)
-    ]
-    excluded_by_user = [row for row in same if bool(row["excluded"]) and row not in retired_same]
+    # An excluded row is an audited user decision. `excluded` is not part of the
+    # observation commitment, so a deliberately excluded row is indistinguishable
+    # from one this observer retired -- refresh therefore never re-includes one.
+    excluded_same = [row for row in same if bool(row["excluded"])]
     exact = [row for row in rows if row["fingerprint"] == fingerprint]
     active_count = len(active_same) + len(active_other)
 
-    reactivate = False
     if len(active_same) > 1:
         raise _conflict(
             "Authoritative chain observation matched ambiguous transaction rows",
@@ -351,19 +348,8 @@ def _find_authoritative_chain_transaction(
         )
     if active_same:
         keeper = active_same[0]
-    elif retired_same:
-        # Narrowing a wallet's watched scripts again: re-adopt the projection
-        # this observer retired itself rather than wedging on the excluded
-        # exact-fingerprint rule below.
-        if len(retired_same) > 1:
-            raise _conflict(
-                "Authoritative chain observation matched ambiguous retired projections",
-                "multiple_excluded_transaction_rows", rows, active_count,
-            )
-        keeper = retired_same[0]
-        reactivate = True
-    elif excluded_by_user and obsolete:
-        # The user deliberately excluded this direction. Reinterpreting a
+    elif excluded_same and obsolete:
+        # The user excluded this direction deliberately. Reinterpreting a
         # different row into its place would silently undo that decision.
         raise _conflict(
             "An excluded transaction owns this observation direction",
@@ -417,7 +403,6 @@ def _find_authoritative_chain_transaction(
             )
     if reconciliation is not None:
         reconciliation["superseded"] = superseded
-        reconciliation["reactivate"] = reactivate
     return keeper
 
 
@@ -1840,17 +1825,6 @@ def insert_wallet_records(
                     "direction": obsolete_row["direction"],
                 }
             )
-        if existing is not None and reconciliation.get("reactivate"):
-            # The wallet's watched scripts narrowed back: re-adopt the projection
-            # this observer retired itself.
-            conn.execute(
-                "UPDATE transactions SET excluded = 0 WHERE id = ?",
-                (existing["id"],),
-            )
-            existing = conn.execute(
-                f"SELECT {_EXISTING_TRANSACTION_COLUMNS} FROM transactions WHERE id = ?",
-                (existing["id"],),
-            ).fetchone()
         if (
             existing is None
             and tax_platform_row_identity

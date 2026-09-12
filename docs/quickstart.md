@@ -303,11 +303,10 @@ python3 -m kassiber --machine reports source-funds \
 python3 -m kassiber source-funds suggest \
   --target-transaction <txid-or-id>
 
-# Bulk-accept deterministic links (canonical scoped transaction identity with
-# equal whole-row principal,
-# transaction input/output structure, source-qualified equal-principal
-# Lightning hashes, and reviewed transaction_pairs) for this target path;
-# provider ids and weak matches stay manual.
+# Bulk-accept deterministic links for this target path. Only exact allocations
+# re-verified against the current stored custody projection qualify; provider
+# ids, privacy hints, weak time/amount matches and pairs you already rejected
+# stay manual.
 python3 -m kassiber source-funds links bulk-review \
   --target-transaction <target-txid-or-id>
 

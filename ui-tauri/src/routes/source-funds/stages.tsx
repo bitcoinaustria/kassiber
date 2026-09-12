@@ -478,7 +478,8 @@ export function TraceStage({ state, onInvestigate, assistantAvailable }: { state
       </div>
       <details className="rounded-md border p-3"><summary className="cursor-pointer text-sm font-medium">{t("case.evidenceSection")}</summary><div className="pt-3"><CaseBrief
         report={state.report}
-        bulkReviewable={state.bulkReviewableSuggestions.length}
+        bulkReviewable={state.bulkReviewableCount}
+        bulkReviewableBeyondInspection={state.bulkEligibleBeyondInspection}
         manualReview={state.manualSuggestionCount}
         onOpenTransaction={state.openTxDetailById}
       /></div></details>
@@ -525,7 +526,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                 disabled={
                   !state.selectedTarget ||
                   state.bulkReviewLinks.isPending ||
-                  state.bulkReviewableSuggestions.length === 0
+                  state.bulkReviewableCount === 0
                 }
               >
                 <Check className="mr-2 size-4" aria-hidden="true" />

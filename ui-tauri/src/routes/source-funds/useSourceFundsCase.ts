@@ -10,6 +10,7 @@ import { toDashboardTransaction } from "@/components/transactions/dashboard/mode
 import { DaemonScopeContext, useDaemon, useDaemonInfinite, useDaemonMutation } from "@/daemon/client";
 import { useCurrency } from "@/lib/currency";
 import { type Tx } from "@/mocks/seed";
+import { BULK_REVIEW_ID_LIMIT } from "./model";
 import { exportCurrentCase } from "./caseExport";
 import { useUiStore } from "@/store/ui";
 import { targetQueryArgs, type SourceFundsReviewContext } from "./caseScope";
@@ -17,6 +18,7 @@ import { targetQueryArgs, type SourceFundsReviewContext } from "./caseScope";
 import {
   NO_ATTACHMENT,
   amountInput,
+  formMatchesLink,
   isStaleLinkReviewError,
   linkReviewFormFromLink,
   linkReviewPayload,
@@ -358,7 +360,12 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
   const selectedSource = sources.find(
     (source) => source.id === selectedLink?.from_source_id,
   );
-  const bulkReviewableSuggestions = links.filter((link) => bulkEligibleIds.has(link.id));
+  // Count what the apply will actually review, not the intersection with the
+  // inspected window: the report graph only expands through reviewed links, so
+  // an eligible hop behind a still-suggested one is absent from `links`.
+  const bulkReviewableCount = bulkEligibleIds.size;
+  const bulkEligibleBeyondInspection =
+    preview.data?.data?.bulk_review?.eligible_beyond_inspection ?? 0;
   const manualSuggestionCount = links.filter(
     (link) => link.state === "suggested" && !bulkEligibleIds.has(link.id),
   ).length;
@@ -420,6 +427,15 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     if (source === linkFormSourceId) {
       return;
     }
+    if (
+      linkFormSourceId.startsWith(`${selectedLink.id}@`) &&
+      !formMatchesLink(linkForm, selectedLink)
+    ) {
+      // Same link, changed upstream, and the reviewer has unsaved edits. Keep
+      // their work: the expected_* precondition refuses the write if the change
+      // actually conflicts.
+      return;
+    }
     setSelectedLinkId(selectedLink.id);
     setLinkFormSourceId(source);
     // Exact msat -> BTC text, so an untouched field round-trips unchanged.
@@ -468,13 +484,28 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
   const bulkReviewDeterministicLinks = async () => {
     if (!selectedTarget) return;
     if (bulkEligibleIds.size === 0) return;
+    const ids = [...bulkEligibleIds];
     // Bound to the server's own eligible set for this target scope, which is
     // what the count above reports -- including hops beyond the reviewed
     // frontier, so one click still assembles the whole deterministic chain.
-    const envelope = await bulkReviewLinks.mutateAsync({
-      target_transaction: selectedTarget,
-      link_ids: [...bulkEligibleIds],
-    });
+    // Above the daemon's bound, fall back to the whole scope rather than
+    // sending a list it will reject.
+    let envelope;
+    try {
+      envelope = await bulkReviewLinks.mutateAsync({
+        target_transaction: selectedTarget,
+        ...(ids.length <= BULK_REVIEW_ID_LIMIT ? { link_ids: ids } : {}),
+      });
+    } catch {
+      if (scope?.isCurrent?.() !== false) {
+        addNotification({
+          title: t("toast.linkReviewFailed"),
+          body: t("toast.linkReviewFailedBody"),
+          tone: "warning",
+        });
+      }
+      return;
+    }
     const reviewed = envelope.data?.reviewed ?? 0;
     const skipped = envelope.data?.skipped ?? 0;
     addNotification({
@@ -712,7 +743,8 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     selectedLinkId,
     setSelectedLinkId,
     selectedSource,
-    bulkReviewableSuggestions,
+    bulkReviewableCount,
+    bulkEligibleBeyondInspection,
     manualSuggestionCount,
     // mutations + actions
     suggestLinks,

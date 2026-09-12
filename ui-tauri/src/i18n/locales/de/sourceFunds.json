@@ -270,6 +270,8 @@
     "noPreview": "Lokale Falldaten sind noch nicht verfügbar.",
     "manualReview_one": "{{count}} Eintrag zur manuellen Prüfung.",
     "manualReview_other": "{{count}} Einträge zur manuellen Prüfung.",
+    "batchableBeyondInspection_one": "{{count}} weiterer liegt oberhalb dieser Ansicht und wird von derselben Aktion geprüft.",
+    "batchableBeyondInspection_other": "{{count}} weitere liegen oberhalb dieser Ansicht und werden von derselben Aktion geprüft.",
     "unresolved": "ungeklärt"
   },
   "flowPath": {
@@ -521,6 +523,13 @@
         "reviewedParentTransactionIsMissing": "Die geprüfte Vorgängertransaktion fehlt."
       }
     },
+    "unknown_origin": {
+      "title": "Herkunft unbekannt",
+      "nextStep": "Halte fest, woher diese Mittel stammen",
+      "messages": {
+        "aReviewedRootSourceEndsTheTrace": "Eine geprüfte Ursprungsquelle beendet die Kette, ohne die wirtschaftliche Herkunft der Mittel zu nennen."
+      }
+    },
     "missing_pricing": {
       "title": "Fehlende Bewertung",
       "nextStep": "Fiat-Preis für diese Transaktion ergänzen",
@@ -585,7 +594,7 @@
     },
     "stale_custody_component_lineage": {
       "title": "Verwahrungsnachweis geändert",
-      "nextStep": "Die betreffende Verknüpfung oder Quelle zur Prüfung öffnen",
+      "nextStep": "Prüfe diese Verknüpfung erneut gegen die aktuelle Custody-Projektion",
       "messages": {
         "aReviewedCustodyLinkIsAbsentOr": "Eine geprüfte Verwahrungsverknüpfung fehlt in der aktuellen gespeicherten Ableitung oder ist dort veraltet."
       }

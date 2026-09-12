@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 
 from kassiber import daemon
+from kassiber.errors import AppError
 from kassiber.core import source_funds
 from tests.test_daemon_review_workflow import book  # noqa: F401
 
@@ -228,3 +229,63 @@ def test_multi_asset_mix_is_never_summed_into_the_target_denomination(book):
     from kassiber.core import source_funds_diagram
 
     assert source_funds_diagram.source_mix_ring_spec(result) is None
+
+
+def test_unknown_origin_warns_once_per_source_with_the_whole_unattributed_amount(book):
+    """One root funding two legs must not report one leg's share as the total."""
+    conn, _runtime = book
+    prepare(conn)
+    hooks = daemon._source_funds_hooks()
+    source = source_funds.create_source(
+        conn, "ws", "profile", hooks, source_type="unknown", label="Origin unknown",
+        amount=btc(1_000_000_000), acquired_at="2024-01-01T00:00:00Z", fiat_value="1000",
+    )
+    # The root funds the target twice: once directly, once through a parent hop.
+    source_funds.create_link(
+        conn, "ws", "profile", hooks, from_source_ref=source["id"],
+        to_transaction_ref="out", link_type="manual_source", allocation_amount=btc(400_000_000),
+    )
+    source_funds.create_link(
+        conn, "ws", "profile", hooks, from_source_ref=source["id"],
+        to_transaction_ref="in", link_type="manual_source", allocation_amount=btc(600_000_000),
+    )
+    source_funds.create_link(
+        conn, "ws", "profile", hooks, from_transaction_ref="out", to_transaction_ref="in",
+        allocation_amount=btc(400_000_000), from_allocation_amount=btc(400_000_000),
+    )
+    result = report(conn, 1_000_000_000)
+
+    # Exportable with a warning, not a blocker: forcing a blocker would push
+    # users to mislabel an unknown root just to get an export.
+    assert result["explain_gates"]["exportable"] is True, result["explain_gates"]["blockers"]
+    findings = [item for item in result["findings"] if item["code"] == "unknown_origin"]
+    assert len(findings) == 1
+    assert findings[0]["severity"] == "warning"
+    assert findings[0]["amount_msat"] == 1_000_000_000
+    assert findings[0]["asset"] == "BTC"
+    assert findings[0]["ref"] == source["id"]
+    # It belongs in the gaps table a reader scans for what is not explained.
+    assert any(item["code"] == "unknown_origin" for item in result["gaps"])
+
+
+def test_a_pre_asset_snapshot_is_not_re_exported(book):
+    """A frozen narrative quoting the old target share must not be re-published."""
+    conn, _runtime = book
+    prepare(conn)
+    root_link(conn)
+    report(conn, 1_000_000_000, save_case=True)
+    case_id = conn.execute("SELECT id FROM source_funds_cases").fetchone()[0]
+    hooks = daemon._source_funds_hooks()
+
+    # A freshly saved case exports.
+    loaded = source_funds.load_case_snapshot(conn, "ws", "profile", hooks, case_id)
+    source_funds._require_exportable_snapshot_shape(loaded)
+
+    # The same case saved before source assets were recorded does not.
+    legacy = json.loads(json.dumps(loaded))
+    for row in legacy["source_mix"]:
+        row.pop("asset", None)
+    with pytest.raises(AppError) as excinfo:
+        source_funds._require_exportable_snapshot_shape(legacy)
+    assert excinfo.value.code == "source_funds_snapshot_outdated"
+    assert excinfo.value.retryable is False

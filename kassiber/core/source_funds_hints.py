@@ -32,6 +32,18 @@ _FINDING_HINTS: dict[str, dict[str, Any]] = {
         "action_args": {"source_type": "missing_history"},
         "doc_anchor": "missing-history",
     },
+    "stale_custody_component_lineage": {
+        "headline": "Re-review this link against the current custody projection",
+        "action": "open_link_review",
+        "action_args": {"focus": "custody"},
+        "doc_anchor": "custody-lineage",
+    },
+    "unknown_origin": {
+        "headline": "Record where these funds came from",
+        "action": "open_source_creator",
+        "action_args": {"source_type": "unknown"},
+        "doc_anchor": "missing-history",
+    },
     "missing_pricing": {
         "headline": "Add a fiat price for this transaction",
         "action": "open_transaction",

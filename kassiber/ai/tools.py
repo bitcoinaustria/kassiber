@@ -1788,6 +1788,16 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "type": "string",
                     "description": "Target transaction id or txid whose deterministic suggestions should be reviewed.",
                 },
+                "link_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 500,
+                    "description": (
+                        "Restrict the apply to these previewed link ids, normally "
+                        "bulk_review.eligible_link_ids from review_context. Omit to "
+                        "review the whole target scope."
+                    ),
+                },
             },
         },
         kind_class="mutating",

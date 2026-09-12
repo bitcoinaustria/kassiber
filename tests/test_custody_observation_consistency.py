@@ -428,10 +428,23 @@ def _final_evidence(conn):
         "SELECT * FROM transactions WHERE excluded = 0 ORDER BY external_id, direction"
     )]
     state = CustodyJournalBuilder(conn, _profile(conn)).build()
+    projection = state["custody_quantity"].projection
     return {
         "rows": [{column: row[column] for column in _EVIDENCE_COLUMNS} for row in rows],
-        "holdings": json.loads(json.dumps(state.get("wallet_holdings") or [], default=str)),
-        "quarantines": [item.get("code") for item in (state.get("quarantines") or [])],
+        # The accounting interpretation, not just the row count: which decision
+        # the arbiter reached and what it posted where.
+        "decisions": sorted(
+            (decision.reason, decision.state, decision.source.end_msat - decision.source.start_msat)
+            for decision in projection.decisions
+        ),
+        "postings": sorted(
+            (posting.location_kind, posting.location_id, posting.asset, posting.amount_msat)
+            for posting in projection.postings
+        ),
+        "differences": sorted(
+            (item.wallet_id, item.asset, item.canonical_msat)
+            for item in (state.get("quantity_differences") or ())
+        ),
         "provenance": conn.execute("SELECT COUNT(*) FROM chain_observation_provenance").fetchone()[0],
     }
 
@@ -455,11 +468,25 @@ def test_expanded_watched_scripts_match_complete_history(tmp_path):
             helper = fixtures.OwnershipDeriverHandlerTest()
             helper._seed(conn)
             _observe_expanding_wallet(conn, mode)
+            # Price the row so the basis comparison below compares real values.
+            # The incremental route recomputes fiat value from the retained rate
+            # rather than pricing at insert time, which is a different path.
+            row_id = conn.execute("SELECT id FROM transactions WHERE excluded=0").fetchone()[0]
+            update_transaction_metadata(
+                conn, "Main", "Default", row_id, _metadata_hooks(),
+                pricing_update={
+                    "fiat_rate": "40000", "source_kind": "manual_override", "quality": "exact",
+                },
+            )
             evidence[mode] = _final_evidence(conn)
         finally:
             conn.close()
 
     complete = evidence["complete"]
+    # Guard the comparison itself: equal-but-empty would prove nothing.
+    assert complete["rows"][0]["fiat_value"] is not None
+    assert complete["rows"][0]["fiat_rate_exact"] is not None
+    assert complete["decisions"] and complete["postings"]
     assert complete["rows"] == [{
         **complete["rows"][0],
         "direction": "outbound",
@@ -638,14 +665,53 @@ def test_an_audited_exclusion_is_never_silently_bypassed(custody_book):
     """A row the user deliberately excluded is not replaced by reinterpreting another."""
     conn, _helper = custody_book
     hooks, receipt_id, _spend_id = _seed_pre_fix_duplicate(conn)
-    # The user excluded the receipt themselves, so it is not ours to re-adopt.
+    # An audited exclusion leaves the observation commitment intact -- `excluded`
+    # is not part of it -- so this is exactly what a real user exclusion looks like.
     conn.execute("UPDATE transactions SET excluded=1 WHERE id=?", (receipt_id,))
-    conn.execute("DELETE FROM chain_observation_provenance WHERE transaction_id=?", (receipt_id,))
     conn.commit()
 
     with pytest.raises(AppError) as excinfo:
         _narrow_and_sync(conn, hooks)
     assert excinfo.value.details["conflict_kind"] == "excluded_direction_owns_observation"
+
+
+def test_narrowing_after_a_retirement_fails_closed_rather_than_re_including(custody_book):
+    """Refresh will not overturn an exclusion it created either.
+
+    `excluded` is outside the observation commitment, so a retired projection is
+    indistinguishable from one the user excluded. Rather than guess, refresh
+    stops and lets the user pick the keeper through the audited action.
+    """
+    conn, _helper = custody_book
+    hooks, receipt_id, spend_id = _seed_pre_fix_duplicate(conn)
+    _widen_and_sync(conn, hooks)
+    assert conn.execute("SELECT excluded FROM transactions WHERE id=?", (receipt_id,)).fetchone()[0] == 1
+
+    with pytest.raises(AppError) as excinfo:
+        _narrow_and_sync(conn, hooks)
+    assert excinfo.value.details["conflict_kind"] == "excluded_direction_owns_observation"
+    # Still exactly one active row; nothing was silently flipped back.
+    assert [row[0] for row in conn.execute("SELECT id FROM transactions WHERE excluded=0")] == [spend_id]
+
+
+def test_refresh_never_re_includes_an_excluded_transaction(custody_book):
+    """Refresh must not overturn an audited exclusion, even of its own observation.
+
+    `excluded` is not covered by the observation commitment, so a row the user
+    excluded is indistinguishable from one the observer retired. Re-including
+    either would silently revert a decision the user made on purpose.
+    """
+    conn, _helper = custody_book
+    hooks, receipt_id = _narrow_book(conn)
+    conn.execute("UPDATE transactions SET excluded=1 WHERE id=?", (receipt_id,))
+    conn.commit()
+
+    wallet = conn.execute("SELECT * FROM wallets WHERE id='w'").fetchone()
+    sync_wallet_from_backend(conn, {}, _profile(conn), wallet, hooks)
+
+    assert conn.execute(
+        "SELECT excluded FROM transactions WHERE id=?", (receipt_id,)
+    ).fetchone()[0] == 1
 
 
 def test_an_authored_kind_blocks_a_contradicting_direction_flip(custody_book):

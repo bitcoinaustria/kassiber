@@ -35,6 +35,7 @@ class _JobRemoved(AppError):
 
 _SAFE_OBSERVER_PROJECTION_CONFLICT_KINDS = frozenset(
     {
+        "authored_kind_contradicts_direction",
         "authored_superseded_transaction_row",
         "bdk_conflicting_prevouts",
         "bdk_inconsistent_inputs",

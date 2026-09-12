@@ -619,6 +619,10 @@ export function stringValue(value: unknown): string {
 }
 
 
+/** Mirrors SUGGESTION_WRITE_CAP: the daemon refuses a longer id list. */
+export const BULK_REVIEW_ID_LIMIT = 500;
+
+
 export type LinkReviewForm = {
   link_type: string;
   confidence: string;
@@ -694,6 +698,19 @@ export function linkReviewPayload({
     payload.allocation_policy = "explicit";
   }
   return payload;
+}
+
+
+/** True when the form still shows exactly what the link says (no unsaved edits). */
+export function formMatchesLink(form: LinkReviewForm, link: SourceFundsLink): boolean {
+  const baseline = linkReviewFormFromLink(link);
+  return (
+    form.link_type === baseline.link_type &&
+    form.confidence === baseline.confidence &&
+    form.allocation_amount.trim() === baseline.allocation_amount.trim() &&
+    form.from_allocation_amount.trim() === baseline.from_allocation_amount.trim() &&
+    form.explanation.trim() === baseline.explanation.trim()
+  );
 }
 
 

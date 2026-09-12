@@ -287,11 +287,13 @@ export function OptionalSection({
 export function CaseBrief({
   report,
   bulkReviewable,
+  bulkReviewableBeyondInspection = 0,
   manualReview,
   onOpenTransaction,
 }: {
   report?: SourceFundsPreview;
   bulkReviewable: number;
+  bulkReviewableBeyondInspection?: number;
   manualReview: number;
   onOpenTransaction?: (txId: string) => void;
 }) {
@@ -347,6 +349,11 @@ export function CaseBrief({
           {manualReview > 0 && (
             <p className="text-xs text-amber-700 dark:text-amber-300">
               {t("caseBrief.manualReview", { count: manualReview })}
+            </p>
+          )}
+          {bulkReviewableBeyondInspection > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {t("caseBrief.batchableBeyondInspection", { count: bulkReviewableBeyondInspection })}
             </p>
           )}
         </div>
@@ -712,7 +719,7 @@ export function CoveragePanel({
                 <Trans t={t} i18nKey="coverage.truncated" values={{ shown: totalTxCount, total: coverage.truncation.inbound_total_count, notClassified: coverage.truncation.not_classified_count }} components={[<code className="text-2xs" />]} />
               </div>
             )}
-            <div className="grid gap-4 md:grid-cols-5">
+            <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
               {COVERAGE_BUCKET_ORDER.map((name) => {
                 const bucket = buckets?.[name];
                 const amount = bucket?.amount ?? 0;
