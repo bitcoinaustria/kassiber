@@ -243,38 +243,115 @@ class NativeTransitionAuthorityTest(unittest.TestCase):
             self.compile(rows[:1], refs)
 
 
+def seed_native_transition_book(conn, role):
+    """Seed the LWK lockup + claim/refund book used by the native-transition tests."""
+    conn.execute("INSERT INTO workspaces(id,label,created_at) VALUES('workspace','W','2020')")
+    conn.execute(
+        "INSERT INTO profiles(id,workspace_id,label,fiat_currency,tax_country,gains_algorithm,created_at) "
+        "VALUES('profile','workspace','P','USD','generic','FIFO','2020')"
+    )
+    rows, refs = native_transition_rows(role)
+    for wallet_id, ref in refs.items():
+        kind = next(row["wallet_kind"] for row in rows if row["wallet_id"] == wallet_id)
+        config = {"chain": "lightning", "network": "regtest"} if kind == "lnd" else {"chain": "liquid", "network": "elementsregtest"}
+        conn.execute(
+            "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES(?,'workspace','profile',?,?,?,'2020')",
+            (wallet_id, ref["label"], kind, json.dumps(config)),
+        )
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(transactions)")}
+    for original in rows:
+        row = {key: value for key, value in original.items() if key in columns}
+        row["fingerprint"] = "fp-" + row["id"]
+        if not isinstance(row["raw_json"], str):
+            row["raw_json"] = json.dumps(row["raw_json"])
+        names = tuple(row)
+        conn.execute(
+            f"INSERT INTO transactions ({','.join(names)}) VALUES ({','.join('?' for _ in names)})",
+            tuple(row[name] for name in names),
+        )
+        if original["id"] != "acquisition" and original["wallet_kind"] != "lnd":
+            persist_authoritative_chain_observation(conn, row["id"], observer_kind="lwk")
+    return rows, refs
+
+
 class NativeTransitionDatabaseTest(unittest.TestCase):
+    def test_supporting_price_enrichment_keeps_the_exact_refund_transfer(self):
+        """A matched CSV price row must not cost the book its claim/refund transfer.
+
+        Before the merge policy separated pricing from observer authority, one
+        generic-ledger row that merely matched an existing native transaction
+        replaced its `raw_json`. That broke the closed observation commitment, so
+        the next journal build lost the exact refund route and booked a bare
+        disposal with no hold.
+        """
+        from unittest.mock import Mock
+
+        from kassiber.core.imports import ImportCoordinatorHooks, insert_wallet_records
+
+        with tempfile.TemporaryDirectory() as tmp:
+            conn = open_db(Path(tmp) / "data")
+            try:
+                seed_native_transition_book(conn, "refund")
+                profile = conn.execute("SELECT * FROM profiles WHERE id='profile'").fetchone()
+                before = custody_journal.build_ledger_state(conn, profile)
+                self.assertTrue(any(
+                    decision.reason == "native_htlc_transition"
+                    for decision in before["custody_quantity"].projection.decisions
+                ))
+                raw_before = conn.execute(
+                    "SELECT raw_json FROM transactions WHERE id='claim'"
+                ).fetchone()[0]
+
+                wallet = conn.execute("SELECT * FROM wallets WHERE id='liquid-wallet'").fetchone()
+                outcome = insert_wallet_records(
+                    conn,
+                    profile,
+                    wallet,
+                    [{
+                        "txid": "66" * 32,
+                        "occurred_at": "2025-10-09T08:53:20Z",
+                        "direction": "inbound",
+                        "asset": "LBTC",
+                        "amount": "0.000995",
+                        "fee": "0",
+                        "fiat_rate": "41000",
+                    }],
+                    "file:generic-ledger",
+                    ImportCoordinatorHooks(
+                        ensure_tag_row=Mock(), invalidate_journals=Mock(),
+                    ),
+                    match_existing_only=True,
+                    report_updates=True,
+                )
+                self.assertEqual(outcome["imported"], 0)
+
+                row = conn.execute(
+                    "SELECT raw_json, fiat_rate FROM transactions WHERE id='claim'"
+                ).fetchone()
+                # The price landed...
+                self.assertEqual(float(row["fiat_rate"]), 41000.0)
+                # ...and the native evidence is byte-identical.
+                self.assertEqual(row["raw_json"], raw_before)
+
+                after = custody_journal.build_ledger_state(conn, profile)
+                self.assertEqual(after["quarantines"], [])
+                self.assertTrue(any(
+                    decision.reason == "native_htlc_transition"
+                    for decision in after["custody_quantity"].projection.decisions
+                ))
+                entry_types = {entry["entry_type"] for entry in after["entries"]}
+                self.assertIn("transfer_in", entry_types)
+                self.assertIn("transfer_out", entry_types)
+                self.assertNotIn("disposal", entry_types)
+            finally:
+                conn.close()
+
     def test_journal_uses_persisted_authority_without_writing_review_records(self):
         for role in ("claim", "refund"):
             with self.subTest(role=role), tempfile.TemporaryDirectory() as tmp:
                 conn = open_db(Path(tmp) / "data")
                 try:
-                    conn.execute("INSERT INTO workspaces(id,label,created_at) VALUES('workspace','W','2020')")
-                    conn.execute(
-                        "INSERT INTO profiles(id,workspace_id,label,fiat_currency,tax_country,gains_algorithm,created_at) "
-                        "VALUES('profile','workspace','P','USD','generic','FIFO','2020')"
-                    )
-                    rows, refs = native_transition_rows(role)
-                    for wallet_id, ref in refs.items():
-                        kind = next(row["wallet_kind"] for row in rows if row["wallet_id"] == wallet_id)
-                        config = {"chain": "lightning", "network": "regtest"} if kind == "lnd" else {"chain": "liquid", "network": "elementsregtest"}
-                        conn.execute(
-                            "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES(?,'workspace','profile',?,?,?,'2020')",
-                            (wallet_id, ref["label"], kind, json.dumps(config)),
-                        )
-                    columns = {row["name"] for row in conn.execute("PRAGMA table_info(transactions)")}
-                    for original in rows:
-                        row = {key: value for key, value in original.items() if key in columns}
-                        row["fingerprint"] = "fp-" + row["id"]
-                        if not isinstance(row["raw_json"], str):
-                            row["raw_json"] = json.dumps(row["raw_json"])
-                        names = tuple(row)
-                        conn.execute(
-                            f"INSERT INTO transactions ({','.join(names)}) VALUES ({','.join('?' for _ in names)})",
-                            tuple(row[name] for name in names),
-                        )
-                        if original["id"] != "acquisition" and original["wallet_kind"] != "lnd":
-                            persist_authoritative_chain_observation(conn, row["id"], observer_kind="lwk")
+                    seed_native_transition_book(conn, role)
                     profile = conn.execute("SELECT * FROM profiles WHERE id='profile'").fetchone()
                     state = custody_journal.build_ledger_state(conn, profile)
                     self.assertEqual(state["quarantines"], [])

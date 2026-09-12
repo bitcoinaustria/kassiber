@@ -172,6 +172,9 @@ back after dependency application begins.
 
 Authoritative Bitcoin-family transaction identity is case-insensitive. Refresh
 updates the existing row in place and passes that exact row id into provenance.
+A supporting (non-observer) import can no longer replace the observed payload of
+a row under a closed observation commitment, so an ordinary price or metadata
+enrichment cannot leave that provenance in a silent graph-hash mismatch.
 If legacy imports left several rows for the same wallet/txid/direction/asset,
 one active row may be selected only when every sibling was already excluded
 through the audited transaction metadata action. Multiple active rows, or

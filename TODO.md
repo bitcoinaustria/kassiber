@@ -282,7 +282,7 @@ same verification surface.
   - [x] Batch optional accounting schema initialization in one savepoint,
     preserving caller transactions and rollback while avoiding a separate
     durable commit for every new schema object.
-  - [ ] Preserve native chain evidence during supporting CSV price enrichment.
+  - [x] Preserve native chain evidence during supporting CSV price enrichment.
     A matched generic-ledger import can replace the native `raw_json` with its
     CSV fields while quantity and identity stay unchanged; the next journal
     build loses an exact claim/refund transfer and books a disposal without a

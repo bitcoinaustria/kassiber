@@ -44,6 +44,7 @@ from ..wallet_descriptors import normalize_asset_code, normalize_network
 from . import import_batches
 from . import output_inventory as core_output_inventory
 from . import wallets as core_wallets
+from .chain_observer.provenance import row_has_current_authoritative_observation
 from .privacy_hops import privacy_boundary_from_import_record
 from .sync import sync_progress_emitter
 
@@ -175,7 +176,19 @@ _EXISTING_TRANSACTION_COLUMNS = """
        pricing_timestamp, pricing_fetched_at, pricing_granularity, pricing_method,
        pricing_external_ref, pricing_quality, kind, privacy_boundary, description,
        counterparty, excluded, raw_json, payment_hash, payment_hash_source,
-       swap_refund_funding_txid, swap_refund_funding_vout
+       swap_refund_funding_txid, swap_refund_funding_vout,
+       -- The merge policy needs the closed observation commitment a generic
+       -- import cannot forge. Correlated subqueries rather than a LEFT JOIN:
+       -- several interpolation sites select from an unaliased derived table and
+       -- filter on bare wallet_id/profile_id, which a join would make ambiguous.
+       -- The bare `id` binds to the outer row because chain_observation_provenance
+       -- has no `id` column of its own.
+       (SELECT observation.authority_version FROM chain_observation_provenance observation
+         WHERE observation.transaction_id = id) AS observation_authority_version,
+       (SELECT observation.graph_hash FROM chain_observation_provenance observation
+         WHERE observation.transaction_id = id) AS observation_graph_hash,
+       (SELECT observation.quantity_hash FROM chain_observation_provenance observation
+         WHERE observation.transaction_id = id) AS observation_quantity_hash
 """
 
 _OBSERVER_DUPLICATE_HINT = (
@@ -696,6 +709,56 @@ def _ownership_graph_is_strict_enrichment(
     return enriched
 
 
+def _asserts_chain_legs(row: Mapping[str, Any]) -> bool:
+    """True when the payload asserts observed input/output legs.
+
+    Only ever used to DECLINE a replacement, never to grant one: it is a floor
+    for rows that predate the provenance commitment, not a way for graph-shaped
+    imported JSON to claim observer authority.
+    """
+    payload = _raw_json_payload(row)
+    if payload is None:
+        return False
+    # Some observer payloads nest the graph under "tx"; legacy rows carry only
+    # one side (a refund witness has vin, a lockup has vout).
+    inner = payload.get("tx")
+    graph = inner if isinstance(inner, Mapping) else payload
+    if not isinstance(graph, Mapping):
+        return False
+    return isinstance(graph.get("vin"), list) or isinstance(graph.get("vout"), list)
+
+
+def _may_replace_observation_payload(
+    existing: Mapping[str, Any],
+    normalized: Mapping[str, Any],
+    *,
+    authoritative_chain_observer: bool,
+    authoritative_settlement: bool,
+    ownership_graph_upgrade: bool,
+) -> bool:
+    """Decide whether this payload may take over stored observation material.
+
+    Accepting a price or metadata change is a different decision from replacing
+    the evidence a chain observer recorded. Authority comes from the trusted
+    ingestion context and from the persisted commitment, never from names or
+    schema markers inside the incoming payload.
+    """
+    if authoritative_chain_observer or authoritative_settlement:
+        # A native refresh keeps full power to correct or withdraw its own evidence.
+        return True
+    if row_has_current_authoritative_observation(existing):
+        # Ordered before the ownership-graph clause on purpose: a CSV row may
+        # carry an `ownership_graph_version` key, and payload contents must not
+        # outrank the closed commitment persisted by the sync boundary.
+        return False
+    if ownership_graph_upgrade:
+        return True
+    if _asserts_chain_legs(existing) and not _asserts_chain_legs(normalized):
+        # A supporting ledger row that asserts no legs may not discard observed ones.
+        return False
+    return True
+
+
 def _same_lnd_settlement_identity(existing: Mapping[str, Any], normalized: Mapping[str, Any]) -> bool:
     """A date refresh cannot repair or reinterpret conflicting native identity."""
     if not (
@@ -952,6 +1015,13 @@ def _transaction_merge_updates(
         (updates or ownership_graph_upgrade)
         and normalized["raw_json"]
         and normalized["raw_json"] != existing["raw_json"]
+        and _may_replace_observation_payload(
+            existing,
+            normalized,
+            authoritative_chain_observer=authoritative_chain_observer,
+            authoritative_settlement=authoritative_settlement,
+            ownership_graph_upgrade=ownership_graph_upgrade,
+        )
     ):
         updates["raw_json"] = normalized["raw_json"]
     return updates
