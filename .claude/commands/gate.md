@@ -1,5 +1,9 @@
-Run the full quality gate: compile check, CLI smoke suite, review regression suite, and CLI help smoke checks.
+Run the full pre-push/PR gate defined in
+[CONTRIBUTING.md](../../CONTRIBUTING.md#verification-and-review):
 
-```bash
+```sh
 ./scripts/quality-gate.sh
 ```
+
+Report failures and incomplete checks; do not call the work push-ready unless
+the gate passes.
