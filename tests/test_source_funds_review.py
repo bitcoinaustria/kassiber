@@ -323,3 +323,136 @@ def test_oversized_recipe_is_rejected_for_ai_but_available_to_local_workflow(boo
     assert result["ok"] is False
     assert "source_funds_recipe_too_large" in str(result)
     assert "review_fingerprint" not in str(result)
+
+
+def seed_subsatoshi_link(conn):
+    """A link whose exact amount cannot survive an 8-decimal round trip."""
+    hooks = daemon._source_funds_hooks()
+    source = daemon.core_source_funds.create_source(
+        conn, "ws", "profile", hooks, source_type="fiat_purchase", label="Exact purchase",
+        amount="0.00000099", fiat_value="0.099", acquired_at="2024-01-01T00:00:00Z",
+    )
+    link = daemon.core_source_funds.create_link(
+        conn, "ws", "profile", hooks, from_source_ref=source["id"], to_transaction_ref="in",
+        link_type="manual_source", allocation_amount="0.00000001234",
+    )
+    assert link["allocation_amount_msat"] == 1234
+    return link
+
+
+def review(conn, **args):
+    return daemon._ui_source_funds_payload_from_conn(conn, "ui.source_funds.links.review", args)
+
+
+def stored_msat(conn, link_id):
+    return conn.execute(
+        "SELECT allocation_amount FROM source_funds_links WHERE id=?", (link_id,)
+    ).fetchone()[0]
+
+
+def test_review_exposes_exact_millisatoshi_for_the_editor(book):
+    """The lossy float projection must not be the only amount a client can read."""
+    conn, _runtime = book
+    link = seed_subsatoshi_link(conn)
+    inspected = context(conn)
+    row = next(item for item in inspected["links"] if item["id"] == link["id"])
+    assert row["allocation_amount_msat"] == 1234
+    # Echoing the float projection back at 8 decimals would silently drop 234 msat.
+    assert f"{float(row['allocation_amount']):.8f}" == "0.00000001"
+
+
+def test_approving_without_an_amount_keeps_the_exact_stored_value(book):
+    conn, _runtime = book
+    link = seed_subsatoshi_link(conn)
+    result = review(
+        conn, link=link["id"], state="reviewed", allocation_policy="explicit",
+        expected_allocation_amount_msat=1234,
+    )
+    assert result["allocation_amount_msat"] == 1234
+    assert stored_msat(conn, link["id"]) == 1234
+
+
+def test_a_rejection_can_never_carry_an_allocation_edit(book):
+    conn, _runtime = book
+    link = seed_subsatoshi_link(conn)
+    with pytest.raises(AppError) as excinfo:
+        review(conn, link=link["id"], state="rejected", allocation_amount="0.00000000")
+    assert excinfo.value.code == "validation"
+    assert stored_msat(conn, link["id"]) == 1234
+    # Rejecting on its own still works.
+    assert review(conn, link=link["id"], state="rejected")["state"] == "rejected"
+    assert stored_msat(conn, link["id"]) == 1234
+
+
+def test_an_approval_cannot_land_on_amounts_that_changed_since_inspection(book):
+    conn, _runtime = book
+    link = seed_subsatoshi_link(conn)
+    conn.execute(
+        "UPDATE source_funds_links SET allocation_amount=? WHERE id=?", (5678, link["id"])
+    )
+    conn.commit()
+
+    with pytest.raises(AppError) as excinfo:
+        review(
+            conn, link=link["id"], state="reviewed", allocation_policy="explicit",
+            expected_allocation_amount_msat=1234,
+        )
+    assert excinfo.value.code == "source_funds_link_stale"
+    assert excinfo.value.retryable is False
+    # The refusal happens before any write.
+    assert stored_msat(conn, link["id"]) == 5678
+
+
+def test_a_deliberate_amount_edit_is_still_bounds_checked_without_a_state_change(book):
+    """An amount write used to skip every bound check when no state transition happened."""
+    conn, _runtime = book
+    link = seed_subsatoshi_link(conn)
+    # A still-suggested link never reached the reviewed-state validation branch.
+    conn.execute("UPDATE source_funds_links SET state='suggested' WHERE id=?", (link["id"],))
+    conn.commit()
+
+    with pytest.raises(AppError) as excinfo:
+        review(conn, link=link["id"], allocation_amount="21000000")
+    assert excinfo.value.code == "validation"
+    assert stored_msat(conn, link["id"]) == 1234
+    # A valid deliberate edit still lands.
+    assert review(conn, link=link["id"], allocation_amount="0.00000002")["allocation_amount_msat"] == 2000
+
+
+def test_bulk_eligibility_has_exactly_one_definition(book):
+    conn, _runtime = book
+    seed_source(conn)
+    inspected = context(conn)
+    published = inspected["bulk_review"]["eligible_link_ids"]
+    from kassiber.core import source_funds as core
+
+    assert published == core.bulk_review_eligible_link_ids(conn, "profile", "in")
+    # The preliminary server flag no longer travels on the wire as eligibility.
+    assert all("requires_review" not in item for item in inspected["links"])
+
+
+def test_bulk_apply_is_bound_to_the_ids_the_preview_published(book):
+    conn, _runtime = book
+    seed_source(conn)
+    result = daemon._ui_source_funds_payload_from_conn(
+        conn, "ui.source_funds.links.bulk_review",
+        {"target_transaction": "in", "link_ids": []},
+    )
+    # A missing eligibility verdict is unknown, not permission.
+    assert result["reviewed"] == 0
+    with pytest.raises(AppError):
+        daemon._ui_source_funds_payload_from_conn(
+            conn, "ui.source_funds.links.bulk_review",
+            {"target_transaction": "in", "link_ids": "not-a-list"},
+        )
+
+
+def test_eligibility_is_advisory_and_never_invalidates_a_pending_save(book):
+    """A custody-projection change must not make an authored inspection stale."""
+    conn, _runtime = book
+    seed_source(conn)
+    inspected = context(conn)
+    packet = dict(inspected)
+    packet.pop("bulk_review")
+    packet.pop("review_fingerprint")
+    assert source_funds_review._digest(packet) == inspected["review_fingerprint"]

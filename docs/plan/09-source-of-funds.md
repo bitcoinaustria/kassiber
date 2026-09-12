@@ -182,8 +182,7 @@ Deterministic suggestions should run in this order:
    does not identify which source paid the miner fee, external output, or
    missing change. Those residual N:1 cases — and every multi-source,
    multi-destination matrix — remain deterministic pro-rata accounting
-   proposals marked `strong` / `requires_review`; bulk review never promotes
-   them. Use an explicit custody-component allocation for authoritative
+   proposals marked `strong`; bulk review never promotes them. Use an explicit custody-component allocation for authoritative
    residual N:1 or N:M lineage. Works identically for Bitcoin and Liquid
    (`wallet_utxos.chain`).
 4. Lightning payment hashes (`payment_hash`): exactly one outbound and one
@@ -244,9 +243,14 @@ already reachable from the target through non-rejected source-funds links.
 Broad account-scoped provider ids and same-day time/amount matches are not
 persisted unless the user explicitly opts into broad hints. Every suggestion
 run has a hard write cap and aborts without committing when the cap is exceeded.
-Batch review must re-check deterministic predicates against the live database
-before promotion. A stale `same_onchain_scope` or deleted `transaction_pair`
-remains `suggested`. Provider ids remain manual suggestions even when one-to-one.
+Batch review accepts only allocations re-verified against the current stored
+custody projection (`custody_component`). A stale projection or a pair the user
+already rejected remains `suggested`, and provider ids remain manual suggestions
+even when one-to-one. That verdict has exactly one implementation
+(`_validated_bulk_review_candidates`); the review context publishes it as
+`bulk_review.eligible_link_ids` and the apply is bound to those ids, so a
+preview count can never disagree with what the server would review. The apply
+still revalidates against the live database.
 
 Walkers must keep a visited set keyed by transaction and asset, enforce depth
 and node-count caps, and emit `path_truncated` instead of silently stopping.
@@ -544,9 +548,9 @@ The v1 suggestion pass seeds separate source-funds links from canonical scoped
 transactions, existing `transaction_pairs`, and provider/import ids in
 `raw_json`; broad provider account ids and tight
 same-day amount matches require explicit broad-hint opt-in. These links stay
-suggested until reviewed; PDF export does not use them as proof. Canonical scoped
-identity, UTXO structure, source-qualified Lightning hashes, and existing
-reviewed `transaction_pairs` may be batch-reviewed; provider/import ids may not.
+suggested until reviewed; PDF export does not use them as proof. Only exact
+allocations from the current stored custody projection may be batch-reviewed;
+provider/import ids, privacy hints and time/amount guesses may not.
 Batch review is target-scoped: it only promotes deterministic suggestions
 reachable from the selected report target and still deterministic at review
 time. Provider account/transaction ids, weak time/amount matches, stale scoped

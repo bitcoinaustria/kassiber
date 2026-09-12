@@ -1705,7 +1705,11 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         description=(
             "Update review state, confidence, allocation, or explanation for an "
             "existing source-funds link after explicit consent. Use this to accept, "
-            "reject, or downgrade suggested provenance without changing tax pairs."
+            "reject, or downgrade suggested provenance without changing tax pairs. "
+            "Omit an allocation to keep the exact stored amount: send one only when "
+            "the user asked for that specific value. Pass the inspected "
+            "expected_*_amount_msat so an approval cannot land on amounts that "
+            "changed since you read them."
         ),
         parameters={
             "type": "object",
@@ -1718,6 +1722,14 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 "confidence": {"type": "string", "enum": list(_SOURCE_FUNDS_CONFIDENCE_LEVELS)},
                 "allocation_amount": {"type": "string"},
                 "from_allocation_amount": {"type": "string"},
+                "expected_allocation_amount_msat": {
+                    "type": "integer",
+                    "description": "allocation_amount_msat as inspected; refuses if it changed.",
+                },
+                "expected_from_allocation_amount_msat": {
+                    "type": "integer",
+                    "description": "from_allocation_amount_msat as inspected; refuses if it changed.",
+                },
                 "allocation_policy": {
                     "type": "string",
                     "enum": list(_SOURCE_FUNDS_ALLOCATION_POLICIES),

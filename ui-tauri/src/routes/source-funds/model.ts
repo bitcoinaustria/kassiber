@@ -2,6 +2,9 @@
 // daemon envelopes, CLI-precise vocabularies, and pure row helpers shared
 // by every stage of the workstation.
 
+import { type CustodyExactInteger } from "@/lib/custodyComponentBulk";
+import { msatToBtcInput } from "@/routes/transfers-custody/guidedComponentModel";
+
 export type TransactionRow = {
   id?: string;
   transaction_id?: string;
@@ -110,18 +113,10 @@ export type SourceFundsFinding = {
   message: string;
   ref?: string;
   amount?: number | null;
-  amount_msat?: number | null;
+  amount_msat?: number | string | null;
   asset?: string;
   next_step?: SourceFundsFindingNextStep;
 };
-
-
-export const BULK_REVIEWABLE_METHODS = new Set([
-  "same_onchain_scope",
-  "transaction_pair",
-  "utxo_spend",
-  "payment_hash",
-]);
 
 
 export type SourceFundsPreview = {
@@ -319,13 +314,15 @@ export type SourceFundsLink = {
   link_type: string;
   state: string;
   confidence: string;
-  requires_review?: boolean;
   method: string;
   asset: string;
   allocation_amount?: number | null;
+  allocation_amount_msat?: CustodyExactInteger | null;
   from_allocation_amount?: number | null;
+  from_allocation_amount_msat?: CustodyExactInteger | null;
   allocation_policy: string;
   explanation?: string;
+  updated_at?: string;
   uses_chain_observation?: boolean;
   attachments?: EvidenceAttachment[];
 };
@@ -622,18 +619,88 @@ export function stringValue(value: unknown): string {
 }
 
 
-export function isBulkReviewableLink(link: SourceFundsLink) {
-  const method = link.method || "";
-  const deterministic = BULK_REVIEWABLE_METHODS.has(method);
+export type LinkReviewForm = {
+  link_type: string;
+  confidence: string;
+  allocation_amount: string;
+  from_allocation_amount: string;
+  explanation: string;
+  attachment_id: string;
+};
+
+
+/** Exact BTC input text for an msat integer, or "" when there is no amount. */
+export function amountInput(msat: number | string | null | undefined): string {
+  // BigInt("") is 0n, so an empty value must never reach the formatter.
+  if (msat === null || msat === undefined || msat === "") return "";
+  return msatToBtcInput(msat as CustodyExactInteger);
+}
+
+
+export function linkReviewFormFromLink(link: SourceFundsLink): LinkReviewForm {
+  return {
+    link_type: link.link_type,
+    confidence: link.confidence,
+    allocation_amount: amountInput(link.allocation_amount_msat),
+    from_allocation_amount: amountInput(link.from_allocation_amount_msat),
+    explanation: link.explanation ?? "",
+    attachment_id: NO_ATTACHMENT,
+  };
+}
+
+
+/**
+ * Build a review payload carrying only what the reviewer deliberately changed.
+ *
+ * Approving is not editing: an untouched amount is omitted so the server keeps
+ * its exact stored millisatoshis, and a rejection never carries an allocation
+ * at all. The expected_* preconditions bind the decision to the amounts that
+ * were actually inspected.
+ */
+export function linkReviewPayload({
+  link,
+  form,
+  state,
+}: {
+  link: SourceFundsLink;
+  form: LinkReviewForm;
+  state: "reviewed" | "rejected";
+}): Record<string, unknown> {
+  const baseline = linkReviewFormFromLink(link);
+  const payload: Record<string, unknown> = { link: link.id, state };
+  if (link.allocation_amount_msat !== null && link.allocation_amount_msat !== undefined) {
+    payload.expected_allocation_amount_msat = link.allocation_amount_msat;
+  }
+  if (
+    link.from_allocation_amount_msat !== null &&
+    link.from_allocation_amount_msat !== undefined
+  ) {
+    payload.expected_from_allocation_amount_msat = link.from_allocation_amount_msat;
+  }
+  // Both selects sit beside the Reject button, so a deliberate change to them
+  // is written on either decision.
+  if (form.link_type !== baseline.link_type) payload.link_type = form.link_type;
+  if (form.confidence !== baseline.confidence) payload.confidence = form.confidence;
+  if (form.explanation.trim() !== baseline.explanation.trim()) {
+    payload.explanation = form.explanation;
+  }
+  if (state === "reviewed") {
+    if (form.allocation_amount.trim() !== baseline.allocation_amount.trim()) {
+      payload.allocation_amount = form.allocation_amount;
+    }
+    if (form.from_allocation_amount.trim() !== baseline.from_allocation_amount.trim()) {
+      payload.from_allocation_amount = form.from_allocation_amount;
+    }
+    payload.allocation_policy = "explicit";
+  }
+  return payload;
+}
+
+
+export function isStaleLinkReviewError(error: unknown): boolean {
   return (
-    link.state === "suggested" &&
-    deterministic &&
-    (link.confidence === "exact" || link.confidence === "strong") &&
-    !link.requires_review &&
-    (!(method === "same_onchain_scope" || method === "utxo_spend") ||
-      link.confidence === "exact") &&
-    typeof link.allocation_amount === "number" &&
-    !link.uses_chain_observation
+    (error as { envelope?: { error?: { code?: string } } })?.envelope?.error?.code ===
+    "source_funds_link_stale"
   );
 }
 

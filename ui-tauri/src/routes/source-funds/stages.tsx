@@ -549,11 +549,9 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusPill state={link.state} />
                     <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                      {state.reachableLinkIds.has(link.id)
-                        ? t("reviewQueue.badge.path")
-                        : link.to_transaction_id === state.selectedTxId
-                          ? t("reviewQueue.badge.target")
-                          : t("reviewQueue.badge.suggested")}
+                      {link.to_transaction_id === state.selectedTxId
+                        ? t("reviewQueue.badge.target")
+                        : t("reviewQueue.badge.path")}
                     </span>
                     <span className="font-medium">{t(`linkType.${link.link_type}`, { defaultValue: pretty(link.link_type) })}</span>
                     <span className="text-muted-foreground">

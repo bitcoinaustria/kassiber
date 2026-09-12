@@ -604,9 +604,6 @@ def _link_row_to_dict(conn: sqlite3.Connection, row: Mapping[str, Any]) -> dict[
         "link_type": row["link_type"],
         "state": row["state"],
         "confidence": row["confidence"],
-        "requires_review": bool(
-            row["state"] == "suggested" and not _is_bulk_reviewable_suggestion(row)
-        ),
         "method": row["method"],
         "asset": row["asset"],
         "allocation_amount": _btc_value(row["allocation_amount"]),
@@ -1010,9 +1007,48 @@ def update_link_review(
     explanation: str | None = None,
     uses_chain_observation: bool | None = None,
     chain_data_confirmed: bool | None = None,
+    expected_allocation_amount_msat: Any = None,
+    expected_from_allocation_amount_msat: Any = None,
 ) -> dict[str, Any]:
+    """Record a review decision, and only the edits the caller deliberately made.
+
+    Reviewing is not editing. Omitted amount fields keep their stored values, a
+    rejection may not carry an allocation edit at all, and the optional
+    ``expected_*_msat`` preconditions bind the decision to the amounts the
+    reviewer actually inspected, so an approval cannot land on newer, unseen
+    values.
+    """
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     link = _resolve_link(conn, profile["id"], link_ref)
+    if state is not None and _normalize_state(state) == "rejected" and (
+        allocation_amount not in (None, "") or from_allocation_amount not in (None, "")
+    ):
+        raise AppError(
+            "A rejected source-funds link cannot carry an allocation edit",
+            code="validation",
+            hint="Reject the link on its own, or correct the allocation in a separate review.",
+        )
+    for supplied, column, label in (
+        (expected_allocation_amount_msat, "allocation_amount", "allocation amount"),
+        (expected_from_allocation_amount_msat, "from_allocation_amount", "source amount"),
+    ):
+        if supplied in (None, ""):
+            continue
+        try:
+            expected = int(supplied)
+        except (TypeError, ValueError):
+            raise AppError(
+                f"Expected {label} must be an exact millisatoshi integer",
+                code="validation",
+            ) from None
+        if int(link[column] or 0) != expected:
+            raise AppError(
+                "This source-funds link changed since it was inspected",
+                code="source_funds_link_stale",
+                hint="Reload the investigation, check the updated amounts, and review it again.",
+                details={"link": link["id"], "field": column},
+                retryable=False,
+            )
     updates: dict[str, Any] = {}
     if state is not None:
         updates["state"] = _normalize_state(state)
@@ -1046,7 +1082,10 @@ def update_link_review(
         raise AppError("source-funds links review requires at least one update", code="validation")
     candidate_state = updates.get("state", link["state"])
     candidate_link_type = updates.get("link_type", link["link_type"])
-    if candidate_state == "reviewed":
+    # Validate whenever an allocation is written, not only on a transition into
+    # `reviewed`: an amount edit against a still-suggested link used to skip
+    # every bound check.
+    if candidate_state == "reviewed" or "allocation_amount" in updates or "from_allocation_amount" in updates:
         from_tx = _transaction_by_id(conn, profile["id"], link["from_transaction_id"])
         to_tx = _transaction_by_id(conn, profile["id"], link["to_transaction_id"])
         source = (
@@ -1406,12 +1445,49 @@ def _pair_has_rejected_link(
     )
 
 
+def _scoped_suggested_link_rows(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    target_transaction_id: str,
+) -> list[Mapping[str, Any]]:
+    return [
+        row
+        for row in _target_scoped_link_rows(conn, profile_id, target_transaction_id)
+        if row["state"] == "suggested"
+    ]
+
+
+def bulk_review_eligible_link_ids(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    target_transaction_id: str,
+) -> list[str]:
+    """The batch validator's verdict for one target scope.
+
+    This is the only eligibility definition. The preview publishes it and the
+    apply is bound to it, so a count can never disagree with what the server
+    would actually review. The apply still revalidates.
+    """
+    return [
+        str(row["id"])
+        for row in _validated_bulk_review_candidates(
+            conn,
+            profile_id,
+            _scoped_suggested_link_rows(conn, profile_id, target_transaction_id),
+        )
+    ]
+
+
 def _validated_bulk_review_candidates(
     conn: sqlite3.Connection,
     profile_id: str,
     rows: Sequence[Mapping[str, Any]],
 ) -> list[Mapping[str, Any]]:
     candidates: list[Mapping[str, Any]] = []
+    if not rows:
+        # The custody projection is the expensive part; never build it for an
+        # empty scope.
+        return candidates
     rows_by_id = {
         str(tx["id"]): tx for tx in _active_transaction_rows(conn, profile_id)
     }
@@ -1467,21 +1543,32 @@ def bulk_review_suggestions(
     *,
     target_transaction_ref: str,
     commit: bool = True,
+    link_ids: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """Accept deterministic source-funds suggestions as user-reviewed links.
 
     This is intentionally narrow: only exact allocations from the current
     stored custody projection can be accepted in bulk. Provider ids, privacy
     hints, time/amount guesses, and stale projections remain manual.
+
+    ``link_ids`` binds the apply to a set a caller already previewed. ``None``
+    reviews the whole target scope (the CLI and ``assemble_history`` rely on
+    that); an empty list reviews nothing, because a missing eligibility verdict
+    is unknown, not permission.
     """
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     target = hooks.resolve_transaction(conn, profile["id"], target_transaction_ref)
-    rows = [
-        row
-        for row in _target_scoped_link_rows(conn, profile["id"], target["id"])
-        if row["state"] == "suggested"
-    ]
-    reviewable = _validated_bulk_review_candidates(conn, profile["id"], rows)
+    rows = _scoped_suggested_link_rows(conn, profile["id"], target["id"])
+    considered = rows
+    if link_ids is not None:
+        if isinstance(link_ids, (str, bytes)) or len(link_ids) > SUGGESTION_WRITE_CAP:
+            raise AppError(
+                "source-funds bulk review accepts a bounded list of link ids",
+                code="validation",
+            )
+        selected = {str(item) for item in link_ids}
+        considered = [row for row in rows if str(row["id"]) in selected]
+    reviewable = _validated_bulk_review_candidates(conn, profile["id"], considered)
     now = _now()
     for row in reviewable:
         conn.execute(
@@ -1500,6 +1587,8 @@ def bulk_review_suggestions(
     ]
     return {
         "reviewed": len(reviewed_rows),
+        # Always the whole scoped-suggested population, so the list path and the
+        # None path report the same denominator.
         "skipped": len(rows) - len(reviewed_rows),
         "target_transaction_id": target["id"],
         "links": [_link_row_to_dict(conn, row) for row in reviewed_rows if row],

@@ -16,7 +16,10 @@ import { targetQueryArgs, type SourceFundsReviewContext } from "./caseScope";
 
 import {
   NO_ATTACHMENT,
-  isBulkReviewableLink,
+  amountInput,
+  isStaleLinkReviewError,
+  linkReviewFormFromLink,
+  linkReviewPayload,
   pretty,
   shortId,
   transactionRows,
@@ -235,13 +238,13 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     });
     return mapping;
   }, [rows, selectedTx]);
-  const resolveDetail = useDaemonMutation<{ transaction?: TransactionRow }>("ui.transactions.resolve", { invalidateQueries: false });
+  const resolveDetail = useDaemonMutation<{ transaction?: Tx }>("ui.transactions.resolve", { invalidateQueries: false });
   const openTxDetailById = async (txId: string) => {
     if (!txId) return;
     try {
       const envelope = await resolveDetail.mutateAsync({ query: txId });
       if (scope?.isCurrent?.() === false) return;
-      if (envelope.data?.transaction) setDetailTransaction(toDashboardTransaction(envelope.data.transaction as unknown as Tx, 0));
+      if (envelope.data?.transaction) setDetailTransaction(toDashboardTransaction(envelope.data.transaction, 0));
     } catch {
       if (scope?.isCurrent?.() !== false) addNotification({ title: t("header.title"), body: t("case.targetUnavailable"), tone: "info" });
     }
@@ -342,8 +345,11 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
   const blockers = report?.explain_gates.blockers ?? [];
   const warnings = report?.explain_gates.warnings ?? [];
 
-  // The canonical investigation owns graph reachability and evidence scope.
-  const reachableLinkIds = new Set(links.map((link) => link.id));
+  // Eligibility has exactly one definition, and it is the server's.
+  const bulkEligibleIds = useMemo(
+    () => new Set(preview.data?.data?.bulk_review?.eligible_link_ids ?? []),
+    [preview.data],
+  );
   const reviewQueueLinks = links;
   const selectedLink =
     reviewQueueLinks.find((link) => link.id === selectedLinkId) ??
@@ -352,14 +358,9 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
   const selectedSource = sources.find(
     (source) => source.id === selectedLink?.from_source_id,
   );
-  const bulkReviewableSuggestions = links.filter(
-    (link) => reachableLinkIds.has(link.id) && isBulkReviewableLink(link),
-  );
+  const bulkReviewableSuggestions = links.filter((link) => bulkEligibleIds.has(link.id));
   const manualSuggestionCount = links.filter(
-    (link) =>
-      reachableLinkIds.has(link.id) &&
-      link.state === "suggested" &&
-      !isBulkReviewableLink(link),
+    (link) => link.state === "suggested" && !bulkEligibleIds.has(link.id),
   ).length;
 
   // Persist only under the canonical database/workspace/profile key supplied by the scope wrapper.
@@ -413,25 +414,16 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
       }
       return;
     }
-    if (selectedLink.id === linkFormSourceId) {
+    // Re-key on updated_at too: a same-id refresh with changed content must
+    // rebuild the form rather than leave it describing a stale inspection.
+    const source = `${selectedLink.id}@${selectedLink.updated_at ?? ""}`;
+    if (source === linkFormSourceId) {
       return;
     }
     setSelectedLinkId(selectedLink.id);
-    setLinkFormSourceId(selectedLink.id);
-    setLinkForm({
-      link_type: selectedLink.link_type,
-      confidence: selectedLink.confidence,
-      allocation_amount:
-        typeof selectedLink.allocation_amount === "number"
-          ? selectedLink.allocation_amount.toFixed(8)
-          : "",
-      from_allocation_amount:
-        typeof selectedLink.from_allocation_amount === "number"
-          ? selectedLink.from_allocation_amount.toFixed(8)
-          : "",
-      explanation: selectedLink.explanation ?? "",
-      attachment_id: NO_ATTACHMENT,
-    });
+    setLinkFormSourceId(source);
+    // Exact msat -> BTC text, so an untouched field round-trips unchanged.
+    setLinkForm(linkReviewFormFromLink(selectedLink));
   }, [selectedLink, linkFormSourceId]);
 
   const txName = (id?: string | null) => {
@@ -475,8 +467,13 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
 
   const bulkReviewDeterministicLinks = async () => {
     if (!selectedTarget) return;
+    if (bulkEligibleIds.size === 0) return;
+    // Bound to the server's own eligible set for this target scope, which is
+    // what the count above reports -- including hops beyond the reviewed
+    // frontier, so one click still assembles the whole deterministic chain.
     const envelope = await bulkReviewLinks.mutateAsync({
       target_transaction: selectedTarget,
+      link_ids: [...bulkEligibleIds],
     });
     const reviewed = envelope.data?.reviewed ?? 0;
     const skipped = envelope.data?.skipped ?? 0;
@@ -489,16 +486,24 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
 
   const reviewSelectedLink = async (state: "reviewed" | "rejected") => {
     if (!selectedLink) return;
-    await reviewLink.mutateAsync({
-      link: selectedLink.id,
-      state,
-      link_type: linkForm.link_type,
-      confidence: linkForm.confidence,
-      allocation_amount: linkForm.allocation_amount || undefined,
-      from_allocation_amount: linkForm.from_allocation_amount || undefined,
-      allocation_policy: state === "reviewed" ? "explicit" : undefined,
-      explanation: linkForm.explanation,
-    });
+    try {
+      await reviewLink.mutateAsync(
+        linkReviewPayload({ link: selectedLink, form: linkForm, state }),
+      );
+    } catch (error) {
+      // A stale inspection is not retryable as-is; reload it so the reviewer
+      // can see what changed instead of clicking into the same refusal.
+      const stale = isStaleLinkReviewError(error);
+      if (stale) void preview.refetch();
+      if (scope?.isCurrent?.() !== false) {
+        addNotification({
+          title: t("toast.linkReviewFailed"),
+          body: t(stale ? "toast.linkReviewStaleBody" : "toast.linkReviewFailedBody"),
+          tone: "warning",
+        });
+      }
+      return;
+    }
     if (state === "reviewed" && linkForm.attachment_id !== NO_ATTACHMENT) {
       await attachLink.mutateAsync({
         link: selectedLink.id,
@@ -592,6 +597,7 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
 
   /** Prefill the gap form for a quantified missing-history finding. */
   const prefillGapForm = (gap?: {
+    amount_msat?: number | string | null;
     amount?: number | null;
     asset?: string;
     ref?: string;
@@ -603,9 +609,7 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
       label: current.label || t("gapDefaults.label"),
       asset: gap?.asset || current.asset,
       amount:
-        typeof gap?.amount === "number"
-          ? gap.amount.toFixed(8)
-          : current.amount || selectedTargetAmount,
+        amountInput(gap?.amount_msat) || current.amount || selectedTargetAmount,
       to_transaction:
         gap?.ref && txById.has(gap.ref) ? gap.ref : current.to_transaction,
       description:
@@ -703,7 +707,6 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     evidence,
     blockers,
     warnings,
-    reachableLinkIds,
     reviewQueueLinks,
     selectedLink,
     selectedLinkId,

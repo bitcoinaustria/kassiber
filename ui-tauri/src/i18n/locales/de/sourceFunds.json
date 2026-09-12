@@ -161,8 +161,7 @@
     "empty": "Noch keine passenden Verknüpfungen. Kassiber sucht nach Transfers mit gleicher id, geprüften Paaren, Provider-ids und engen Betrags-/Zeit-Hinweisen.",
     "badge": {
       "path": "Pfad",
-      "target": "Ziel",
-      "suggested": "Vorgeschlagen"
+      "target": "Ziel"
     },
     "arrow": "{{from}} -> {{to}}",
     "amountConfidence": "{{amount}} · {{confidence}}"
@@ -387,7 +386,10 @@
     "manualLinkBody": "Der geprüfte Fluss wurde aktualisiert.",
     "gapMarked": "Lücke als geprüft markiert",
     "sourceLinked": "Quelle verknüpft",
-    "sourcePathBody": "Der Mittelherkunftspfad wurde aktualisiert."
+    "sourcePathBody": "Der Mittelherkunftspfad wurde aktualisiert.",
+    "linkReviewFailed": "Prüfung nicht übernommen",
+    "linkReviewStaleBody": "Diese Verknüpfung hat sich seit deiner Prüfung geändert. Sieh dir die aktualisierten Werte an und prüfe sie erneut.",
+    "linkReviewFailedBody": "Kassiber konnte diese Prüfung nicht speichern."
   },
   "case": {
     "description": "Erkläre die Herkunft eines Betrags anhand der Nachweise in diesem Buch.",

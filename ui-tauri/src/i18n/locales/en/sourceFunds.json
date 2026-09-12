@@ -161,8 +161,7 @@
     "empty": "No matched links yet. Kassiber will look for same-id transfers, reviewed pairs, provider ids, and tight amount/time hints.",
     "badge": {
       "path": "Path",
-      "target": "Target",
-      "suggested": "Suggested"
+      "target": "Target"
     },
     "arrow": "{{from}} -> {{to}}",
     "amountConfidence": "{{amount}} · {{confidence}}"
@@ -387,7 +386,10 @@
     "manualLinkBody": "The reviewed flow has been updated.",
     "gapMarked": "Gap marked reviewed",
     "sourceLinked": "Source linked",
-    "sourcePathBody": "The source-funds path has been updated."
+    "sourcePathBody": "The source-funds path has been updated.",
+    "linkReviewFailed": "Link review not applied",
+    "linkReviewStaleBody": "This link changed since you inspected it. Check the updated values and review it again.",
+    "linkReviewFailedBody": "Kassiber could not save this review."
   },
   "case": {
     "description": "Explain the origin of one amount using the evidence in this book.",
