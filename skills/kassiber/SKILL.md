@@ -7,7 +7,7 @@ description: Use this skill when the user wants to use the Kassiber CLI for loca
 
 Use this skill for Kassiber CLI workflows. Kassiber has its own command surface, so agents should not guess flags or reuse commands from analogous tools.
 
-All `scripts/` paths in this skill are relative to the directory containing this `SKILL.md` file. Resolve `<skill-dir>` first, then use paths like `<skill-dir>/scripts/verify-state.sh`.
+This checked-in skill uses the shared reference files under `kassiber/ai/skill_references/`; keep those repository-relative links intact. Its own helper scripts and intake references live beside this file. Resolve `<skill-dir>` before using `<skill-dir>/scripts/verify-state.sh`.
 
 Kassiber accounts are wallet/reporting buckets, not a double-entry chart of accounts. Keep explanations simple unless the user explicitly asks for accounting theory.
 
@@ -43,7 +43,7 @@ If a fast-path command returns a structured error, inspect the envelope and take
 3. When the chat includes pasted Kassiber output or docs, identify the live user request separately from the quoted material before running commands.
 4. Use fast paths for common read-only workflows. For wallet sync or other operations that contact configured backends, read the relevant reference first and avoid feeding raw command output into remote AI context unless it is documented as public-safe.
 5. Before concluding a reference is missing, verify that you resolved it from `<skill-dir>` rather than the repo root or the current working directory.
-6. If a Kassiber command fails with `unrecognized arguments`, stop and check `--help` or [references/command-templates.md](references/command-templates.md) before retrying. Do not keep guessing positional versus flagged forms.
+6. If a Kassiber command fails with `unrecognized arguments`, stop and check `--help` or [command templates](../../kassiber/ai/skill_references/command-templates.md) before retrying. Do not keep guessing positional versus flagged forms.
 7. `--machine`, `--format`, and `--output` are global flags and must come before the subcommand tree, for example `kassiber --format plain reports balance-sheet`.
 8. Use `--machine` whenever the output needs to be parsed or piped into later steps.
 9. Use `--format plain` when the user wants report output shown in the terminal. Let Kassiber format financial values; do not recompute or restyle them.
@@ -70,7 +70,7 @@ If a fast-path command returns a structured error, inspect the envelope and take
 30. Never claim a BTC ↔ LBTC swap is already paired, carrying-value, or reflected in reports unless `kassiber --machine journals transfers list` shows the pair or `kassiber transfers pair` just succeeded and you reprocessed journals.
 31. When quarantines remain, distinguish processed holdings from raw transaction-net estimates. Reports show processed journal state only; any netting from `transactions list` must be labeled as an approximate diagnostic rather than a Kassiber holding.
 32. For rate coverage, do not infer the covered time window from `samples` or `days` alone. Use `kassiber rates range` with RFC3339 timestamps around the missing transactions.
-33. Treat Kassiber accounts as wallet/reporting buckets. Do not recommend double-entry charts of accounts, automatic fee expense postings, or external equity counterpart accounts unless the product gains an explicit ledger model.
+33. Treat wallet accounts as reporting buckets. Organizational double-entry work uses the separate opt-in general ledger described in [general accounting](../../docs/reference/general-accounting.md); never reinterpret wallet buckets or RP2 journals as ledger accounts or postings.
 34. For planning or codebase work, treat `TODO.md` as the executable backlog and `docs/plan/` as orientation/guardrails. Verify current behavior against code before acting on a plan doc.
 35. If `kassiber status` (or any other command) returns `passphrase_required`, the local DB is SQLCipher-encrypted. Either prompt the user interactively, or have them re-run the command with `--db-passphrase-fd <FD>` from a parent process. Never embed a passphrase in argv — there is no `--db-passphrase <value>` flag and there will not be one.
 36. `kassiber secrets init` is a one-time migration from plaintext to SQLCipher. After it runs, the original plaintext file is preserved as `kassiber.pre-encryption.sqlite3.bak`; Kassiber refuses to overwrite an existing rollback file at that path. Advise the user to verify the encrypted DB opens (`kassiber secrets verify`) and then `rm` the `.bak` themselves once they trust the new file. Forgetting the passphrase means data loss — there is no recovery path and `.kassiber` backups do not help.
@@ -93,13 +93,13 @@ If a fast-path command returns a structured error, inspect the envelope and take
 - Quarantined transactions are omitted from accurate downstream reporting until resolved or excluded.
 - Paginated list commands keep rows under command-specific keys such as `.data.records` and `.data.events`. Do not assume every list response uses the same field name.
 - Follow `next_cursor` only when the user asks for all/full/export/audit output. For top-N, largest/smallest, or summary questions, stop after the correctly sorted first page.
-- Cross-asset `--policy carrying-value` pairing is Austrian-only right now. Outside Austrian books, BTC ↔ LBTC manual pairs still stay on the normal SELL + BUY path, so do not describe them as carrying-value.
+- Carrying-value treatment depends on the book tax policy. Generic BTC ↔ LBTC rail changes can carry basis when `bitcoin_rail_carrying_value` permits it; inspect the reviewed relation and rebuilt journal before describing its treatment. Other unlike-asset treatment remains policy-specific.
 - `kassiber status` may resolve to a legacy XDG path on machines with older state trees. Use status output, not assumptions, to find the live database.
 - If `journals transfers list` reports `cross_asset_pairs: 0`, no cross-asset swap pair is active yet. Do not describe Austrian carry-value as already applied until that changes.
 - Coinbase `rates sync` normally uses missing transaction minutes and cached checked-minute state before falling back to a continuous `--days` warm-cache request. Verify actual coverage with `rates range` instead of hand-mathing sample counts.
-- If a skill reference lookup fails, the most common mistake is resolving `references/...` from repo root instead of `<skill-dir>/references/...`.
+- Resolve Markdown reference links relative to this skill file, including links to shared in-product references outside this directory.
 - Kassiber already has `reports export-pdf`; do not invent bespoke render scripts unless the user specifically wants a custom format beyond the built-in export.
-- Accounts are not a double-entry chart of accounts today. `account_type` and `asset` are descriptive bucket metadata; fees and external counterparties do not auto-post to separate accounts.
+- Wallet accounts are not the general ledger. `account_type` and `asset` are descriptive bucket metadata; the opt-in ledger has its own accounts and explicit posting workflow.
 
 ## Data Model
 
@@ -118,24 +118,24 @@ Related notes:
 - `backends` define sync transport endpoints.
 - `metadata` covers notes, tags, exclusions, and BIP329 labels.
 - `attachments` are managed separately from wallet config and transaction rows.
-- Cost basis is pooled per asset across all wallets in one set of books.
+- Cost basis is pooled per asset across the wallets of one book/profile, not across a workspace’s separate books.
 - Balance-sheet output groups holdings by the wallet's assigned bucket, not by account-type rollups or counterpart postings.
 - If multiple BTCPay stores point at the same real wallet, keep them in one Kassiber wallet or holdings will be duplicated.
 
 ## Workflow Routing
 
-- For fragile CLI command shapes and safe invocation patterns, read [references/command-templates.md](references/command-templates.md).
-- For first-run setup, roots, context, and books creation, read [references/onboarding.md](references/onboarding.md).
-- For wallet kinds, descriptor setup, backend selection, and imports, read [references/wallets-backends.md](references/wallets-backends.md).
+- For fragile CLI command shapes and safe invocation patterns, read [command templates](../../kassiber/ai/skill_references/command-templates.md).
+- For first-run setup, roots, context, and books creation, read [onboarding](../../kassiber/ai/skill_references/onboarding.md).
+- For wallet kinds, descriptor setup, backend selection, and imports, read [wallets and backends](../../kassiber/ai/skill_references/wallets-backends.md).
 - For onboarding a brand-new exchange / broker / custodial platform Kassiber does not support yet (the structured intake interview plus the importer implementation checklist), read [references/add-exchange.md](references/add-exchange.md). The user-facing entry point is the `/add-exchange` command. Most requests do not need an importer at all: `kassiber wallets analyze-file --file <export>` then `wallets import-ledger --column-map` reads the export as the platform wrote it, and `imports rollback` undoes a wrong mapping. Try that before proposing code.
-- For researching, drafting, and publishing a Kassiber GitHub feature request, read [references/feature-request.md](references/feature-request.md). The user-facing entry point is the `/feature-request` command.
-- For journal processing, quarantine handling, and transfer pairing, read [references/journal-processing.md](references/journal-processing.md).
-- For swap-candidate matching (Lightning ↔ Liquid, BTC ↔ LBTC peg, Boltz submarine swaps), the auto-pair rules engine, and saved review-queue views, read [references/swap-matching.md](references/swap-matching.md).
-- For notes, tags, exclusions, BIP329 labels, and attachments, read [references/metadata.md](references/metadata.md).
-- For balance sheet, portfolio, capital gains, balance history, PDF export, and rates, read [references/reports.md](references/reports.md).
-- For quick state checks and smoke validation, read [references/verification.md](references/verification.md) and use `scripts/verify-state.sh` when helpful.
-- For common failure modes and path confusion, read [references/troubleshooting.md](references/troubleshooting.md).
-- For SQLCipher encryption (`kassiber secrets ...`), `tar | age` backups (`kassiber backup ...`), passphrase entry, and the `--*-stdin` / `--*-fd` secret-input channels, read [references/secrets-and-backup.md](references/secrets-and-backup.md).
+- For researching, drafting, and publishing a Kassiber GitHub feature request, read [references/feature-request.md](references/feature-request.md).
+- For journal processing, quarantine handling, and transfer pairing, read [journal processing](../../kassiber/ai/skill_references/journal-processing.md).
+- For swap-candidate matching (Lightning ↔ Liquid, BTC ↔ LBTC peg, Boltz submarine swaps), the auto-pair rules engine, and saved review-queue views, read [swap matching](../../kassiber/ai/skill_references/swap-matching.md).
+- For notes, tags, exclusions, BIP329 labels, and attachments, read [metadata](../../kassiber/ai/skill_references/metadata.md).
+- For balance sheet, portfolio, capital gains, balance history, PDF export, and rates, read [reports](../../kassiber/ai/skill_references/reports.md).
+- For quick state checks and smoke validation, read [verification](../../kassiber/ai/skill_references/verification.md) and use `scripts/verify-state.sh` when helpful.
+- For common failure modes and path confusion, read [troubleshooting](../../kassiber/ai/skill_references/troubleshooting.md).
+- For SQLCipher encryption (`kassiber secrets ...`), `tar | age` backups (`kassiber backup ...`), passphrase entry, and the `--*-stdin` / `--*-fd` secret-input channels, read [secrets and backup](../../kassiber/ai/skill_references/secrets-and-backup.md).
 - For the local regtest integration harness and persistent demo book, read [../../docs/reference/testing.md](../../docs/reference/testing.md).
 
 ## Report Selection
