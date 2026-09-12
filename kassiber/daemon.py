@@ -2857,6 +2857,8 @@ def _ui_source_funds_payload_from_conn(
             explanation=args.get("explanation") if isinstance(args.get("explanation"), str) else None,
             uses_chain_observation=args.get("uses_chain_observation") if isinstance(args.get("uses_chain_observation"), bool) else None,
             chain_data_confirmed=args.get("chain_data_confirmed") if isinstance(args.get("chain_data_confirmed"), bool) else None,
+            expected_allocation_amount_msat=args.get("expected_allocation_amount_msat"),
+            expected_from_allocation_amount_msat=args.get("expected_from_allocation_amount_msat"),
         )
 
     if kind == "ui.source_funds.links.bulk_review":
@@ -2866,12 +2868,26 @@ def _ui_source_funds_payload_from_conn(
                 "ui.source_funds.links.bulk_review requires args.target_transaction",
                 code="validation",
             )
+        raw_link_ids = args.get("link_ids")
+        if raw_link_ids is not None and not (
+            isinstance(raw_link_ids, list)
+            and all(isinstance(item, str) and item.strip() for item in raw_link_ids)
+        ):
+            raise AppError(
+                "ui.source_funds.links.bulk_review args.link_ids must be a list of link ids",
+                code="validation",
+            )
         return core_source_funds.bulk_review_suggestions(
             conn,
             None,
             None,
             hooks,
             target_transaction_ref=target.strip(),
+            link_ids=(
+                [item.strip() for item in raw_link_ids]
+                if raw_link_ids is not None
+                else None
+            ),
         )
 
     if kind == "ui.source_funds.links.attach":

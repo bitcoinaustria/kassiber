@@ -24,6 +24,7 @@ export interface SyncResult {
   reconciliation_rows?: number;
   reconciliation_changed?: number;
   reactivated?: number;
+  observer_superseded?: number;
   utxos_skipped_unchanged?: boolean;
   utxos_refreshed?: boolean;
   force_full?: boolean;
@@ -159,6 +160,12 @@ function syncResultObservability(result: SyncResult | undefined): string | null 
         `${formatNumber(result.reactivated)} migration row${result.reactivated === 1 ? "" : "s"} reactivated`,
       );
     }
+  }
+  if (result.observer_superseded) {
+    // A balance-changing reconciliation: say so rather than reporting only "N updated".
+    parts.push(
+      `${formatNumber(result.observer_superseded)} obsolete projection${result.observer_superseded === 1 ? "" : "s"} retired`,
+    );
   }
   if (result.utxos_skipped_unchanged) {
     parts.push("UTXOs unchanged");

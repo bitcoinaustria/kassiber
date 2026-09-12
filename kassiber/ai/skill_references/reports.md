@@ -373,6 +373,13 @@ target instead of loading whole-book coverage. It returns the canonical report,
 reachable links/sources/evidence, documentary `input_needs`, and a
 `review_fingerprint` binding the current provenance facts and complete `recipe`.
 Respect `scope_truncated`; historical inbound coverage is not current holdings.
+Each link carries exact `allocation_amount_msat` / `from_allocation_amount_msat`;
+review a link by sending only what the user actually asked to change, and pass
+the inspected values as `expected_allocation_amount_msat` /
+`expected_from_allocation_amount_msat` so an approval cannot land on amounts that
+moved. Omitting an allocation keeps the stored one, and a rejection may not
+carry an allocation edit. `bulk_review.eligible_link_ids` is the only batch
+eligibility verdict; pass it as `link_ids` to bind an apply to what you read.
 CLI equivalents are `source-funds review-context --target-transaction <id>` and
 `source-funds request-input --target-transaction <id> --action <action>
 --expected-review-fingerprint <fingerprint> --recipe-file <context.json>`.

@@ -161,8 +161,7 @@
     "empty": "No matched links yet. Kassiber will look for same-id transfers, reviewed pairs, provider ids, and tight amount/time hints.",
     "badge": {
       "path": "Path",
-      "target": "Target",
-      "suggested": "Suggested"
+      "target": "Target"
     },
     "arrow": "{{from}} -> {{to}}",
     "amountConfidence": "{{amount}} · {{confidence}}"
@@ -271,6 +270,8 @@
     "noPreview": "Local case data is not available yet.",
     "manualReview_one": "{{count}} manual review item.",
     "manualReview_other": "{{count}} manual review items.",
+    "batchableBeyondInspection_one": "{{count}} more sits upstream of this view and is reviewed by the same action.",
+    "batchableBeyondInspection_other": "{{count}} more sit upstream of this view and are reviewed by the same action.",
     "unresolved": "unresolved"
   },
   "flowPath": {
@@ -387,7 +388,10 @@
     "manualLinkBody": "The reviewed flow has been updated.",
     "gapMarked": "Gap marked reviewed",
     "sourceLinked": "Source linked",
-    "sourcePathBody": "The source-funds path has been updated."
+    "sourcePathBody": "The source-funds path has been updated.",
+    "linkReviewFailed": "Link review not applied",
+    "linkReviewStaleBody": "This link changed since you inspected it. Check the updated values and review it again.",
+    "linkReviewFailedBody": "Kassiber could not save this review."
   },
   "case": {
     "description": "Explain the origin of one amount using the evidence in this book.",
@@ -494,6 +498,7 @@
   "coverageBucket": {
     "fully_traced": "Fully traced",
     "attested": "Attested",
+    "unattributed": "Origin unknown",
     "in_review": "In review",
     "untraced": "Untraced",
     "not_classified": "Not classified"
@@ -516,6 +521,13 @@
         "reviewedSourceRecordIsMissing": "Reviewed source record is missing.",
         "reviewedMissinghistoryGapIncludedItIsNot": "Reviewed missing-history gap included; it is not a real root source.",
         "reviewedParentTransactionIsMissing": "Reviewed parent transaction is missing."
+      }
+    },
+    "unknown_origin": {
+      "title": "Origin unknown",
+      "nextStep": "Record where these funds came from",
+      "messages": {
+        "aReviewedRootSourceEndsTheTrace": "A reviewed root source ends the trace without stating the economic origin of the funds."
       }
     },
     "missing_pricing": {
@@ -582,7 +594,7 @@
     },
     "stale_custody_component_lineage": {
       "title": "Custody evidence changed",
-      "nextStep": "Open the relevant link or source to resolve this finding",
+      "nextStep": "Re-review this link against the current custody projection",
       "messages": {
         "aReviewedCustodyLinkIsAbsentOr": "A reviewed custody link is absent or stale in the current stored projection."
       }

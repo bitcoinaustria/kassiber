@@ -17,11 +17,12 @@ from ._pdf_common import (
 )
 
 from .core.source_funds_diagram import (
+    LEGACY_SNAPSHOT_GUIDANCE,
     build_flow_drawing,
     build_ring_drawing,
     data_source_segments,
     detail_thresholds,
-    source_mix_segments,
+    source_mix_ring_spec,
 )
 
 
@@ -169,8 +170,8 @@ class _SourceFundsPdfBuilder:
     def _content_width(self) -> float:
         return float(self.rl["A4"][0] - 34 * self.rl["mm"])
 
-    def _source_mix_segments(self) -> list[dict[str, Any]]:
-        return source_mix_segments(self.report)
+    def _source_mix_ring_spec(self) -> dict[str, Any] | None:
+        return source_mix_ring_spec(self.report)
 
     def _data_source_segments(self) -> list[dict[str, Any]]:
         return data_source_segments(self.report)
@@ -447,27 +448,53 @@ class _SourceFundsPdfBuilder:
 
     def source_mix(self) -> list[Any]:
         story: list[Any] = [self.p("Source Mix", "h1")]
-        overview = self.report.get("overview") or {}
-        segments = self._source_mix_segments()
-        if segments:
+        allocations = self.report.get("allocations") or {}
+        mix_rows = self.report.get("source_mix") or []
+        spec = self._source_mix_ring_spec()
+        if spec:
             story.append(
                 build_ring_drawing(
                     self.rl,
                     self.fonts,
-                    segments,
-                    center_value=_btc(overview.get("target_amount")),
-                    center_label=f"{overview.get('target_asset') or 'BTC'} explained",
+                    spec["segments"],
+                    center_value=spec["center_value"],
+                    center_label=spec["center_label"],
                     width=self._content_width(),
                 )
             )
+        gross_phrase = ", ".join(
+            f"{_btc(row.get('amount'))} {row.get('asset') or ''}".strip()
+            for row in allocations.get("gross_source_requirement") or ()
+        )
+        if gross_phrase and not allocations.get("gross_matches_target"):
+            story.append(
+                self.p(
+                    f"Selected target: {_btc(allocations.get('target_amount'))} "
+                    f"{allocations.get('asset') or ''}. Gross upstream requirement: "
+                    f"{gross_phrase}.",
+                    "small",
+                )
+            )
+            route_difference = allocations.get("route_difference")
+            if route_difference is not None and float(route_difference) != 0:
+                story.append(
+                    self.p(
+                        f"The route difference of {_btc(abs(float(route_difference)))} "
+                        f"{allocations.get('asset') or ''} is not automatically classified "
+                        "as a fee.",
+                        "small",
+                    )
+                )
+        if any(row.get("asset") is None for row in mix_rows):
+            story.append(self.p(LEGACY_SNAPSHOT_GUIDANCE, "small"))
         rows = [["Source", "Amount", "Asset", "Share", "Count"]]
-        for row in self.report.get("source_mix") or []:
+        for row in mix_rows:
             rows.append(
                 [
                     _label(row.get("source_type")),
                     self.amt(row.get("amount")),
-                    self.report.get("allocations", {}).get("asset", ""),
-                    _pct(row.get("percent_of_target")),
+                    row.get("asset") or allocations.get("asset", ""),
+                    _pct(row.get("percent_of_target")) if row.get("asset") else "",
                     row.get("count", 0),
                 ]
             )

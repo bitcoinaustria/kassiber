@@ -323,3 +323,164 @@ def test_oversized_recipe_is_rejected_for_ai_but_available_to_local_workflow(boo
     assert result["ok"] is False
     assert "source_funds_recipe_too_large" in str(result)
     assert "review_fingerprint" not in str(result)
+
+
+def seed_subsatoshi_link(conn):
+    """A link whose exact amount cannot survive an 8-decimal round trip."""
+    hooks = daemon._source_funds_hooks()
+    source = daemon.core_source_funds.create_source(
+        conn, "ws", "profile", hooks, source_type="fiat_purchase", label="Exact purchase",
+        amount="0.00000099", fiat_value="0.099", acquired_at="2024-01-01T00:00:00Z",
+    )
+    link = daemon.core_source_funds.create_link(
+        conn, "ws", "profile", hooks, from_source_ref=source["id"], to_transaction_ref="in",
+        link_type="manual_source", allocation_amount="0.00000001234",
+    )
+    assert link["allocation_amount_msat"] == 1234
+    return link
+
+
+def review(conn, **args):
+    return daemon._ui_source_funds_payload_from_conn(conn, "ui.source_funds.links.review", args)
+
+
+def stored_msat(conn, link_id):
+    return conn.execute(
+        "SELECT allocation_amount FROM source_funds_links WHERE id=?", (link_id,)
+    ).fetchone()[0]
+
+
+def test_review_exposes_exact_millisatoshi_for_the_editor(book):
+    """The lossy float projection must not be the only amount a client can read."""
+    conn, _runtime = book
+    link = seed_subsatoshi_link(conn)
+    inspected = context(conn)
+    row = next(item for item in inspected["links"] if item["id"] == link["id"])
+    assert row["allocation_amount_msat"] == 1234
+    # Echoing the float projection back at 8 decimals would silently drop 234 msat.
+    assert f"{float(row['allocation_amount']):.8f}" == "0.00000001"
+
+
+def test_approving_without_an_amount_keeps_the_exact_stored_value(book):
+    conn, _runtime = book
+    link = seed_subsatoshi_link(conn)
+    result = review(
+        conn, link=link["id"], state="reviewed", allocation_policy="explicit",
+        expected_allocation_amount_msat=1234,
+    )
+    assert result["allocation_amount_msat"] == 1234
+    assert stored_msat(conn, link["id"]) == 1234
+
+
+def test_a_rejection_can_never_carry_an_allocation_edit(book):
+    conn, _runtime = book
+    link = seed_subsatoshi_link(conn)
+    with pytest.raises(AppError) as excinfo:
+        review(conn, link=link["id"], state="rejected", allocation_amount="0.00000000")
+    assert excinfo.value.code == "validation"
+    assert stored_msat(conn, link["id"]) == 1234
+    # Rejecting on its own still works.
+    assert review(conn, link=link["id"], state="rejected")["state"] == "rejected"
+    assert stored_msat(conn, link["id"]) == 1234
+
+
+def test_an_approval_cannot_land_on_amounts_that_changed_since_inspection(book):
+    conn, _runtime = book
+    link = seed_subsatoshi_link(conn)
+    conn.execute(
+        "UPDATE source_funds_links SET allocation_amount=? WHERE id=?", (5678, link["id"])
+    )
+    conn.commit()
+
+    with pytest.raises(AppError) as excinfo:
+        review(
+            conn, link=link["id"], state="reviewed", allocation_policy="explicit",
+            expected_allocation_amount_msat=1234,
+        )
+    assert excinfo.value.code == "source_funds_link_stale"
+    assert excinfo.value.retryable is False
+    # The refusal happens before any write.
+    assert stored_msat(conn, link["id"]) == 5678
+
+
+def test_a_deliberate_amount_edit_is_still_bounds_checked_without_a_state_change(book):
+    """An amount write used to skip every bound check when no state transition happened."""
+    conn, _runtime = book
+    link = seed_subsatoshi_link(conn)
+    # A still-suggested link never reached the reviewed-state validation branch.
+    conn.execute("UPDATE source_funds_links SET state='suggested' WHERE id=?", (link["id"],))
+    conn.commit()
+
+    with pytest.raises(AppError) as excinfo:
+        review(conn, link=link["id"], allocation_amount="21000000")
+    assert excinfo.value.code == "validation"
+    assert stored_msat(conn, link["id"]) == 1234
+    # A valid deliberate edit still lands.
+    assert review(conn, link=link["id"], allocation_amount="0.00000002")["allocation_amount_msat"] == 2000
+
+
+def seed_bulk_eligible_and_manual_links(conn):
+    """One batch-eligible custody suggestion plus one that must stay manual."""
+    hooks = daemon._source_funds_hooks()
+    eligible = daemon.core_source_funds.create_link(
+        conn, "ws", "profile", hooks, from_transaction_ref="out", to_transaction_ref="in",
+        link_type="self_transfer", state="suggested", method="custody_component",
+        confidence="exact", allocation_amount="0.00000050", from_allocation_amount="0.00000050",
+    )
+    manual = daemon.core_source_funds.create_link(
+        conn, "ws", "profile", hooks, from_transaction_ref="out", to_transaction_ref="in",
+        link_type="self_transfer", state="suggested", method="provider_trade_id",
+        confidence="strong", allocation_amount="0.00000050", from_allocation_amount="0.00000050",
+    )
+    return eligible, manual
+
+
+def test_bulk_eligibility_names_the_links_the_validator_accepts(book):
+    conn, _runtime = book
+    eligible, manual = seed_bulk_eligible_and_manual_links(conn)
+    published = context(conn)["bulk_review"]["eligible_link_ids"]
+
+    # A provider-id suggestion is scoped and suggested but never batch-eligible,
+    # so the published set is a real verdict rather than "everything suggested".
+    assert manual["id"] not in published
+    assert published == [] or published == [eligible["id"]]
+
+
+def test_the_wire_no_longer_carries_the_preliminary_eligibility_flag(book):
+    conn, _runtime = book
+    seed_source(conn)
+    assert all("requires_review" not in item for item in context(conn)["links"])
+
+
+def test_bulk_apply_is_bound_to_the_ids_the_preview_published(book):
+    conn, _runtime = book
+    _eligible, manual = seed_bulk_eligible_and_manual_links(conn)
+
+    def apply(**args):
+        return daemon._ui_source_funds_payload_from_conn(
+            conn, "ui.source_funds.links.bulk_review", {"target_transaction": "in", **args},
+        )
+
+    # A missing eligibility verdict is unknown, not permission.
+    assert apply(link_ids=[])["reviewed"] == 0
+    # An id the validator rejects stays manual even when the caller names it.
+    assert apply(link_ids=[manual["id"]])["reviewed"] == 0
+    assert conn.execute(
+        "SELECT state FROM source_funds_links WHERE id=?", (manual["id"],)
+    ).fetchone()[0] == "suggested"
+    # `skipped` uses the whole scoped-suggested population on either path, so a
+    # bounded apply cannot understate what is left.
+    assert apply(link_ids=[])["skipped"] == apply()["skipped"] + apply()["reviewed"]
+    with pytest.raises(AppError):
+        apply(link_ids="not-a-list")
+
+
+def test_eligibility_is_advisory_and_never_invalidates_a_pending_save(book):
+    """A custody-projection change must not make an authored inspection stale."""
+    conn, _runtime = book
+    seed_source(conn)
+    inspected = context(conn)
+    packet = dict(inspected)
+    packet.pop("bulk_review")
+    packet.pop("review_fingerprint")
+    assert source_funds_review._digest(packet) == inspected["review_fingerprint"]

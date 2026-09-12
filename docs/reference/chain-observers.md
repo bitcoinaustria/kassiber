@@ -170,14 +170,44 @@ facts cannot be applied together: the coordinator raises
 `observer_projection_conflict` instead of running a shadow observer or falling
 back after dependency application begins.
 
-Authoritative Bitcoin-family transaction identity is case-insensitive. Refresh
-updates the existing row in place and passes that exact row id into provenance.
-If legacy imports left several rows for the same wallet/txid/direction/asset,
-one active row may be selected only when every sibling was already excluded
-through the audited transaction metadata action. Multiple active rows, or
-multiple excluded rows with no selected keeper, remain a fail-closed
-`observer_projection_conflict`; refresh never merges, deletes or automatically
-excludes authored transaction rows.
+Authoritative Bitcoin-family transaction identity is (wallet, canonical txid,
+asset) and is case-insensitive. Direction is a projection of the wallet's
+currently watched scripts, not part of that identity: when the watched set
+expands, the same transaction can stop being a receipt and become a spend.
+Refresh reinterprets the existing row in place and passes that exact row id into
+provenance, so reviewed references, authored metadata and edit history survive.
+A supporting (non-observer) import can no longer replace the observed payload of
+a row under a closed observation commitment, so an ordinary price or metadata
+enrichment cannot leave that provenance in a silent graph-hash mismatch.
+
+A row of the other direction is eligible for reinterpretation only when it still
+carries this observer channel's own graph- and quantity-bound provenance. A
+Lightning event, an exchange record, another wallet's leg or a hand-authored row
+therefore never qualifies. When a book already holds two active projections of
+one transaction (left behind by the earlier direction-qualified matcher), the
+next refresh retires the obsolete one by excluding it -- never deleting it --
+and reports it as `observer_superseded`. Widening and narrowing a watched set
+keeps converging because reinterpretation happens in place; no exclusion is
+created along the way.
+
+Refresh still never merges or deletes transaction rows, and never re-includes an
+excluded one: `excluded` is outside the observation commitment, so a row the user
+excluded deliberately is indistinguishable from one the observer retired, and
+guessing either way would silently overturn a decision. It also stops rather than
+deciding for the user when authored meaning is at stake. It fails closed with
+`observer_projection_conflict` when a row it would retire carries a note, review
+status, tags or overrides (`authored_superseded_transaction_row`), when an
+authored `kind_override` would contradict the observed direction
+(`authored_kind_contradicts_direction`), when a row the user excluded
+deliberately owns the observed direction (`excluded_direction_owns_observation`),
+and for the pre-existing ambiguity cases
+(`multiple_active_transaction_rows`, `multiple_excluded_transaction_rows`,
+`excluded_exact_transaction_row`). One refresh producing opposite directions for
+the same transaction is `conflicting_observer_projection_records`.
+
+The retirement sets `excluded`, which is a replicated, high-stakes column: device
+sync records it as an ordinary signed row change. It is deterministic across
+replicas, so steady-state convergence is unaffected.
 
 ## Capability matrix
 

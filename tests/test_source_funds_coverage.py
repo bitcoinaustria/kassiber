@@ -476,6 +476,32 @@ class CoverageCoreTests(unittest.TestCase):
         self._add_link(to_tx_id=tx, from_source_id=real, allocation_msat=50_000)
         self.assertEqual(self._classify(tx), "attested")
 
+    def test_unknown_origin_is_not_fully_traced(self):
+        """"Origin unknown" is exportable but states nothing; it is not established origin."""
+        tx = self._add_inbound_tx("unattributed", 100_000)
+        src = self._add_source("unknown", amount_msat=100_000)
+        self._add_link(to_tx_id=tx, from_source_id=src, allocation_msat=100_000)
+        self.assertEqual(self._classify(tx), "unattributed")
+
+    def test_unknown_origin_is_reported_separately_from_an_attestation(self):
+        tx = self._add_inbound_tx("unknown-vs-attested", 100_000)
+        src = self._add_source("unknown", amount_msat=100_000)
+        self._add_link(to_tx_id=tx, from_source_id=src, allocation_msat=100_000)
+        attested = self._add_inbound_tx("attested-only", 100_000)
+        attest_src = self._add_source("missing_history")
+        self._add_link(to_tx_id=attested, from_source_id=attest_src, allocation_msat=100_000)
+        self.assertEqual(self._classify(tx), "unattributed")
+        self.assertEqual(self._classify(attested), "attested")
+
+    def test_traced_sibling_does_not_offset_an_unknown_root(self):
+        """The weakest claim in a report wins; a real root cannot vouch for an unknown one."""
+        tx = self._add_inbound_tx("mixed-unknown", 100_000)
+        unknown = self._add_source("unknown", amount_msat=50_000)
+        real = self._add_source("fiat_purchase", amount_msat=50_000)
+        self._add_link(to_tx_id=tx, from_source_id=unknown, allocation_msat=50_000)
+        self._add_link(to_tx_id=tx, from_source_id=real, allocation_msat=50_000)
+        self.assertEqual(self._classify(tx), "unattributed")
+
     def test_walks_through_parent_transaction_to_root(self):
         target = self._add_inbound_tx("target", 100_000, occurred_at="2026-04-02T09:00:00Z")
         parent = self._add_inbound_tx("parent", 100_000, occurred_at="2026-04-01T09:00:00Z")

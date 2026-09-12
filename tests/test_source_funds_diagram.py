@@ -62,7 +62,7 @@ class FlowDiagramEdgeTests(unittest.TestCase):
                 {
                     "from": "s1",
                     "to": "t1",
-                    "percent_of_target": "100.0",
+                    "share_of_target": "100.0",
                     "link_type": "self_transfer",
                 }
             ],
@@ -80,7 +80,7 @@ class FlowDiagramEdgeTests(unittest.TestCase):
     def test_same_column_edge_is_skipped(self):
         flow = self._flow()
         # A degenerate self-referential edge shares a column -> no connector.
-        flow["edges"] = [{"from": "s1", "to": "s1", "percent_of_target": "100.0"}]
+        flow["edges"] = [{"from": "s1", "to": "s1", "share_of_target": "100.0"}]
         drawing = build_flow_drawing(self.rl, self.fonts, flow, width=400.0)
         self.assertEqual(_line_count(drawing), 0)
 

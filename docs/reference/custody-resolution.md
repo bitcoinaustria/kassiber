@@ -18,7 +18,9 @@ wallets.
    RP2. Reports, graphs and AI read the resulting stored projection.
 
 An export's transaction hash can identify an event, but graph-shaped imported
-JSON cannot impersonate a native observer. Provider IDs, matching amounts and
+JSON cannot impersonate a native observer, and a supporting import cannot erase
+one either: enrichment updates prices and still-empty metadata columns while an
+observation under a closed provenance commitment stays intact. Provider IDs, matching amounts and
 nearby timestamps remain candidate evidence. A reviewed component can supply
 missing historical meaning with explicit quantities and durable provenance.
 

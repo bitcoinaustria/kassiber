@@ -2,6 +2,9 @@
 // daemon envelopes, CLI-precise vocabularies, and pure row helpers shared
 // by every stage of the workstation.
 
+import { type CustodyExactInteger } from "@/lib/custodyComponentBulk";
+import { msatToBtcInput } from "@/routes/transfers-custody/guidedComponentModel";
+
 export type TransactionRow = {
   id?: string;
   transaction_id?: string;
@@ -52,6 +55,7 @@ export type SourceFundsCoverageBucket = {
 export type SourceFundsCoverageBuckets = {
   fully_traced: SourceFundsCoverageBucket;
   attested: SourceFundsCoverageBucket;
+  unattributed: SourceFundsCoverageBucket;
   in_review: SourceFundsCoverageBucket;
   untraced: SourceFundsCoverageBucket;
   not_classified: SourceFundsCoverageBucket;
@@ -109,18 +113,10 @@ export type SourceFundsFinding = {
   message: string;
   ref?: string;
   amount?: number | null;
-  amount_msat?: number | null;
+  amount_msat?: number | string | null;
   asset?: string;
   next_step?: SourceFundsFindingNextStep;
 };
-
-
-export const BULK_REVIEWABLE_METHODS = new Set([
-  "same_onchain_scope",
-  "transaction_pair",
-  "utxo_spend",
-  "payment_hash",
-]);
 
 
 export type SourceFundsPreview = {
@@ -147,10 +143,13 @@ export type SourceFundsPreview = {
   };
   source_mix: {
     source_type: string;
+    /** Absent on cases saved before source assets were recorded. */
+    asset?: string | null;
     amount: number;
     amount_msat?: number;
     count: number;
-    percent_of_target?: number;
+    /** Null unless the gross upstream demand equals the target in one asset. */
+    percent_of_target?: number | null;
   }[];
   report_context?: {
     tax_country?: string;
@@ -315,13 +314,15 @@ export type SourceFundsLink = {
   link_type: string;
   state: string;
   confidence: string;
-  requires_review?: boolean;
   method: string;
   asset: string;
   allocation_amount?: number | null;
+  allocation_amount_msat?: CustodyExactInteger | null;
   from_allocation_amount?: number | null;
+  from_allocation_amount_msat?: CustodyExactInteger | null;
   allocation_policy: string;
   explanation?: string;
+  updated_at?: string;
   uses_chain_observation?: boolean;
   attachments?: EvidenceAttachment[];
 };
@@ -618,18 +619,105 @@ export function stringValue(value: unknown): string {
 }
 
 
-export function isBulkReviewableLink(link: SourceFundsLink) {
-  const method = link.method || "";
-  const deterministic = BULK_REVIEWABLE_METHODS.has(method);
+/** Mirrors SUGGESTION_WRITE_CAP: the daemon refuses a longer id list. */
+export const BULK_REVIEW_ID_LIMIT = 500;
+
+
+export type LinkReviewForm = {
+  link_type: string;
+  confidence: string;
+  allocation_amount: string;
+  from_allocation_amount: string;
+  explanation: string;
+  attachment_id: string;
+};
+
+
+/** Exact BTC input text for an msat integer, or "" when there is no amount. */
+export function amountInput(msat: number | string | null | undefined): string {
+  // BigInt("") is 0n, so an empty value must never reach the formatter.
+  if (msat === null || msat === undefined || msat === "") return "";
+  return msatToBtcInput(msat as CustodyExactInteger);
+}
+
+
+export function linkReviewFormFromLink(link: SourceFundsLink): LinkReviewForm {
+  return {
+    link_type: link.link_type,
+    confidence: link.confidence,
+    allocation_amount: amountInput(link.allocation_amount_msat),
+    from_allocation_amount: amountInput(link.from_allocation_amount_msat),
+    explanation: link.explanation ?? "",
+    attachment_id: NO_ATTACHMENT,
+  };
+}
+
+
+/**
+ * Build a review payload carrying only what the reviewer deliberately changed.
+ *
+ * Approving is not editing: an untouched amount is omitted so the server keeps
+ * its exact stored millisatoshis, and a rejection never carries an allocation
+ * at all. The expected_* preconditions bind the decision to the amounts that
+ * were actually inspected.
+ */
+export function linkReviewPayload({
+  link,
+  form,
+  state,
+}: {
+  link: SourceFundsLink;
+  form: LinkReviewForm;
+  state: "reviewed" | "rejected";
+}): Record<string, unknown> {
+  const baseline = linkReviewFormFromLink(link);
+  const payload: Record<string, unknown> = { link: link.id, state };
+  if (link.allocation_amount_msat !== null && link.allocation_amount_msat !== undefined) {
+    payload.expected_allocation_amount_msat = link.allocation_amount_msat;
+  }
+  if (
+    link.from_allocation_amount_msat !== null &&
+    link.from_allocation_amount_msat !== undefined
+  ) {
+    payload.expected_from_allocation_amount_msat = link.from_allocation_amount_msat;
+  }
+  // Both selects sit beside the Reject button, so a deliberate change to them
+  // is written on either decision.
+  if (form.link_type !== baseline.link_type) payload.link_type = form.link_type;
+  if (form.confidence !== baseline.confidence) payload.confidence = form.confidence;
+  if (form.explanation.trim() !== baseline.explanation.trim()) {
+    payload.explanation = form.explanation;
+  }
+  if (state === "reviewed") {
+    if (form.allocation_amount.trim() !== baseline.allocation_amount.trim()) {
+      payload.allocation_amount = form.allocation_amount;
+    }
+    if (form.from_allocation_amount.trim() !== baseline.from_allocation_amount.trim()) {
+      payload.from_allocation_amount = form.from_allocation_amount;
+    }
+    payload.allocation_policy = "explicit";
+  }
+  return payload;
+}
+
+
+/** True when the form still shows exactly what the link says (no unsaved edits). */
+export function formMatchesLink(form: LinkReviewForm, link: SourceFundsLink): boolean {
+  const baseline = linkReviewFormFromLink(link);
   return (
-    link.state === "suggested" &&
-    deterministic &&
-    (link.confidence === "exact" || link.confidence === "strong") &&
-    !link.requires_review &&
-    (!(method === "same_onchain_scope" || method === "utxo_spend") ||
-      link.confidence === "exact") &&
-    typeof link.allocation_amount === "number" &&
-    !link.uses_chain_observation
+    form.link_type === baseline.link_type &&
+    form.confidence === baseline.confidence &&
+    form.allocation_amount.trim() === baseline.allocation_amount.trim() &&
+    form.from_allocation_amount.trim() === baseline.from_allocation_amount.trim() &&
+    form.explanation.trim() === baseline.explanation.trim()
+  );
+}
+
+
+export function isStaleLinkReviewError(error: unknown): boolean {
+  return (
+    (error as { envelope?: { error?: { code?: string } } })?.envelope?.error?.code ===
+    "source_funds_link_stale"
   );
 }
 
@@ -637,6 +725,7 @@ export function isBulkReviewableLink(link: SourceFundsLink) {
 export const COVERAGE_BUCKET_ORDER: (keyof SourceFundsCoverageBuckets)[] = [
   "fully_traced",
   "attested",
+  "unattributed",
   "in_review",
   "untraced",
   "not_classified",
@@ -646,6 +735,7 @@ export const COVERAGE_BUCKET_ORDER: (keyof SourceFundsCoverageBuckets)[] = [
 export const COVERAGE_BUCKET_LABELS: Record<keyof SourceFundsCoverageBuckets, string> = {
   fully_traced: "Fully traced",
   attested: "Attested",
+  unattributed: "Origin unknown",
   in_review: "In review",
   untraced: "Untraced",
   not_classified: "Not classified",
@@ -655,6 +745,7 @@ export const COVERAGE_BUCKET_LABELS: Record<keyof SourceFundsCoverageBuckets, st
 export const COVERAGE_BUCKET_TONES: Record<keyof SourceFundsCoverageBuckets, string> = {
   fully_traced: "text-emerald-700 dark:text-emerald-300",
   attested: "text-sky-700 dark:text-sky-300",
+  unattributed: "text-orange-700 dark:text-orange-300",
   in_review: "text-amber-700 dark:text-amber-300",
   untraced: "text-rose-700 dark:text-rose-300",
   not_classified: "text-muted-foreground",
@@ -674,6 +765,7 @@ export function coverageSummary(coverage?: SourceFundsCoverage) {
 export const COVERAGE_BUCKET_BARS: Record<keyof SourceFundsCoverageBuckets, string> = {
   fully_traced: "bg-emerald-500",
   attested: "bg-sky-500",
+  unattributed: "bg-orange-500",
   in_review: "bg-amber-500",
   untraced: "bg-rose-500",
   not_classified: "bg-muted-foreground/40",

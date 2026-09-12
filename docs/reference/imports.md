@@ -220,6 +220,13 @@ exports may pass stronger kinds such as `exchange_execution`,
 `btcpay_invoice`, or `btcpay_payment`. Stronger later pricing can replace weaker
 earlier pricing for the same transaction.
 
+Pricing provenance is separate from observer authority. When a supporting import
+matches a transaction whose payload is a chain observation still under its own
+closed provenance commitment, the import updates pricing and still-empty
+metadata columns but does not replace that stored observation. Only another
+authoritative refresh may correct or withdraw it, so a CSV price row cannot cost
+the book the evidence a later journal build needs.
+
 If imported transactions do not carry `fiat_rate` or `fiat_value`, `journals process` first tries to backfill pricing from the local rates cache. When `confirmed_at` is present, Kassiber prices from that timestamp; otherwise it falls back to `occurred_at`. Liquid Bitcoin import spellings such as `L-BTC` are normalized to `LBTC` and use the BTC fiat rate because L-BTC is pegged one-to-one with BTC. Coarse provider samples such as daily historical fallback are stored with provenance but quarantined for pricing review instead of being silently accepted as exact FMV.
 
 For inbound transactions, explicit earn-like `kind` values such as `income`,
