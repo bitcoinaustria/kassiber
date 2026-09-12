@@ -66,6 +66,10 @@ _CONFIDENCE_RANK = {"unknown": 0, "weak": 1, "strong": 2, "exact": 3}
 ALLOCATION_POLICIES = ("explicit", "heuristic", "unknown")
 PRIVACY_LINK_TYPES = {"coinjoin", "payjoin"}
 ATTESTATION_SOURCE_TYPES = {"missing_history", "opening_balance_attestation"}
+# An attestation asserts a documented prior-history stop. ``unknown`` asserts
+# nothing about economic origin, so it is neither a traced root nor an
+# attestation and must never be presented as fully established origin.
+UNKNOWN_ORIGIN_SOURCE_TYPES = {"unknown"}
 DETERMINISTIC_BULK_REVIEW_METHODS = {
     # This compatibility method now means a current allocation from the stored
     # custody projection. It covers native evidence and reviewed components,
@@ -2421,15 +2425,28 @@ def _build_simplified_flow(report: Mapping[str, Any]) -> dict[str, Any]:
         )
 
     target_amount_msat = target.get("required_amount_msat") or target.get("amount_msat")
+    allocations = report.get("allocations") or {}
+    target_asset_code = normalize_asset_code(allocations.get("asset") or target.get("asset") or "")
+    gross_matches_target = bool(allocations.get("gross_matches_target"))
     simplified_edges = []
     for edge in edges:
         parent = str(edge.get("from") or "")
         child = str(edge.get("to") or "")
         if parent in included and child in included:
             allocation_msat = edge.get("allocation_amount_msat")
-            percent_of_target = None
-            if target_amount_msat and allocation_msat is not None:
-                percent_of_target = round((allocation_msat / target_amount_msat) * 100, 4)
+            # A share of the target must be bounded by the target and denominated
+            # in it. A deflating hop can carry more than the selected target even
+            # when the roots sum to it exactly, so this test is per edge and never
+            # inherited from the root aggregate alone.
+            share_of_target = None
+            if (
+                gross_matches_target
+                and target_amount_msat
+                and allocation_msat is not None
+                and allocation_msat <= target_amount_msat
+                and normalize_asset_code(edge.get("asset") or "") == target_asset_code
+            ):
+                share_of_target = round((allocation_msat / target_amount_msat) * 100, 4)
             simplified_edges.append(
                 {
                     "id": edge.get("id", ""),
@@ -2439,7 +2456,7 @@ def _build_simplified_flow(report: Mapping[str, Any]) -> dict[str, Any]:
                     "asset": edge.get("asset", ""),
                     "amount": edge.get("allocation_amount"),
                     "amount_msat": allocation_msat,
-                    "percent_of_target": percent_of_target,
+                    "share_of_target": share_of_target,
                     "deferred_privacy_hop": edge.get("link_type") in PRIVACY_LINK_TYPES,
                 }
             )
@@ -2457,7 +2474,12 @@ def _build_simplified_flow(report: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _source_mix_phrase(source_mix: Sequence[Mapping[str, Any]], asset: str) -> str:
+def _source_mix_phrase(source_mix: Sequence[Mapping[str, Any]], fallback_asset: str) -> str:
+    """Render the reviewed mix in each row's own denomination.
+
+    ``fallback_asset`` is used only for rows saved before source assets were
+    recorded; it is never stamped onto a row that names its own asset.
+    """
     if not source_mix:
         return "no reviewed root sources"
     parts = []
@@ -2465,10 +2487,18 @@ def _source_mix_phrase(source_mix: Sequence[Mapping[str, Any]], asset: str) -> s
         amount = _btc_value(row.get("amount_msat"))
         percent = row.get("percent_of_target")
         suffix = f", {float(percent):.1f}% of target" if percent is not None else ""
-        parts.append(f"{_label(row.get('source_type'))}: {amount:.8f} {asset}{suffix}")
+        row_asset = row.get("asset") or fallback_asset
+        parts.append(f"{_label(row.get('source_type'))}: {amount:.8f} {row_asset}{suffix}")
     if len(source_mix) > 4:
         parts.append(f"{len(source_mix) - 4} more source categories")
     return "; ".join(parts)
+
+
+def _gross_requirement_phrase(allocations: Mapping[str, Any]) -> str:
+    return ", ".join(
+        f"{float(row.get('amount') or 0):.8f} {row.get('asset') or ''}".strip()
+        for row in allocations.get("gross_source_requirement") or ()
+    )
 
 
 def _add_report_shape(envelope: dict[str, Any]) -> None:
@@ -2501,7 +2531,7 @@ def _add_report_shape(envelope: dict[str, Any]) -> None:
         "transaction_count": len(tx_nodes),
         "link_count": len(edges),
         "root_source_count": len(source_nodes),
-        "source_category_count": len(source_mix),
+        "source_category_count": len({row.get("source_type") for row in source_mix}),
         "data_source_count": len(data_sources),
         "blocker_count": blocker_count,
         "warning_count": warning_count,
@@ -2510,6 +2540,23 @@ def _add_report_shape(envelope: dict[str, Any]) -> None:
     envelope["data_provenance_summary"] = _summarize_data_provenance(nodes)
     envelope["flow_levels"] = _build_flow_levels(envelope)
     envelope["simplified_flow"] = _build_simplified_flow(envelope)
+    # Say the gross number out loud exactly when it differs from the selected
+    # target; a matching gross needs no explanation and a standing reassurance
+    # line would be noise.
+    allocations = envelope.get("allocations") or {}
+    gross_phrase = _gross_requirement_phrase(allocations)
+    gross_sentence = ""
+    if gross_phrase and not allocations.get("gross_matches_target"):
+        gross_sentence = (
+            f"Selected target: {float(target.get('required_amount') or 0):.8f} {target_asset}. "
+            f"Gross upstream requirement: {gross_phrase}. "
+        )
+        route_difference = allocations.get("route_difference")
+        if route_difference is not None and float(route_difference) != 0:
+            gross_sentence += (
+                f"The route difference of {abs(float(route_difference)):.8f} {target_asset} "
+                "is not automatically classified as a fee. "
+            )
     envelope["narrative"] = {
         "generated_by": "local_rule_summary",
         "paragraphs": [
@@ -2521,7 +2568,8 @@ def _add_report_shape(envelope: dict[str, Any]) -> None:
             ),
             (
                 f"The reviewed source mix is {_source_mix_phrase(source_mix, target_asset)}. "
-                f"The path spans {envelope['overview']['time_range']['start'] or 'unknown start'} "
+                + gross_sentence
+                + f"The path spans {envelope['overview']['time_range']['start'] or 'unknown start'} "
                 f"to {envelope['overview']['time_range']['end'] or 'unknown end'} and uses "
                 f"{len(data_sources)} local data source{'' if len(data_sources) == 1 else 's'}."
             ),
@@ -2565,17 +2613,17 @@ def attach_diagram_svgs(envelope: dict[str, Any]) -> None:
             ),
         )
 
-    mix_segments = diagram.source_mix_segments(envelope)
-    if mix_segments:
+    mix_spec = diagram.source_mix_ring_spec(envelope)
+    if mix_spec:
         diagrams["source_mix_ring_svg"] = diagram.render_drawing_to_svg(
             rl,
             fonts,
             diagram.build_ring_drawing(
                 rl,
                 fonts,
-                mix_segments,
-                center_value=f"{float(overview.get('target_amount') or 0):.8f}",
-                center_label=f"{overview.get('target_asset') or 'BTC'} explained",
+                mix_spec["segments"],
+                center_value=mix_spec["center_value"],
+                center_label=mix_spec["center_label"],
                 width=width,
             ),
         )
@@ -2673,7 +2721,12 @@ def build_report(
     nodes: dict[str, dict[str, Any]] = {}
     edges: list[dict[str, Any]] = []
     findings: list[dict[str, Any]] = []
+    # Keyed by (normalized source asset, source type): a peg-out route can fund a
+    # BTC target from an L-BTC root, and summing those denominations into one row
+    # would silently relabel them with the target asset.
     source_mix = defaultdict(lambda: {"amount_msat": 0, "count": 0})
+    unknown_origin_msat = defaultdict(int)
+    unknown_origin_assets: dict[str, str] = {}
     source_consumption_msat = defaultdict(int)
     disclosure_txids: set[str] = set()
     explorer_links_by_txid: dict[str, dict[str, Any]] = {}
@@ -2988,7 +3041,14 @@ def build_report(
                         "Opening balance is an attested prior-history stop, not a fully traced root source.",
                         ref=source["id"],
                     )
-                mix = source_mix[source["source_type"]]
+                elif source["source_type"] in UNKNOWN_ORIGIN_SOURCE_TYPES:
+                    # One root can fund several legs; accumulate here and emit a
+                    # single finding for the whole unattributed amount below, so the
+                    # gaps table never states one leg's share as the total.
+                    unknown_origin_msat[source["id"]] += int(source_required or 0)
+                    unknown_origin_assets[source["id"]] = source["asset"]
+                mix_asset = normalize_asset_code(source["asset"])
+                mix = source_mix[(mix_asset, source["source_type"])]
                 mix["amount_msat"] += source_required
                 mix["count"] += 1
                 for attachment in conn.execute(
@@ -3119,22 +3179,52 @@ def build_report(
 
     if traversal.truncated:
         _emit_size_truncation()
+    for source_id, unattributed_msat in sorted(unknown_origin_msat.items()):
+        _add_finding(
+            findings,
+            "unknown_origin",
+            "warning",
+            "A reviewed root source ends the trace without stating the economic origin of the funds.",
+            ref=source_id,
+            amount_msat=int(unattributed_msat),
+            asset=unknown_origin_assets.get(source_id),
+        )
     enrich_findings_with_next_steps(findings)
     blockers = [finding for finding in findings if finding["severity"] == "blocker"]
     warnings = [finding for finding in findings if finding["severity"] == "warning"]
+    gross_by_asset: dict[str, int] = defaultdict(int)
+    for (mix_asset, _source_type), values in source_mix.items():
+        gross_by_asset[mix_asset] += int(values["amount_msat"])
+    target_asset_code = normalize_asset_code(target["asset"])
+    # A target composition share is only meaningful when every root is denominated
+    # in the target asset AND the gross upstream requirement equals the selected
+    # target. Any route difference (a mining fee on a disclosed hop, an unequal
+    # reviewed ratio) makes the quotient a gross-over-target ratio, not a share.
+    gross_matches_target = (
+        bool(target_amount_msat)
+        and len(gross_by_asset) == 1
+        and target_asset_code in gross_by_asset
+        and gross_by_asset[target_asset_code] == target_amount_msat
+    )
+    route_difference_msat = (
+        gross_by_asset[target_asset_code] - target_amount_msat
+        if len(gross_by_asset) == 1 and target_asset_code in gross_by_asset
+        else None
+    )
     source_mix_rows = [
         {
             "source_type": source_type,
+            "asset": mix_asset,
             "amount": _btc_value(values["amount_msat"]),
             "amount_msat": values["amount_msat"],
             "percent_of_target": (
                 round((values["amount_msat"] / target_amount_msat) * 100, 4)
-                if target_amount_msat
-                else 0
+                if gross_matches_target and values["amount_msat"] <= target_amount_msat
+                else None
             ),
             "count": values["count"],
         }
-        for source_type, values in sorted(source_mix.items())
+        for (mix_asset, source_type), values in sorted(source_mix.items())
     ]
     wallets_named = sorted(
         {
@@ -3190,9 +3280,27 @@ def build_report(
             "target_amount_msat": target_amount_msat,
             "asset": target["asset"],
             "reviewed_edge_count": len(edges),
+            # Gross upstream demand per source denomination. This is what the
+            # reviewed routes actually require upstream; it is not a composition
+            # of the target and is never summed across assets.
+            "gross_source_requirement": [
+                {
+                    "asset": mix_asset,
+                    "amount": _btc_value(amount_msat),
+                    "amount_msat": amount_msat,
+                }
+                for mix_asset, amount_msat in sorted(gross_by_asset.items())
+            ],
+            "gross_matches_target": gross_matches_target,
+            "route_difference_msat": route_difference_msat,
+            "route_difference": (
+                _btc_value(route_difference_msat)
+                if route_difference_msat is not None
+                else None
+            ),
         },
         "source_mix": source_mix_rows,
-        "gaps": [finding for finding in findings if finding["code"] in {"missing_history", "ambiguous_allocation", "privacy_hop_unresolved", "path_truncated"}],
+        "gaps": [finding for finding in findings if finding["code"] in {"missing_history", "unknown_origin", "ambiguous_allocation", "privacy_hop_unresolved", "path_truncated"}],
         "findings": findings,
         "explain_gates": {
             "exportable": not blockers,
@@ -3396,6 +3504,29 @@ def load_case_snapshot(conn: sqlite3.Connection, workspace_ref: str | None, prof
     return snapshot
 
 
+def _require_exportable_snapshot_shape(report: Mapping[str, Any]) -> None:
+    """Refuse to re-publish a snapshot whose target shares are known to be wrong.
+
+    Cases saved before source assets and gross upstream demand were recorded
+    carry a ``percent_of_target`` computed as gross-over-target and a frozen
+    narrative sentence quoting it. The stored artifact is never rewritten, but
+    a disclosure document shown to a recipient must not restate a number the
+    current rules would suppress, so re-export asks for a fresh save instead.
+    """
+    mix = report.get("source_mix") or []
+    if any(row.get("asset") is None for row in mix):
+        raise AppError(
+            "This source-funds case was saved before source assets and gross "
+            "upstream demand were recorded",
+            code="source_funds_snapshot_outdated",
+            hint=(
+                "Re-run the report for this target and save the case again, "
+                "then export the new case."
+            ),
+            retryable=False,
+        )
+
+
 def build_report_lines(report: Mapping[str, Any], hooks: SourceFundsHooks) -> list[str]:
     target = report["target"]
     title = "Kassiber Source of Funds Report"
@@ -3480,6 +3611,27 @@ def build_report_lines(report: Mapping[str, Any], hooks: SourceFundsHooks) -> li
         ]
     )
     if report["source_mix"]:
+        allocations = report.get("allocations") or {}
+        gross_phrase = _gross_requirement_phrase(allocations)
+        if gross_phrase and not allocations.get("gross_matches_target"):
+            lines.extend(
+                [
+                    f"Selected target:         {float(allocations.get('target_amount') or 0):.8f} {allocations.get('asset') or ''}",
+                    f"Gross upstream demand:   {gross_phrase}",
+                ]
+            )
+            route_difference = allocations.get("route_difference")
+            if route_difference is not None and float(route_difference) != 0:
+                lines.append(
+                    f"The route difference ({abs(float(route_difference)):.8f} "
+                    f"{allocations.get('asset') or ''}) is not automatically classified as a fee."
+                )
+            lines.append("")
+        if any(row.get("asset") is None for row in report["source_mix"]):
+            from .source_funds_diagram import LEGACY_SNAPSHOT_GUIDANCE
+
+            lines.append(LEGACY_SNAPSHOT_GUIDANCE)
+            lines.append("")
         lines.extend(
             hooks.format_table(
                 ["Source", "Amount", "Asset", "Count"],
@@ -3487,7 +3639,7 @@ def build_report_lines(report: Mapping[str, Any], hooks: SourceFundsHooks) -> li
                     [
                         row["source_type"],
                         f"{row['amount']:.8f}",
-                        report["allocations"]["asset"],
+                        row.get("asset") or report["allocations"]["asset"],
                         row["count"],
                     ]
                     for row in report["source_mix"]
@@ -3563,6 +3715,7 @@ def export_pdf(
             ),
         )
     report = load_case_snapshot(conn, workspace_ref, profile_ref, hooks, case_ref)
+    _require_exportable_snapshot_shape(report)
     if not report["explain_gates"]["exportable"]:
         raise AppError(
             "Source-of-funds PDF export is blocked by unresolved review gates",
@@ -3661,6 +3814,7 @@ def export_bundle(
             ),
         )
     report = load_case_snapshot(conn, workspace_ref, profile_ref, hooks, case_ref)
+    _require_exportable_snapshot_shape(report)
     if not report["explain_gates"]["exportable"]:
         raise AppError(
             "Source-of-funds bundle export is blocked by unresolved review gates",

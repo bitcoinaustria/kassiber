@@ -32,8 +32,9 @@ descriptors, xpubs, secrets, or unnecessary counterparties.
   balance attestation, or prior exchange withdrawal
 - attachment-backed evidence for source claims
 - explicit missing-history and ambiguity markers
-- source mix rollups by root-source category such as fiat purchase, exchange
-  withdrawal, income, gift, mining, opening-balance attestation, and unknown
+- source mix rollups by source denomination and root-source category (fiat
+  purchase, exchange withdrawal, income, gift, mining, opening-balance
+  attestation, unknown), never summed across assets
 - simplified and full flow graph data
 - a machine-readable source-of-funds envelope
 - immutable case snapshots so a generated report can be re-rendered from the
@@ -329,8 +330,16 @@ via `build_report(..., include_diagrams=True)`; the `compute_coverage` sweep
 leaves it off so its repeated per-transaction `build_report` calls never pay for
 chart rendering. When `include_diagrams` is set the `diagrams` SVGs are frozen
 into the case snapshot alongside the rest of the disclosure payload. `simplified_flow`
-edges now also carry `percent_of_target` (target amount = 100% base; trading
-gains/losses and fees are never folded into source percentages). They must not call an external AI service or upgrade weak heuristics
+edges carry `share_of_target`, which is populated only when the disclosure can
+actually support a target-composition claim: the gross upstream demand equals
+the selected target in a single asset matching it, and the edge's own allocation
+is denominated in that asset and does not exceed the target. Otherwise it is
+`null` — a route difference (a mining fee on a disclosed hop, an unequal
+reviewed ratio) makes the quotient a gross-over-target ratio, not a share, and
+is never clamped, renormalised, or explained away as a fee. The same rule gates
+`source_mix[].percent_of_target`; every mix row carries its own `asset`, and
+`allocations` carries `gross_source_requirement` per asset plus
+`gross_matches_target` and `route_difference`. They must not call an external AI service or upgrade weak heuristics
 into proof. The simplified chart follows reviewed local sources, wallet
 transfers, and consolidation-style reviewed hops. CoinJoin/PayJoin traversal is
 deferred for now and rendered as an explicit privacy boundary, not as proof

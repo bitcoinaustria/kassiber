@@ -355,12 +355,13 @@ export function CaseBrief({
             {(sources.length > 0 ? sources : [{ source_type: "unresolved", amount: 0, count: 0 }]).map(
               (source) => (
                 <div
-                  key={source.source_type}
+                  // One category can appear once per source denomination.
+                  key={`${source.asset ?? ""}-${source.source_type}`}
                   className="flex items-center justify-between gap-3 border-b px-3 py-2 text-sm last:border-b-0"
                 >
                   <span className="truncate">{pretty(source.source_type)}</span>
                   <span className="font-mono text-xs tabular-nums">
-                    {formatBtc(source.amount, targetAsset)}
+                    {formatBtc(source.amount, source.asset || targetAsset)}
                   </span>
                 </div>
               ),

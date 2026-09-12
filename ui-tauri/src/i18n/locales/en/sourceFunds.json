@@ -494,6 +494,7 @@
   "coverageBucket": {
     "fully_traced": "Fully traced",
     "attested": "Attested",
+    "unattributed": "Origin unknown",
     "in_review": "In review",
     "untraced": "Untraced",
     "not_classified": "Not classified"

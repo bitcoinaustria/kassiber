@@ -52,6 +52,7 @@ export type SourceFundsCoverageBucket = {
 export type SourceFundsCoverageBuckets = {
   fully_traced: SourceFundsCoverageBucket;
   attested: SourceFundsCoverageBucket;
+  unattributed: SourceFundsCoverageBucket;
   in_review: SourceFundsCoverageBucket;
   untraced: SourceFundsCoverageBucket;
   not_classified: SourceFundsCoverageBucket;
@@ -147,10 +148,13 @@ export type SourceFundsPreview = {
   };
   source_mix: {
     source_type: string;
+    /** Absent on cases saved before source assets were recorded. */
+    asset?: string | null;
     amount: number;
     amount_msat?: number;
     count: number;
-    percent_of_target?: number;
+    /** Null unless the gross upstream demand equals the target in one asset. */
+    percent_of_target?: number | null;
   }[];
   report_context?: {
     tax_country?: string;
@@ -637,6 +641,7 @@ export function isBulkReviewableLink(link: SourceFundsLink) {
 export const COVERAGE_BUCKET_ORDER: (keyof SourceFundsCoverageBuckets)[] = [
   "fully_traced",
   "attested",
+  "unattributed",
   "in_review",
   "untraced",
   "not_classified",
@@ -646,6 +651,7 @@ export const COVERAGE_BUCKET_ORDER: (keyof SourceFundsCoverageBuckets)[] = [
 export const COVERAGE_BUCKET_LABELS: Record<keyof SourceFundsCoverageBuckets, string> = {
   fully_traced: "Fully traced",
   attested: "Attested",
+  unattributed: "Origin unknown",
   in_review: "In review",
   untraced: "Untraced",
   not_classified: "Not classified",
@@ -655,6 +661,7 @@ export const COVERAGE_BUCKET_LABELS: Record<keyof SourceFundsCoverageBuckets, st
 export const COVERAGE_BUCKET_TONES: Record<keyof SourceFundsCoverageBuckets, string> = {
   fully_traced: "text-emerald-700 dark:text-emerald-300",
   attested: "text-sky-700 dark:text-sky-300",
+  unattributed: "text-orange-700 dark:text-orange-300",
   in_review: "text-amber-700 dark:text-amber-300",
   untraced: "text-rose-700 dark:text-rose-300",
   not_classified: "text-muted-foreground",
@@ -674,6 +681,7 @@ export function coverageSummary(coverage?: SourceFundsCoverage) {
 export const COVERAGE_BUCKET_BARS: Record<keyof SourceFundsCoverageBuckets, string> = {
   fully_traced: "bg-emerald-500",
   attested: "bg-sky-500",
+  unattributed: "bg-orange-500",
   in_review: "bg-amber-500",
   untraced: "bg-rose-500",
   not_classified: "bg-muted-foreground/40",

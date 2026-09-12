@@ -23,6 +23,13 @@ Buckets:
 - ``attested``: ``build_report`` would emit ``exportable=True`` AND at
   least one source_mix entry is an attestation source type
   (``missing_history``, ``opening_balance_attestation``).
+- ``unattributed``: ``build_report`` would emit ``exportable=True`` AND at
+  least one source_mix entry states no economic origin (``unknown``).
+  This is weaker than ``attested``: an attestation is a declaration about
+  prior history, while ``unknown`` declares nothing at all. It is reported
+  separately so an unattributed root can never be counted as either a
+  traced root or an attested one. When a report carries both, the
+  unattributed root dominates.
 - ``in_review``: ``build_report`` would emit at least one blocker, but
   some non-rejected link exists.
 - ``untraced``: no non-rejected links exist for this transaction.
@@ -50,6 +57,7 @@ from ..errors import AppError
 from ..msat import msat_to_btc
 from .source_funds import (
     ATTESTATION_SOURCE_TYPES,
+    UNKNOWN_ORIGIN_SOURCE_TYPES,
     SourceFundsHooks,
     _ReportInputs,
     _load_report_inputs,
@@ -57,7 +65,14 @@ from .source_funds import (
 )
 
 
-COVERAGE_BUCKETS = ("fully_traced", "attested", "in_review", "untraced", "not_classified")
+COVERAGE_BUCKETS = (
+    "fully_traced",
+    "attested",
+    "unattributed",
+    "in_review",
+    "untraced",
+    "not_classified",
+)
 # Match build_report's default so a path that would be path_truncated on
 # export does not look fully_traced in coverage.
 DEFAULT_MAX_DEPTH = 8
@@ -97,8 +112,11 @@ def _classify_via_report(
     The mapping is deliberate: anything the export gate would block
     classifies as ``in_review`` here. A transaction is only
     ``fully_traced`` when its source_mix is composed entirely of
-    non-attestation sources (i.e. a recipient that rejects
-    attestations would still accept this disclosure).
+    sources that actually state an economic origin (i.e. a recipient
+    that rejects attestations would still accept this disclosure).
+
+    ``unknown`` is neither: it states no origin at all, so it can never
+    stand for established provenance and is reported on its own.
     """
     explain_gates = report.get("explain_gates") or {}
     if not explain_gates.get("exportable"):
@@ -106,12 +124,21 @@ def _classify_via_report(
     source_mix = report.get("source_mix") or []
     has_real = any(
         item.get("source_type") not in ATTESTATION_SOURCE_TYPES
+        and item.get("source_type") not in UNKNOWN_ORIGIN_SOURCE_TYPES
         for item in source_mix
     )
     has_attestation = any(
         item.get("source_type") in ATTESTATION_SOURCE_TYPES
         for item in source_mix
     )
+    has_unattributed = any(
+        item.get("source_type") in UNKNOWN_ORIGIN_SOURCE_TYPES
+        for item in source_mix
+    )
+    # Weakest claim wins: an unattributed root cannot be offset by a traced
+    # or attested sibling in the same report.
+    if has_unattributed:
+        return "unattributed"
     if has_real and not has_attestation:
         return "fully_traced"
     if has_attestation:

@@ -117,3 +117,114 @@ def test_partial_disclosure_preserves_existing_authority_and_asset_gates(book, i
         "cross_asset": "source_asset_mismatch",
     }
     assert expected[invalidity] in {item["code"] for item in result["explain_gates"]["blockers"]}
+
+
+def test_unequal_route_states_gross_without_claiming_a_target_share(book):
+    """The 0.0099 gross demand is correct; calling it 110% of the target is not."""
+    conn, _runtime = book
+    prepare(conn)
+    conn.execute("UPDATE transactions SET amount=? WHERE id='out'", (1_100_000_000,))
+    conn.commit()
+    root_link(conn, "out", 1_100_000_000)
+    source_funds.create_link(
+        conn, "ws", "profile", daemon._source_funds_hooks(), from_transaction_ref="out",
+        to_transaction_ref="in", allocation_amount="0.01", from_allocation_amount=btc(1_100_000_000),
+    )
+    result = report(conn, 900_000_000)
+    assert result["explain_gates"]["exportable"] is True
+
+    allocations = result["allocations"]
+    assert allocations["target_amount_msat"] == 900_000_000
+    # The gross upstream demand is retained exactly, with its own denomination.
+    assert allocations["gross_source_requirement"] == [
+        {"asset": "BTC", "amount": 0.0099, "amount_msat": 990_000_000}
+    ]
+    assert allocations["gross_matches_target"] is False
+    assert allocations["route_difference_msat"] == 90_000_000
+
+    row = result["source_mix"][0]
+    assert row["amount_msat"] == 990_000_000
+    assert row["asset"] == "BTC"
+    # No unsupported target-composition claim, and nothing clamped to 100.
+    assert row["percent_of_target"] is None
+
+    narrative = " ".join(result["narrative"]["paragraphs"])
+    assert "110" not in narrative
+    assert "Gross upstream requirement: 0.00990000 BTC" in narrative
+    assert "not automatically classified as a fee" in narrative
+    assert all(edge["share_of_target"] is None for edge in result["simplified_flow"]["edges"])
+
+
+def test_deflating_hop_never_claims_a_share_above_the_target(book):
+    """A per-edge allocation above the target is not a share of it, even when the roots sum exactly."""
+    conn, _runtime = book
+    prepare(conn)
+    conn.execute("UPDATE transactions SET amount=? WHERE id='out'", (1_100_000_000,))
+    conn.commit()
+    hooks = daemon._source_funds_hooks()
+    source = source_funds.create_source(
+        conn, "ws", "profile", hooks, source_type="fiat_purchase", label="Reviewed purchase",
+        amount=btc(1_000_000_000), acquired_at="2024-01-01T00:00:00Z", fiat_value="1000",
+    )
+    source_funds.create_link(
+        conn, "ws", "profile", hooks, from_source_ref=source["id"], to_transaction_ref="out",
+        link_type="manual_source", allocation_amount=btc(1_100_000_000),
+        from_allocation_amount=btc(1_000_000_000),
+    )
+    source_funds.create_link(
+        conn, "ws", "profile", hooks, from_transaction_ref="out", to_transaction_ref="in",
+        allocation_amount=btc(1_000_000_000), from_allocation_amount=btc(1_100_000_000),
+    )
+    result = report(conn, 1_000_000_000)
+    assert result["explain_gates"]["exportable"] is True
+    # Roots sum to the target exactly, so the aggregate gate opens...
+    assert result["allocations"]["gross_matches_target"] is True
+    assert result["source_mix"][0]["percent_of_target"] == 100
+    # ...but the inflated hop still may not be labelled a share of the target.
+    shares = [edge["share_of_target"] for edge in result["simplified_flow"]["edges"]]
+    assert all(share is None or share <= 100 for share in shares), shares
+
+
+def test_multi_asset_mix_is_never_summed_into_the_target_denomination(book):
+    """A peg-out route funds a BTC target from an L-BTC root; the two must stay apart."""
+    conn, _runtime = book
+    prepare(conn)
+    hooks = daemon._source_funds_hooks()
+    conn.execute("UPDATE transactions SET amount=?, asset='LBTC' WHERE id='out'", (600_000_000,))
+    conn.commit()
+    btc_source = source_funds.create_source(
+        conn, "ws", "profile", hooks, source_type="fiat_purchase", label="BTC purchase",
+        amount=btc(400_000_000), acquired_at="2024-01-01T00:00:00Z", fiat_value="400",
+    )
+    source_funds.create_link(
+        conn, "ws", "profile", hooks, from_source_ref=btc_source["id"], to_transaction_ref="in",
+        link_type="manual_source", allocation_amount=btc(400_000_000),
+    )
+    lbtc_source = source_funds.create_source(
+        conn, "ws", "profile", hooks, source_type="fiat_purchase", label="L-BTC purchase",
+        asset="LBTC", amount=btc(600_000_000), acquired_at="2024-01-01T00:00:00Z", fiat_value="600",
+    )
+    source_funds.create_link(
+        conn, "ws", "profile", hooks, from_source_ref=lbtc_source["id"], to_transaction_ref="out",
+        link_type="manual_source", allocation_amount=btc(600_000_000),
+    )
+    source_funds.create_link(
+        conn, "ws", "profile", hooks, from_transaction_ref="out", to_transaction_ref="in",
+        link_type="peg_out", allocation_amount=btc(600_000_000),
+        from_allocation_amount=btc(600_000_000),
+    )
+    result = report(conn, 1_000_000_000)
+    assert result["explain_gates"]["exportable"] is True, result["findings"]
+    by_asset = {row["asset"]: row for row in result["source_mix"]}
+    assert set(by_asset) == {"BTC", "LBTC"}
+    assert by_asset["BTC"]["amount_msat"] == 400_000_000
+    assert by_asset["LBTC"]["amount_msat"] == 600_000_000
+    # Two rows, one category: the category count must not become a row count.
+    assert result["overview"]["source_category_count"] == 1
+    # Mixed denominations establish no target composition and draw no single ring.
+    assert all(row["percent_of_target"] is None for row in result["source_mix"])
+    assert result["allocations"]["gross_matches_target"] is False
+    assert result["allocations"]["route_difference_msat"] is None
+    from kassiber.core import source_funds_diagram
+
+    assert source_funds_diagram.source_mix_ring_spec(result) is None

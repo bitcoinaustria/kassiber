@@ -494,6 +494,7 @@
   "coverageBucket": {
     "fully_traced": "Vollständig nachvollzogen",
     "attested": "Bestätigte Historie",
+    "unattributed": "Herkunft unbekannt",
     "in_review": "In Prüfung",
     "untraced": "Nicht nachvollzogen",
     "not_classified": "Nicht eingeordnet"

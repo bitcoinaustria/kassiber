@@ -32,6 +32,19 @@ with exact millisatoshi ratios; this changes only the report projection, not
 the authored allocation. Multiple possible sources and ratios requiring
 rounding remain unresolved.
 
+A report states the gross upstream demand its reviewed routes require, per
+source denomination, and says so explicitly when that gross differs from the
+selected target. It claims a target composition share only when the gross
+equals the target in a single asset matching it; a route difference is reported
+as a difference, never silently reclassified as a fee. Source denominations are
+never summed together, so a peg-out route funding a BTC target from an L-BTC
+root shows both assets rather than one target-denominated total. A `unknown`
+root source is exportable but establishes no economic origin, so coverage
+reports it in its own `unattributed` bucket rather than as fully traced or
+attested, and the report carries a matching `unknown_origin` warning naming the
+unattributed amount. Cases saved before source assets and gross demand were
+recorded are not re-exported; re-run the report and save the case again.
+
 Reviewed branching paths are evaluated in dependency order: every downstream
 allocation reaches a shared ancestor before its root sources are consumed.
 An additional intermediate wallet therefore cannot change coverage merely by
