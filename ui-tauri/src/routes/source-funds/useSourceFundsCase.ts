@@ -427,19 +427,18 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     if (source === linkFormSourceId) {
       return;
     }
-    if (
-      linkFormSourceId.startsWith(`${selectedLink.id}@`) &&
-      !formMatchesLink(linkForm, selectedLink)
-    ) {
-      // Same link, changed upstream, and the reviewer has unsaved edits. Keep
-      // their work: the expected_* precondition refuses the write if the change
-      // actually conflicts.
-      return;
-    }
+    const sameLink = linkFormSourceId.startsWith(`${selectedLink.id}@`);
     setSelectedLinkId(selectedLink.id);
     setLinkFormSourceId(source);
     // Exact msat -> BTC text, so an untouched field round-trips unchanged.
-    setLinkForm(linkReviewFormFromLink(selectedLink));
+    setLinkForm((current) =>
+      // Same link changed upstream while the reviewer has unsaved edits: keep
+      // their work rather than silently discarding it. The expected_*
+      // precondition refuses the write if the change actually conflicts.
+      sameLink && !formMatchesLink(current, selectedLink)
+        ? current
+        : linkReviewFormFromLink(selectedLink),
+    );
   }, [selectedLink, linkFormSourceId]);
 
   const txName = (id?: string | null) => {
