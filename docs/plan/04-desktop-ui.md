@@ -1,8 +1,13 @@
 # Desktop UI Implementation Plan
 
-**Status:** Accepted. Implementation guide for [01-stack-decision.md](01-stack-decision.md).
-**Date:** 2026-04-25.
-**Current source of truth:** this file plus code as the build progresses.
+**Status:** Historical implementation roadmap for the accepted
+[stack decision](01-stack-decision.md), dated 2026-04-25. Phase instructions
+and acceptance targets below record that design, not the current task list or
+proof of implementation. Use [TODO.md](../../TODO.md) for remaining work and
+[desktop](../reference/desktop.md), [daemon](../reference/daemon.md),
+[testing](../reference/testing.md), and [packaging](../reference/prerelease-binaries.md)
+for current procedures. Security invariants and unresolved release gates remain
+binding; the token-WebSocket design and disk logging were not shipped.
 
 ## Scope and preconditions
 
@@ -59,23 +64,11 @@ malicious page could appear there.
   TypeScript types reflect that — there is no `WalletFullConfig` type
   exposed to React at all.
 
-### Vibeability is engineered, not accidental
+### Development feedback
 
-- **One source of truth per concept.** Pydantic models on the Python side
-  generate JSON Schema, which generates TypeScript types. Frontend AI never
-  sees a hand-maintained type file that has drifted.
-- **HMR end-to-end.** Vite for the web layer; daemon hot-reload via watch
-  mode in dev so backend handler tweaks don't require a full rebuild.
-- **Focused fixtures for unit tests only.** Interactive development uses the
-  real daemon with the persistent regtest demo book.
-- **Stack picks match v0/Lovable/Artifacts defaults** (React + TS +
-  Tailwind + shadcn/ui + TanStack). Any AI-generated screen drops in with
-  minimal reshaping.
-- **Browser dev mode is a first-class workflow.** The same Vite dev
-  server that the Tauri shell loads is reachable directly at
-  `http://localhost:5173` from any browser — including Codex's in-app
-  browser, Claude in Chrome, Claude Preview MCP, and any future
-  AI-driven browser tool. See section 2.7 below for the concrete setup.
+The architecture aims for short feedback loops through typed contracts, HMR,
+and a real-daemon browser preview. The remaining schema-generation work is in
+[TODO.md](../../TODO.md); do not assume historical tooling proposals exist.
 
 ### Animations honor motion preference and the display's refresh rate
 
@@ -192,19 +185,8 @@ keys.
 > and reach disk only on explicit, redacted user export. `diagnostics collect`
 > deliberately folds **no** logs.
 
-Originally planned (not built): a central log dir `~/.kassiber/logs/` (or
-per-project `logs/` per [03-storage-conventions.md](03-storage-conventions.md))
-with rotation — `cli.log` (daily, 7d retention), `daemon.log`, `supervisor.log`,
-`webview.log` — all redacted and folded into `diagnostics collect`.
-
-What shipped instead: a Developer-tools-gated Logs view backed by a bounded
-RAM-only ring buffer with field-type redaction, copy-last-200, and
-Markdown/JSONL/log exports, plus a support-bundle export with High-signal and
-Public-safe redaction modes. Redaction follows the same secret-floor rules as
-the safe-view contract.
-
-**Verification:** the RAM-only ring buffer + redaction are unit-tested;
-`diagnostics collect` stays public-safe and does not include raw logs.
+The [logging reference](../reference/logging.md) owns the implemented ring,
+redaction, explicit export, and diagnostics boundaries.
 
 ## Phase 1 — Daemon mode (no UI yet)
 
@@ -424,64 +406,16 @@ ever compromised.
 
 ### 2.6 Browser dev mode (AI-friendly, daemon-optional)
 
-The frontend ships in three runtime modes, all sharing the same React app:
+The original proposal used `daemon --bridge` with a token-authenticated
+WebSocket. It was not implemented. The supported preview uses Vite HTTP
+middleware with origin/loopback containment and the real daemon. See the
+[desktop invoke contract](../reference/daemon.md#desktop-invoke-contract) and
+[testing guide](../reference/testing.md) for commands and isolation.
 
-1. **Regtest bridge, plain browser.** `pnpm dev:browser` runs Vite against
-   the daemon bridge pointed at the generated regtest demo book. Any
-   browser-driven tool — Codex's
-   in-app browser, Claude in Chrome, Claude Preview MCP, browser-MCP
-   automations, design-review screenshotters — can drive the full UI
-   without a Python install. **This is the default dev mode** for layout,
-   styling, component iteration, and AI-assisted screen work.
-
-2. **Real daemon over loopback bridge, plain browser.** `python -m kassiber
-   daemon --bridge ws://127.0.0.1:8765` exposes the daemon over an
-   authenticated localhost WebSocket, dev-only, so AI browser tools can
-   drive real data flows. The bridge is treated as a trust boundary, not
-   a convenience, and is gated by **all** of the following — any failure
-   refuses startup or rejects the connection:
-
-   - **Per-run random token.** 256-bit token generated at daemon start,
-     never written to disk. Printed once to stdout for the dev to paste
-     into the Vite dev server's session. **No `.env.local` token file.**
-     The Vite client holds the token in process memory only; reload
-     prompts for re-paste.
-   - **Strict Origin validation.** WS upgrade rejected unless the
-     `Origin` header matches an allowlist (default `http://localhost:5173`
-     only); allowlist is a CLI flag, not env-derived.
-   - **Loopback-only bind.** Refuses to start on any address other than
-     `127.0.0.1`. No `0.0.0.0`, no LAN bind, no `--host` override.
-   - **Production refusal.** Refuses to start when `KASSIBER_ENV=production`
-     or when the bundled-app build flag is set.
-   - **Read-only by default.** Bridge mode exposes a bridge-specific
-     `kind` allowlist that is a strict subset of the daemon's full
-     surface, defaulting to read-only kinds. Mutations require an
-     explicit `--allow-mutations` flag and emit a startup banner naming
-     each enabled mutation kind.
-   - **Token redaction.** The token never appears in `daemon.log`,
-     `supervisor.log`, error envelopes, or any progress envelope.
-     Redaction is unit-tested.
-
-   The Tauri shell does **not** use the bridge — it speaks JSONL over
-   stdin/stdout to the supervised child. The bridge is a development
-   affordance, not part of any shipped artifact.
-
-3. **Tauri shell.** `pnpm tauri dev` launches the production-shaped
-   webview with `daemon:invoke` Tauri commands, native dialogs, and the
-   capability allowlist. Used for IPC-shape verification, native-dialog
-   testing, and shell-startup measurement. Not directly drivable from
-   AI browser tools (it's not a URL they can navigate to), but the
-   webview's DevTools is accessible for debugging.
-   During development the supervisor resolves the Python command from the
-   checkout (`.venv` first, then `python3`) and may use `KASSIBER_REPO_ROOT`
-   for another checkout. Packaged builds now prefer a bundled PyInstaller
-   CLI sidecar before falling back to developer Python.
-
-A dev script (`pnpm dev:browser`, `pnpm dev:bridge`, `pnpm dev:shell`)
-selects the mode. `pnpm dev:browser` is regtest-backed; the fixture transport
-is kept as internal plumbing for UI tests. The Vite config rejects unsupported
-daemon transport tokens so production builds can't accidentally ship the bridge
-transport.
+Additional mutation authorization and containment checks remain explicit tasks
+in [TODO.md](../../TODO.md#daemon-contracts-and-performance). Their completion
+must be demonstrated against the selected HTTP design, not assumed from this
+historical WebSocket proposal.
 
 ### 2.7 Verification gates for Phase 2
 
@@ -501,20 +435,8 @@ transport.
   disagree.
 - A "shell-of-shells" smoke: launch Tauri, fetch overview, screenshot
   matches a stored baseline within tolerance.
-- Bridge containment tests (negative-test suite, all required to pass):
-  - WS upgrade with a `Origin: http://evil.example` header is rejected.
-  - WS upgrade with no `Origin` header is rejected.
-  - Daemon refuses `--bridge` bind to anything other than `127.0.0.1`
-    (try `0.0.0.0`, an external interface, `localhost` if it resolves
-    differently from `127.0.0.1`).
-  - Daemon refuses `--bridge` startup with `KASSIBER_ENV=production`.
-  - Daemon refuses bridge connections with a missing or wrong token.
-  - Default bridge `kind` allowlist is a strict subset of the daemon
-    surface; a mutation kind hits an explicit "mutations disabled"
-    error unless `--allow-mutations` is set.
-  - Token redaction: a captured `daemon.log` and `supervisor.log` from
-    a bridge dev session contain zero occurrences of the token
-    (verified by a CI grep for the known per-run value).
+- Bridge containment: prove the current HTTP design's authorization, origin,
+  bind, environment, and secret-redaction boundaries described above.
 
 ## Phase 3 — Screen-by-screen port
 
@@ -768,35 +690,11 @@ green before merging the phase's PRs.
       security advisory above a defined severity threshold; rerun
       `cargo audit` and refresh on every release tag.
 
-## Cross-cutting: vibeability checklist
+## Documentation ownership
 
-These should stay green so AI-assisted iteration stays smooth.
-
-- [ ] `pnpm tauri dev` from a fresh checkout works in under 60 s.
-- [ ] Pydantic → JSON Schema → TS regenerates in under 5 s.
-- [ ] `tsc --noEmit` clean.
-- [ ] HMR round-trip from a `*.tsx` save to visible change ≤ 2 s.
-- [ ] A new screen prompt to AI ("add a sortable column for X") drops in
-      with no manual type fix-ups.
-- [ ] Regtest browser mode gives a working UI against a generated local book.
-- [ ] Designer asset pipeline: a Figma export → Tailwind classes → screen
-      lands within an afternoon for a typical card layout.
-- [ ] `shadcn/ui` components are added via the CLI, kept in
-      `src/components/ui/`, not abstracted behind a wrapper layer.
-
-## Cross-cutting: doc update map
-
-Every phase touches docs in lockstep with code. Map of which docs change
-when:
-
-| Phase | Docs that update |
-|---|---|
-| 0 | [README.md](../../README.md) install section, [pyproject.toml](../../pyproject.toml) deps, [THIRD_PARTY_LICENSES.md](../../THIRD_PARTY_LICENSES.md), `TODO.md` |
-| 1 | New `docs/reference/daemon.md`, [README.md](../../README.md) architecture paragraph, [AGENTS.md](../../AGENTS.md) "Current architecture", `TODO.md` |
-| 2 | [docs/reference/desktop.md](../reference/desktop.md), [01-stack-decision.md](01-stack-decision.md) verification numbers updated, this file |
-| 3 | [docs/reference/desktop.md](../reference/desktop.md) per-screen, `TODO.md` desktop items mapped 1:1 |
-| 4 | [Privacy & security](../reference/privacy-and-security.md) secret-entry flow update, [docs/reference/desktop.md](../reference/desktop.md) mutation patterns |
-| 5 | New `docs/reference/packaging.md`, [README.md](../../README.md) install section (now offers a download link), [Privacy & security](../reference/privacy-and-security.md) update-policy paragraph |
+Update the reference that owns changed behavior. Setup, quality gates, and
+review expectations live in [CONTRIBUTING.md](../../CONTRIBUTING.md); root agent
+guidance links subsystem contracts instead of maintaining inventories.
 
 ## Open risks
 

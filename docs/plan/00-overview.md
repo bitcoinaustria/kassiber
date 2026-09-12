@@ -7,10 +7,10 @@ the docs in the same change.
 
 ## Product
 
-Kassiber is a local-first Bitcoin accounting CLI. A desktop shell built on
-Tauri 2 + React + TypeScript with a Python sidecar daemon is in active
-development; see [01-stack-decision.md](01-stack-decision.md) for the stack
-and [04-desktop-ui.md](04-desktop-ui.md) for the implementation plan.
+Kassiber is local-first Bitcoin accounting with a desktop app and a first-class
+CLI. The desktop uses Tauri, React, and a Python sidecar daemon;
+see [01-stack-decision.md](01-stack-decision.md) for the stack
+and [04-desktop-ui.md](04-desktop-ui.md) for the historical implementation roadmap.
 
 It owns wallet sync/import, local storage, provenance, metadata, attachments,
 transfer pairing, review/quarantine workflows, CLI/desktop UX, and
@@ -30,8 +30,8 @@ remote disclosures under the existing daemon, secret, and consent contracts.
 
 Out of scope unless a future design says otherwise:
 
-- invoicing
-- VAT/RKSV
+- invoice issuance, payment initiation, RKSV, EBICS, and FinanzOnline transmission;
+  reviewed VAT/tax supporting records do not imply an automatic filing engine
 - unreviewed production claims for the general ledger; the integrated local
   implementation follows `17-general-accounting-and-private-ai-spec.md` and
   its remaining acceptance gates are recorded in
@@ -45,13 +45,19 @@ Out of scope unless a future design says otherwise:
 - CLI entrypoint: `kassiber/cli/main.py`
 - remaining CLI helper surface: `kassiber/cli/handlers.py`
 - shared runtime/core: `kassiber/core/`
-- desktop shell: `ui-tauri/` (under construction per [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md))
+- desktop shell: `ui-tauri/`, sharing the daemon contract with the browser bridge
 - storage: SQLite under the OS-native per-user app-data root, with meaningful
   `~/.kassiber` state moved there once when the native target does not exist
 - storage shape: one DB per project under `<state-root>/projects/`
 - tax engine: RP2 fork at `bitcoinaustria/rp2`
 - machine envelope: `{kind, schema_version, data}` for success, structured
   `error` envelope for failure
+
+The production accounting path is observations and reviewed evidence →
+`core/custody_journal.py` → finalized tax projection → RP2 → stored journals
+and reports. The optional general ledger remains separate. See
+[the tax implementation boundary](../reference/tax.md#implementation-boundary)
+and [the daemon contract](../reference/daemon.md#desktop-invoke-contract).
 
 ## Product Invariants
 
@@ -68,6 +74,15 @@ Out of scope unless a future design says otherwise:
 - secret-bearing success output stays redacted/safe for agents
 - docs and command behavior move together
 
+## Reading historical plans
+
+Plan 02 records completed extraction. Plan 04 is the historical desktop roadmap;
+use current reference docs for commands and TODO for unfinished gates. Plan 16
+corporate-tax research is superseded by plan 17, which also replaces plan 08’s
+product-wide general-ledger exclusion. The chain-analysis audit records a dated
+baseline. Shipped design documents retain their domain invariants; historical
+checklists and test counts are not current delivery evidence.
+
 ## Track Status
 
 | Track | Status | Current direction |
@@ -75,15 +90,15 @@ Out of scope unless a future design says otherwise:
 | Core extraction | Landed | keep logic in shared core, not CLI/UI copies |
 | Attachments | Landed | use shipped `attachments`; keep links/file blobs bounded |
 | Austrian RP2 path | Active | processing and review-gated E 1kv PDF/XLSX export work; domestic-provider KESt metadata pending |
-| Organizational accounting and AI | Proposed, not shipped | complete opt-in double-entry workflow, local document assistance, country packs, and the user's K2/annex acceptance case; plan 17 |
+| Organizational accounting and AI | Under implementation | opt-in CLI/Agent workflow under plan 17; delivery limits and unresolved gates live in the [acceptance record](../reference/general-accounting-acceptance.md) |
 | Austrian corporate handoff | Proposed | K2 and required annexes consume reviewed accounting/tax facts; plan 16 is historical research superseded in scope by plan 17 |
 | Desktop UI | In progress | Tauri 2 + React + TypeScript with a Python sidecar daemon, per [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md) |
-| Project storage | Target-state | app-wide to per-project migration still needs a focused plan |
+| Project storage | Implemented | per-project databases; [compatibility](../reference/database-compatibility.md) covers legacy upgrades |
 | External documents | Design | reconcile BTC evidence without becoming ERP/invoicing |
 | Source of funds | v1 landed | desktop review workstation, reviewed transaction-flow links, disclosure preview, immutable snapshots, and gated PDF export |
 | Custody lineage | Design/active | separate quantity from tax, reconcile complete policies automatically, and review durable missing-wallet bridges |
 | Local chain analysis | Audited / proposed expansion | share observed graph facts across transaction understanding and privacy; keep ownership hypotheses, observer knowledge and economic meaning separate |
-| Packaging | In progress | Unsigned prerelease desktop bundles now carry a PyInstaller CLI sidecar; signed production packaging and any `python-build-standalone` replacement are still open |
+| Packaging | Release-gated | bundled CLI runtime; public releases follow [local signing and notarization](../reference/macos-release.md) |
 
 ## Stack
 
@@ -98,7 +113,7 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
 - `01-stack-decision.md`: desktop stack ADR (Tauri + React + Python sidecar)
 - `02-core-extraction.md`: archived Phase 0 extraction reference
 - `03-storage-conventions.md`: project-bundle storage target
-- `04-desktop-ui.md`: desktop implementation plan
+- `04-desktop-ui.md`: historical desktop implementation roadmap
 - `05-attachments.md`: attachment/link boundary
 - `06-austrian-tax-engine.md`: Austrian RP2 boundary and E 1kv direction
 - `07-austrian-tax-open-questions.md`: unresolved AT assumptions and review gates
