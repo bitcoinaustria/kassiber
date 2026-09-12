@@ -45,6 +45,7 @@ from . import import_batches
 from . import output_inventory as core_output_inventory
 from . import wallets as core_wallets
 from .chain_observer.provenance import row_has_current_authoritative_observation
+from ..importers import GENERIC_LEDGER_KIND_DIRECTIONS as SUPPORTED_TRANSACTION_KINDS
 from .privacy_hops import privacy_boundary_from_import_record
 from .sync import sync_progress_emitter
 
@@ -175,7 +176,9 @@ _EXISTING_TRANSACTION_COLUMNS = """
        fiat_value_exact, pricing_source_kind, pricing_provider, pricing_pair,
        pricing_timestamp, pricing_fetched_at, pricing_granularity, pricing_method,
        pricing_external_ref, pricing_quality, kind, privacy_boundary, description,
-       counterparty, excluded, raw_json, payment_hash, payment_hash_source,
+       counterparty, excluded, kind_override, note, review_status,
+       taxability_override, at_regime_override, at_category_override,
+       raw_json, payment_hash, payment_hash_source,
        swap_refund_funding_txid, swap_refund_funding_vout,
        -- The merge policy needs the closed observation commitment a generic
        -- import cannot forge. Correlated subqueries rather than a LEFT JOIN:
@@ -195,6 +198,79 @@ _OBSERVER_DUPLICATE_HINT = (
     "Choose one transaction as the keeper and exclude every sibling through "
     "the audited transaction metadata action, then retry refresh."
 )
+_OBSERVER_AUTHORED_HINT = (
+    "Clear the authored note, review status, tags or overrides on that "
+    "transaction through the audited transaction metadata action, then retry "
+    "refresh."
+)
+_OBSERVER_RECORD_CONFLICT_HINT = (
+    "One refresh produced opposite wallet directions for the same transaction. "
+    "Re-run the refresh; if it repeats, report the wallet backend and txid."
+)
+# The only `kind` values a chain observer derives purely from wallet-local
+# direction (sync_backends._record_from_bitcoin_graph and
+# record_components_from_liquid_tx). A direction flip may correct these; any
+# other kind is importer-authored meaning and is left alone.
+OBSERVER_DERIVED_KINDS = frozenset({"deposit", "withdrawal", "fee"})
+_AUTHORED_TRANSACTION_COLUMNS = (
+    "note",
+    "review_status",
+    "kind_override",
+    "taxability_override",
+    "at_regime_override",
+    "at_category_override",
+)
+
+
+def _optional_column(row: Mapping[str, Any], column: str) -> Any:
+    """Read a column that some row shapes (compatibility dicts) may not carry."""
+    if hasattr(row, "get"):
+        return row.get(column)
+    try:
+        return row[column]
+    except (KeyError, IndexError):
+        return None
+
+
+def _row_has_authored_state(conn: sqlite3.Connection, row: Mapping[str, Any]) -> bool:
+    """True when a user authored something on this row that retiring would bury."""
+    for column in _AUTHORED_TRANSACTION_COLUMNS:
+        try:
+            value = row[column]
+        except (KeyError, IndexError):
+            continue
+        if value not in (None, ""):
+            return True
+    return bool(
+        conn.execute(
+            "SELECT 1 FROM transaction_tags WHERE transaction_id = ? LIMIT 1",
+            (row["id"],),
+        ).fetchone()
+    )
+
+
+def _is_superseded_native_projection(
+    conn: sqlite3.Connection, row: Mapping[str, Any]
+) -> bool:
+    """True when this observer channel itself still owns the row's projection.
+
+    Reinterpreting a row across directions is only safe for a projection this
+    observer wrote and still owns, proven by the closed provenance commitment
+    over both the observed graph and the observed quantity. A Lightning event,
+    an exchange record or a hand-authored row can never satisfy it.
+    """
+    provenance = conn.execute(
+        "SELECT authority_version, graph_hash, quantity_hash "
+        "FROM chain_observation_provenance WHERE transaction_id = ?",
+        (row["id"],),
+    ).fetchone()
+    if provenance is None:
+        return False
+    candidate = {key: row[key] for key in row.keys()}
+    candidate["observation_authority_version"] = provenance["authority_version"]
+    candidate["observation_graph_hash"] = provenance["graph_hash"]
+    candidate["observation_quantity_hash"] = provenance["quantity_hash"]
+    return row_has_current_authoritative_observation(candidate)
 
 
 def _find_authoritative_chain_transaction(
@@ -202,68 +278,147 @@ def _find_authoritative_chain_transaction(
     wallet_id: str,
     normalized: Mapping[str, Any],
     fingerprint: str,
+    reconciliation: dict[str, Any] | None = None,
 ) -> sqlite3.Row | None:
+    """Resolve the row this observation belongs to.
+
+    Native identity is (wallet, canonical txid, asset). Direction is a
+    projection of the wallet's currently watched scripts, not part of that
+    identity: when the watched set expands, the same physical transaction can
+    change from a receipt into a spend. Direction-qualified matching used to
+    miss the existing row and leave the obsolete receipt active, so the
+    transaction was counted twice.
+
+    A row of the other direction is eligible only when it still carries this
+    observer channel's own graph- and quantity-bound provenance. Everything
+    else -- another wallet's leg, a Lightning event, an exchange record, a
+    hand-authored row -- stays separate.
+    """
     external_id = canonical_txid(normalized["external_id"])
     if external_id is None:
         return None
+
+    def _conflict(message: str, kind: str, rows, active_count: int, hint: str = _OBSERVER_DUPLICATE_HINT):
+        return AppError(
+            message,
+            code="observer_projection_conflict",
+            hint=hint,
+            details={
+                "conflict_kind": kind,
+                "txid": external_id,
+                "asset": normalized["asset"],
+                "direction": normalized["direction"],
+                "match_count": len(rows),
+                "active_match_count": active_count,
+            },
+            retryable=False,
+        )
+
     rows = conn.execute(
         f"""
         SELECT {_EXISTING_TRANSACTION_COLUMNS}
         FROM transactions
         WHERE wallet_id = ? AND external_id IS NOT NULL
           AND LOWER(external_id) = ?
-          AND direction = ? AND asset = ?
+          AND asset = ?
         ORDER BY created_at DESC, id DESC
         """,
-        (
-            wallet_id,
-            external_id,
-            normalized["direction"],
-            normalized["asset"],
-        ),
+        (wallet_id, external_id, normalized["asset"]),
     ).fetchall()
-    if len(rows) <= 1:
-        return _single_match(rows)
+    if not rows:
+        return None
 
-    active = [row for row in rows if not bool(row["excluded"])]
+    same = [row for row in rows if row["direction"] == normalized["direction"]]
+    other = [row for row in rows if row["direction"] != normalized["direction"]]
+    active_same = [row for row in same if not bool(row["excluded"])]
+    active_other = [row for row in other if not bool(row["excluded"])]
+    # Only this observer's own current projections may be reinterpreted.
+    obsolete = [row for row in active_other if _is_superseded_native_projection(conn, row)]
+    retired_same = [
+        row
+        for row in same
+        if bool(row["excluded"]) and _is_superseded_native_projection(conn, row)
+    ]
+    excluded_by_user = [row for row in same if bool(row["excluded"]) and row not in retired_same]
     exact = [row for row in rows if row["fingerprint"] == fingerprint]
-    if len(active) == 1:
-        if exact and exact[0]["id"] != active[0]["id"]:
-            raise AppError(
-                "An excluded transaction owns the authoritative observer fingerprint",
-                code="observer_projection_conflict",
-                hint=_OBSERVER_DUPLICATE_HINT,
-                details={
-                    "conflict_kind": "excluded_exact_transaction_row",
-                    "txid": external_id,
-                    "asset": normalized["asset"],
-                    "direction": normalized["direction"],
-                    "match_count": len(rows),
-                    "active_match_count": 1,
-                },
-                retryable=False,
-            )
-        return active[0]
+    active_count = len(active_same) + len(active_other)
 
-    conflict_kind = (
-        "multiple_active_transaction_rows"
-        if active
-        else "multiple_excluded_transaction_rows"
-    )
-    raise AppError(
-        "Authoritative chain observation matched ambiguous transaction rows",
-        code="observer_projection_conflict",
-        hint=_OBSERVER_DUPLICATE_HINT,
-        details={
-            "conflict_kind": conflict_kind,
-            "txid": external_id,
-            "asset": normalized["asset"],
-            "direction": normalized["direction"],
-            "match_count": len(rows),
-            "active_match_count": len(active),
-        },
-        retryable=False,
-    )
+    reactivate = False
+    if len(active_same) > 1:
+        raise _conflict(
+            "Authoritative chain observation matched ambiguous transaction rows",
+            "multiple_active_transaction_rows", rows, active_count,
+        )
+    if active_same:
+        keeper = active_same[0]
+    elif retired_same:
+        # Narrowing a wallet's watched scripts again: re-adopt the projection
+        # this observer retired itself rather than wedging on the excluded
+        # exact-fingerprint rule below.
+        if len(retired_same) > 1:
+            raise _conflict(
+                "Authoritative chain observation matched ambiguous retired projections",
+                "multiple_excluded_transaction_rows", rows, active_count,
+            )
+        keeper = retired_same[0]
+        reactivate = True
+    elif excluded_by_user and obsolete:
+        # The user deliberately excluded this direction. Reinterpreting a
+        # different row into its place would silently undo that decision.
+        raise _conflict(
+            "An excluded transaction owns this observation direction",
+            "excluded_direction_owns_observation", rows, active_count,
+        )
+    elif len(obsolete) > 1:
+        raise _conflict(
+            "Authoritative chain observation matched ambiguous transaction rows",
+            "multiple_active_transaction_rows", rows, active_count,
+        )
+    elif obsolete:
+        keeper = obsolete[0]
+    elif len(same) > 1:
+        raise _conflict(
+            "Authoritative chain observation matched ambiguous transaction rows",
+            "multiple_excluded_transaction_rows", rows, active_count,
+        )
+    else:
+        keeper = _single_match(same)
+        if keeper is None:
+            return None
+
+    if exact and exact[0]["id"] != keeper["id"] and bool(exact[0]["excluded"]):
+        raise _conflict(
+            "An excluded transaction owns the authoritative observer fingerprint",
+            "excluded_exact_transaction_row", rows, active_count,
+        )
+
+    if keeper["direction"] != normalized["direction"]:
+        # Reinterpreting in place must not manufacture a row state the authoring
+        # API forbids: update_transaction_metadata rejects a kind_override whose
+        # direction contradicts the row, and normalized_transaction_kind prefers
+        # the override over `kind`.
+        override = _optional_column(keeper, "kind_override")
+        if override and SUPPORTED_TRANSACTION_KINDS.get(override) != normalized["direction"]:
+            raise _conflict(
+                "An authored transaction kind contradicts the observed direction",
+                "authored_kind_contradicts_direction", rows, active_count,
+                hint=_OBSERVER_AUTHORED_HINT,
+            )
+
+    superseded = [row for row in obsolete if row["id"] != keeper["id"]]
+    for row in superseded:
+        # Retiring a row that carries authored meaning would bury the user's
+        # own work, so refresh stops and asks rather than deciding for them.
+        if _row_has_authored_state(conn, row):
+            raise _conflict(
+                "A superseded observer projection carries authored metadata",
+                "authored_superseded_transaction_row", rows, active_count,
+                hint=_OBSERVER_AUTHORED_HINT,
+            )
+    if reconciliation is not None:
+        reconciliation["superseded"] = superseded
+        reconciliation["reactivate"] = reactivate
+    return keeper
 
 
 def _find_existing_transaction(
@@ -273,16 +428,18 @@ def _find_existing_transaction(
     fingerprint: str,
     *,
     authoritative_chain_observer: bool = False,
+    reconciliation: dict[str, Any] | None = None,
 ):
     if authoritative_chain_observer and canonical_txid(normalized["external_id"]):
-        # Observer txids are physical identities. Resolve them before the
-        # fingerprint fast path so an exact stale sibling cannot hide an
-        # ambiguous active projection.
+        # Observer txids are physical identities; direction is only the current
+        # projection of them. Resolve here before the fingerprint fast path so
+        # an exact stale sibling cannot hide an ambiguous active projection.
         return _find_authoritative_chain_transaction(
             conn,
             wallet_id,
             normalized,
             fingerprint,
+            reconciliation,
         )
     existing = conn.execute(
         f"""
@@ -820,6 +977,16 @@ def _transaction_merge_updates(
         incoming_amount_includes_fee = 1 if normalized.get("amount_includes_fee") else 0
         if existing["external_id"] != normalized["external_id"]:
             updates["external_id"] = normalized["external_id"]
+        existing_direction = _optional_column(existing, "direction")
+        if existing_direction is not None and existing_direction != normalized["direction"]:
+            # A widened watched-script set can reveal that a receipt was really a
+            # spend. Correct the projection, including an observer-derived kind
+            # that only described the old direction.
+            updates["direction"] = normalized["direction"]
+            if normalized["kind"] and (
+                not existing["kind"] or existing["kind"] in OBSERVER_DERIVED_KINDS
+            ):
+                updates["kind"] = normalized["kind"]
         authoritative_amount_changed = int(existing["amount"] or 0) != incoming_amount
         if authoritative_amount_changed:
             updates["amount"] = incoming_amount
@@ -1584,9 +1751,11 @@ def insert_wallet_records(
     skipped = 0
     updated = 0
     unchanged = 0
+    superseded = 0
     inserted_records: list[dict[str, Any]] = []
     updated_records: list[dict[str, Any]] = []
     observer_resolved_records: list[dict[str, str]] = []
+    superseded_records: list[dict[str, Any]] = []
     total = len(records)
     progress = sync_progress_emitter.get()
     if progress is not None:
@@ -1602,12 +1771,34 @@ def insert_wallet_records(
         raise AppError("Import wallet does not belong to the selected book", code="not_found")
     normalized_records = [normalize_import_record(record, source_label=source_label) for record in records]
     guard_observations(conn, profile["id"], ({**normalized, "wallet_kind": scoped_wallet["kind"], "wallet_config_json": scoped_wallet["config_json"]} for normalized in normalized_records))
-    for index, (record, normalized) in enumerate(zip(records, normalized_records), start=1):
-        if authoritative_chain_observer:
+    if authoritative_chain_observer:
+        # Direction is no longer part of native identity, so two records in one
+        # batch sharing (txid, asset) with opposite directions would now write
+        # and overwrite the same row. Every native adapter emits at most one
+        # record per (txid, asset) per wallet, so this should never fire -- and
+        # if it ever does it must fail loudly rather than silently merge.
+        projected_directions: dict[tuple[str, str], str] = {}
+        for normalized in normalized_records:
             external_id = canonical_txid(normalized["external_id"])
-            if external_id is not None:
-                normalized["external_id"] = external_id
-                normalized["external_id_kind"] = "txid"
+            if external_id is None:
+                continue
+            normalized["external_id"] = external_id
+            normalized["external_id_kind"] = "txid"
+            key = (external_id, normalized["asset"])
+            projected = projected_directions.setdefault(key, normalized["direction"])
+            if projected != normalized["direction"]:
+                raise AppError(
+                    "One chain observation produced opposite wallet directions for the same transaction",
+                    code="observer_projection_conflict",
+                    hint=_OBSERVER_RECORD_CONFLICT_HINT,
+                    details={
+                        "conflict_kind": "conflicting_observer_projection_records",
+                        "txid": external_id,
+                        "asset": normalized["asset"],
+                    },
+                    retryable=False,
+                )
+    for index, (record, normalized) in enumerate(zip(records, normalized_records), start=1):
         tax_platform_row_identity = str_or_none(
             record.get("_tax_platform_row_identity")
         )
@@ -1623,13 +1814,43 @@ def insert_wallet_records(
             normalized["amount"],
             normalized["fee"],
         )
+        reconciliation: dict[str, Any] = {}
         existing = _find_existing_transaction(
             conn,
             wallet["id"],
             normalized,
             fingerprint,
             authoritative_chain_observer=authoritative_chain_observer,
+            reconciliation=reconciliation,
         )
+        for obsolete_row in reconciliation.get("superseded") or ():
+            # Retire, never delete: the row id carries every reviewed reference
+            # (source-funds links, custody legs, attachments, edit history).
+            conn.execute(
+                "UPDATE transactions SET excluded = 1 WHERE id = ?",
+                (obsolete_row["id"],),
+            )
+            superseded += 1
+            superseded_records.append(
+                {
+                    "transaction_id": obsolete_row["id"],
+                    "wallet": wallet["label"],
+                    "external_id": obsolete_row["external_id"],
+                    "asset": obsolete_row["asset"],
+                    "direction": obsolete_row["direction"],
+                }
+            )
+        if existing is not None and reconciliation.get("reactivate"):
+            # The wallet's watched scripts narrowed back: re-adopt the projection
+            # this observer retired itself.
+            conn.execute(
+                "UPDATE transactions SET excluded = 0 WHERE id = ?",
+                (existing["id"],),
+            )
+            existing = conn.execute(
+                f"SELECT {_EXISTING_TRANSACTION_COLUMNS} FROM transactions WHERE id = ?",
+                (existing["id"],),
+            ).fetchone()
         if (
             existing is None
             and tax_platform_row_identity
@@ -1808,7 +2029,7 @@ def insert_wallet_records(
                 imported=imported,
                 skipped=skipped,
             )
-    journal_invalidated = bool(imported or updated)
+    journal_invalidated = bool(imported or updated or superseded)
     if journal_invalidated:
         hooks.invalidate_journals(conn, profile["id"])
     if commit:
@@ -1825,6 +2046,9 @@ def insert_wallet_records(
     }
     if authoritative_chain_observer:
         outcome["_observer_resolved_records"] = observer_resolved_records
+        if superseded:
+            outcome["observer_superseded"] = superseded
+            outcome["observer_superseded_records"] = superseded_records
     if report_updates and updated:
         outcome["updated"] = updated
     return outcome

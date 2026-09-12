@@ -329,6 +329,7 @@ def test_authoritative_refresh_still_replaces_native_graph_payload():
         for key, value in (
             ("external_id", "ab" * 32), ("external_id_kind", "txid"),
             ("amount", "0.000009"), ("fee", "0.000001"), ("amount_includes_fee", False),
+            ("direction", "outbound"),
         ):
             normalized[key] = value
         row = _closed_provenance(existing)

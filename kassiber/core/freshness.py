@@ -35,8 +35,11 @@ class _JobRemoved(AppError):
 
 _SAFE_OBSERVER_PROJECTION_CONFLICT_KINDS = frozenset(
     {
+        "authored_superseded_transaction_row",
         "bdk_conflicting_prevouts",
         "bdk_inconsistent_inputs",
+        "conflicting_observer_projection_records",
+        "excluded_direction_owns_observation",
         "excluded_exact_transaction_row",
         "mixed_observer_routes",
         "multiple_active_transaction_rows",

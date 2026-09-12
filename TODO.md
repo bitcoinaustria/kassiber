@@ -287,7 +287,7 @@ same verification surface.
     CSV fields while quantity and identity stay unchanged; the next journal
     build loses an exact claim/refund transfer and books a disposal without a
     hold. Keep pricing provenance separate from observer authority.
-  - [ ] Reconcile obsolete native rows when a wallet's watched scripts expand.
+  - [x] Reconcile obsolete native rows when a wallet's watched scripts expand.
     The same physical transaction can change from a receipt to a spend, but
     direction-qualified import matching leaves the old receipt active. Verify
     incremental history has the same quantity and basis as complete history,
