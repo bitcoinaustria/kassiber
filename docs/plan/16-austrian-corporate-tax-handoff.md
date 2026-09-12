@@ -6,10 +6,10 @@
 > supersede this draft's general-ledger prohibition and staged delivery scope.
 > Legal/form claims below remain research inputs requiring current verification.
 
-**Status:** Proposed follow-up after the shipped Austrian E 1kv slice.
-**Current source of truth:** this document, `docs/plan/06-austrian-tax-engine.md`,
-`docs/austrian-handoff.md`, `kassiber/core/reports.py`, `kassiber/core/report_context.py`,
-and TODO.md.
+**Status:** Superseded research baseline; do not execute its staged delivery
+plan. [Spec 17](17-general-accounting-and-private-ai-spec.md) owns accepted
+scope and [the acceptance record](../reference/general-accounting-acceptance.md)
+owns delivery evidence. Source and form claims below describe the dated research.
 **As of:** 2026-09-03.
 **Legal gate:** Kassiber is not tax advice. Austrian corporate filings must be
 reviewed by a Steuerberater before filing.

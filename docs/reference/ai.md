@@ -1,76 +1,21 @@
 # AI Reference
 
-Kassiber has three AI-related layers:
+The desktop Assistant and `kassiber chat` use the same provider configuration,
+tool loop, and daemon authority. External coding/terminal assistants can use
+the [checked-in CLI skill](../../skills/kassiber/SKILL.md).
 
-- an external Agent Skill for AI coding and terminal assistants
-- the in-app assistant that ships with the desktop UI (and a CLI surface that
-  reuses the same provider config)
-- planned in-product AI help for OCR, extraction, and reconciliation workflows
+Accounting, imports, matching, and reports remain deterministic and work without
+AI. Models can propose classifications, extract document fields, and help resolve
+missing evidence; those outputs require the same validation and review as other
+inputs. Opt-in organizational work follows the
+[general-accounting contract](general-accounting.md) and its separate disclosure
+and mutation approvals.
 
-These are related, but they are not the same thing.
+## HTTP transport
 
-## What exists today
-
-Two surfaces ship today:
-
-- The Kassiber CLI Agent Skill at
-  [bitcoinaustria/kassiber-skill](https://github.com/bitcoinaustria/kassiber-skill) for AI
-  coding and terminal assistants.
-- An **in-app assistant** in the desktop UI that streams chat from an
-  OpenAI Responses-compatible endpoint or the Codex, Claude, and
-  OpenCode provider broker, plus a
-  parallel CLI surface (`kassiber chat`, `kassiber ai providers …`,
-  `kassiber ai models`) that reuses the same provider config.
-
-The external skill helps an AI assistant use the Kassiber CLI safely and
-correctly for:
-
-- onboarding and context checks
-- wallet setup and imports
-- journal processing
-- reports
-- metadata cleanup
-- troubleshooting
-
-The core accounting workflow does not depend on AI. Watch-only source refresh, imports,
-journal processing, and reports should work without any model at all.
-
-## Current direction
-
-Kassiber's AI direction is intentionally narrow and review-gated.
-
-The intended uses are:
-
-- local OCR from invoice PDFs or images
-- structured extraction from attached documents
-- confidence-scored reconciliation suggestions
-- tie-breaking when deterministic matching narrows the field but does not finish it
-
-Deterministic matching should work without AI first. AI should stay optional.
-
-## Why the Responses API
-
-Kassiber's HTTP transport uses `POST /v1/responses` rather than the legacy
-Chat Completions endpoint. OpenAI recommends Responses for new projects and
-describes it as the future-facing interface for agentic and multimodal work.
-For Kassiber, the practical improvements are:
-
-- typed `message`, `function_call`, `function_call_output`, and `reasoning`
-  Items instead of encoding every provider action as a chat message
-- semantic streaming events such as `response.output_text.delta` and
-  `response.completed`, which are less ambiguous than parsing choice deltas
-- correct reasoning-model tool round-trips: Kassiber replays the complete
-  response output alongside each matching function result
-- a direct path to future Responses-only models and tools without another
-  transport migration
-
-OpenAI also reports a 3% SWE-bench improvement for reasoning models and
-40–80% better cache utilization in its internal Responses-vs-Chat-Completions
-tests. Those are OpenAI measurements, not a promised improvement for Ollama,
-oMLX, or every model Kassiber can connect to. See the
-[OpenAI migration guide](https://developers.openai.com/api/docs/guides/migrate-to-responses),
-[function-calling guide](https://developers.openai.com/api/docs/guides/function-calling),
-and [streaming guide](https://developers.openai.com/api/docs/guides/streaming-responses).
+HTTP providers must implement `POST /v1/responses`, typed function calls, and
+semantic streaming events. The tool loop replays complete response Items with
+matching function results so provider reasoning state is not discarded.
 
 Kassiber deliberately does **not** enable provider-managed conversation state.
 Every HTTP request sets `store: false`; system guidance is sent through
@@ -151,7 +96,7 @@ copying, persisting, or displaying provider credentials. Treat them as
 off-device unless the underlying configuration proves local or confidential
 inference.
 
-## Recommended inference setup
+## Provider setup
 
 Local inference is the recommended default.
 
@@ -165,14 +110,10 @@ built-in local provider and Settings preset. Run the server (`ollama serve`, or
 `omlx start` / the oMLX menu-bar app) and use **Test connection** in Settings
 before saving a provider change.
 
-HTTP providers must implement `POST /v1/responses`; a server that only exposes
-`/v1/chat/completions` is no longer sufficient. Ollama added its stateless
-Responses endpoint in v0.13.3, including streaming, function calling, and
-reasoning summaries, so older Ollama installations must be upgraded. Current
-oMLX releases and OpenRouter also expose `/v1/responses`. See
-[Ollama's compatibility reference](https://docs.ollama.com/api/openai-compatibility),
-[oMLX releases](https://github.com/jundot/omlx/releases), and the
-[OpenRouter Responses reference](https://openrouter.ai/docs/api/api-reference/responses/create-responses).
+Settings **Test connection** checks reachability/model discovery or CLI binary
+presence. It does not prove inference, tool calling, or streaming. Verify those
+through an explicitly started chat workflow. A Chat Completions-only endpoint
+is insufficient for HTTP chat; compatibility depends on the installed server.
 
 If Kassiber itself is running inside a container and Ollama is running on the
 host, seed the provider with the Docker host alias instead:
@@ -198,24 +139,10 @@ KASSIBER_OMLX_AI_BASE_URL=http://127.0.0.1:8000/v1
 KASSIBER_OLLAMA_AI_BASE_URL=http://host.docker.internal:11434/v1
 ```
 
-Example:
-
-```bash
-ollama run qwen3.6:35b
-```
-
-Local testing so far has used `qwen3.6:35b` with good results for Kassiber-style
-assistant flows. Smaller and less powerful models can still be useful for
-narrower tasks, and should become more practical as Kassiber's prompts, skill
-bundle, and workflows get tighter.
-
-The photo/PDF transaction importer is stricter than chat: it only accepts a
-local loopback provider and an installed vision/OCR model. Good Ollama choices
-for that surface are `glm-ocr` for fast document OCR, `qwen3-vl:8b` or
-`qwen3-vl:4b` for stronger multimodal table reasoning, and
-`llama3.2-vision:11b` / `minicpm-v:8b` as broad fallback models. Remote,
-TEE, Codex, Claude, and OpenCode CLI providers are hard-disabled for document
-OCR.
+Choose a model that supports the required tool or image input contract and
+verify it against the intended workflow. The photo/PDF transaction importer
+requires a local loopback provider and an installed vision/OCR model. Remote,
+TEE, Codex, Claude, and OpenCode CLI providers are hard-disabled for that path.
 
 Codex, Claude, and OpenCode appear automatically through fixed provider
 locators:
@@ -232,19 +159,15 @@ required`, and tells the user to run the provider's normal login command
 outside Kassiber when necessary. It uses Codex `app-server`, the Claude
 executable's `--output-format stream-json` event stream with strict MCP config,
 and the OpenCode SDK v2 against an ephemeral loopback OpenCode server. A local
-Node.js 20+ executable is currently required to run the bundled broker.
+Node.js executable meeting the [broker package requirements](../../ui-tauri/package.json) is required to run the bundled broker.
 
 Model and reasoning-effort selection are forwarded through each provider's
 native protocol.
 
-Codex and OpenCode enumerate their own models, so their rows carry concrete
-model IDs. The Claude CLI has no model-enumeration command, so its rows are the
-aliases the CLI accepts — `fable`, `opus`, `sonnet`, `haiku`, plus Kassiber's
-`default` sentinel meaning "send no `--model`" and let the CLI's configured
-default apply. Aliases are deliberate rather than pinned IDs: an alias always
-resolves to the current model behind it. That is why Claude rows show no version
-number; the concrete ID (for example `claude-sonnet-5`) is only reported in the
-`init` event of a real request. Provider session cursors are kept only in daemon memory and
+Model discovery follows each provider's protocol. Where discovery supplies
+aliases, forward those aliases rather than maintaining versioned model IDs in
+this document. The provider's configured default applies when no model is sent.
+Provider session cursors are kept only in daemon memory and
 are reused only while the visible Kassiber transcript remains unchanged;
 editing or branching starts a clean native provider session.
 
@@ -372,14 +295,8 @@ were auto-refreshed — the same provenance the desktop Assistant records.
 `--system "..."` replaces the built-in Kassiber system prompt with a raw one
 (`system_prompt_kind="raw"`).
 
-CLI chat defaults to `--tool-profile core`, a reduced schema for small local
-models that covers common accounting, wallet, transaction, report, journal,
-rate, readiness, and read-only swap-review workflows. `--tool-profile scoped`
-keeps that per-question scoping but also reaches the specialist catalog behind
-the question — source-of-funds editing, Lightning node snapshots, saved views,
-advanced swap mutations — and is what the daemon uses when a caller omits the
-field. Use `--tool-profile full` to advertise every schema regardless of the
-question; it is the largest prompt and skips scoping entirely.
+Use `--tool-profile` to select the exposed catalog; defaults and scope behavior
+are documented under [Tool use](#tool-use).
 
 Use `--timeout SECONDS` for harnesses or local models that need a shorter or
 longer wait. It caps daemon startup and provider stream inactivity (default
@@ -447,14 +364,7 @@ Test the assistant/tool path through the CLI, not only through the desktop GUI:
 `tests/test_cli_chat.py` pins the daemon-backed chat loop, consent behavior,
 locked-database handling, timeout controls, and the tool profiles.
 
-`ai.chat` takes a `tool_profile`: `core` intersects the capability packs with
-the small common catalog (the CLI default, and the right choice for small local
-models), `scoped` keeps the packs but reaches the specialist tools behind the
-current screen, and `full` advertises all 113 schemas — roughly 20k tokens per
-turn, with capability scoping skipped. **A caller that omits the field gets
-`scoped`.** The desktop Assistant omitted it while the default was `full`,
-which is why local models on Ollama/oMLX had neither working tool selection nor
-room left for the conversation.
+Tool-profile selection is described under [Tool use](#tool-use).
 Live backend checks should also be CLI-first, with explicit user-approved
 endpoints and a fresh temporary data root.
 
@@ -612,8 +522,7 @@ summaries, largest/smallest transactions, transaction search, quarantine,
 the combined review worklist, loans, book-set views, transfers/direct payouts,
 swap-review context, saved review filters, auto-pair rules, and pricing.
 Matching read-only tool results are streamed to the UI and inserted into the
-model context as exact local data, so small local models can answer from program
-output instead of doing their own arithmetic. That auto-read context is sent as
+model context as exact local data, so answers use program-derived facts. That auto-read context is sent as
 untrusted accounting data, not as system instructions, and is bounded per tool
 so large reports cannot silently crowd out everything else.
 When one of those reads needs current reports or journal-derived state,
@@ -656,17 +565,18 @@ another `ai.chat.tool_call` for the same `call_id` with `needs_consent: false`
 before `ai.chat.tool_result`; that second record marks the approved call as
 running and must not create a duplicate card.
 
-Read-only provider tool names run automatically through safe daemon snapshot
-surfaces:
+Live chats advertise capability packs selected from the latest question and
+typed `screen_context`. `tool_profile=core` intersects those packs with the
+common catalog; `scoped` includes relevant specialist tools; `full` skips
+capability scoping. Omitted `tool_profile` defaults to `scoped` at the daemon;
+the CLI supplies `core` by default. Profile selection limits exposure and
+context size, not the validation or consent required to execute a tool.
 
-Live chats do not advertise the entire catalog on every turn. The daemon picks
-bounded capability packs (`core`, `workspace`, `transactions`, `reports`,
-`wallets`, `loans`, `privacy`, `source_funds`, `merchant`, `transfers`,
-`operations`) from the
-latest question and optional typed `screen_context`. Capability-discovery
-questions can still request the full catalog. This reduces schema/token load
-and improves tool choice on smaller local models without widening execution:
-`get_tool` and the daemon dispatcher remain the authoritative allowlists.
+The authoritative tool names, schemas, effects, and daemon mappings live in
+[TOOL_CATALOG and get_tool](../../kassiber/ai/tools.py), with capability selection
+in `select_tool_capabilities` in the same module. These are distinct from
+CLI `commands describe` and the renderer allowlist. Do not reconstruct a tool
+schema or assume that a daemon kind is available to the model.
 
 Desktop chat builds an ephemeral `screen_context` from a positive registry of
 canonical routes and capability packs. It contains only a route and,
@@ -683,201 +593,37 @@ arguments against the catalog again at execution time, including required
 fields, types, enums, bounds, and `additionalProperties`; provider output cannot
 smuggle a hidden network or mutation argument into a narrower tool.
 
-- `status`
-- `ui_overview_snapshot` maps to daemon kind `ui.overview.snapshot`
-- `ui_transactions_list` maps to daemon kind `ui.transactions.list` with
-  bounded filters for `limit`, `direction`, `asset`, `wallet`, `since`, `sort`,
-  and `order`
-- `ui_transactions_extremes` maps to daemon kind
-  `ui.transactions.extremes`; it returns the exact largest and smallest
-  transactions after sorting before the limit
-- `ui_transactions_search` maps to daemon kind `ui.transactions.search`; it
-  searches safe transaction metadata such as ids, txids, wallet labels, notes,
-  descriptions, counterparties, kinds, and tags
-- `ui_transactions_history` maps to daemon kind `ui.transactions.history`; it
-  returns bounded, redacted append-only metadata edit history for one
-  transaction, including grouped pricing events and source attribution
-- `ui_activity_history` maps to daemon kind `ui.activity.history`; it returns
-  bounded, redacted global edit Activity with date, source, field-family,
-  wallet, transaction, pricing-only, and AI-only filters
-- `ui_wallets_list` maps to daemon kind `ui.wallets.list`
-- `ui_wallets_utxos` maps to daemon kind `ui.wallets.utxos`; it returns one
-  wallet's redacted watch-only UTXO inventory and source freshness, without
-  wallet addresses, scriptPubKeys, branch labels, derivation indices,
-  descriptors, xpubs, Silent Payments scan material, blinding keys, backend
-  URLs/tokens, raw wallet config, or raw wallet files
-- `ui_backends_list` maps to daemon kind `ui.backends.list`; it is scoped to
-  backends referenced by the active books/profile and returns URL presence
-  metadata, not exact endpoint URLs
-- `ui_profiles_snapshot` maps to daemon kind `ui.profiles.snapshot`
-- `ui_workspace_overview_snapshot` reads every book in the chat's original
-  workspace only after an explicit book-set request. It preserves per-book
-  boundaries and does not aggregate mixed fiat currencies.
-- `ui_reports_capital_gains` maps to daemon kind `ui.reports.capital_gains`
-- `ui_reports_summary` maps to daemon kind `ui.reports.summary`; it returns
-  exact processed all-time summary totals, including asset and wallet
-  inflow/outflow fields in BTC, sat, and msat, plus reviewed
-  transfer/swap pair rows that explain paired movement inside raw flows
-- `ui_reports_balance_sheet` maps to daemon kind `ui.reports.balance_sheet`;
-  it returns exact processed current holdings by reporting bucket/account,
-  including BTC, sat, msat, cost basis, market value, and unrealized PnL
-- `ui_reports_portfolio_summary` maps to daemon kind
-  `ui.reports.portfolio_summary`; it returns exact processed holdings by wallet
-- `ui_reports_tax_summary` maps to daemon kind `ui.reports.tax_summary`; it
-  returns exact processed tax-summary rows by year and asset
-- `ui_reports_balance_history` maps to daemon kind
-  `ui.reports.balance_history`; it returns processed balance-history buckets
-  for trend questions
-- `ui_reports_privacy_hygiene` maps to daemon kind
-  `ui.reports.privacy_hygiene`; it returns the same redacted local-only
-  privacy facts shown by Settings -> Privacy and `kassiber reports
-  privacy-hygiene`, with `evidence_level` on findings and no addresses,
-  scripts, descriptors, xpubs, backend URLs/tokens, wallet config, raw JSON,
-  branch/index values, or derivation paths. The GUI may separately show
-  operator-facing endpoint rows through backend settings permissions; the AI
-  tool receives only this redacted payload.
-- `ui_reports_privacy_mirror` maps to daemon kind
-  `ui.reports.privacy_mirror`; it returns the redacted Privacy Mirror payload
-  projected from the same immutable public-observer snapshot as Chain Analysis:
-  personal linkage findings, counterparty context, executed checks, coverage and
-  bounded conditional interpretation counts. CLI exports use the same opaque
-  scoped references; desktop navigation retains physical references locally.
-  There is no aggregate grade or inferred ownership probability. Finding-specific
-  assistant handoffs require `ui.chain_analysis.ai_context` with the displayed
-  snapshot; raw graph identities must not be interpolated into prompts.
-  The read is local-only and advisory-only. The chain-analysis workbench
-  can inspect and compare PSBT v0/v2 sources through native-selected opaque
-  grants; structured facts, explicit Payjoin constraints and job receipts pass
-  through the same provider projection. Long work uses cancellable `.start`
-  jobs. Local dataset import requires a completed source/recipe/hash-bound
-  preview, an on-device provider and once-only consent; consent reuses that
-  validation receipt while the worker verifies bytes again before activation. See [`privacy-mirror.md`](privacy-mirror.md).
-- `ui_journals_snapshot` maps to daemon kind `ui.journals.snapshot`; recent
-  rows include reviewed pair context for swap/peg journal rows when available
-- `ui_journals_quarantine` maps to daemon kind `ui.journals.quarantine`
-- `ui_journals_events_list` maps to daemon kind `ui.journals.events.list`; it
-  returns bounded processed journal events with transaction ids, Austrian
-  category fields, reviewed pair context for swap/peg rows, and an optional
-  transaction filter
-- `ui_journals_transfers_list` maps to daemon kind
-  `ui.journals.transfers.list`; it is where deterministic same-asset
-  self-transfers already booked by the journal appear, since
-  `ui.transfers.suggest` deliberately excludes them. When the journal needs
-  processing it returns `summary.projection_status = "stale"` with every count at
-  zero and no pairs, so an empty result is not evidence that no transfers were
-  booked — the tool description tells the model to check that field before
-  answering rather than reporting zero
-- `ui_rates_summary` maps to daemon kind `ui.rates.summary`
-- `ui_rates_coverage` maps to daemon kind `ui.rates.coverage`; it returns
-  transaction pricing coverage, rows that still require a usable fiat spot
-  price, and whether local rates-cache samples can cover those gaps
-- `ui_rates_latest` is consent-gated and fetches one latest public market rate
-  only when live-rate access is enabled for the active book
-- `ui_rates_rebuild` maps to daemon kind `ui.rates.rebuild`; after consent it
-  fetches missing provider spot-rate windows, clears provider-derived
-  transaction prices, applies cache-backed prices, and attempts to reprocess
-  journals. If journal processing is blocked by ledger or quarantine issues,
-  the tool still returns the completed rate/price sync with a structured
-  journal error instead of reporting the whole price sync as failed
-- `ui_report_blockers` maps to daemon kind `ui.report.blockers`; it returns a
-  deterministic report-readiness answer with blockers for missing scope,
-  wallets, transactions, stale journals, quarantine, or missing prices
-- `ui_audit_changes_since_last_answer` maps to daemon kind
-  `ui.audit.changes_since_last_answer`; it answers whether transactions,
-  metadata edits, wallets, journals, quarantines, or rates changed since an
-  optional RFC3339 answer timestamp
-- `ui_maintenance_settings` maps to daemon kind `ui.maintenance.settings`; it
-  reads the active profile's AI maintenance settings
-- `ui_workspace_health` maps to daemon kind `ui.workspace.health`
-- `ui_next_actions` maps to daemon kind `ui.next_actions`
-- `ui_transactions_resolve` and `ui_transactions_graph` expose the existing
-  safe local lookup/graph surfaces without public-backend lookup
-- `ui_transactions_review_context` maps to
-  `ui.transactions.review_context`; it composes one bounded transaction row,
-  local graph, journal events, edit history, evidence readiness, attachment
-  labels, commercial context, source-funds links, privacy findings, and
-  deterministic next actions. Each optional section degrades independently
-  instead of making the whole packet fail.
-- `ui_activity_stale`, `ui_attachments_list`,
-  `ui_audit_evidence_summary`, and `ui_review_badges` expose local review and
-  audit readiness. AI attachment/evidence lists are cursor-bounded and omit
-  local paths and URL targets.
-- `ui_review_worklist` combines bounded readiness blockers, quarantine, stale
-  edits, transfer candidates, loan hints, and optional commercial/source-funds
-  gaps into one deterministic local review queue
-- `ui_loans_list` reads reviewed collateral/principal marks and open-lock hints;
-  the latter are explicitly heuristic and never liquidation proof. Returned
-  rows are bounded and the summary reports full counts/truncation.
-- `ui_source_funds_sources_list` maps to daemon kind
-  `ui.source_funds.sources.list`; attachment labels may be shown, but raw
-  evidence URLs and stored attachment paths are redacted
-- `ui_source_funds_links_list` maps to daemon kind
-  `ui.source_funds.links.list`; pass `target_transaction` to inspect the
-  reviewed/suggested provenance attached to one transaction without exposing
-  raw evidence URLs or stored attachment paths
-- `ui_source_funds_preview` maps to daemon kind `ui.source_funds.preview`; it
-  returns a read-only path graph plus export gates for missing history,
-  heuristic allocations, privacy-hop ambiguity, missing pricing, and other
-  blockers before any PDF/export decision
-- `ui_source_funds_evidence_list`, `ui_source_funds_coverage`, and
-  `ui_source_funds_cases_list` complete the read side of the evidence workflow
-- `ui_transactions_commercial_context`, `ui_btcpay_provenance_{list,suggest,links}`,
-  and `ui_documents_list` expose redacted merchant/document reconciliation
-  metadata; raw BTCPay payloads and document bytes stay local
-- `ui_reports_exit_tax_preview` exposes the deterministic Austrian exit-tax
-  preview
-- `ui_egress_snapshot` returns only outbound counts/bytes by subsystem; it
-  deliberately omits hosts, ports, backend identities, paths, headers, query
-  strings, and request bodies from provider-bound content
-- `ui_transfers_suggest` maps to daemon kind `ui.transfers.suggest`; it returns
-  wallet-transfer candidates, Bitcoin swap/peg candidates, and other cross-asset
-  swap candidates with confidence, method, computed fee, and conflict-cluster
-  context without writing review decisions. Pass `candidate_type=transfer` for
-  carrying-value Bitcoin movements (including Boltz/submarine swaps) or
-  `candidate_type=swap` for other cross-asset swaps. Bitcoin swap review still
-  requires ownership intent: if the swap route paid or received from an external
-  counterparty, it should remain an ordinary payment or receipt.
-  The `method` filter accepts `ownership_graph` in addition to the matcher's own
-  methods, because journal ownership proofs are merged into the same candidate
-  graph. It is deliberately absent from the `ui.transfers.bulk_pair` filter:
-  ownership candidates always require explicit per-row review and are never
-  rule- or bulk-paired.
-  The heuristic band is tunable per call through `time_window_seconds`
-  (default 86400), `fee_pct_max` (default 0.01) and `fee_sats_min`
-  (default 2500), so the assistant can answer "widen the window to 48h" instead
-  of reporting the default band as fixed. `route_pair` filters on the
-  rail-aware route shape where `asset_pair` only sees assets.
-  When a provider candidate is `strong` rather than `exact`, `evidence.conflicts`
-  names the contradictions that denied exactness (`amount`, `route`, `identity`,
-  `semantic`), and `evidence.send_amount_msat` / `evidence.receive_amount_msat`
-  carry the provider's declared leg amounts that whole-row coverage compared.
-  Those facts were previously computed and discarded, which left a `strong`
-  verdict on deterministic-looking metadata unexplainable to both the reviewer
-  and the assistant. Route txids are intentionally not repeated: the matcher
-  already requires each declared route txid to equal that row's own scope txid.
-- `ui_transfers_review_context` maps to daemon kind
-  `ui.transfers.review_context`; it returns a bounded deterministic pair-review
-  packet with candidate leg summaries, confidence reasons, fee assessment,
-  conflict status, metadata clues, current journal impact if left unpaired,
-  suggested next action, active pairs, rules, and saved candidate views. Pass
-  `candidate_type=transfer` or `candidate_type=swap` when the review packet
-  should follow one split queue; without a candidate type it includes both.
-  It is the preferred entry point for a human-facing review; bare
-  `ui_transfers_suggest` is for counts or a filtered sweep. It accepts the same
-  `method` values and heuristic-band arguments as `ui_transfers_suggest`. Note
-  that `limit` (default 8) truncates `active_pairs`, `rules` and `saved_views`
-  alongside candidates, and that `conflict.candidate_count` reports the true
-  cluster size even when the competing candidates fall outside that limit — read
-  the full cluster from `ui_transfers_suggest` grouped by `conflict_set_id`.
-- `ui_transfers_list` maps to daemon kind `ui.transfers.list`; it returns active
-  reviewed transfer/swap pairs
-- `ui_transfers_payouts_list` returns reviewed direct/split payouts where the
-  outbound leg is known but no inbound transaction was imported
-- `ui_transfers_rules_list` maps to daemon kind `ui.transfers.rules.list`; it
-  returns active auto-pair rules without applying them
-- `ui_saved_views_list` maps to daemon kind `ui.saved_views.list`; it returns
-  saved review-queue filters such as swap-candidate views
-- `read_skill_reference`
+Read tools return bounded, redacted projections. The following boundaries
+matter across tool additions:
+
+- UTXO/privacy projections omit addresses, scripts, derivation details, wallet
+  material and backend endpoints. Privacy Mirror and chain analysis share the
+  same snapshot and opaque provider references; use `ui.chain_analysis.ai_context`
+  for handoffs. Dataset import requires a validated source/recipe/hash-bound
+  preview, on-device provider and once-only consent. See
+  [chain analysis](local-chain-analysis.md) and [Privacy Mirror](privacy-mirror.md).
+- Cross-book context requires an explicit book-set request within the chat's
+  original workspace. Keep each book's tax/lot scope and mixed fiat values
+  separate. Ordinary health remains active-book scoped.
+- Report tools return processed journal facts. Rates remain local unless live
+  access is enabled; a rate rebuild can complete while journal processing fails,
+  and must report those outcomes separately. [Tax and journals](tax.md) owns
+  report semantics and readiness.
+- Transaction review combines independently degradable evidence sections.
+  Attachment lists omit paths and URL targets, merchant reads omit raw provider
+  payloads/document bytes, and egress summaries omit destination identities and
+  request contents. [Source-of-funds review](source-of-funds-review.md) owns the
+  provenance workflow; evidence never acquires custody or tax authority.
+- Transfer suggestions do not write decisions. Ownership intent remains
+  necessary for Bitcoin rail changes; an external payment is not a self-transfer.
+  `ownership_graph` candidates require individual review and cannot enter bulk
+  or rule pairing. A bounded review packet may omit competing rows: use
+  `conflict_set_id` and the full cluster before approving a choice. Candidate
+  evidence retains contradictions and exact declared amounts so a `strong`
+  result is explainable. [Swap matching](../../kassiber/ai/skill_references/swap-matching.md)
+  owns the review procedure and filter semantics.
+- Loan open-lock hints remain heuristics, never liquidation proof or automatic
+  marks. Bounded lists must disclose full counts and truncation.
 
 `ui.workspace.health` summarizes the active books set and book
 (`workspace`/`profile` internally), wallet and transaction counts,
@@ -895,25 +641,10 @@ restricted to packaged files under `kassiber/ai/skill_references/`:
 `secrets-and-backup`, `swap-matching`, `troubleshooting`, `verification`, and
 `wallets-backends`.
 
-Mutating provider tools currently include `ui_wallets_sync`, which maps to
-daemon kind `ui.wallets.sync`, `ui_journals_process`, which maps to
-`ui.journals.process`, `ui_rates_latest`, which fetches one opted-in latest
-public rate, `ui_rates_rebuild`, which refreshes provider spot prices
-and reprocesses journals, `ui_maintenance_configure`, which changes
-active-profile AI maintenance settings, and `ui_maintenance_run`, which runs
-optional sync plus journal maintenance and returns report blockers. The same
-consent path also
-covers review-queue actions exposed to chat: `ui_transfers_pair`,
-`ui_transfers_unpair`, `ui_transfers_bulk_pair`, `ui_transfers_dismiss`,
-`ui_transfers_rules_create`, `ui_transfers_rules_delete`,
-`ui_transfers_rules_set_enabled`, `ui_transfers_rules_apply`,
-`ui_transfers_payouts_create`, `ui_transfers_payouts_delete`,
-`ui_transfers_update`, `ui_saved_views_create`, and `ui_saved_views_delete`.
-`ui_transfers_pair`
-supports `coinjoin` and `whirlpool` kinds for user-reviewed same-asset
-ownership hops, including reviewed one-to-many / many-to-one same-asset links.
-Cross-asset and layer-transition links remain one-to-one. The AI may propose
-these pairings, but the write still requires explicit user consent.
+Tools marked mutating or egressing require consent. Their catalog metadata,
+not a copied list of names, determines the execution path. Reviewed same-asset
+pairing can express one-to-many or many-to-one ownership hops; cross-asset and
+layer-transition links remain one-to-one on that pairing surface.
 
 Natural-language pairing ("pair the Phoenix payment with the Liquid receipt") is
 supported on the `core` tool profile through `ui_transfers_pair` only.
@@ -1022,49 +753,20 @@ provider/model, generation timestamp, local tool names used, journal refresh
 status, sync-attempt status, successful versus denied tool attempts, and counts
 learned from health/report-blocker tools. Denied calls never count as executed
 or as cross-book disclosure. The GUI uses that object and the exact tool payloads to render source
-chips beside the assistant answer, so small models can be checked against
+chips beside the assistant answer, making the result traceable to
 program-derived facts.
 
 ## Remote inference
 
-Remote inference should be an explicit choice, not the default.
-
-If remote inference is needed, prefer a provider that documents encrypted
-inference and attestation rather than a generic hosted model API. One example
-is [Maple Proxy / Maple AI](https://blog.trymaple.ai/maple-proxy-documentation/),
-which documents TEE-based encrypted inference behind a local proxy. Confirm
-that any selected proxy exposes `/v1/responses` before configuring it.
-
-Even then, users should make an intentional privacy decision before sending
-accounting data off-device.
-
-## Example usage with the Kassiber skill
-
-Examples of prompt shapes that work well with an AI assistant using the Kassiber
-skill:
-
-- "Use the Kassiber skill to inspect my current books, list my wallets, and tell me whether journals need to be reprocessed before I trust the reports."
-- "Use the Kassiber skill to import this Phoenix CSV into my existing wallet, re-run journals, and show me the summary report."
-- "Use the Kassiber skill to find quarantined journal events, explain what is missing, and suggest the smallest fix."
-- "Use the Kassiber skill to compare wallet balances, bucket allocations, and portfolio output for these books without doing your own arithmetic."
-- "Find transactions tagged revenue, show my total inflow/outflow, largest transaction, current balance, and 2026 tax summary from tool output only."
-
-Kassiber accounts are wallet/reporting buckets in the current product. AI
-assistants should not recommend double-entry charts of accounts, automatic fee
-expense postings, or external counterparty equity accounts unless a future
-ledger design explicitly adds those behaviors.
-
-## Planned AI-assisted workflows
-
-These are directionally in scope, but should remain optional and review-gated:
-
-- "Extract the key fields from this invoice PDF and suggest the most likely BTCPay settlement match."
-- "Review these transactions and suggest likely transfer or swap pairs for human confirmation before journal processing."
-- "Summarize which fields are missing from this document match and why confidence is low."
+Remote inference requires an explicit privacy decision. Provider branding or a
+local proxy alone does not establish confidentiality. Verify the selected
+transport and provider protections against the
+[privacy model](privacy-and-security.md#ai-provider-configuration); selected
+financial context follows the stricter [general-accounting disclosure contract](general-accounting.md).
 
 ## Related files
 
-- [Kassiber CLI Agent Skill](https://github.com/bitcoinaustria/kassiber-skill)
+- [Kassiber CLI skill](../../skills/kassiber/SKILL.md)
 - [`../../kassiber/ai/client.py`](../../kassiber/ai/client.py)
 - [`../../kassiber/ai/broker_client.py`](../../kassiber/ai/broker_client.py)
 - [`../../ui-tauri/provider-broker/`](../../ui-tauri/provider-broker/)

@@ -20,130 +20,17 @@ then `python3`. Set `KASSIBER_PYTHON=/path/to/python` to override the Python
 executable, or `KASSIBER_REPO_ROOT=/path/to/checkout` when the development
 binary should run against a different checkout.
 
-Packaged prerelease desktop builds bundle a one-file PyInstaller CLI sidecar
+Packaged prerelease desktop builds bundle a PyInstaller CLI runtime (onedir on
+macOS, onefile elsewhere)
 and prefer that bundled executable before the development Python fallback when
 starting the daemon. `KASSIBER_PYTHON` remains the highest-priority override
 for daemon startup and installed-app CLI forwarding during debugging.
 
-The first line is always a lifecycle envelope. The `supported_kinds` array
-below is representative; use the live `daemon.ready` payload from the running
-daemon for the exact current allowlist:
+The first record is `daemon.ready`. Its `data` includes `version` and
+`supported_kinds`; read that payload for the running daemon's capability list.
+The declaration is [SUPPORTED_KINDS in daemon.py](../../kassiber/daemon.py).
+Renderer authority is a separate subset under the [desktop invoke contract](#desktop-invoke-contract).
 
-```json
-{
-  "kind": "daemon.ready",
-  "schema_version": 1,
-  "data": {
-    "version": "...",
-    "supported_kinds": [
-      "status",
-      "ui.overview.snapshot",
-      "ui.workspace.overview.snapshot",
-      "ui.transactions.list",
-      "ui.transactions.resolve",
-      "ui.transactions.metadata.update",
-      "ui.transactions.history",
-      "ui.transactions.history.revert",
-      "ui.activity.history",
-      "ui.activity.stale",
-      "ui.wallets.list",
-      "ui.wallets.utxos",
-      "ui.backends.list",
-      "ui.backends.options",
-      "ui.reports.capital_gains",
-      "ui.reports.export_pdf",
-      "ui.reports.export_summary_pdf",
-      "ui.reports.export_csv",
-      "ui.reports.export_xlsx",
-      "ui.reports.export_capital_gains_csv",
-      "ui.reports.export_austrian_e1kv_pdf",
-      "ui.reports.export_austrian_e1kv_xlsx",
-      "ui.reports.export_austrian_e1kv_csv",
-      "ui.journals.snapshot",
-      "ui.journals.events.list",
-      "ui.journals.quarantine",
-      "ui.journals.transfers.list",
-      "ui.journals.process",
-      "ui.profiles.snapshot",
-      "ui.profiles.create",
-      "ui.profiles.switch",
-      "ui.rates.summary",
-      "ui.rates.kraken_csv.import",
-      "ui.rates.rebuild",
-      "ui.freshness.status",
-      "ui.freshness.configure",
-      "ui.freshness.run",
-      "ui.freshness.cancel",
-      "ui.freshness.pause",
-      "ui.freshness.resume",
-      "ui.workspace.health",
-      "ui.workspace.freshness.run",
-      "ui.workspace.create",
-      "ui.workspace.delete",
-      "ui.profiles.reset_data",
-      "ui.projects.list",
-      "ui.projects.create",
-      "ui.projects.select",
-      "ui.secrets.init",
-      "ui.secrets.change_passphrase",
-      "ui.next_actions",
-      "ui.wallets.create",
-      "ui.wallets.import_file",
-      "ui.wallets.document_import.preview",
-      "ui.wallets.document_import.import",
-      "ui.wallets.import_samourai",
-      "ui.connections.btcpay.create",
-      "ui.connections.bullbitcoin_wallet.create",
-      "ui.connections.btcpay.discover",
-      "ui.connections.btcpay.test",
-      "ui.connections.node.snapshot",
-      "ui.reports.lightning_profitability",
-      "ui.metadata.bip329.preview",
-      "ui.metadata.bip329.import",
-      "ui.metadata.bip329.export",
-      "ui.wallets.update",
-      "ui.wallets.delete",
-      "ui.wallets.sync",
-      "ui.sync.status",
-      "ui.sync.enable",
-      "ui.sync.disable",
-      "ui.sync.transports.list",
-      "ui.sync.transports.configure",
-      "ui.sync.transports.delete",
-      "ui.sync.push",
-      "ui.sync.pull",
-      "ui.sync.join_request",
-      "ui.sync.invite",
-      "ui.sync.join",
-      "ui.sync.members.list",
-      "ui.sync.members.revoke",
-      "ui.sync.devices.list",
-      "ui.sync.devices.revoke",
-      "ui.sync.conflicts.list",
-      "ui.sync.conflicts.resolve",
-      "daemon.lock",
-      "daemon.unlock",
-      "ai.providers.list",
-      "ai.providers.get",
-      "ai.providers.create",
-      "ai.providers.update",
-      "ai.providers.set_api_key",
-      "ai.providers.delete",
-      "ai.providers.set_default",
-      "ai.providers.clear_default",
-      "ai.providers.acknowledge",
-      "ai.list_models",
-      "ai.test_connection",
-      "ai.chat",
-      "ai.chat.cancel",
-      "ai.tool_call.consent",
-      "wallets.reveal_descriptor",
-      "backends.reveal_token",
-      "daemon.shutdown"
-    ]
-  }
-}
-```
 
 `ui.reports.export_summary_pdf` writes a managed stakeholder summary PDF. It
 accepts optional `start` / `end` RFC3339 timestamps, optional `wallets` as an
@@ -160,18 +47,13 @@ callers can re-render the same narrative outside the PDF. The export is
 portfolio-shaped and deliberately omits tax tables; Austrian tax PDFs remain
 the authoritative tax handoff.
 
-`supported_kinds` is the public UI allowlist the Tauri supervisor mirrors;
-treat this list (not the docs) as the source of truth for what the supervisor
-will pass through. Reveal kinds (see below) are included in the list but still
-require their own passphrase round-trip before the daemon returns raw secret
-material.
+`supported_kinds` describes daemon capabilities, not renderer authority. The
+desktop forwards only its explicit subset; see the [desktop invoke contract](#desktop-invoke-contract).
+Reveal kinds require their own local-auth flow and must not be added to the
+ordinary webview invoke allowlist.
 
-`ai.chat` takes an optional `tool_profile` of `core`, `scoped`, or `full`,
-controlling how much of the typed catalog is advertised for the turn. **A
-request that omits the field gets `scoped`**, which selects capability packs
-from the question and screen context. `full` advertises all 113 schemas and
-skips that scoping; it costs roughly 20k tokens per turn and should be an
-explicit choice, not a default.
+Chat capability selection, `tool_profile` defaults, and execution validation
+are defined in [AI tool use](ai.md#tool-use).
 
 The `ui.sync.*` family backs Settings → Device sync and is never registered as
 an AI tool. It operates only on the active encrypted profile. Mailbox push/pull
@@ -636,6 +518,37 @@ SQLCipher round-trip used by reveal requests; plaintext databases require an
 explicit acknowledgement (`CHANGE LOCAL DATA` for updates, `DELETE LOCAL DATA`
 for deletes).
 
+## Desktop invoke contract
+
+For a new desktop-invoked kind, keep these declarations in lockstep:
+
+| Layer | Declaration | Source |
+| --- | --- | --- |
+| Python handler support | `SUPPORTED_KINDS` | [daemon.py](../../kassiber/daemon.py) |
+| Tauri renderer invocation | `ALLOWED_DAEMON_KINDS` | [lib.rs](../../ui-tauri/src-tauri/src/lib.rs) |
+| Browser bridge invocation | `ALLOWED_BRIDGE_KINDS` | [vite.config.ts](../../ui-tauri/vite.config.ts) |
+| Streaming support, when needed | `STREAMING_DAEMON_KINDS` / `STREAM_CAPABLE_BRIDGE_KINDS` | The same Rust / Vite files |
+
+The Tauri and bridge lists must be equal and a subset of daemon support.
+Missing entries fail as `kind_not_allowed` in Tauri or HTTP 403 in the bridge.
+[test_connection_catalog_drift.py](../../tests/test_connection_catalog_drift.py)
+checks those relationships and actual React transport call sites.
+
+These are privilege boundaries. AI runtime kinds have their own
+`AI_RUNTIME_KINDS` gate. AI-only reads and unsolicited worker events are
+intentionally absent from renderer invocation; confirm a real desktop caller
+before adding a kind. Do not add generic shell/filesystem dispatch or
+`reveal-*` kinds to the ordinary webview invoke path. Ordinary reads must redact
+stored wallet material and credentials. Explicit setup requests can carry
+locally entered wallet material; that does not authorize later disclosure.
+
+The browser preview uses the real daemon through the loopback Vite bridge:
+`pnpm --dir ui-tauri run dev:bridge` exposes `/__kassiber__/daemon` and the
+NDJSON `/__kassiber__/daemon/stream` endpoint. Follow the
+[testing guide](testing.md) to choose an isolated data root.
+
+## Request routing
+
 Requests carry a caller-chosen `request_id`, a `kind`, and optional `args`:
 
 ```json
@@ -643,6 +556,8 @@ Requests carry a caller-chosen `request_id`, a `kind`, and optional `args`:
 ```
 
 Responses use the normal machine envelope plus the same `request_id`.
+The supervisor resolves only the matching request's exact-kind terminal record
+or error; intermediate streaming records go to `daemon://stream`.
 `schema_version` follows the CLI machine-output contract; bump it only when
 consumers must change how they parse daemon envelopes.
 
