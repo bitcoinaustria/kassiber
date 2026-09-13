@@ -21,6 +21,7 @@ from ..wallet_descriptors import normalize_asset_code, normalize_chain, normaliz
 from . import custody_journal
 from .attachments import attachment_display_label
 from .privacy_hops import privacy_hop_type_from_row
+from .source_funds_assembly import build_owned_outpoint_index, derive_parent_spend_pairs
 from .source_funds_hints import enrich_findings_with_next_steps
 from .source_funds_traversal import load_report_traversal
 
@@ -75,6 +76,10 @@ DETERMINISTIC_BULK_REVIEW_METHODS = {
     # custody projection. It covers native evidence and reviewed components,
     # including exact N:M bridges, without redetecting either in this module.
     "custody_component",
+    # An input IS the output it spends. Within one wallet that is observed
+    # structure, not a judgement call, so it needs no human to confirm it --
+    # but it is re-derived from current evidence before every apply.
+    "utxo_spend",
 }
 _CUSTODY_LINEAGE_METHODS = {
     "custody_component",
@@ -1374,6 +1379,26 @@ def _stored_custody_still_deterministic(
     )
 
 
+def _structural_still_deterministic(
+    derived: Mapping[tuple[str, str], tuple[int, int]],
+    row: Mapping[str, Any],
+    from_tx: Mapping[str, Any] | None,
+    to_tx: Mapping[str, Any],
+) -> bool:
+    """A stored structural edge must still match a fresh derivation exactly."""
+    if from_tx is None:
+        return False
+    pair = derived.get((str(from_tx["id"]), str(to_tx["id"])))
+    if pair is None:
+        return False
+    allocation_msat, from_allocation_msat = pair
+    return (
+        allocation_msat == int(row["allocation_amount"] or 0)
+        and from_allocation_msat == int(row["from_allocation_amount"] or 0)
+        and str(row["confidence"] or "") == "exact"
+    )
+
+
 def _suggestion_still_deterministic(
     custody_allocations: Mapping[
         tuple[str, str, str], _StoredCustodyAllocation
@@ -1381,6 +1406,7 @@ def _suggestion_still_deterministic(
     row: Mapping[str, Any],
     from_tx: Mapping[str, Any] | None,
     to_tx: Mapping[str, Any],
+    derived_structural: Mapping[tuple[str, str], tuple[int, int]] | None = None,
 ) -> bool:
     method = str(row["method"] or "")
     if method == "custody_component":
@@ -1389,6 +1415,10 @@ def _suggestion_still_deterministic(
             row,
             from_tx,
             to_tx,
+        )
+    if method == "utxo_spend":
+        return _structural_still_deterministic(
+            derived_structural or {}, row, from_tx, to_tx,
         )
     # Provider/import ids remain useful suggestions, but are not physical
     # identity and therefore never enter deterministic bulk review.
@@ -1488,14 +1518,24 @@ def _validated_bulk_review_candidates(
         # The custody projection is the expensive part; never build it for an
         # empty scope.
         return candidates
-    rows_by_id = {
-        str(tx["id"]): tx for tx in _active_transaction_rows(conn, profile_id)
-    }
+    active_rows = _active_transaction_rows(conn, profile_id)
+    rows_by_id = {str(tx["id"]): tx for tx in active_rows}
     custody_allocations = _stored_custody_allocation_map(
         conn,
         profile_id,
         rows_by_id,
     )
+    derived_structural: dict[tuple[str, str], tuple[int, int]] = {}
+    if any(str(row["method"] or "") == "utxo_spend" for row in rows):
+        # Derived once for the whole batch, never per candidate row.
+        owned_index = build_owned_outpoint_index(conn, profile_id)
+        if owned_index:
+            for pair in derive_parent_spend_pairs(
+                active_rows, owned_index, skip_row=_skip_structural_row,
+            ):
+                derived_structural[
+                    (str(pair["from_row"]["id"]), str(pair["to_row"]["id"]))
+                ] = (int(pair["allocation_msat"]), int(pair["from_allocation_msat"]))
     for row in rows:
         if not _is_bulk_reviewable_suggestion(row):
             continue
@@ -1517,6 +1557,7 @@ def _validated_bulk_review_candidates(
             row,
             from_tx,
             to_tx,
+            derived_structural,
         ):
             continue
         try:
@@ -1679,13 +1720,33 @@ def assemble_history(
     }
 
 
+def _skip_structural_row(row: Mapping[str, Any]) -> bool:
+    """Rows structural lineage must never assert through.
+
+    Privacy-boundary rows (CoinJoin/PayJoin/sweeps) keep their deferred
+    semantics, and Samourai group wallets keep the dedicated Whirlpool boundary
+    handling instead of raw input/output edges.
+    """
+    if _raw_privacy_hop(row):
+        return True
+    return _samourai_metadata_from_wallet_config(row["wallet_config_json"]) is not None
+
+
 def _active_transaction_rows(conn: sqlite3.Connection, profile_id: str):
+    # The observation commitment travels with the row so structural lineage can
+    # fail closed on anything an authoritative observer did not write. Aliased
+    # exactly as custody_journal does, so both read one contract.
     return conn.execute(
         """
         SELECT t.*, w.label AS wallet_label, w.kind AS wallet_kind,
-               w.config_json AS wallet_config_json
+               w.config_json AS wallet_config_json,
+               observation.authority_version AS observation_authority_version,
+               observation.graph_hash AS observation_graph_hash,
+               observation.quantity_hash AS observation_quantity_hash
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN chain_observation_provenance observation
+          ON observation.transaction_id = t.id
         WHERE t.profile_id = ? AND t.excluded = 0
         ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
         """,
@@ -1992,6 +2053,42 @@ def suggest_links(
             ),
         )
         remember(link)
+
+    # Structural lineage the custody projection does not model: a spend funded
+    # by this wallet's own earlier outputs. Target-scoped on purpose -- a
+    # whole-book pass would blow through SUGGESTION_WRITE_CAP and roll back the
+    # custody, coinjoin and provider suggestions written above it.
+    if target is not None:
+        owned_index = build_owned_outpoint_index(conn, profile["id"])
+        if owned_index:
+            custody_pairs = {
+                (allocation.from_transaction_id, allocation.to_transaction_id)
+                for allocation in custody_allocations.values()
+            }
+            for pair in derive_parent_spend_pairs(
+                rows, owned_index, skip_row=_skip_structural_row,
+            ):
+                out_tx, in_tx = pair["from_row"], pair["to_row"]
+                endpoints = (str(out_tx["id"]), str(in_tx["id"]))
+                if endpoints in custody_pairs:
+                    # The projection owns this pair; structure never competes.
+                    continue
+                if not in_scope(out_tx, in_tx) or int(pair["allocation_msat"]) <= 0:
+                    continue
+                link = _insert_suggestion(
+                    conn,
+                    workspace["id"],
+                    profile["id"],
+                    from_tx=out_tx,
+                    to_tx=in_tx,
+                    link_type="self_transfer",
+                    method="utxo_spend",
+                    confidence="exact",
+                    allocation_msat=int(pair["allocation_msat"]),
+                    from_allocation_msat=int(pair["from_allocation_msat"]),
+                    explanation=pair["explanation"],
+                )
+                remember(link)
 
     by_provider_key = defaultdict(list)
     for row in rows:
