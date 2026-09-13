@@ -1955,7 +1955,7 @@ def suggest_links(
     def in_scope(*txs: Mapping[str, Any]) -> bool:
         return not target or any(tx["id"] in scoped_tx_ids for tx in txs)
 
-    def remember(link: Mapping[str, Any] | None) -> None:
+    def remember(link: Mapping[str, Any] | None, *, widen_scope: bool = True) -> None:
         if not link:
             return
         inserted.append(link)
@@ -1974,7 +1974,7 @@ def suggest_links(
                 ),
                 details={"max_suggestions": max_suggestions},
             )
-        if target:
+        if target and widen_scope:
             scoped_tx_ids.add(link["from_transaction_id"])
             scoped_tx_ids.add(link["to_transaction_id"])
 
@@ -2111,7 +2111,12 @@ def suggest_links(
                 from_allocation_msat=int(pair["from_allocation_msat"]),
                 explanation=pair["explanation"],
             )
-            remember(link)
+            # Deliberately does not widen the shared scope: these edges are
+            # already bound to the target's funding chain, and admitting
+            # their endpoints would hand the provider loop below a wider
+            # cartesian product that can exceed the write cap and roll back
+            # this pass -- including these very edges.
+            remember(link, widen_scope=False)
 
     by_provider_key = defaultdict(list)
     for row in rows:
@@ -3135,7 +3140,7 @@ def build_report(
                         findings,
                         "stale_structural_lineage",
                         "blocker",
-                        "A reviewed link no longer matches the observed transaction structure.",
+                        "An earlier funding connection can no longer be verified against this wallet's transactions.",
                         ref=link["id"],
                     )
                     continue

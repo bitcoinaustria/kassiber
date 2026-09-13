@@ -166,22 +166,42 @@ def _row_is_authoritative(row: Mapping[str, Any]) -> bool:
 # such an output therefore has to pass THROUGH that row to the inbound rows
 # behind it. Bounded because each hop re-reads a stored graph.
 _MAX_PASSTHROUGH_HOPS = 8
+# Bounded total work per derivation pass. A split/recombine graph can reach the
+# same ancestors from many directions; memoisation collapses that, and this is
+# the backstop for anything it cannot.
+_MAX_ANCESTOR_RESOLUTIONS = 5000
 
 
-def _owned_inputs(row: Mapping[str, Any], chain: str, network: str) -> list[tuple[str, int, int]] | None:
-    """Return (txid, vout, msat) for every input, or None unless ALL are owned."""
+def _owned_inputs(
+    row: Mapping[str, Any],
+    chain: str,
+    network: str,
+    owned_index: Mapping[OwnedOutpointKey, Mapping[str, Any]],
+) -> list[tuple[str, int, int]] | None:
+    """Return (txid, vout, msat) for every input, or None unless ALL are owned.
+
+    One helper for every traversed transaction, direct or intermediate. An
+    earlier version checked inventory only on the spend's own inputs, so an
+    input contradicted by inventory could still be adopted one hop deeper --
+    ownership has to be vetoed at every hop or it is not vetoed at all.
+    """
     parsed = parse_ownership_tx(row["raw_json"])
     if parsed is None:
         return None
     entries = list(parsed.get("inputs") or ())
     if not entries or _declared_inputs(row["raw_json"]) != len(entries):
+        # A truncated graph cannot prove complete ownership of the inputs.
         return None
     outer = stored_tx_mapping(row["raw_json"]) or {}
     owned_scripts = {
         str(script) for script in (outer.get("observer_owned_scripts") or ()) if script
     }
+    wallet_id = str(row["wallet_id"])
+    asset_identity = _owned_asset_identity((chain, "", "", 0), {"asset": row["asset"]})
     resolved: list[tuple[str, int, int]] = []
     for entry in entries:
+        # parse_ownership_tx normalizes a vin to "txid:vout" plus resolved
+        # value/script; the raw vin shape is not what comes back here.
         outpoint = str(entry.get("outpoint") or "")
         prev_txid, _, vout_text = outpoint.partition(":")
         prev_txid = canonical_txid(prev_txid)
@@ -194,14 +214,36 @@ def _owned_inputs(row: Mapping[str, Any], chain: str, network: str) -> list[tupl
         if prev_txid is None or vout < 0 or not script:
             return None
         if script not in owned_scripts and str(entry.get("role") or "") != "owned":
+            # A foreign input: this spend is collaborative or externally
+            # funded, and nothing about it is ours to claim.
             return None
+        info = owned_index.get((chain, network, prev_txid, vout))
+        if info is not None:
+            # Inventory corroborates when it has the outpoint; a disagreement
+            # about ownership is a reason to stop, never to overrule the
+            # observation.
+            if info.get("ambiguous") or str(info.get("wallet_id")) != wallet_id:
+                return None
+            if _owned_asset_identity(
+                (chain, network, prev_txid, vout), info
+            ) != asset_identity:
+                return None
         resolved.append((prev_txid, vout, value_sats * 1000))
     return resolved
 
 
-def _resolve_owned_ancestors(
+def _scale_ancestors(
+    ancestors: Sequence[tuple[Mapping[str, Any], int]], value_msat: int
+) -> list[tuple[Mapping[str, Any], int]]:
+    """Carry `value_msat` down an ancestor distribution, conserving the total."""
+    shares = _allocate_by_weight([msat for _row, msat in ancestors], value_msat)
+    return [
+        (row, share) for (row, _msat), share in zip(ancestors, shares) if share > 0
+    ]
+
+
+def _ancestor_distribution(
     txid: str,
-    value_msat: int,
     *,
     wallet_id: str,
     chain: str,
@@ -211,13 +253,23 @@ def _resolve_owned_ancestors(
     blocked: frozenset[tuple[str, str, str]],
     depth: int,
     visited: frozenset[str],
+    memo: dict[str, list[tuple[Mapping[str, Any], int]] | None],
+    budget: list[int],
 ) -> list[tuple[Mapping[str, Any], int]] | None:
-    """Inbound rows funding one owned output, passing through change hops.
+    """Every inbound row behind one transaction, with the value each carries.
 
-    Returns None whenever the chain cannot be resolved completely, so a partial
-    answer is never mistaken for a whole one.
+    Resolved once per transaction rather than once per referencing input: a
+    wallet that splits and recombines would otherwise revisit the same
+    ancestors combinatorially. Returns None whenever the chain cannot be
+    resolved completely, so a partial answer is never mistaken for a whole one.
     """
-    if depth > _MAX_PASSTHROUGH_HOPS or txid in visited or value_msat <= 0:
+    if txid in memo:
+        return memo[txid]
+    if depth > _MAX_PASSTHROUGH_HOPS or txid in visited:
+        return None
+    budget[0] -= 1
+    if budget[0] < 0:
+        # A pathological graph must cost a bounded amount and fail closed.
         return None
     if (chain, network, txid) in blocked:
         # A CoinJoin/PayJoin hop keeps its deferred semantics. Passing lineage
@@ -227,42 +279,48 @@ def _resolve_owned_ancestors(
     candidates = rows_by_scope.get((chain, network, txid), ())
     inbound = [r for r in candidates if str(r["wallet_id"]) == wallet_id
                and str(r["direction"]) == "inbound"]
-    if len(inbound) == 1:
-        parent = inbound[0]
-        if not _row_is_authoritative(parent) or value_msat > int(parent["amount"] or 0):
-            return None
-        return [(parent, value_msat)]
-    if inbound:
+    if len(inbound) > 1:
         # More than one inbound leg for this wallet is ambiguous evidence.
         return None
+    if inbound:
+        parent = inbound[0]
+        result = (
+            [(parent, int(parent["amount"] or 0))]
+            if _row_is_authoritative(parent) and int(parent["amount"] or 0) > 0
+            else None
+        )
+        memo[txid] = result
+        return result
 
     outbound = [r for r in candidates if str(r["wallet_id"]) == wallet_id
                 and str(r["direction"]) == "outbound"]
-    if len(outbound) != 1:
-        return None
-    hop = outbound[0]
-    if not _row_is_authoritative(hop):
-        return None
-    inputs = _owned_inputs(hop, chain, network)
-    if not inputs:
-        return None
-    # The output being spent is funded by this hop's own inputs. Money is
-    # fungible inside one transaction, so split by input weight and keep the
-    # shares summing exactly to the value actually being carried forward.
-    shares = _allocate_by_weight([msat for _t, _v, msat in inputs], value_msat)
-    carried: list[tuple[Mapping[str, Any], int]] = []
-    for (prev_txid, _prev_vout, _msat), share in zip(inputs, shares):
-        if share <= 0:
-            continue
-        resolved = _resolve_owned_ancestors(
-            prev_txid, share, wallet_id=wallet_id, chain=chain, network=network,
-            rows_by_scope=rows_by_scope, owned_index=owned_index, blocked=blocked,
-            depth=depth + 1, visited=visited | {txid},
-        )
-        if resolved is None:
-            return None
-        carried.extend(resolved)
-    return carried or None
+    result = None
+    if len(outbound) == 1 and _row_is_authoritative(outbound[0]):
+        inputs = _owned_inputs(outbound[0], chain, network, owned_index)
+        if inputs:
+            carried: dict[str, list[Any]] = {}
+            complete = True
+            for prev_txid, _vout, msat in inputs:
+                upstream = _ancestor_distribution(
+                    prev_txid, wallet_id=wallet_id, chain=chain, network=network,
+                    rows_by_scope=rows_by_scope, owned_index=owned_index,
+                    blocked=blocked, depth=depth + 1, visited=visited | {txid},
+                    memo=memo, budget=budget,
+                )
+                if upstream is None:
+                    complete = False
+                    break
+                for ancestor, share in _scale_ancestors(upstream, msat):
+                    entry = carried.setdefault(str(ancestor["id"]), [ancestor, 0])
+                    entry[1] += share
+            if complete and carried:
+                result = [
+                    (ancestor, msat) for ancestor, msat in sorted(
+                        carried.values(), key=lambda item: str(item[0]["id"]),
+                    )
+                ]
+    memo[txid] = result
+    return result
 
 
 def derive_parent_spend_pairs(
@@ -299,6 +357,11 @@ def derive_parent_spend_pairs(
         if (scope := onchain_transfer_scope(row)) is not None and skip_row(row)
     }
 
+    # Shared across every spend in this pass: a wallet that splits and
+    # recombines reaches the same ancestors from many directions.
+    memo: dict[str, list[tuple[Mapping[str, Any], int]] | None] = {}
+    budget = [_MAX_ANCESTOR_RESOLUTIONS]
+
     pairs: list[dict[str, Any]] = []
     for row in rows:
         if str(row["direction"]) != "outbound":
@@ -317,81 +380,35 @@ def derive_parent_spend_pairs(
             and str(other["direction"]) == "outbound"
         ]) != 1:
             continue
-        parsed = parse_ownership_tx(row["raw_json"])
-        if parsed is None:
-            continue
-        inputs = list(parsed.get("inputs") or ())
-        declared = _declared_inputs(row["raw_json"])
-        # A truncated graph cannot prove complete ownership of the inputs.
-        if not inputs or declared != len(inputs):
-            continue
-
         chain, network = scope[0], scope[1]
         # The spend attests which scripts its wallet watched. That is the
         # ownership proof, not the UTXO inventory: inventory is built from the
         # backend's CURRENT unspent set, so a wallet first synced after these
         # outputs were already spent has no row for any of them, and the
         # lineage would be invisible exactly when the history is longest.
-        outer = stored_tx_mapping(row["raw_json"]) or {}
-        owned_scripts = {
-            str(script) for script in (outer.get("observer_owned_scripts") or ()) if script
-        }
-        contributions: dict[str, int] = defaultdict(int)
-        complete = True
-        for entry in inputs:
-            # parse_ownership_tx normalizes a vin to "txid:vout" plus resolved
-            # value/script; the raw vin shape is not what comes back here.
-            outpoint = str(entry.get("outpoint") or "")
-            prev_txid, _, vout_text = outpoint.partition(":")
-            prev_txid = canonical_txid(prev_txid)
-            try:
-                vout = int(vout_text)
-                value_sats = int(entry["value_sats"])
-            except (KeyError, TypeError, ValueError):
-                complete = False
-                break
-            script = str(entry.get("script") or "")
-            if prev_txid is None or vout < 0 or not script:
-                complete = False
-                break
-            if script not in owned_scripts and str(entry.get("role") or "") != "owned":
-                # A foreign input: this spend is collaborative or externally
-                # funded, and nothing about it is ours to claim.
-                complete = False
-                break
-            info = owned_index.get((chain, network, prev_txid, vout))
-            if info is not None:
-                # Inventory corroborates when it has the outpoint; a
-                # disagreement about ownership is a reason to stop, never to
-                # overrule the observation.
-                if info.get("ambiguous") or str(info.get("wallet_id")) != wallet_id:
-                    complete = False
-                    break
-                if _owned_asset_identity(
-                    (chain, network, prev_txid, vout), info
-                ) != _owned_asset_identity(
-                    (chain, network, prev_txid, vout), {"asset": row["asset"]}
-                ):
-                    complete = False
-                    break
-            contributions[prev_txid] += int(value_sats) * 1000
-        if not complete or not contributions:
+        inputs = _owned_inputs(row, chain, network, owned_index)
+        if not inputs:
             continue
+
+        contributions: dict[str, int] = defaultdict(int)
+        for prev_txid, _vout, msat in inputs:
+            contributions[prev_txid] += msat
 
         by_parent: dict[str, list[Any]] = {}
         resolved_all = True
         for prev_txid, gross_msat in sorted(contributions.items()):
-            resolved = _resolve_owned_ancestors(
-                prev_txid, gross_msat, wallet_id=wallet_id, chain=chain, network=network,
+            upstream = _ancestor_distribution(
+                prev_txid, wallet_id=wallet_id, chain=chain, network=network,
                 rows_by_scope=rows_by_scope, owned_index=owned_index,
                 blocked=frozenset(blocked), depth=0, visited=frozenset(),
+                memo=memo, budget=budget,
             )
-            if resolved is None:
+            if upstream is None:
                 resolved_all = False
                 break
-            for parent, msat in resolved:
-                entry = by_parent.setdefault(str(parent["id"]), [parent, 0])
-                entry[1] += msat
+            for ancestor, share in _scale_ancestors(upstream, gross_msat):
+                entry = by_parent.setdefault(str(ancestor["id"]), [ancestor, 0])
+                entry[1] += share
         if not resolved_all or not by_parent:
             continue
         parents = [(parent, msat) for parent, msat in sorted(
@@ -399,6 +416,10 @@ def derive_parent_spend_pairs(
         )]
         if any(msat > int(parent["amount"] or 0) for parent, msat in parents):
             continue
+        passthrough = any(
+            str(parent["external_id"] or "").lower() not in contributions
+            for parent, _msat in parents
+        )
 
         target_msat = int(row["amount"] or 0)
         if target_msat <= 0:
@@ -413,8 +434,18 @@ def derive_parent_spend_pairs(
                 "allocation_msat": share_msat,
                 "from_allocation_msat": gross_msat,
                 "explanation": (
-                    "This spend's observed inputs include outputs created by this "
-                    "transaction in the same wallet."
+                    (
+                        "This spend's observed inputs trace back to this transaction "
+                        "through intermediate transactions in the same wallet. Value is "
+                        "attributed across those hops in proportion to the amounts they "
+                        "carried, which conserves the total but does not identify which "
+                        "individual coins moved."
+                    )
+                    if passthrough
+                    else (
+                        "This spend's observed inputs include outputs created by this "
+                        "transaction in the same wallet."
+                    )
                 ),
             })
     return pairs

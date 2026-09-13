@@ -357,3 +357,120 @@ class ChangePassthroughTests(unittest.TestCase):
         )
 
         self.assertEqual([p for p in pairs if p["to_row"]["id"] == self.spend["id"]], [])
+
+    def test_an_ownership_contradiction_one_hop_deep_still_vetoes(self):
+        """The veto has to apply at every hop, or it is not a veto.
+
+        Astra's finding: inventory was consulted only on the spend's own
+        inputs, so a deposit that inventory says belongs to another wallet was
+        still adopted through the intermediate payment.
+        """
+        foreign = {
+            ("bitcoin", "main", self.deposit_txid, 0): {
+                "wallet_id": "someone-else", "amount_msat": 1_000_000_000,
+                "branch_label": "receive", "spent_by": "", "asset": "BTC",
+                "asset_identity": "BTC", "ambiguous": False,
+            },
+        }
+
+        pairs = self.derive(self.rows, foreign, skip_row=lambda row: False)
+
+        self.assertEqual([p for p in pairs if p["to_row"]["id"] == self.spend["id"]], [])
+
+    def test_an_ambiguous_outpoint_one_hop_deep_still_vetoes(self):
+        ambiguous = {
+            ("bitcoin", "main", self.deposit_txid, 0): {
+                "wallet_id": "w", "amount_msat": 1_000_000_000,
+                "branch_label": "receive", "spent_by": "", "asset": "BTC",
+                "asset_identity": "BTC", "ambiguous": True,
+            },
+        }
+
+        pairs = self.derive(self.rows, ambiguous, skip_row=lambda row: False)
+
+        self.assertEqual([p for p in pairs if p["to_row"]["id"] == self.spend["id"]], [])
+
+    def test_a_passthrough_edge_discloses_its_hops_and_attribution(self):
+        pairs = self.derive(self.rows, {}, skip_row=lambda row: False)
+        funding = [p for p in pairs if p["to_row"]["id"] == self.spend["id"]]
+
+        self.assertEqual(len(funding), 1)
+        explanation = funding[0]["explanation"]
+        # It must not claim the deposit created this spend's inputs; it did not.
+        self.assertNotIn("include outputs created by", explanation)
+        self.assertIn("intermediate transactions", explanation)
+        self.assertIn("proportion", explanation)
+
+
+class FanInBoundsTests(unittest.TestCase):
+    """A wallet that splits and recombines must not cost combinatorial work."""
+
+    def _book(self, hops, width):
+        from kassiber.core.source_funds_assembly import derive_parent_spend_pairs
+
+        self.derive = derive_parent_spend_pairs
+        script = _script("a")
+
+        def out_row(rid, txid, vin, n_out, occurred, amount):
+            raw = {
+                "txid": txid, "chain": "bitcoin", "network": "main",
+                "observer_owned_scripts": [script], "vin": vin,
+                "vout": [
+                    {"n": i, "scriptpubkey": script, "value": 1_000_000}
+                    for i in range(n_out)
+                ],
+            }
+            return _authoritative({
+                "id": rid, "wallet_id": "w",
+                "wallet_config_json": json.dumps({"chain": "bitcoin", "network": "main"}),
+                "external_id": txid, "external_id_kind": "txid",
+                "direction": "outbound", "asset": "BTC", "amount": amount,
+                "fee": 1_000_000, "amount_includes_fee": 0, "occurred_at": occurred,
+                "raw_json": json.dumps(raw, sort_keys=True),
+            })
+
+        # Note: 00..00 is the coinbase sentinel and is refused, so start at 01.
+        deposits = [(f"{i + 1:02x}" * 32, 1_000_000) for i in range(width)]
+        rows = [_parent_row(txid, sats * 1000) for txid, sats in deposits]
+        prev = [(txid, 0) for txid, _sats in deposits]
+        for hop in range(hops):
+            txid = f"{(0xa0 + hop):02x}" * 32
+            vin = [
+                {"txid": t, "vout": v, "prevout": {"scriptpubkey": script, "value": 1_000_000}}
+                for t, v in prev
+            ]
+            rows.append(out_row(f"hop{hop}", txid, vin, width, f"2026-01-{hop + 2:02d}T00:00:00Z", 0))
+            prev = [(txid, i) for i in range(width)]
+        spend_value = width * 1_000_000 * 1000 - 1_000_000
+        rows.append(out_row(
+            "final", "ff" * 32,
+            [{"txid": t, "vout": v, "prevout": {"scriptpubkey": script, "value": 1_000_000}}
+             for t, v in prev],
+            1, "2026-02-01T00:00:00Z", spend_value,
+        ))
+        return rows, spend_value
+
+    def test_repeated_ancestors_resolve_once_and_stay_exact(self):
+        rows, spend_value = self._book(hops=4, width=10)
+
+        pairs = self.derive(rows, {}, skip_row=lambda row: False)
+        funding = [p for p in pairs if p["to_row"]["id"] == "final"]
+
+        # One edge per deposit, not one per path that reaches it.
+        self.assertEqual(len(funding), 10)
+        self.assertEqual(len({p["from_row"]["id"] for p in funding}), 10)
+        self.assertEqual(sum(p["allocation_msat"] for p in funding), spend_value)
+
+    def test_a_graph_beyond_the_work_budget_fails_closed(self):
+        from kassiber.core import source_funds_assembly
+
+        rows, _spend_value = self._book(hops=4, width=10)
+        original = source_funds_assembly._MAX_ANCESTOR_RESOLUTIONS
+        source_funds_assembly._MAX_ANCESTOR_RESOLUTIONS = 2
+        try:
+            pairs = self.derive(rows, {}, skip_row=lambda row: False)
+        finally:
+            source_funds_assembly._MAX_ANCESTOR_RESOLUTIONS = original
+
+        # Exhausting the budget emits nothing rather than a partial history.
+        self.assertEqual([p for p in pairs if p["to_row"]["id"] == "final"], [])

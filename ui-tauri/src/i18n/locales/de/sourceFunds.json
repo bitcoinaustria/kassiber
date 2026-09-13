@@ -392,7 +392,9 @@
     "linkReviewStaleBody": "Diese Verknüpfung hat sich seit deiner Prüfung geändert. Sieh dir die aktualisierten Werte an und prüfe sie erneut.",
     "linkReviewFailedBody": "Kassiber konnte diese Prüfung nicht speichern.",
     "assemblyFailed": "Historie konnte nicht zusammengestellt werden",
-    "assemblyFailedBody": "Kassiber konnte die Chain-Evidenz dieser Transaktion nicht lesen. Versuche es mit „Zusammenstellung erneut ausführen“."
+    "assemblyFailedBody": "Kassiber konnte die Chain-Evidenz dieser Transaktion nicht lesen. Versuche es mit „Zusammenstellung erneut ausführen“.",
+    "assembledBody_one": "{{count}} Zahlungsquelle aus der Chain-Evidenz verknüpft. Halte fest, woher sie stammt.",
+    "assembledBody_other": "{{count}} Zahlungsquellen aus der Chain-Evidenz verknüpft. Halte fest, woher sie stammen."
   },
   "case": {
     "description": "Erkläre die Herkunft eines Betrags anhand der Nachweise in diesem Buch.",
@@ -601,10 +603,10 @@
       }
     },
     "stale_structural_lineage": {
-      "title": "Chain-Evidenz hat sich geändert",
-      "nextStep": "Führe die Zusammenstellung mit der aktuellen Chain-Evidenz erneut aus",
+      "title": "Eine Zahlungsverbindung braucht eine Prüfung",
+      "nextStep": "Sieh dir diese Zahlungsverbindung an und prüfe sie erneut",
       "messages": {
-        "aReviewedLinkNoLongerMatchesThe": "Eine geprüfte Verknüpfung passt nicht mehr zur beobachteten Transaktionsstruktur."
+        "anEarlierFundingConnectionCanNoLonger": "Eine frühere Zahlungsverbindung lässt sich nicht mehr anhand der Transaktionen dieser Wallet bestätigen."
       }
     },
     "source_asset_mismatch": {

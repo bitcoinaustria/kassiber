@@ -472,10 +472,15 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     const summary = envelope.data;
     const reviewed = summary?.auto_reviewed ?? 0;
     const manual = summary?.awaiting_manual_review ?? 0;
+    // Say what happened and what is left, once. A zero-result run on an
+    // automatic pass is not news, so it stays quiet unless asked for.
     if (showNotification || reviewed > 0) {
       addNotification({
         title: t(reviewed > 0 ? "case.historyAssembled" : "actionsBar.assembleResultEmpty"),
-        body: t("toast.deterministicBody", { reviewed, skipped: manual }),
+        body: t(
+          reviewed > 0 ? "toast.assembledBody" : "toast.deterministicBody",
+          { count: reviewed, reviewed, skipped: manual },
+        ),
         tone: reviewed > 0 ? "success" : "info",
       });
     }
@@ -492,7 +497,18 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     if (!shouldAutoAssemble({
       targetId,
       reviewedEdgeCount: preview.data?.data?.report?.graph?.edges?.length ?? 0,
-      busy: Boolean(preview.isFetching) || assembleLinks.isPending,
+      // Any authoring in flight means the user is mid-decision. Assembling
+      // underneath that can add structural funding beside a root source they
+      // are still writing, leaving two competing allocations.
+      busy:
+        Boolean(preview.isFetching) ||
+        assembleLinks.isPending ||
+        suggestLinks.isPending ||
+        bulkReviewLinks.isPending ||
+        reviewLink.isPending ||
+        attachLink.isPending ||
+        createLink.isPending ||
+        createSource.isPending,
       alreadyAssembled: autoAssembled.current,
     })) {
       return;

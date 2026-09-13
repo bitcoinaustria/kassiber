@@ -392,7 +392,9 @@
     "linkReviewStaleBody": "This link changed since you inspected it. Check the updated values and review it again.",
     "linkReviewFailedBody": "Kassiber could not save this review.",
     "assemblyFailed": "Could not assemble history",
-    "assemblyFailedBody": "Kassiber could not read this transaction's chain evidence. Try Re-run assembly."
+    "assemblyFailedBody": "Kassiber could not read this transaction's chain evidence. Try Re-run assembly.",
+    "assembledBody_one": "Connected {{count}} funding transaction from chain evidence. Document where it came from.",
+    "assembledBody_other": "Connected {{count}} funding transactions from chain evidence. Document where they came from."
   },
   "case": {
     "description": "Explain the origin of one amount using the evidence in this book.",
@@ -601,10 +603,10 @@
       }
     },
     "stale_structural_lineage": {
-      "title": "Chain evidence changed",
-      "nextStep": "Re-run assembly against the current chain evidence",
+      "title": "A funding connection needs checking",
+      "nextStep": "Check this funding connection and review it again",
       "messages": {
-        "aReviewedLinkNoLongerMatchesThe": "A reviewed link no longer matches the observed transaction structure."
+        "anEarlierFundingConnectionCanNoLonger": "An earlier funding connection can no longer be verified against this wallet's transactions."
       }
     },
     "source_asset_mismatch": {
