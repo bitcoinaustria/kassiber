@@ -1919,7 +1919,15 @@ def suggest_links(
     target_transaction_ref: str | None = None,
     include_broad_hints: bool = False,
     max_suggestions: int = SUGGESTION_WRITE_CAP,
+    commit: bool = True,
 ) -> dict[str, Any]:
+    """Derive candidate funding edges for a target.
+
+    ``commit=False`` still builds the rows so the caller can read exactly what
+    would be written, and leaves the transaction open for the caller to roll
+    back -- a provenance tool should be able to show its work without changing
+    the book to do it.
+    """
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     target = hooks.resolve_transaction(conn, profile["id"], target_transaction_ref) if target_transaction_ref else None
     if max_suggestions <= 0:
@@ -2158,10 +2166,12 @@ def suggest_links(
                 )
                 remember(link)
 
-    conn.commit()
     links = [_link_row_to_dict(conn, row) for row in inserted]
+    if commit:
+        conn.commit()
     return {
         "inserted": len(links),
+        "committed": bool(commit),
         "target_transaction_id": target["id"] if target else None,
         "links": links,
         "privacy_warning": (
