@@ -159,6 +159,112 @@ def _row_is_authoritative(row: Mapping[str, Any]) -> bool:
         return False
 
 
+
+# A change or consolidation output is never its own row: the observer stores one
+# NET row per wallet per transaction, so a self-consolidation becomes an
+# outbound fee row and change is netted out of a withdrawal's amount. Spending
+# such an output therefore has to pass THROUGH that row to the inbound rows
+# behind it. Bounded because each hop re-reads a stored graph.
+_MAX_PASSTHROUGH_HOPS = 8
+
+
+def _owned_inputs(row: Mapping[str, Any], chain: str, network: str) -> list[tuple[str, int, int]] | None:
+    """Return (txid, vout, msat) for every input, or None unless ALL are owned."""
+    parsed = parse_ownership_tx(row["raw_json"])
+    if parsed is None:
+        return None
+    entries = list(parsed.get("inputs") or ())
+    if not entries or _declared_inputs(row["raw_json"]) != len(entries):
+        return None
+    outer = stored_tx_mapping(row["raw_json"]) or {}
+    owned_scripts = {
+        str(script) for script in (outer.get("observer_owned_scripts") or ()) if script
+    }
+    resolved: list[tuple[str, int, int]] = []
+    for entry in entries:
+        outpoint = str(entry.get("outpoint") or "")
+        prev_txid, _, vout_text = outpoint.partition(":")
+        prev_txid = canonical_txid(prev_txid)
+        try:
+            vout = int(vout_text)
+            value_sats = int(entry["value_sats"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        script = str(entry.get("script") or "")
+        if prev_txid is None or vout < 0 or not script:
+            return None
+        if script not in owned_scripts and str(entry.get("role") or "") != "owned":
+            return None
+        resolved.append((prev_txid, vout, value_sats * 1000))
+    return resolved
+
+
+def _resolve_owned_ancestors(
+    txid: str,
+    value_msat: int,
+    *,
+    wallet_id: str,
+    chain: str,
+    network: str,
+    rows_by_scope: Mapping[tuple[str, str, str], Sequence[Mapping[str, Any]]],
+    owned_index: Mapping[OwnedOutpointKey, Mapping[str, Any]],
+    blocked: frozenset[tuple[str, str, str]],
+    depth: int,
+    visited: frozenset[str],
+) -> list[tuple[Mapping[str, Any], int]] | None:
+    """Inbound rows funding one owned output, passing through change hops.
+
+    Returns None whenever the chain cannot be resolved completely, so a partial
+    answer is never mistaken for a whole one.
+    """
+    if depth > _MAX_PASSTHROUGH_HOPS or txid in visited or value_msat <= 0:
+        return None
+    if (chain, network, txid) in blocked:
+        # A CoinJoin/PayJoin hop keeps its deferred semantics. Passing lineage
+        # through one would assert exactly the participant linkage the privacy
+        # boundary exists to refuse.
+        return None
+    candidates = rows_by_scope.get((chain, network, txid), ())
+    inbound = [r for r in candidates if str(r["wallet_id"]) == wallet_id
+               and str(r["direction"]) == "inbound"]
+    if len(inbound) == 1:
+        parent = inbound[0]
+        if not _row_is_authoritative(parent) or value_msat > int(parent["amount"] or 0):
+            return None
+        return [(parent, value_msat)]
+    if inbound:
+        # More than one inbound leg for this wallet is ambiguous evidence.
+        return None
+
+    outbound = [r for r in candidates if str(r["wallet_id"]) == wallet_id
+                and str(r["direction"]) == "outbound"]
+    if len(outbound) != 1:
+        return None
+    hop = outbound[0]
+    if not _row_is_authoritative(hop):
+        return None
+    inputs = _owned_inputs(hop, chain, network)
+    if not inputs:
+        return None
+    # The output being spent is funded by this hop's own inputs. Money is
+    # fungible inside one transaction, so split by input weight and keep the
+    # shares summing exactly to the value actually being carried forward.
+    shares = _allocate_by_weight([msat for _t, _v, msat in inputs], value_msat)
+    carried: list[tuple[Mapping[str, Any], int]] = []
+    for (prev_txid, _prev_vout, _msat), share in zip(inputs, shares):
+        if share <= 0:
+            continue
+        resolved = _resolve_owned_ancestors(
+            prev_txid, share, wallet_id=wallet_id, chain=chain, network=network,
+            rows_by_scope=rows_by_scope, owned_index=owned_index, blocked=blocked,
+            depth=depth + 1, visited=visited | {txid},
+        )
+        if resolved is None:
+            return None
+        carried.extend(resolved)
+    return carried or None
+
+
 def derive_parent_spend_pairs(
     rows: Sequence[Mapping[str, Any]],
     owned_index: Mapping[OwnedOutpointKey, Mapping[str, Any]],
@@ -272,23 +378,26 @@ def derive_parent_spend_pairs(
         if not complete or not contributions:
             continue
 
-        parents = []
+        by_parent: dict[str, list[Any]] = {}
+        resolved_all = True
         for prev_txid, gross_msat in sorted(contributions.items()):
-            parent = None
-            for candidate in rows_by_scope.get((chain, network, prev_txid), ()):
-                if (
-                    str(candidate["wallet_id"]) == wallet_id
-                    and str(candidate["direction"]) == "inbound"
-                ):
-                    parent = candidate if parent is None else False
-            if not parent or not _row_is_authoritative(parent):
-                parents = []
+            resolved = _resolve_owned_ancestors(
+                prev_txid, gross_msat, wallet_id=wallet_id, chain=chain, network=network,
+                rows_by_scope=rows_by_scope, owned_index=owned_index,
+                blocked=frozenset(blocked), depth=0, visited=frozenset(),
+            )
+            if resolved is None:
+                resolved_all = False
                 break
-            if gross_msat > int(parent["amount"] or 0):
-                parents = []
-                break
-            parents.append((parent, gross_msat))
-        if not parents:
+            for parent, msat in resolved:
+                entry = by_parent.setdefault(str(parent["id"]), [parent, 0])
+                entry[1] += msat
+        if not resolved_all or not by_parent:
+            continue
+        parents = [(parent, msat) for parent, msat in sorted(
+            by_parent.values(), key=lambda item: str(item[0]["id"]),
+        )]
+        if any(msat > int(parent["amount"] or 0) for parent, msat in parents):
             continue
 
         target_msat = int(row["amount"] or 0)

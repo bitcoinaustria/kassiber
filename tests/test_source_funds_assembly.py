@@ -286,3 +286,74 @@ class ParentSpendDerivationTests(unittest.TestCase):
         rows = [_parent_row(t, v) for t, v in self.parents] + [spend]
 
         self.assertEqual(self.derive(rows, _index(self.parents), skip_row=lambda row: False), [])
+
+
+class ChangePassthroughTests(unittest.TestCase):
+    """A change output is never its own row, so lineage must pass through it.
+
+    The observer stores one NET row per wallet per transaction: a same-wallet
+    consolidation becomes an outbound `fee` row and change is netted out of a
+    withdrawal's amount. Spending change therefore lands on an outbound parent.
+    """
+
+    def setUp(self):
+        from kassiber.core.source_funds_assembly import derive_parent_spend_pairs
+
+        self.derive = derive_parent_spend_pairs
+        self.deposit_txid = "e1" * 32
+        self.hop_txid = "e2" * 32
+        self.spend_txid = "e3" * 32
+        # Deposit 1,000,000 -> pay 400,000 out, keep 599,000 change, 1,000 fee.
+        self.deposit = _parent_row(self.deposit_txid, 1_000_000_000)
+        hop_raw = {
+            "txid": self.hop_txid, "chain": "bitcoin", "network": "main",
+            "observer_owned_scripts": [_script("a")],
+            "vin": [{
+                "txid": self.deposit_txid, "vout": 0,
+                "prevout": {"scriptpubkey": _script("a"), "value": 1_000_000},
+            }],
+            "vout": [
+                {"n": 0, "scriptpubkey": _script("f"), "value": 400_000},
+                {"n": 1, "scriptpubkey": _script("a"), "value": 599_000},
+            ],
+        }
+        self.hop = _authoritative({
+            "id": "hop", "wallet_id": "w",
+            "wallet_config_json": json.dumps({"chain": "bitcoin", "network": "main"}),
+            "external_id": self.hop_txid, "external_id_kind": "txid",
+            "direction": "outbound", "asset": "BTC",
+            "amount": 400_000_000, "fee": 1_000_000, "amount_includes_fee": 0,
+            "occurred_at": "2026-01-15T00:00:00Z",
+            "raw_json": json.dumps(hop_raw, sort_keys=True),
+        })
+        # Now spend that change entirely.
+        self.spend = _spend_row(
+            self.spend_txid, [(self.hop_txid, 599_000_000)], 598_000_000, 1_000_000,
+        )
+        spend_raw = json.loads(self.spend["raw_json"])
+        spend_raw["vin"][0]["vout"] = 1
+        self.spend["raw_json"] = json.dumps(spend_raw, sort_keys=True)
+        self.spend = _authoritative(self.spend)
+        self.rows = [self.deposit, self.hop, self.spend]
+
+    def test_spending_change_reaches_the_deposit_behind_it(self):
+        pairs = self.derive(self.rows, {}, skip_row=lambda row: False)
+        funding = [p for p in pairs if p["to_row"]["id"] == self.spend["id"]]
+
+        self.assertEqual(len(funding), 1)
+        # The edge lands on the deposit, not on the intermediate payment.
+        self.assertEqual(funding[0]["from_row"]["id"], self.deposit["id"])
+        self.assertEqual(funding[0]["allocation_msat"], 598_000_000)
+
+    def test_an_unresolvable_hop_emits_nothing(self):
+        """Drop the deposit: the change can no longer be traced to a root."""
+        pairs = self.derive([self.hop, self.spend], {}, skip_row=lambda row: False)
+
+        self.assertEqual([p for p in pairs if p["to_row"]["id"] == self.spend["id"]], [])
+
+    def test_a_privacy_hop_is_not_passed_through(self):
+        pairs = self.derive(
+            self.rows, {}, skip_row=lambda row: row["id"] == "hop",
+        )
+
+        self.assertEqual([p for p in pairs if p["to_row"]["id"] == self.spend["id"]], [])
