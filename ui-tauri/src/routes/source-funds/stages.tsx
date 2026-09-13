@@ -378,6 +378,12 @@ export function TraceStage({ state, onInvestigate, assistantAvailable }: { state
 
   const dispatchGapAction = (action: string, gap: SourceFundsFinding) => {
     if (action === "open_source_creator") {
+      // Documenting where the funds came from, not attesting that nobody knows.
+      state.prefillOriginForm(gap);
+      state.setShowAdvancedReview(true);
+      return;
+    }
+    if (action === "attest_missing_history") {
       state.prefillGapForm(gap);
       state.setShowAdvancedReview(true);
       return;
@@ -448,6 +454,22 @@ export function TraceStage({ state, onInvestigate, assistantAvailable }: { state
             {t("case.noBlockers")}
           </div>
         )}
+        {(() => {
+          const origins = gaps.filter((finding) => finding.code === "missing_history");
+          if (origins.length < 2) return null;
+          const total = origins.reduce(
+            (sum, finding) => sum + Number(finding.amount ?? 0),
+            0,
+          );
+          return (
+            <p className="text-sm text-muted-foreground">
+              {t("case.originsNeeded", {
+                count: origins.length,
+                amount: formatBtc(total, state.report?.overview?.target_asset ?? "BTC"),
+              })}
+            </p>
+          );
+        })()}
         <div className="grid gap-2 xl:grid-cols-2">
           {gaps.map((finding) => (
             <GateRow

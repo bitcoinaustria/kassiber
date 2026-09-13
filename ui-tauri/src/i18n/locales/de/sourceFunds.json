@@ -442,7 +442,9 @@
     "exportFingerprintChanged": "Der Fall hat sich geändert. Prüfe ihn vor dem Export erneut.",
     "remainingMore": "+{{count}} weitere",
     "optionalAmount": "Leer lassen, um den gesamten Transaktionsbetrag zu erklären.",
-    "notClassified": "Nicht eingeordnet"
+    "notClassified": "Nicht eingeordnet",
+    "originsNeeded_one": "Bei {{count}} Zahlungsquelle fehlt noch die Herkunft ({{amount}}).",
+    "originsNeeded_other": "Bei {{count}} Zahlungsquellen fehlt noch die Herkunft (insgesamt {{amount}})."
   },
   "workstation": {
     "amounts": "Beträge",

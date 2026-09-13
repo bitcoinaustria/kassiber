@@ -688,6 +688,33 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
   };
 
   /** Prefill the gap form for a quantified missing-history finding. */
+  /**
+   * Prefill the source form to DOCUMENT where funds came from.
+   *
+   * Deliberately separate from attesting a gap. After assembly connects real
+   * deposits, defaulting the one-click action to `missing_history` would steer
+   * someone into attesting history they actually have, which downgrades their
+   * own report from traced to attested.
+   */
+  const prefillOriginForm = (gap?: {
+    amount_msat?: number | string | null;
+    amount?: number | null;
+    asset?: string;
+    ref?: string;
+  }) => {
+    setSourceForm((current) => ({
+      ...current,
+      source_type:
+        current.source_type === "missing_history" ? "fiat_purchase" : current.source_type,
+      link_type: "manual_source",
+      asset: gap?.asset || current.asset,
+      amount: amountInput(gap?.amount_msat) || current.amount || selectedTargetAmount,
+      to_transaction:
+        gap?.ref && txById.has(gap.ref) ? gap.ref : current.to_transaction,
+    }));
+  };
+
+  /** Prefill the source form to ATTEST that the history is genuinely missing. */
   const prefillGapForm = (gap?: {
     amount_msat?: number | string | null;
     amount?: number | null;
@@ -833,6 +860,7 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     createManualLink,
     createSourceLink,
     prefillGapForm,
+    prefillOriginForm,
     // advanced editor
     showAdvancedReview,
     setShowAdvancedReview,

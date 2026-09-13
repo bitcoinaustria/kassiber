@@ -164,11 +164,14 @@ def _row_is_authoritative(row: Mapping[str, Any]) -> bool:
 # NET row per wallet per transaction, so a self-consolidation becomes an
 # outbound fee row and change is netted out of a withdrawal's amount. Spending
 # such an output therefore has to pass THROUGH that row to the inbound rows
-# behind it. Bounded because each hop re-reads a stored graph.
-_MAX_PASSTHROUGH_HOPS = 8
+# behind it.
 # Bounded total work per derivation pass. A split/recombine graph can reach the
 # same ancestors from many directions; memoisation collapses that, and this is
-# the backstop for anything it cannot.
+# the backstop for anything it cannot. There is deliberately no limit on chain
+# LENGTH: a long change chain is still fully observed history, and refusing it
+# would report a misleading "no root source" for lineage the book can prove.
+# Memoisation made such a cap order-dependent anyway -- resolving a hop from the
+# bottom up cached it at shallow depth and the limit never applied.
 _MAX_ANCESTOR_RESOLUTIONS = 5000
 
 
@@ -251,7 +254,6 @@ def _ancestor_distribution(
     rows_by_scope: Mapping[tuple[str, str, str], Sequence[Mapping[str, Any]]],
     owned_index: Mapping[OwnedOutpointKey, Mapping[str, Any]],
     blocked: frozenset[tuple[str, str, str]],
-    depth: int,
     visited: frozenset[str],
     memo: dict[str, list[tuple[Mapping[str, Any], int]] | None],
     budget: list[int],
@@ -265,7 +267,8 @@ def _ancestor_distribution(
     """
     if txid in memo:
         return memo[txid]
-    if depth > _MAX_PASSTHROUGH_HOPS or txid in visited:
+    if txid in visited:
+        # Path-local, so a diamond still resolves while a cycle cannot.
         return None
     budget[0] -= 1
     if budget[0] < 0:
@@ -304,7 +307,7 @@ def _ancestor_distribution(
                 upstream = _ancestor_distribution(
                     prev_txid, wallet_id=wallet_id, chain=chain, network=network,
                     rows_by_scope=rows_by_scope, owned_index=owned_index,
-                    blocked=blocked, depth=depth + 1, visited=visited | {txid},
+                    blocked=blocked, visited=visited | {txid},
                     memo=memo, budget=budget,
                 )
                 if upstream is None:
@@ -400,7 +403,7 @@ def derive_parent_spend_pairs(
             upstream = _ancestor_distribution(
                 prev_txid, wallet_id=wallet_id, chain=chain, network=network,
                 rows_by_scope=rows_by_scope, owned_index=owned_index,
-                blocked=frozenset(blocked), depth=0, visited=frozenset(),
+                blocked=frozenset(blocked), visited=frozenset(),
                 memo=memo, budget=budget,
             )
             if upstream is None:

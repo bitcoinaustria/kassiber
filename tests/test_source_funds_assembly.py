@@ -474,3 +474,119 @@ class FanInBoundsTests(unittest.TestCase):
 
         # Exhausting the budget emits nothing rather than a partial history.
         self.assertEqual([p for p in pairs if p["to_row"]["id"] == "final"], [])
+
+
+class PassthroughWeightTests(unittest.TestCase):
+    """Value carried through a hop is split by what each input contributed."""
+
+    def setUp(self):
+        from kassiber.core.source_funds_assembly import derive_parent_spend_pairs
+
+        self.derive = derive_parent_spend_pairs
+        script = _script("a")
+        self.big, self.small = "b1" * 32, "b2" * 32
+        hop_txid, spend_txid = "b3" * 32, "b4" * 32
+        # 750,000 and 250,000 in; one 999,000 change output out.
+        hop_raw = {
+            "txid": hop_txid, "chain": "bitcoin", "network": "main",
+            "observer_owned_scripts": [script],
+            "vin": [
+                {"txid": self.big, "vout": 0,
+                 "prevout": {"scriptpubkey": script, "value": 750_000}},
+                {"txid": self.small, "vout": 0,
+                 "prevout": {"scriptpubkey": script, "value": 250_000}},
+            ],
+            "vout": [{"n": 0, "scriptpubkey": script, "value": 999_000}],
+        }
+        hop = _authoritative({
+            "id": "hop", "wallet_id": "w",
+            "wallet_config_json": json.dumps({"chain": "bitcoin", "network": "main"}),
+            "external_id": hop_txid, "external_id_kind": "txid",
+            "direction": "outbound", "asset": "BTC", "amount": 0,
+            "fee": 1_000_000, "amount_includes_fee": 0,
+            "occurred_at": "2026-01-15T00:00:00Z",
+            "raw_json": json.dumps(hop_raw, sort_keys=True),
+        })
+        spend = _spend_row(spend_txid, [(hop_txid, 999_000_000)], 998_000_000, 1_000_000)
+        self.rows = [
+            _parent_row(self.big, 750_000_000),
+            _parent_row(self.small, 250_000_000),
+            hop,
+            spend,
+        ]
+
+    def test_each_ancestor_carries_its_share_and_the_total_is_exact(self):
+        pairs = self.derive(self.rows, {}, skip_row=lambda row: False)
+        funding = {p["from_row"]["external_id"]: p["allocation_msat"] for p in pairs
+                   if p["to_row"]["id"] == "tx-b4b4b4b4"}
+
+        self.assertEqual(set(funding), {self.big, self.small})
+        # 3:1 in, so 3:1 out -- and the shares still sum to the spend exactly.
+        self.assertEqual(sum(funding.values()), 998_000_000)
+        self.assertGreater(funding[self.big], funding[self.small] * 2)
+
+
+class TraversalBoundsTests(unittest.TestCase):
+    """Depth and cycles are bounded, and both fail closed."""
+
+    def setUp(self):
+        from kassiber.core.source_funds_assembly import derive_parent_spend_pairs
+
+        self.derive = derive_parent_spend_pairs
+
+    def _chain(self, length):
+        script = _script("a")
+        deposit = "c0" * 32
+        rows = [_parent_row(deposit, 1_000_000_000)]
+        prev, value = deposit, 1_000_000
+        for hop in range(length):
+            txid = f"{(0xc1 + hop):02x}" * 32
+            value -= 100
+            raw = {
+                "txid": txid, "chain": "bitcoin", "network": "main",
+                "observer_owned_scripts": [script],
+                "vin": [{"txid": prev, "vout": 0,
+                         "prevout": {"scriptpubkey": script, "value": value + 100}}],
+                "vout": [{"n": 0, "scriptpubkey": script, "value": value}],
+            }
+            rows.append(_authoritative({
+                "id": f"hop{hop}", "wallet_id": "w",
+                "wallet_config_json": json.dumps({"chain": "bitcoin", "network": "main"}),
+                "external_id": txid, "external_id_kind": "txid",
+                "direction": "outbound", "asset": "BTC", "amount": 0,
+                "fee": 100_000, "amount_includes_fee": 0,
+                "occurred_at": f"2026-01-{hop + 2:02d}T00:00:00Z",
+                "raw_json": json.dumps(raw, sort_keys=True),
+            }))
+            prev = txid
+        spend = _spend_row("cf" * 32, [(prev, value * 1000)], (value - 100) * 1000, 100_000)
+        rows.append(spend)
+        return rows
+
+    def test_a_long_change_chain_still_resolves_to_its_deposit(self):
+        """Length is not a reason to refuse history the book can prove.
+
+        Chain length is deliberately uncapped: a depth limit made this
+        order-dependent once resolution was memoised, and refusing a long but
+        fully observed chain reports a misleading "no root source".
+        """
+        for length in (3, 12):
+            with self.subTest(length=length):
+                pairs = self.derive(self._chain(length), {}, skip_row=lambda row: False)
+
+                funding = [p for p in pairs if p["to_row"]["id"] == "tx-cfcfcfcf"]
+                self.assertEqual(len(funding), 1)
+                self.assertEqual(funding[0]["from_row"]["id"], "tx-c0c0c0c0")
+
+    def test_a_cycle_cannot_be_traversed(self):
+        rows = self._chain(3)
+        # Point the first hop back at a descendant of itself.
+        hop0 = next(row for row in rows if row["id"] == "hop0")
+        raw = json.loads(hop0["raw_json"])
+        raw["vin"][0]["txid"] = "c3" * 32
+        hop0["raw_json"] = json.dumps(raw, sort_keys=True)
+        rows = [_authoritative(hop0) if row["id"] == "hop0" else row for row in rows]
+
+        pairs = self.derive(rows, {}, skip_row=lambda row: False)
+
+        self.assertEqual([p for p in pairs if p["to_row"]["id"] == "tx-cfcfcfcf"], [])

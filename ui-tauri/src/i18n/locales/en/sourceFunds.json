@@ -442,7 +442,9 @@
     "exportFingerprintChanged": "The case changed. Inspect it again before exporting.",
     "remainingMore": "+{{count}} more",
     "optionalAmount": "Leave blank to explain the full transaction amount.",
-    "notClassified": "Not classified"
+    "notClassified": "Not classified",
+    "originsNeeded_one": "{{count}} funding transaction still needs its origin documented ({{amount}}).",
+    "originsNeeded_other": "{{count}} funding transactions still need their origin documented ({{amount}} in total)."
   },
   "workstation": {
     "amounts": "Amounts",
