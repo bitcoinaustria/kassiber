@@ -5128,9 +5128,6 @@ def _migrate_inline_ownership_history(conn) -> int:
     return migrated
 
 
-_LEGACY_SOURCE_FUNDS_METHODS_RETIRED = "source_funds_legacy_methods_retired"
-
-
 def ensure_schema_compat(conn):
     """Apply one-shot backfills not covered by `CREATE TABLE IF NOT EXISTS`.
 
@@ -5138,20 +5135,18 @@ def ensure_schema_compat(conn):
     existing databases pick it up on the next `open_db`.
     """
     migrated_ownership_history = _migrate_inline_ownership_history(conn)
-    # Retire the method names the pre-projection derivers wrote -- exactly once.
-    # `utxo_spend` is written again today by the authority-gated structural
-    # deriver, so an unconditional rewrite would relabel every fresh edge as a
-    # custody projection it is not, and the next report would call all of them
-    # stale. The one-shot flag still converts whatever legacy rows a book is
-    # carrying at upgrade time.
-    migrated_source_links = 0
-    if get_setting(conn, _LEGACY_SOURCE_FUNDS_METHODS_RETIRED) != "1":
-        migrated_source_links = conn.execute(
-            "UPDATE source_funds_links SET method = 'custody_component' "
-            "WHERE method IN ('transaction_pair', 'same_onchain_scope', "
-            "'utxo_spend', 'payment_hash')"
-        ).rowcount
-        set_setting(conn, _LEGACY_SOURCE_FUNDS_METHODS_RETIRED, "1")
+    # Retire the method names the pre-projection derivers wrote and nothing
+    # writes today. `utxo_spend` is deliberately NOT in this list: the
+    # authority-gated structural deriver writes it again, so relabelling would
+    # turn every fresh edge into a custody projection it is not. A legacy
+    # `utxo_spend` row needs no migration either -- build_report and bulk review
+    # both re-derive it from current evidence, so one the old ungated deriver
+    # invented fails that check and is refused rather than quietly relabelled.
+    migrated_source_links = conn.execute(
+        "UPDATE source_funds_links SET method = 'custody_component' "
+        "WHERE method IN ('transaction_pair', 'same_onchain_scope', "
+        "'payment_hash')"
+    ).rowcount
     if migrated_ownership_history or migrated_source_links:
         conn.commit()
     # Derived gap pages and normalized candidate caches carry no authored

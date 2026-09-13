@@ -153,28 +153,32 @@ def test_reopening_the_book_does_not_retire_fresh_structural_links(consolidation
     assert "ambiguous_allocation" not in codes
 
 
-def test_legacy_method_rows_are_still_retired_once(consolidation_book):
-    """Pre-projection rows carry no authority gate and must not become trusted."""
+def test_a_legacy_invented_link_is_refused_rather_than_relabelled(consolidation_book):
+    """Pre-projection rows carried no authority gate and must not become trusted.
+
+    They are not migrated to custody_component -- that would assert they came
+    from the projection, which is its own untruth. Re-derivation refuses them.
+    """
     from kassiber.db import ensure_schema_compat
 
     conn = consolidation_book
-    # A book upgraded from an old build carries the legacy rows before the
-    # one-shot retirement has ever run.
-    conn.execute("DELETE FROM settings WHERE key = 'source_funds_legacy_methods_retired'")
+    # An allocation the old ungated deriver could have invented: p0 does not
+    # fund p1, and no observed structure says it does.
     conn.execute(
         "INSERT INTO source_funds_links(id,workspace_id,profile_id,from_transaction_id,"
         "to_transaction_id,link_type,state,confidence,method,asset,from_asset,"
         "allocation_amount,from_allocation_amount,allocation_policy,created_at,updated_at)"
-        " VALUES('legacy','ws','profile','p0','spend','self_transfer','suggested','exact',"
-        "'utxo_spend','BTC','BTC',1,1,'explicit','2026','2026')"
+        " VALUES('legacy','ws','profile','p0','spend','self_transfer','reviewed','exact',"
+        "'utxo_spend','BTC','BTC',12345,12345,'explicit','2026','2026')"
     )
     conn.commit()
-
     ensure_schema_compat(conn)
 
     assert conn.execute(
         "SELECT method FROM source_funds_links WHERE id='legacy'"
-    ).fetchone()[0] == "custody_component"
+    ).fetchone()[0] == "utxo_spend"
+    codes = {f["code"] for f in _report(conn)["explain_gates"]["blockers"]}
+    assert "stale_structural_lineage" in codes
 
 
 def test_a_reviewed_edge_stops_being_trusted_when_its_evidence_disappears(consolidation_book):
