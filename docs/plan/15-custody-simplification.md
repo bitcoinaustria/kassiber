@@ -231,9 +231,24 @@ binary.
    exports, transaction graphs, source-of-funds, transaction/journal UI and AI
    snapshots read that projection; stale books do not render old custody
    grouping as current booked truth. Source-of-funds no longer has private pair,
-   component, UTXO or payment-hash allocation engines. Consumer-side calls to
+   component or payment-hash allocation engines. Consumer-side calls to
    transfer detection have consequently been deleted, leaving the custody
-   journal interpreter as the only production caller. Journal-derived reports
+   journal interpreter as the only production caller.
+
+   One exception is deliberate, because the premise of a blanket cutover was
+   wrong. The projection books movements across custody boundaries; provenance
+   also has to explain a spend funded by the wallet's own earlier outputs, and
+   receiving then spending inside one wallet is acquisition then disposal, not
+   a transfer, so the projection has no opinion on it and never will. Cutting
+   source-of-funds over wholesale therefore left it unable to explain an
+   ordinary consolidation. It may derive exactly that one shape privately
+   (`derive_parent_spend_pairs`, method `utxo_spend`): strictly intra-wallet,
+   never crossing a custody boundary, carrying no basis, gated on a closed
+   `chain_observation_provenance` commitment so imported or hand-authored
+   payloads cannot found lineage, all-or-nothing so a partial history is never
+   emitted, and yielding to the projection wherever it has an opinion on the
+   same pair. It is re-derived from current evidence at bulk review and again
+   at report time, so it can go stale but never drift. Journal-derived reports
    and exports now enter through one core `ReportContext` that proves tax
    support, journal input-version freshness, active-component integrity and
    clear quantity barriers. Nested report composition reuses the same proof;

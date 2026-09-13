@@ -23,6 +23,7 @@ import {
   linkReviewFormFromLink,
   linkReviewPayload,
   pretty,
+  shouldAutoAssemble,
   shortId,
   transactionRows,
   txLabel,
@@ -479,6 +480,40 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
       });
     }
   }
+
+  // Chain evidence assembles itself. An input that IS an earlier owned output
+  // is observed structure, not a judgement call, so making someone press two
+  // buttons to see it is ceremony. Fires once per target, only when the case
+  // has no reviewed history at all, and never touches an authored decision:
+  // assemble_history only adds suggestions and promotes edges it re-derives.
+  const autoAssembled = useRef(new Set<string>());
+  useEffect(() => {
+    const targetId = preview.data?.data?.target?.transaction_id;
+    if (!shouldAutoAssemble({
+      targetId,
+      reviewedEdgeCount: preview.data?.data?.report?.graph?.edges?.length ?? 0,
+      busy: Boolean(preview.isFetching) || assembleLinks.isPending,
+      alreadyAssembled: autoAssembled.current,
+    })) {
+      return;
+    }
+    autoAssembled.current.add(String(targetId));
+    void (async () => {
+      try {
+        // Silent on success: a complete graph is the signal, not a toast.
+        await runAssembly(false);
+      } catch {
+        if (scope?.isCurrent?.() !== false) {
+          addNotification({
+            title: t("toast.assemblyFailed"),
+            body: t("toast.assemblyFailedBody"),
+            tone: "warning",
+          });
+        }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runAssembly identity changes per render; keyed on the resolved target.
+  }, [preview.data, preview.isFetching]);
 
   const bulkReviewDeterministicLinks = async () => {
     if (!selectedTarget) return;

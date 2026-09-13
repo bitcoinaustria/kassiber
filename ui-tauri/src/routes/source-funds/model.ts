@@ -714,6 +714,32 @@ export function formMatchesLink(form: LinkReviewForm, link: SourceFundsLink): bo
 }
 
 
+/**
+ * Whether opening this target should assemble its chain evidence automatically.
+ *
+ * An input that IS an earlier owned output is observed structure, not a
+ * judgement call, so requiring two button presses to see it is ceremony. This
+ * stays deliberately narrow: once per target, only while the case has no
+ * reviewed history at all, and never while a read or write is still in flight.
+ */
+export function shouldAutoAssemble({
+  targetId,
+  reviewedEdgeCount,
+  busy,
+  alreadyAssembled,
+}: {
+  targetId: string | undefined | null;
+  reviewedEdgeCount: number;
+  busy: boolean;
+  alreadyAssembled: ReadonlySet<string>;
+}): boolean {
+  if (!targetId || busy) return false;
+  if (alreadyAssembled.has(targetId)) return false;
+  // Any reviewed edge means this case already has a history someone owns.
+  return reviewedEdgeCount === 0;
+}
+
+
 export function isStaleLinkReviewError(error: unknown): boolean {
   return (
     (error as { envelope?: { error?: { code?: string } } })?.envelope?.error?.code ===

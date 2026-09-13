@@ -125,8 +125,6 @@
     "onChain": "On-chain"
   },
   "actionsBar": {
-    "findLinks": "Find Links",
-    "reviewDeterministic": "Review Deterministic Hops",
     "assemble": "Assemble History",
     "assembling": "Assembling…",
     "markGap": "Mark Gap",
@@ -135,7 +133,8 @@
     "assembleResult_other": "{{count}} hops proven",
     "assembleResultEmpty": "no new evidence this run",
     "manualReviewHint_one": "{{count}} weak or chain-observation suggestion still needs manual review.",
-    "manualReviewHint_other": "{{count}} weak or chain-observation suggestions still need manual review."
+    "manualReviewHint_other": "{{count}} weak or chain-observation suggestions still need manual review.",
+    "reassemble": "Re-run assembly"
   },
   "gapDefaults": {
     "label": "Reviewed missing history",
@@ -391,7 +390,9 @@
     "sourcePathBody": "The source-funds path has been updated.",
     "linkReviewFailed": "Link review not applied",
     "linkReviewStaleBody": "This link changed since you inspected it. Check the updated values and review it again.",
-    "linkReviewFailedBody": "Kassiber could not save this review."
+    "linkReviewFailedBody": "Kassiber could not save this review.",
+    "assemblyFailed": "Could not assemble history",
+    "assemblyFailedBody": "Kassiber could not read this transaction's chain evidence. Try Re-run assembly."
   },
   "case": {
     "description": "Explain the origin of one amount using the evidence in this book.",

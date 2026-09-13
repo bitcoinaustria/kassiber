@@ -5,6 +5,7 @@ import {
   linkReviewFormFromLink,
   linkReviewPayload,
   isStaleLinkReviewError,
+  shouldAutoAssemble,
   type SourceFundsLink,
 } from "./model";
 
@@ -91,5 +92,43 @@ describe("reviewing is not editing", () => {
     ).toBe(true);
     expect(isStaleLinkReviewError({ envelope: { error: { code: "validation" } } })).toBe(false);
     expect(isStaleLinkReviewError(undefined)).toBe(false);
+  });
+});
+
+describe("chain evidence assembles itself", () => {
+  const base = {
+    targetId: "tx-1",
+    reviewedEdgeCount: 0,
+    busy: false,
+    alreadyAssembled: new Set<string>(),
+  };
+
+  it("assembles a target that has no reviewed history yet", () => {
+    expect(shouldAutoAssemble(base)).toBe(true);
+  });
+
+  it("leaves a case that already has a history alone", () => {
+    // Someone owns those edges; re-running behind them is not ours to do.
+    expect(shouldAutoAssemble({ ...base, reviewedEdgeCount: 3 })).toBe(false);
+  });
+
+  it("fires once per target, not once per render", () => {
+    expect(
+      shouldAutoAssemble({ ...base, alreadyAssembled: new Set(["tx-1"]) }),
+    ).toBe(false);
+    expect(
+      shouldAutoAssemble({ ...base, alreadyAssembled: new Set(["other"]) }),
+    ).toBe(true);
+  });
+
+  it("waits while a read or write is in flight", () => {
+    expect(shouldAutoAssemble({ ...base, busy: true })).toBe(false);
+  });
+
+  it("does nothing before a target resolves", () => {
+    // The target-amount field is an undebounced input; an unresolved target
+    // must never trigger a write.
+    expect(shouldAutoAssemble({ ...base, targetId: undefined })).toBe(false);
+    expect(shouldAutoAssemble({ ...base, targetId: "" })).toBe(false);
   });
 });

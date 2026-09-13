@@ -125,8 +125,6 @@
     "onChain": "On-chain"
   },
   "actionsBar": {
-    "findLinks": "Verknüpfungen finden",
-    "reviewDeterministic": "Deterministische Hops prüfen",
     "assemble": "Historie zusammenstellen",
     "assembling": "Historie wird zusammengestellt…",
     "markGap": "Lücke markieren",
@@ -135,7 +133,8 @@
     "assembleResult_other": "{{count}} Hops belegt",
     "assembleResultEmpty": "in diesem Lauf keine neuen Nachweise",
     "manualReviewHint_one": "{{count}} schwacher Vorschlag bzw. Vorschlag aus On-chain-Beobachtung braucht noch eine manuelle Prüfung.",
-    "manualReviewHint_other": "{{count}} schwache Vorschläge bzw. Vorschläge aus On-chain-Beobachtung brauchen noch eine manuelle Prüfung."
+    "manualReviewHint_other": "{{count}} schwache Vorschläge bzw. Vorschläge aus On-chain-Beobachtung brauchen noch eine manuelle Prüfung.",
+    "reassemble": "Zusammenstellung erneut ausführen"
   },
   "gapDefaults": {
     "label": "Geprüfte fehlende Historie",
@@ -391,7 +390,9 @@
     "sourcePathBody": "Der Mittelherkunftspfad wurde aktualisiert.",
     "linkReviewFailed": "Prüfung nicht übernommen",
     "linkReviewStaleBody": "Diese Verknüpfung hat sich seit deiner Prüfung geändert. Sieh dir die aktualisierten Werte an und prüfe sie erneut.",
-    "linkReviewFailedBody": "Kassiber konnte diese Prüfung nicht speichern."
+    "linkReviewFailedBody": "Kassiber konnte diese Prüfung nicht speichern.",
+    "assemblyFailed": "Historie konnte nicht zusammengestellt werden",
+    "assemblyFailedBody": "Kassiber konnte die Chain-Evidenz dieser Transaktion nicht lesen. Versuche es mit „Zusammenstellung erneut ausführen“."
   },
   "case": {
     "description": "Erkläre die Herkunft eines Betrags anhand der Nachweise in diesem Buch.",

@@ -10,7 +10,6 @@ import {
   Info,
   Link2,
   Plus,
-  RefreshCw,
   Search,
   Sparkles,
   ShieldAlert,
@@ -473,7 +472,7 @@ export function TraceStage({ state, onInvestigate, assistantAvailable }: { state
         summary={t("advancedReview.summary", { links: state.reviewQueueLinks.length, sources: state.sources.length, evidence: state.evidence.length })}
       >
       <div className="flex flex-wrap gap-2 pb-3">
-        <Button variant="outline" disabled={!state.selectedTarget || state.assembleLinks.isPending} onClick={() => void state.runAssembly()}><GitBranch className="size-4" />{t(state.assembleLinks.isPending ? "actionsBar.assembling" : "actionsBar.assemble")}</Button>
+        <Button variant="outline" disabled={!state.selectedTarget || state.assembleLinks.isPending} onClick={() => void state.runAssembly()}><GitBranch className="size-4" />{t(state.assembleLinks.isPending ? "actionsBar.assembling" : "actionsBar.reassemble")}</Button>
         <Button variant="outline" onClick={() => { state.prefillGapForm(); state.setShowAdvancedReview(true); }}><AlertTriangle className="size-4" />{t("actionsBar.markGap")}</Button>
       </div>
       <details className="rounded-md border p-3"><summary className="cursor-pointer text-sm font-medium">{t("case.evidenceSection")}</summary><div className="pt-3"><CaseBrief
@@ -508,30 +507,6 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
               {t("reviewQueue.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 p-4">
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void state.runSuggestions()}
-                disabled={!state.selectedTarget || state.suggestLinks.isPending}
-              >
-                <RefreshCw className="mr-2 size-4" aria-hidden="true" />
-                {t("actionsBar.findLinks")}</Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void state.bulkReviewDeterministicLinks()}
-                disabled={
-                  !state.selectedTarget ||
-                  state.bulkReviewLinks.isPending ||
-                  state.bulkReviewableCount === 0
-                }
-              >
-                <Check className="mr-2 size-4" aria-hidden="true" />
-                {t("actionsBar.reviewDeterministic")}</Button>
-            </div>
             {state.reviewQueueLinks.length === 0 ? (
               <EmptyState text={t("workstation.noMatchedLinksYetAssemble")} />
             ) : (
