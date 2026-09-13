@@ -2718,6 +2718,58 @@ def _gross_requirement_phrase(allocations: Mapping[str, Any]) -> str:
     )
 
 
+def _route_difference_explanation(envelope: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Name the route difference when recorded fees demonstrably account for it.
+
+    Pure over the finished envelope, and deliberately strict. A hop consumes
+    value when more entered it than its requirement carried onward; that is
+    explainable only when the amount consumed is exactly the fee the hop's own
+    row records. Numerical coincidence is not an explanation, so every hop must
+    close, the total must match, and a privacy boundary -- where Kassiber does
+    not claim to know what happened -- disqualifies the whole route.
+    """
+    allocations = envelope.get("allocations") or {}
+    difference = allocations.get("route_difference_msat")
+    if not isinstance(difference, int) or difference <= 0:
+        return None
+    graph = envelope.get("graph") or {}
+    nodes = {
+        str(node.get("id")): node
+        for node in (graph.get("nodes") or ())
+        if node.get("node_type") == "transaction"
+    }
+    consumed_by_node: dict[str, int] = defaultdict(int)
+    for edge in graph.get("edges") or ():
+        child = str(edge.get("to") or "")
+        if child not in nodes:
+            continue
+        allocation = edge.get("allocation_amount_msat")
+        from_allocation = edge.get("from_allocation_amount_msat")
+        if allocation is None:
+            return None
+        consumed_by_node[child] += int(from_allocation or allocation) - int(allocation)
+    hops = 0
+    total = 0
+    for node_id, consumed in consumed_by_node.items():
+        if consumed == 0:
+            continue
+        node = nodes[node_id]
+        if consumed < 0 or node.get("privacy_boundary"):
+            return None
+        if consumed != int(node.get("fee_msat") or 0):
+            return None
+        hops += 1
+        total += consumed
+    if hops == 0 or total != difference:
+        return None
+    return {
+        "kind": "network_fees",
+        "fee_msat": total,
+        "fee": _btc_value(total),
+        "hop_count": hops,
+    }
+
+
 def _add_report_shape(envelope: dict[str, Any]) -> None:
     graph = envelope.get("graph") or {}
     nodes = list(graph.get("nodes") or [])
@@ -2761,6 +2813,9 @@ def _add_report_shape(envelope: dict[str, Any]) -> None:
     # target; a matching gross needs no explanation and a standing reassurance
     # line would be noise.
     allocations = envelope.get("allocations") or {}
+    explanation = _route_difference_explanation(envelope)
+    if explanation is not None:
+        allocations["route_difference_explanation"] = explanation
     gross_phrase = _gross_requirement_phrase(allocations)
     gross_sentence = ""
     if gross_phrase and not allocations.get("gross_matches_target"):
@@ -2769,7 +2824,16 @@ def _add_report_shape(envelope: dict[str, Any]) -> None:
             f"Gross upstream requirement: {gross_phrase}. "
         )
         route_difference = allocations.get("route_difference")
-        if route_difference is not None and float(route_difference) != 0:
+        if explanation is not None:
+            # State it as an equation the reader can check against the rows.
+            hops = explanation["hop_count"]
+            gross_sentence += (
+                f"That is {float(target.get('required_amount') or 0):.8f} {target_asset} "
+                f"plus {float(explanation['fee']):.8f} {target_asset} of network fees "
+                f"recorded on {hops} disclosed transaction"
+                f"{'' if hops == 1 else 's'}. "
+            )
+        elif route_difference is not None and float(route_difference) != 0:
             gross_sentence += (
                 f"The route difference of {abs(float(route_difference)):.8f} {target_asset} "
                 "is not automatically classified as a fee. "
@@ -3876,8 +3940,20 @@ def build_report_lines(report: Mapping[str, Any], hooks: SourceFundsHooks) -> li
                     f"Gross upstream demand:   {gross_phrase}",
                 ]
             )
+            # Read the stored explanation; never recompute it here, so a saved
+            # case renders exactly what it was saved with.
+            explanation = allocations.get("route_difference_explanation")
             route_difference = allocations.get("route_difference")
-            if route_difference is not None and float(route_difference) != 0:
+            if isinstance(explanation, Mapping) and explanation.get("kind") == "network_fees":
+                hops = int(explanation.get("hop_count") or 0)
+                lines.append(
+                    f"That is {float(allocations.get('target_amount') or 0):.8f} "
+                    f"{allocations.get('asset') or ''} plus "
+                    f"{float(explanation.get('fee') or 0):.8f} {allocations.get('asset') or ''} "
+                    f"of network fees recorded on {hops} disclosed transaction"
+                    f"{'' if hops == 1 else 's'}."
+                )
+            elif route_difference is not None and float(route_difference) != 0:
                 lines.append(
                     f"The route difference ({abs(float(route_difference)):.8f} "
                     f"{allocations.get('asset') or ''}) is not automatically classified as a fee."

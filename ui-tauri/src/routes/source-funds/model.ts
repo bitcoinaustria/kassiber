@@ -722,19 +722,38 @@ export function formMatchesLink(form: LinkReviewForm, link: SourceFundsLink): bo
  * stays deliberately narrow: once per target, only while the case has no
  * reviewed history at all, and never while a read or write is still in flight.
  */
+export function autoAssembleKey({
+  profileId,
+  targetId,
+  inputVersion,
+}: {
+  profileId: string | undefined | null;
+  targetId: string | undefined | null;
+  inputVersion: number | undefined | null;
+}): string {
+  // Keyed on the book's journal input version, so reopening an unchanged
+  // unresolved case does no work twice, while importing new history earns
+  // another attempt. A per-mount memory would retry on every navigation and
+  // still never notice fresh evidence.
+  return `${profileId ?? ""}:${targetId ?? ""}:${inputVersion ?? ""}`;
+}
+
+
 export function shouldAutoAssemble({
   targetId,
   reviewedEdgeCount,
   busy,
+  attemptKey,
   alreadyAssembled,
 }: {
   targetId: string | undefined | null;
   reviewedEdgeCount: number;
   busy: boolean;
+  attemptKey: string;
   alreadyAssembled: ReadonlySet<string>;
 }): boolean {
   if (!targetId || busy) return false;
-  if (alreadyAssembled.has(targetId)) return false;
+  if (alreadyAssembled.has(attemptKey)) return false;
   // Any reviewed edge means this case already has a history someone owns.
   return reviewedEdgeCount === 0;
 }

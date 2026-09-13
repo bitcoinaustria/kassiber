@@ -18,6 +18,7 @@ import { targetQueryArgs, type SourceFundsReviewContext } from "./caseScope";
 import {
   NO_ATTACHMENT,
   amountInput,
+  autoAssembleKey,
   formMatchesLink,
   isStaleLinkReviewError,
   linkReviewFormFromLink,
@@ -37,6 +38,10 @@ import {
   type SourceFundsSource,
   type TransactionRow,
 } from "./model";
+
+// Module scope on purpose: a ref resets on every remount, so returning to a
+// case would assemble it again from scratch.
+const autoAssembledKeys = new Set<string>();
 
 export const CASE_STAGES = [
   { id: "target" },
@@ -491,11 +496,17 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
   // buttons to see it is ceremony. Fires once per target, only when the case
   // has no reviewed history at all, and never touches an authored decision:
   // assemble_history only adds suggestions and promotes edges it re-derives.
-  const autoAssembled = useRef(new Set<string>());
   useEffect(() => {
-    const targetId = preview.data?.data?.target?.transaction_id;
+    const packet = preview.data?.data;
+    const targetId = packet?.target?.transaction_id;
+    const attemptKey = autoAssembleKey({
+      profileId: packet?.profile_id,
+      targetId,
+      inputVersion: packet?.input_version,
+    });
     if (!shouldAutoAssemble({
       targetId,
+      attemptKey,
       reviewedEdgeCount: preview.data?.data?.report?.graph?.edges?.length ?? 0,
       // Any authoring in flight means the user is mid-decision. Assembling
       // underneath that can add structural funding beside a root source they
@@ -509,11 +520,11 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
         attachLink.isPending ||
         createLink.isPending ||
         createSource.isPending,
-      alreadyAssembled: autoAssembled.current,
+      alreadyAssembled: autoAssembledKeys,
     })) {
       return;
     }
-    autoAssembled.current.add(String(targetId));
+    autoAssembledKeys.add(attemptKey);
     void (async () => {
       try {
         // Silent on success: a complete graph is the signal, not a toast.

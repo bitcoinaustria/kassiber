@@ -475,8 +475,23 @@ class _SourceFundsPdfBuilder:
                     "small",
                 )
             )
+            # Read the stored explanation; a saved case renders what it was
+            # saved with rather than whatever today's rules would conclude.
+            explanation = allocations.get("route_difference_explanation")
             route_difference = allocations.get("route_difference")
-            if route_difference is not None and float(route_difference) != 0:
+            if isinstance(explanation, Mapping) and explanation.get("kind") == "network_fees":
+                hops = int(explanation.get("hop_count") or 0)
+                story.append(
+                    self.p(
+                        f"That is {_btc(allocations.get('target_amount'))} "
+                        f"{allocations.get('asset') or ''} plus "
+                        f"{_btc(explanation.get('fee'))} {allocations.get('asset') or ''} of "
+                        f"network fees recorded on {hops} disclosed transaction"
+                        f"{'' if hops == 1 else 's'}.",
+                        "small",
+                    )
+                )
+            elif route_difference is not None and float(route_difference) != 0:
                 story.append(
                     self.p(
                         f"The route difference of {_btc(abs(float(route_difference)))} "

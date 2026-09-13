@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   amountInput,
+  autoAssembleKey,
   linkReviewFormFromLink,
   linkReviewPayload,
   isStaleLinkReviewError,
@@ -100,6 +101,7 @@ describe("chain evidence assembles itself", () => {
     targetId: "tx-1",
     reviewedEdgeCount: 0,
     busy: false,
+    attemptKey: "book:tx-1:7",
     alreadyAssembled: new Set<string>(),
   };
 
@@ -112,13 +114,39 @@ describe("chain evidence assembles itself", () => {
     expect(shouldAutoAssemble({ ...base, reviewedEdgeCount: 3 })).toBe(false);
   });
 
-  it("fires once per target, not once per render", () => {
+  it("fires once per attempt, not once per render", () => {
     expect(
-      shouldAutoAssemble({ ...base, alreadyAssembled: new Set(["tx-1"]) }),
+      shouldAutoAssemble({ ...base, alreadyAssembled: new Set(["book:tx-1:7"]) }),
     ).toBe(false);
     expect(
       shouldAutoAssemble({ ...base, alreadyAssembled: new Set(["other"]) }),
     ).toBe(true);
+  });
+
+  it("remembers the attempt across remounts, but retries on new evidence", () => {
+    const seen = new Set([autoAssembleKey({ profileId: "book", targetId: "tx-1", inputVersion: 7 })]);
+    // Reopening the same unresolved case does no work twice...
+    expect(
+      shouldAutoAssemble({
+        ...base,
+        attemptKey: autoAssembleKey({ profileId: "book", targetId: "tx-1", inputVersion: 7 }),
+        alreadyAssembled: seen,
+      }),
+    ).toBe(false);
+    // ...but importing history bumps the journal input version and earns another try.
+    expect(
+      shouldAutoAssemble({
+        ...base,
+        attemptKey: autoAssembleKey({ profileId: "book", targetId: "tx-1", inputVersion: 8 }),
+        alreadyAssembled: seen,
+      }),
+    ).toBe(true);
+  });
+
+  it("keys attempts per book, so two books never share one", () => {
+    expect(autoAssembleKey({ profileId: "book-a", targetId: "tx-1", inputVersion: 7 })).not.toBe(
+      autoAssembleKey({ profileId: "book-b", targetId: "tx-1", inputVersion: 7 }),
+    );
   });
 
   it("waits while a read or write is in flight", () => {

@@ -240,3 +240,76 @@ def test_lineage_resolves_for_a_wallet_imported_after_the_outputs_were_spent(
         f["code"] for f in report["explain_gates"]["blockers"]
     }
     assert len(report["graph"]["edges"]) == 3
+
+
+def _assembled_report(conn):
+    source_funds.assemble_history(
+        conn, "ws", "profile", daemon._source_funds_hooks(), target_transaction_ref="spend",
+    )
+    hooks = daemon._source_funds_hooks()
+    source = source_funds.create_source(
+        conn, "ws", "profile", hooks, source_type="fiat_purchase", label="Purchase",
+        amount="0.01", acquired_at="2025-12-01T00:00:00Z", fiat_value="500",
+    )
+    for index, (_txid, sats) in enumerate(PARENTS):
+        source_funds.create_link(
+            conn, "ws", "profile", hooks, from_source_ref=source["id"],
+            to_transaction_ref=f"p{index}",
+            link_type="manual_source", allocation_amount=f"{sats / 100_000_000:.8f}",
+        )
+    return _report(conn)
+
+
+def test_the_route_difference_is_named_as_the_fee_the_row_records(consolidation_book):
+    """The difference IS the network fee; saying otherwise reads as evasive."""
+    report = _assembled_report(consolidation_book)
+    allocations = report["allocations"]
+
+    assert allocations["route_difference_msat"] == FEE_SATS * 1000
+    explanation = allocations["route_difference_explanation"]
+    assert explanation["kind"] == "network_fees"
+    assert explanation["fee_msat"] == FEE_SATS * 1000
+    assert explanation["hop_count"] == 1
+
+    narrative = " ".join(report["narrative"]["paragraphs"])
+    assert "network fees recorded on 1 disclosed transaction" in narrative
+    assert "not automatically classified as a fee" not in narrative
+
+
+def _envelope(*, consumed, fee_msat, difference=None, privacy=False):
+    """Minimal envelope for the route-difference licensing rule."""
+    return {
+        "allocations": {
+            "route_difference_msat": difference if difference is not None else consumed,
+        },
+        "graph": {
+            "nodes": [{
+                "id": "tx:spend", "node_type": "transaction", "fee_msat": fee_msat,
+                **({"privacy_boundary": "coinjoin"} if privacy else {}),
+            }],
+            "edges": [{
+                "to": "tx:spend",
+                "allocation_amount_msat": 1_000_000,
+                "from_allocation_amount_msat": 1_000_000 + consumed,
+            }],
+        },
+    }
+
+
+def test_a_difference_is_only_named_when_the_rows_actually_account_for_it():
+    """Numerical coincidence is not an explanation."""
+    explain = source_funds._route_difference_explanation
+
+    # The hop consumed exactly what it recorded as fee.
+    assert explain(_envelope(consumed=1_413, fee_msat=1_413))["kind"] == "network_fees"
+    # Consumed more than the row records: unexplained.
+    assert explain(_envelope(consumed=1_413, fee_msat=900)) is None
+    # The row records a fee, but a different amount moved.
+    assert explain(_envelope(consumed=1_413, fee_msat=2_000)) is None
+    # Per-hop arithmetic closes but the totals disagree.
+    assert explain(_envelope(consumed=1_413, fee_msat=1_413, difference=2_000)) is None
+    # Nothing to explain.
+    assert explain(_envelope(consumed=0, fee_msat=0, difference=0)) is None
+    # A privacy boundary disqualifies the route: Kassiber does not claim to
+    # know what happened inside one.
+    assert explain(_envelope(consumed=1_413, fee_msat=1_413, privacy=True)) is None
