@@ -599,6 +599,13 @@
         "aReviewedCustodyLinkIsAbsentOr": "A reviewed custody link is absent or stale in the current stored projection."
       }
     },
+    "stale_structural_lineage": {
+      "title": "Chain evidence changed",
+      "nextStep": "Re-run assembly against the current chain evidence",
+      "messages": {
+        "aReviewedLinkNoLongerMatchesThe": "A reviewed link no longer matches the observed transaction structure."
+      }
+    },
     "source_asset_mismatch": {
       "title": "Source asset mismatch",
       "nextStep": "Pick a source whose asset matches the link",

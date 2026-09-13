@@ -599,6 +599,13 @@
         "aReviewedCustodyLinkIsAbsentOr": "Eine geprüfte Verwahrungsverknüpfung fehlt in der aktuellen gespeicherten Ableitung oder ist dort veraltet."
       }
     },
+    "stale_structural_lineage": {
+      "title": "Chain-Evidenz hat sich geändert",
+      "nextStep": "Führe die Zusammenstellung mit der aktuellen Chain-Evidenz erneut aus",
+      "messages": {
+        "aReviewedLinkNoLongerMatchesThe": "Eine geprüfte Verknüpfung passt nicht mehr zur beobachteten Transaktionsstruktur."
+      }
+    },
     "source_asset_mismatch": {
       "title": "Abweichender Vermögenswert der Quelle",
       "nextStep": "Eine Quelle mit passendem Vermögenswert wählen",

@@ -221,6 +221,15 @@ def derive_parent_spend_pairs(
             continue
 
         chain, network = scope[0], scope[1]
+        # The spend attests which scripts its wallet watched. That is the
+        # ownership proof, not the UTXO inventory: inventory is built from the
+        # backend's CURRENT unspent set, so a wallet first synced after these
+        # outputs were already spent has no row for any of them, and the
+        # lineage would be invisible exactly when the history is longest.
+        outer = stored_tx_mapping(row["raw_json"]) or {}
+        owned_scripts = {
+            str(script) for script in (outer.get("observer_owned_scripts") or ()) if script
+        }
         contributions: dict[str, int] = defaultdict(int)
         complete = True
         for entry in inputs:
@@ -235,22 +244,30 @@ def derive_parent_spend_pairs(
             except (KeyError, TypeError, ValueError):
                 complete = False
                 break
-            if prev_txid is None or vout < 0 or not str(entry.get("script") or ""):
+            script = str(entry.get("script") or "")
+            if prev_txid is None or vout < 0 or not script:
+                complete = False
+                break
+            if script not in owned_scripts and str(entry.get("role") or "") != "owned":
+                # A foreign input: this spend is collaborative or externally
+                # funded, and nothing about it is ours to claim.
                 complete = False
                 break
             info = owned_index.get((chain, network, prev_txid, vout))
-            if info is None or info.get("ambiguous"):
-                complete = False
-                break
-            if str(info.get("wallet_id")) != wallet_id:
-                # Cross-wallet funding is a custody question, not ours.
-                complete = False
-                break
-            if _owned_asset_identity((chain, network, prev_txid, vout), info) != _owned_asset_identity(
-                (chain, network, prev_txid, vout), {"asset": row["asset"]}
-            ):
-                complete = False
-                break
+            if info is not None:
+                # Inventory corroborates when it has the outpoint; a
+                # disagreement about ownership is a reason to stop, never to
+                # overrule the observation.
+                if info.get("ambiguous") or str(info.get("wallet_id")) != wallet_id:
+                    complete = False
+                    break
+                if _owned_asset_identity(
+                    (chain, network, prev_txid, vout), info
+                ) != _owned_asset_identity(
+                    (chain, network, prev_txid, vout), {"asset": row["asset"]}
+                ):
+                    complete = False
+                    break
             contributions[prev_txid] += int(value_sats) * 1000
         if not complete or not contributions:
             continue

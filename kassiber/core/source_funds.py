@@ -84,6 +84,9 @@ DETERMINISTIC_BULK_REVIEW_METHODS = {
 _CUSTODY_LINEAGE_METHODS = {
     "custody_component",
 }
+_STRUCTURAL_LINEAGE_METHODS = {
+    "utxo_spend",
+}
 PROVIDER_UNIQUE_KEYS = (
     "trade_id",
     "order_id",
@@ -1528,14 +1531,14 @@ def _validated_bulk_review_candidates(
     derived_structural: dict[tuple[str, str], tuple[int, int]] = {}
     if any(str(row["method"] or "") == "utxo_spend" for row in rows):
         # Derived once for the whole batch, never per candidate row.
-        owned_index = build_owned_outpoint_index(conn, profile_id)
-        if owned_index:
-            for pair in derive_parent_spend_pairs(
-                active_rows, owned_index, skip_row=_skip_structural_row,
-            ):
-                derived_structural[
-                    (str(pair["from_row"]["id"]), str(pair["to_row"]["id"]))
-                ] = (int(pair["allocation_msat"]), int(pair["from_allocation_msat"]))
+        for pair in derive_parent_spend_pairs(
+            active_rows,
+            build_owned_outpoint_index(conn, profile_id),
+            skip_row=_skip_structural_row,
+        ):
+            derived_structural[
+                (str(pair["from_row"]["id"]), str(pair["to_row"]["id"]))
+            ] = (int(pair["allocation_msat"]), int(pair["from_allocation_msat"]))
     for row in rows:
         if not _is_bulk_reviewable_suggestion(row):
             continue
@@ -1939,6 +1942,7 @@ def suggest_links(
     # ceiling regardless of how the request reaches us.
     if max_suggestions > SUGGESTION_WRITE_CAP:
         max_suggestions = SUGGESTION_WRITE_CAP
+    conn.execute("SAVEPOINT source_funds_suggest")
     rows = _active_transaction_rows(conn, profile["id"])
     rows_by_id = {row["id"]: row for row in rows}
     scoped_tx_ids = (
@@ -1956,7 +1960,11 @@ def suggest_links(
             return
         inserted.append(link)
         if len(inserted) > max_suggestions:
-            conn.rollback()
+            # Discard this pass's writes without destroying an enclosing
+            # savepoint: a dry-run preview must still surface this error rather
+            # than an "no such savepoint" from its own rollback.
+            conn.execute("ROLLBACK TO SAVEPOINT source_funds_suggest")
+            conn.execute("RELEASE SAVEPOINT source_funds_suggest")
             raise AppError(
                 "source-funds suggestion write cap exceeded",
                 code="validation",
@@ -2067,36 +2075,43 @@ def suggest_links(
     # whole-book pass would blow through SUGGESTION_WRITE_CAP and roll back the
     # custody, coinjoin and provider suggestions written above it.
     if target is not None:
+        # No `if owned_index` guard: inventory only corroborates, and a wallet
+        # first synced after its outputs were spent legitimately has none.
         owned_index = build_owned_outpoint_index(conn, profile["id"])
-        if owned_index:
-            custody_pairs = {
-                (allocation.from_transaction_id, allocation.to_transaction_id)
-                for allocation in custody_allocations.values()
-            }
-            for pair in derive_parent_spend_pairs(
-                rows, owned_index, skip_row=_skip_structural_row,
-            ):
-                out_tx, in_tx = pair["from_row"], pair["to_row"]
-                endpoints = (str(out_tx["id"]), str(in_tx["id"]))
-                if endpoints in custody_pairs:
-                    # The projection owns this pair; structure never competes.
-                    continue
-                if not in_scope(out_tx, in_tx) or int(pair["allocation_msat"]) <= 0:
-                    continue
-                link = _insert_suggestion(
-                    conn,
-                    workspace["id"],
-                    profile["id"],
-                    from_tx=out_tx,
-                    to_tx=in_tx,
-                    link_type="self_transfer",
-                    method="utxo_spend",
-                    confidence="exact",
-                    allocation_msat=int(pair["allocation_msat"]),
-                    from_allocation_msat=int(pair["from_allocation_msat"]),
-                    explanation=pair["explanation"],
-                )
-                remember(link)
+        custody_pairs = {
+            (allocation.from_transaction_id, allocation.to_transaction_id)
+            for allocation in custody_allocations.values()
+        }
+        for pair in derive_parent_spend_pairs(
+            rows, owned_index, skip_row=_skip_structural_row,
+        ):
+            out_tx, in_tx = pair["from_row"], pair["to_row"]
+            endpoints = (str(out_tx["id"]), str(in_tx["id"]))
+            if endpoints in custody_pairs:
+                # The projection owns this pair; structure never competes.
+                continue
+            # Bounded to the target's own funding chain. `in_scope` accepts
+            # either endpoint, so adopting it here would pull in every other
+            # spend of a shared parent -- on a busy parent that exceeds the
+            # write cap and rolls back the whole pass.
+            if str(in_tx["id"]) not in scoped_tx_ids:
+                continue
+            if int(pair["allocation_msat"]) <= 0:
+                continue
+            link = _insert_suggestion(
+                conn,
+                workspace["id"],
+                profile["id"],
+                from_tx=out_tx,
+                to_tx=in_tx,
+                link_type="self_transfer",
+                method="utxo_spend",
+                confidence="exact",
+                allocation_msat=int(pair["allocation_msat"]),
+                from_allocation_msat=int(pair["from_allocation_msat"]),
+                explanation=pair["explanation"],
+            )
+            remember(link)
 
     by_provider_key = defaultdict(list)
     for row in rows:
@@ -2166,6 +2181,7 @@ def suggest_links(
                 )
                 remember(link)
 
+    conn.execute("RELEASE SAVEPOINT source_funds_suggest")
     links = [_link_row_to_dict(conn, row) for row in inserted]
     if commit:
         conn.commit()
@@ -2897,6 +2913,24 @@ def build_report(
         raise AppError("Source-funds report inputs belong to a different book", code="validation")
     active_rows_by_id = report_inputs.active_rows_by_id
     custody_allocations = report_inputs.custody_allocations
+    # Built only if a structural edge is actually reviewed on this path, so the
+    # common report pays nothing for it.
+    _structural_cache: dict[str, dict[tuple[str, str], tuple[int, int]]] = {}
+
+    def derived_structural() -> Mapping[tuple[str, str], tuple[int, int]]:
+        if "index" not in _structural_cache:
+            derived: dict[tuple[str, str], tuple[int, int]] = {}
+            for pair in derive_parent_spend_pairs(
+                list(active_rows_by_id.values()),
+                build_owned_outpoint_index(conn, str(profile["id"])),
+                skip_row=_skip_structural_row,
+            ):
+                derived[
+                    (str(pair["from_row"]["id"]), str(pair["to_row"]["id"]))
+                ] = (int(pair["allocation_msat"]), int(pair["from_allocation_msat"]))
+            _structural_cache["index"] = derived
+        return _structural_cache["index"]
+
     from .source_funds_recipients import effective_reveal_mode
     resolved_mode, recipient = effective_reveal_mode(
         conn,
@@ -3081,6 +3115,27 @@ def build_report(
                         "stale_custody_component_lineage",
                         "blocker",
                         "A reviewed custody link is absent or stale in the current stored projection.",
+                        ref=link["id"],
+                    )
+                    continue
+            if link["method"] in _STRUCTURAL_LINEAGE_METHODS:
+                # A structural edge was auto-promoted because the evidence said
+                # so; if that evidence is gone or changed, the edge must stop
+                # being trusted here too, not only at promotion time.
+                structural_parent = active_rows_by_id.get(
+                    str(link["from_transaction_id"])
+                )
+                if not _structural_still_deterministic(
+                    derived_structural(),
+                    link,
+                    structural_parent,
+                    tx,
+                ):
+                    _add_finding(
+                        findings,
+                        "stale_structural_lineage",
+                        "blocker",
+                        "A reviewed link no longer matches the observed transaction structure.",
                         ref=link["id"],
                     )
                     continue

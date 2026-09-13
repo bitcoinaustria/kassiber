@@ -125,3 +125,114 @@ def test_assembly_builds_the_history_from_chain_structure_alone(consolidation_bo
     # Gross/route-difference only appear once the walk reaches root sources;
     # here the frontier is still transactions, so there is nothing to state yet.
     assert report["allocations"]["gross_source_requirement"] == []
+
+
+def test_reopening_the_book_does_not_retire_fresh_structural_links(consolidation_book):
+    """The legacy method retirement must not relabel edges derived today.
+
+    ensure_schema_compat runs on every open_db. It used to rewrite every
+    `utxo_spend` row to `custody_component`, which would make each freshly
+    derived edge look like a stale custody projection on the next app start.
+    """
+    from kassiber.db import ensure_schema_compat
+
+    conn = consolidation_book
+    source_funds.assemble_history(
+        conn, "ws", "profile", daemon._source_funds_hooks(), target_transaction_ref="spend",
+    )
+    ensure_schema_compat(conn)
+
+    links = source_funds.list_links(
+        conn, "ws", "profile", daemon._source_funds_hooks(), target_transaction_ref="spend",
+    )
+    assert {link["method"] for link in links} == {"utxo_spend"}
+
+    report = _report(conn)
+    codes = {f["code"] for f in report["explain_gates"]["blockers"]}
+    assert "stale_custody_component_lineage" not in codes
+    assert "ambiguous_allocation" not in codes
+
+
+def test_legacy_method_rows_are_still_retired_once(consolidation_book):
+    """Pre-projection rows carry no authority gate and must not become trusted."""
+    from kassiber.db import ensure_schema_compat
+
+    conn = consolidation_book
+    # A book upgraded from an old build carries the legacy rows before the
+    # one-shot retirement has ever run.
+    conn.execute("DELETE FROM settings WHERE key = 'source_funds_legacy_methods_retired'")
+    conn.execute(
+        "INSERT INTO source_funds_links(id,workspace_id,profile_id,from_transaction_id,"
+        "to_transaction_id,link_type,state,confidence,method,asset,from_asset,"
+        "allocation_amount,from_allocation_amount,allocation_policy,created_at,updated_at)"
+        " VALUES('legacy','ws','profile','p0','spend','self_transfer','suggested','exact',"
+        "'utxo_spend','BTC','BTC',1,1,'explicit','2026','2026')"
+    )
+    conn.commit()
+
+    ensure_schema_compat(conn)
+
+    assert conn.execute(
+        "SELECT method FROM source_funds_links WHERE id='legacy'"
+    ).fetchone()[0] == "custody_component"
+
+
+def test_a_reviewed_edge_stops_being_trusted_when_its_evidence_disappears(consolidation_book):
+    """Auto-promotion is not permanent: the report re-checks the structure."""
+    conn = consolidation_book
+    source_funds.assemble_history(
+        conn, "ws", "profile", daemon._source_funds_hooks(), target_transaction_ref="spend",
+    )
+    assert "stale_structural_lineage" not in {
+        f["code"] for f in _report(conn)["explain_gates"]["blockers"]
+    }
+
+    # The observation commitment is withdrawn; the edges were only ever as good
+    # as the evidence behind them.
+    conn.execute("DELETE FROM chain_observation_provenance")
+    conn.commit()
+
+    codes = {f["code"] for f in _report(conn)["explain_gates"]["blockers"]}
+    assert "stale_structural_lineage" in codes
+
+
+def test_a_reviewed_edge_stops_being_trusted_when_its_parent_leaves_the_book(
+    consolidation_book,
+):
+    """Re-derivation runs against current rows, not the ones that were there."""
+    conn = consolidation_book
+    source_funds.assemble_history(
+        conn, "ws", "profile", daemon._source_funds_hooks(), target_transaction_ref="spend",
+    )
+    assert "stale_structural_lineage" not in {
+        f["code"] for f in _report(conn)["explain_gates"]["blockers"]
+    }
+
+    # The user excludes one funding deposit; the edge that claimed it is no
+    # longer supported.
+    conn.execute("UPDATE transactions SET excluded = 1 WHERE id = 'p0'")
+    conn.commit()
+
+    codes = {f["code"] for f in _report(conn)["explain_gates"]["blockers"]}
+    assert "stale_structural_lineage" in codes
+
+
+def test_lineage_resolves_for_a_wallet_imported_after_the_outputs_were_spent(
+    consolidation_book,
+):
+    """The reported book's shape: the wallet was first synced days AFTER the
+    spend, so the backend's unspent view never contained these outputs."""
+    conn = consolidation_book
+    conn.execute("DELETE FROM wallet_utxos")
+    conn.commit()
+
+    outcome = source_funds.assemble_history(
+        conn, "ws", "profile", daemon._source_funds_hooks(), target_transaction_ref="spend",
+    )
+
+    assert outcome["auto_reviewed"] == 3, outcome
+    report = _report(conn)
+    assert "ambiguous_allocation" not in {
+        f["code"] for f in report["explain_gates"]["blockers"]
+    }
+    assert len(report["graph"]["edges"]) == 3

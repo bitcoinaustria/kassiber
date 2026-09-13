@@ -212,11 +212,33 @@ class ParentSpendDerivationTests(unittest.TestCase):
         self.assertEqual(sum(p["allocation_msat"] for p in pairs), self.amount)
         self.assertTrue(all(p["to_row"] is self.spend for p in pairs))
 
-    def test_an_unowned_input_emits_nothing_rather_than_a_partial_history(self):
+    def test_a_foreign_input_emits_nothing_rather_than_a_partial_history(self):
         """Partial cover would raise ambiguous_allocation, which has no fix-it path."""
-        partial = _index(self.parents[:2])
+        spend = _spend_row("d4" * 32, self.parents, self.amount, self.fee)
+        raw = json.loads(spend["raw_json"])
+        # One input pays from a script this wallet never watched.
+        raw["vin"][1]["prevout"]["scriptpubkey"] = _script("f")
+        spend["raw_json"] = json.dumps(raw, sort_keys=True)
+        rows = [_parent_row(t, v) for t, v in self.parents] + [_authoritative(spend)]
 
-        self.assertEqual(self.derive(self.rows, partial, skip_row=lambda row: False), [])
+        self.assertEqual(self.derive(rows, _index(self.parents), skip_row=lambda row: False), [])
+
+    def test_lineage_resolves_without_any_utxo_inventory(self):
+        """Inventory holds the CURRENT unspent set, so a wallet imported after
+        these outputs were spent has no row for any of them. The spend's own
+        attested scripts must be enough."""
+        pairs = self.derive(self.rows, {}, skip_row=lambda row: False)
+
+        self.assertEqual(len(pairs), 3)
+        self.assertEqual(sum(p["allocation_msat"] for p in pairs), self.amount)
+
+    def test_inventory_disagreeing_about_ownership_stops_the_spend(self):
+        """Corroboration may veto; it may never be overruled."""
+        conflicting = dict(_index(self.parents))
+        key = ("bitcoin", "main", self.parents[0][0], 0)
+        conflicting[key] = {**conflicting[key], "wallet_id": "other"}
+
+        self.assertEqual(self.derive(self.rows, conflicting, skip_row=lambda row: False), [])
 
     def test_a_row_without_observation_authority_founds_no_lineage(self):
         """A hand-written vin array must never author provenance."""
