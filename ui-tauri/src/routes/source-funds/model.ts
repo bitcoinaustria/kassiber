@@ -701,6 +701,36 @@ export function linkReviewPayload({
 }
 
 
+/**
+ * Decide what the link editor shows after the selected link changes.
+ *
+ * The record the form was BUILT from (`inspected`) is kept apart from the
+ * latest fetched one. Comparing a pristine old form against a refreshed link
+ * made it look edited, so the stale form was kept and then submitted against
+ * the new record's precondition -- restoring the obsolete amount with the
+ * guard satisfied. Now: a pristine form refreshes; a dirty form keeps both its
+ * edits and its ORIGINAL precondition, so the server refuses the write and the
+ * reviewer resolves the conflict instead of silently winning it.
+ */
+export function reconcileLinkForm({
+  form,
+  inspected,
+  latest,
+}: {
+  form: LinkReviewForm;
+  inspected: SourceFundsLink | null;
+  latest: SourceFundsLink;
+}): { form: LinkReviewForm; inspected: SourceFundsLink } {
+  if (!inspected || inspected.id !== latest.id) {
+    return { form: linkReviewFormFromLink(latest), inspected: latest };
+  }
+  if (formMatchesLink(form, inspected)) {
+    return { form: linkReviewFormFromLink(latest), inspected: latest };
+  }
+  return { form, inspected };
+}
+
+
 /** True when the form still shows exactly what the link says (no unsaved edits). */
 export function formMatchesLink(form: LinkReviewForm, link: SourceFundsLink): boolean {
   const baseline = linkReviewFormFromLink(link);

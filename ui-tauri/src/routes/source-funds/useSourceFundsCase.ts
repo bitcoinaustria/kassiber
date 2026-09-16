@@ -19,11 +19,10 @@ import {
   NO_ATTACHMENT,
   amountInput,
   autoAssembleKey,
-  formMatchesLink,
   isStaleLinkReviewError,
-  linkReviewFormFromLink,
   linkReviewPayload,
   pretty,
+  reconcileLinkForm,
   shouldAutoAssemble,
   shortId,
   transactionRows,
@@ -141,7 +140,8 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
   const [showCoverage, setShowCoverage] = useState(false);
   const [showDisclosure, setShowDisclosure] = useState(false);
   const [selectedLinkId, setSelectedLinkId] = useState("");
-  const [linkFormSourceId, setLinkFormSourceId] = useState("");
+  // The link the form was built from -- deliberately NOT the latest fetch.
+  const [inspectedLink, setInspectedLink] = useState<SourceFundsLink | null>(null);
   const [linkForm, setLinkForm] = useState({
     link_type: "self_transfer",
     confidence: "strong",
@@ -422,30 +422,25 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
 
   useEffect(() => {
     if (!selectedLink) {
-      if (linkFormSourceId) {
-        setLinkFormSourceId("");
-      }
+      if (inspectedLink) setInspectedLink(null);
       return;
     }
-    // Re-key on updated_at too: a same-id refresh with changed content must
-    // rebuild the form rather than leave it describing a stale inspection.
-    const source = `${selectedLink.id}@${selectedLink.updated_at ?? ""}`;
-    if (source === linkFormSourceId) {
+    if (
+      inspectedLink?.id === selectedLink.id &&
+      inspectedLink.updated_at === selectedLink.updated_at &&
+      inspectedLink.allocation_amount_msat === selectedLink.allocation_amount_msat &&
+      inspectedLink.from_allocation_amount_msat === selectedLink.from_allocation_amount_msat
+    ) {
       return;
     }
-    const sameLink = linkFormSourceId.startsWith(`${selectedLink.id}@`);
     setSelectedLinkId(selectedLink.id);
-    setLinkFormSourceId(source);
     // Exact msat -> BTC text, so an untouched field round-trips unchanged.
-    setLinkForm((current) =>
-      // Same link changed upstream while the reviewer has unsaved edits: keep
-      // their work rather than silently discarding it. The expected_*
-      // precondition refuses the write if the change actually conflicts.
-      sameLink && !formMatchesLink(current, selectedLink)
-        ? current
-        : linkReviewFormFromLink(selectedLink),
-    );
-  }, [selectedLink, linkFormSourceId]);
+    setLinkForm((current) => {
+      const next = reconcileLinkForm({ form: current, inspected: inspectedLink, latest: selectedLink });
+      setInspectedLink(next.inspected);
+      return next.form;
+    });
+  }, [selectedLink, inspectedLink]);
 
   const txName = (id?: string | null) => {
     const row = id ? txById.get(id) : undefined;
@@ -580,7 +575,7 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     if (!selectedLink) return;
     try {
       await reviewLink.mutateAsync(
-        linkReviewPayload({ link: selectedLink, form: linkForm, state }),
+        linkReviewPayload({ link: inspectedLink ?? selectedLink, form: linkForm, state }),
       );
     } catch (error) {
       // A stale inspection is not retryable as-is; reload it so the reviewer

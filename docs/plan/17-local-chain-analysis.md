@@ -9,9 +9,10 @@ The shared indexed engine, desktop workbench, CLI/chat queries, observer views,
 reversible hypotheses, local label exposure, bounded compatible-partition
 entropy, explicit backend acquisition and immutable saved-case comparisons are
 now implemented. Read [the current interface and limits](../reference/local-chain-analysis.md)
-for shipped behavior. PSBT v2, background watchlists, full-chain indexing and
-commercial attribution datasets remain outside this implementation. Execution
-and remaining acceptance work live in [TODO.md](../../TODO.md).
+for shipped behavior, including subsequent PSBT v2, dataset, incremental-index,
+and evidence-watch work. The exclusions in the dated baseline below are not
+current capability claims. Full-chain capacity remains unproven; remaining
+work lives in [TODO.md](../../TODO.md).
 
 ## Product outcome
 
