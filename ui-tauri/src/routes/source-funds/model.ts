@@ -731,6 +731,52 @@ export function reconcileLinkForm({
 }
 
 
+/**
+ * True while the reviewer has work in progress in any editor.
+ *
+ * Auto-assembly writes to the book; doing so while someone is mid-decision can
+ * plant structural funding beside a root source they are still authoring and
+ * leave two competing allocations. Pending requests are not enough of a signal
+ * -- a half-typed form has no request in flight.
+ */
+export function hasUnsavedDrafts({
+  linkForm,
+  inspectedLink,
+  sourceForm,
+  manualLinkForm,
+}: {
+  linkForm: LinkReviewForm;
+  inspectedLink: SourceFundsLink | null;
+  sourceForm: { label: string; amount: string; description: string; attachment_id: string };
+  manualLinkForm: {
+    from_transaction: string;
+    allocation_amount: string;
+    from_allocation_amount: string;
+    explanation: string;
+    attachment_id: string;
+  };
+}): boolean {
+  if (inspectedLink && !formMatchesLink(linkForm, inspectedLink)) return true;
+  // to_transaction is set programmatically on target switch, so it is not a
+  // signal of the user having started anything.
+  if (
+    sourceForm.label.trim() ||
+    sourceForm.amount.trim() ||
+    sourceForm.description.trim() ||
+    sourceForm.attachment_id !== NO_ATTACHMENT
+  ) {
+    return true;
+  }
+  return Boolean(
+    manualLinkForm.from_transaction.trim() ||
+      manualLinkForm.allocation_amount.trim() ||
+      manualLinkForm.from_allocation_amount.trim() ||
+      manualLinkForm.explanation.trim() ||
+      manualLinkForm.attachment_id !== NO_ATTACHMENT,
+  );
+}
+
+
 /** True when the form still shows exactly what the link says (no unsaved edits). */
 export function formMatchesLink(form: LinkReviewForm, link: SourceFundsLink): boolean {
   const baseline = linkReviewFormFromLink(link);

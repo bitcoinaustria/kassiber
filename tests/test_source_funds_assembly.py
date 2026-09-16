@@ -465,12 +465,12 @@ class FanInBoundsTests(unittest.TestCase):
         from kassiber.core import source_funds_assembly
 
         rows, _spend_value = self._book(hops=4, width=10)
-        original = source_funds_assembly._MAX_ANCESTOR_RESOLUTIONS
-        source_funds_assembly._MAX_ANCESTOR_RESOLUTIONS = 2
+        original = source_funds_assembly._MAX_ANCESTOR_RESOLUTIONS_PER_TARGET
+        source_funds_assembly._MAX_ANCESTOR_RESOLUTIONS_PER_TARGET = 2
         try:
             pairs = self.derive(rows, {}, skip_row=lambda row: False)
         finally:
-            source_funds_assembly._MAX_ANCESTOR_RESOLUTIONS = original
+            source_funds_assembly._MAX_ANCESTOR_RESOLUTIONS_PER_TARGET = original
 
         # Exhausting the budget emits nothing rather than a partial history.
         self.assertEqual([p for p in pairs if p["to_row"]["id"] == "final"], [])
@@ -590,3 +590,120 @@ class TraversalBoundsTests(unittest.TestCase):
         pairs = self.derive(rows, {}, skip_row=lambda row: False)
 
         self.assertEqual([p for p in pairs if p["to_row"]["id"] == "tx-cfcfcfcf"], [])
+
+
+class WalletIsolationTests(unittest.TestCase):
+    """One batched transaction pays several wallets; each gets only its own ancestry."""
+
+    def setUp(self):
+        from kassiber.core.source_funds_assembly import derive_parent_spend_pairs
+
+        self.derive = derive_parent_spend_pairs
+        sa, sb, ext = _script("a"), _script("b"), _script("f")
+        pa, pb, batch, spend_a, spend_b = "a1" * 32, "b1" * 32, "cc" * 32, "da" * 32, "db" * 32
+
+        def row(rid, wallet, txid, direction, amount, vin, vout, scripts):
+            raw = {"txid": txid, "chain": "bitcoin", "network": "main",
+                   "observer_owned_scripts": scripts, "vin": vin, "vout": vout}
+            return _authoritative({
+                "id": rid, "wallet_id": wallet,
+                "wallet_config_json": json.dumps({"chain": "bitcoin", "network": "main"}),
+                "external_id": txid, "external_id_kind": "txid", "direction": direction,
+                "asset": "BTC", "amount": amount, "fee": 1000 if direction == "outbound" else 0,
+                "amount_includes_fee": 0, "occurred_at": "2026-01-01T00:00:00Z",
+                "raw_json": json.dumps(raw, sort_keys=True),
+            })
+
+        batch_vout = [{"n": 0, "scriptpubkey": sa, "value": 499_000},
+                      {"n": 1, "scriptpubkey": sb, "value": 699_000}]
+        self.rows = [
+            row("parent-A", "A", pa, "inbound", 500_000_000, [], [{"n": 0, "scriptpubkey": sa, "value": 500_000}], [sa]),
+            row("parent-B", "B", pb, "inbound", 700_000_000, [], [{"n": 0, "scriptpubkey": sb, "value": 700_000}], [sb]),
+            # Each wallet stores its own NET leg of the shared batch transaction.
+            row("batch-A", "A", batch, "inbound", 499_000_000,
+                [{"txid": pa, "vout": 0, "prevout": {"scriptpubkey": sa, "value": 500_000}}], batch_vout, [sa]),
+            row("batch-B", "B", batch, "inbound", 699_000_000,
+                [{"txid": pb, "vout": 0, "prevout": {"scriptpubkey": sb, "value": 700_000}}], batch_vout, [sb]),
+            row("spend-A", "A", spend_a, "outbound", 498_000_000,
+                [{"txid": batch, "vout": 0, "prevout": {"scriptpubkey": sa, "value": 499_000}}],
+                [{"n": 0, "scriptpubkey": ext, "value": 498_000}], [sa]),
+            row("spend-B", "B", spend_b, "outbound", 698_000_000,
+                [{"txid": batch, "vout": 1, "prevout": {"scriptpubkey": sb, "value": 699_000}}],
+                [{"n": 0, "scriptpubkey": ext, "value": 698_000}], [sb]),
+        ]
+
+    def _edges(self, rows):
+        return {(p["from_row"]["id"], p["to_row"]["id"]) for p in
+                self.derive(rows, {}, skip_row=lambda row: False)}
+
+    def test_each_wallet_resolves_only_its_own_parent_in_either_order(self):
+        """Astra's P1: a txid-only memo handed wallet B the ancestry cached for A."""
+        expected = {("batch-A", "spend-A"), ("batch-B", "spend-B")}
+        self.assertEqual(self._edges(self.rows), expected)
+        self.assertEqual(self._edges(list(reversed(self.rows))), expected)
+
+    def test_no_edge_ever_crosses_a_wallet(self):
+        for rows in (self.rows, list(reversed(self.rows))):
+            for src, dst in self._edges(rows):
+                a = next(r for r in rows if r["id"] == src)["wallet_id"]
+                b = next(r for r in rows if r["id"] == dst)["wallet_id"]
+                self.assertEqual(a, b, f"cross-wallet edge {src} -> {dst}")
+
+
+class OrderAndScaleTests(unittest.TestCase):
+    """Row order must not change the answer, and size must not crash it."""
+
+    def setUp(self):
+        from kassiber.core.source_funds_assembly import derive_parent_spend_pairs
+
+        self.derive = derive_parent_spend_pairs
+
+    def _long_chain(self, hops):
+        script = _script("a")
+        deposit = "01" * 32
+        rows = [_parent_row(deposit, 10_000_000_000)]
+        prev, value = deposit, 10_000_000
+        for i in range(hops):
+            txid = f"{i + 2:064x}"
+            value -= 1
+            raw = {"txid": txid, "chain": "bitcoin", "network": "main",
+                   "observer_owned_scripts": [script],
+                   "vin": [{"txid": prev, "vout": 0, "prevout": {"scriptpubkey": script, "value": value + 1}}],
+                   "vout": [{"n": 0, "scriptpubkey": script, "value": value}]}
+            rows.append(_authoritative({
+                "id": f"h{i}", "wallet_id": "w",
+                "wallet_config_json": json.dumps({"chain": "bitcoin", "network": "main"}),
+                "external_id": txid, "external_id_kind": "txid", "direction": "outbound",
+                "asset": "BTC", "amount": 0, "fee": 1000, "amount_includes_fee": 0,
+                # Same-block timestamps: chronology cannot be used to order the walk.
+                "occurred_at": "2026-01-01T00:00:00Z", "raw_json": json.dumps(raw, sort_keys=True),
+            }))
+            prev = txid
+        rows.append(_spend_row("ff" * 32, [(prev, value * 1000)], (value - 1) * 1000, 1000))
+        return rows
+
+    def test_a_1101_hop_chain_resolves_in_both_row_orders(self):
+        """Recursion overflowed on the reversed order before the budget was reached."""
+        rows = self._long_chain(1101)
+        for ordered in (rows, list(reversed(rows))):
+            funding = [p for p in self.derive(ordered, {}, skip_row=lambda row: False)
+                       if p["to_row"]["id"] == "tx-ffffffff"]
+            self.assertEqual(len(funding), 1)
+            self.assertEqual(funding[0]["from_row"]["id"], "tx-01010101")
+
+    def test_unrelated_spends_cannot_exhaust_a_targets_budget(self):
+        """A pass-wide budget let 5,001 unrelated pairs starve a valid target listed last."""
+        rows = []
+        for i in range(5001):
+            parent, spend = f"{i + 10:064x}", f"{i + 20000:064x}"
+            rows.append(_parent_row(parent, 1_000_000_000))
+            rows.append(_spend_row(spend, [(parent, 1_000_000_000)], 999_000_000, 1_000_000))
+        target_parent, target_spend = "ee" * 32, "ef" * 32
+        rows += [_parent_row(target_parent, 1_000_000_000),
+                 _spend_row(target_spend, [(target_parent, 1_000_000_000)], 999_000_000, 1_000_000)]
+
+        pairs = self.derive(rows, {}, skip_row=lambda row: False)
+
+        self.assertTrue(any(p["to_row"]["external_id"] == target_spend for p in pairs))
+        # And every one of the unrelated pairs resolved too: none starved another.
+        self.assertEqual(len(pairs), 5002)

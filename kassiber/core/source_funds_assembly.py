@@ -165,14 +165,12 @@ def _row_is_authoritative(row: Mapping[str, Any]) -> bool:
 # outbound fee row and change is netted out of a withdrawal's amount. Spending
 # such an output therefore has to pass THROUGH that row to the inbound rows
 # behind it.
-# Bounded total work per derivation pass. A split/recombine graph can reach the
+# Bounded fresh work per TARGET spend. A split/recombine graph can reach the
 # same ancestors from many directions; memoisation collapses that, and this is
 # the backstop for anything it cannot. There is deliberately no limit on chain
 # LENGTH: a long change chain is still fully observed history, and refusing it
 # would report a misleading "no root source" for lineage the book can prove.
-# Memoisation made such a cap order-dependent anyway -- resolving a hop from the
-# bottom up cached it at shallow depth and the limit never applied.
-_MAX_ANCESTOR_RESOLUTIONS = 5000
+_MAX_ANCESTOR_RESOLUTIONS_PER_TARGET = 5000
 
 
 def _owned_inputs(
@@ -254,76 +252,108 @@ def _ancestor_distribution(
     rows_by_scope: Mapping[tuple[str, str, str], Sequence[Mapping[str, Any]]],
     owned_index: Mapping[OwnedOutpointKey, Mapping[str, Any]],
     blocked: frozenset[tuple[str, str, str]],
-    visited: frozenset[str],
-    memo: dict[str, list[tuple[Mapping[str, Any], int]] | None],
+    memo: dict[tuple[str, str, str, str], list[tuple[Mapping[str, Any], int]] | None],
     budget: list[int],
 ) -> list[tuple[Mapping[str, Any], int]] | None:
     """Every inbound row behind one transaction, with the value each carries.
 
-    Resolved once per transaction rather than once per referencing input: a
-    wallet that splits and recombines would otherwise revisit the same
-    ancestors combinatorially. Returns None whenever the chain cannot be
-    resolved completely, so a partial answer is never mistaken for a whole one.
-    """
-    if txid in memo:
-        return memo[txid]
-    if txid in visited:
-        # Path-local, so a diamond still resolves while a cycle cannot.
-        return None
-    budget[0] -= 1
-    if budget[0] < 0:
-        # A pathological graph must cost a bounded amount and fail closed.
-        return None
-    if (chain, network, txid) in blocked:
-        # A CoinJoin/PayJoin hop keeps its deferred semantics. Passing lineage
-        # through one would assert exactly the participant linkage the privacy
-        # boundary exists to refuse.
-        return None
-    candidates = rows_by_scope.get((chain, network, txid), ())
-    inbound = [r for r in candidates if str(r["wallet_id"]) == wallet_id
-               and str(r["direction"]) == "inbound"]
-    if len(inbound) > 1:
-        # More than one inbound leg for this wallet is ambiguous evidence.
-        return None
-    if inbound:
-        parent = inbound[0]
-        result = (
-            [(parent, int(parent["amount"] or 0))]
-            if _row_is_authoritative(parent) and int(parent["amount"] or 0) > 0
-            else None
-        )
-        memo[txid] = result
-        return result
+    Resolved once per (wallet, scope, transaction) rather than once per
+    referencing input: a wallet that splits and recombines would otherwise
+    revisit the same ancestors combinatorially. The key includes the wallet on
+    purpose -- one batched transaction pays several wallets, and a txid-only
+    memo handed wallet B the ancestry resolved for wallet A, which is the one
+    thing this deriver must never do.
 
-    outbound = [r for r in candidates if str(r["wallet_id"]) == wallet_id
-                and str(r["direction"]) == "outbound"]
-    result = None
-    if len(outbound) == 1 and _row_is_authoritative(outbound[0]):
-        inputs = _owned_inputs(outbound[0], chain, network, owned_index)
-        if inputs:
-            carried: dict[str, list[Any]] = {}
-            complete = True
-            for prev_txid, _vout, msat in inputs:
-                upstream = _ancestor_distribution(
-                    prev_txid, wallet_id=wallet_id, chain=chain, network=network,
-                    rows_by_scope=rows_by_scope, owned_index=owned_index,
-                    blocked=blocked, visited=visited | {txid},
-                    memo=memo, budget=budget,
-                )
-                if upstream is None:
-                    complete = False
-                    break
-                for ancestor, share in _scale_ancestors(upstream, msat):
-                    entry = carried.setdefault(str(ancestor["id"]), [ancestor, 0])
-                    entry[1] += share
-            if complete and carried:
-                result = [
-                    (ancestor, msat) for ancestor, msat in sorted(
-                        carried.values(), key=lambda item: str(item[0]["id"]),
-                    )
-                ]
-    memo[txid] = result
-    return result
+    Iterative, with an explicit stack: a long change chain is legitimate
+    history, and its length must not be able to overflow the interpreter --
+    which is what happened when rows arrived in reverse order and every hop was
+    a fresh recursion. Returns None whenever the chain cannot be resolved
+    completely, so a partial answer is never mistaken for a whole one.
+    """
+
+    def key_for(t: str) -> tuple[str, str, str, str]:
+        return (wallet_id, chain, network, t)
+
+    if key_for(txid) in memo:
+        return memo[key_for(txid)]
+
+    # frame: [txid, path, inputs, next_index, carried]
+    #   inputs is None until the frame's first visit classifies the row.
+    stack: list[list[Any]] = [[txid, frozenset(), None, 0, {}]]
+
+    def finish(frame: list[Any], result: list[tuple[Mapping[str, Any], int]] | None) -> None:
+        memo[key_for(frame[0])] = result
+        stack.pop()
+
+    while stack:
+        frame = stack[-1]
+        f_txid, path, inputs, index, carried = frame
+        if inputs is None:
+            budget[0] -= 1
+            if budget[0] < 0:
+                # A pathological graph must cost a bounded amount and fail closed.
+                finish(frame, None)
+                continue
+            if (chain, network, f_txid) in blocked:
+                # A CoinJoin/PayJoin hop keeps its deferred semantics. Passing
+                # lineage through one would assert exactly the participant
+                # linkage the privacy boundary exists to refuse.
+                finish(frame, None)
+                continue
+            candidates = rows_by_scope.get((chain, network, f_txid), ())
+            inbound = [r for r in candidates if str(r["wallet_id"]) == wallet_id
+                       and str(r["direction"]) == "inbound"]
+            if len(inbound) > 1:
+                # More than one inbound leg for this wallet is ambiguous evidence.
+                finish(frame, None)
+                continue
+            if inbound:
+                parent = inbound[0]
+                finish(frame, (
+                    [(parent, int(parent["amount"] or 0))]
+                    if _row_is_authoritative(parent) and int(parent["amount"] or 0) > 0
+                    else None
+                ))
+                continue
+            outbound = [r for r in candidates if str(r["wallet_id"]) == wallet_id
+                        and str(r["direction"]) == "outbound"]
+            if len(outbound) != 1 or not _row_is_authoritative(outbound[0]):
+                finish(frame, None)
+                continue
+            resolved_inputs = _owned_inputs(outbound[0], chain, network, owned_index)
+            if not resolved_inputs:
+                finish(frame, None)
+                continue
+            frame[2] = resolved_inputs
+            continue
+
+        if index < len(inputs):
+            prev_txid, _vout, msat = inputs[index]
+            child_key = key_for(prev_txid)
+            if child_key not in memo:
+                if prev_txid == f_txid or prev_txid in path:
+                    # Path-local, so a diamond still resolves while a cycle cannot.
+                    memo[child_key] = None
+                else:
+                    stack.append([prev_txid, path | {f_txid}, None, 0, {}])
+                    continue
+            upstream = memo[child_key]
+            if upstream is None:
+                finish(frame, None)
+                continue
+            for ancestor, share in _scale_ancestors(upstream, msat):
+                entry = carried.setdefault(str(ancestor["id"]), [ancestor, 0])
+                entry[1] += share
+            frame[3] = index + 1
+            continue
+
+        finish(frame, [
+            (ancestor, msat) for ancestor, msat in sorted(
+                carried.values(), key=lambda item: str(item[0]["id"]),
+            )
+        ] if carried else None)
+
+    return memo[key_for(txid)]
 
 
 def derive_parent_spend_pairs(
@@ -361,14 +391,20 @@ def derive_parent_spend_pairs(
     }
 
     # Shared across every spend in this pass: a wallet that splits and
-    # recombines reaches the same ancestors from many directions.
-    memo: dict[str, list[tuple[Mapping[str, Any], int]] | None] = {}
-    budget = [_MAX_ANCESTOR_RESOLUTIONS]
+    # recombines reaches the same ancestors from many directions. Keyed by
+    # wallet as well as transaction -- see _ancestor_distribution.
+    memo: dict[tuple[str, str, str, str], list[tuple[Mapping[str, Any], int]] | None] = {}
 
     pairs: list[dict[str, Any]] = []
     for row in rows:
         if str(row["direction"]) != "outbound":
             continue
+        # Budget is per target, not per pass. A pass-wide budget let thousands
+        # of unrelated spends exhaust it before a fully resolvable target was
+        # reached, misreporting available history as missing -- and which
+        # target lost depended on row order. Memo hits cost nothing, so a
+        # shared ancestor resolved for one target is free for the next.
+        budget = [_MAX_ANCESTOR_RESOLUTIONS_PER_TARGET]
         scope = onchain_transfer_scope(row)
         if scope is None or scope[:3] in blocked:
             continue
@@ -403,8 +439,7 @@ def derive_parent_spend_pairs(
             upstream = _ancestor_distribution(
                 prev_txid, wallet_id=wallet_id, chain=chain, network=network,
                 rows_by_scope=rows_by_scope, owned_index=owned_index,
-                blocked=frozenset(blocked), visited=frozenset(),
-                memo=memo, budget=budget,
+                blocked=frozenset(blocked), memo=memo, budget=budget,
             )
             if upstream is None:
                 resolved_all = False

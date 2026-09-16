@@ -6,6 +6,7 @@ import {
   linkReviewFormFromLink,
   linkReviewPayload,
   isStaleLinkReviewError,
+  hasUnsavedDrafts,
   reconcileLinkForm,
   shouldAutoAssemble,
   type SourceFundsLink,
@@ -200,5 +201,38 @@ describe("a refreshed link cannot be approved against its old amounts", () => {
     const next = reconcileLinkForm({ form: dirty, inspected, latest: other });
     expect(next.inspected).toBe(other);
     expect(next.form.allocation_amount).toBe(amountInput(5000));
+  });
+});
+
+describe("auto-assembly waits for work in progress", () => {
+  const inspected = link({ allocation_amount_msat: 1000, from_allocation_amount_msat: 1000 });
+  const pristine = {
+    linkForm: linkReviewFormFromLink(inspected),
+    inspectedLink: inspected,
+    sourceForm: { label: "", amount: "", description: "", attachment_id: "__none__" },
+    manualLinkForm: {
+      from_transaction: "", allocation_amount: "", from_allocation_amount: "",
+      explanation: "", attachment_id: "__none__",
+    },
+  };
+
+  it("sees no draft when every editor is untouched", () => {
+    expect(hasUnsavedDrafts(pristine)).toBe(false);
+  });
+
+  it("treats an edited link form as work in progress", () => {
+    expect(hasUnsavedDrafts({
+      ...pristine, linkForm: { ...pristine.linkForm, explanation: "half a sentence" },
+    })).toBe(true);
+  });
+
+  it("treats a started root-source form as work in progress", () => {
+    expect(hasUnsavedDrafts({ ...pristine, sourceForm: { ...pristine.sourceForm, amount: "0.5" } })).toBe(true);
+  });
+
+  it("treats a started manual link as work in progress", () => {
+    expect(hasUnsavedDrafts({
+      ...pristine, manualLinkForm: { ...pristine.manualLinkForm, from_transaction: "tx-9" },
+    })).toBe(true);
   });
 });

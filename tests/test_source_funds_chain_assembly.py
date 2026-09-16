@@ -313,3 +313,94 @@ def test_a_difference_is_only_named_when_the_rows_actually_account_for_it():
     # A privacy boundary disqualifies the route: Kassiber does not claim to
     # know what happened inside one.
     assert explain(_envelope(consumed=1_413, fee_msat=1_413, privacy=True)) is None
+
+
+@pytest.mark.parametrize("insertion_order", ["a_first", "b_first"])
+def test_two_wallets_paid_by_one_transaction_each_keep_their_own_ancestry(tmp_path, insertion_order):
+    """Astra's P1, through the production path: one batched transaction pays two
+    wallets; assembling each spend must never adopt the OTHER wallet's parent.
+
+    A txid-only memo handed wallet B the ancestry cached for wallet A, and both
+    bulk review and report re-verification repeated the same wrong derivation.
+    """
+    from kassiber.db import set_setting
+
+    conn = open_db(str(tmp_path))
+    set_setting(conn, "context_workspace", "ws")
+    set_setting(conn, "context_profile", "profile")
+    conn.execute("INSERT INTO workspaces(id,label,created_at) VALUES('ws','WS','2026')")
+    conn.execute(
+        "INSERT INTO profiles(id,workspace_id,label,fiat_currency,tax_country,gains_algorithm,created_at)"
+        " VALUES('profile','ws','P','EUR','generic','FIFO','2026')"
+    )
+    script = {"A": "0014" + "aa" * 20, "B": "0014" + "bb" * 20}
+    for wallet in ("A", "B"):
+        conn.execute(
+            "INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at)"
+            " VALUES(?,'ws','profile',?,'descriptor',?,'2026')",
+            (wallet, f"Wallet {wallet}", json.dumps({"chain": "bitcoin", "network": "main"})),
+        )
+    parent = {"A": "a1" * 32, "B": "b1" * 32}
+    batch, spend = "cc" * 32, {"A": "da" * 32, "B": "db" * 32}
+    sats = {"A": (500_000, 499_000, 498_000), "B": (700_000, 699_000, 698_000)}
+
+    def graph(txid, vin, vout, wallet):
+        return json.dumps({"txid": txid, "chain": "bitcoin", "network": "main",
+                           "observer_owned_scripts": [script[wallet]], "vin": vin, "vout": vout},
+                          sort_keys=True)
+
+    def insert(rid, wallet, txid, direction, amount_sats, fee_sats, raw, occurred):
+        conn.execute(
+            "INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,external_id,"
+            "external_id_kind,occurred_at,direction,asset,amount,fee,amount_includes_fee,raw_json,"
+            "fiat_rate,created_at) VALUES(?,'ws','profile',?,?,?,'txid',?,?,'BTC',?,?,0,?,50000,'2026')",
+            (rid, wallet, f"fp-{rid}", txid, occurred, direction, amount_sats * 1000, fee_sats * 1000, raw),
+        )
+
+    batch_vout = [{"n": 0, "scriptpubkey": script["A"], "value": sats["A"][1]},
+                  {"n": 1, "scriptpubkey": script["B"], "value": sats["B"][1]}]
+    order = ("A", "B") if insertion_order == "a_first" else ("B", "A")
+    for w in order:
+        deposit, received, spent = sats[w]
+        vout_index = 0 if w == "A" else 1
+        insert(f"parent-{w}", w, parent[w], "inbound", deposit, 0,
+               graph(parent[w], [], [{"n": 0, "scriptpubkey": script[w], "value": deposit}], w),
+               "2026-01-01T00:00:00Z")
+        insert(f"batch-{w}", w, batch, "inbound", received, 0,
+               graph(batch, [{"txid": parent[w], "vout": 0,
+                              "prevout": {"scriptpubkey": script[w], "value": deposit}}], batch_vout, w),
+               "2026-01-02T00:00:00Z")
+        insert(f"spend-{w}", w, spend[w], "outbound", spent, received - spent,
+               graph(spend[w], [{"txid": batch, "vout": vout_index,
+                                 "prevout": {"scriptpubkey": script[w], "value": received}}],
+                     [{"n": 0, "scriptpubkey": "0014" + "ff" * 20, "value": spent}], w),
+               "2026-02-01T00:00:00Z")
+    conn.commit()
+    for rid in ("parent-A", "batch-A", "spend-A", "parent-B", "batch-B", "spend-B"):
+        persist_authoritative_chain_observation(conn, rid, observer_kind="bdk")
+    conn.commit()
+    hooks = daemon._source_funds_hooks()
+    try:
+        for w in order:
+            outcome = source_funds.assemble_history(
+                conn, "ws", "profile", hooks, target_transaction_ref=f"spend-{w}",
+            )
+            assert outcome["auto_reviewed"] == 1, (w, outcome)
+        wallet_of = {row[0]: row[1] for row in conn.execute("SELECT id, wallet_id FROM transactions")}
+        links = conn.execute(
+            "SELECT from_transaction_id, to_transaction_id, state FROM source_funds_links"
+        ).fetchall()
+        assert {(f, t) for f, t, _s in links} == {("batch-A", "spend-A"), ("batch-B", "spend-B")}, links
+        for from_id, to_id, _state in links:
+            assert wallet_of[from_id] == wallet_of[to_id], f"cross-wallet link {from_id} -> {to_id}"
+        # Report re-verification must agree with what was persisted.
+        for w in order:
+            report = source_funds.build_report(
+                conn, "ws", "profile", hooks, target_transaction_ref=f"spend-{w}", save_case=False,
+            )
+            assert "stale_structural_lineage" not in {
+                f["code"] for f in report["explain_gates"]["blockers"]
+            }
+            assert [e["from"] for e in report["graph"]["edges"]] == [f"tx:batch-{w}"]
+    finally:
+        conn.close()

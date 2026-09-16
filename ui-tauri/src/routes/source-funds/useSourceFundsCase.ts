@@ -19,6 +19,7 @@ import {
   NO_ATTACHMENT,
   amountInput,
   autoAssembleKey,
+  hasUnsavedDrafts,
   isStaleLinkReviewError,
   linkReviewPayload,
   pretty,
@@ -514,7 +515,8 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
         reviewLink.isPending ||
         attachLink.isPending ||
         createLink.isPending ||
-        createSource.isPending,
+        createSource.isPending ||
+        hasUnsavedDrafts({ linkForm, inspectedLink, sourceForm, manualLinkForm }),
       alreadyAssembled: autoAssembledKeys,
     })) {
       return;
