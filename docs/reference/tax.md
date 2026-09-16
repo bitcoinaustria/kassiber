@@ -17,6 +17,25 @@ Current policies:
 - `generic` -> RP2-backed lot accounting
 - `at` -> RP2-backed Austrian accounting through the Kassiber-maintained fork at [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2), with moving-average defaults for new wallets plus Kassiber-side normalization and current disposal-category / Kennzahl mapping
 
+## Implementation boundary
+
+[custody_journal.py](../../kassiber/core/custody_journal.py) composes imported
+observations, observer authority, and authored custody evidence into canonical
+decisions, issues, lineage, and finalized tax inputs. CLI handlers call this
+service rather than assembling a second interpreter.
+
+`GenericRP2TaxEngine` consumes a `FinalizedTaxProjection`. Both generic and
+Austrian books use that engine; Austrian books select `rp2.plugin.country.at.AT`.
+RP2 owns country defaults, lot computation, and native carry math. Kassiber
+owns the typed marker/quarantine contract and maps disposal categories into
+report buckets; see [the Austrian handoff](../austrian-handoff.md).
+
+RP2 calls pool each asset across the wallets of a profile, so
+`IntraTransaction` can carry basis between owned wallets. Wallet identity is
+preserved through RP2's exchange label and `BalanceSet`. Per-wallet portfolio
+basis is an allocation at the asset's average residual basis, not a claim
+about which physical lots remain in a wallet.
+
 ## Journal processing
 
 Run:
