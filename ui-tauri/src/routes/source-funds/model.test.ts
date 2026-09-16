@@ -5,6 +5,7 @@ import {
   linkReviewFormFromLink,
   linkReviewPayload,
   isStaleLinkReviewError,
+  reconcileLinkForm,
   type SourceFundsLink,
 } from "./model";
 
@@ -91,5 +92,46 @@ describe("reviewing is not editing", () => {
     ).toBe(true);
     expect(isStaleLinkReviewError({ envelope: { error: { code: "validation" } } })).toBe(false);
     expect(isStaleLinkReviewError(undefined)).toBe(false);
+  });
+});
+
+describe("a refreshed link cannot be approved against its old amounts", () => {
+  // Astra's reproduction: inspected at 1,000 msat, refreshed to 2,000, user
+  // changes nothing. The old guard compared the pristine form to the NEW link,
+  // saw a difference, kept the form, then submitted it against the new
+  // precondition -- restoring 1,000 with the guard satisfied.
+  const inspected = link({ allocation_amount_msat: 1000, from_allocation_amount_msat: 1000, updated_at: "t1" });
+  const refreshed = link({ allocation_amount_msat: 2000, from_allocation_amount_msat: 2000, updated_at: "t2" });
+
+  it("refreshes a pristine form and approves the refreshed amounts unchanged", () => {
+    const pristine = linkReviewFormFromLink(inspected);
+    const next = reconcileLinkForm({ form: pristine, inspected, latest: refreshed });
+    expect(next.inspected).toBe(refreshed);
+    const payload = linkReviewPayload({ link: next.inspected, form: next.form, state: "reviewed" });
+    expect(payload.expected_allocation_amount_msat).toBe(2000);
+    // Nothing was edited, so no amount travels -- the stored 2,000 stands.
+    expect(payload).not.toHaveProperty("allocation_amount");
+    expect(payload).not.toHaveProperty("from_allocation_amount");
+  });
+
+  it("keeps a dirty form AND its original precondition, so the server refuses", () => {
+    const dirty = { ...linkReviewFormFromLink(inspected), allocation_amount: "0.00000003" };
+    const next = reconcileLinkForm({ form: dirty, inspected, latest: refreshed });
+    expect(next.form).toBe(dirty);
+    expect(next.inspected).toBe(inspected);
+    const payload = linkReviewPayload({ link: next.inspected, form: next.form, state: "reviewed" });
+    // Bound to what was inspected (1,000), not to what was fetched last (2,000):
+    // update_link_review compares against stored 2,000 and raises
+    // source_funds_link_stale instead of writing the edit over unseen amounts.
+    expect(payload.expected_allocation_amount_msat).toBe(1000);
+    expect(payload.allocation_amount).toBe("0.00000003");
+  });
+
+  it("selecting a different link always rebuilds the form", () => {
+    const dirty = { ...linkReviewFormFromLink(inspected), explanation: "half-typed" };
+    const other = link({ id: "link-2", allocation_amount_msat: 5000 });
+    const next = reconcileLinkForm({ form: dirty, inspected, latest: other });
+    expect(next.inspected).toBe(other);
+    expect(next.form.allocation_amount).toBe(amountInput(5000));
   });
 });
