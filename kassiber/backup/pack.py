@@ -15,8 +15,8 @@ archive is being built. The result is then tarred and piped through age.
 
 The import reverses the process: decrypt to a temp tarball, pass through
 the strict tar member validator, extract into a staging directory,
-validate the manifest against the staged files, and atomically move the
-staging tree into place.
+validate the manifest against the staged files, and install from a prepared
+same-filesystem tree with a retained recovery copy and rollback on failure.
 """
 
 from __future__ import annotations
@@ -34,10 +34,6 @@ from typing import Iterable, Optional
 
 from .. import __version__
 from ..db import (
-    DEFAULT_ATTACHMENTS_DIRNAME,
-    DEFAULT_CONFIG_DIRNAME,
-    DEFAULT_DATA_DIRNAME,
-    DEFAULT_EXPORTS_DIRNAME,
     resolve_attachments_root,
     resolve_config_root,
     resolve_database_path,
@@ -566,83 +562,10 @@ def import_backup(
         installed_root: Optional[Path] = None
         backup_dir: Optional[Path] = None
         if move_into_place:
-            target_data_root = Path(target_data_root).expanduser()
-            target_data_root.mkdir(parents=True, exist_ok=True)
-            installed_root = target_data_root
-            # Mirror resolve_effective_state_root() but skip the legacy
-            # XDG fallback: install always writes to the literal target
-            # the user asked for, never to a half-discovered legacy path.
-            # Without this, --target-data-root=<state>/data would dump
-            # attachments/ and config/ next to the data root only when
-            # the path looks like `<state>/data`; for a flat custom root
-            # like `--data-root /srv/kassiber`, sidecars would land in
-            # `/srv/attachments` and `/srv/config/`, outside the tree.
-            if target_data_root.name == DEFAULT_DATA_DIRNAME:
-                target_state_root = target_data_root.parent
-            else:
-                target_state_root = target_data_root
-            target_db = target_data_root / BACKUP_DB_NAME
-            target_attachments = target_state_root / DEFAULT_ATTACHMENTS_DIRNAME
-            target_env = (
-                target_state_root / DEFAULT_CONFIG_DIRNAME / "backends.env"
-            )
-            target_settings = (
-                target_state_root / DEFAULT_CONFIG_DIRNAME / "settings.json"
-            )
-            target_exports = target_state_root / DEFAULT_EXPORTS_DIRNAME
+            from .install import install_staged_backup
 
-            # Move any pre-existing live data into a sibling
-            # `pre-restore-<timestamp>/` directory so an accidental
-            # restore over a populated data root is recoverable.
-            needs_backup = (
-                target_db.exists()
-                or target_attachments.exists()
-                or target_env.exists()
-                or target_settings.exists()
-                or target_exports.exists()
-            )
-            if needs_backup:
-                backup_dir = target_state_root / (
-                    "pre-restore-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-                )
-                backup_dir.mkdir(parents=True, exist_ok=False)
-                if target_db.exists():
-                    shutil.move(str(target_db), str(backup_dir / BACKUP_DB_NAME))
-                if target_attachments.exists():
-                    shutil.move(
-                        str(target_attachments),
-                        str(backup_dir / BACKUP_ATTACHMENTS_DIR),
-                    )
-                if target_env.exists():
-                    backup_env_dir = backup_dir / BACKUP_CONFIG_DIR
-                    backup_env_dir.mkdir(parents=True, exist_ok=True)
-                    shutil.move(str(target_env), str(backup_env_dir / "backends.env"))
-                if target_settings.exists():
-                    backup_settings_dir = backup_dir / BACKUP_CONFIG_DIR
-                    backup_settings_dir.mkdir(parents=True, exist_ok=True)
-                    shutil.move(str(target_settings), str(backup_settings_dir / "settings.json"))
-                if target_exports.exists():
-                    shutil.move(
-                        str(target_exports),
-                        str(backup_dir / DEFAULT_EXPORTS_DIRNAME),
-                    )
-
-            target_db.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(staging_dir / BACKUP_DB_NAME, target_db)
-            staged_attachments = staging_dir / BACKUP_ATTACHMENTS_DIR
-            if staged_attachments.exists():
-                target_attachments.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copytree(
-                    staged_attachments, target_attachments, dirs_exist_ok=True
-                )
-            staged_env = staging_dir / BACKUP_BACKENDS_ENV
-            if staged_env.exists():
-                target_env.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(staged_env, target_env)
-            staged_settings = staging_dir / BACKUP_SETTINGS_JSON
-            if staged_settings.exists():
-                target_settings.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(staged_settings, target_settings)
+            installed_root = Path(target_data_root).expanduser()
+            backup_dir = install_staged_backup(staging_dir, installed_root)
 
             try:
                 shutil.rmtree(staging_parent)
