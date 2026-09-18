@@ -504,6 +504,21 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
   // buttons to see it is ceremony. Fires once per target, only when the case
   // has no reviewed history at all, and never touches an authored decision:
   // assemble_history only adds suggestions and promotes edges it re-derives.
+  // Any authoring in flight means the user is mid-decision. Assembling
+  // underneath that can add structural funding beside a root source they are
+  // still writing, leaving two competing allocations. A dependency of the
+  // effect below on purpose: the guard postpones assembly, it does not cancel
+  // it, so the effect has to run again once the draft is saved or discarded.
+  const assemblyBlocked =
+    Boolean(preview.isFetching) ||
+    assembleLinks.isPending ||
+    suggestLinks.isPending ||
+    bulkReviewLinks.isPending ||
+    reviewLink.isPending ||
+    attachLink.isPending ||
+    createLink.isPending ||
+    createSource.isPending ||
+    hasUnsavedDrafts({ linkForm, inspectedLink, sourceForm, manualLinkForm });
   useEffect(() => {
     const packet = preview.data?.data;
     const targetId = packet?.target?.transaction_id;
@@ -516,19 +531,7 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
       targetId,
       attemptKey,
       reviewedEdgeCount: preview.data?.data?.report?.graph?.edges?.length ?? 0,
-      // Any authoring in flight means the user is mid-decision. Assembling
-      // underneath that can add structural funding beside a root source they
-      // are still writing, leaving two competing allocations.
-      busy:
-        Boolean(preview.isFetching) ||
-        assembleLinks.isPending ||
-        suggestLinks.isPending ||
-        bulkReviewLinks.isPending ||
-        reviewLink.isPending ||
-        attachLink.isPending ||
-        createLink.isPending ||
-        createSource.isPending ||
-        hasUnsavedDrafts({ linkForm, inspectedLink, sourceForm, manualLinkForm }),
+      busy: assemblyBlocked,
       alreadyAssembled: autoAssembledKeys,
     })) {
       return;
@@ -548,8 +551,8 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
         }
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runAssembly identity changes per render; keyed on the resolved target.
-  }, [preview.data, preview.isFetching]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runAssembly identity changes per render; keyed on the packet and the guard.
+  }, [preview.data, assemblyBlocked]);
 
   const bulkReviewDeterministicLinks = async () => {
     if (!selectedTarget) return;
