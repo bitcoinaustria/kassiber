@@ -1602,6 +1602,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     cost_basis_exact TEXT,
     proceeds_exact TEXT,
     gain_loss_exact TEXT,
+    calculation_json TEXT,
     pricing_source_kind TEXT,
     pricing_quality TEXT,
     description TEXT,
@@ -5326,6 +5327,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "journal_entries", "cost_basis_exact", "TEXT")
     ensure_column(conn, "journal_entries", "proceeds_exact", "TEXT")
     ensure_column(conn, "journal_entries", "gain_loss_exact", "TEXT")
+    ensure_column(conn, "journal_entries", "calculation_json", "TEXT")
     ensure_column(conn, "journal_entries", "pricing_source_kind", "TEXT")
     ensure_column(conn, "journal_entries", "pricing_quality", "TEXT")
     ensure_column(conn, "journal_tax_summary", "capital_gains_type", "TEXT")
@@ -7346,6 +7348,7 @@ def _migrate_msat_columns(conn):
                     cost_basis_exact TEXT,
                     proceeds_exact TEXT,
                     gain_loss_exact TEXT,
+                    calculation_json TEXT,
                     pricing_source_kind TEXT,
                     pricing_quality TEXT,
                     description TEXT,
@@ -7360,7 +7363,7 @@ def _migrate_msat_columns(conn):
                     CAST(ROUND(quantity * 100000000000.0) AS INTEGER),
                     fiat_value, unit_cost, cost_basis, proceeds, gain_loss,
                     fiat_value_exact, unit_cost_exact, cost_basis_exact,
-                    proceeds_exact, gain_loss_exact, pricing_source_kind,
+                    proceeds_exact, gain_loss_exact, calculation_json, pricing_source_kind,
                     pricing_quality, description,
                     at_category, at_kennzahl, capital_gains_type, created_at
                 FROM journal_entries;

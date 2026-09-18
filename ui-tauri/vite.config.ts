@@ -183,6 +183,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.profiles.switch",
   "ui.profiles.reset_data",
   "ui.reports.capital_gains",
+  "ui.reports.explain_capital_gain",
   "ui.reports.summary",
   "ui.reports.balance_sheet",
   "ui.reports.portfolio_summary",

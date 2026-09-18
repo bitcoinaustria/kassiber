@@ -84,7 +84,7 @@ CLI_READ_PATHS = _paths(
     source-funds.review-context source-funds.request-input
     source-funds.coverage source-funds.recipients.list reports.summary
     reports.tax-summary reports.balance-sheet reports.portfolio-summary
-    reports.capital-gains reports.journal-entries reports.privacy-hygiene
+    reports.capital-gains reports.explain-capital-gain reports.journal-entries reports.privacy-hygiene
     reports.privacy-mirror reports.psbt-privacy reports.austrian-e1kv
     reports.austrian-tax-summary reports.exit-tax reports.filed-snapshots.list
     reports.balance-history reports.lightning-profitability
@@ -228,7 +228,7 @@ DAEMON_READ_KINDS = _paths(
     ui.backends.list ui.backends.options ui.backends.public_defaults
     ui.backends.settings.list
     ui.reports.privacy_hygiene ui.reports.privacy_mirror
-    ui.reports.psbt_privacy
+    ui.reports.psbt_privacy ui.reports.explain_capital_gain
     ui.source_funds.preview ui.source_funds.review_context ui.source_funds.request_input ui.source_funds.cases.list
     ui.source_funds.sources.list ui.source_funds.links.list
     ui.source_funds.evidence.list ui.source_funds.coverage

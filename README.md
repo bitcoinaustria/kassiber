@@ -69,7 +69,7 @@ using real wallet data, and [SECURITY.md](SECURITY.md) to report a vulnerability
 ## Documentation
 
 - [Imports](docs/reference/imports.md) and [backends](docs/reference/backends.md)
-- [Tax and journals](docs/reference/tax.md) and [source-of-funds review](docs/reference/source-of-funds-review.md)
+- [Tax and journals](docs/reference/tax.md), [report explanations](docs/reference/report-explanations.md), and [source-of-funds review](docs/reference/source-of-funds-review.md)
 - [Desktop](docs/reference/desktop.md) and [AI assistant](docs/reference/ai.md)
 - [Product and architecture](docs/plan/00-overview.md) and [backlog](TODO.md)
 - [Contributor guide](CONTRIBUTING.md) and [agent instructions](AGENTS.md)
