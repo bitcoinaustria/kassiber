@@ -145,9 +145,10 @@ def review_context(conn, profile, hooks, *, target_transaction: str, recipe=None
             needs.add("documentary_origin_attested")
         if any(not source["attachments"] for source in sources) or not evidence:
             needs.add("documentary_evidence_missing")
-        if target["id"] in source_funds.rows_missing_input_attestation(
-            source_funds._active_transaction_rows(conn, current["id"])
-        ):
+        # One-row fetch, not a full reload: review_context is the hottest read
+        # path and only the target's own attestation matters here.
+        target_row = source_funds._active_transaction_row(conn, current["id"], target["id"])
+        if target_row is not None and source_funds.rows_missing_input_attestation([target_row]):
             # The observer never recorded which inputs were its own; a rescan
             # fixes this, and attaching documents does not.
             needs.add("chain_attestation_missing")

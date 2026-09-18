@@ -1746,6 +1746,25 @@ def _skip_structural_row(row: Mapping[str, Any]) -> bool:
     return _samourai_metadata_from_wallet_config(row["wallet_config_json"]) is not None
 
 
+def _active_transaction_row(conn: sqlite3.Connection, profile_id: str, tx_id: str):
+    """One row in the exact shape _active_transaction_rows returns (provenance included)."""
+    return conn.execute(
+        """
+        SELECT t.*, w.label AS wallet_label, w.kind AS wallet_kind,
+               w.config_json AS wallet_config_json,
+               observation.authority_version AS observation_authority_version,
+               observation.graph_hash AS observation_graph_hash,
+               observation.quantity_hash AS observation_quantity_hash
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN chain_observation_provenance observation
+          ON observation.transaction_id = t.id
+        WHERE t.profile_id = ? AND t.id = ? AND t.excluded = 0
+        """,
+        (profile_id, tx_id),
+    ).fetchone()
+
+
 def _active_transaction_rows(conn: sqlite3.Connection, profile_id: str):
     # The observation commitment travels with the row so structural lineage can
     # fail closed on anything an authoritative observer did not write. Aliased

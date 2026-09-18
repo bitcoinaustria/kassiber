@@ -695,7 +695,7 @@ class OrderAndScaleTests(unittest.TestCase):
         """A pass-wide budget let 5,001 unrelated pairs starve a valid target listed last."""
         rows = []
         for i in range(5001):
-            parent, spend = f"{i + 10:064x}", f"{i + 20000:064x}"
+            parent, spend = f"{i + 10:08x}" * 8, f"{i + 20000:08x}" * 8
             rows.append(_parent_row(parent, 1_000_000_000))
             rows.append(_spend_row(spend, [(parent, 1_000_000_000)], 999_000_000, 1_000_000))
         target_parent, target_spend = "ee" * 32, "ef" * 32

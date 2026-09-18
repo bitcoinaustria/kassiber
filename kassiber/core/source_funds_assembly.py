@@ -397,9 +397,13 @@ def derive_parent_spend_pairs(
     ``ambiguous_allocation``, which is strictly worse for the user: it has no
     one-click attestation path, while ``missing_history`` does.
     """
+    # onchain_transfer_scope re-parses raw_json every call, and a pass asks for
+    # each row's scope several times. Profiling a real book put it at ~75% of
+    # assembly time. Resolve once per row.
+    scope_of: dict[str, tuple | None] = {str(row["id"]): onchain_transfer_scope(row) for row in rows}
     rows_by_scope: dict[tuple[str, str, str], list[Mapping[str, Any]]] = defaultdict(list)
     for row in rows:
-        scope = onchain_transfer_scope(row)
+        scope = scope_of[str(row["id"])]
         if scope is not None:
             rows_by_scope[scope[:3]].append(row)
 
@@ -407,7 +411,7 @@ def derive_parent_spend_pairs(
     blocked = {
         scope[:3]
         for row in rows
-        if (scope := onchain_transfer_scope(row)) is not None and skip_row(row)
+        if (scope := scope_of[str(row["id"])]) is not None and skip_row(row)
     }
 
     # Shared across every spend in this pass: a wallet that splits and
@@ -425,7 +429,7 @@ def derive_parent_spend_pairs(
         # target lost depended on row order. Memo hits cost nothing, so a
         # shared ancestor resolved for one target is free for the next.
         budget = [_MAX_ANCESTOR_RESOLUTIONS_PER_TARGET]
-        scope = onchain_transfer_scope(row)
+        scope = scope_of[str(row["id"])]
         if scope is None or scope[:3] in blocked:
             continue
         if not _row_is_authoritative(row):
