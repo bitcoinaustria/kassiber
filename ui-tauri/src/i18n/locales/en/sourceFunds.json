@@ -394,7 +394,10 @@
     "assemblyFailed": "Could not assemble history",
     "assemblyFailedBody": "Kassiber could not read this transaction's chain evidence. Try Re-run assembly.",
     "assembledBody_one": "Connected {{count}} funding transaction from chain evidence. Document where it came from.",
-    "assembledBody_other": "Connected {{count}} funding transactions from chain evidence. Document where they came from."
+    "assembledBody_other": "Connected {{count}} funding transactions from chain evidence. Document where they came from.",
+    "rescanNeeded": "Full rescan needed",
+    "rescanNeededBody_one": "{{count}} transaction was synced before Kassiber recorded which inputs were its own. Run a full rescan of the wallet to connect its history.",
+    "rescanNeededBody_other": "{{count}} transactions were synced before Kassiber recorded which inputs were their own. Run a full rescan of the wallet to connect their history."
   },
   "case": {
     "description": "Explain the origin of one amount using the evidence in this book.",

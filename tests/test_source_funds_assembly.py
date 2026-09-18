@@ -707,3 +707,28 @@ class OrderAndScaleTests(unittest.TestCase):
         self.assertTrue(any(p["to_row"]["external_id"] == target_spend for p in pairs))
         # And every one of the unrelated pairs resolved too: none starved another.
         self.assertEqual(len(pairs), 5002)
+
+
+class LegacyAttestationTests(unittest.TestCase):
+    """Rows synced before observer_owned_scripts existed: no lineage, but a named remedy."""
+
+    def setUp(self):
+        from kassiber.core.source_funds_assembly import derive_parent_spend_pairs, rows_missing_input_attestation
+
+        self.derive, self.missing = derive_parent_spend_pairs, rows_missing_input_attestation
+        self.parents = [("a1" * 32, 200_000_000), ("b2" * 32, 300_000_000)]
+        spend = _spend_row("d4" * 32, self.parents, 499_900_000, 100_000)
+        raw = json.loads(spend["raw_json"]); raw.pop("observer_owned_scripts")
+        spend["raw_json"] = json.dumps(raw, sort_keys=True)
+        self.spend = _authoritative(spend)
+        self.rows = [_parent_row(t, v) for t, v in self.parents] + [self.spend]
+
+    def test_a_legacy_spend_derives_nothing_and_is_named(self):
+        # Ownership is never inferred from the absence of a marker: the
+        # collaborative-spend marker itself only exists since 2026-09-05.
+        self.assertEqual(self.derive(self.rows, {}, skip_row=lambda row: False), [])
+        self.assertEqual(self.missing(self.rows), [self.spend["id"]])
+
+    def test_an_attested_spend_is_not_named(self):
+        attested = _spend_row("d4" * 32, self.parents, 499_900_000, 100_000)
+        self.assertEqual(self.missing([_parent_row(t, v) for t, v in self.parents] + [attested]), [])

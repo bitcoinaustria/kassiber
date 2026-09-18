@@ -348,3 +348,50 @@ def test_pre_provenance_row_without_legs_still_accepts_a_supporting_payload():
     updates = _transaction_merge_updates(existing, normalized, "fp")
 
     assert updates["raw_json"] == normalized["raw_json"]
+
+
+_LEGACY_GRAPH = {  # a row synced before 2026-07-14: complete graph, no attestation
+    "txid": "ab" * 32, "observer": "bdk",
+    "vin": [{"txid": "cd" * 32, "vout": 0, "prevout": {"scriptpubkey": "0014" + "aa" * 20, "value": 1000}}],
+    "vout": [{"n": 0, "scriptpubkey": "0014" + "ff" * 20, "value": 900}],
+}
+_ATTESTED_GRAPH = {**_LEGACY_GRAPH, "observer_owned_scripts": ["0014" + "aa" * 20]}
+
+
+def _authoritative_record(existing, incoming):
+    existing, normalized = _records(existing, incoming)
+    for key, value in (("external_id", "ab" * 32), ("external_id_kind", "txid"), ("direction", "outbound"),
+                       ("amount", "0.000009"), ("fee", "0.000001"), ("amount_includes_fee", False)):
+        normalized[key] = value
+    row = _closed_provenance(existing)
+    row["external_id_kind"] = "txid"
+    return row, normalized
+
+
+def test_authoritative_refresh_backfills_the_input_attestation():
+    """The only delta is the new observer_owned_scripts key; the refresh must still land it.
+
+    Before: an otherwise identical re-observation produced no column update, so
+    raw_json was never replaced and pre-2026-07-14 rows could never gain the
+    attestation -- structural lineage stayed invisible for every older book.
+    """
+    row, normalized = _authoritative_record(_LEGACY_GRAPH, _ATTESTED_GRAPH)
+
+    updates = _transaction_merge_updates(row, normalized, "fp", authoritative_chain_observer=True)
+
+    assert updates["raw_json"] == normalized["raw_json"]
+
+
+def test_a_csv_carrying_the_attestation_key_cannot_backfill_it():
+    """Only an observer may say which inputs were its own."""
+    existing, normalized = _records(_LEGACY_GRAPH, _ATTESTED_GRAPH)
+
+    updates = _transaction_merge_updates(_closed_provenance(existing), normalized, "fp")
+
+    assert "raw_json" not in updates
+
+
+def test_an_identical_attested_refresh_is_still_a_no_op():
+    row, normalized = _authoritative_record(_ATTESTED_GRAPH, _ATTESTED_GRAPH)
+
+    assert _transaction_merge_updates(row, normalized, "fp", authoritative_chain_observer=True) == {}

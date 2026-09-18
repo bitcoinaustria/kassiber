@@ -356,6 +356,26 @@ def _ancestor_distribution(
     return memo[key_for(txid)]
 
 
+def rows_missing_input_attestation(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Authoritative spends whose stored graph predates the ownership attestation.
+
+    Such a row has inputs with values and scripts but no `observer_owned_scripts`,
+    so structural lineage cannot be derived from it -- not because the history is
+    missing, but because the observer never recorded which inputs were its own.
+    A full rescan backfills it (see imports._attestation_upgrade). Named so the
+    user is told the one action that fixes it instead of a misleading gap.
+    """
+    missing: list[str] = []
+    for row in rows:
+        if str(row["direction"]) != "outbound" or not _row_is_authoritative(row):
+            continue
+        outer = stored_tx_mapping(row["raw_json"]) or {}
+        if "observer_owned_scripts" in outer or not isinstance(outer.get("vin"), list) or not outer["vin"]:
+            continue
+        missing.append(str(row["id"]))
+    return missing
+
+
 def derive_parent_spend_pairs(
     rows: Sequence[Mapping[str, Any]],
     owned_index: Mapping[OwnedOutpointKey, Mapping[str, Any]],
@@ -493,4 +513,5 @@ __all__ = [
     "OwnedOutpointKey",
     "build_owned_outpoint_index",
     "derive_parent_spend_pairs",
+    "rows_missing_input_attestation",
 ]

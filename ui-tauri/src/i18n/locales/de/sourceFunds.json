@@ -394,7 +394,10 @@
     "assemblyFailed": "Historie konnte nicht zusammengestellt werden",
     "assemblyFailedBody": "Kassiber konnte die Chain-Evidenz dieser Transaktion nicht lesen. Versuche es mit „Zusammenstellung erneut ausführen“.",
     "assembledBody_one": "{{count}} Zahlungsquelle aus der Chain-Evidenz verknüpft. Halte fest, woher sie stammt.",
-    "assembledBody_other": "{{count}} Zahlungsquellen aus der Chain-Evidenz verknüpft. Halte fest, woher sie stammen."
+    "assembledBody_other": "{{count}} Zahlungsquellen aus der Chain-Evidenz verknüpft. Halte fest, woher sie stammen.",
+    "rescanNeeded": "Vollständiger Rescan nötig",
+    "rescanNeededBody_one": "{{count}} Transaktion wurde synchronisiert, bevor Kassiber festgehalten hat, welche Inputs ihr gehören. Führe einen vollständigen Rescan der Wallet aus, um ihre Historie zu verknüpfen.",
+    "rescanNeededBody_other": "{{count}} Transaktionen wurden synchronisiert, bevor Kassiber festgehalten hat, welche Inputs ihnen gehören. Führe einen vollständigen Rescan der Wallet aus, um ihre Historie zu verknüpfen."
   },
   "case": {
     "description": "Erkläre die Herkunft eines Betrags anhand der Nachweise in diesem Buch.",

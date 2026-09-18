@@ -21,7 +21,11 @@ from ..wallet_descriptors import normalize_asset_code, normalize_chain, normaliz
 from . import custody_journal
 from .attachments import attachment_display_label
 from .privacy_hops import privacy_hop_type_from_row
-from .source_funds_assembly import build_owned_outpoint_index, derive_parent_spend_pairs
+from .source_funds_assembly import (
+    build_owned_outpoint_index,
+    derive_parent_spend_pairs,
+    rows_missing_input_attestation,
+)
 from .source_funds_hints import enrich_findings_with_next_steps
 from .source_funds_traversal import load_report_traversal
 
@@ -1705,6 +1709,7 @@ def assemble_history(
             methods[str(link.get("method") or "")] += 1
         if suggested["inserted"] == 0 and reviewed["reviewed"] == 0:
             break
+    _profile_id = str(hooks.resolve_scope(conn, workspace_ref, profile_ref)[1]["id"])
     return {
         "target_transaction_id": reviewed["target_transaction_id"],
         "passes": passes,
@@ -1712,6 +1717,12 @@ def assemble_history(
         "auto_reviewed": total_reviewed,
         "awaiting_manual_review": total_skipped,
         "methods": dict(sorted(methods.items())),
+        # Spends in this target's scope whose stored graph predates the input
+        # attestation. Not a gap in history: a full rescan records it.
+        "chain_attestation_missing": sorted(
+            set(rows_missing_input_attestation(_active_transaction_rows(conn, _profile_id)))
+            & _target_scoped_transaction_ids(conn, _profile_id, reviewed["target_transaction_id"])
+        ),
         "policy": (
             "Assembly derives exact edges from unambiguous synced transaction "
             "inputs/outputs and source-qualified Lightning payment hashes, plus "

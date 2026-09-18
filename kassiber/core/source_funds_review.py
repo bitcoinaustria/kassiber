@@ -145,6 +145,12 @@ def review_context(conn, profile, hooks, *, target_transaction: str, recipe=None
             needs.add("documentary_origin_attested")
         if any(not source["attachments"] for source in sources) or not evidence:
             needs.add("documentary_evidence_missing")
+        if target["id"] in source_funds.rows_missing_input_attestation(
+            source_funds._active_transaction_rows(conn, current["id"])
+        ):
+            # The observer never recorded which inputs were its own; a rescan
+            # fixes this, and attaching documents does not.
+            needs.add("chain_attestation_missing")
         packet = {
             "schema_version": 1, "domain": "source_funds",
             "workspace_id": current["workspace_id"], "profile_id": current["id"],

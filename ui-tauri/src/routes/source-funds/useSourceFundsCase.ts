@@ -285,6 +285,7 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     inserted: number;
     auto_reviewed: number;
     awaiting_manual_review: number;
+    chain_attestation_missing?: string[];
     methods: Record<string, number>;
   }>("ui.source_funds.assemble");
   const bulkReviewLinks = useDaemonMutation<{
@@ -473,6 +474,17 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     const summary = envelope.data;
     const reviewed = summary?.auto_reviewed ?? 0;
     const manual = summary?.awaiting_manual_review ?? 0;
+    const unattested = summary?.chain_attestation_missing?.length ?? 0;
+    if (unattested > 0 && reviewed === 0) {
+      // Not a gap in history: the observer never recorded which inputs were
+      // its own. Say the one action that fixes it.
+      addNotification({
+        title: t("toast.rescanNeeded"),
+        body: t("toast.rescanNeededBody", { count: unattested }),
+        tone: "info",
+      });
+      return;
+    }
     // Say what happened and what is left, once. A zero-result run on an
     // automatic pass is not news, so it stays quiet unless asked for.
     if (showNotification || reviewed > 0) {

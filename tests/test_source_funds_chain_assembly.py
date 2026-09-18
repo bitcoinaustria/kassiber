@@ -4,7 +4,7 @@ import json
 import pytest
 
 from kassiber import daemon
-from kassiber.core import source_funds
+from kassiber.core import source_funds, source_funds_review
 from kassiber.db import open_db, set_setting
 from tests.custody_tax_helpers import persist_authoritative_chain_observation
 
@@ -404,3 +404,47 @@ def test_two_wallets_paid_by_one_transaction_each_keep_their_own_ancestry(tmp_pa
             assert [e["from"] for e in report["graph"]["edges"]] == [f"tx:batch-{w}"]
     finally:
         conn.close()
+
+
+def test_a_legacy_book_names_the_rescan_and_heals_after_one(consolidation_book):
+    """The reported book's real shape: rows synced before the observer recorded
+    which inputs were its own. Assembly must not guess; it must say what fixes
+    it, and an authoritative refresh must then make the lineage appear."""
+    from unittest.mock import Mock
+    from kassiber.core.imports import ImportCoordinatorHooks, insert_wallet_records
+
+    conn = consolidation_book
+    attested_raw = conn.execute("SELECT raw_json FROM transactions WHERE id='spend'").fetchone()[0]
+    legacy = json.loads(attested_raw); legacy.pop("observer_owned_scripts")
+    conn.execute("UPDATE transactions SET raw_json=? WHERE id='spend'", (json.dumps(legacy, sort_keys=True),))
+    conn.commit()
+    persist_authoritative_chain_observation(conn, "spend", observer_kind="bdk")  # legacy rows ARE authoritative
+    conn.commit()
+    hooks = daemon._source_funds_hooks()
+
+    outcome = source_funds.assemble_history(conn, "ws", "profile", hooks, target_transaction_ref="spend")
+    assert outcome["auto_reviewed"] == 0
+    assert outcome["chain_attestation_missing"] == ["spend"]
+    assert "chain_attestation_missing" in source_funds_review.review_context(
+        conn, conn.execute("SELECT * FROM profiles WHERE id='profile'").fetchone(), hooks,
+        target_transaction="spend",
+    )["input_needs"]
+
+    # What a full rescan does: the observer re-emits the row, now attesting its inputs.
+    profile = conn.execute("SELECT * FROM profiles WHERE id='profile'").fetchone()
+    wallet = conn.execute("SELECT * FROM wallets WHERE id='w'").fetchone()
+    attested = json.loads(attested_raw)
+    refreshed = insert_wallet_records(
+        conn, profile, wallet,
+        [{"txid": SPEND_TXID, "occurred_at": "2026-02-01T00:00:00Z", "direction": "outbound", "asset": "BTC",
+          "amount": f"{SPEND_SATS / 1e8:.8f}", "fee": f"{FEE_SATS / 1e8:.8f}", "raw_json": attested}],
+        "backend:fixture", ImportCoordinatorHooks(ensure_tag_row=Mock(), invalidate_journals=Mock()),
+        authoritative_chain_observer=True, report_updates=True,
+    )
+    assert refreshed["updated"] == 1 and "raw_json" in refreshed["updated_records"][0]["changed_fields"]
+    persist_authoritative_chain_observation(conn, "spend", observer_kind="bdk")
+    conn.commit()
+
+    healed = source_funds.assemble_history(conn, "ws", "profile", hooks, target_transaction_ref="spend")
+    assert healed["auto_reviewed"] == 3, healed
+    assert healed["chain_attestation_missing"] == []
