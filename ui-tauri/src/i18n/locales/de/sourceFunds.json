@@ -161,8 +161,7 @@
     "empty": "Noch keine passenden Verknüpfungen. Kassiber sucht nach Transfers mit gleicher id, geprüften Paaren, Provider-ids und engen Betrags-/Zeit-Hinweisen.",
     "badge": {
       "path": "Pfad",
-      "target": "Ziel",
-      "suggested": "Vorgeschlagen"
+      "target": "Ziel"
     },
     "arrow": "{{from}} -> {{to}}",
     "amountConfidence": "{{amount}} · {{confidence}}"
@@ -271,6 +270,8 @@
     "noPreview": "Lokale Falldaten sind noch nicht verfügbar.",
     "manualReview_one": "{{count}} Eintrag zur manuellen Prüfung.",
     "manualReview_other": "{{count}} Einträge zur manuellen Prüfung.",
+    "batchableBeyondInspection_one": "{{count}} weiterer liegt oberhalb dieser Ansicht und wird von derselben Aktion geprüft.",
+    "batchableBeyondInspection_other": "{{count}} weitere liegen oberhalb dieser Ansicht und werden von derselben Aktion geprüft.",
     "unresolved": "ungeklärt"
   },
   "flowPath": {
@@ -387,7 +388,10 @@
     "manualLinkBody": "Der geprüfte Fluss wurde aktualisiert.",
     "gapMarked": "Lücke als geprüft markiert",
     "sourceLinked": "Quelle verknüpft",
-    "sourcePathBody": "Der Mittelherkunftspfad wurde aktualisiert."
+    "sourcePathBody": "Der Mittelherkunftspfad wurde aktualisiert.",
+    "linkReviewFailed": "Prüfung nicht übernommen",
+    "linkReviewStaleBody": "Diese Verknüpfung hat sich seit deiner Prüfung geändert. Sieh dir die aktualisierten Werte an und prüfe sie erneut.",
+    "linkReviewFailedBody": "Kassiber konnte diese Prüfung nicht speichern."
   },
   "case": {
     "description": "Erkläre die Herkunft eines Betrags anhand der Nachweise in diesem Buch.",
@@ -494,6 +498,7 @@
   "coverageBucket": {
     "fully_traced": "Vollständig nachvollzogen",
     "attested": "Bestätigte Historie",
+    "unattributed": "Herkunft unbekannt",
     "in_review": "In Prüfung",
     "untraced": "Nicht nachvollzogen",
     "not_classified": "Nicht eingeordnet"
@@ -516,6 +521,13 @@
         "reviewedSourceRecordIsMissing": "Der geprüfte Quelldatensatz fehlt.",
         "reviewedMissinghistoryGapIncludedItIsNot": "Eine geprüfte Lücke in der Historie wurde aufgenommen. Sie ist keine tatsächliche Ursprungsquelle.",
         "reviewedParentTransactionIsMissing": "Die geprüfte Vorgängertransaktion fehlt."
+      }
+    },
+    "unknown_origin": {
+      "title": "Herkunft unbekannt",
+      "nextStep": "Halte fest, woher diese Mittel stammen",
+      "messages": {
+        "aReviewedRootSourceEndsTheTrace": "Eine geprüfte Ursprungsquelle beendet die Kette, ohne die wirtschaftliche Herkunft der Mittel zu nennen."
       }
     },
     "missing_pricing": {
@@ -582,7 +594,7 @@
     },
     "stale_custody_component_lineage": {
       "title": "Verwahrungsnachweis geändert",
-      "nextStep": "Die betreffende Verknüpfung oder Quelle zur Prüfung öffnen",
+      "nextStep": "Prüfe diese Verknüpfung erneut gegen die aktuelle Custody-Projektion",
       "messages": {
         "aReviewedCustodyLinkIsAbsentOr": "Eine geprüfte Verwahrungsverknüpfung fehlt in der aktuellen gespeicherten Ableitung oder ist dort veraltet."
       }

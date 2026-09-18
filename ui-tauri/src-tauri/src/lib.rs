@@ -353,6 +353,10 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.projects.list",
     "ui.projects.create",
     "ui.projects.select",
+    "ui.backup.export",
+    "ui.backup.preview",
+    "ui.backup.apply",
+    "ui.backup.cancel",
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.secrets.forget_cli_unlock",
@@ -486,6 +490,13 @@ const STREAMING_DAEMON_KINDS: &[&str] = &[
     "ui.sync.push",
     "ui.sync.pull",
     "ui.sync.join",
+    // Backup export/preview/apply stream a whole container (SQLCipher database
+    // plus retained attachments) through tar and age. On a large book that
+    // outlives the ordinary request timeout, and killing it mid-restore is
+    // exactly the failure the pre-restore recovery copy exists to survive.
+    "ui.backup.export",
+    "ui.backup.preview",
+    "ui.backup.apply",
 ];
 
 // Daemon kinds that exercise the AI runtime (model calls, chat sessions, tool

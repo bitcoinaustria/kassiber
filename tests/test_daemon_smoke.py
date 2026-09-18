@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
+from kassiber.daemon_backup import BackupSessions
 from kassiber.daemon import (
     AiToolConsentState,
     AiToolRuntime,
@@ -912,7 +913,7 @@ class DaemonReportDepthClampTest(unittest.TestCase):
 
 class DaemonForgetCliUnlockTest(unittest.TestCase):
     def test_marker_failure_still_attempts_every_credential_delete(self):
-        ctx = SimpleNamespace(data_root="/tmp/kassiber-forget-test")
+        ctx = SimpleNamespace(data_root="/tmp/kassiber-forget-test", backup_sessions=BackupSessions())
         with mock.patch.object(
             daemon_module,
             "cli_remembered_unlock_enabled",
@@ -950,7 +951,7 @@ class DaemonForgetCliUnlockTest(unittest.TestCase):
         self.assertTrue(raised.exception.details["legacy_shared_credential_deleted"])
 
     def test_cli_owned_legacy_delete_failure_quarantines_item(self):
-        ctx = SimpleNamespace(data_root="/tmp/kassiber-forget-test")
+        ctx = SimpleNamespace(data_root="/tmp/kassiber-forget-test", backup_sessions=BackupSessions())
         with mock.patch.object(
             daemon_module,
             "cli_remembered_unlock_enabled",
@@ -1002,6 +1003,7 @@ class DaemonPassphraseRotationGuardTest(unittest.TestCase):
     def test_guard_write_failure_preserves_live_connection(self):
         connection = mock.Mock()
         ctx = SimpleNamespace(
+            backup_sessions=BackupSessions(),
             data_root="/tmp/kassiber-rotate-test",
             conn=connection,
             project_owner=mock.Mock(),
@@ -1049,6 +1051,7 @@ class DaemonPassphraseRotationGuardTest(unittest.TestCase):
             data_root = Path(root) / "data"
             data_root.mkdir()
             ctx = SimpleNamespace(
+                backup_sessions=BackupSessions(),
                 data_root=data_root,
                 conn=None,
                 project_owner=mock.Mock(),
@@ -1086,6 +1089,7 @@ class DaemonPassphraseRotationGuardTest(unittest.TestCase):
     def test_locked_rotation_failure_releases_temporary_desktop_owner(self):
         owner = mock.Mock()
         ctx = SimpleNamespace(
+            backup_sessions=BackupSessions(),
             data_root="/tmp/kassiber-rotate-test",
             conn=None,
             project_owner=None,

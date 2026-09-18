@@ -162,6 +162,20 @@ def review_context(conn, profile, hooks, *, target_transaction: str, recipe=None
         # attachment hashes, disclosure options and journal version all bind the
         # inspection even when a provenance edit does not invalidate journals.
         packet["review_fingerprint"] = _digest(packet)
+        # Deliberately outside the fingerprint: eligibility is derived from the
+        # live custody projection, not from authored provenance, so a reprocess
+        # elsewhere must not invalidate a pending save. The apply revalidates
+        # and is bounded by these ids anyway.
+        eligible = source_funds.bulk_review_eligible_link_ids(
+            conn, current["id"], target["id"],
+        )
+        inspected = {link["id"] for link in links}
+        packet["bulk_review"] = {
+            "eligible_link_ids": eligible,
+            "eligible_beyond_inspection": sum(
+                1 for link_id in eligible if link_id not in inspected
+            ),
+        }
         return packet
 
 

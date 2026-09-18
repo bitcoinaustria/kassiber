@@ -1190,6 +1190,20 @@ def sync_wallet_from_backend(
                 str(profile["id"]),
                 str(wallet["id"]),
             )
+            # The repair pass replaces the surfaced outcome, so carry forward any
+            # projection retirement the first pass already performed — it is a
+            # balance-changing reconciliation the user needs to see.
+            if outcome.get("journal_invalidated"):
+                repair_outcome["journal_invalidated"] = True
+            if outcome.get("observer_superseded"):
+                repair_outcome["observer_superseded"] = (
+                    int(outcome["observer_superseded"])
+                    + int(repair_outcome.get("observer_superseded") or 0)
+                )
+                repair_outcome["observer_superseded_records"] = [
+                    *(outcome.get("observer_superseded_records") or ()),
+                    *(repair_outcome.get("observer_superseded_records") or ()),
+                ]
             repair_outcome["negative_balance_rescan"] = {
                 "triggered": True,
                 "resolved": not remaining_events,

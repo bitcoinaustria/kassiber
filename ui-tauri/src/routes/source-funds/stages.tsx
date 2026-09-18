@@ -478,7 +478,8 @@ export function TraceStage({ state, onInvestigate, assistantAvailable }: { state
       </div>
       <details className="rounded-md border p-3"><summary className="cursor-pointer text-sm font-medium">{t("case.evidenceSection")}</summary><div className="pt-3"><CaseBrief
         report={state.report}
-        bulkReviewable={state.bulkReviewableSuggestions.length}
+        bulkReviewable={state.bulkReviewableCount}
+        bulkReviewableBeyondInspection={state.bulkEligibleBeyondInspection}
         manualReview={state.manualSuggestionCount}
         onOpenTransaction={state.openTxDetailById}
       /></div></details>
@@ -525,7 +526,7 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                 disabled={
                   !state.selectedTarget ||
                   state.bulkReviewLinks.isPending ||
-                  state.bulkReviewableSuggestions.length === 0
+                  state.bulkReviewableCount === 0
                 }
               >
                 <Check className="mr-2 size-4" aria-hidden="true" />
@@ -549,11 +550,9 @@ function AdvancedReviewEditor({ state }: { state: SourceFundsCaseState }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusPill state={link.state} />
                     <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                      {state.reachableLinkIds.has(link.id)
-                        ? t("reviewQueue.badge.path")
-                        : link.to_transaction_id === state.selectedTxId
-                          ? t("reviewQueue.badge.target")
-                          : t("reviewQueue.badge.suggested")}
+                      {link.to_transaction_id === state.selectedTxId
+                        ? t("reviewQueue.badge.target")
+                        : t("reviewQueue.badge.path")}
                     </span>
                     <span className="font-medium">{t(`linkType.${link.link_type}`, { defaultValue: pretty(link.link_type) })}</span>
                     <span className="text-muted-foreground">

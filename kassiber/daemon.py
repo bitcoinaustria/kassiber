@@ -29,6 +29,7 @@ from . import __version__
 from .core import chain_analysis_api
 from .core import chain_analysis_runtime
 from .daemon_chain_analysis import job_starter as chain_analysis_job_starter
+from . import daemon_backup
 from . import daemon_accounting_tasks
 from .command_capabilities import daemon_capability
 from .secrets.auth_backoff import AuthAttemptBackoff, AUTH_BACKOFF_FILENAME
@@ -529,6 +530,10 @@ SUPPORTED_KINDS = (
     "ui.projects.list",
     "ui.projects.create",
     "ui.projects.select",
+    "ui.backup.export",
+    "ui.backup.preview",
+    "ui.backup.apply",
+    "ui.backup.cancel",
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.secrets.forget_cli_unlock",
@@ -1167,6 +1172,7 @@ class DaemonContext:
     project_root: str | None = None
     select_project_on_open: bool = True
     db_passphrase: str | None = None
+    backup_sessions: daemon_backup.BackupSessions = field(default_factory=daemon_backup.BackupSessions)
     freshness_worker: threading.Thread | None = None
     watch_worker: threading.Thread | None = None
     watch_stop_event: threading.Event = field(default_factory=threading.Event)
@@ -1192,6 +1198,8 @@ class DaemonContext:
 
 
 def _clear_unlocked_passphrase(ctx):
+    if getattr(ctx, "backup_sessions", None) is not None:
+        ctx.backup_sessions.clear()
     _clear_unlocked_passphrase_base(ctx)
     _GRAPH_SEMANTICS_CACHE.clear()
     jobs = getattr(ctx, "accounting_document_jobs", None)
@@ -2858,6 +2866,8 @@ def _ui_source_funds_payload_from_conn(
             explanation=args.get("explanation") if isinstance(args.get("explanation"), str) else None,
             uses_chain_observation=args.get("uses_chain_observation") if isinstance(args.get("uses_chain_observation"), bool) else None,
             chain_data_confirmed=args.get("chain_data_confirmed") if isinstance(args.get("chain_data_confirmed"), bool) else None,
+            expected_allocation_amount_msat=args.get("expected_allocation_amount_msat"),
+            expected_from_allocation_amount_msat=args.get("expected_from_allocation_amount_msat"),
         )
 
     if kind == "ui.source_funds.links.bulk_review":
@@ -2867,12 +2877,26 @@ def _ui_source_funds_payload_from_conn(
                 "ui.source_funds.links.bulk_review requires args.target_transaction",
                 code="validation",
             )
+        raw_link_ids = args.get("link_ids")
+        if raw_link_ids is not None and not (
+            isinstance(raw_link_ids, list)
+            and all(isinstance(item, str) and item.strip() for item in raw_link_ids)
+        ):
+            raise AppError(
+                "ui.source_funds.links.bulk_review args.link_ids must be a list of link ids",
+                code="validation",
+            )
         return core_source_funds.bulk_review_suggestions(
             conn,
             None,
             None,
             hooks,
             target_transaction_ref=target.strip(),
+            link_ids=(
+                [item.strip() for item in raw_link_ids]
+                if raw_link_ids is not None
+                else None
+            ),
         )
 
     if kind == "ui.source_funds.links.attach":
@@ -14910,6 +14934,39 @@ def handle_request(
         request = {**request, "args": {key: value for key, value in request_args.items()
                                      if key != "expected_scope"}}
 
+    ctx.backup_sessions.expire()
+    if kind in daemon_backup.KINDS:
+        def close_for_restore(require_current: Callable[[], None]) -> None:
+            _stop_watch_worker(ctx)
+            _stop_freshness_background_worker(ctx, cancel_running=True)
+            ctx.document_import_sessions.clear()
+            chain_analysis_runtime.clear_runtime()
+            require_current()
+            if ctx.conn is not None:
+                checkpoint = ctx.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+                if checkpoint[0]:
+                    raise AppError("Close other database readers before restoring", code="project_in_use")
+                ctx.conn.close()
+                ctx.conn = None
+            _clear_unlocked_passphrase(ctx)
+
+        def invalidate_restore_credentials() -> None:
+            mark_desktop_biometric_passphrase_stale(ctx.data_root)
+            invalidate_operator_native_auth(ctx.data_root)
+            disable_remembered_unlock(ctx.data_root, legacy_quarantined=True)
+            ctx.runtime_config = load_runtime_config(resolve_effective_env_file(None, ctx.data_root))
+            if ctx.project_id is not None:
+                refresh_project_metadata(ctx.project_id, data_root=ctx.data_root)
+
+        payload = daemon_backup.handle_backup(
+            ctx, kind, _coerce_args_dict(request_id, request.get("args")),
+            close_database=close_for_restore,
+            ensure_owner=lambda: _ensure_daemon_project_owner(ctx),
+            release_owner=lambda: _release_daemon_project_owner(ctx),
+            invalidate_credentials=invalidate_restore_credentials,
+        )
+        return _with_request_id(build_envelope(kind, payload), request_id), False
+
     if kind == "daemon.shutdown":
         return (
             _with_request_id(
@@ -17994,6 +18051,7 @@ def run(
 
     try:
         while True:
+            ctx.backup_sessions.expire()
             _drain_daemon_main_thread_tasks(ctx)
             ctx.active_ai_chats.validate_accounting_scopes()
             ctx.accounting_document_jobs.poll(ctx, out)
