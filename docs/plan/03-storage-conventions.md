@@ -1,14 +1,14 @@
 # Storage Conventions
 
-**Status:** Project-container implementation in progress. Fresh default runtime
+**Status:** Implemented project-container model. Fresh default runtime
 resolution uses the OS-native app-data root; `--data-root` remains an explicit
 escape hatch for tests, scripts, and manually chosen project data roots.
 **Current source of truth:** `kassiber/db.py`, `kassiber/core/runtime.py`,
-README, and TODO.md.
+[database compatibility](../reference/database-compatibility.md), and [TODO.md](../../TODO.md).
 
-## Product Direction
+## Storage model
 
-Move toward one project bundle per bookkeeping scope:
+One project container owns its books and their shared storage/unlock boundary:
 
 ```text
 <state-root>/

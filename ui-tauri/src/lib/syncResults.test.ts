@@ -134,6 +134,28 @@ describe("syncResults", () => {
     );
   });
 
+  it("reports retired observer projections, which change a wallet's balance", () => {
+    expect(
+      describeWalletSyncResult(
+        {
+          wallet: "Descriptor",
+          status: "synced",
+          observer_superseded: 1,
+          journal_invalidated: true,
+        },
+        "Descriptor",
+      ),
+    ).toBe(
+      "Descriptor refreshed: 1 obsolete projection retired · journals marked stale.",
+    );
+    expect(
+      describeWalletSyncResult(
+        { wallet: "Descriptor", status: "synced", observer_superseded: 2 },
+        "Descriptor",
+      ),
+    ).toContain("2 obsolete projections retired");
+  });
+
   it("marks force-full rescans in refresh summaries", () => {
     expect(
       describeWalletSyncResult(

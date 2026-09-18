@@ -71,28 +71,35 @@ class HintCoverageTests(unittest.TestCase):
     """Pin the catalog. If a new finding code is added without a hint, this test
     flags it so the UI/CLI doesn't ship raw codes to users."""
 
-    EXPECTED_CODES = {
-        "missing_history",
-        "missing_pricing",
-        "asset_mismatch",
-        "source_asset_mismatch",
-        "transaction_overallocation",
-        "source_overallocation",
-        "source_amount_missing",
-        "path_truncated",
-        "path_cycle",
-        "unreviewed_link",
-        "ambiguous_allocation",
-        "unconfirmed_chain_data",
-        "chain_observation_privacy",
-        "privacy_hop_unresolved",
-        "chronology_violation",
-        "opening_balance_attestation",
-    }
+    @staticmethod
+    def emitted_codes():
+        """Read the codes build_report actually emits, straight from its source.
+
+        Derived rather than listed: a hardcoded copy silently stops pinning the
+        moment someone adds a finding, which is exactly what this test exists to
+        prevent.
+        """
+        import ast
+        from pathlib import Path
+
+        tree = ast.parse(Path("kassiber/core/source_funds.py").read_text())
+        codes = set()
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "_add_finding"
+                and len(node.args) >= 2
+                and isinstance(node.args[1], ast.Constant)
+                and isinstance(node.args[1].value, str)
+            ):
+                codes.add(node.args[1].value)
+        return codes
 
     def test_every_emitted_code_has_a_hint(self):
-        catalog = set(known_finding_codes())
-        missing = self.EXPECTED_CODES - catalog
+        emitted = self.emitted_codes()
+        self.assertIn("unknown_origin", emitted, "source parsing found no findings")
+        missing = emitted - set(known_finding_codes())
         self.assertFalse(missing, f"Codes without hints: {sorted(missing)}")
 
     def test_module_re_export(self):
