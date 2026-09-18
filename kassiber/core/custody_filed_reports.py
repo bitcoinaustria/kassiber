@@ -469,6 +469,8 @@ def register_saved_report_export(
         snapshot_id=snapshot_id,
         created_at=timestamp,
     )
+    from .filed_report_chain import capture_export_dependencies
+    capture_export_dependencies(conn, get_filed_report_snapshot(conn, snapshot_id, profile_id=profile_id))
     conn.commit()
     return get_filed_report_snapshot(conn, snapshot_id, profile_id=profile_id)
 
@@ -478,11 +480,11 @@ def create_filed_report_snapshot(
     *,
     workspace_id: str,
     profile_id: str,
-    report_kind: str,
+    report_kind: str | None = None,
     report_state: str,
-    period_start_year: int,
-    period_end_year: int,
-    content_sha256: str,
+    period_start_year: int | None = None,
+    period_end_year: int | None = None,
+    content_sha256: str | None = None,
     classification_summary: Mapping[str, Any] | None = None,
     gain_summary: Mapping[str, Any] | None = None,
     report_scope: Mapping[str, Any] | None = None,
@@ -490,15 +492,34 @@ def create_filed_report_snapshot(
     notes: str | None = None,
     snapshot_id: str | None = None,
     created_at: str | None = None,
+    saved_snapshot_id: str | None = None,
 ) -> dict[str, Any]:
     """Append one user-authored saved/filed report marker."""
 
+    saved = None
+    if saved_snapshot_id is not None:
+        if not isinstance(saved_snapshot_id, str) or not saved_snapshot_id.strip():
+            raise _error("saved_snapshot_id must identify a captured local export")
+        saved = get_filed_report_snapshot(conn, saved_snapshot_id, profile_id=profile_id)
+        captured = conn.execute("SELECT 1 FROM filed_report_chain_captures WHERE snapshot_id=? AND profile_id=?",
+                                (saved_snapshot_id, profile_id)).fetchone()
+        if saved["report_state"] != "saved" or saved["workspace_id"] != workspace_id or not captured:
+            raise _error("The reference must be a locally captured saved export from this book")
+        if str(report_state).strip().lower() != "filed":
+            raise _error("A saved export reference is only valid for an explicit filed marker")
+        report_kind = saved["report_kind"] if report_kind is None else report_kind
+        period_start_year = saved["period_start_year"] if period_start_year is None else period_start_year
+        period_end_year = saved["period_end_year"] if period_end_year is None else period_end_year
+        content_sha256 = saved["content_sha256"] if content_sha256 is None else content_sha256
+        classification_summary = saved["classification_summary"] if classification_summary is None else classification_summary
+        gain_summary = saved["gain_summary"] if gain_summary is None else gain_summary
+        report_scope = saved["report_scope"] if report_scope is None else report_scope
     kind = _token(report_kind, "report_kind")
     state = str(report_state or "").strip().lower()
     if state not in _REPORT_STATES:
         raise _error("report_state must be saved or filed", field="report_state")
     start_year = _year(period_start_year, "period_start_year")
-    end_year = _year(period_end_year, "period_end_year")
+    end_year = _year(period_start_year if period_end_year is None else period_end_year, "period_end_year")
     if end_year < start_year:
         raise _error(
             "period_end_year must not precede period_start_year",
@@ -527,32 +548,52 @@ def create_filed_report_snapshot(
     classifications = _classification_summary(classification_summary)
     gains = _gain_summary(gain_summary)
     bounded_scope = _report_scope(report_scope)
-    conn.execute(
-        """
-        INSERT INTO filed_report_snapshots(
-            id, workspace_id, profile_id, report_kind, report_state,
-            period_start_year, period_end_year, content_sha256,
-            classification_summary_json, gain_summary_json, report_scope_json, authored_source,
-            notes, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            row_id,
-            workspace_id,
-            profile_id,
-            kind,
-            state,
-            start_year,
-            end_year,
-            digest,
-            _json(classifications),
-            _json(gains),
-            _json(bounded_scope),
-            source,
-            note_text,
-            timestamp,
-        ),
-    )
+    if saved is not None:
+        expected = (saved["report_kind"], saved["period_start_year"], saved["period_end_year"],
+                    saved["content_sha256"], saved["classification_summary"], saved["gain_summary"], saved["report_scope"])
+        if (kind, start_year, end_year, digest, classifications, gains, bounded_scope) != expected:
+            raise _error("Filed marker identity must match the referenced saved export")
+    owns_transaction = not conn.in_transaction
+    if owns_transaction:
+        conn.execute("BEGIN")
+    conn.execute("SAVEPOINT filed_snapshot_create")
+    try:
+        conn.execute(
+            """
+            INSERT INTO filed_report_snapshots(
+                id, workspace_id, profile_id, report_kind, report_state,
+                period_start_year, period_end_year, content_sha256,
+                classification_summary_json, gain_summary_json, report_scope_json, authored_source,
+                notes, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                row_id,
+                workspace_id,
+                profile_id,
+                kind,
+                state,
+                start_year,
+                end_year,
+                digest,
+                _json(classifications),
+                _json(gains),
+                _json(bounded_scope),
+                source,
+                note_text,
+                timestamp,
+            ),
+        )
+        if saved is not None:
+            from .filed_report_chain import copy_export_dependencies
+            copy_export_dependencies(conn, saved, row_id)
+        conn.execute("RELEASE SAVEPOINT filed_snapshot_create")
+    except Exception:
+        conn.execute("ROLLBACK TO SAVEPOINT filed_snapshot_create")
+        conn.execute("RELEASE SAVEPOINT filed_snapshot_create")
+        if owns_transaction:
+            conn.rollback()
+        raise
     return get_filed_report_snapshot(conn, row_id, profile_id=profile_id)
 
 
@@ -835,6 +876,22 @@ def _public_impact_resolution(row: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def compare_report_summaries(snapshot: Mapping[str, Any], summaries: Mapping[str, Any]) -> dict[str, Any]:
+    """Shared exact saved/filed impact semantics, independent of its cause."""
+    classification_changed = snapshot["classification_summary"] != summaries["classification_summary"]
+    gain_changed = snapshot["gain_summary"] != summaries["gain_summary"]
+    changed = classification_changed or gain_changed
+    return {
+        "after_classification_summary": summaries["classification_summary"],
+        "after_gain_summary": summaries["gain_summary"],
+        "classification_changed": classification_changed,
+        "gain_changed": gain_changed,
+        "amendment_status": ("no_change" if not changed else
+                             "review_required" if snapshot["report_state"] == "filed" else
+                             "saved_report_changed"),
+    }
+
+
 def resolve_pending_custody_impacts(
     conn: sqlite3.Connection,
     *,
@@ -879,15 +936,14 @@ def resolve_pending_custody_impacts(
         before_gain = _json_object(row["before_gain_summary_json"])
         after_classification = summaries["classification_summary"]
         after_gain = summaries["gain_summary"]
-        classification_changed = before_classification != after_classification
-        gain_changed = before_gain != after_gain
-        changed = classification_changed or gain_changed
-        if not changed:
-            amendment_status = "no_change"
-        elif str(row["report_state"]) == "filed":
-            amendment_status = "review_required"
-        else:
-            amendment_status = "saved_report_changed"
+        comparison = compare_report_summaries({
+            "classification_summary": before_classification,
+            "gain_summary": before_gain,
+            "report_state": row["report_state"],
+        }, summaries)
+        classification_changed = comparison["classification_changed"]
+        gain_changed = comparison["gain_changed"]
+        amendment_status = comparison["amendment_status"]
         if amendment_status not in _AMENDMENT_STATUSES:
             raise AssertionError("unsupported custody amendment status")
         resolution_id = str(

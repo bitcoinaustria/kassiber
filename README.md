@@ -13,6 +13,7 @@ Do not use Kassiber as the sole basis for filings or financial decisions.
 - Watch-only Bitcoin, Lightning, and Liquid sources, plus exchange and wallet
   file imports.
 - Transaction notes, attachments, transfer review, quarantine, and audit history.
+- Encrypted backup and restore of a book container, from the desktop or the CLI.
 - Local tax calculations through [RP2](https://github.com/bitcoinaustria/rp2),
   including an Austrian plugin and E 1kv exports.
 - An optional AI assistant using local or explicitly authorized remote providers.
@@ -68,7 +69,7 @@ using real wallet data, and [SECURITY.md](SECURITY.md) to report a vulnerability
 ## Documentation
 
 - [Imports](docs/reference/imports.md) and [backends](docs/reference/backends.md)
-- [Tax and journals](docs/reference/tax.md) and [source-of-funds review](docs/reference/source-of-funds-review.md)
+- [Tax and journals](docs/reference/tax.md), [report explanations](docs/reference/report-explanations.md), and [source-of-funds review](docs/reference/source-of-funds-review.md)
 - [Desktop](docs/reference/desktop.md) and [AI assistant](docs/reference/ai.md)
 - [Product and architecture](docs/plan/00-overview.md) and [backlog](TODO.md)
 - [Contributor guide](CONTRIBUTING.md) and [agent instructions](AGENTS.md)

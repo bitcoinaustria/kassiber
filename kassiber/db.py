@@ -1602,6 +1602,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     cost_basis_exact TEXT,
     proceeds_exact TEXT,
     gain_loss_exact TEXT,
+    calculation_json TEXT,
     pricing_source_kind TEXT,
     pricing_quality TEXT,
     description TEXT,
@@ -3239,6 +3240,8 @@ SCHEMA += CUSTODY_COMPONENT_SCHEMA
 
 from .chain_analysis_watches_schema import WATCH_SCHEMA
 SCHEMA += WATCH_SCHEMA
+from .filed_report_chain_schema import SCHEMA as FILED_REPORT_CHAIN_SCHEMA
+SCHEMA += FILED_REPORT_CHAIN_SCHEMA
 from .chain_analysis_backfill_schema import SCHEMA as CHAIN_ANALYSIS_BACKFILL_SCHEMA
 SCHEMA += CHAIN_ANALYSIS_BACKFILL_SCHEMA
 
@@ -5134,6 +5137,8 @@ def ensure_schema_compat(conn):
     Anything added after the initial schema shipped belongs here so
     existing databases pick it up on the next `open_db`.
     """
+    from .chain_analysis_watches_schema import ensure_inbox_sources
+    ensure_inbox_sources(conn)
     migrated_ownership_history = _migrate_inline_ownership_history(conn)
     # Retire the method names the pre-projection derivers wrote and nothing
     # writes today. `utxo_spend` is deliberately NOT in this list: the
@@ -5333,6 +5338,7 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "journal_entries", "cost_basis_exact", "TEXT")
     ensure_column(conn, "journal_entries", "proceeds_exact", "TEXT")
     ensure_column(conn, "journal_entries", "gain_loss_exact", "TEXT")
+    ensure_column(conn, "journal_entries", "calculation_json", "TEXT")
     ensure_column(conn, "journal_entries", "pricing_source_kind", "TEXT")
     ensure_column(conn, "journal_entries", "pricing_quality", "TEXT")
     ensure_column(conn, "journal_tax_summary", "capital_gains_type", "TEXT")
@@ -5377,6 +5383,9 @@ def ensure_schema_compat(conn):
     # it on a legacy REAL-typed database.
     ensure_column(conn, "transactions", "amount_includes_fee", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(conn, "transactions", "kind_override", "TEXT")
+    from .core.acquisition_review import migrate_valuation_support
+    if migrate_valuation_support(conn):
+        conn.commit()
     ensure_column(
         conn,
         "transactions",
@@ -7353,6 +7362,7 @@ def _migrate_msat_columns(conn):
                     cost_basis_exact TEXT,
                     proceeds_exact TEXT,
                     gain_loss_exact TEXT,
+                    calculation_json TEXT,
                     pricing_source_kind TEXT,
                     pricing_quality TEXT,
                     description TEXT,
@@ -7367,7 +7377,7 @@ def _migrate_msat_columns(conn):
                     CAST(ROUND(quantity * 100000000000.0) AS INTEGER),
                     fiat_value, unit_cost, cost_basis, proceeds, gain_loss,
                     fiat_value_exact, unit_cost_exact, cost_basis_exact,
-                    proceeds_exact, gain_loss_exact, pricing_source_kind,
+                    proceeds_exact, gain_loss_exact, calculation_json, pricing_source_kind,
                     pricing_quality, description,
                     at_category, at_kennzahl, capital_gains_type, created_at
                 FROM journal_entries;

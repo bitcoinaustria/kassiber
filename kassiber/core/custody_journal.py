@@ -1004,6 +1004,7 @@ def store_ledger_state(
                 exact_payload["cost_basis_exact"],
                 exact_payload["proceeds_exact"],
                 exact_payload["gain_loss_exact"],
+                json.dumps(entry["calculation"], sort_keys=True) if entry.get("calculation") else None,
                 tx_pricing["pricing_source_kind"] if tx_pricing else None,
                 tx_pricing["pricing_quality"] if tx_pricing else None,
                 entry["description"],
@@ -1019,10 +1020,10 @@ def store_ledger_state(
             id, workspace_id, profile_id, transaction_id, wallet_id, account_id,
             occurred_at, entry_type, asset, quantity, fiat_value, unit_cost,
             cost_basis, proceeds, gain_loss, fiat_value_exact, unit_cost_exact,
-            cost_basis_exact, proceeds_exact, gain_loss_exact, pricing_source_kind,
+            cost_basis_exact, proceeds_exact, gain_loss_exact, calculation_json, pricing_source_kind,
             pricing_quality, description, at_category, at_kennzahl,
             capital_gains_type, created_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         journal_entry_rows,
     )
@@ -1164,6 +1165,7 @@ def store_ledger_state(
         ),
     )
     filed_impact_resolutions = []
+    chain_impact_resolution_count = 0
     if (
         not state.get("custody_component_blockers")
         and not deduped_quarantines
@@ -1175,13 +1177,15 @@ def store_ledger_state(
             profile_id=profile_id,
             rebuilt_at=stored_at,
         )
+        from .filed_report_chain import resolve_pending_chain_impacts
+        chain_impact_resolution_count = resolve_pending_chain_impacts(conn, profile_id, stored_at)
     return {
         "processed_at": stored_at,
         "processed_transactions": tx_count,
         "quarantines": deduped_quarantines,
         "custody_quantity": custody_quantity,
         "quantity_counts": quantity_counts,
-        "filed_report_impacts_resolved": len(filed_impact_resolutions),
+        "filed_report_impacts_resolved": len(filed_impact_resolutions) + chain_impact_resolution_count,
     }
 
 

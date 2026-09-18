@@ -723,7 +723,10 @@ class BackupRoundTripTests(unittest.TestCase):
             restore_temp = Path(root) / "restore-temp"
             real_mkdtemp = backup_pack.tempfile.mkdtemp
 
-            def _mkdtemp(prefix):
+            def _mkdtemp(prefix, **kwargs):
+                # Keep installer preparation on its required target filesystem.
+                if "dir" in kwargs:
+                    return real_mkdtemp(prefix=prefix, **kwargs)
                 restore_temp.mkdir()
                 return str(restore_temp)
 
@@ -983,7 +986,10 @@ class BackupRoundTripTests(unittest.TestCase):
             restore_temp = Path(root) / "restore-stage"
             real_mkdtemp = backup_pack.tempfile.mkdtemp
 
-            def _mkdtemp(prefix):
+            def _mkdtemp(prefix, **kwargs):
+                # Keep installer preparation on its required target filesystem.
+                if "dir" in kwargs:
+                    return real_mkdtemp(prefix=prefix, **kwargs)
                 restore_temp.mkdir()
                 return str(restore_temp)
 

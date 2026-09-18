@@ -5164,7 +5164,7 @@ def build_capital_gains_snapshot(
     # then filter to the exact local year and keep the newest 200 lots.
     rows = conn.execute(
         f"""
-        SELECT je.occurred_at, je.entry_type, je.quantity, je.cost_basis,
+        SELECT je.id, je.occurred_at, je.entry_type, je.quantity, je.cost_basis,
                je.proceeds, je.gain_loss, je.capital_gains_type
         FROM journal_entries je
         LEFT JOIN transactions t ON t.id = je.transaction_id
@@ -5180,8 +5180,10 @@ def build_capital_gains_snapshot(
             if tax_year_in_vienna(str(row["occurred_at"])) == int(latest_year)
         ]
     rows = rows[:200]
+    from .report_explanation import result_reference
     lots = [
         {
+            "explanationReference": result_reference(conn, profile, row["id"]),
             "acquired": "",
             "disposed": (
                 vienna_local_date(str(row["occurred_at"]))
