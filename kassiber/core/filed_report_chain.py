@@ -151,7 +151,12 @@ def _current(conn: sqlite3.Connection, dependency: sqlite3.Row) -> dict[str, Any
         guard_observation(conn, dependency["profile_id"], {"chain": dependency["chain"], "network": dependency["network"]}, operation="report_dependency")
     except AppError:
         return {"status": "unavailable", "reason": "domain_changed"}
-    rows = conn.execute(_OBSERVATION_SELECT + " WHERE t.profile_id=? AND t.wallet_id=? AND LOWER(t.external_id)=?", (
+    # Active rows only. When the watched-script set expands, the observer
+    # retires (excludes) an obsolete projection of a transaction and writes the
+    # replacement under the same txid. Capture already skips excluded rows; an
+    # unfiltered read here would find the retired original first and report the
+    # replaced input as unchanged.
+    rows = conn.execute(_OBSERVATION_SELECT + " WHERE t.profile_id=? AND t.wallet_id=? AND LOWER(t.external_id)=? AND t.excluded=0", (
         dependency["profile_id"], dependency["wallet_id"], dependency["txid"],
     )).fetchall()
     # Keep the original authored row identity when present. A deleted/reimported
