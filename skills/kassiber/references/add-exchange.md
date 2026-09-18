@@ -295,16 +295,18 @@ end-to-end and to pass the drift test.
 7. **`tests/test_cli_smoke.py`** — extend the behavior pin: a small fixture CSV
    covering the main row types (and at least one unrecognized type to prove the
    fail-safe fallback), an import, and assertions on inserted counts, `kind`,
-   msat amounts, and pricing. Prefer extending this suite over new test files
-   (see AGENTS.md). Also add a `wallets import-<slug> --help` line to the smoke
-   block in `scripts/quality-gate.sh` and the verification list in `AGENTS.md`.
+   msat amounts, and pricing. Follow the test-selection guidance in
+   [CONTRIBUTING.md](../../../CONTRIBUTING.md#verification-and-review).
+   Verify the new command appears in command discovery and existing CLI help
+   coverage; the gate uses the generated test inventory, not a hand-maintained
+   list of help commands.
 
 8. **Docs, in the same change:**
    - `docs/reference/imports.md` — a "## <DisplayName>" section (supported-paths
      bullet, format-reference link, behavior list, CLI example).
-   - `README.md` — add to the supported-imports story if it lists providers.
-   - `AGENTS.md` "Known gaps" — update the importer inventory line.
-   - `skills/kassiber/references/wallets-backends.md` — add the import example.
+   - `kassiber/ai/skill_references/wallets-backends.md` — add the import example.
+   - Keep importer inventories out of `README.md` and `AGENTS.md`; they link
+     to the owning reference instead.
 
 ---
 
@@ -339,7 +341,7 @@ end-to-end and to pass the drift test.
 Run the gate and a real round-trip before calling it done:
 
 ```bash
-./scripts/quality-gate.sh                                   # compile + smoke + drift + help
+./scripts/quality-gate.sh                                   # full Python + frontend gate
 uv run --locked python -m kassiber wallets import-<slug> --help       # parser wired
 # round-trip on a temp data root
 uv run --locked python -m kassiber --data-root /tmp/smoke/data init
@@ -348,11 +350,9 @@ uv run --locked python -m kassiber --data-root /tmp/smoke/data journals process
 uv run --locked python -m kassiber --data-root /tmp/smoke/data --machine reports summary
 ```
 
-For `ui-tauri/` catalog/i18n changes also run, from `ui-tauri/`:
-
-```bash
-pnpm typecheck && pnpm test --run && pnpm lint
-```
+For focused catalog/i18n checks while developing, use the frontend commands in
+[CONTRIBUTING.md](../../../CONTRIBUTING.md#verification-and-review). The full
+gate already includes them.
 
 Confirm: every spec row type is mapped/skipped/quarantined, exact pricing only
 where the export is exact, withdrawals pair instead of disposing, and the
@@ -366,11 +366,10 @@ A finished importer (or even just a finished spec) is worth sharing so the next
 person with that exchange gets it for free. Offer to open a PR — there are two
 shapes depending on who did the work:
 
-- **Implemented importer → full PR.** Commit on a feature branch in small,
+- **Implemented importer → full PR.** Commit in small,
   reviewable slices (parser+test, then wiring, then catalog+logo, then docs —
   see the commit guidance in `AGENTS.md`), make sure
-  `./scripts/quality-gate.sh` is green (plus the `ui-tauri/` checks for catalog
-  changes), and open the PR. Include the spec `docs/exchanges/<slug>.md`, a
+  `./scripts/quality-gate.sh` is green, and open the PR. Include the spec `docs/exchanges/<slug>.md`, a
   scrubbed sample (or note why none is committed), and the verification you ran.
 - **Spec only (the user can't code) → spec PR or issue.** The intake is the hard
   part and it is done — do not let it evaporate. Open a PR that adds just

@@ -94,6 +94,13 @@ def _pct(value: Any) -> str:
     return f"{Decimal(str(value)).quantize(Decimal('0.1'))}%"
 
 
+LEGACY_SNAPSHOT_GUIDANCE = (
+    "This case was saved before source assets and gross upstream demand were "
+    "recorded, so target shares are not shown. Re-run the report and save the "
+    "case again to disclose them."
+)
+
+
 def _label(value: Any) -> str:
     return str(value or "").replace("_", " ")
 
@@ -196,6 +203,40 @@ def source_mix_segments(report: Mapping[str, Any]) -> list[dict[str, Any]]:
         for row in report.get("source_mix") or []
         if Decimal(str(row.get("amount") or 0)) > 0
     ]
+
+
+def source_mix_ring_spec(report: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Ring model for the source mix, or None when one ring cannot be honest.
+
+    Wedge angles are a proportion of a single total, so a mix spanning several
+    denominations has no drawable ring: summing L-BTC into BTC to size a wedge
+    is exactly the silent conversion this report must not make. Rows saved
+    before source assets were recorded are likewise not drawn.
+    """
+    rows = [
+        row
+        for row in report.get("source_mix") or []
+        if Decimal(str(row.get("amount") or 0)) > 0
+    ]
+    if not rows:
+        return None
+    assets = {str(row.get("asset") or "") for row in rows}
+    if len(assets) != 1 or "" in assets:
+        return None
+    asset = assets.pop()
+    total = sum(Decimal(str(row.get("amount") or 0)) for row in rows)
+    return {
+        "segments": [
+            {
+                "key": row.get("source_type"),
+                "label": _label(row.get("source_type")),
+                "value": float(Decimal(str(row.get("amount") or 0))),
+            }
+            for row in rows
+        ],
+        "center_value": _btc(total),
+        "center_label": f"{asset} gross upstream demand",
+    }
 
 
 def data_source_segments(report: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -325,7 +366,7 @@ def build_flow_drawing(
             has_swap_edge = True
         deferred = bool(edge.get("deferred_privacy_hop")) or link_type in _PRIVACY_LINK_TYPES
         color = _edge_color(colors, edge)
-        percent = edge.get("percent_of_target")
+        percent = edge.get("share_of_target")
         try:
             share = float(percent) / 100.0 if percent is not None else 0.0
         except (TypeError, ValueError):

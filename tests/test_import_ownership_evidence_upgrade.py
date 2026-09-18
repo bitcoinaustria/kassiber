@@ -244,3 +244,107 @@ def test_daily_routing_income_uses_stable_identity_and_updates_cumulative_amount
         assert updates["amount"] == 2000
         assert updates["fingerprint"] == "new-fp"
         conn.close()
+
+
+_NATIVE_GRAPH = {
+    "txid": "ab" * 32,
+    "observer": "bdk",
+    "chain": "bitcoin",
+    "vin": [{"txid": "cd" * 32, "vout": 0, "prevout": {"value_sats": 1000, "role": "owned"}}],
+    "vout": [{"n": 0, "value_sats": 900, "role": "owned"}],
+}
+# What a generic ledger CSV row looks like after normalization: no observed legs.
+_SUPPORTING_ROW = {"txid": "ab" * 32, "source": "file:generic-ledger", "memo": "cold storage"}
+
+
+def _closed_provenance(existing):
+    """Give the row the commitment an authoritative observer apply persists."""
+    from kassiber.core.chain_observer.provenance import (
+        AUTHORITY_VERSION,
+        canonical_graph_hash,
+        canonical_observed_quantity_hash,
+    )
+
+    row = dict(existing)
+    row.setdefault("wallet_id", "wallet")
+    row.setdefault("external_id", "ab" * 32)
+    row.setdefault("direction", "outbound")
+    row.setdefault("asset", "BTC")
+    row.setdefault("amount", 900_000)
+    row.setdefault("fee", 100_000)
+    row.setdefault("amount_includes_fee", 0)
+    row["observation_authority_version"] = AUTHORITY_VERSION
+    row["observation_graph_hash"] = canonical_graph_hash(row["raw_json"])
+    row["observation_quantity_hash"] = canonical_observed_quantity_hash(row)
+    return row
+
+
+def test_supporting_price_enrichment_keeps_native_graph_payload():
+    """A matched CSV price row may price the transaction; it may not rewrite its evidence."""
+    existing, normalized = _records(_NATIVE_GRAPH, _SUPPORTING_ROW)
+    normalized["pricing_source_kind"] = "fmv_provider"
+    normalized["fiat_rate"] = 41000
+
+    updates = _transaction_merge_updates(_closed_provenance(existing), normalized, "fp")
+
+    assert updates["fiat_rate"] == 41000
+    assert all(column in updates for column in PRICE_COLUMNS)
+    assert "raw_json" not in updates
+
+
+def test_supporting_metadata_enrichment_keeps_native_graph_payload():
+    existing, normalized = _records(_NATIVE_GRAPH, _SUPPORTING_ROW)
+    existing["counterparty"] = None
+    normalized["counterparty"] = "Acme GmbH"
+
+    updates = _transaction_merge_updates(_closed_provenance(existing), normalized, "fp")
+
+    assert updates["counterparty"] == "Acme GmbH"
+    assert "raw_json" not in updates
+
+
+def test_closed_provenance_outranks_a_graph_shaped_supporting_payload():
+    """Payload contents must never beat the commitment the sync boundary persisted.
+
+    `ownership_graph_version` lives inside user-supplied JSON, so a CSV row can
+    carry it. It must not become a key to the native payload.
+    """
+    existing, normalized = _records(_NATIVE_GRAPH, {**_SUPPORTING_ROW, "ownership_graph_version": 99})
+    normalized["counterparty"] = "Acme GmbH"
+
+    updates = _transaction_merge_updates(_closed_provenance(existing), normalized, "fp")
+
+    assert updates["counterparty"] == "Acme GmbH"
+    assert "raw_json" not in updates
+
+
+def test_authoritative_refresh_still_replaces_native_graph_payload():
+    """Native evidence is preserved, not frozen: authority may still correct it."""
+    corrected = {**_NATIVE_GRAPH, "vout": [{"n": 0, "value_sats": 880, "role": "owned"}]}
+    for flag in ("authoritative_chain_observer", "authoritative_settlement"):
+        existing, normalized = _records(_NATIVE_GRAPH, corrected)
+        # The tail rule needs at least one other update, so carry a real price change.
+        normalized["pricing_source_kind"] = "fmv_provider"
+        normalized["fiat_rate"] = 41000
+        for key, value in (
+            ("external_id", "ab" * 32), ("external_id_kind", "txid"),
+            ("amount", "0.000009"), ("fee", "0.000001"), ("amount_includes_fee", False),
+            ("direction", "outbound"),
+        ):
+            normalized[key] = value
+        row = _closed_provenance(existing)
+        row["external_id_kind"] = "txid"
+
+        updates = _transaction_merge_updates(row, normalized, "fp", **{flag: True})
+
+        assert updates["raw_json"] == normalized["raw_json"], flag
+
+
+def test_pre_provenance_row_without_legs_still_accepts_a_supporting_payload():
+    """Unchanged behaviour for rows that carry no observation to protect."""
+    existing, normalized = _records({"txid": "ab" * 32, "source": "wasabi_gethistory"}, _SUPPORTING_ROW)
+    normalized["counterparty"] = "Acme GmbH"
+
+    updates = _transaction_merge_updates(existing, normalized, "fp")
+
+    assert updates["raw_json"] == normalized["raw_json"]
