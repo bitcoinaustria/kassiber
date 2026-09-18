@@ -246,6 +246,14 @@ def _operations(operations):
                     raise ValueError()
             except (InvalidOperation, ValueError) as exc:
                 raise _error("Review price is invalid") from exc
+        elif kind == "kind_override":
+            allowed |= {"kind", "valuation_mode"}
+            if "kind" not in operation or (operation["kind"] is not None and
+                    (not isinstance(operation["kind"], str) or
+                     metadata.SUPPORTED_TRANSACTION_KINDS.get(operation["kind"]) != "inbound")):
+                raise _error("Acquisition review requires an inbound kind or null")
+            if operation.get("valuation_mode", "market_value") != "market_value":
+                raise _error("This acquisition valuation mode is unsupported", "acquisition_valuation_unsupported")
         elif kind != "exclude":
             raise _error("Review operation type is unsupported")
         if set(operation) - allowed:
@@ -294,7 +302,7 @@ def _economic_values(value):
     return value
 
 
-def _effects(state) -> dict[str, Any]:
+def _effects(state, conn=None, profile=None, operations=()) -> dict[str, Any]:
     # Hash full economic output while bounding the human/model-facing preview.
     # IDs created for derived journal rows are deliberately not economic facts.
     fields = ("transaction_id", "wallet_id", "account_id", "occurred_at", "entry_type",
@@ -312,7 +320,12 @@ def _effects(state) -> dict[str, Any]:
     ], key=_json)
     quantity = state.get("custody_quantity")
     blocked = bool(state.get("custody_component_blockers") or (quantity and quantity.report_blocked))
+    acquisition = {}
+    if any(op["type"] == "kind_override" for op in operations):
+        from .acquisition_review import acquisition_effects
+        acquisition = acquisition_effects(state, conn, profile)
     return {
+        **acquisition,
         "entries_count": len(entries), "quarantine_count": len(quarantines),
         "quarantines": [{"transaction_id": tx, "reason": reason} for tx, reason in quarantines[:100]],
         "wallet_holdings": holdings[:100], "report_ready": not quarantines and not blocked,
@@ -336,6 +349,20 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, case_id
                               (operation["transaction_id"], profile["id"])).fetchone()
             if tx is None:
                 raise _error("Review transaction was not found", "not_found")
+            if kind == "kind_override":
+                from .acquisition_review import require_acquisition_target
+                require_acquisition_target(conn, profile["id"], tx)
+                updated = metadata.update_transaction_metadata(
+                    conn, profile["workspace_id"], profile["id"], tx["id"], hooks.metadata,
+                    kind=operation["kind"], kind_set=True,
+                    source="gui" if authored_source == "user" else authored_source,
+                    reason=operation["reason"], commit=False,
+                )
+                results.append({"type": kind, "result": {
+                    "transaction_id": tx["id"], "history_event_id": updated["history_event_id"],
+                    "updated": updated["updated"],
+                }})
+                continue
             if tx["id"] not in case_ids:
                 raise _error("Review transaction is not quarantined", "review_case_changed")
             updated = quarantine_resolution.update_quarantine_metadata(
@@ -375,10 +402,10 @@ def plan_review(conn, profile, *, operations, expected_input_version, hooks):
             expected_input_version=expected_input_version,
         )
         before_state = _build(clone, current)
-        before = _effects(before_state)
+        before = _effects(before_state, clone, current, operations)
         _apply_operations(clone, current, operations, hooks, "user",
                           {q["transaction_id"] for q in before_state["quarantines"]})
-        after = _effects(_build(clone, current))
+        after = _effects(_build(clone, current), clone, current, operations)
         artifact = {
             "schema_version": 1, "workspace_id": current["workspace_id"], "profile_id": current["id"],
             "base_input_version": expected_input_version, "operations": operations,
@@ -499,12 +526,12 @@ def apply_review(conn, profile, *, artifact, idempotency_key, hooks, authored_so
                 expected_input_version=artifact["base_input_version"],
             )
             before_state = _build(conn, profile)
-            if _effects(before_state) != artifact["before"]:
+            if _effects(before_state, conn, profile, operations) != artifact["before"]:
                 raise _error("Review evidence changed; create a fresh preview", "review_plan_stale")
             results = _apply_operations(conn, profile, operations, hooks, authored_source,
                                         {q["transaction_id"] for q in before_state["quarantines"]})
             state = _build(conn, profile)
-            after = _effects(state)
+            after = _effects(state, conn, profile, operations)
             if after != artifact["after"]:
                 raise _error("Review effects changed; create a fresh preview", "review_plan_stale")
             current = _profile(conn, profile)

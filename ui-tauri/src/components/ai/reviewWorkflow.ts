@@ -43,14 +43,14 @@ function effects(value: unknown): value is ReviewEffects {
   return Boolean(row && count(row.entries_count) && count(row.quarantine_count) &&
     typeof row.report_ready === "boolean" && Array.isArray(row.quarantines));
 }
-export function reviewArtifact(value: unknown): ReviewArtifact | null {
+export function reviewArtifact(value: unknown, allowAcquisitions = false): ReviewArtifact | null {
   const row = reviewRecord(value);
   return row?.schema_version === 1 && typeof row.workspace_id === "string" &&
     typeof row.profile_id === "string" && count(row.base_input_version) &&
     typeof row.digest === "string" && /^[a-f0-9]{64}$/.test(row.digest) &&
     Array.isArray(row.operations) && row.operations.length > 0 && row.operations.length <= 50 &&
     row.operations.every((operation) => reviewRecord(operation) &&
-      ["price_override", "exclude", "custody_component"].includes(String(operation.type))) &&
+      ["price_override", "exclude", "custody_component", ...(allowAcquisitions ? ["kind_override"] : [])].includes(String(operation.type))) &&
     effects(row.before) && effects(row.after) ? row as ReviewArtifact : null;
 }
 export function reviewReceipt(value: unknown): ReviewReceipt | null {

@@ -283,6 +283,8 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.next_actions",
   "ui.review.badges",
   "ui.review.cases",
+  "ui.review.plan",
+  "ui.review.apply",
   "ui.review.request_input",
   "ui.wallets.utxos",
   "ui.privacy_hygiene.snapshot",
@@ -404,6 +406,8 @@ const STREAM_CAPABLE_BRIDGE_KINDS = new Set([
   "ui.backup.export",
   "ui.backup.preview",
   "ui.backup.apply",
+  "ui.review.plan",
+  "ui.review.apply",
 ]);
 const STREAM_ONLY_BRIDGE_KINDS = new Set(["ai.chat"]);
 
