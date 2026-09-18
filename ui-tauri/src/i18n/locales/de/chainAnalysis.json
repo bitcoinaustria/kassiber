@@ -372,13 +372,36 @@
       "connection_supported": "Verbindung lokal belegt",
       "attribution_changed": "Zuordnung geändert",
       "findings_changed": "Befunde geändert",
-      "evidence_changed": "Lokale Belege geändert"
+      "evidence_changed": "Lokale Belege geändert",
+      "report_input_retracted": "Berichtseingabe vom Wallet-Beobachter zurückgezogen"
     },
     "delete": "Entfernen",
     "confirmDelete": "Mit Verlauf entfernen?",
     "encryption": "Buch verschlüsseln",
     "bindBook": "Buchnetzwerk festlegen",
-    "bookScope": "Alle Ketten im Buch ({{environment}})"
+    "bookScope": "Alle Ketten im Buch ({{environment}})",
+    "report": {
+      "title": "Berichtsauswirkung: {{start}}–{{end}}",
+      "saved": "Gespeichert",
+      "filed": "Eingereicht",
+      "identity": "Gespeicherter Stand:",
+      "confirmed": "Bestätigt (Block {{height}})",
+      "unconfirmed": "Unbestätigt",
+      "unavailable": "Abdeckung fehlt, kein Nachweis einer Entfernung",
+      "retracted": "Vom Wallet-Beobachter zurückgezogen",
+      "evidence": "Belege: {{before}} → {{after}}",
+      "gainBefore": "Gespeicherter Gewinn/Verlust: {{value}} {{currency}}",
+      "gainAfter": "Neu berechneter Gewinn/Verlust: {{value}} {{currency}}",
+      "pending": "Aktualisiere das betroffene Wallet, prüfe die Belege und erstelle die Journale neu. Die genaue Berichtsauswirkung ist noch offen.",
+      "no_change": "Die neu berechneten Klassifizierungen und Gewinnsummen stimmen überein. Andere Berichtsinhalte werden nicht verglichen.",
+      "saved_report_changed": "Die neu berechneten Summen weichen vom gespeicherten Bericht ab.",
+      "review_required": "Die neu berechneten Summen weichen ab. Prüfe, ob eine berichtigte Erklärung nötig ist.",
+      "filingAuthority": "Der ursprüngliche Export und der Einreichungsstatus bleiben unverändert. Als gelesen markieren berichtigt keine Erklärung.",
+      "transaction": "Transaktion prüfen",
+      "journals": "Journale prüfen und neu erstellen",
+      "reports": "Berichte öffnen",
+      "blocks": "Block-Hashes:"
+    }
   },
   "sources": {
     "title": "Lokale Belege aktuell halten",

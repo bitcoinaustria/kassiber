@@ -262,6 +262,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.profiles.switch",
     "ui.profiles.reset_data",
     "ui.reports.capital_gains",
+    "ui.reports.explain_capital_gain",
     "ui.reports.summary",
     "ui.reports.balance_sheet",
     "ui.reports.portfolio_summary",
@@ -352,12 +353,18 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.projects.list",
     "ui.projects.create",
     "ui.projects.select",
+    "ui.backup.export",
+    "ui.backup.preview",
+    "ui.backup.apply",
+    "ui.backup.cancel",
     "ui.secrets.init",
     "ui.secrets.change_passphrase",
     "ui.secrets.forget_cli_unlock",
     "ui.next_actions",
     "ui.review.badges",
     "ui.review.cases",
+    "ui.review.plan",
+    "ui.review.apply",
     "ui.review.request_input",
     "ui.wallets.utxos",
     "ui.privacy_hygiene.snapshot",
@@ -489,6 +496,19 @@ const STREAMING_DAEMON_KINDS: &[&str] = &[
     "ui.sync.push",
     "ui.sync.pull",
     "ui.sync.join",
+    // Backup export/preview/apply stream a whole container (SQLCipher database
+    // plus retained attachments) through tar and age. On a large book that
+    // outlives the ordinary request timeout, and killing it mid-restore is
+    // exactly the failure the pre-restore recovery copy exists to survive.
+    "ui.backup.export",
+    "ui.backup.preview",
+    "ui.backup.apply",
+    // A classification plan rebuilds the journal on a RAM clone of the book to
+    // show exact before/after accounting effects; apply does it again inside
+    // the write. On a large book that is a journal run, and a journal run is
+    // already a streaming kind above.
+    "ui.review.plan",
+    "ui.review.apply",
 ];
 
 // Daemon kinds that exercise the AI runtime (model calls, chat sessions, tool

@@ -89,6 +89,7 @@ import {
   type NeutralSwapLot,
 } from "@/mocks/reports";
 import { useUiStore } from "@/store/ui";
+import { CapitalGainExplanation, ExplanationBody } from "@/components/reports/CapitalGainExplanation";
 
 const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
@@ -247,6 +248,17 @@ function initialReportYearFromUrl() {
 }
 
 export function Reports() {
+  const hideSensitive = useUiStore((state) => state.hideSensitive);
+  const reference = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search).get("result");
+  if (reference) {
+    let parsed;
+    try { parsed = JSON.parse(reference); } catch { parsed = null; }
+    return <div className={screenPanelClassName}><ExplanationBody reference={parsed} hideSensitive={hideSensitive} /></div>;
+  }
+  return <ReportOverview />;
+}
+
+function ReportOverview() {
   const [selectedYear, setSelectedYear] = useState<number | null>(
     initialReportYearFromUrl,
   );
@@ -2194,6 +2206,7 @@ function ReportLotRow({
         )}
       >
         {signedNumber(gain, formatNumber)}
+        {lot.explanationReference && <CapitalGainExplanation reference={lot.explanationReference} hideSensitive={hideSensitive} />}
       </TableCell>
     </TableRow>
   );

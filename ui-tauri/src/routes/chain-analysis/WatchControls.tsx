@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { shortAnalysisId } from "@/lib/chainAnalysis";
 import { watchQueryScope, type WatchBinding } from "@/lib/chainAnalysisWatchScope";
 import type { AnalysisQuery } from "@/lib/chainAnalysis";
+import { ReportImpactDetails, type ReportImpact } from "./ReportImpactDetails";
 type Rule = "output_spent" | "confirmations" | "connection_supported" | "attribution_changed" | "findings_changed";
 type Definition = {
     rule: Rule;
@@ -14,7 +15,7 @@ type Definition = {
     threshold?: number;
 };
 type WatchStatus = "observed" | "unknown" | "unavailable" | "partial";
-type EventCode = "coverage_lost" | "threshold_reached" | "threshold_reversed" | "spend_observed" | "connection_supported" | "attribution_changed" | "findings_changed" | "evidence_changed";
+type EventCode = "report_input_retracted" | "coverage_lost" | "threshold_reached" | "threshold_reversed" | "spend_observed" | "connection_supported" | "attribution_changed" | "findings_changed" | "evidence_changed";
 type Preview = {
     plan_id: string;
     baseline: {
@@ -35,7 +36,9 @@ type Watch = {
 type Inbox = {
     items: {
         id: string;
-        watch_id: string;
+        watch_id: string | null;
+        report_impact?: ReportImpact;
+        observation: Parameters<typeof ReportImpactDetails>[0]["observation"];
         code: EventCode;
         created_at: string;
         acknowledged_at: string | null;
@@ -163,6 +166,7 @@ export function WatchInbox({ onOpen, onError }: {
                 }
             }}>{t("watch.check")}</Button>}
       {events.data?.data?.items.map(item => <div key={item.id} className="flex flex-wrap items-center gap-2 border-b py-2">
+        {item.report_impact && <ReportImpactDetails impact={item.report_impact} observation={item.observation} />}
         <span className="flex-1">{t(`watch.events.${item.code}`)} <time className="text-muted-foreground">{item.created_at}</time></span>
         {items.find(watch => watch.id === item.watch_id)?.definition.query && <Button size="sm" variant="ghost" onClick={() => onOpen(items.find(watch => watch.id === item.watch_id)!.definition.query!)}>{t("watch.open")}</Button>}
         {!item.acknowledged_at && <Button size="sm" variant="ghost" disabled={busy} onClick={async () => {

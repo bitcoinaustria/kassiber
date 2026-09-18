@@ -3071,6 +3071,10 @@ def build_parser() -> argparse.ArgumentParser:
         report.add_argument("--profile")
         if report_name == "summary":
             report.add_argument("--wallet")
+    explanation = reports_sub.add_parser("explain-capital-gain")
+    explanation.add_argument("--workspace")
+    explanation.add_argument("--profile")
+    explanation.add_argument("--reference", required=True, help="Exact explanation_reference JSON from reports capital-gains.")
     psbt_privacy = reports_sub.add_parser("psbt-privacy")
     psbt_privacy.add_argument("--workspace")
     psbt_privacy.add_argument("--profile")
@@ -3099,17 +3103,19 @@ def build_parser() -> argparse.ArgumentParser:
     filed_snapshots_create = filed_snapshots_sub.add_parser("create")
     filed_snapshots_create.add_argument("--workspace")
     filed_snapshots_create.add_argument("--profile")
-    filed_snapshots_create.add_argument("--report-kind", required=True)
+    filed_snapshots_create.add_argument("--report-kind")
     filed_snapshots_create.add_argument(
         "--state", required=True, choices=("saved", "filed")
     )
-    filed_snapshots_create.add_argument("--period-start-year", required=True, type=int)
+    filed_snapshots_create.add_argument("--period-start-year", type=int)
     filed_snapshots_create.add_argument("--period-end-year", type=int)
-    filed_snapshots_create.add_argument("--content-sha256", required=True)
+    filed_snapshots_create.add_argument("--content-sha256")
+    filed_snapshots_create.add_argument("--saved-snapshot-id", help="Mark this exact locally saved export as filed, inheriting its immutable identity and captured dependencies")
+    filed_snapshots_create.add_argument("--report-scope-json")
     filed_snapshots_create.add_argument(
-        "--classification-summary-json", default="{}"
+        "--classification-summary-json"
     )
-    filed_snapshots_create.add_argument("--gain-summary-json", default="{}")
+    filed_snapshots_create.add_argument("--gain-summary-json")
     filed_snapshots_create.add_argument("--notes")
 
     balance_history = reports_sub.add_parser("balance-history")
@@ -5530,18 +5536,16 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     kind="reports.filed-snapshots.list",
                 )
             try:
-                classification_summary = json.loads(
-                    args.classification_summary_json
-                )
-                gain_summary = json.loads(args.gain_summary_json)
+                classification_summary = json.loads(args.classification_summary_json) if args.classification_summary_json is not None else None
+                gain_summary = json.loads(args.gain_summary_json) if args.gain_summary_json is not None else None
+                report_scope = json.loads(args.report_scope_json) if args.report_scope_json is not None else None
             except json.JSONDecodeError as exc:
                 raise AppError(
                     "filed snapshot summaries must be JSON objects",
                     code="validation",
                 ) from exc
-            if not isinstance(classification_summary, dict) or not isinstance(
-                gain_summary, dict
-            ):
+            if any(value is not None and not isinstance(value, dict) for value in
+                   (classification_summary, gain_summary, report_scope)):
                 raise AppError(
                     "filed snapshot summaries must be JSON objects",
                     code="validation",
@@ -5553,14 +5557,12 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 report_kind=args.report_kind,
                 report_state=args.state,
                 period_start_year=args.period_start_year,
-                period_end_year=(
-                    args.period_end_year
-                    if args.period_end_year is not None
-                    else args.period_start_year
-                ),
+                period_end_year=args.period_end_year,
                 content_sha256=args.content_sha256,
                 classification_summary=classification_summary,
                 gain_summary=gain_summary,
+                report_scope=report_scope,
+                saved_snapshot_id=args.saved_snapshot_id,
                 authored_source="cli",
                 notes=args.notes,
             )
@@ -5622,6 +5624,14 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     conn, args.workspace, args.profile, report_hooks
                 ),
             )
+        if args.reports_command == "explain-capital-gain":
+            from ..core.report_explanation import explain_capital_gain
+            _, profile = report_hooks.resolve_scope(conn, args.workspace, args.profile)
+            try:
+                reference = json.loads(args.reference)
+            except ValueError as exc:
+                raise AppError("Result reference must be JSON", code="validation") from exc
+            return emit(args, explain_capital_gain(conn, profile, reference))
         if args.reports_command == "capital-gains":
             return emit(
                 args,
