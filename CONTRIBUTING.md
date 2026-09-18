@@ -42,6 +42,14 @@ pnpm test --run
 pnpm lint
 ```
 
+Frontend tests render statically on Node by default, so effects never run. A
+test that has to observe an effect (a fetch on mount, a guard that re-arms)
+opts into a DOM per file: name it `*.dom.test.tsx` and start it with
+`// @vitest-environment happy-dom`, then mount with Testing Library's
+`renderHook`/`render` and drive it inside `act`. Keep the default for
+everything else; the DOM costs startup time and hides nothing a static render
+would show.
+
 Before push or PR, run the full gate:
 
 ```sh
