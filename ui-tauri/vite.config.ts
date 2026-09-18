@@ -400,6 +400,9 @@ const STREAM_CAPABLE_BRIDGE_KINDS = new Set([
   "ui.sync.push",
   "ui.sync.pull",
   "ui.sync.join",
+  "ui.backup.export",
+  "ui.backup.preview",
+  "ui.backup.apply",
 ]);
 const STREAM_ONLY_BRIDGE_KINDS = new Set(["ai.chat"]);
 
