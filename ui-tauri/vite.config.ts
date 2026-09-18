@@ -405,6 +405,8 @@ const STREAM_CAPABLE_BRIDGE_KINDS = new Set([
   "ui.backup.export",
   "ui.backup.preview",
   "ui.backup.apply",
+  "ui.review.plan",
+  "ui.review.apply",
 ]);
 const STREAM_ONLY_BRIDGE_KINDS = new Set(["ai.chat"]);
 
