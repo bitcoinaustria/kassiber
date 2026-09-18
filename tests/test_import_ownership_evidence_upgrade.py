@@ -360,8 +360,11 @@ _ATTESTED_GRAPH = {**_LEGACY_GRAPH, "observer_owned_scripts": ["0014" + "aa" * 2
 
 def _authoritative_record(existing, incoming):
     existing, normalized = _records(existing, incoming)
+    # A normalized observer record always carries its asset; #564's block-
+    # occurrence refresh compares it before deciding whether raw_json may move.
     for key, value in (("external_id", "ab" * 32), ("external_id_kind", "txid"), ("direction", "outbound"),
-                       ("amount", "0.000009"), ("fee", "0.000001"), ("amount_includes_fee", False)):
+                       ("asset", "BTC"), ("amount", "0.000009"), ("fee", "0.000001"),
+                       ("amount_includes_fee", False)):
         normalized[key] = value
     row = _closed_provenance(existing)
     row["external_id_kind"] = "txid"
