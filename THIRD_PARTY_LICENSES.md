@@ -111,6 +111,7 @@ Payments protocol testing. It is not a Kassiber runtime dependency.
 | [Sparrow Frigate](https://github.com/sparrowwallet/frigate) | `dev/regtest/Dockerfile.frigate`, `dev/regtest/compose.bitcoin.yml` | Optional regtest Electrum server for BIP352 Silent Payments discovery | Apache-2.0 |
 | [pytest-xdist](https://github.com/pytest-dev/pytest-xdist) | `pyproject.toml`, `uv.lock`, `.github/workflows/ci.yml` | Runs the explicitly safe Python CI shards across isolated worker processes; socket/process-sensitive modules stay serial | MIT |
 | [esbuild](https://github.com/evanw/esbuild) | `ui-tauri/package.json`, `ui-tauri/provider-broker/` | Bundles the TypeScript chat provider broker into one Python-package data file; it is a build dependency, not a provider runtime | MIT |
+| [happy-dom](https://github.com/capricorn86/happy-dom), [Testing Library](https://github.com/testing-library/react-testing-library) | `ui-tauri/package.json`, `*.dom.test.tsx` | Mounted desktop-UI tests: a DOM for React effects to run in, and `renderHook`/`act` to drive them. Opt-in per file; the default suite stays static-render on Node | MIT |
 
 ## Practical notes
 
