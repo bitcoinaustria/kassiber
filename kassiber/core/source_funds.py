@@ -1494,6 +1494,40 @@ def _scoped_suggested_link_rows(
     ]
 
 
+@dataclass(frozen=True)
+class _AssemblyInputs:
+    """Book inputs an assembly pass reads but never writes.
+
+    assemble_history alternates suggestion and bulk review until the graph
+    stops growing. Both steps used to reload every active row, rebuild the
+    stored custody map and re-derive structural lineage on every pass -- and
+    nothing they write (source_funds_links) feeds back into any of it. Load
+    once per assembly; a single suggest or bulk-review call still loads its
+    own.
+    """
+
+    rows: Sequence[Mapping[str, Any]]
+    rows_by_id: Mapping[str, Mapping[str, Any]]
+    custody_allocations: Mapping[tuple[str, str, str], _StoredCustodyAllocation]
+    owned_index: Mapping[Any, Any]
+    structural_pairs: Sequence[Mapping[str, Any]]
+
+
+def _load_assembly_inputs(conn: sqlite3.Connection, profile_id: str) -> _AssemblyInputs:
+    rows = _active_transaction_rows(conn, profile_id)
+    rows_by_id = {str(row["id"]): row for row in rows}
+    owned_index = build_owned_outpoint_index(conn, profile_id)
+    return _AssemblyInputs(
+        rows=rows,
+        rows_by_id=rows_by_id,
+        custody_allocations=_stored_custody_allocation_map(conn, profile_id, rows_by_id),
+        owned_index=owned_index,
+        structural_pairs=tuple(
+            derive_parent_spend_pairs(rows, owned_index, skip_row=_skip_structural_row)
+        ),
+    )
+
+
 def bulk_review_eligible_link_ids(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1519,30 +1553,41 @@ def _validated_bulk_review_candidates(
     conn: sqlite3.Connection,
     profile_id: str,
     rows: Sequence[Mapping[str, Any]],
+    inputs: _AssemblyInputs | None = None,
 ) -> list[Mapping[str, Any]]:
     candidates: list[Mapping[str, Any]] = []
     if not rows:
         # The custody projection is the expensive part; never build it for an
         # empty scope.
         return candidates
-    active_rows = _active_transaction_rows(conn, profile_id)
-    rows_by_id = {str(tx["id"]): tx for tx in active_rows}
-    custody_allocations = _stored_custody_allocation_map(
-        conn,
-        profile_id,
-        rows_by_id,
-    )
-    derived_structural: dict[tuple[str, str], tuple[int, int]] = {}
-    if any(str(row["method"] or "") == "utxo_spend" for row in rows):
-        # Derived once for the whole batch, never per candidate row.
-        for pair in derive_parent_spend_pairs(
-            active_rows,
-            build_owned_outpoint_index(conn, profile_id),
-            skip_row=_skip_structural_row,
-        ):
-            derived_structural[
-                (str(pair["from_row"]["id"]), str(pair["to_row"]["id"]))
-            ] = (int(pair["allocation_msat"]), int(pair["from_allocation_msat"]))
+    if inputs is not None:
+        rows_by_id = inputs.rows_by_id
+        custody_allocations = inputs.custody_allocations
+        structural_pairs: Sequence[Mapping[str, Any]] = inputs.structural_pairs
+    else:
+        active_rows = _active_transaction_rows(conn, profile_id)
+        rows_by_id = {str(tx["id"]): tx for tx in active_rows}
+        custody_allocations = _stored_custody_allocation_map(
+            conn,
+            profile_id,
+            rows_by_id,
+        )
+        structural_pairs = (
+            # Derived once for the whole batch, never per candidate row.
+            tuple(derive_parent_spend_pairs(
+                active_rows,
+                build_owned_outpoint_index(conn, profile_id),
+                skip_row=_skip_structural_row,
+            ))
+            if any(str(row["method"] or "") == "utxo_spend" for row in rows)
+            else ()
+        )
+    derived_structural: dict[tuple[str, str], tuple[int, int]] = {
+        (str(pair["from_row"]["id"]), str(pair["to_row"]["id"])): (
+            int(pair["allocation_msat"]), int(pair["from_allocation_msat"]),
+        )
+        for pair in structural_pairs
+    }
     for row in rows:
         if not _is_bulk_reviewable_suggestion(row):
             continue
@@ -1592,6 +1637,7 @@ def bulk_review_suggestions(
     target_transaction_ref: str,
     commit: bool = True,
     link_ids: Sequence[str] | None = None,
+    _inputs: _AssemblyInputs | None = None,
 ) -> dict[str, Any]:
     """Accept deterministic source-funds suggestions as user-reviewed links.
 
@@ -1616,7 +1662,7 @@ def bulk_review_suggestions(
             )
         selected = {str(item) for item in link_ids}
         considered = [row for row in rows if str(row["id"]) in selected]
-    reviewable = _validated_bulk_review_candidates(conn, profile["id"], considered)
+    reviewable = _validated_bulk_review_candidates(conn, profile["id"], considered, _inputs)
     now = _now()
     for row in reviewable:
         conn.execute(
@@ -1685,6 +1731,8 @@ def assemble_history(
     total_reviewed = 0
     total_skipped = 0
     methods: dict[str, int] = defaultdict(int)
+    profile_id = str(hooks.resolve_scope(conn, workspace_ref, profile_ref)[1]["id"])
+    inputs = _load_assembly_inputs(conn, profile_id)
     while passes < max_passes:
         passes += 1
         suggested = suggest_links(
@@ -1694,6 +1742,7 @@ def assemble_history(
             hooks,
             target_transaction_ref=target_transaction_ref,
             include_broad_hints=include_broad_hints,
+            _inputs=inputs,
         )
         reviewed = bulk_review_suggestions(
             conn,
@@ -1701,6 +1750,7 @@ def assemble_history(
             profile_ref,
             hooks,
             target_transaction_ref=target_transaction_ref,
+            _inputs=inputs,
         )
         total_inserted += suggested["inserted"]
         total_reviewed += reviewed["reviewed"]
@@ -1709,7 +1759,6 @@ def assemble_history(
             methods[str(link.get("method") or "")] += 1
         if suggested["inserted"] == 0 and reviewed["reviewed"] == 0:
             break
-    _profile_id = str(hooks.resolve_scope(conn, workspace_ref, profile_ref)[1]["id"])
     return {
         "target_transaction_id": reviewed["target_transaction_id"],
         "passes": passes,
@@ -1720,8 +1769,8 @@ def assemble_history(
         # Spends in this target's scope whose stored graph predates the input
         # attestation. Not a gap in history: a full rescan records it.
         "chain_attestation_missing": sorted(
-            set(rows_missing_input_attestation(_active_transaction_rows(conn, _profile_id)))
-            & _target_scoped_transaction_ids(conn, _profile_id, reviewed["target_transaction_id"])
+            set(rows_missing_input_attestation(inputs.rows))
+            & _target_scoped_transaction_ids(conn, profile_id, reviewed["target_transaction_id"])
         ),
         "policy": (
             "Assembly derives exact edges from unambiguous synced transaction "
@@ -1953,6 +2002,7 @@ def suggest_links(
     include_broad_hints: bool = False,
     max_suggestions: int = SUGGESTION_WRITE_CAP,
     commit: bool = True,
+    _inputs: _AssemblyInputs | None = None,
 ) -> dict[str, Any]:
     """Derive candidate funding edges for a target.
 
@@ -1973,7 +2023,7 @@ def suggest_links(
     if max_suggestions > SUGGESTION_WRITE_CAP:
         max_suggestions = SUGGESTION_WRITE_CAP
     conn.execute("SAVEPOINT source_funds_suggest")
-    rows = _active_transaction_rows(conn, profile["id"])
+    rows = _inputs.rows if _inputs is not None else _active_transaction_rows(conn, profile["id"])
     rows_by_id = {row["id"]: row for row in rows}
     scoped_tx_ids = (
         _target_scoped_transaction_ids(conn, profile["id"], target["id"])
@@ -2058,10 +2108,10 @@ def suggest_links(
     # Booked custody lineage is projected once by the journal builder. Source
     # funds consumes those exact slices and does not re-run native matching,
     # component allocation, or legacy pair rules.
-    custody_allocations = _stored_custody_allocation_map(
-        conn,
-        profile["id"],
-        rows_by_id,
+    custody_allocations = (
+        _inputs.custody_allocations
+        if _inputs is not None
+        else _stored_custody_allocation_map(conn, profile["id"], rows_by_id)
     )
     reviewed_targets = {
         item.to_transaction_id for item in custody_allocations.values()
@@ -2107,14 +2157,18 @@ def suggest_links(
     if target is not None:
         # No `if owned_index` guard: inventory only corroborates, and a wallet
         # first synced after its outputs were spent legitimately has none.
-        owned_index = build_owned_outpoint_index(conn, profile["id"])
+        structural_pairs = (
+            _inputs.structural_pairs
+            if _inputs is not None
+            else derive_parent_spend_pairs(
+                rows, build_owned_outpoint_index(conn, profile["id"]), skip_row=_skip_structural_row,
+            )
+        )
         custody_pairs = {
             (allocation.from_transaction_id, allocation.to_transaction_id)
             for allocation in custody_allocations.values()
         }
-        for pair in derive_parent_spend_pairs(
-            rows, owned_index, skip_row=_skip_structural_row,
-        ):
+        for pair in structural_pairs:
             out_tx, in_tx = pair["from_row"], pair["to_row"]
             endpoints = (str(out_tx["id"]), str(in_tx["id"]))
             if endpoints in custody_pairs:
