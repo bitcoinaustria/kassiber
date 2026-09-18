@@ -35,8 +35,14 @@ rounding remain unresolved.
 A report states the gross upstream demand its reviewed routes require, per
 source denomination, and says so explicitly when that gross differs from the
 selected target. It claims a target composition share only when the gross
-equals the target in a single asset matching it; a route difference is reported
-as a difference, never silently reclassified as a fee. Source denominations are
+equals the target in a single asset matching it. A route difference is named as
+network fees only when the disclosed rows actually account for it: every hop
+that consumed value must have consumed exactly the fee its own row records, the
+totals must agree, and no privacy boundary may sit on the route. Otherwise it
+stays reported as a difference, never silently reclassified as a fee. The
+verdict is computed once and stored as
+`allocations.route_difference_explanation`, so a saved case renders what it was
+saved with rather than whatever today's rules would conclude. Source denominations are
 never summed together, so a peg-out route funding a BTC target from an L-BTC
 root shows both assets rather than one target-denominated total. A `unknown`
 root source is exportable but establishes no economic origin, so coverage

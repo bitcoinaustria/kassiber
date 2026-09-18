@@ -243,10 +243,13 @@ already reachable from the target through non-rejected source-funds links.
 Broad account-scoped provider ids and same-day time/amount matches are not
 persisted unless the user explicitly opts into broad hints. Every suggestion
 run has a hard write cap and aborts without committing when the cap is exceeded.
-Batch review accepts only allocations re-verified against the current stored
-custody projection (`custody_component`). A stale projection or a pair the user
-already rejected remains `suggested`, and provider ids remain manual suggestions
-even when one-to-one. That verdict has exactly one implementation
+Batch review accepts two kinds of edge, both re-derived from current evidence
+before every apply: allocations from the stored custody projection
+(`custody_component`), and intra-wallet structural edges (`utxo_spend`) where a
+spend's own observed inputs are earlier outputs of the same wallet, gated on a
+closed observation commitment. A stale projection, a structural edge whose
+evidence no longer matches, or a pair the user already rejected remains
+`suggested`, and provider ids remain manual suggestions even when one-to-one. That verdict has exactly one implementation
 (`_validated_bulk_review_candidates`); the review context publishes it as
 `bulk_review.eligible_link_ids` and the apply is bound to those ids, so a
 preview count can never disagree with what the server would review. The apply

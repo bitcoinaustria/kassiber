@@ -303,8 +303,10 @@ python3 -m kassiber --machine reports source-funds \
 python3 -m kassiber source-funds suggest \
   --target-transaction <txid-or-id>
 
-# Bulk-accept deterministic links for this target path. Only exact allocations
-# re-verified against the current stored custody projection qualify; provider
+# Bulk-accept deterministic links for this target path. Two kinds qualify, both
+# re-verified against current evidence at apply time: exact allocations from
+# the stored custody projection, and intra-wallet structural edges where a
+# spend's own observed inputs are earlier outputs of the same wallet. Provider
 # ids, privacy hints, weak time/amount matches and pairs you already rejected
 # stay manual.
 python3 -m kassiber source-funds links bulk-review \

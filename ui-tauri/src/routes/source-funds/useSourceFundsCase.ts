@@ -18,10 +18,13 @@ import { targetQueryArgs, type SourceFundsReviewContext } from "./caseScope";
 import {
   NO_ATTACHMENT,
   amountInput,
+  autoAssembleKey,
+  hasUnsavedDrafts,
   isStaleLinkReviewError,
   linkReviewPayload,
   pretty,
   reconcileLinkForm,
+  shouldAutoAssemble,
   shortId,
   transactionRows,
   txLabel,
@@ -35,6 +38,10 @@ import {
   type SourceFundsSource,
   type TransactionRow,
 } from "./model";
+
+// Module scope on purpose: a ref resets on every remount, so returning to a
+// case would assemble it again from scratch.
+const autoAssembledKeys = new Set<string>();
 
 export const CASE_STAGES = [
   { id: "target" },
@@ -278,6 +285,7 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     inserted: number;
     auto_reviewed: number;
     awaiting_manual_review: number;
+    chain_attestation_missing?: string[];
     methods: Record<string, number>;
   }>("ui.source_funds.assemble");
   const bulkReviewLinks = useDaemonMutation<{
@@ -466,14 +474,82 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     const summary = envelope.data;
     const reviewed = summary?.auto_reviewed ?? 0;
     const manual = summary?.awaiting_manual_review ?? 0;
+    const unattested = summary?.chain_attestation_missing?.length ?? 0;
+    if (unattested > 0 && reviewed === 0) {
+      // Not a gap in history: the observer never recorded which inputs were
+      // its own. Say the one action that fixes it.
+      addNotification({
+        title: t("toast.rescanNeeded"),
+        body: t("toast.rescanNeededBody", { count: unattested }),
+        tone: "info",
+      });
+      return;
+    }
+    // Say what happened and what is left, once. A zero-result run on an
+    // automatic pass is not news, so it stays quiet unless asked for.
     if (showNotification || reviewed > 0) {
       addNotification({
         title: t(reviewed > 0 ? "case.historyAssembled" : "actionsBar.assembleResultEmpty"),
-        body: t("toast.deterministicBody", { reviewed, skipped: manual }),
+        body: t(
+          reviewed > 0 ? "toast.assembledBody" : "toast.deterministicBody",
+          { count: reviewed, reviewed, skipped: manual },
+        ),
         tone: reviewed > 0 ? "success" : "info",
       });
     }
   }
+
+  // Chain evidence assembles itself. An input that IS an earlier owned output
+  // is observed structure, not a judgement call, so making someone press two
+  // buttons to see it is ceremony. Fires once per target, only when the case
+  // has no reviewed history at all, and never touches an authored decision:
+  // assemble_history only adds suggestions and promotes edges it re-derives.
+  useEffect(() => {
+    const packet = preview.data?.data;
+    const targetId = packet?.target?.transaction_id;
+    const attemptKey = autoAssembleKey({
+      profileId: packet?.profile_id,
+      targetId,
+      inputVersion: packet?.input_version,
+    });
+    if (!shouldAutoAssemble({
+      targetId,
+      attemptKey,
+      reviewedEdgeCount: preview.data?.data?.report?.graph?.edges?.length ?? 0,
+      // Any authoring in flight means the user is mid-decision. Assembling
+      // underneath that can add structural funding beside a root source they
+      // are still writing, leaving two competing allocations.
+      busy:
+        Boolean(preview.isFetching) ||
+        assembleLinks.isPending ||
+        suggestLinks.isPending ||
+        bulkReviewLinks.isPending ||
+        reviewLink.isPending ||
+        attachLink.isPending ||
+        createLink.isPending ||
+        createSource.isPending ||
+        hasUnsavedDrafts({ linkForm, inspectedLink, sourceForm, manualLinkForm }),
+      alreadyAssembled: autoAssembledKeys,
+    })) {
+      return;
+    }
+    autoAssembledKeys.add(attemptKey);
+    void (async () => {
+      try {
+        // Silent on success: a complete graph is the signal, not a toast.
+        await runAssembly(false);
+      } catch {
+        if (scope?.isCurrent?.() !== false) {
+          addNotification({
+            title: t("toast.assemblyFailed"),
+            body: t("toast.assemblyFailedBody"),
+            tone: "warning",
+          });
+        }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runAssembly identity changes per render; keyed on the resolved target.
+  }, [preview.data, preview.isFetching]);
 
   const bulkReviewDeterministicLinks = async () => {
     if (!selectedTarget) return;
@@ -621,6 +697,33 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
   };
 
   /** Prefill the gap form for a quantified missing-history finding. */
+  /**
+   * Prefill the source form to DOCUMENT where funds came from.
+   *
+   * Deliberately separate from attesting a gap. After assembly connects real
+   * deposits, defaulting the one-click action to `missing_history` would steer
+   * someone into attesting history they actually have, which downgrades their
+   * own report from traced to attested.
+   */
+  const prefillOriginForm = (gap?: {
+    amount_msat?: number | string | null;
+    amount?: number | null;
+    asset?: string;
+    ref?: string;
+  }) => {
+    setSourceForm((current) => ({
+      ...current,
+      source_type:
+        current.source_type === "missing_history" ? "fiat_purchase" : current.source_type,
+      link_type: "manual_source",
+      asset: gap?.asset || current.asset,
+      amount: amountInput(gap?.amount_msat) || current.amount || selectedTargetAmount,
+      to_transaction:
+        gap?.ref && txById.has(gap.ref) ? gap.ref : current.to_transaction,
+    }));
+  };
+
+  /** Prefill the source form to ATTEST that the history is genuinely missing. */
   const prefillGapForm = (gap?: {
     amount_msat?: number | string | null;
     amount?: number | null;
@@ -766,6 +869,7 @@ export function useSourceFundsCase(profileKey: string, initialTarget = "") {
     createManualLink,
     createSourceLink,
     prefillGapForm,
+    prefillOriginForm,
     // advanced editor
     showAdvancedReview,
     setShowAdvancedReview,

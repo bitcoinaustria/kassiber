@@ -2994,6 +2994,11 @@ def build_parser() -> argparse.ArgumentParser:
     sf_suggest.add_argument("--target-transaction")
     sf_suggest.add_argument("--include-broad-hints", action="store_true")
     sf_suggest.add_argument("--max-suggestions", type=int, default=core_source_funds.SUGGESTION_WRITE_CAP)
+    sf_suggest.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report what would be suggested and restore the database exactly.",
+    )
 
     sf_assemble = source_funds_sub.add_parser(
         "assemble",
@@ -5432,9 +5437,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     else operation(),
                 )
         if args.source_funds_command == "suggest":
-            return emit(
-                args,
-                core_source_funds.suggest_links(
+            def operation():
+                return core_source_funds.suggest_links(
                     conn,
                     args.workspace,
                     args.profile,
@@ -5442,7 +5446,12 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     target_transaction_ref=args.target_transaction,
                     include_broad_hints=args.include_broad_hints,
                     max_suggestions=args.max_suggestions,
-                ),
+                    commit=not args.dry_run,
+                )
+
+            return emit(
+                args,
+                _dry_run_transaction(conn, operation) if args.dry_run else operation(),
             )
         if args.source_funds_command == "assemble":
             return emit(

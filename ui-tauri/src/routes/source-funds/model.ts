@@ -731,6 +731,52 @@ export function reconcileLinkForm({
 }
 
 
+/**
+ * True while the reviewer has work in progress in any editor.
+ *
+ * Auto-assembly writes to the book; doing so while someone is mid-decision can
+ * plant structural funding beside a root source they are still authoring and
+ * leave two competing allocations. Pending requests are not enough of a signal
+ * -- a half-typed form has no request in flight.
+ */
+export function hasUnsavedDrafts({
+  linkForm,
+  inspectedLink,
+  sourceForm,
+  manualLinkForm,
+}: {
+  linkForm: LinkReviewForm;
+  inspectedLink: SourceFundsLink | null;
+  sourceForm: { label: string; amount: string; description: string; attachment_id: string };
+  manualLinkForm: {
+    from_transaction: string;
+    allocation_amount: string;
+    from_allocation_amount: string;
+    explanation: string;
+    attachment_id: string;
+  };
+}): boolean {
+  if (inspectedLink && !formMatchesLink(linkForm, inspectedLink)) return true;
+  // to_transaction is set programmatically on target switch, so it is not a
+  // signal of the user having started anything.
+  if (
+    sourceForm.label.trim() ||
+    sourceForm.amount.trim() ||
+    sourceForm.description.trim() ||
+    sourceForm.attachment_id !== NO_ATTACHMENT
+  ) {
+    return true;
+  }
+  return Boolean(
+    manualLinkForm.from_transaction.trim() ||
+      manualLinkForm.allocation_amount.trim() ||
+      manualLinkForm.from_allocation_amount.trim() ||
+      manualLinkForm.explanation.trim() ||
+      manualLinkForm.attachment_id !== NO_ATTACHMENT,
+  );
+}
+
+
 /** True when the form still shows exactly what the link says (no unsaved edits). */
 export function formMatchesLink(form: LinkReviewForm, link: SourceFundsLink): boolean {
   const baseline = linkReviewFormFromLink(link);
@@ -741,6 +787,51 @@ export function formMatchesLink(form: LinkReviewForm, link: SourceFundsLink): bo
     form.from_allocation_amount.trim() === baseline.from_allocation_amount.trim() &&
     form.explanation.trim() === baseline.explanation.trim()
   );
+}
+
+
+/**
+ * Whether opening this target should assemble its chain evidence automatically.
+ *
+ * An input that IS an earlier owned output is observed structure, not a
+ * judgement call, so requiring two button presses to see it is ceremony. This
+ * stays deliberately narrow: once per target, only while the case has no
+ * reviewed history at all, and never while a read or write is still in flight.
+ */
+export function autoAssembleKey({
+  profileId,
+  targetId,
+  inputVersion,
+}: {
+  profileId: string | undefined | null;
+  targetId: string | undefined | null;
+  inputVersion: number | undefined | null;
+}): string {
+  // Keyed on the book's journal input version, so reopening an unchanged
+  // unresolved case does no work twice, while importing new history earns
+  // another attempt. A per-mount memory would retry on every navigation and
+  // still never notice fresh evidence.
+  return `${profileId ?? ""}:${targetId ?? ""}:${inputVersion ?? ""}`;
+}
+
+
+export function shouldAutoAssemble({
+  targetId,
+  reviewedEdgeCount,
+  busy,
+  attemptKey,
+  alreadyAssembled,
+}: {
+  targetId: string | undefined | null;
+  reviewedEdgeCount: number;
+  busy: boolean;
+  attemptKey: string;
+  alreadyAssembled: ReadonlySet<string>;
+}): boolean {
+  if (!targetId || busy) return false;
+  if (alreadyAssembled.has(attemptKey)) return false;
+  // Any reviewed edge means this case already has a history someone owns.
+  return reviewedEdgeCount === 0;
 }
 
 

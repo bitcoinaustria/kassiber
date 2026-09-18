@@ -901,6 +901,25 @@ def _may_replace_observation_payload(
     return True
 
 
+def _attestation_upgrade(existing: Mapping[str, Any], incoming: Mapping[str, Any]) -> bool:
+    """True when a re-observation first records which input scripts were owned.
+
+    `observer_owned_scripts` was introduced on 2026-07-14. Rows synced before
+    that carry a complete graph but no attestation, and the merge tail only
+    replaced raw_json when some column changed -- so an otherwise identical
+    re-observation could never backfill it, and structural lineage stayed
+    invisible for every older book. Only an authoritative observer may cause
+    this (see _may_replace_observation_payload); a CSV carrying the key is
+    refused there regardless.
+    """
+    old = _raw_json_payload(existing)
+    new = _raw_json_payload(incoming)
+    if old is None or new is None or "observer_owned_scripts" in old:
+        return False
+    scripts = new.get("observer_owned_scripts")
+    return isinstance(scripts, list) and len(scripts) > 0
+
+
 def _same_lnd_settlement_identity(existing: Mapping[str, Any], normalized: Mapping[str, Any]) -> bool:
     """A date refresh cannot repair or reinterpret conflicting native identity."""
     if not (
@@ -1192,8 +1211,9 @@ def _transaction_merge_updates(
         _ownership_graph_version(normalized) > _ownership_graph_version(existing)
         or _ownership_graph_is_strict_enrichment(existing, normalized)
     )
+    attestation_upgrade = authoritative_chain_observer and _attestation_upgrade(existing, normalized)
     if (
-        (updates or ownership_graph_upgrade)
+        (updates or ownership_graph_upgrade or attestation_upgrade)
         and normalized["raw_json"]
         and normalized["raw_json"] != existing["raw_json"]
         and _may_replace_observation_payload(

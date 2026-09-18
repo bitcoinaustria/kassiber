@@ -5140,10 +5140,17 @@ def ensure_schema_compat(conn):
     from .chain_analysis_watches_schema import ensure_inbox_sources
     ensure_inbox_sources(conn)
     migrated_ownership_history = _migrate_inline_ownership_history(conn)
+    # Retire the method names the pre-projection derivers wrote and nothing
+    # writes today. `utxo_spend` is deliberately NOT in this list: the
+    # authority-gated structural deriver writes it again, so relabelling would
+    # turn every fresh edge into a custody projection it is not. A legacy
+    # `utxo_spend` row needs no migration either -- build_report and bulk review
+    # both re-derive it from current evidence, so one the old ungated deriver
+    # invented fails that check and is refused rather than quietly relabelled.
     migrated_source_links = conn.execute(
         "UPDATE source_funds_links SET method = 'custody_component' "
         "WHERE method IN ('transaction_pair', 'same_onchain_scope', "
-        "'utxo_spend', 'payment_hash')"
+        "'payment_hash')"
     ).rowcount
     if migrated_ownership_history or migrated_source_links:
         conn.commit()

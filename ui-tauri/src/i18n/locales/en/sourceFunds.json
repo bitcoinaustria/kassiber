@@ -125,8 +125,6 @@
     "onChain": "On-chain"
   },
   "actionsBar": {
-    "findLinks": "Find Links",
-    "reviewDeterministic": "Review Deterministic Hops",
     "assemble": "Assemble History",
     "assembling": "Assembling…",
     "markGap": "Mark Gap",
@@ -135,7 +133,8 @@
     "assembleResult_other": "{{count}} hops proven",
     "assembleResultEmpty": "no new evidence this run",
     "manualReviewHint_one": "{{count}} weak or chain-observation suggestion still needs manual review.",
-    "manualReviewHint_other": "{{count}} weak or chain-observation suggestions still need manual review."
+    "manualReviewHint_other": "{{count}} weak or chain-observation suggestions still need manual review.",
+    "reassemble": "Re-run assembly"
   },
   "gapDefaults": {
     "label": "Reviewed missing history",
@@ -391,7 +390,14 @@
     "sourcePathBody": "The source-funds path has been updated.",
     "linkReviewFailed": "Link review not applied",
     "linkReviewStaleBody": "This link changed since you inspected it. Check the updated values and review it again.",
-    "linkReviewFailedBody": "Kassiber could not save this review."
+    "linkReviewFailedBody": "Kassiber could not save this review.",
+    "assemblyFailed": "Could not assemble history",
+    "assemblyFailedBody": "Kassiber could not read this transaction's chain evidence. Try Re-run assembly.",
+    "assembledBody_one": "Connected {{count}} funding transaction from chain evidence. Document where it came from.",
+    "assembledBody_other": "Connected {{count}} funding transactions from chain evidence. Document where they came from.",
+    "rescanNeeded": "Full rescan needed",
+    "rescanNeededBody_one": "{{count}} transaction was synced before Kassiber recorded which inputs were its own. Run a full rescan of the wallet to connect its history.",
+    "rescanNeededBody_other": "{{count}} transactions were synced before Kassiber recorded which inputs were their own. Run a full rescan of the wallet to connect their history."
   },
   "case": {
     "description": "Explain the origin of one amount using the evidence in this book.",
@@ -439,7 +445,9 @@
     "exportFingerprintChanged": "The case changed. Inspect it again before exporting.",
     "remainingMore": "+{{count}} more",
     "optionalAmount": "Leave blank to explain the full transaction amount.",
-    "notClassified": "Not classified"
+    "notClassified": "Not classified",
+    "originsNeeded_one": "{{count}} funding transaction still needs its origin documented ({{amount}}).",
+    "originsNeeded_other": "{{count}} funding transactions still need their origin documented ({{amount}} in total)."
   },
   "workstation": {
     "amounts": "Amounts",
@@ -597,6 +605,13 @@
       "nextStep": "Re-review this link against the current custody projection",
       "messages": {
         "aReviewedCustodyLinkIsAbsentOr": "A reviewed custody link is absent or stale in the current stored projection."
+      }
+    },
+    "stale_structural_lineage": {
+      "title": "A funding connection needs checking",
+      "nextStep": "Check this funding connection and review it again",
+      "messages": {
+        "anEarlierFundingConnectionCanNoLonger": "An earlier funding connection can no longer be verified against this wallet's transactions."
       }
     },
     "source_asset_mismatch": {

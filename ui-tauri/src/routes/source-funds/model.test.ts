@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   amountInput,
+  autoAssembleKey,
   linkReviewFormFromLink,
   linkReviewPayload,
   isStaleLinkReviewError,
+  hasUnsavedDrafts,
   reconcileLinkForm,
+  shouldAutoAssemble,
   type SourceFundsLink,
 } from "./model";
 
@@ -95,6 +98,71 @@ describe("reviewing is not editing", () => {
   });
 });
 
+describe("chain evidence assembles itself", () => {
+  const base = {
+    targetId: "tx-1",
+    reviewedEdgeCount: 0,
+    busy: false,
+    attemptKey: "book:tx-1:7",
+    alreadyAssembled: new Set<string>(),
+  };
+
+  it("assembles a target that has no reviewed history yet", () => {
+    expect(shouldAutoAssemble(base)).toBe(true);
+  });
+
+  it("leaves a case that already has a history alone", () => {
+    // Someone owns those edges; re-running behind them is not ours to do.
+    expect(shouldAutoAssemble({ ...base, reviewedEdgeCount: 3 })).toBe(false);
+  });
+
+  it("fires once per attempt, not once per render", () => {
+    expect(
+      shouldAutoAssemble({ ...base, alreadyAssembled: new Set(["book:tx-1:7"]) }),
+    ).toBe(false);
+    expect(
+      shouldAutoAssemble({ ...base, alreadyAssembled: new Set(["other"]) }),
+    ).toBe(true);
+  });
+
+  it("remembers the attempt across remounts, but retries on new evidence", () => {
+    const seen = new Set([autoAssembleKey({ profileId: "book", targetId: "tx-1", inputVersion: 7 })]);
+    // Reopening the same unresolved case does no work twice...
+    expect(
+      shouldAutoAssemble({
+        ...base,
+        attemptKey: autoAssembleKey({ profileId: "book", targetId: "tx-1", inputVersion: 7 }),
+        alreadyAssembled: seen,
+      }),
+    ).toBe(false);
+    // ...but importing history bumps the journal input version and earns another try.
+    expect(
+      shouldAutoAssemble({
+        ...base,
+        attemptKey: autoAssembleKey({ profileId: "book", targetId: "tx-1", inputVersion: 8 }),
+        alreadyAssembled: seen,
+      }),
+    ).toBe(true);
+  });
+
+  it("keys attempts per book, so two books never share one", () => {
+    expect(autoAssembleKey({ profileId: "book-a", targetId: "tx-1", inputVersion: 7 })).not.toBe(
+      autoAssembleKey({ profileId: "book-b", targetId: "tx-1", inputVersion: 7 }),
+    );
+  });
+
+  it("waits while a read or write is in flight", () => {
+    expect(shouldAutoAssemble({ ...base, busy: true })).toBe(false);
+  });
+
+  it("does nothing before a target resolves", () => {
+    // The target-amount field is an undebounced input; an unresolved target
+    // must never trigger a write.
+    expect(shouldAutoAssemble({ ...base, targetId: undefined })).toBe(false);
+    expect(shouldAutoAssemble({ ...base, targetId: "" })).toBe(false);
+  });
+});
+
 describe("a refreshed link cannot be approved against its old amounts", () => {
   // Astra's reproduction: inspected at 1,000 msat, refreshed to 2,000, user
   // changes nothing. The old guard compared the pristine form to the NEW link,
@@ -133,5 +201,38 @@ describe("a refreshed link cannot be approved against its old amounts", () => {
     const next = reconcileLinkForm({ form: dirty, inspected, latest: other });
     expect(next.inspected).toBe(other);
     expect(next.form.allocation_amount).toBe(amountInput(5000));
+  });
+});
+
+describe("auto-assembly waits for work in progress", () => {
+  const inspected = link({ allocation_amount_msat: 1000, from_allocation_amount_msat: 1000 });
+  const pristine = {
+    linkForm: linkReviewFormFromLink(inspected),
+    inspectedLink: inspected,
+    sourceForm: { label: "", amount: "", description: "", attachment_id: "__none__" },
+    manualLinkForm: {
+      from_transaction: "", allocation_amount: "", from_allocation_amount: "",
+      explanation: "", attachment_id: "__none__",
+    },
+  };
+
+  it("sees no draft when every editor is untouched", () => {
+    expect(hasUnsavedDrafts(pristine)).toBe(false);
+  });
+
+  it("treats an edited link form as work in progress", () => {
+    expect(hasUnsavedDrafts({
+      ...pristine, linkForm: { ...pristine.linkForm, explanation: "half a sentence" },
+    })).toBe(true);
+  });
+
+  it("treats a started root-source form as work in progress", () => {
+    expect(hasUnsavedDrafts({ ...pristine, sourceForm: { ...pristine.sourceForm, amount: "0.5" } })).toBe(true);
+  });
+
+  it("treats a started manual link as work in progress", () => {
+    expect(hasUnsavedDrafts({
+      ...pristine, manualLinkForm: { ...pristine.manualLinkForm, from_transaction: "tx-9" },
+    })).toBe(true);
   });
 });

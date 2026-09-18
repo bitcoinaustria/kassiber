@@ -21,6 +21,11 @@ from ..wallet_descriptors import normalize_asset_code, normalize_chain, normaliz
 from . import custody_journal
 from .attachments import attachment_display_label
 from .privacy_hops import privacy_hop_type_from_row
+from .source_funds_assembly import (
+    build_owned_outpoint_index,
+    derive_parent_spend_pairs,
+    rows_missing_input_attestation,
+)
 from .source_funds_hints import enrich_findings_with_next_steps
 from .source_funds_traversal import load_report_traversal
 
@@ -75,9 +80,16 @@ DETERMINISTIC_BULK_REVIEW_METHODS = {
     # custody projection. It covers native evidence and reviewed components,
     # including exact N:M bridges, without redetecting either in this module.
     "custody_component",
+    # An input IS the output it spends. Within one wallet that is observed
+    # structure, not a judgement call, so it needs no human to confirm it --
+    # but it is re-derived from current evidence before every apply.
+    "utxo_spend",
 }
 _CUSTODY_LINEAGE_METHODS = {
     "custody_component",
+}
+_STRUCTURAL_LINEAGE_METHODS = {
+    "utxo_spend",
 }
 PROVIDER_UNIQUE_KEYS = (
     "trade_id",
@@ -1374,6 +1386,26 @@ def _stored_custody_still_deterministic(
     )
 
 
+def _structural_still_deterministic(
+    derived: Mapping[tuple[str, str], tuple[int, int]],
+    row: Mapping[str, Any],
+    from_tx: Mapping[str, Any] | None,
+    to_tx: Mapping[str, Any],
+) -> bool:
+    """A stored structural edge must still match a fresh derivation exactly."""
+    if from_tx is None:
+        return False
+    pair = derived.get((str(from_tx["id"]), str(to_tx["id"])))
+    if pair is None:
+        return False
+    allocation_msat, from_allocation_msat = pair
+    return (
+        allocation_msat == int(row["allocation_amount"] or 0)
+        and from_allocation_msat == int(row["from_allocation_amount"] or 0)
+        and str(row["confidence"] or "") == "exact"
+    )
+
+
 def _suggestion_still_deterministic(
     custody_allocations: Mapping[
         tuple[str, str, str], _StoredCustodyAllocation
@@ -1381,6 +1413,7 @@ def _suggestion_still_deterministic(
     row: Mapping[str, Any],
     from_tx: Mapping[str, Any] | None,
     to_tx: Mapping[str, Any],
+    derived_structural: Mapping[tuple[str, str], tuple[int, int]] | None = None,
 ) -> bool:
     method = str(row["method"] or "")
     if method == "custody_component":
@@ -1389,6 +1422,10 @@ def _suggestion_still_deterministic(
             row,
             from_tx,
             to_tx,
+        )
+    if method == "utxo_spend":
+        return _structural_still_deterministic(
+            derived_structural or {}, row, from_tx, to_tx,
         )
     # Provider/import ids remain useful suggestions, but are not physical
     # identity and therefore never enter deterministic bulk review.
@@ -1488,14 +1525,24 @@ def _validated_bulk_review_candidates(
         # The custody projection is the expensive part; never build it for an
         # empty scope.
         return candidates
-    rows_by_id = {
-        str(tx["id"]): tx for tx in _active_transaction_rows(conn, profile_id)
-    }
+    active_rows = _active_transaction_rows(conn, profile_id)
+    rows_by_id = {str(tx["id"]): tx for tx in active_rows}
     custody_allocations = _stored_custody_allocation_map(
         conn,
         profile_id,
         rows_by_id,
     )
+    derived_structural: dict[tuple[str, str], tuple[int, int]] = {}
+    if any(str(row["method"] or "") == "utxo_spend" for row in rows):
+        # Derived once for the whole batch, never per candidate row.
+        for pair in derive_parent_spend_pairs(
+            active_rows,
+            build_owned_outpoint_index(conn, profile_id),
+            skip_row=_skip_structural_row,
+        ):
+            derived_structural[
+                (str(pair["from_row"]["id"]), str(pair["to_row"]["id"]))
+            ] = (int(pair["allocation_msat"]), int(pair["from_allocation_msat"]))
     for row in rows:
         if not _is_bulk_reviewable_suggestion(row):
             continue
@@ -1517,6 +1564,7 @@ def _validated_bulk_review_candidates(
             row,
             from_tx,
             to_tx,
+            derived_structural,
         ):
             continue
         try:
@@ -1661,6 +1709,7 @@ def assemble_history(
             methods[str(link.get("method") or "")] += 1
         if suggested["inserted"] == 0 and reviewed["reviewed"] == 0:
             break
+    _profile_id = str(hooks.resolve_scope(conn, workspace_ref, profile_ref)[1]["id"])
     return {
         "target_transaction_id": reviewed["target_transaction_id"],
         "passes": passes,
@@ -1668,6 +1717,12 @@ def assemble_history(
         "auto_reviewed": total_reviewed,
         "awaiting_manual_review": total_skipped,
         "methods": dict(sorted(methods.items())),
+        # Spends in this target's scope whose stored graph predates the input
+        # attestation. Not a gap in history: a full rescan records it.
+        "chain_attestation_missing": sorted(
+            set(rows_missing_input_attestation(_active_transaction_rows(conn, _profile_id)))
+            & _target_scoped_transaction_ids(conn, _profile_id, reviewed["target_transaction_id"])
+        ),
         "policy": (
             "Assembly derives exact edges from unambiguous synced transaction "
             "inputs/outputs and source-qualified Lightning payment hashes, plus "
@@ -1679,13 +1734,52 @@ def assemble_history(
     }
 
 
-def _active_transaction_rows(conn: sqlite3.Connection, profile_id: str):
+def _skip_structural_row(row: Mapping[str, Any]) -> bool:
+    """Rows structural lineage must never assert through.
+
+    Privacy-boundary rows (CoinJoin/PayJoin/sweeps) keep their deferred
+    semantics, and Samourai group wallets keep the dedicated Whirlpool boundary
+    handling instead of raw input/output edges.
+    """
+    if _raw_privacy_hop(row):
+        return True
+    return _samourai_metadata_from_wallet_config(row["wallet_config_json"]) is not None
+
+
+def _active_transaction_row(conn: sqlite3.Connection, profile_id: str, tx_id: str):
+    """One row in the exact shape _active_transaction_rows returns (provenance included)."""
     return conn.execute(
         """
         SELECT t.*, w.label AS wallet_label, w.kind AS wallet_kind,
-               w.config_json AS wallet_config_json
+               w.config_json AS wallet_config_json,
+               observation.authority_version AS observation_authority_version,
+               observation.graph_hash AS observation_graph_hash,
+               observation.quantity_hash AS observation_quantity_hash
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN chain_observation_provenance observation
+          ON observation.transaction_id = t.id
+        WHERE t.profile_id = ? AND t.id = ? AND t.excluded = 0
+        """,
+        (profile_id, tx_id),
+    ).fetchone()
+
+
+def _active_transaction_rows(conn: sqlite3.Connection, profile_id: str):
+    # The observation commitment travels with the row so structural lineage can
+    # fail closed on anything an authoritative observer did not write. Aliased
+    # exactly as custody_journal does, so both read one contract.
+    return conn.execute(
+        """
+        SELECT t.*, w.label AS wallet_label, w.kind AS wallet_kind,
+               w.config_json AS wallet_config_json,
+               observation.authority_version AS observation_authority_version,
+               observation.graph_hash AS observation_graph_hash,
+               observation.quantity_hash AS observation_quantity_hash
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        LEFT JOIN chain_observation_provenance observation
+          ON observation.transaction_id = t.id
         WHERE t.profile_id = ? AND t.excluded = 0
         ORDER BY t.occurred_at ASC, t.created_at ASC, t.id ASC
         """,
@@ -1858,7 +1952,15 @@ def suggest_links(
     target_transaction_ref: str | None = None,
     include_broad_hints: bool = False,
     max_suggestions: int = SUGGESTION_WRITE_CAP,
+    commit: bool = True,
 ) -> dict[str, Any]:
+    """Derive candidate funding edges for a target.
+
+    ``commit=False`` still builds the rows so the caller can read exactly what
+    would be written, and leaves the transaction open for the caller to roll
+    back -- a provenance tool should be able to show its work without changing
+    the book to do it.
+    """
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     target = hooks.resolve_transaction(conn, profile["id"], target_transaction_ref) if target_transaction_ref else None
     if max_suggestions <= 0:
@@ -1870,6 +1972,7 @@ def suggest_links(
     # ceiling regardless of how the request reaches us.
     if max_suggestions > SUGGESTION_WRITE_CAP:
         max_suggestions = SUGGESTION_WRITE_CAP
+    conn.execute("SAVEPOINT source_funds_suggest")
     rows = _active_transaction_rows(conn, profile["id"])
     rows_by_id = {row["id"]: row for row in rows}
     scoped_tx_ids = (
@@ -1882,12 +1985,16 @@ def suggest_links(
     def in_scope(*txs: Mapping[str, Any]) -> bool:
         return not target or any(tx["id"] in scoped_tx_ids for tx in txs)
 
-    def remember(link: Mapping[str, Any] | None) -> None:
+    def remember(link: Mapping[str, Any] | None, *, widen_scope: bool = True) -> None:
         if not link:
             return
         inserted.append(link)
         if len(inserted) > max_suggestions:
-            conn.rollback()
+            # Discard this pass's writes without destroying an enclosing
+            # savepoint: a dry-run preview must still surface this error rather
+            # than an "no such savepoint" from its own rollback.
+            conn.execute("ROLLBACK TO SAVEPOINT source_funds_suggest")
+            conn.execute("RELEASE SAVEPOINT source_funds_suggest")
             raise AppError(
                 "source-funds suggestion write cap exceeded",
                 code="validation",
@@ -1897,7 +2004,7 @@ def suggest_links(
                 ),
                 details={"max_suggestions": max_suggestions},
             )
-        if target:
+        if target and widen_scope:
             scoped_tx_ids.add(link["from_transaction_id"])
             scoped_tx_ids.add(link["to_transaction_id"])
 
@@ -1993,6 +2100,54 @@ def suggest_links(
         )
         remember(link)
 
+    # Structural lineage the custody projection does not model: a spend funded
+    # by this wallet's own earlier outputs. Target-scoped on purpose -- a
+    # whole-book pass would blow through SUGGESTION_WRITE_CAP and roll back the
+    # custody, coinjoin and provider suggestions written above it.
+    if target is not None:
+        # No `if owned_index` guard: inventory only corroborates, and a wallet
+        # first synced after its outputs were spent legitimately has none.
+        owned_index = build_owned_outpoint_index(conn, profile["id"])
+        custody_pairs = {
+            (allocation.from_transaction_id, allocation.to_transaction_id)
+            for allocation in custody_allocations.values()
+        }
+        for pair in derive_parent_spend_pairs(
+            rows, owned_index, skip_row=_skip_structural_row,
+        ):
+            out_tx, in_tx = pair["from_row"], pair["to_row"]
+            endpoints = (str(out_tx["id"]), str(in_tx["id"]))
+            if endpoints in custody_pairs:
+                # The projection owns this pair; structure never competes.
+                continue
+            # Bounded to the target's own funding chain. `in_scope` accepts
+            # either endpoint, so adopting it here would pull in every other
+            # spend of a shared parent -- on a busy parent that exceeds the
+            # write cap and rolls back the whole pass.
+            if str(in_tx["id"]) not in scoped_tx_ids:
+                continue
+            if int(pair["allocation_msat"]) <= 0:
+                continue
+            link = _insert_suggestion(
+                conn,
+                workspace["id"],
+                profile["id"],
+                from_tx=out_tx,
+                to_tx=in_tx,
+                link_type="self_transfer",
+                method="utxo_spend",
+                confidence="exact",
+                allocation_msat=int(pair["allocation_msat"]),
+                from_allocation_msat=int(pair["from_allocation_msat"]),
+                explanation=pair["explanation"],
+            )
+            # Deliberately does not widen the shared scope: these edges are
+            # already bound to the target's funding chain, and admitting
+            # their endpoints would hand the provider loop below a wider
+            # cartesian product that can exceed the write cap and roll back
+            # this pass -- including these very edges.
+            remember(link, widen_scope=False)
+
     by_provider_key = defaultdict(list)
     for row in rows:
         for key, value in _raw_evidence_values(row):
@@ -2061,10 +2216,13 @@ def suggest_links(
                 )
                 remember(link)
 
-    conn.commit()
+    conn.execute("RELEASE SAVEPOINT source_funds_suggest")
     links = [_link_row_to_dict(conn, row) for row in inserted]
+    if commit:
+        conn.commit()
     return {
         "inserted": len(links),
+        "committed": bool(commit),
         "target_transaction_id": target["id"] if target else None,
         "links": links,
         "privacy_warning": (
@@ -2590,6 +2748,58 @@ def _gross_requirement_phrase(allocations: Mapping[str, Any]) -> str:
     )
 
 
+def _route_difference_explanation(envelope: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Name the route difference when recorded fees demonstrably account for it.
+
+    Pure over the finished envelope, and deliberately strict. A hop consumes
+    value when more entered it than its requirement carried onward; that is
+    explainable only when the amount consumed is exactly the fee the hop's own
+    row records. Numerical coincidence is not an explanation, so every hop must
+    close, the total must match, and a privacy boundary -- where Kassiber does
+    not claim to know what happened -- disqualifies the whole route.
+    """
+    allocations = envelope.get("allocations") or {}
+    difference = allocations.get("route_difference_msat")
+    if not isinstance(difference, int) or difference <= 0:
+        return None
+    graph = envelope.get("graph") or {}
+    nodes = {
+        str(node.get("id")): node
+        for node in (graph.get("nodes") or ())
+        if node.get("node_type") == "transaction"
+    }
+    consumed_by_node: dict[str, int] = defaultdict(int)
+    for edge in graph.get("edges") or ():
+        child = str(edge.get("to") or "")
+        if child not in nodes:
+            continue
+        allocation = edge.get("allocation_amount_msat")
+        from_allocation = edge.get("from_allocation_amount_msat")
+        if allocation is None:
+            return None
+        consumed_by_node[child] += int(from_allocation or allocation) - int(allocation)
+    hops = 0
+    total = 0
+    for node_id, consumed in consumed_by_node.items():
+        if consumed == 0:
+            continue
+        node = nodes[node_id]
+        if consumed < 0 or node.get("privacy_boundary"):
+            return None
+        if consumed != int(node.get("fee_msat") or 0):
+            return None
+        hops += 1
+        total += consumed
+    if hops == 0 or total != difference:
+        return None
+    return {
+        "kind": "network_fees",
+        "fee_msat": total,
+        "fee": _btc_value(total),
+        "hop_count": hops,
+    }
+
+
 def _add_report_shape(envelope: dict[str, Any]) -> None:
     graph = envelope.get("graph") or {}
     nodes = list(graph.get("nodes") or [])
@@ -2633,6 +2843,9 @@ def _add_report_shape(envelope: dict[str, Any]) -> None:
     # target; a matching gross needs no explanation and a standing reassurance
     # line would be noise.
     allocations = envelope.get("allocations") or {}
+    explanation = _route_difference_explanation(envelope)
+    if explanation is not None:
+        allocations["route_difference_explanation"] = explanation
     gross_phrase = _gross_requirement_phrase(allocations)
     gross_sentence = ""
     if gross_phrase and not allocations.get("gross_matches_target"):
@@ -2641,7 +2854,16 @@ def _add_report_shape(envelope: dict[str, Any]) -> None:
             f"Gross upstream requirement: {gross_phrase}. "
         )
         route_difference = allocations.get("route_difference")
-        if route_difference is not None and float(route_difference) != 0:
+        if explanation is not None:
+            # State it as an equation the reader can check against the rows.
+            hops = explanation["hop_count"]
+            gross_sentence += (
+                f"That is {float(target.get('required_amount') or 0):.8f} {target_asset} "
+                f"plus {float(explanation['fee']):.8f} {target_asset} of network fees "
+                f"recorded on {hops} disclosed transaction"
+                f"{'' if hops == 1 else 's'}. "
+            )
+        elif route_difference is not None and float(route_difference) != 0:
             gross_sentence += (
                 f"The route difference of {abs(float(route_difference)):.8f} {target_asset} "
                 "is not automatically classified as a fee. "
@@ -2790,6 +3012,24 @@ def build_report(
         raise AppError("Source-funds report inputs belong to a different book", code="validation")
     active_rows_by_id = report_inputs.active_rows_by_id
     custody_allocations = report_inputs.custody_allocations
+    # Built only if a structural edge is actually reviewed on this path, so the
+    # common report pays nothing for it.
+    _structural_cache: dict[str, dict[tuple[str, str], tuple[int, int]]] = {}
+
+    def derived_structural() -> Mapping[tuple[str, str], tuple[int, int]]:
+        if "index" not in _structural_cache:
+            derived: dict[tuple[str, str], tuple[int, int]] = {}
+            for pair in derive_parent_spend_pairs(
+                list(active_rows_by_id.values()),
+                build_owned_outpoint_index(conn, str(profile["id"])),
+                skip_row=_skip_structural_row,
+            ):
+                derived[
+                    (str(pair["from_row"]["id"]), str(pair["to_row"]["id"]))
+                ] = (int(pair["allocation_msat"]), int(pair["from_allocation_msat"]))
+            _structural_cache["index"] = derived
+        return _structural_cache["index"]
+
     from .source_funds_recipients import effective_reveal_mode
     resolved_mode, recipient = effective_reveal_mode(
         conn,
@@ -2974,6 +3214,27 @@ def build_report(
                         "stale_custody_component_lineage",
                         "blocker",
                         "A reviewed custody link is absent or stale in the current stored projection.",
+                        ref=link["id"],
+                    )
+                    continue
+            if link["method"] in _STRUCTURAL_LINEAGE_METHODS:
+                # A structural edge was auto-promoted because the evidence said
+                # so; if that evidence is gone or changed, the edge must stop
+                # being trusted here too, not only at promotion time.
+                structural_parent = active_rows_by_id.get(
+                    str(link["from_transaction_id"])
+                )
+                if not _structural_still_deterministic(
+                    derived_structural(),
+                    link,
+                    structural_parent,
+                    tx,
+                ):
+                    _add_finding(
+                        findings,
+                        "stale_structural_lineage",
+                        "blocker",
+                        "An earlier funding connection can no longer be verified against this wallet's transactions.",
                         ref=link["id"],
                     )
                     continue
@@ -3709,8 +3970,20 @@ def build_report_lines(report: Mapping[str, Any], hooks: SourceFundsHooks) -> li
                     f"Gross upstream demand:   {gross_phrase}",
                 ]
             )
+            # Read the stored explanation; never recompute it here, so a saved
+            # case renders exactly what it was saved with.
+            explanation = allocations.get("route_difference_explanation")
             route_difference = allocations.get("route_difference")
-            if route_difference is not None and float(route_difference) != 0:
+            if isinstance(explanation, Mapping) and explanation.get("kind") == "network_fees":
+                hops = int(explanation.get("hop_count") or 0)
+                lines.append(
+                    f"That is {float(allocations.get('target_amount') or 0):.8f} "
+                    f"{allocations.get('asset') or ''} plus "
+                    f"{float(explanation.get('fee') or 0):.8f} {allocations.get('asset') or ''} "
+                    f"of network fees recorded on {hops} disclosed transaction"
+                    f"{'' if hops == 1 else 's'}."
+                )
+            elif route_difference is not None and float(route_difference) != 0:
                 lines.append(
                     f"The route difference ({abs(float(route_difference)):.8f} "
                     f"{allocations.get('asset') or ''}) is not automatically classified as a fee."

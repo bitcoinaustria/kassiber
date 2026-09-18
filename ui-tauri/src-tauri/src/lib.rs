@@ -487,6 +487,10 @@ const STREAMING_DAEMON_KINDS: &[&str] = &[
     "ui.workspace.freshness.run",
     "ui.journals.process",
     "ui.rates.rebuild",
+    // Assembly walks the target's whole funding graph over repeated passes and
+    // now runs on opening a case, so it must not share the ordinary
+    // request timeout with the polls queued behind it.
+    "ui.source_funds.assemble",
     "ui.wallets.document_import.preview",
     "ui.wallets.document_import.import",
     "ui.sync.push",
