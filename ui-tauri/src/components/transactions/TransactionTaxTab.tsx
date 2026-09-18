@@ -17,6 +17,7 @@ import {
   UNCLASSIFIED_KIND,
 } from "@/lib/transactionTypeLabel";
 
+import { AcquisitionReview } from "./AcquisitionReview";
 import { DirtyDot, InfoHint, LedgerRow } from "./TransactionDetailSheetParts";
 import {
   austrianSelectionValue,
@@ -96,7 +97,9 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                     {/* Paired transfer/swap legs route through the pair path,
                         which never reads `kind` — offering the control there
                         would be a no-op the user cannot tell apart. */}
-                    {transaction.direction === "Transfer" ? null : (
+                    {transaction.direction === "Transfer" ? null : transaction.direction === "Receive" ? (
+                      <AcquisitionReview key={transaction.id} transaction={transaction} dirty={Object.values(dirty).some(Boolean)} hideSensitive={hideSensitive} />
+                    ) : (
                     <div className="rounded-md border bg-background p-3">
                       <div className="min-w-0 space-y-1.5">
                         <Label
@@ -125,9 +128,7 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                             <SelectItem value={UNCLASSIFIED_KIND}>
                               {t("tax.kindUnclassified")}
                             </SelectItem>
-                            {transactionKindOptions(
-                              transaction.direction === "Receive",
-                            ).map((option) => (
+                            {transactionKindOptions(false).map((option) => (
                               <SelectItem key={option.kind} value={option.kind}>
                                 {/* dynamic key */}
                                 {t(option.labelKey as ParseKeys<["transactions"]>)}

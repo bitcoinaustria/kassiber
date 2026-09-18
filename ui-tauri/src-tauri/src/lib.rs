@@ -363,6 +363,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.next_actions",
     "ui.review.badges",
     "ui.review.cases",
+    "ui.review.plan",
+    "ui.review.apply",
     "ui.review.request_input",
     "ui.wallets.utxos",
     "ui.privacy_hygiene.snapshot",
@@ -497,6 +499,12 @@ const STREAMING_DAEMON_KINDS: &[&str] = &[
     "ui.backup.export",
     "ui.backup.preview",
     "ui.backup.apply",
+    // A classification plan rebuilds the journal on a RAM clone of the book to
+    // show exact before/after accounting effects; apply does it again inside
+    // the write. On a large book that is a journal run, and a journal run is
+    // already a streaming kind above.
+    "ui.review.plan",
+    "ui.review.apply",
 ];
 
 // Daemon kinds that exercise the AI runtime (model calls, chat sessions, tool
