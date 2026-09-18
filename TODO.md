@@ -8,14 +8,6 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
 
 ## Accounting correctness and custody
 
-- [ ] Preserve native observer evidence during supporting CSV price enrichment.
-  A matched generic-ledger import must not replace native `raw_json` authority
-  with CSV fields and turn an exact claim/refund transfer into a disposal.
-  Keep pricing provenance separate and test the subsequent journal rebuild.
-- [ ] Reconcile obsolete native rows when watched scripts expand. Incremental
-  history must match a complete rescan's quantity and basis when the same
-  transaction changes from receipt to spend. Retain authored metadata and
-  review references.
 - [ ] Resolve the remaining custody-core code-volume stop criterion in
   [plan 15](docs/plan/15-custody-simplification.md). Consumer/report cutover and
   performance verification are recorded there as complete. Do not remove
