@@ -12,6 +12,8 @@ export interface SourceFundsReviewContext {
   recipe: Record<string, unknown>;
   report: SourceFundsPreview;
   links: SourceFundsLink[];
+  /** Server-owned batch eligibility. Absent reads as unknown, never as permission. */
+  bulk_review?: { eligible_link_ids: string[]; eligible_beyond_inspection: number };
   sources: SourceFundsSource[];
   evidence: EvidenceAttachment[];
   scope_truncated?: boolean;

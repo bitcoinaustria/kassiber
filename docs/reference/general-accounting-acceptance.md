@@ -378,8 +378,14 @@ integration worktree; the original preview checkout is unchanged.
   green release gate, updated packaged binary, completed Fable review, or
   published PR is claimed by these focused results.
 
-The author-approved UI removals and retained security code are recorded in
-`AGENT_OVERWRITES.md`. No database or financial records were deleted.
+The owner-approved UI removal changed delivery scope, not the ledger or
+security model. Shared UI returned to the combined #542/#543 baseline
+`5371c851`; minimal exact Assistant consent remained. Supervisor export and
+book-change protections were retained, and the Vite renderer allowlist stayed
+aligned with native invocation. The full UI recovery checkpoint above preserves
+the removed routes. No database or financial records were deleted. Selected
+financial assistance was moved with its provider protections and tests as
+recorded under [the split policy](#current-split-and-acceptance-policy-2026-09-06).
 
 ## Remaining delivery gates and deliberate exclusions
 

@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from kassiber.errors import AppError
 from kassiber.cli.handlers import _metadata_hooks, _wallet_sync_hooks, process_journals
 from kassiber.core.chain_observer.provenance import fee_attribution_from_raw
 from kassiber.core.custody_journal import CustodyJournalBuilder
@@ -354,3 +355,421 @@ def test_returned_own_input_does_not_fund_foreign_receipt(
         assert sum(value["quantity"] for value in state["wallet_holdings"].values()) == Decimal(".002")
         assert not any(entry["entry_type"] == "fee" for entry in state["entries"])
     assert [tuple(row) for row in conn.execute("SELECT id,amount,fee,raw_json FROM transactions ORDER BY id")] == original_rows
+
+
+def _expanding_wallet_adapter(graph):
+    def adapter(_backend, wallet, state):
+        return [record_from_bitcoin_esplora_tx(
+            json.loads(json.dumps(graph)), state.tracked_scripts, "esplora",
+        )], {}
+    return adapter
+
+
+def _transport_only_hooks(adapter):
+    return replace(
+        _wallet_sync_hooks(), prepare_observer_fetch=None,
+        resolve_backend=lambda *_: {"name": "fixture", "kind": "esplora", "url": "https://example.invalid"},
+        backend_adapters={"esplora": adapter},
+    )
+
+
+def _active_rows(conn):
+    return [dict(row) for row in conn.execute(
+        "SELECT * FROM transactions WHERE excluded = 0 ORDER BY id"
+    )]
+
+
+def _observe_expanding_wallet(conn, mode):
+    """Sync one transaction either with the final watched set, or by expanding into it."""
+    conn.execute("DELETE FROM wallets")
+    # SCRIPT_B funds the transaction; SCRIPT_A receives change, the rest leaves.
+    graph = _graph(
+        "aa" * 32,
+        inputs=[("bb" * 32, 0, SCRIPT_B, 300010)],
+        outputs=[(SCRIPT_A, 100000), ("0014" + "ff" * 20, 200000)],
+        fee=10,
+    )
+    hooks = _transport_only_hooks(_expanding_wallet_adapter(graph))
+    watched = [ADDR_A] if mode == "incremental" else [ADDR_A, ADDR_B]
+    create_wallet(
+        conn, "ws-1", "profile-1", "Watched", "address", wallet_id="w",
+        config={"chain": "bitcoin", "network": "main", "addresses": watched},
+    )
+    wallet = conn.execute("SELECT * FROM wallets WHERE id='w'").fetchone()
+    sync_wallet_from_backend(conn, {}, _profile(conn), wallet, hooks)
+    first_row_id = conn.execute("SELECT id FROM transactions").fetchone()[0]
+
+    if mode == "incremental":
+        update_wallet(
+            conn, "ws-1", "profile-1", "w",
+            {"config": {"chain": "bitcoin", "network": "main", "addresses": [ADDR_A, ADDR_B]}},
+        )
+        wallet = conn.execute("SELECT * FROM wallets WHERE id='w'").fetchone()
+        outcome = sync_wallet_from_backend(conn, {}, _profile(conn), wallet, hooks)
+        assert outcome["imported"] == 0
+        # Reinterpreted in place, so every reference to the row id survives.
+        assert conn.execute("SELECT id FROM transactions WHERE excluded=0").fetchone()[0] == first_row_id
+
+    # Re-syncing the final state is idempotent.
+    sync_wallet_from_backend(conn, {}, _profile(conn), wallet, hooks)
+    return hooks, wallet
+
+
+_EVIDENCE_COLUMNS = (
+    "direction", "asset", "amount", "fee", "amount_includes_fee", "kind",
+    "external_id", "external_id_kind", "fingerprint", "occurred_at", "confirmed_at",
+    "fiat_rate", "fiat_rate_exact", "fiat_value", "fiat_value_exact",
+    "pricing_source_kind", "pricing_provider", "pricing_granularity", "pricing_method",
+)
+
+
+def _final_evidence(conn):
+    rows = [dict(row) for row in conn.execute(
+        "SELECT * FROM transactions WHERE excluded = 0 ORDER BY external_id, direction"
+    )]
+    state = CustodyJournalBuilder(conn, _profile(conn)).build()
+    projection = state["custody_quantity"].projection
+    return {
+        "rows": [{column: row[column] for column in _EVIDENCE_COLUMNS} for row in rows],
+        # The accounting interpretation, not just the row count: which decision
+        # the arbiter reached and what it posted where.
+        "decisions": sorted(
+            (decision.reason, decision.state, decision.source.end_msat - decision.source.start_msat)
+            for decision in projection.decisions
+        ),
+        "postings": sorted(
+            (posting.location_kind, posting.location_id, posting.asset, posting.amount_msat)
+            for posting in projection.postings
+        ),
+        "differences": sorted(
+            (item.wallet_id, item.asset, item.canonical_msat)
+            for item in (state.get("quantity_differences") or ())
+        ),
+        "provenance": conn.execute("SELECT COUNT(*) FROM chain_observation_provenance").fetchone()[0],
+    }
+
+
+def test_expanded_watched_scripts_match_complete_history(tmp_path):
+    """Acquiring the same final evidence incrementally must land where one complete import lands.
+
+    A wallet that watches only the output script sees a receipt. Once it also
+    watches the spent input's script, the same physical transaction is a spend.
+    Direction-qualified matching used to miss the existing row, leaving the
+    obsolete receipt active and double-counting the transaction.
+
+    Quantity AND basis must converge: the incremental path recomputes fiat value
+    from the retained rate rather than pricing at insert time, so comparing row
+    counts alone would not catch a divergence.
+    """
+    evidence = {}
+    for mode in ("complete", "incremental"):
+        conn = open_db(tmp_path / mode)
+        try:
+            helper = fixtures.OwnershipDeriverHandlerTest()
+            helper._seed(conn)
+            _observe_expanding_wallet(conn, mode)
+            # Price the row so the basis comparison below compares real values.
+            # The incremental route recomputes fiat value from the retained rate
+            # rather than pricing at insert time, which is a different path.
+            row_id = conn.execute("SELECT id FROM transactions WHERE excluded=0").fetchone()[0]
+            update_transaction_metadata(
+                conn, "Main", "Default", row_id, _metadata_hooks(),
+                pricing_update={
+                    "fiat_rate": "40000", "source_kind": "manual_override", "quality": "exact",
+                },
+            )
+            evidence[mode] = _final_evidence(conn)
+        finally:
+            conn.close()
+
+    complete = evidence["complete"]
+    # Guard the comparison itself: equal-but-empty would prove nothing.
+    assert complete["rows"][0]["fiat_value"] is not None
+    assert complete["rows"][0]["fiat_rate_exact"] is not None
+    assert complete["decisions"] and complete["postings"]
+    assert complete["rows"] == [{
+        **complete["rows"][0],
+        "direction": "outbound",
+        "amount": btc_to_msat(Decimal("0.00200000")),
+        "fee": btc_to_msat(Decimal("0.00000010")),
+        "kind": "withdrawal",
+    }]
+    assert complete["provenance"] == 1
+    # No obsolete active receipt on either route, and identical accounting.
+    assert evidence["incremental"] == complete
+
+
+def test_pre_existing_duplicate_projection_is_retired_not_deleted(custody_book):
+    """Books already broken by the old matcher reconcile on the next sync, without a migration."""
+    conn, _helper = custody_book
+    conn.execute("DELETE FROM wallets")
+    graph = _graph(
+        "aa" * 32,
+        inputs=[("bb" * 32, 0, SCRIPT_B, 300010)],
+        outputs=[(SCRIPT_A, 100000), ("0014" + "ff" * 20, 200000)],
+        fee=10,
+    )
+    hooks = _transport_only_hooks(_expanding_wallet_adapter(graph))
+    create_wallet(
+        conn, "ws-1", "profile-1", "Watched", "address", wallet_id="w",
+        config={"chain": "bitcoin", "network": "main", "addresses": [ADDR_A]},
+    )
+    wallet = conn.execute("SELECT * FROM wallets WHERE id='w'").fetchone()
+    sync_wallet_from_backend(conn, {}, _profile(conn), wallet, hooks)
+    receipt_id = conn.execute("SELECT id FROM transactions").fetchone()[0]
+
+    update_wallet(
+        conn, "ws-1", "profile-1", "w",
+        {"config": {"chain": "bitcoin", "network": "main", "addresses": [ADDR_A, ADDR_B]}},
+    )
+    wallet = conn.execute("SELECT * FROM wallets WHERE id='w'").fetchone()
+    sync_wallet_from_backend(conn, {}, _profile(conn), wallet, hooks)
+
+    # The row still exists under its original id; it was retired, not deleted.
+    retired = conn.execute("SELECT * FROM transactions WHERE id=?", (receipt_id,)).fetchone()
+    assert retired is not None
+    assert conn.execute("SELECT COUNT(*) FROM transactions WHERE excluded=0").fetchone()[0] == 1
+
+
+def test_narrowing_watched_scripts_again_converges_without_wedging(custody_book):
+    """widen -> narrow -> widen must keep converging instead of failing closed forever."""
+    conn, _helper = custody_book
+    conn.execute("DELETE FROM wallets")
+    graph = _graph(
+        "aa" * 32,
+        inputs=[("bb" * 32, 0, SCRIPT_B, 300010)],
+        outputs=[(SCRIPT_A, 100000), ("0014" + "ff" * 20, 200000)],
+        fee=10,
+    )
+    hooks = _transport_only_hooks(_expanding_wallet_adapter(graph))
+    create_wallet(
+        conn, "ws-1", "profile-1", "Watched", "address", wallet_id="w",
+        config={"chain": "bitcoin", "network": "main", "addresses": [ADDR_A]},
+    )
+    for addresses in ([ADDR_A], [ADDR_A, ADDR_B], [ADDR_A], [ADDR_A, ADDR_B]):
+        update_wallet(
+            conn, "ws-1", "profile-1", "w",
+            {"config": {"chain": "bitcoin", "network": "main", "addresses": addresses}},
+        )
+        wallet = conn.execute("SELECT * FROM wallets WHERE id='w'").fetchone()
+        sync_wallet_from_backend(conn, {}, _profile(conn), wallet, hooks)
+        active = conn.execute("SELECT COUNT(*) FROM transactions WHERE excluded=0").fetchone()[0]
+        assert active == 1, (addresses, active)
+    assert conn.execute("SELECT direction FROM transactions WHERE excluded=0").fetchone()[0] == "outbound"
+
+
+def _widen_and_sync(conn, hooks):
+    update_wallet(
+        conn, "ws-1", "profile-1", "w",
+        {"config": {"chain": "bitcoin", "network": "main", "addresses": [ADDR_A, ADDR_B]}},
+    )
+    wallet = conn.execute("SELECT * FROM wallets WHERE id='w'").fetchone()
+    return sync_wallet_from_backend(conn, {}, _profile(conn), wallet, hooks)
+
+
+def _narrow_and_sync(conn, hooks):
+    update_wallet(
+        conn, "ws-1", "profile-1", "w",
+        {"config": {"chain": "bitcoin", "network": "main", "addresses": [ADDR_A]}},
+    )
+    wallet = conn.execute("SELECT * FROM wallets WHERE id='w'").fetchone()
+    return sync_wallet_from_backend(conn, {}, _profile(conn), wallet, hooks)
+
+
+def _narrow_book(conn):
+    conn.execute("DELETE FROM wallets")
+    graph = _graph(
+        "aa" * 32,
+        inputs=[("bb" * 32, 0, SCRIPT_B, 300010)],
+        outputs=[(SCRIPT_A, 100000), ("0014" + "ff" * 20, 200000)],
+        fee=10,
+    )
+    hooks = _transport_only_hooks(_expanding_wallet_adapter(graph))
+    create_wallet(
+        conn, "ws-1", "profile-1", "Watched", "address", wallet_id="w",
+        config={"chain": "bitcoin", "network": "main", "addresses": [ADDR_A]},
+    )
+    wallet = conn.execute("SELECT * FROM wallets WHERE id='w'").fetchone()
+    sync_wallet_from_backend(conn, {}, _profile(conn), wallet, hooks)
+    return hooks, conn.execute("SELECT id FROM transactions").fetchone()[0]
+
+
+def _seed_pre_fix_duplicate(conn):
+    """Reproduce the two-active-row state the old direction-qualified matcher left behind."""
+    hooks, receipt_id = _narrow_book(conn)
+    receipt = conn.execute("SELECT * FROM transactions WHERE id=?", (receipt_id,)).fetchone()
+    columns = [key for key in receipt.keys() if key != "id"]
+    overrides = {
+        "direction": "outbound",
+        "kind": "withdrawal",
+        "amount": btc_to_msat(Decimal("0.00200000")),
+        "fee": btc_to_msat(Decimal("0.00000010")),
+        "fingerprint": "pre-fix-fp",
+    }
+    values = [overrides.get(key, receipt[key]) for key in columns]
+    spend_id = "pre-fix-spend"
+    conn.execute(
+        f"INSERT INTO transactions (id,{','.join(columns)}) VALUES ({','.join('?' for _ in range(len(columns) + 1))})",
+        (spend_id, *values),
+    )
+    conn.commit()
+    persist_authoritative_chain_observation(conn, spend_id, observer_kind="esplora")
+    return hooks, receipt_id, spend_id
+
+
+@pytest.mark.parametrize("authored", ["note", "review_status", "tag"])
+def test_retiring_an_authored_projection_fails_closed(custody_book, authored):
+    """Refresh must never bury a user's own work; it stops and asks instead."""
+    conn, _helper = custody_book
+    hooks, receipt_id, _spend_id = _seed_pre_fix_duplicate(conn)
+    if authored == "tag":
+        conn.execute(
+            "INSERT INTO tags(id,workspace_id,profile_id,code,label,created_at) "
+            "VALUES('t','ws-1','profile-1','mine','Mine','2026-01-01T00:00:00Z')"
+        )
+        conn.execute(
+            "INSERT INTO transaction_tags(transaction_id,tag_id) VALUES(?, 't')",
+            (receipt_id,),
+        )
+    else:
+        conn.execute(
+            f"UPDATE transactions SET {authored} = 'authored' WHERE id = ?", (receipt_id,)
+        )
+    conn.commit()
+
+    with pytest.raises(AppError) as excinfo:
+        _widen_and_sync(conn, hooks)
+    assert excinfo.value.details["conflict_kind"] == "authored_superseded_transaction_row"
+    # Nothing was mutated on the failure path.
+    assert conn.execute("SELECT excluded FROM transactions WHERE id=?", (receipt_id,)).fetchone()[0] == 0
+
+
+def test_unauthored_pre_fix_duplicate_is_retired_on_the_next_sync(custody_book):
+    """The repair needs no migration: the next refresh reconciles the duplicate pair."""
+    conn, _helper = custody_book
+    hooks, receipt_id, spend_id = _seed_pre_fix_duplicate(conn)
+    assert conn.execute("SELECT COUNT(*) FROM transactions WHERE excluded=0").fetchone()[0] == 2
+
+    outcome = _widen_and_sync(conn, hooks)
+
+    assert outcome["observer_superseded"] == 1
+    assert outcome["observer_superseded_records"][0]["transaction_id"] == receipt_id
+    assert outcome["journal_invalidated"] is True
+    # Retired, never deleted: the row id still carries every reviewed reference.
+    assert conn.execute("SELECT excluded FROM transactions WHERE id=?", (receipt_id,)).fetchone()[0] == 1
+    active = conn.execute("SELECT id FROM transactions WHERE excluded=0").fetchall()
+    assert [row[0] for row in active] == [spend_id]
+
+
+def test_an_audited_exclusion_is_never_silently_bypassed(custody_book):
+    """A row the user deliberately excluded is not replaced by reinterpreting another."""
+    conn, _helper = custody_book
+    hooks, receipt_id, _spend_id = _seed_pre_fix_duplicate(conn)
+    # An audited exclusion leaves the observation commitment intact -- `excluded`
+    # is not part of it -- so this is exactly what a real user exclusion looks like.
+    conn.execute("UPDATE transactions SET excluded=1 WHERE id=?", (receipt_id,))
+    conn.commit()
+
+    with pytest.raises(AppError) as excinfo:
+        _narrow_and_sync(conn, hooks)
+    assert excinfo.value.details["conflict_kind"] == "excluded_direction_owns_observation"
+
+
+def test_narrowing_after_a_retirement_fails_closed_rather_than_re_including(custody_book):
+    """Refresh will not overturn an exclusion it created either.
+
+    `excluded` is outside the observation commitment, so a retired projection is
+    indistinguishable from one the user excluded. Rather than guess, refresh
+    stops and lets the user pick the keeper through the audited action.
+    """
+    conn, _helper = custody_book
+    hooks, receipt_id, spend_id = _seed_pre_fix_duplicate(conn)
+    _widen_and_sync(conn, hooks)
+    assert conn.execute("SELECT excluded FROM transactions WHERE id=?", (receipt_id,)).fetchone()[0] == 1
+
+    with pytest.raises(AppError) as excinfo:
+        _narrow_and_sync(conn, hooks)
+    assert excinfo.value.details["conflict_kind"] == "excluded_direction_owns_observation"
+    # Still exactly one active row; nothing was silently flipped back.
+    assert [row[0] for row in conn.execute("SELECT id FROM transactions WHERE excluded=0")] == [spend_id]
+
+
+def test_refresh_never_re_includes_an_excluded_transaction(custody_book):
+    """Refresh must not overturn an audited exclusion, even of its own observation.
+
+    `excluded` is not covered by the observation commitment, so a row the user
+    excluded is indistinguishable from one the observer retired. Re-including
+    either would silently revert a decision the user made on purpose.
+    """
+    conn, _helper = custody_book
+    hooks, receipt_id = _narrow_book(conn)
+    conn.execute("UPDATE transactions SET excluded=1 WHERE id=?", (receipt_id,))
+    conn.commit()
+
+    wallet = conn.execute("SELECT * FROM wallets WHERE id='w'").fetchone()
+    sync_wallet_from_backend(conn, {}, _profile(conn), wallet, hooks)
+
+    assert conn.execute(
+        "SELECT excluded FROM transactions WHERE id=?", (receipt_id,)
+    ).fetchone()[0] == 1
+
+
+def test_an_authored_kind_blocks_a_contradicting_direction_flip(custody_book):
+    """A user-authored kind may not be silently kept against the observed direction."""
+    conn, _helper = custody_book
+    hooks, receipt_id = _narrow_book(conn)
+    conn.execute("UPDATE transactions SET kind_override='buy' WHERE id=?", (receipt_id,))
+    conn.commit()
+
+    with pytest.raises(AppError) as excinfo:
+        _widen_and_sync(conn, hooks)
+    assert excinfo.value.details["conflict_kind"] == "authored_kind_contradicts_direction"
+    assert conn.execute("SELECT direction FROM transactions WHERE id=?", (receipt_id,)).fetchone()[0] == "inbound"
+
+
+def test_only_current_native_authority_may_be_reinterpreted(custody_book):
+    """A foreign row sharing the identifier is never reinterpreted across directions."""
+    conn, _helper = custody_book
+    hooks, receipt_id = _narrow_book(conn)
+    # Strip the closed commitment: without it the row is not this observer's to reinterpret.
+    conn.execute("DELETE FROM chain_observation_provenance WHERE transaction_id=?", (receipt_id,))
+    conn.commit()
+
+    _widen_and_sync(conn, hooks)
+
+    rows = {row["id"]: row["direction"] for row in conn.execute(
+        "SELECT id, direction FROM transactions WHERE excluded=0"
+    )}
+    # The untouchable row kept its direction and the observer wrote its own.
+    assert rows[receipt_id] == "inbound"
+    assert "outbound" in rows.values()
+
+
+def test_conflicting_observer_projection_records_fail_closed(custody_book):
+    """Two opposite-direction records for one (txid, asset) must not silently merge."""
+    from unittest.mock import Mock
+
+    from kassiber.core.imports import ImportCoordinatorHooks, insert_wallet_records
+
+    conn, _helper = custody_book
+    conn.execute("DELETE FROM wallets")
+    create_wallet(
+        conn, "ws-1", "profile-1", "Watched", "address", wallet_id="w",
+        config={"chain": "bitcoin", "network": "main", "addresses": [ADDR_A]},
+    )
+    wallet = conn.execute("SELECT * FROM wallets WHERE id='w'").fetchone()
+    before = [dict(row) for row in conn.execute("SELECT * FROM transactions ORDER BY id")]
+    record = {
+        "txid": "aa" * 32, "occurred_at": "2026-01-01T00:00:00Z",
+        "asset": "BTC", "amount": "0.001", "fee": "0",
+    }
+    with pytest.raises(AppError) as excinfo:
+        insert_wallet_records(
+            conn, _profile(conn), wallet,
+            [{**record, "direction": "inbound"}, {**record, "direction": "outbound"}],
+            "fixture",
+            ImportCoordinatorHooks(ensure_tag_row=Mock(), invalidate_journals=Mock()),
+            authoritative_chain_observer=True,
+        )
+    assert excinfo.value.details["conflict_kind"] == "conflicting_observer_projection_records"
+    assert [dict(row) for row in conn.execute("SELECT * FROM transactions ORDER BY id")] == before

@@ -1,10 +1,10 @@
 # External Document Reconciliation
 
-> This document describes the original BTC-side implementation. The proposed
+> This document describes the original BTC-side implementation. The accepted
 > opt-in organizational-accounting and document-AI extension is governed by
 > [plan 17](17-general-accounting-and-private-ai-spec.md), which supersedes the
-> product-wide general-ledger prohibition below. Existing shipped behavior and
-> security contracts remain unchanged until that work is implemented.
+> product-wide general-ledger prohibition below. The BTC reconciliation and security contracts remain binding; the broader
+> product scope belongs to plan 17.
 
 **Status:** Initial schema, CLI commands, daemon-safe list/suggest/review
 surfaces, and CSV subledger export have landed. Rich desktop workflow and AI
@@ -12,8 +12,8 @@ extraction remain future work.
 **Current source of truth:** shipped transaction attachments, BTCPay wallet
 history sync, `btcpay provenance`, `documents`, `reports commercial-subledger`,
 `TODO.md`, and this boundary doc.
-**Core rule:** Kassiber is the BTC-side subledger. It is not an invoicing, VAT,
-ERP, or general-ledger product.
+**Boundary:** This subsystem reconciles BTC evidence. Invoice issuance, ERP,
+and automatic filing are outside it; the opt-in general ledger is separate.
 
 ## Problem
 
@@ -132,7 +132,7 @@ models. Any remote model use must be explicit opt-in.
    platforms with no predefined importer (the model maps header names and label
    vocabulary; the deterministic importer still reads every value, so an
    off-device provider only ever sees headers and counts). See
-   [docs/reference/imports.md](docs/reference/imports.md).
+   [imports reference](../reference/imports.md).
 
 ## One-Line Restatement
 
