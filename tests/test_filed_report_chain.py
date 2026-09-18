@@ -10,11 +10,13 @@ from kassiber.cli.handlers import _wallet_sync_hooks, process_journals
 from kassiber.core import custody_filed_reports as reports, filed_report_chain as impacts
 from kassiber.core import chain_analysis_watches as watches
 from kassiber.core.sync import sync_wallet_from_backend
+from kassiber.core.wallets import update_wallet
+from tests.custody_tax_helpers import persist_authoritative_chain_observation
 from kassiber.core.sync_backends import record_from_bitcoin_esplora_tx
 from kassiber.db import open_db
 from kassiber.chain_analysis_watches_schema import ensure_inbox_sources
 from tests import test_rp2_ownership_transfers as ownership_fixtures
-from tests.test_source_overlap import ADDR_A, _script
+from tests.test_source_overlap import ADDR_A, ADDR_B, _script
 
 TX = "aa" * 32
 PROFILE = "profile-1"
@@ -28,7 +30,7 @@ def book(tmp_path):
     conn.commit()
     state = {"confirmed": True, "block_hash": "11" * 32, "retracted": False}
     graph = {"txid": TX, "chain": "bitcoin", "network": "main", "fee": 10,
-             "vin": [{"txid": "bb" * 32, "vout": 0, "prevout": {"scriptpubkey": "0014" + "ff" * 20, "value": 100010}}],
+             "vin": [{"txid": "bb" * 32, "vout": 0, "prevout": {"scriptpubkey": _script(ADDR_B), "value": 100010}}],
              "vout": [{"n": 0, "scriptpubkey": _script(ADDR_A), "value": 100000}]}
 
     def adapter(_backend, _wallet, sync_state):
@@ -169,6 +171,43 @@ def test_missing_authority_is_coverage_loss_not_retraction(book):
     assert sync()["saved_report_impacts"] == 1
     process_journals(conn, "Main", "Default")
     assert watches.inbox(conn, PROFILE, {})["items"][-1]["report_impact"]["resolution"] is not None
+
+
+def test_a_retired_projection_does_not_hide_the_replacement_from_a_saved_report(book):
+    """A book carries the pre-fix duplicate pair for one txid: the receipt the
+    report was built on, and a spend row the old direction-qualified matcher left
+    beside it. Widening the watched scripts lets the observer reconcile them: it
+    keeps the spend and retires the receipt (excluded=1, never deleted). The
+    saved report depended on the receipt, so its input has changed. An
+    unfiltered current-row read finds the retired receipt first and reports
+    nothing; the inbox must carry the change."""
+    conn, state, sync, export, _ = book
+    export()
+    receipt_id = conn.execute("SELECT transaction_id FROM filed_report_chain_dependencies").fetchone()[0]
+    receipt = conn.execute("SELECT * FROM transactions WHERE id=?", (receipt_id,)).fetchone()
+    columns = [key for key in receipt.keys() if key != "id"]
+    overrides = {"direction": "outbound", "kind": "withdrawal", "amount": 10_000, "fee": 10_000, "fingerprint": "pre-fix-fp"}
+    conn.execute(
+        f"INSERT INTO transactions (id,{','.join(columns)}) VALUES ({','.join('?' for _ in range(len(columns) + 1))})",
+        ("pre-fix-spend", *[overrides.get(key, receipt[key]) for key in columns]),
+    )
+    conn.commit()
+    persist_authoritative_chain_observation(conn, "pre-fix-spend", observer_kind="esplora")
+    update_wallet(conn, "ws-1", PROFILE, "wallet-a",
+                  {"config": {"chain": "bitcoin", "network": "main", "addresses": [ADDR_A, ADDR_B]}})
+    outcome = sync()
+    assert outcome["observer_superseded"] == 1
+    assert outcome["observer_superseded_records"][0]["transaction_id"] == receipt_id
+    assert conn.execute("SELECT excluded FROM transactions WHERE id=?", (receipt_id,)).fetchone()[0] == 1
+    assert conn.execute("SELECT direction FROM transactions WHERE id='pre-fix-spend' AND excluded=0").fetchone()[0] == "outbound"
+    items = watches.inbox(conn, PROFILE, {})["items"]
+    assert [item["code"] for item in items] == ["evidence_changed"]
+    assert items[0]["report_impact"]["transaction_id"] == receipt_id
+    assert items[0]["observation"]["after"]["status"] == "observed"
+    assert items[0]["observation"]["after"]["quantity_hash"] != items[0]["observation"]["before"]["quantity_hash"]
+    # Steady state: the replacement is the current observation; nothing new to say.
+    assert sync()["saved_report_impacts"] == 0
+    assert len(watches.inbox(conn, PROFILE, {})["items"]) == 1
 
 
 def test_sync_rollback_rolls_back_report_items_and_authority(book):
