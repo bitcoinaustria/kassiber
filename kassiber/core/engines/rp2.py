@@ -1437,6 +1437,10 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
                 "capital_gains_type": capital_gains_type,
             },
         )
+        from .explanation import gain_fragment
+        event.setdefault("calculation_fragments", []).append(
+            gain_fragment(gain_loss, row_by_id, computed_data)
+        )
         event["quantity"] += dec(gain_loss.crypto_amount)
         event["cost_basis"] += dec(gain_loss.fiat_cost_basis)
         event["proceeds"] += dec(gain_loss.taxable_event_fiat_amount_with_fee_fraction)
@@ -1478,6 +1482,11 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
             entry["at_category"] = event["at_category"]
             entry["at_kennzahl"] = event["at_kennzahl"]
         entry["capital_gains_type"] = event["capital_gains_type"]
+        entry["calculation"] = {
+            "schema_version": 1, "engine": "rp2",
+            "method": _profile_str(profile, "gains_algorithm"),
+            "fragments": event["calculation_fragments"],
+        }
         entries.append(entry)
 
     for audit in intra_audit:

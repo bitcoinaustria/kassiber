@@ -183,6 +183,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.profiles.switch",
   "ui.profiles.reset_data",
   "ui.reports.capital_gains",
+  "ui.reports.explain_capital_gain",
   "ui.reports.summary",
   "ui.reports.balance_sheet",
   "ui.reports.portfolio_summary",
@@ -272,6 +273,10 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.projects.list",
   "ui.projects.create",
   "ui.projects.select",
+  "ui.backup.export",
+  "ui.backup.preview",
+  "ui.backup.apply",
+  "ui.backup.cancel",
   "ui.secrets.init",
   "ui.secrets.change_passphrase",
   "ui.secrets.forget_cli_unlock",
@@ -396,6 +401,9 @@ const STREAM_CAPABLE_BRIDGE_KINDS = new Set([
   "ui.sync.push",
   "ui.sync.pull",
   "ui.sync.join",
+  "ui.backup.export",
+  "ui.backup.preview",
+  "ui.backup.apply",
 ]);
 const STREAM_ONLY_BRIDGE_KINDS = new Set(["ai.chat"]);
 

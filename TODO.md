@@ -136,8 +136,6 @@ remains outside that closeout.
   capital gains, and mixed-fiat semantics book-scoped.
 - [ ] Add destructive single-book deletion UX and a scoped `ui.profiles.delete`
   contract. Resetting book data and deleting a workspace are separate actions.
-- [ ] Add GUI backup/restore on narrow daemon kinds using the existing backup
-  core, with explicit review and isolated restore verification.
 - [ ] Add scoped handoff import, selected-books audit-package export, and an
   actionable restricted technical-wallet-evidence path. Single-book audit export
   already exists; do not widen default disclosure when adding these paths.

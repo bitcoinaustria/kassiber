@@ -11,6 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from kassiber import daemon
+from kassiber.daemon_backup import BackupSessions
 from kassiber.cli.main import build_parser, dispatch as cli_dispatch
 from kassiber.core.chain_analysis_api import dispatch
 from kassiber.core.chain_analysis_ai import project_ai_result
@@ -102,7 +103,7 @@ def test_background_dataset_preview_import_public_exposure_and_case_revocation(b
 def test_native_analysis_stage_is_scope_bound_and_never_a_renderer_path_tool(book):
     conn, root = book
     from types import SimpleNamespace
-    ctx = SimpleNamespace(conn=conn, data_root=str(root), runtime_config={})
+    ctx = SimpleNamespace(conn=conn, data_root=str(root), runtime_config={}, backup_sessions=BackupSessions())
     path = root / "source.psbt"
     path.write_bytes(sample().serialize())
     response, _ = daemon.handle_request(ctx, {"kind": "internal.chain_analysis.stage", "request_id": "stage", "args": {"source_file": str(path), "purpose": "psbt", "expected_scope": {"workspace_id": "ws", "profile_id": "profile"}}}, None)
