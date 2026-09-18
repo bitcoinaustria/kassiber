@@ -3066,6 +3066,10 @@ def build_parser() -> argparse.ArgumentParser:
         report.add_argument("--profile")
         if report_name == "summary":
             report.add_argument("--wallet")
+    explanation = reports_sub.add_parser("explain-capital-gain")
+    explanation.add_argument("--workspace")
+    explanation.add_argument("--profile")
+    explanation.add_argument("--reference", required=True, help="Exact explanation_reference JSON from reports capital-gains.")
     psbt_privacy = reports_sub.add_parser("psbt-privacy")
     psbt_privacy.add_argument("--workspace")
     psbt_privacy.add_argument("--profile")
@@ -5613,6 +5617,14 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     conn, args.workspace, args.profile, report_hooks
                 ),
             )
+        if args.reports_command == "explain-capital-gain":
+            from ..core.report_explanation import explain_capital_gain
+            _, profile = report_hooks.resolve_scope(conn, args.workspace, args.profile)
+            try:
+                reference = json.loads(args.reference)
+            except ValueError as exc:
+                raise AppError("Result reference must be JSON", code="validation") from exc
+            return emit(args, explain_capital_gain(conn, profile, reference))
         if args.reports_command == "capital-gains":
             return emit(
                 args,
