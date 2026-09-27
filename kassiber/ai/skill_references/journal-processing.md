@@ -123,8 +123,16 @@ kassiber journals quarantine resolve price-override --transaction <transaction-i
 kassiber journals quarantine resolve exclude --transaction <transaction-id>
 ```
 
-`journals quarantined` has no pagination or `--limit`. The individual AI tool
-`ui.journals.quarantine.resolve` repairs reviewed prices or explicit exclusions.
+`journals quarantined` has no pagination or `--limit`; `ui.journals.quarantine`
+pages with `limit`/`offset`. Every row carries `category`, `blocks_reports`,
+`is_downstream`, `root`, `evidence` and ordered `actions`, and the summary
+groups rows by root cause, reports `freshness` and lists `assumptions`
+(presumed disposals and kind-less receipts booked as purchases). Explain the
+root cause first: a `downstream` row clears when its `root` is resolved, and
+excluding it never fixes anything. Name the wallet or evidence the user has to
+provide from `evidence`, and do not present an assumption as proven. The
+individual AI tool `ui.journals.quarantine.resolve` repairs reviewed prices or
+explicit exclusions.
 After custody mutations outside `ui.review.apply`, run `ui.journals.process`
 and reread quarantine/report blockers; an applied component alone does not
 mean the book is resolved.

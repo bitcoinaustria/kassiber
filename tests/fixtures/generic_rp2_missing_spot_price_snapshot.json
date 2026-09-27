@@ -17,7 +17,23 @@
       "fee_msat": 0,
       "occurred_at": "2024-05-01T12:00:00Z",
       "reason": "missing_spot_price",
-      "wallet": "MissingPrice"
+      "wallet": "MissingPrice",
+      "category": "missing_price",
+      "blocks_reports": false,
+      "is_downstream": false,
+      "root": null,
+      "reasons": [
+        "missing_spot_price"
+      ],
+      "evidence": {
+        "wallet_label": "MissingPrice"
+      },
+      "actions": [
+        {
+          "kind": "set_price",
+          "transaction_id": "missing-price"
+        }
+      ]
     }
   ],
   "summary": {

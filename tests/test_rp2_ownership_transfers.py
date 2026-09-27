@@ -63,6 +63,26 @@ WALLET_REFS = {
 }
 
 
+def _root_quarantine_reasons(test, quarantines):
+    """Reasons of rows with their own problem; downstream rows must name one.
+
+    Rows held behind a pool's basis barrier (for example receipts that share
+    the blocked event's instant) are reported as downstream quarantines that
+    point at the transactions whose unresolved state set the barrier.
+    """
+
+    quarantines = list(quarantines)
+    roots = [q for q in quarantines if q["reason"] != "custody_basis_barrier"]
+    root_ids = {q["transaction_id"] for q in roots}
+    for quarantine in quarantines:
+        if quarantine["reason"] != "custody_basis_barrier":
+            continue
+        pointers = json.loads(quarantine["detail_json"])["root_transaction_ids"]
+        test.assertTrue(pointers)
+        test.assertLessEqual(set(pointers), root_ids)
+    return sorted(q["reason"] for q in roots)
+
+
 def _match(wallet_id, label):
     return OwnedMatch(wallet_id, label, "", "bitcoin", "main", "", None, None, "derived")
 
@@ -303,6 +323,88 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
             {fake_b["id"], fake_c["id"]},
         )
 
+    def test_untrusted_nonconserving_receipts_cannot_hold_graph_proven_disposal(self):
+        # Same forged shape, but the claimed receipts no longer conserve, so
+        # the recorded fan-out decomposer declines. The graph deriver remains
+        # the authority for a graph-bearing transaction: an unsupported
+        # same-txid receipt must not turn its proven external payment into an
+        # owned_fanout_unresolved hold.
+        txid = "external-with-forged-partial-fanout"
+        graph = _external_payment_json(txid)
+        source = _row(
+            "A", "outbound", 80 * BTC // 100, external_id=txid, raw_json=graph
+        )
+        fake_b = _without_observer_authority(
+            _row("B", "inbound", 50 * BTC // 100, external_id=txid, raw_json=graph)
+        )
+        fake_c = _without_observer_authority(
+            _row("C", "inbound", 20 * BTC // 100, external_id=txid, raw_json=graph)
+        )
+        acquisition = _row("A", "inbound", BTC, external_id="acq-forged-partial")
+        acquisition["occurred_at"] = "2025-01-01T00:00:00Z"
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
+            finalized_tax_inputs(
+                PROFILE,
+                rows=[acquisition, source, fake_b, fake_c],
+                wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[],
+                owned_index=_fanout_index(),
+            )
+        )
+
+        self.assertNotIn(
+            "owned_fanout_unresolved", {q["reason"] for q in state.quarantines}
+        )
+        self.assertIn(
+            (source["id"], "disposal"),
+            {(entry["transaction_id"], entry["entry_type"]) for entry in state.entries},
+        )
+
+    def test_partially_derived_graph_fanout_holds_whole_group(self):
+        # The graph proves A -> B, but C's script is missing from the index, so
+        # the deriver treats C's output as part of A's external remainder even
+        # though C's own observer recorded the receipt. Booking the proven leg
+        # would dispose of C's 0.2 BTC and acquire it again in C.
+        graph = json.dumps(
+            {
+                "txid": "partial-graph-fanout",
+                "vin": [{"txid": "prevtx", "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A}}],
+                "vout": [
+                    {"n": 0, "scriptpubkey": SCRIPT_B, "value": 50_000_000},
+                    {"n": 1, "scriptpubkey": SCRIPT_C, "value": 20_000_000},
+                    {"n": 2, "scriptpubkey": "0014" + "ee" * 20, "value": 10_000_000},
+                ],
+            }
+        )
+        index = OwnedIndex()
+        index.add_script(SCRIPT_A, _match("A", "Cold"))
+        index.add_script(SCRIPT_B, _match("B", "Hot"))
+        acquisition = _row("A", "inbound", BTC, external_id="acq-partial-graph")
+        acquisition["occurred_at"] = "2025-01-01T00:00:00Z"
+        rows = [
+            acquisition,
+            _row("A", "outbound", 80 * BTC // 100, external_id="partial-graph-fanout",
+                 raw_json=graph),
+            _row("B", "inbound", 50 * BTC // 100, external_id="partial-graph-fanout"),
+            _row("C", "inbound", 20 * BTC // 100, external_id="partial-graph-fanout"),
+        ]
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(
+            finalized_tax_inputs(
+                PROFILE, rows=rows, wallet_refs_by_id=WALLET_REFS,
+                manual_pair_records=[], owned_index=index,
+            )
+        )
+
+        held = {
+            q["transaction_id"]
+            for q in state.quarantines
+            if q["reason"] == "owned_fanout_unresolved"
+        }
+        self.assertEqual(held, {row["id"] for row in rows[1:]})
+        self.assertEqual(
+            [entry["entry_type"] for entry in state.entries], ["acquisition"]
+        )
+
     def test_fanout_becomes_moves_with_deriver(self):
         state = self._run(owned_index=_fanout_index())
         reasons = {q["reason"] for q in state.quarantines}
@@ -421,7 +523,7 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            sorted(q["reason"] for q in state.quarantines),
+            _root_quarantine_reasons(self, state.quarantines),
             ["ownership_transfer_duplicate_outbound"] * 3,
         )
         self.assertFalse(
@@ -1100,8 +1202,18 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
             )
         )
         self.assertEqual(
-            [q["reason"] for q in state.quarantines],
+            _root_quarantine_reasons(self, state.quarantines),
             ["ownership_transfer_destination_ambiguous"],
+        )
+        # The same-instant acquisition and both candidate receipts are held too;
+        # they are listed as downstream rows instead of vanishing silently.
+        self.assertEqual(
+            sorted(
+                q["transaction_id"]
+                for q in state.quarantines
+                if q["reason"] == "custody_basis_barrier"
+            ),
+            sorted(row["id"] for row in rows if row["direction"] == "inbound"),
         )
         entry_types = [entry["entry_type"] for entry in state.entries]
         # The graph proves an owned destination, while two imported receipts are
@@ -1191,7 +1303,7 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
         # ownership interpreter identifies the actual ambiguity and applies its
         # blocker atomically to every physical-event leg.
         self.assertEqual(
-            sorted(q["reason"] for q in state.quarantines),
+            _root_quarantine_reasons(self, state.quarantines),
             ["ownership_transfer_destination_ambiguous"] * 3,
         )
         self.assertNotIn("transfer_in", [entry["entry_type"] for entry in state.entries])
@@ -1505,7 +1617,7 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
             return sum(
                 float(totals["quantity"])
                 for _, totals in state.wallet_holdings.items()
-            ), [q["reason"] for q in state.quarantines]
+            ), _root_quarantine_reasons(self, state.quarantines)
 
         index = OwnedIndex()
         index.add_script(SCRIPT_A, _match("A", "Cold"))
@@ -2897,6 +3009,317 @@ class CollaborativeBitcoinFeeTest(unittest.TestCase):
         self.assertEqual(btc_to_msat(record["amount"]), 10_000_000)
         self.assertEqual(btc_to_msat(record["fee"]), 0)
         self.assertEqual(json.loads(record["raw_json"])["fee"], 20_000)
+
+
+class RawObservationHoldJournalTest(unittest.TestCase):
+    """Fail-closed holds applied before custody arbitration (`journals process`).
+
+    Every finalized projection row has a synthetic ``custody-tax:`` id, so the
+    tax-event detectors for these shapes no longer see them. Without the
+    interpreter holds, the rows below either booked as an unrelated disposal
+    plus fresh acquisition (phantom gain) or were stored as a verified custody
+    MOVE while the tax side quarantined them.
+    """
+
+    TXID = "ab" * 32
+    PREVOUT = "ef" * 32
+
+    def _book(self):
+        tmp = tempfile.TemporaryDirectory(prefix="kassiber-raw-holds-")
+        self.addCleanup(tmp.cleanup)
+        conn = open_db(Path(tmp.name) / "data")
+        self.addCleanup(conn.close)
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES('ws-1', 'Main', ?)",
+            (NOW,),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, created_at
+            ) VALUES('profile-1', 'ws-1', 'Default', 'USD', 'generic', 365, 'FIFO', ?)
+            """,
+            (NOW,),
+        )
+        conn.execute(
+            """
+            INSERT INTO accounts(
+                id, workspace_id, profile_id, code, label, account_type, asset, created_at
+            ) VALUES('acct-1', 'ws-1', 'profile-1', 'treasury', 'Treasury', 'asset', 'BTC', ?)
+            """,
+            (NOW,),
+        )
+        for wallet_id, label in (
+            ("wallet-a", "Cold"), ("wallet-b", "Hot"), ("wallet-c", "Savings"),
+        ):
+            conn.execute(
+                """
+                INSERT INTO wallets(
+                    id, workspace_id, profile_id, account_id, label, kind, config_json, created_at
+                ) VALUES(?, 'ws-1', 'profile-1', 'acct-1', ?, 'custom', ?, ?)
+                """,
+                (
+                    wallet_id, label,
+                    json.dumps({"chain": "bitcoin", "network": "main"}), NOW,
+                ),
+            )
+        self._tx(
+            conn, "acq", "wallet-a", "inbound", BTC, external_id="acq-1",
+            occurred_at="2025-01-01T00:00:00Z", rate=10_000.0,
+        )
+        return conn
+
+    def _tx(
+        self, conn, tx_id, wallet_id, direction, amount, *, external_id,
+        raw_json="{}", fee=0, occurred_at="2025-06-01T00:00:00Z", rate=60_000.0,
+        authoritative=False,
+    ):
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, direction, asset, amount, fee, fiat_currency,
+                fiat_rate, fiat_value, kind, raw_json, created_at
+            ) VALUES(?, 'ws-1', 'profile-1', ?, ?, ?, ?, ?, 'BTC', ?, ?, 'USD', ?, NULL, ?, ?, ?)
+            """,
+            (
+                tx_id, wallet_id, external_id, f"fp-{tx_id}", occurred_at,
+                direction, amount, fee, rate,
+                "withdrawal" if direction == "outbound" else "deposit",
+                raw_json, NOW,
+            ),
+        )
+        if authoritative:
+            persist_authoritative_chain_observation(conn, tx_id)
+
+    def _graphless_chain_tx(self, conn, tx_id, wallet_id, direction, amount, **kwargs):
+        # A graphless chain-observer row: canonical txid, no vin/vout.
+        self._tx(
+            conn, tx_id, wallet_id, direction, amount,
+            external_id=self.TXID,
+            raw_json=json.dumps(
+                {"txid": self.TXID, "chain": "bitcoin", "network": "main"}
+            ),
+            authoritative=True,
+            **kwargs,
+        )
+
+    def _process(self, conn):
+        conn.commit()
+        result = handlers.process_journals(conn, "Main", "Default")
+        quarantines = {
+            row["transaction_id"]: row["reason"]
+            for row in conn.execute(
+                "SELECT transaction_id, reason FROM journal_quarantines"
+            )
+        }
+        entries = sorted(
+            (row["transaction_id"], row["entry_type"])
+            for row in conn.execute(
+                "SELECT transaction_id, entry_type FROM journal_entries"
+            )
+        )
+        decisions = sorted(
+            (row["source_transaction_id"], row["target_transaction_id"])
+            for row in conn.execute(
+                "SELECT source_transaction_id, target_transaction_id "
+                "FROM journal_custody_decisions"
+            )
+        )
+        return result, quarantines, entries, decisions
+
+    def test_shared_provider_id_across_wallets_holds_until_reviewed(self):
+        conn = self._book()
+        self._tx(conn, "a-out", "wallet-a", "outbound", 50 * BTC // 100,
+                 external_id="provider-batch-7")
+        self._tx(conn, "b-in", "wallet-b", "inbound", 50 * BTC // 100,
+                 external_id="provider-batch-7")
+
+        _result, quarantines, entries, decisions = self._process(conn)
+
+        # Previously: a $25,000 phantom gain (SELL a-out + fresh BUY b-in).
+        self.assertEqual(
+            quarantines,
+            {"a-out": "unscoped_transfer_review", "b-in": "unscoped_transfer_review"},
+        )
+        self.assertEqual(entries, [("acq", "acquisition")])
+        self.assertEqual(decisions, [])
+
+        # The documented resolution (an explicit reviewed link) clears the hold.
+        handlers.create_transaction_pair(
+            conn, "Main", "Default", "a-out", "b-in", policy="carrying-value",
+        )
+        _result, quarantines, entries, _decisions = self._process(conn)
+        self.assertEqual(quarantines, {})
+        self.assertEqual(
+            entries,
+            [("a-out", "transfer_out"), ("acq", "acquisition"), ("b-in", "transfer_in")],
+        )
+
+    def test_nonconserving_graphless_fanout_holds_whole_group(self):
+        conn = self._book()
+        # 0.1 BTC of the 0.8 BTC spend went to an unsynced wallet or an
+        # external party; the rows cannot tell which.
+        self._graphless_chain_tx(conn, "a-out", "wallet-a", "outbound", 80 * BTC // 100)
+        self._graphless_chain_tx(conn, "b-in", "wallet-b", "inbound", 50 * BTC // 100)
+        self._graphless_chain_tx(conn, "c-in", "wallet-c", "inbound", 20 * BTC // 100)
+
+        _result, quarantines, entries, decisions = self._process(conn)
+
+        # Previously: SELL 0.8 BTC plus fresh BUYs of 0.5 and 0.2 BTC.
+        self.assertEqual(
+            quarantines,
+            {
+                "a-out": "owned_fanout_unresolved",
+                "b-in": "owned_fanout_unresolved",
+                "c-in": "owned_fanout_unresolved",
+            },
+        )
+        self.assertEqual(entries, [("acq", "acquisition")])
+        self.assertEqual(decisions, [])
+
+    def test_conserving_graphless_fanout_still_books_moves(self):
+        conn = self._book()
+        self._graphless_chain_tx(conn, "a-out", "wallet-a", "outbound", 70 * BTC // 100)
+        self._graphless_chain_tx(conn, "b-in", "wallet-b", "inbound", 50 * BTC // 100)
+        self._graphless_chain_tx(conn, "c-in", "wallet-c", "inbound", 20 * BTC // 100)
+
+        _result, quarantines, entries, decisions = self._process(conn)
+
+        self.assertEqual(quarantines, {})
+        self.assertEqual(decisions, [("a-out", "b-in"), ("a-out", "c-in")])
+        self.assertNotIn("disposal", [entry_type for _, entry_type in entries])
+
+    def test_one_to_one_partial_payment_is_not_a_fanout_hold(self):
+        conn = self._book()
+        # The documented partial-payment path: the owned receipt moves and the
+        # remainder stays a presumed external disposal. No large-residual hold.
+        self._graphless_chain_tx(conn, "a-out", "wallet-a", "outbound", 80 * BTC // 100)
+        self._graphless_chain_tx(conn, "b-in", "wallet-b", "inbound", 50 * BTC // 100)
+
+        _result, quarantines, entries, decisions = self._process(conn)
+
+        self.assertEqual(quarantines, {})
+        self.assertEqual(decisions, [("a-out", "b-in")])
+        self.assertEqual(
+            entries,
+            [
+                ("a-out", "disposal"),
+                ("a-out", "transfer_out"),
+                ("acq", "acquisition"),
+                ("b-in", "transfer_in"),
+            ],
+        )
+
+    def test_graphless_multi_source_consolidation_holds(self):
+        conn = self._book()
+        self._tx(
+            conn, "acq-b", "wallet-b", "inbound", BTC, external_id="acq-2",
+            occurred_at="2025-01-01T00:00:00Z", rate=10_000.0,
+        )
+        self._graphless_chain_tx(conn, "a-out", "wallet-a", "outbound", 30 * BTC // 100)
+        self._graphless_chain_tx(conn, "b-out", "wallet-b", "outbound", 20 * BTC // 100)
+        self._graphless_chain_tx(conn, "c-in", "wallet-c", "inbound", 50 * BTC // 100)
+
+        _result, quarantines, entries, decisions = self._process(conn)
+
+        self.assertEqual(
+            quarantines,
+            {
+                "a-out": "owned_fanout_unresolved",
+                "b-out": "owned_fanout_unresolved",
+                "c-in": "owned_fanout_unresolved",
+            },
+        )
+        self.assertEqual(entries, [("acq", "acquisition"), ("acq-b", "acquisition")])
+        self.assertEqual(decisions, [])
+
+    def _graph(self, txid, *, confirmed, value_sats=50_000_000, script=SCRIPT_B):
+        return json.dumps(
+            {
+                "txid": txid,
+                "chain": "bitcoin",
+                "network": "main",
+                "status": {"confirmed": confirmed},
+                "vin": [
+                    {
+                        "txid": self.PREVOUT,
+                        "vout": 0,
+                        "prevout": {"scriptpubkey": SCRIPT_A, "value": value_sats + 1000},
+                    }
+                ],
+                "vout": [{"n": 0, "scriptpubkey": script, "value": value_sats}],
+            }
+        )
+
+    def test_pending_self_transfer_is_not_a_verified_custody_move(self):
+        for confirmed in (False, True):
+            with self.subTest(confirmed=confirmed):
+                conn = self._book()
+                graph = self._graph(self.TXID, confirmed=confirmed)
+                self._tx(conn, "a-out", "wallet-a", "outbound", 50 * BTC // 100,
+                         external_id=self.TXID, raw_json=graph, fee=1_000_000,
+                         authoritative=True)
+                self._tx(conn, "b-in", "wallet-b", "inbound", 50 * BTC // 100,
+                         external_id=self.TXID, raw_json=graph, authoritative=True)
+
+                result, quarantines, entries, decisions = self._process(conn)
+
+                if confirmed:
+                    self.assertEqual(quarantines, {})
+                    self.assertEqual(decisions, [("a-out", "b-in")])
+                    continue
+                # Previously the lineage index stored an internal_verified
+                # a-out -> b-in MOVE while tax quarantined both legs.
+                self.assertEqual(decisions, [])
+                self.assertEqual(
+                    quarantines,
+                    {
+                        "a-out": "pending_onchain_confirmation",
+                        "b-in": "pending_onchain_confirmation",
+                    },
+                )
+                self.assertEqual(entries, [("acq", "acquisition")])
+                # Waiting for a confirmation is not a custody gap: the rows stay
+                # out of booking without freezing later basis or every report.
+                self.assertFalse(result["custody_quantity"]["blocked"])
+
+    def test_rbf_losing_self_transfer_is_not_a_verified_custody_move(self):
+        conn = self._book()
+        loser = self._graph(self.TXID, confirmed=False)
+        winner_txid = "cd" * 32
+        winner = self._graph(
+            winner_txid, confirmed=True, value_sats=49_000_000,
+            script=SCRIPT_EXT,
+        )
+        self._tx(conn, "a-out-loser", "wallet-a", "outbound", 50 * BTC // 100,
+                 external_id=self.TXID, raw_json=loser, fee=1_000_000,
+                 authoritative=True)
+        self._tx(conn, "b-in-loser", "wallet-b", "inbound", 50 * BTC // 100,
+                 external_id=self.TXID, raw_json=loser, authoritative=True)
+        self._tx(conn, "a-out-winner", "wallet-a", "outbound", 49 * BTC // 100,
+                 external_id=winner_txid, raw_json=winner, fee=2_000_000,
+                 occurred_at="2025-06-01T00:10:00Z", authoritative=True)
+
+        _result, quarantines, _entries, decisions = self._process(conn)
+
+        # Previously the losing replacement was stored as a verified MOVE,
+        # crediting 0.5 BTC to Hot from a prevout the winner actually spent.
+        self.assertEqual(decisions, [])
+        self.assertEqual(quarantines["a-out-loser"], "conflicting_spend")
+        self.assertEqual(quarantines["b-in-loser"], "conflicting_spend")
+        blocked = {
+            (json.loads(row["transaction_ids_json"])[0], row["reason"])
+            for row in conn.execute(
+                "SELECT transaction_ids_json, reason FROM journal_quantity_issues "
+                "WHERE issue_type = 'custody_interpreter_blocked'"
+            )
+        }
+        # A replaced spend is held until the backend retracts it; it is not
+        # a custody gap, so it neither freezes later basis nor blocks reports.
+        self.assertEqual(blocked, set())
+        self.assertFalse(_result["custody_quantity"]["blocked"])
 
 
 if __name__ == "__main__":
