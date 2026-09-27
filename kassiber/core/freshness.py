@@ -657,6 +657,36 @@ def _set_cancelled(
     return get_job(conn, job["id"])
 
 
+def _merge_pending_journal_payload(
+    conn: sqlite3.Connection,
+    existing: sqlite3.Row,
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Fold a second journal request into the job that is still waiting.
+
+    A reused single-flight job must not silently drop what the later caller
+    asked for: automatic pairing is requested if either caller wants it, and the
+    rebuild may be skipped for a current projection only if both callers allow
+    it.
+    """
+
+    current = _json_load(existing["payload_json"], {})
+    merged = dict(current)
+    if payload.get("auto_pair"):
+        merged["auto_pair"] = True
+    if not (current.get("skip_rebuild_when_current") and payload.get("skip_rebuild_when_current")):
+        merged.pop("skip_rebuild_when_current", None)
+    if merged != current:
+        conn.execute(
+            "UPDATE freshness_jobs SET payload_json = ?, updated_at = ? WHERE id = ?",
+            (_json_dump(redact_freshness_payload(merged)), now_iso(), existing["id"]),
+        )
+        existing = conn.execute(
+            "SELECT * FROM freshness_jobs WHERE id = ?", (existing["id"],)
+        ).fetchone()
+    return _row_payload(existing)
+
+
 def enqueue_job(
     conn: sqlite3.Connection,
     *,
@@ -701,6 +731,8 @@ def enqueue_job(
         # gets the in-flight (possibly incremental) job; re-run the rescan once
         # it settles if the forced payload matters.
         if single_flight or existing["status"] == JOB_RUNNING:
+            if existing["status"] != JOB_RUNNING and job_type == JOB_JOURNAL_REFRESH:
+                return _merge_pending_journal_payload(conn, existing, payload or {})
             return _row_payload(existing)
         _set_cancelled(conn, _row_payload(existing))
     job_id = str(uuid.uuid4())

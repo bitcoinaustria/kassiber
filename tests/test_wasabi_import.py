@@ -374,6 +374,15 @@ class WasabiImportFlowTest(unittest.TestCase):
 
             tax_payload = _run_cli(data_root, "journals", "process")["data"]
             self.assertGreaterEqual(tax_payload["quarantined"], 1)
+            self.assertNotIn("auto_pair", tax_payload)
+            # --auto-pair runs the desktop's local step: exact pairing, then a
+            # rebuild of the requested book. CoinJoin rows stay quarantined.
+            paired_payload = _run_cli(
+                data_root, "journals", "process", "--auto-pair"
+            )["data"]
+            self.assertTrue(paired_payload["rebuilt"])
+            self.assertTrue(paired_payload["auto_pair"]["enabled"])
+            self.assertEqual(paired_payload["quarantined"], tax_payload["quarantined"])
             conn = open_db(data_root)
             try:
                 quarantine_reasons = {
@@ -427,6 +436,13 @@ class WasabiImportFlowTest(unittest.TestCase):
                 daemon_import = _read_daemon_until(daemon, "ui.wallets.import_file")
                 self.assertEqual(daemon_import["kind"], "ui.wallets.import_file")
                 self.assertEqual(daemon_import["data"]["wasabi_transactions"], 3)
+                # A desktop import finishes with the local journal step, so the
+                # imported history is booked without a separate processing run
+                # (already processed CLI rows leave the projection current).
+                self.assertIn(
+                    daemon_import["data"]["journals"]["status"], {"processed", "current"}
+                )
+                self.assertIsInstance(daemon_import["data"]["journals"]["quarantines"], int)
             finally:
                 _stop_daemon(daemon)
 

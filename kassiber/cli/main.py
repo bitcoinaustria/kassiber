@@ -28,6 +28,7 @@ if getattr(sys, "frozen", False) and sys.argv[1:2] == ["--accounting-document-wo
     raise SystemExit(2)
 
 from .. import daemon as daemon_runtime
+from .. import daemon_freshness
 from ..ai import (
     AI_PROVIDER_KINDS,
     clear_default_ai_provider,
@@ -2324,6 +2325,14 @@ def build_parser() -> argparse.ArgumentParser:
     journals_process = journals_sub.add_parser("process")
     journals_process.add_argument("--workspace")
     journals_process.add_argument("--profile")
+    journals_process.add_argument(
+        "--auto-pair",
+        action="store_true",
+        help=(
+            "Apply exact automatic transfer pairs first, as the desktop does "
+            "after a sync or when processing journals"
+        ),
+    )
     journals_list = journals_sub.add_parser("list")
     journals_list.add_argument("--workspace")
     journals_list.add_argument("--profile")
@@ -4664,7 +4673,17 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     )
     if args.command == "journals":
         if args.journals_command == "process":
-            return emit(args, process_journals(conn, args.workspace, args.profile))
+            if not args.auto_pair:
+                return emit(args, process_journals(conn, args.workspace, args.profile))
+            _, journal_profile = resolve_scope(conn, args.workspace, args.profile)
+            return emit(
+                args,
+                daemon_freshness.refresh_journals_step(
+                    conn,
+                    str(journal_profile["id"]),
+                    auto_pair=True,
+                ),
+            )
         if args.journals_command == "list":
             journal_entries_payload, journal_entries_meta = list_journal_entries(
                 conn,

@@ -1214,10 +1214,18 @@ class DaemonFreshnessForceFullTest(unittest.TestCase):
                 {"wallet": "Cold", "force_full": True},
                 strict=True,
             ),
-            {"wallet": "Cold", "all": False, "force_full": True},
+            {"wallet": "Cold", "all": False, "force_full": True, "process_journals": True},
+        )
+        self.assertFalse(
+            _coerce_wallets_sync_args(
+                {"wallet": "Cold", "process_journals": False},
+                strict=True,
+            )["process_journals"]
         )
         with self.assertRaises(AppError):
             _coerce_wallets_sync_args({"force_full": "yes"}, strict=True)
+        with self.assertRaises(AppError):
+            _coerce_wallets_sync_args({"process_journals": "yes"}, strict=True)
 
     def test_force_full_wallet_specs_disable_single_flight_and_mark_payload(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-force-full-specs-") as tmp:
@@ -4557,7 +4565,7 @@ class DaemonSmokeTest(unittest.TestCase):
                     },
                 )
                 envelopes = []
-                for _ in range(5):
+                for _ in range(20):
                     envelope = _read_payload_timeout(proc)
                     envelopes.append(envelope)
                     if envelope["kind"] == "ui.wallets.sync":
@@ -4565,14 +4573,21 @@ class DaemonSmokeTest(unittest.TestCase):
                 kinds = [envelope["kind"] for envelope in envelopes]
                 self.assertIn("ui.wallets.sync.progress", kinds)
                 self.assertEqual(kinds[-1], "ui.wallets.sync")
+                # The same stream then reports the local journal step that
+                # finishes every user-triggered sync.
                 progress_events = [
                     envelope for envelope in envelopes
                     if envelope["kind"] == "ui.wallets.sync.progress"
+                    and "total" in envelope["data"]
                 ]
                 self.assertEqual(progress_events[0]["data"]["wallet"], "River UI")
                 self.assertEqual(progress_events[0]["data"]["total"], 1)
                 final_progress = progress_events[-1]["data"]
                 self.assertEqual(final_progress["processed"], 1)
+                self.assertIn(
+                    envelopes[-1]["data"]["journals"]["status"],
+                    {"processed", "current"},
+                )
 
                 _write_payload(
                     proc,
@@ -6889,7 +6904,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 side_effect=AssertionError("should use daemon main connection"),
             ),
             mock.patch(
-                "kassiber.daemon._journals_process_payload",
+                "kassiber.daemon._journals_refresh_payload",
                 return_value={"processed_transactions": 1},
             ) as payload_mock,
         ):
@@ -6905,6 +6920,8 @@ class DaemonSmokeTest(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         payload_mock.assert_called_once()
         self.assertIs(payload_mock.call_args.args[0], conn_marker)
+        # The assistant's consent does not cover authoring transfer pairs.
+        self.assertEqual(payload_mock.call_args.kwargs, {"auto_pair": False})
         self.assertEqual(results[0]["envelope"]["kind"], "ui.journals.process")
 
     def test_rates_rebuild_tool_uses_daemon_main_thread_connection(self):

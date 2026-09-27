@@ -720,6 +720,40 @@ def _count_conflict_clusters(candidates):
     return len({c.conflict_set_id for c in candidates if c.conflict_size > 1})
 
 
+def _user_unpaired_keys(conn, profile_id):
+    """(out, in) legs whose pair the user deleted.
+
+    Deleting a pair is an explicit decision. Automatic pairing after a sync or
+    journal run must not quietly recreate it; an explicit bulk or manual pair
+    still can.
+    """
+
+    records = core_custody_authored_migration.list_pair_review_records(
+        conn, profile_id=profile_id, include_deleted=True
+    )
+    active = {
+        (str(row["out_transaction_id"]), str(row["in_transaction_id"]))
+        for row in records
+        if not row.get("deleted_at")
+    }
+    return {
+        (str(row["out_transaction_id"]), str(row["in_transaction_id"]))
+        for row in records
+        if row.get("deleted_at")
+    } - active
+
+
+def _without_user_unpaired(conn, profile_id, candidates):
+    unpaired = _user_unpaired_keys(conn, profile_id)
+    if not unpaired:
+        return candidates
+    return [
+        candidate
+        for candidate in candidates
+        if (candidate.out_id, candidate.in_id) not in unpaired
+    ]
+
+
 def bulk_pair_transfers(
     conn,
     workspace_ref,
@@ -735,6 +769,7 @@ def bulk_pair_transfers(
     candidate_type=None,
     commit=True,
     authored_source="cli",
+    skip_user_unpaired=False,
 ):
     """Run the matcher and auto-pair every solo (non-conflicted) candidate
     whose confidence meets the threshold.
@@ -777,6 +812,8 @@ def bulk_pair_transfers(
         method=method,
         candidate_type=candidate_type,
     )
+    if skip_user_unpaired:
+        candidates = _without_user_unpaired(conn, profile["id"], candidates)
     applied = []
     pair_source = "bulk_exact" if confidence == "exact" else "bulk_selected"
     try:
@@ -837,6 +874,7 @@ def apply_transfer_rules(
     candidate_type=None,
     commit=True,
     authored_source="cli",
+    skip_user_unpaired=False,
 ):
     """Auto-pair every non-conflicted candidate matched by enabled rules."""
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
@@ -874,6 +912,10 @@ def apply_transfer_rules(
         for candidate in candidates
         if candidate.method != core_transfer_matching.METHOD_OWNERSHIP_GRAPH
     ]
+    if skip_user_unpaired:
+        candidates_for_rules = _without_user_unpaired(
+            conn, profile["id"], candidates_for_rules
+        )
     rules = _load_transfer_rules(conn, profile["id"])
     rules_by_id = {rule.id: rule for rule in rules}
     rule_matches, remaining = core_swap_rules.apply_rules(candidates_for_rules, rules)

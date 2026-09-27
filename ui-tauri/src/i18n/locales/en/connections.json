@@ -1189,5 +1189,19 @@
       "importing": "Importing {{wallet}}…",
       "rows": "{{processed}} / {{total}} rows"
     }
+  },
+  "journalStep": {
+    "processed_one": "Journals updated; {{count}} transaction in quarantine.",
+    "processed_other": "Journals updated; {{count}} transactions in quarantine.",
+    "processedClear": "Journals updated; nothing in quarantine.",
+    "current": "Journals were already current.",
+    "deferred": "Another refresh was running, so journals were not updated; recalculate once it finishes.",
+    "disabled": "Journals were not updated because journal refresh is turned off in the refresh settings.",
+    "failed": "Journals could not be updated: {{message}}",
+    "cancelled": "The journal update was cancelled.",
+    "autoPaired_one": "{{count}} exact transfer pair applied.",
+    "autoPaired_other": "{{count}} exact transfer pairs applied.",
+    "attentionTitle": "Journals need attention",
+    "autoPairSkipped": "Automatic pairing was skipped: {{message}}"
   }
 }
