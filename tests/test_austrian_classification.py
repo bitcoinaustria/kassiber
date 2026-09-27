@@ -715,5 +715,192 @@ class ATSwapOverSellQuarantineTest(unittest.TestCase):
             self.assertEqual(json.loads(quarantine["detail_json"])["reason_code"], "insufficient_lots")
 
 
+class CarryPairPhaseOneBlockJournalTest(unittest.TestCase):
+    """Phase-1 blocks on carry legs through the real ``journals process`` path.
+
+    Finalized projection rows have synthetic ``custody-tax:``/``direct-payout:``
+    ids while quarantines are keyed by the real anchor transaction. The swap
+    selection must resolve that anchor; otherwise an over-sold leg is promoted
+    to an ``at_swap_link`` and aborts the whole multi-asset report, and a leg's
+    real reason (e.g. a missing price) is replaced by a generic fallback.
+    """
+
+    NOW = "2025-01-01T00:00:00Z"
+
+    def _book(self, tmp, *, tax_country="at"):
+        from pathlib import Path
+
+        from kassiber.db import open_db
+
+        conn = open_db(Path(tmp) / "data")
+        self.addCleanup(conn.close)
+        conn.execute(
+            "INSERT INTO workspaces(id, label, created_at) VALUES('ws-1', 'Main', ?)",
+            (self.NOW,),
+        )
+        conn.execute(
+            """
+            INSERT INTO profiles(
+                id, workspace_id, label, fiat_currency, tax_country,
+                tax_long_term_days, gains_algorithm, created_at
+            ) VALUES('profile-1', 'ws-1', 'Default', 'EUR', ?, 365, ?, ?)
+            """,
+            (
+                tax_country,
+                "moving_average_at" if tax_country == "at" else "FIFO",
+                self.NOW,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO accounts(
+                id, workspace_id, profile_id, code, label, account_type, asset, created_at
+            ) VALUES('acct-1', 'ws-1', 'profile-1', 'treasury', 'Treasury', 'asset', 'BTC', ?)
+            """,
+            (self.NOW,),
+        )
+        for wallet_id, label in (("wallet-btc", "Onchain"), ("wallet-liquid", "Liquid")):
+            conn.execute(
+                """
+                INSERT INTO wallets(
+                    id, workspace_id, profile_id, account_id, label, kind, config_json, created_at
+                ) VALUES(?, 'ws-1', 'profile-1', 'acct-1', ?, 'custom', '{}', ?)
+                """,
+                (wallet_id, label, self.NOW),
+            )
+        return conn
+
+    def _tx(self, conn, tx_id, wallet_id, direction, asset, amount_msat, occurred_at, rate):
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, direction, asset, amount, fee, fiat_currency,
+                fiat_rate, fiat_value, kind, raw_json, created_at
+            ) VALUES(?, 'ws-1', 'profile-1', ?, ?, ?, ?, ?, ?, ?, 0, 'EUR', ?, NULL, ?, '{}', ?)
+            """,
+            (
+                tx_id, wallet_id, f"ext-{tx_id}", f"fp-{tx_id}", occurred_at,
+                direction, asset, amount_msat, rate,
+                "buy" if direction == "inbound" and asset == "BTC" else (
+                    "deposit" if direction == "inbound" else "withdrawal"
+                ),
+                self.NOW,
+            ),
+        )
+
+    def _process(self, conn):
+        from kassiber.cli import handlers
+
+        handlers.process_journals(conn, "Main", "Default")
+        quarantines = {
+            (row["transaction_id"], row["reason"]): json.loads(row["detail_json"])
+            for row in conn.execute(
+                "SELECT transaction_id, reason, detail_json FROM journal_quarantines"
+            )
+        }
+        entries = [
+            (row["transaction_id"], row["entry_type"], row["asset"])
+            for row in conn.execute(
+                "SELECT transaction_id, entry_type, asset FROM journal_entries"
+            )
+        ]
+        return quarantines, entries
+
+    def _pair(self, conn):
+        from kassiber.cli import handlers
+
+        handlers.create_transaction_pair(
+            conn, "Main", "Default", "swap-out", "swap-in",
+            kind="peg-in", policy="carrying-value",
+        )
+
+    def test_oversold_at_swap_leg_quarantines_pair_instead_of_aborting(self):
+        import tempfile
+
+        from kassiber.core.austrian import AT_SWAP_QUARANTINE_REASON
+
+        with tempfile.TemporaryDirectory(prefix="kassiber-at-carry-oversell-") as tmp:
+            conn = self._book(tmp)
+            self._tx(conn, "btc-in", "wallet-btc", "inbound", "BTC", 10_000_000, "2025-05-01T00:00:00Z", 50_000)
+            self._tx(conn, "swap-out", "wallet-btc", "outbound", "BTC", 50_000_000, "2025-06-01T00:00:00Z", 50_000)
+            self._tx(conn, "swap-in", "wallet-liquid", "inbound", "LBTC", 50_000_000, "2025-06-01T00:01:00Z", 50_000)
+            conn.commit()
+            self._pair(conn)
+
+            # Before the anchor lookup this raised "RP2 multi-asset tax
+            # calculation failed" and no journal was written at all.
+            quarantines, entries = self._process(conn)
+
+        self.assertEqual(
+            set(quarantines),
+            {
+                ("swap-out", AT_SWAP_QUARANTINE_REASON),
+                ("swap-in", AT_SWAP_QUARANTINE_REASON),
+            },
+        )
+        for detail in quarantines.values():
+            self.assertEqual(detail["reason_code"], "insufficient_lots")
+        self.assertEqual(entries, [("btc-in", "acquisition", "BTC")])
+
+    def test_oversold_at_direct_payout_quarantines_source_instead_of_aborting(self):
+        import tempfile
+
+        from kassiber.cli import handlers
+        from kassiber.core.austrian import AT_SWAP_QUARANTINE_REASON
+
+        with tempfile.TemporaryDirectory(prefix="kassiber-at-payout-oversell-") as tmp:
+            conn = self._book(tmp)
+            self._tx(conn, "btc-in", "wallet-btc", "inbound", "BTC", 10_000_000, "2025-05-01T00:00:00Z", 50_000)
+            self._tx(conn, "swap-out", "wallet-btc", "outbound", "BTC", 50_000_000, "2025-06-01T00:00:00Z", 60_000)
+            conn.commit()
+            handlers.create_direct_swap_payout(
+                conn, "Main", "Default", "swap-out",
+                payout_asset="USDT", payout_amount="30", payout_fiat_value="30",
+                policy="carrying-value", counterparty="exchange",
+            )
+
+            quarantines, entries = self._process(conn)
+
+        # One record for the one real source; the synthetic target-asset
+        # settlement disposal is withheld with the pair instead of surfacing a
+        # second, misleading insufficient-lots block.
+        self.assertEqual(set(quarantines), {("swap-out", AT_SWAP_QUARANTINE_REASON)})
+        self.assertEqual(
+            quarantines[("swap-out", AT_SWAP_QUARANTINE_REASON)]["reason_code"],
+            "insufficient_lots",
+        )
+        self.assertEqual(entries, [("btc-in", "acquisition", "BTC")])
+
+    def test_unpriced_carry_leg_keeps_its_missing_price_reason(self):
+        import tempfile
+
+        from kassiber.core.austrian import AT_SWAP_QUARANTINE_REASON
+        from kassiber.core.engines.rp2 import GENERIC_BITCOIN_RAIL_QUARANTINE_REASON
+
+        for tax_country, reason in (
+            ("at", AT_SWAP_QUARANTINE_REASON),
+            ("generic", GENERIC_BITCOIN_RAIL_QUARANTINE_REASON),
+        ):
+            with self.subTest(tax_country=tax_country):
+                with tempfile.TemporaryDirectory(prefix="kassiber-carry-noprice-") as tmp:
+                    conn = self._book(tmp, tax_country=tax_country)
+                    self._tx(conn, "btc-in", "wallet-btc", "inbound", "BTC", 100_000_000, "2025-05-01T00:00:00Z", 50_000)
+                    # No rate and outside any bundled price history.
+                    self._tx(conn, "swap-out", "wallet-btc", "outbound", "BTC", 50_000_000, "2031-06-01T00:00:00Z", None)
+                    self._tx(conn, "swap-in", "wallet-liquid", "inbound", "LBTC", 50_000_000, "2031-06-01T00:01:00Z", None)
+                    conn.commit()
+                    self._pair(conn)
+
+                    quarantines, entries = self._process(conn)
+
+                self.assertEqual(
+                    set(quarantines), {("swap-out", reason), ("swap-in", reason)}
+                )
+                for detail in quarantines.values():
+                    self.assertEqual(detail["reason_code"], "missing_spot_price")
+                self.assertEqual(entries, [("btc-in", "acquisition", "BTC")])
+
+
 if __name__ == "__main__":
     unittest.main()

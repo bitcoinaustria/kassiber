@@ -12164,8 +12164,11 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(set(quarantines), {"cross-out-leg", "cross-in-leg"})
         for quarantine in quarantines.values():
             self.assertEqual(quarantine["reason"], "bitcoin_rail_carry_basis_unresolved")
+            # The source leg's own phase-1 block (resolved through its anchor
+            # transaction, not the synthetic projection id) explains why no
+            # basis could be carried.
             self.assertEqual(
-                quarantine["detail"]["reason_code"], "source_basis_unavailable"
+                quarantine["detail"]["reason_code"], "insufficient_lots"
             )
             self.assertEqual(quarantine["detail"]["rail_pair"], "pair-cross-1")
 

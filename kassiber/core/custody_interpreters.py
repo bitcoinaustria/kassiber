@@ -18,6 +18,7 @@ from ..transfers import (
     bitcoin_network_domain,
     canonical_payment_hash,
     detect_intra_transfers,
+    detect_unscoped_transfer_review_ids,
     is_lightning_payment_hash_row,
     onchain_transfer_scope,
 )
@@ -45,7 +46,9 @@ from .ownership_transfers import (
     OwnershipDeriveResult,
     ProfileTransferDerivation,
     derive_profile_transfers,
+    detect_conflicting_spend_ids,
     detect_pending_onchain_ids,
+    detect_unresolved_owned_fanout_ids,
 )
 from .custody_native_reconciliation import NativeComponentReconciliation, reconcile_native_components
 from .privacy_hops import privacy_hop_evidence_from_row
@@ -79,6 +82,8 @@ class CustodyInterpreterCompilation:
     blocked_transaction_ids: tuple[str, ...] = ()
     quarantines: tuple[Mapping[str, Any], ...] = ()
     native_component_reconciliations: tuple[NativeComponentReconciliation, ...] = ()
+    # Blocked from booking, but not persisted as custody quantity issues.
+    transient_blocked_transaction_ids: tuple[str, ...] = ()
 
     @property
     def native_reconciled_component_ids(self) -> tuple[str, ...]:
@@ -86,7 +91,9 @@ class CustodyInterpreterCompilation:
 
     @property
     def blocking_quarantines(self) -> tuple[Mapping[str, Any], ...]:
-        blocked = set(self.blocked_transaction_ids)
+        blocked = set(self.blocked_transaction_ids) - set(
+            self.transient_blocked_transaction_ids
+        )
         return tuple(
             item
             for item in self.quarantines
@@ -956,6 +963,202 @@ def _native_audits_for_rowless_pairs(
     return tuple(audits)
 
 
+@dataclass(frozen=True)
+class _RawObservationHolds:
+    blocked_ids: frozenset[str]
+    pending_ids: frozenset[str]
+    quarantines: tuple[Mapping[str, Any], ...]
+    # Held only until the chain settles (unconfirmed or replaced spends and
+    # the pairs that depend on them). They are kept out of custody moves and
+    # tax booking, but are not custody gaps: they must not freeze later basis
+    # or block every report the way an unresolved custody issue does.
+    transient_ids: frozenset[str] = frozenset()
+
+
+def _pair_anchor_ids(pair: Mapping[str, Any]) -> set[str]:
+    return {
+        transaction_id
+        for side in ("out", "in")
+        if (transaction_id := _anchor_id(_field(pair, side, {}) or {}))
+    }
+
+
+def _without_held_pairs(
+    pairs: Sequence[Mapping[str, Any]],
+    held_ids: set[str],
+) -> list[Mapping[str, Any]]:
+    """Drop candidate pairs, whole groups included, that touch a held row."""
+
+    held_groups = {
+        str(_field(pair, "group_id"))
+        for pair in pairs
+        if _field(pair, "group_id") not in (None, "")
+        and _pair_anchor_ids(pair) & held_ids
+    }
+    return [
+        pair
+        for pair in pairs
+        if not _pair_anchor_ids(pair) & held_ids
+        and str(_field(pair, "group_id") or "") not in held_groups
+    ]
+
+
+def _raw_observation_holds(
+    rows: Sequence[Mapping[str, Any]],
+    derivation_rows: Sequence[Mapping[str, Any]],
+    pair_inputs: Sequence[Mapping[str, Any]],
+    *,
+    wallet_refs_by_id: Mapping[str, Mapping[str, Any]],
+    has_chain_events: bool,
+    excluded_ids: set[str],
+    blocked_ids: set[str],
+    resolved_ids: set[str],
+) -> _RawObservationHolds:
+    """Fail-closed holds that must apply before custody arbitration.
+
+    * ``conflicting_spend`` / ``pending_onchain_confirmation``: a transaction
+      that lost a shared prevout, or is explicitly unconfirmed, must not become
+      a verified custody MOVE while the tax side quarantines it.
+    * ``owned_fanout_unresolved``: a scoped multi-leg own-wallet transaction
+      no decomposer resolved.
+    * ``unscoped_transfer_review``: different own wallets share an import
+      identity that has no canonical on-chain scope.
+
+    The finalized projection gives every row a synthetic id, so the old
+    row-based tax-event detectors can no longer see these shapes. Reviewed
+    component legs keep their authored interpretation, as for derivation
+    blocks; rows already blocked with a more specific interpreter reason keep
+    only that reason.
+    """
+
+    conflict_ids = detect_conflicting_spend_ids(rows) if has_chain_events else set()
+    pending_ids = detect_pending_onchain_ids(rows)
+    rows_by_id = {_row_id(row): row for row in rows}
+    covered = (
+        set(excluded_ids)
+        | blocked_ids
+        | resolved_ids
+        | conflict_ids
+        | pending_ids
+        | {
+            transaction_id
+            for pair in pair_inputs
+            for transaction_id in _pair_anchor_ids(pair)
+        }
+    )
+    # Judge fan-out shape on the amounts the derivers saw: a jointly proven
+    # fee-only contributor has no principal leg to resolve.
+    fanout_ids = (
+        detect_unresolved_owned_fanout_ids(derivation_rows, covered_ids=covered)
+        if has_chain_events
+        else set()
+    )
+    unscoped_ids = detect_unscoped_transfer_review_ids(rows) - covered - fanout_ids
+    reasons: dict[str, str] = {}
+    for transaction_ids, reason in (
+        (conflict_ids, "conflicting_spend"),
+        (pending_ids, "pending_onchain_confirmation"),
+        (fanout_ids, "owned_fanout_unresolved"),
+        (unscoped_ids, "unscoped_transfer_review"),
+    ):
+        for transaction_id in transaction_ids:
+            if (
+                transaction_id in excluded_ids
+                or transaction_id in blocked_ids
+                or transaction_id not in rows_by_id
+            ):
+                continue
+            reasons.setdefault(transaction_id, reason)
+    # Candidate pairs touching a held row are dropped whole (see
+    # ``_without_held_pairs``). A partner on another transaction, such as an
+    # HTLC funding leg whose claim is still pending, would otherwise lose its
+    # MOVE silently and book standalone. Close the hold over those partners.
+    dependency_causes: dict[str, set[str]] = {}
+    while reasons:
+        held = set(reasons)
+        kept = _without_held_pairs(pair_inputs, held)
+        kept_ids = {id(pair) for pair in kept}
+        dropped = [pair for pair in pair_inputs if id(pair) not in kept_ids]
+        causes_by_group: dict[str, set[str]] = {}
+        for pair in dropped:
+            group_id = str(_field(pair, "group_id") or "")
+            if group_id:
+                causes_by_group.setdefault(group_id, set()).update(
+                    _pair_anchor_ids(pair) & held
+                )
+        added = False
+        for pair in dropped:
+            anchors = _pair_anchor_ids(pair)
+            causes = (anchors & held) or causes_by_group.get(
+                str(_field(pair, "group_id") or ""), set()
+            )
+            for transaction_id in sorted(anchors - held):
+                if (
+                    transaction_id in excluded_ids
+                    or transaction_id in blocked_ids
+                    or transaction_id not in rows_by_id
+                ):
+                    continue
+                reasons[transaction_id] = "transfer_pair_dependency_blocked"
+                dependency_causes.setdefault(transaction_id, set()).update(causes)
+                added = True
+        if not added:
+            break
+    required_for = {
+        "pending_onchain_confirmation": "confirmed_chain_history",
+        "owned_fanout_unresolved": "complete_transfer_component",
+        "unscoped_transfer_review": "physical_transfer_scope_or_custody_component",
+        "transfer_pair_dependency_blocked": "complete_transfer_component",
+    }
+    quarantines = []
+    for transaction_id, reason in sorted(reasons.items()):
+        row = rows_by_id[transaction_id]
+        wallet_id = str(_field(row, "wallet_id") or "")
+        detail = {
+            "wallet": _field(wallet_refs_by_id.get(wallet_id, {}), "label", wallet_id),
+            "asset": str(_field(row, "asset") or "").upper(),
+            "direction": _field(row, "direction"),
+            "external_id": str(_field(row, "external_id") or ""),
+        }
+        if reason in required_for:
+            detail["required_for"] = required_for[reason]
+        if transaction_id in dependency_causes:
+            detail["blocked_by_transaction_ids"] = sorted(
+                dependency_causes[transaction_id]
+            )
+        quarantines.append(
+            {
+                "transaction_id": transaction_id,
+                "workspace_id": _field(row, "workspace_id"),
+                "profile_id": _field(row, "profile_id"),
+                "reason": reason,
+                "detail_json": json.dumps(detail, sort_keys=True),
+            }
+        )
+    transient_reasons = {"conflicting_spend", "pending_onchain_confirmation"}
+    transient_ids = {
+        transaction_id
+        for transaction_id, reason in reasons.items()
+        if reason in transient_reasons
+    }
+    # Dependencies can chain (A holds B, B holds C); propagate to a fixed point.
+    while True:
+        grown = {
+            transaction_id
+            for transaction_id, causes in dependency_causes.items()
+            if transaction_id not in transient_ids and causes and causes <= transient_ids
+        }
+        if not grown:
+            break
+        transient_ids |= grown
+    return _RawObservationHolds(
+        blocked_ids=frozenset(reasons),
+        pending_ids=frozenset(pending_ids),
+        quarantines=tuple(quarantines),
+        transient_ids=frozenset(transient_ids),
+    )
+
+
 def compile_custody_interpreters(
     rows: Sequence[Mapping[str, Any]],
     canonical: CanonicalQuantityInput,
@@ -1088,6 +1291,7 @@ def compile_custody_interpreters(
     paired_ids.update(complete_recorded_pair_ids)
     paired_ids.update(native_transition_ids)
     paired_ids.update(native_transition_blocked_ids)
+    derivation_rows: list[Mapping[str, Any]] = list(rows)
     if has_chain_events or owned_index is not None:
         derivation_rows = []
         for row in rows:
@@ -1282,6 +1486,30 @@ def compile_custody_interpreters(
         *derived_pairs,
         *native_transition_pairs,
     ]
+    holds = _raw_observation_holds(
+        rows,
+        derivation_rows,
+        pair_inputs,
+        wallet_refs_by_id=wallet_refs_by_id,
+        has_chain_events=has_chain_events,
+        excluded_ids=excluded,
+        blocked_ids=(
+            derivation_blocked_ids
+            | privacy_blocked_ids
+            | channel_blocked_ids
+            | samourai_unverified_ids
+            | native_transition_blocked_ids
+        ),
+        resolved_ids=(
+            occupied_transition_ids
+            | samourai_touched_ids
+            | native_transition_ids
+        ),
+    )
+    hold_blocked_ids = set(holds.blocked_ids)
+    if hold_blocked_ids:
+        pair_inputs = _without_held_pairs(pair_inputs, hold_blocked_ids)
+        derived_pairs = _without_held_pairs(derived_pairs, hold_blocked_ids)
     native_reconciliations: tuple[NativeComponentReconciliation, ...] = ()
     physical_scopes = {
         _anchor_id(row): scope
@@ -1311,7 +1539,7 @@ def compile_custody_interpreters(
             blocked_transaction_ids=(
                 set(candidate_blocked) | channel_blocked_ids | derivation_blocked_ids
                 | privacy_blocked_ids | samourai_unverified_ids | native_transition_blocked_ids
-                | detect_pending_onchain_ids(rows)
+                | holds.pending_ids | hold_blocked_ids
             ),
         )
         if native_reconciliations:
@@ -1374,6 +1602,7 @@ def compile_custody_interpreters(
                     *privacy_blocked_ids,
                     *samourai_unverified_ids,
                     *native_transition_blocked_ids,
+                    *hold_blocked_ids,
                 }
             )
         ),
@@ -1385,6 +1614,18 @@ def compile_custody_interpreters(
                 *privacy_quarantines,
                 *samourai_unverified_quarantines,
                 *native_transition_quarantines,
+                *holds.quarantines,
+            )
+        ),
+        transient_blocked_transaction_ids=tuple(
+            sorted(
+                holds.transient_ids
+                - set(blocked_transaction_ids)
+                - channel_blocked_ids
+                - derivation_blocked_ids
+                - privacy_blocked_ids
+                - samourai_unverified_ids
+                - native_transition_blocked_ids
             )
         ),
     )
