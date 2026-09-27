@@ -939,7 +939,11 @@ export const BtcActivityChart = ({
                 )}
                 {completenessDetail && fiatSeriesEnabled ? (
                   <span
-                    className="font-semibold text-amber-600 dark:text-amber-400"
+                    className={cn(
+                      "font-semibold text-amber-600 dark:text-amber-400",
+                      // The copy can carry the uncovered BTC amount.
+                      completenessDetail.copy.params && blurClass(hideSensitive),
+                    )}
                     title={t(completenessDetail.hintKey as never)}
                   >
                     {/* dynamic key */}

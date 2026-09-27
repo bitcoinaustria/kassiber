@@ -209,7 +209,11 @@ export const HoldingsBySourceChart = ({
               // No "+X % vs cost basis" while the basis misses rows or the
               // value has no market rate; say what is missing instead.
               <p
-                className="truncate text-2xs text-amber-600 sm:text-xs dark:text-amber-400"
+                className={cn(
+                  "truncate text-2xs text-amber-600 sm:text-xs dark:text-amber-400",
+                  // The copy can carry the uncovered BTC amount.
+                  completenessDetail.copy.params && blurClass(hideSensitive),
+                )}
                 title={t(completenessDetail.hintKey)}
               >
                 {/* dynamic key */}
