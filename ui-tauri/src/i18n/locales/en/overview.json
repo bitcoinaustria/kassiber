@@ -28,7 +28,9 @@
       "allBooksReady": "All books ready",
       "quarantine": "Quarantine",
       "journalsNeedProcessing": "Journals need processing",
-      "noStaleJournals": "No stale journals"
+      "noStaleJournals": "No stale journals",
+      "basisIncompleteBooks_one": "Cost basis incomplete in {{count}} book",
+      "basisIncompleteBooks_other": "Cost basis incomplete in {{count}} books"
     },
     "booksCard": {
       "title": "Books",
@@ -172,7 +174,16 @@
     },
     "sourceDetail_one": "{{synced}}/{{total}} source current",
     "sourceDetail_other": "{{synced}}/{{total}} sources current",
-    "noSources": "No sources connected"
+    "noSources": "No sources connected",
+    "custodyUnresolved": {
+      "title": "Custody gaps open",
+      "detail": "Cost basis and reports wait for custody review"
+    },
+    "missingPrices": {
+      "title": "Prices missing",
+      "detail_one": "{{count}} transaction without a price",
+      "detail_other": "{{count}} transactions without a price"
+    }
   },
   "health": {
     "title": "Book readiness",
@@ -222,6 +233,13 @@
         "title": "Add a connection",
         "detail": "Connect a source or import rows to start the book."
       }
+    },
+    "basis": {
+      "title": "Cost basis",
+      "custody": "Custody gaps open",
+      "missingPrices_one": "{{count}} missing price",
+      "missingPrices_other": "{{count}} missing prices",
+      "detail": "Cost basis and reports stay incomplete until resolved."
     }
   },
   "drivers": {
@@ -434,5 +452,22 @@
     "totalBalance": "Total balance",
     "pointsSynthesized": "{{count}} points · synthesized for demo",
     "hoverFooter": "hover for detail · esc to close"
+  },
+  "completeness": {
+    "badge": {
+      "incomplete": "Incomplete",
+      "stale": "Outdated",
+      "noMarketRate": "No market rate",
+      "unavailable": "Unavailable"
+    },
+    "uncovered": "{{amount}} without cost basis",
+    "basisIncomplete": "Cost basis incomplete",
+    "basisStale": "Cost basis from outdated journals",
+    "valueUnavailable": "No market rate for a current value",
+    "hint": {
+      "incomplete": "Cost basis is incomplete here: quarantined, unpriced, or unresolved custody rows are not in the journal yet. Resolve them to see exact figures.",
+      "stale": "Journals are outdated. Reprocess them to see current cost basis.",
+      "unavailable": "No market rate is available, so Kassiber shows no current value."
+    }
   }
 }

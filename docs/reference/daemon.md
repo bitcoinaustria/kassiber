@@ -617,6 +617,33 @@ as `mode="mixed"` / `partial=true` instead of converting between currencies.
 Desktop drilldowns from the book-set overview are book-scoped routes; they
 must make the active-book switch visible before navigating.
 
+Both overviews carry `fiat.completeness`, because `eurCostBasis`,
+`eurUnrealized`, `eurRealizedYTD`, and the portfolio series' `costBasisEur`
+come from journal entries while the displayed BTC balance comes from observed
+coins. Quarantined rows and everything after an unresolved custody gap have no
+journal entries, so the basis can be off in either direction. The block is:
+`state` (`complete`, `incomplete`, `stale`, or `unavailable`),
+`costBasisComplete`, `reasons` (a subset of `journals_stale`, `quarantines`,
+`custody_unresolved`, `missing_prices`, `market_rate_missing`),
+`quarantineCount`, `quarantinedInboundMsat` and `quarantinedOutboundMsat`
+(amount plus fee for outbound rows), `basisCoveredMsat` (BTC carrying journal
+basis, from processed wallet holdings or the journal-entry net), and
+`basisUncoveredMsat` (displayed balance minus covered, never negative). It also
+has `earliestIncompleteAt`, the first quarantined, custody-blocked, or unpriced
+instant, plus `missingPriceCount` and `marketRateMissing`. Stale journals
+report `null` coverage and `null` start, which means every point is affected.
+When `costBasisComplete` is false, basis, unrealized, and realized figures must
+not be presented as exact. Series points at or after `earliestIncompleteAt`
+share that limit; earlier points stay valid. `eurBalance` keeps its
+best-available valuation (latest transaction rate, else 0) for compatibility,
+so readers treat it as unavailable when `marketRateMissing` is true. Custody
+and missing-price reasons reuse the report-blocker helpers. Each book-set fiat
+row and the rollup carry the same block, with the rollup taking the worst book.
+Book rows in `books[]` also carry `balanceSummary` and `taxFreeBalance`, and
+book-set BTC totals use each book's de-duplicated `balanceSummary.totalBtc`.
+The desktop normalizer maps a missing or unknown block to `state="unavailable"`
+with `costBasisComplete=false`, so it never reads as complete.
+
 ## Freshness jobs
 
 Kassiber's daemon owns source freshness. The desktop configures, observes,

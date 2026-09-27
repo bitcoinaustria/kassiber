@@ -156,7 +156,11 @@
       "recentTransactions_one": "{{count}} recent transaction",
       "recentTransactions_other": "{{count}} recent transactions",
       "priceEur": "BTC/EUR {{value}}",
-      "realizedYtd": "realized YTD {{value}}"
+      "realizedYtd": "realized YTD {{value}}",
+      "realizedYtdIncomplete": "realized YTD {{value}} (incomplete)",
+      "basisIncomplete": "cost basis incomplete",
+      "basisStale": "cost basis outdated",
+      "noMarketRate": "no market rate"
     },
     "workspaceHealth": {
       "noBooksSet": "No books set",

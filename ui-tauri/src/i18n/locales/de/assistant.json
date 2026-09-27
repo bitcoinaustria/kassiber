@@ -156,7 +156,11 @@
       "recentTransactions_one": "{{count}} aktuelle Transaktion",
       "recentTransactions_other": "{{count}} aktuelle Transaktionen",
       "priceEur": "BTC/EUR {{value}}",
-      "realizedYtd": "realisiert seit Jahresbeginn {{value}}"
+      "realizedYtd": "realisiert seit Jahresbeginn {{value}}",
+      "realizedYtdIncomplete": "realisiert seit Jahresbeginn {{value}} (unvollständig)",
+      "basisIncomplete": "Anschaffungskosten unvollständig",
+      "basisStale": "Anschaffungskosten veraltet",
+      "noMarketRate": "kein Marktkurs"
     },
     "workspaceHealth": {
       "noBooksSet": "Kein Workspace gesetzt",

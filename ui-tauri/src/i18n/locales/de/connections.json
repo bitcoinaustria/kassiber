@@ -32,7 +32,8 @@
     "upToDateNotUpToDate": "{{count}} noch nicht aktuell",
     "needsAttention": "Benötigt Aufmerksamkeit",
     "needsAttentionFailed": "Fehlgeschlagene Quelle(n)",
-    "needsAttentionNoFailed": "Keine fehlgeschlagenen Quellen"
+    "needsAttentionNoFailed": "Keine fehlgeschlagenen Quellen",
+    "balanceNoMarketRate": "Kein Marktkurs · Fiat-Wert nicht verfügbar"
   },
   "filters": {
     "heading": "Wallets und Quellen",

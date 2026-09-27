@@ -6,6 +6,7 @@ import {
   formatBtc,
   type Currency,
 } from "@/lib/currency";
+import { fiatCompleteness } from "@/lib/fiatCompleteness";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 
@@ -19,6 +20,7 @@ import {
   latestPortfolioBalanceBtc,
   marketRateCompactLabel,
   marketRateDetailLabel,
+  portfolioCompletenessDetail,
   type OverviewTranslate,
 } from "./model";
 import { statStatusKey } from "./statStatus";
@@ -49,6 +51,8 @@ export const StatsCards = ({
     snapshot.marketRate?.fetchedAt ?? snapshot.marketRate?.timestamp,
   );
   const marketRateDetail = marketRateDetailLabel(snapshot, to);
+  const completeness = fiatCompleteness(snapshot.fiat);
+  const completenessDetail = portfolioCompletenessDetail(snapshot);
   return (
     <div
       className="overflow-hidden rounded-lg border bg-card"
@@ -104,28 +108,41 @@ export const StatsCards = ({
             stat,
             isBitcoinPortfolio,
             balanceStatus,
+            completeness,
           );
+          // Fiat portfolio figures that are not exact: amber value, a badge in
+          // place of the percentage, and what is missing instead of "vs cost
+          // basis". The BTC balance is observed and keeps its own statuses.
+          const completenessIssue =
+            stat.id === "portfolioValue" && !isBitcoinPortfolio
+              ? completenessDetail
+              : null;
           const statusText = statusKey
             ? t(statusKey, {
                 count: balanceStatus?.quarantines ?? 0,
               })
             : `${stat.isPositive ? "+" : "-"}${stat.changePercent.toFixed(1)}%`;
           const balanceWarning =
+            Boolean(completenessIssue) ||
             statusKey === "stats.status.needsJournals" ||
             statusKey === "stats.status.reviewQuarantines";
-          const balanceWarningHref =
-            statusKey === "stats.status.needsJournals"
+          const balanceWarningHref = completenessIssue
+            ? completenessIssue.href
+            : statusKey === "stats.status.needsJournals"
               ? "/journals"
               : statusKey === "stats.status.reviewQuarantines"
                 ? "/quarantine"
                 : null;
           const showComparisonLabel =
-            !statusKey ||
-            ![
-              "stats.status.current",
-              "stats.status.loaded",
-              "stats.status.configured",
-            ].includes(statusKey);
+            !completenessIssue &&
+            (!statusKey ||
+              ![
+                "stats.status.current",
+                "stats.status.loaded",
+                "stats.status.configured",
+              ].includes(statusKey));
+          const valueUnavailable =
+            Boolean(completenessIssue) && completeness.marketRateMissing;
           const statTitle = isBitcoinPortfolio
             ? t("stats.bitcoinBalance")
             : // dynamic key
@@ -149,6 +166,11 @@ export const StatsCards = ({
                   }
                   className="absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label={t("stats.openStat", { title: statTitle })}
+                  // The card body ignores pointer events, so the reason for an
+                  // amber/"—" value hangs on the link that receives the hover.
+                  title={
+                    completenessIssue ? t(completenessIssue.hintKey) : undefined
+                  }
                 />
                 <div className="pointer-events-none relative z-20 space-y-1.5">
                   <div className="text-muted-foreground">
@@ -159,10 +181,13 @@ export const StatsCards = ({
                   <p
                     className={cn(
                       "text-lg font-semibold tracking-tight tabular-nums sm:text-xl",
+                      completenessIssue && "text-amber-600 dark:text-amber-400",
                       blurClass(hideSensitive),
                     )}
                   >
-                    {isBitcoinPortfolio ? (
+                    {valueUnavailable ? (
+                      <span>—</span>
+                    ) : isBitcoinPortfolio ? (
                       <span>
                         {formatBtc(latestPortfolioBalanceBtc(snapshot), {
                           precision: 3,
@@ -195,7 +220,20 @@ export const StatsCards = ({
                     >
                       {statusText}
                     </span>
-                    {showComparisonLabel ? (
+                    {completenessIssue ? (
+                      <span
+                        className={cn(
+                          "min-w-0 truncate text-muted-foreground",
+                          blurClass(hideSensitive),
+                        )}
+                      >
+                        {/* dynamic key */}
+                        {t(
+                          completenessIssue.copy.key as never,
+                          completenessIssue.copy.params,
+                        )}
+                      </span>
+                    ) : showComparisonLabel ? (
                       <span className="min-w-0 truncate text-muted-foreground">
                         {/* dynamic key */}
                         {t(stat.comparisonLabelKey as never)}

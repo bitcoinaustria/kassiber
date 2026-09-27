@@ -35,6 +35,8 @@ interface WalletsTableProps {
   connections: Connection[];
   currency: Currency;
   hideSensitive: boolean;
+  /** No market rate: per-wallet fiat values show "—" instead of a placeholder. */
+  marketRateMissing?: boolean;
   onSelectConnection: (id: string) => void;
   priceEur: number;
   taxFreeBalance?: OverviewSnapshot["taxFreeBalance"];
@@ -137,6 +139,7 @@ export function WalletsTable({
   connections,
   currency,
   hideSensitive,
+  marketRateMissing = false,
   onSelectConnection,
   priceEur,
   taxFreeBalance,
@@ -276,6 +279,7 @@ export function WalletsTable({
                   hideSensitive={hideSensitive}
                   currency={currency}
                   hasTaxFreeBalance={taxFreeWalletIds.has(connection.id)}
+                  marketRateMissing={marketRateMissing}
                   showTaxFreeColumn={showTaxFreeColumn}
                   onSelect={() => onSelectConnection(connection.id)}
                 />
@@ -348,6 +352,7 @@ interface WalletRowProps {
   currency: Currency;
   hideSensitive: boolean;
   hasTaxFreeBalance: boolean;
+  marketRateMissing: boolean;
   onSelect: () => void;
   priceEur: number;
   showTaxFreeColumn: boolean;
@@ -360,6 +365,7 @@ function WalletRow({
   currency,
   hideSensitive,
   hasTaxFreeBalance,
+  marketRateMissing,
   onSelect,
   priceEur,
   showTaxFreeColumn,
@@ -369,6 +375,9 @@ function WalletRow({
   const isBackend = connection.role === "backend";
   const pct = totalBtc > 0 ? (connection.balance / totalBtc) * 100 : 0;
   const isEur = currency === "eur";
+  const fiatLabel = marketRateMissing
+    ? "—"
+    : formatEur(connection.balance * priceEur);
   const metadataItems = [
     isBackend ? connection.endpoint : null,
     isBackend && connection.isDefaultBackend ? "default backend" : null,
@@ -501,7 +510,7 @@ function WalletRow({
             >
               <CurrencyToggleText>
                 {isEur
-                  ? formatEur(connection.balance * priceEur)
+                  ? fiatLabel
                   : `₿ ${formatBtc(connection.balance)}`}
               </CurrencyToggleText>
             </div>
@@ -514,7 +523,7 @@ function WalletRow({
               <CurrencyToggleText>
                 {isEur
                   ? `₿ ${formatBtc(connection.balance)}`
-                  : formatEur(connection.balance * priceEur)}
+                  : fiatLabel}
               </CurrencyToggleText>
             </div>
           </>

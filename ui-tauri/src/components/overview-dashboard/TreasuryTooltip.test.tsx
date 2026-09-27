@@ -81,4 +81,52 @@ describe("treasury tooltip", () => {
     expect(html).not.toContain("0.21000000");
     expect(html).not.toContain("tx-stale");
   });
+
+  it("dashes avg cost and unrealized at points past the first basis gap", () => {
+    const point: TreasuryChartPoint = {
+      ...activityPoint("day", 0, 1.2),
+      isActivityEvent: false,
+      eventFlow: undefined,
+      basisIncomplete: true,
+      avgCostEur: null,
+    };
+
+    const html = renderToStaticMarkup(
+      <TreasuryTooltip
+        active
+        fiatCurrency="EUR"
+        hideSensitive={false}
+        payload={[{ dataKey: "lineBalanceBtc", payload: point }]}
+        priceEur={65_000}
+      />,
+    );
+
+    expect(html).toContain("Avg cost / BTC");
+    expect(html).toContain("Unrealized");
+    expect(html).not.toContain("18.000");
+    expect(html).not.toContain("(+");
+    expect(html).toContain("Cost basis is incomplete here");
+    expect(html.match(/—/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("keeps avg cost and unrealized for points before the gap", () => {
+    const point: TreasuryChartPoint = {
+      ...activityPoint("day", 0, 1.2),
+      isActivityEvent: false,
+      eventFlow: undefined,
+    };
+
+    const html = renderToStaticMarkup(
+      <TreasuryTooltip
+        active
+        fiatCurrency="EUR"
+        hideSensitive={false}
+        payload={[{ dataKey: "lineBalanceBtc", payload: point }]}
+        priceEur={65_000}
+      />,
+    );
+
+    expect(html).toContain("(+30.0%)");
+    expect(html).not.toContain("Cost basis is incomplete here");
+  });
 });

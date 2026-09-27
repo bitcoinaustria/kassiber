@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import {
   blurClass,
   formatPortfolioMoney,
+  type BasisHintKey,
   type PortfolioChartPoint,
 } from "./model";
 
@@ -16,6 +17,7 @@ export function PortfolioInspector({
   hideSensitive,
   priceEur,
   fiatCurrency,
+  basisHintKey = "completeness.hint.incomplete",
   variant = "panel",
   className,
 }: {
@@ -23,6 +25,8 @@ export function PortfolioInspector({
   hideSensitive: boolean;
   priceEur: number;
   fiatCurrency: string;
+  /** Why an incomplete point shows "—"; see basisIncompleteHintKey(). */
+  basisHintKey?: BasisHintKey;
   variant?: "panel" | "header";
   className?: string;
 }) {
@@ -37,18 +41,26 @@ export function PortfolioInspector({
     fiatCurrency,
   );
   const btcLabel = formatBtc(point?.balanceBtc ?? 0, { precision: 8 });
-  const costBasisLabel = formatPortfolioMoney(
-    point?.costBasisEur ?? 0,
-    priceEur,
-    "eur",
-    fiatCurrency,
-  );
-  const unrealizedLabel = `${(point?.unrealizedEur ?? 0) >= 0 ? "+ " : "− "}${formatPortfolioMoney(
-    Math.abs(point?.unrealizedEur ?? 0),
-    priceEur,
-    "eur",
-    fiatCurrency,
-  )}`;
+  // From the first quarantine/custody gap on, the journal basis misses rows
+  // the BTC figure already contains: show "—" and say why.
+  const basisIncomplete = Boolean(point?.basisIncomplete);
+  const basisHint = basisIncomplete ? t(basisHintKey) : undefined;
+  const costBasisLabel = basisIncomplete
+    ? "—"
+    : formatPortfolioMoney(point?.costBasisEur ?? 0, priceEur, "eur", fiatCurrency);
+  const unrealizedLabel = basisIncomplete
+    ? "—"
+    : `${(point?.unrealizedEur ?? 0) >= 0 ? "+ " : "− "}${formatPortfolioMoney(
+        Math.abs(point?.unrealizedEur ?? 0),
+        priceEur,
+        "eur",
+        fiatCurrency,
+      )}`;
+  const unrealizedTone = basisIncomplete
+    ? "neutral"
+    : (point?.unrealizedEur ?? 0) >= 0
+      ? "good"
+      : "bad";
 
   if (variant === "header") {
     return (
@@ -79,12 +91,14 @@ export function PortfolioInspector({
         <HeaderInspectorMetric
           label={t("inspector.costBasis")}
           value={costBasisLabel}
+          title={basisHint}
           hidden={hideSensitive}
         />
         <HeaderInspectorMetric
           label={t("inspector.unrealized")}
           value={unrealizedLabel}
-          tone={(point?.unrealizedEur ?? 0) >= 0 ? "good" : "bad"}
+          title={basisHint}
+          tone={unrealizedTone}
           hidden={hideSensitive}
         />
       </aside>
@@ -143,12 +157,14 @@ export function PortfolioInspector({
             <InspectorMetric
               label={t("inspector.costBasis")}
               value={costBasisLabel}
+              title={basisHint}
               hidden={hideSensitive}
             />
             <InspectorMetric
               label={t("inspector.unrealized")}
               value={unrealizedLabel}
-              tone={(point?.unrealizedEur ?? 0) >= 0 ? "good" : "bad"}
+              title={basisHint}
+              tone={unrealizedTone}
               hidden={hideSensitive}
             />
           </div>
@@ -162,17 +178,20 @@ export function InspectorMetric({
   label,
   value,
   detail,
+  title,
   tone = "neutral",
   hidden,
 }: {
   label: string;
   value: string;
   detail?: string;
+  /** Explanatory tooltip, e.g. why a value is "—". */
+  title?: string;
   tone?: "good" | "bad" | "neutral";
   hidden: boolean;
 }) {
   return (
-    <div className="rounded-md bg-muted/25 px-2.5 py-2">
+    <div className="rounded-md bg-muted/25 px-2.5 py-2" title={title}>
       <p className="text-2xs font-medium text-muted-foreground">{label}</p>
       <p
         className={cn(
@@ -197,17 +216,20 @@ function HeaderInspectorMetric({
   label,
   value,
   detail,
+  title,
   tone = "neutral",
   hidden,
 }: {
   label: string;
   value: string;
   detail?: string;
+  /** Explanatory tooltip, e.g. why a value is "—". */
+  title?: string;
   tone?: "good" | "bad" | "neutral";
   hidden: boolean;
 }) {
   return (
-    <div className="min-w-[92px] rounded bg-muted/20 px-2 py-1">
+    <div className="min-w-[92px] rounded bg-muted/20 px-2 py-1" title={title}>
       <p className="truncate text-3xs font-medium text-muted-foreground">
         {label}
       </p>
