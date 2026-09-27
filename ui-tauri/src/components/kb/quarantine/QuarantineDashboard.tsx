@@ -54,6 +54,7 @@ import {
 } from "./model";
 import { QuarantineActions } from "./QuarantineActions";
 import { QuarantineCausePanel } from "./QuarantineCausePanel";
+import { quarantineDetailContext } from "./explain";
 import { QuarantineResolveDrawer } from "./QuarantineResolveDrawer";
 import type { QuarantineSnapshot } from "./types";
 
@@ -508,6 +509,7 @@ export function QuarantineDashboard({
             snapshot={snapshot}
             isProcessingJournals={isProcessingJournals}
             onProcessJournals={onProcessJournals}
+            hideSensitive={hideSensitive}
             onOpenTransaction={(transactionId, tab) =>
               openDetail({ transactionId, label: "", tab })
             }
@@ -549,6 +551,11 @@ export function QuarantineDashboard({
             ? t("quarantine.detail.resolveError")
             : null)
         }
+        quarantineContext={quarantineDetailContext(
+          snapshot.items.find(
+            (item) => item.transaction_id === detailTarget.transactionId,
+          ),
+        )}
         quarantineReasonOverride={
           selectedReviewRow?.transactionAction?.reviewReason ?? null
         }

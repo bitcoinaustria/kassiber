@@ -85,13 +85,14 @@ function snapshot(overrides: Partial<QuarantineSnapshot["summary"]> = {}): Quara
   };
 }
 
-function render(data: QuarantineSnapshot, onOpenTransaction = vi.fn()) {
+function render(data: QuarantineSnapshot, onOpenTransaction = vi.fn(), hideSensitive = false) {
   return renderToStaticMarkup(
     <QuarantineCausePanel
       snapshot={data}
       isProcessingJournals={false}
       onProcessJournals={() => {}}
       onOpenTransaction={onOpenTransaction}
+      hideSensitive={hideSensitive}
     />,
   );
 }
@@ -157,6 +158,13 @@ describe("quarantine cause panel", () => {
     expect(html).toContain("Eine Zwischen-Wallet fehlt");
     expect(html).toContain("Blockiert Berichte");
     void i18n.changeLanguage("en");
+  });
+
+  it("masks amounts when sensitive values are hidden", () => {
+    const sensitive = (html: string) => (html.match(/class="[^"]*\bsensitive\b/g) ?? []).length;
+    expect(sensitive(render(snapshot()))).toBe(0);
+    // root amount, assumption total and assumption item
+    expect(sensitive(render(snapshot(), vi.fn(), true))).toBeGreaterThanOrEqual(3);
   });
 
   it("renders nothing for an empty, current quarantine", () => {

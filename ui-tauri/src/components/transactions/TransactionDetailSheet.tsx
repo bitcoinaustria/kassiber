@@ -73,6 +73,7 @@ import {
   causeKeyFor,
   exclusionFitsReason,
   sheetTabForCause,
+  type QuarantineDetailContext,
 } from "@/components/kb/quarantine/explain";
 
 import { TransactionDetailHeader } from "./TransactionDetailHeader";
@@ -103,6 +104,8 @@ export type TransactionDetailSheetProps = {
   isSaving?: boolean;
   saveError?: string | null;
   quarantineReasonOverride?: string | null;
+  /** The daemon's category, evidence and root for this quarantined row. */
+  quarantineContext?: QuarantineDetailContext | null;
   nowRate?: number | null;
   attachments?: AttachmentItem[];
   journalEvents?: JournalEventItem[];
@@ -181,6 +184,7 @@ function TransactionDetailBody({
   isSaving,
   saveError,
   quarantineReasonOverride,
+  quarantineContext = null,
   nowRate,
   attachments,
   journalEvents = [],
@@ -484,12 +488,20 @@ function TransactionDetailBody({
   const quarantineReasonCode = quarantineReason?.toLowerCase() ?? "";
   // Known reasons use the shared quarantine reading, so a custody hold or a
   // row waiting on an earlier problem is not presented as a price or lot issue.
+  // Prefer the daemon's classification of this row; the reason code alone
+  // cannot tell which blocker an umbrella custody hold carries.
+  const detailContext =
+    quarantineContext && quarantineContext.reason.toLowerCase() === quarantineReasonCode
+      ? quarantineContext
+      : null;
   const knownQuarantineCause = quarantineReason
-    ? causeKeyFor(quarantineReasonCode)
+    ? causeKeyFor(quarantineReasonCode, detailContext?.evidence)
     : null;
-  const quarantineCategory = quarantineReason
-    ? categoryForReason(quarantineReasonCode)
-    : null;
+  const quarantineCategory = detailContext
+    ? detailContext.category
+    : quarantineReason
+      ? categoryForReason(quarantineReasonCode)
+      : null;
   const isSyncQuarantine =
     quarantineReasonCode.includes("ownership_transfer_amount_mismatch") ||
     quarantineReasonCode === "ownership_transfer_source_missing";
@@ -508,7 +520,7 @@ function TransactionDetailBody({
     quarantineReasonCode.includes("transfer_fee_implausible");
   const quarantineTargetTab =
     knownQuarantineCause && quarantineCategory
-      ? sheetTabForCause(quarantineReasonCode, quarantineCategory)
+      ? sheetTabForCause(quarantineReasonCode, quarantineCategory, detailContext?.evidence)
       : isSplitTransferQuarantine
         ? "details"
         : isSyncQuarantine
@@ -524,6 +536,8 @@ function TransactionDetailBody({
           {
             reason: quarantineReasonCode,
             category: quarantineCategory,
+            evidence: detailContext?.evidence,
+            rootLabel: detailContext?.rootLabel,
             wallet: transaction.wallet,
             asset: transaction.asset,
           },
@@ -532,7 +546,7 @@ function TransactionDetailBody({
       : null;
   const exclusionFits =
     !quarantineCategory ||
-    exclusionFitsReason(quarantineReasonCode, quarantineCategory);
+    exclusionFitsReason(quarantineReasonCode, quarantineCategory, detailContext?.evidence);
   const hasJournalQuarantine = Boolean(quarantineReason) && !localDraft.excluded;
   const hasPricingBlocker = isPricingMissing && !localDraft.excluded;
   const suppressPricingCacheWarning =

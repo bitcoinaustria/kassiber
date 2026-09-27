@@ -13,6 +13,7 @@ import {
   actionLabel as explainActionLabel,
   categoryLabel,
   causeCopy,
+  quarantineRootLabel,
   sheetTabForCause,
 } from "./explain";
 import type {
@@ -134,7 +135,7 @@ function explainedQuarantineRow(
       detail: item.detail,
       wallet: item.wallet,
       asset: item.asset,
-      rootLabel: item.root ? rootLabel(item.root) : null,
+      rootLabel: item.root ? quarantineRootLabel(item.root) : null,
     },
     t,
   );
@@ -180,10 +181,6 @@ function explainedQuarantineRow(
   };
 }
 
-function rootLabel(root: NonNullable<QuarantineItem["root"]>) {
-  const date = root.occurred_at ? root.occurred_at.slice(0, 10) : "";
-  return [date, root.wallet].filter(Boolean).join(", ");
-}
 
 function categoryFilterIds(category: QuarantineCategory) {
   if (category === "missing_price") return ["missing-prices"];

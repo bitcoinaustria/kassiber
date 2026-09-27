@@ -6,6 +6,7 @@ import type {
   QuarantineAction,
   QuarantineCategory,
   QuarantineEvidence,
+  QuarantineItem,
 } from "./types";
 
 // One reading of a quarantine reason for every surface (cause cards, the
@@ -365,4 +366,30 @@ export function actionLabel(action: QuarantineAction, t: TFunction<"journals">) 
     default:
       return t("quarantine.cta.openTransaction");
   }
+}
+
+/** The daemon's reading of one quarantined row, as handed to detail views. */
+export interface QuarantineDetailContext {
+  reason: string;
+  category: QuarantineCategory;
+  evidence: QuarantineEvidence;
+  rootLabel: string | null;
+}
+
+export function quarantineRootLabel(root: NonNullable<QuarantineItem["root"]>) {
+  const date = root.occurred_at ? root.occurred_at.slice(0, 10) : "";
+  return [date, root.wallet].filter(Boolean).join(", ");
+}
+
+/** Context for a classified item; older daemons without a category give none. */
+export function quarantineDetailContext(
+  item: QuarantineItem | null | undefined,
+): QuarantineDetailContext | null {
+  if (!item?.category) return null;
+  return {
+    reason: item.reason,
+    category: item.category,
+    evidence: item.evidence ?? {},
+    rootLabel: item.root ? quarantineRootLabel(item.root) : null,
+  };
 }

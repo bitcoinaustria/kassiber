@@ -35,6 +35,7 @@ interface QuarantineCausePanelProps {
   isProcessingJournals: boolean;
   onProcessJournals: () => void;
   onOpenTransaction: (transactionId: string, tab: QuarantineSheetTab) => void;
+  hideSensitive?: boolean;
 }
 
 type ConnectionDialogState =
@@ -45,6 +46,9 @@ type ConnectionDialogState =
 function formatMsat(value: number) {
   return formatSats(Math.round(Math.abs(value) / 1000));
 }
+
+// Same masking class as the review table: amounts follow "hide sensitive".
+const sensitiveClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 function dateOnly(value: string | null | undefined) {
   return value ? value.slice(0, 10) : "";
@@ -60,6 +64,7 @@ export function QuarantineCausePanel({
   isProcessingJournals,
   onProcessJournals,
   onOpenTransaction,
+  hideSensitive = false,
 }: QuarantineCausePanelProps) {
   const { t } = useTranslation("journals");
   const navigate = useNavigate();
@@ -244,6 +249,7 @@ export function QuarantineCausePanel({
                 group={group}
                 lockedGapNotice={lockedGapNotice === group.key}
                 syncPending={syncWallet.isPending}
+                hideSensitive={hideSensitive}
                 onAction={(action) => runAction(group, action)}
                 onOpenRoot={() => {
                   if (group.root_transaction_id) {
@@ -272,6 +278,7 @@ export function QuarantineCausePanel({
           inbound={assumptions.unclassified_inbound}
           onOpenTransaction={onOpenTransaction}
           onConnectWallet={() => setDialog({ mode: "connect" })}
+          hideSensitive={hideSensitive}
         />
       ) : null}
 
@@ -301,12 +308,14 @@ function QuarantineCauseCard({
   group,
   lockedGapNotice,
   syncPending,
+  hideSensitive,
   onAction,
   onOpenRoot,
 }: {
   group: QuarantineGroup;
   lockedGapNotice: boolean;
   syncPending: boolean;
+  hideSensitive: boolean;
   onAction: (action: QuarantineAction) => void;
   onOpenRoot: () => void;
 }) {
@@ -356,10 +365,25 @@ function QuarantineCauseCard({
         ) : null}
       </div>
       <p className="mt-2 text-sm font-semibold">{copy.title}</p>
-      <p className="mt-1 text-sm text-muted-foreground">{copy.why}</p>
+      <p
+        className={cn(
+          "mt-1 text-sm text-muted-foreground",
+          // The explanation can quote required and available amounts.
+          (group.evidence.required_msat != null ||
+            group.evidence.available_msat != null) &&
+            sensitiveClass(hideSensitive),
+        )}
+      >
+        {copy.why}
+      </p>
       {group.root_amount_msat &&
       ["BTC", "LBTC"].includes(String(group.root_asset ?? "").toUpperCase()) ? (
-        <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+        <p
+          className={cn(
+            "mt-1 text-xs text-muted-foreground tabular-nums",
+            sensitiveClass(hideSensitive),
+          )}
+        >
           {dateOnly(group.root_occurred_at)} · {group.root_wallet} ·{" "}
           {formatMsat(group.root_amount_msat)}
         </p>
@@ -416,11 +440,13 @@ function QuarantineAssumptions({
   inbound,
   onOpenTransaction,
   onConnectWallet,
+  hideSensitive,
 }: {
   outbound: QuarantineAssumption;
   inbound: QuarantineAssumption;
   onOpenTransaction: (transactionId: string, tab: QuarantineSheetTab) => void;
   onConnectWallet: () => void;
+  hideSensitive: boolean;
 }) {
   const { t } = useTranslation("journals");
   const blocks = [
@@ -448,7 +474,12 @@ function QuarantineAssumptions({
           <details key={block.key} className="rounded-md border p-3">
             <summary className="cursor-pointer text-sm font-medium">
               {block.title}
-              <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">
+              <span
+                className={cn(
+                  "ml-2 text-xs font-normal text-muted-foreground tabular-nums",
+                  sensitiveClass(hideSensitive),
+                )}
+              >
                 {t("quarantine.assumptions.total", { amount: formatMsat(block.data.amount_msat) })}
               </span>
             </summary>
@@ -465,7 +496,9 @@ function QuarantineAssumptions({
                     <span className="truncate">
                       {dateOnly(item.occurred_at)} · {item.wallet}
                     </span>
-                    <span className="shrink-0 tabular-nums">{formatMsat(item.amount_msat)}</span>
+                    <span className={cn("shrink-0 tabular-nums", sensitiveClass(hideSensitive))}>
+                      {formatMsat(item.amount_msat)}
+                    </span>
                   </button>
                 </li>
               ))}
