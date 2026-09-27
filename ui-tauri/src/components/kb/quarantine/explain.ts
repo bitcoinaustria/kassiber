@@ -1,0 +1,368 @@
+import type { TFunction } from "i18next";
+
+import { formatSats } from "@/lib/localeFormat";
+
+import type {
+  QuarantineAction,
+  QuarantineCategory,
+  QuarantineEvidence,
+} from "./types";
+
+// One reading of a quarantine reason for every surface (cause cards, the
+// review table, the transaction sheet). The daemon owns the classification
+// (category, root, blocking state, actions); this module only turns the
+// stable reason code plus its evidence into words. Unknown reasons fall back
+// to their category so no raw code ever reaches the user.
+
+export type CauseKey =
+  | "ownershipSourceMissing"
+  | "ownershipSourceAmbiguous"
+  | "ownershipDestinationAmbiguous"
+  | "ownershipDestinationMissingRef"
+  | "ownershipAmountMismatch"
+  | "ownershipConservation"
+  | "ownershipFeeEvidence"
+  | "ownershipAssetEvidence"
+  | "ownershipAmbiguousOutput"
+  | "ownershipDuplicateOutbound"
+  | "liquidGraphIncomplete"
+  | "recordedAuthorityConflict"
+  | "chronologyMismatch"
+  | "networkMismatch"
+  | "feeImplausible"
+  | "privacyHop"
+  | "samouraiUnverified"
+  | "channelOpen"
+  | "channelClose"
+  | "nativeTransitionAmbiguous"
+  | "nativeTransitionAmountMismatch"
+  | "nativeTransitionFeeTiming"
+  | "migrationIncomplete"
+  | "gapHold"
+  | "implicitDelta"
+  | "unclaimedResidual"
+  | "sourceOverlap"
+  | "searchCapacity"
+  | "componentProblem"
+  | "reviewedSuspense"
+  | "quantityOther"
+  | "basisBarrier"
+  | "pairDependency"
+  | "provenanceIncomplete"
+  | "groupBlocked"
+  | "carryUnresolved"
+  | "missingPrice"
+  | "pricingReview"
+  | "swapPriceRequired"
+  | "insufficientLots"
+  | "missingCostBasis"
+  | "unclassifiedIncome"
+  | "nonSaleDisposal"
+  | "valuationUnsupported"
+  | "conflictingSpend"
+  | "pendingConfirmation"
+  | "unscopedTransfer"
+  | "ownedFanout"
+  | "pairAmbiguous";
+
+const REASON_CAUSES: Record<string, CauseKey> = {
+  ownership_transfer_source_missing: "ownershipSourceMissing",
+  ownership_transfer_source_ambiguous: "ownershipSourceAmbiguous",
+  ownership_transfer_destination_ambiguous: "ownershipDestinationAmbiguous",
+  ownership_transfer_destination_missing_ref: "ownershipDestinationMissingRef",
+  ownership_transfer_amount_mismatch: "ownershipAmountMismatch",
+  ownership_transfer_conservation_mismatch: "ownershipConservation",
+  ownership_transfer_fee_evidence_incomplete: "ownershipFeeEvidence",
+  ownership_transfer_asset_evidence_incomplete: "ownershipAssetEvidence",
+  ownership_transfer_ambiguous_output: "ownershipAmbiguousOutput",
+  ownership_transfer_duplicate_outbound: "ownershipDuplicateOutbound",
+  liquid_transfer_graph_incomplete: "liquidGraphIncomplete",
+  recorded_transfer_authority_conflict: "recordedAuthorityConflict",
+  transfer_pair_chronology_mismatch: "chronologyMismatch",
+  transfer_network_mismatch: "networkMismatch",
+  transfer_fee_implausible: "feeImplausible",
+  privacy_hop_unresolved: "privacyHop",
+  samourai_native_event_unverified: "samouraiUnverified",
+  channel_open_unresolved: "channelOpen",
+  channel_close_unresolved: "channelClose",
+  native_transition_ambiguous: "nativeTransitionAmbiguous",
+  native_transition_amount_mismatch: "nativeTransitionAmountMismatch",
+  native_transition_fee_timing_unresolved: "nativeTransitionFeeTiming",
+  custody_authored_migration_incomplete: "migrationIncomplete",
+  custody_basis_barrier: "basisBarrier",
+  transfer_pair_dependency_blocked: "pairDependency",
+  basis_provenance_incomplete: "provenanceIncomplete",
+  derived_transfer_group_blocked: "groupBlocked",
+  at_swap_basis_carry_unresolved: "carryUnresolved",
+  bitcoin_rail_carry_basis_unresolved: "carryUnresolved",
+  missing_spot_price: "missingPrice",
+  pricing_review_required: "pricingReview",
+  at_swap_price_required: "swapPriceRequired",
+  insufficient_lots: "insufficientLots",
+  missing_cost_basis: "missingCostBasis",
+  unclassified_income_kind: "unclassifiedIncome",
+  non_sale_disposal_kind: "nonSaleDisposal",
+  acquisition_valuation_unsupported: "valuationUnsupported",
+  conflicting_spend: "conflictingSpend",
+  pending_onchain_confirmation: "pendingConfirmation",
+  unscoped_transfer_review: "unscopedTransfer",
+  owned_fanout_unresolved: "ownedFanout",
+  manual_multi_pair_ambiguous: "pairAmbiguous",
+  transfer_mismatch: "pairAmbiguous",
+  custody_component_blocked: "componentProblem",
+  custody_interpreter_blocked: "quantityOther",
+};
+
+const BLOCKER_CAUSES: Record<string, CauseKey> = {
+  custody_gap_review_required: "gapHold",
+  implicit_wallet_delta_unallocated: "implicitDelta",
+  unclaimed_source_residual: "unclaimedResidual",
+  source_overlap_quantity_unresolved: "sourceOverlap",
+  search_capacity_incomplete: "searchCapacity",
+  capacity_source_suspense_required: "searchCapacity",
+  reviewed_residual_suspense: "reviewedSuspense",
+};
+
+/** Every reason the daemon can store; the copy test keeps both locales complete. */
+export const KNOWN_QUARANTINE_REASONS = Object.keys(REASON_CAUSES);
+export const KNOWN_QUANTITY_BLOCKERS = Object.keys(BLOCKER_CAUSES);
+export const CAUSE_KEYS = Array.from(
+  new Set<CauseKey>([
+    ...Object.values(REASON_CAUSES),
+    ...Object.values(BLOCKER_CAUSES),
+    "componentProblem",
+    "quantityOther",
+  ]),
+);
+
+// Older daemons do not send a category; derive the same one from the reason
+// so the page still groups and prioritizes consistently.
+const CAUSE_CATEGORIES: Record<CauseKey, QuarantineCategory> = {
+  ownershipSourceMissing: "missing_wallet_history",
+  ownershipDestinationMissingRef: "missing_wallet_history",
+  channelOpen: "missing_wallet_history",
+  channelClose: "missing_wallet_history",
+  gapHold: "missing_wallet_history",
+  implicitDelta: "missing_wallet_history",
+  ownershipAmountMismatch: "missing_chain_evidence",
+  ownershipConservation: "missing_chain_evidence",
+  ownershipFeeEvidence: "missing_chain_evidence",
+  ownershipAssetEvidence: "missing_chain_evidence",
+  liquidGraphIncomplete: "missing_chain_evidence",
+  recordedAuthorityConflict: "missing_chain_evidence",
+  samouraiUnverified: "missing_chain_evidence",
+  conflictingSpend: "missing_chain_evidence",
+  pendingConfirmation: "missing_chain_evidence",
+  missingPrice: "missing_price",
+  pricingReview: "missing_price",
+  swapPriceRequired: "missing_price",
+  insufficientLots: "missing_acquisition_history",
+  missingCostBasis: "missing_acquisition_history",
+  nativeTransitionFeeTiming: "unsupported",
+  valuationUnsupported: "unsupported",
+  basisBarrier: "downstream",
+  pairDependency: "downstream",
+  provenanceIncomplete: "downstream",
+  groupBlocked: "downstream",
+  carryUnresolved: "downstream",
+  ownershipSourceAmbiguous: "needs_decision",
+  ownershipDestinationAmbiguous: "needs_decision",
+  ownershipAmbiguousOutput: "needs_decision",
+  ownershipDuplicateOutbound: "needs_decision",
+  chronologyMismatch: "needs_decision",
+  networkMismatch: "needs_decision",
+  feeImplausible: "needs_decision",
+  privacyHop: "needs_decision",
+  nativeTransitionAmbiguous: "needs_decision",
+  nativeTransitionAmountMismatch: "needs_decision",
+  migrationIncomplete: "needs_decision",
+  unclaimedResidual: "needs_decision",
+  sourceOverlap: "needs_decision",
+  searchCapacity: "needs_decision",
+  componentProblem: "needs_decision",
+  reviewedSuspense: "needs_decision",
+  quantityOther: "needs_decision",
+  unclassifiedIncome: "needs_decision",
+  nonSaleDisposal: "needs_decision",
+  unscopedTransfer: "needs_decision",
+  ownedFanout: "needs_decision",
+  pairAmbiguous: "needs_decision",
+};
+
+export function causeKeyFor(
+  reason: string,
+  evidence?: QuarantineEvidence | null,
+  detail?: Record<string, unknown> | null,
+): CauseKey | null {
+  if (reason === "custody_quantity_unresolved") {
+    const blocker =
+      evidence?.blocker_code ??
+      (typeof detail?.blocker_code === "string" ? detail.blocker_code : "");
+    if (blocker && BLOCKER_CAUSES[blocker]) return BLOCKER_CAUSES[blocker];
+    if (blocker.startsWith("custody_component_")) return "componentProblem";
+    return "quantityOther";
+  }
+  return REASON_CAUSES[reason] ?? null;
+}
+
+export function categoryForReason(
+  reason: string,
+  evidence?: QuarantineEvidence | null,
+  detail?: Record<string, unknown> | null,
+): QuarantineCategory {
+  const key = causeKeyFor(reason, evidence, detail);
+  return key ? CAUSE_CATEGORIES[key] : "needs_decision";
+}
+
+export interface CauseCopy {
+  title: string;
+  why: string;
+  provide: string;
+}
+
+export interface CauseContext {
+  reason: string;
+  category?: QuarantineCategory | null;
+  evidence?: QuarantineEvidence | null;
+  detail?: Record<string, unknown> | null;
+  wallet?: string | null;
+  asset?: string | null;
+  rootLabel?: string | null;
+}
+
+// Cause keys are composed from the stable reason code; the copy test proves
+// every composed key exists in both locales, which the typed `t` cannot see.
+type DynamicT = (key: string, options?: Record<string, unknown>) => string;
+
+function formatMsat(value: number | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "";
+  return formatSats(Math.round(Math.abs(value) / 1000));
+}
+
+function joinLabels(labels: string[]) {
+  return labels.filter(Boolean).join(", ");
+}
+
+/** Title, reason and the information the user has to provide. */
+export function causeCopy(context: CauseContext, typedT: TFunction<"journals">): CauseCopy {
+  const t = typedT as unknown as DynamicT;
+  const evidence = context.evidence ?? {};
+  const key = causeKeyFor(context.reason, evidence, context.detail);
+  const wallet =
+    evidence.wallet_label || context.wallet || t("quarantine.cause.fallback.wallet");
+  const wallets =
+    joinLabels((evidence.missing_source_wallets ?? []).map((item) => item.label)) ||
+    t("quarantine.cause.fallback.sendingWallet");
+  const values = {
+    wallet,
+    wallets,
+    asset: context.asset || "BTC",
+    required: formatMsat(evidence.required_msat) || t("quarantine.cause.fallback.amount"),
+    available: formatMsat(evidence.available_msat) || t("quarantine.cause.fallback.amount"),
+    since: evidence.lot_state_uncertain_since?.slice(0, 10) || t("quarantine.cause.fallback.date"),
+    root: context.rootLabel || t("quarantine.cause.fallback.root"),
+  };
+  if (key) {
+    return {
+      title: t(`quarantine.cause.${key}.title`, values),
+      why: t(`quarantine.cause.${key}.why`, values),
+      provide: t(`quarantine.cause.${key}.provide`, values),
+    };
+  }
+  const category = context.category ?? "needs_decision";
+  return {
+    title: t(`quarantine.cause.category.${category}.title`, values),
+    why: t(`quarantine.cause.category.${category}.why`, values),
+    provide: t(`quarantine.cause.category.${category}.provide`, values),
+  };
+}
+
+export function categoryLabel(category: QuarantineCategory, t: TFunction<"journals">) {
+  return (t as unknown as DynamicT)(`quarantine.category.${category}`);
+}
+
+export type QuarantineSheetTab = "details" | "classify" | "pricing" | "tax" | "linked" | "ledger";
+
+/** Which transaction-sheet tab holds the evidence for this cause. */
+export function sheetTabForCause(
+  reason: string,
+  category: QuarantineCategory,
+  evidence?: QuarantineEvidence | null,
+): QuarantineSheetTab {
+  const key = causeKeyFor(reason, evidence);
+  if (category === "missing_price") return "pricing";
+  if (key === "unclassifiedIncome" || key === "nonSaleDisposal" || key === "valuationUnsupported") {
+    return "tax";
+  }
+  if (category === "missing_acquisition_history") return "tax";
+  if (
+    key === "ownershipSourceAmbiguous" ||
+    key === "ownershipDestinationAmbiguous" ||
+    key === "nativeTransitionAmbiguous" ||
+    key === "chronologyMismatch" ||
+    key === "networkMismatch" ||
+    key === "unscopedTransfer" ||
+    key === "ownedFanout" ||
+    key === "pairAmbiguous"
+  ) {
+    return "linked";
+  }
+  return "details";
+}
+
+/**
+ * Excluding a transaction is a legitimate answer for prices and explicit
+ * classification questions. For custody, missing history and follow-on rows
+ * it would hide an owned movement or missing basis, never explain it.
+ */
+// Decision questions about explicit classification or a duplicate import;
+// custody decisions (pairing, CoinJoin, components) are never answered by
+// excluding a row.
+const EXCLUSION_DECISIONS = new Set<CauseKey>([
+  "unclassifiedIncome",
+  "nonSaleDisposal",
+  "ownershipDuplicateOutbound",
+]);
+
+/** Exclusion is offered for prices and a few explicit classification questions. */
+export function exclusionFitsReason(
+  reason: string,
+  category: QuarantineCategory,
+  evidence?: QuarantineEvidence | null,
+) {
+  if (category === "missing_price") return true;
+  if (category !== "needs_decision") return false;
+  const key = causeKeyFor(reason, evidence);
+  return key !== null && EXCLUSION_DECISIONS.has(key);
+}
+
+export function actionLabel(action: QuarantineAction, t: TFunction<"journals">) {
+  switch (action.kind) {
+    case "sync_wallet":
+      return t("quarantine.cta.syncWallet", {
+        wallet: action.wallet_label || t("quarantine.cause.fallback.wallet"),
+      });
+    case "connect_wallet":
+      return t("quarantine.cta.connectWallet");
+    case "import_history":
+      return t("quarantine.cta.importHistory");
+    case "set_price":
+      return t("quarantine.cta.setPrice");
+    case "classify":
+      return t("quarantine.cta.classify");
+    case "pair_transfer":
+      return t("quarantine.cta.pairTransfer");
+    case "review_custody_gap":
+      return t("quarantine.cta.reviewCustodyGap");
+    case "attach_evidence":
+      return t("quarantine.cta.attachEvidence");
+    case "wait_for_confirmation":
+      return t("quarantine.cta.waitForConfirmation");
+    case "resolve_root":
+      return t("quarantine.cta.resolveRoot");
+    case "process_journals":
+      return t("quarantine.cta.processJournals");
+    default:
+      return t("quarantine.cta.openTransaction");
+  }
+}

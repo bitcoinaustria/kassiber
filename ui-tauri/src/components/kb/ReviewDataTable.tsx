@@ -90,6 +90,8 @@ interface ReviewDataTableProps {
   icon?: ComponentType<SVGProps<SVGSVGElement>>;
   rows: ReviewTableRow[];
   actions?: ReactNode;
+  /** Rendered between the page header and the queue (e.g. an explanation). */
+  beforeTable?: ReactNode;
   metrics?: ReviewMetric[];
   tableTitle?: string;
   tableDescription?: string;
@@ -179,6 +181,7 @@ export function ReviewDataTable({
   icon: Icon,
   rows,
   actions,
+  beforeTable,
   metrics,
   tableTitle,
   tableDescription,
@@ -339,6 +342,8 @@ export function ReviewDataTable({
           ) : null}
         </div>
       </div>
+
+      {beforeTable}
 
       <div className="kb-surface overflow-hidden">
         <div

@@ -53,6 +53,7 @@ import {
   type QuarantineResolveStep,
 } from "./model";
 import { QuarantineActions } from "./QuarantineActions";
+import { QuarantineCausePanel } from "./QuarantineCausePanel";
 import { QuarantineResolveDrawer } from "./QuarantineResolveDrawer";
 import type { QuarantineSnapshot } from "./types";
 
@@ -502,6 +503,16 @@ export function QuarantineDashboard({
         emptyMessage={t("quarantine.empty")}
         onOpenTransactionAction={openDetail}
         onVisibleRowsChange={setOrderedRows}
+        beforeTable={
+          <QuarantineCausePanel
+            snapshot={snapshot}
+            isProcessingJournals={isProcessingJournals}
+            onProcessJournals={onProcessJournals}
+            onOpenTransaction={(transactionId, tab) =>
+              openDetail({ transactionId, label: "", tab })
+            }
+          />
+        }
         actions={
           <QuarantineActions
             quarantineCount={snapshot.summary.count}
