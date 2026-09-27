@@ -7,6 +7,7 @@ from kassiber.core import wallets as core_wallets
 from kassiber.core.ui_snapshot import build_report_blockers_snapshot
 from kassiber.daemon import _create_profile_payload
 from kassiber.db import (
+    CUSTODY_HOLD_SEMANTICS_MIGRATION,
     RP2_POOL_BASIS_SEMANTICS_MIGRATION,
     WAGES_ACQUISITION_SEMANTICS_MIGRATION,
     open_db,
@@ -355,3 +356,50 @@ def test_new_book_country_change_resets_inherited_pool_scope(tmp_path):
         assert created["defaults"]["cost_basis_pool_scope"] == "global"
     finally:
         conn.close()
+
+
+def test_custody_hold_semantics_rebuild_books_processed_before_upgrade(tmp_path):
+    # Journals built before the pre-arbitration custody holds can keep a
+    # phantom sell-plus-buy; their inputs did not change, so only this
+    # one-shot marker sends them through the next (automatic) rebuild.
+    data_root = tmp_path / "data"
+    conn = open_db(data_root)
+    workspace = core_accounts.create_workspace(conn, "Books")
+    processed = core_accounts.create_profile(
+        conn, workspace["id"], "Processed", "EUR", "fifo", "generic", 365
+    )
+    untouched = core_accounts.create_profile(
+        conn, workspace["id"], "Never processed", "EUR", "fifo", "generic", 365
+    )
+    conn.execute(
+        "UPDATE profiles SET journal_input_version = 4, last_processed_input_version = 4, "
+        "last_processed_at = ? WHERE id = ?",
+        (NOW, processed["id"]),
+    )
+    conn.execute(
+        "DELETE FROM schema_migration_audits WHERE migration_name = ?",
+        (CUSTODY_HOLD_SEMANTICS_MIGRATION,),
+    )
+    conn.commit()
+    conn.close()
+    for _ in range(2):
+        reopened = open_db(data_root)
+        try:
+            row = reopened.execute(
+                "SELECT * FROM profiles WHERE id = ?", (processed["id"],)
+            ).fetchone()
+            assert row["journal_input_version"] == 5
+            assert row["last_processed_at"] is None
+            other = reopened.execute(
+                "SELECT journal_input_version FROM profiles WHERE id = ?",
+                (untouched["id"],),
+            ).fetchone()
+            assert other[0] == 0
+            audits = reopened.execute(
+                "SELECT impact_json FROM schema_migration_audits WHERE migration_name = ?",
+                (CUSTODY_HOLD_SEMANTICS_MIGRATION,),
+            ).fetchall()
+            assert len(audits) == 1
+            assert json.loads(audits[0][0])["changes"][0]["affected_profile_count"] == 1
+        finally:
+            reopened.close()

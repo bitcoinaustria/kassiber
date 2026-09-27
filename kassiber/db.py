@@ -541,6 +541,7 @@ SWAP_FEE_PAIR_KINDS = (
 CUSTODY_DURABLE_EVIDENCE_MIGRATION = "custody-durable-evidence-v1"
 WAGES_ACQUISITION_SEMANTICS_MIGRATION = "wages-acquisition-semantics-v1"
 RP2_POOL_BASIS_SEMANTICS_MIGRATION = "rp2-pool-basis-semantics-v1"
+CUSTODY_HOLD_SEMANTICS_MIGRATION = "custody-fail-closed-holds-v1"
 _CUSTODY_MIGRATION_EXPLANATIONS = {
     "durable_transaction_anchors": (
         "Copies each extant leg transaction id into the immutable anchor so "
@@ -671,6 +672,70 @@ def _migrate_rp2_pool_basis_semantics(conn) -> int:
         (
             RP2_POOL_BASIS_SEMANTICS_MIGRATION,
             RP2_POOL_BASIS_SEMANTICS_MIGRATION,
+            json.dumps(impact, sort_keys=True, separators=(",", ":")),
+        ),
+    )
+    if int(inserted.rowcount or 0) == 0:
+        return 0
+    conn.execute(
+        f"""
+        UPDATE profiles
+        SET last_processed_at = NULL,
+            last_processed_tx_count = 0,
+            journal_input_version = journal_input_version + 1,
+            ownership_review_counts_json = NULL
+        WHERE {affected}
+        """
+    )
+    return 1
+
+
+def _migrate_custody_hold_semantics(conn) -> int:
+    """Mark processed journals stale once for the restored custody holds.
+
+    Journals built before the pre-arbitration holds can hold a disposal plus a
+    fresh acquisition for an unproven own-wallet transfer, or a verified move
+    from an unconfirmed spend. Their inputs did not change, so freshness alone
+    would keep them. One-shot and auditable like the other semantic upgrades;
+    retained evidence is unchanged.
+    """
+    if conn.execute(
+        "SELECT 1 FROM schema_migration_audits WHERE migration_name = ?",
+        (CUSTODY_HOLD_SEMANTICS_MIGRATION,),
+    ).fetchone():
+        return 0
+    affected = """
+        last_processed_at IS NOT NULL OR EXISTS (
+            SELECT 1 FROM journal_entries WHERE profile_id = profiles.id
+        )
+    """
+    affected_count = int(
+        conn.execute(f"SELECT COUNT(*) FROM profiles WHERE {affected}").fetchone()[0]
+    )
+    impact = {
+        "schema_version": 1,
+        "migration": CUSTODY_HOLD_SEMANTICS_MIGRATION,
+        "changes": [
+            {
+                "name": "pre_arbitration_custody_holds",
+                "affected_profile_count": affected_count,
+                "explanation": (
+                    "Marks processed journals stale so unscoped, fan-out, "
+                    "pending and replaced spends are held on the next rebuild; "
+                    "retained journals are unchanged until then."
+                ),
+            }
+        ],
+    }
+    inserted = conn.execute(
+        """
+        INSERT OR IGNORE INTO schema_migration_audits(
+            id, migration_name, schema_version, impact_json, created_at
+        ) VALUES(?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        """,
+        (
+            CUSTODY_HOLD_SEMANTICS_MIGRATION,
+            CUSTODY_HOLD_SEMANTICS_MIGRATION,
             json.dumps(impact, sort_keys=True, separators=(",", ":")),
         ),
     )
@@ -5282,6 +5347,8 @@ def ensure_schema_compat(conn):
     if _migrate_wages_acquisition_semantics(conn):
         conn.commit()
     if _migrate_rp2_pool_basis_semantics(conn):
+        conn.commit()
+    if _migrate_custody_hold_semantics(conn):
         conn.commit()
     ensure_column(conn, "backends", "batch_size", "INTEGER")
     ensure_column(conn, "backends", "config_json", "TEXT NOT NULL DEFAULT '{}'")
