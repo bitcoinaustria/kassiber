@@ -44,6 +44,7 @@ from . import freshness as core_freshness
 from . import custody_components as core_custody_components
 from . import custody_journal as core_custody_journal
 from . import custody_quantity_store as core_custody_quantity_store
+from . import quarantine_review as core_quarantine_review
 from . import lightning as core_lightning
 from . import rates as core_rates
 from . import silent_payments
@@ -6607,7 +6608,7 @@ def build_journals_quarantine_snapshot(
     args: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     raw_args = _coerce_args(args)
-    unknown = sorted(set(raw_args) - {"limit"})
+    unknown = sorted(set(raw_args) - {"limit", "offset"})
     if unknown:
         raise AppError(
             "ui.journals.quarantine received unsupported arguments",
@@ -6616,6 +6617,13 @@ def build_journals_quarantine_snapshot(
             retryable=False,
         )
     limit = _coerce_limit(raw_args, default=20, maximum=MAX_UI_PREVIEW_LIMIT)
+    offset = raw_args.get("offset", 0)
+    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+        raise AppError(
+            "ui.journals.quarantine offset must be a non-negative integer",
+            code="validation",
+            retryable=False,
+        )
     context, profile = _active_context_and_profile(conn)
     if profile is None:
         return {
@@ -6625,6 +6633,7 @@ def build_journals_quarantine_snapshot(
                 "count": 0,
                 "by_reason": [],
                 "limit": limit,
+                "offset": offset,
             },
             "items": [],
         }
@@ -6639,31 +6648,10 @@ def build_journals_quarantine_snapshot(
         """,
         (profile["id"],),
     ).fetchall()
-    rows = conn.execute(
-        """
-        SELECT
-            q.transaction_id,
-            q.reason,
-            q.detail_json,
-            q.created_at,
-            t.external_id,
-            t.occurred_at,
-            t.confirmed_at,
-            t.direction,
-            t.asset,
-            t.amount,
-            t.fee,
-            w.label AS wallet
-        FROM journal_quarantines q
-        JOIN transactions t ON t.id = q.transaction_id
-        JOIN wallets w ON w.id = t.wallet_id
-        WHERE q.profile_id = ?
-        ORDER BY q.created_at DESC, t.occurred_at DESC, q.transaction_id DESC
-        LIMIT ?
-        """,
-        (profile["id"], limit),
-    ).fetchall()
     total = sum(int(row["count"] or 0) for row in reason_rows)
+    review = core_quarantine_review.review_quarantine(
+        conn, profile, limit=limit, offset=offset
+    )
     return {
         "summary": {
             "workspace": context["workspace_label"] or None,
@@ -6674,25 +6662,16 @@ def build_journals_quarantine_snapshot(
                 for row in reason_rows
             ],
             "limit": limit,
+            "offset": offset,
+            **review["summary"],
         },
         "items": [
             {
-                "transaction_id": row["transaction_id"],
-                "external_id": row["external_id"] or "",
-                "occurred_at": row["occurred_at"],
-                "confirmed_at": row["confirmed_at"],
-                "wallet": row["wallet"],
-                "direction": row["direction"],
-                "asset": row["asset"],
-                "amount": float(msat_to_btc(row["amount"] or 0)),
-                "amount_msat": int(row["amount"] or 0),
-                "fee": float(msat_to_btc(row["fee"] or 0)),
-                "fee_msat": int(row["fee"] or 0),
-                "reason": row["reason"],
-                "detail": _json_config(row["detail_json"]),
-                "created_at": row["created_at"],
+                **item,
+                "amount": float(msat_to_btc(item["amount_msat"])),
+                "fee": float(msat_to_btc(item["fee_msat"])),
             }
-            for row in rows
+            for item in review["items"]
         ],
     }
 
@@ -6711,6 +6690,13 @@ def build_journals_transfers_list_snapshot(
             retryable=False,
         )
     limit = _coerce_limit(raw_args, default=20, maximum=MAX_UI_PREVIEW_LIMIT)
+    offset = raw_args.get("offset", 0)
+    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+        raise AppError(
+            "ui.journals.quarantine offset must be a non-negative integer",
+            code="validation",
+            retryable=False,
+        )
     context, profile = _active_context_and_profile(conn)
     if profile is None:
         return {

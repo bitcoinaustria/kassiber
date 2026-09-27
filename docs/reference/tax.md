@@ -246,6 +246,10 @@ python3 -m kassiber journals quarantine clear \
   --transaction <TRANSACTION_ID>
 ```
 
+Each row explains itself: `category`, `blocks_reports`, the `root` for rows
+that only follow from another transaction, `evidence` and the next `actions`
+(see [why a transaction is quarantined](custody-resolution.md#why-a-transaction-is-quarantined)).
+
 Quarantine causes typically include:
 
 - missing spot price

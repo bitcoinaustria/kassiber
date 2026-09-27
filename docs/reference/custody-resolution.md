@@ -116,6 +116,50 @@ not automatically used as one. Samourai's public Deposit/Badbank/Premix/Postmix/
 Ricochet sources help organize the ownership history; native observations and
 the same quantity checks still establish movements.
 
+## Why a transaction is quarantined
+
+A quarantine holds a transaction out of the tax journals because the evidence
+is not enough to book it; it never guesses a taxable event. Every journal
+rebuild recomputes all rows, so a quarantine clears by itself once the missing
+evidence arrives. Desktop syncs, imports and "Process journals" end with that
+rebuild (see [daemon](daemon.md)); the quarantine snapshot reports
+`summary.freshness` so a list older than the book's transactions is marked.
+
+`core/quarantine_catalog.py` is the single vocabulary for reading a stored
+reason. It never decides whether something is quarantined:
+
+| Category | Meaning | Typical next step |
+| --- | --- | --- |
+| `missing_wallet_history` | Part of the movement happened in a wallet whose history is not in the book (sending wallet not synced, intermediate wallet missing, channel sweep wallet). | Sync or connect that wallet; import its history. |
+| `missing_chain_evidence` | The stored graph cannot prove amounts (no input values, confidential outputs, file-only side, pending or replaced). | Sync again from the chain; wait for confirmation. |
+| `missing_price` | No usable price for the valuation date. | Refresh rates or enter the price. |
+| `missing_acquisition_history` | A disposal needs earlier acquisitions Kassiber has not seen or priced. | Import purchase history or connect the source wallet. |
+| `needs_decision` | The evidence has more than one valid reading. | Pair, classify or review the component. |
+| `unsupported` | Kassiber cannot book the shape yet. | Stays visible until supported. |
+| `downstream` | A consequence of another transaction's problem (basis barrier, blocked transfer chain, contaminated lots, carried basis). | Resolve the root; the row follows. |
+
+When a transaction has several reasons, the stored `reason` is the root cause
+and the rest are kept in `detail.additional_reasons`: a custody gap hold is
+not labelled with the basis barrier it raises. `custody_basis_barrier` rows
+name the transactions that set their pool's barrier in
+`detail.root_transaction_ids`; a receipt behind the barrier that books nothing
+at all is listed as such a downstream row instead of disappearing.
+`custody_quantity_unresolved` keeps a deterministic primary `blocker_code` and,
+when several issues apply, every `blocker_codes`/`issue_ids` plus `gap_ids`.
+
+`ui.journals.quarantine` and `journals quarantined` add per row `category`,
+`blocks_reports` (the row is named by a persisted custody quantity issue, which
+blocks every report), `is_downstream`, `root`, `reasons`, normalized
+`evidence` (wallet labels instead of ids, required/available msat, gap id) and
+ordered `actions`. The snapshot also groups rows by root cause, orders roots
+before their consequences and oldest first, pages with `offset`, and lists
+`assumptions`: outflows booked as disposals only because no owned destination
+is known, and kind-less receipts booked as purchases at market value. Neither
+assumption is a quarantine, but both change results when the owner has an
+unconnected wallet. The desktop shows these causes above the table, keeps the
+gap editor behind developer tools, and offers exclusion only for price and
+decision questions.
+
 ## Desktop review
 
 The **Transfers & Custody** surface combines transfer/swap review with custody

@@ -4,6 +4,7 @@ import unittest
 
 from kassiber.msat import msat_to_btc
 from kassiber.core.engines import GenericRP2TaxEngine
+from kassiber.core import quarantine_catalog
 from kassiber.core.tax_events import (
     build_tax_quarantine,
     dedupe_quarantines,
@@ -2911,6 +2912,49 @@ class DedupeQuarantinesTest(unittest.TestCase):
             ]
         )
         self.assertEqual([q["transaction_id"] for q in out], ["tx-b", "tx-a"])
+
+    def test_root_cause_outranks_an_earlier_downstream_reason(self):
+        # The projection emits a gap hold's own basis barrier before the hold
+        # (alphabetical order). The stored reason must name the custody gap,
+        # not the barrier every later row in the pool shares.
+        out = dedupe_quarantines(
+            [
+                self._q("tx", "custody_basis_barrier", {"root_transaction_ids": ["tx"]}),
+                self._q(
+                    "tx",
+                    "custody_quantity_unresolved",
+                    {"blocker_code": "custody_gap_review_required"},
+                ),
+                self._q("tx", "missing_spot_price", {"asset": "BTC"}),
+            ]
+        )
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["reason"], "custody_quantity_unresolved")
+        detail = json.loads(out[0]["detail_json"])
+        self.assertEqual(detail["blocker_code"], "custody_gap_review_required")
+        self.assertEqual(
+            [item["reason"] for item in detail["additional_reasons"]],
+            ["custody_basis_barrier", "missing_spot_price"],
+        )
+        self.assertEqual(
+            quarantine_catalog.primary_reasons(
+                [
+                    self._q("tx", "custody_basis_barrier", {}),
+                    self._q("tx", "custody_quantity_unresolved", {}),
+                    self._q("tx", "missing_spot_price", {}),
+                ]
+            ),
+            {"tx": "custody_quantity_unresolved"},
+        )
+
+    def test_downstream_only_rows_keep_their_first_reason(self):
+        out = dedupe_quarantines(
+            [
+                self._q("tx", "custody_basis_barrier", {"root_transaction_ids": ["root"]}),
+                self._q("tx", "transfer_pair_dependency_blocked", {}),
+            ]
+        )
+        self.assertEqual(out[0]["reason"], "custody_basis_barrier")
 
 
 class ClampedZeroSelfSendTest(unittest.TestCase):

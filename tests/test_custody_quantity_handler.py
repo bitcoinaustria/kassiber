@@ -796,14 +796,34 @@ class CustodyQuantityHandlerTests(unittest.TestCase):
                             """
                         ).fetchone()
                     )
-                    self.assertIsNotNone(
-                        conn.execute(
-                            """
-                            SELECT 1 FROM journal_quarantines
-                            WHERE transaction_id = 'later-sale'
-                              AND reason = 'custody_basis_barrier'
-                            """
-                        ).fetchone()
+                    later = conn.execute(
+                        """
+                        SELECT detail_json FROM journal_quarantines
+                        WHERE transaction_id = 'later-sale'
+                          AND reason = 'custody_basis_barrier'
+                        """
+                    ).fetchone()
+                    self.assertIsNotNone(later)
+                    # A downstream row points at the transaction whose
+                    # unresolved custody set the barrier.
+                    self.assertEqual(
+                        json.loads(later["detail_json"])["root_transaction_ids"],
+                        ["out"],
+                    )
+                    # The root row itself reads as the custody problem it is,
+                    # not as the basis barrier it raises for its suspense slice.
+                    root = conn.execute(
+                        """
+                        SELECT reason, detail_json FROM journal_quarantines
+                        WHERE transaction_id = 'out'
+                        """
+                    ).fetchone()
+                    self.assertEqual(root["reason"], "custody_quantity_unresolved")
+                    root_detail = json.loads(root["detail_json"])
+                    self.assertEqual(root_detail["blocker_code"], "reviewed_residual_suspense")
+                    self.assertEqual(
+                        [item["reason"] for item in root_detail["additional_reasons"]],
+                        ["custody_basis_barrier"],
                     )
                     issue = conn.execute(
                         """

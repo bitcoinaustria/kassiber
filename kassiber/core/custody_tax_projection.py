@@ -14,6 +14,7 @@ from typing import Any, Mapping, Sequence
 
 from ..msat import msat_to_btc
 from ..transfers import is_bitcoin_rail_pair
+from . import quarantine_catalog
 from .privacy_hops import privacy_hop_evidence_from_row
 from .custody_evidence import row_principal_msat
 from .custody_quantity import (
@@ -334,13 +335,22 @@ def compile_finalized_tax_projection(
         move_neighbors.setdefault(source_id, set()).add(target_id)
         move_neighbors.setdefault(target_id, set()).add(source_id)
     effectively_blocked = set(explicitly_blocked)
+    # Which explicitly blocked transactions each dependent move path hangs on,
+    # so a dependency quarantine names its own cause rather than every block.
+    blocked_origins: dict[str, set[str]] = {
+        transaction_id: {transaction_id} for transaction_id in explicitly_blocked
+    }
     frontier = list(explicitly_blocked)
     while frontier:
         transaction_id = frontier.pop()
         for neighbor in move_neighbors.get(transaction_id, ()):
+            origins = blocked_origins.setdefault(neighbor, set())
+            if not blocked_origins[transaction_id] <= origins:
+                origins.update(blocked_origins[transaction_id])
+                if neighbor not in explicitly_blocked:
+                    frontier.append(neighbor)
             if neighbor not in effectively_blocked:
                 effectively_blocked.add(neighbor)
-                frontier.append(neighbor)
     event_order_by_hash: dict[str, tuple[str, str, str, str, str]] = {}
     for event in state.canonical_input.events:
         event_order = (
@@ -394,7 +404,9 @@ def compile_finalized_tax_projection(
             reason,
             {
                 "required_for": "complete_transfer_component",
-                "blocked_by_transaction_ids": sorted(explicitly_blocked),
+                "blocked_by_transaction_ids": sorted(
+                    blocked_origins.get(transaction_id, explicitly_blocked)
+                ),
             },
         )
 
@@ -447,6 +459,11 @@ def compile_finalized_tax_projection(
                     "required_for": "resolved_prior_custody_basis",
                     "barrier_event": source_barrier,
                     "source_quantity_hash": source.quantity_hash,
+                    # The unresolved transactions that set this pool's
+                    # barrier; resolving them releases this row.
+                    "root_transaction_ids": list(
+                        state.tax_eligibility.barrier_roots_for(source)
+                    ),
                 },
             ),
         )
@@ -698,6 +715,7 @@ def compile_finalized_tax_projection(
     # Inbound slices not consumed by a selected custody move are genuine tax
     # acquisition candidates.  A rowless virtual target is never promoted into
     # an acquisition if its native claim failed/was blocked.
+    barrier_held_receipts: list[QuantityObservation] = []
     for observation in sorted(
         state.projection.observations,
         key=lambda item: (item.occurred_at, item.quantity_hash),
@@ -707,6 +725,7 @@ def compile_finalized_tax_projection(
         if observation.anchor_transaction_id in non_events:
             continue
         if is_blocked_by_basis_barrier(observation):
+            barrier_held_receipts.append(observation)
             continue
         if observation.anchor_transaction_id in blocked_anchor_ids or (
             observation.anchor_transaction_id in effectively_blocked
@@ -751,6 +770,7 @@ def compile_finalized_tax_projection(
                 )
             )
 
+    issues_by_quarantine: dict[tuple[str, str], list[Any]] = {}
     for issue in state.issues:
         if issue.issue_type == "custody_interpreter_blocked":
             continue
@@ -762,31 +782,74 @@ def compile_finalized_tax_projection(
                 if issue.reason == "transfer_fee_implausible"
                 else "custody_quantity_unresolved"
             )
-            key = (transaction_id, quarantine_reason)
-            quarantines.setdefault(
-                key,
-                _quarantine(
-                    profile,
-                    transaction_id,
-                    quarantine_reason,
-                    {
-                        "blocker_code": issue.reason,
-                        "required_for": "finalized_custody_tax_projection",
-                        "issue_id": issue.issue_id,
-                        **(
-                            {
-                                "resolution": (
-                                    "review the authored component evidence and create "
-                                    "or supersede the revision"
-                                )
-                            }
-                            if issue.reason.startswith("custody_component_")
-                            or issue.issue_type == "component_claim_compile_failed"
-                            else {}
-                        ),
-                    },
-                ),
+            issues_by_quarantine.setdefault(
+                (transaction_id, quarantine_reason), []
+            ).append(issue)
+    for key, row_issues in sorted(issues_by_quarantine.items()):
+        if key in quarantines:
+            continue
+        transaction_id, quarantine_reason = key
+        # Several issues can name one transaction. Choose the explaining
+        # blocker by meaning, not by hash order, and keep the others.
+        row_issues.sort(
+            key=lambda item: (
+                quarantine_catalog.quantity_blocker_rank(item.reason),
+                item.issue_id,
             )
+        )
+        issue = row_issues[0]
+        gap_ids = sorted(
+            {
+                str(item.details.get("gap_id"))
+                for item in row_issues
+                if isinstance(item.details, Mapping) and item.details.get("gap_id")
+            }
+        )
+        quarantines[key] = _quarantine(
+            profile,
+            transaction_id,
+            quarantine_reason,
+            {
+                "blocker_code": issue.reason,
+                "required_for": "finalized_custody_tax_projection",
+                "issue_id": issue.issue_id,
+                **(
+                    {
+                        "blocker_codes": sorted({item.reason for item in row_issues}),
+                        "issue_ids": sorted({item.issue_id for item in row_issues}),
+                    }
+                    if len(row_issues) > 1
+                    else {}
+                ),
+                **({"gap_ids": gap_ids} if gap_ids else {}),
+                **(
+                    {
+                        "resolution": (
+                            "review the authored component evidence and create "
+                            "or supersede the revision"
+                        )
+                    }
+                    if issue.reason.startswith("custody_component_")
+                    or issue.issue_type == "component_claim_compile_failed"
+                    else {}
+                ),
+            },
+        )
+
+    # A receipt behind the basis barrier that books nothing and has no
+    # quarantine of its own would otherwise vanish from both the journals and
+    # the review queue. Name the barrier for it; receipts that still book a
+    # move-in, or already explain themselves, stay as they are.
+    projected_anchor_ids = {
+        str(_field(row, "journal_transaction_id") or "") for row in projection_rows
+    }
+    quarantined_ids = {transaction_id for transaction_id, _reason in quarantines}
+    for observation in barrier_held_receipts:
+        if (
+            observation.anchor_transaction_id not in projected_anchor_ids
+            and observation.anchor_transaction_id not in quarantined_ids
+        ):
+            quarantine_basis_barrier(observation)
 
     # Taxable cross-asset reviews do not assert continuing custody, so they do
     # not emit an internal quantity claim.  Preserve them as audit/tax-relation
