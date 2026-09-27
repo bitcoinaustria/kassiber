@@ -32,6 +32,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { formatBtc, type Currency } from "@/lib/currency";
+import { fiatCompleteness } from "@/lib/fiatCompleteness";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
@@ -44,6 +45,7 @@ import {
   activityFlowPalettes,
   activityMarkerView,
   autoFitDomain,
+  basisIncompleteHintKey,
   brushedActivityMarkers,
   blurClass,
   bucketActivityMarkers,
@@ -79,6 +81,7 @@ import {
   OUTGOING_MARKER_MIN_PARAM,
   portfolioAxisTicks,
   portfolioChartColors,
+  portfolioCompletenessDetail,
   positiveLogDomain,
   powerLawXDomain,
   powerLawXTicks,
@@ -135,6 +138,11 @@ export const BtcActivityChart = ({
     [snapshot],
   );
   const to = t as OverviewTranslate;
+  // Basis-derived figures (avg cost, unrealized) are only exact while the
+  // daemon says the journal basis covers the displayed BTC.
+  const basisTrusted = fiatCompleteness(snapshot.fiat).costBasisComplete;
+  const completenessDetail = portfolioCompletenessDetail(snapshot);
+  const basisHintKey = basisIncompleteHintKey(snapshot);
   const bookKey = useUiStore((state) => bookIdentityKey(state.identity));
   const storedBookChartPeriod = useUiStore((state) =>
     bookKey ? state.bookChartPeriods[bookKey] : undefined,
@@ -681,8 +689,14 @@ export const BtcActivityChart = ({
       seriesVisible.portfolioValue
         ? lastTreasuryLineValue(plotData, "linePortfolioValueEur")
         : null;
+    // The avg-cost line stops at the first basis gap; a right-edge tag would
+    // present the last pre-gap value as the current one.
     const lastBasisValue =
-      showLastValue && !hideSensitive && fiatSeriesEnabled && seriesVisible.basis
+      showLastValue &&
+      !hideSensitive &&
+      fiatSeriesEnabled &&
+      seriesVisible.basis &&
+      basisTrusted
         ? lastTreasuryLineValue(plotData, "lineAvgCostEur")
         : null;
     const handleBrushChange = (range: TreasuryBrushChange) => {
@@ -718,9 +732,13 @@ export const BtcActivityChart = ({
     const visibleLatestReserve = snapshot.fiat.eurBalance;
     const visibleCostBasis = snapshot.fiat.eurCostBasis;
     const gainEur = visibleLatestReserve - visibleCostBasis;
-    const gainPct = visibleCostBasis
-      ? (gainEur / Math.abs(visibleCostBasis)) * 100
-      : null;
+    // Without a market rate eurBalance is a fallback valuation, not a price.
+    const gainPct =
+      visibleCostBasis &&
+      !completenessDetail &&
+      !fiatCompleteness(snapshot.fiat).marketRateMissing
+        ? (gainEur / Math.abs(visibleCostBasis)) * 100
+        : null;
     const fiatCurrency = activeMarketFiatCurrency(snapshot);
     const fiatRate = activeMarketFiatRate(snapshot);
     const incomingActivityPoints = activityPoints.filter(
@@ -919,6 +937,18 @@ export const BtcActivityChart = ({
                     </span>
                   </span>
                 )}
+                {completenessDetail && fiatSeriesEnabled ? (
+                  <span
+                    className="font-semibold text-amber-600 dark:text-amber-400"
+                    title={t(completenessDetail.hintKey as never)}
+                  >
+                    {/* dynamic key */}
+                    {t(
+                      completenessDetail.copy.key as never,
+                      completenessDetail.copy.params,
+                    )}
+                  </span>
+                ) : null}
                 {gainPct !== null && (
                   <span
                     className={cn(
@@ -965,6 +995,7 @@ export const BtcActivityChart = ({
                   hideSensitive={hideSensitive}
                   priceEur={fiatRate}
                   fiatCurrency={fiatCurrency}
+                  basisHintKey={basisHintKey}
                   variant="header"
                   className="max-w-[calc(100vw-5.5rem)] xl:max-w-[920px]"
                 />
@@ -1257,6 +1288,7 @@ export const BtcActivityChart = ({
                         priceEur={fiatRate}
                         fiatCurrency={fiatCurrency}
                         fiatSeriesEnabled={fiatSeriesEnabled}
+                        basisHintKey={basisHintKey}
                       />
                     }
                     cursor={{ strokeOpacity: 0.2 }}

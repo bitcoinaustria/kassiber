@@ -79,6 +79,8 @@ interface WalletsMetricGridProps {
   currency: Currency;
   hideSensitive: boolean;
   isSyncing: boolean;
+  /** No market rate: a fiat total would be a stale or zero placeholder. */
+  marketRateMissing?: boolean;
   priceEur: number;
   taxFreeBalance?: OverviewSnapshot["taxFreeBalance"];
   totalBtc: number;
@@ -90,13 +92,17 @@ export function WalletsMetricGrid({
   currency,
   hideSensitive,
   isSyncing,
+  marketRateMissing = false,
   priceEur,
   taxFreeBalance,
   totalBtc,
 }: WalletsMetricGridProps) {
   const { t } = useTranslation("connections");
   const totalEur = totalBtc * priceEur;
-  const balanceDetail = balanceSummary?.needsJournals
+  const fiatUnavailable = currency === "eur" && marketRateMissing;
+  const balanceDetail = fiatUnavailable
+    ? t("metrics.balanceNoMarketRate")
+    : balanceSummary?.needsJournals
     ? t("metrics.balanceNeedsJournals")
     : (balanceSummary?.quarantines ?? 0) > 0
       ? t("metrics.balanceQuarantines", {
@@ -172,9 +178,11 @@ export function WalletsMetricGrid({
           value={
             <span className={hiddenSensitiveClassName(hideSensitive)}>
               <CurrencyToggleText>
-                {currency === "eur"
-                  ? formatEur(totalEur)
-                  : `₿ ${formatBtc(totalBtc)}`}
+                {fiatUnavailable
+                  ? "—"
+                  : currency === "eur"
+                    ? formatEur(totalEur)
+                    : `₿ ${formatBtc(totalBtc)}`}
               </CurrencyToggleText>
             </span>
           }

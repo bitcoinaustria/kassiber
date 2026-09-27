@@ -17,7 +17,7 @@ from ..backends import (
 )
 from ..db import get_setting
 from ..errors import AppError
-from ..msat import dec, msat_to_btc
+from ..msat import btc_to_msat, dec, msat_to_btc
 from ..tax_policy import build_tax_policy
 from .journal_markers import (
     MARKER_ALT_IN,
@@ -216,6 +216,7 @@ def _empty_overview_snapshot() -> dict[str, Any]:
             "eurCostBasis": 0.0,
             "eurUnrealized": 0.0,
             "eurRealizedYTD": 0.0,
+            "completeness": _unavailable_fiat_completeness(),
         },
         "taxFreeBalance": None,
         "status": {
@@ -262,6 +263,7 @@ def _empty_workspace_overview_snapshot(
             "eurRealizedYTD": 0.0,
             "btcBalance": 0.0,
             "books": [],
+            "completeness": _unavailable_fiat_completeness(),
         },
         "status": {
             "workspace": workspace["label"] if workspace is not None else None,
@@ -2930,6 +2932,283 @@ def _fiat_snapshot(
     return payload
 
 
+# Reasons that make the journal cost basis (and therefore unrealized / realized
+# figures) incomplete. ``market_rate_missing`` only affects the fiat valuation.
+_FIAT_COMPLETENESS_BASIS_REASONS = (
+    "journals_stale",
+    "quarantines",
+    "custody_unresolved",
+    "missing_prices",
+)
+_FIAT_COMPLETENESS_REASONS = (*_FIAT_COMPLETENESS_BASIS_REASONS, "market_rate_missing")
+_FIAT_COMPLETENESS_STATE_RANK = {
+    "complete": 0,
+    "unavailable": 1,
+    "incomplete": 2,
+    "stale": 3,
+}
+
+
+def _unavailable_fiat_completeness() -> dict[str, Any]:
+    """Completeness for payloads that carry no book state (no active book).
+
+    Nothing here claims a complete cost basis; the UI and AI must not present
+    zero placeholders as accounting figures.
+    """
+    return {
+        "state": "unavailable",
+        "costBasisComplete": False,
+        "reasons": [],
+        "quarantineCount": 0,
+        "quarantinedInboundMsat": 0,
+        "quarantinedOutboundMsat": 0,
+        "basisCoveredMsat": None,
+        "basisUncoveredMsat": None,
+        "earliestIncompleteAt": None,
+        "missingPriceCount": 0,
+        "marketRateMissing": False,
+    }
+
+
+def _quarantined_quantity_summary(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, Any]:
+    row = conn.execute(
+        """
+        SELECT
+            COALESCE(SUM(
+                CASE
+                    WHEN t.excluded = 0 AND t.asset IN ('BTC', 'LBTC')
+                         AND t.direction = 'inbound'
+                    THEN ABS(COALESCE(t.amount, 0))
+                    ELSE 0
+                END
+            ), 0) AS inbound_msat,
+            COALESCE(SUM(
+                CASE
+                    WHEN t.excluded = 0 AND t.asset IN ('BTC', 'LBTC')
+                         AND t.direction = 'outbound'
+                    THEN ABS(COALESCE(t.amount, 0)) + ABS(COALESCE(t.fee, 0))
+                    ELSE 0
+                END
+            ), 0) AS outbound_msat,
+            MIN(t.occurred_at) AS earliest_at
+        FROM journal_quarantines q
+        JOIN transactions t ON t.id = q.transaction_id
+        WHERE q.profile_id = ?
+        """,
+        (profile_id,),
+    ).fetchone()
+    return {
+        "inbound_msat": int(row["inbound_msat"] or 0) if row else 0,
+        "outbound_msat": int(row["outbound_msat"] or 0) if row else 0,
+        "earliest_at": row["earliest_at"] if row else None,
+    }
+
+
+def _missing_price_summary(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, Any]:
+    # Same predicate as ui.rates.coverage / the report-blocker missing_prices row.
+    row = conn.execute(
+        """
+        SELECT COUNT(*) AS count, MIN(t.occurred_at) AS earliest_at
+        FROM transactions t
+        WHERE t.profile_id = ? AND t.excluded = 0
+          AND (t.amount > 0 OR t.fee > 0)
+          AND {missing_price_sql}
+        """.format(missing_price_sql=core_rates.transaction_price_missing_sql()),
+        (profile_id,),
+    ).fetchone()
+    return {
+        "count": int(row["count"] or 0) if row else 0,
+        "earliest_at": row["earliest_at"] if row else None,
+    }
+
+
+def _journal_basis_covered_msat(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> int:
+    """BTC quantity (msat) that carries journal cost basis.
+
+    Mirrors the book-balance fallback order: processed wallet holdings when they
+    exist, otherwise the net holdings delta of journal entries. Quarantined rows
+    produce neither, so their quantity stays uncovered.
+    """
+    try:
+        holdings = conn.execute(
+            """
+            SELECT COUNT(*) AS row_count, SUM(quantity) AS quantity
+            FROM journal_wallet_holdings
+            WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
+            """,
+            (profile_id,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        holdings = None
+    if holdings is not None and int(holdings["row_count"] or 0) > 0:
+        return max(0, int(holdings["quantity"] or 0))
+    rows = conn.execute(
+        """
+        SELECT entry_type, quantity
+        FROM journal_entries
+        WHERE profile_id = ? AND asset IN ('BTC', 'LBTC')
+        """,
+        (profile_id,),
+    ).fetchall()
+    total = sum(
+        int(report_builders._holdings_quantity_delta(row["entry_type"], int(row["quantity"] or 0)))
+        for row in rows
+    )
+    return max(0, total)
+
+
+def _overview_fiat_completeness(
+    conn: sqlite3.Connection,
+    profile: sqlite3.Row,
+    freshness: dict[str, Any],
+    *,
+    display_balance_btc: float,
+    market_rate_missing: bool,
+) -> dict[str, Any]:
+    """Say whether the overview's cost basis and fiat figures can be trusted.
+
+    ``eurCostBasis`` sums journal entries, which exclude quarantined rows and
+    everything after an unresolved custody gap, while the displayed BTC balance
+    comes from observed coins. This block exposes that mismatch instead of
+    letting the UI or AI present basis/unrealized/realized figures as exact.
+    """
+    profile_id = str(profile["id"])
+    stale = bool(freshness.get("needs_processing"))
+    quarantine_count = int(freshness.get("quarantine_count") or 0)
+    quarantined = (
+        _quarantined_quantity_summary(conn, profile_id)
+        if quarantine_count
+        else {"inbound_msat": 0, "outbound_msat": 0, "earliest_at": None}
+    )
+    try:
+        custody = core_custody_quantity_store.custody_quantity_readiness_summary(
+            conn,
+            profile_id,
+            journal_status=str(freshness.get("status") or ""),
+        )
+        custody_issue_count = int(custody.get("issue_count") or 0)
+    except AppError as exc:
+        if exc.code != "custody_quantity_state_unavailable":
+            raise
+        # Unknown custody state must not read as clear, but it should not take
+        # the whole dashboard down either: report it as an unresolved gap.
+        custody = {"blocked_from": None}
+        custody_issue_count = 1
+    missing_prices = _missing_price_summary(conn, profile_id)
+
+    flags = {
+        "journals_stale": stale,
+        "quarantines": quarantine_count > 0,
+        "custody_unresolved": custody_issue_count > 0,
+        "missing_prices": missing_prices["count"] > 0,
+        "market_rate_missing": bool(market_rate_missing),
+    }
+    reasons = [reason for reason in _FIAT_COMPLETENESS_REASONS if flags[reason]]
+    cost_basis_complete = not any(
+        flags[reason] for reason in _FIAT_COMPLETENESS_BASIS_REASONS
+    )
+    if stale:
+        state = "stale"
+    elif not cost_basis_complete:
+        state = "incomplete"
+    elif market_rate_missing:
+        state = "unavailable"
+    else:
+        state = "complete"
+
+    # A stale projection cannot say which quantity or date it still covers.
+    covered_msat = None if stale else _journal_basis_covered_msat(conn, profile_id)
+    display_msat = max(0, int(btc_to_msat(display_balance_btc) or 0))
+    uncovered_msat = (
+        None if covered_msat is None else max(0, display_msat - covered_msat)
+    )
+    earliest_incomplete_at = None
+    if not stale and not cost_basis_complete:
+        candidates = [
+            str(value)
+            for value in (
+                quarantined["earliest_at"] if flags["quarantines"] else None,
+                custody.get("blocked_from") if flags["custody_unresolved"] else None,
+                missing_prices["earliest_at"] if flags["missing_prices"] else None,
+            )
+            if value
+        ]
+        earliest_incomplete_at = min(candidates) if candidates else None
+    return {
+        "state": state,
+        "costBasisComplete": cost_basis_complete,
+        "reasons": reasons,
+        "quarantineCount": quarantine_count,
+        "quarantinedInboundMsat": quarantined["inbound_msat"],
+        "quarantinedOutboundMsat": quarantined["outbound_msat"],
+        "basisCoveredMsat": covered_msat,
+        "basisUncoveredMsat": uncovered_msat,
+        "earliestIncompleteAt": earliest_incomplete_at,
+        "missingPriceCount": missing_prices["count"],
+        "marketRateMissing": bool(market_rate_missing),
+    }
+
+
+def _rollup_fiat_completeness(items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Combine per-book completeness blocks without hiding any book's gap."""
+    if not items:
+        return _unavailable_fiat_completeness()
+    state = max(
+        (str(item.get("state") or "unavailable") for item in items),
+        key=lambda value: _FIAT_COMPLETENESS_STATE_RANK.get(value, 1),
+    )
+    reason_set = {
+        str(reason) for item in items for reason in (item.get("reasons") or [])
+    }
+    cost_basis_complete = all(item.get("costBasisComplete") is True for item in items)
+
+    def _sum_optional(key: str) -> int | None:
+        values = [item.get(key) for item in items]
+        if any(value is None for value in values):
+            return None
+        return sum(int(value) for value in values)
+
+    earliest_incomplete_at = None
+    incomplete_items = [
+        item for item in items if item.get("costBasisComplete") is not True
+    ]
+    # A book that is incomplete without a known start date affects every point.
+    if incomplete_items and all(
+        item.get("earliestIncompleteAt") for item in incomplete_items
+    ):
+        earliest_incomplete_at = min(
+            str(item["earliestIncompleteAt"]) for item in incomplete_items
+        )
+    return {
+        "state": state,
+        "costBasisComplete": cost_basis_complete,
+        "reasons": [
+            reason for reason in _FIAT_COMPLETENESS_REASONS if reason in reason_set
+        ],
+        "quarantineCount": sum(int(item.get("quarantineCount") or 0) for item in items),
+        "quarantinedInboundMsat": sum(
+            int(item.get("quarantinedInboundMsat") or 0) for item in items
+        ),
+        "quarantinedOutboundMsat": sum(
+            int(item.get("quarantinedOutboundMsat") or 0) for item in items
+        ),
+        "basisCoveredMsat": _sum_optional("basisCoveredMsat"),
+        "basisUncoveredMsat": _sum_optional("basisUncoveredMsat"),
+        "earliestIncompleteAt": earliest_incomplete_at,
+        "missingPriceCount": sum(int(item.get("missingPriceCount") or 0) for item in items),
+        "marketRateMissing": any(item.get("marketRateMissing") is True for item in items),
+    }
+
+
 def _tax_free_balance_snapshot(
     conn: sqlite3.Connection,
     profile: sqlite3.Row,
@@ -3222,6 +3501,15 @@ def _build_profile_overview_snapshot(
         balance_total=display_balance_total,
         chain_duplicate_adjustment_btc=chain_duplicate_adjustment,
     )
+    # eurBalance keeps its best-available valuation for compatibility; when no
+    # market rate exists, marketRateMissing tells readers it is not a market value.
+    fiat["completeness"] = _overview_fiat_completeness(
+        conn,
+        profile,
+        freshness,
+        display_balance_btc=display_balance_total,
+        market_rate_missing=market_rate["rate"] is None,
+    )
     snapshot = {
         "priceEur": price_eur,
         "priceUsd": price_usd,
@@ -3290,6 +3578,32 @@ def _profile_overview_for_status(
         transaction_count=transaction_count,
         freshness=freshness,
     )
+    # Custody gaps and missing prices also block basis-dependent figures and
+    # reports (see ui.report.blockers); a book-set row must not call them ready.
+    completeness_reasons = set(
+        (snapshot["fiat"].get("completeness") or {}).get("reasons") or []
+    )
+    extra_hints = [
+        hint
+        for reason, hint in (
+            (
+                "custody_unresolved",
+                "Resolve custody gaps before trusting cost basis or reports.",
+            ),
+            (
+                "missing_prices",
+                "Fill missing transaction prices before trusting cost basis or reports.",
+            ),
+        )
+        if reason in completeness_reasons
+    ]
+    if extra_hints:
+        hints = [
+            hint
+            for hint in readiness["hints"]
+            if not hint.startswith("Reports are ready")
+        ]
+        readiness = {"ready": False, "hints": [*hints, *extra_hints]}
     return {
         "profile": {
             "id": profile["id"],
@@ -3309,6 +3623,8 @@ def _profile_overview_for_status(
         "balanceSeries": snapshot["balanceSeries"],
         "portfolioSeries": snapshot.get("portfolioSeries", []),
         "fiat": snapshot["fiat"],
+        "balanceSummary": snapshot.get("balanceSummary"),
+        "taxFreeBalance": snapshot.get("taxFreeBalance"),
         "marketRate": snapshot.get("marketRate"),
         "status": {
             **snapshot["status"],
@@ -3499,10 +3815,18 @@ def _workspace_fiat_rollup(
     *,
     currencies: list[str],
 ) -> dict[str, Any]:
-    btc_balance = sum(
-        sum(float(connection.get("balance") or 0) for connection in book["connections"])
-        for book in books
-    )
+    def book_btc_balance(book: dict[str, Any]) -> float:
+        # balanceSummary.totalBtc already removes coins that several chain
+        # wallets in the same book watch; summing connection tiles would not.
+        summary = book.get("balanceSummary") or {}
+        if isinstance(summary.get("totalBtc"), (int, float)):
+            return float(summary["totalBtc"])
+        return sum(
+            float(connection.get("balance") or 0)
+            for connection in book["connections"]
+        )
+
+    btc_balance = sum(book_btc_balance(book) for book in books)
     book_rows = [
         {
             "profileId": book["profile"]["id"],
@@ -3512,11 +3836,17 @@ def _workspace_fiat_rollup(
             "costBasis": float(book["fiat"].get("eurCostBasis") or 0),
             "unrealized": float(book["fiat"].get("eurUnrealized") or 0),
             "realizedYTD": float(book["fiat"].get("eurRealizedYTD") or 0),
+            "completeness": (
+                book["fiat"].get("completeness") or _unavailable_fiat_completeness()
+            ),
         }
         for book in books
     ]
     if not books:
         return _empty_workspace_overview_snapshot()["fiat"]
+    completeness = _rollup_fiat_completeness(
+        [row["completeness"] for row in book_rows]
+    )
     if len(currencies) == 1:
         return {
             "mode": "single",
@@ -3530,6 +3860,7 @@ def _workspace_fiat_rollup(
             "eurRealizedYTD": sum(row["realizedYTD"] for row in book_rows),
             "btcBalance": btc_balance,
             "books": book_rows,
+            "completeness": completeness,
         }
     return {
         "mode": "mixed",
@@ -3543,6 +3874,7 @@ def _workspace_fiat_rollup(
         "eurRealizedYTD": None,
         "btcBalance": btc_balance,
         "books": book_rows,
+        "completeness": completeness,
         "label": "Mixed fiat currencies; per-book fiat rows are shown without conversion.",
     }
 
@@ -6690,13 +7022,6 @@ def build_journals_transfers_list_snapshot(
             retryable=False,
         )
     limit = _coerce_limit(raw_args, default=20, maximum=MAX_UI_PREVIEW_LIMIT)
-    offset = raw_args.get("offset", 0)
-    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
-        raise AppError(
-            "ui.journals.quarantine offset must be a non-negative integer",
-            code="validation",
-            retryable=False,
-        )
     context, profile = _active_context_and_profile(conn)
     if profile is None:
         return {

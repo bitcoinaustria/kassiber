@@ -553,7 +553,11 @@ does not get raw SQLite or CLI access.
 
 The in-app prompt is a digest, not a full Agent Skill dump. It teaches the model the local-first accounting
 role, the normal workflow order, the journal reprocessing rule, and the
-boundary between read-only information and mutating actions. The assistant is
+boundary between read-only information and mutating actions. It also carries
+one hard figure rule: when an overview's `fiat.completeness.costBasisComplete`
+is false, the model must call cost basis and unrealized/realized gains
+incomplete and name the blockers, never state them as exact (see
+[the daemon overview contract](daemon.md)). The assistant is
 skill-aware, but it is not shell-powered or CLI-powered: there is no raw command
 execution, raw filesystem access, arbitrary daemon dispatch, or generic
 Kassiber CLI tool.

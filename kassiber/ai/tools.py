@@ -475,7 +475,11 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.overview.snapshot",
-        description="Read the current dashboard overview snapshot for the active workspace/profile.",
+        description=(
+            "Read the dashboard overview for the active workspace/profile. "
+            "fiat.completeness says whether cost basis, unrealized, and realized "
+            "figures are exact; if costBasisComplete is false they are incomplete."
+        ),
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
         wire_name="ui_overview_snapshot",
@@ -894,8 +898,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.reports.balance_sheet",
         description=(
-            "Read exact processed current holdings by reporting bucket/account for "
-            "the active profile, including BTC, sat, msat, cost basis, and value."
+            "Read processed current holdings by reporting bucket/account for "
+            "the active profile, including BTC, sat, msat, cost basis, and value. "
+            "Journaled rows only: quarantined rows and custody gaps are missing."
         ),
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
@@ -906,8 +911,10 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.reports.portfolio_summary",
         description=(
-            "Read exact processed current holdings by wallet, including BTC, sat, "
-            "msat, average cost, cost basis, market value, and unrealized PnL."
+            "Read processed current holdings by wallet, including BTC, sat, "
+            "msat, average cost, cost basis, market value, and unrealized PnL. "
+            "Journaled rows only: quarantined rows and custody gaps are missing, "
+            "so check report blockers before calling figures complete."
         ),
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
@@ -995,8 +1002,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.reports.tax_summary",
         description=(
-            "Read exact processed tax-summary rows by year and asset, including "
-            "proceeds, cost basis, and gain/loss."
+            "Read processed tax-summary rows by year and asset, including "
+            "proceeds, cost basis, and gain/loss. Provisional while quarantines "
+            "or report blockers exist."
         ),
         parameters={
             "type": "object",
@@ -2623,7 +2631,8 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.workspace.overview.snapshot",
         description=(
             "Read an explicit book-set treasury overview across all books in one workspace. "
-            "Preserves per-book boundaries and never sums mixed fiat currencies."
+            "Preserves per-book boundaries and never sums mixed fiat currencies. "
+            "Each fiat row and the rollup carry completeness."
         ),
         parameters={
             "type": "object",

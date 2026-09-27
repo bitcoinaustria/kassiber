@@ -10,7 +10,7 @@ import { RecentTransactionsTable } from "@/components/overview-dashboard/RecentT
 import { router } from "@/routeTree";
 import { WorkspaceSection } from "@/routes/Books";
 
-import { BookRow } from "./BirdsEye";
+import { BookRow, FiatBookRow } from "./BirdsEye";
 
 describe("Book Set Overview route and model", () => {
   it("registers the workspace overview route", () => {
@@ -41,6 +41,52 @@ describe("Book Set Overview route and model", () => {
     expect(mixed.fiat.eurBalance).toBeNull();
     expect(mixed.fiat.currencies).toEqual(["CHF", "EUR"]);
     expect(mixed.fiat.books.map((row) => row.profileLabel)).toContain("Alice");
+  });
+});
+
+describe("Book Set Overview fiat rows", () => {
+  const row = MOCK_WORKSPACE_OVERVIEW.fiat.books[0];
+
+  it("shows exact per-book basis and YTD when complete", () => {
+    const html = renderToStaticMarkup(
+      <FiatBookRow row={row} hideSensitive={false} />,
+    );
+
+    expect(html).not.toContain("Incomplete");
+    expect(html).not.toContain("Basis —");
+  });
+
+  it("marks an incomplete book and hides its basis-derived figures", () => {
+    const html = renderToStaticMarkup(
+      <FiatBookRow
+        row={{
+          ...row,
+          completeness: {
+            ...row.completeness!,
+            state: "incomplete",
+            costBasisComplete: false,
+            reasons: ["quarantines"],
+            quarantineCount: 2,
+          },
+        }}
+        hideSensitive={false}
+      />,
+    );
+
+    expect(html).toContain("Incomplete");
+    expect(html).toContain("Basis —");
+    expect(html).toContain("YTD —");
+  });
+
+  it("does not treat a row without completeness as exact", () => {
+    const html = renderToStaticMarkup(
+      <FiatBookRow
+        row={{ ...row, completeness: undefined }}
+        hideSensitive={false}
+      />,
+    );
+
+    expect(html).toContain("Basis —");
   });
 });
 

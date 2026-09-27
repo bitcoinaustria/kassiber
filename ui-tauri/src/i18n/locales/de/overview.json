@@ -27,7 +27,9 @@
       "allBooksReady": "Alle Bücher bereit",
       "quarantine": "Quarantäne",
       "journalsNeedProcessing": "Journale müssen verarbeitet werden",
-      "noStaleJournals": "Keine veralteten Journale"
+      "noStaleJournals": "Keine veralteten Journale",
+      "basisIncompleteBooks_one": "Anschaffungskosten in {{count}} Buch unvollständig",
+      "basisIncompleteBooks_other": "Anschaffungskosten in {{count}} Büchern unvollständig"
     },
     "booksCard": {
       "title": "Bücher",
@@ -171,7 +173,16 @@
     },
     "sourceDetail_one": "{{synced}}/{{total}} Quelle aktuell",
     "sourceDetail_other": "{{synced}}/{{total}} Quellen aktuell",
-    "noSources": "Keine Quellen verbunden"
+    "noSources": "Keine Quellen verbunden",
+    "custodyUnresolved": {
+      "title": "Verwahrungslücken offen",
+      "detail": "Anschaffungskosten und Berichte warten auf die Verwahrungsprüfung"
+    },
+    "missingPrices": {
+      "title": "Kurse fehlen",
+      "detail_one": "{{count}} Transaktion ohne Kurs",
+      "detail_other": "{{count}} Transaktionen ohne Kurs"
+    }
   },
   "health": {
     "title": "Buch-Bereitschaft",
@@ -221,6 +232,13 @@
         "title": "Verbindung hinzufügen",
         "detail": "Verbinde eine Quelle oder importiere Zeilen, um das Buch zu starten."
       }
+    },
+    "basis": {
+      "title": "Anschaffungskosten",
+      "custody": "Verwahrungslücken offen",
+      "missingPrices_one": "{{count}} fehlender Kurs",
+      "missingPrices_other": "{{count}} fehlende Kurse",
+      "detail": "Anschaffungskosten und Berichte bleiben bis zur Klärung unvollständig."
     }
   },
   "drivers": {
@@ -411,7 +429,7 @@
     "noDateSelected": "Kein Datum ausgewählt",
     "value": "Wert",
     "btc": "BTC",
-    "costBasis": "Gesamtkostenbasis",
+    "costBasis": "Anschaffungskosten gesamt",
     "unrealized": "Unrealisiert",
     "collapseAria": "Panel einklappen",
     "expandAria": "Panel ausklappen"
@@ -433,5 +451,22 @@
     "totalBalance": "Gesamtguthaben",
     "pointsSynthesized": "{{count}} Punkte · für die Demo synthetisiert",
     "hoverFooter": "Für Details darüberfahren · Esc zum Schließen"
+  },
+  "completeness": {
+    "badge": {
+      "incomplete": "Unvollständig",
+      "stale": "Veraltet",
+      "noMarketRate": "Kein Marktkurs",
+      "unavailable": "Nicht verfügbar"
+    },
+    "uncovered": "{{amount}} ohne Anschaffungskosten",
+    "basisIncomplete": "Anschaffungskosten unvollständig",
+    "basisStale": "Anschaffungskosten aus veraltetem Journalstand",
+    "valueUnavailable": "Kein Marktkurs für einen aktuellen Wert",
+    "hint": {
+      "incomplete": "Die Anschaffungskosten sind hier unvollständig: Transaktionen in Quarantäne, ohne Kurs oder mit offener Verwahrungslücke fehlen noch im Journal. Löse sie auf, um exakte Werte zu sehen.",
+      "stale": "Der Journalstand ist veraltet. Verarbeite die Journale neu, um aktuelle Anschaffungskosten zu sehen.",
+      "unavailable": "Es gibt keinen Marktkurs, daher zeigt Kassiber keinen aktuellen Wert an."
+    }
   }
 }

@@ -10,6 +10,7 @@ import { Cell, Pie, PieChart } from "recharts";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { ChartContainer } from "@/components/ui/chart";
 import { type Currency } from "@/lib/currency";
+import { fiatCompleteness } from "@/lib/fiatCompleteness";
 import { cn } from "@/lib/utils";
 import type { OverviewSnapshot } from "@/mocks/seed";
 
@@ -24,6 +25,7 @@ import {
   formatDriverValue,
   formatSignedDisplayMoney,
   holdingsChartConfig,
+  portfolioCompletenessDetail,
   transactionsDriverSearch,
   useHoverHighlight,
 } from "./model";
@@ -167,6 +169,7 @@ export const HoldingsBySourceChart = ({
   const { active: activeSlice, handleHover: setHoveredSlice } =
     useHoverHighlight<number>();
   const holdingsData = buildHoldingsBySource(snapshot);
+  const completenessDetail = portfolioCompletenessDetail(snapshot);
   const unrealizedPercent = snapshot.fiat.eurCostBasis
     ? (snapshot.fiat.eurUnrealized / snapshot.fiat.eurCostBasis) * 100
     : 0;
@@ -174,12 +177,14 @@ export const HoldingsBySourceChart = ({
     (acc, item) => acc + item.value,
     0,
   );
-  const totalHoldingsLabel = formatCompactDisplayMoney(
-    totalHoldings,
-    fiatRate,
-    currency,
-    fiatCurrency,
-  );
+  // Without a market rate a fiat figure would be a stale or zero placeholder.
+  const fiatValueUnavailable =
+    !isBitcoinMode && fiatCompleteness(snapshot.fiat).marketRateMissing;
+  const holdingValueLabel = (value: number) =>
+    fiatValueUnavailable
+      ? "—"
+      : formatCompactDisplayMoney(value, fiatRate, currency, fiatCurrency);
+  const totalHoldingsLabel = holdingValueLabel(totalHoldings);
   const singleHolding = holdingsData.length === 1 ? holdingsData[0] : null;
 
   return (
@@ -199,6 +204,19 @@ export const HoldingsBySourceChart = ({
             {isBitcoinMode ? (
               <p className="text-2xs text-muted-foreground sm:text-xs">
                 {t("holdings.btcAllocation")}
+              </p>
+            ) : completenessDetail ? (
+              // No "+X % vs cost basis" while the basis misses rows or the
+              // value has no market rate; say what is missing instead.
+              <p
+                className="truncate text-2xs text-amber-600 sm:text-xs dark:text-amber-400"
+                title={t(completenessDetail.hintKey)}
+              >
+                {/* dynamic key */}
+                {t(
+                  completenessDetail.copy.key as never,
+                  completenessDetail.copy.params,
+                )}
               </p>
             ) : (
               <p className="flex items-center gap-1 text-2xs text-muted-foreground sm:text-xs">
@@ -263,12 +281,7 @@ export const HoldingsBySourceChart = ({
                 blurClass(hideSensitive),
               )}
             >
-              {formatCompactDisplayMoney(
-                singleHolding.value,
-                fiatRate,
-                currency,
-                fiatCurrency,
-              )}
+              {holdingValueLabel(singleHolding.value)}
             </p>
             <p
               className={cn(
@@ -354,12 +367,7 @@ export const HoldingsBySourceChart = ({
                     blurClass(hideSensitive),
                   )}
                 >
-                  {formatCompactDisplayMoney(
-                    item.value,
-                    fiatRate,
-                    currency,
-                    fiatCurrency,
-                  )}
+                  {holdingValueLabel(item.value)}
                 </span>
                 <span
                   className={cn(

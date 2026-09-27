@@ -323,12 +323,48 @@ export interface Tx {
   summaryOnly?: boolean;
 }
 
+export type FiatCompletenessState =
+  | "complete"
+  | "incomplete"
+  | "stale"
+  | "unavailable";
+
+export type FiatCompletenessReason =
+  | "journals_stale"
+  | "quarantines"
+  | "custody_unresolved"
+  | "missing_prices"
+  | "market_rate_missing";
+
+/**
+ * Daemon `fiat.completeness`: whether cost basis, unrealized, and realized
+ * figures can be shown as exact. `costBasisComplete === false` means basis-
+ * derived numbers must be hidden or qualified; `marketRateMissing` means the
+ * fiat valuation is not a market value. See docs/reference/daemon.md.
+ */
+export interface FiatCompleteness {
+  state: FiatCompletenessState;
+  costBasisComplete: boolean;
+  reasons: FiatCompletenessReason[];
+  quarantineCount: number;
+  quarantinedInboundMsat: number;
+  quarantinedOutboundMsat: number;
+  basisCoveredMsat: number | null;
+  basisUncoveredMsat: number | null;
+  /** Basis-derived chart points at/after this instant are incomplete. */
+  earliestIncompleteAt: string | null;
+  missingPriceCount: number;
+  marketRateMissing: boolean;
+}
+
 export interface FiatSnapshot {
   fiatCurrency?: string | null;
   eurBalance: number;
   eurCostBasis: number;
   eurUnrealized: number;
   eurRealizedYTD: number;
+  /** Always set by normalizeOverviewSnapshot; missing means "not known complete". */
+  completeness?: FiatCompleteness;
 }
 
 export interface PortfolioPoint {
@@ -979,6 +1015,19 @@ export const MOCK_OVERVIEW: OverviewSnapshot = {
     eurCostBasis: 198_502.40,
     eurUnrealized: 114_340.37,
     eurRealizedYTD: 42_118.92,
+    completeness: {
+      state: "complete",
+      costBasisComplete: true,
+      reasons: [],
+      quarantineCount: 0,
+      quarantinedInboundMsat: 0,
+      quarantinedOutboundMsat: 0,
+      basisCoveredMsat: 438_000_000_000,
+      basisUncoveredMsat: 0,
+      earliestIncompleteAt: null,
+      missingPriceCount: 0,
+      marketRateMissing: false,
+    },
   },
   taxFreeBalance: {
     rule: "austrian_altbestand",

@@ -1,7 +1,9 @@
 import {
   MOCK_OVERVIEW,
   type Connection,
+  type FiatCompleteness,
   type MarketRateSnapshot,
+  type OverviewSnapshot,
   type PortfolioPoint,
   type Tx,
 } from "@/mocks/seed";
@@ -36,6 +38,8 @@ export interface WorkspaceFiatBookRow {
   costBasis: number;
   unrealized: number;
   realizedYTD: number;
+  /** Per-book `fiat.completeness`; missing means "not known complete". */
+  completeness?: FiatCompleteness;
 }
 
 export interface WorkspaceFiatRollup {
@@ -50,6 +54,8 @@ export interface WorkspaceFiatRollup {
   eurRealizedYTD: number | null;
   btcBalance: number;
   books: WorkspaceFiatBookRow[];
+  /** Worst-of rollup: incomplete as soon as any book is. */
+  completeness?: FiatCompleteness;
   label?: string;
 }
 
@@ -77,7 +83,10 @@ export interface WorkspaceBookOverview {
     eurCostBasis: number;
     eurUnrealized: number;
     eurRealizedYTD: number;
+    completeness?: FiatCompleteness;
   };
+  balanceSummary?: OverviewSnapshot["balanceSummary"] | null;
+  taxFreeBalance?: OverviewSnapshot["taxFreeBalance"];
   marketRate?: MarketRateSnapshot;
   status: {
     workspace: string | null;
@@ -280,6 +289,7 @@ export function mockWorkspaceOverviewSnapshot(
     costBasis: book.fiat.eurCostBasis,
     unrealized: book.fiat.eurUnrealized,
     realizedYTD: book.fiat.eurRealizedYTD,
+    completeness: book.fiat.completeness,
   }));
   return {
     workspace: { id: workspace.id, label: workspace.name },
@@ -325,6 +335,7 @@ export function mockWorkspaceOverviewSnapshot(
           eurRealizedYTD: fiatBooks.reduce((total, row) => total + row.realizedYTD, 0),
           btcBalance,
           books: fiatBooks,
+          completeness: MOCK_OVERVIEW.fiat.completeness,
         }
       : {
           mode: "mixed",
@@ -338,6 +349,7 @@ export function mockWorkspaceOverviewSnapshot(
           eurRealizedYTD: null,
           btcBalance,
           books: fiatBooks,
+          completeness: MOCK_OVERVIEW.fiat.completeness,
           label: "Mixed fiat currencies; per-book fiat rows are shown without conversion.",
         },
     status: {
