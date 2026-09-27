@@ -12,9 +12,73 @@ import {
   summarizeFreshnessRun,
   summarizeSyncResults,
   syncResultsAreTrustedForReports,
+  describeJournalStep,
+  freshnessRunOnlyJournalsPending,
+  journalStepNeedsAttention,
 } from "./syncResults";
 
 describe("syncResults", () => {
+  it("replaces the stale-journals marker once the sync processed journals", () => {
+    const result = { wallet: "Cold", status: "synced", imported: 2, journal_invalidated: true };
+    expect(describeWalletSyncResult(result, "Cold")).toContain("journals marked stale");
+    const processed = describeWalletSyncResult(result, "Cold", {
+      status: "processed",
+      quarantines: 3,
+      auto_pair_applied: 1,
+    });
+    expect(processed).not.toContain("journals marked stale");
+    expect(processed).toContain("3 transactions in quarantine");
+    expect(processed).toContain("1 exact transfer pair applied");
+  });
+  it("describes every journal step outcome and flags the ones needing attention", () => {
+    expect(describeJournalStep(null)).toBeNull();
+    expect(describeJournalStep({ status: "skipped" })).toBeNull();
+    expect(describeJournalStep({ status: "processed", quarantines: 0 })).toBe(
+      "Journals updated; nothing in quarantine.",
+    );
+    expect(describeJournalStep({ status: "current", quarantines: 4 })).toBe(
+      "Journals were already current.",
+    );
+    expect(
+      describeJournalStep({ status: "failed", error: { code: "sync_conflicts_open", message: "Resolve conflicts" } }),
+    ).toBe("Journals could not be updated: Resolve conflicts");
+    for (const status of ["failed", "cancelled", "disabled", "deferred"]) {
+      expect(journalStepNeedsAttention({ status })).toBe(true);
+    }
+    for (const status of ["processed", "current", "skipped"]) {
+      expect(journalStepNeedsAttention({ status })).toBe(false);
+    }
+    const skippedPairing = { status: "processed", quarantines: 0, auto_pair_skipped: true,
+      error: { message: "gone" } };
+    expect(journalStepNeedsAttention(skippedPairing)).toBe(true);
+    expect(describeJournalStep(skippedPairing)).toContain("Automatic pairing was skipped: gone");
+  });
+  it("routes a refresh whose only open work is the journal step to Journals", () => {
+    const data = {
+      enqueued: [
+        { id: "wallet", job_type: "onchain_wallet_history" },
+        { id: "journal", job_type: "journal_refresh" },
+      ],
+      completed: [{ id: "wallet", job_type: "onchain_wallet_history", status: "done" }],
+    };
+    expect(freshnessRunOnlyJournalsPending(data)).toBe(true);
+    expect(
+      freshnessRunOnlyJournalsPending({ ...data, completed: [] }),
+    ).toBe(false);
+  });
+  it("counts a journal step that did not run as needing attention", () => {
+    const completed = [{ id: "wallet", job_type: "onchain_wallet_history", status: "done" }];
+    expect(freshnessRunNeedsAttention({ completed, journals: { status: "failed" } })).toBe(true);
+    expect(freshnessRunNeedsAttention({ completed, journals: { status: "processed" } })).toBe(false);
+  });
+  it("mentions a disabled journal step in refresh summaries", () => {
+    expect(
+      summarizeFreshnessRun({
+        completed: [{ id: "wallet", job_type: "onchain_wallet_history", status: "done" }],
+        journals: { status: "disabled" },
+      }),
+    ).toContain("journal refresh is turned off");
+  });
   it("keeps requested jobs pending until a terminal result exists", () => {
     const enqueued = [{ id: "a" }, { id: "b" }];
     expect(freshnessRunHasPendingJobs({ enqueued, completed: [] })).toBe(true);

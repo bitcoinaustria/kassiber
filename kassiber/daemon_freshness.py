@@ -28,6 +28,7 @@ from .cli.handlers import (
     sync_wallet_from_backend,
 )
 from .core import commercial as core_commercial
+from .core import custody_journal as core_custody_journal
 from .core import freshness as core_freshness
 from .core import rates as core_rates
 from .core import sync_backends as core_sync_backends
@@ -125,7 +126,9 @@ def _clear_unlocked_passphrase(ctx: FreshnessDaemonContext) -> None:
 
 def _coerce_wallets_sync_args(raw_args: dict[str, Any], *, strict: bool) -> dict[str, Any]:
     if strict:
-        unknown = sorted(set(raw_args) - {"wallet", "all", "force_full"})
+        unknown = sorted(
+            set(raw_args) - {"wallet", "all", "force_full", "process_journals"}
+        )
         if unknown:
             raise AppError(
                 "ui.wallets.sync received unsupported arguments",
@@ -166,7 +169,20 @@ def _coerce_wallets_sync_args(raw_args: dict[str, Any], *, strict: bool) -> dict
             details={"type": type(force_full).__name__},
             retryable=False,
         )
-    return {"wallet": wallet, "all": sync_all, "force_full": bool(force_full)}
+    process_journals_raw = raw_args.get("process_journals")
+    if process_journals_raw is not None and not isinstance(process_journals_raw, bool):
+        raise AppError(
+            "ui.wallets.sync process_journals must be a boolean",
+            code="validation",
+            details={"type": type(process_journals_raw).__name__},
+            retryable=False,
+        )
+    return {
+        "wallet": wallet,
+        "all": sync_all,
+        "force_full": bool(force_full),
+        "process_journals": process_journals_raw is not False,
+    }
 
 
 def _wallets_sync_payload(
@@ -177,6 +193,7 @@ def _wallets_sync_payload(
     strict: bool,
     progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
     automatic_trigger: Literal["background", "report_read"] | None = None,
+    auto_pair_journals: bool = True,
 ) -> dict[str, Any]:
     args = _coerce_wallets_sync_args(raw_args, strict=strict)
     context = current_context_snapshot(conn)
@@ -207,7 +224,175 @@ def _wallets_sync_payload(
             sync_all=args["all"],
             force_full=args["force_full"],
         )
+    if automatic_trigger is None and args["process_journals"]:
+        # A user-triggered sync ends with the same local journal step as a
+        # book refresh, so newly observed wallets resolve quarantines without
+        # a separate "process journals" action. No network I/O happens here.
+        try:
+            journal_run = run_local_journal_refresh(
+                conn,
+                runtime_config,
+                auto_pair=auto_pair_journals,
+                skip_rebuild_when_current=True,
+                progress_observer=progress_observer,
+            )
+        except AppError as exc:
+            if exc.code != "project_operation_in_progress":
+                raise
+            # The wallet sync itself finished. Journals stay marked stale, so
+            # the quarantine and overview show it until the owner recalculates.
+            payload["journals"] = {
+                **journal_step_summary([], []),
+                "status": "deferred",
+                "error": {"code": exc.code, "message": str(exc)},
+            }
+            journal_run = None
+        if journal_run is not None:
+            payload["enqueued"] = [
+                *(payload.get("enqueued") or []),
+                *journal_run["enqueued"],
+            ]
+            payload["completed"] = [
+                *(payload.get("completed") or []),
+                *journal_run["completed"],
+            ]
+            payload["journals"] = journal_run["journals"]
+            payload.update(journal_run["snapshot"])
     return _freshness_payload_for_ui(payload)
+
+
+def _journal_refresh_spec(profile_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "job_type": core_freshness.JOB_JOURNAL_REFRESH,
+        "source_type": core_freshness.SOURCE_JOURNALS,
+        "source_key": core_freshness.journal_source_key(profile_id),
+        "source_label": "Journal refresh",
+        "payload": dict(payload),
+        "priority": 80,
+    }
+
+
+def journal_step_summary(
+    enqueued: list[Mapping[str, Any]],
+    completed: list[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Describe what happened to the journal step of one refresh request."""
+
+    journal_jobs = [
+        job for job in completed
+        if job.get("job_type") == core_freshness.JOB_JOURNAL_REFRESH
+    ]
+    summary: dict[str, Any] = {
+        "status": "skipped",
+        "rebuilt": False,
+        "quarantines": None,
+        "auto_pair_applied": 0,
+        "error": None,
+    }
+    if not journal_jobs:
+        if any(job.get("job_type") == core_freshness.JOB_JOURNAL_REFRESH for job in enqueued):
+            summary["status"] = "deferred"
+        return summary
+    job = journal_jobs[-1]
+    status = job.get("status")
+    if status == core_freshness.JOB_DONE:
+        result = job.get("result") if isinstance(job.get("result"), AbcMapping) else {}
+        auto_pair = result.get("auto_pair") if isinstance(result.get("auto_pair"), AbcMapping) else {}
+        rebuilt = bool(result.get("rebuilt", True))
+        quarantined = result.get("quarantined")
+        summary.update(
+            {
+                "status": "processed" if rebuilt else "current",
+                "rebuilt": rebuilt,
+                "quarantines": int(quarantined) if isinstance(quarantined, int) else None,
+                "auto_pair_applied": int(auto_pair.get("applied") or 0),
+            }
+        )
+        if auto_pair.get("skipped"):
+            # Journals were rebuilt, but exact pairing did not run.
+            summary["auto_pair_skipped"] = True
+            error = auto_pair.get("error") if isinstance(auto_pair.get("error"), AbcMapping) else {}
+            summary["error"] = {
+                "code": str(error.get("code") or "auto_pair_failed"),
+                "message": str(
+                    error.get("message")
+                    or "Automatic pairing was skipped; journals were still processed."
+                ),
+            }
+        return summary
+    if status in {core_freshness.JOB_QUEUED, core_freshness.JOB_RATE_LIMITED}:
+        summary["status"] = "deferred"
+        return summary
+    error = job.get("error") if isinstance(job.get("error"), AbcMapping) else {}
+    summary["status"] = "cancelled" if status == core_freshness.JOB_CANCELLED else "failed"
+    summary["error"] = {
+        "code": str(error.get("code") or status or "journal_refresh_failed"),
+        "message": str(error.get("message") or "Journal processing did not finish."),
+    }
+    return summary
+
+
+@_freshness_execution("foreground")
+def run_local_journal_refresh(
+    conn: sqlite3.Connection,
+    runtime_config: dict[str, object],
+    *,
+    auto_pair: bool,
+    skip_rebuild_when_current: bool,
+    progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
+) -> dict[str, Any] | None:
+    """Queue and run only the journal source of the active book.
+
+    Used after user-triggered syncs and imports. It records the same freshness
+    job/source state as a book refresh and honors the journals source class of
+    the freshness policy, reporting a disabled or deferred step explicitly.
+    """
+
+    profile = _active_profile_row(conn)
+    if profile is None:
+        return None
+    profile_id = str(profile["id"])
+    policy = core_freshness.get_policy(conn, profile_id)
+    if not policy.source_classes.get(core_freshness.SOURCE_JOURNALS, False):
+        return {
+            "enqueued": [],
+            "completed": [],
+            "journals": {
+                **journal_step_summary([], []),
+                "status": "disabled",
+            },
+            "snapshot": {},
+        }
+    job_payload: dict[str, Any] = {}
+    if auto_pair:
+        job_payload["auto_pair"] = True
+    if skip_rebuild_when_current:
+        job_payload["skip_rebuild_when_current"] = True
+    enqueued = _enqueue_freshness_jobs(
+        conn, profile_id, [_journal_refresh_spec(profile_id, job_payload)]
+    )
+    selected = _due_jobs_for_refresh(conn, profile_id, enqueued, 1)
+
+    def observe(payload: Mapping[str, Any]) -> None:
+        if progress_observer is not None:
+            progress_observer(_freshness_payload_for_ui(dict(payload)))
+
+    completed = _run_requested_freshness_jobs(
+        conn,
+        profile_id,
+        selected,
+        _freshness_handlers(runtime_config),
+        limit=1,
+        progress_observer=observe if progress_observer is not None else None,
+    )
+    return _freshness_payload_for_ui(
+        {
+            "enqueued": enqueued,
+            "completed": completed,
+            "journals": journal_step_summary(enqueued, completed),
+            "snapshot": _freshness_snapshot_for_ui(conn, profile_id),
+        }
+    )
 
 
 def _redact_sync_payload_for_ui(value: Any) -> Any:
@@ -334,13 +519,42 @@ def _apply_sync_failure_blocker(
 def _journals_process_payload(
     conn: sqlite3.Connection,
     *,
+    profile_id: str | None = None,
     progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
+    workspace_ref = profile_ref = None
+    if profile_id is not None:
+        workspace_ref, profile_ref = _job_scope_refs(conn, {"profile_id": profile_id})
     return process_journals(
         conn,
-        None,
-        None,
+        workspace_ref,
+        profile_ref,
         progress_observer=progress_observer,
+    )
+
+
+@_freshness_execution("foreground")
+def _journals_refresh_payload(
+    conn: sqlite3.Connection,
+    *,
+    auto_pair: bool = True,
+    progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    """Explicit "process journals": exact automatic pairing, then a rebuild.
+
+    This is the same local step a book refresh runs, so the desktop button, the
+    assistant tool and ``kassiber journals process`` book the same pairs.
+    """
+
+    profile = _active_profile_row(conn)
+    if profile is None:
+        return _journals_process_payload(conn, progress_observer=progress_observer)
+    return refresh_journals_step(
+        conn,
+        str(profile["id"]),
+        auto_pair=auto_pair,
+        phase=progress_observer,
+        journal_progress_observer=progress_observer,
     )
 
 
@@ -391,13 +605,16 @@ def _auto_pair_before_journals(
     before = _transfer_candidate_counts(
         suggest_transfer_candidates(conn, workspace_ref, profile_ref)
     )
-    rules = apply_transfer_rules(conn, workspace_ref, profile_ref, commit=False)
+    rules = apply_transfer_rules(
+        conn, workspace_ref, profile_ref, commit=False, skip_user_unpaired=True
+    )
     bulk_exact = bulk_pair_transfers(
         conn,
         workspace_ref,
         profile_ref,
         confidence="exact",
         commit=False,
+        skip_user_unpaired=True,
     )
     remaining = _transfer_candidate_counts(
         suggest_transfer_candidates(conn, workspace_ref, profile_ref)
@@ -431,6 +648,101 @@ def _auto_pair_before_journals(
         "before": before,
         "remaining": remaining,
     }
+
+
+def _stored_quarantine_count(conn: sqlite3.Connection, profile_id: str) -> int:
+    row = conn.execute(
+        "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
+        (profile_id,),
+    ).fetchone()
+    return int(row["count"] or 0)
+
+
+def refresh_journals_step(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    auto_pair: bool,
+    skip_rebuild_when_current: bool = False,
+    phase: Callable[[Mapping[str, Any]], None] | None = None,
+    journal_progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    """Run exact automatic pairing and the journal rebuild as one local step.
+
+    Stored MOVE decisions and ownership review cards only block conflicting
+    automatic pairs while the projection is current, so a stale projection is
+    rebuilt first. Pairs applied afterwards invalidate it again; they are stored
+    together with the second rebuild and roll back if that rebuild fails. With
+    ``skip_rebuild_when_current`` a current projection that gained no pairs is
+    left as is; every other case rebuilds exactly once more.
+
+    ``phase`` may commit the connection (freshness job progress does), so it is
+    never called while automatic pairs are pending. This step performs no
+    network I/O: pairing reads the book and pricing uses the local rate cache.
+    """
+
+    def is_current() -> bool:
+        return bool(core_custody_journal.projection_freshness(conn, profile_id)["is_current"])
+
+    job_scope = {"profile_id": profile_id}
+    payload: dict[str, Any] | None = None
+    if auto_pair and not is_current():
+        payload = _journals_process_payload(
+            conn,
+            profile_id=profile_id,
+            progress_observer=journal_progress_observer,
+        )
+    auto_pair_summary = None
+    if auto_pair:
+        if phase is not None:
+            phase({"phase": "auto_pair"})
+        try:
+            auto_pair_summary = _auto_pair_before_journals(conn, job_scope)
+        except AppError as exc:
+            conn.rollback()
+            _LOGGER.warning(
+                "Automatic pairing before journal refresh was skipped: %s",
+                exc.code,
+            )
+            auto_pair_summary = _skipped_auto_pair_summary(exc)
+        except Exception as exc:
+            conn.rollback()
+            _LOGGER.exception("Automatic pairing before journal refresh was skipped")
+            auto_pair_summary = _skipped_auto_pair_summary(exc)
+    # Applied pairs always get their own rebuild, even if a pairing path did
+    # not bump the projection's input version.
+    pairs_applied = bool(auto_pair_summary and auto_pair_summary.get("applied"))
+    try:
+        if payload is not None and not pairs_applied and is_current():
+            # Nothing changed since the first rebuild; keep the cached
+            # candidate count written by the pairing pass.
+            conn.commit()
+        elif (
+            payload is None
+            and skip_rebuild_when_current
+            and not pairs_applied
+            and is_current()
+        ):
+            conn.commit()
+            payload = {
+                "rebuilt": False,
+                "quarantined": _stored_quarantine_count(conn, profile_id),
+            }
+        else:
+            payload = _journals_process_payload(
+                conn,
+                profile_id=profile_id,
+                progress_observer=journal_progress_observer,
+            )
+    except Exception:
+        # Automatic pairs are pending (commit=False). A failed or cancelled
+        # rebuild must not leave them for a caller's error handler to commit.
+        conn.rollback()
+        raise
+    payload.setdefault("rebuilt", True)
+    if auto_pair_summary is not None:
+        payload["auto_pair"] = auto_pair_summary
+    return payload
 
 
 def _active_profile_row(conn: sqlite3.Connection) -> sqlite3.Row | None:
@@ -617,16 +929,7 @@ def _freshness_wallet_source_specs(
         )
     if include_journals:
         journal_payload = {"auto_pair": True} if auto_pair_before_journals else {}
-        specs.append(
-            {
-                "job_type": core_freshness.JOB_JOURNAL_REFRESH,
-                "source_type": core_freshness.SOURCE_JOURNALS,
-                "source_key": core_freshness.journal_source_key(profile_id),
-                "source_label": "Journal refresh",
-                "payload": journal_payload,
-                "priority": 80,
-            }
-        )
+        specs.append(_journal_refresh_spec(profile_id, journal_payload))
     return specs
 
 
@@ -1026,45 +1329,18 @@ def _freshness_handlers(
         check_cancelled: Callable[[], None],
     ) -> Mapping[str, Any]:
         job_payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
-        auto_pair_requested = bool(job_payload.get("auto_pair"))
-        if auto_pair_requested:
-            progress({"phase": "auto_pair"})
-        # Emit the journal-refresh phase BEFORE any auto-pair inserts. run_job's
-        # progress callback COMMITS the connection, so emitting it after the
-        # commit=False pair inserts would commit them prematurely and defeat the
-        # rollback below. After this point no committing progress is issued until
-        # process_journals, so the auto-pair + journal step stays atomic.
+        # run_job's progress callback COMMITS the connection; the step below
+        # only reports phases while no automatic pair is pending, so the
+        # pair + journal write stays atomic.
         progress({"phase": core_freshness.PHASE_JOURNAL_REFRESH})
-        auto_pair = None
-        try:
-            check_cancelled()
-            if auto_pair_requested:
-                try:
-                    auto_pair = _auto_pair_before_journals(conn, job)
-                except AppError as exc:
-                    conn.rollback()
-                    _LOGGER.warning(
-                        "Automatic pairing before journal refresh was skipped: %s",
-                        exc.code,
-                    )
-                    auto_pair = _skipped_auto_pair_summary(exc)
-                except Exception as exc:
-                    conn.rollback()
-                    _LOGGER.exception("Automatic pairing before journal refresh was skipped")
-                    auto_pair = _skipped_auto_pair_summary(exc)
-            payload = _journals_process_payload(conn)
-        except Exception:
-            # The auto-pair inserts above are pending (commit=False). If journal
-            # processing fails or is cancelled, run_job's error/cancel handler
-            # would otherwise commit the connection — persisting those pairs (and
-            # the journal invalidation) for a refresh the user was told failed,
-            # so the next retry would see already-paired legs without ever
-            # getting the auto-pair summary. Roll back so the auto-pair + journal
-            # step is atomic: either both land or neither does.
-            conn.rollback()
-            raise
-        if auto_pair is not None:
-            payload["auto_pair"] = auto_pair
+        check_cancelled()
+        payload = refresh_journals_step(
+            conn,
+            str(job["profile_id"]),
+            auto_pair=bool(job_payload.get("auto_pair")),
+            skip_rebuild_when_current=bool(job_payload.get("skip_rebuild_when_current")),
+            phase=progress,
+        )
         return {"status": "synced", **payload}
 
     return {
@@ -1871,6 +2147,13 @@ def _freshness_run_payload(
         )
     snapshot = _freshness_snapshot_for_ui(conn, profile["id"])
     results = _sync_results_from_freshness_jobs(completed)
+    journals_summary: dict[str, Any] | None = None
+    if include_journals:
+        journals_summary = journal_step_summary(enqueued, completed)
+    elif args.get("journals"):
+        # Requested but the policy's journals source class is off: say so
+        # instead of letting the caller assume journals were rebuilt.
+        journals_summary = {**journal_step_summary([], []), "status": "disabled"}
     # A normal terminal envelope does not imply every requested source ran.
     # Retain only counts, so skipped dispatch/cancellation and handled failures
     # remain distinguishable without logging source identities or result blobs.
@@ -1897,6 +2180,7 @@ def _freshness_run_payload(
             "recovered": recovered,
             "enqueued": enqueued,
             "completed": completed,
+            **({"journals": journals_summary} if journals_summary is not None else {}),
             **snapshot,
         }
     )

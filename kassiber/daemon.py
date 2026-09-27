@@ -271,6 +271,9 @@ from .daemon_freshness import (
     _freshness_run_payload,
     _freshness_status_payload,
     _journals_process_payload,
+    _journals_refresh_payload,
+    journal_step_summary,
+    run_local_journal_refresh,
     _maintenance_configure_payload,
     _maintenance_run_payload,
     _maintenance_settings_payload,
@@ -2736,6 +2739,37 @@ def _ui_commercial_payload_from_conn(
         )
     raise AppError(f"Unsupported commercial daemon kind '{kind}'", code="validation")
 
+
+
+def _with_local_journal_refresh(ctx: "DaemonContext", payload: Any) -> Any:
+    """Finish a user-triggered import with the local journal step.
+
+    The import itself already committed; a failed or deferred rebuild is
+    reported in ``payload["journals"]`` rather than turning a successful import
+    into an error. The step performs no network I/O.
+    """
+
+    if not isinstance(payload, dict) or ctx.conn is None:
+        return payload
+    try:
+        journal_run = run_local_journal_refresh(
+            ctx.conn,
+            ctx.runtime_config,
+            auto_pair=True,
+            skip_rebuild_when_current=True,
+        )
+    except AppError as exc:
+        if exc.code != "project_operation_in_progress":
+            raise
+        payload["journals"] = {
+            **journal_step_summary([], []),
+            "status": "deferred",
+            "error": {"code": exc.code, "message": str(exc)},
+        }
+        return payload
+    if journal_run is not None:
+        payload["journals"] = journal_run["journals"]
+    return payload
 
 def _ui_source_funds_payload_from_conn(
     conn: sqlite3.Connection,
@@ -6951,11 +6985,14 @@ def _execute_mutating_ai_tool(
             args = _coerce_wallets_sync_args(call.arguments, strict=True)
 
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
+                # The assistant's consent covers refreshing sources; it does not
+                # author transfer pairs, so the journal step only rebuilds.
                 payload = _wallets_sync_payload(
                     conn,
                     runtime.runtime_config,
                     args,
                     strict=True,
+                    auto_pair_journals=False,
                 )
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
@@ -6971,7 +7008,9 @@ def _execute_mutating_ai_tool(
                 )
 
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
-                payload = _journals_process_payload(conn)
+                # "Process journals" consent rebuilds derived state only; it
+                # does not let the assistant author transfer pairs.
+                payload = _journals_refresh_payload(conn, auto_pair=False)
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
             return _run_scoped_ai_mutation(runtime, _execute)
@@ -17106,9 +17145,12 @@ def handle_request(
             _with_request_id(
                 build_envelope(
                     "ui.wallets.import_file",
-                    _import_wallet_file_payload(
-                        ctx.conn,
-                        _coerce_args_dict(request_id, request.get("args")),
+                    _with_local_journal_refresh(
+                        ctx,
+                        _import_wallet_file_payload(
+                            ctx.conn,
+                            _coerce_args_dict(request_id, request.get("args")),
+                        )
                     ),
                 ),
                 request_id,
@@ -17151,9 +17193,12 @@ def handle_request(
             _with_request_id(
                 build_envelope(
                     "ui.wallets.document_import.import",
-                    _document_import_import_payload(
+                    _with_local_journal_refresh(
                         ctx,
-                        _coerce_args_dict(request_id, request.get("args")),
+                        _document_import_import_payload(
+                            ctx,
+                            _coerce_args_dict(request_id, request.get("args")),
+                        )
                     ),
                 ),
                 request_id,
@@ -17166,9 +17211,12 @@ def handle_request(
             _with_request_id(
                 build_envelope(
                     "ui.wallets.import_samourai",
-                    _import_samourai_payload(
-                        ctx.conn,
-                        _coerce_args_dict(request_id, request.get("args")),
+                    _with_local_journal_refresh(
+                        ctx,
+                        _import_samourai_payload(
+                            ctx.conn,
+                            _coerce_args_dict(request_id, request.get("args")),
+                        )
                     ),
                 ),
                 request_id,
@@ -17438,7 +17486,7 @@ def handle_request(
             _with_request_id(
                 build_envelope(
                     "ui.journals.process",
-                    _journals_process_payload(
+                    _journals_refresh_payload(
                         ctx.conn,
                         progress_observer=_emit_journal_progress,
                     ),

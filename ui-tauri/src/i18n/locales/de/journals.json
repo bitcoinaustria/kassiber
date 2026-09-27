@@ -11,6 +11,7 @@
     "reportHint": "Berichte werden nach Abschluss der Verarbeitung aktualisiert",
     "phase": {
       "writerWait": "Warten auf den Datenbankzugriff",
+      "autoPair": "Eindeutige Transfers zwischen eigenen Wallets zuordnen",
       "preparing": "Journaleingaben werden vorbereitet",
       "repairing": "Überschneidende Quellen werden geprüft",
       "pricing": "Zwischengespeicherte Preise werden angewendet",

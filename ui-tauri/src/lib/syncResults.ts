@@ -95,10 +95,21 @@ export interface FreshnessTransferCandidateCounts {
   rule_matches?: number;
 }
 
+/** Outcome of the local journal step that finishes a sync, import, or refresh. */
+export interface JournalStepSummary {
+  status?: "processed" | "current" | "deferred" | "disabled" | "failed" | "cancelled" | "skipped" | string;
+  rebuilt?: boolean;
+  quarantines?: number | null;
+  auto_pair_applied?: number;
+  auto_pair_skipped?: boolean;
+  error?: { code?: string; message?: string } | null;
+}
+
 export interface FreshnessRunData {
   results?: SyncResult[];
   enqueued?: FreshnessJobSummary[];
   completed?: FreshnessJobSummary[];
+  journals?: JournalStepSummary | null;
   sources?: FreshnessSourceState[];
   summary?: {
     failed?: number;
@@ -183,7 +194,75 @@ function syncResultObservability(result: SyncResult | undefined): string | null 
   return parts.join(" · ") || null;
 }
 
+export function journalStepNeedsAttention(
+  journals: JournalStepSummary | null | undefined,
+): boolean {
+  return (
+    ["failed", "cancelled", "disabled", "deferred"].includes(journals?.status ?? "") ||
+    Boolean(journals?.auto_pair_skipped)
+  );
+}
+
+/** One sentence describing the journal step, or null when none was requested. */
+export function describeJournalStep(
+  journals: JournalStepSummary | null | undefined,
+): string | null {
+  if (!journals?.status || journals.status === "skipped") return null;
+  const parts: string[] = [];
+  if (journals.status === "processed" || journals.status === "current") {
+    const count = positiveInteger(journals.quarantines ?? 0);
+    if (journals.status === "current") {
+      parts.push(i18n.t("connections:journalStep.current"));
+    } else if (count) {
+      parts.push(i18n.t("connections:journalStep.processed", { count }));
+    } else {
+      parts.push(i18n.t("connections:journalStep.processedClear"));
+    }
+    const paired = positiveInteger(journals.auto_pair_applied);
+    if (paired) parts.push(i18n.t("connections:journalStep.autoPaired", { count: paired }));
+    if (journals.auto_pair_skipped) {
+      parts.push(
+        i18n.t("connections:journalStep.autoPairSkipped", {
+          message: journals.error?.message || journals.error?.code || "",
+        }),
+      );
+    }
+  } else if (journals.status === "failed") {
+    parts.push(
+      i18n.t("connections:journalStep.failed", {
+        message: journals.error?.message || journals.error?.code || "",
+      }),
+    );
+  } else if (journals.status === "deferred") {
+    parts.push(i18n.t("connections:journalStep.deferred"));
+  } else if (journals.status === "disabled") {
+    parts.push(i18n.t("connections:journalStep.disabled"));
+  } else if (journals.status === "cancelled") {
+    parts.push(i18n.t("connections:journalStep.cancelled"));
+  }
+  return parts.join(" ") || null;
+}
+
 export function describeWalletSyncResult(
+  result: SyncResult | undefined,
+  walletLabel: string,
+  journals?: JournalStepSummary | null,
+): string {
+  const journalText = describeJournalStep(journals);
+  if (journalText && result?.status === "synced") {
+    // The sync already finished with the journal step, so the row-level
+    // "journals marked stale" marker would be outdated.
+    const described = describeSingleWalletSyncResult(
+      { ...result, journal_invalidated: undefined },
+      walletLabel,
+    );
+    return `${described} ${journalText}`;
+  }
+  const described = describeSingleWalletSyncResult(result, walletLabel);
+  return journalText ? `${described} ${journalText}` : described;
+}
+
+function describeSingleWalletSyncResult(
   result: SyncResult | undefined,
   walletLabel: string,
 ): string {
@@ -237,11 +316,23 @@ export function syncResultsAreTrustedForReports(results: SyncResult[]): boolean 
   );
 }
 
-export function freshnessRunHasPendingJobs(data: FreshnessRunData | null | undefined): boolean {
+function pendingJobs(data: FreshnessRunData | null | undefined): FreshnessJobSummary[] {
   const terminalIds = new Set((data?.completed ?? [])
     .filter((job) => ["done", "error", "cancelled"].includes(job.status ?? ""))
     .map((job) => job.id));
-  return (data?.enqueued ?? []).some((job) => !job.id || !terminalIds.has(job.id));
+  return (data?.enqueued ?? []).filter((job) => !job.id || !terminalIds.has(job.id));
+}
+
+export function freshnessRunHasPendingJobs(data: FreshnessRunData | null | undefined): boolean {
+  return pendingJobs(data).length > 0;
+}
+
+/** True when every source finished and only the journal step is still waiting. */
+export function freshnessRunOnlyJournalsPending(
+  data: FreshnessRunData | null | undefined,
+): boolean {
+  const pending = pendingJobs(data);
+  return pending.length > 0 && pending.every((job) => job.job_type === "journal_refresh");
 }
 
 export function freshnessRunNeedsAttention(data: FreshnessRunData | null | undefined): boolean {
@@ -253,6 +344,7 @@ export function freshnessRunNeedsAttention(data: FreshnessRunData | null | undef
     completed.some(
       (job) => job.job_type === "journal_refresh" && autoPairNeedsAttention(job),
     ) ||
+    journalStepNeedsAttention(data?.journals) ||
     sources.some((source) => Boolean(source.blocking_reports) || source.status === "failed") ||
     Boolean((summary?.failed ?? 0) > 0 || (summary?.blocking_reports ?? 0) > 0)
   );
@@ -352,6 +444,7 @@ export function summarizeFreshnessRun(data: FreshnessRunData | null | undefined)
     quarantineCount
       ? `${quarantineCount} quarantined transaction${quarantineCount === 1 ? "" : "s"}`
       : null,
+    journalStepNeedsAttention(data?.journals) ? describeJournalStep(data?.journals) : null,
   ].filter(Boolean);
   const summary = parts.join(", ") || "No source changes returned.";
   const firstProblem = completed.find((job) => job.status && job.status !== "done");
