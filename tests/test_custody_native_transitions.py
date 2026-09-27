@@ -91,6 +91,37 @@ class NativeTransitionEngineTest(unittest.TestCase):
                     self.assertAlmostEqual(float(receipt["fiat_value"]), 20.002)
                 self.assertAlmostEqual(sum(float(v["quantity"]) for v in state.wallet_holdings.values()), 0.000995)
 
+    def test_pending_claim_holds_its_funding_leg_instead_of_a_disposal(self):
+        rows, refs = native_transition_rows("claim")
+        held_rows = []
+        for row in rows:
+            if row["id"] == "claim":
+                raw = json.loads(row["raw_json"])
+                raw["status"] = {"confirmed": False}
+                row = authoritative_chain_observation(
+                    {**row, "raw_json": json.dumps(raw)},
+                    observer_kind="lwk", fee_attribution="exact",
+                )
+                row["observation_observer_kinds_json"] = '["lwk"]'
+            held_rows.append(row)
+        inputs = finalized_tax_inputs(PROFILE, rows=held_rows, wallet_refs_by_id=refs)
+        state = GenericRP2TaxEngine(PROFILE).build_ledger_state(inputs)
+
+        # The unconfirmed claim cannot carry the route, and its Lightning
+        # funding leg must not fall back to an ordinary disposal meanwhile.
+        self.assertEqual(
+            sorted((q["transaction_id"], q["reason"]) for q in state.quarantines),
+            [
+                ("claim", "pending_onchain_confirmation"),
+                ("send", "transfer_pair_dependency_blocked"),
+            ],
+        )
+        self.assertEqual(
+            [(e["transaction_id"], e["entry_type"]) for e in state.entries],
+            [("acquisition", "acquisition")],
+        )
+        self.assertEqual(inputs.finalized_tax_projection.cross_asset_pairs, ())
+
     def test_same_hard_evidence_respects_disabled_cross_rail_carry_policy(self):
         rows, refs = native_transition_rows()
         profile = {**PROFILE, "bitcoin_rail_carrying_value": False}

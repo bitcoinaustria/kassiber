@@ -1688,11 +1688,60 @@ def _validate_prepared_rp2_inputs(configuration: Any, input_data_list: list[Any]
 def _prepared_quarantine_reasons(
     prepared_by_asset: list[tuple[NormalizedTaxAssetInputs, _RP2PreparedInput]]
 ) -> dict[str, str]:
+    """First phase-1 quarantine reason per real (anchor) transaction id.
+
+    ``build_tax_quarantine`` records the anchor ``journal_transaction_id``, not
+    the synthetic projected row id, so look pair legs up through
+    ``_carry_pair_leg_reason`` rather than by ``pair["out_id"]``/``["in_id"]``.
+    """
+
     reasons: dict[str, str] = {}
     for _, prepared in prepared_by_asset:
         for quarantine in prepared.quarantines:
             reasons.setdefault(str(quarantine["transaction_id"]), str(quarantine["reason"]))
     return reasons
+
+
+def _carry_pair_leg_reason(
+    quarantine_reasons: Mapping[str, str],
+    rows_by_id: Mapping[str, Mapping[str, Any]],
+    pair: Mapping[str, Any],
+    side: str,
+) -> str | None:
+    """Return the phase-1 quarantine reason that blocks one carry-pair leg.
+
+    Every finalized projection row has a synthetic ``custody-tax:``/
+    ``direct-payout:`` id while quarantines are keyed by the real anchor
+    transaction. Resolve the leg's anchor before looking it up. The anchor
+    granularity is deliberately conservative: a phase-1 block on any slice of
+    the leg's real transaction keeps the carry pair out of swap promotion.
+    """
+
+    row_id = str(pair[f"{side}_id"])
+    candidates = [row_id]
+    row = rows_by_id.get(row_id)
+    if row is not None:
+        anchor = _row_get(row, "journal_transaction_id")
+        if anchor not in (None, ""):
+            candidates.append(str(anchor))
+    pair_anchor = pair.get(f"{side}_transaction_id")
+    if pair_anchor not in (None, ""):
+        candidates.append(str(pair_anchor))
+    for candidate in candidates:
+        reason = quarantine_reasons.get(candidate)
+        if reason is not None:
+            return reason
+    return None
+
+
+def _carry_pair_reason(
+    quarantine_reasons: Mapping[str, str],
+    rows_by_id: Mapping[str, Mapping[str, Any]],
+    pair: Mapping[str, Any],
+) -> str | None:
+    return _carry_pair_leg_reason(
+        quarantine_reasons, rows_by_id, pair, "out"
+    ) or _carry_pair_leg_reason(quarantine_reasons, rows_by_id, pair, "in")
 
 
 def _swap_pair_quarantines(
@@ -1706,14 +1755,20 @@ def _swap_pair_quarantines(
     out_row = rows_by_id[out_id]
     in_row = rows_by_id[in_id]
     pair_id = str(pair.get("pair_id") or f"{out_id}->{in_id}")
-    out_amount = msat_to_btc(out_row["amount"]) or Decimal("0")
     detail = {
         "outgoing_asset": pair.get("out_asset") or out_row["asset"],
         "incoming_asset": pair.get("in_asset") or in_row["asset"],
-        "out_amount": float(out_amount),
         "at_swap_link": pair_id,
         "reason_code": reason_code,
     }
+    if pair_id.startswith("direct-payout:"):
+        # Both synthetic settlement legs anchor to the one real source
+        # transaction; surface that source once rather than twice.
+        return [
+            build_tax_quarantine(profile, out_row, AT_SWAP_QUARANTINE_REASON, detail)
+        ]
+    out_amount = msat_to_btc(out_row["amount"]) or Decimal("0")
+    detail["out_amount"] = float(out_amount)
     return [
         build_tax_quarantine(profile, out_row, AT_SWAP_QUARANTINE_REASON, detail),
         build_tax_quarantine(profile, in_row, AT_SWAP_QUARANTINE_REASON, detail),
@@ -1758,27 +1813,14 @@ def _select_at_cross_asset_swap_links(
 
         out_event = events_by_id.get(out_id)
         in_event = events_by_id.get(in_id)
+        # Phase-1 quarantines are not re-emitted: the second prepare pass
+        # excludes every row in ``quarantined_row_ids``. The pair quarantine is
+        # therefore the only record of this block and must always be written.
+        leg_reason = _carry_pair_reason(quarantine_reasons, rows_by_id, pair)
         if out_event is None or in_event is None:
-            reason_code = quarantine_reasons.get(out_id) or quarantine_reasons.get(in_id) or "swap_leg_unavailable"
-            pair_id = str(pair.get("pair_id") or f"{out_id}->{in_id}")
-            if pair_id.startswith("direct-payout:"):
-                if out_id not in quarantine_reasons:
-                    quarantines.append(
-                        build_tax_quarantine(
-                            profile,
-                            rows_by_id[out_id],
-                            AT_SWAP_QUARANTINE_REASON,
-                            {
-                                "outgoing_asset": pair.get("out_asset") or rows_by_id[out_id]["asset"],
-                                "incoming_asset": pair.get("in_asset") or rows_by_id[in_id]["asset"],
-                                "at_swap_link": pair_id,
-                                "reason_code": reason_code,
-                            },
-                        )
-                    )
-            else:
-                quarantines.extend(_swap_pair_quarantines(profile, pair, rows_by_id, reason_code))
-            quarantined_row_ids.update({out_id, in_id})
+            reason_code = leg_reason or "swap_leg_unavailable"
+            quarantines.extend(_swap_pair_quarantines(profile, pair, rows_by_id, reason_code))
+            quarantined_row_ids.update(_carry_pair_blocked_row_ids(pair))
             continue
 
         # A leg Kassiber already quarantined in phase 1 (insufficient quantity,
@@ -1791,10 +1833,9 @@ def _select_at_cross_asset_swap_links(
         # surviving leg is no better — it orphans the at_swap_link and trips the
         # cross-asset validator instead. Quarantine the whole pair so neither leg
         # reaches compute, preserving the original phase-1 reason for review.
-        leg_reason = quarantine_reasons.get(out_id) or quarantine_reasons.get(in_id)
         if leg_reason is not None:
             quarantines.extend(_swap_pair_quarantines(profile, pair, rows_by_id, leg_reason))
-            quarantined_row_ids.update({out_id, in_id})
+            quarantined_row_ids.update(_carry_pair_blocked_row_ids(pair))
             continue
 
         if getattr(out_event, "at_regime", None) != REGIME_NEU:
@@ -1919,7 +1960,13 @@ class _GenericRailCarryResult:
     quarantines: list[dict[str, Any]]
 
 
-def _generic_bitcoin_rail_blocked_row_ids(pair: Mapping[str, Any]) -> set[str]:
+def _carry_pair_blocked_row_ids(pair: Mapping[str, Any]) -> set[str]:
+    """Rows withheld from RP2 when a carrying-value pair is blocked.
+
+    A direct payout also has a synthetic target-asset disposal that must not
+    book without the carried acquisition it would consume.
+    """
+
     out_id = str(pair["out_id"])
     in_id = str(pair["in_id"])
     blocked = {out_id, in_id}
@@ -2031,12 +2078,15 @@ def _apply_generic_bitcoin_rail_carry_values(
                 continue
             carried_basis = basis_by_id.get(out_id)
             if carried_basis is None or carried_basis <= 0:
+                # Only the source leg explains a missing carried basis; an
+                # unpriced incoming leg is exactly what the carry would fix.
                 reason_code = (
-                    quarantine_reasons.get(out_id)
-                    or quarantine_reasons.get(in_id)
+                    _carry_pair_leg_reason(
+                        quarantine_reasons, rows_by_id, pair, "out"
+                    )
                     or "source_basis_unavailable"
                 )
-                pair_blocked_ids = _generic_bitcoin_rail_blocked_row_ids(pair)
+                pair_blocked_ids = _carry_pair_blocked_row_ids(pair)
                 if not pair_blocked_ids <= blocked_row_ids:
                     blocks_changed = True
                     blocked_row_ids.update(pair_blocked_ids)

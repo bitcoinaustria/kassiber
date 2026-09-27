@@ -1092,6 +1092,94 @@ def derive_recorded_fanout_transfers(
     return result
 
 
+def detect_unresolved_owned_fanout_ids(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    covered_ids: set[str],
+) -> set[str]:
+    """Rows of a multi-leg own-wallet transaction that no interpreter resolved.
+
+    This is the ``owned_fanout_unresolved`` hold. It sees the same canonical
+    ``(chain, network, txid, asset)`` groups as the recorded fan-out
+    decomposer. A group with positive outbound and inbound legs in different
+    own wallets and more than one leg on either side (1->N fan-out, N->1
+    consolidation, N:M) moves coins between owned wallets. When the
+    decomposers declined it (a destination was not synced, amounts do not
+    conserve, several sources without a readable graph), booking each leg
+    standalone would dispose of the source and acquire fresh destination lots
+    for the same coins. Hold the whole group instead.
+
+    ``covered_ids`` are anchors another interpreter already resolved or
+    blocked: pair candidates, reviewed components, derivation blocks. A pair
+    covering only some positive legs does not resolve the group. The clean
+    1-out/1-in shape is never held here; its residual stays on the partial-
+    payment path. Provider/import labels never form a group (they have no
+    canonical scope).
+
+    When a leg carries a readable transaction graph, the address-ownership
+    derivers are the authority and flag what they cannot prove themselves.
+    Such a group is held only when they resolved some legs but not all; a
+    same-txid receipt the graph does not support must not suppress a
+    graph-proven external disposal.
+    """
+
+    groups: dict[tuple[str, str, str, str], list[Mapping[str, Any]]] = {}
+    for row in rows:
+        if str(_get(row, "id")).startswith(_SYNTHETIC_ID_PREFIXES):
+            continue
+        scope = onchain_transfer_scope(row)
+        if scope is None:
+            continue
+        groups.setdefault(scope, []).append(row)
+    held: set[str] = set()
+    for group in groups.values():
+        outs = [
+            row
+            for row in group
+            if _get(row, "direction") == "outbound"
+            and int(_get(row, "amount") or 0) > 0
+        ]
+        ins = [
+            row
+            for row in group
+            if _get(row, "direction") == "inbound"
+            and int(_get(row, "amount") or 0) > 0
+        ]
+        if not outs or not ins or (len(outs) == 1 and len(ins) == 1):
+            continue
+        if not any(
+            str(_get(out_row, "wallet_id")) != str(_get(in_row, "wallet_id"))
+            for out_row in outs
+            for in_row in ins
+        ):
+            continue
+        positive_ids = {str(_get(row, "id")) for row in (*outs, *ins)}
+        if positive_ids <= covered_ids:
+            continue
+        graph_bearing = any(
+            _parse_onchain_tx(_get(row, "raw_json"), allow_partial=True) is not None
+            for row in (*outs, *ins)
+        )
+        if graph_bearing and not positive_ids & covered_ids:
+            continue
+        handled = {str(_get(row, "id")) for row in group} & covered_ids
+        uncovered_positive_outbound = any(
+            str(_get(row, "id")) not in covered_ids for row in outs
+        )
+        zero_outs = any(
+            _get(row, "direction") == "outbound"
+            and int(_get(row, "amount") or 0) <= 0
+            for row in group
+        )
+        # A collaborative event whose own clamped zero-amount source is already
+        # explained elsewhere may leave a covered subset; only an uncovered
+        # positive source proves an unresolved own-wallet spend in that shape.
+        if handled and zero_outs and not uncovered_positive_outbound:
+            continue
+        held.update(str(_get(row, "id")) for row in group)
+    return held
+
+
 def _complete_collaborative_destinations(group, parsed, index, physical_scope):
     """Prove complete, conserving own wallet deltas inside a joint event."""
 
