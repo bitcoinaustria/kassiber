@@ -235,6 +235,7 @@ def _wallets_sync_payload(
                 auto_pair=auto_pair_journals,
                 skip_rebuild_when_current=True,
                 progress_observer=progress_observer,
+                profile_id=str(context["profile_id"]),
             )
         except AppError as exc:
             if exc.code != "project_operation_in_progress":
@@ -340,18 +341,24 @@ def run_local_journal_refresh(
     auto_pair: bool,
     skip_rebuild_when_current: bool,
     progress_observer: Callable[[Mapping[str, Any]], None] | None = None,
+    profile_id: str | None = None,
 ) -> dict[str, Any] | None:
-    """Queue and run only the journal source of the active book.
+    """Queue and run only the journal source of one book.
+
+    Callers pass the book they captured before their own work; the active
+    context is only the fallback, because another connection may switch books
+    while a sync or import runs.
 
     Used after user-triggered syncs and imports. It records the same freshness
     job/source state as a book refresh and honors the journals source class of
     the freshness policy, reporting a disabled or deferred step explicitly.
     """
 
-    profile = _active_profile_row(conn)
-    if profile is None:
-        return None
-    profile_id = str(profile["id"])
+    if profile_id is None:
+        profile = _active_profile_row(conn)
+        if profile is None:
+            return None
+        profile_id = str(profile["id"])
     policy = core_freshness.get_policy(conn, profile_id)
     if not policy.source_classes.get(core_freshness.SOURCE_JOURNALS, False):
         return {

@@ -2187,6 +2187,36 @@ class FreshnessTest(unittest.TestCase):
         # exactly the synced sources.
         self.assertEqual([row["wallet"] for row in payload["results"]], ["Wallet"])
 
+    def test_wallet_sync_journal_step_stays_on_the_synced_book(self):
+        # Another connection switches books while the sync runs; the journal
+        # step must still rebuild the book whose wallet was synced.
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        self._seed_address_wallet(conn, profile_id)
+        conn.execute(
+            """
+            INSERT INTO profiles(id, workspace_id, label, fiat_currency, created_at)
+            VALUES('other', 'ws', 'Other', 'EUR', '2026-06-04T00:00:00Z')
+            """
+        )
+        conn.commit()
+
+        def switch_books(*_args, **_kwargs):
+            set_setting(conn, "context_profile", "other")
+            return {"wallet": "Wallet", "status": "synced"}
+
+        step = Mock(return_value={"quarantined": 0, "rebuilt": True})
+        with patch.object(
+            daemon_freshness, "prefetch_wallets_from_backend", return_value={}
+        ), patch.object(
+            daemon_freshness, "sync_wallet_from_backend", side_effect=switch_books
+        ), patch.object(daemon_freshness, "refresh_journals_step", step):
+            daemon_freshness._wallets_sync_payload(
+                conn, {}, {"wallet": "Wallet"}, strict=True
+            )
+
+        self.assertEqual(step.call_args.args[1], profile_id)
+
     def test_wallet_sync_can_leave_journals_for_later(self):
         conn = self._db()
         profile_id = _seed_profile(conn)

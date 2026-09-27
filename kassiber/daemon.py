@@ -2745,15 +2745,23 @@ def _ui_commercial_payload_from_conn(
 
 
 
-def _with_local_journal_refresh(ctx: "DaemonContext", payload: Any) -> Any:
-    """Finish a user-triggered import with the local journal step.
+def _with_local_journal_refresh(
+    ctx: "DaemonContext", run_import: Callable[[], Any]
+) -> Any:
+    """Run a user-triggered import, then finish it with the local journal step.
 
-    The import itself already committed; a failed or deferred rebuild is
-    reported in ``payload["journals"]`` rather than turning a successful import
-    into an error. The step performs no network I/O.
+    The book is captured before the import, so a book switch from another
+    connection meanwhile cannot redirect the rebuild. The import itself already
+    committed; a failed or deferred rebuild is reported in
+    ``payload["journals"]`` rather than turning a successful import into an
+    error. The step performs no network I/O.
     """
 
-    if not isinstance(payload, dict) or ctx.conn is None:
+    profile_id = (
+        current_context_snapshot(ctx.conn).get("profile_id") if ctx.conn is not None else None
+    )
+    payload = run_import()
+    if not isinstance(payload, dict) or ctx.conn is None or not profile_id:
         return payload
     try:
         journal_run = run_local_journal_refresh(
@@ -2761,6 +2769,7 @@ def _with_local_journal_refresh(ctx: "DaemonContext", payload: Any) -> Any:
             ctx.runtime_config,
             auto_pair=True,
             skip_rebuild_when_current=True,
+            profile_id=str(profile_id),
         )
     except AppError as exc:
         if exc.code != "project_operation_in_progress":
@@ -17157,10 +17166,10 @@ def handle_request(
                     "ui.wallets.import_file",
                     _with_local_journal_refresh(
                         ctx,
-                        _import_wallet_file_payload(
+                        lambda: _import_wallet_file_payload(
                             ctx.conn,
                             _coerce_args_dict(request_id, request.get("args")),
-                        )
+                        ),
                     ),
                 ),
                 request_id,
@@ -17205,10 +17214,10 @@ def handle_request(
                     "ui.wallets.document_import.import",
                     _with_local_journal_refresh(
                         ctx,
-                        _document_import_import_payload(
+                        lambda: _document_import_import_payload(
                             ctx,
                             _coerce_args_dict(request_id, request.get("args")),
-                        )
+                        ),
                     ),
                 ),
                 request_id,
@@ -17223,10 +17232,10 @@ def handle_request(
                     "ui.wallets.import_samourai",
                     _with_local_journal_refresh(
                         ctx,
-                        _import_samourai_payload(
+                        lambda: _import_samourai_payload(
                             ctx.conn,
                             _coerce_args_dict(request_id, request.get("args")),
-                        )
+                        ),
                     ),
                 ),
                 request_id,
