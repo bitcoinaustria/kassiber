@@ -326,7 +326,380 @@
           "action": "Journale verarbeiten"
         }
       }
-    }
+    },
+    "cause": {
+      "ownershipSourceMissing": {
+        "title": "Historie der sendenden Wallet fehlt",
+        "why": "Dieser Eingang gibt Coins aus, die zu {{wallets}} gehören, aber der Ausgang dieser Wallet fehlt im Buch.",
+        "provide": "Synchronisiere {{wallets}} (bei vielen genutzten Adressen das Gap-Limit erhöhen) oder importiere ihre Historie. Danach bucht Kassiber den Vorgang als Transfer zwischen deinen Wallets."
+      },
+      "ownershipSourceAmbiguous": {
+        "title": "Mehrere eigene Wallets kommen als Absender infrage",
+        "why": "Die Inputs gehören zu mehr als einer deiner Wallets oder ihr Netzwerk passt nicht zur Transaktion.",
+        "provide": "Öffne die Zuordnung und wähle, welche Wallets diesen Transfer finanziert haben."
+      },
+      "ownershipDestinationAmbiguous": {
+        "title": "Mehrere Eingänge passen zu diesem Transfer",
+        "why": "{{wallet}} hat mehr als einen Eingang, der die Gegenseite dieses Transfers sein könnte.",
+        "provide": "Öffne die Zuordnung und wähle den passenden Eingang."
+      },
+      "ownershipDestinationMissingRef": {
+        "title": "Ziel-Wallet fehlt in diesem Buch",
+        "why": "Laut Blockchain gingen die Coins an eine Adresse einer deiner Wallets, die in diesem Buch aber nicht eingerichtet ist.",
+        "provide": "Verbinde diese Wallet mit dem Buch oder prüfe ihre Einrichtung."
+      },
+      "ownershipAmountMismatch": {
+        "title": "Gebuchter Betrag passt nicht zur Blockchain",
+        "why": "Die Outputs an deine eigenen Wallets sind größer als Betrag plus Gebühr dieser Zeile.",
+        "provide": "Synchronisiere die sendende Wallet erneut, damit der Betrag aus der Blockchain stammt."
+      },
+      "ownershipConservation": {
+        "title": "Die Beträge dieses Transfers gehen nicht auf",
+        "why": "Inputs, Outputs und Gebühr dieses Transfers zwischen deinen Wallets lassen sich nicht ausgleichen.",
+        "provide": "Synchronisiere die beteiligten Wallets erneut; bleiben die Beträge widersprüchlich, prüfe die importierte Datei."
+      },
+      "ownershipFeeEvidence": {
+        "title": "Die Netzwerkgebühr lässt sich nicht nachweisen",
+        "why": "Die Zeile enthält eine Gebühr, aber die Werte der ausgegebenen Inputs sind unbekannt, daher lässt sich die genaue Gebühr nicht trennen.",
+        "provide": "Synchronisiere die Wallet über ein Backend, das Input-Werte liefert (Electrum, Esplora oder dein eigener Node)."
+      },
+      "ownershipAssetEvidence": {
+        "title": "Output-Beträge sind verborgen oder unvollständig",
+        "why": "Ein Output an deine Wallet hat keinen lesbaren Betrag oder Asset (z. B. vertrauliche Liquid-Beträge).",
+        "provide": "Synchronisiere die empfangende Wallet mit ihrem Descriptor, damit Kassiber die Beträge lesen kann."
+      },
+      "ownershipAmbiguousOutput": {
+        "title": "Eine Adresse gehört zu zwei Wallets",
+        "why": "Dasselbe Script wird von mehr als einer deiner Wallets beobachtet, daher ist unklar, welche es empfangen hat.",
+        "provide": "Entferne den doppelten Descriptor oder die doppelte Adresse aus einer der Wallets."
+      },
+      "ownershipDuplicateOutbound": {
+        "title": "Dieselbe Zahlung ist doppelt erfasst",
+        "why": "Mehrere Ausgänge beschreiben dieselbe Transaktion, meist nach einem doppelten Import derselben Historie.",
+        "provide": "Lösche den doppelten Import oder schließe ihn aus und behalte die Zeile aus der Blockchain."
+      },
+      "liquidGraphIncomplete": {
+        "title": "Liquid-Transfer ist unvollständig",
+        "why": "Kassiber hat nur einen Teil der Eingänge dieses Liquid-Transfers in deinen Wallets gefunden.",
+        "provide": "Synchronisiere alle beteiligten Liquid-Wallets oder verbinde die Wallet, die den Rest erhalten hat."
+      },
+      "recordedAuthorityConflict": {
+        "title": "Eine Seite stammt aus einer Datei, die andere aus der Blockchain",
+        "why": "Nur eine Seite dieses Transfers ist durch einen Blockchain-Sync bestätigt; die andere ist ein importierter Datensatz.",
+        "provide": "Synchronisiere die Wallet, deren Seite aus einer Datei stammt, damit beide Seiten on-chain beobachtet werden."
+      },
+      "chronologyMismatch": {
+        "title": "Transfer kommt an, bevor er abgeht",
+        "why": "Die Empfangsseite ist um mehr als die erlaubte Zeitabweichung früher datiert als die Sendeseite.",
+        "provide": "Prüfe die Zeitstempel der importierten Zeilen (Zeitzone) oder ordne die richtigen Transaktionen zu."
+      },
+      "networkMismatch": {
+        "title": "Transfer über verschiedene Netzwerke",
+        "why": "Die beiden Seiten dieses Paars liegen in verschiedenen Netzwerken oder Einheiten.",
+        "provide": "Löse die Zuordnung oder erfasse den Vorgang in der Zuordnung als Swap."
+      },
+      "feeImplausible": {
+        "title": "In diesem Transfer fehlt zu viel",
+        "why": "Mehr als 1 % (mindestens 2.500 Sats) dieses Transfers ist weder durch den Eingang noch durch die Gebühr erklärt.",
+        "provide": "Ging ein Teil an eine andere Wallet von dir, verbinde sie; sonst ordne den richtigen Eingang zu oder erfasse die Differenz."
+      },
+      "privacyHop": {
+        "title": "CoinJoin oder gemeinsame Transaktion braucht Nachweise",
+        "why": "Diese Zeile gehört zu einer gemeinsamen Transaktion. Aus der Blockchain ist nicht erkennbar, welcher Teil dir gehört, eine Zahlung oder eine Gebühr war.",
+        "provide": "Verbinde alle beteiligten Wallets (z. B. Premix und Postmix) oder hänge die Aufzeichnungen der Wallet an und beschreibe die Bewegung."
+      },
+      "samouraiUnverified": {
+        "title": "Samourai/Whirlpool-Schritt nicht on-chain bestätigt",
+        "why": "Dieser Samourai-Schritt stammt aus einem Export und wurde nicht durch einen Sync aller beteiligten Wallets bestätigt.",
+        "provide": "Synchronisiere die Deposit-, Premix- und Postmix-Wallets."
+      },
+      "channelOpen": {
+        "title": "Lightning-Kanalöffnung ist nicht erklärt",
+        "why": "Die On-chain-Finanzierung ist größer als der laut Node in den Kanal eingezahlte Betrag.",
+        "provide": "Importiere die Historie des Lightning-Nodes oder verbinde die Wallet, die das Wechselgeld erhalten hat."
+      },
+      "channelClose": {
+        "title": "Lightning-Kanalschließung ist nicht erklärt",
+        "why": "Die beim Schließen zurückgeflossenen Beträge passen nicht zum Kanalguthaben (innerhalb der Gebührentoleranz).",
+        "provide": "Importiere die Historie des Nodes oder verbinde die Wallet, die den Close-Output erhalten hat."
+      },
+      "nativeTransitionAmbiguous": {
+        "title": "Mehrere Zahlungen passen zu diesem Swap",
+        "why": "Der Payment-Hash dieses Lightning-Swaps passt zu mehr als einem Datensatz.",
+        "provide": "Öffne die Zuordnung und wähle die passende Zahlung."
+      },
+      "nativeTransitionAmountMismatch": {
+        "title": "Swap-Beträge gleichen sich nicht aus",
+        "why": "Die nachgewiesene Swap-Route hält die Beträge auf beiden Seiten nicht gleich.",
+        "provide": "Hänge den Beleg des Swap-Anbieters an und prüfe den Swap."
+      },
+      "nativeTransitionFeeTiming": {
+        "title": "Swap-Gebühr fällt auf einen anderen Tag",
+        "why": "Der Swap ist nachgewiesen, aber ein Teil der Gebühr fiel an einem späteren Tag an. Kassiber kann getrennt datierte Gebühren noch nicht buchen.",
+        "provide": "Das lässt sich derzeit durch keine Eingabe automatisch lösen; es bleibt sichtbar, bis Kassiber es unterstützt."
+      },
+      "migrationIncomplete": {
+        "title": "Eine ältere Prüfung konnte nicht übernommen werden",
+        "why": "Ein in einer älteren Version geprüftes Transfer-Paar oder eine Auszahlung ließ sich nicht ins aktuelle Format übernehmen.",
+        "provide": "Öffne die Transaktion und prüfe die Zuordnung erneut."
+      },
+      "gapHold": {
+        "title": "Eine Zwischen-Wallet fehlt",
+        "why": "Coins haben {{wallet}} verlassen und ein ähnlicher Betrag kam später zurück, aber die Wallet dazwischen ist nicht verbunden.",
+        "provide": "Verbinde die Wallet, über die die Coins gelaufen sind (ihren xpub oder Descriptor). Hast du sie nicht mehr, bestätige den Weg in der Prüfung der Verwahrungslücken."
+      },
+      "implicitDelta": {
+        "title": "Wallet-Saldo änderte sich ohne erfasste Transaktion",
+        "why": "Der beobachtete Saldo von {{wallet}} weicht von ihren erfassten Transaktionen ab.",
+        "provide": "Synchronisiere die Wallet erneut oder importiere ihre vollständige Historie."
+      },
+      "unclaimedResidual": {
+        "title": "Ein Teil dieses Abgangs ist unerklärt",
+        "why": "Ein Teil dieses Abgangs ging weder an eine bekannte Wallet von dir noch an einen erfassten Empfänger.",
+        "provide": "Verbinde die Wallet, die den Rest erhalten hat, oder erfasse, wohin er ging."
+      },
+      "sourceOverlap": {
+        "title": "Zwei Quellen erfassen dieselben Coins",
+        "why": "Zwei verbundene Quellen (z. B. eine Adressliste und ein Descriptor) beanspruchen beide diese Coins.",
+        "provide": "Entferne die überlappende Quelle oder behalte nur eine davon."
+      },
+      "searchCapacity": {
+        "title": "Zu viele Kandidaten für eine automatische Prüfung",
+        "why": "Kassiber hat die Suche nach einer fehlenden Wallet hier abgebrochen, weil es zu viele Möglichkeiten gab.",
+        "provide": "Prüfe diese Verwahrungslücke manuell oder mit dem Assistenten."
+      },
+      "componentProblem": {
+        "title": "Ein geprüfter Verwahrungsweg passt nicht mehr",
+        "why": "Ein früher geprüfter Verwahrungsweg passt nicht mehr zu den aktuellen Transaktionen (z. B. nach einem neuen Sync).",
+        "provide": "Prüfe die Verwahrungskomponente und lege eine neue Revision an."
+      },
+      "reviewedSuspense": {
+        "title": "Ein geprüfter Weg hält einen Teil in Schwebe",
+        "why": "Ein Teil eines geprüften Verwahrungswegs ist bewusst in Schwebe, daher sind spätere Anschaffungskosten nicht endgültig.",
+        "provide": "Löse den Teil in Schwebe auf: Verbinde die Wallet, an die er ging, oder erfasse, was damit passiert ist."
+      },
+      "quantityOther": {
+        "title": "Verwahrung dieser Coins ist ungeklärt",
+        "why": "Kassiber kann nicht feststellen, wo ein Teil dieser Coins verwahrt ist.",
+        "provide": "Öffne die Transaktion; die fehlende Wallet zu verbinden oder den Weg zu prüfen löst das."
+      },
+      "basisBarrier": {
+        "title": "Wartet auf ein früheres Problem",
+        "why": "Eine frühere Transaktion in diesem Bestand ist ungeklärt ({{root}}), daher sind die Anschaffungskosten ab dort nicht endgültig.",
+        "provide": "Hier ist nichts zu tun: Das löst sich automatisch, sobald die frühere Transaktion geklärt ist."
+      },
+      "pairDependency": {
+        "title": "Teil einer blockierten Transferkette",
+        "why": "Diese Zeile ist über einen Transfer mit einer zurückgehaltenen Transaktion verbunden ({{root}}).",
+        "provide": "Kläre die verbundene Transaktion; diese Zeile folgt automatisch."
+      },
+      "provenanceIncomplete": {
+        "title": "Ein früherer Bestand ist ungeklärt",
+        "why": "Eine frühere {{asset}}-Transaktion ({{since}}) ist nicht gebucht, daher ist unsicher, aus welchen Beständen diese Veräußerung stammt.",
+        "provide": "Kläre die frühere Transaktion; diese Zeile folgt automatisch."
+      },
+      "groupBlocked": {
+        "title": "Ein anderer Teil dieser Transfergruppe ist zurückgehalten",
+        "why": "Ein anderer Teil dieser Transfergruppe ist zurückgehalten; die Gruppe wird nur vollständig gebucht.",
+        "provide": "Kläre den anderen Teil; diese Zeile folgt automatisch."
+      },
+      "carryUnresolved": {
+        "title": "Übernommene Anschaffungskosten fehlen",
+        "why": "Dieser Swap übernimmt die Anschaffungskosten der Gegenseite, die noch nicht gebucht ist.",
+        "provide": "Kläre die Gegenseite des Swaps; diese Zeile folgt automatisch."
+      },
+      "missingPrice": {
+        "title": "Preis fehlt",
+        "why": "Für dieses Datum gibt es keinen {{asset}}-Preis, daher ist der Wert in deiner Buchwährung unbekannt.",
+        "provide": "Aktualisiere die Marktpreise oder gib den Preis von deinem Beleg ein."
+      },
+      "pricingReview": {
+        "title": "Nur ein ungefährer Preis verfügbar",
+        "why": "Der Preis für dieses Datum stammt aus einer groben Quelle (z. B. einem Tagesdurchschnitt), und deine Einstellungen verlangen eine Prüfung.",
+        "provide": "Bestätige den Preis oder gib den genauen Preis von deinem Beleg ein."
+      },
+      "swapPriceRequired": {
+        "title": "Swap-Auszahlung braucht einen Wert",
+        "why": "Die Auszahlung dieses Swaps hat keinen Betrag oder Wert, den die österreichischen Swap-Regeln brauchen.",
+        "provide": "Gib den Wert der Auszahlung ein."
+      },
+      "insufficientLots": {
+        "title": "Mehr ausgegeben als je empfangen",
+        "why": "{{wallet}} sendet {{required}}, Kassiber kennt aber nur {{available}} an früheren Eingängen.",
+        "provide": "Importiere die fehlende Kauf-Historie (z. B. einen Börsen-Export) oder verbinde die Wallet, von der diese Coins kamen."
+      },
+      "missingCostBasis": {
+        "title": "Frühere Käufe haben keine Anschaffungskosten",
+        "why": "Die Coins sind vorhanden, aber für die zugehörigen Käufe fehlt der Preis, daher sind die Anschaffungskosten unbekannt.",
+        "provide": "Gib die Preise der früheren Käufe ein oder importiere deren Historie mit Preisen."
+      },
+      "unclassifiedIncome": {
+        "title": "Diese Einkommensart wird nicht unterstützt",
+        "why": "Dieser Eingang ist als Einkommensart markiert, die Kassiber keiner Steuerkategorie zuordnen kann.",
+        "provide": "Klassifiziere ihn als Kauf, Einkommen, Mining oder eine andere unterstützte Art."
+      },
+      "nonSaleDisposal": {
+        "title": "Schenkung, Spende oder Verlust braucht eine Entscheidung",
+        "why": "Dieser Abgang ist als Schenkung, Spende, Verlust oder Diebstahl markiert. Kassiber rät die steuerliche Behandlung nicht.",
+        "provide": "Entscheide die Behandlung: umklassifizieren, ausschließen oder die Steuerkategorie setzen."
+      },
+      "valuationUnsupported": {
+        "title": "Bewertung von Airdrop oder Hard Fork wird nicht unterstützt",
+        "why": "Kassiber bewertet Airdrops oder Hard Forks für die österreichische Steuer nicht.",
+        "provide": "Klassifiziere den Eingang anders, falls er kein Airdrop ist, oder lass ihn ausgeschlossen."
+      },
+      "conflictingSpend": {
+        "title": "Ersetzte oder doppelt ausgegebene Transaktion",
+        "why": "Eine andere Transaktion gibt dieselben Coins aus. Es zählt nur die, die bestätigt wird.",
+        "provide": "Warte auf die Bestätigung und synchronisiere erneut; die ersetzte Transaktion fällt dann weg."
+      },
+      "pendingConfirmation": {
+        "title": "Noch nicht bestätigt",
+        "why": "Diese Transaktion liegt noch im Mempool.",
+        "provide": "Hier ist nichts zu tun: Sie wird gebucht, sobald sie bestätigt ist und die Wallet synchronisiert."
+      },
+      "unscopedTransfer": {
+        "title": "Transfer ohne Blockchain-Bezug",
+        "why": "Zwei Zeilen in verschiedenen Wallets von dir teilen eine Anbieter-ID, haben aber keinen Transaktionsgraphen, daher ist nicht nachweisbar, dass es ein Transfer ist.",
+        "provide": "Ordne sie in der Zuordnung zu oder synchronisiere die Wallets aus der Blockchain."
+      },
+      "ownedFanout": {
+        "title": "Zahlung an mehrere eigene Wallets geht nicht auf",
+        "why": "Diese Transaktion sendet an mehrere deiner Wallets, aber die erfassten Eingänge passen nicht zu den Beträgen.",
+        "provide": "Synchronisiere oder verbinde alle empfangenden Wallets oder ordne die Eingänge in der Zuordnung zu."
+      },
+      "pairAmbiguous": {
+        "title": "Die Zuordnung ist nicht eindeutig",
+        "why": "Die zugeordneten Transaktionen ergeben keinen eindeutigen Transfer.",
+        "provide": "Öffne die Zuordnung und korrigiere sie."
+      },
+      "category": {
+        "missing_wallet_history": {
+          "title": "Wallet-Historie fehlt",
+          "why": "Ein Teil dieser Bewegung fand in einer Wallet statt, deren Historie nicht im Buch ist.",
+          "provide": "Verbinde oder synchronisiere die fehlende Wallet."
+        },
+        "missing_chain_evidence": {
+          "title": "Blockchain-Nachweis ist unvollständig",
+          "why": "Die Daten, die Kassiber zu dieser Transaktion hat, reichen nicht, um ihre Beträge nachzuweisen.",
+          "provide": "Synchronisiere die Wallet erneut aus der Blockchain."
+        },
+        "missing_price": {
+          "title": "Preis fehlt",
+          "why": "Der Wert dieser Transaktion in deiner Buchwährung ist unbekannt.",
+          "provide": "Aktualisiere die Marktpreise oder gib den Preis ein."
+        },
+        "missing_acquisition_history": {
+          "title": "Anschaffungs-Historie fehlt",
+          "why": "Kassiber weiß nicht, wo und zu welchen Kosten diese Coins angeschafft wurden.",
+          "provide": "Importiere die Kauf-Historie oder verbinde die Wallet, von der die Coins kamen."
+        },
+        "needs_decision": {
+          "title": "Braucht deine Entscheidung",
+          "why": "Die Nachweise lassen mehr als eine Deutung zu.",
+          "provide": "Öffne die Transaktion und entscheide, wie sie gebucht werden soll."
+        },
+        "unsupported": {
+          "title": "Noch nicht unterstützt",
+          "why": "Kassiber kann diese Art von Transaktion noch nicht buchen.",
+          "provide": "Sie bleibt sichtbar, bis die Unterstützung ergänzt ist."
+        },
+        "downstream": {
+          "title": "Wartet auf eine andere Transaktion",
+          "why": "Diese Zeile hängt von einer anderen, ungeklärten Transaktion ab.",
+          "provide": "Kläre die andere Transaktion; diese Zeile folgt automatisch."
+        }
+      },
+      "fallback": {
+        "wallet": "diese Wallet",
+        "sendingWallet": "die sendende Wallet",
+        "amount": "einen unbekannten Betrag",
+        "date": "früheres Datum",
+        "root": "siehe Ursache oben"
+      }
+    },
+    "category": {
+      "missing_wallet_history": "Wallet-Historie fehlt",
+      "missing_chain_evidence": "Blockchain-Nachweis unvollständig",
+      "missing_price": "Preis fehlt",
+      "missing_acquisition_history": "Anschaffungs-Historie fehlt",
+      "needs_decision": "Braucht deine Entscheidung",
+      "unsupported": "Noch nicht unterstützt",
+      "downstream": "Folgt aus anderem Problem"
+    },
+    "cta": {
+      "syncWallet": "{{wallet}} synchronisieren",
+      "connectWallet": "Wallet verbinden",
+      "importHistory": "Historie importieren",
+      "setPrice": "Preis eingeben",
+      "classify": "Klassifizieren",
+      "pairTransfer": "Zuordnung öffnen",
+      "reviewCustodyGap": "Verwahrungslücke prüfen",
+      "attachEvidence": "Beleg anhängen",
+      "waitForConfirmation": "Wartet auf Bestätigung",
+      "resolveRoot": "Ursache öffnen",
+      "processJournals": "Neu berechnen",
+      "openTransaction": "Transaktion öffnen",
+      "askAssistant": "Mit Assistent untersuchen"
+    },
+    "panel": {
+      "title": "Warum ist etwas in Quarantäne?",
+      "intro": "Kassiber hält eine Transaktion aus den Steuer-Journalen zurück, wenn die Nachweise nicht reichen, um sie korrekt zu buchen. Einen steuerpflichtigen Vorgang errät es nie. Jede Ursache unten sagt, was fehlt und was du liefern kannst.",
+      "counts_one": "{{count}} Transaktion in Quarantäne",
+      "counts_other": "{{count}} Transaktionen in Quarantäne",
+      "blocking_one": "{{count}} blockiert alle Berichte",
+      "blocking_other": "{{count}} blockieren alle Berichte",
+      "downstream_one": "{{count}} löst sich mit ihrer Ursache",
+      "downstream_other": "{{count}} lösen sich mit ihrer Ursache",
+      "reportsBlocked": "Steuer- und Portfolioberichte bleiben blockiert, bis die mit „Blockiert Berichte“ markierten Ursachen geklärt sind.",
+      "causesTitle": "Ursachen, älteste zuerst",
+      "causesHint": "Eine frühere Ursache zu klären, löst oft spätere Zeilen mit; arbeite also von oben nach unten.",
+      "moreCauses_one": "{{count}} weitere Ursache steht in der Tabelle unten.",
+      "moreCauses_other": "{{count}} weitere Ursachen stehen in der Tabelle unten.",
+      "blocksReports": "Blockiert Berichte",
+      "dependents_one": "{{count}} abhängige Transaktion löst sich automatisch, sobald das geklärt ist.",
+      "dependents_other": "{{count}} abhängige Transaktionen lösen sich automatisch, sobald das geklärt ist.",
+      "affected_one": "{{count}} Transaktion",
+      "affected_other": "{{count}} Transaktionen",
+      "wallets": "Wallets: {{wallets}}",
+      "since": "Seit {{date}}",
+      "whatToProvide": "Was du liefern kannst",
+      "deprecatedWallet": "{{wallet}} ist als veraltet markiert, daher überspringt „Alles aktualisieren“ sie; synchronisiere sie einzeln.",
+      "gapReviewLocked": "Die Prüfung von Verwahrungslücken gehört derzeit zu den Entwickler-Tools. Verbinde die fehlende Wallet oder lass den Assistenten untersuchen.",
+      "syncStartedTitle": "{{wallet}} wird synchronisiert",
+      "syncStartedBody": "Kassiber synchronisiert die Wallet und berechnet danach die Quarantäne neu.",
+      "syncFinishedTitle": "{{wallet}} synchronisiert",
+      "syncFailedTitle": "Synchronisierung von {{wallet}} fehlgeschlagen"
+    },
+    "freshness": {
+      "staleTitle": "Diese Liste ist möglicherweise veraltet",
+      "staleBody": "Seit der letzten Verarbeitung der Journale ({{when}}) haben sich Transaktionen geändert. Berechne neu, um die aktuelle Quarantäne zu sehen.",
+      "neverBody": "Die Journale wurden noch nicht verarbeitet. Berechne neu, um zu sehen, welche Transaktionen Aufmerksamkeit brauchen.",
+      "failedTitle": "Die letzte Journal-Aktualisierung ist fehlgeschlagen",
+      "failedBody": "{{message}} Die Liste zeigt den Stand vor diesem Versuch.",
+      "unknownTime": "unbekannter Zeitpunkt"
+    },
+    "assumptions": {
+      "title": "Annahmen, die Kassiber getroffen hat",
+      "intro": "Diese Transaktionen sind nicht in Quarantäne, verändern aber dein Ergebnis, falls die Annahme falsch ist.",
+      "outboundTitle_one": "{{count}} Abgang als Veräußerung gebucht",
+      "outboundTitle_other": "{{count}} Abgänge als Veräußerung gebucht",
+      "outboundWhy": "Keine deiner Wallets hat diese Coins erhalten, daher behandelt Kassiber sie als zum Marktwert verkauft oder ausgegeben.",
+      "outboundFix": "Ging ein Teil an eine eigene Wallet, verbinde sie: Dann werden daraus Transfers ohne Steuerwirkung. Klassifiziere echte Zahlungen, um sie zu bestätigen.",
+      "inboundTitle_one": "{{count}} Eingang unbekannter Herkunft als Kauf gebucht",
+      "inboundTitle_other": "{{count}} Eingänge unbekannter Herkunft als Kauf gebucht",
+      "inboundWhy": "Für diese Eingänge ist keine Herkunft erfasst, daher bucht Kassiber sie als Kauf zum Marktwert am Eingangstag.",
+      "inboundFix": "Kamen sie von einer älteren Wallet von dir, verbinde sie, damit die ursprünglichen Anschaffungskosten und die Haltedauer erhalten bleiben. Handelt es sich um Einkommen, klassifiziere sie.",
+      "total": "Gesamt {{amount}}",
+      "showMore_one": "{{count}} weitere nicht angezeigt",
+      "showMore_other": "{{count}} weitere nicht angezeigt"
+    },
+    "paging": {
+      "range": "Zeilen {{from}}–{{to}} von {{total}}",
+      "previous": "Zurück",
+      "next": "Weiter"
+    },
+    "impactFollows": "Löst sich mit der Ursache"
   },
   "review": {
     "column": {
