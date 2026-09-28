@@ -19,7 +19,7 @@ import { useDaemon } from "@/daemon/client";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { connectionCategoryLabel } from "@/lib/connectionDisplay";
 import { useCurrency } from "@/lib/currency";
-import { fiatCompleteness } from "@/lib/fiatCompleteness";
+import { eurRateMissing } from "@/lib/fiatCompleteness";
 import { normalizeOverviewSnapshot } from "@/lib/normalizeUiSnapshots";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { useUiStore } from "@/store/ui";
@@ -65,7 +65,8 @@ export function Connections() {
   // Needs the normalized balanceSummary: it removes coins several chain
   // wallets watch and carries the quarantine/stale caveat.
   const totalBtc = walletOverviewTotalBtc(snapshot);
-  const marketRateMissing = fiatCompleteness(snapshot.fiat).marketRateMissing;
+  // The wallet views value balances in EUR, so only a missing EUR rate hides them.
+  const marketRateMissing = eurRateMissing(snapshot);
   const filteredConnections = connections.filter(
     (connection) =>
       (kindFilter === "all" ||

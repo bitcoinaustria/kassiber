@@ -6,6 +6,7 @@ import {
   UNKNOWN_FIAT_COMPLETENESS,
   basisIncompleteFromMs,
   completenessHref,
+  eurRateMissing,
   fiatCompleteness,
   isBasisIncompleteAt,
   isBasisIncompleteOnDay,
@@ -65,6 +66,29 @@ describe("normalizeFiatCompleteness", () => {
     expect(normalizeFiatCompleteness({ costBasisComplete: true }).costBasisComplete).toBe(false);
     expect(
       normalizeFiatCompleteness({ state: "complete", costBasisComplete: true }).costBasisComplete,
+    ).toBe(true);
+  });
+});
+
+describe("eurRateMissing", () => {
+  const missing = { ...UNKNOWN_FIAT_COMPLETENESS, marketRateMissing: true };
+  const present = { ...UNKNOWN_FIAT_COMPLETENESS, marketRateMissing: false };
+
+  it("hides EUR values in a EUR book without a market rate", () => {
+    expect(
+      eurRateMissing({ priceEur: 60_000, marketRate: { fiatCurrency: "EUR" }, fiat: { completeness: missing } }),
+    ).toBe(true);
+  });
+
+  it("keeps EUR values when only another book currency lacks a rate", () => {
+    expect(
+      eurRateMissing({ priceEur: 60_000, marketRate: { fiatCurrency: "USD" }, fiat: { completeness: missing } }),
+    ).toBe(false);
+  });
+
+  it("hides EUR values when there is no EUR price at all", () => {
+    expect(
+      eurRateMissing({ priceEur: 0, marketRate: { fiatCurrency: "USD" }, fiat: { completeness: present } }),
     ).toBe(true);
   });
 });

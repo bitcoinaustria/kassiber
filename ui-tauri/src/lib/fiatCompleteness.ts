@@ -94,6 +94,21 @@ export function fiatCompleteness(
 }
 
 /**
+ * Whether EUR valuations have no rate to stand on. `marketRateMissing` is about
+ * the book's own currency, so it only speaks for EUR in a EUR book; any book
+ * without a positive EUR price has none either.
+ */
+export function eurRateMissing(snapshot: {
+  priceEur: number;
+  marketRate?: { fiatCurrency?: string | null } | null;
+  fiat?: { completeness?: FiatCompleteness | null } | null;
+}): boolean {
+  if (!(snapshot.priceEur > 0)) return true;
+  const bookCurrency = (snapshot.marketRate?.fiatCurrency ?? "EUR").toUpperCase();
+  return bookCurrency === "EUR" && fiatCompleteness(snapshot.fiat).marketRateMissing;
+}
+
+/**
  * Epoch ms from which basis-derived chart values (cost basis, avg cost,
  * unrealized) are incomplete; `null` when the basis is complete. An
  * incomplete basis without a known start date affects every point.
