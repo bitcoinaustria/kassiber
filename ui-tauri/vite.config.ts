@@ -141,6 +141,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.agent_access.configure",
   "ui.agent_access.unlock",
   "ui.agent_access.lock",
+  "ui.agent_access.pairing",
   "ui.egress.snapshot",
   "ui.overview.snapshot",
   "ui.workspace.overview.snapshot",

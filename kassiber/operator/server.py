@@ -179,6 +179,9 @@ class BrokerServer:
             try:
                 request = channel.receive_json()
                 self._require_version(request)
+                if request.get("action") == "agent_session_open":
+                    self._serve_agent_session(channel, request)
+                    return
                 response = self._handle(channel, request)
                 restart_after_response = (
                     request.get("action") == "restart_for_native_auth"
@@ -199,6 +202,41 @@ class BrokerServer:
             channel.send_json(response)
         if restart_after_response:
             self.request_stop()
+
+    def _serve_agent_session(self, channel: BrokerChannel, request: dict[str, Any]) -> None:
+        """Hold one MCP server's agent session while its connection lives.
+
+        The process id comes from the OS for this connection. The session
+        ends when the process exits (end of file), stops sending heartbeats
+        within the frame deadline, or its lease ends.
+        """
+
+        from .peers import process_label
+
+        try:
+            data_root = _canonical_data_root(_required_string(request, "data_root"))
+            session = self.service.open_agent_session(
+                data_root,
+                pid=channel.peer_pid,
+                label=process_label(channel.peer_pid),
+            )
+        except AppError as exc:
+            channel.send_json(_error_response(exc))
+            return
+        try:
+            # The token goes only to this connection's process, which must
+            # present it with every call.
+            channel.send_json(
+                _ok({"session_id": session.id, "state": session.state, "token": session.token})
+            )
+            while self.service.agent_session_alive(session.id):
+                message = channel.receive_json()
+                if message.get("action") != "agent_session_heartbeat":
+                    break
+        except (EOFError, OSError, AppError):
+            pass
+        finally:
+            self.service.close_agent_session(session.id)
 
     def _handle(
         self,
@@ -246,7 +284,17 @@ class BrokerServer:
                     code="operator_invalid_authentication_method",
                     retryable=False,
                 )
+            agent_scope = request.get("agent_scope", False)
+            idle_timeout = request.get("idle_timeout_seconds")
+            if not isinstance(agent_scope, bool) or (
+                idle_timeout is not None
+                and (not isinstance(idle_timeout, int) or isinstance(idle_timeout, bool))
+            ):
+                raise AppError("invalid broker agent session request", code="operator_protocol_error")
             challenge = secrets.token_hex(SECRET_CHALLENGE_ENTROPY_BYTES)
+            control_challenge = (
+                secrets.token_hex(SECRET_CHALLENGE_ENTROPY_BYTES) if agent_scope else None
+            )
             channel.send_json(
                 {
                     "ok": True,
@@ -254,10 +302,20 @@ class BrokerServer:
                     "label": "database_passphrase",
                     "challenge": challenge,
                     "build": build_identity(),
+                    **(
+                        {"agent_control_challenge": control_challenge}
+                        if control_challenge is not None
+                        else {}
+                    ),
                 }
             )
             passphrase = channel.receive_secret(challenge)
+            control: bytearray | None = None
             try:
+                if control_challenge is not None:
+                    # Only its holder (the desktop that unlocked) can later
+                    # allow an agent process to use this session.
+                    control = channel.receive_secret(control_challenge)
                 duration, capability = _lease_request_args(request)
                 only_if_locked = request.get("only_if_locked", False)
                 if not isinstance(only_if_locked, bool):
@@ -270,10 +328,15 @@ class BrokerServer:
                         capability=capability,
                         authentication_method="password",
                         only_if_locked=only_if_locked,
+                        agent_scope=agent_scope,
+                        idle_timeout_seconds=idle_timeout,
+                        agent_control=control,
                     )
                 )
             finally:
                 _wipe(passphrase)
+                if control is not None:
+                    _wipe(control)
         if action == "unlock_touch_id":
             from .native_auth import (
                 broker_touch_id_passphrase,
@@ -306,6 +369,31 @@ class BrokerServer:
                 )
             finally:
                 _wipe(passphrase)
+        if action == "agent_session_decide":
+            data_root = _canonical_data_root(_required_string(request, "data_root"))
+            session_id = _required_string(request, "session_id")
+            allow = request.get("allow")
+            if not isinstance(allow, bool):
+                raise AppError("invalid agent session decision", code="operator_protocol_error")
+            challenge = secrets.token_hex(SECRET_CHALLENGE_ENTROPY_BYTES)
+            channel.send_json(
+                {
+                    "ok": True,
+                    "continue": "secret",
+                    "label": "agent_control",
+                    "challenge": challenge,
+                    "build": build_identity(),
+                }
+            )
+            control = channel.receive_secret(challenge)
+            try:
+                return _ok(
+                    self.service.decide_agent_session(
+                        data_root, session_id, allow=allow, control=control
+                    )
+                )
+            finally:
+                _wipe(control)
         if action == "lock":
             expected_lease_id = request.get("expected_lease_id")
             restore_manual = request.get("restore_manual", False)
@@ -429,6 +517,11 @@ class BrokerServer:
         no_egress = request.get("no_egress", False)
         if not isinstance(no_egress, bool):
             raise AppError("invalid broker egress flag", code="operator_protocol_error")
+        agent_session_token = request.get("agent_session_token")
+        if agent_session_token is not None and (
+            not isinstance(agent_session_token, str) or len(agent_session_token) > 128
+        ):
+            raise AppError("invalid agent session token", code="operator_protocol_error")
         expected_build = request.get("expected_build")
         if expected_build is not None and expected_build != build_identity():
             # Before any secret or admission: the caller must not have this
@@ -493,6 +586,8 @@ class BrokerServer:
                 admin_authorization=admin_authorization,
                 working_directory=working_directory,
                 no_egress=no_egress,
+                peer_pid=channel.peer_pid,
+                agent_session_token=agent_session_token,
             )
             return _ok({**accepted, "build": build_identity()})
         except Exception:

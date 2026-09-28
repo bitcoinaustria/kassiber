@@ -145,6 +145,10 @@ If a command returns:
   open error that non-interactive commands report as this.)
 - `interaction_required` with `details.reason = operator_lease_required` —
   the project is in brokered mode without an active lease; the user unlocks.
+- `interaction_required` with `details.reason = agent_pairing_required` — the
+  desktop unlocked the book for agents and this MCP server waits for the user
+  to allow it in Kassiber (Settings, AI, External agents). `agent_session_scope`
+  means that session admits only `kassiber mcp` tool calls.
 - `database_busy` — another process holds a lock on the encrypted database;
   the passphrase was not rejected. Retry later; never ask for the passphrase again.
 - `unlock_failed` — the passphrase did not match. Double-check it; if rotated

@@ -129,21 +129,50 @@ neither is ever created.
 - **From the desktop:** with external agents on, the External agents row in
   Settings offers *Unlock for agents* for the open encrypted book when agents
   cannot open it on their own (not for plaintext or `unattended` books). It
-  grants the same `read` lease as `kassiber operator unlock --capability read`,
-  from the passphrase the desktop already holds after its own unlock (typed,
+  uses the passphrase the desktop already holds after its own unlock (typed,
   Touch ID, or the OS credential store); the renderer never receives it. The
-  broker is contacted only for that click and when the lease ends, which is
-  when the desktop locks, quits, switches book, rotates the passphrase, or
-  restores a backup, when external agents or AI features are turned off, and
-  after at most 8 hours. Until the broker confirms the lock, the row keeps
-  showing the lease and the desktop retries. A lease that is already open, for
-  example from a terminal, is neither replaced nor locked. Granting a lease
+  result is an **agent session**, narrower than a terminal lease:
+  - It admits only `mcp call` tool calls. Ordinary CLI reads such as
+    `kassiber transactions list` are refused (`agent_session_scope`).
+  - It admits them only from `kassiber mcp serve` processes the user
+    allowed. Each server registers itself on its first call and holds that
+    registration open with a heartbeat. The broker takes the process id from
+    the OS, not from the caller, and hands that connection a token the server
+    must present with every call, so a process that later reuses the id is a
+    stranger. The registration ends when the process exits. Until the user allows it, calls return `interaction_required` with
+    `details.reason = agent_pairing_required` and a hint to allow the agent
+    in Kassiber; the row lists it as "*claude* wants to read this book" with
+    Allow and Deny. The name is the program that started the server and is
+    display only.
+  - Allowing needs a random control secret that only the desktop holds, so a
+    program talking to the broker directly cannot allow itself. Deny also
+    withdraws an earlier approval, closes that registration, and keeps the
+    process refused (`agent_pairing_denied`) until the book is unlocked for
+    agents again.
+  - It ends after 15 minutes without a tool call, when the desktop locks,
+    quits, switches book, rotates the passphrase, or restores a backup, when
+    external agents or AI features are turned off, and after at most 8 hours.
+    A new session never inherits an earlier approval.
+
+  The row shows each allowed agent's read count. While the session exists
+  the desktop asks the broker for waiting agents and activity (every few
+  seconds while the row is on screen, every 30 seconds otherwise); without a
+  session it contacts no broker. Until the broker confirms the lock, the row
+  keeps showing the session and the desktop retries. A lease that is already
+  open, for example from a terminal, is neither replaced nor locked. Granting
   binds the book to `brokered` mode. A book that was `manual` returns to
-  `manual` when the desktop's lease ends, through whichever broker is running
-  then, unless someone chose another mode since. If no broker is running by
-  then, the book stays `brokered`, and a terminal needs
-  `kassiber operator unlock`. The broker it starts runs the
-  desktop's build, so point agents at the command the row shows.
+  `manual` when the desktop's session ends, through whichever broker is
+  running then, unless someone chose another mode since. If no broker is
+  running by then, the book stays `brokered`, and a terminal needs
+  `kassiber operator unlock`. The broker it starts runs the desktop's build,
+  so point agents at the command the row shows.
+
+  Pairing stops other programs from simply connecting to the broker. It is
+  not a boundary against a program running as the same OS user that goes
+  after the allowed server itself: on Linux such a program can reach the
+  server's input and output through `/proc`, and, with
+  `kernel.yama.ptrace_scope=0`, its memory. See
+  [privacy and security](privacy-and-security.md#external-agents-mcp).
 
 A broker from an earlier build that is still running cannot bind caller
 context; MCP calls are refused against it (`operator_broker_outdated`) until

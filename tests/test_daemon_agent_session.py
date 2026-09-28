@@ -19,6 +19,8 @@ class FakeBroker:
         self.stopped = False
         self.lock_fails = False
         self.previous_mode = "manual"  # what the broker's grant replaces
+        self.sessions: list[dict] = []
+        self.decisions: list[tuple] = []
         self.connection_lost = False  # lock looks "stopped" but the broker lives
 
     def __call__(self):
@@ -35,6 +37,31 @@ class FakeBroker:
             "expires_at": "2026-09-28T18:00:00Z",
             "previous_mode": self.previous_mode,
         }
+
+    def status(self, data_root):
+        self.calls.append(("status", data_root))
+        if self.stopped or self.lease_id is None:
+            return {"broker": "running", "lease": "locked"}
+        return {
+            "broker": "running",
+            "lease": "unlocked",
+            "lease_id": self.lease_id,
+            "agent_scope": True,
+            "agent": {
+                "calls": sum(session.get("calls", 0) for session in self.sessions),
+                "last_call_at": None,
+                "idle_remaining_seconds": 800,
+                "sessions": self.sessions,
+            },
+        }
+
+    def decide_agent_session(self, data_root, session_id, *, allow, agent_control):
+        self.calls.append(("decide", data_root, session_id, allow))
+        self.decisions.append((session_id, allow, agent_control))
+        for session in self.sessions:
+            if session["id"] == session_id:
+                session["state"] = "allowed" if allow else "denied"
+        return {"id": session_id}
 
     def ping(self):
         self.calls.append(("ping",))
@@ -102,10 +129,19 @@ class DesktopAgentSessionTests(unittest.TestCase):
 
         state = daemon_agent_session.unlock(self.ctx)
 
-        self.assertEqual(state, {"needed": True, "active": True, "expires_at": "2026-09-28T18:00:00Z"})
+        self.assertEqual(
+            state,
+            {
+                "needed": True,
+                "active": True,
+                "expires_at": "2026-09-28T18:00:00Z",
+                "idle_timeout_seconds": daemon_agent_session.AGENT_IDLE_TIMEOUT_SECONDS,
+            },
+        )
         _, data_root, secret, options = broker.calls[0]
         self.assertEqual(data_root, self.ctx.data_root)
         self.assertEqual(secret, b"correct horse")
+        control = options.pop("agent_control")
         self.assertEqual(
             options,
             {
@@ -113,8 +149,13 @@ class DesktopAgentSessionTests(unittest.TestCase):
                 "capability": "read",
                 "authentication_method": "password",
                 "only_if_locked": True,
+                "idle_timeout_seconds": daemon_agent_session.AGENT_IDLE_TIMEOUT_SECONDS,
             },
         )
+        # A fresh random control secret, kept only in the daemon.
+        self.assertEqual(len(control), 32)
+        self.assertEqual(self.ctx.agent_lease.control, control)
+        self.assertNotIn(control.hex(), repr(self.ctx.agent_lease))
         # Asking again is idempotent and does not reach the broker.
         daemon_agent_session.unlock(self.ctx)
         self.assertEqual(len(broker.calls), 1)
@@ -297,6 +338,85 @@ class DesktopAgentSessionTests(unittest.TestCase):
         self._refuse_broker("mock contexts must not reach the broker")
         daemon_agent_session.end_lease(MagicMock())
         daemon_agent_session.expire(MagicMock())
+
+    def test_a_refresh_without_a_desktop_session_stays_in_memory(self):
+        self._refuse_broker("no session: a refresh must not contact the broker")
+        state = daemon_agent_session.session_state(self.ctx, refresh=True)
+        self.assertFalse(state["active"])
+        payload = daemon._agent_access_payload(
+            self.ctx, "ui.agent_access.status", {"args": {"refresh": True}}
+        )
+        self.assertFalse(payload["session"]["active"])
+
+    def test_a_refresh_shows_waiting_agents_and_activity(self):
+        broker = self._with_broker(FakeBroker())
+        daemon_agent_session.unlock(self.ctx)
+        broker.sessions = [
+            {"id": "s1", "label": "claude", "pid": 41, "state": "pending", "calls": 0},
+            {"id": "s2", "label": "codex", "pid": 42, "state": "allowed", "calls": 3},
+        ]
+
+        state = daemon_agent_session.session_state(self.ctx, refresh=True)
+
+        self.assertTrue(state["active"])
+        self.assertEqual(state["calls"], 3)
+        self.assertEqual([agent["label"] for agent in state["agents"]], ["claude", "codex"])
+        self.assertEqual(state["agents"][0]["state"], "pending")
+
+    def test_a_refresh_notices_a_session_the_broker_ended(self):
+        broker = self._with_broker(FakeBroker())
+        daemon_agent_session.unlock(self.ctx)
+        broker.lease_id = None  # idle timeout in the broker
+
+        state = daemon_agent_session.session_state(self.ctx, refresh=True)
+
+        self.assertFalse(state["active"])
+        self.assertIsNone(self.ctx.agent_lease)
+        self.assertEqual(broker.calls[-1][0], "lock")
+
+    def test_allowing_an_agent_proves_the_control_secret(self):
+        broker = self._with_broker(FakeBroker())
+        daemon_agent_session.unlock(self.ctx)
+        broker.sessions = [{"id": "s1", "label": "claude", "pid": 41, "state": "pending", "calls": 0}]
+
+        payload = daemon._agent_access_payload(
+            self.ctx,
+            "ui.agent_access.pairing",
+            {"args": {"session_id": "s1", "allow": True}},
+        )
+
+        self.assertEqual(broker.decisions, [("s1", True, self.ctx.agent_lease.control)])
+        self.assertEqual(payload["session"]["agents"][0]["state"], "allowed")
+
+    def test_pairing_needs_the_desktop_session_and_valid_arguments(self):
+        self._refuse_broker("no session: nothing to decide")
+        with self.assertRaises(AppError) as raised:
+            daemon_agent_session.decide(self.ctx, "s1", True)
+        self.assertEqual(raised.exception.code, "agent_unlock_unavailable")
+        for args in ({"session_id": "s1"}, {"session_id": "", "allow": True}, {"allow": "yes", "session_id": "s1"}):
+            with self.subTest(args=args), self.assertRaises(AppError):
+                daemon._agent_access_payload(self.ctx, "ui.agent_access.pairing", {"args": args})
+        with self.assertRaises(AppError):
+            daemon._agent_access_payload(
+                self.ctx, "ui.agent_access.status", {"args": {"refresh": "yes"}}
+            )
+
+    def test_the_loop_checks_a_live_session_only_every_so_often(self):
+        broker = self._with_broker(FakeBroker())
+        daemon_agent_session.unlock(self.ctx)
+        daemon_agent_session.expire(self.ctx)
+        self.assertEqual([call[0] for call in broker.calls], ["unlock"])
+
+        broker.lease_id = None  # ended in the broker
+        with patch.object(
+            daemon_agent_session.time,
+            "monotonic",
+            return_value=self.ctx.agent_lease.next_check_monotonic + 1,
+        ):
+            daemon_agent_session.expire(self.ctx)
+
+        self.assertEqual([call[0] for call in broker.calls], ["unlock", "status", "lock"])
+        self.assertIsNone(self.ctx.agent_lease)
 
     def test_unlock_and_lock_take_no_arguments(self):
         with self.assertRaises(AppError) as raised:

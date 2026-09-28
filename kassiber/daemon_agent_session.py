@@ -2,28 +2,37 @@
 
 The desktop already holds the passphrase of the book it opened (typed, Touch
 ID, or the OS credential store). On the user's click it hands that passphrase
-to the operator broker as a `read` lease, the same lease
-`kassiber operator unlock --capability read` creates, so `kassiber mcp` can
-serve the book. The renderer never sees the passphrase. The broker is contacted
-only for that click and when the desktop's own lease ends; status is answered
-from memory.
+to the operator broker as an agent session: a read-only lease that admits
+only `kassiber mcp` tool calls, only from MCP server processes the user
+allowed here, and that ends after an idle timeout. The desktop keeps a random
+control secret that only it can use to allow an agent, so a program that
+talks to the broker directly cannot allow itself. The renderer never sees the
+passphrase or the control secret. The broker is contacted only for the
+user's clicks, while the desktop's own session exists (to show waiting
+agents and activity), and when it ends.
 """
 
 from __future__ import annotations
 
 import logging
+import secrets
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .errors import AppError
 
 
-KINDS = frozenset({"ui.agent_access.unlock", "ui.agent_access.lock"})
+KINDS = frozenset({"ui.agent_access.unlock", "ui.agent_access.lock", "ui.agent_access.pairing"})
 
 # The lease ends with the desktop session; this bounds it if the desktop
 # crashes or is killed before it can lock.
 DESKTOP_AGENT_LEASE_SECONDS = 8 * 60 * 60
+# Without a tool call (or an approval) for this long, the broker ends it.
+AGENT_IDLE_TIMEOUT_SECONDS = 15 * 60
+# While the session exists, how often the daemon loop asks the broker whether
+# it ended on its own (idle, broker gone), to restore the mode promptly.
+_CHECK_SECONDS = 30.0
 
 # How often the daemon loop retries a lock the broker did not confirm.
 _RETRY_SECONDS = 5.0
@@ -49,10 +58,14 @@ class DesktopAgentLease:
     # The broker binds a book to `brokered` mode when it grants a lease; a
     # book that was `manual` goes back to it when the desktop's lease ends.
     restore_manual: bool
+    # Proves to the broker that this desktop granted the session; only this
+    # desktop can allow agents. Never leaves the daemon except to the broker.
+    control: bytes = field(default=b"", repr=False)
     # Set when ending it failed: kept (and shown) until the broker confirms,
     # and retried from the daemon loop.
     ending: bool = False
     retry_at: float = 0.0
+    next_check_monotonic: float = 0.0
 
     def expired(self) -> bool:
         return time.monotonic() >= self.expires_monotonic
@@ -67,8 +80,13 @@ def _unlock_mode(data_root: str) -> str:
         return "manual"
 
 
-def session_state(ctx: Any) -> dict[str, Any]:
-    """The book's agent session as the desktop knows it, without broker I/O."""
+def session_state(ctx: Any, *, refresh: bool = False) -> dict[str, Any]:
+    """The book's agent session as the desktop knows it.
+
+    Without `refresh` this reads memory only. With it, and only while the
+    desktop's own session exists, it asks the broker for waiting agents and
+    activity, and notices a session that ended on its own.
+    """
 
     lease = getattr(ctx, "agent_lease", None)
     if (
@@ -76,7 +94,23 @@ def session_state(ctx: Any) -> dict[str, Any]:
         and lease.data_root == ctx.data_root
         and not lease.expired()
     ):
-        return {"needed": True, "active": True, "expires_at": lease.expires_at}
+        state: dict[str, Any] = {
+            "needed": True,
+            "active": True,
+            "expires_at": lease.expires_at,
+            "idle_timeout_seconds": AGENT_IDLE_TIMEOUT_SECONDS,
+        }
+        if not refresh or lease.ending:
+            return state
+        try:
+            agent = _broker_view(lease)
+        except (OSError, EOFError, AppError):
+            return state
+        if agent is None:
+            # Ended in the broker (idle timeout, broker gone): clean up here.
+            end_lease(ctx)
+            return session_state(ctx)
+        return {**state, **agent}
     # Plaintext books and books with a remembered (unattended) unlock already
     # open for agents without a lease.
     needed = (
@@ -85,6 +119,64 @@ def session_state(ctx: Any) -> dict[str, Any]:
         and _unlock_mode(ctx.data_root) != "unattended"
     )
     return {"needed": needed, "active": False, "expires_at": None}
+
+
+def _broker_view(lease: DesktopAgentLease) -> dict[str, Any] | None:
+    """Waiting agents and activity, or None when the lease no longer exists."""
+
+    from .operator.client import BrokerClient
+
+    status = BrokerClient().status(lease.data_root)
+    if status.get("lease") != "unlocked" or status.get("lease_id") != lease.lease_id:
+        return None
+    agent = status.get("agent") if isinstance(status.get("agent"), dict) else {}
+    agents = [
+        {
+            "id": session.get("id"),
+            "label": session.get("label"),
+            "pid": session.get("pid"),
+            "state": session.get("state"),
+            "calls": session.get("calls", 0),
+            "last_call_at": session.get("last_call_at"),
+        }
+        for session in agent.get("sessions", [])
+        if isinstance(session, dict) and isinstance(session.get("id"), str)
+    ]
+    return {
+        "calls": agent.get("calls", 0),
+        "last_call_at": agent.get("last_call_at"),
+        "idle_remaining_seconds": agent.get("idle_remaining_seconds"),
+        "agents": agents,
+    }
+
+
+def decide(ctx: Any, session_id: Any, allow: Any) -> dict[str, Any]:
+    """Allow or deny one waiting agent process for the desktop's session."""
+
+    from .operator.client import BrokerClient
+
+    if not isinstance(session_id, str) or not session_id or not isinstance(allow, bool):
+        raise AppError(
+            "ui.agent_access.pairing takes a session_id and a boolean allow",
+            code="validation",
+        )
+    lease = getattr(ctx, "agent_lease", None)
+    if (
+        not isinstance(lease, DesktopAgentLease)
+        or lease.data_root != ctx.data_root
+        or lease.expired()
+        or lease.ending
+    ):
+        raise AppError(
+            "this book is not unlocked for agents",
+            code="agent_unlock_unavailable",
+            hint="Unlock the book for agents first.",
+            retryable=False,
+        )
+    BrokerClient().decide_agent_session(
+        lease.data_root, session_id, allow=allow, agent_control=lease.control
+    )
+    return session_state(ctx, refresh=True)
 
 
 def unlock(ctx: Any) -> dict[str, Any]:
@@ -112,6 +204,7 @@ def unlock(ctx: Any) -> dict[str, Any]:
             return session_state(ctx)
         end_lease(ctx, raise_errors=True)
     passphrase = bytearray(str(ctx.db_passphrase).encode("utf-8"))
+    control = secrets.token_bytes(32)
     started = time.monotonic()
     try:
         granted = BrokerClient().unlock(
@@ -123,6 +216,9 @@ def unlock(ctx: Any) -> dict[str, Any]:
             # A lease that already exists (say, from a terminal) is someone
             # else's session: never replace it, which could narrow it.
             only_if_locked=True,
+            # Agent-only: `mcp call` from processes allowed with `control`.
+            agent_control=control,
+            idle_timeout_seconds=AGENT_IDLE_TIMEOUT_SECONDS,
         )
     except AppError as exc:
         if exc.code != "operator_lease_exists":
@@ -142,6 +238,8 @@ def unlock(ctx: Any) -> dict[str, Any]:
         # The broker reports the mode its grant replaced, read in the same
         # transition; restore only a book that really was manual.
         restore_manual=granted.get("previous_mode") == "manual",
+        control=control,
+        next_check_monotonic=granted_at + _CHECK_SECONDS,
     )
     return session_state(ctx)
 
@@ -152,12 +250,27 @@ def lock(ctx: Any) -> dict[str, Any]:
 
 
 def expire(ctx: Any) -> None:
-    """From the daemon loop: end an expired lease, or retry a failed lock."""
+    """From the daemon loop: end an expired lease, or retry a failed lock.
+
+    While the session is live it also checks, every 30 s, whether the broker
+    ended it on its own (idle timeout), so a manual book is restored promptly.
+    """
 
     lease = getattr(ctx, "agent_lease", None)
     if not isinstance(lease, DesktopAgentLease):
         return
-    if not (lease.ending or lease.expired()) or time.monotonic() < lease.retry_at:
+    now = time.monotonic()
+    if not (lease.ending or lease.expired()):
+        if now < lease.next_check_monotonic:
+            return
+        ctx.agent_lease = replace(lease, next_check_monotonic=now + _CHECK_SECONDS)
+        try:
+            ended = _broker_view(lease) is None
+        except (OSError, EOFError, AppError):
+            return
+        if not ended:
+            return
+    elif now < lease.retry_at:
         return
     end_lease(ctx)
     lease = getattr(ctx, "agent_lease", None)

@@ -7,7 +7,21 @@ const daemon = vi.hoisted(() => ({
     ai_features_enabled: true as boolean | null,
     mcp_available: false,
     reason: "mcp_disabled" as string | null,
-    session: undefined as { needed: boolean; active: boolean; expires_at: string | null } | undefined,
+    session: undefined as
+      | {
+          needed: boolean;
+          active: boolean;
+          expires_at: string | null;
+          agents?: {
+            id: string;
+            label: string | null;
+            pid: number;
+            state: "pending" | "allowed" | "denied";
+            calls: number;
+            last_call_at: string | null;
+          }[];
+        }
+      | undefined,
   },
   status: { data_root: "/data/books", current_workspace: "Personal", current_profile: "Main" },
 }));
@@ -94,9 +108,11 @@ describe("ExternalAgentsSettings", () => {
       session: { needed: true, active: true, expires_at: "2026-09-28T18:00:00Z" },
     };
     const html = render(true);
-    expect(html).toContain("Agents can read this book until you lock Kassiber");
+    expect(html).toContain("Agents you allow can read this book until you lock Kassiber");
+    expect(html).toContain("after 15 minutes without reads");
     expect(html).toContain(">Lock<");
     expect(html).not.toContain("Unlock for agents");
+    expect(html).toContain("Start your agent; it appears here for you to allow.");
   });
 
   it("keeps an unconfirmed lease visible after agents are turned off", () => {
@@ -121,5 +137,32 @@ describe("ExternalAgentsSettings", () => {
       session: { needed: false, active: false, expires_at: null },
     };
     expect(render(true)).not.toContain("Unlock for agents");
+  });
+
+  it("asks to allow a waiting agent and shows what allowed ones read", () => {
+    daemon.access = {
+      mcp_enabled: true,
+      ai_features_enabled: true,
+      mcp_available: true,
+      reason: null,
+      session: {
+        needed: true,
+        active: true,
+        expires_at: "2026-09-28T18:00:00Z",
+        agents: [
+          { id: "s1", label: "claude", pid: 41, state: "pending", calls: 0, last_call_at: null },
+          { id: "s2", label: "codex", pid: 42, state: "allowed", calls: 3, last_call_at: null },
+          { id: "s3", label: "stranger", pid: 43, state: "denied", calls: 0, last_call_at: null },
+        ],
+      },
+    };
+    const html = render(true);
+    expect(html).toContain("claude (41) wants to read this book");
+    expect(html).toContain(">Allow<");
+    expect(html).toContain(">Deny<");
+    expect(html).toContain("codex (42) can read this book · 3 reads");
+    expect(html).toContain(">Remove<");
+    expect(html).not.toContain("stranger");
+    expect(html).not.toContain("Start your agent");
   });
 });

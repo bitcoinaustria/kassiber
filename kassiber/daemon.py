@@ -352,6 +352,7 @@ SUPPORTED_KINDS = (
     "ui.agent_access.configure",
     "ui.agent_access.unlock",
     "ui.agent_access.lock",
+    "ui.agent_access.pairing",
     "ui.egress.snapshot",
     "ui.overview.snapshot",
     "ui.workspace.overview.snapshot",
@@ -14928,14 +14929,29 @@ def _agent_access_payload(
     if not isinstance(args, dict):
         raise AppError("agent access arguments must be an object", code="validation")
     if kind in {"ui.agent_access.status", *daemon_agent_session.KINDS}:
-        if args:
-            raise AppError(f"{kind} takes no arguments", code="validation")
+        allowed_args = {
+            "ui.agent_access.status": {"refresh"},
+            "ui.agent_access.pairing": {"session_id", "allow"},
+        }.get(kind, set())
+        unknown = sorted(set(args) - allowed_args)
+        if unknown or not isinstance(args.get("refresh", False), bool):
+            raise AppError(
+                f"{kind} got unexpected arguments",
+                code="validation",
+                details={"unknown": unknown},
+            )
         if kind == "ui.agent_access.unlock":
             session = daemon_agent_session.unlock(ctx)
         elif kind == "ui.agent_access.lock":
             session = daemon_agent_session.lock(ctx)
+        elif kind == "ui.agent_access.pairing":
+            session = daemon_agent_session.decide(ctx, args.get("session_id"), args.get("allow"))
         else:
-            session = daemon_agent_session.session_state(ctx)
+            # Refreshing contacts the broker only while the desktop's own
+            # agent session exists; otherwise this reads memory only.
+            session = daemon_agent_session.session_state(
+                ctx, refresh=bool(args.get("refresh", False))
+            )
         return {**agent_access_status(), "session": session}
     unknown = sorted(set(args) - {"mcp_enabled", "ai_features_enabled"})
     values = {key: args[key] for key in ("mcp_enabled", "ai_features_enabled") if key in args}

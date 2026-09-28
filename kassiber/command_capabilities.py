@@ -359,6 +359,7 @@ DAEMON_ADMIN_KINDS = _paths(
     ai.providers.clear_default ai.providers.acknowledge ai.test_connection
     ui.chat.sessions.delete ui.chat.sessions.clear ui.chat.history.configure
     ui.agent_access.configure ui.agent_access.unlock ui.agent_access.lock
+    ui.agent_access.pairing
     wallets.reveal_descriptor backends.reveal_token daemon.shutdown
     """
 )

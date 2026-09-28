@@ -227,6 +227,19 @@ remains outside that closeout.
 
 ## Privacy and security follow-ups
 
+- [ ] Harden against infostealers running as the user: `exports/` and
+  `attachments/` sit outside SQLCipher, CLI remembered unlock on Linux is
+  readable by any same-user process through the unlocked Secret Service, and
+  terminal operator leases default to "until lock". Encrypt or clearly warn
+  about the first two, surface the Linux risk in `secrets status`, and give
+  terminal leases a bounded default.
+- [ ] Decide whether MCP results pseudonymize addresses and txids by default
+  (stable per-book aliases, with a switch for real ids), which also limits
+  what reaches an agent's AI provider.
+- [ ] Verify whether Claude Code's and Codex's agent sandboxes block the
+  operator broker socket for the agent's own commands while the host-launched
+  MCP server still reaches it, and document the recommended settings.
+
 - [ ] Finish the desktop restore contract for CLI `backup import --install`:
   it already refuses a live desktop or broker owner, but it still skips
   credential invalidation and proof that the restored inner DB is encrypted

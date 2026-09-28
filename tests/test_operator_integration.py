@@ -280,10 +280,71 @@ class OperatorIntegrationTest(unittest.TestCase):
                     daemon_agent_session.DESKTOP_AGENT_LEASE_SECONDS,
                 )
                 self.assertEqual(effective_unlock_mode(tmp), "brokered")
+                self.assertTrue(lease["agent_scope"])
+
+                # This process is unknown until the user allows it.
+                waiting = provider.call_tool("status", {}, threading.Event())
+                self.assertEqual(
+                    waiting.structured["error"]["details"]["reason"], "agent_pairing_required"
+                )
+                shown = daemon_agent_session.session_state(ctx, refresh=True)
+                self.assertEqual(
+                    [(agent["pid"], agent["state"]) for agent in shown["agents"]],
+                    [(os.getpid(), "pending")],
+                )
+                daemon_agent_session.decide(ctx, shown["agents"][0]["id"], True)
+
                 during = provider.call_tool("status", {}, threading.Event())
                 self.assertFalse(during.is_error, during.structured)
                 self.assertEqual(during.structured["kind"], "status")
                 self.assertEqual(during.structured["book"]["profile"], "Book A")
+                self.assertEqual(daemon_agent_session.session_state(ctx, refresh=True)["calls"], 1)
+
+                # Even the allowed process gets only MCP tool calls ...
+                with self.assertRaises(AppError) as raised:
+                    BrokerClient().submit(
+                        tmp,
+                        PreparedArguments(
+                            [
+                                "--data-root",
+                                tmp,
+                                "--machine",
+                                "health",
+                                "--workspace",
+                                workspace["id"],
+                                "--profile",
+                                profile["id"],
+                            ],
+                            {},
+                        ),
+                        admin_authentication=None,
+                        start_broker=False,
+                    )
+                self.assertEqual(raised.exception.code, "agent_session_scope")
+                # ... and any other process is a stranger, however it calls.
+                other = subprocess.run(
+                    [
+                        sys.executable,
+                        "-c",
+                        "import threading, json, sys\n"
+                        "from kassiber.mcp import cli\n"
+                        "p = cli.BookToolProvider(data_root=sys.argv[1], project=None, env_file=None,"
+                        " workspace=sys.argv[2], profile=sys.argv[3])\n"
+                        "print(json.dumps(p.call_tool('status', {}, threading.Event()).structured))\n",
+                        tmp,
+                        workspace["id"],
+                        profile["id"],
+                    ],
+                    capture_output=True,
+                    text=True,
+                    env={**os.environ, "PYTHONPATH": str(SOURCE_ROOT)},
+                    timeout=60,
+                    check=True,
+                )
+                self.assertEqual(
+                    json.loads(other.stdout)["error"]["details"]["reason"],
+                    "agent_pairing_required",
+                )
 
                 # The desktop locking itself ends the agents' lease too.
                 daemon._clear_unlocked_passphrase(ctx)

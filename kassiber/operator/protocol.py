@@ -45,8 +45,16 @@ class _ReadableWritable(Protocol):
 class BrokerChannel:
     """Length-prefixed frames with a distinct non-JSON secret frame type."""
 
-    def __init__(self, transport: _ReadableWritable) -> None:
+    def __init__(
+        self,
+        transport: _ReadableWritable,
+        *,
+        peer_pid: int | None = None,
+    ) -> None:
         self._transport = transport
+        # The connecting process as the OS reports it (server side only).
+        # Agent sessions bind to it; None where the platform cannot say.
+        self.peer_pid = peer_pid
 
     def send_json(self, payload: dict[str, Any]) -> None:
         raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
@@ -185,12 +193,12 @@ class UnixBrokerListener:
     def accept(self) -> BrokerChannel:
         connection, _ = self._socket.accept()
         try:
-            _verify_unix_peer(connection)
+            peer_pid = _verify_unix_peer(connection)
             connection.settimeout(DEFAULT_UNIX_SERVER_IO_TIMEOUT_SECONDS)
         except Exception:
             connection.close()
             raise
-        return BrokerChannel(_SocketTransport(connection))
+        return BrokerChannel(_SocketTransport(connection), peer_pid=peer_pid)
 
     def close(self) -> None:
         if self._closed:
@@ -405,11 +413,20 @@ def _remove_stale_socket(endpoint: Path) -> None:
     )
 
 
-def _verify_unix_peer(connection: socket.socket) -> None:
+# <sys/un.h>: SOL_LOCAL, LOCAL_PEERPID.
+_DARWIN_SOL_LOCAL = 0
+_DARWIN_LOCAL_PEERPID = 0x002
+
+
+def _verify_unix_peer(connection: socket.socket) -> int | None:
+    """Reject another OS user's peer; return the peer's pid when known."""
+
     expected_uid = os.getuid()
+    peer_pid: int | None = None
     if sys.platform.startswith("linux"):
         raw = connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
-        _pid, uid, _gid = struct.unpack("3i", raw)
+        pid, uid, _gid = struct.unpack("3i", raw)
+        peer_pid = pid if pid > 0 else None
     elif sys.platform == "darwin":
         uid = ctypes.c_uint()
         gid = ctypes.c_uint()
@@ -417,6 +434,11 @@ def _verify_unix_peer(connection: socket.socket) -> None:
         if libc.getpeereid(connection.fileno(), ctypes.byref(uid), ctypes.byref(gid)) != 0:
             raise OSError(ctypes.get_errno(), "getpeereid failed")
         uid = uid.value
+        try:
+            pid = connection.getsockopt(_DARWIN_SOL_LOCAL, _DARWIN_LOCAL_PEERPID)
+        except OSError:
+            pid = 0
+        peer_pid = pid if isinstance(pid, int) and pid > 0 else None
     else:
         raise AppError(
             "this platform lacks a supported local peer-credential primitive",
@@ -429,6 +451,7 @@ def _verify_unix_peer(connection: socket.socket) -> None:
             code="operator_peer_rejected",
             retryable=False,
         )
+    return peer_pid
 
 
 def _constant_time_equal(left: bytes, right: bytes) -> bool:
@@ -756,6 +779,12 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
                 _kernel32.LocalFree(ctypes.cast(text, wintypes.LPVOID))
         finally:
             _kernel32.LocalFree(descriptor)
+
+    def _windows_client_pid(pipe: wintypes.HANDLE) -> int:
+        pid = wintypes.ULONG()
+        if not _kernel32.GetNamedPipeClientProcessId(pipe, ctypes.byref(pid)):
+            _raise_windows("GetNamedPipeClientProcessId failed")
+        return int(pid.value)
 
     def _windows_client_sid(pipe: wintypes.HANDLE) -> str:
         pid = wintypes.ULONG()
@@ -1096,6 +1125,7 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
                         code="operator_peer_rejected",
                         retryable=False,
                     )
+                client_pid = _windows_client_pid(handle)
             except Exception:
                 _kernel32.DisconnectNamedPipe(handle)
                 _kernel32.CloseHandle(handle)
@@ -1104,7 +1134,8 @@ if os.name == "nt":  # pragma: no cover - exercised by the Windows CI job
                 _WindowsPipeTransport(
                     handle,
                     io_timeout=DEFAULT_WINDOWS_IO_TIMEOUT_SECONDS,
-                )
+                ),
+                peer_pid=client_pid if client_pid > 0 else None,
             )
 
         def close(self) -> None:

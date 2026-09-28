@@ -654,10 +654,24 @@ remembered credential, like any CLI command in that mode. See [MCP](mcp.md).
 **Unlock for agents** in that Settings row lets the desktop hand the open
 book's passphrase to the operator broker: on the user's click, the desktop
 daemon sends the passphrase it already holds to the per-user broker over the
-broker's secret frame, as a `read` lease. Like any lease, every process of the
-same OS user can use it while it lasts. The renderer never sees the
-passphrase, status reads contact no broker, and the lease ends with the
-desktop session or after at most 8 hours.
+broker's secret frame, as an agent session. Unlike a terminal lease, it is not
+usable by every process of the same OS user. It admits only MCP tool calls,
+only from `kassiber mcp serve` processes the user allowed in the desktop
+(bound to the process id the OS reports, not to a name), and it ends after 15
+minutes without a call, with the desktop session, or after at most 8 hours.
+Only the desktop holds the control secret that allows an agent. The renderer
+never sees the passphrase or that secret. While the session exists, the
+desktop polls the local broker to show waiting agents and activity; without
+one, it contacts no broker.
+
+This raises the bar from "connect to a socket" to "go after the allowed
+process". It is not a boundary against code running as the same user that
+does that. On Linux, such code can open the allowed server's input and output
+pipes through `/proc/<pid>/fd`. With `kernel.yama.ptrace_scope=0` it can also
+attach to any of the user's processes and read their memory, including the
+desktop holding the passphrase; `kernel.yama.ptrace_scope=1` stops attaching,
+not the `/proc` pipes. macOS has no `/proc`, and its hardened runtime keeps
+other processes out of the signed app's memory.
 
 ## Reporting
 

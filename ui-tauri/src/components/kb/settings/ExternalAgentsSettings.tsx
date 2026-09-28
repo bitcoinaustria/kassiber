@@ -12,6 +12,7 @@ import {
   mcpJsonConfig,
   mcpServeArgs,
   type AgentAccessStatus,
+  type AgentPeer,
 } from "@/lib/agentAccess";
 import { cn } from "@/lib/utils";
 import { CommandLine, CopyButton } from "./SettingsControls";
@@ -29,6 +30,7 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
   const configure = useDaemonMutation("ui.agent_access.configure");
   const unlock = useDaemonMutation<AgentAccessStatus>("ui.agent_access.unlock");
   const lock = useDaemonMutation("ui.agent_access.lock");
+  const pairing = useDaemonMutation("ui.agent_access.pairing");
   const [terminal, setTerminal] = React.useState<TerminalCommandStatus | null>(null);
 
   const access =
@@ -59,9 +61,24 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
       : null;
   const launcher = agentLauncher(terminal);
   const args = book ? mcpServeArgs(book) : null;
-  const session = access?.session;
-  const sessionBusy = unlock.isPending || lock.isPending;
-  const sessionError = unlock.error ?? lock.error;
+  // Only while this desktop's agent session exists (and this row is shown)
+  // does the daemon ask the broker for waiting agents and activity.
+  const liveQuery = useDaemon<AgentAccessStatus>(
+    "ui.agent_access.status",
+    { refresh: true },
+    { enabled: access?.session?.active === true, refetchInterval: 3000, staleTime: 0 },
+  );
+  const live =
+    liveQuery.data?.kind === "ui.agent_access.status" ? liveQuery.data.data : null;
+  const session = access?.session?.active && live?.session ? live.session : access?.session;
+  const agents = (session?.agents ?? []).filter((agent) => agent.state !== "denied");
+  const idleMinutes = Math.round((session?.idle_timeout_seconds ?? 900) / 60);
+  const sessionBusy = unlock.isPending || lock.isPending || pairing.isPending;
+  const sessionError = unlock.error ?? lock.error ?? pairing.error;
+  const decide = (agent: AgentPeer, allow: boolean) =>
+    pairing.mutate({ session_id: agent.id, allow });
+  const agentName = (agent: AgentPeer) =>
+    agent.label ? `${agent.label} (${agent.pid})` : String(agent.pid);
   const existingLease =
     unlock.data?.kind === "ui.agent_access.unlock" && unlock.data.data?.session?.existing_lease === true;
 
@@ -108,7 +125,7 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground">
             {session.active
-              ? t("ai.agentsSessionActive")
+              ? t("ai.agentsSessionActive", { minutes: idleMinutes })
               : existingLease
                 ? t("ai.agentsSessionExisting")
                 : t("ai.agentsSessionLocked")}
@@ -123,6 +140,46 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
           >
             {session.active ? t("ai.agentsSessionLock") : t("ai.agentsSessionUnlock")}
           </Button>
+        </div>
+      ) : null}
+      {session?.active ? (
+        <div className="space-y-2">
+          {agents.length === 0 ? (
+            <p className="text-xs text-muted-foreground">{t("ai.agentsSessionWaiting")}</p>
+          ) : null}
+          {agents.map((agent) => (
+            <div
+              key={agent.id}
+              className="flex flex-col gap-2 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <p className="min-w-0 text-sm">
+                {agent.state === "pending"
+                  ? t("ai.agentsPairingRequest", { name: agentName(agent) })
+                  : t("ai.agentsPairingAllowed", { name: agentName(agent), count: agent.calls })}
+              </p>
+              <div className="flex shrink-0 gap-2">
+                {agent.state === "pending" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={sessionBusy}
+                    onClick={() => decide(agent, true)}
+                  >
+                    {t("ai.agentsPairingAllow")}
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={sessionBusy}
+                  onClick={() => decide(agent, false)}
+                >
+                  {agent.state === "pending" ? t("ai.agentsPairingDeny") : t("ai.agentsPairingRemove")}
+                </Button>
+              </div>
+            </div>
+          ))}
         </div>
       ) : null}
       {(enabled || session?.active) && sessionError ? (

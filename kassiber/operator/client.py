@@ -6,6 +6,7 @@ import os
 import secrets
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from typing import BinaryIO
@@ -25,6 +26,52 @@ from .protocol import (
     connect,
 )
 from .service import _wipe
+
+
+AGENT_SESSION_HEARTBEAT_SECONDS = 10.0
+
+
+class AgentSessionHandle:
+    """Keeps one agent session open; the broker drops it when this stops."""
+
+    def __init__(self, channel: BrokerChannel, session_id: str, token: str) -> None:
+        self.session_id = session_id
+        # Presented with every call of this process; never logged or shown.
+        self.token = token
+        self._channel = channel
+        self._closed = threading.Event()
+        self._thread = threading.Thread(
+            target=self._beat,
+            name="kassiber-agent-session",
+            daemon=True,
+        )
+        self._thread.start()
+
+    @property
+    def alive(self) -> bool:
+        return not self._closed.is_set()
+
+    def _beat(self) -> None:
+        # The broker's frame deadline (30 s) ends a session that stops
+        # beating; the process exiting closes the connection at once.
+        try:
+            while not self._closed.wait(AGENT_SESSION_HEARTBEAT_SECONDS):
+                self._channel.send_json(
+                    {"version": PROTOCOL_VERSION, "action": "agent_session_heartbeat"}
+                )
+        except (OSError, EOFError, AppError):
+            pass
+        finally:
+            self.close()
+
+    def close(self) -> None:
+        if self._closed.is_set():
+            return
+        self._closed.set()
+        try:
+            self._channel.close()
+        except OSError:
+            pass
 
 
 TERMINAL_OPERATION_STATES = frozenset(
@@ -169,7 +216,15 @@ class BrokerClient:
         capability: str,
         authentication_method: str,
         only_if_locked: bool = False,
+        agent_control: bytes | None = None,
+        idle_timeout_seconds: int | None = None,
     ) -> dict[str, object]:
+        """Unlock a lease; with `agent_control`, an agent-only session.
+
+        An agent session admits only `kassiber mcp` tool calls from processes
+        that the holder of `agent_control` allowed, and ends when idle.
+        """
+
         _require_same_build(self.ensure_running())
         request: dict[str, object] = {
             "version": PROTOCOL_VERSION,
@@ -181,17 +236,81 @@ class BrokerClient:
         }
         if only_if_locked:
             request["only_if_locked"] = True
+        if agent_control is not None:
+            request["agent_scope"] = True
+            request["idle_timeout_seconds"] = idle_timeout_seconds
         with connect() as channel:
             channel.send_json(request)
             continuation = self._receive(channel)
             challenge = continuation.get("challenge")
             if continuation.get("continue") != "secret" or not isinstance(challenge, str):
                 raise AppError("invalid broker unlock challenge", code="operator_protocol_error")
+            control_challenge = continuation.get("agent_control_challenge")
+            if (agent_control is not None) != isinstance(control_challenge, str):
+                raise AppError("invalid broker unlock challenge", code="operator_protocol_error")
             # The broker that asks for the secret must be this build too; a
             # ping on an earlier connection could have reached another one.
             _require_same_build(continuation)
             channel.send_secret(challenge, passphrase)
+            if agent_control is not None:
+                channel.send_secret(str(control_challenge), agent_control)
             return self._receive_data(channel)
+
+    def decide_agent_session(
+        self,
+        data_root: str,
+        session_id: str,
+        *,
+        allow: bool,
+        agent_control: bytes,
+    ) -> dict[str, object]:
+        """Allow or deny an agent process, proving the session's control secret."""
+
+        with connect(io_timeout=5.0) as channel:
+            channel.send_json(
+                {
+                    "version": PROTOCOL_VERSION,
+                    "action": "agent_session_decide",
+                    "data_root": data_root,
+                    "session_id": session_id,
+                    "allow": allow,
+                }
+            )
+            continuation = self._receive(channel)
+            challenge = continuation.get("challenge")
+            if continuation.get("continue") != "secret" or not isinstance(challenge, str):
+                raise AppError("invalid broker decision challenge", code="operator_protocol_error")
+            _require_same_build(continuation)
+            channel.send_secret(challenge, agent_control)
+            return self._receive_data(channel)
+
+    def open_agent_session(self, data_root: str) -> "AgentSessionHandle":
+        """Ask to use this project's agent session, as this process.
+
+        The broker identifies the process from the connection and shows it
+        to the user for approval; the connection stays open, with heartbeats,
+        for as long as the returned handle lives.
+        """
+
+        channel = connect(io_timeout=5.0)
+        try:
+            channel.send_json(
+                {
+                    "version": PROTOCOL_VERSION,
+                    "action": "agent_session_open",
+                    "data_root": data_root,
+                }
+            )
+            opened = self._receive_data(channel)
+        except BaseException:
+            channel.close()
+            raise
+        session_id = opened.get("session_id")
+        token = opened.get("token")
+        if not isinstance(session_id, str) or not isinstance(token, str):
+            channel.close()
+            raise AppError("broker did not return an agent session", code="operator_protocol_error")
+        return AgentSessionHandle(channel, session_id, token)
 
     def unlock_touch_id(
         self,
@@ -330,6 +449,7 @@ class BrokerClient:
         start_broker: bool = True,
         require_caller_context: bool = False,
         require_same_build: bool = False,
+        agent_session_token: str | None = None,
     ) -> dict[str, object]:
         if start_broker:
             broker = self.ensure_running()
@@ -356,6 +476,7 @@ class BrokerClient:
                     operation_id=operation_id,
                     admin_authentication=admin_authentication,
                     require_same_build=require_same_build,
+                    agent_session_token=agent_session_token,
                 ),
                 operation_id,
                 require_same_build=require_same_build,
@@ -370,6 +491,7 @@ class BrokerClient:
                         operation_id=operation_id,
                         admin_authentication=admin_authentication,
                         require_same_build=require_same_build,
+                        agent_session_token=agent_session_token,
                     ),
                     operation_id,
                     require_same_build=require_same_build,
@@ -422,6 +544,7 @@ class BrokerClient:
         operation_id: str,
         admin_authentication: bytearray | None,
         require_same_build: bool = False,
+        agent_session_token: str | None = None,
     ) -> dict[str, object]:
         request: dict[str, object] = {
             "version": PROTOCOL_VERSION,
@@ -438,6 +561,8 @@ class BrokerClient:
             # The broker refuses before admitting anything; the checks on
             # its replies below cover a broker that ignores this field.
             request["expected_build"] = build_identity()
+        if agent_session_token is not None:
+            request["agent_session_token"] = agent_session_token
         with connect() as channel:
             channel.send_json(request)
             response = self._receive(channel)

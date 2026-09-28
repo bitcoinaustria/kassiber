@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import secrets
@@ -42,6 +43,13 @@ MAX_RETAINED_RESULT_BYTES = 16 * 1024 * 1024
 MAX_RETAINED_OPERATION_TOMBSTONES = 1024
 MAX_CACHED_AUTH_BACKOFFS = 256
 ADMIN_AUTH_TTL_SECONDS = 60.0
+# Agent sessions: each is one `kassiber mcp serve` process holding a
+# connection open, so the caps also bound the client threads they use.
+MAX_AGENT_SESSIONS_PER_PROJECT = 8
+MAX_AGENT_SESSIONS = 16
+MIN_AGENT_CONTROL_BYTES = 32
+MIN_AGENT_IDLE_TIMEOUT_SECONDS = 60
+MAX_REMEMBERED_AGENT_DENIALS = 256
 _OPERATION_STATUS_FRAME_HEADROOM = 64 * 1024
 _LOGGER = logging.getLogger("kassiber.operator")
 OperationRunner = Callable[["Operation", bytearray], "OperationResult"]
@@ -139,12 +147,59 @@ class ProjectLease:
     profile: str | None = None
     revoked: bool = False
     running_operations: int = 0
+    # Desktop "Unlock for agents": admits only `mcp call` from processes the
+    # holder of the control secret allowed, and ends after an idle timeout.
+    # Terminal leases leave these unset.
+    agent_scope: bool = False
+    agent_control_digest: bytes | None = field(default=None, repr=False)
+    idle_timeout_seconds: int | None = None
+    last_used_monotonic: float = field(default_factory=time.monotonic)
+    calls: int = 0
+    last_call_at: str | None = None
 
     def expired(self) -> bool:
+        now = time.monotonic()
+        if self.expires_at_monotonic is not None and now >= self.expires_at_monotonic:
+            return True
         return (
-            self.expires_at_monotonic is not None
-            and time.monotonic() >= self.expires_at_monotonic
+            self.idle_timeout_seconds is not None
+            and now - self.last_used_monotonic >= self.idle_timeout_seconds
         )
+
+
+@dataclass
+class AgentSession:
+    """One `kassiber mcp serve` process asking to use an agent lease.
+
+    It lives as long as that process keeps its session connection open, and
+    only for the lease (epoch) it was opened under, so a later grant never
+    inherits an earlier approval. Each call must come from the registered
+    process id and present the session's token, which only that process
+    received, so a process that later reuses the id is not trusted either.
+    """
+
+    id: str
+    project_identity: str
+    lease_epoch: str
+    pid: int
+    label: str | None
+    opened_at: str
+    state: str = "pending"  # pending | allowed | denied
+    calls: int = 0
+    last_call_at: str | None = None
+    closed: bool = False
+    token: str = field(default_factory=lambda: secrets.token_urlsafe(32), repr=False)
+
+    def public_status(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "label": self.label,
+            "pid": self.pid,
+            "state": self.state,
+            "opened_at": self.opened_at,
+            "calls": self.calls,
+            "last_call_at": self.last_call_at,
+        }
 
 
 def _still_brokered(data_root: str) -> bool:
@@ -569,6 +624,11 @@ class OperatorService:
         self._runner = runner
         self._lock = threading.RLock()
         self._leases: dict[str, ProjectLease] = {}
+        self._agent_sessions: dict[str, AgentSession] = {}
+        # Denied (project, lease epoch, pid): the process cannot come back
+        # as a new request under the same grant, and holds no session slot.
+        # Kept until the lease ends, never evicted.
+        self._agent_denials: OrderedDict[tuple[str, str, int], None] = OrderedDict()
         self._workers: dict[str, ProjectWorker] = {}
         self._operations: OrderedDict[str, Operation] = OrderedDict()
         self._operation_tombstones: OrderedDict[
@@ -645,7 +705,38 @@ class OperatorService:
         expected_project_identity: str | None = None,
         expected_database_identity: str | None = None,
         only_if_locked: bool = False,
+        agent_scope: bool = False,
+        idle_timeout_seconds: int | None = None,
+        agent_control: bytearray | None = None,
     ) -> dict[str, object]:
+        if agent_scope:
+            if capability is not Capability.READ:
+                raise AppError(
+                    "an agent session is read-only",
+                    code="operator_invalid_lease_capability",
+                    retryable=False,
+                )
+            if agent_control is None or len(agent_control) < MIN_AGENT_CONTROL_BYTES:
+                raise AppError(
+                    "an agent session needs its holder's control secret",
+                    code="operator_protocol_error",
+                    retryable=False,
+                )
+            if (
+                not isinstance(idle_timeout_seconds, int)
+                or idle_timeout_seconds < MIN_AGENT_IDLE_TIMEOUT_SECONDS
+            ):
+                raise AppError(
+                    "an agent session needs an idle timeout of at least 1 minute",
+                    code="operator_invalid_duration",
+                    retryable=False,
+                )
+        elif idle_timeout_seconds is not None or agent_control is not None:
+            raise AppError(
+                "idle timeouts and control secrets apply to agent sessions only",
+                code="operator_protocol_error",
+                retryable=False,
+            )
         if capability not in {
             Capability.READ,
             Capability.OPERATOR,
@@ -878,6 +969,13 @@ class OperatorService:
                         profile=(str(context.get("profile_id")) or None)
                         if context.get("profile_id")
                         else None,
+                        agent_scope=agent_scope,
+                        agent_control_digest=(
+                            hashlib.sha256(bytes(agent_control)).digest()
+                            if agent_scope and agent_control is not None
+                            else None
+                        ),
+                        idle_timeout_seconds=idle_timeout_seconds if agent_scope else None,
                     )
                     self._lease_aliases[alias] = project.identity
                     if project.identity not in self._workers:
@@ -1295,6 +1393,8 @@ class OperatorService:
         admin_authorization: AdminAuthorization | None = None,
         working_directory: str | None = None,
         no_egress: bool = False,
+        peer_pid: int | None = None,
+        agent_session_token: str | None = None,
     ) -> dict[str, object]:
         owned_secrets = secret_arguments if secret_arguments is not None else {}
         ownership_transferred = False
@@ -1313,6 +1413,8 @@ class OperatorService:
                 transfer_secret_ownership=transfer_secret_ownership,
                 working_directory=working_directory,
                 no_egress=no_egress,
+                peer_pid=peer_pid,
+                agent_session_token=agent_session_token,
             )
         finally:
             if not ownership_transferred:
@@ -1329,6 +1431,8 @@ class OperatorService:
         transfer_secret_ownership: Callable[[], None],
         working_directory: str | None = None,
         no_egress: bool = False,
+        peer_pid: int | None = None,
+        agent_session_token: str | None = None,
     ) -> dict[str, object]:
         parsed, command_path, required = _parse_argv(argv)
         if command_path.startswith("operator.") or command_path in {
@@ -1424,6 +1528,12 @@ class OperatorService:
                     retryable=False,
                 )
             lease = self._require_lease_locked(project)
+            if lease.agent_scope:
+                # Before any replay lookup: only an allowed agent process
+                # may learn anything about this lease's operations.
+                self._admit_agent_call_locked(
+                    lease, command_path, peer_pid, agent_session_token
+                )
             lease.data_root = canonical_data_root
             lease.project = project
             self._lease_aliases[str(project.database)] = project.identity
@@ -1722,6 +1832,7 @@ class OperatorService:
         if lease is None or lease.revoked or lease.expired():
             if lease is not None:
                 lease.revoked = True
+                self._close_agent_sessions_locked(project.identity)
                 if lease.running_operations == 0:
                     self._drop_lease_locked(project.identity)
             raise AppError(
@@ -1908,6 +2019,7 @@ class OperatorService:
         if lease is None:
             return
         lease.revoked = True
+        self._close_agent_sessions_locked(project_id)
         worker = self._workers.get(project_id)
         if worker is not None:
             worker.drain()
@@ -2028,7 +2140,248 @@ class OperatorService:
                 "workspace": lease.workspace,
                 "profile": lease.profile,
             },
+            "agent_scope": lease.agent_scope,
+            **({"agent": self._agent_status_locked(lease)} if lease.agent_scope else {}),
         }
+
+    def _agent_status_locked(self, lease: ProjectLease) -> dict[str, object]:
+        idle_timeout = lease.idle_timeout_seconds or 0
+        idle_remaining = max(
+            0, int(idle_timeout - (time.monotonic() - lease.last_used_monotonic))
+        )
+        return {
+            "idle_timeout_seconds": lease.idle_timeout_seconds,
+            "idle_remaining_seconds": idle_remaining,
+            "calls": lease.calls,
+            "last_call_at": lease.last_call_at,
+            "sessions": [
+                session.public_status()
+                for session in self._agent_sessions.values()
+                if self._agent_session_current_locked(session, lease)
+            ],
+        }
+
+    @staticmethod
+    def _agent_session_current_locked(session: AgentSession, lease: ProjectLease) -> bool:
+        return (
+            not session.closed
+            and session.project_identity == lease.project.identity
+            and session.lease_epoch == lease.epoch
+        )
+
+    def _close_agent_sessions_locked(self, project_id: str) -> None:
+        for session_id, session in list(self._agent_sessions.items()):
+            if session.project_identity == project_id:
+                session.closed = True
+                del self._agent_sessions[session_id]
+        for denial in [key for key in self._agent_denials if key[0] == project_id]:
+            del self._agent_denials[denial]
+
+    def _agent_denied_locked(self, lease: ProjectLease, pid: int | None) -> bool:
+        return pid is not None and (lease.project.identity, lease.epoch, pid) in self._agent_denials
+
+    @staticmethod
+    def _denied_error() -> AppError:
+        return AppError(
+            "the user denied this agent",
+            code="agent_pairing_denied",
+            retryable=False,
+        )
+
+    def open_agent_session(
+        self,
+        data_root: str,
+        *,
+        pid: int | None,
+        label: str | None,
+    ) -> AgentSession:
+        """Register a `kassiber mcp serve` process waiting to be allowed."""
+
+        if pid is None:
+            raise AppError(
+                "this platform cannot identify the agent's process",
+                code="agent_pairing_unavailable",
+                retryable=False,
+            )
+        project = canonical_project(data_root)
+        with self._lock:
+            lease = self._require_lease_locked(project)
+            if not lease.agent_scope:
+                raise AppError(
+                    "this project's operator lease is not an agent session",
+                    code="agent_session_not_needed",
+                    retryable=False,
+                )
+            if self._agent_denied_locked(lease, pid):
+                raise self._denied_error()
+            denials = sum(
+                1
+                for key in self._agent_denials
+                if key[0] == lease.project.identity and key[1] == lease.epoch
+            )
+            if denials >= MAX_REMEMBERED_AGENT_DENIALS:
+                # Denials last as long as the grant; rather than forget one,
+                # stop taking new requests until the user unlocks again.
+                raise AppError(
+                    "too many agents were denied for this unlock",
+                    code="agent_session_limit",
+                    hint="Lock the book for agents in Kassiber and unlock it again.",
+                    retryable=False,
+                )
+            live = [session for session in self._agent_sessions.values() if not session.closed]
+            per_project = sum(
+                1 for session in live if session.project_identity == lease.project.identity
+            )
+            if len(live) >= MAX_AGENT_SESSIONS or per_project >= MAX_AGENT_SESSIONS_PER_PROJECT:
+                raise AppError(
+                    "too many agent sessions are open",
+                    code="agent_session_limit",
+                    hint="Close idle agent sessions, or deny waiting ones in Kassiber, then retry.",
+                    details={"limit": MAX_AGENT_SESSIONS_PER_PROJECT},
+                    retryable=True,
+                )
+            session = AgentSession(
+                id=secrets.token_urlsafe(12),
+                project_identity=lease.project.identity,
+                lease_epoch=lease.epoch,
+                pid=pid,
+                label=label,
+                opened_at=now_iso(),
+            )
+            self._agent_sessions[session.id] = session
+        _LOGGER.info(
+            "agent session opened",
+            extra={"kb_fields": {"project": project.public_id}},
+        )
+        return session
+
+    def agent_session_alive(self, session_id: str) -> bool:
+        with self._lock:
+            session = self._agent_sessions.get(session_id)
+            if session is None or session.closed:
+                return False
+            lease = self._leases.get(session.project_identity)
+            return (
+                lease is not None
+                and not lease.revoked
+                and not lease.expired()
+                and self._agent_session_current_locked(session, lease)
+            )
+
+    def close_agent_session(self, session_id: str) -> None:
+        with self._lock:
+            session = self._agent_sessions.pop(session_id, None)
+            if session is not None:
+                session.closed = True
+
+    def decide_agent_session(
+        self,
+        data_root: str,
+        session_id: str,
+        *,
+        allow: bool,
+        control: bytearray,
+    ) -> dict[str, object]:
+        """Allow or deny an agent session; only the lease's grantor can."""
+
+        project = canonical_project(data_root)
+        with self._lock:
+            lease = self._require_lease_locked(project)
+            if (
+                not lease.agent_scope
+                or lease.agent_control_digest is None
+                or not hmac.compare_digest(
+                    hashlib.sha256(bytes(control)).digest(),
+                    lease.agent_control_digest,
+                )
+            ):
+                raise AppError(
+                    "only the Kassiber app that unlocked this book can allow agents",
+                    code="agent_pairing_unauthorized",
+                    retryable=False,
+                )
+            session = self._agent_sessions.get(session_id)
+            if session is None or not self._agent_session_current_locked(session, lease):
+                raise AppError(
+                    "that agent session has ended",
+                    code="agent_session_not_found",
+                    retryable=False,
+                )
+            if allow:
+                session.state = "allowed"
+                lease.last_used_monotonic = time.monotonic()
+            else:
+                # Denying refuses the process, not just this request: every
+                # registration it holds under this grant closes (connections
+                # end at the next heartbeat), freeing their slots, and any
+                # earlier approval is withdrawn.
+                session.state = "denied"
+                for other_id, other in list(self._agent_sessions.items()):
+                    if other.pid == session.pid and self._agent_session_current_locked(other, lease):
+                        other.closed = True
+                        del self._agent_sessions[other_id]
+                self._agent_denials[(lease.project.identity, lease.epoch, session.pid)] = None
+            decided = session.public_status()
+        _LOGGER.info(
+            "agent session decided",
+            extra={"kb_fields": {"project": project.public_id, "state": decided["state"]}},
+        )
+        return decided
+
+    def _admit_agent_call_locked(
+        self,
+        lease: ProjectLease,
+        command_path: str,
+        peer_pid: int | None,
+        token: str | None,
+    ) -> None:
+        if command_path != "mcp.call":
+            raise AppError(
+                "an agent session admits only Kassiber MCP tool calls",
+                code="agent_session_scope",
+                details={"command": command_path},
+                retryable=False,
+            )
+        # A denial outranks any registration the process still holds.
+        if self._agent_denied_locked(lease, peer_pid):
+            raise self._denied_error()
+        # Both the process id the OS reports and the token only the registered
+        # process received: a later process reusing the id has no token.
+        sessions = [
+            session
+            for session in self._agent_sessions.values()
+            if peer_pid is not None
+            and token is not None
+            and session.pid == peer_pid
+            and self._agent_session_current_locked(session, lease)
+            and hmac.compare_digest(session.token.encode(), token.encode())
+        ]
+        if not sessions:
+            raise AppError(
+                "this process has no agent session for the book",
+                code="interaction_required",
+                hint="Open the book through `kassiber mcp serve`, which asks the user to allow it.",
+                details={"reason": "agent_session_required"},
+                retryable=True,
+            )
+        allowed = next((session for session in sessions if session.state == "allowed"), None)
+        if allowed is None:
+            raise AppError(
+                "waiting for the user to allow this agent in Kassiber",
+                code="interaction_required",
+                hint=(
+                    "Ask the user to allow this agent in Kassiber under Settings, "
+                    "AI, External agents, then retry. Never ask for the passphrase."
+                ),
+                details={"reason": "agent_pairing_required"},
+                retryable=True,
+            )
+        called_at = now_iso()
+        allowed.calls += 1
+        allowed.last_call_at = called_at
+        lease.calls += 1
+        lease.last_call_at = called_at
+        lease.last_used_monotonic = time.monotonic()
 
     def _prune_operations_locked(self) -> None:
         terminal_ids = [
