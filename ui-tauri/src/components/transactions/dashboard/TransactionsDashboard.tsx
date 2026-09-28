@@ -483,7 +483,7 @@ const TransactionsDashboard = ({
       className={cn(
         screenShellClassName,
         tableExpanded &&
-          "flex h-full min-h-0 flex-col overflow-hidden pt-0 pb-3 sm:pt-0 sm:pb-3 md:pt-0 md:pb-3",
+          "flex h-full min-h-0 flex-col overflow-hidden pt-0 pb-3",
         "relative",
         className,
       )}

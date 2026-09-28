@@ -878,7 +878,7 @@ function coreReadinessMessages(
 
 function InlineCode({ children }: { children?: React.ReactNode }) {
   return (
-    <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
+    <code className="rounded-md bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
       {children}
     </code>
   );
@@ -886,7 +886,7 @@ function InlineCode({ children }: { children?: React.ReactNode }) {
 
 function CommandSnippet({ children }: { children: React.ReactNode }) {
   return (
-    <code className="block overflow-x-auto rounded border bg-background px-2 py-1.5 font-mono text-xs leading-relaxed text-foreground">
+    <code className="block overflow-x-auto rounded-md border bg-background px-2 py-1.5 font-mono text-xs leading-relaxed text-foreground">
       {children}
     </code>
   );
@@ -3043,7 +3043,7 @@ function AddConnectionDialogContent({
               <span className="min-w-0 flex-1 truncate">{entry.address}</span>
               <button
                 type="button"
-                className="rounded border px-2 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground hover:bg-muted/40"
+                className="rounded-md border px-2 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground hover:bg-muted/40"
                 onClick={() => void copyAddress(entry.address)}
                 title={t("add.descriptor.copyAddress")}
               >

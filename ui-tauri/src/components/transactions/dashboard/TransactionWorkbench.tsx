@@ -572,7 +572,7 @@ const TransactionWorkbench = ({
   return (
     <>
       <section
-        className="relative z-20 grid grid-cols-2 overflow-visible rounded-xl border bg-card md:grid-cols-3 xl:grid-cols-6"
+        className="kb-surface relative z-20 grid grid-cols-2 overflow-visible md:grid-cols-3 xl:grid-cols-6"
         role={isRefreshing ? "status" : undefined}
         aria-live={isRefreshing ? "polite" : undefined}
       >
@@ -1017,19 +1017,19 @@ function FlowTooltip({
                     stats.failed > 0) && (
                     <div className="flex flex-wrap gap-1 pt-0.5">
                       {stats.missingPrice > 0 && (
-                        <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-amber-600">
+                        <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-amber-600">
                           {t("workbench.tooltip.missingPrice", {
                             count: stats.missingPrice,
                           })}
                         </span>
                       )}
                       {stats.review > 0 && (
-                        <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-blue-600">
+                        <span className="rounded-md bg-blue-500/10 px-1.5 py-0.5 text-blue-600">
                           {t("workbench.tooltip.review", { count: stats.review })}
                         </span>
                       )}
                       {stats.failed > 0 && (
-                        <span className="rounded bg-[var(--kb-accent)]/10 px-1.5 py-0.5 text-[var(--kb-accent)]">
+                        <span className="rounded-md bg-[var(--kb-accent)]/10 px-1.5 py-0.5 text-[var(--kb-accent)]">
                           {t("workbench.tooltip.failed", { count: stats.failed })}
                         </span>
                       )}

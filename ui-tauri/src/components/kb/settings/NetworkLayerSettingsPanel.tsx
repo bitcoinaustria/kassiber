@@ -79,7 +79,7 @@ export function NetworkLayerSettingsPanel({
       </div>
 
       {layer === "lightning" ? (
-        <div className="flex items-start gap-2 rounded-md border border-sky-500/25 bg-sky-500/5 p-3 text-xs text-muted-foreground">
+        <div className="flex items-start gap-2 rounded-lg border border-sky-500/25 bg-sky-500/5 p-3 text-xs text-muted-foreground">
           <ShieldCheck
             className="mt-0.5 size-4 shrink-0 text-sky-600 dark:text-sky-400"
             aria-hidden="true"
@@ -93,7 +93,7 @@ export function NetworkLayerSettingsPanel({
       ) : null}
 
       {layerBackends.length === 0 ? (
-        <div className="rounded-md border border-dashed bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+        <div className="rounded-lg border border-dashed bg-muted/20 p-6 text-center text-sm text-muted-foreground">
           {meta.empty}
         </div>
       ) : (
@@ -147,7 +147,7 @@ export function BackendLayerCard({
   const TrustIcon = trust.icon;
   const explorerBaseUrl = backendExplorerBaseUrl(backend);
   return (
-    <div className="rounded-md border bg-background p-4">
+    <div className="rounded-lg border bg-background p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -229,7 +229,7 @@ function AnalysisNetworkSettings() {
   const network = useUiStore((state) => state.analysisNetwork);
   const setNetwork = useUiStore((state) => state.setAnalysisNetwork);
   return (
-    <details className="rounded-md border bg-background p-4">
+    <details className="rounded-lg border bg-background p-4">
       <summary className="cursor-pointer text-sm font-medium">{t("analysisNetwork.title")}</summary>
       <div className="mt-3 space-y-2">
         <label className="flex max-w-sm flex-col gap-2 text-sm">

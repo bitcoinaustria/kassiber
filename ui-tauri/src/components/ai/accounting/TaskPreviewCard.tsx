@@ -30,7 +30,7 @@ export function TaskPreviewCard({ value, book }: { value: TaskPreview; book: Mon
     {value.step === "close" && <><p className="text-sm leading-relaxed">{t("closeConsequence")}</p>{isTaskReports(detail) && <FinancialReports reports={detail} money={(amount) => formatMinor(amount, book)} />}</>}
     {value.step === "tax_finalize" && <><p className="text-sm">{t("taxConsequence")}</p>{forms.map((value, index) => {
       const form = object(value);
-      return <section key={index} className="space-y-2 rounded border p-3"><h5 className="font-medium">{scalar(form.label)} · {scalar(form.form_id)}</h5><dl className="space-y-2 text-xs">{Object.entries(object(form.fields)).map(([key, value]) => {
+      return <section key={index} className="space-y-2 rounded-lg border p-3"><h5 className="font-medium">{scalar(form.label)} · {scalar(form.form_id)}</h5><dl className="space-y-2 text-xs">{Object.entries(object(form.fields)).map(([key, value]) => {
         const field = object(value);
         const amount = typeof field.value_minor === "string" && /^-?\d+$/.test(field.value_minor) ? formatMinor(field.value_minor, book) : scalar(field.value);
         return <div key={key} className="border-t pt-2"><dt>{scalar(field.label)} · {key}</dt><dd className="mt-1 break-words font-mono">{amount} · {scalar(field.state)}</dd>{Boolean(field.reason) && <dd className="mt-1 text-muted-foreground">{scalar(field.reason)}</dd>}</div>;
@@ -44,10 +44,10 @@ function ProjectionPreview({ value, book }: { value: unknown; book: MoneyBook })
   // Exact strings and every effect, including zero-fiat custody/rounding. Text
   // only: escape non-ASCII controls too, so evidence cannot spoof review order.
   const text = JSON.stringify({ book, effect: value }, null, 2).replace(/[\u007f-\uffff]/g, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
-  return <article className="rounded border p-3"><pre className="whitespace-pre-wrap break-all font-mono text-xs">{text}</pre></article>;
+  return <article className="rounded-lg border p-3"><pre className="whitespace-pre-wrap break-all font-mono text-xs">{text}</pre></article>;
 }
 
 function EntryPreview({ entry, book, source }: { entry: TaskEntry; book: MoneyBook; source?: string }) {
   const { t } = useTranslation("accountingReview");
-  return <article className="space-y-2 rounded border p-3 text-sm"><p className="font-medium">{entry.description}</p><p className="break-all text-xs text-muted-foreground">{entry.entry_date}{source ? ` · ${source}` : ""}</p><div className="overflow-x-auto"><table className="w-full min-w-80 text-xs"><thead><tr><th className="text-left">{t("account")}</th><th className="text-right">{t("debit")}</th><th className="text-right">{t("credit")}</th></tr></thead><tbody>{entry.lines.map((line, index) => <tr key={index}><td>{line.account_code}</td><td className="text-right font-mono">{formatMinor(line.debit_minor, book)}</td><td className="text-right font-mono">{formatMinor(line.credit_minor, book)}</td></tr>)}</tbody></table></div></article>;
+  return <article className="space-y-2 rounded-lg border p-3 text-sm"><p className="font-medium">{entry.description}</p><p className="break-all text-xs text-muted-foreground">{entry.entry_date}{source ? ` · ${source}` : ""}</p><div className="overflow-x-auto"><table className="w-full min-w-80 text-xs"><thead><tr><th className="text-left">{t("account")}</th><th className="text-right">{t("debit")}</th><th className="text-right">{t("credit")}</th></tr></thead><tbody>{entry.lines.map((line, index) => <tr key={index}><td>{line.account_code}</td><td className="text-right font-mono">{formatMinor(line.debit_minor, book)}</td><td className="text-right font-mono">{formatMinor(line.credit_minor, book)}</td></tr>)}</tbody></table></div></article>;
 }

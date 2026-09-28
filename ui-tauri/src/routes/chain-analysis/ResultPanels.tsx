@@ -88,7 +88,7 @@ export function ResultPanels({
     </article>
   );
   return (
-    <section className="overflow-hidden rounded-xl border bg-card">
+    <section className="kb-surface overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
         <label className="text-sm font-medium" htmlFor={baseId}>{t("resultView")}</label>
         <select id={baseId} className="ca-select max-w-full" value={tab} onChange={(event) => setTab(event.target.value as AnalysisTab)}>

@@ -97,7 +97,7 @@ function SourceFundsCase({ draftKey, initialTarget }: { draftKey: string; initia
     {stage === "disclose" && (state.diagramQuery.isError ? <div role="alert" className="rounded-lg border p-4 text-sm"><p>{t("journey.previewError")}</p><Button variant="outline" size="sm" onClick={() => void state.diagramQuery.refetch()}>{t("journey.retry")}</Button></div> : state.diagramQuery.isFetching && <p role="status" className="text-sm text-muted-foreground">{t("case.loading")}</p>)}
     {stage === "disclose" && state.report && !state.report.explain_gates.exportable && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm" role="status"><p>{t("case.exportBlocked")}</p><Button variant="outline" size="sm" onClick={() => state.goToStage("trace")}>{t("journey.resolveQuestions")}</Button></div>}
     {state.exportError && <p role="alert" className="text-sm text-destructive">{t("case.exportError")}</p>}
-    <section className="rounded-xl border bg-card p-4 sm:p-6" aria-label={t(`journey.${stage}`)}>
+    <section className="kb-surface p-(--kb-card-padding)" aria-label={t(`journey.${stage}`)}>
       {stage === "target" && <TargetStage state={state} />}
       {stage === "trace" && <TraceStage state={state} onInvestigate={investigate} assistantAvailable={Boolean(context && !state.preview.isFetching && assistant && !assistant.isStreaming)} />}
       {stage === "disclose" && <DiscloseStage state={state} />}

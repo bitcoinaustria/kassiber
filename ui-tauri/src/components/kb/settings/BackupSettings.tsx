@@ -154,7 +154,7 @@ export function BackupSettings() {
     }
   }
 
-  return <div className="space-y-3 rounded-md border bg-background p-4">
+  return <div className="space-y-3 rounded-lg border bg-background p-4">
     <p className="max-w-prose text-sm text-muted-foreground">{t("backup.description")}</p>
     <p className="text-sm text-muted-foreground">{t("backup.scope")}</p>
     {!mode ? <div className="flex flex-wrap gap-2">

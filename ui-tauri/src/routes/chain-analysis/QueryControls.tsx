@@ -62,7 +62,7 @@ export function QueryControls({
   const filters = activeFilterCount(query);
   return (
     <form
-      className="rounded-xl border bg-card p-3"
+      className="kb-surface p-3"
       onSubmit={(event) => {
         event.preventDefault();
         onRun();

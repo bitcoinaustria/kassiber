@@ -1586,7 +1586,7 @@ const TransactionsTable = ({
     <>
       <div
         ref={tableRef}
-        className="flex scroll-mt-24 flex-col overflow-hidden rounded-xl border bg-card"
+        className="kb-surface flex scroll-mt-24 flex-col overflow-hidden"
         style={
           tableCardFrame === null
             ? undefined

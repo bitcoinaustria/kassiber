@@ -88,7 +88,7 @@ export function SecuritySettingsPanel({
             {t("security.encryptionHeading")}
           </h3>
         </div>
-        <div className="rounded-md border bg-background p-4">
+        <div className="rounded-lg border bg-background p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 space-y-1.5">
               <span
@@ -147,7 +147,7 @@ export function SecuritySettingsPanel({
             {t("security.appLockHeading")}
           </h3>
         </div>
-        <div className="rounded-md border bg-background p-3">
+        <div className="rounded-lg border bg-background p-3">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <Label className="text-sm font-medium">
@@ -220,7 +220,7 @@ export function SecuritySettingsPanel({
             {t("security.biometricHeading")}
           </h3>
         </div>
-        <div className="rounded-md border bg-background p-3">
+        <div className="rounded-lg border bg-background p-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 space-y-1">
               <div className="flex items-center gap-2">

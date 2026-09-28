@@ -204,7 +204,7 @@ export function ExitTax() {
       {preview.isLoading ? (
         <ScreenSkeleton />
       ) : preview.isError ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           <div className="flex items-center gap-2 font-medium">
             <AlertTriangle className="size-4" /> Could not load the exit-tax estimate
           </div>
@@ -258,7 +258,7 @@ function ExitTaxBody({
   return (
     <div className="grid gap-4">
       {incomplete ? (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+        <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
           <div>
             <p className="font-medium">This estimate is incomplete.</p>
@@ -277,7 +277,7 @@ function ExitTaxBody({
       ) : null}
 
       {/* Headline liability */}
-      <div className="grid gap-4 rounded-xl border bg-card p-5 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] sm:items-center">
+      <div className="kb-surface grid gap-4 p-(--kb-card-padding) sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] sm:items-center">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Estimated exit tax
@@ -325,7 +325,7 @@ function ExitTaxBody({
       {/* Collection-timing banner */}
       <div
         className={cn(
-          "flex items-start gap-3 rounded-xl border p-4 text-sm",
+          "flex items-start gap-3 rounded-lg border p-4 text-sm",
           deferred
             ? "border-sky-500/30 bg-sky-500/10"
             : "border-amber-500/30 bg-amber-500/10",
@@ -353,7 +353,7 @@ function ExitTaxBody({
       <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="grid min-w-0 gap-4">
           {/* Deemed disposal lots */}
-          <section className="min-w-0 overflow-hidden rounded-xl border bg-card">
+          <section className="kb-surface min-w-0 overflow-hidden">
             <div className="flex items-center gap-2 px-4 pt-4 sm:px-5">
               <Landmark className="size-4 text-muted-foreground" />
               <h2 className="text-sm font-medium">Deemed disposal at fair market value</h2>
@@ -390,7 +390,7 @@ function ExitTaxBody({
 
           {/* Wallet holdings */}
           {report.walletHoldings.length ? (
-            <section className="min-w-0 overflow-hidden rounded-xl border bg-card">
+            <section className="kb-surface min-w-0 overflow-hidden">
               <div className="flex items-center gap-2 px-4 pt-4 sm:px-5">
                 <Info className="size-4 text-muted-foreground" />
                 <h2 className="text-sm font-medium">Wallet holdings (context)</h2>
@@ -427,7 +427,7 @@ function ExitTaxBody({
 
         <div className="grid min-w-0 gap-4">
           {/* Export handoff */}
-          <section className="rounded-xl border bg-card p-4 sm:p-5">
+          <section className="kb-surface p-(--kb-card-padding)">
             <div className="flex items-center gap-2">
               <Download className="size-4 text-muted-foreground" />
               <h2 className="text-sm font-medium">Steuerberater handoff</h2>
@@ -496,7 +496,7 @@ function ExitTaxBody({
           </section>
 
           {/* FMV source */}
-          <section className="rounded-xl border bg-card p-4 sm:p-5">
+          <section className="kb-surface p-(--kb-card-padding)">
             <h2 className="text-sm font-medium">Fair market value</h2>
             <ul className="mt-2 grid gap-1 text-xs text-muted-foreground">
               {report.fmvSource.map((source) => (
@@ -514,7 +514,7 @@ function ExitTaxBody({
           </section>
 
           {/* Assumptions & review gate */}
-          <section className="rounded-xl border bg-card p-4 sm:p-5">
+          <section className="kb-surface p-(--kb-card-padding)">
             <div className="flex items-center gap-2">
               <ShieldCheck className="size-4 text-muted-foreground" />
               <h2 className="text-sm font-medium">Assumptions &amp; review</h2>

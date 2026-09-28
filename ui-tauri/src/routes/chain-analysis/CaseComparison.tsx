@@ -31,7 +31,7 @@ export function CaseComparison({ comparison }: { comparison: Record<string, unkn
         }));
       if (!groups.some(g => g.rows.length))
         return null;
-      return <details key={kind} className="rounded border p-3">
+      return <details key={kind} className="rounded-lg border p-3">
           <summary className="cursor-pointer text-xs font-medium">
             {kind === "transaction_features" ? t("workbench.features") : t(kind)} · {groups.map(g => t(`workbench.${g.change}`, { count: g.rows.length })).join(" · ")}
           </summary>
@@ -46,7 +46,7 @@ export function CaseComparison({ comparison }: { comparison: Record<string, unkn
         </details>;
     })}
     </div>
-    {!!comparison.coverage_changed && <details className="rounded border p-3">
+    {!!comparison.coverage_changed && <details className="rounded-lg border p-3">
       <summary className="cursor-pointer text-xs font-medium">
         {t("coverage")}
       </summary>

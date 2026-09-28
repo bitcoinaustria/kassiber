@@ -51,7 +51,7 @@ export const BalanceDriversCard = ({
         : "text-muted-foreground";
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
+    <div className="kb-surface flex flex-col gap-3 p-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 sm:gap-2.5">
           <span
@@ -183,7 +183,7 @@ export const HoldingsBySourceChart = ({
   const singleHolding = holdingsData.length === 1 ? holdingsData[0] : null;
 
   return (
-    <div className="flex flex-1 flex-col gap-3 rounded-lg border bg-card p-3">
+    <div className="kb-surface flex flex-1 flex-col gap-3 p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2 sm:gap-2.5">
           <span

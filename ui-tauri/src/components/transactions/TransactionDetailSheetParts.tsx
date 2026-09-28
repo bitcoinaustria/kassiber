@@ -112,7 +112,7 @@ export function InfoHint({
       <TooltipTrigger asChild>
         <button
           type="button"
-          className="inline-flex size-4 cursor-help items-center justify-center rounded text-current opacity-60 hover:opacity-100"
+          className="inline-flex size-4 cursor-help items-center justify-center rounded-md text-current opacity-60 hover:opacity-100"
           aria-label={label || t("infoHint.moreInfo")}
           tabIndex={-1}
         >
@@ -451,7 +451,7 @@ export function ReviewChecklist({
   const { t } = useTranslation("transactions");
   const completed = items.filter((i) => i.done).length;
   return (
-    <div className="rounded-md border bg-card p-3">
+    <div className="kb-surface-inset p-3">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <ListChecks

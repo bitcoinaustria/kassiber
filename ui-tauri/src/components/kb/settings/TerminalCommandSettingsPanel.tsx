@@ -73,7 +73,7 @@ export function TerminalCommandSettingsPanel({
       </div>
 
       {error ? (
-        <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
           <XCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <span>{error}</span>
         </div>
@@ -83,7 +83,7 @@ export function TerminalCommandSettingsPanel({
         <div className="space-y-3">
           <div
             className={cn(
-              "flex items-start gap-2 rounded-md border p-3 text-sm",
+              "flex items-start gap-2 rounded-lg border p-3 text-sm",
               status.installed && status.pathOnPath
                 ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300"
                 : "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200",
@@ -124,7 +124,7 @@ export function TerminalCommandSettingsPanel({
           ) : null}
         </div>
       ) : (
-        <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+        <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
           {t("terminal.inspecting")}
         </div>
       )}

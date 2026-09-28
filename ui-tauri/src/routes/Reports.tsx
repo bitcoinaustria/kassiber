@@ -290,7 +290,7 @@ function ReportOverview() {
   if (reportYearMismatch) {
     return (
       <div className={screenPanelClassName}>
-        <div className="rounded-lg border bg-card p-4">
+        <div className="kb-surface p-(--kb-card-padding)">
           <h2 className="text-base font-semibold">Reports unavailable</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             The daemon returned {returnedReportYear} while the selected tax year is{" "}
@@ -304,7 +304,7 @@ function ReportOverview() {
   if (isError || data?.error || !data?.data) {
     return (
       <div className={screenPanelClassName}>
-        <div className="rounded-lg border bg-card p-4">
+        <div className="kb-surface p-(--kb-card-padding)">
           <h2 className="text-base font-semibold">Reports unavailable</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {error instanceof Error
@@ -851,7 +851,7 @@ function ReportPackageHeader({
         </div>
       </div>
       {rulesExpanded ? (
-        <div className="rounded-lg border bg-card p-3">
+        <div className="kb-surface p-3">
           <ReportPolicyDetails
             jurisdiction={jurisdiction}
             methodName={methodName}
@@ -930,7 +930,7 @@ function ReportMetricStrip({
   ];
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
+    <div className="kb-surface min-w-0 overflow-hidden">
       <div className="grid grid-cols-1 divide-x-0 divide-y divide-border sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
         {metrics.map((metric) => (
           <div
@@ -985,7 +985,7 @@ function KennzahlOverviewPanel({
   );
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
+    <div className="kb-surface min-w-0 overflow-hidden">
       <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 items-center gap-2">
           <span
@@ -1108,7 +1108,7 @@ function SummaryPdfPanel({
 }) {
   const selectedCount = showWalletPicker ? selectedWalletIds.length : wallets.length;
   return (
-    <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
+    <div className="kb-surface min-w-0 overflow-hidden">
       <div className="flex items-start justify-between gap-3 p-3 pb-0">
         <div className="flex min-w-0 items-center gap-2">
           <span
@@ -1216,7 +1216,7 @@ function ReportFilesPanel({
     useState(false);
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
+    <div className="kb-surface min-w-0 overflow-hidden">
       <div className="flex items-center justify-between gap-3 p-3 pb-0">
         <div className="flex items-center gap-2">
           <span
@@ -1411,7 +1411,7 @@ function HandoffScopePanel({
     (auditScope === "source_funds_case" && !auditCaseId);
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
+    <div className="kb-surface min-w-0 overflow-hidden">
       <div className="flex items-center justify-between gap-3 p-3">
         <div className="flex min-w-0 items-center gap-2">
           <span
@@ -1889,7 +1889,7 @@ function LotAuditPanel({
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
+    <div className="kb-surface min-w-0 overflow-hidden">
       <div
         className={cn(
           "flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between",
@@ -2024,7 +2024,7 @@ function NeutralSwapAuditPanel({
   const totalFeeSats = swaps.reduce((sum, swap) => sum + swap.feeSats, 0);
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-lg border bg-card">
+    <div className="kb-surface min-w-0 overflow-hidden">
       <div
         className={cn(
           "flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between",

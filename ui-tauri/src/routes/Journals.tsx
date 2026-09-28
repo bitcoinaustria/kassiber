@@ -104,7 +104,7 @@ export function Journals() {
   if (isError || data?.error || !data?.data) {
     return (
       <div className={screenPanelClassName}>
-        <div className="rounded-xl border bg-card p-4">
+        <div className="kb-surface p-(--kb-card-padding)">
           <h2 className="text-base font-semibold">
             {t("ledger.unavailable.title")}
           </h2>
@@ -193,7 +193,7 @@ export function Journals() {
         </div>
 
         <TabsContent value="state" className="mt-0 space-y-3">
-          <div className="overflow-hidden rounded-lg border bg-card">
+          <div className="kb-surface overflow-hidden">
             <div className="grid grid-cols-2 divide-x-0 divide-y divide-border sm:grid-cols-4 sm:divide-x sm:divide-y-0">
               <JournalMetric
                 label={t("ledger.metric.status")}
@@ -227,7 +227,7 @@ export function Journals() {
           </div>
 
           <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
-            <div className="min-w-0 rounded-xl border bg-card">
+            <div className="kb-surface min-w-0">
               <div className="border-b p-3 sm:px-4">
                 <h2 className="flex items-center gap-2 text-base font-semibold">
                   <BookOpen className="size-4" aria-hidden="true" />
@@ -301,7 +301,7 @@ export function Journals() {
               </div>
             </div>
 
-            <div className="min-w-0 rounded-xl border bg-card">
+            <div className="kb-surface min-w-0">
               <div className="flex items-start justify-between gap-3 border-b p-3 sm:px-4">
                 <div className="min-w-0">
                   <h2 className="text-base font-semibold">

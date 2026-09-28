@@ -410,7 +410,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
       </p>
 
       {coarsePricedCount > 0 && !requireCoarseReview ? (
-        <div className="rounded-md border bg-background p-3 text-sm">
+        <div className="rounded-lg border bg-background p-3 text-sm">
           <p className="font-medium">
             {t("marketData.coarse.countNotice", { count: coarsePricedCount })}
           </p>
@@ -420,7 +420,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         </div>
       ) : null}
 
-      <div className="rounded-md border bg-background p-3">
+      <div className="rounded-lg border bg-background p-3">
         <div className="mb-3 flex flex-col gap-2 border-b pb-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="grid gap-1">
             <Label htmlFor="market-rate-provider">
@@ -519,7 +519,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           {rateBackends.map((backend, index) => (
             <div
               key={backend.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background p-3"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-background p-3"
             >
               <div className="min-w-0 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
@@ -549,7 +549,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         </div>
       </div>
 
-      <div className="rounded-md border bg-background p-3">
+      <div className="rounded-lg border bg-background p-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <p className="text-sm font-medium">
@@ -588,7 +588,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           </p>
         ) : null}
         {isRebuildingRates ? (
-          <div className="mt-3 rounded-md border border-primary/25 bg-primary/5 p-3">
+          <div className="mt-3 rounded-lg border border-primary/25 bg-primary/5 p-3">
             <div className="flex items-center justify-between gap-3 text-xs">
               <span className="font-medium text-foreground">
                 {t("marketData.rebuildingTitle")}
@@ -613,7 +613,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         {rateRebuildResult ? (
           <div
             className={cn(
-              "mt-3 rounded-md border p-3 text-sm",
+              "mt-3 rounded-lg border p-3 text-sm",
               rateRebuildJournalBlocker
                 ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200"
                 : "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300",
@@ -689,7 +689,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         ) : null}
       </div>
 
-      <div className="rounded-md border bg-background p-3">
+      <div className="rounded-lg border bg-background p-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <p className="text-sm font-medium">
@@ -726,7 +726,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           </span>
         </div>
 
-        <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3">
+        <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
           <div className="min-w-0 space-y-1">
             <p className="text-sm font-medium">
               {t("marketData.krakenMinuteHeading")}
@@ -807,7 +807,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
           </div>
         </div>
 
-        <div className="mt-3 rounded-md border bg-muted/30 p-3">
+        <div className="mt-3 rounded-lg border bg-muted/30 p-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0 space-y-1">
               <p className="text-sm font-medium">
@@ -835,14 +835,14 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
         </div>
 
         {krakenImportError ? (
-          <div className="mt-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
             <XCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <span>{krakenImportError}</span>
           </div>
         ) : null}
 
         {krakenImportResult ? (
-          <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3">
+          <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
             <div className="flex items-start gap-2 text-sm text-emerald-700 dark:text-emerald-300">
               <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               <span>
@@ -898,7 +898,7 @@ export function MarketDataSettingsPanel({ backends }: { backends: Backend[] }) {
               })}
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
             <div className="flex items-start gap-2">
               <AlertTriangle
                 className="mt-0.5 size-4 shrink-0"

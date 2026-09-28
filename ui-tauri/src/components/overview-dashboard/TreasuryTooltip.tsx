@@ -136,12 +136,12 @@ export function TreasuryTooltip({
                 {t(activityFlowLabelKeys[eventFlow])}
               </span>
               {markerCount > 1 && (
-                <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-2xs text-muted-foreground">
+                <span className="rounded-md border bg-muted/30 px-1.5 py-0.5 text-2xs text-muted-foreground">
                   {t("tooltip.mergedEvents", { count: markerCount })}
                 </span>
               )}
               {point.eventType && (
-                <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-2xs text-muted-foreground">
+                <span className="rounded-md border bg-muted/30 px-1.5 py-0.5 text-2xs text-muted-foreground">
                   {transactionTypeLabel(tTransactions, point.eventType)}
                 </span>
               )}
@@ -303,12 +303,12 @@ export function TreasuryTooltip({
           {(point.eventTag || eventId) && (
             <div className="flex flex-wrap gap-1.5 pt-1">
               {point.eventTag && (
-                <span className="rounded border bg-muted/30 px-1.5 py-0.5 text-2xs text-muted-foreground">
+                <span className="rounded-md border bg-muted/30 px-1.5 py-0.5 text-2xs text-muted-foreground">
                   {point.eventTag}
                 </span>
               )}
               {eventId && (
-                <span className="rounded border bg-muted/30 px-1.5 py-0.5 font-mono text-2xs text-muted-foreground">
+                <span className="rounded-md border bg-muted/30 px-1.5 py-0.5 font-mono text-2xs text-muted-foreground">
                   {eventId}
                 </span>
               )}

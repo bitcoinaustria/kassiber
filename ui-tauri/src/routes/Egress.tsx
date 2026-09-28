@@ -131,7 +131,7 @@ export function Egress() {
       </div>
 
       {snapshotQuery.error ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           {t("egress.loadFailed", { error: snapshotQuery.error.message })}
         </div>
       ) : null}
@@ -164,7 +164,7 @@ export function Egress() {
       <p className="text-xs text-muted-foreground">{t("egress.notMonitored")}</p>
 
       <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
-        <div className="rounded-md border bg-background">
+        <div className="kb-surface">
           <div className="flex flex-wrap items-center gap-2 border-b p-3">
             <Input
               value={query}
@@ -232,7 +232,7 @@ export function Egress() {
         </div>
 
         <aside className="space-y-3">
-          <div className="rounded-md border bg-background p-3">
+          <div className="kb-surface p-3">
             <div className="mb-3 flex items-center gap-2">
               <Database className="size-4 text-muted-foreground" aria-hidden="true" />
               <h2 className="text-sm font-semibold">{t("egress.db.title")}</h2>
@@ -251,7 +251,7 @@ export function Egress() {
             </dl>
           </div>
 
-          <div className="rounded-md border bg-background p-3">
+          <div className="kb-surface p-3">
             <h2 className="mb-3 text-sm font-semibold">
               {t("egress.subsystems.title")}
             </h2>
@@ -358,7 +358,7 @@ export function EgressRow({
         <tr className="border-b bg-muted/20">
           <td colSpan={6} className="px-3 py-3">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(300px,0.9fr)]">
-              <section className="min-w-0 rounded-md border bg-background/70 p-3">
+              <section className="min-w-0 rounded-lg border bg-background/70 p-3">
                 <h2 className="mb-3 text-xs font-semibold uppercase text-muted-foreground">
                   {t("egress.details.capturedMetadata")}
                 </h2>
@@ -413,7 +413,7 @@ export function EgressRow({
                   />
                 </dl>
               </section>
-              <section className="min-w-0 rounded-md border bg-background/70 p-3">
+              <section className="min-w-0 rounded-lg border bg-background/70 p-3">
                 <h2 className="mb-3 text-xs font-semibold uppercase text-muted-foreground">
                   {t("egress.details.storedRecord")}
                 </h2>
@@ -473,7 +473,7 @@ function Metric({
   return (
     <div
       className={cn(
-        "rounded-md border bg-background p-3",
+        "kb-surface p-3",
         tone === "good" && "border-emerald-500/30",
         tone === "bad" && "border-destructive/40 bg-destructive/10",
       )}

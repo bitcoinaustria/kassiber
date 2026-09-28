@@ -154,7 +154,7 @@ export function ExposureFilterTile({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "rounded-md border bg-background p-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "rounded-lg border bg-background p-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active && "border-foreground/30 bg-muted ring-1 ring-foreground/10",
       )}
     >
@@ -186,7 +186,7 @@ export function ExposureEndpointRow({
   const trust = backendTrust(backend);
   const TrustIcon = trust.icon;
   return (
-    <div className="rounded-md border bg-background p-3">
+    <div className="rounded-lg border bg-background p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{backend.name}</p>
@@ -423,7 +423,7 @@ export function PrivacySettingsPanel({
               {t("privacy.assistantDescription")}
             </p>
           </div>
-          <div className="flex flex-col gap-2 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 rounded-lg border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
               {aiFeaturesEnabled
                 ? t("privacy.assistantEnabled")

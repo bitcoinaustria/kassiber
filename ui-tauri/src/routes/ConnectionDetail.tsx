@@ -98,6 +98,8 @@ import { connectionKindLabels } from "@/lib/connectionDisplay";
 import {
   pageHeaderActionClassName,
   pageHeaderActionsClassName,
+  pageHeaderIconButtonClassName,
+  pageTitleClassName,
   screenShellClassName,
 } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
@@ -179,7 +181,7 @@ function WalletOverviewStat({
   detail?: ReactNode;
 }) {
   return (
-    <div className="relative isolate min-w-0 overflow-hidden rounded-2xl border border-border/60 bg-background/55 p-3.5 shadow-sm shadow-black/[0.025] backdrop-blur-xl">
+    <div className="kb-surface-inset relative isolate min-w-0 overflow-hidden bg-card/70 p-3.5">
       <div className="pointer-events-none relative z-20 space-y-1.5">
         <div className="text-muted-foreground">
           <span className="text-xs font-medium tracking-[0.01em]">{label}</span>
@@ -200,7 +202,7 @@ function WalletOverviewStat({
 const relatedViewLinkClass =
   "group flex items-center gap-3 px-4 py-3 transition-[background-color,transform] duration-200 hover:bg-muted/45 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none";
 const relatedViewIconClass =
-  "flex size-8 shrink-0 items-center justify-center rounded-xl border bg-muted/40 text-muted-foreground shadow-sm transition-colors group-hover:border-foreground/20 group-hover:bg-background/80 group-hover:text-foreground";
+  "flex size-8 shrink-0 items-center justify-center rounded-lg border bg-muted/40 text-muted-foreground transition-colors group-hover:border-foreground/20 group-hover:bg-background/80 group-hover:text-foreground";
 const relatedViewArrowClass =
   "size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5";
 
@@ -1361,7 +1363,7 @@ function ConnectionDetailView({
 
   return (
     <div className={screenShellClassName}>
-      <section className="relative isolate overflow-hidden rounded-[1.75rem] border border-border/70 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04),0_18px_50px_rgba(0,0,0,0.07)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.35),0_24px_60px_rgba(0,0,0,0.28)]">
+      <section className="kb-surface relative isolate overflow-hidden">
         <div
           className={cn(
             "pointer-events-none absolute inset-0 opacity-70",
@@ -1380,7 +1382,7 @@ function ConnectionDetailView({
                 asChild
                 variant="outline"
                 size="icon"
-                className="size-9 shrink-0 rounded-full border-border/60 bg-background/60 shadow-sm backdrop-blur-xl transition-transform duration-200 active:scale-95 motion-reduce:transition-none"
+                className="size-8 shrink-0"
               >
                 <Link to="/connections" aria-label={t("detail.backToWallets")}>
                   <ArrowLeft className="size-4" aria-hidden="true" />
@@ -1389,12 +1391,12 @@ function ConnectionDetailView({
               <ConnectionAssetBadge
                 connection={connection}
                 size="md"
-                className="size-12 rounded-2xl border-white/50 bg-background/65 p-1 shadow-[0_8px_24px_rgba(0,0,0,0.10)] backdrop-blur-xl dark:border-white/10 sm:size-14"
+                className="size-12 rounded-lg p-1 sm:size-14"
               />
               <div className="min-w-0">
-                <h1 className="truncate text-2xl font-semibold tracking-[-0.025em] sm:text-3xl">
+                <h2 className={cn(pageTitleClassName, "truncate")}>
                   {connection.label}
-                </h1>
+                </h2>
                 <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <span className="truncate font-medium">
                     {connectionKindLabels[connection.kind]}
@@ -1418,10 +1420,7 @@ function ConnectionDetailView({
                 type="button"
                 variant="outline"
                 size="sm"
-                className={cn(
-                  pageHeaderActionClassName,
-                  "rounded-full border-border/60 bg-background/60 px-4 shadow-sm backdrop-blur-xl transition-transform duration-200 active:scale-[0.97] motion-reduce:transition-none",
-                )}
+                className={pageHeaderActionClassName}
                 disabled={isWalletSyncRunning}
                 aria-busy={isWalletSyncRunning}
                 aria-label={t("detail.refreshAction", {
@@ -1451,13 +1450,13 @@ function ConnectionDetailView({
                     type="button"
                     variant="outline"
                     size="icon"
-                    className="size-8 rounded-full border-border/60 bg-background/60 shadow-sm backdrop-blur-xl transition-transform duration-200 active:scale-95 motion-reduce:transition-none"
+                    className={pageHeaderIconButtonClassName}
                     aria-label={t("detail.moreActions")}
                   >
                     <MoreHorizontal className="size-4" aria-hidden="true" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 rounded-xl">
+                <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuItem onClick={openEditDialog}>
                     <Pencil className="size-4" aria-hidden="true" />
                     {t("common:actions.edit")}
@@ -1491,7 +1490,7 @@ function ConnectionDetailView({
           <div className="mt-4 grid items-stretch gap-3 lg:grid-cols-[minmax(260px,0.72fr)_minmax(360px,1.28fr)]">
             <button
               type="button"
-              className="group flex min-w-0 flex-col justify-center rounded-2xl px-3 py-3 text-left transition-[background-color,transform] duration-200 hover:bg-background/30 active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none sm:px-4"
+              className="group flex min-w-0 flex-col justify-center rounded-lg px-3 py-3 text-left transition-[background-color,transform] duration-200 hover:bg-background/30 active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none sm:px-4"
               aria-label={
                 balanceUnit === "btc"
                   ? t("detail.balanceToggle.showFiat")
@@ -1507,7 +1506,7 @@ function ConnectionDetailView({
                 <span className="text-xs font-medium tracking-[0.02em] text-muted-foreground">
                   {t("detail.metric.balance")}
                 </span>
-                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/55 px-2 py-1 text-2xs font-semibold text-muted-foreground shadow-sm backdrop-blur-xl transition-colors group-hover:text-foreground">
+                <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/55 px-2 py-1 text-2xs font-semibold text-muted-foreground transition-colors group-hover:text-foreground">
                   <ArrowLeftRight className="size-3" aria-hidden="true" />
                   {balanceUnit === "btc" ? "BTC" : "EUR"}
                 </span>
@@ -1573,7 +1572,7 @@ function ConnectionDetailView({
 
       {backendRequired ? (
         <div
-          className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200 sm:flex-row sm:items-center"
+          className="flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200 sm:flex-row sm:items-center"
           role="status"
         >
           <div className="flex flex-1 items-start gap-3">
@@ -1598,7 +1597,7 @@ function ConnectionDetailView({
 
       {syncErrorMessage && (
         <div
-          className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-sm dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
+          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"
           role="status"
         >
           {syncErrorMessage}
@@ -1947,12 +1946,12 @@ function ConnectionDetailView({
                     >
                       <div className="mt-0.5 size-8 shrink-0 animate-pulse rounded-md bg-muted" />
                       <div className="min-w-0 flex-1 space-y-2">
-                        <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
-                        <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+                        <div className="h-4 w-2/3 animate-pulse rounded-md bg-muted" />
+                        <div className="h-3 w-1/2 animate-pulse rounded-md bg-muted" />
                       </div>
                       <div className="space-y-2">
-                        <div className="h-4 w-20 animate-pulse rounded bg-muted" />
-                        <div className="ml-auto h-3 w-12 animate-pulse rounded bg-muted" />
+                        <div className="h-4 w-20 animate-pulse rounded-md bg-muted" />
+                        <div className="ml-auto h-3 w-12 animate-pulse rounded-md bg-muted" />
                       </div>
                     </div>
                   ),

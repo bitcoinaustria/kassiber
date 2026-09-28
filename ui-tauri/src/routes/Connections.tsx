@@ -104,7 +104,7 @@ export function Connections() {
         balanceSummary={snapshot.balanceSummary}
       />
 
-      <div className="rounded-xl border bg-card">
+      <div className="kb-surface">
         <WalletsFilters
           filteredCount={filteredConnections.length}
           hasActiveFilters={hasActiveFilters}

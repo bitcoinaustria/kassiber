@@ -340,7 +340,7 @@ export function ReviewDataTable({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-lg border bg-card">
+      <div className="kb-surface overflow-hidden">
         <div
           className={cn(
             "grid grid-cols-2 divide-x-0 divide-y divide-border sm:divide-x sm:divide-y-0",
@@ -365,7 +365,7 @@ export function ReviewDataTable({
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card">
+      <div className="kb-surface">
         <div className="flex flex-col gap-3 border-b p-3 lg:flex-row lg:items-center lg:justify-between sm:px-4">
           <div className="flex min-w-0 items-center gap-2">
             <FileSearch

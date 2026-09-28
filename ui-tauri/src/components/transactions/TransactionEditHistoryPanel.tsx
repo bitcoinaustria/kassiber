@@ -82,13 +82,13 @@ function FieldDiffRow({
         <span className="truncate font-medium text-foreground">{field.label}</span>
       </div>
       <div className="grid min-w-0 gap-1 sm:grid-cols-2">
-        <div className="min-w-0 rounded border bg-muted/40 px-2 py-1">
+        <div className="min-w-0 rounded-md border bg-muted/40 px-2 py-1">
           <div className="text-2xs uppercase text-muted-foreground">{t("history.before")}</div>
           <div className={cn("truncate", hiddenClass(hideSensitive))}>
             {field.before_label}
           </div>
         </div>
-        <div className="min-w-0 rounded border bg-background px-2 py-1">
+        <div className="min-w-0 rounded-md border bg-background px-2 py-1">
           <div className="text-2xs uppercase text-muted-foreground">{t("history.after")}</div>
           <div className={cn("truncate", hiddenClass(hideSensitive))}>
             {field.after_label}
@@ -97,12 +97,12 @@ function FieldDiffRow({
         {added.length || removed.length ? (
           <div className="sm:col-span-2 flex flex-wrap gap-1 text-xs text-muted-foreground">
             {added.map((tag) => (
-              <span key={`add-${tag}`} className={cn("rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300", hiddenClass(hideSensitive))}>
+              <span key={`add-${tag}`} className={cn("rounded-md bg-emerald-100 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300", hiddenClass(hideSensitive))}>
                 +{tag}
               </span>
             ))}
             {removed.map((tag) => (
-              <span key={`remove-${tag}`} className={cn("rounded bg-rose-100 px-1.5 py-0.5 text-rose-700 dark:bg-rose-950 dark:text-rose-300", hiddenClass(hideSensitive))}>
+              <span key={`remove-${tag}`} className={cn("rounded-md bg-rose-100 px-1.5 py-0.5 text-rose-700 dark:bg-rose-950 dark:text-rose-300", hiddenClass(hideSensitive))}>
                 -{tag}
               </span>
             ))}
@@ -176,7 +176,7 @@ export function TransactionHistoryTimeline({
         return (
           <details
             key={event.id}
-            className="group rounded-md border bg-card"
+            className="kb-surface-inset group"
           >
             <summary className="grid cursor-pointer list-none gap-2 p-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto]">
               <div className="min-w-0 space-y-1">
@@ -290,7 +290,7 @@ export function TransactionEditHistoryPanel({
   const { t } = useTranslation("transactions");
   const staleCount = stale?.edit_count ?? 0;
   return (
-    <details className="group rounded-md border bg-card">
+    <details className="kb-surface-inset group">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3 [&::-webkit-details-marker]:hidden">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <History className="size-4 text-muted-foreground" aria-hidden="true" />

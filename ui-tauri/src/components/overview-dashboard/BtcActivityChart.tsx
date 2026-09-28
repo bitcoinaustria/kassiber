@@ -812,7 +812,7 @@ export const BtcActivityChart = ({
     return (
       <div
         className={cn(
-          "treasury-chart-card relative z-10 flex min-w-0 flex-1 flex-col gap-3 rounded-lg border bg-card p-3",
+          "kb-surface treasury-chart-card relative z-10 flex min-w-0 flex-1 flex-col gap-3 p-3",
           expanded
             ? "h-full min-h-0 overflow-hidden rounded-none border-0"
             : "overflow-visible",
@@ -998,7 +998,7 @@ export const BtcActivityChart = ({
                   })}
                   aria-pressed={seriesVisible[item.key]}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-current transition-[background-color,opacity] duration-200 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
+                    "inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-current transition-[background-color,opacity] duration-200 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
                     !seriesVisible[item.key] && "opacity-30",
                     activeSeries !== null &&
                       activeSeries !== item.key &&

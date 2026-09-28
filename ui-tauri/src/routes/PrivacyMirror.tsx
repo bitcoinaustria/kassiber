@@ -17,8 +17,10 @@ import { bookIdentityKey, useUiStore } from "@/store/ui";
 const readableCode = (code: string) => code.replace(/_/g, " ");
 type Investigate = (investigation: PrivacyInvestigation, workspace?: AnalysisWorkspace, tab?: AnalysisTab) => void;
 
-function ExposureFinding({ finding, onInvestigate, onAsk, asking }: {
+function ExposureFinding({ finding, onInvestigate, onAsk, asking, nested = false }: {
   finding: PrivacyFinding;
+  /** Inside a collapsible card, where it is a tile rather than a card. */
+  nested?: boolean;
   onInvestigate?: Investigate;
   onAsk?: (investigation?: PrivacyInvestigation) => void;
   asking?: boolean;
@@ -26,7 +28,7 @@ function ExposureFinding({ finding, onInvestigate, onAsk, asking }: {
   const { t } = useTranslation("privacyMirror");
   const contextOnly = finding.relevance === "received_context" || finding.relevance === "nearby_context";
   return (
-    <article className={cn("rounded-lg border bg-card p-4", !contextOnly && finding.severity === "warning" && "border-amber-500/35")} data-testid="privacy-finding" data-relevance={finding.relevance}>
+    <article className={cn(nested ? "kb-surface-inset p-4" : "kb-surface p-(--kb-card-padding)", !contextOnly && finding.severity === "warning" && "border-amber-500/35")} data-testid="privacy-finding" data-relevance={finding.relevance}>
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span>{t(`category.${finding.category}`)}</span>
         <span aria-hidden="true">·</span>
@@ -53,23 +55,24 @@ function ExposureFinding({ finding, onInvestigate, onAsk, asking }: {
 }
 
 /** Repeated presentation rows fold into one disclosure; evidence and counts stay per finding. */
-function FindingList({ findings, onInvestigate, onAsk, asking }: {
+function FindingList({ findings, onInvestigate, onAsk, asking, nested = false }: {
   findings: PrivacyFinding[];
   onInvestigate?: Investigate;
   onAsk?: (investigation?: PrivacyInvestigation) => void;
   asking?: boolean;
+  nested?: boolean;
 }) {
   const { t } = useTranslation("privacyMirror");
   return <>{groupPrivacyFindings(findings).map(group => group.length === 1 ? (
-    <ExposureFinding key={group[0].id} finding={group[0]} onInvestigate={onInvestigate} onAsk={onAsk} asking={asking} />
+    <ExposureFinding key={group[0].id} finding={group[0]} onInvestigate={onInvestigate} onAsk={onAsk} asking={asking} nested={nested} />
   ) : (
-    <details key={group[0].id} className="rounded-lg border bg-card">
+    <details key={group[0].id} className={nested ? "kb-surface-inset" : "kb-surface"}>
       <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
         {t(`findingTitle.${group[0].code}`, { defaultValue: group[0].title })}
         <span className="ml-2 text-xs font-normal text-muted-foreground">{t("repeatedFindings", { count: group.length })}</span>
       </summary>
       <div className="space-y-2 border-t p-3">
-        {group.map(finding => <ExposureFinding key={finding.id} finding={finding} onInvestigate={onInvestigate} onAsk={onAsk} asking={asking} />)}
+        {group.map(finding => <ExposureFinding key={finding.id} finding={finding} onInvestigate={onInvestigate} onAsk={onAsk} asking={asking} nested />)}
       </div>
     </details>
   ))}</>;
@@ -113,7 +116,7 @@ export function PrivacyMirrorPayloadView({ payload, onRefresh, refreshing = fals
       </header>
       {refreshError && <div role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm"><p className="font-medium">{t("refreshFailed")}</p><p className="mt-1 text-muted-foreground">{refreshError}</p></div>}
       {actionError && <p role="alert" className="text-sm text-destructive">{actionError}</p>}
-      <section className="rounded-xl border bg-card p-5" data-testid="privacy-mirror-summary" data-headline={headline}>
+      <section className="kb-surface p-(--kb-card-padding)" data-testid="privacy-mirror-summary" data-headline={headline}>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <h2 className="text-lg font-semibold">{t(`headline.${headline}`)}</h2>
           <Badge variant="outline">{t(`coverage.status.${coverage.status}`)}</Badge>
@@ -127,16 +130,16 @@ export function PrivacyMirrorPayloadView({ payload, onRefresh, refreshing = fals
         <h2 className="text-sm font-semibold">{t("groups.attention")} <span className="font-mono text-muted-foreground">{attention.length}</span></h2>
         <FindingList findings={attention} onInvestigate={onInvestigate} onAsk={onAsk} asking={asking} />
       </section>}
-      {context.length > 0 && <details className="rounded-lg border bg-card" data-testid="privacy-mirror-context">
+      {context.length > 0 && <details className="kb-surface" data-testid="privacy-mirror-context">
         <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
           {t("groups.context")} <span className="font-mono text-muted-foreground">{context.length}</span>
           <span className="ml-2 text-xs font-normal text-muted-foreground">{t("groups.contextNote")}</span>
         </summary>
         <div className="space-y-2 border-t p-3">
-          <FindingList findings={context} onInvestigate={onInvestigate} asking={asking} />
+          <FindingList findings={context} onInvestigate={onInvestigate} asking={asking} nested />
         </div>
       </details>}
-      <details className="rounded-lg border bg-card" data-testid="privacy-mirror-coverage">
+      <details className="kb-surface" data-testid="privacy-mirror-coverage">
         <summary className="cursor-pointer px-4 py-3 text-sm font-medium">{t("coverage.title")}</summary>
         <div className="border-t px-4 pb-4">
           <p className="pt-3 text-xs text-muted-foreground">{t("population.domains", { count: summary.domain_count })}</p>

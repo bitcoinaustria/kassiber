@@ -1161,7 +1161,7 @@ export function SettingsScreen({
       <div className={screenPanelClassName}>
         <div className="mx-auto flex w-full max-w-[1100px] min-w-0 flex-col gap-(--kb-page-gap)">
           {deferredConnectionSetup ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
               <span>
                 {deferredConnectionSetup.reason
                   ? t("page.deferred.bodyWithReason", {
@@ -1285,7 +1285,7 @@ export function SettingsScreen({
                   onChange={(event) => setResetDataConfirm(event.target.value)}
                 />
               </div>
-              <div className="flex items-start gap-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+              <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
                 <Checkbox
                   id="reset-data-clear-shared-rates"
                   checked={resetDataClearSharedRates}

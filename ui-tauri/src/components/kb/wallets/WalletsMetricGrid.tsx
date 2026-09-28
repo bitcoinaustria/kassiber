@@ -159,7 +159,7 @@ export function WalletsMetricGrid({
       : t("metrics.taxFreeBlockedJournals");
 
   return (
-    <div className="overflow-hidden rounded-lg border bg-card">
+    <div className="kb-surface overflow-hidden">
       <div
         className={
           taxFreeBalance

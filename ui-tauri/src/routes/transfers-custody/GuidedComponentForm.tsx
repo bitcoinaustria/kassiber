@@ -596,8 +596,8 @@ export function GuidedComponentForm({
   if (variant === "embedded") {
     return (
       <>
-        <div className="min-h-0 overflow-y-auto px-6 py-5">{body}</div>
-        <div className="border-t bg-background/80 px-6 py-4">{footer}</div>
+        <div className="min-h-0 overflow-y-auto p-(--kb-card-padding)">{body}</div>
+        <div className="border-t bg-background/80 px-(--kb-card-padding) py-3">{footer}</div>
       </>
     );
   }

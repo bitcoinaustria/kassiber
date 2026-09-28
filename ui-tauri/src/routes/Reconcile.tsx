@@ -413,7 +413,7 @@ export function Reconcile() {
         <p className={pageDescriptionClassName}>{t("reconcile.description")}</p>
       </div>
 
-      <div className="rounded-lg border bg-card p-3">
+      <div className="kb-surface p-3">
         <div className="space-y-3">
           <Textarea
             value={input}
@@ -475,7 +475,7 @@ export function Reconcile() {
       </div>
 
       {errorMessage ? (
-        <div className="rounded-lg border bg-card p-4 text-sm text-destructive">
+        <div className="kb-surface p-(--kb-card-padding) text-sm text-destructive">
           {errorMessage}
         </div>
       ) : null}
@@ -517,7 +517,7 @@ export function Reconcile() {
             ) : null}
           </div>
 
-          <div className="overflow-hidden rounded-lg border bg-card">
+          <div className="kb-surface overflow-hidden">
             <div className="flex flex-col gap-2 border-b p-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">
                 {t("reconcile.scanned", {
@@ -596,7 +596,7 @@ export function Reconcile() {
                                     onClick={() => toggleExpand(rowKey)}
                                     aria-label={isOpen ? t("reconcile.hideLegsAria") : t("reconcile.showLegsAria")}
                                     aria-expanded={isOpen}
-                                    className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                                    className="rounded-md p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                                   >
                                     {isOpen ? (
                                       <ChevronDown className="size-3.5" />
@@ -663,7 +663,7 @@ export function Reconcile() {
           </div>
 
           {report?.warnings && report.warnings.length > 0 ? (
-            <div className="space-y-1 rounded-lg border bg-card p-3 text-xs text-muted-foreground">
+            <div className="kb-surface space-y-1 p-3 text-xs text-muted-foreground">
               {report.warnings.map((warning, index) => (
                 <p key={index}>⚠ {warning}</p>
               ))}

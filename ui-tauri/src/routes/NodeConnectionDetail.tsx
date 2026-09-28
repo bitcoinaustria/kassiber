@@ -509,7 +509,7 @@ function NodeOperatorHero({
   const netRoutingBtc = netRoutingSat / 100_000_000;
 
   return (
-    <Card className="rounded-xl">
+    <Card>
       <CardContent className="grid gap-4 px-4 py-4 xl:grid-cols-[minmax(0,1fr)_220px]">
         <div className="min-w-0 space-y-4">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -1318,7 +1318,7 @@ function ChannelRow({
         */}
         <button
           type="button"
-          className="flex min-w-0 flex-col gap-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+          className="flex min-w-0 flex-col gap-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md"
           onClick={(event) => {
             event.stopPropagation();
             onOpen();

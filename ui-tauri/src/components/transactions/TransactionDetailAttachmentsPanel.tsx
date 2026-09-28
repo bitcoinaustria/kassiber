@@ -291,7 +291,7 @@ export function AttachmentsPanel({
   };
 
   return (
-    <div className="rounded-md border bg-card p-3">
+    <div className="kb-surface-inset p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <Paperclip

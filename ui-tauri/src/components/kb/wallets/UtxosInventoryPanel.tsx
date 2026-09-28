@@ -759,7 +759,7 @@ export function UtxosInventoryPanel({
     <Card variant="flush">
       <div className="flex flex-col gap-3 border-b bg-muted/[0.08] p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-5 sm:py-3.5">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background/70 text-muted-foreground shadow-sm">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-background/70 text-muted-foreground">
             <Coins className="size-4" aria-hidden="true" />
           </span>
           <div className="min-w-0">

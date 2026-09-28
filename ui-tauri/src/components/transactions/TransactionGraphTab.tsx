@@ -1346,7 +1346,7 @@ function SwapRouteStrip({
               <button
                 type="button"
                 className={cn(
-                  "mt-2 inline-flex max-w-full items-center justify-center rounded border border-border/70 bg-muted/35 px-1.5 py-0.5 text-2xs font-medium tabular-nums text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "mt-2 inline-flex max-w-full items-center justify-center rounded-md border border-border/70 bg-muted/35 px-1.5 py-0.5 text-2xs font-medium tabular-nums text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   hideSensitive && "sensitive",
                 )}
                 aria-pressed={feeMode === "absolute"}

@@ -131,7 +131,7 @@ function SourceEvidence({ source, label, reference, node }: { source: Source; la
     pricing_pair: t("explanation.pricePair"), pricing_fetched_at: t("explanation.priceFetched"),
     pricing_granularity: t("explanation.priceGranularity"), pricing_method: t("explanation.priceMethod"),
   };
-  return <details id={node} open={(typeof window !== "undefined" && window.location.hash === `#${node}`) || undefined} className="rounded border p-2">
+  return <details id={node} open={(typeof window !== "undefined" && window.location.hash === `#${node}`) || undefined} className="rounded-lg border p-2">
     <summary className="cursor-pointer break-all">{label}: {source.transaction_id ?? t("explanation.missingSource")}</summary>
     <a className="text-xs underline" href={`${resultLink(reference)}#${node}`}>{t("explanation.sourceLink")}</a>
     <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 break-all text-xs">
