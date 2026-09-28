@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -64,7 +62,6 @@ describe("WindowFrame", () => {
       userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     });
 
-    expect(macTauri).toContain("--kb-native-titlebar-background");
     expect(macTauri).toContain("data-tauri-drag-region");
     expect(macBrowser).not.toContain("data-tauri-drag-region");
     expect(windowsTauri).not.toContain("data-tauri-drag-region");
@@ -77,19 +74,18 @@ describe("WindowFrame", () => {
       userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
     });
 
-    expect(html).toContain("--kb-native-titlebar-background");
+    expect(html).toContain("data-tauri-drag-region");
     expect(html).not.toContain("Alpha software warning");
   });
 
-  it("pins dark native chrome to RGB 18 18 18", () => {
-    const css = readFileSync(
-      new URL("../../styles/globals.css", import.meta.url),
-      "utf8",
-    );
+  it("frames screens outside the shell in the shell's own outline", () => {
+    const html = renderFrame();
 
-    expect(css).toMatch(
-      /\.dark\s*\{[\s\S]*--kb-native-titlebar-background:\s*#121212;/,
-    );
+    // Title bar row on the chrome, then the page on the inset panel with the
+    // dashboard panel's hairline and gutters.
+    expect(html).toContain("h-(--kb-toolbar-height)");
+    expect(html).toContain("md:px-1.5 md:pb-1.5");
+    expect(html).toContain("md:rounded-xl md:border md:border-border/70");
   });
 
   it("keeps portalled dialogs below the title bar, so it stays draggable", () => {

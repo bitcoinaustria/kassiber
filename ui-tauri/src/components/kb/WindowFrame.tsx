@@ -2,6 +2,7 @@ import type { Window as TauriWindow } from "@tauri-apps/api/window";
 import * as React from "react";
 
 import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
+import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
 import { AlphaNotice } from "./AlphaNotice";
@@ -181,21 +182,39 @@ export function WindowFrame({ children }: { children: React.ReactNode }) {
   return (
     <WindowChromeContext.Provider value={context}>
       <div className="relative flex h-svh flex-col overflow-hidden bg-sidebar">
-        {insets.nativeTitlebar && !claimed ? (
+        {/*
+          Screens that do not draw the shell (setup, a route still loading, the
+          error boundary) get the shell's outline anyway: the title bar row on
+          the chrome, and the page on an inset panel with the same hairline and
+          gutters. The row is window chrome on macOS (traffic lights, drag) and
+          carries the alpha warning at its right end, as the shell's does.
+        */}
+        {!claimed ? (
           <div
-            aria-hidden="true"
-            data-tauri-drag-region
-            className="h-[var(--kb-native-titlebar-height)] shrink-0 bg-[var(--kb-native-titlebar-background)]"
-          />
-        ) : null}
-        <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
-        {/* Screens without the shell's title bar still carry the warning, in
-            the same place: the right end of the top row. */}
-        {preAlphaBannerVisible && !claimed ? (
-          <div className="pointer-events-none absolute top-0 right-3 z-40 flex h-(--kb-toolbar-height) items-center">
-            <AlphaNotice className="pointer-events-auto" />
+            data-tauri-drag-region={insets.nativeTitlebar ? "" : undefined}
+            className="flex h-(--kb-toolbar-height) shrink-0 items-center justify-end pr-3"
+          >
+            {preAlphaBannerVisible ? <AlphaNotice /> : null}
           </div>
         ) : null}
+        {/* The same two wrappers whether or not a screen claims the title bar:
+            changing the element tree here would remount the whole router. */}
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-hidden",
+            !claimed && "md:px-1.5 md:pb-1.5",
+          )}
+        >
+          <div
+            className={cn(
+              "h-full w-full overflow-hidden",
+              !claimed &&
+                "bg-background md:rounded-xl md:border md:border-border/70",
+            )}
+          >
+            {children}
+          </div>
+        </div>
       </div>
     </WindowChromeContext.Provider>
   );

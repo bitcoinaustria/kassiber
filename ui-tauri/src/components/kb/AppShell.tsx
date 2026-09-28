@@ -152,7 +152,6 @@ import {
   type SettingsSectionId,
 } from "@/components/kb/settingsSections";
 import { ShellSearch } from "@/components/kb/shell/ShellSearch";
-import { BlockDeckBand } from "@/components/kb/shell/BlockDeckBackdrop";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantScreenContext } from "@/components/ai/assistantSession";
 import { assistantScreenContextFor } from "@/components/ai/assistantScreenContext";
@@ -3062,13 +3061,9 @@ function ShellTitlebar({
   return (
     <header
       data-tauri-drag-region={nativeTitlebar ? "deep" : undefined}
-      className={cn(
-        "relative flex h-(--kb-toolbar-height) w-full shrink-0 items-center select-none",
-        // Locked, the row carries only the alpha chip. Without a native title
-        // bar the lock screen starts at the window's top edge, so lift the row
-        // above it; unlocked it must stay below dialogs.
-        controlsVisible ? "z-20" : "z-[60]",
-      )}
+      // Locked, the row keeps only the alpha chip; the lock screen starts
+      // below it on every platform, so the row needs no special stacking.
+      className="relative z-20 flex h-(--kb-toolbar-height) w-full shrink-0 items-center select-none"
     >
       <div
         className={cn(
@@ -3577,6 +3572,23 @@ function CurrencyToggle() {
   );
 }
 
+/**
+ * The lock and import-restore screens, drawn in the shell's own outline: the
+ * chrome, the title bar row above (traffic lights and the alpha chip stay on
+ * it), and an inset panel with the page panel's hairline and gutters, with the
+ * card centred in it. A locked window keeps looking like this app, and nothing
+ * of the book shows through: the panel covers the nav and the page.
+ */
+function LockedFrame({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-x-0 top-(--kb-toolbar-height) bottom-0 z-50 flex bg-sidebar md:px-1.5 md:pb-1.5">
+      <div className="flex min-w-0 flex-1 items-center justify-center overflow-y-auto bg-background px-4 text-foreground md:rounded-xl md:border md:border-border/70">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function LockScreen({
   reason,
   passphraseRequired = true,
@@ -3691,20 +3703,9 @@ function LockScreen({
   }, [autoTouchIdPrompt, canUseTouchId, submitTouchId]);
 
   return (
-    <div className="fixed inset-x-0 top-[var(--kb-window-top-inset)] bottom-0 z-50 flex items-center justify-center overflow-hidden bg-background px-4 text-foreground">
-      {/*
-       * Blocks of confirmed transactions, run across the whole lock screen, so a
-       * locked window looks like the app rather than a dialog on a flat field.
-       *
-       * Full height and unmasked: the field is this screen's backdrop and has
-       * nothing to dissolve into, unlike the nav's accent strip. That also puts
-       * art behind the centred card — where a lock prompt belongs — for its
-       * frost to blur. The band measures itself, which is what keeps the block
-       * size put instead of magnifying with window height.
-       */}
-      <BlockDeckBand className="h-full" />
+    <LockedFrame>
       <form
-        className="kb-glass-dialog relative z-10 w-full max-w-md rounded-lg border p-5 text-card-foreground"
+        className="kb-surface w-full max-w-md p-5 text-card-foreground"
         onSubmit={(event) => {
           void submit(event);
         }}
@@ -3839,7 +3840,7 @@ function LockScreen({
           {t("lock.backToSetup")}
         </Button>
       </form>
-    </div>
+    </LockedFrame>
   );
 }
 
@@ -3852,8 +3853,8 @@ function ImportRootRestoreScreen({
 }) {
   const { t } = useTranslation("chrome");
   return (
-    <div className="fixed inset-x-0 top-[var(--kb-window-top-inset)] bottom-0 z-50 flex items-center justify-center bg-background px-4 text-foreground">
-      <div className="w-full max-w-sm rounded-lg border border-border bg-card p-5 text-card-foreground shadow-xl ring-1 ring-border/60">
+    <LockedFrame>
+      <div className="kb-surface w-full max-w-sm p-5 text-card-foreground">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Database className="size-5" aria-hidden="true" />
@@ -3878,6 +3879,6 @@ function ImportRootRestoreScreen({
           </div>
         )}
       </div>
-    </div>
+    </LockedFrame>
   );
 }
