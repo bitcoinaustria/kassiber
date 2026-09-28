@@ -2,6 +2,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from kassiber.core import custody_journal
 from kassiber.core.ui_snapshot import (
@@ -612,6 +613,31 @@ class OverviewFiatCompletenessTest(unittest.TestCase):
         # overstated: nothing is uncovered, yet the block stays incomplete.
         self.assertEqual(completeness["basisUncoveredMsat"], 0)
         self.assertEqual(completeness["earliestIncompleteAt"], "2026-06-04T09:00:00Z")
+
+    def test_custody_blocker_without_a_start_keeps_every_point_incomplete(self):
+        conn = self._db()
+        _seed_directional_book(conn, "nostart", journals=True)
+        _insert_market_rate(conn)
+        self._add_quarantined_transaction(
+            conn,
+            "nostart",
+            amount_btc="0.1",
+            direction="outbound",
+            occurred_at="2026-06-04T09:00:00Z",
+        )
+        _activate_book(conn, "nostart")
+
+        with patch(
+            "kassiber.core.custody_quantity_store.custody_quantity_readiness_summary",
+            side_effect=AppError(
+                "Custody state unavailable", code="custody_quantity_state_unavailable"
+            ),
+        ):
+            completeness = build_overview_snapshot(conn)["fiat"]["completeness"]
+
+        self.assertIn("custody_unresolved", completeness["reasons"])
+        # The quarantine's date must not hide that custody coverage is unknown.
+        self.assertIsNone(completeness["earliestIncompleteAt"])
 
     def test_stale_journals_do_not_claim_coverage(self):
         conn = self._db()

@@ -3133,16 +3133,19 @@ def _overview_fiat_completeness(
     )
     earliest_incomplete_at = None
     if not stale and not cost_basis_complete:
-        candidates = [
-            str(value)
-            for value in (
-                quarantined["earliest_at"] if flags["quarantines"] else None,
-                custody.get("blocked_from") if flags["custody_unresolved"] else None,
-                missing_prices["earliest_at"] if flags["missing_prices"] else None,
+        starts = [
+            start
+            for active, start in (
+                (flags["quarantines"], quarantined["earliest_at"]),
+                (flags["custody_unresolved"], custody.get("blocked_from")),
+                (flags["missing_prices"], missing_prices["earliest_at"]),
             )
-            if value
+            if active
         ]
-        earliest_incomplete_at = min(candidates) if candidates else None
+        # A blocker with no known start can reach back to the first point, so
+        # another blocker's date must not become the cutoff.
+        if starts and all(starts):
+            earliest_incomplete_at = min(str(start) for start in starts)
     return {
         "state": state,
         "costBasisComplete": cost_basis_complete,
