@@ -265,6 +265,19 @@ class SwapMatchingCliTest(unittest.TestCase):
             )
             self.assertGreaterEqual(explicit["summary"]["count"], 1)
             conn.rollback()
+            # Guards read before an earlier pass still block, whatever the
+            # projection says now.
+            every_row = {
+                row["id"] for row in conn.execute("SELECT id FROM transactions")
+            }
+            guarded = handlers.bulk_pair_transfers(
+                conn, "Main", "Swap", confidence="strong", commit=False,
+                guards=handlers.ProjectionPairingGuards(
+                    booked_move_transaction_ids=every_row, ownership_candidates=[]
+                ),
+            )
+            self.assertEqual(guarded["summary"]["count"], 0)
+            conn.rollback()
         finally:
             conn.close()
 

@@ -2328,6 +2328,45 @@ class FreshnessTest(unittest.TestCase):
         self.assertEqual(failed["status"], "failed")
         self.assertEqual(failed["error"], {"code": "tax_failed", "message": "boom"})
 
+    def test_bulk_pairing_keeps_the_guards_a_rule_pair_would_invalidate(self):
+        # A rule pair bumps the input version, so a projection read afterwards
+        # blocks nothing; bulk pairing must use the guards read before it.
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        seen = []
+
+        def rule_pass(*_args, **kwargs):
+            seen.append(kwargs["guards"])
+            conn.execute(
+                "UPDATE profiles SET journal_input_version = journal_input_version + 1 "
+                "WHERE id = ?",
+                (profile_id,),
+            )
+            return {"summary": {"count": 1}}
+
+        def bulk_pass(*_args, **kwargs):
+            seen.append(kwargs["guards"])
+            return {"summary": {"count": 0}}
+
+        guards = daemon_freshness.projection_pairing_guards(conn, profile_id)._replace(
+            booked_move_transaction_ids={"booked-move"}
+        )
+        with patch(
+            "kassiber.daemon_freshness.suggest_transfer_candidates",
+            return_value={"counts": {}},
+        ), patch(
+            "kassiber.daemon_freshness.projection_pairing_guards",
+            return_value=guards,
+        ) as read_guards, patch(
+            "kassiber.daemon_freshness.apply_transfer_rules", side_effect=rule_pass
+        ), patch(
+            "kassiber.daemon_freshness.bulk_pair_transfers", side_effect=bulk_pass
+        ):
+            daemon_freshness._auto_pair_before_journals(conn, {"profile_id": profile_id})
+
+        read_guards.assert_called_once()
+        self.assertEqual(seen, [guards, guards])
+
     def test_auto_pair_before_journals_returns_applied_and_remaining_counts(self):
         conn = self._db()
         profile_id = _seed_profile(conn)
@@ -2355,8 +2394,9 @@ class FreshnessTest(unittest.TestCase):
                 {"profile_id": profile_id},
             )
 
+        guards = rules.call_args.kwargs["guards"]
         rules.assert_called_once_with(
-            conn, "ws", profile_id, commit=False, skip_user_unpaired=True
+            conn, "ws", profile_id, commit=False, skip_user_unpaired=True, guards=guards
         )
         bulk.assert_called_once_with(
             conn,
@@ -2365,6 +2405,7 @@ class FreshnessTest(unittest.TestCase):
             confidence="exact",
             commit=False,
             skip_user_unpaired=True,
+            guards=guards,
         )
         self.assertEqual(summary["applied"], 3)
         self.assertEqual(summary["rules_applied"], 1)

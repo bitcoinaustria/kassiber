@@ -21,6 +21,7 @@ from .cli.handlers import (
     enrich_wallet_from_btcpay_provenance,
     process_journals,
     prefetch_wallets_from_backend,
+    projection_pairing_guards,
     suggest_transfer_candidates,
     sync_btcpay_commercial_provenance,
     sync_configured_btcpay_wallet,
@@ -612,8 +613,16 @@ def _auto_pair_before_journals(
     before = _transfer_candidate_counts(
         suggest_transfer_candidates(conn, workspace_ref, profile_ref)
     )
+    # A pair a rule applies makes the projection stale, and a stale projection
+    # blocks nothing; both passes use what it said before the first pair.
+    guards = projection_pairing_guards(conn, profile_ref)
     rules = apply_transfer_rules(
-        conn, workspace_ref, profile_ref, commit=False, skip_user_unpaired=True
+        conn,
+        workspace_ref,
+        profile_ref,
+        commit=False,
+        skip_user_unpaired=True,
+        guards=guards,
     )
     bulk_exact = bulk_pair_transfers(
         conn,
@@ -622,6 +631,7 @@ def _auto_pair_before_journals(
         confidence="exact",
         commit=False,
         skip_user_unpaired=True,
+        guards=guards,
     )
     remaining = _transfer_candidate_counts(
         suggest_transfer_candidates(conn, workspace_ref, profile_ref)
@@ -678,7 +688,8 @@ def refresh_journals_step(
 
     Stored MOVE decisions and ownership review cards only block conflicting
     automatic pairs while the projection is current, so a stale projection is
-    rebuilt first. Pairs applied afterwards invalidate it again; they are stored
+    rebuilt first, and both pairing passes use what it said before the first
+    pair. Pairs applied afterwards invalidate it again; they are stored
     together with the second rebuild and roll back if that rebuild fails. With
     ``skip_rebuild_when_current`` a current projection that gained no pairs is
     left as is; every other case rebuilds exactly once more.
