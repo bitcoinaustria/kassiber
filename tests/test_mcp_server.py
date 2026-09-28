@@ -796,3 +796,32 @@ class OutdatedBrokerMcpTests(_TwoBookFixture):
         ):
             outcome = self.provider().call_tool("status", {}, threading.Event())
         self.assertEqual(outcome.structured["error"]["code"], "operator_broker_outdated")
+
+
+class StrictJsonTests(unittest.TestCase):
+    def test_non_json_constants_are_parse_errors(self):
+        server = McpServer(_FakeProvider(), name="kassiber", version="test")
+        line = b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{"x":NaN}}}\n'
+        writer = io.BytesIO()
+        serve(server, io.BytesIO(line), writer)
+        response = json.loads(writer.getvalue().decode().splitlines()[0])
+        self.assertEqual(response["error"]["code"], -32700)
+
+    def test_one_shot_arguments_reject_non_json_constants(self):
+        with self.assertRaises(AppError) as raised:
+            mcp_cli._parse_arguments('{"limit": Infinity}')
+        self.assertEqual(raised.exception.code, "validation")
+
+    def test_fresh_machine_mcp_call_creates_no_project(self):
+        with tempfile.TemporaryDirectory() as state:
+            catalog = Path(state) / "projects.json"
+            with mock.patch("kassiber.projects.catalog_path", return_value=catalog), mock.patch(
+                "kassiber.projects.ensure_default_project",
+                side_effect=AssertionError("must not create a project"),
+            ), mock.patch(
+                "kassiber.cli.main._maybe_migrate_default_state_root"
+            ):
+                payload, code = _run_cli("--machine", "mcp", "call", "--tool", "status")
+            self.assertEqual(code, 1)
+            self.assertEqual(payload["error"]["code"], "not_initialized")
+            self.assertFalse(catalog.exists())

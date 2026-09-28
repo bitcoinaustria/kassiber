@@ -125,8 +125,8 @@ def describe_tools() -> dict[str, Any]:
 
 def _parse_arguments(raw: str) -> dict[str, Any]:
     try:
-        value = json.loads(raw)
-    except ValueError:
+        value = json.loads(raw, parse_constant=_reject_json_constant)
+    except (ValueError, RecursionError):
         raise AppError(
             "--arguments must be a JSON object",
             code="validation",
@@ -135,6 +135,10 @@ def _parse_arguments(raw: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise AppError("--arguments must be a JSON object", code="validation", retryable=False)
     return value
+
+
+def _reject_json_constant(name: str) -> Any:
+    raise ValueError(f"invalid JSON constant {name}")
 
 
 def _project_name(args: argparse.Namespace) -> str | None:

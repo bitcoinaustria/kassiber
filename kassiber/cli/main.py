@@ -6161,6 +6161,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             # a stderr the client may persist. Each call resolves its book.
             dispatch(None, args)
             return 0
+        if args.command == "mcp":
+            # Before path resolution or broker routing, both of which would
+            # create a default project on a machine with no Kassiber state.
+            _require_existing_book_for_agent_read(args)
         _maybe_migrate_default_state_root(args)
         try:
             show_cached_update(args)
@@ -6175,8 +6179,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         brokered_exit = route_brokered_command(args, raw_argv)
         if brokered_exit is not None:
             return brokered_exit
-        if args.command == "mcp":
-            _require_existing_book_for_agent_read(args)
         operator_child = os.environ.get("KASSIBER_OPERATOR_CHILD") == "1"
         if operator_child:
             prime_db_passphrase(args)
@@ -6252,6 +6254,19 @@ def _maybe_migrate_default_state_root(args: argparse.Namespace) -> None:
 def _require_existing_book_for_agent_read(args: argparse.Namespace) -> None:
     """`mcp call` reads; unlike other CLI reads it never creates a book."""
 
+    from ..projects import load_catalog
+
+    if (
+        getattr(args, "data_root", None) is None
+        and getattr(args, "project", None) is None
+        and not load_catalog().get("projects")
+    ):
+        raise AppError(
+            "No Kassiber project exists on this machine yet",
+            code="not_initialized",
+            hint="Ask the user to set Kassiber up first (desktop app or `kassiber init`).",
+            retryable=False,
+        )
     paths = resolve_runtime_paths(
         getattr(args, "data_root", None),
         getattr(args, "env_file", None),

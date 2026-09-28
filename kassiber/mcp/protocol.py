@@ -324,6 +324,11 @@ class McpServer:
         return result
 
 
+def _reject_constant(name: str) -> Any:
+    # Python accepts NaN/Infinity, which are not JSON; refuse them at the edge.
+    raise ValueError(f"invalid JSON constant {name}")
+
+
 def _reject_cursor(params: dict[str, Any]) -> None:
     # Every list fits in one page, so no cursor this server issued exists.
     if params.get("cursor") is not None:
@@ -365,7 +370,7 @@ class StdioLoop:
                 if not line.strip():
                     continue
                 try:
-                    message = json.loads(line.decode("utf-8"))
+                    message = json.loads(line.decode("utf-8"), parse_constant=_reject_constant)
                 except (UnicodeDecodeError, ValueError, RecursionError):
                     # Deeply nested JSON must not end the session.
                     self._write(_error_response(None, PARSE_ERROR, "Parse error"))
