@@ -95,6 +95,11 @@ Interactive unlock may prompt on the controlling terminal. `--machine`,
 `--non-interactive`, piped calls without an explicit secret fd, and ordinary
 commands never open a surprise terminal or GUI prompt; they return the existing
 `interaction_required` error with an operator command in the hint.
+Its `details.reason` is `operator_lease_required` (brokered, no lease),
+`database_passphrase` (encrypted book outside a lease), or
+`fresh_local_authentication` (admin or unlock work). The hints tell an agent
+to ask the user to run the command in their own terminal, never to collect the
+passphrase.
 
 The CLI chat transport is a long-lived streaming daemon session and is not
 routed through the broker's finite-operation queue. `kassiber chat` therefore
@@ -351,6 +356,18 @@ The child eagerly drains and caches its lease pipe after project binding and
 before command dispatch. The parent feeds all secret pipes on a dedicated
 thread while concurrently draining child stdout/stderr, so platform pipe
 capacity cannot deadlock a later command-specific secret handoff.
+The submitting client also sends its working directory and whether its own
+`KASSIBER_NO_EGRESS` kill switch is set. The admitted operation binds both,
+including in the replay fingerprint, so a reused operation id must repeat the
+same caller context. The child is still launched from the broker's directory,
+which keeps a source install's `python -m kassiber` import path independent of
+the caller. It changes into the caller's directory before dispatch, so
+relative `--output`, `--file`, and proposal paths mean what they meant to the
+caller; a vanished directory fails the operation rather than falling back.
+The caller's egress kill switch can only tighten the child's environment.
+The broker advertises this in `ping`; against an older running broker the
+client refuses a no-egress caller (`operator_broker_outdated`) and warns that
+relative paths resolve in the broker's directory.
 No-bootstrap children then authenticate and close the canonical database as a
 preflight, enforcing the queued durable database identity before even a
 credential-store-only or staged-backup handler can run.
@@ -373,7 +390,14 @@ broker about an operation accepted by a dead generation, the answer is
 exactly-once mutation delivery across broker or worker crashes.
 Unproven nonzero exits from mutating/admin children are likewise
 `result_unknown`; only read-only child failures are safely reported as
-`failed`. Every brokered passphrase-rotation attempt revokes the old lease and
+`failed`. The brokered CLI surfaces these states to machine callers. In
+`--machine` mode it writes one `operator.operation.accepted` JSON line with
+the operation id to stderr on admission. A child's own envelope passes through
+stdout unchanged. When the child produced no output, `cancelled`, `failed`,
+`result_unknown`, and oversized results become typed error envelopes
+(`operator_operation_cancelled`, `operator_operation_failed`,
+`operator_result_unknown`, `operator_result_too_large`) carrying the operation
+id and state. Every brokered passphrase-rotation attempt revokes the old lease and
 cancels its queued work after the child exits; this also covers a rekey that
 succeeded before a later acknowledgement/invalidation failure, so status never
 advertises an unusable stale secret. A live desktop owner prevents the child

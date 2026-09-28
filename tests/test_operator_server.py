@@ -276,6 +276,63 @@ class OperatorServerTest(unittest.TestCase):
         self.assertIs(submitted["broker-secret-a"], first)
         self.assertIs(submitted["broker-secret-z"], second)
 
+    def _submit_with_caller_context(self, **fields: object) -> mock.Mock:
+        server = BrokerServer.__new__(BrokerServer)
+        server.service = mock.Mock()
+        server.service.submit.return_value = {
+            "operation_id": "generation.operation",
+            "state": "queued",
+        }
+        with mock.patch(
+            "kassiber.operator.server._canonical_data_root",
+            return_value="/canonical-project",
+        ), mock.patch(
+            "kassiber.operator.server._classify_argv",
+            return_value=("status", mock.Mock(value="read")),
+        ):
+            server._handle_submit(
+                mock.Mock(),
+                {
+                    "data_root": "/caller-project",
+                    "operation_id": "generation.operation",
+                    "argv": ["status"],
+                    **fields,
+                },
+            )
+        return server.service.submit
+
+    def test_submission_binds_the_callers_directory_and_egress_switch(self) -> None:
+        with tempfile.TemporaryDirectory() as caller_directory:
+            submit = self._submit_with_caller_context(
+                working_directory=caller_directory,
+                no_egress=True,
+            )
+        self.assertEqual(submit.call_args.kwargs["working_directory"], caller_directory)
+        self.assertIs(submit.call_args.kwargs["no_egress"], True)
+
+    def test_older_clients_without_caller_context_keep_prior_behavior(self) -> None:
+        submit = self._submit_with_caller_context()
+        self.assertIsNone(submit.call_args.kwargs["working_directory"])
+        self.assertIs(submit.call_args.kwargs["no_egress"], False)
+
+    def test_submission_rejects_relative_or_missing_working_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            missing = os.path.join(root, "gone")
+            cases = {
+                "relative": ("relative/dir", "operator_protocol_error"),
+                "missing": (missing, "operator_working_directory_unavailable"),
+                "not_a_string": (7, "operator_protocol_error"),
+            }
+            for label, (value, code) in cases.items():
+                with self.subTest(label), self.assertRaises(AppError) as raised:
+                    self._submit_with_caller_context(working_directory=value)
+                self.assertEqual(raised.exception.code, code)
+
+    def test_submission_rejects_a_non_boolean_egress_flag(self) -> None:
+        with self.assertRaises(AppError) as raised:
+            self._submit_with_caller_context(no_egress="1")
+        self.assertEqual(raised.exception.code, "operator_protocol_error")
+
     def test_password_unlock_cannot_claim_touch_id_authentication(self) -> None:
         server = BrokerServer.__new__(BrokerServer)
         server.service = mock.Mock()

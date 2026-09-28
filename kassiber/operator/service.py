@@ -79,6 +79,11 @@ class Operation:
     secret_arguments: dict[str, bytearray] = field(repr=False)
     admitted_lease_epoch: str | None = None
     admin_authorized_until_monotonic: float | None = None
+    # The submitting caller's context: relative path arguments resolve against
+    # its working directory, and its egress kill switch can only tighten the
+    # broker's own environment. Neither is authority; both bind the request.
+    working_directory: str | None = None
+    no_egress: bool = False
     state: str = "queued"
     submitted_at: str = field(default_factory=now_iso)
     started_at: str | None = None
@@ -1211,6 +1216,8 @@ class OperatorService:
         operation_id: str | None = None,
         secret_arguments: dict[str, bytearray] | None = None,
         admin_authorization: AdminAuthorization | None = None,
+        working_directory: str | None = None,
+        no_egress: bool = False,
     ) -> dict[str, object]:
         owned_secrets = secret_arguments if secret_arguments is not None else {}
         ownership_transferred = False
@@ -1227,6 +1234,8 @@ class OperatorService:
                 secret_arguments=owned_secrets,
                 admin_authorization=admin_authorization,
                 transfer_secret_ownership=transfer_secret_ownership,
+                working_directory=working_directory,
+                no_egress=no_egress,
             )
         finally:
             if not ownership_transferred:
@@ -1241,6 +1250,8 @@ class OperatorService:
         secret_arguments: dict[str, bytearray],
         admin_authorization: AdminAuthorization | None,
         transfer_secret_ownership: Callable[[], None],
+        working_directory: str | None = None,
+        no_egress: bool = False,
     ) -> dict[str, object]:
         parsed, command_path, required = _parse_argv(argv)
         if command_path.startswith("operator.") or command_path in {"daemon", "chat"}:
@@ -1354,6 +1365,8 @@ class OperatorService:
                     if (
                         existing.project_id != project.public_id
                         or existing.argv != pinned_argv
+                        or existing.working_directory != working_directory
+                        or existing.no_egress != no_egress
                     ):
                         raise AppError(
                             "the operation id is already bound to another request",
@@ -1367,7 +1380,11 @@ class OperatorService:
                     if (
                         bound_project != project.public_id
                         or bound_fingerprint
-                        != _operation_request_fingerprint(pinned_argv)
+                        != _operation_request_fingerprint(
+                            pinned_argv,
+                            working_directory=working_directory,
+                            no_egress=no_egress,
+                        )
                     ):
                         raise AppError(
                             "the operation id is already bound to another request",
@@ -1423,6 +1440,8 @@ class OperatorService:
                     if required is Capability.ADMIN
                     else None
                 ),
+                working_directory=working_directory,
+                no_egress=no_egress,
             )
             worker = self._workers.get(project.identity)
             if worker is None:
@@ -1627,8 +1646,17 @@ class OperatorService:
             raise AppError(
                 "this project has no active operator lease",
                 code="interaction_required",
-                hint="Run `kassiber operator unlock` in a terminal.",
-                details={"project": project.public_id},
+                hint=(
+                    "Ask the user to run `kassiber operator unlock` in their own "
+                    "terminal (add `--capability read` for a read-only session), "
+                    "then retry. Never ask for the passphrase itself."
+                ),
+                details={
+                    "project": project.public_id,
+                    "reason": "operator_lease_required",
+                    "unlock_mode": "brokered",
+                    "user_command": "kassiber operator unlock",
+                },
                 retryable=True,
             )
         return lease
@@ -1952,7 +1980,11 @@ class OperatorService:
                 )
                 self._operation_tombstones[removable] = (
                     operation.project_id,
-                    _operation_request_fingerprint(operation.argv),
+                    _operation_request_fingerprint(
+                        operation.argv,
+                        working_directory=operation.working_directory,
+                        no_egress=operation.no_egress,
+                    ),
                 )
                 self._operation_tombstones.move_to_end(removable)
         while len(self._operation_tombstones) > MAX_RETAINED_OPERATION_TOMBSTONES:
@@ -2042,9 +2074,16 @@ def _result_exceeds_protocol_frame(result: OperationResult) -> bool:
     return len(encoded) > MAX_JSON_FRAME - _OPERATION_STATUS_FRAME_HEADROOM
 
 
-def _operation_request_fingerprint(argv: list[str]) -> str:
+def _operation_request_fingerprint(
+    argv: list[str],
+    *,
+    working_directory: str | None = None,
+    no_egress: bool = False,
+) -> str:
+    # Relative paths in argv mean something different in another working
+    # directory, so a replayed id must repeat the whole caller context.
     encoded = json.dumps(
-        argv,
+        [argv, working_directory, no_egress],
         ensure_ascii=True,
         separators=(",", ":"),
     ).encode("utf-8")

@@ -175,7 +175,7 @@ from ..diagnostics import (
 )
 from ..backup.cli import add_backup_parser, dispatch_backup
 from ..backends import preferred_explorer_base
-from ..envelope import write_text
+from ..envelope import build_error_envelope, write_text
 from ..errors import AppError
 from ..projects import (
     create_project,
@@ -6105,7 +6105,33 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         return 0
     parser = build_parser()
-    args = parser.parse_args(raw_argv)
+    if "--machine" in raw_argv:
+        # Agents parse stdout: an invalid command line must still be one
+        # machine envelope, not argparse usage text on stderr.
+        _raise_usage_errors(parser)
+        try:
+            args = parser.parse_args(raw_argv)
+        except _UsageError as exc:
+            print(
+                json.dumps(
+                    build_error_envelope(
+                        "usage_error",
+                        exc.message,
+                        hint=(
+                            "Global flags such as --machine, --format, --output, --project, "
+                            "and --data-root go before the subcommand. Check "
+                            "`kassiber --machine commands describe <command path>` for the "
+                            "exact arguments."
+                        ),
+                        details={"usage": exc.usage},
+                        retryable=False,
+                    ),
+                    indent=2,
+                )
+            )
+            return 2
+    else:
+        args = parser.parse_args(raw_argv)
     args.non_interactive = bool(args.non_interactive or args.machine)
     _configure_cli_logging(args)
 
@@ -6118,6 +6144,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     try:
+        _enter_operator_caller_directory(args)
         _verify_operator_child_project(args)
         _maybe_migrate_default_state_root(args)
         try:
@@ -6203,6 +6230,55 @@ def _maybe_migrate_default_state_root(args: argparse.Namespace) -> None:
     ):
         return
     migrate_hidden_home_state_root_if_needed()
+
+
+class _UsageError(Exception):
+    def __init__(self, message: str, usage: str) -> None:
+        super().__init__(message)
+        self.message = message
+        self.usage = usage
+
+
+def _raise_usage_errors(parser: argparse.ArgumentParser) -> None:
+    """Make every parser in the tree raise instead of printing and exiting."""
+
+    def fail(message: str, *, _parser: argparse.ArgumentParser = parser) -> None:
+        raise _UsageError(message, _parser.format_usage().strip())
+
+    parser.error = fail  # type: ignore[method-assign]
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            for child in action.choices.values():
+                _raise_usage_errors(child)
+
+
+def _enter_operator_caller_directory(args: argparse.Namespace) -> None:
+    """Resolve a queued command's relative paths where its caller ran it.
+
+    The broker launches workers from its own directory so a source install's
+    import path is unchanged; the worker moves only after startup.
+    """
+
+    directory = os.environ.get("KASSIBER_OPERATOR_WORKING_DIRECTORY")
+    if directory is None:
+        return
+    if os.environ.get("KASSIBER_OPERATOR_CHILD") != "1":
+        raise AppError(
+            "operator working directory is only valid in a broker child",
+            code="operator_project_binding_invalid",
+            retryable=False,
+        )
+    try:
+        os.chdir(directory)
+    except OSError:
+        # A relative --output would otherwise land in the broker's directory.
+        args.output = None
+        raise AppError(
+            "the caller's working directory is no longer available",
+            code="operator_working_directory_unavailable",
+            hint="Run the command from an existing directory or pass absolute paths.",
+            retryable=False,
+        ) from None
 
 
 def _verify_operator_child_project(args: argparse.Namespace) -> None:

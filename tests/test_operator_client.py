@@ -265,3 +265,72 @@ class OperatorClientSubmitTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OperatorClientCallerContextTest(unittest.TestCase):
+    def _submitted_request(self, environment: dict[str, str]) -> dict[str, object]:
+        channel = mock.MagicMock()
+        channel.__enter__.return_value = channel
+        channel.receive_json.return_value = {
+            "ok": True,
+            "data": {"operation_id": "generation.client.op", "state": "queued"},
+        }
+        client = BrokerClient()
+        prepared = prepare_arguments(["--output", "relative.json", "status"])
+        with tempfile.TemporaryDirectory() as caller_directory:
+            previous = os.getcwd()
+            os.chdir(caller_directory)
+            try:
+                with mock.patch.dict(os.environ, environment, clear=False), mock.patch(
+                    "kassiber.operator.client.connect",
+                    return_value=channel,
+                ):
+                    client._submit_once(
+                        "/project",
+                        prepared,
+                        operation_id="generation.client.op",
+                        admin_authentication=None,
+                    )
+            finally:
+                os.chdir(previous)
+            request = channel.send_json.call_args.args[0]
+            self.assertEqual(
+                os.path.realpath(str(request["working_directory"])),
+                os.path.realpath(caller_directory),
+            )
+        return request
+
+    def test_submit_carries_the_callers_working_directory(self) -> None:
+        request = self._submitted_request({"KASSIBER_NO_EGRESS": ""})
+        self.assertIs(request["no_egress"], False)
+
+    def test_submit_carries_the_callers_egress_kill_switch(self) -> None:
+        request = self._submitted_request({"KASSIBER_NO_EGRESS": "yes"})
+        self.assertIs(request["no_egress"], True)
+
+
+class OperatorClientOutdatedBrokerTest(unittest.TestCase):
+    def _submit(self, environment: dict[str, str]) -> mock.Mock:
+        client = BrokerClient()
+        prepared = prepare_arguments(["status"])
+        submit_once = mock.Mock(return_value={"operation_id": "g.client.x", "state": "queued"})
+        with mock.patch.dict(os.environ, environment, clear=False), mock.patch.object(
+            client, "ensure_running", return_value={"generation": "g"}
+        ), mock.patch.object(client, "_submit_once", submit_once):
+            try:
+                client.submit("/project", prepared, admin_authentication=None)
+            finally:
+                wipe_prepared(prepared)
+        return submit_once
+
+    def test_egress_kill_switch_fails_closed_against_an_older_broker(self) -> None:
+        with self.assertRaises(AppError) as raised:
+            self._submit({"KASSIBER_NO_EGRESS": "1"})
+        self.assertEqual(raised.exception.code, "operator_broker_outdated")
+
+    def test_older_broker_without_kill_switch_submits_with_a_warning(self) -> None:
+        stderr = io.StringIO()
+        with mock.patch("sys.stderr", stderr):
+            submit_once = self._submit({"KASSIBER_NO_EGRESS": ""})
+        submit_once.assert_called_once()
+        self.assertIn("absolute paths", stderr.getvalue())

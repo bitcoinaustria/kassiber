@@ -43,6 +43,19 @@ Errors emit:
 }
 ```
 
+With `--machine` anywhere on the command line, an invalid command line (unknown
+command or flag, bad choice, or a global flag after the subcommand) is a
+`usage_error` envelope on stdout with the parser's usage in `details`, and
+exit code 2.
+
+Passphrase, lease, and fresh-authentication `interaction_required` errors carry `details.reason` so an agent can choose
+the next step without parsing prose: `database_passphrase`,
+`operator_lease_required`, or `fresh_local_authentication`, plus
+`unlock_mode` and `user_command` where relevant. The next step is always the
+user's own terminal; agents never collect the passphrase. Brokered commands
+in `--machine` mode also write an `operator.operation.accepted` JSON line to
+stderr; see [the operator broker](operator-broker.md#queue-and-operation-semantics).
+
 `--debug` may include stack traces and other sensitive context. Do not paste debug output publicly without reviewing it first.
 
 ## Public Diagnostics

@@ -167,7 +167,129 @@ class OperatorCliTest(unittest.TestCase):
         self.assertNotIn("--db-passphrase-fd", captured["argv"])
         self.assertNotIn(str(read_fd), captured["argv"])
         self.assertEqual(captured["secrets"], {})
-        self.assertEqual(stderr.getvalue(), "")
+        # Machine mode writes exactly one accepted event and nothing secret.
+        events = [json.loads(line) for line in stderr.getvalue().splitlines()]
+        self.assertEqual(
+            events,
+            [
+                {
+                    "kind": "operator.operation.accepted",
+                    "schema_version": 1,
+                    "data": {"operation_id": "generation.operation", "state": "queued"},
+                }
+            ],
+        )
+        self.assertNotIn("database-passphrase", stderr.getvalue())
+
+    def _route_machine_command(
+        self,
+        completed: dict[str, object],
+    ) -> tuple[int | None, str, str]:
+        args = mock.Mock(
+            command="status",
+            db_passphrase_fd=None,
+            data_root="/project",
+            env_file=None,
+            project=None,
+            operator_auth_fd=None,
+            non_interactive=True,
+            machine=True,
+            format="json",
+            output=None,
+        )
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(
+            stderr
+        ), mock.patch(
+            "kassiber.operator.cli._selected_data_root",
+            return_value="/canonical-project",
+        ), mock.patch(
+            "kassiber.operator.cli.effective_unlock_mode",
+            return_value="brokered",
+        ), mock.patch(
+            "kassiber.cli.command_registry.command_path",
+            return_value="status",
+        ), mock.patch(
+            "kassiber.operator.cli.BrokerClient.submit",
+            return_value={"operation_id": "generation.operation", "state": "queued"},
+        ), mock.patch(
+            "kassiber.operator.cli.BrokerClient.wait",
+            return_value=completed,
+        ):
+            exit_code = route_brokered_command(args, ["status"])
+        return exit_code, stdout.getvalue(), stderr.getvalue()
+
+    def test_machine_cancelled_operation_writes_typed_envelope(self) -> None:
+        exit_code, stdout, _stderr = self._route_machine_command(
+            {
+                "operation_id": "generation.operation",
+                "state": "cancelled",
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": "operator lease expired\n",
+            }
+        )
+
+        self.assertEqual(exit_code, 1)
+        payload = json.loads(stdout)
+        self.assertEqual(payload["error"]["code"], "operator_operation_cancelled")
+        self.assertEqual(payload["error"]["details"]["operation_id"], "generation.operation")
+        self.assertEqual(payload["error"]["details"]["state"], "cancelled")
+        self.assertTrue(payload["error"]["retryable"])
+
+    def test_machine_unknown_result_without_child_output_writes_envelope(self) -> None:
+        exit_code, stdout, stderr = self._route_machine_command(
+            {
+                "operation_id": "generation.operation",
+                "state": "result_unknown",
+                "reason": "broker_generation_changed",
+            }
+        )
+
+        self.assertEqual(exit_code, 1)
+        payload = json.loads(stdout)
+        self.assertEqual(payload["error"]["code"], "operator_result_unknown")
+        self.assertEqual(
+            payload["error"]["details"]["reason"], "broker_generation_changed"
+        )
+        self.assertIn("operator operation status generation.operation", payload["error"]["hint"])
+        self.assertIn("operator result is unknown", stderr)
+
+    def test_machine_unknown_result_keeps_the_childs_single_envelope(self) -> None:
+        child = json.dumps({"kind": "error", "schema_version": 1, "error": {"code": "conflict"}})
+        exit_code, stdout, _stderr = self._route_machine_command(
+            {
+                "operation_id": "generation.operation",
+                "state": "result_unknown",
+                "exit_code": 1,
+                "stdout": child + "\n",
+                "stderr": "",
+            }
+        )
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(json.loads(stdout)["error"]["code"], "conflict")
+
+    def test_machine_oversized_result_writes_typed_envelope(self) -> None:
+        exit_code, stdout, _stderr = self._route_machine_command(
+            {
+                "operation_id": "generation.operation",
+                "state": "completed",
+                "exit_code": 0,
+                "output_available": False,
+                "output_error": {
+                    "code": "operator_result_too_large",
+                    "message": "The operator result is too large to return.",
+                },
+            }
+        )
+
+        self.assertEqual(exit_code, 1)
+        payload = json.loads(stdout)
+        self.assertEqual(payload["error"]["code"], "operator_result_too_large")
+        self.assertEqual(payload["error"]["details"]["state"], "completed")
+        self.assertEqual(payload["error"]["details"]["exit_code"], 0)
 
     def test_worker_requires_project_binding_before_runtime_bootstrap(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(
@@ -323,3 +445,51 @@ class OperatorCliTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OperatorChildWorkingDirectoryTest(unittest.TestCase):
+    def test_child_enters_the_callers_directory_before_dispatch(self) -> None:
+        from kassiber.cli.main import _enter_operator_caller_directory
+
+        previous = os.getcwd()
+        with tempfile.TemporaryDirectory() as caller:
+            try:
+                with mock.patch.dict(
+                    os.environ,
+                    {
+                        "KASSIBER_OPERATOR_CHILD": "1",
+                        "KASSIBER_OPERATOR_WORKING_DIRECTORY": caller,
+                    },
+                ):
+                    _enter_operator_caller_directory(mock.Mock(output="out.json"))
+                self.assertEqual(os.path.realpath(os.getcwd()), os.path.realpath(caller))
+            finally:
+                os.chdir(previous)
+
+    def test_directory_binding_is_refused_outside_a_broker_child(self) -> None:
+        from kassiber.cli.main import _enter_operator_caller_directory
+
+        with mock.patch.dict(
+            os.environ,
+            {"KASSIBER_OPERATOR_WORKING_DIRECTORY": "/", "KASSIBER_OPERATOR_CHILD": ""},
+        ):
+            with self.assertRaises(AppError) as raised:
+                _enter_operator_caller_directory(mock.Mock(output=None))
+        self.assertEqual(raised.exception.code, "operator_project_binding_invalid")
+
+    def test_vanished_directory_fails_without_writing_relative_output(self) -> None:
+        from kassiber.cli.main import _enter_operator_caller_directory
+
+        with tempfile.TemporaryDirectory() as root:
+            args = mock.Mock(output="out.json")
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "KASSIBER_OPERATOR_CHILD": "1",
+                    "KASSIBER_OPERATOR_WORKING_DIRECTORY": os.path.join(root, "gone"),
+                },
+            ):
+                with self.assertRaises(AppError) as raised:
+                    _enter_operator_caller_directory(args)
+        self.assertEqual(raised.exception.code, "operator_working_directory_unavailable")
+        self.assertIsNone(args.output)

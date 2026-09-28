@@ -11,9 +11,18 @@ from .project import canonical_project
 from .service import Operation, OperationResult
 
 
+CALLER_WORKING_DIRECTORY_ENV = "KASSIBER_OPERATOR_WORKING_DIRECTORY"
+
+
 def run_cli_operation(operation: Operation, passphrase: bytearray) -> OperationResult:
     if canonical_project(operation.data_root).identity != operation.project_identity:
         raise RuntimeError("operator project changed before child launch")
+    if operation.working_directory is not None and not os.path.isdir(
+        operation.working_directory
+    ):
+        # Never fall back to the broker's own directory: a relative output or
+        # proposal path would silently point at a different file.
+        raise RuntimeError("operator caller working directory changed before child launch")
     argv, removed_database_secrets = strip_database_passphrase_arguments(
         operation.argv
     )
@@ -48,6 +57,9 @@ def run_cli_operation(operation: Operation, passphrase: bytearray) -> OperationR
         environment["KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"] = (
             operation.database_identity
         )
+        if operation.no_egress:
+            # The caller's kill switch can only tighten the broker's own.
+            environment["KASSIBER_NO_EGRESS"] = "1"
         prepare_independent_child_environment(environment)
         popen_args: dict[str, object] = {
             "stdin": subprocess.DEVNULL,
@@ -55,6 +67,11 @@ def run_cli_operation(operation: Operation, passphrase: bytearray) -> OperationR
             "stderr": subprocess.PIPE,
             "env": environment,
         }
+        if operation.working_directory is not None:
+            # Launching with `cwd=` would put the caller's directory first on a
+            # source install's `python -m kassiber` import path. The child
+            # changes directory itself once its modules are resolved.
+            environment[CALLER_WORKING_DIRECTORY_ENV] = operation.working_directory
         if os.name == "nt":
             startup = subprocess.STARTUPINFO()
             startup.lpAttributeList = {"handle_list": child_handles}
