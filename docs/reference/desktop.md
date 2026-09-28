@@ -104,6 +104,12 @@ then, because WebView2 would otherwise navigate by itself. Tooltips and menus
 write shortcuts in the platform's notation (`⌘⇧A` on macOS, `Ctrl+Shift+A`
 elsewhere).
 
+The command palette (Cmd/Ctrl+K) opens as a launcher: the main pages and
+everyday actions with their shortcuts, before anything is typed. Page shortcuts
+come from the native menu, so the browser preview does not show them. The
+palette, its actions, and the workflow shortcuts stay closed while the app is
+locked.
+
 The main window starts hidden and is sized before it is shown. The first launch
 centres a frame in the work area of the display it opens on (82% by 88%, capped
 at 1440×960 and floored at the configured minimum). After that the last frame

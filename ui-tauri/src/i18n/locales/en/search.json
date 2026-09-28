@@ -50,8 +50,8 @@
       "subtitle": "Refresh local report-ready journal state"
     },
     "sync-wallets": {
-      "title": "Sync wallets",
-      "subtitle": "Open Connections to refresh watch-only sources"
+      "title": "Refresh book set",
+      "subtitle": "Sync sources, rates, and journals"
     },
     "add-wallet": {
       "title": "Add wallet",
@@ -72,6 +72,10 @@
     "open-logs": {
       "title": "Open logs",
       "subtitle": "Open redacted local troubleshooting logs"
+    },
+    "lock-app": {
+      "title": "Lock Kassiber",
+      "subtitle": "Lock the books until you unlock them again"
     },
     "change-passphrase": {
       "title": "Change passphrase",
