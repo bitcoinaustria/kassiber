@@ -555,8 +555,12 @@
   "reconcile": {
     "placeholder": "Paste one address or transaction id per line, for example:\nbc1qexampleaddress…\na1b2c3…  (64-char transaction id)",
     "description": "Paste addresses or transaction ids to find which belong to a wallet in this book — receive or change — and which are external. Useful for telling apart historic payments from transfers between your own wallets.",
+    "inputTitle": "Addresses & transaction ids",
+    "entryCount_one": "{{count}} entry",
+    "entryCount_other": "{{count}} entries",
     "removeCsvAria": "Remove imported CSV",
-    "onDeviceNote": "Checked on-device against your wallets — nothing leaves this machine. Transactions not in your synced history can be verified on chain below (that one step contacts your backend).",
+    "clear": "Clear",
+    "onDeviceNote": "Checked on this device against your wallets. Nothing leaves this machine unless you verify on chain.",
     "importCsv": "Import CSV",
     "checking": "Checking…",
     "checkOwnership": "Check ownership",
@@ -565,24 +569,28 @@
     "csvImportFailed": "CSV import failed",
     "fileEmpty": "That file is empty — nothing to import.",
     "fileReadFailed": "Could not read that file.",
-    "metric": {
-      "checked": "Checked",
-      "owned": "Owned",
-      "external": "External",
-      "unknown": "Unknown",
-      "invalid": "Invalid"
+    "resultsTitle": "Results",
+    "filterAll": "All",
+    "filterPlaceholder": "Filter results",
+    "empty": {
+      "title": "Paste entries and check them",
+      "owned": "Derived from a wallet in this book, as a receive or change address with its index.",
+      "external": "Not derived from any of your wallets.",
+      "unknown": "Not in your synced history. Verify on chain to settle it."
     },
     "scanned_one": "Scanned {{count}} wallet to derivation index {{index}}{{verified}}.",
     "scanned_other": "Scanned {{count}} wallets to derivation index {{index}}{{verified}}.",
     "verifiedSuffix": " · verified on-chain",
     "verifying": "Verifying…",
     "verifyOnChain": "Verify {{count}} on chain",
+    "verifyHint": "Asks {{backend}} about the entries your synced history cannot settle. This is the only step that leaves this device.",
+    "verifyBackend": "Verify with",
+    "listChanged": "The list changed since this check. Check again to update the results; Verify on chain uses the checked list.",
     "copied": "Copied",
     "copyCsv": "Copy CSV",
     "table": {
       "input": "Input",
-      "wallet": "Wallet",
-      "branch": "Branch",
+      "match": "Match",
       "classification": "Classification",
       "noResults": "No matching results."
     },
@@ -595,11 +603,24 @@
       "input": "input",
       "external": "external"
     },
+    "type": {
+      "address": "address",
+      "txid": "transaction id",
+      "lightningInvoice": "Lightning invoice",
+      "lightningOffer": "BOLT12 offer",
+      "lnurl": "LNURL",
+      "lightningAddress": "Lightning address",
+      "silentPaymentAddress": "silent payment address",
+      "outpoint": "outpoint",
+      "extendedPublicKey": "extended public key",
+      "privateKey": "private key"
+    },
     "status": {
       "owned": "Owned",
       "external": "External",
       "unknown": "Unknown",
-      "invalid": "Invalid"
+      "invalid": "Invalid",
+      "unsupported": "Not supported"
     },
     "classification": {
       "ownedAddress": "Owned address",
@@ -611,7 +632,8 @@
       "external": "External",
       "unknown": "Unknown",
       "undetermined": "Undetermined",
-      "invalid": "Invalid"
+      "invalid": "Invalid",
+      "unsupported": "Unsupported format"
     }
   },
   "activity": {
