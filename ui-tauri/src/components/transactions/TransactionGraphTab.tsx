@@ -679,16 +679,68 @@ function positiveKnownSats(node: TransactionGraphNode) {
     : 0;
 }
 
-function visualTotalSatsForSides(inputRows: GraphRow[], destinationRows: GraphRow[]) {
-  // Drawing only: confidential and missing values still render as confidential
-  // text, but the bowtie needs a stable visual total to size unknown legs.
-  const inputKnownTotal = inputRows.reduce((sum, node) => sum + positiveKnownSats(node), 0);
-  const outputKnownTotal = destinationRows.reduce((sum, node) => sum + positiveKnownSats(node), 0);
-  return Math.max(inputKnownTotal, outputKnownTotal, 1);
+/**
+ * How the bowtie sizes its legs. Drawing only: confidential and missing values
+ * still render as confidential text, whatever width their strand gets.
+ */
+type GeometryScale =
+  /** Widths follow a visual total in sats. */
+  | { kind: "value"; totalSats: number }
+  /**
+   * No leg but the fee has a known amount (a confidential Liquid row, a
+   * reference-only record, or hidden values): every unknown leg gets the same
+   * modest width instead of each claiming the full band.
+   */
+  | { kind: "uniform" };
+
+/** An unknown leg drawn at uniform width is at most this share of the band. */
+const UNIFORM_STRAND_BAND_SHARE = 1 / 6;
+
+function amountlessLegCount(rows: GraphRow[]) {
+  return rows.filter((node) => node.side !== "fee" && isAmountless(node)).length;
 }
 
-function fallbackVisualSats(visualTotalSats: number, rowCount: number) {
-  return Math.max(1, visualTotalSats / Math.max(1, rowCount));
+function geometryScale(inputRows: GraphRow[], destinationRows: GraphRow[]): GeometryScale {
+  const inputKnownTotal = inputRows.reduce((sum, node) => sum + positiveKnownSats(node), 0);
+  const outputKnownTotal = destinationRows.reduce((sum, node) => sum + positiveKnownSats(node), 0);
+  const inputUnknown = amountlessLegCount(inputRows);
+  const outputUnknown = amountlessLegCount(destinationRows);
+  if (!inputUnknown || !outputUnknown) {
+    // One complete side fixes the total; the other side's unknown legs share
+    // whatever it leaves unaccounted for.
+    return { kind: "value", totalSats: Math.max(inputKnownTotal, outputKnownTotal, 1) };
+  }
+  // Unknown legs on both sides leave the total open. As mempool's Liquid graph
+  // does, estimate it by assuming each unknown leg is as large as the average
+  // known one; both sides must still meet in the middle, so each side's unknown
+  // legs then share what that side leaves of the larger estimate. The fee is
+  // left out of the average: it would make every unknown leg look like dust.
+  const knownLegs = [...inputRows, ...destinationRows]
+    .filter((node) => node.side !== "fee")
+    .map(positiveKnownSats)
+    .filter((sats) => sats > 0);
+  if (!knownLegs.length) return { kind: "uniform" };
+  const average = knownLegs.reduce((sum, sats) => sum + sats, 0) / knownLegs.length;
+  return {
+    kind: "value",
+    totalSats: Math.max(
+      inputKnownTotal + average * inputUnknown,
+      outputKnownTotal + average * outputUnknown,
+      1,
+    ),
+  };
+}
+
+function fallbackVisualSats(scale: GeometryScale, rowCount: number) {
+  if (scale.kind === "uniform") return 1;
+  return Math.max(1, scale.totalSats / Math.max(1, rowCount));
+}
+
+function uniformStrandWeight(combinedWeight: number, rowCount: number) {
+  return Math.min(
+    combinedWeight / Math.max(1, rowCount),
+    combinedWeight * UNIFORM_STRAND_BAND_SHARE,
+  );
 }
 
 function geometryValues(rows: GraphRow[], fallbackSats: number) {
@@ -731,26 +783,33 @@ function clamp(value: number, min: number, max: number) {
 
 function buildDrawableRows(
   rows: GraphRow[],
-  totalSats: number,
+  scale: GeometryScale,
   height: number,
   combinedWeight: number,
   curveWidth: number,
   fallbackSats: number,
+  uniformWeight: number,
 ): DrawableGraphRow[] {
   if (!rows.length) return [];
   const centerY = height / 2;
   const { values, hasAmountlessNonFeeRows } = geometryValues(rows, fallbackSats);
   const unknownCount = values.filter((value) => value.amountless).length;
   const knownTotal = values.reduce((sum, value) => sum + (value.known ?? 0), 0);
+  const totalSats = scale.kind === "value" ? scale.totalSats : 0;
   // Unknown legs share whatever the opposite side says is unaccounted for.
   const unknownShare = unknownCount
     ? Math.max(1, (Math.max(totalSats, knownTotal) - knownTotal) / unknownCount)
     : 0;
   const lines = rows.map((node, index) => {
     const value = values[index];
-    const weight = totalSats
-      ? (combinedWeight * (value.known ?? unknownShare)) / Math.max(1, totalSats)
-      : combinedWeight / rows.length;
+    const weight =
+      scale.kind === "uniform"
+        ? value.amountless
+          ? uniformWeight
+          : value.zero
+            ? 0
+            : AMOUNTLESS_FEE_STRAND_THICKNESS
+        : (combinedWeight * (value.known ?? unknownShare)) / Math.max(1, totalSats);
     const amountlessPeerFee =
       node.side === "fee" && hasAmountlessNonFeeRows && weight > 0;
     return {
@@ -777,8 +836,14 @@ function buildDrawableRows(
           GRAPH_MULTI_LEG_GAP,
           (Math.max(120, height - 80) - visibleWeight) / Math.max(1, lines.length - 1),
         );
-  const innerTop = centerY - combinedWeight / 2;
-  const innerBottom = innerTop + combinedWeight + 0.5;
+  // Uniform legs claim no share of a total, so they meet in a knot as wide as
+  // they are rather than fanning out to fill the full band.
+  const bandWeight =
+    scale.kind === "uniform"
+      ? Math.min(combinedWeight, lines.reduce((sum, line) => sum + line.weight, 0))
+      : combinedWeight;
+  const innerTop = centerY - bandWeight / 2;
+  const innerBottom = innerTop + bandWeight + 0.5;
   let lastOuter = 40;
   let lastInner = innerTop;
   let offset = 0;
@@ -1446,24 +1511,30 @@ export function TransactionFlowDiagram({
   const centerX = canvasWidth / 2;
   const edgePadding = expanded ? 84 : 64;
   const curveWidth = centerX - edgePadding - 12;
-  const visualTotal = visualTotalSatsForSides(layoutInputRows, layoutDestinationRows);
-  const fallbackSats = fallbackVisualSats(visualTotal, rowCount);
+  const scale = geometryScale(layoutInputRows, layoutDestinationRows);
+  const fallbackSats = fallbackVisualSats(scale, rowCount);
   const combinedWeight = Math.min(expanded ? 96 : 82, Math.max(26, Math.floor((canvasWidth - 2 * edgePadding) / 9)));
+  const uniformWeight = uniformStrandWeight(
+    combinedWeight,
+    Math.max(layoutInputRows.length, layoutDestinationRows.length),
+  );
   const inputDrawRows = buildDrawableRows(
     layoutInputRows,
-    visualTotal,
+    scale,
     height,
     combinedWeight,
     curveWidth,
     fallbackSats,
+    uniformWeight,
   );
   const outputDrawRows = buildDrawableRows(
     layoutDestinationRows,
-    visualTotal,
+    scale,
     height,
     combinedWeight,
     curveWidth,
     fallbackSats,
+    uniformWeight,
   );
   // The visible strand and its wide invisible hit target follow the same path.
   const pathFor = (node: DrawableGraphRow) => {

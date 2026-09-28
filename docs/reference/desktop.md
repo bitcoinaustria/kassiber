@@ -203,7 +203,13 @@ panel uses `ui.transactions.graph` to draw a local, read-only flow view: valued
 Bitcoin vin/vout become proportional input/output strands with a distinct fee
 leg, reference-only or confidential records can show amountless public
 references, and unsupported imports get an explicit empty state instead of a
-guessed graph. Lookups use the wallet's own backend first and never a server
+guessed graph. Liquid legs this book's wallets unblinded during sync keep their
+values, including spent inputs and another owned wallet's legs of the same
+transaction; conflicting observations stay confidential. Legs without a known
+amount are drawn from what is known: they share what a complete side leaves
+unaccounted for; when both sides have unknown legs, the total is estimated from
+the average known leg; and when no leg but the fee is known (or values are
+hidden), every leg gets one modest uniform width. Widths are drawing only. Lookups use the wallet's own backend first and never a server
 Kassiber merely ships as a default, so the panel follows whatever observes the
 wallet and stays silent instead of reaching for third-party infrastructure; with
 nothing configured it offers an explicit backend-setup action. The view is
