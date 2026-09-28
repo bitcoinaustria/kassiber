@@ -20,7 +20,9 @@ from ..errors import AppError
 
 # 2: brokers name their build and honor `expected_build`. A broker from
 # before that must refuse such a request rather than ignore the binding.
-PROTOCOL_VERSION = 2
+# 3: conditional unlock (`only_if_locked`) and lock (`expected_lease_id`,
+# `restore_manual`), which an older broker would perform unconditionally.
+PROTOCOL_VERSION = 3
 MAX_JSON_FRAME = 8 * 1024 * 1024
 MAX_SECRET_FRAME = 16 * 1024
 SECRET_CHALLENGE_ENTROPY_BYTES = 24

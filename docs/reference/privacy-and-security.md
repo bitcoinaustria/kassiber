@@ -651,6 +651,14 @@ never holds a passphrase: each call runs through the operator lease, and a
 call never starts a broker. Unattended books open per call with the
 remembered credential, like any CLI command in that mode. See [MCP](mcp.md).
 
+**Unlock for agents** in that Settings row lets the desktop hand the open
+book's passphrase to the operator broker: on the user's click, the desktop
+daemon sends the passphrase it already holds to the per-user broker over the
+broker's secret frame, as a `read` lease. Like any lease, every process of the
+same OS user can use it while it lasts. The renderer never sees the
+passphrase, status reads contact no broker, and the lease ends with the
+desktop session or after at most 8 hours.
+
 ## Reporting
 
 Do not file security-impacting issues in the public tracker. See

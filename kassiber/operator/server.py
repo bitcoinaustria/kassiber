@@ -259,6 +259,9 @@ class BrokerServer:
             passphrase = channel.receive_secret(challenge)
             try:
                 duration, capability = _lease_request_args(request)
+                only_if_locked = request.get("only_if_locked", False)
+                if not isinstance(only_if_locked, bool):
+                    raise AppError("invalid broker unlock condition", code="operator_protocol_error")
                 return _ok(
                     self.service.unlock(
                         data_root,
@@ -266,6 +269,7 @@ class BrokerServer:
                         duration_seconds=duration,
                         capability=capability,
                         authentication_method="password",
+                        only_if_locked=only_if_locked,
                     )
                 )
             finally:
@@ -303,9 +307,17 @@ class BrokerServer:
             finally:
                 _wipe(passphrase)
         if action == "lock":
+            expected_lease_id = request.get("expected_lease_id")
+            restore_manual = request.get("restore_manual", False)
+            if (
+                expected_lease_id is not None and not isinstance(expected_lease_id, str)
+            ) or not isinstance(restore_manual, bool):
+                raise AppError("invalid broker lock condition", code="operator_protocol_error")
             return _ok(
                 self.service.lock(
-                    _canonical_data_root(_required_string(request, "data_root"))
+                    _canonical_data_root(_required_string(request, "data_root")),
+                    expected_lease_id=expected_lease_id,
+                    restore_manual=restore_manual,
                 )
             )
         if action == "submit":

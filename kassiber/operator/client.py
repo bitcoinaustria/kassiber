@@ -168,19 +168,21 @@ class BrokerClient:
         duration_seconds: int | None,
         capability: str,
         authentication_method: str,
+        only_if_locked: bool = False,
     ) -> dict[str, object]:
         _require_same_build(self.ensure_running())
+        request: dict[str, object] = {
+            "version": PROTOCOL_VERSION,
+            "action": "unlock",
+            "data_root": data_root,
+            "duration_seconds": duration_seconds,
+            "capability": capability,
+            "authentication_method": authentication_method,
+        }
+        if only_if_locked:
+            request["only_if_locked"] = True
         with connect() as channel:
-            channel.send_json(
-                {
-                    "version": PROTOCOL_VERSION,
-                    "action": "unlock",
-                    "data_root": data_root,
-                    "duration_seconds": duration_seconds,
-                    "capability": capability,
-                    "authentication_method": authentication_method,
-                }
-            )
+            channel.send_json(request)
             continuation = self._receive(channel)
             challenge = continuation.get("challenge")
             if continuation.get("continue") != "secret" or not isinstance(challenge, str):
@@ -245,9 +247,20 @@ class BrokerClient:
             raise
         return {"broker": "stopping", "broker_build": broker.get("build")}
 
-    def lock(self, data_root: str) -> dict[str, object]:
+    def lock(
+        self,
+        data_root: str,
+        *,
+        expected_lease_id: str | None = None,
+        restore_manual: bool = False,
+    ) -> dict[str, object]:
+        conditions: dict[str, object] = {}
+        if expected_lease_id is not None:
+            conditions["expected_lease_id"] = expected_lease_id
+        if restore_manual:
+            conditions["restore_manual"] = True
         try:
-            return self._simple_request("lock", data_root=data_root)
+            return self._simple_request("lock", data_root=data_root, **conditions)
         except (OSError, EOFError):
             return {"broker": "stopped", "locked": True, "lease_existed": False}
 

@@ -132,7 +132,9 @@ remains outside that closeout.
   without a terminal when explicitly requested, since the biometric prompt is
   the user's action and no secret reaches the caller. Keep enrollment and mode
   changes human-only, document it as the one explicit GUI prompt, and verify on
-  a signed, notarized build.
+  a signed, notarized build. The desktop's *Unlock for agents* already covers a
+  user who has the book open; this item is for agent-initiated requests
+  without the desktop.
 
 - [ ] Finish the localization long tail: deferred report/exit-tax/Lightning
   reporting surfaces, shared enum-to-label helpers, and locale-aware number/date

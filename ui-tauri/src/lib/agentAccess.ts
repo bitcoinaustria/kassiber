@@ -3,12 +3,25 @@ import * as React from "react";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import type { TerminalCommandStatus } from "@/daemon/transport";
 
+/**
+ * Whether agents can read the open book. `needed` is true for an unlocked
+ * encrypted book that agents cannot open on their own; `active` when this
+ * desktop has unlocked it for them. Answered without contacting the broker.
+ */
+export interface AgentSession {
+  needed: boolean;
+  active: boolean;
+  expires_at: string | null;
+  existing_lease?: boolean;
+}
+
 /** Global external-agent (MCP) access, read and enforced by the Python core. */
 export interface AgentAccessStatus {
   mcp_enabled: boolean;
   ai_features_enabled: boolean | null;
   mcp_available: boolean;
   reason: "mcp_disabled" | "ai_features_disabled" | null;
+  session?: AgentSession;
 }
 
 export interface AgentBook {

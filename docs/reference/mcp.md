@@ -126,6 +126,24 @@ neither is ever created.
   their own terminal.
 - **`manual` encrypted books** return `interaction_required` with
   `details.reason = database_passphrase`.
+- **From the desktop:** with external agents on, the External agents row in
+  Settings offers *Unlock for agents* for the open encrypted book when agents
+  cannot open it on their own (not for plaintext or `unattended` books). It
+  grants the same `read` lease as `kassiber operator unlock --capability read`,
+  from the passphrase the desktop already holds after its own unlock (typed,
+  Touch ID, or the OS credential store); the renderer never receives it. The
+  broker is contacted only for that click and when the lease ends, which is
+  when the desktop locks, quits, switches book, rotates the passphrase, or
+  restores a backup, when external agents or AI features are turned off, and
+  after at most 8 hours. Until the broker confirms the lock, the row keeps
+  showing the lease and the desktop retries. A lease that is already open, for
+  example from a terminal, is neither replaced nor locked. Granting a lease
+  binds the book to `brokered` mode. A book that was `manual` returns to
+  `manual` when the desktop's lease ends, through whichever broker is running
+  then, unless someone chose another mode since. If no broker is running by
+  then, the book stays `brokered`, and a terminal needs
+  `kassiber operator unlock`. The broker it starts runs the
+  desktop's build, so point agents at the command the row shows.
 
 A broker from an earlier build that is still running cannot bind caller
 context; MCP calls are refused against it (`operator_broker_outdated`) until

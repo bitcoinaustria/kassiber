@@ -305,6 +305,8 @@ export function daemonMutationKey(dataMode: DataMode, kind: string) {
 }
 
 const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
+  "ui.agent_access.unlock": ["ui.agent_access.status"],
+  "ui.agent_access.lock": ["ui.agent_access.status"],
   "ui.custody.review.apply": [
     "ui.custody.gaps.list",
     "ui.custody.gaps.review_context",

@@ -25,7 +25,7 @@ from ..log_ring import sanitize_traceback_text
 from ..redaction import redact_secret_text
 from ..secrets.auth_backoff import AuthAttemptBackoff, AUTH_BACKOFF_FILENAME
 from ..time_utils import now_iso
-from .modes import set_unlock_mode
+from .modes import effective_unlock_mode, set_unlock_mode
 from .policy import bind_project_policy
 from .project import (
     CanonicalProject,
@@ -145,6 +145,23 @@ class ProjectLease:
             self.expires_at_monotonic is not None
             and time.monotonic() >= self.expires_at_monotonic
         )
+
+
+def _still_brokered(data_root: str) -> bool:
+    try:
+        return effective_unlock_mode(data_root) == "brokered"
+    except AppError:
+        return False
+
+
+def _public_lease_id(lease: ProjectLease) -> str:
+    """Name one lease for compare-and-lock without revealing its epoch.
+
+    Epochs are fresh random tokens per lease, so ids never repeat, not even
+    across broker restarts.
+    """
+
+    return hashlib.sha256(f"lease-id:{lease.epoch}".encode()).hexdigest()[:24]
 
 
 @dataclass
@@ -627,6 +644,7 @@ class OperatorService:
         authentication_method: str = "password",
         expected_project_identity: str | None = None,
         expected_database_identity: str | None = None,
+        only_if_locked: bool = False,
     ) -> dict[str, object]:
         if capability not in {
             Capability.READ,
@@ -706,6 +724,15 @@ class OperatorService:
                     )
                     if previous.running_operations == 0:
                         previous = None
+                if only_if_locked and previous is not None and not previous.revoked:
+                    # Checked inside the project transition, so no other unlock
+                    # can create a lease between this check and the grant.
+                    raise AppError(
+                        "the project already has an operator lease",
+                        code="operator_lease_exists",
+                        details={"project": project.public_id},
+                        retryable=False,
+                    )
                 if previous is not None and previous.running_operations > 0:
                     raise AppError(
                         "the project still has a running operator operation",
@@ -804,6 +831,12 @@ class OperatorService:
                     retryable=False,
                 )
             try:
+                # Read in the same transition that replaces it, so a caller
+                # that restores the mode later restores what it really was.
+                try:
+                    previous_mode: str | None = effective_unlock_mode(canonical_data_root)
+                except AppError:
+                    previous_mode = None
                 set_unlock_mode(
                     canonical_data_root,
                     "brokered",
@@ -875,7 +908,7 @@ class OperatorService:
                 }
             },
         )
-        return self.status(canonical_data_root)
+        return {**self.status(canonical_data_root), "previous_mode": previous_mode}
 
     def verify_admin(
         self,
@@ -1111,14 +1144,50 @@ class OperatorService:
         )
         return {"configured": configured, "auth": "touch_id"}
 
-    def lock(self, data_root: str) -> dict[str, object]:
+    def lock(
+        self,
+        data_root: str,
+        *,
+        expected_lease_id: str | None = None,
+        restore_manual: bool = False,
+    ) -> dict[str, object]:
+        """Lock the project's lease.
+
+        With `expected_lease_id`, lock only that lease: a live lease with
+        another id belongs to someone else and is kept, with its mode.
+        `restore_manual` puts the project back into manual mode in the same
+        transition, so no unlock can bind `brokered` between the two, and only
+        while the mode is still the `brokered` a grant set: a mode someone
+        chose since is theirs.
+        """
+
         project = canonical_project(data_root)
         with self._lock:
             transition_identity = self._lease_identity_for_path_locked(project)
         with self._project_transition(transition_identity):
             with self._lock:
                 project_identity = self._lease_identity_for_path_locked(project)
-                existed = project_identity in self._leases
+                current = self._leases.get(project_identity)
+                live = (
+                    current
+                    if current is not None
+                    and not current.revoked
+                    and not current.expired()
+                    else None
+                )
+                if (
+                    expected_lease_id is not None
+                    and live is not None
+                    and _public_lease_id(live) != expected_lease_id
+                ):
+                    return {
+                        "project": project.public_id,
+                        "locked": False,
+                        "lease_existed": True,
+                        "kept": True,
+                        "generation": self.generation,
+                    }
+                existed = current is not None
                 running = 0
                 if existed:
                     lease = self._leases[project_identity]
@@ -1128,6 +1197,13 @@ class OperatorService:
                         reason="operator lease was locked",
                     )
             self._release_pending_owners(project_identity)
+            mode_restored = False
+            # A broker that replaced the granting one (after a crash) restores
+            # too: the named lease is gone, and this transition still
+            # serializes the write with any unlock here.
+            if restore_manual and _still_brokered(str(project.database.parent)):
+                set_unlock_mode(str(project.database.parent), "manual")
+                mode_restored = True
         _LOGGER.info(
             "operator lease locked",
             extra={
@@ -1143,6 +1219,7 @@ class OperatorService:
             "lease_existed": existed,
             "running_operations_finishing": running,
             "generation": self.generation,
+            "mode_restored": mode_restored,
         }
 
     def status(self, data_root: str | None = None) -> dict[str, object]:
@@ -1927,6 +2004,7 @@ class OperatorService:
         return {
             "project": lease.project.public_id,
             "lease": "unlocked",
+            "lease_id": _public_lease_id(lease),
             "capability": lease.capability.value,
             "granted_capabilities": [
                 capability.value

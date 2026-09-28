@@ -12,6 +12,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from kassiber.ai.tools import TOOL_CATALOG, get_tool
@@ -1023,14 +1024,18 @@ class AgentAccessTests(unittest.TestCase):
 
         self.assertIn("ui.agent_access.status", daemon.SUPPORTED_KINDS)
         self.assertIn("ui.agent_access.configure", daemon.SUPPORTED_KINDS)
+        # No book is open: status and configure need none.
+        ctx = SimpleNamespace(conn=None, db_passphrase=None, data_root=str(self.path.parent), agent_lease=None)
         with mock.patch.dict(os.environ, {PATH_ENV: str(self.path)}):
             status = daemon._agent_access_payload(
+                ctx,
                 "ui.agent_access.configure",
                 {"args": {"mcp_enabled": True, "ai_features_enabled": True}},
             )
             self.assertTrue(status["mcp_available"])
+            self.assertEqual(status["session"], {"needed": False, "active": False, "expires_at": None})
             for bad in ({}, {"mcp_enabled": "yes"}, {"mcp_enabled": True, "path": "/x"}):
                 with self.subTest(bad=bad), self.assertRaises(AppError):
-                    daemon._agent_access_payload("ui.agent_access.configure", {"args": bad})
+                    daemon._agent_access_payload(ctx, "ui.agent_access.configure", {"args": bad})
             with self.assertRaises(AppError):
-                daemon._agent_access_payload("ui.agent_access.status", {"args": {"x": 1}})
+                daemon._agent_access_payload(ctx, "ui.agent_access.status", {"args": {"x": 1}})

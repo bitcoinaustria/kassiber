@@ -1,9 +1,10 @@
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { DaemonRequestError, useDaemon, useDaemonMutation } from "@/daemon/client";
 import { terminalCommandStatus, type TerminalCommandStatus } from "@/daemon/transport";
 import {
   agentLauncher,
@@ -26,6 +27,8 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
   const accessQuery = useDaemon<AgentAccessStatus>("ui.agent_access.status");
   const statusQuery = useDaemon<StatusData>("status");
   const configure = useDaemonMutation("ui.agent_access.configure");
+  const unlock = useDaemonMutation<AgentAccessStatus>("ui.agent_access.unlock");
+  const lock = useDaemonMutation("ui.agent_access.lock");
   const [terminal, setTerminal] = React.useState<TerminalCommandStatus | null>(null);
 
   const access =
@@ -56,6 +59,11 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
       : null;
   const launcher = agentLauncher(terminal);
   const args = book ? mcpServeArgs(book) : null;
+  const session = access?.session;
+  const sessionBusy = unlock.isPending || lock.isPending;
+  const sessionError = unlock.error ?? lock.error;
+  const existingLease =
+    unlock.data?.kind === "ui.agent_access.unlock" && unlock.data.data?.session?.existing_lease === true;
 
   return (
     <div
@@ -93,6 +101,37 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
             <CopyButton value={mcpJsonConfig(launcher, args)} label={t("ai.agentsCopyJson")} />
           </span>
         </div>
+      ) : null}
+      {/* A lease the broker has not confirmed locking stays visible, with
+          Lock, even after agents are turned off. */}
+      {(enabled && session?.needed) || session?.active ? (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            {session.active
+              ? t("ai.agentsSessionActive")
+              : existingLease
+                ? t("ai.agentsSessionExisting")
+                : t("ai.agentsSessionLocked")}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            disabled={sessionBusy}
+            onClick={() => (session.active ? lock.mutate(undefined) : unlock.mutate(undefined))}
+          >
+            {session.active ? t("ai.agentsSessionLock") : t("ai.agentsSessionUnlock")}
+          </Button>
+        </div>
+      ) : null}
+      {(enabled || session?.active) && sessionError ? (
+        <p className="text-sm text-destructive">
+          {t("ai.agentsSessionError")}
+          {sessionError instanceof DaemonRequestError && sessionError.envelope.error?.hint
+            ? ` ${sessionError.envelope.error.hint}`
+            : null}
+        </p>
       ) : null}
     </div>
   );

@@ -112,6 +112,16 @@ long-lived and is refused as a broker operation, but it submits each tool call
 as a finite `mcp call` read operation, so it works under a lease; see
 [MCP](mcp.md).
 
+The desktop can grant a `read` lease for the encrypted book it has open, from
+the passphrase of its own unlock, when the user enables external agents and
+clicks *Unlock for agents*. It asks the broker to grant only if no lease
+exists, and to end only that lease (by its `lease_id` from `status`) while
+putting a previously `manual` book back into `manual` mode if it is still
+`brokered`. Each of these is decided inside the project's broker transition,
+so a terminal unlock can neither be replaced nor ended, nor lose its mode. The desktop ends its lease
+with the desktop session and cleans up after the lease expires; see
+[MCP](mcp.md#books-and-encrypted-databases).
+
 On macOS, an enrolled operator-specific Keychain item may authorize an unlock
 after Touch ID through the signed desktop app's native LocalAuthentication
 path. The broker starts the helper with a broker-created inherited output pipe.
