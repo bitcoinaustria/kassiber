@@ -5569,6 +5569,8 @@ function AddConnectionDialogContent({
         </div>
       </div>
 
+      <p className="text-sm text-foreground">{selected.description}</p>
+
       <ul className="space-y-2 text-sm text-muted-foreground">
         {selected.details.map((detail) => (
           <li key={detail} className="flex gap-2">
@@ -5842,35 +5844,35 @@ function AddConnectionDialogContent({
           {visibleSources.map((source) => {
             const selectedSource = selectedId === source.id;
             return (
+              // One line per source, as in the command palette: the
+              // description lives in the detail pane beside the list, so
+              // the row only needs enough to pick it out (and a tooltip).
               <button
                 key={source.id}
                 type="button"
                 aria-pressed={selectedSource}
+                title={source.description}
                 className={cn(
-                  "flex w-full items-start gap-3 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                  "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                   selectedSource
                     ? "bg-accent text-accent-foreground"
                     : "hover:bg-accent/60",
                 )}
                 onClick={() => { historySourceChosenRef.current = true; setSelectedId(source.id); }}
               >
-                <SourceArtwork source={source} className="size-9" />
-                <span className="min-w-0 flex-1">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="min-w-0 truncate text-sm font-medium">
-                      {source.title}
-                    </span>
-                    {source.status === "planned" ? (
-                      <Badge variant="outline">{t("add.plannedLabel")}</Badge>
-                    ) : null}
-                    {/* The palette's right-aligned detail column. */}
-                    <span className="ml-auto max-w-[45%] shrink truncate text-xs text-muted-foreground">
-                      {source.formatLabel ?? source.pathLabel}
-                    </span>
-                  </span>
-                  <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">
-                    {source.description}
-                  </span>
+                <SourceArtwork
+                  source={source}
+                  className="size-7 rounded-md p-0.5 [&_svg]:size-4"
+                />
+                <span className="min-w-0 truncate text-sm font-medium">
+                  {source.title}
+                </span>
+                {source.status === "planned" ? (
+                  <Badge variant="outline">{t("add.plannedLabel")}</Badge>
+                ) : null}
+                {/* The palette's right-aligned detail column. */}
+                <span className="ml-auto max-w-[45%] shrink truncate text-xs text-muted-foreground">
+                  {source.formatLabel ?? source.pathLabel}
                 </span>
               </button>
             );
