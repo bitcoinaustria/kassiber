@@ -104,6 +104,27 @@
     100dvh - var(--kb-window-top-inset) - var(--kb-dialog-top) - 1rem
   );
   /*
+   * The layout scale, one definition for every screen.
+   *
+   * Corners come in three surface tiers, outermost largest, so a surface is
+   * always rounder than what sits inside it:
+   *   window  the page panel, dialogs, the palette, the lock and setup panels
+   *   card    cards on a page (`Card`, `.kb-surface`)
+   *   inset   tiles nested inside a card (`.kb-surface-inset`)
+   * Controls (buttons, inputs, menu and nav rows) stay on `rounded-md`, and
+   * chips, pills and avatars on `rounded-full`.
+   *
+   * Spacing: one gutter around every page, one gap between the blocks on a
+   * page, and one inner padding for cards — the gutter, so a card's content
+   * lines up with the page's own edge rhythm.
+   */
+  --kb-radius-window: 1rem;
+  --kb-radius-card: 0.75rem;
+  --kb-radius-inset: 0.5rem;
+  --kb-page-gutter: 1.25rem;
+  --kb-page-gap: 0.75rem;
+  --kb-card-padding: 1.25rem;
+  /*
    * Frosted-glass tuning, ported from T3Code. Every frosted surface
    * (`.kb-glass-*`, the assistant composer) reads these so light and dark keep
    * one consistent blur/saturation feel instead of hand-tuned per-component
@@ -534,26 +555,31 @@
  *
  * The app previously drew this concept at four different radii with a
  * full-strength border. These two classes are the whole vocabulary.
+ *
+ * They live in the components layer so a caller's utilities still apply on
+ * top: a warning card's amber border and tint, or `overflow-hidden`.
  */
-.kb-surface {
-  border-radius: var(--radius-2xl);
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  background-color: var(--card);
-  box-shadow:
-    0 1px 2px rgb(0 0 0 / 3.5%),
-    0 10px 30px rgb(0 0 0 / 3.5%);
-}
+@layer components {
+  .kb-surface {
+    border-radius: var(--kb-radius-card);
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    background-color: var(--card);
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 3.5%),
+      0 10px 30px rgb(0 0 0 / 3.5%);
+  }
 
-.dark .kb-surface {
-  box-shadow:
-    0 1px 2px rgb(0 0 0 / 35%),
-    0 10px 30px rgb(0 0 0 / 20%);
-}
+  .dark .kb-surface {
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 35%),
+      0 10px 30px rgb(0 0 0 / 20%);
+  }
 
-.kb-surface-inset {
-  border-radius: var(--radius-lg);
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  background-color: var(--card);
+  .kb-surface-inset {
+    border-radius: var(--kb-radius-inset);
+    border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    background-color: var(--card);
+  }
 }
 
 /*

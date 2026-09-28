@@ -412,7 +412,7 @@ export function ShellSearch({
           */}
           <DialogPrimitive.Content
             aria-label={label}
-            className="kb-glass-dialog fixed top-[calc(var(--kb-window-top-inset)+var(--kb-dialog-top))] left-1/2 z-50 flex max-h-(--kb-dialog-max-h) w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 flex-col overflow-hidden rounded-2xl border p-0 text-foreground duration-200 ease-in-out outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-98 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-98"
+            className="kb-glass-dialog fixed top-[calc(var(--kb-window-top-inset)+var(--kb-dialog-top))] left-1/2 z-50 flex max-h-(--kb-dialog-max-h) w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 flex-col overflow-hidden rounded-(--kb-radius-window) border p-0 text-foreground duration-200 ease-in-out outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-98 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-98"
             onKeyDown={(event) => {
               if (event.key === "ArrowDown") {
                 event.preventDefault();

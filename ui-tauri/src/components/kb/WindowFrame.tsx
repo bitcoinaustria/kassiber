@@ -209,7 +209,7 @@ export function WindowFrame({ children }: { children: React.ReactNode }) {
             className={cn(
               "h-full w-full overflow-hidden",
               !claimed &&
-                "bg-background md:rounded-xl md:border md:border-border/70",
+                "bg-background md:rounded-(--kb-radius-window) md:border md:border-border/70",
             )}
           >
             {children}

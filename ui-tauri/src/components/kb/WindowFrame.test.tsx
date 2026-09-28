@@ -85,7 +85,7 @@ describe("WindowFrame", () => {
     // dashboard panel's hairline and gutters.
     expect(html).toContain("h-(--kb-toolbar-height)");
     expect(html).toContain("md:px-1.5 md:pb-1.5");
-    expect(html).toContain("md:rounded-xl md:border md:border-border/70");
+    expect(html).toContain("md:rounded-(--kb-radius-window) md:border md:border-border/70");
   });
 
   it("hangs dialogs below the title bar, so it stays draggable", () => {

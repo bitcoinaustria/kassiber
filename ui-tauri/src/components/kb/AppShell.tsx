@@ -1885,7 +1885,7 @@ export function AppShell() {
           {/* The panel sits flush against the nav and keeps a small gutter on
               its free sides, so its rounded corners read against the chrome. */}
           <div className="min-h-0 w-full min-w-0 overflow-hidden md:pr-1.5 md:pb-1.5">
-            <div className="relative flex h-full w-full min-w-0 flex-col items-center justify-start overflow-hidden bg-background md:rounded-xl md:border md:border-border/70">
+            <div className="relative flex h-full w-full min-w-0 flex-col items-center justify-start overflow-hidden bg-background md:rounded-(--kb-radius-window) md:border md:border-border/70">
               {importRootBlocked ? (
                 <main
                   id="app-main"
@@ -3582,7 +3582,7 @@ function CurrencyToggle() {
 function LockedFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="fixed inset-x-0 top-(--kb-toolbar-height) bottom-0 z-50 flex bg-sidebar md:px-1.5 md:pb-1.5">
-      <div className="flex min-w-0 flex-1 items-center justify-center overflow-y-auto bg-background px-4 text-foreground md:rounded-xl md:border md:border-border/70">
+      <div className="flex min-w-0 flex-1 items-center justify-center overflow-y-auto bg-background px-4 text-foreground md:rounded-(--kb-radius-window) md:border md:border-border/70">
         {children}
       </div>
     </div>
