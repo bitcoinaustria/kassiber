@@ -1990,10 +1990,11 @@ def build_parser() -> argparse.ArgumentParser:
     wallets_identify.add_argument(
         "--candidate",
         action="append",
-        help="Address or txid, auto-detected (repeatable)",
+        help="Address, txid, or BOLT11 Lightning invoice, auto-detected (repeatable)",
     )
     wallets_identify.add_argument(
-        "--file", help="File with one address/txid per line (# comments allowed)"
+        "--file",
+        help="File with one address, txid, or Lightning invoice per line (# comments allowed)",
     )
     wallets_identify.add_argument(
         "--csv",

@@ -221,6 +221,16 @@ kassiber wallets identify --txid <64-hex> --verify-on-chain --verify-backend mem
   otherwise content-harvests any cell that is a 64-hex txid or a real
   (checksum-validated) address — ignoring amounts, dates, memos, and labels. It
   handles header-less and one-per-line files too.
+- A BOLT11 Lightning invoice is decoded on the device and matched by its
+  payment hash against the book's Lightning history: it comes back `owned`
+  (paid, received, or paid between your own wallets, naming the wallet) or
+  `unknown` when no synced record carries that payment hash. The invoice itself
+  is never echoed back in full.
+- Recognized formats the check does not handle yet come back `unsupported`
+  with their type named instead of being called external addresses: BOLT12
+  offers, LNURLs, Lightning addresses, silent-payment addresses, outpoints,
+  and extended public keys. Private keys are also `unsupported`, and their
+  value is never echoed back.
 - Scope with repeatable `--wallet` (default: all wallets). At least one of
   `--address` / `--txid` / `--candidate` / `--file` / `--csv` is required.
 - The desktop **Reconcile** screen is the GUI peer: it runs the cache-only

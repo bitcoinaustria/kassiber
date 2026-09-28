@@ -752,7 +752,10 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                 },
                 "text": {
                     "type": "string",
-                    "description": "Free-form text with one address or txid per line.",
+                    "description": (
+                        "Free-form text with one address, txid, or BOLT11 "
+                        "Lightning invoice per line."
+                    ),
                 },
             },
         },

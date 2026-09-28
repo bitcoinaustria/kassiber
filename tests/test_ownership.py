@@ -30,7 +30,8 @@ def _engine_conn():
             address_index INTEGER, chain TEXT, network TEXT, script_pubkey TEXT
         );
         CREATE TABLE transactions (
-            profile_id TEXT, wallet_id TEXT, external_id TEXT, raw_json TEXT
+            profile_id TEXT, wallet_id TEXT, external_id TEXT, raw_json TEXT,
+            direction TEXT, payment_hash TEXT
         );
         """
     )
@@ -94,6 +95,161 @@ class ParseTokensTests(unittest.TestCase):
         self.assertEqual(parsed, [])
         self.assertEqual(len(invalid), 1)
         self.assertEqual(invalid[0]["type"], "txid")
+
+
+# BOLT11 spec example, BIP32 test vector 1, and the LUD-01 example LNURL.
+_BOLT11 = (
+    "lnbc1pvjluezsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygspp5qqqsyqcyq5"
+    "rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdpl2pkx2ctnv5sxxmmwwd5kgetjypeh2ursdae8g"
+    "6twvus8g6rfwvs8qun0dfjkxaq9qrsgq357wnc5r2ueh7ck6q93dj32dlqnls087fxdwk8qakdyafkq3ya"
+    "p9us6v52vjjsrvywa6rt52cm9r9zqt8r2t7mlcwspyetp5h2tztugp9lfyql"
+)
+_XPUB = (
+    "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8Yt"
+    "GqsefD265TMg7usUDFdp6W1EGMcet8"
+)
+_XPRV = (
+    "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5k"
+    "ejMRNNU3TGtRBeJgk33yuGBxrMPHi"
+)
+_LNURL = (
+    "LNURL1DP68GURN8GHJ7UM9WFMXJCM99E3K7MF0V9CXJ0M385EKVCENXC6R2C35XVUKXEFCV5MKVV34X5E"
+    "KZD3EV56NYD3HXQURZEPEXEJXXEPNXSCRVWFNV9NXZCN9XQ6XYEFHVGCXXCMYXYMNSERXFQ5FNS"
+)
+
+
+class UnsupportedFormatTests(unittest.TestCase):
+    def _unsupported(self, token):
+        parsed, rows = ownership.parse_tokens(candidates=[token])
+        self.assertEqual(parsed, [], token)
+        self.assertEqual(len(rows), 1, token)
+        self.assertEqual(rows[0]["status"], "unsupported")
+        return rows[0]
+
+    def test_payment_and_key_formats_are_named_not_called_addresses(self):
+        cases = {
+            "lno1" + "q" * 60: "lightning_offer",
+            _LNURL: "lnurl",
+            "satoshi@example.com": "lightning_address",
+            "sp1q" + "q" * 110: "silent_payment_address",
+            "ab" * 32 + ":1": "outpoint",
+            _XPUB: "extended_public_key",
+        }
+        for token, token_type in cases.items():
+            row = self._unsupported(token)
+            self.assertEqual(row["type"], token_type, token)
+            if token_type == "lightning_offer":
+                self.assertNotEqual(row["input"], token)
+            else:
+                self.assertEqual(row["input"], token)
+
+    def test_addresses_and_txids_are_unaffected(self):
+        parsed, rows = ownership.parse_tokens(
+            candidates=[
+                "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+                "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy",
+                "ab" * 32,
+            ]
+        )
+        self.assertEqual(rows, [])
+        self.assertEqual([p["type"] for p in parsed], ["address", "address", "txid"])
+
+    def test_private_keys_are_never_echoed(self):
+        for token in (_XPRV, f"wpkh([d34db33f/84h/0h/0h]{_XPRV}/0/*)"):
+            row = self._unsupported(token)
+            self.assertEqual(row["type"], "private_key")
+            self.assertNotIn(_XPRV, json.dumps(row))
+
+    def test_identify_reports_and_counts_unsupported(self):
+        report = ownership.identify(
+            _engine_conn(),
+            "p1",
+            candidates=["lno1" + "q" * 60, _XPRV, "not-an-address"],
+            scan_to_index=0,
+        )
+        self.assertNotIn(_XPRV, json.dumps(report))
+        by_type = {row["type"]: row for row in report["results"]}
+        self.assertEqual(by_type["lightning_offer"]["classification"], "unsupported")
+        self.assertEqual(by_type["address"]["status"], "invalid")
+        self.assertEqual(report["summary"]["unsupported"], 2)
+        self.assertEqual(report["summary"]["invalid"], 1)
+
+    def test_ai_projection_hides_an_echoed_xpub(self):
+        report = ownership.identify(_engine_conn(), "p1", candidates=[_XPUB], scan_to_index=0)
+        redacted = ownership.redact_result_for_ai(report["results"][0])
+        self.assertNotIn(_XPUB, json.dumps(redacted))
+
+
+_BOLT11_HASH = "0001020304050607080900010203040506070809000102030405060708090102"
+
+
+def _lightning_conn(*directions):
+    conn = _engine_conn()
+    conn.execute(
+        "INSERT INTO wallets VALUES ('w-ln', 'p1', 'Node', 'lnd', '{}', NULL)"
+    )
+    for direction in directions:
+        conn.execute(
+            "INSERT INTO transactions VALUES ('p1', 'w-ln', NULL, '{}', ?, ?)",
+            (direction, _BOLT11_HASH),
+        )
+    return conn
+
+
+class LightningInvoiceTests(unittest.TestCase):
+    def test_invoice_parses_to_its_payment_hash_without_keeping_the_invoice(self):
+        for token in (_BOLT11, "lightning:" + _BOLT11.upper()):
+            parsed, rows = ownership.parse_tokens(candidates=[token])
+            self.assertEqual(rows, [])
+            self.assertEqual(parsed[0]["type"], "lightning_invoice")
+            self.assertEqual(parsed[0]["normalized"], _BOLT11_HASH)
+            self.assertNotIn(_BOLT11, json.dumps(parsed).lower())
+
+    def test_a_broken_invoice_is_invalid_and_not_echoed(self):
+        broken = _BOLT11[:-1] + ("q" if _BOLT11[-1] != "q" else "p")
+        parsed, rows = ownership.parse_tokens(candidates=[broken])
+        self.assertEqual(parsed, [])
+        self.assertEqual(rows[0]["type"], "lightning_invoice")
+        self.assertNotIn(broken, json.dumps(rows))
+
+    def test_matches_the_node_that_paid_or_received_it(self):
+        cases = {
+            ("outbound",): "outbound_payment",
+            ("inbound",): "inbound_receipt",
+            ("outbound", "inbound"): "self_transfer",
+        }
+        for directions, classification in cases.items():
+            report = ownership.identify(
+                _lightning_conn(*directions), "p1", candidates=[_BOLT11], scan_to_index=0
+            )
+            row = report["results"][0]
+            self.assertEqual(row["status"], "owned")
+            self.assertEqual(row["classification"], classification)
+            self.assertEqual(row["wallets"], ["Node"])
+            self.assertNotIn(_BOLT11, json.dumps(report))
+
+    def test_an_unseen_invoice_is_unknown_not_external(self):
+        report = ownership.identify(_lightning_conn(), "p1", candidates=[_BOLT11], scan_to_index=0)
+        self.assertEqual(report["results"][0]["status"], "unknown")
+        self.assertEqual(report["summary"]["unknown"], 1)
+
+    def test_wallet_scope_excludes_other_nodes(self):
+        report = ownership.identify(
+            _lightning_conn("outbound"),
+            "p1",
+            candidates=[_BOLT11],
+            wallet_ids=["someone-else"],
+            scan_to_index=0,
+        )
+        self.assertEqual(report["results"][0]["status"], "unknown")
+
+    def test_ai_projection_hides_the_invoice(self):
+        report = ownership.identify(
+            _lightning_conn("outbound"), "p1", candidates=[_BOLT11], scan_to_index=0
+        )
+        redacted = ownership.redact_result_for_ai(report["results"][0])
+        self.assertEqual(redacted["input"], "Lightning invoice (not shown)")
+        self.assertEqual(redacted["wallets"], ["Node"])
 
 
 class OwnedIndexPhysicalScopeTests(unittest.TestCase):
