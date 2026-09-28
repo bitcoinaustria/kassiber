@@ -20,6 +20,9 @@ def restore_targets(data_root: Path) -> dict[str, Path]:
         "kassiber.sqlite3": data_root / "kassiber.sqlite3",
         "kassiber.sqlite3-wal": data_root / "kassiber.sqlite3-wal",
         "kassiber.sqlite3-shm": data_root / "kassiber.sqlite3-shm",
+        # A hot rollback journal belongs to the old database: keep it with the
+        # recovery copy, never beside the restored file.
+        "kassiber.sqlite3-journal": data_root / "kassiber.sqlite3-journal",
         "attachments": state / "attachments",
         "config/backends.env": state / "config/backends.env",
         "config/settings.json": state / "config/settings.json",
@@ -44,7 +47,12 @@ def install_staged_backup(staging: Path, data_root: Path) -> Path | None:
         # Finish potentially failing copies before touching the live tree.
         for name in targets:
             source = staging / name
-            if name in {"exports", "kassiber.sqlite3-wal", "kassiber.sqlite3-shm"} or not source.exists():
+            if name in {
+                "exports",
+                "kassiber.sqlite3-wal",
+                "kassiber.sqlite3-shm",
+                "kassiber.sqlite3-journal",
+            } or not source.exists():
                 continue
             destination = prepared / name
             destination.parent.mkdir(parents=True, exist_ok=True)

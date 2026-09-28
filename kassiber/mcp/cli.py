@@ -317,6 +317,14 @@ class BookToolProvider:
             wipe_prepared,
         )
 
+        from .. import daemon
+
+        # Validate here, in this build, before anything is queued: the broker
+        # child runs the broker's build, which must not be the only check.
+        entry = mcp_tools.entry_for(name)
+        if entry is None:
+            raise AppError(f"unknown Kassiber MCP tool: {name}", code="unknown_tool")
+        daemon._validate_ai_tool_arguments(entry, arguments)
         client = BrokerClient()
         # Status never starts a broker; without a lease there is nothing to
         # submit to, so do not spawn one just to be refused.
@@ -376,6 +384,8 @@ class BookToolProvider:
                 # Its warning would be invisible (stderr is silenced), so an
                 # older broker that ignores caller context is refused outright.
                 require_caller_context=True,
+                # Agent reads run the broker's code; only this build's broker.
+                require_same_build=True,
             )
         finally:
             wipe_prepared(prepared)
@@ -414,7 +424,10 @@ def _brokered_result(operation_id: str, completed: dict[str, Any]) -> dict[str, 
     if isinstance(envelope, dict) and envelope.get("kind") == "mcp.call":
         data = envelope.get("data")
         if isinstance(data, dict):
-            return data
+            from ..ai.tools import redact_ai_tool_result
+
+            # Redact again at this process's boundary, as the direct path does.
+            return redact_ai_tool_result(data)
     if isinstance(envelope, dict) and isinstance(envelope.get("error"), dict):
         error = envelope["error"]
         raise AppError(

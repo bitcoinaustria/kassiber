@@ -21,7 +21,7 @@ from kassiber.operator.server import (
     main,
 )
 from kassiber.errors import AppError
-from kassiber.operator.protocol import TEST_RUNTIME_OVERRIDE_ENV
+from kassiber.operator.protocol import PROTOCOL_VERSION, TEST_RUNTIME_OVERRIDE_ENV
 
 
 class OperatorServerTest(unittest.TestCase):
@@ -35,7 +35,7 @@ class OperatorServerTest(unittest.TestCase):
         server.request_stop = mock.Mock()
         channel = mock.MagicMock()
         channel.receive_json.return_value = {
-            "version": 1,
+            "version": PROTOCOL_VERSION,
             "action": "restart_for_native_auth",
         }
 
@@ -332,6 +332,43 @@ class OperatorServerTest(unittest.TestCase):
         with self.assertRaises(AppError) as raised:
             self._submit_with_caller_context(no_egress="1")
         self.assertEqual(raised.exception.code, "operator_protocol_error")
+
+    def test_ping_and_status_name_the_brokers_build(self) -> None:
+        from kassiber.operator.build import build_identity
+
+        server = BrokerServer.__new__(BrokerServer)
+        server.generation = "generation"
+        server.service = mock.Mock()
+        server.service.status.return_value = {"broker": "running", "lease": "locked"}
+        with mock.patch(
+            "kassiber.operator.native_auth.native_auth_helper_identity",
+            return_value=None,
+        ):
+            ping = server._handle(mock.Mock(), {"action": "ping"})
+        self.assertEqual(ping["data"]["build"], build_identity())
+        status = server._handle(mock.Mock(), {"action": "status"})
+        self.assertEqual(status["data"]["broker_build"], build_identity())
+
+    def test_submit_for_another_build_is_refused_before_admission(self) -> None:
+        from kassiber.operator.build import build_identity
+
+        server = BrokerServer.__new__(BrokerServer)
+        server.service = mock.Mock()
+        channel = mock.Mock()
+        with self.assertRaises(AppError) as raised:
+            server._handle(
+                channel,
+                {
+                    "action": "submit",
+                    "data_root": "/project",
+                    "operation_id": "g.client.1",
+                    "argv": ["--machine", "status"],
+                    "expected_build": {**build_identity(), "origin": "f" * 12},
+                },
+            )
+        self.assertEqual(raised.exception.code, "operator_broker_build_mismatch")
+        server.service.submit.assert_not_called()
+        channel.send_json.assert_not_called()
 
     def test_password_unlock_cannot_claim_touch_id_authentication(self) -> None:
         server = BrokerServer.__new__(BrokerServer)

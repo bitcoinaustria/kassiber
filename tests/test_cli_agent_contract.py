@@ -223,3 +223,20 @@ class CliAgentContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LockContentionReportingTests(unittest.TestCase):
+    def test_a_locked_database_is_reported_as_busy_not_internal_error(self):
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as root:
+            data_root = str(Path(root) / "data")
+            _run("--data-root", data_root, "--machine", "init")
+            with patch(
+                "kassiber.cli.main.bootstrap_runtime",
+                side_effect=sqlite3.OperationalError("database is locked"),
+            ):
+                payload, code, _stderr = _run("--data-root", data_root, "--machine", "status")
+        self.assertEqual(code, 1)
+        self.assertEqual(payload["error"]["code"], "database_busy")
+        self.assertTrue(payload["error"]["retryable"])

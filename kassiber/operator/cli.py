@@ -20,6 +20,7 @@ from .client import (
     prepare_arguments,
     wipe_prepared,
 )
+from .build import build_identity, describe_build
 from .modes import effective_unlock_mode, unlock_mode_status
 from .native_auth import touch_id_status
 from .runner import strip_database_passphrase_arguments
@@ -60,6 +61,10 @@ def add_operator_parser(subparsers: argparse._SubParsersAction) -> None:
     status = commands.add_parser("status", help="Show public-safe broker state")
     status.add_argument("--all", action="store_true", help="Show every active project lease")
     commands.add_parser("lock", help="Drop the active project lease")
+    commands.add_parser(
+        "stop",
+        help="Stop this user's idle operator broker, whichever build started it",
+    )
 
     mode = commands.add_parser("mode", help="Select manual, brokered, or unattended unlock")
     mode.add_argument("mode", choices=("manual", "brokered", "unattended"))
@@ -92,6 +97,9 @@ def dispatch_operator(args: argparse.Namespace) -> dict[str, object]:
             return client.operation_status(args.operation_id)
         return client.cancel(args.operation_id)
 
+    if command == "stop":
+        return client.stop()
+
     data_root = _selected_data_root(args)
     if command == "touch-id":
         if args.operator_touch_id_command == "status":
@@ -113,6 +121,10 @@ def dispatch_operator(args: argparse.Namespace) -> dict[str, object]:
         broker = client.status(None if args.all else data_root)
         if not args.all:
             broker["mode"] = unlock_mode_status(data_root)
+        if "broker_build" in broker:
+            # A lease serves every build, but runs the broker's own code.
+            broker["this_build"] = build_identity()
+            broker["same_build"] = broker["broker_build"] == broker["this_build"]
         return broker
     if command == "lock":
         return client.lock(data_root)
@@ -218,10 +230,13 @@ def route_brokered_command(
             )
         prepared = prepare_arguments(pinned_argv)
         client = BrokerClient()
+        # Ordinary commands never start a broker: without a lease it could not
+        # run them, and a stray broker would serve every other build.
         accepted = client.submit(
             data_root,
             prepared,
             admin_authentication=admin_authentication,
+            start_broker=False,
         )
         operation_id = accepted.get("operation_id")
         if not isinstance(operation_id, str):
@@ -236,6 +251,7 @@ def route_brokered_command(
                         {
                             "operation_id": operation_id,
                             "state": accepted.get("state"),
+                            "broker_build": accepted.get("broker_build"),
                         },
                     ),
                     separators=(",", ":"),
@@ -244,6 +260,11 @@ def route_brokered_command(
             )
         else:
             sys.stderr.write(f"operator operation accepted: {operation_id}\n")
+            if accepted.get("broker_build") != build_identity():
+                sys.stderr.write(
+                    "note: this runs in "
+                    f"{describe_build(accepted.get('broker_build'))}, which holds the lease\n"
+                )
         try:
             completed = client.wait(operation_id)
         except KeyboardInterrupt:

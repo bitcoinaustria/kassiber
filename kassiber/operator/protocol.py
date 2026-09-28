@@ -18,7 +18,9 @@ from typing import Any, BinaryIO, Callable, Protocol
 from ..errors import AppError
 
 
-PROTOCOL_VERSION = 1
+# 2: brokers name their build and honor `expected_build`. A broker from
+# before that must refuse such a request rather than ignore the binding.
+PROTOCOL_VERSION = 2
 MAX_JSON_FRAME = 8 * 1024 * 1024
 MAX_SECRET_FRAME = 16 * 1024
 SECRET_CHALLENGE_ENTROPY_BYTES = 24

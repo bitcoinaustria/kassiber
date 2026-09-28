@@ -169,6 +169,14 @@ remains outside that closeout.
   `--no-wait` plus `operator operation result`, precise failed-vs-unknown for
   pre-transaction errors, and specific startup diagnostics instead of
   retryable `operator_broker_start_failed` (for example missing logind).
+- [ ] Make a repeat open of a current database write nothing. Each open
+  still runs about 30 idempotent write statements (source-funds link and case
+  normalization, AI provider display names, BIP-329 wallet ids, custody
+  component legs, the wages sentinel `INSERT OR IGNORE`, and `DROP`/`CREATE
+  TRIGGER`/`INDEX IF EXISTS` pairs), so a CLI or MCP read opened while the
+  desktop or a broker child writes waits for the lock and can end in
+  `database_busy`. Gate them on schema version or a completed-migration
+  marker, with a test that a second open issues no writes.
 - [ ] Extend `commands describe` to catalog v2: argument JSON schemas (types,
   booleans, defaults, mutually exclusive groups), explicit secret-argument and
   sensitive-output registries, emitted kinds, egress class, and pagination
@@ -217,11 +225,11 @@ remains outside that closeout.
 
 ## Privacy and security follow-ups
 
-- [ ] Make CLI `backup import --install` use the desktop restore contract:
-  exclusive maintenance, ownership check, job quiescing, credential
-  invalidation, and proof that the restored inner DB is encrypted with a known
-  passphrase. Today it can swap files under a live desktop or broker owner and
-  silently turn a project plaintext from a partition archive.
+- [ ] Finish the desktop restore contract for CLI `backup import --install`:
+  it already refuses a live desktop or broker owner, but it still skips
+  credential invalidation and proof that the restored inner DB is encrypted
+  with a known passphrase, so a partition archive can silently turn a project
+  plaintext.
 - [ ] Keep encryption sticky: record that a project must be encrypted and
   return `resume_required` or `missing_database` instead of creating a new
   plaintext DB when the file is missing (interrupted `secrets init`, unmounted

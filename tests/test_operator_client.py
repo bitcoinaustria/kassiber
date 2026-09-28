@@ -10,6 +10,7 @@ from kassiber.errors import AppError
 from kassiber.operator.client import (
     MAX_CLIENT_SECRET_BYTES,
     BrokerClient,
+    PreparedArguments,
     prepare_arguments,
     wipe_prepared,
 )
@@ -366,3 +367,274 @@ class OperatorBrokerLaunchDirectoryTest(unittest.TestCase):
         cwd = popen.call_args.kwargs["cwd"]
         self.assertNotEqual(os.path.realpath(cwd), os.path.realpath(caller))
         self.assertTrue(os.path.isdir(os.path.join(cwd, "kassiber")))
+
+
+class OperatorClientBuildBindingTest(unittest.TestCase):
+    def test_unlock_never_sends_a_passphrase_to_another_builds_broker(self) -> None:
+        from kassiber.operator.build import build_identity
+
+        client = BrokerClient()
+        other = {**build_identity(), "origin": "f" * 12}
+        with mock.patch.object(
+            client, "ensure_running", return_value={"generation": "g", "build": other}
+        ), mock.patch(
+            "kassiber.operator.client.connect",
+            side_effect=AssertionError("must not connect to send the passphrase"),
+        ):
+            with self.assertRaises(AppError) as raised:
+                client.unlock(
+                    "/project",
+                    bytearray(b"secret"),
+                    duration_seconds=None,
+                    capability="read",
+                    authentication_method="password",
+                )
+        self.assertEqual(raised.exception.code, "operator_broker_build_mismatch")
+        self.assertEqual(raised.exception.details["broker_build"], other)
+
+    def test_a_broker_without_build_identity_is_another_build(self) -> None:
+        client = BrokerClient()
+        with mock.patch.object(client, "ensure_running", return_value={"generation": "g"}):
+            with self.assertRaises(AppError) as raised:
+                client.set_mode("/project", "brokered", bytearray(b"secret"))
+        self.assertEqual(raised.exception.code, "operator_broker_build_mismatch")
+
+    def test_protocol_mismatch_fails_fast_without_spawning_a_broker(self) -> None:
+        client = BrokerClient()
+        mismatch = AppError("mismatch", code="operator_protocol_version_mismatch")
+        with mock.patch.object(client, "ping", side_effect=mismatch), mock.patch(
+            "kassiber.operator.client.subprocess.Popen",
+            side_effect=AssertionError("must not spawn"),
+        ):
+            with self.assertRaises(AppError) as raised:
+                client.ensure_running()
+        self.assertEqual(raised.exception.code, "operator_broker_build_mismatch")
+
+    def test_stop_asks_an_idle_broker_to_exit_and_explains_a_busy_one(self) -> None:
+        client = BrokerClient()
+        with mock.patch.object(client, "ping", return_value={"build": {"version": "x"}}), mock.patch.object(
+            client, "_simple_request", return_value={"restart": "accepted"}
+        ) as request:
+            self.assertEqual(client.stop()["broker"], "stopping")
+        request.assert_called_once_with("restart_for_native_auth")
+        busy = AppError("busy", code="operator_broker_busy")
+        with mock.patch.object(client, "ping", return_value={}), mock.patch.object(
+            client, "_simple_request", side_effect=busy
+        ):
+            with self.assertRaises(AppError) as raised:
+                client.stop()
+        self.assertIn("operator lock", raised.exception.hint)
+        with mock.patch.object(client, "ping", side_effect=ConnectionRefusedError()):
+            self.assertEqual(client.stop(), {"broker": "stopped"})
+
+    def test_stop_explains_a_broker_of_another_protocol(self) -> None:
+        client = BrokerClient()
+        mismatch = AppError("mismatch", code="operator_protocol_version_mismatch")
+        with mock.patch.object(client, "ping", side_effect=mismatch), mock.patch.object(
+            client, "_simple_request", side_effect=AssertionError("it would refuse this too")
+        ):
+            with self.assertRaises(AppError) as raised:
+                client.stop()
+        self.assertEqual(raised.exception.code, "operator_broker_build_mismatch")
+        self.assertIn("from that build", raised.exception.hint)
+
+    def test_the_broker_asking_for_the_secret_must_be_this_build(self) -> None:
+        # The ping reached this build, but another broker took the endpoint
+        # before the secret-bearing connection.
+        from kassiber.operator.build import build_identity
+
+        client = BrokerClient()
+        other = {**build_identity(), "origin": "f" * 12}
+        channel = _ScriptedChannel(
+            [{"ok": True, "continue": "secret", "challenge": "c", "build": other}]
+        )
+        with mock.patch.object(
+            client, "ensure_running", return_value={"generation": "g", "build": build_identity()}
+        ), mock.patch("kassiber.operator.client.connect", return_value=channel):
+            for call in (
+                lambda: client.unlock(
+                    "/project",
+                    bytearray(b"secret"),
+                    duration_seconds=None,
+                    capability="read",
+                    authentication_method="password",
+                ),
+                lambda: client.set_mode("/project", "brokered", bytearray(b"secret")),
+            ):
+                channel.responses[:] = [
+                    {"ok": True, "continue": "secret", "challenge": "c", "build": other}
+                ]
+                with self.subTest(call=call), self.assertRaises(AppError) as raised:
+                    call()
+                self.assertEqual(raised.exception.code, "operator_broker_build_mismatch")
+        self.assertEqual(channel.secrets, [])
+
+    def test_work_another_build_accepted_is_withdrawn_when_this_build_is_required(self) -> None:
+        from kassiber.operator.build import build_identity
+
+        client = BrokerClient()
+        other = {**build_identity(), "origin": "f" * 12}
+        accepted = {"operation_id": "g.client.1", "state": "queued", "build": other}
+        with mock.patch.object(
+            client, "ping", return_value={"generation": "g", "build": build_identity(), "caller_context": True}
+        ), mock.patch.object(client, "_submit_once", return_value=accepted), mock.patch.object(
+            client, "cancel"
+        ) as cancel:
+            with self.assertRaises(AppError) as raised:
+                client.submit(
+                    "/project",
+                    PreparedArguments(["status"], {}),
+                    admin_authentication=None,
+                    start_broker=False,
+                    require_same_build=True,
+                )
+            self.assertEqual(raised.exception.code, "operator_broker_build_mismatch")
+            cancel.assert_called_once()
+            # Ordinary commands run where the lease is, and say so.
+            ordinary = client.submit(
+                "/project",
+                PreparedArguments(["status"], {}),
+                admin_authentication=None,
+                start_broker=False,
+            )
+        self.assertEqual(ordinary["broker_build"], other)
+        self.assertNotIn("build", ordinary)
+
+    def test_an_acceptance_without_a_build_falls_back_to_the_ping(self) -> None:
+        from kassiber.operator.build import build_identity
+
+        client = BrokerClient()
+        other = {**build_identity(), "origin": "f" * 12}
+        with mock.patch.object(
+            client, "ping", return_value={"generation": "g", "build": other, "caller_context": True}
+        ), mock.patch.object(
+            client, "_submit_once", return_value={"operation_id": "g.client.1", "state": "queued"}
+        ), mock.patch.object(client, "cancel") as cancel:
+            ordinary = client.submit(
+                "/project",
+                PreparedArguments(["status"], {}),
+                admin_authentication=None,
+                start_broker=False,
+            )
+            self.assertEqual(ordinary["broker_build"], other)
+            # Required binding never trusts the ping for an unnamed acceptance.
+            with mock.patch.object(
+                client,
+                "ping",
+                return_value={"generation": "g", "build": build_identity(), "caller_context": True},
+            ), self.assertRaises(AppError):
+                client.submit(
+                    "/project",
+                    PreparedArguments(["status"], {}),
+                    admin_authentication=None,
+                    start_broker=False,
+                    require_same_build=True,
+                )
+        cancel.assert_called_once()
+
+    def test_a_retry_accepted_by_another_build_is_still_refused(self) -> None:
+        from kassiber.operator.build import build_identity
+
+        client = BrokerClient()
+        other = {**build_identity(), "origin": "f" * 12}
+        accepted = {"operation_id": "g.client.1", "state": "queued", "build": other}
+        with mock.patch.object(
+            client, "ping", return_value={"generation": "g", "build": build_identity(), "caller_context": True}
+        ), mock.patch.object(
+            client, "_submit_once", side_effect=[ConnectionResetError(), accepted]
+        ), mock.patch.object(client, "cancel"), mock.patch.object(
+            client, "operation_status", side_effect=AssertionError("no reconciliation")
+        ):
+            with self.assertRaises(AppError) as raised:
+                client.submit(
+                    "/project",
+                    PreparedArguments(["status"], {}),
+                    admin_authentication=None,
+                    start_broker=False,
+                    require_same_build=True,
+                )
+        self.assertEqual(raised.exception.code, "operator_broker_build_mismatch")
+
+    def test_submit_asks_the_broker_to_refuse_another_build(self) -> None:
+        from kassiber.operator.build import build_identity
+
+        client = BrokerClient()
+        channel = _ScriptedChannel(
+            [
+                {"ok": True, "data": {"operation_id": "g.client.1", "build": build_identity()}},
+                {"ok": True, "data": {"operation_id": "g.client.2"}},
+            ]
+        )
+        with mock.patch("kassiber.operator.client.connect", return_value=channel):
+            for operation_id, required in (("g.client.1", True), ("g.client.2", False)):
+                client._submit_once(
+                    "/project",
+                    PreparedArguments(["status"], {}),
+                    operation_id=operation_id,
+                    admin_authentication=None,
+                    require_same_build=required,
+                )
+        self.assertEqual(channel.sent[0]["expected_build"], build_identity())
+        self.assertNotIn("expected_build", channel.sent[1])
+
+    def test_a_retried_unnamed_acceptance_reports_no_build(self) -> None:
+        from kassiber.operator.build import build_identity
+
+        client = BrokerClient()
+        with mock.patch.object(
+            client, "ping", return_value={"generation": "g", "build": build_identity(), "caller_context": True}
+        ), mock.patch.object(
+            client,
+            "_submit_once",
+            side_effect=[ConnectionResetError(), {"operation_id": "g.client.1", "state": "queued"}],
+        ):
+            result = client.submit(
+                "/project",
+                PreparedArguments(["status"], {}),
+                admin_authentication=None,
+                start_broker=False,
+            )
+        self.assertIsNone(result["broker_build"])
+
+    def test_a_retried_submit_still_names_the_brokers_build(self) -> None:
+        from kassiber.operator.build import build_identity
+
+        client = BrokerClient()
+        accepted = {"operation_id": "g.client.1", "state": "queued", "build": build_identity()}
+        with mock.patch.object(
+            client, "ping", return_value={"generation": "g", "build": build_identity(), "caller_context": True}
+        ), mock.patch.object(
+            client, "_submit_once", side_effect=[ConnectionResetError(), accepted]
+        ):
+            result = client.submit(
+                "/project",
+                PreparedArguments(["status"], {}),
+                admin_authentication=None,
+                start_broker=False,
+                require_same_build=True,
+            )
+        self.assertEqual(result["broker_build"], build_identity())
+
+
+class _ScriptedChannel:
+    """A broker connection that replays responses and records secrets."""
+
+    def __init__(self, responses: list[dict]) -> None:
+        self.responses = responses
+        self.secrets: list[bytes] = []
+        self.sent: list[dict] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        return None
+
+    def send_json(self, payload) -> None:
+        self.sent.append(payload)
+
+    def receive_json(self):
+        return self.responses.pop(0)
+
+    def send_secret(self, challenge, secret) -> None:
+        self.secrets.append(bytes(secret))

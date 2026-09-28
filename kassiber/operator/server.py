@@ -24,6 +24,7 @@ from .protocol import (
     BrokerChannel,
     listen,
 )
+from .build import build_identity
 from .project import canonical_project
 from .policy import require_project_policy_binding
 from .runner import run_cli_operation
@@ -222,19 +223,21 @@ class BrokerServer:
                     # Submissions bind the caller's working directory and
                     # egress kill switch. Older brokers silently ignore them.
                     "caller_context": True,
+                    # Clients compare this before handing over a passphrase:
+                    # queued work runs this build's code, not the caller's.
+                    "build": build_identity(),
                 }
             )
         if action == "restart_for_native_auth":
             return _ok(self.service.prepare_idle_restart())
         if action == "status":
             data_root = request.get("data_root")
-            return _ok(
-                self.service.status(
-                    _canonical_data_root(data_root)
-                    if isinstance(data_root, str)
-                    else None
-                )
+            status = self.service.status(
+                _canonical_data_root(data_root)
+                if isinstance(data_root, str)
+                else None
             )
+            return _ok({**status, "broker_build": build_identity()})
         if action == "unlock":
             data_root = _canonical_data_root(_required_string(request, "data_root"))
             if request.get("authentication_method", "password") != "password":
@@ -250,6 +253,7 @@ class BrokerServer:
                     "continue": "secret",
                     "label": "database_passphrase",
                     "challenge": challenge,
+                    "build": build_identity(),
                 }
             )
             passphrase = channel.receive_secret(challenge)
@@ -327,6 +331,7 @@ class BrokerServer:
                     "continue": "secret",
                     "label": "fresh_admin_auth",
                     "challenge": challenge,
+                    "build": build_identity(),
                 }
             )
             authentication = channel.receive_secret(challenge)
@@ -363,6 +368,7 @@ class BrokerServer:
                     "continue": "secret",
                     "label": "fresh_native_auth",
                     "challenge": challenge,
+                    "build": build_identity(),
                 }
             )
             authentication = channel.receive_secret(challenge)
@@ -405,6 +411,20 @@ class BrokerServer:
         no_egress = request.get("no_egress", False)
         if not isinstance(no_egress, bool):
             raise AppError("invalid broker egress flag", code="operator_protocol_error")
+        expected_build = request.get("expected_build")
+        if expected_build is not None and expected_build != build_identity():
+            # Before any secret or admission: the caller must not have this
+            # build's work run by another one.
+            raise AppError(
+                "the operator broker is another Kassiber build",
+                code="operator_broker_build_mismatch",
+                hint=(
+                    "Run `kassiber operator lock` and `kassiber operator stop`, "
+                    "then retry."
+                ),
+                details={"broker_build": build_identity()},
+                retryable=False,
+            )
         command_path, capability = _classify_argv(argv)
         admin_command_label = None
         if command_path == "secrets.remember-unlock" and "--passphrase-fd" not in argv:
@@ -426,6 +446,7 @@ class BrokerServer:
                     "continue": "secrets",
                     "challenges": challenges,
                     "admin_challenge": admin_challenge,
+                    "build": build_identity(),
                 }
             )
         secret_arguments: dict[str, bytearray] = {}
@@ -446,17 +467,16 @@ class BrokerServer:
                 )
                 if admin_command_label is not None:
                     secret_arguments[admin_command_label] = bytearray(admin_auth)
-            return _ok(
-                self.service.submit(
-                    data_root,
-                    argv,
-                    operation_id=operation_id,
-                    secret_arguments=secret_arguments,
-                    admin_authorization=admin_authorization,
-                    working_directory=working_directory,
-                    no_egress=no_egress,
-                )
+            accepted = self.service.submit(
+                data_root,
+                argv,
+                operation_id=operation_id,
+                secret_arguments=secret_arguments,
+                admin_authorization=admin_authorization,
+                working_directory=working_directory,
+                no_egress=no_egress,
             )
+            return _ok({**accepted, "build": build_identity()})
         except Exception:
             for value in secret_arguments.values():
                 _wipe(value)

@@ -34,6 +34,7 @@ from kassiber.mcp.protocol import (
     ToolOutcome,
     serve,
 )
+from kassiber.operator.build import build_identity
 from kassiber.operator.cli import route_brokered_command
 from tests.integration.env import no_egress_guard
 
@@ -615,7 +616,9 @@ class BrokeredRoutingTests(_TwoBookFixture):
                 "stderr": "",
             },
         ):
-            outcome = self.provider().call_tool("status", {"x": 1}, threading.Event())
+            outcome = self.provider().call_tool(
+                "transactions_list", {"limit": 3}, threading.Event()
+            )
         self.assertFalse(outcome.is_error, outcome.structured)
         self.assertEqual(outcome.structured["data"], {"ok": 1})
         argv = captured["argv"]
@@ -625,7 +628,7 @@ class BrokeredRoutingTests(_TwoBookFixture):
         self.assertEqual(argv[argv.index("mcp") : argv.index("mcp") + 2], ["mcp", "call"])
         self.assertEqual(argv[argv.index("--workspace") + 1], "ws-id")
         self.assertEqual(argv[argv.index("--profile") + 1], "book-id")
-        self.assertEqual(json.loads(argv[argv.index("--arguments") + 1]), {"x": 1})
+        self.assertEqual(json.loads(argv[argv.index("--arguments") + 1]), {"limit": 3})
         self.assertNotIn("--db-passphrase-fd", argv)
 
     def test_brokered_child_errors_become_tool_errors(self):
@@ -847,12 +850,41 @@ class OutdatedBrokerMcpTests(_TwoBookFixture):
             BrokerClient, "status",
             return_value={"lease": "unlocked", "default_scope": {"workspace": "w", "profile": "p"}},
         ), mock.patch.object(
-            BrokerClient, "ping", return_value={"generation": "old"}
+            BrokerClient, "ping", return_value={"generation": "old", "build": build_identity()}
         ), mock.patch.object(
             BrokerClient, "_submit_once", side_effect=AssertionError("must not submit")
         ):
             outcome = self.provider().call_tool("status", {}, threading.Event())
         self.assertEqual(outcome.structured["error"]["code"], "operator_broker_outdated")
+
+    def test_mcp_refuses_a_broker_of_another_build(self):
+        from kassiber.operator.client import BrokerClient
+
+        other = {**build_identity(), "origin": "0" * 12}
+        with mock.patch(
+            "kassiber.operator.modes.effective_unlock_mode", return_value="brokered"
+        ), mock.patch.object(
+            BrokerClient, "status",
+            return_value={"lease": "unlocked", "default_scope": {"workspace": "w", "profile": "p"}},
+        ), mock.patch.object(
+            BrokerClient, "ping",
+            return_value={"generation": "g", "caller_context": True, "build": other},
+        ), mock.patch.object(
+            BrokerClient, "_submit_once", side_effect=AssertionError("must not submit")
+        ):
+            outcome = self.provider().call_tool("status", {}, threading.Event())
+        self.assertEqual(outcome.structured["error"]["code"], "operator_broker_build_mismatch")
+
+    def test_invalid_arguments_are_refused_before_anything_is_queued(self):
+        from kassiber.operator.client import BrokerClient
+
+        with mock.patch(
+            "kassiber.operator.modes.effective_unlock_mode", return_value="brokered"
+        ), mock.patch.object(
+            BrokerClient, "status", side_effect=AssertionError("must not contact the broker")
+        ):
+            outcome = self.provider().call_tool("status", {"x": 1}, threading.Event())
+        self.assertEqual(outcome.structured["error"]["code"], "validation")
 
 
 class StrictJsonTests(unittest.TestCase):
