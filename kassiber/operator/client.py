@@ -12,7 +12,11 @@ from typing import BinaryIO
 
 from ..errors import AppError
 from ..secrets.prompt import MAX_PASSPHRASE_BYTES
-from .launcher import broker_server_command, prepare_independent_child_environment
+from .launcher import (
+    broker_server_command,
+    prepare_independent_child_environment,
+    trusted_launch_directory,
+)
 from .protocol import (
     MAX_SECRET_PAYLOAD_BYTES,
     PROTOCOL_VERSION,
@@ -63,6 +67,8 @@ class BrokerClient:
             "stderr": subprocess.DEVNULL,
             "env": environment,
             "close_fds": True,
+            # Never the first client's directory: see trusted_launch_directory.
+            "cwd": trusted_launch_directory(),
         }
         if os.name == "nt":
             popen_args["creationflags"] = (
@@ -264,6 +270,7 @@ class BrokerClient:
         generation = broker.get("generation")
         if not isinstance(generation, str):
             raise AppError("broker generation is unavailable", code="operator_protocol_error")
+        _require_caller_context_support(broker)
         operation_id = f"{generation}.client.{secrets.token_hex(16)}"
         try:
             return self._submit_once(
@@ -329,6 +336,8 @@ class BrokerClient:
                     "operation_id": operation_id,
                     "argv": prepared.argv,
                     "secret_labels": list(prepared.secrets),
+                    "working_directory": _caller_working_directory(),
+                    "no_egress": _caller_disables_egress(),
                 }
             )
             response = self._receive(channel)
@@ -488,6 +497,55 @@ def prepare_arguments(
             _wipe(secret)
         raise
     return PreparedArguments(prepared, secret_values)
+
+
+def _require_caller_context_support(broker: dict[str, object]) -> None:
+    """Refuse to lose the caller's egress kill switch to an older broker.
+
+    A broker from an earlier build that is still running ignores the caller
+    context fields. The kill switch must never fail open, so refuse before
+    anything is queued; relative paths would only resolve in the broker's
+    directory, so warn about those.
+    """
+
+    if broker.get("caller_context") is True:
+        return
+    hint = (
+        "An older operator broker is still running. Ask the user to stop it "
+        "(log out, or end the `kassiber.operator.server` process) and unlock again."
+    )
+    if _caller_disables_egress():
+        raise AppError(
+            "the running operator broker cannot honor KASSIBER_NO_EGRESS",
+            code="operator_broker_outdated",
+            hint=hint,
+            retryable=False,
+        )
+    sys.stderr.write(
+        "warning: the running operator broker predates caller working "
+        "directories; pass absolute paths. " + hint + "\n"
+    )
+
+
+def _caller_working_directory() -> str:
+    # The broker was started from whatever directory its first client used;
+    # the queued child must resolve this caller's relative paths instead.
+    # Omitting the field means "older client" to the broker, so an unreadable
+    # cwd (renamed or deleted under us) must fail rather than fall back.
+    try:
+        return os.getcwd()
+    except OSError:
+        raise AppError(
+            "the current working directory is no longer available",
+            code="operator_working_directory_unavailable",
+            hint="Run the command from an existing directory or pass absolute paths.",
+            retryable=False,
+        ) from None
+
+
+def _caller_disables_egress() -> bool:
+    value = str(os.environ.get("KASSIBER_NO_EGRESS") or "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 def wipe_prepared(prepared: PreparedArguments) -> None:

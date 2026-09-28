@@ -232,7 +232,10 @@ gopass show kassiber/db-pass | kassiber --db-passphrase-fd 0 status
 ```
 
 Wrong passphrase → `unlock_failed`. Missing passphrase against an encrypted
-DB → `passphrase_required`. Plaintext DB → no prompt.
+DB in machine/non-interactive mode → `interaction_required` with
+`details.reason = database_passphrase`. Plaintext DB → no prompt. Agents use a
+brokered session instead of the fd: the user runs `kassiber operator unlock`
+in their own terminal.
 
 ## Secrets
 
@@ -276,11 +279,13 @@ the bundle is still SQLCipher-encrypted under the original DB passphrase.
 
 ```bash
 kassiber backends reveal-token <name>
-kassiber wallets reveal-descriptor <wallet-label> --workspace personal --profile main
+kassiber wallets reveal-descriptor --wallet <wallet-label> --workspace personal --profile main
 ```
 
-Each request triggers a daemon `auth_required` round-trip; a wrong
-passphrase produces `local_auth_denied`. Do not pipe reveal output into chat.
+These print the raw secret. The desktop daemon gates reveals behind a fresh
+`auth_required` round-trip; the CLI prints directly on plaintext and
+unattended books and needs fresh admin authentication under a brokered lease.
+Agents never run reveal commands; the user runs them locally.
 
 ## Transactions
 

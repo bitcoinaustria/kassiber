@@ -135,6 +135,23 @@ class CliAgentContractTests(unittest.TestCase):
             self.assertEqual(payload["error"]["code"], "interaction_required")
             self.assertIn("--new-passphrase-fd", payload["error"]["hint"])
 
+    def test_machine_mode_reports_usage_errors_as_one_envelope(self):
+        with tempfile.TemporaryDirectory() as root:
+            for argv in (
+                ("--machine", "status", "--bogus"),
+                ("status", "--machine"),
+                ("--machine", "no-such-command"),
+            ):
+                with self.subTest(argv=argv):
+                    stdout = io.StringIO()
+                    with redirect_stdout(stdout), redirect_stderr(io.StringIO()):
+                        code = main(["--data-root", str(Path(root) / "data"), *argv])
+                    payload = json.loads(stdout.getvalue())
+                    self.assertEqual(code, 2)
+                    self.assertEqual(payload["error"]["code"], "usage_error")
+                    self.assertIn("before the subcommand", payload["error"]["hint"])
+            self.assertFalse((Path(root) / "data").exists())
+
     def test_health_and_next_actions_are_direct_cli_reads(self):
         with tempfile.TemporaryDirectory() as root:
             data_root = Path(root) / "data"

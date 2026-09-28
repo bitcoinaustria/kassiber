@@ -136,15 +136,22 @@ live under `<skill-dir>/references/`, not repo-root `references/`.
 
 If a command returns:
 
-- `passphrase_required` — the on-disk database is SQLCipher-encrypted but no
-  passphrase was supplied. Re-run interactively, or pass
-  `--db-passphrase-fd <FD>` from a parent process. There is no
-  `--db-passphrase <value>` flag.
+- `interaction_required` with `details.reason = database_passphrase` — the
+  on-disk database is SQLCipher-encrypted and nothing unlocked it. An agent
+  asks the user to run `kassiber operator unlock` in their own terminal and
+  retries; it never asks for the passphrase. A controlling process that owns
+  the secret may pass `--db-passphrase-fd <FD>`. There is no
+  `--db-passphrase <value>` flag. (`passphrase_required` is the lower-level
+  open error that non-interactive commands report as this.)
+- `interaction_required` with `details.reason = operator_lease_required` —
+  the project is in brokered mode without an active lease; the user unlocks.
+- `database_busy` — another process holds a lock on the encrypted database;
+  the passphrase was not rejected. Retry later; never ask for the passphrase again.
 - `unlock_failed` — the passphrase did not match. Double-check it; if rotated
   recently, the old passphrase no longer works.
 - `remembered_unlock_stale` on stderr — the stored copy no longer opens this
   database. Re-enroll with `kassiber secrets remember-unlock`; Kassiber still
-  falls through to the normal prompt or `passphrase_required` path.
+  falls through to the normal prompt or `interaction_required` path.
 - `remembered_unlock_unavailable` — the native credential store is missing,
   locked, or rejected the write. Keep using `--db-passphrase-fd`; Kassiber does
   not create a plaintext fallback.

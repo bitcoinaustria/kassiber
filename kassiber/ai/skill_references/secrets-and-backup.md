@@ -10,8 +10,11 @@ plaintext on disk and credentials were collected via argv flags.
 
 ## Passphrase entry
 
-The SQLCipher passphrase has no argv form — by design. CLI unlock has three
-channels, in priority order:
+The SQLCipher passphrase has no argv form — by design. Agents never handle it:
+for agent or scripted sessions the user runs `kassiber operator unlock` in
+their own terminal and commands run through the brokered lease (see
+[the operator broker](../../../docs/reference/operator-broker.md)). Outside
+brokered mode, CLI unlock has three channels, in priority order:
 
 - `--db-passphrase-fd <FD>` global flag (any non-negative integer) reads raw
   UTF-8 bytes from an already-open file descriptor. Strips one trailing
@@ -34,7 +37,8 @@ Behavior to remember:
 
 - A wrong passphrase surfaces as the structured `unlock_failed` envelope, not
   a generic SQLite error.
-- A missing passphrase against an encrypted DB produces `passphrase_required`.
+- A missing passphrase against an encrypted DB in machine/non-interactive mode
+  produces `interaction_required` with `details.reason = database_passphrase`.
 - The plaintext code path is preserved: when the on-disk file looks like a
   vanilla SQLite database, no passphrase is asked for and the legacy behavior
   is unchanged.
@@ -42,6 +46,29 @@ Behavior to remember:
   Windows Credential Manager, or available/unlocked Linux Secret Service. It is
   not recovery: the passphrase remains the perimeter and losing it means data
   loss.
+
+## Encrypted books and agent sessions
+
+Agents never ask for, receive, or relay the database passphrase. When a
+command on an encrypted book returns `interaction_required`, read
+`error.details.reason`:
+
+- `database_passphrase`: the book is encrypted and nothing unlocked it. Run
+  `kassiber --machine operator status` (it never starts a broker), then ask the
+  user to run `kassiber operator unlock` in their own terminal (add
+  `--capability read` for a read-only session), and retry.
+- `operator_lease_required`: brokered mode is selected but no lease is active.
+  Ask the user to unlock again.
+- `fresh_local_authentication`: admin work (reveal, delete, backup, passphrase
+  or unlock-policy changes) needs the user's own fresh authentication. Ask the
+  user to run that exact command themselves.
+
+Under a brokered lease every command runs as a queued broker operation. Pass
+`--workspace` and `--profile` explicitly. Relative paths resolve in your
+working directory. In `--machine` mode an
+`operator.operation.accepted` JSON line on stderr carries the operation id. If
+you lose track of a mutation, inspect it with `kassiber operator operation
+status <id>` before retrying. `kassiber chat` is refused in brokered mode.
 
 ## Remembered CLI unlock
 
@@ -61,7 +88,7 @@ accepts only the native keyring backend for macOS, Windows, or Linux Secret
 Service; configured third-party/file backends are treated as unavailable. CLI
 reads are not biometric-gated. If the stored copy is stale, Kassiber
 writes `remembered_unlock_stale` to stderr and falls through to the existing
-prompt or `passphrase_required` behavior. Headless systems should keep using
+prompt or `interaction_required` behavior. Headless systems should keep using
 `--db-passphrase-fd`. `kassiber secrets status` reports `platform`,
 `access_policy`, `available`, `configured`, and `cli_enabled` under
 `remembered_unlock`. The stable access-policy codes are
@@ -242,16 +269,18 @@ the secret in chat.
 
 ## Reveal: pulling a secret back out of the DB
 
-The daemon refuses to return raw descriptor or token material without a
-fresh passphrase round-trip even if the DB is already unlocked in the
+The desktop daemon refuses to return raw descriptor or token material without
+a fresh passphrase round-trip even if the DB is already unlocked in the
 running process. Each reveal request requires an `auth_response` carrying
-the passphrase; a wrong passphrase produces `local_auth_denied`.
+the passphrase; a wrong passphrase produces `local_auth_denied`. The CLI
+prints the secret directly on plaintext and unattended books and needs fresh
+admin authentication under a brokered lease. Agents never run reveal commands.
 
 CLI surfaces:
 
 ```bash
 kassiber backends reveal-token <name>
-kassiber wallets reveal-descriptor <wallet-label> --workspace personal --profile main
+kassiber wallets reveal-descriptor --wallet <wallet-label> --workspace personal --profile main
 ```
 
 These exist for legitimate recovery and rotation workflows. Do not pipe the

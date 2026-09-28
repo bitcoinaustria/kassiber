@@ -219,6 +219,9 @@ class BrokerServer:
                     "generation": self.generation,
                     "native_auth_available": native_auth_identity is not None,
                     "native_auth_identity": native_auth_identity,
+                    # Submissions bind the caller's working directory and
+                    # egress kill switch. Older brokers silently ignore them.
+                    "caller_context": True,
                 }
             )
         if action == "restart_for_native_auth":
@@ -398,6 +401,10 @@ class BrokerServer:
             or len(set(labels)) != len(labels)
         ):
             raise AppError("invalid broker secret labels", code="operator_protocol_error")
+        working_directory = _optional_working_directory(request)
+        no_egress = request.get("no_egress", False)
+        if not isinstance(no_egress, bool):
+            raise AppError("invalid broker egress flag", code="operator_protocol_error")
         command_path, capability = _classify_argv(argv)
         admin_command_label = None
         if command_path == "secrets.remember-unlock" and "--passphrase-fd" not in argv:
@@ -446,6 +453,8 @@ class BrokerServer:
                     operation_id=operation_id,
                     secret_arguments=secret_arguments,
                     admin_authorization=admin_authorization,
+                    working_directory=working_directory,
+                    no_egress=no_egress,
                 )
             )
         except Exception:
@@ -473,6 +482,38 @@ def _required_string(payload: dict[str, Any], key: str) -> str:
         raise AppError(
             f"operator request requires {key}",
             code="operator_protocol_error",
+            retryable=False,
+        )
+    return value
+
+
+def _optional_working_directory(payload: dict[str, Any]) -> str | None:
+    """Accept the caller's cwd so relative argv paths keep their meaning.
+
+    The caller is the same OS user and could pass absolute paths instead, so
+    this grants nothing; it only has to be a real directory right now.
+    """
+
+    value = payload.get("working_directory")
+    if value is None:
+        return None
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > 4096
+        or "\x00" in value
+        or not os.path.isabs(value)
+    ):
+        raise AppError(
+            "invalid broker working directory",
+            code="operator_protocol_error",
+            retryable=False,
+        )
+    if not os.path.isdir(value):
+        raise AppError(
+            "the caller's working directory no longer exists",
+            code="operator_working_directory_unavailable",
+            hint="Run the command from an existing directory or pass absolute paths.",
             retryable=False,
         )
     return value

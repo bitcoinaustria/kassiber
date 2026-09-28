@@ -1176,6 +1176,31 @@ class OperatorServiceTest(unittest.TestCase):
                 service.close()
 
     @unittest.skipUnless(sqlcipher_available(), "SQLCipher is required")
+    def test_real_worker_child_writes_relative_output_in_callers_directory(self) -> None:
+        passphrase = "correct horse battery staple"
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as caller:
+            create_empty_encrypted_database(resolve_database_path(tmp), passphrase)
+            connection = open_db(tmp, passphrase=passphrase)
+            set_setting(connection, "app_version", "test")
+            connection.commit()
+            connection.close()
+            service = OperatorService("generation", run_cli_operation)
+            try:
+                service.unlock(tmp, bytearray(passphrase.encode()), duration_seconds=None)
+                accepted = service.submit(
+                    tmp,
+                    ["--data-root", tmp, "--machine", "--output", "status.json", "status"],
+                    working_directory=caller,
+                )
+                completed = self._wait_terminal(service, accepted["operation_id"])
+                self.assertEqual(completed["state"], "completed", completed)
+                written = Path(caller) / "status.json"
+                self.assertEqual(json.loads(written.read_text())["kind"], "status")
+                self.assertFalse((Path.cwd() / "status.json").exists())
+            finally:
+                service.close()
+
+    @unittest.skipUnless(sqlcipher_available(), "SQLCipher is required")
     @unittest.skipUnless(
         sys.platform.startswith("linux"),
         "Linux small-pipe regression",
@@ -1679,6 +1704,110 @@ class OperatorServiceTest(unittest.TestCase):
                 )
             finally:
                 service.close()
+
+    def test_operation_id_replay_must_repeat_the_callers_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as caller, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ):
+            release = threading.Event()
+
+            def runner(*_args: object) -> OperationResult:
+                release.wait(5)
+                return OperationResult(0, "", "")
+
+            service = OperatorService("generation", runner)
+            try:
+                service.unlock(tmp, bytearray(b"passphrase"), duration_seconds=None)
+                operation_id = "generation.client.fixed"
+                service.submit(
+                    tmp,
+                    ["status"],
+                    operation_id=operation_id,
+                    working_directory=caller,
+                )
+                replay = service.submit(
+                    tmp,
+                    ["status"],
+                    operation_id=operation_id,
+                    working_directory=caller,
+                )
+                self.assertEqual(replay["operation_id"], operation_id)
+                for changed in (
+                    {"working_directory": tmp},
+                    {"working_directory": caller, "no_egress": True},
+                ):
+                    with self.subTest(changed=changed), self.assertRaises(AppError) as raised:
+                        service.submit(
+                            tmp,
+                            ["status"],
+                            operation_id=operation_id,
+                            **changed,
+                        )
+                    self.assertEqual(
+                        raised.exception.code,
+                        "operator_operation_id_conflict",
+                    )
+            finally:
+                release.set()
+                service.close()
+
+    def test_worker_child_gets_caller_directory_and_tightened_egress(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as caller:
+            project = canonical_project(tmp)
+            operation = Operation(
+                id="generation.caller-context",
+                generation="generation",
+                project_id=project.public_id,
+                project_identity=project.identity,
+                database_identity="d" * 32,
+                data_root=str(project.database.parent),
+                argv=["--data-root", str(project.database.parent), "--machine", "status"],
+                command_path="status",
+                capability=Capability.READ,
+                secret_arguments={},
+                working_directory=caller,
+                no_egress=True,
+            )
+            process = mock.Mock(returncode=0)
+            process.communicate.return_value = (b"", b"")
+            with mock.patch.dict(os.environ, {"KASSIBER_NO_EGRESS": ""}), mock.patch.object(
+                operator_runner.subprocess,
+                "Popen",
+                return_value=process,
+            ) as popen, mock.patch.object(operator_runner, "_write_secret"):
+                run_cli_operation(operation, bytearray(b"passphrase"))
+
+        options = popen.call_args.kwargs
+        # The launch directory stays the broker's, so a source install's
+        # `python -m kassiber` import path cannot come from the caller.
+        self.assertEqual(options["cwd"], operator_runner.trusted_launch_directory())
+        self.assertNotEqual(os.path.realpath(options["cwd"]), os.path.realpath(caller))
+        self.assertEqual(
+            options["env"][operator_runner.CALLER_WORKING_DIRECTORY_ENV],
+            caller,
+        )
+        self.assertEqual(options["env"]["KASSIBER_NO_EGRESS"], "1")
+
+    def test_worker_refuses_when_the_callers_directory_disappeared(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as root:
+            project = canonical_project(tmp)
+            operation = Operation(
+                id="generation.caller-gone",
+                generation="generation",
+                project_id=project.public_id,
+                project_identity=project.identity,
+                database_identity="d" * 32,
+                data_root=str(project.database.parent),
+                argv=["--data-root", str(project.database.parent), "status"],
+                command_path="status",
+                capability=Capability.READ,
+                secret_arguments={},
+                working_directory=os.path.join(root, "gone"),
+            )
+            with mock.patch.object(operator_runner.subprocess, "Popen") as popen:
+                with self.assertRaises(RuntimeError):
+                    run_cli_operation(operation, bytearray(b"passphrase"))
+            popen.assert_not_called()
 
     def test_replaced_database_path_keeps_prior_lease_revocable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, mock.patch(

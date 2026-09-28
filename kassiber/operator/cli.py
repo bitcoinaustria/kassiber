@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from typing import Sequence
 
 from ..command_capabilities import Capability, cli_capability
-from ..core.runtime import resolve_runtime_paths
+from ..core.runtime import emit_error, resolve_runtime_paths
+from ..envelope import build_envelope
 from ..errors import AppError
 from ..secrets.prompt import prompt_passphrase, read_passphrase_from_fd
 from .client import (
@@ -208,6 +210,7 @@ def route_brokered_command(
                 operator_auth_fd,
                 non_interactive=args.non_interactive,
                 label="Fresh database passphrase for admin operation: ",
+                fd_flag="--operator-auth-fd",
             )
         prepared = prepare_arguments(pinned_argv)
         client = BrokerClient()
@@ -219,7 +222,23 @@ def route_brokered_command(
         operation_id = accepted.get("operation_id")
         if not isinstance(operation_id, str):
             raise AppError("broker did not return an operation id", code="operator_protocol_error")
-        if not args.machine:
+        if args.machine:
+            # One JSON line on stderr keeps stdout a single envelope while
+            # still telling a caller that may time out which work to inspect.
+            sys.stderr.write(
+                json.dumps(
+                    build_envelope(
+                        "operator.operation.accepted",
+                        {
+                            "operation_id": operation_id,
+                            "state": accepted.get("state"),
+                        },
+                    ),
+                    separators=(",", ":"),
+                )
+                + "\n"
+            )
+        else:
             sys.stderr.write(f"operator operation accepted: {operation_id}\n")
         try:
             completed = client.wait(operation_id)
@@ -232,32 +251,97 @@ def route_brokered_command(
             return 130
         stdout = completed.get("stdout")
         stderr = completed.get("stderr")
-        if isinstance(stdout, str) and stdout:
+        child_wrote_stdout = isinstance(stdout, str) and bool(stdout)
+        if child_wrote_stdout:
             sys.stdout.write(stdout)
         if isinstance(stderr, str) and stderr:
             sys.stderr.write(stderr)
-        output_error = completed.get("output_error")
-        if isinstance(output_error, dict):
-            code = str(output_error.get("code") or "operator_output_unavailable")
-            message = str(
-                output_error.get("message")
-                or "The operator result output is unavailable."
-            )
-            sys.stderr.write(f"{code}: {message}\n")
-            return 1
         state = completed.get("state")
         exit_code = completed.get("exit_code")
+        output_error = completed.get("output_error")
+        if isinstance(output_error, dict):
+            emit_error(
+                args,
+                _operation_outcome_error(
+                    str(output_error.get("code") or "operator_output_unavailable"),
+                    str(
+                        output_error.get("message")
+                        or "The operator result output is unavailable."
+                    ),
+                    operation_id,
+                    completed,
+                    hint=(
+                        "Narrow the query or write a file export; reconcile a "
+                        "mutation before retrying it."
+                    ),
+                ),
+            )
+            return 1
         if state == "result_unknown":
             sys.stderr.write(
                 f"operator result is unknown; inspect operation {operation_id} before retrying\n"
             )
+            if not child_wrote_stdout:
+                emit_error(
+                    args,
+                    _operation_outcome_error(
+                        "operator_result_unknown",
+                        "the broker cannot prove whether the operation ran",
+                        operation_id,
+                        completed,
+                        hint=(
+                            f"Run `kassiber operator operation status {operation_id}` "
+                            "and reconcile the book before retrying."
+                        ),
+                    ),
+                )
             return 1
+        if state in {"cancelled", "failed"} and not child_wrote_stdout:
+            # Queued work cancelled by lock/expiry never started; say so on
+            # stdout instead of leaving a machine caller with empty output.
+            emit_error(
+                args,
+                _operation_outcome_error(
+                    f"operator_operation_{state}",
+                    f"the operator operation was {state}",
+                    operation_id,
+                    completed,
+                    hint=(
+                        "Check `kassiber operator status`; if the lease ended, ask "
+                        "the user to run `kassiber operator unlock` and retry."
+                    ),
+                    retryable=state == "cancelled",
+                ),
+            )
+            # A signal-killed child reports a negative code; exit plainly.
+            return int(exit_code) if isinstance(exit_code, int) and exit_code > 0 else 1
         return int(exit_code) if isinstance(exit_code, int) else (0 if state == "completed" else 1)
     finally:
         if prepared is not None:
             wipe_prepared(prepared)
         if admin_authentication is not None:
             _wipe(admin_authentication)
+
+
+def _operation_outcome_error(
+    code: str,
+    message: str,
+    operation_id: str,
+    completed: dict[str, object],
+    *,
+    hint: str,
+    retryable: bool = False,
+) -> AppError:
+    details: dict[str, object] = {
+        "operation_id": operation_id,
+        "state": completed.get("state"),
+    }
+    if isinstance(completed.get("exit_code"), int):
+        details["exit_code"] = completed["exit_code"]
+    reason = completed.get("reason")
+    if isinstance(reason, str) and reason:
+        details["reason"] = reason
+    return AppError(message, code=code, hint=hint, details=details, retryable=retryable)
 
 
 def _selected_data_root(args: argparse.Namespace) -> str:
@@ -269,19 +353,36 @@ def _selected_data_root(args: argparse.Namespace) -> str:
     return paths.data_root
 
 
-def _password_secret(fd: int | None, *, non_interactive: bool, label: str) -> bytearray:
+def _password_secret(
+    fd: int | None,
+    *,
+    non_interactive: bool,
+    label: str,
+    fd_flag: str = "--passphrase-fd",
+) -> bytearray:
     if fd is not None:
         return bytearray(read_passphrase_from_fd(int(fd)).encode("utf-8"))
-    _require_interactive_auth(non_interactive)
+    _require_interactive_auth(non_interactive, fd_flag=fd_flag)
     return bytearray(prompt_passphrase(label).encode("utf-8"))
 
 
-def _require_interactive_auth(non_interactive: bool) -> None:
+def _require_interactive_auth(non_interactive: bool, *, fd_flag: str | None = None) -> None:
     if non_interactive or not sys.stdin.isatty():
+        # Agents reach this path too; the useful next step is the user's own
+        # terminal, never a passphrase relayed through the agent.
+        alternative = (
+            f", or have a controlling process pass it through {fd_flag}"
+            if fd_flag
+            else ""
+        )
         raise AppError(
             "fresh local authentication is required",
             code="interaction_required",
-            hint="Pass the passphrase through the command's dedicated fd flag.",
+            hint=(
+                "Ask the user to run this command in their own terminal"
+                f"{alternative}. Never ask for the passphrase itself."
+            ),
+            details={"reason": "fresh_local_authentication"},
             retryable=False,
         )
 
