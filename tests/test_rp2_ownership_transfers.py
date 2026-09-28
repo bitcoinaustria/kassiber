@@ -63,6 +63,26 @@ WALLET_REFS = {
 }
 
 
+def _root_quarantine_reasons(test, quarantines):
+    """Reasons of rows with their own problem; downstream rows must name one.
+
+    Rows held behind a pool's basis barrier (for example receipts that share
+    the blocked event's instant) are reported as downstream quarantines that
+    point at the transactions whose unresolved state set the barrier.
+    """
+
+    quarantines = list(quarantines)
+    roots = [q for q in quarantines if q["reason"] != "custody_basis_barrier"]
+    root_ids = {q["transaction_id"] for q in roots}
+    for quarantine in quarantines:
+        if quarantine["reason"] != "custody_basis_barrier":
+            continue
+        pointers = json.loads(quarantine["detail_json"])["root_transaction_ids"]
+        test.assertTrue(pointers)
+        test.assertLessEqual(set(pointers), root_ids)
+    return sorted(q["reason"] for q in roots)
+
+
 def _match(wallet_id, label):
     return OwnedMatch(wallet_id, label, "", "bitcoin", "main", "", None, None, "derived")
 
@@ -503,7 +523,7 @@ class OwnershipDeriverEngineTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            sorted(q["reason"] for q in state.quarantines),
+            _root_quarantine_reasons(self, state.quarantines),
             ["ownership_transfer_duplicate_outbound"] * 3,
         )
         self.assertFalse(
@@ -1182,8 +1202,18 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
             )
         )
         self.assertEqual(
-            [q["reason"] for q in state.quarantines],
+            _root_quarantine_reasons(self, state.quarantines),
             ["ownership_transfer_destination_ambiguous"],
+        )
+        # The same-instant acquisition and both candidate receipts are held too;
+        # they are listed as downstream rows instead of vanishing silently.
+        self.assertEqual(
+            sorted(
+                q["transaction_id"]
+                for q in state.quarantines
+                if q["reason"] == "custody_basis_barrier"
+            ),
+            sorted(row["id"] for row in rows if row["direction"] == "inbound"),
         )
         entry_types = [entry["entry_type"] for entry in state.entries]
         # The graph proves an owned destination, while two imported receipts are
@@ -1273,7 +1303,7 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
         # ownership interpreter identifies the actual ambiguity and applies its
         # blocker atomically to every physical-event leg.
         self.assertEqual(
-            sorted(q["reason"] for q in state.quarantines),
+            _root_quarantine_reasons(self, state.quarantines),
             ["ownership_transfer_destination_ambiguous"] * 3,
         )
         self.assertNotIn("transfer_in", [entry["entry_type"] for entry in state.entries])
@@ -1587,7 +1617,7 @@ class OwnershipDeriverAmbiguityTest(unittest.TestCase):
             return sum(
                 float(totals["quantity"])
                 for _, totals in state.wallet_holdings.items()
-            ), [q["reason"] for q in state.quarantines]
+            ), _root_quarantine_reasons(self, state.quarantines)
 
         index = OwnedIndex()
         index.add_script(SCRIPT_A, _match("A", "Cold"))

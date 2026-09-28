@@ -79,6 +79,18 @@ class QuantityTaxEligibility:
     pool_barriers: tuple[
         tuple["TaxExposurePool", tuple[str, str, str, str, str]], ...
     ] = ()
+    # Transactions of the issues that set each pool's barrier. They explain
+    # every later quarantine in the pool; resolving them lifts the barrier.
+    pool_barrier_roots: tuple[tuple["TaxExposurePool", tuple[str, ...]], ...] = ()
+
+    def barrier_roots_for(self, observation: QuantityObservation) -> tuple[str, ...]:
+        """Return the transactions whose unresolved issue set this pool's barrier."""
+
+        pool = TaxExposurePool.from_observation(observation)
+        return next(
+            (roots for candidate, roots in self.pool_barrier_roots if candidate == pool),
+            (),
+        )
 
     def barrier_for(
         self,
@@ -737,6 +749,7 @@ def _tax_eligibility(
     barriers_by_pool: dict[
         TaxExposurePool, tuple[str, str, str, str, str]
     ] = {}
+    roots_by_pool: dict[TaxExposurePool, set[str]] = {}
     directly_blocked_hashes: set[str] = set()
 
     def row_pool(row: Mapping[str, Any]) -> TaxExposurePool | None:
@@ -767,10 +780,14 @@ def _tax_eligibility(
     def register(
         pool: TaxExposurePool,
         barrier: tuple[str, str, str, str, str],
+        root_transaction_ids: Iterable[str],
     ) -> None:
         current = barriers_by_pool.get(pool)
         if current is None or barrier < current:
             barriers_by_pool[pool] = barrier
+            roots_by_pool[pool] = set(root_transaction_ids)
+        elif barrier == current:
+            roots_by_pool[pool].update(root_transaction_ids)
 
     for issue in issues:
         if issue.issue_type in {
@@ -787,16 +804,25 @@ def _tax_eligibility(
             (
                 pool_by_hash[transaction_to_hash[transaction_id]],
                 event_order_by_hash[transaction_to_hash[transaction_id]],
+                transaction_id,
             )
             for transaction_id in issue.transaction_ids
             if transaction_id in transaction_to_hash
             and transaction_to_hash[transaction_id] in event_order_by_hash
         ]
         if known:
-            for pool in {pool for pool, _barrier in known}:
+            for pool in {pool for pool, _barrier, _tx in known}:
+                pool_barrier = min(
+                    barrier for candidate, barrier, _tx in known if candidate == pool
+                )
                 register(
                     pool,
-                    min(barrier for candidate, barrier in known if candidate == pool),
+                    pool_barrier,
+                    (
+                        transaction_id
+                        for candidate, barrier, transaction_id in known
+                        if candidate == pool and barrier == pool_barrier
+                    ),
                 )
             continue
         if not issue.occurred_at:
@@ -821,7 +847,7 @@ def _tax_eligibility(
             # pool in this already profile-scoped build is affected.
             rejected_pools = set(pool_by_hash.values())
         for pool in rejected_pools:
-            register(pool, synthetic)
+            register(pool, synthetic, issue.transaction_ids)
 
     barrier = min(barriers_by_pool.values()) if barriers_by_pool else None
     blocked_from = barrier[0] if barrier is not None else None
@@ -869,6 +895,12 @@ def _tax_eligibility(
         blocked_from,
         barrier,
         tuple(sorted(barriers_by_pool.items())),
+        tuple(
+            sorted(
+                (pool, tuple(sorted(roots)))
+                for pool, roots in roots_by_pool.items()
+            )
+        ),
     )
 
 

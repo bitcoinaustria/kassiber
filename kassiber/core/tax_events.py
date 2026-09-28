@@ -7,7 +7,7 @@ from typing import Any, Literal, Mapping, Optional, Sequence
 
 from ..msat import msat_to_btc
 from ..transfers import detect_unscoped_transfer_review_ids, onchain_transfer_scope
-from . import pricing
+from . import pricing, quarantine_catalog
 from ..tax_policy import resolve_cost_basis_pool_id
 from .austrian import infer_outbound_regimes, infer_regime_from_timestamp
 from .journal_markers import REGIME_BASIS_ELECTION
@@ -321,8 +321,18 @@ def dedupe_quarantines(quarantines: Sequence[Mapping[str, Any]]) -> list[dict[st
     remove. Collapse to one row per transaction, preserving the first-seen
     reason/detail and folding any *distinct* later reasons into
     ``detail_json['additional_reasons']`` so no review signal is silently lost.
-    Exact duplicates are discarded; first-seen transaction order is preserved.
+    A root cause outranks a downstream consequence (for example a custody gap
+    hold over the basis barrier it raises): the stored reason must say what to
+    fix, not what follows from it. Exact duplicates are discarded; first-seen
+    transaction order is preserved.
     """
+
+    def parsed(value: Any) -> Any:
+        try:
+            return json.loads(value)
+        except (ValueError, TypeError):
+            return value
+
     by_id: dict[str, dict[str, Any]] = {}
     for quarantine in quarantines:
         tx_id = quarantine["transaction_id"]
@@ -336,20 +346,24 @@ def dedupe_quarantines(quarantines: Sequence[Mapping[str, Any]]) -> list[dict[st
         ):
             # Identical quarantine for the same transaction — nothing new.
             continue
-        try:
-            detail = json.loads(existing["detail_json"])
-        except (ValueError, TypeError):
-            detail = None
+        primary, secondary = existing, dict(quarantine)
+        if quarantine_catalog.is_downstream(
+            str(existing["reason"])
+        ) and not quarantine_catalog.is_downstream(str(quarantine["reason"])):
+            primary, secondary = dict(quarantine), existing
+        detail = parsed(primary["detail_json"])
         if not isinstance(detail, dict):
             detail = {"detail": detail}
-        try:
-            extra_detail: Any = json.loads(quarantine["detail_json"])
-        except (ValueError, TypeError):
-            extra_detail = quarantine["detail_json"]
-        detail.setdefault("additional_reasons", []).append(
-            {"reason": quarantine["reason"], "detail": extra_detail}
-        )
-        existing["detail_json"] = json.dumps(detail, sort_keys=True)
+        additional = list(detail.pop("additional_reasons", []) or [])
+        secondary_detail = parsed(secondary["detail_json"])
+        carried: list[Any] = []
+        if isinstance(secondary_detail, dict):
+            carried = list(secondary_detail.pop("additional_reasons", []) or [])
+        additional.append({"reason": secondary["reason"], "detail": secondary_detail})
+        additional.extend(carried)
+        detail["additional_reasons"] = additional
+        primary["detail_json"] = json.dumps(detail, sort_keys=True)
+        by_id[tx_id] = primary
     return list(by_id.values())
 
 

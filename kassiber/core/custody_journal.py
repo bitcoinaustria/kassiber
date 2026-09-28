@@ -30,6 +30,7 @@ from . import loans
 from . import ownership
 from . import ownership_transfers
 from . import pricing
+from . import quarantine_catalog
 from . import tax_events
 from . import transfer_matching
 from .custody_evidence import build_canonical_quantity_input, enriched_quantity_rows
@@ -265,10 +266,9 @@ def ownership_review_projection(
     quarantines,
     active_components,
 ) -> dict[str, Any]:
-    blocked_reasons = {
-        str(quarantine["transaction_id"]): str(quarantine["reason"])
-        for quarantine in quarantines
-    }
+    # The same reason the stored quarantine row keeps, so a review card is
+    # derived from the reason the user is shown.
+    blocked_reasons = quarantine_catalog.primary_reasons(quarantines)
     if not blocked_reasons:
         return {"counts": {"total": 0, "by_reason": {}}, "candidates": []}
     active_review_records: list[dict[str, Any]] = []

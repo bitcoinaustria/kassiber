@@ -39,6 +39,7 @@ from ..core import commercial as core_commercial
 from ..core import custody_authored_migration as core_custody_authored_migration
 from ..core import custody_journal as core_custody_journal
 from ..core import quarantine_resolution as core_quarantine_resolution
+from ..core import quarantine_review as core_quarantine_review
 from ..core import custody_review_terms as core_custody_review_terms
 from ..core import freshness as core_freshness
 from ..core import exchange_imports as core_exchange_imports
@@ -4269,6 +4270,7 @@ def list_quarantines(conn, workspace_ref, profile_ref):
         """,
         (profile["id"],),
     ).fetchall()
+    explained = _explained_quarantines(conn, profile, len(rows))
     output = []
     for row in rows:
         detail = json.loads(row["detail_json"] or "{}")
@@ -4286,9 +4288,35 @@ def list_quarantines(conn, workspace_ref, profile_ref):
                 "fee_msat": int(row["fee"]),
                 "reason": row["reason"],
                 "detail": detail,
+                **explained.get(str(row["transaction_id"]), {}),
             }
         )
     return output
+
+
+_EXPLAINED_QUARANTINE_FIELDS = (
+    "category",
+    "blocks_reports",
+    "is_downstream",
+    "root",
+    "reasons",
+    "evidence",
+    "actions",
+)
+
+
+def _explained_quarantines(conn, profile, limit):
+    """Cause, root, blocking state and next action per quarantined row."""
+
+    review = core_quarantine_review.review_quarantine(
+        conn, profile, limit=max(1, int(limit)), offset=0
+    )
+    return {
+        str(item["transaction_id"]): {
+            key: item[key] for key in _EXPLAINED_QUARANTINE_FIELDS
+        }
+        for item in review["items"]
+    }
 
 
 def show_quarantine(conn, workspace_ref, profile_ref, tx_ref):
@@ -4344,6 +4372,14 @@ def show_quarantine(conn, workspace_ref, profile_ref, tx_ref):
         "reason": row["reason"],
         "detail": json.loads(row["detail_json"] or "{}"),
         "quarantined_at": row["created_at"],
+        **_explained_quarantines(
+            conn,
+            profile,
+            conn.execute(
+                "SELECT COUNT(*) FROM journal_quarantines WHERE profile_id = ?",
+                (profile["id"],),
+            ).fetchone()[0],
+        ).get(str(row["transaction_id"]), {}),
     }
 
 
