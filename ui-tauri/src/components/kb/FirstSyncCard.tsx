@@ -94,19 +94,18 @@ export function FirstSyncCard({
     splitSyncProgressLabel(statusLabel);
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center px-4 pb-28">
-      {/* Subtle scrim over the content area to focus the card. It captures
-          pointer events (pointer-events-auto) so background hover/animations go
-          inert while the card is open — only the modal is in focus. Scoped to
-          this content region, so the sidebar/top bar stay usable; "Continue in
-          background" collapses the card to resume working in this area. */}
+    <div className="pointer-events-none absolute inset-0 z-30 flex items-start justify-center overflow-y-auto px-4 pt-(--kb-dialog-top) pb-4">
+      {/* The command palette's treatment, like every dialog: a faint wash over
+          the content area and the frosted palette surface, hung from the shared
+          modal anchor. The wash captures pointer events so background hover and
+          animation go inert while the card is open. It is scoped to this
+          content region, so the nav and title bar stay usable; "Continue in
+          background" collapses the card to resume working here. */}
       <div
         aria-hidden="true"
-        className="pointer-events-auto absolute inset-0 bg-background/30 backdrop-blur-sm"
+        className="kb-glass-backdrop pointer-events-auto absolute inset-0"
       />
-      <div
-        className="relative pointer-events-auto w-full max-w-2xl rounded-[28px] border border-white/70 bg-muted/85 p-5 shadow-[0_24px_90px_rgba(15,23,42,0.26),0_3px_18px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.80)] ring-1 ring-zinc-950/10 backdrop-blur-2xl backdrop-saturate-150 dark:border-border dark:bg-card dark:shadow-[0_18px_48px_rgba(0,0,0,0.28)] dark:ring-border/70 dark:backdrop-blur-none dark:backdrop-saturate-100"
-      >
+      <div className="kb-glass-dialog relative pointer-events-auto w-full max-w-2xl rounded-2xl border p-5">
         <div className="flex items-start gap-3">
           <span
             className={cn(

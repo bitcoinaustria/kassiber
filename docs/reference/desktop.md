@@ -106,6 +106,12 @@ then, because WebView2 would otherwise navigate by itself. Tooltips and menus
 write shortcuts in the platform's notation (`⌘⇧A` on macOS, `Ctrl+Shift+A`
 elsewhere).
 
+Every modal shares the command palette's treatment: dialogs, sheets, the
+palette, and the sync progress card use the same faint, unblurred backdrop and
+frosted surface, and dialogs hang from one anchor below the title bar
+(`--kb-dialog-top`, capped by `--kb-dialog-max-h`) instead of centring, so a
+dialog whose content changes size grows downward rather than jumping.
+
 The command palette (Cmd/Ctrl+K) opens as a launcher: the main pages and
 everyday actions with their shortcuts, before anything is typed. Page shortcuts
 come from the native menu, so the browser preview does not show them. The

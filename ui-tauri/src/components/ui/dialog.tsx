@@ -5,8 +5,14 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
+/**
+ * Where every dialog sits: centred horizontally and hung from the shared modal
+ * anchor below the title bar, the same place as the command palette, growing
+ * downward to at most `--kb-dialog-max-h`. The cap is `!important` so no caller
+ * can push a dialog past the window edge.
+ */
 export const DIALOG_VIEWPORT_CLASSNAME =
-  "fixed top-[var(--kb-window-top-inset)] bottom-0 my-auto max-h-[calc(100dvh-var(--kb-window-top-inset)-2rem)]!"
+  "fixed top-[calc(var(--kb-window-top-inset)+var(--kb-dialog-top))] max-h-(--kb-dialog-max-h)!"
 
 /**
  * Viewport for a dialog that fills the window below its title bar, such as
@@ -48,7 +54,9 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-x-0 top-[var(--kb-window-top-inset)] bottom-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        // The command palette's faint, unblurred wash rather than a black scrim:
+        // the page stays readable behind the dialog.
+        "kb-glass-backdrop fixed inset-x-0 top-[var(--kb-window-top-inset)] bottom-0 z-50 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
         className
       )}
       {...props}
@@ -72,7 +80,9 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "kb-glass-dialog left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] gap-4 rounded-lg border bg-background p-6 text-foreground duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
+          // The command palette's surface: frosted `kb-glass-dialog`, a large
+          // radius, and the same slight settle (98%, not the stock 95%).
+          "kb-glass-dialog left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] gap-4 rounded-2xl border p-6 text-foreground duration-200 ease-in-out outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-98 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-98 sm:max-w-lg",
           fullWindow ? DIALOG_FULL_WINDOW_CLASSNAME : DIALOG_VIEWPORT_CLASSNAME,
           className
         )}
@@ -82,7 +92,7 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="absolute top-4 right-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="absolute top-3 right-3 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             <XIcon />
             <span className="sr-only">Close</span>

@@ -88,14 +88,13 @@ describe("WindowFrame", () => {
     expect(html).toContain("md:rounded-xl md:border md:border-border/70");
   });
 
-  it("keeps portalled dialogs below the title bar, so it stays draggable", () => {
+  it("hangs dialogs below the title bar, so it stays draggable", () => {
+    // The shared modal anchor under the title bar, and a cap that keeps every
+    // dialog inside the window (see `--kb-dialog-max-h` in globals.css).
     expect(DIALOG_VIEWPORT_CLASSNAME).toContain(
-      "top-[var(--kb-window-top-inset)]",
+      "top-[calc(var(--kb-window-top-inset)+var(--kb-dialog-top))]",
     );
-    expect(DIALOG_VIEWPORT_CLASSNAME).toContain("bottom-0");
-    expect(DIALOG_VIEWPORT_CLASSNAME).toContain(
-      "100dvh-var(--kb-window-top-inset)-2rem",
-    );
+    expect(DIALOG_VIEWPORT_CLASSNAME).toContain("max-h-(--kb-dialog-max-h)!");
     expect(DIALOG_FULL_WINDOW_CLASSNAME).toContain(
       "top-[var(--kb-window-top-inset)]",
     );
