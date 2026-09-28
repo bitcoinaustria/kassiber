@@ -396,7 +396,13 @@ class BrokerServer:
     ) -> dict[str, Any]:
         data_root = _canonical_data_root(_required_string(request, "data_root"))
         operation_id = _required_string(request, "operation_id")
-        argv = request.get("argv")
+        if request.get("argv_follows") is True:
+            # The command line can carry secrets and book data: name this
+            # build first, so the client sends it only to its own build.
+            channel.send_json({"ok": True, "continue": "argv", "build": build_identity()})
+            argv = channel.receive_json().get("argv")
+        else:
+            argv = request.get("argv")
         labels = request.get("secret_labels", [])
         if not isinstance(argv, list) or not all(isinstance(value, str) for value in argv):
             raise AppError("invalid broker argv", code="operator_protocol_error")

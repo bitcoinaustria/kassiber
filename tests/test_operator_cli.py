@@ -171,9 +171,8 @@ class OperatorCliTest(unittest.TestCase):
         self.assertEqual(captured["secrets"], {})
         # An ordinary command must never start a broker of its own build.
         self.assertIs(captured["start_broker"], False)
-        # Ordinary commands may run on another build's broker (the lease was
-        # granted there); only agent reads insist on this build.
-        self.assertIs(captured["require_same_build"], False)
+        # Brokered work goes only to this build's broker.
+        self.assertIs(captured["require_same_build"], True)
         # Machine mode writes exactly one accepted event and nothing secret.
         events = [json.loads(line) for line in stderr.getvalue().splitlines()]
         self.assertEqual(

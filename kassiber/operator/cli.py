@@ -20,7 +20,7 @@ from .client import (
     prepare_arguments,
     wipe_prepared,
 )
-from .build import build_identity, describe_build
+from .build import build_identity
 from .modes import effective_unlock_mode, unlock_mode_status
 from .native_auth import touch_id_status
 from .runner import strip_database_passphrase_arguments
@@ -237,9 +237,9 @@ def route_brokered_command(
             prepared,
             admin_authentication=admin_authentication,
             start_broker=False,
-            # Agent reads run the broker's code, like `mcp serve`'s calls:
-            # only this build's broker may answer a one-shot `mcp call`.
-            require_same_build=path == "mcp.call",
+            # Brokered work runs the broker's code, and its command line can
+            # carry secrets: only this build's broker may take it.
+            require_same_build=True,
         )
         operation_id = accepted.get("operation_id")
         if not isinstance(operation_id, str):
@@ -263,11 +263,6 @@ def route_brokered_command(
             )
         else:
             sys.stderr.write(f"operator operation accepted: {operation_id}\n")
-            if accepted.get("broker_build") != build_identity():
-                sys.stderr.write(
-                    "note: this runs in "
-                    f"{describe_build(accepted.get('broker_build'))}, which holds the lease\n"
-                )
         try:
             completed = client.wait(operation_id)
         except KeyboardInterrupt:

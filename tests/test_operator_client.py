@@ -270,12 +270,14 @@ if __name__ == "__main__":
 
 class OperatorClientCallerContextTest(unittest.TestCase):
     def _submitted_request(self, environment: dict[str, str]) -> dict[str, object]:
+        from kassiber.operator.build import build_identity
+
         channel = mock.MagicMock()
         channel.__enter__.return_value = channel
-        channel.receive_json.return_value = {
-            "ok": True,
-            "data": {"operation_id": "generation.client.op", "state": "queued"},
-        }
+        channel.receive_json.side_effect = [
+            {"ok": True, "continue": "argv", "build": build_identity()},
+            {"ok": True, "data": {"operation_id": "generation.client.op", "state": "queued"}},
+        ]
         client = BrokerClient()
         prepared = prepare_arguments(["--output", "relative.json", "status"])
         with tempfile.TemporaryDirectory() as caller_directory:
@@ -294,7 +296,13 @@ class OperatorClientCallerContextTest(unittest.TestCase):
                     )
             finally:
                 os.chdir(previous)
-            request = channel.send_json.call_args.args[0]
+            request = channel.send_json.call_args_list[0].args[0]
+            # The command line waits for the broker to name its build.
+            self.assertNotIn("argv", request)
+            self.assertEqual(
+                channel.send_json.call_args_list[1].args[0],
+                {"argv": ["--output", "relative.json", "status"]},
+            )
             self.assertEqual(
                 os.path.realpath(str(request["working_directory"])),
                 os.path.realpath(caller_directory),
@@ -474,19 +482,20 @@ class OperatorClientBuildBindingTest(unittest.TestCase):
 
         client = BrokerClient()
         other = {**build_identity(), "origin": "f" * 12}
-        channel = _ScriptedChannel(
-            [{"ok": True, "continue": "secrets", "challenges": {}, "admin_challenge": "a", "build": other}]
-        )
+        channel = _ScriptedChannel([{"ok": True, "continue": "argv", "build": other}])
         with mock.patch("kassiber.operator.client.connect", return_value=channel):
             with self.assertRaises(AppError) as raised:
                 client._submit_once(
                     "/project",
-                    PreparedArguments(["secrets", "change-passphrase"], {}),
+                    PreparedArguments(["backends", "update", "x", "--token", "inline-secret"], {}),
                     operation_id="g.client.1",
                     admin_authentication=bytearray(b"fresh-passphrase"),
                 )
         self.assertEqual(raised.exception.code, "operator_broker_build_mismatch")
         self.assertEqual(channel.secrets, [])
+        # Nothing but the opening request (no command line) reached it.
+        self.assertEqual(len(channel.sent), 1)
+        self.assertNotIn("inline-secret", repr(channel.sent))
 
     def test_work_another_build_accepted_is_withdrawn_when_this_build_is_required(self) -> None:
         from kassiber.operator.build import build_identity
@@ -580,7 +589,9 @@ class OperatorClientBuildBindingTest(unittest.TestCase):
         client = BrokerClient()
         channel = _ScriptedChannel(
             [
+                {"ok": True, "continue": "argv", "build": build_identity()},
                 {"ok": True, "data": {"operation_id": "g.client.1", "build": build_identity()}},
+                {"ok": True, "continue": "argv", "build": build_identity()},
                 {"ok": True, "data": {"operation_id": "g.client.2"}},
             ]
         )
@@ -594,7 +605,7 @@ class OperatorClientBuildBindingTest(unittest.TestCase):
                     require_same_build=required,
                 )
         self.assertEqual(channel.sent[0]["expected_build"], build_identity())
-        self.assertNotIn("expected_build", channel.sent[1])
+        self.assertNotIn("expected_build", channel.sent[2])
 
     def test_a_retried_unnamed_acceptance_reports_no_build(self) -> None:
         from kassiber.operator.build import build_identity

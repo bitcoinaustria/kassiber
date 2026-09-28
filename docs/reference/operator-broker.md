@@ -187,12 +187,11 @@ code, which can claim any identity.
   cancelled and refused.
 - Ordinary brokered commands never start a broker. Without one they return
   `interaction_required` with `details.reason = operator_lease_required`. When
-  they reach a broker of another build, they run on it (the lease was granted
-  there) and the accepted event carries `broker_build`; human output adds a
-  note to stderr. Two exceptions are refused there with
-  `operator_broker_build_mismatch`: a command that would send secrets or fresh
-  admin authentication (checked in the reply that asks for them, before
-  anything is sent), and a one-shot `kassiber mcp call`.
+  they reach a broker of another build, they are refused with
+  `operator_broker_build_mismatch`: the broker names its build before the
+  client sends the command line, which can carry secrets (`--token VALUE`)
+  and book data, so nothing of the command reaches another build. The
+  accepted event carries `broker_build`.
 - `operator status` reports `broker_build`, `this_build`, and `same_build`.
 
 Two desktop apps cannot open the same project at once: the second receives

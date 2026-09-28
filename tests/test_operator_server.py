@@ -349,6 +349,25 @@ class OperatorServerTest(unittest.TestCase):
         status = server._handle(mock.Mock(), {"action": "status"})
         self.assertEqual(status["data"]["broker_build"], build_identity())
 
+    def test_the_command_line_follows_only_after_the_broker_names_its_build(self) -> None:
+        from kassiber.operator.build import build_identity
+
+        server = BrokerServer.__new__(BrokerServer)
+        server.service = mock.Mock()
+        server.service.submit.return_value = {"operation_id": "g.client.1", "state": "queued"}
+        channel = mock.MagicMock()
+        channel.peer_pid = 7
+        channel.receive_json.return_value = {"argv": ["--data-root", "/project", "--machine", "status"]}
+        with mock.patch("kassiber.operator.server._canonical_data_root", return_value="/project"):
+            response = server._handle(
+                channel,
+                {"action": "submit", "data_root": "/project", "operation_id": "g.client.1", "argv_follows": True},
+            )
+        continuation = channel.send_json.call_args_list[0].args[0]
+        self.assertEqual(continuation, {"ok": True, "continue": "argv", "build": build_identity()})
+        self.assertEqual(server.service.submit.call_args.args[1][-1], "status")
+        self.assertEqual(response["data"]["build"], build_identity())
+
     def test_submit_for_another_build_is_refused_before_admission(self) -> None:
         from kassiber.operator.build import build_identity
 

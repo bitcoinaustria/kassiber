@@ -415,7 +415,8 @@ class BrokerClient:
             "action": "submit",
             "data_root": data_root,
             "operation_id": operation_id,
-            "argv": prepared.argv,
+            # The command line follows once the broker has named its build.
+            "argv_follows": True,
             "secret_labels": list(prepared.secrets),
             "working_directory": _caller_working_directory(),
             "no_egress": _caller_disables_egress(),
@@ -426,6 +427,13 @@ class BrokerClient:
             request["expected_build"] = build_identity()
         with connect() as channel:
             channel.send_json(request)
+            response = self._receive(channel)
+            if response.get("continue") != "argv":
+                raise AppError("invalid broker submit continuation", code="operator_protocol_error")
+            # Inline arguments can carry secrets (`--token VALUE`) and book
+            # data: they, like every brokered command, go only to this build.
+            _require_same_build(response)
+            channel.send_json({"argv": prepared.argv})
             response = self._receive(channel)
             if response.get("continue") == "secrets":
                 # Command secrets and fresh admin authentication go only to
