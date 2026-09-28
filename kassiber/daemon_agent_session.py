@@ -287,8 +287,9 @@ def expire(ctx: Any) -> None:
 def end_lease(ctx: Any, *, raise_errors: bool = False) -> None:
     """Lock the lease this desktop created, and only that one.
 
-    Called whenever the desktop session for the book ends (lock, quit, book
-    switch, passphrase rotation, restore), when agents are turned off, and
+    Called whenever the desktop session for the book ends (lock, quit,
+    opening another project, passphrase rotation, restore), when agents are
+    turned off, and
     after the lease expired. The lease is forgotten only once the broker
     confirms; otherwise it stays visible and the daemon loop retries.
     """

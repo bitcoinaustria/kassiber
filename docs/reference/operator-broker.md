@@ -132,8 +132,9 @@ The open reply carries a random session token that every submit must
 present, together with the matching process id, so a process that reuses the
 id after the server exits is refused. At most 8 sessions
 per project and 16 in total can be open; `status` lists them with their
-state and read counts. Denying closes the session, freeing its slot, and
-refuses that process id for the rest of the lease.
+state and read counts. Denying closes the session, freeing its slot,
+refuses that process id for the rest of the lease, cancels the reads it still
+has queued, and withholds the results of those that ran (`output_withheld`).
 
 The desktop also asks the broker to grant only if no lease exists, and to end
 only that lease (by its `lease_id` from `status`) while putting a previously

@@ -459,3 +459,81 @@ class AgentSessionServerTest(unittest.TestCase):
                 channel,
                 {"action": "agent_session_decide", "data_root": "/book", "session_id": "s1", "allow": "yes"},
             )
+
+
+class DeniedAgentWorkTest(unittest.TestCase):
+    def test_denying_an_agent_cancels_its_queued_reads_and_withholds_results(self) -> None:
+        import threading
+
+        release = threading.Event()
+        started = threading.Event()
+
+        def runner(*_args, **_kwargs):
+            started.set()
+            release.wait(10)
+            return OperationResult(0, '{"secret": "balances"}', "")
+
+        with tempfile.TemporaryDirectory() as root, mock.patch(
+            "kassiber.operator.service.open_db", return_value=_Connection()
+        ):
+            service = OperatorService("generation", runner)
+            try:
+                service.unlock(
+                    root,
+                    bytearray(b"passphrase"),
+                    duration_seconds=3600,
+                    capability=Capability.READ,
+                    only_if_locked=True,
+                    agent_scope=True,
+                    idle_timeout_seconds=900,
+                    agent_control=bytearray(CONTROL),
+                )
+                first = service.open_agent_session(root, pid=AGENT_PID, label="a")
+                second = service.open_agent_session(root, pid=AGENT_PID + 1, label="b")
+                for session in (first, second):
+                    service.decide_agent_session(root, session.id, allow=True, control=bytearray(CONTROL))
+                running = service.submit(
+                    root, _mcp_call(root), peer_pid=AGENT_PID, agent_session_token=first.token
+                )
+                self.assertTrue(started.wait(5))
+                queued = service.submit(
+                    root, _mcp_call(root), peer_pid=AGENT_PID + 1, agent_session_token=second.token
+                )
+                self.assertEqual(service.operation_status(queued["operation_id"])["state"], "queued")
+
+                service.decide_agent_session(root, second.id, allow=False, control=bytearray(CONTROL))
+
+                withdrawn = service.operation_status(queued["operation_id"])
+                self.assertEqual(withdrawn["state"], "cancelled")
+                self.assertEqual(withdrawn["output_withheld"], "agent_denied")
+                self.assertNotIn("stdout", withdrawn)
+
+                # A read queued through an earlier, since closed registration
+                # of the same process is withdrawn when that process is denied.
+                third = service.open_agent_session(root, pid=AGENT_PID + 2, label="c")
+                service.decide_agent_session(root, third.id, allow=True, control=bytearray(CONTROL))
+                earlier = service.submit(
+                    root, _mcp_call(root), peer_pid=AGENT_PID + 2, agent_session_token=third.token
+                )
+                service.close_agent_session(third.id)
+                again = service.open_agent_session(root, pid=AGENT_PID + 2, label="c")
+                service.decide_agent_session(root, again.id, allow=False, control=bytearray(CONTROL))
+                self.assertEqual(service.operation_status(earlier["operation_id"])["state"], "cancelled")
+                self.assertEqual(
+                    service.operation_status(earlier["operation_id"])["output_withheld"], "agent_denied"
+                )
+
+                release.set()
+                deadline = time.monotonic() + 5
+                while service.operation_status(running["operation_id"])["state"] != "completed":
+                    self.assertLess(time.monotonic(), deadline)
+                    time.sleep(0.02)
+                self.assertIn("balances", service.operation_status(running["operation_id"])["stdout"])
+                # Denying the other agent afterwards withholds its finished result.
+                service.decide_agent_session(root, first.id, allow=False, control=bytearray(CONTROL))
+                finished = service.operation_status(running["operation_id"])
+                self.assertNotIn("stdout", finished)
+                self.assertEqual(finished["output_withheld"], "agent_denied")
+            finally:
+                release.set()
+                service.close()

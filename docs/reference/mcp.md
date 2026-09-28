@@ -146,11 +146,13 @@ neither is ever created.
     display only.
   - Allowing needs a random control secret that only the desktop holds, so a
     program talking to the broker directly cannot allow itself. Deny also
-    withdraws an earlier approval, closes that registration, and keeps the
+    withdraws an earlier approval, closes that registration, cancels its
+    queued reads, withholds the results of any it already ran, and keeps the
     process refused (`agent_pairing_denied`) until the book is unlocked for
-    agents again.
+    agents again. The session covers the whole project, so switching books
+    within it keeps it; opening another project ends it.
   - It ends after 15 minutes without a tool call, when the desktop locks,
-    quits, switches book, rotates the passphrase, or restores a backup, when
+    quits, opens another project, rotates the passphrase, or restores a backup, when
     external agents or AI features are turned off, and after at most 8 hours.
     A new session never inherits an earlier approval.
 

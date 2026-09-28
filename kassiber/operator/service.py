@@ -92,6 +92,12 @@ class Operation:
     # broker's own environment. Neither is authority; both bind the request.
     working_directory: str | None = None
     no_egress: bool = False
+    # The agent session and process that submitted it, under an agent
+    # lease. Denying that process cancels it if queued and withholds its
+    # result otherwise, whichever of its registrations queued it.
+    agent_session_id: str | None = None
+    agent_pid: int | None = None
+    output_withheld: bool = False
     state: str = "queued"
     submitted_at: str = field(default_factory=now_iso)
     started_at: str | None = None
@@ -118,7 +124,10 @@ class Operation:
             "started_at": self.started_at,
             "finished_at": self.finished_at,
         }
-        if self.result is not None:
+        if self.output_withheld:
+            payload["output_available"] = False
+            payload["output_withheld"] = "agent_denied"
+        elif self.result is not None:
             payload["exit_code"] = self.result.exit_code
             if self.output_error is not None:
                 payload["output_available"] = False
@@ -1528,10 +1537,11 @@ class OperatorService:
                     retryable=False,
                 )
             lease = self._require_lease_locked(project)
+            agent_session_id: str | None = None
             if lease.agent_scope:
                 # Before any replay lookup: only an allowed agent process
                 # may learn anything about this lease's operations.
-                self._admit_agent_call_locked(
+                agent_session_id = self._admit_agent_call_locked(
                     lease, command_path, peer_pid, agent_session_token
                 )
             lease.data_root = canonical_data_root
@@ -1633,6 +1643,8 @@ class OperatorService:
                 ),
                 working_directory=working_directory,
                 no_egress=no_egress,
+                agent_session_id=agent_session_id,
+                agent_pid=peer_pid if agent_session_id is not None else None,
             )
             worker = self._workers.get(project.identity)
             if worker is None:
@@ -2320,6 +2332,9 @@ class OperatorService:
                     if other.pid == session.pid and self._agent_session_current_locked(other, lease):
                         other.closed = True
                         del self._agent_sessions[other_id]
+                # By process, so reads queued through an earlier, already
+                # closed registration of the same process are withdrawn too.
+                self._withdraw_agent_operations_locked(lease, session.pid)
                 self._agent_denials[(lease.project.identity, lease.epoch, session.pid)] = None
             decided = session.public_status()
         _LOGGER.info(
@@ -2334,7 +2349,9 @@ class OperatorService:
         command_path: str,
         peer_pid: int | None,
         token: str | None,
-    ) -> None:
+    ) -> str:
+        """Admit one agent call; return the session id it is charged to."""
+
         if command_path != "mcp.call":
             raise AppError(
                 "an agent session admits only Kassiber MCP tool calls",
@@ -2382,6 +2399,29 @@ class OperatorService:
         lease.calls += 1
         lease.last_call_at = called_at
         lease.last_used_monotonic = time.monotonic()
+        return allowed.id
+
+    def _withdraw_agent_operations_locked(self, lease: ProjectLease, pid: int) -> None:
+        """A denied agent's queued reads never start; finished ones stay unread."""
+
+        for operation in list(self._operations.values()):
+            if not (
+                operation.agent_pid == pid
+                and operation.project_identity == lease.project.identity
+                and operation.admitted_lease_epoch == lease.epoch
+            ):
+                continue
+            if operation.state == "queued":
+                operation.cancellation_requested = True
+                self._finish_operation_locked(
+                    operation,
+                    "cancelled",
+                    OperationResult(1, "", "the user denied this agent\n"),
+                )
+                worker = self._worker_for_public_project_locked(operation.project_id)
+                if worker is not None:
+                    worker.remove(operation)
+            operation.output_withheld = True
 
     def _prune_operations_locked(self) -> None:
         terminal_ids = [
