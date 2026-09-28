@@ -469,6 +469,25 @@ class OperatorClientBuildBindingTest(unittest.TestCase):
                 self.assertEqual(raised.exception.code, "operator_broker_build_mismatch")
         self.assertEqual(channel.secrets, [])
 
+    def test_secrets_never_go_to_another_build_even_for_ordinary_commands(self) -> None:
+        from kassiber.operator.build import build_identity
+
+        client = BrokerClient()
+        other = {**build_identity(), "origin": "f" * 12}
+        channel = _ScriptedChannel(
+            [{"ok": True, "continue": "secrets", "challenges": {}, "admin_challenge": "a", "build": other}]
+        )
+        with mock.patch("kassiber.operator.client.connect", return_value=channel):
+            with self.assertRaises(AppError) as raised:
+                client._submit_once(
+                    "/project",
+                    PreparedArguments(["secrets", "change-passphrase"], {}),
+                    operation_id="g.client.1",
+                    admin_authentication=bytearray(b"fresh-passphrase"),
+                )
+        self.assertEqual(raised.exception.code, "operator_broker_build_mismatch")
+        self.assertEqual(channel.secrets, [])
+
     def test_work_another_build_accepted_is_withdrawn_when_this_build_is_required(self) -> None:
         from kassiber.operator.build import build_identity
 

@@ -237,6 +237,9 @@ def route_brokered_command(
             prepared,
             admin_authentication=admin_authentication,
             start_broker=False,
+            # Agent reads run the broker's code, like `mcp serve`'s calls:
+            # only this build's broker may answer a one-shot `mcp call`.
+            require_same_build=path == "mcp.call",
         )
         operation_id = accepted.get("operation_id")
         if not isinstance(operation_id, str):

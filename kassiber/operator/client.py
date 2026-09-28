@@ -428,8 +428,10 @@ class BrokerClient:
             channel.send_json(request)
             response = self._receive(channel)
             if response.get("continue") == "secrets":
-                if require_same_build:
-                    _require_same_build(response)
+                # Command secrets and fresh admin authentication go only to
+                # this build's broker, whatever the caller asked for; the
+                # broker named its build in this very reply.
+                _require_same_build(response)
                 challenges = response.get("challenges")
                 if not isinstance(challenges, dict):
                     raise AppError("invalid broker secret challenge", code="operator_protocol_error")

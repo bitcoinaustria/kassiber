@@ -686,6 +686,37 @@ class CommandSurfaceTests(unittest.TestCase):
                     self.assertIsNone(route_brokered_command(args, ["mcp", command]))
                 self.assertEqual(mode.called, expected_routed)
 
+    def test_a_one_shot_mcp_call_insists_on_this_builds_broker(self):
+        captured = {}
+
+        def submit(_client, data_root, prepared, **options):
+            captured.update(options)
+            return {"operation_id": "g.op", "state": "queued"}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            args = mock.Mock(
+                command="mcp",
+                mcp_command="call",
+                data_root=tmp,
+                env_file=None,
+                project=None,
+                operator_auth_fd=None,
+                non_interactive=True,
+                machine=True,
+            )
+            with contextlib.redirect_stderr(io.StringIO()), mock.patch(
+                "kassiber.operator.cli.effective_unlock_mode", return_value="brokered"
+            ), mock.patch(
+                "kassiber.cli.command_registry.command_path", return_value="mcp.call"
+            ), mock.patch(
+                "kassiber.operator.cli.BrokerClient.submit", autospec=True, side_effect=submit
+            ), mock.patch(
+                "kassiber.operator.cli.BrokerClient.wait",
+                return_value={"state": "completed", "exit_code": 0},
+            ):
+                route_brokered_command(args, ["mcp", "call", "--tool", "status"])
+        self.assertIs(captured.get("require_same_build"), True)
+
     def test_the_broker_refuses_to_queue_a_long_lived_server(self):
         from kassiber.operator.service import OperatorService
 

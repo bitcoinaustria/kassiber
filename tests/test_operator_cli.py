@@ -131,6 +131,7 @@ class OperatorCliTest(unittest.TestCase):
 
             def submit(_client, data_root, prepared, *, admin_authentication, **options):
                 captured["start_broker"] = options.get("start_broker", True)
+                captured["require_same_build"] = options.get("require_same_build", False)
                 captured["data_root"] = data_root
                 captured["argv"] = list(prepared.argv)
                 captured["secrets"] = {
@@ -170,6 +171,9 @@ class OperatorCliTest(unittest.TestCase):
         self.assertEqual(captured["secrets"], {})
         # An ordinary command must never start a broker of its own build.
         self.assertIs(captured["start_broker"], False)
+        # Ordinary commands may run on another build's broker (the lease was
+        # granted there); only agent reads insist on this build.
+        self.assertIs(captured["require_same_build"], False)
         # Machine mode writes exactly one accepted event and nothing secret.
         events = [json.loads(line) for line in stderr.getvalue().splitlines()]
         self.assertEqual(
