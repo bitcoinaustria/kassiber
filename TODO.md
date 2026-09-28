@@ -43,6 +43,30 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
 - [ ] Evaluate per-wallet physical-lot attribution only if a jurisdiction
   requires it. Current per-wallet basis allocation is not a physical-lot claim.
 
+## Quarantine follow-ups
+
+- [ ] Delete the pre-custody normalizer branches that no finalized row can
+  reach (`tax_events` Samourai/multi-pair/unscoped/loan/channel paths,
+  `pair_allocation` max-flow, the `austrian` multi-source branch, RP2 loan
+  branches). First keep the restored `unscoped_transfer_review` and
+  `owned_fanout_unresolved` holds in the live interpreter and migrate the
+  raw-row tests that pin the dead branches; done when the projection-id guard
+  test also covers `accounting-transit:` rows and the suite stays green.
+- [ ] Tell the owner when `ownership_transfer_source_missing` points at an
+  address beyond the wallet's synced depth (the ownership index derives deeper
+  than the sync gap limit) and offer that wallet's scoped rescan; done when the
+  quarantine row carries the used index and the rescan is a user action.
+- [ ] Bound `ui.journals.quarantine` for very large quarantines: page items in
+  SQL and compute the whole-book groups, counts and assumptions with aggregate
+  queries; done when the first page no longer parses every stored row.
+  Carry downstream rows (`at_swap_basis_carry_unresolved`,
+  `bitcoin_rail_carry_basis_unresolved`) and `basis_provenance_incomplete`
+  should record their causal transaction ids so the root is exact.
+- [ ] Let the owner confirm presumed disposals in bulk (an outbound
+  `kind_override` operation in `review plan/apply`) and show per-wallet
+  history coverage; decide whether custody-gap review leaves the developer
+  gate.
+
 ## Organizational accounting acceptance
 
 The accepted scope is [spec 17](docs/plan/17-general-accounting-and-private-ai-spec.md).

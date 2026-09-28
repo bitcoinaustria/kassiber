@@ -46,6 +46,40 @@ describe("transaction detail opening surface", () => {
     expect(html).toContain("Synthetic wallet");
     expect(html).not.toContain('data-slot="dialog-content"');
   });
+  it("explains a custody hold with the daemon's blocker instead of the bare reason", () => {
+    const loaded = { ...props, transaction, draft: draftForTransaction(transaction), isLoading: false };
+    const reason = "custody_quantity_unresolved";
+    const generic = renderToStaticMarkup(<TransactionDetailSheet {...loaded} quarantineReasonOverride={reason} />);
+    const html = renderToStaticMarkup(
+      <TransactionDetailSheet
+        {...loaded}
+        quarantineReasonOverride={reason}
+        quarantineContext={{ reason, category: "needs_decision", evidence: { blocker_code: "reviewed_residual_suspense" }, rootLabel: null }}
+      />,
+    );
+    expect(generic).not.toContain("A reviewed route keeps part in suspense");
+    expect(html).toContain("A reviewed route keeps part in suspense");
+  });
+  it("masks the amounts the explanation quotes when values are hidden", () => {
+    const loaded = { ...props, transaction, draft: draftForTransaction(transaction), isLoading: false };
+    const reason = "insufficient_lots";
+    const context = {
+      reason,
+      category: "missing_acquisition_history" as const,
+      evidence: { required_msat: 123_456_789_000, available_msat: 87_654_321_000 },
+      rootLabel: null,
+    };
+    const quoting = /class="[^"]*\bsensitive\b[^"]*">[^<]*123,456,789 sats/;
+    const shown = renderToStaticMarkup(
+      <TransactionDetailSheet {...loaded} quarantineReasonOverride={reason} quarantineContext={context} />,
+    );
+    const hidden = renderToStaticMarkup(
+      <TransactionDetailSheet {...loaded} hideSensitive quarantineReasonOverride={reason} quarantineContext={context} />,
+    );
+    expect(shown).toContain("123,456,789 sats");
+    expect(shown).not.toMatch(quoting);
+    expect(hidden).toMatch(quoting);
+  });
   it("does not display a pending sheet after closing", () => {
     expect(renderToStaticMarkup(<TransactionDetailSheet {...props} open={false} />)).toBe("");
   });

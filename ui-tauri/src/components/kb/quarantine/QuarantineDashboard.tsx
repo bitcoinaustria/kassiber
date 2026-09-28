@@ -53,6 +53,8 @@ import {
   type QuarantineResolveStep,
 } from "./model";
 import { QuarantineActions } from "./QuarantineActions";
+import { QuarantineCausePanel } from "./QuarantineCausePanel";
+import { detailContextFor, type QuarantineDetailContext } from "./explain";
 import { QuarantineResolveDrawer } from "./QuarantineResolveDrawer";
 import type { QuarantineSnapshot } from "./types";
 
@@ -95,6 +97,12 @@ export function QuarantineDashboard({
   const [detailTarget, setDetailTarget] = React.useState(
     readQuarantineDetailTarget,
   );
+  // A cause can point at a root on another page; keep the daemon's reading
+  // that came with the click so the sheet does not fall back to the code.
+  const [openedContext, setOpenedContext] = React.useState<{
+    transactionId: string;
+    context: QuarantineDetailContext;
+  } | null>(null);
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
   const [drafts, setDrafts] = React.useState<
@@ -234,6 +242,11 @@ export function QuarantineDashboard({
     selectedRowIndex >= 0 && selectedRowIndex < detailQueueRows.length - 1;
   const selectedReviewRow =
     selectedRowIndex >= 0 ? detailQueueRows[selectedRowIndex] : null;
+  const detailContext = detailContextFor(
+    detailTarget.transactionId,
+    snapshot.items,
+    openedContext,
+  );
 
   const openDetail = React.useCallback(
     (
@@ -280,6 +293,7 @@ export function QuarantineDashboard({
 
   const closeDetail = React.useCallback(() => {
     setDetailTarget({ transactionId: null, tab: "details", rowId: null });
+    setOpenedContext(null);
     setDetailQueueRowKeys(null);
     setExplorerTransaction(null);
     setSaveError(null);
@@ -502,6 +516,18 @@ export function QuarantineDashboard({
         emptyMessage={t("quarantine.empty")}
         onOpenTransactionAction={openDetail}
         onVisibleRowsChange={setOrderedRows}
+        beforeTable={
+          <QuarantineCausePanel
+            snapshot={snapshot}
+            isProcessingJournals={isProcessingJournals}
+            onProcessJournals={onProcessJournals}
+            hideSensitive={hideSensitive}
+            onOpenTransaction={(transactionId, tab, context) => {
+              setOpenedContext(context ? { transactionId, context } : null);
+              openDetail({ transactionId, label: "", tab });
+            }}
+          />
+        }
         actions={
           <QuarantineActions
             quarantineCount={snapshot.summary.count}
@@ -538,8 +564,11 @@ export function QuarantineDashboard({
             ? t("quarantine.detail.resolveError")
             : null)
         }
+        quarantineContext={detailContext}
         quarantineReasonOverride={
-          selectedReviewRow?.transactionAction?.reviewReason ?? null
+          selectedReviewRow?.transactionAction?.reviewReason ??
+          detailContext?.reason ??
+          null
         }
         nowRate={overviewQuery.data?.data?.priceEur ?? null}
         attachments={detailTransaction ? attachmentItems : undefined}

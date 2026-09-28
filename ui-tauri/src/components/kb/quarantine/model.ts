@@ -9,7 +9,19 @@ import {
   type ReviewTone,
 } from "@/components/kb/ReviewDataTable";
 
-import type { QuarantineItem, QuarantineReason, QuarantineSnapshot } from "./types";
+import {
+  actionLabel as explainActionLabel,
+  categoryLabel,
+  causeCopy,
+  quarantineRootLabel,
+  sheetTabForCause,
+} from "./explain";
+import type {
+  QuarantineCategory,
+  QuarantineItem,
+  QuarantineReason,
+  QuarantineSnapshot,
+} from "./types";
 
 function custodyReasonKey(
   reason: string,
@@ -69,6 +81,7 @@ export function quarantineItemToRow(
   profile: string | null,
   t: TFunction<"journals">,
 ): ReviewTableRow {
+  if (item.category) return explainedQuarantineRow(item, profile, t);
   const reason = item.reason || "review_required";
   const effectiveReason = effectiveReviewReason(reason, item.detail);
   const priority = quarantinePriority(effectiveReason, reason);
@@ -102,6 +115,86 @@ export function quarantineItemToRow(
       reviewReason: effectiveReason,
     },
   };
+}
+
+/**
+ * Row for a daemon that classifies its quarantine: blocking state, category,
+ * root and next action come from the backend instead of substring guesses.
+ */
+function explainedQuarantineRow(
+  item: QuarantineItem,
+  profile: string | null,
+  t: TFunction<"journals">,
+): ReviewTableRow {
+  const category = item.category ?? "needs_decision";
+  const copy = causeCopy(
+    {
+      reason: item.reason,
+      category,
+      evidence: item.evidence,
+      detail: item.detail,
+      wallet: item.wallet,
+      asset: item.asset,
+      rootLabel: item.root ? quarantineRootLabel(item.root) : null,
+    },
+    t,
+  );
+  const blocksReports = Boolean(item.blocks_reports);
+  const downstream = Boolean(item.is_downstream);
+  const amountMsat =
+    item.direction === "outbound" ? -Math.abs(item.amount_msat) : item.amount_msat;
+  const primary = item.actions?.[0];
+  const openTarget =
+    primary?.kind === "resolve_root" && primary.transaction_id
+      ? primary.transaction_id
+      : item.transaction_id;
+  return {
+    id: item.external_id || shortId(item.transaction_id),
+    date: formatDate(item.occurred_at || item.confirmed_at || item.created_at, t),
+    account: item.wallet,
+    event: copy.title,
+    source: t("quarantine.source", { direction: formatDirection(item.direction, t) }),
+    amount: formatMsatAmount(amountMsat, item.asset),
+    basis: categoryLabel(category, t),
+    impact: blocksReports
+      ? t("quarantine.impactBlocksReports")
+      : downstream
+        ? t("quarantine.impactFollows")
+        : t("quarantine.impactHeldForReview"),
+    status: blocksReports ? "Blocked" : "Needs review",
+    priority: blocksReports ? "High" : downstream ? "Low" : "Medium",
+    owner: profile ?? t("quarantine.ownerFallback"),
+    evidenceHint: copy.why,
+    evidenceHintSensitive: copy.whyQuotesAmounts,
+    nextAction: copy.provide,
+    metricFilterIds: categoryFilterIds(category),
+    transactionAction: {
+      transactionId: openTarget,
+      // The button only opens a transaction; the cause panel runs the actions
+      // themselves, so the label must not promise a sync or an import.
+      label:
+        primary?.kind === "resolve_root"
+          ? explainActionLabel(primary, t)
+          : t("quarantine.cta.openTransaction"),
+      tab:
+        openTarget === item.transaction_id
+          ? sheetTabForCause(item.reason, category, item.evidence)
+          : "details",
+      // A downstream row opens its root, which is explained by its own reason.
+      reviewReason:
+        openTarget === item.transaction_id ? item.reason : item.root?.reason ?? undefined,
+    },
+  };
+}
+
+
+function categoryFilterIds(category: QuarantineCategory) {
+  if (category === "missing_price") return ["missing-prices"];
+  if (category === "missing_acquisition_history" || category === "downstream") {
+    return ["basis-or-pairs"];
+  }
+  if (category === "needs_decision") return ["basis-or-pairs", "other-review"];
+  return ["other-review"];
 }
 
 export function quarantineRows(
@@ -669,7 +762,9 @@ function evidenceHint(
     const available =
       formatBtcDetail(detailNumber(detail, "available")) ||
       formatBtcDetail(detailNumber(detail, "priced_available"));
-    const fromWallet = detailString(detail, "from_wallet");
+    // Disposal rows name their wallet as `wallet`; transfers as `from_wallet`.
+    const fromWallet =
+      detailString(detail, "wallet") || detailString(detail, "from_wallet");
     if (required && available) {
       return t("quarantine.evidence.basisValues", {
         required,

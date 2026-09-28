@@ -67,6 +67,15 @@ import {
   type TimelineStep,
 } from "./TransactionDetailSheetParts";
 export type { AttachmentItem, CommercialContextData, JournalEventItem } from "./TransactionDetailSheetParts";
+import {
+  categoryForReason,
+  causeCopy,
+  causeKeyFor,
+  exclusionFitsReason,
+  sheetTabForCause,
+  type QuarantineDetailContext,
+} from "@/components/kb/quarantine/explain";
+
 import { TransactionDetailHeader } from "./TransactionDetailHeader";
 import { TransactionDetailRightRail } from "./TransactionDetailRightRail";
 import {
@@ -95,6 +104,8 @@ export type TransactionDetailSheetProps = {
   isSaving?: boolean;
   saveError?: string | null;
   quarantineReasonOverride?: string | null;
+  /** The daemon's category, evidence and root for this quarantined row. */
+  quarantineContext?: QuarantineDetailContext | null;
   nowRate?: number | null;
   attachments?: AttachmentItem[];
   journalEvents?: JournalEventItem[];
@@ -173,6 +184,7 @@ function TransactionDetailBody({
   isSaving,
   saveError,
   quarantineReasonOverride,
+  quarantineContext = null,
   nowRate,
   attachments,
   journalEvents = [],
@@ -212,6 +224,7 @@ function TransactionDetailBody({
   hasNext,
 }: TransactionDetailSheetProps) {
   const { t } = useTranslation(["transactions", "common"]);
+  const { t: tJournals } = useTranslation("journals");
   // "graph" and "ledger" folded into Details; remap old deep links.
   const visibleInitialTab =
     initialTab === "graph" || initialTab === "ledger" ? "details" : initialTab;
@@ -473,13 +486,30 @@ function TransactionDetailBody({
   const quarantineReason =
     quarantineReasonOverride ?? transaction.quarantineReason ?? null;
   const quarantineReasonCode = quarantineReason?.toLowerCase() ?? "";
+  // Known reasons use the shared quarantine reading, so a custody hold or a
+  // row waiting on an earlier problem is not presented as a price or lot issue.
+  // Prefer the daemon's classification of this row; the reason code alone
+  // cannot tell which blocker an umbrella custody hold carries.
+  const detailContext =
+    quarantineContext && quarantineContext.reason.toLowerCase() === quarantineReasonCode
+      ? quarantineContext
+      : null;
+  const knownQuarantineCause = quarantineReason
+    ? causeKeyFor(quarantineReasonCode, detailContext?.evidence)
+    : null;
+  const quarantineCategory = detailContext
+    ? detailContext.category
+    : quarantineReason
+      ? categoryForReason(quarantineReasonCode)
+      : null;
   const isSyncQuarantine =
     quarantineReasonCode.includes("ownership_transfer_amount_mismatch") ||
     quarantineReasonCode === "ownership_transfer_source_missing";
-  const isBasisQuarantine =
-    quarantineReasonCode.includes("basis") ||
-    quarantineReasonCode.includes("lot") ||
-    quarantineReasonCode.includes("insufficient");
+  const isBasisQuarantine = knownQuarantineCause
+    ? quarantineCategory === "missing_acquisition_history"
+    : quarantineReasonCode.includes("basis") ||
+      quarantineReasonCode.includes("lot") ||
+      quarantineReasonCode.includes("insufficient");
   const isTransferQuarantine =
     quarantineReasonCode === "native_transition_ambiguous" ||
     quarantineReasonCode.includes("ownership_transfer") ||
@@ -488,15 +518,35 @@ function TransactionDetailBody({
     quarantineReasonCode.includes("swap");
   const isSplitTransferQuarantine =
     quarantineReasonCode.includes("transfer_fee_implausible");
-  const quarantineTargetTab = isSplitTransferQuarantine
-    ? "details"
-    : isSyncQuarantine
-      ? "details"
-      : isTransferQuarantine
-        ? "linked"
-        : isBasisQuarantine
-          ? "tax"
-          : "pricing";
+  const quarantineTargetTab =
+    knownQuarantineCause && quarantineCategory
+      ? sheetTabForCause(quarantineReasonCode, quarantineCategory, detailContext?.evidence)
+      : isSplitTransferQuarantine
+        ? "details"
+        : isSyncQuarantine
+          ? "details"
+          : isTransferQuarantine
+            ? "linked"
+            : isBasisQuarantine
+              ? "tax"
+              : "pricing";
+  const quarantineExplanation =
+    knownQuarantineCause && quarantineCategory
+      ? causeCopy(
+          {
+            reason: quarantineReasonCode,
+            category: quarantineCategory,
+            evidence: detailContext?.evidence,
+            rootLabel: detailContext?.rootLabel,
+            wallet: transaction.wallet,
+            asset: transaction.asset,
+          },
+          tJournals,
+        )
+      : null;
+  const exclusionFits =
+    !quarantineCategory ||
+    exclusionFitsReason(quarantineReasonCode, quarantineCategory, detailContext?.evidence);
   const hasJournalQuarantine = Boolean(quarantineReason) && !localDraft.excluded;
   const hasPricingBlocker = isPricingMissing && !localDraft.excluded;
   const suppressPricingCacheWarning =
@@ -708,6 +758,22 @@ function TransactionDetailBody({
     : null;
   const reviewBanner = showReviewBanner
     ? (() => {
+        if (hasJournalQuarantine && quarantineExplanation) {
+          return {
+            title: quarantineExplanation.title,
+            reason: quarantineExplanation.why,
+            reasonSensitive: quarantineExplanation.whyQuotesAmounts,
+            hint: quarantineExplanation.provide,
+            primaryActionLabel:
+              quarantineTargetTab === "pricing"
+                ? t("sheet.banner.viewPricing")
+                : quarantineTargetTab === "tax"
+                  ? t("sheet.banner.viewBasisContext")
+                  : quarantineTargetTab === "linked"
+                    ? t("sheet.banner.viewLinked")
+                    : t("sheet.banner.viewDetails"),
+          };
+        }
         if (hasJournalQuarantine) {
           return {
             title: isBasisQuarantine
@@ -897,6 +963,9 @@ function TransactionDetailBody({
               <QuarantineBanner
                 title={reviewBanner.title}
                 reason={reviewBanner.reason}
+                reasonClassName={
+                  reviewBanner.reasonSensitive && hideSensitive ? "sensitive" : undefined
+                }
                 hint={reviewBanner.hint}
                 primaryActionLabel={reviewBanner.primaryActionLabel}
                 onPrimaryAction={
@@ -904,7 +973,9 @@ function TransactionDetailBody({
                     ? undefined
                     : jumpToQuarantineTarget
                 }
-                onExclude={setExcluded}
+                // Excluding hides an owned movement or missing basis instead
+                // of explaining it; offer it only where it can be an answer.
+                onExclude={hasJournalQuarantine && !exclusionFits ? undefined : setExcluded}
               />
             ) : null}
 

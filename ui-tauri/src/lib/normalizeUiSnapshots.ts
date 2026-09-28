@@ -6,6 +6,12 @@ import type {
   Tx,
 } from "@/mocks/seed";
 import type {
+  QuarantineAction,
+  QuarantineAssumption,
+  QuarantineCategory,
+  QuarantineEvidence,
+  QuarantineFreshness,
+  QuarantineGroup,
   QuarantineItem,
   QuarantineReason,
   QuarantineSnapshot,
@@ -104,12 +110,73 @@ export function normalizeOverviewSnapshot(value: unknown): OverviewSnapshot {
   };
 }
 
+function normalizeQuarantineFreshness(value: unknown): QuarantineFreshness | null {
+  if (!isRecord(value)) return null;
+  const lastError = isRecord(value.last_error) ? value.last_error : null;
+  return {
+    needs_processing: value.needs_processing === true,
+    status: nullableString(value.status),
+    last_processed_at: nullableString(value.last_processed_at),
+    last_error: lastError
+      ? {
+          code: nullableString(lastError.code) ?? "journal_refresh_failed",
+          message: nullableString(lastError.message) ?? "",
+          at: nullableString(lastError.at),
+        }
+      : null,
+  };
+}
+
+function normalizeQuarantineAssumption(value: unknown): QuarantineAssumption {
+  const raw = isRecord(value) ? value : {};
+  return {
+    count: finiteNumber(raw.count),
+    amount_msat: finiteNumber(raw.amount_msat),
+    items: arrayOrEmpty<unknown>(raw.items)
+      .filter(isRecord)
+      .map((item) => ({
+        transaction_id: nullableString(item.transaction_id) ?? "",
+        occurred_at: nullableString(item.occurred_at),
+        wallet: nullableString(item.wallet) ?? "",
+        amount_msat: finiteNumber(item.amount_msat),
+        external_id: nullableString(item.external_id) ?? "",
+      }))
+      .filter((item) => item.transaction_id),
+  };
+}
+
+function normalizeQuarantineGroup(value: Record<string, unknown>): QuarantineGroup {
+  return {
+    key: nullableString(value.key) ?? "",
+    category: (nullableString(value.category) ?? "needs_decision") as QuarantineCategory,
+    reason: nullableString(value.reason) ?? "",
+    root_transaction_id: nullableString(value.root_transaction_id),
+    root_occurred_at: nullableString(value.root_occurred_at),
+    root_wallet: nullableString(value.root_wallet),
+    root_external_id: nullableString(value.root_external_id),
+    root_amount_msat:
+      typeof value.root_amount_msat === "number" ? value.root_amount_msat : null,
+    root_direction: nullableString(value.root_direction),
+    root_asset: nullableString(value.root_asset),
+    count: finiteNumber(value.count),
+    downstream_count: finiteNumber(value.downstream_count),
+    blocks_reports: value.blocks_reports === true,
+    wallets: arrayOrEmpty<unknown>(value.wallets).filter(
+      (entry): entry is string => typeof entry === "string",
+    ),
+    earliest_occurred_at: nullableString(value.earliest_occurred_at),
+    evidence: isRecord(value.evidence) ? (value.evidence as QuarantineEvidence) : {},
+    actions: arrayOrEmpty<unknown>(value.actions).filter(isRecord) as unknown as QuarantineAction[],
+  };
+}
+
 export function normalizeQuarantineSnapshot(value: unknown): QuarantineSnapshot {
   const raw = isRecord(value) ? value : {};
   const summary = isRecord(raw.summary) ? raw.summary : {};
   const byReason = arrayOrEmpty<unknown>(summary.by_reason).filter(
     (entry): entry is QuarantineReason => isRecord(entry),
   );
+  const assumptions = isRecord(summary.assumptions) ? summary.assumptions : null;
 
   return {
     summary: {
@@ -118,6 +185,32 @@ export function normalizeQuarantineSnapshot(value: unknown): QuarantineSnapshot 
       count: finiteNumber(summary.count),
       by_reason: byReason,
       limit: finiteNumber(summary.limit),
+      offset: finiteNumber(summary.offset),
+      // An older daemon sends no freshness; `null` means "unknown", never
+      // "current", so the page does not claim the list is up to date.
+      freshness: normalizeQuarantineFreshness(summary.freshness),
+      blocking_count: finiteNumber(summary.blocking_count),
+      reports_blocked: summary.reports_blocked === true,
+      by_category: arrayOrEmpty<unknown>(summary.by_category)
+        .filter(isRecord)
+        .map((entry) => ({
+          category: (nullableString(entry.category) ?? "needs_decision") as QuarantineCategory,
+          count: finiteNumber(entry.count),
+        })),
+      groups: arrayOrEmpty<unknown>(summary.groups)
+        .filter(isRecord)
+        .map(normalizeQuarantineGroup),
+      group_count: finiteNumber(summary.group_count),
+      assumptions: assumptions
+        ? {
+            presumed_external_outbound: normalizeQuarantineAssumption(
+              assumptions.presumed_external_outbound,
+            ),
+            unclassified_inbound: normalizeQuarantineAssumption(
+              assumptions.unclassified_inbound,
+            ),
+          }
+        : null,
     },
     items: arrayOrEmpty<QuarantineItem>(raw.items),
   };

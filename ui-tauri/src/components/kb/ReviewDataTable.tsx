@@ -60,6 +60,8 @@ export interface ReviewTableRow {
   priority: "Low" | "Medium" | "High";
   owner: string;
   evidenceHint?: string;
+  /** The evidence hint quotes amounts and follows "hide sensitive". */
+  evidenceHintSensitive?: boolean;
   nextAction?: string;
   metricFilterIds?: string[];
   transactionAction?: {
@@ -90,6 +92,8 @@ interface ReviewDataTableProps {
   icon?: ComponentType<SVGProps<SVGSVGElement>>;
   rows: ReviewTableRow[];
   actions?: ReactNode;
+  /** Rendered between the page header and the queue (e.g. an explanation). */
+  beforeTable?: ReactNode;
   metrics?: ReviewMetric[];
   tableTitle?: string;
   tableDescription?: string;
@@ -179,6 +183,7 @@ export function ReviewDataTable({
   icon: Icon,
   rows,
   actions,
+  beforeTable,
   metrics,
   tableTitle,
   tableDescription,
@@ -339,6 +344,8 @@ export function ReviewDataTable({
           ) : null}
         </div>
       </div>
+
+      {beforeTable}
 
       <div className="kb-surface overflow-hidden">
         <div
@@ -769,7 +776,12 @@ function QuarantineReviewRow({
             {row.source}
           </span>
         </div>
-        <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
+        <p
+          className={cn(
+            "mt-1.5 line-clamp-2 text-xs leading-5 text-muted-foreground",
+            row.evidenceHintSensitive && blurClass(hideSensitive),
+          )}
+        >
           {evidenceHint(row, t)}
         </p>
       </div>
@@ -880,7 +892,12 @@ function ReviewWorklistRow({
       </TableCell>
       <TableCell>
         <span className="text-sm text-muted-foreground">{row.source}</span>
-        <p className="mt-1 text-2xs text-muted-foreground sm:text-xs">
+        <p
+          className={cn(
+            "mt-1 text-2xs text-muted-foreground sm:text-xs",
+            row.evidenceHintSensitive && blurClass(hideSensitive),
+          )}
+        >
           {evidenceHint(row, t)}
         </p>
       </TableCell>
