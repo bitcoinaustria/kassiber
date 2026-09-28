@@ -89,7 +89,7 @@ function centreline(from: [number, number], to: [number, number]) {
  * A flat ribbon swept along an S-curve in the xy plane, capped at both ends.
  * `offset` shifts it across the curve, for the edge lines beside a ribbon.
  */
-function ribbonGeometry(
+export function ribbonGeometry(
   from: [number, number],
   to: [number, number],
   height = RIBBON_HEIGHT,
@@ -117,7 +117,9 @@ function ribbonGeometry(
       const b = index * size + ((corner + 1) % size);
       const c = a + size;
       const d = b + size;
-      indices.push(a, c, b, b, c, d);
+      // The profile runs counterclockwise around the path, so this order
+      // turns the side faces outward, like the end caps.
+      indices.push(a, b, c, b, d, c);
     }
   }
   for (const [ringIndex, flip] of [
