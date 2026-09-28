@@ -59,6 +59,7 @@ import {
   type TransactionSwapRouteLeg,
   type TransactionSwapRouteLegKey,
 } from "./TransactionGraphModel";
+import { TransactionGraph3D } from "./graph3d/TransactionGraph3D";
 import {
   fallbackVisualSats,
   geometryScale,
@@ -1728,6 +1729,51 @@ function graphSupportText(
   return t("graph.partialSupport");
 }
 
+function ExpandedTransactionGraph({
+  graph,
+  hideSensitive,
+}: {
+  graph: TransactionGraphPayload;
+  hideSensitive: boolean;
+}) {
+  const { t } = useTranslation("transactions");
+  const [view, setView] = useState<"2d" | "3d">("2d");
+  const flat = <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} expanded />;
+  return (
+    <div className="space-y-3">
+      <div
+        role="group"
+        aria-label={t("graph.viewToggle")}
+        className="inline-flex rounded-md border p-0.5"
+      >
+        {(["2d", "3d"] as const).map((option) => (
+          <Button
+            key={option}
+            type="button"
+            size="sm"
+            variant={view === option ? "secondary" : "ghost"}
+            aria-pressed={view === option}
+            className="h-7 px-2.5"
+            onClick={() => setView(option)}
+          >
+            {option === "2d" ? t("graph.view2d") : t("graph.view3d")}
+          </Button>
+        ))}
+      </div>
+      {view === "3d" ? (
+        <TransactionGraph3D
+          graph={graph}
+          hideSensitive={hideSensitive}
+          maxRows={MAX_EXPANDED_ROWS}
+          fallback={flat}
+        />
+      ) : (
+        flat
+      )}
+    </div>
+  );
+}
+
 export function TransactionGraphPanel({
   graph,
   loading,
@@ -1789,7 +1835,7 @@ export function TransactionGraphPanel({
               </DialogTrigger>
               <DialogContent className="w-[min(1180px,calc(100vw-2rem))] max-w-none sm:max-w-none">
                 <DialogTitle className="sr-only">{t("graph.expandedTitle")}</DialogTitle>
-                <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} expanded />
+                <ExpandedTransactionGraph graph={graph} hideSensitive={hideSensitive} />
               </DialogContent>
             </Dialog>
           </div>
