@@ -247,6 +247,40 @@ class SwapMatchingCliTest(unittest.TestCase):
         )
         self.assertGreaterEqual(payload["data"]["counts"]["total"], 1)
 
+        # The desktop's automatic pairing after a sync or journal run must not
+        # recreate a pair the user just removed; an explicit bulk pair still can.
+        from kassiber.cli import handlers
+        from kassiber.db import open_db
+
+        conn = open_db(data_root)
+        try:
+            automatic = handlers.bulk_pair_transfers(
+                conn, "Main", "Swap", confidence="strong", commit=False,
+                skip_user_unpaired=True,
+            )
+            self.assertEqual(automatic["summary"]["count"], 0)
+            conn.rollback()
+            explicit = handlers.bulk_pair_transfers(
+                conn, "Main", "Swap", confidence="strong", commit=False,
+            )
+            self.assertGreaterEqual(explicit["summary"]["count"], 1)
+            conn.rollback()
+            # Guards read before an earlier pass still block, whatever the
+            # projection says now.
+            every_row = {
+                row["id"] for row in conn.execute("SELECT id FROM transactions")
+            }
+            guarded = handlers.bulk_pair_transfers(
+                conn, "Main", "Swap", confidence="strong", commit=False,
+                guards=handlers.ProjectionPairingGuards(
+                    booked_move_transaction_ids=every_row, ownership_candidates=[]
+                ),
+            )
+            self.assertEqual(guarded["summary"]["count"], 0)
+            conn.rollback()
+        finally:
+            conn.close()
+
     def test_untrusted_same_txid_rows_remain_review_candidates(self):
         data_root = self._fresh_root("same-txid-transfer")
         out_csv = Path(self._tmp.name) / "cold-to-hot-out.csv"

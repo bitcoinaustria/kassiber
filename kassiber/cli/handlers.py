@@ -11,6 +11,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import lru_cache
+from typing import NamedTuple
 
 from .. import __version__
 from ..backends import (
@@ -578,7 +579,30 @@ def _load_active_transfer_review_refs(conn, profile_id):
     )
 
 
-def _merge_ownership_review_candidates(conn, profile_id, candidates):
+class ProjectionPairingGuards(NamedTuple):
+    """What a current journal projection says must block automatic pairs.
+
+    Both come only from a current projection, and every pair applied makes it
+    stale. A pairing sequence (rules, then bulk exact pairing) therefore reads
+    them once before its first pass and hands the same guards to each pass.
+    """
+
+    booked_move_transaction_ids: set[str]
+    ownership_candidates: list
+
+
+def projection_pairing_guards(conn, profile_id) -> ProjectionPairingGuards:
+    return ProjectionPairingGuards(
+        booked_move_transaction_ids=core_custody_journal.stored_move_transaction_ids(
+            conn, profile_id
+        ),
+        ownership_candidates=core_custody_journal.stored_ownership_review_candidates(
+            conn, profile_id
+        ),
+    )
+
+
+def _merge_ownership_review_candidates(conn, profile_id, candidates, ownership_candidates=None):
     """Merge ownership evidence before global conflict stamping.
 
     Ownership proofs originate from persisted journal blocks rather than the
@@ -587,9 +611,10 @@ def _merge_ownership_review_candidates(conn, profile_id, candidates):
     eligible even while ownership evidence pointed at another destination.
     """
 
-    ownership_candidates = core_custody_journal.stored_ownership_review_candidates(
-        conn, profile_id
-    )
+    if ownership_candidates is None:
+        ownership_candidates = core_custody_journal.stored_ownership_review_candidates(
+            conn, profile_id
+        )
     ownership_pair_keys = {
         (candidate.out_id, candidate.in_id) for candidate in ownership_candidates
     }
@@ -720,6 +745,40 @@ def _count_conflict_clusters(candidates):
     return len({c.conflict_set_id for c in candidates if c.conflict_size > 1})
 
 
+def _user_unpaired_keys(conn, profile_id):
+    """(out, in) legs whose pair the user deleted.
+
+    Deleting a pair is an explicit decision. Automatic pairing after a sync or
+    journal run must not quietly recreate it; an explicit bulk or manual pair
+    still can.
+    """
+
+    records = core_custody_authored_migration.list_pair_review_records(
+        conn, profile_id=profile_id, include_deleted=True
+    )
+    active = {
+        (str(row["out_transaction_id"]), str(row["in_transaction_id"]))
+        for row in records
+        if not row.get("deleted_at")
+    }
+    return {
+        (str(row["out_transaction_id"]), str(row["in_transaction_id"]))
+        for row in records
+        if row.get("deleted_at")
+    } - active
+
+
+def _without_user_unpaired(conn, profile_id, candidates):
+    unpaired = _user_unpaired_keys(conn, profile_id)
+    if not unpaired:
+        return candidates
+    return [
+        candidate
+        for candidate in candidates
+        if (candidate.out_id, candidate.in_id) not in unpaired
+    ]
+
+
 def bulk_pair_transfers(
     conn,
     workspace_ref,
@@ -735,6 +794,8 @@ def bulk_pair_transfers(
     candidate_type=None,
     commit=True,
     authored_source="cli",
+    skip_user_unpaired=False,
+    guards=None,
 ):
     """Run the matcher and auto-pair every solo (non-conflicted) candidate
     whose confidence meets the threshold.
@@ -750,19 +811,19 @@ def bulk_pair_transfers(
         "SELECT out_transaction_id, in_transaction_id, expires_at FROM transaction_pair_dismissals WHERE profile_id = ?",
         (profile["id"],),
     ).fetchall()
+    if guards is None:
+        guards = projection_pairing_guards(conn, profile["id"])
     candidates = core_transfer_matching.suggest_swap_candidates(
         rows,
         pair_records=pair_records,
         dismissals=dismissals,
-        booked_move_transaction_ids=core_custody_journal.stored_move_transaction_ids(
-            conn, profile["id"]
-        ),
+        booked_move_transaction_ids=guards.booked_move_transaction_ids,
         time_window_seconds=int(time_window_seconds),
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
     )
     candidates = _merge_ownership_review_candidates(
-        conn, profile["id"], candidates
+        conn, profile["id"], candidates, guards.ownership_candidates
     )
     candidates = _apply_profile_candidate_policies(candidates, profile)
     if confidence not in ("exact", "strong"):
@@ -777,6 +838,8 @@ def bulk_pair_transfers(
         method=method,
         candidate_type=candidate_type,
     )
+    if skip_user_unpaired:
+        candidates = _without_user_unpaired(conn, profile["id"], candidates)
     applied = []
     pair_source = "bulk_exact" if confidence == "exact" else "bulk_selected"
     try:
@@ -837,6 +900,8 @@ def apply_transfer_rules(
     candidate_type=None,
     commit=True,
     authored_source="cli",
+    skip_user_unpaired=False,
+    guards=None,
 ):
     """Auto-pair every non-conflicted candidate matched by enabled rules."""
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
@@ -846,19 +911,19 @@ def apply_transfer_rules(
         "SELECT out_transaction_id, in_transaction_id, expires_at FROM transaction_pair_dismissals WHERE profile_id = ?",
         (profile["id"],),
     ).fetchall()
+    if guards is None:
+        guards = projection_pairing_guards(conn, profile["id"])
     candidates = core_transfer_matching.suggest_swap_candidates(
         rows,
         pair_records=pair_records,
         dismissals=dismissals,
-        booked_move_transaction_ids=core_custody_journal.stored_move_transaction_ids(
-            conn, profile["id"]
-        ),
+        booked_move_transaction_ids=guards.booked_move_transaction_ids,
         time_window_seconds=int(time_window_seconds),
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
     )
     candidates = _merge_ownership_review_candidates(
-        conn, profile["id"], candidates
+        conn, profile["id"], candidates, guards.ownership_candidates
     )
     candidates = _apply_profile_candidate_policies(candidates, profile)
     candidates = _filter_transfer_candidates(
@@ -874,6 +939,10 @@ def apply_transfer_rules(
         for candidate in candidates
         if candidate.method != core_transfer_matching.METHOD_OWNERSHIP_GRAPH
     ]
+    if skip_user_unpaired:
+        candidates_for_rules = _without_user_unpaired(
+            conn, profile["id"], candidates_for_rules
+        )
     rules = _load_transfer_rules(conn, profile["id"])
     rules_by_id = {rule.id: rule for rule in rules}
     rule_matches, remaining = core_swap_rules.apply_rules(candidates_for_rules, rules)

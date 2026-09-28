@@ -1952,65 +1952,139 @@ class FreshnessTest(unittest.TestCase):
             )
         )
 
-    def test_journal_freshness_handler_auto_pairs_before_processing(self):
-        conn = self._db()
-        profile_id = _seed_profile(conn)
-        progress = []
+    def _run_journal_handler(
+        self,
+        conn,
+        profile_id,
+        *,
+        payload,
+        current_states,
+        auto_pair_result=None,
+        auto_pair_error=None,
+        process_error=None,
+        progress=None,
+    ):
+        """Drive the journal job with scripted projection freshness answers."""
+        calls = []
+        states = list(current_states)
+
+        def freshness_state(_conn, _profile):
+            return {"is_current": states.pop(0) if states else True}
+
+        def auto_pair(conn_arg, job):
+            calls.append("auto_pair")
+            self.assertEqual(job["profile_id"], profile_id)
+            if auto_pair_error is not None:
+                raise auto_pair_error
+            return auto_pair_result(conn_arg) if callable(auto_pair_result) else auto_pair_result
+
+        def process(_conn, *, profile_id=None, progress_observer=None):
+            calls.append("process")
+            if process_error is not None:
+                raise process_error
+            return {"quarantined": 0, "entries_created": 4}
+
         handler = daemon_freshness._freshness_handlers({})[
             freshness.JOB_JOURNAL_REFRESH
         ]
-
         with patch(
+            "kassiber.daemon_freshness.core_custody_journal.projection_freshness",
+            side_effect=freshness_state,
+        ), patch(
             "kassiber.daemon_freshness._auto_pair_before_journals",
-            return_value={"enabled": True, "applied": 2, "remaining": {"total": 1}},
-        ) as auto_pair, patch(
+            side_effect=auto_pair,
+        ), patch(
             "kassiber.daemon_freshness._journals_process_payload",
-            return_value={"quarantined": 0, "entries_created": 4},
-        ) as process:
+            side_effect=process,
+        ):
             result = handler(
                 conn,
-                {"profile_id": profile_id, "payload": {"auto_pair": True}},
-                progress.append,
+                {"profile_id": profile_id, "payload": payload},
+                progress if progress is not None else (lambda _payload: None),
                 lambda: None,
             )
+        return result, calls
 
+    def test_journal_freshness_handler_rebuilds_stale_projection_before_auto_pair(self):
+        # Booked MOVE decisions and ownership review cards only block
+        # conflicting automatic pairs against a current projection, so a stale
+        # book is rebuilt first; new pairs then need exactly one more rebuild.
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        progress = []
+        result, calls = self._run_journal_handler(
+            conn,
+            profile_id,
+            payload={"auto_pair": True},
+            current_states=[False, False],
+            auto_pair_result={"enabled": True, "applied": 2, "remaining": {"total": 1}},
+            progress=progress.append,
+        )
+
+        self.assertEqual(calls, ["process", "auto_pair", "process"])
         self.assertEqual(
             [item["phase"] for item in progress],
-            ["auto_pair", "journal_refresh"],
+            ["journal_refresh", "auto_pair"],
         )
-        auto_pair.assert_called_once()
-        process.assert_called_once()
         self.assertEqual(result["auto_pair"]["applied"], 2)
         self.assertEqual(result["entries_created"], 4)
+        self.assertTrue(result["rebuilt"])
+
+    def test_journal_freshness_handler_skips_second_rebuild_without_new_pairs(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        result, calls = self._run_journal_handler(
+            conn,
+            profile_id,
+            payload={"auto_pair": True},
+            current_states=[False, True],
+            auto_pair_result={"enabled": True, "applied": 0, "remaining": {"total": 0}},
+        )
+
+        self.assertEqual(calls, ["process", "auto_pair"])
+        self.assertEqual(result["entries_created"], 4)
+
+    def test_journal_freshness_handler_keeps_current_projection_when_allowed(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        result, calls = self._run_journal_handler(
+            conn,
+            profile_id,
+            payload={"auto_pair": True, "skip_rebuild_when_current": True},
+            current_states=[True, True],
+            auto_pair_result={"enabled": True, "applied": 0, "remaining": {"total": 0}},
+        )
+
+        # A current projection can still hold unpaired exact candidates (for
+        # example after a rebuild without pairing), so pairing still runs.
+        self.assertEqual(calls, ["auto_pair"])
+        self.assertFalse(result["rebuilt"])
+        self.assertEqual(result["quarantined"], 0)
+
+    def test_journal_freshness_handler_rebuilds_current_projection_by_default(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        _, calls = self._run_journal_handler(
+            conn,
+            profile_id,
+            payload={},
+            current_states=[True],
+        )
+
+        self.assertEqual(calls, ["process"])
 
     def test_journal_freshness_handler_continues_when_auto_pair_fails(self):
         conn = self._db()
         profile_id = _seed_profile(conn)
-        progress = []
-        handler = daemon_freshness._freshness_handlers({})[
-            freshness.JOB_JOURNAL_REFRESH
-        ]
-
-        with patch(
-            "kassiber.daemon_freshness._auto_pair_before_journals",
-            side_effect=AppError("profile missing", code="not_found"),
-        ) as auto_pair, patch(
-            "kassiber.daemon_freshness._journals_process_payload",
-            return_value={"quarantined": 0, "entries_created": 4},
-        ) as process:
-            result = handler(
-                conn,
-                {"profile_id": profile_id, "payload": {"auto_pair": True}},
-                progress.append,
-                lambda: None,
-            )
-
-        self.assertEqual(
-            [item["phase"] for item in progress],
-            ["auto_pair", "journal_refresh"],
+        result, calls = self._run_journal_handler(
+            conn,
+            profile_id,
+            payload={"auto_pair": True},
+            current_states=[True, True],
+            auto_pair_error=AppError("profile missing", code="not_found"),
         )
-        auto_pair.assert_called_once()
-        process.assert_called_once()
+
+        self.assertEqual(calls, ["auto_pair", "process"])
         self.assertEqual(result["entries_created"], 4)
         self.assertEqual(result["auto_pair"]["applied"], 0)
         self.assertTrue(result["auto_pair"]["skipped"])
@@ -2023,11 +2097,8 @@ class FreshnessTest(unittest.TestCase):
         # rolls back so the pair + journal step is atomic.
         conn = self._db()
         profile_id = _seed_profile(conn)
-        handler = daemon_freshness._freshness_handlers({})[
-            freshness.JOB_JOURNAL_REFRESH
-        ]
 
-        def seed_pending_pair(conn_arg, _job):
+        def seed_pending_pair(conn_arg):
             # Stand in for a commit=False auto-pair insert left pending.
             conn_arg.execute(
                 "INSERT INTO settings(key, value) VALUES('pending-auto-pair', '1')"
@@ -2041,20 +2112,16 @@ class FreshnessTest(unittest.TestCase):
         def committing_progress(_payload):
             conn.commit()
 
-        with patch(
-            "kassiber.daemon_freshness._auto_pair_before_journals",
-            side_effect=seed_pending_pair,
-        ), patch(
-            "kassiber.daemon_freshness._journals_process_payload",
-            side_effect=AppError("journal boom", code="tax_failed"),
-        ):
-            with self.assertRaises(AppError):
-                handler(
-                    conn,
-                    {"profile_id": profile_id, "payload": {"auto_pair": True}},
-                    committing_progress,
-                    lambda: None,
-                )
+        with self.assertRaises(AppError):
+            self._run_journal_handler(
+                conn,
+                profile_id,
+                payload={"auto_pair": True},
+                current_states=[True, False],
+                auto_pair_result=seed_pending_pair,
+                process_error=AppError("journal boom", code="tax_failed"),
+                progress=committing_progress,
+            )
 
         # The pending auto-pair write must have been rolled back, not left for
         # run_job's error handler to commit.
@@ -2062,6 +2129,243 @@ class FreshnessTest(unittest.TestCase):
             "SELECT value FROM settings WHERE key = 'pending-auto-pair'"
         ).fetchone()
         self.assertIsNone(row)
+
+    def _seed_address_wallet(self, conn, profile_id):
+        set_setting(conn, "context_workspace", "ws")
+        set_setting(conn, "context_profile", profile_id)
+        conn.execute(
+            """
+            INSERT INTO wallets(
+                id, workspace_id, profile_id, account_id, label, kind,
+                config_json, created_at
+            ) VALUES(
+                'wallet', 'ws', ?, NULL, 'Wallet', 'address',
+                '{"addresses":["bc1qwallet"]}', '2026-06-04T00:00:00Z'
+            )
+            """,
+            (profile_id,),
+        )
+        conn.commit()
+
+    def _sync_wallet_with_journal_step(self, conn, args, *, step_result=None):
+        step = Mock(return_value=step_result or {"quarantined": 3, "rebuilt": True})
+        with patch.object(
+            daemon_freshness, "prefetch_wallets_from_backend", return_value={}
+        ), patch.object(
+            daemon_freshness,
+            "sync_wallet_from_backend",
+            return_value={"wallet": "Wallet", "status": "synced"},
+        ), patch.object(daemon_freshness, "refresh_journals_step", step):
+            payload = daemon_freshness._wallets_sync_payload(
+                conn, {}, args, strict=True
+            )
+        return payload, step
+
+    def test_user_wallet_sync_finishes_with_local_journal_step(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        self._seed_address_wallet(conn, profile_id)
+
+        payload, step = self._sync_wallet_with_journal_step(conn, {"wallet": "Wallet"})
+
+        step.assert_called_once()
+        self.assertEqual(step.call_args.args[1], profile_id)
+        self.assertTrue(step.call_args.kwargs["auto_pair"])
+        self.assertTrue(step.call_args.kwargs["skip_rebuild_when_current"])
+        self.assertEqual(payload["journals"]["status"], "processed")
+        self.assertEqual(payload["journals"]["quarantines"], 3)
+        journal_jobs = [
+            job for job in payload["completed"]
+            if job["job_type"] == freshness.JOB_JOURNAL_REFRESH
+        ]
+        self.assertEqual(len(journal_jobs), 1)
+        self.assertEqual(
+            journal_jobs[0]["payload"],
+            {"auto_pair": True, "skip_rebuild_when_current": True},
+        )
+        # Wallet results stay wallet-only, so setup outcome checks still see
+        # exactly the synced sources.
+        self.assertEqual([row["wallet"] for row in payload["results"]], ["Wallet"])
+
+    def test_wallet_sync_journal_step_stays_on_the_synced_book(self):
+        # Another connection switches books while the sync runs; the journal
+        # step must still rebuild the book whose wallet was synced.
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        self._seed_address_wallet(conn, profile_id)
+        conn.execute(
+            """
+            INSERT INTO profiles(id, workspace_id, label, fiat_currency, created_at)
+            VALUES('other', 'ws', 'Other', 'EUR', '2026-06-04T00:00:00Z')
+            """
+        )
+        conn.commit()
+
+        def switch_books(*_args, **_kwargs):
+            set_setting(conn, "context_profile", "other")
+            return {"wallet": "Wallet", "status": "synced"}
+
+        step = Mock(return_value={"quarantined": 0, "rebuilt": True})
+        with patch.object(
+            daemon_freshness, "prefetch_wallets_from_backend", return_value={}
+        ), patch.object(
+            daemon_freshness, "sync_wallet_from_backend", side_effect=switch_books
+        ), patch.object(daemon_freshness, "refresh_journals_step", step):
+            daemon_freshness._wallets_sync_payload(
+                conn, {}, {"wallet": "Wallet"}, strict=True
+            )
+
+        self.assertEqual(step.call_args.args[1], profile_id)
+
+    def test_wallet_sync_can_leave_journals_for_later(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        self._seed_address_wallet(conn, profile_id)
+
+        payload, step = self._sync_wallet_with_journal_step(
+            conn, {"wallet": "Wallet", "process_journals": False}
+        )
+
+        step.assert_not_called()
+        self.assertNotIn("journals", payload)
+
+    def test_wallet_sync_reports_disabled_journal_source_class(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        self._seed_address_wallet(conn, profile_id)
+        freshness.set_policy(
+            conn, profile_id, source_classes={freshness.SOURCE_JOURNALS: False}
+        )
+        conn.commit()
+
+        payload, step = self._sync_wallet_with_journal_step(conn, {"wallet": "Wallet"})
+
+        step.assert_not_called()
+        self.assertEqual(payload["journals"]["status"], "disabled")
+
+    def test_wallet_sync_reports_failed_journal_step_without_failing_the_sync(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        self._seed_address_wallet(conn, profile_id)
+        step = Mock(side_effect=AppError("journal boom", code="sync_conflicts_open"))
+        with patch.object(
+            daemon_freshness, "prefetch_wallets_from_backend", return_value={}
+        ), patch.object(
+            daemon_freshness,
+            "sync_wallet_from_backend",
+            return_value={"wallet": "Wallet", "status": "synced"},
+        ), patch.object(daemon_freshness, "refresh_journals_step", step):
+            payload = daemon_freshness._wallets_sync_payload(
+                conn, {}, {"wallet": "Wallet"}, strict=True
+            )
+
+        self.assertEqual(payload["results"][0]["status"], "synced")
+        self.assertEqual(payload["journals"]["status"], "failed")
+        self.assertEqual(payload["journals"]["error"]["code"], "sync_conflicts_open")
+
+    def test_book_refresh_reports_journals_disabled_by_policy(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        set_setting(conn, "context_workspace", "ws")
+        set_setting(conn, "context_profile", profile_id)
+        freshness.set_policy(
+            conn, profile_id, source_classes={freshness.SOURCE_JOURNALS: False}
+        )
+        conn.commit()
+
+        payload = daemon_freshness._freshness_run_payload(
+            conn, {}, {"all": True, "rates": False, "journals": True, "run": False}
+        )
+
+        self.assertEqual(payload["journals"]["status"], "disabled")
+
+    def test_reused_journal_job_keeps_later_auto_pair_request(self):
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        spec = daemon_freshness._journal_refresh_spec(
+            profile_id, {"skip_rebuild_when_current": True}
+        )
+        first = daemon_freshness._enqueue_freshness_jobs(conn, profile_id, [spec])[0]
+        later = daemon_freshness._enqueue_freshness_jobs(
+            conn,
+            profile_id,
+            [daemon_freshness._journal_refresh_spec(profile_id, {"auto_pair": True})],
+        )[0]
+
+        self.assertEqual(later["id"], first["id"])
+        # Pairing is requested if either caller wants it; skipping the rebuild
+        # needs both callers to allow it.
+        self.assertEqual(later["payload"], {"auto_pair": True})
+
+    def test_journal_step_summary_distinguishes_outcomes(self):
+        journal = freshness.JOB_JOURNAL_REFRESH
+        self.assertEqual(
+            daemon_freshness.journal_step_summary([{"job_type": journal}], [])["status"],
+            "deferred",
+        )
+        self.assertEqual(
+            daemon_freshness.journal_step_summary(
+                [],
+                [{"job_type": journal, "status": freshness.JOB_DONE,
+                  "result": {"rebuilt": False, "quarantined": 0}}],
+            )["status"],
+            "current",
+        )
+        skipped = daemon_freshness.journal_step_summary(
+            [],
+            [{"job_type": journal, "status": freshness.JOB_DONE,
+              "result": {"rebuilt": True, "quarantined": 0, "auto_pair": {
+                  "skipped": True, "error": {"code": "not_found", "message": "gone"}}}}],
+        )
+        self.assertEqual(skipped["status"], "processed")
+        self.assertTrue(skipped["auto_pair_skipped"])
+        self.assertEqual(skipped["error"]["code"], "not_found")
+        failed = daemon_freshness.journal_step_summary(
+            [],
+            [{"job_type": journal, "status": freshness.JOB_ERROR,
+              "error": {"code": "tax_failed", "message": "boom"}}],
+        )
+        self.assertEqual(failed["status"], "failed")
+        self.assertEqual(failed["error"], {"code": "tax_failed", "message": "boom"})
+
+    def test_bulk_pairing_keeps_the_guards_a_rule_pair_would_invalidate(self):
+        # A rule pair bumps the input version, so a projection read afterwards
+        # blocks nothing; bulk pairing must use the guards read before it.
+        conn = self._db()
+        profile_id = _seed_profile(conn)
+        seen = []
+
+        def rule_pass(*_args, **kwargs):
+            seen.append(kwargs["guards"])
+            conn.execute(
+                "UPDATE profiles SET journal_input_version = journal_input_version + 1 "
+                "WHERE id = ?",
+                (profile_id,),
+            )
+            return {"summary": {"count": 1}}
+
+        def bulk_pass(*_args, **kwargs):
+            seen.append(kwargs["guards"])
+            return {"summary": {"count": 0}}
+
+        guards = daemon_freshness.projection_pairing_guards(conn, profile_id)._replace(
+            booked_move_transaction_ids={"booked-move"}
+        )
+        with patch(
+            "kassiber.daemon_freshness.suggest_transfer_candidates",
+            return_value={"counts": {}},
+        ), patch(
+            "kassiber.daemon_freshness.projection_pairing_guards",
+            return_value=guards,
+        ) as read_guards, patch(
+            "kassiber.daemon_freshness.apply_transfer_rules", side_effect=rule_pass
+        ), patch(
+            "kassiber.daemon_freshness.bulk_pair_transfers", side_effect=bulk_pass
+        ):
+            daemon_freshness._auto_pair_before_journals(conn, {"profile_id": profile_id})
+
+        read_guards.assert_called_once()
+        self.assertEqual(seen, [guards, guards])
 
     def test_auto_pair_before_journals_returns_applied_and_remaining_counts(self):
         conn = self._db()
@@ -2090,13 +2394,18 @@ class FreshnessTest(unittest.TestCase):
                 {"profile_id": profile_id},
             )
 
-        rules.assert_called_once_with(conn, "ws", profile_id, commit=False)
+        guards = rules.call_args.kwargs["guards"]
+        rules.assert_called_once_with(
+            conn, "ws", profile_id, commit=False, skip_user_unpaired=True, guards=guards
+        )
         bulk.assert_called_once_with(
             conn,
             "ws",
             profile_id,
             confidence="exact",
             commit=False,
+            skip_user_unpaired=True,
+            guards=guards,
         )
         self.assertEqual(summary["applied"], 3)
         self.assertEqual(summary["rules_applied"], 1)

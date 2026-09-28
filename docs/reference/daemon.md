@@ -679,11 +679,34 @@ policy (`background_enabled`, `report_read_sync`, and per-source-class opt-ins).
 The legacy `auto_sync_before_report_reads` argument remains accepted and maps
 onto `report_read_sync` plus wallet-source opt-ins. `ui.freshness.run` enqueues
 and optionally drains due jobs. `ui.wallets.sync` now delegates to that same
-daemon-owned queue with `rates=false` and `journals=false`; when a wallet is
-supplied it is source-scoped to that wallet, while a book/global refresh can
-enqueue the remaining wallet, rate, and journal jobs without duplicating the
-already queued source. `ui.freshness.cancel`, `ui.freshness.pause`, and
-`ui.freshness.resume` mutate the job/source state.
+daemon-owned queue with `rates=false`; when a wallet is supplied it is
+source-scoped to that wallet, while a book/global refresh can enqueue the
+remaining wallet, rate, and journal jobs without duplicating the already queued
+source. `ui.freshness.cancel`, `ui.freshness.pause`, and `ui.freshness.resume`
+mutate the job/source state.
+
+Every user-triggered `ui.wallets.sync` (unless `process_journals: false`),
+`ui.wallets.import_file`, `ui.wallets.document_import.import`, and
+`ui.wallets.import_samourai` finishes with the local journal step: exact
+automatic transfer pairing followed by a rebuild, recorded as the book's
+journal freshness job. Stored MOVE decisions and ownership review cards block
+conflicting automatic pairs only against a current projection, so a stale book
+is rebuilt before pairing and rebuilt once more only when pairs were applied;
+a current book that gained no pairs is left as is. The step performs no network
+I/O and honors the policy's `journals` source class. Its outcome is returned as
+`journals: {status, rebuilt, quarantines, auto_pair_applied, error}` with
+`status` one of `processed`, `current`, `deferred`, `disabled`, `failed`,
+`cancelled`, or `skipped`; a failed or deferred step never turns the finished
+sync or import into an error. `ui.freshness.run` returns the same summary when
+journals were requested, including `disabled` when the policy skips them.
+`ui.journals.process` runs the same step (always rebuilding);
+`kassiber journals process --auto-pair` is the CLI equivalent. The assistant's
+`ui.wallets.sync` and `ui.journals.process` tools rebuild without automatic
+pairing, because their consent does not cover authoring transfer pairs.
+Automatic pairing never recreates a pair the user deleted.
+Automatic background and report-read syncs keep their journal policy. A queued
+journal job reused by a later request keeps automatic pairing if either
+request asked for it.
 
 `ui.workspace.freshness.run` is the explicit book-set refresh path. It requires
 `args.workspace_id`, loops through every profile in that workspace, recovers

@@ -1086,6 +1086,9 @@ function AddConnectionDialogContent({
     }
   >("ui.wallets.sync", {
     onProgress: (record) => {
+      // The same stream ends with the local journal step; keep the import
+      // counter on the wallet rows instead of resetting it to 0/0.
+      if ((record as { job_type?: string }).job_type === "journal_refresh") return;
       setSyncProgress({
         wallet: record.wallet,
         processed: record.processed ?? 0,

@@ -24,6 +24,11 @@ export type JournalProcessResult = {
   processed_transactions?: number;
   processed_at?: string;
   warnings?: JournalProcessWarning[];
+  auto_pair?: {
+    applied?: number;
+    skipped?: boolean;
+    error?: { code?: string; message?: string } | null;
+  } | null;
 };
 
 type JournalProcessProgress = {
@@ -34,6 +39,8 @@ function journalProcessPhaseKey(phase: string | undefined) {
   switch (phase) {
     case "writer_wait":
       return "processing.phase.writerWait" as const;
+    case "auto_pair":
+      return "processing.phase.autoPair" as const;
     case "preparing":
       return "processing.phase.preparing" as const;
     case "repairing":
@@ -71,7 +78,10 @@ export function journalProcessOutcome(
       : summary,
     // A non-blocking warning (e.g. duplicate wallet labels merging per-wallet
     // attribution) must not read as a clean success.
-    tone: warnings.length || payload?.quarantined ? "warning" : "success",
+    tone:
+      warnings.length || payload?.quarantined || payload?.auto_pair?.skipped
+        ? "warning"
+        : "success",
   };
 }
 
@@ -96,6 +106,10 @@ function journalProcessBody(
     payload?.quarantined !== undefined
       ? `${payload.quarantined} quarantined`
       : null,
+    payload?.auto_pair?.applied
+      ? `${payload.auto_pair.applied} exact transfer pair${payload.auto_pair.applied === 1 ? "" : "s"} applied`
+      : null,
+    payload?.auto_pair?.skipped ? "automatic pairing skipped" : null,
   ].filter(Boolean);
   return parts.join(", ") || "Journal state refreshed.";
 }

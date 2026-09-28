@@ -110,7 +110,12 @@ import {
   editConfigKindForConnection,
   walletSyncNeedsBackend,
 } from "@/lib/connectionEditKind";
-import { describeWalletSyncResult, type SyncResult } from "@/lib/syncResults";
+import {
+  describeWalletSyncResult,
+  journalStepNeedsAttention,
+  type JournalStepSummary,
+  type SyncResult,
+} from "@/lib/syncResults";
 import { transactionBelongsToConnection } from "@/lib/connectionTransactions";
 import { buildBalanceReconciliation } from "@/lib/walletBalanceReconcile";
 import { MISSING_FIAT_LABEL } from "@/lib/currency";
@@ -609,7 +614,7 @@ function ConnectionDetailView({
   const connectionRefreshing = useConnectionRefreshState(connection);
   const progressValueRef = useRef(startingSyncProgress().value ?? 5);
   const syncWallet = useDaemonStreamMutation<
-    { results: SyncResult[] },
+    { results: SyncResult[]; journals?: JournalStepSummary | null },
     WalletSyncProgress
   >("ui.wallets.sync", {
     onProgress: (record) => {
@@ -932,17 +937,30 @@ function ConnectionDetailView({
             (item) => item.wallet === connection.label,
           );
           const status = result?.status ?? "error";
-          const message = describeWalletSyncResult(result, connection.label);
+          const journals = envelope.data?.journals;
+          const message = describeWalletSyncResult(
+            result,
+            connection.label,
+            journals,
+          );
           if (status === "error") {
             setSyncErrorMessage(message);
           }
+          const needsJournalAttention = journalStepNeedsAttention(journals);
           const notification = {
             title:
               status === "error"
                 ? t("detail.sync.failedTitle")
-                : t("detail.sync.finishedTitle"),
+                : needsJournalAttention
+                  ? t("journalStep.attentionTitle")
+                  : t("detail.sync.finishedTitle"),
             body: message,
-            tone: status === "error" ? "error" : "success",
+            tone:
+              status === "error"
+                ? "error"
+                : needsJournalAttention || (journals?.quarantines ?? 0) > 0
+                  ? "warning"
+                  : "success",
             dedupeKey: "wallet-sync",
             progress: undefined,
           } as const;

@@ -1189,5 +1189,19 @@
       "importing": "{{wallet}} wird importiert…",
       "rows": "{{processed}} / {{total}} Zeilen"
     }
+  },
+  "journalStep": {
+    "processed_one": "Journale aktualisiert; {{count}} Transaktion in Quarantäne.",
+    "processed_other": "Journale aktualisiert; {{count}} Transaktionen in Quarantäne.",
+    "processedClear": "Journale aktualisiert; nichts in Quarantäne.",
+    "current": "Die Journale waren bereits aktuell.",
+    "deferred": "Eine andere Aktualisierung lief, daher wurden die Journale nicht aktualisiert; berechne neu, sobald sie fertig ist.",
+    "disabled": "Die Journale wurden nicht aktualisiert, weil die Journal-Aktualisierung in den Aktualisierungseinstellungen ausgeschaltet ist.",
+    "failed": "Die Journale konnten nicht aktualisiert werden: {{message}}",
+    "cancelled": "Die Journal-Aktualisierung wurde abgebrochen.",
+    "autoPaired_one": "{{count}} eindeutiges Transfer-Paar zugeordnet.",
+    "autoPaired_other": "{{count}} eindeutige Transfer-Paare zugeordnet.",
+    "attentionTitle": "Journale brauchen Aufmerksamkeit",
+    "autoPairSkipped": "Die automatische Zuordnung wurde übersprungen: {{message}}"
   }
 }

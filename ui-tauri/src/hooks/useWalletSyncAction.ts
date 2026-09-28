@@ -7,6 +7,8 @@ import {
   freshnessRunNeedsAttention,
   freshnessRunHasPendingJobs,
   freshnessRunNeedsBackend,
+  freshnessRunOnlyJournalsPending,
+  journalStepNeedsAttention,
   freshnessRunQuarantineCount,
   freshnessRunTransferReviewCount,
   summarizeFreshnessRun,
@@ -163,25 +165,43 @@ export function useWalletSyncAction() {
             const needsBackend = freshnessRunNeedsBackend(envelope.data);
             const quarantineCount = freshnessRunQuarantineCount(envelope.data);
             const transferReviewCount = freshnessRunTransferReviewCount(envelope.data);
-            const blocksFirstSync = needsAttention || hasPendingJobs || quarantineCount > 0;
+            const blocksFirstSync =
+              needsAttention ||
+              hasPendingJobs ||
+              quarantineCount > 0;
             const needsReview = blocksFirstSync || transferReviewCount > 0;
             let title = t("bookRefresh.finishedTitle");
             let target:
               | "/logs"
               | "/connections"
+              | "/journals"
               | "/quarantine"
               | "/swaps"
               | "/settings/bitcoin"
               | undefined;
+            const journalsNeedAttention = journalStepNeedsAttention(
+              envelope.data?.journals,
+            );
             if (needsBackend) {
               title = t("bookRefresh.backendRequiredTitle");
               target = "/settings/bitcoin";
+            } else if (
+              journalsNeedAttention &&
+              !freshnessRunNeedsAttention({ ...envelope.data, journals: null })
+            ) {
+              // Only the journal step needs attention: review it on Journals.
+              title = t("bookRefresh.needsAttentionTitle");
+              target = "/journals";
             } else if (needsAttention) {
               title = t("bookRefresh.needsAttentionTitle");
               target = "/logs";
             } else if (hasPendingJobs) {
               title = t("bookRefresh.pendingTitle");
-              target = "/connections";
+              // A waiting journal step is reviewed on Journals, not on the
+              // connection list whose sources already finished.
+              target = freshnessRunOnlyJournalsPending(envelope.data)
+                ? "/journals"
+                : "/connections";
             } else if (quarantineCount > 0) {
               title = t("bookRefresh.quarantineTitle", { count: quarantineCount });
               target = "/quarantine";

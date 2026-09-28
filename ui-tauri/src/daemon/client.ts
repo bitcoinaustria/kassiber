@@ -21,6 +21,7 @@ import {
 } from "@tanstack/react-query";
 import { getTransport, type DaemonEnvelope } from "./transport";
 import { useUiStore, type DataMode } from "@/store/ui";
+import { notifyJournalStepAfterImport } from "@/lib/journalStepNotice";
 
 export interface ExpectedBookScope {
   workspace_id: string;
@@ -421,9 +422,12 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
     "ui.activity.history",
     "ui.activity.stale",
     "ui.connections.node.snapshot",
+    "ui.custody.gaps.list",
+    "ui.custody.lineage.snapshot",
     "ui.journals.events.list",
     "ui.journals.quarantine",
     "ui.journals.snapshot",
+    "ui.journals.transfers.list",
     "ui.next_actions",
     "ui.overview.snapshot",
     "ui.rates.coverage",
@@ -566,13 +570,14 @@ export function useDaemonMutation<T = unknown>(
       boundary?.onMutationSuccess?.(kind, envelope.data);
       return envelope;
     },
-    onSuccess: () => {
+    onSuccess: (envelope) => {
       if (mutationAdvancesDaemonSession(kind)) {
         useUiStore.getState().bumpDaemonSession();
       }
       if (options?.invalidateQueries !== false) {
         invalidateDaemonQueriesForMutation(queryClient, dataMode, kind);
       }
+      notifyJournalStepAfterImport(kind, envelope.data);
     },
   });
 }

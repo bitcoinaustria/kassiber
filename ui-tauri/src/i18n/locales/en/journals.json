@@ -11,6 +11,7 @@
     "reportHint": "Reports update when processing finishes",
     "phase": {
       "writerWait": "Waiting for the database writer",
+      "autoPair": "Pairing exact own-wallet transfers",
       "preparing": "Preparing journal inputs",
       "repairing": "Checking overlapping sources",
       "pricing": "Applying cached prices",
