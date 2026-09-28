@@ -54,6 +54,10 @@ import { SecurityStep } from "./steps/SecurityStep";
 import { SyncStep } from "./steps/SyncStep";
 import { ImportProjectPanel } from "./ImportProjectPanel";
 import { StartChoicePanel } from "./StartChoicePanel";
+import {
+  regtestDemoImportedProject,
+  type RegtestStatusData,
+} from "./regtestDemo";
 import { OnboardingStepper } from "./stepper";
 import type { BackendPreviewRow, OnboardingForm, OnboardingStep } from "./types";
 
@@ -105,18 +109,6 @@ const DEFAULT_STEP_LABEL_KEYS: Record<
 const SECURITY_STEP_INDEX = DEFAULT_STEPS.findIndex(
   (entry) => entry.component === SecurityStep,
 );
-
-interface RegtestStatusData {
-  state_root?: string | null;
-  data_root?: string | null;
-  database?: string | null;
-  database_encrypted?: boolean | null;
-  current_workspace?: string | null;
-  current_profile?: string | null;
-  default_backend?: string | null;
-  transactions?: number | null;
-  wallets?: number | null;
-}
 
 export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) => {
   const { t } = useTranslation("onboarding");
@@ -526,17 +518,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         backendSetupMode: "custom",
         backendKind: "bitcoinrpc",
         backendName: regtestStatus.default_backend || "core-regtest",
-        importedProject:
-          canImportProjects() &&
-          regtestStatus.state_root &&
-          regtestStatus.data_root &&
-          regtestStatus.database
-            ? {
-                stateRoot: regtestStatus.state_root,
-                dataRoot: regtestStatus.data_root,
-                database: regtestStatus.database,
-              }
-            : undefined,
+        importedProject: regtestDemoImportedProject(regtestStatus),
       };
       setIdentity(identity);
       const bookKey = bookIdentityKey(identity);
