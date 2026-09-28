@@ -12,7 +12,11 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  SegmentedControl,
+  SettingsGroup,
+  SettingsRow,
+} from "./SettingsControls";
 import { SUPPORTED_LANGUAGES, type LanguageCode } from "@/i18n/config";
 import {
   DEFAULT_APP_SCALE,
@@ -61,95 +65,67 @@ export function AppearanceSettingsPanel({
   const scalePercent = Math.round(appScale * 100);
   return (
     <div className="space-y-6">
-      <section className="space-y-2">
-        <div>
-          <h3 className="text-sm font-semibold">
-            {t("appearance.theme.title")}
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            {t("appearance.theme.description")}
-          </p>
-        </div>
-        <Tabs
-          value={theme}
-          onValueChange={(value) => setTheme(value as ThemePreference)}
+      <SettingsGroup>
+        <SettingsRow
+          label={t("appearance.theme.title")}
+          description={t("appearance.theme.description")}
         >
-          <TabsList>
-            <TabsTrigger value="system">
-              <Monitor className="size-4" aria-hidden="true" />
-              {t("appearance.theme.system")}
-            </TabsTrigger>
-            <TabsTrigger value="light">
-              <Sun className="size-4" aria-hidden="true" />
-              {t("appearance.theme.light")}
-            </TabsTrigger>
-            <TabsTrigger value="dark">
-              <Moon className="size-4" aria-hidden="true" />
-              {t("appearance.theme.dark")}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </section>
-
-      <section className="space-y-2">
-        <div>
-          <h3 className="text-sm font-semibold">
-            {t("appearance.denomination.title")}
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            {t("appearance.denomination.description")}
-          </p>
-        </div>
-        <Tabs
-          value={currency}
-          onValueChange={(value) => setCurrency(value as CurrencyMode)}
+          <SegmentedControl
+            label={t("appearance.theme.title")}
+            value={theme}
+            onValueChange={setTheme}
+            options={[
+              { value: "system", label: t("appearance.theme.system"), icon: <Monitor aria-hidden="true" /> },
+              { value: "light", label: t("appearance.theme.light"), icon: <Sun aria-hidden="true" /> },
+              { value: "dark", label: t("appearance.theme.dark"), icon: <Moon aria-hidden="true" /> },
+            ]}
+          />
+        </SettingsRow>
+        <SettingsRow
+          label={t("appearance.denomination.title")}
+          description={t("appearance.denomination.description")}
         >
-          <TabsList>
-            <TabsTrigger value="eur">
-              <span aria-hidden="true">€</span>
-              {t("appearance.denomination.euro")}
-            </TabsTrigger>
-            <TabsTrigger value="btc">
-              <span aria-hidden="true">₿</span>
-              {t("appearance.denomination.bitcoin")}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </section>
-
-      <section className="space-y-2">
-        <div>
-          <h3 className="text-sm font-semibold">
-            {t("appearance.scale.title")}
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            {t("appearance.scale.description")}
-          </p>
-        </div>
-        <div className="flex max-w-md items-center gap-2 rounded-md border bg-background p-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            aria-label={t("appearance.scale.decrease")}
-            disabled={appScale <= MIN_APP_SCALE}
-            onClick={decreaseAppScale}
-          >
-            <Minus className="size-4" aria-hidden="true" />
-          </Button>
-          <div className="flex-1 text-center font-mono text-sm tabular-nums">
-            {t("appearance.scale.value", { percent: scalePercent })}
+          <SegmentedControl<CurrencyMode>
+            label={t("appearance.denomination.title")}
+            value={currency}
+            onValueChange={setCurrency}
+            options={[
+              { value: "eur", label: t("appearance.denomination.euro"), icon: <span aria-hidden="true">€</span> },
+              { value: "btc", label: t("appearance.denomination.bitcoin"), icon: <span aria-hidden="true">₿</span> },
+            ]}
+          />
+        </SettingsRow>
+        <SettingsRow
+          label={t("appearance.scale.title")}
+          description={t("appearance.scale.description")}
+        >
+          <div className="inline-flex items-center rounded-lg border">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="rounded-r-none"
+              aria-label={t("appearance.scale.decrease")}
+              disabled={appScale <= MIN_APP_SCALE}
+              onClick={decreaseAppScale}
+            >
+              <Minus className="size-4" aria-hidden="true" />
+            </Button>
+            <span className="w-14 text-center font-mono text-sm tabular-nums">
+              {t("appearance.scale.value", { percent: scalePercent })}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="rounded-l-none"
+              aria-label={t("appearance.scale.increase")}
+              disabled={appScale >= MAX_APP_SCALE}
+              onClick={increaseAppScale}
+            >
+              <Plus className="size-4" aria-hidden="true" />
+            </Button>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            aria-label={t("appearance.scale.increase")}
-            disabled={appScale >= MAX_APP_SCALE}
-            onClick={increaseAppScale}
-          >
-            <Plus className="size-4" aria-hidden="true" />
-          </Button>
           <Button
             type="button"
             variant="ghost"
@@ -159,75 +135,50 @@ export function AppearanceSettingsPanel({
           >
             {t("common:actions.reset")}
           </Button>
-        </div>
-      </section>
+        </SettingsRow>
+        <SettingsRow
+          label={t("appearance.language.title")}
+          description={t("appearance.language.description")}
+        >
+          <SegmentedControl<LanguageCode>
+            label={t("appearance.language.title")}
+            value={lang}
+            onValueChange={setLang}
+            options={SUPPORTED_LANGUAGES.map((language) => ({
+              value: language.code,
+              label: language.label,
+            }))}
+          />
+        </SettingsRow>
+      </SettingsGroup>
 
       {aiFeaturesEnabled ? (
-        <section className="space-y-2">
-          <div>
-            <h3 className="text-sm font-semibold">
-              {t("appearance.assistantDock.title")}
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              {t("appearance.assistantDock.description")}
-            </p>
-          </div>
-          <label className="flex max-w-md items-center justify-between gap-3 rounded-md border bg-background px-3 py-2">
-            <span className="text-sm">
-              {t("appearance.assistantDock.autoHide")}
-            </span>
+        <SettingsGroup title={t("appearance.assistantDock.title")}>
+          <SettingsRow
+            label={t("appearance.assistantDock.autoHide")}
+            description={t("appearance.assistantDock.description")}
+            htmlFor="assistant-dock-auto-hide"
+          >
             <Switch
+              id="assistant-dock-auto-hide"
               checked={assistantDockAutoHide}
               onCheckedChange={setAssistantDockAutoHide}
-              aria-label={t("appearance.assistantDock.autoHide")}
             />
-          </label>
-          <Tabs
-            value={assistantDockPosition}
-            onValueChange={(value) =>
-              setAssistantDockPosition(value as AssistantDockPosition)
-            }
-          >
-            <TabsList>
-              <TabsTrigger value="left">
-                <AlignLeft className="size-4" aria-hidden="true" />
-                {t("appearance.assistantDock.positionLeft")}
-              </TabsTrigger>
-              <TabsTrigger value="center">
-                <AlignCenter className="size-4" aria-hidden="true" />
-                {t("appearance.assistantDock.positionCenter")}
-              </TabsTrigger>
-              <TabsTrigger value="right">
-                <AlignRight className="size-4" aria-hidden="true" />
-                {t("appearance.assistantDock.positionRight")}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </section>
+          </SettingsRow>
+          <SettingsRow label={t("appearance.assistantDock.position")}>
+            <SegmentedControl<AssistantDockPosition>
+              label={t("appearance.assistantDock.position")}
+              value={assistantDockPosition}
+              onValueChange={setAssistantDockPosition}
+              options={[
+                { value: "left", label: t("appearance.assistantDock.positionLeft"), icon: <AlignLeft aria-hidden="true" /> },
+                { value: "center", label: t("appearance.assistantDock.positionCenter"), icon: <AlignCenter aria-hidden="true" /> },
+                { value: "right", label: t("appearance.assistantDock.positionRight"), icon: <AlignRight aria-hidden="true" /> },
+              ]}
+            />
+          </SettingsRow>
+        </SettingsGroup>
       ) : null}
-
-      <section className="space-y-2">
-        <div>
-          <h3 className="text-sm font-semibold">
-            {t("appearance.language.title")}
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            {t("appearance.language.description")}
-          </p>
-        </div>
-        <Tabs
-          value={lang}
-          onValueChange={(value) => setLang(value as LanguageCode)}
-        >
-          <TabsList>
-            {SUPPORTED_LANGUAGES.map((language) => (
-              <TabsTrigger key={language.code} value={language.code}>
-                {language.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      </section>
     </div>
   );
 }

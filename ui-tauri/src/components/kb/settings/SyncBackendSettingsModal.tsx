@@ -1122,7 +1122,7 @@ export function SyncBackendSettingsModal({
             ) : null}
 
             {isEditing ? (
-              <section className="flex items-center gap-3 rounded-md border bg-muted/10 p-3">
+              <section className="flex items-center gap-3 rounded-lg border bg-muted/10 p-3">
                 <NetworkMark type={type} />
                 <div className="min-w-0">
                   <Label>{t("backendModal.connectionType")}</Label>
@@ -1507,7 +1507,7 @@ export function SyncBackendSettingsModal({
 
             {showAdvancedConnectionSettings && (
               <details
-                className="group rounded-md border bg-muted/10"
+                className="group rounded-lg border bg-muted/10"
                 open={
                   trustSsl ||
                   Boolean(certificate) ||
@@ -1516,7 +1516,7 @@ export function SyncBackendSettingsModal({
                   undefined
                 }
               >
-                <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <summary className="flex min-h-12 cursor-pointer list-none items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   <ChevronRight
                     className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
                     aria-hidden="true"
