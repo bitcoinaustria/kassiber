@@ -1366,7 +1366,8 @@ function ConnectionDetailView({
       <section className="kb-surface relative isolate overflow-hidden">
         <div
           className={cn(
-            "pointer-events-none absolute inset-0 opacity-70",
+            // The chain's glow; on white it turns peachy at dark mode's strength.
+            "pointer-events-none absolute inset-0 opacity-35 dark:opacity-70",
             walletChain === "liquid"
               ? "bg-[radial-gradient(circle_at_12%_0%,rgba(0,174,199,0.20),transparent_32%),radial-gradient(circle_at_95%_100%,rgba(31,122,140,0.10),transparent_36%)]"
               : "bg-[radial-gradient(circle_at_12%_0%,rgba(247,147,26,0.22),transparent_32%),radial-gradient(circle_at_95%_100%,rgba(227,0,15,0.08),transparent_36%)]",
