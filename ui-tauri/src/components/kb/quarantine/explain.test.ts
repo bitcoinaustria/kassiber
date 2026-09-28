@@ -12,6 +12,7 @@ import {
   categoryForReason,
   causeCopy,
   causeKeyFor,
+  detailContextFor,
   exclusionFitsReason,
   sheetTabForCause,
 } from "./explain";
@@ -189,6 +190,41 @@ describe("classified quarantine rows", () => {
     expect(root.priority).toBe("High");
     expect(root.event).toBe("An intermediate wallet is missing");
     expect(root.transactionAction?.tab).toBe("details");
+  });
+
+  it("flags explanations that quote amounts so tables can mask them", () => {
+    const oversell = quarantineItemToRow(
+      {
+        ...item,
+        reason: "insufficient_lots",
+        category: "missing_acquisition_history",
+        is_downstream: false,
+        root: null,
+        evidence: { required_msat: 123_456_789_000, available_msat: 87_654_321_000 },
+      },
+      "Book",
+      t,
+    );
+    expect(oversell.evidenceHint).toContain("123,456,789");
+    expect(oversell.evidenceHintSensitive).toBe(true);
+    expect(quarantineItemToRow(item, "Book", t).evidenceHintSensitive).toBe(false);
+  });
+
+  it("keeps the reading that came with a click for a root on another page", () => {
+    const opened = {
+      transactionId: "out",
+      context: {
+        reason: "custody_quantity_unresolved",
+        category: "needs_decision" as const,
+        evidence: { blocker_code: "reviewed_residual_suspense" },
+        rootLabel: null,
+      },
+    };
+    // The page holds only the downstream row; its root was opened from the panel.
+    expect(detailContextFor("out", [item], opened)).toBe(opened.context);
+    expect(detailContextFor("later-sale", [item], opened)?.category).toBe("downstream");
+    expect(detailContextFor("other", [item], opened)).toBeNull();
+    expect(detailContextFor(null, [item], opened)).toBeNull();
   });
 });
 

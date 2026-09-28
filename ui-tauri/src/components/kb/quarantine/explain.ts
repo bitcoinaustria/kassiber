@@ -6,6 +6,7 @@ import type {
   QuarantineAction,
   QuarantineCategory,
   QuarantineEvidence,
+  QuarantineGroup,
   QuarantineItem,
 } from "./types";
 
@@ -219,6 +220,8 @@ export interface CauseCopy {
   title: string;
   why: string;
   provide: string;
+  /** `why` may quote wallet amounts, so it follows "hide sensitive". */
+  whyQuotesAmounts: boolean;
 }
 
 export interface CauseContext {
@@ -263,11 +266,14 @@ export function causeCopy(context: CauseContext, typedT: TFunction<"journals">):
     since: evidence.lot_state_uncertain_since?.slice(0, 10) || t("quarantine.cause.fallback.date"),
     root: context.rootLabel || t("quarantine.cause.fallback.root"),
   };
+  const whyQuotesAmounts =
+    evidence.required_msat != null || evidence.available_msat != null;
   if (key) {
     return {
       title: t(`quarantine.cause.${key}.title`, values),
       why: t(`quarantine.cause.${key}.why`, values),
       provide: t(`quarantine.cause.${key}.provide`, values),
+      whyQuotesAmounts,
     };
   }
   const category = context.category ?? "needs_decision";
@@ -275,6 +281,7 @@ export function causeCopy(context: CauseContext, typedT: TFunction<"journals">):
     title: t(`quarantine.cause.category.${category}.title`, values),
     why: t(`quarantine.cause.category.${category}.why`, values),
     provide: t(`quarantine.cause.category.${category}.provide`, values),
+    whyQuotesAmounts,
   };
 }
 
@@ -379,6 +386,35 @@ export interface QuarantineDetailContext {
 export function quarantineRootLabel(root: NonNullable<QuarantineItem["root"]>) {
   const date = root.occurred_at ? root.occurred_at.slice(0, 10) : "";
   return [date, root.wallet].filter(Boolean).join(", ");
+}
+
+/**
+ * The reading for the transaction the sheet shows: its row on this page, or
+ * the context handed over by the click that opened it from another page.
+ */
+export function detailContextFor(
+  transactionId: string | null,
+  items: QuarantineItem[],
+  opened: { transactionId: string; context: QuarantineDetailContext } | null,
+): QuarantineDetailContext | null {
+  if (!transactionId) return null;
+  return (
+    quarantineDetailContext(items.find((item) => item.transaction_id === transactionId)) ??
+    (opened?.transactionId === transactionId ? opened.context : null)
+  );
+}
+
+/** Context for a cause's root, which may sit on another page of the queue. */
+export function quarantineGroupContext(
+  group: QuarantineGroup,
+): QuarantineDetailContext | null {
+  if (!group.root_transaction_id) return null;
+  return {
+    reason: group.reason,
+    category: group.category,
+    evidence: group.evidence ?? {},
+    rootLabel: null,
+  };
 }
 
 /** Context for a classified item; older daemons without a category give none. */

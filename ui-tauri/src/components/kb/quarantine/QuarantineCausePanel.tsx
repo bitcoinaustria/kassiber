@@ -20,7 +20,9 @@ import {
   actionLabel,
   categoryLabel,
   causeCopy,
+  quarantineGroupContext,
   sheetTabForCause,
+  type QuarantineDetailContext,
   type QuarantineSheetTab,
 } from "./explain";
 import type {
@@ -34,7 +36,11 @@ interface QuarantineCausePanelProps {
   snapshot: QuarantineSnapshot;
   isProcessingJournals: boolean;
   onProcessJournals: () => void;
-  onOpenTransaction: (transactionId: string, tab: QuarantineSheetTab) => void;
+  onOpenTransaction: (
+    transactionId: string,
+    tab: QuarantineSheetTab,
+    context?: QuarantineDetailContext | null,
+  ) => void;
   hideSensitive?: boolean;
 }
 
@@ -151,7 +157,11 @@ export function QuarantineCausePanel({
       default: {
         const target = action.transaction_id ?? rootId;
         if (target) {
-          onOpenTransaction(target, sheetTabForCause(group.reason, group.category, group.evidence));
+          onOpenTransaction(
+            target,
+            sheetTabForCause(group.reason, group.category, group.evidence),
+            target === rootId ? quarantineGroupContext(group) : null,
+          );
         }
       }
     }
@@ -256,6 +266,7 @@ export function QuarantineCausePanel({
                     onOpenTransaction(
                       group.root_transaction_id,
                       sheetTabForCause(group.reason, group.category, group.evidence),
+                      quarantineGroupContext(group),
                     );
                   }
                 }}
@@ -368,10 +379,7 @@ function QuarantineCauseCard({
       <p
         className={cn(
           "mt-1 text-sm text-muted-foreground",
-          // The explanation can quote required and available amounts.
-          (group.evidence.required_msat != null ||
-            group.evidence.available_msat != null) &&
-            sensitiveClass(hideSensitive),
+          copy.whyQuotesAmounts && sensitiveClass(hideSensitive),
         )}
       >
         {copy.why}

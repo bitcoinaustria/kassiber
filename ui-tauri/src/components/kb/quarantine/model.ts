@@ -165,6 +165,7 @@ function explainedQuarantineRow(
     priority: blocksReports ? "High" : downstream ? "Low" : "Medium",
     owner: profile ?? t("quarantine.ownerFallback"),
     evidenceHint: copy.why,
+    evidenceHintSensitive: copy.whyQuotesAmounts,
     nextAction: copy.provide,
     metricFilterIds: categoryFilterIds(category),
     transactionAction: {

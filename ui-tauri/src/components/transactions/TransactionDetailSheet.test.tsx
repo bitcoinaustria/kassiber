@@ -60,6 +60,26 @@ describe("transaction detail opening surface", () => {
     expect(generic).not.toContain("A reviewed route keeps part in suspense");
     expect(html).toContain("A reviewed route keeps part in suspense");
   });
+  it("masks the amounts the explanation quotes when values are hidden", () => {
+    const loaded = { ...props, transaction, draft: draftForTransaction(transaction), isLoading: false };
+    const reason = "insufficient_lots";
+    const context = {
+      reason,
+      category: "missing_acquisition_history" as const,
+      evidence: { required_msat: 123_456_789_000, available_msat: 87_654_321_000 },
+      rootLabel: null,
+    };
+    const quoting = /class="[^"]*\bsensitive\b[^"]*">[^<]*123,456,789 sats/;
+    const shown = renderToStaticMarkup(
+      <TransactionDetailSheet {...loaded} quarantineReasonOverride={reason} quarantineContext={context} />,
+    );
+    const hidden = renderToStaticMarkup(
+      <TransactionDetailSheet {...loaded} hideSensitive quarantineReasonOverride={reason} quarantineContext={context} />,
+    );
+    expect(shown).toContain("123,456,789 sats");
+    expect(shown).not.toMatch(quoting);
+    expect(hidden).toMatch(quoting);
+  });
   it("does not display a pending sheet after closing", () => {
     expect(renderToStaticMarkup(<TransactionDetailSheet {...props} open={false} />)).toBe("");
   });

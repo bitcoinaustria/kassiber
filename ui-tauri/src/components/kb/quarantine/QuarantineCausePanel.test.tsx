@@ -167,6 +167,18 @@ describe("quarantine cause panel", () => {
     expect(sensitive(render(snapshot(), vi.fn(), true))).toBeGreaterThanOrEqual(3);
   });
 
+  it("hands the cause's reading to the sheet when its root is on another page", () => {
+    const onOpenTransaction = vi.fn();
+    render(snapshot(), onOpenTransaction);
+    buttons.find((button) => button.label === "Open transaction")?.onClick?.();
+    expect(onOpenTransaction).toHaveBeenCalledWith("out", "details", {
+      reason: "custody_quantity_unresolved",
+      category: "missing_wallet_history",
+      evidence: { blocker_code: "custody_gap_review_required", gap_id: "gap-1", wallet_label: "Cold" },
+      rootLabel: null,
+    });
+  });
+
   it("renders nothing for an empty, current quarantine", () => {
     expect(
       render(

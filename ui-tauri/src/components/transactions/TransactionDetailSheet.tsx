@@ -762,6 +762,7 @@ function TransactionDetailBody({
           return {
             title: quarantineExplanation.title,
             reason: quarantineExplanation.why,
+            reasonSensitive: quarantineExplanation.whyQuotesAmounts,
             hint: quarantineExplanation.provide,
             primaryActionLabel:
               quarantineTargetTab === "pricing"
@@ -962,6 +963,9 @@ function TransactionDetailBody({
               <QuarantineBanner
                 title={reviewBanner.title}
                 reason={reviewBanner.reason}
+                reasonClassName={
+                  reviewBanner.reasonSensitive && hideSensitive ? "sensitive" : undefined
+                }
                 hint={reviewBanner.hint}
                 primaryActionLabel={reviewBanner.primaryActionLabel}
                 onPrimaryAction={

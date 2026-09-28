@@ -372,6 +372,7 @@ export function StatusTimeline({ steps }: { steps: TimelineStep[] }) {
 export function QuarantineBanner({
   title,
   reason,
+  reasonClassName,
   hint,
   primaryActionLabel,
   onPrimaryAction,
@@ -379,6 +380,7 @@ export function QuarantineBanner({
 }: {
   title: string;
   reason: string;
+  reasonClassName?: string;
   hint?: React.ReactNode;
   primaryActionLabel: string;
   onPrimaryAction?: () => void;
@@ -401,7 +403,12 @@ export function QuarantineBanner({
             {hint ?? t("sheet.quarantineHint")}
           </InfoHint>
         </div>
-        <div className="mt-0.5 text-xs text-amber-700/80 dark:text-amber-300/80">
+        <div
+          className={cn(
+            "mt-0.5 text-xs text-amber-700/80 dark:text-amber-300/80",
+            reasonClassName,
+          )}
+        >
           {reason}
         </div>
       </div>
