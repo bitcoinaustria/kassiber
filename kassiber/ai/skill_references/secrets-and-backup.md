@@ -58,7 +58,12 @@ command on an encrypted book returns `interaction_required`, read
   user to run `kassiber operator unlock` in their own terminal (add
   `--capability read` for a read-only session), and retry.
 - `operator_lease_required`: brokered mode is selected but no lease is active.
-  Ask the user to unlock again.
+  Ask the user to unlock again, in their terminal or with *Unlock for agents*
+  in Kassiber (Settings, AI, External agents).
+- `agent_pairing_required`: the book is unlocked for agents from the desktop,
+  and this MCP server is waiting for the user's approval. Ask the user to
+  click Allow for it in that same row, then retry. `agent_pairing_denied`
+  means the user refused it; stop.
 - `fresh_local_authentication`: admin work (reveal, delete, backup, passphrase
   or unlock-policy changes) needs the user's own fresh authentication. Ask the
   user to run that exact command themselves.
@@ -69,7 +74,10 @@ working directory. In `--machine` mode an
 `operator.operation.accepted` JSON line on stderr carries the operation id. If
 you lose track of a mutation, inspect it with `kassiber operator operation
 status <id>` before retrying. `kassiber chat` is refused in brokered mode;
-`kassiber mcp serve` works with a lease.
+`kassiber mcp serve` works with a lease. A desktop *Unlock for agents* session
+admits only `kassiber mcp` tool calls from the server the user allowed; other
+commands, including CLI reads from a shell, return `agent_session_scope` or
+`agent_session_required`.
 
 ## Remembered CLI unlock
 

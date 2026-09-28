@@ -12,6 +12,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 from kassiber.ai.tools import TOOL_CATALOG, get_tool
@@ -631,6 +632,144 @@ class BrokeredRoutingTests(_TwoBookFixture):
         self.assertEqual(json.loads(argv[argv.index("--arguments") + 1]), {"limit": 3})
         self.assertNotIn("--db-passphrase-fd", argv)
 
+    def test_an_agent_lease_registers_this_process_once_and_again_when_dropped(self):
+        opened: list[str] = []
+
+        class Handle:
+            alive = True
+            token = "session-token"
+
+            def close(self):
+                self.alive = False
+
+        def open_session(_client, data_root):
+            opened.append(data_root)
+            return Handle()
+
+        submits = iter(
+            [
+                AppError(
+                    "no session",
+                    code="interaction_required",
+                    details={"reason": "agent_session_required"},
+                ),
+                {"operation_id": "gen.client.op", "state": "queued"},
+                {"operation_id": "gen.client.op2", "state": "queued"},
+            ]
+        )
+
+        tokens: list[object] = []
+
+        def submit(*_args, **kwargs):
+            tokens.append(kwargs.get("agent_session_token"))
+            outcome = next(submits)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        child = {"kind": "mcp.call", "schema_version": 1, "data": {"tool": "status", "data": {}}}
+        provider = self.provider()
+        with self._brokered(), mock.patch(
+            "kassiber.operator.client.BrokerClient.status",
+            return_value={
+                "lease": "unlocked",
+                "agent_scope": True,
+                "default_scope": {"workspace": "w", "profile": "p"},
+            },
+        ), mock.patch(
+            "kassiber.operator.client.BrokerClient.open_agent_session",
+            autospec=True,
+            side_effect=open_session,
+        ), mock.patch(
+            "kassiber.operator.client.BrokerClient.submit",
+            side_effect=submit,
+        ), mock.patch(
+            "kassiber.operator.client.BrokerClient.operation_status",
+            return_value={"state": "completed", "exit_code": 0, "stdout": json.dumps(child), "stderr": ""},
+        ):
+            first = provider.call_tool("status", {}, threading.Event())
+            second = provider.call_tool("status", {}, threading.Event())
+        self.assertFalse(first.is_error, first.structured)
+        self.assertFalse(second.is_error, second.structured)
+        # One registration, one re-registration after the broker dropped it,
+        # and the live session is reused for the next call.
+        self.assertEqual(len(opened), 2)
+        # Every call presents the session's token.
+        self.assertEqual(tokens, ["session-token"] * 3)
+
+    def test_parallel_calls_with_a_stale_session_replace_it_only_once(self):
+        class Handle:
+            def __init__(self, name):
+                self.name = name
+                self.alive = True
+                self.token = name
+
+            def close(self):
+                self.alive = False
+
+        opened = []
+
+        class Client:
+            def open_agent_session(self, data_root):
+                opened.append(data_root)
+                return Handle(f"h{len(opened)}")
+
+        provider = self.provider()
+        client = Client()
+        stale = provider._agent_session(client, "/book")
+        # Call A replaces the stale registration ...
+        fresh = provider._agent_session(client, "/book", replacing=stale)
+        # ... and call B, which saw the same stale one, reuses A's.
+        again = provider._agent_session(client, "/book", replacing=stale)
+        self.assertIs(again, fresh)
+        self.assertTrue(fresh.alive)
+        self.assertFalse(stale.alive)
+        self.assertEqual(len(opened), 2)
+
+    def test_a_waiting_agent_is_told_to_ask_the_user(self):
+        waiting = AppError(
+            "waiting for the user to allow this agent in Kassiber",
+            code="interaction_required",
+            hint="Ask the user to allow this agent in Kassiber under Settings, AI, External agents, then retry.",
+            details={"reason": "agent_pairing_required"},
+            retryable=True,
+        )
+
+        class Handle:
+            alive = True
+            token = "session-token"
+
+            def close(self):
+                self.alive = False
+
+        with self._brokered(), mock.patch(
+            "kassiber.operator.client.BrokerClient.status",
+            return_value={
+                "lease": "unlocked",
+                "agent_scope": True,
+                "default_scope": {"workspace": "w", "profile": "p"},
+            },
+        ), mock.patch(
+            "kassiber.operator.client.BrokerClient.open_agent_session",
+            return_value=Handle(),
+        ), mock.patch(
+            "kassiber.operator.client.BrokerClient.submit",
+            side_effect=waiting,
+        ):
+            outcome = self.provider().call_tool("status", {}, threading.Event())
+        self.assertTrue(outcome.is_error)
+        self.assertEqual(outcome.structured["error"]["details"]["reason"], "agent_pairing_required")
+        self.assertIn("allow this agent in Kassiber", outcome.structured["error"]["hint"])
+        self.assertTrue(outcome.structured["error"]["retryable"])
+
+    def test_no_lease_points_at_the_desktop_unlock_too(self):
+        with self._brokered(), mock.patch(
+            "kassiber.operator.client.BrokerClient.status",
+            return_value={"broker": "stopped", "lease": "locked"},
+        ):
+            outcome = self.provider().call_tool("status", {}, threading.Event())
+        self.assertIn("unlock this book for agents in Kassiber", outcome.structured["error"]["hint"])
+
     def test_brokered_child_errors_become_tool_errors(self):
         child = {
             "kind": "error",
@@ -1023,14 +1162,18 @@ class AgentAccessTests(unittest.TestCase):
 
         self.assertIn("ui.agent_access.status", daemon.SUPPORTED_KINDS)
         self.assertIn("ui.agent_access.configure", daemon.SUPPORTED_KINDS)
+        # No book is open: status and configure need none.
+        ctx = SimpleNamespace(conn=None, db_passphrase=None, data_root=str(self.path.parent), agent_lease=None)
         with mock.patch.dict(os.environ, {PATH_ENV: str(self.path)}):
             status = daemon._agent_access_payload(
+                ctx,
                 "ui.agent_access.configure",
                 {"args": {"mcp_enabled": True, "ai_features_enabled": True}},
             )
             self.assertTrue(status["mcp_available"])
+            self.assertEqual(status["session"], {"needed": False, "active": False, "expires_at": None})
             for bad in ({}, {"mcp_enabled": "yes"}, {"mcp_enabled": True, "path": "/x"}):
                 with self.subTest(bad=bad), self.assertRaises(AppError):
-                    daemon._agent_access_payload("ui.agent_access.configure", {"args": bad})
+                    daemon._agent_access_payload(ctx, "ui.agent_access.configure", {"args": bad})
             with self.assertRaises(AppError):
-                daemon._agent_access_payload("ui.agent_access.status", {"args": {"x": 1}})
+                daemon._agent_access_payload(ctx, "ui.agent_access.status", {"args": {"x": 1}})

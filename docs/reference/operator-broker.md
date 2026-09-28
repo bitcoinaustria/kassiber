@@ -112,6 +112,38 @@ long-lived and is refused as a broker operation, but it submits each tool call
 as a finite `mcp call` read operation, so it works under a lease; see
 [MCP](mcp.md).
 
+The desktop can grant an **agent session** for the encrypted book it has open,
+from the passphrase of its own unlock, when the user enables external agents
+and clicks *Unlock for agents*. It is a `read` lease with three limits
+(`agent_scope` in `status`):
+
+- it admits only `mcp call` operations;
+- it admits them only from processes allowed with a control secret the
+  desktop sent as a second secret frame at unlock (`agent_session_decide`);
+- it expires after an idle timeout (15 minutes from the desktop), on top of
+  its duration.
+
+A `kassiber mcp serve` process asks for approval with `agent_session_open`
+on a connection it keeps open with heartbeats. The broker binds the session
+to the peer process id the OS reports for that connection (`SO_PEERCRED`,
+`LOCAL_PEERPID`, or `GetNamedPipeClientProcessId`) and to the lease epoch, and
+ends it at end of file, after 30 seconds without a frame, or with the lease.
+The open reply carries a random session token that every submit must
+present, together with the matching process id, so a process that reuses the
+id after the server exits is refused. At most 8 sessions
+per project and 16 in total can be open; `status` lists them with their
+state and read counts. Denying closes the session, freeing its slot,
+refuses that process id for the rest of the lease, cancels the reads it still
+has queued, and withholds the results of those that ran (`output_withheld`).
+
+The desktop also asks the broker to grant only if no lease exists, and to end
+only that lease (by its `lease_id` from `status`) while putting a previously
+`manual` book back into `manual` mode if it is still `brokered`. Each of these
+is decided inside the project's broker transition, so a terminal unlock can
+neither be replaced nor ended, nor lose its mode. The desktop ends its
+session with the desktop session and cleans up after it expires; see
+[MCP](mcp.md#books-and-encrypted-databases).
+
 On macOS, an enrolled operator-specific Keychain item may authorize an unlock
 after Touch ID through the signed desktop app's native LocalAuthentication
 path. The broker starts the helper with a broker-created inherited output pipe.

@@ -467,6 +467,9 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.logs.snapshot",
     "ui.agent_access.status",
     "ui.agent_access.configure",
+    "ui.agent_access.unlock",
+    "ui.agent_access.lock",
+    "ui.agent_access.pairing",
 ];
 
 /// Kinds that may emit intermediate stream records (kind = "<request_kind>.delta",

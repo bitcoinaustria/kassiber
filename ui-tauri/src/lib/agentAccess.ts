@@ -3,12 +3,41 @@ import * as React from "react";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import type { TerminalCommandStatus } from "@/daemon/transport";
 
+/** One `kassiber mcp serve` process asking to use the desktop's session. */
+export interface AgentPeer {
+  id: string;
+  /** The program that started it (for example `claude`); display only. */
+  label: string | null;
+  pid: number;
+  state: "pending" | "allowed" | "denied";
+  calls: number;
+  last_call_at: string | null;
+}
+
+/**
+ * Whether agents can read the open book. `needed` is true for an unlocked
+ * encrypted book that agents cannot open on their own; `active` when this
+ * desktop has unlocked it for them. Only a `refresh` read (while `active`)
+ * asks the broker, which adds waiting agents and activity.
+ */
+export interface AgentSession {
+  needed: boolean;
+  active: boolean;
+  expires_at: string | null;
+  existing_lease?: boolean;
+  idle_timeout_seconds?: number;
+  calls?: number;
+  last_call_at?: string | null;
+  agents?: AgentPeer[];
+}
+
 /** Global external-agent (MCP) access, read and enforced by the Python core. */
 export interface AgentAccessStatus {
   mcp_enabled: boolean;
   ai_features_enabled: boolean | null;
   mcp_available: boolean;
   reason: "mcp_disabled" | "ai_features_disabled" | null;
+  session?: AgentSession;
 }
 
 export interface AgentBook {

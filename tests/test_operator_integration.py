@@ -209,6 +209,312 @@ class OperatorIntegrationTest(unittest.TestCase):
                 else:
                     os.environ[TEST_RUNTIME_OVERRIDE_ENV] = old_test_gate
 
+    def test_desktop_grant_serves_mcp_and_ends_with_the_desktop_session(self) -> None:
+        import threading
+        from types import SimpleNamespace
+
+        from kassiber import daemon, daemon_agent_session
+        from kassiber.agent_access import PATH_ENV, set_agent_access
+        from kassiber.mcp import cli as mcp_cli
+        from kassiber.operator.modes import effective_unlock_mode
+
+        passphrase = "correct horse battery staple"
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            tempfile.TemporaryDirectory() as runtime,
+            tempfile.TemporaryDirectory() as config,
+        ):
+            os.chmod(runtime, 0o700)
+            create_empty_encrypted_database(resolve_database_path(tmp), passphrase)
+            connection = open_db(tmp, passphrase=passphrase)
+            workspace = core_accounts.create_workspace(connection, "Workspace A")
+            profile = core_accounts.create_profile(
+                connection, workspace["id"], "Book A", "EUR", "FIFO", "generic", 365
+            )
+            access_file = str(Path(config) / "agent-access.json")
+            environment = _broker_environment(runtime)
+            # Broker children read the same agent preference as the desktop.
+            environment[PATH_ENV] = access_file
+            server = subprocess.Popen(
+                BROKER_SERVER_COMMAND,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                env=environment,
+            )
+            saved = {
+                key: os.environ.get(key)
+                for key in ("KASSIBER_OPERATOR_RUNTIME_DIR", TEST_RUNTIME_OVERRIDE_ENV, PATH_ENV)
+            }
+            os.environ["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
+            os.environ[TEST_RUNTIME_OVERRIDE_ENV] = "1"
+            os.environ[PATH_ENV] = access_file
+            # What the desktop daemon holds after its own unlock.
+            ctx = SimpleNamespace(
+                conn=connection, db_passphrase=passphrase, data_root=tmp, agent_lease=None
+            )
+            provider = mcp_cli.BookToolProvider(
+                data_root=tmp,
+                project=None,
+                env_file=None,
+                workspace=workspace["id"],
+                profile=profile["id"],
+            )
+            try:
+                _wait_for_broker(BrokerClient(), [server])
+                set_agent_access(mcp_enabled=True)
+                before = provider.call_tool("status", {}, threading.Event())
+                self.assertEqual(
+                    before.structured["error"]["details"]["reason"], "database_passphrase"
+                )
+
+                state = daemon_agent_session.unlock(ctx)
+
+                self.assertTrue(state["active"])
+                # The broker reported the mode its grant replaced.
+                self.assertTrue(ctx.agent_lease.restore_manual)
+                lease = BrokerClient().status(tmp)
+                self.assertEqual(lease["capability"], "read")
+                self.assertEqual(
+                    lease["duration_seconds"],
+                    daemon_agent_session.DESKTOP_AGENT_LEASE_SECONDS,
+                )
+                self.assertEqual(effective_unlock_mode(tmp), "brokered")
+                self.assertTrue(lease["agent_scope"])
+
+                # This process is unknown until the user allows it.
+                waiting = provider.call_tool("status", {}, threading.Event())
+                self.assertEqual(
+                    waiting.structured["error"]["details"]["reason"], "agent_pairing_required"
+                )
+                shown = daemon_agent_session.session_state(ctx, refresh=True)
+                self.assertEqual(
+                    [(agent["pid"], agent["state"]) for agent in shown["agents"]],
+                    [(os.getpid(), "pending")],
+                )
+                daemon_agent_session.decide(ctx, shown["agents"][0]["id"], True)
+
+                during = provider.call_tool("status", {}, threading.Event())
+                self.assertFalse(during.is_error, during.structured)
+                self.assertEqual(during.structured["kind"], "status")
+                self.assertEqual(during.structured["book"]["profile"], "Book A")
+                self.assertEqual(daemon_agent_session.session_state(ctx, refresh=True)["calls"], 1)
+
+                # Even the allowed process gets only MCP tool calls ...
+                with self.assertRaises(AppError) as raised:
+                    BrokerClient().submit(
+                        tmp,
+                        PreparedArguments(
+                            [
+                                "--data-root",
+                                tmp,
+                                "--machine",
+                                "health",
+                                "--workspace",
+                                workspace["id"],
+                                "--profile",
+                                profile["id"],
+                            ],
+                            {},
+                        ),
+                        admin_authentication=None,
+                        start_broker=False,
+                    )
+                self.assertEqual(raised.exception.code, "agent_session_scope")
+                # ... and any other process is a stranger, however it calls.
+                other = subprocess.run(
+                    [
+                        sys.executable,
+                        "-c",
+                        "import threading, json, sys\n"
+                        "from kassiber.mcp import cli\n"
+                        "p = cli.BookToolProvider(data_root=sys.argv[1], project=None, env_file=None,"
+                        " workspace=sys.argv[2], profile=sys.argv[3])\n"
+                        "print(json.dumps(p.call_tool('status', {}, threading.Event()).structured))\n",
+                        tmp,
+                        workspace["id"],
+                        profile["id"],
+                    ],
+                    capture_output=True,
+                    text=True,
+                    env={**os.environ, "PYTHONPATH": str(SOURCE_ROOT)},
+                    timeout=60,
+                    check=True,
+                )
+                self.assertEqual(
+                    json.loads(other.stdout)["error"]["details"]["reason"],
+                    "agent_pairing_required",
+                )
+
+                # The desktop locking itself ends the agents' lease too.
+                daemon._clear_unlocked_passphrase(ctx)
+
+                self.assertEqual(BrokerClient().status(tmp)["lease"], "locked")
+                self.assertEqual(effective_unlock_mode(tmp), "manual")
+                after = provider.call_tool("status", {}, threading.Event())
+                self.assertEqual(
+                    after.structured["error"]["details"]["reason"], "database_passphrase"
+                )
+            finally:
+                connection.close()
+                server.terminate()
+                server.wait(timeout=5)
+                if server.stderr is not None:
+                    server.stderr.close()
+                for key, value in saved.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+    def test_desktop_grant_never_replaces_or_ends_a_terminal_lease(self) -> None:
+        from types import SimpleNamespace
+
+        from kassiber import daemon_agent_session
+        from kassiber.agent_access import PATH_ENV, set_agent_access
+        from kassiber.operator.modes import effective_unlock_mode
+
+        passphrase = "correct horse battery staple"
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            tempfile.TemporaryDirectory() as runtime,
+            tempfile.TemporaryDirectory() as config,
+        ):
+            os.chmod(runtime, 0o700)
+            create_empty_encrypted_database(resolve_database_path(tmp), passphrase)
+            connection = open_db(tmp, passphrase=passphrase)
+            access_file = str(Path(config) / "agent-access.json")
+            server = subprocess.Popen(
+                BROKER_SERVER_COMMAND,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                env=_broker_environment(runtime),
+            )
+            saved = {
+                key: os.environ.get(key)
+                for key in ("KASSIBER_OPERATOR_RUNTIME_DIR", TEST_RUNTIME_OVERRIDE_ENV, PATH_ENV)
+            }
+            os.environ["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
+            os.environ[TEST_RUNTIME_OVERRIDE_ENV] = "1"
+            os.environ[PATH_ENV] = access_file
+            ctx = SimpleNamespace(
+                conn=connection, db_passphrase=passphrase, data_root=tmp, agent_lease=None
+            )
+            terminal = BrokerClient()
+            try:
+                _wait_for_broker(terminal, [server])
+                set_agent_access(mcp_enabled=True)
+                terminal.unlock(
+                    tmp,
+                    bytearray(passphrase.encode()),
+                    duration_seconds=None,
+                    capability="accounting_decisions",
+                    authentication_method="password",
+                )
+
+                # A terminal session exists: the desktop must not narrow it.
+                state = daemon_agent_session.unlock(ctx)
+
+                self.assertTrue(state["existing_lease"])
+                self.assertIsNone(ctx.agent_lease)
+                self.assertEqual(terminal.status(tmp)["capability"], "accounting_decisions")
+
+                # The desktop grants once the book is free; then the terminal
+                # unlocks again, replacing the desktop's lease with its own.
+                terminal.lock(tmp)
+                daemon_agent_session.unlock(ctx)
+                self.assertEqual(terminal.status(tmp)["capability"], "read")
+                terminal.unlock(
+                    tmp,
+                    bytearray(passphrase.encode()),
+                    duration_seconds=None,
+                    capability="operator",
+                    authentication_method="password",
+                )
+
+                daemon_agent_session.end_lease(ctx)
+
+                # The desktop's session ended; the terminal's did not, and its
+                # book stays brokered.
+                status = terminal.status(tmp)
+                self.assertEqual(status["lease"], "unlocked")
+                self.assertEqual(status["capability"], "operator")
+                self.assertEqual(effective_unlock_mode(tmp), "brokered")
+            finally:
+                connection.close()
+                server.terminate()
+                server.wait(timeout=5)
+                if server.stderr is not None:
+                    server.stderr.close()
+                for key, value in saved.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+    def test_desktop_cleanup_leaves_a_mode_chosen_since(self) -> None:
+        from types import SimpleNamespace
+
+        from kassiber import daemon_agent_session
+        from kassiber.agent_access import PATH_ENV, set_agent_access
+        from kassiber.db import database_instance_id
+        from kassiber.operator.modes import effective_unlock_mode, set_unlock_mode
+
+        passphrase = "correct horse battery staple"
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            tempfile.TemporaryDirectory() as runtime,
+            tempfile.TemporaryDirectory() as config,
+        ):
+            os.chmod(runtime, 0o700)
+            create_empty_encrypted_database(resolve_database_path(tmp), passphrase)
+            connection = open_db(tmp, passphrase=passphrase)
+            server = subprocess.Popen(
+                BROKER_SERVER_COMMAND,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                env=_broker_environment(runtime),
+            )
+            saved = {
+                key: os.environ.get(key)
+                for key in ("KASSIBER_OPERATOR_RUNTIME_DIR", TEST_RUNTIME_OVERRIDE_ENV, PATH_ENV)
+            }
+            os.environ["KASSIBER_OPERATOR_RUNTIME_DIR"] = runtime
+            os.environ[TEST_RUNTIME_OVERRIDE_ENV] = "1"
+            os.environ[PATH_ENV] = str(Path(config) / "agent-access.json")
+            ctx = SimpleNamespace(
+                conn=connection, db_passphrase=passphrase, data_root=tmp, agent_lease=None
+            )
+            terminal = BrokerClient()
+            try:
+                _wait_for_broker(terminal, [server])
+                set_agent_access(mcp_enabled=True)
+                daemon_agent_session.unlock(ctx)
+                # The desktop's lease ends elsewhere, and the user then picks
+                # another mode on purpose.
+                terminal.lock(tmp)
+                set_unlock_mode(
+                    tmp, "unattended", database_identity=database_instance_id(connection)
+                )
+
+                daemon_agent_session.end_lease(ctx)
+
+                self.assertIsNone(ctx.agent_lease)
+                self.assertEqual(effective_unlock_mode(tmp), "unattended")
+            finally:
+                connection.close()
+                server.terminate()
+                server.wait(timeout=5)
+                if server.stderr is not None:
+                    server.stderr.close()
+                for key, value in saved.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
     def test_two_projects_and_multiple_books_remain_independent(self) -> None:
         first_passphrase = bytearray(b"first project passphrase")
         second_passphrase = bytearray(b"second project passphrase")

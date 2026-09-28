@@ -7,6 +7,21 @@ const daemon = vi.hoisted(() => ({
     ai_features_enabled: true as boolean | null,
     mcp_available: false,
     reason: "mcp_disabled" as string | null,
+    session: undefined as
+      | {
+          needed: boolean;
+          active: boolean;
+          expires_at: string | null;
+          agents?: {
+            id: string;
+            label: string | null;
+            pid: number;
+            state: "pending" | "allowed" | "denied";
+            calls: number;
+            last_call_at: string | null;
+          }[];
+        }
+      | undefined,
   },
   status: { data_root: "/data/books", current_workspace: "Personal", current_profile: "Main" },
 }));
@@ -20,7 +35,8 @@ vi.mock("@/daemon/client", () => ({
           ? { kind, data: daemon.status }
           : undefined,
   }),
-  useDaemonMutation: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useDaemonMutation: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  DaemonRequestError: class extends Error {},
 }));
 
 import { ExternalAgentsSettings } from "./ExternalAgentsSettings";
@@ -30,7 +46,13 @@ const render = (aiFeaturesEnabled: boolean) =>
 
 describe("ExternalAgentsSettings", () => {
   beforeEach(() => {
-    daemon.access = { mcp_enabled: false, ai_features_enabled: true, mcp_available: false, reason: "mcp_disabled" };
+    daemon.access = {
+      mcp_enabled: false,
+      ai_features_enabled: true,
+      mcp_available: false,
+      reason: "mcp_disabled",
+      session: undefined,
+    };
   });
 
   it("is off by default and shows no command", () => {
@@ -41,7 +63,13 @@ describe("ExternalAgentsSettings", () => {
   });
 
   it("is disabled and off while AI features are off, even if enabled before", () => {
-    daemon.access = { mcp_enabled: true, ai_features_enabled: false, mcp_available: false, reason: "ai_features_disabled" };
+    daemon.access = {
+      mcp_enabled: true,
+      ai_features_enabled: false,
+      mcp_available: false,
+      reason: "ai_features_disabled",
+      session: { needed: true, active: false, expires_at: null },
+    };
     const html = render(false);
     expect(html).toContain('aria-checked="false"');
     const toggle = html.match(/<button[^>]*id="settings-external-agents"[^>]*>/)?.[0] ?? "";
@@ -50,11 +78,91 @@ describe("ExternalAgentsSettings", () => {
   });
 
   it("shows the book-pinned command once enabled", () => {
-    daemon.access = { mcp_enabled: true, ai_features_enabled: true, mcp_available: true, reason: null };
+    daemon.access = { mcp_enabled: true, ai_features_enabled: true, mcp_available: true, reason: null, session: undefined };
     const html = render(true);
     expect(html).toContain('aria-checked="true"');
     expect(html).toContain(
       "claude mcp add kassiber -- kassiber --data-root /data/books mcp serve --workspace Personal --profile Main",
     );
+  });
+
+  it("offers to unlock an encrypted book agents cannot open on their own", () => {
+    daemon.access = {
+      mcp_enabled: true,
+      ai_features_enabled: true,
+      mcp_available: true,
+      reason: null,
+      session: { needed: true, active: false, expires_at: null },
+    };
+    const html = render(true);
+    expect(html).toContain("Agents can read it only while you unlock it for them.");
+    expect(html).toContain("Unlock for agents");
+  });
+
+  it("offers to lock while agents can read the book", () => {
+    daemon.access = {
+      mcp_enabled: true,
+      ai_features_enabled: true,
+      mcp_available: true,
+      reason: null,
+      session: { needed: true, active: true, expires_at: "2026-09-28T18:00:00Z" },
+    };
+    const html = render(true);
+    expect(html).toContain("Agents you allow can read this book until you lock Kassiber");
+    expect(html).toContain("after 15 minutes without reads");
+    expect(html).toContain(">Lock<");
+    expect(html).not.toContain("Unlock for agents");
+    expect(html).toContain("Start your agent; it appears here for you to allow.");
+  });
+
+  it("keeps an unconfirmed lease visible after agents are turned off", () => {
+    daemon.access = {
+      mcp_enabled: false,
+      ai_features_enabled: true,
+      mcp_available: false,
+      reason: "mcp_disabled",
+      session: { needed: true, active: true, expires_at: "2026-09-28T18:00:00Z" },
+    };
+    const html = render(true);
+    expect(html).toContain('aria-checked="false"');
+    expect(html).toContain(">Lock<");
+  });
+
+  it("shows no unlock for books agents can already open", () => {
+    daemon.access = {
+      mcp_enabled: true,
+      ai_features_enabled: true,
+      mcp_available: true,
+      reason: null,
+      session: { needed: false, active: false, expires_at: null },
+    };
+    expect(render(true)).not.toContain("Unlock for agents");
+  });
+
+  it("asks to allow a waiting agent and shows what allowed ones read", () => {
+    daemon.access = {
+      mcp_enabled: true,
+      ai_features_enabled: true,
+      mcp_available: true,
+      reason: null,
+      session: {
+        needed: true,
+        active: true,
+        expires_at: "2026-09-28T18:00:00Z",
+        agents: [
+          { id: "s1", label: "claude", pid: 41, state: "pending", calls: 0, last_call_at: null },
+          { id: "s2", label: "codex", pid: 42, state: "allowed", calls: 3, last_call_at: null },
+          { id: "s3", label: "stranger", pid: 43, state: "denied", calls: 0, last_call_at: null },
+        ],
+      },
+    };
+    const html = render(true);
+    expect(html).toContain("claude (41) wants to read this book");
+    expect(html).toContain(">Allow<");
+    expect(html).toContain(">Deny<");
+    expect(html).toContain("codex (42) can read this book · 3 reads");
+    expect(html).toContain(">Remove<");
+    expect(html).not.toContain("stranger");
+    expect(html).not.toContain("Start your agent");
   });
 });

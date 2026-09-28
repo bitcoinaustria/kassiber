@@ -29,6 +29,7 @@ from . import __version__
 from .core import chain_analysis_api
 from .core import chain_analysis_runtime
 from .daemon_chain_analysis import job_starter as chain_analysis_job_starter
+from . import daemon_agent_session
 from . import daemon_backup
 from . import daemon_accounting_tasks
 from .command_capabilities import daemon_capability
@@ -349,6 +350,9 @@ SUPPORTED_KINDS = (
     "ui.logs.snapshot",
     "ui.agent_access.status",
     "ui.agent_access.configure",
+    "ui.agent_access.unlock",
+    "ui.agent_access.lock",
+    "ui.agent_access.pairing",
     "ui.egress.snapshot",
     "ui.overview.snapshot",
     "ui.workspace.overview.snapshot",
@@ -1201,9 +1205,12 @@ class DaemonContext:
     active_verifications: daemon_ownership_verify.ActiveVerifications = field(
         default_factory=daemon_ownership_verify.ActiveVerifications
     )
+    # The broker lease this desktop granted agents for its open book, if any.
+    agent_lease: daemon_agent_session.DesktopAgentLease | None = None
 
 
 def _clear_unlocked_passphrase(ctx):
+    daemon_agent_session.end_lease(ctx)
     if getattr(ctx, "backup_sessions", None) is not None:
         ctx.backup_sessions.clear()
     _clear_unlocked_passphrase_base(ctx)
@@ -3974,6 +3981,7 @@ def _select_project_payload(
 
             old_conn = ctx.conn
             old_owner = ctx.project_owner
+            daemon_agent_session.end_lease(ctx)
             ctx.document_import_sessions.clear()
             chain_analysis_runtime.clear_runtime()
             ctx.project_id = entry.id
@@ -14912,16 +14920,39 @@ def _handle_ai_tool_call_consent(
     )
 
 
-def _agent_access_payload(kind: str, request: dict[str, Any]) -> dict[str, Any]:
+def _agent_access_payload(
+    ctx: "DaemonContext", kind: str, request: dict[str, Any]
+) -> dict[str, Any]:
     from .agent_access import agent_access_status, set_agent_access
 
     args = request.get("args") or {}
     if not isinstance(args, dict):
         raise AppError("agent access arguments must be an object", code="validation")
-    if kind == "ui.agent_access.status":
-        if args:
-            raise AppError("ui.agent_access.status takes no arguments", code="validation")
-        return agent_access_status()
+    if kind in {"ui.agent_access.status", *daemon_agent_session.KINDS}:
+        allowed_args = {
+            "ui.agent_access.status": {"refresh"},
+            "ui.agent_access.pairing": {"session_id", "allow"},
+        }.get(kind, set())
+        unknown = sorted(set(args) - allowed_args)
+        if unknown or not isinstance(args.get("refresh", False), bool):
+            raise AppError(
+                f"{kind} got unexpected arguments",
+                code="validation",
+                details={"unknown": unknown},
+            )
+        if kind == "ui.agent_access.unlock":
+            session = daemon_agent_session.unlock(ctx)
+        elif kind == "ui.agent_access.lock":
+            session = daemon_agent_session.lock(ctx)
+        elif kind == "ui.agent_access.pairing":
+            session = daemon_agent_session.decide(ctx, args.get("session_id"), args.get("allow"))
+        else:
+            # Refreshing contacts the broker only while the desktop's own
+            # agent session exists; otherwise this reads memory only.
+            session = daemon_agent_session.session_state(
+                ctx, refresh=bool(args.get("refresh", False))
+            )
+        return {**agent_access_status(), "session": session}
     unknown = sorted(set(args) - {"mcp_enabled", "ai_features_enabled"})
     values = {key: args[key] for key in ("mcp_enabled", "ai_features_enabled") if key in args}
     if unknown or not values or any(not isinstance(value, bool) for value in values.values()):
@@ -14930,7 +14961,11 @@ def _agent_access_payload(kind: str, request: dict[str, Any]) -> dict[str, Any]:
             code="validation",
             details={"unknown": unknown},
         )
-    return set_agent_access(**values)
+    result = set_agent_access(**values)
+    if not result.get("mcp_available"):
+        # Turning agents (or AI) off ends the lease the desktop granted them.
+        daemon_agent_session.end_lease(ctx)
+    return {**result, "session": daemon_agent_session.session_state(ctx)}
 
 
 def handle_request(
@@ -15022,6 +15057,9 @@ def handle_request(
 
     ctx.backup_sessions.expire()
     if kind in daemon_backup.KINDS:
+        if kind == "ui.backup.apply":
+            daemon_agent_session.end_lease(ctx)
+
         def close_for_restore(require_current: Callable[[], None]) -> None:
             _stop_watch_worker(ctx)
             _stop_freshness_background_worker(ctx, cancel_running=True)
@@ -15356,6 +15394,7 @@ def handle_request(
         db_path = resolve_database_path(resolve_effective_data_root(ctx.data_root))
         desktop_stale_generation = None
         operator_stale_generation = None
+        daemon_agent_session.end_lease(ctx)
 
         def invalidate_native_credentials() -> None:
             nonlocal desktop_stale_generation, operator_stale_generation
@@ -15441,12 +15480,17 @@ def handle_request(
             False,
         )
 
-    if kind in {"ui.agent_access.status", "ui.agent_access.configure"}:
-        # A global, non-secret preference: answered without opening or
-        # unlocking any book, like the update-check consent.
+    if kind in {
+        "ui.agent_access.status",
+        "ui.agent_access.configure",
+        *daemon_agent_session.KINDS,
+    }:
+        # A global, non-secret preference answered without opening or
+        # unlocking any book, like the update-check consent. Only an explicit
+        # unlock or lock contacts the operator broker.
         return (
             _with_request_id(
-                build_envelope(kind, _agent_access_payload(kind, request)),
+                build_envelope(kind, _agent_access_payload(ctx, kind, request)),
                 request_id,
             ),
             False,
@@ -18155,6 +18199,7 @@ def run(
     try:
         while True:
             ctx.backup_sessions.expire()
+            daemon_agent_session.expire(ctx)
             _drain_daemon_main_thread_tasks(ctx)
             ctx.active_ai_chats.validate_accounting_scopes()
             ctx.accounting_document_jobs.poll(ctx, out)

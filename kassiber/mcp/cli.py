@@ -210,6 +210,9 @@ class BookToolProvider:
         self._env_file = env_file
         self._workspace = workspace
         self._profile = profile
+        # Desktop agent sessions this server process holds, per data root.
+        self._agent_sessions: dict[str, Any] = {}
+        self._agent_sessions_lock = threading.Lock()
 
     def tool_definitions(self) -> list[dict[str, Any]]:
         return mcp_tools.tool_definitions()
@@ -303,6 +306,24 @@ class BookToolProvider:
         finally:
             close_runtime(runtime)
 
+    def _agent_session(self, client: Any, data_root: str, *, replacing: Any = None) -> Any:
+        """This process's registration for the book, opened when needed.
+
+        `replacing` is the handle a call found stale. Parallel calls may find
+        the same one: only the first replaces it, and the rest reuse that
+        replacement rather than closing it (which could drop an approval).
+        """
+
+        with self._agent_sessions_lock:
+            handle = self._agent_sessions.get(data_root)
+            if handle is not None and handle.alive and handle is not replacing:
+                return handle
+            if handle is not None:
+                handle.close()
+            handle = client.open_agent_session(data_root)
+            self._agent_sessions[data_root] = handle
+            return handle
+
     def _call_brokered(
         self,
         paths: Any,
@@ -334,8 +355,10 @@ class BookToolProvider:
                 "this project has no active operator lease",
                 code="interaction_required",
                 hint=(
-                    "Ask the user to run `kassiber operator unlock --capability read` "
-                    "in their own terminal, then retry. Never ask for the passphrase."
+                    "Ask the user to unlock this book for agents in Kassiber "
+                    "(Settings, AI, External agents), or to run "
+                    "`kassiber operator unlock --capability read` in their own "
+                    "terminal, then retry. Never ask for the passphrase."
                 ),
                 details={
                     "reason": "operator_lease_required",
@@ -372,23 +395,41 @@ class BookToolProvider:
             "--profile",
             str(profile),
         ]
-        prepared = prepare_arguments(argv, stdin=io.BytesIO())
+        agent_scope = status.get("agent_scope") is True
+        # The desktop's "Unlock for agents" session admits only processes the
+        # user allowed; register this one so it can be allowed.
+        handle = self._agent_session(client, paths.data_root) if agent_scope else None
+
+        def submit(handle: Any) -> dict[str, Any]:
+            prepared = prepare_arguments(argv, stdin=io.BytesIO())
+            try:
+                # The lease check above did not start a broker; a broker that
+                # has since exited must not be restarted by an agent's read.
+                return client.submit(
+                    paths.data_root,
+                    prepared,
+                    admin_authentication=None,
+                    start_broker=False,
+                    # Its warning would be invisible (stderr is silenced), so
+                    # an older broker that ignores caller context is refused.
+                    require_caller_context=True,
+                    # Agent reads run the broker's code; only this build's.
+                    require_same_build=True,
+                    agent_session_token=handle.token if handle is not None else None,
+                )
+            finally:
+                wipe_prepared(prepared)
+
         try:
-            # The lease check above did not start a broker; a broker that has
-            # since exited must not be restarted by an agent's read either.
-            accepted = client.submit(
-                paths.data_root,
-                prepared,
-                admin_authentication=None,
-                start_broker=False,
-                # Its warning would be invisible (stderr is silenced), so an
-                # older broker that ignores caller context is refused outright.
-                require_caller_context=True,
-                # Agent reads run the broker's code; only this build's broker.
-                require_same_build=True,
-            )
-        finally:
-            wipe_prepared(prepared)
+            accepted = submit(handle)
+        except AppError as exc:
+            reason = (exc.details or {}).get("reason") if isinstance(exc.details, dict) else None
+            if not (agent_scope and reason == "agent_session_required"):
+                raise
+            # The broker dropped this process's session (its lease changed):
+            # register again, which the user must allow again.
+            handle = self._agent_session(client, paths.data_root, replacing=handle)
+            accepted = submit(handle)
         operation_id = accepted.get("operation_id")
         if not isinstance(operation_id, str):
             raise AppError("broker did not return an operation id", code="operator_protocol_error")
