@@ -105,7 +105,7 @@ export function FirstSyncCard({
         aria-hidden="true"
         className="kb-glass-backdrop pointer-events-auto absolute inset-0"
       />
-      <div className="kb-glass-dialog relative pointer-events-auto w-full max-w-2xl rounded-2xl border p-5">
+      <div className="kb-glass-dialog relative pointer-events-auto w-full max-w-2xl rounded-(--kb-radius-window) border p-(--kb-card-padding)">
         <div className="flex items-start gap-3">
           <span
             className={cn(

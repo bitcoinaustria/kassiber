@@ -82,7 +82,7 @@ function DialogContent({
         className={cn(
           // The command palette's surface: frosted `kb-glass-dialog`, a large
           // radius, and the same slight settle (98%, not the stock 95%).
-          "kb-glass-dialog left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] gap-4 rounded-2xl border p-6 text-foreground duration-200 ease-in-out outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-98 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-98 sm:max-w-lg",
+          "kb-glass-dialog left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] gap-4 rounded-(--kb-radius-window) border p-(--kb-card-padding) text-foreground duration-200 ease-in-out outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-98 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-98 sm:max-w-lg",
           fullWindow ? DIALOG_FULL_WINDOW_CLASSNAME : DIALOG_VIEWPORT_CLASSNAME,
           className
         )}
