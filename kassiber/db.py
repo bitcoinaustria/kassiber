@@ -20,6 +20,7 @@ Call sites should never embed their own `CREATE TABLE` or `ALTER TABLE`
 DDL — add it to `SCHEMA` or `ensure_schema_compat` here instead.
 """
 
+import contextvars
 import errno
 import hashlib
 import json
@@ -3784,8 +3785,36 @@ def require_database_instance_id(conn, expected: str) -> None:
         )
 
 
+# A read-only caller (the MCP tool path) can pin the book it reads without
+# touching the database-wide active context the desktop and CLI share. The pin
+# lives in this thread's context only; writing a pinned key fails closed.
+_CONTEXT_SCOPE_OVERRIDE: contextvars.ContextVar[dict[str, str] | None] = (
+    contextvars.ContextVar("kassiber_context_scope_override", default=None)
+)
+
+
+@contextmanager
+def pinned_context_scope(workspace_id, profile_id):
+    """Resolve the active workspace/profile as the given ids inside the block."""
+
+    token = _CONTEXT_SCOPE_OVERRIDE.set(
+        {"context_workspace": str(workspace_id), "context_profile": str(profile_id)}
+    )
+    try:
+        yield
+    finally:
+        _CONTEXT_SCOPE_OVERRIDE.reset(token)
+
+
 def set_setting(conn, key, value):
     """Upsert a single row into the `settings` key/value table."""
+    override = _CONTEXT_SCOPE_OVERRIDE.get()
+    if override is not None and key in override:
+        raise AppError(
+            "the active book is pinned for this read-only request",
+            code="scope_pinned",
+            retryable=False,
+        )
     conn.execute(
         """
         INSERT INTO settings(key, value)
@@ -3798,6 +3827,9 @@ def set_setting(conn, key, value):
 
 def get_setting(conn, key):
     """Return the value for `key` in the `settings` table, or `None` if absent."""
+    override = _CONTEXT_SCOPE_OVERRIDE.get()
+    if override is not None and key in override:
+        return override[key]
     row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
     return row["value"] if row else None
 

@@ -495,6 +495,10 @@ tokens already generated or in flight may still be billed.
 
 ## Tool use
 
+External agents can reach a read-only, redacted slice of this catalog through
+`kassiber mcp serve`; that allowlist, its disabled read maintenance, and its
+book pinning are documented in [MCP](mcp.md).
+
 The desktop assistant and `kassiber chat` opt into a bounded tool loop with
 `ai.chat` top-level args:
 

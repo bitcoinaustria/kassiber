@@ -68,7 +68,7 @@ _NETWORK_SERIAL_MODULES = frozenset(
         "test_sync_replication_s5",
     }
 )
-_DAEMON_SERIAL_MODULES = frozenset({"test_cli_chat", "test_daemon_smoke"})
+_DAEMON_SERIAL_MODULES = frozenset({"test_cli_chat", "test_daemon_smoke", "test_mcp_server"})
 _REGRESSION_SERIAL_MODULES = frozenset({"test_review_regressions"})
 _PROCESS_SERIAL_MODULES = frozenset(
     {

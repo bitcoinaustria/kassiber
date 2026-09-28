@@ -68,7 +68,8 @@ Under a brokered lease every command runs as a queued broker operation. Pass
 working directory. In `--machine` mode an
 `operator.operation.accepted` JSON line on stderr carries the operation id. If
 you lose track of a mutation, inspect it with `kassiber operator operation
-status <id>` before retrying. `kassiber chat` is refused in brokered mode.
+status <id>` before retrying. `kassiber chat` is refused in brokered mode;
+`kassiber mcp serve` works with a lease.
 
 ## Remembered CLI unlock
 

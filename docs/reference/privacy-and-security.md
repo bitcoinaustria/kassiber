@@ -626,12 +626,26 @@ for a tool round-trip are replayed only in daemon memory.
   backend URLs, wallet config JSON, or raw wallet files. Wallet and backend
   tools return labels, kinds, URL presence flags, credential presence flags,
   and status-style metadata only.
-- **Mutating AI tools require explicit consent.** The current mutating surface
-  is limited to `ui.wallets.sync`. Each call emits a redacted preview and waits
+- **Mutating AI tools require explicit consent.** The mutating surface covers
+  maintenance, metadata, transfer, loan, source-of-funds, review, and
+  accounting tools; each is classified in the tool catalog. Each call emits a redacted preview and waits
   for `allow_once`, `allow_session`, or `deny`; session consent lasts only for
   that one chat request and only for the same tool name. If allowed, the tool
   result is fed back to the selected provider as chat context. Unknown tools
   still return `tool_not_allowed` and never execute.
+
+## External agents (MCP)
+
+`kassiber mcp serve` is a local stdio MCP server for agent hosts. Launch,
+discovery, and listing touch nothing: no database, lock, project layout, or
+socket, loopback included. Exposed tools are the Assistant's local, read-only,
+redacted tools, with read-triggered journal rebuilds and freshness syncs
+disabled, so they make no network requests. The server writes nothing to
+stderr, which hosts may persist. Its results reach the host's model; that
+disclosure is the user's choice when registering the server, and Kassiber
+cannot control the host's provider. On encrypted books the server never holds
+a passphrase: brokered books run each call through the operator lease. See
+[MCP](mcp.md).
 
 ## Reporting
 

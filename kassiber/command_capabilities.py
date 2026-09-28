@@ -90,6 +90,7 @@ CLI_READ_PATHS = _paths(
     reports.balance-history reports.lightning-profitability
     reports.commercial-subledger reports.source-funds rates.pairs rates.latest
     rates.range ai.providers.list ai.providers.get ai.models
+    mcp.serve mcp.tools mcp.call
     """
 )
 

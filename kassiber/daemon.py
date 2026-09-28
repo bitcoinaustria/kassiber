@@ -6011,7 +6011,12 @@ def _execute_read_only_ai_tool(
 
         def _read(conn: sqlite3.Connection) -> dict[str, Any]:
             maintenance_metadata: dict[str, Any] = {}
-            if call.name in _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES:
+            # External agent reads (MCP) are strictly read-only: no journal
+            # rebuild and no opt-in freshness sync; stale state is reported.
+            if (
+                call.name in _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES
+                and runtime.maintenance_state.get("read_maintenance") != "disabled"
+            ):
                 maintenance_metadata = _auto_maintain_for_read(
                     conn,
                     runtime.runtime_config,

@@ -181,6 +181,10 @@ def route_brokered_command(
         return None
     if args.command in _DIRECT_COMMANDS:
         return None
+    if args.command == "mcp" and getattr(args, "mcp_command", None) != "call":
+        # The server routes each finite `mcp call` itself; describing tools
+        # needs no project.
+        return None
     from ..cli.command_registry import command_path
 
     path = command_path(args)
