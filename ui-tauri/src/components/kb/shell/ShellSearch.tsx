@@ -405,15 +405,14 @@ export function ShellSearch({
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay className="kb-glass-backdrop fixed inset-x-0 top-[var(--kb-window-top-inset)] bottom-0 z-50 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0" />
           {/*
-            T3Code's viewport: a full-screen flex column that centres
-            horizontally and pushes the palette down with padding, rather than
-            absolute centring. The palette therefore grows downward from a fixed
-            top edge — the input stays put as results come and go — and it can
-            never overflow past the viewport bottom.
+            Hung from the shared modal anchor (`--kb-dialog-top`) like every
+            dialog, rather than centred: the palette grows downward from a
+            fixed top edge — the input stays put as results come and go — and
+            `--kb-dialog-max-h` keeps it inside the window.
           */}
           <DialogPrimitive.Content
             aria-label={label}
-            className="kb-glass-dialog fixed top-[calc(var(--kb-window-top-inset)+max(1rem,4vh))] left-1/2 z-50 flex max-h-[calc(100dvh-var(--kb-window-top-inset)-max(2rem,8vh))] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 flex-col overflow-hidden rounded-2xl border p-0 text-foreground duration-200 ease-in-out outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-98 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-98 sm:top-[calc(var(--kb-window-top-inset)+10vh)]"
+            className="kb-glass-dialog fixed top-[calc(var(--kb-window-top-inset)+var(--kb-dialog-top))] left-1/2 z-50 flex max-h-(--kb-dialog-max-h) w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 flex-col overflow-hidden rounded-2xl border p-0 text-foreground duration-200 ease-in-out outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-98 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-98"
             onKeyDown={(event) => {
               if (event.key === "ArrowDown") {
                 event.preventDefault();

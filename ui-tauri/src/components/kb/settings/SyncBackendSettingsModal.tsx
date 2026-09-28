@@ -1071,7 +1071,7 @@ export function SyncBackendSettingsModal({
         if (!next) onClose();
       }}
     >
-      <DialogContent className="top-[6vh] max-h-[88vh] w-full max-w-[760px] translate-y-0 overflow-hidden p-0 sm:max-w-[760px]">
+      <DialogContent className="w-full max-w-[760px] overflow-hidden p-0 sm:max-w-[760px]">
         <DialogHeader className="border-b px-6 py-5">
           <DialogTitle>{modalCopy.title}</DialogTitle>
           <DialogDescription>{modalCopy.description}</DialogDescription>

@@ -95,6 +95,15 @@
   --kb-toolbar-height: 40px;
   --kb-toolbar-leading: max(var(--kb-traffic-light-inset), 0.5rem);
   /*
+   * One anchor for every modal (dialogs and the command palette): they hang at
+   * the same height below the title bar and grow downward, so a dialog whose
+   * content changes size never jumps, and none can outgrow the window.
+   */
+  --kb-dialog-top: max(1rem, 8vh);
+  --kb-dialog-max-h: calc(
+    100dvh - var(--kb-window-top-inset) - var(--kb-dialog-top) - 1rem
+  );
+  /*
    * Frosted-glass tuning, ported from T3Code. Every frosted surface
    * (`.kb-glass-*`, the assistant composer) reads these so light and dark keep
    * one consistent blur/saturation feel instead of hand-tuned per-component

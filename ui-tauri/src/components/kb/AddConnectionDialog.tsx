@@ -2,7 +2,7 @@ import * as React from "react";
 import { Trans, useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { useNavigate } from "@tanstack/react-router";
-import { Loader2, ScanLine } from "lucide-react";
+import { Loader2, ScanLine, Search } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -5779,9 +5779,13 @@ function AddConnectionDialogContent({
     );
   };
 
+  // The command palette's treatment: no box inside the dialog, hairlines
+  // between the columns, a bare search row, and palette rows — a soft fill for
+  // the current category and the selected source instead of bordered cards.
+  // On wide windows each column scrolls on its own.
   const renderSourceStep = () => (
-    <div className="grid min-h-0 grid-cols-1 overflow-hidden rounded-lg border lg:grid-cols-[190px_minmax(0,1fr)]">
-      <div className="overflow-y-auto border-b bg-muted/30 p-2 lg:border-r lg:border-b-0">
+    <div className="grid min-h-0 grid-cols-1 lg:h-full lg:grid-cols-[190px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden">
+      <div className="space-y-0.5 overflow-y-auto border-b p-2 lg:border-r lg:border-b-0">
         {CONNECTION_CATEGORIES.filter((category) => !historyImport
           || sourceForConnectionCategory(CONNECTION_SOURCES, category.id, true)).map((category) => {
           const Icon = category.icon;
@@ -5791,10 +5795,10 @@ function AddConnectionDialogContent({
               key={category.id}
               type="button"
               className={cn(
-                "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors",
+                "flex min-h-8 w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                 active
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-background/70 hover:text-foreground",
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
               )}
               onClick={() => {
                 setSourceQuery("");
@@ -5808,20 +5812,26 @@ function AddConnectionDialogContent({
         })}
       </div>
 
-      <div className="grid min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[minmax(0,1fr)]">
         <div className="flex min-h-0 flex-col overflow-hidden border-b lg:border-r lg:border-b-0">
-          <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 px-4 py-3">
-            <Input
+          <div className="flex h-12 shrink-0 items-center gap-2.5 border-b px-4">
+            <Search
+              className="size-4 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <input
               type="search"
               value={sourceQuery}
               onChange={(event) => setSourceQuery(event.target.value)}
               placeholder={t("add.searchPlaceholder")}
-              className="h-9 max-w-sm"
+              aria-label={t("add.searchPlaceholder")}
+              autoComplete="off"
+              className="min-w-0 flex-1 border-none bg-transparent text-base text-foreground shadow-none outline-none placeholder:text-muted-foreground/80"
             />
           </div>
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+          <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
           {visibleSources.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="px-2.5 py-2 text-sm text-muted-foreground">
               {sourceQuery.trim()
                 ? t("add.noSearchMatch")
                 : t("add.noFilterMatch")}
@@ -5833,26 +5843,31 @@ function AddConnectionDialogContent({
               <button
                 key={source.id}
                 type="button"
+                aria-pressed={selectedSource}
                 className={cn(
-                  "flex w-full items-start gap-4 rounded-lg border p-4 text-left transition-colors hover:bg-muted/40",
-                  selectedSource && "border-primary bg-primary/5",
+                  "flex w-full items-start gap-3 rounded-lg px-2.5 py-2 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                  selectedSource
+                    ? "bg-accent text-accent-foreground"
+                    : "hover:bg-accent/60",
                 )}
                 onClick={() => { historySourceChosenRef.current = true; setSelectedId(source.id); }}
               >
-                <SourceArtwork source={source} />
-                <span className="min-w-0 flex-1 space-y-1">
-                  <span className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{source.title}</span>
+                <SourceArtwork source={source} className="size-9" />
+                <span className="min-w-0 flex-1">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="min-w-0 truncate text-sm font-medium">
+                      {source.title}
+                    </span>
                     {source.status === "planned" ? (
                       <Badge variant="outline">{t("add.plannedLabel")}</Badge>
                     ) : null}
+                    {/* The palette's right-aligned detail column. */}
+                    <span className="ml-auto max-w-[45%] shrink truncate text-xs text-muted-foreground">
+                      {source.formatLabel ?? source.pathLabel}
+                    </span>
                   </span>
-                  <span className="block text-sm text-muted-foreground">
+                  <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">
                     {source.description}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    {source.pathLabel}
-                    {source.formatLabel ? ` · ${source.formatLabel}` : ""}
                   </span>
                 </span>
               </button>
@@ -5861,7 +5876,7 @@ function AddConnectionDialogContent({
           </div>
         </div>
 
-        <div className="min-h-0 overflow-y-auto bg-muted/20 p-4">
+        <div className="min-h-0 overflow-y-auto p-4">
           {renderSourceSummary()}
         </div>
       </div>
@@ -5869,8 +5884,8 @@ function AddConnectionDialogContent({
   );
 
   const renderSetupStep = () => (
-    <div className="grid min-h-0 grid-cols-1 overflow-hidden rounded-lg border lg:grid-cols-[310px_minmax(0,1fr)]">
-      <div className="min-h-0 overflow-y-auto border-b bg-muted/20 p-5 lg:border-r lg:border-b-0">
+    <div className="grid min-h-0 grid-cols-1 lg:h-full lg:grid-cols-[310px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden">
+      <div className="min-h-0 overflow-y-auto border-b p-5 lg:border-r lg:border-b-0">
         {renderSourceSummary()}
       </div>
       <div className="min-h-0 overflow-y-auto p-5">
@@ -5923,8 +5938,8 @@ function AddConnectionDialogContent({
   return (
     <>
       <Dialog open={open} onOpenChange={(next) => { if (!isSubmitting) onOpenChange(next); }}>
-        <DialogContent className="grid h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:h-[740px] sm:max-w-[960px] lg:max-w-[1040px]">
-          <DialogHeader>
+        <DialogContent className="grid h-(--kb-dialog-max-h) grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:h-[740px] sm:max-w-[960px] lg:max-w-[1040px]">
+          <DialogHeader className="px-5 pt-5 pb-4 pr-12">
             <DialogTitle>
               {isSetupStep
                 ? t("add.setupTitle", { title: selected.title })
@@ -5937,8 +5952,8 @@ function AddConnectionDialogContent({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="min-h-0 overflow-auto">
-            {historyImport && isSetupStep && setupKind === "file-wallet" ? <div className="mb-4 space-y-1">
+          <div className="min-h-0 overflow-auto border-t">
+            {historyImport && isSetupStep && setupKind === "file-wallet" ? <div className="space-y-1 border-b px-5 py-4">
               <Label htmlFor="review-history-target">{t("assistant:evidence.importTarget")}</Label>
               <select id="review-history-target" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                 value={historyTargetId} disabled={isSubmitting} onChange={(event) => setHistoryTargetId(event.target.value)}>
@@ -5952,7 +5967,7 @@ function AddConnectionDialogContent({
             {isSetupStep ? renderSetupStep() : renderSourceStep()}
           </div>
 
-          <DialogFooter className="gap-2 sm:justify-between">
+          <DialogFooter className="gap-2 border-t px-5 py-3 sm:justify-between">
             {isSetupStep ? (
               <Button
                 type="button"

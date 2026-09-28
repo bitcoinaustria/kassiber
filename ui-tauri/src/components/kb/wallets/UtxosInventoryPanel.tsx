@@ -565,7 +565,7 @@ function UtxoExplorerOpenDialog({
       }}
     >
       <DialogContent className="max-h-[calc(100dvh-2rem)] w-[min(calc(100vw-2rem),34rem)] overflow-hidden p-0 sm:max-w-none">
-        <div className="grid max-h-[calc(100dvh-2rem)] min-w-0 gap-4 overflow-y-auto p-4 sm:p-6">
+        <div className="grid max-h-(--kb-dialog-max-h) min-w-0 gap-4 overflow-y-auto p-4 sm:p-6">
           <DialogHeader className="min-w-0 pr-8">
             <div className="mb-1 flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
               <ShieldAlert className="size-5" aria-hidden="true" />
