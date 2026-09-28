@@ -10,7 +10,7 @@ import type { GraphRow, TransactionGraphPayload } from "../TransactionGraphModel
 /**
  * The ribbon piece from the Bitcoin Austria artwork lab, laid out for one
  * transaction. A coin is a block and its value a bundle of ribbons. Every
- * input's ribbons run into one transaction block and new ribbons leave it for
+ * input's ribbons run into one glass collar and new ribbons leave it for
  * the outputs: a transaction spends its inputs together, so no ribbon links a
  * particular input to a particular output. Widths come from the same geometry
  * as the 2D graph; nothing here is accounting truth.
@@ -23,7 +23,8 @@ export const RIBBON_HEIGHT = 0.2;
 export const RIBBON_DEPTH = 0.07;
 export const BLOCK_WIDTH = 0.5;
 export const BLOCK_DEPTH = 0.62;
-export const CENTER_WIDTH = 0.8;
+/** At the collar the ribbons close up, so the bundle reads as one flow. */
+const WAIST_PITCH = RIBBON_HEIGHT * 1.12;
 const LEG_GAP = 0.36;
 const ZERO_BLOCK_HEIGHT = RIBBON_PITCH * 0.6;
 /** A leg never gets fewer ribbons than this, so dust stays visible. */
@@ -57,8 +58,9 @@ export type RibbonPath = {
 export type RibbonLayout = {
   legs: RibbonLeg[];
   ribbons: RibbonPath[];
-  /** The network fee: a single thin filament out of the transaction block. */
+  /** The network fee: a single thin filament out of the collar. */
   fee: { from: [number, number]; to: [number, number]; estimated: boolean } | null;
+  /** The glass collar the ribbons meet in, around the waist at x = 0. */
   center: { halfHeight: number };
   span: number;
   /** True when no leg carries a known amount, so every bundle is the same size. */
@@ -116,10 +118,10 @@ function stackLegs(
   });
 }
 
-/** Slot centres of a contiguous bundle of `count` ribbons centred on y = 0. */
+/** Slot centres of a closed-up bundle of `count` ribbons centred on y = 0. */
 function centerSlots(count: number) {
-  const top = (count * RIBBON_PITCH) / 2;
-  return Array.from({ length: count }, (_, index) => top - RIBBON_PITCH * (index + 0.5));
+  const top = (count * WAIST_PITCH) / 2;
+  return Array.from({ length: count }, (_, index) => top - WAIST_PITCH * (index + 0.5));
 }
 
 export function ribbonLayout(
@@ -166,7 +168,8 @@ export function ribbonLayout(
   const ribbons: RibbonPath[] = [];
   const inputSlots = centerSlots(inputs.reduce((sum, leg) => sum + leg.ribbons, 0));
   const outputSlots = centerSlots(outputs.reduce((sum, leg) => sum + leg.ribbons, 0));
-  const centerInner = CENTER_WIDTH / 2 - 0.06;
+  // Both sides end inside the collar, which hides where they meet.
+  const centerInner = 0;
   let slot = 0;
   for (const leg of inputs) {
     for (let index = 0; index < leg.ribbons; index += 1) {
@@ -195,12 +198,12 @@ export function ribbonLayout(
   }
 
   const halfHeight =
-    (Math.max(inputSlots.length, outputSlots.length, 1) * RIBBON_PITCH) / 2 + RIBBON_PITCH * 0.5;
+    (Math.max(inputSlots.length, outputSlots.length, 1) * WAIST_PITCH) / 2 + RIBBON_PITCH * 0.35;
   const feeRow = feeIndex >= 0 ? layoutDestinationRows[feeIndex] : null;
   const outputTop = outputs.length ? outputs[0].top : halfHeight;
   const fee = feeRow
     ? {
-        from: [centerInner, halfHeight - RIBBON_PITCH * 0.35] as [number, number],
+        from: [centerInner, halfHeight - RIBBON_PITCH * 0.2] as [number, number],
         to: [span * 0.72, Math.max(outputTop, halfHeight) + RIBBON_PITCH * 2.2] as [number, number],
         estimated: destinationWeights[feeIndex].estimated,
       }

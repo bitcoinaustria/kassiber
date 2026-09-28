@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TransactionGraphNode, TransactionGraphPayload } from "../TransactionGraphModel";
-import { CENTER_WIDTH, ribbonLayout } from "./ribbonLayout";
+import { ribbonLayout } from "./ribbonLayout";
 
 const leg = (
   id: string,
@@ -36,12 +36,11 @@ const ribbonsOf = (layout: ReturnType<typeof ribbonLayout>, id: string) =>
 const send = graph([leg("in", 50_000_000, "owned")], [leg("pay", 10_000_000), leg("change", 39_999_000, "owned")]);
 
 describe("ribbon layout", () => {
-  it("runs every ribbon through the transaction block, never input to output", () => {
+  it("ends every ribbon in the collar, never running input to output", () => {
     const layout = ribbonLayout(send, false, 250);
-    const inner = CENTER_WIDTH / 2 - 0.06;
     for (const ribbon of layout.ribbons) {
-      if (ribbon.side === "input") expect(ribbon.to[0]).toBeCloseTo(-inner);
-      else expect(ribbon.from[0]).toBeCloseTo(inner);
+      if (ribbon.side === "input") expect(ribbon.to[0]).toBeCloseTo(0);
+      else expect(ribbon.from[0]).toBeCloseTo(0);
     }
     expect(layout.ribbons.some((ribbon) => ribbon.side === "input")).toBe(true);
     expect(layout.ribbons.some((ribbon) => ribbon.side === "output")).toBe(true);

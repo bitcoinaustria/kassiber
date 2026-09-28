@@ -1,5 +1,6 @@
 import {
   BufferGeometry,
+  CatmullRomCurve3,
   Color,
   DirectionalLight,
   Float32BufferAttribute,
@@ -14,6 +15,7 @@ import {
   SRGBColorSpace,
   Sphere,
   Box3,
+  TubeGeometry,
   Vector3,
   WebGLRenderer,
   type Material,
@@ -25,7 +27,6 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import {
   BLOCK_DEPTH,
   BLOCK_WIDTH,
-  CENTER_WIDTH,
   RIBBON_DEPTH,
   RIBBON_HEIGHT,
   type RibbonLayout,
@@ -205,6 +206,28 @@ function satin(color: string) {
   });
 }
 
+/**
+ * The collar where every input's ribbons end and the outputs' begin: a
+ * rounded-rectangle glass loop around the waist, in the yz plane at x = 0.
+ */
+function collarGeometry(halfHeight: number, halfDepth: number, radius: number) {
+  const corner = Math.min(halfDepth, halfHeight) * 0.9;
+  const points: Vector3[] = [];
+  const corners: Array<[number, number, number]> = [
+    [halfHeight - corner, halfDepth - corner, 0],
+    [-(halfHeight - corner), halfDepth - corner, Math.PI / 2],
+    [-(halfHeight - corner), -(halfDepth - corner), Math.PI],
+    [halfHeight - corner, -(halfDepth - corner), (3 * Math.PI) / 2],
+  ];
+  for (const [cy, cz, start] of corners) {
+    for (let step = 0; step <= 6; step += 1) {
+      const angle = start + ((Math.PI / 2) * step) / 6;
+      points.push(new Vector3(0, cy + corner * Math.cos(angle), cz + corner * Math.sin(angle)));
+    }
+  }
+  return new TubeGeometry(new CatmullRomCurve3(points, true), 96, radius, 12, true);
+}
+
 export function createGlassScene(
   canvas: HTMLCanvasElement,
   layout: RibbonLayout,
@@ -310,11 +333,12 @@ function buildGlassScene(
     block.position.set(leg.x, (leg.top + leg.bottom) / 2, 0);
     content.add(block);
   }
-  const center = new Mesh(
-    new RoundedBoxGeometry(CENTER_WIDTH, layout.center.halfHeight * 2, BLOCK_DEPTH * 1.2, 4, 0.09),
-    materials.center,
+  content.add(
+    new Mesh(
+      collarGeometry(layout.center.halfHeight, RIBBON_DEPTH / 2 + 0.07, 0.05),
+      materials.center,
+    ),
   );
-  content.add(center);
 
   const pivot = new Group();
   const bounds = new Box3().setFromObject(content);
