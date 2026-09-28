@@ -447,6 +447,92 @@ describe("TransactionFlowDiagram", () => {
     expect(feeWidth).toBeLessThan(Math.min(...outputWidths));
   });
 
+  it("draws Liquid legs of unknown size at one modest width, not as the full band", () => {
+    const confidential = (id: string, index: number) => ({
+      id,
+      outpoint: `${index.toString(16).repeat(64)}:${index}`,
+      valueSats: null,
+      valueBtc: null,
+      valueState: "confidential" as const,
+      role: index < 2 ? "input" : "output",
+      ownership: "unknown",
+    });
+    const allConfidential: TransactionGraphPayload = {
+      ...graph,
+      transaction: { ...graph.transaction, id: "liquid-all-confidential", inputCount: 2, outputCount: 2 },
+      supportLevel: "partial",
+      inputs: [confidential("in-0", 0), confidential("in-1", 1)],
+      outputs: [confidential("out-0", 2), confidential("out-1", 3)],
+      fee: { id: "fee", label: "Fee", valueSats: 40, valueBtc: 0.0000004, role: "fee", ownership: "network_fee" },
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionFlowDiagram graph={allConfidential} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+    const widths = (testId: string) =>
+      [...html.matchAll(new RegExp(`data-testid="${testId}"[^>]*stroke-width="([^"]+)"`, "g"))].map(
+        (match) => Number(match[1]),
+      );
+
+    const strands = [...widths("transaction-input-strand"), ...widths("transaction-output-strand")];
+    expect(strands).toHaveLength(4);
+    // Only the fee is known, so no leg may look larger than another.
+    expect(new Set(strands).size).toBe(1);
+    expect(strands[0]).toBeLessThan(20);
+    expect(widths("transaction-fee-strand")[0]).toBeLessThan(strands[0]);
+  });
+
+  it("sizes an unknown Liquid leg like the known ones when both sides are open", () => {
+    const receive: TransactionGraphPayload = {
+      ...graph,
+      transaction: { ...graph.transaction, id: "liquid-receive", inputCount: 2, outputCount: 2 },
+      supportLevel: "partial",
+      inputs: [0, 1].map((index) => ({
+        id: `in-${index}`,
+        outpoint: `${index.toString(16).repeat(64)}:${index}`,
+        valueSats: null,
+        valueBtc: null,
+        valueState: "confidential" as const,
+        role: "input",
+        ownership: "external",
+      })),
+      outputs: [
+        {
+          id: "own",
+          outpoint: `${"a".repeat(64)}:0`,
+          valueSats: 1_000_000,
+          valueBtc: 0.01,
+          valueState: "known",
+          role: "owned_destination",
+          ownership: "owned",
+        },
+        {
+          id: "other",
+          outpoint: `${"a".repeat(64)}:1`,
+          valueSats: null,
+          valueBtc: null,
+          valueState: "confidential",
+          role: "external_recipient",
+          ownership: "external",
+        },
+      ],
+      fee: { id: "fee", label: "Fee", valueSats: 40, valueBtc: 0.0000004, role: "fee", ownership: "network_fee" },
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionFlowDiagram graph={receive} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+    const outputs = [
+      ...html.matchAll(/data-testid="transaction-output-strand"[^>]*stroke-width="([^"]+)"/g),
+    ].map((match) => Number(match[1]));
+
+    expect(outputs).toHaveLength(2);
+    // Before, the other recipient got only what the fee left over and looked like dust.
+    expect(Math.abs(outputs[0] - outputs[1])).toBeLessThan(1);
+  });
+
   it("uses known opposite-side totals only as visual weight for confidential Liquid legs", () => {
     const confidentialInputGraph: TransactionGraphPayload = {
       ...graph,
