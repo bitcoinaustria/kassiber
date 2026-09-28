@@ -226,11 +226,15 @@ kassiber wallets identify --txid <64-hex> --verify-on-chain --verify-backend mem
   (paid, received, or paid between your own wallets, naming the wallet) or
   `unknown` when no synced record carries that payment hash. The invoice itself
   is never echoed back in full.
+- A BIP352 silent-payment address (`sp1…`) is matched against the profile's
+  silent-payment wallets by its scan and spend keys, including labels 0–50
+  (0 is the change label). Both keys must match for `owned`; the wallet's scan
+  key with an unchecked spend key, or material that cannot be decoded, stays
+  `unknown` rather than `external`.
 - Recognized formats the check does not handle yet come back `unsupported`
   with their type named instead of being called external addresses: BOLT12
-  offers, LNURLs, Lightning addresses, silent-payment addresses, outpoints,
-  and extended public keys. Private keys are also `unsupported`, and their
-  value is never echoed back.
+  offers, LNURLs, Lightning addresses, outpoints, and extended public keys.
+  Private keys are also `unsupported`, and their value is never echoed back.
 - Scope with repeatable `--wallet` (default: all wallets). At least one of
   `--address` / `--txid` / `--candidate` / `--file` / `--csv` is required.
 - The desktop **Reconcile** screen is the GUI peer: it runs the cache-only

@@ -131,7 +131,6 @@ class UnsupportedFormatTests(unittest.TestCase):
             "lno1" + "q" * 60: "lightning_offer",
             _LNURL: "lnurl",
             "satoshi@example.com": "lightning_address",
-            "sp1q" + "q" * 110: "silent_payment_address",
             "ab" * 32 + ":1": "outpoint",
             _XPUB: "extended_public_key",
         }
@@ -250,6 +249,69 @@ class LightningInvoiceTests(unittest.TestCase):
         redacted = ownership.redact_result_for_ai(report["results"][0])
         self.assertEqual(redacted["input"], "Lightning invoice (not shown)")
         self.assertEqual(redacted["wallets"], ["Node"])
+
+
+def _sp_conn(material):
+    conn = _engine_conn()
+    config = json.dumps({"sp_descriptor": material, "network": "main"})
+    conn.execute(
+        "INSERT INTO wallets VALUES ('w-sp', 'p1', 'Silent', 'silent-payment', ?, NULL)",
+        (config,),
+    )
+    return conn
+
+
+class SilentPaymentAddressMatchTests(unittest.TestCase):
+    def setUp(self):
+        from tests.test_silent_payments import _BASE, _LABELED, _SCAN, _SPEND, spscan_descriptor
+
+        self.base = _BASE
+        self.label_1 = _LABELED[1]
+        self.material = spscan_descriptor(_SCAN, _SPEND)
+
+    def _identify(self, conn, address):
+        return ownership.identify(conn, "p1", candidates=[address], scan_to_index=0)["results"][0]
+
+    def test_owned_base_and_labeled_addresses(self):
+        row = self._identify(_sp_conn(self.material), self.base)
+        self.assertEqual((row["status"], row["type"]), ("owned", "silent_payment_address"))
+        self.assertIn("silent payment address", row["note"])
+        row = self._identify(_sp_conn(self.material), self.label_1)
+        self.assertEqual(row["status"], "owned")
+        self.assertEqual(row["matches"][0]["address_index"], 1)
+
+    def test_scan_key_alone_is_unknown_not_owned(self):
+        from kassiber.core import silent_payments
+
+        keys = silent_payments.receive_keys(
+            {"sp_descriptor": self.material, "network": "main"},
+            label_limit=silent_payments.LABEL_CHECK_LIMIT + 1,
+        )
+        beyond = dict(keys.spend_pubkeys)[silent_payments.LABEL_CHECK_LIMIT + 1]
+        address = silent_payments.encode_address("main", keys.scan_pubkey, beyond)
+        row = self._identify(_sp_conn(self.material), address)
+        self.assertEqual(row["status"], "unknown")
+        self.assertIn("scan key", row["note"])
+
+    def test_another_wallets_address_is_external(self):
+        from tests.test_silent_payments import _CHANGE_CASE
+
+        row = self._identify(_sp_conn(self.material), _CHANGE_CASE["change"])
+        self.assertEqual(row["status"], "external")
+
+    def test_undecodable_material_keeps_a_miss_unknown(self):
+        row = self._identify(_sp_conn("sp(spscan1qqqq)"), self.base)
+        self.assertEqual(row["status"], "unknown")
+
+    def test_bad_checksum_is_invalid(self):
+        row = self._identify(_sp_conn(self.material), self.base[:-1] + "q")
+        self.assertEqual((row["status"], row["type"]), ("invalid", "silent_payment_address"))
+
+    def test_ai_projection_drops_the_label_geometry(self):
+        row = self._identify(_sp_conn(self.material), self.label_1)
+        redacted = ownership.redact_result_for_ai(row)
+        self.assertEqual(redacted["note"], "Owned by 'Silent'.")
+        self.assertNotIn("matches", redacted)
 
 
 class OwnedIndexPhysicalScopeTests(unittest.TestCase):

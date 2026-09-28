@@ -949,5 +949,82 @@ class SilentPaymentsTests(unittest.TestCase):
         self.assertNotIn("sp(spscan", log_text)
 
 
+# BIP352 send_and_receive_test_vectors.json: the "label with even parity" and
+# "use silent payments for sender change" receiving cases.
+_SCAN = "0f694e068028a717f8af6b9411f9a133dd3565258714cc226594b34db90c1f2c"
+_SPEND = "9d6ad855ce3417ef84e836892e5a56392bfba05fa5d97ccea30e266f540e08b3"
+_BASE = (
+    "sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjuexzk6murw56suy3e0"
+    "rd2cgqvycxttddwsvgxe2usfpxumr70xc9pkqwv"
+)
+_LABELED = {
+    1: "sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqaxww2fnhrx05cghth75n0"
+    "qcj59e3e2anscr0q9wyknjxtxycg07y3pevyj",
+    1337: "sp1qqgste7k9hx0qftg6qmwlkqtwuy6cycyavzmzj85c6qdfhjdpdjtdgqjyh2ju7hd5gj57jg5r9"
+    "lev3pckk4n2shtzaq34467erzzdfajfggty6aa5",
+}
+_CHANGE_CASE = {
+    "scan": "11b7a82e06ca2648d5fded2366478078ec4fc9dc1d8ff487518226f229d768fd",
+    "spend": "b8f87388cbb41934c50daca018901b00070a5ff6cc25a7e9e716a9d5b9e4d664",
+    "change": "sp1qqw6vczcfpdh5nf5y2ky99kmqae0tr30hgdfg88parz50cp80wd2wqqlv6saelkk5snl4wfut"
+    "yxrchpzzwm8rjp3z6q7apna59z9huq4x754e5atr",
+}
+
+
+def spscan_descriptor(scan_hex: str, spend_priv_hex: str, hrp: str = "spscan") -> str:
+    from embit import bech32, ec
+
+    spend = ec.PrivateKey(bytes.fromhex(spend_priv_hex)).get_public_key().sec()
+    words = [0] + bech32.convertbits(bytes.fromhex(scan_hex) + spend, 8, 5, True)
+    return f"sp({bech32.bech32_encode(bech32.Encoding.BECH32M, hrp, words)})"
+
+
+class SilentPaymentAddressTests(unittest.TestCase):
+    def _address(self, keys, label):
+        spend = dict(keys.spend_pubkeys)[label]
+        return silent_payments.encode_address(keys.network, keys.scan_pubkey, spend)
+
+    def test_spscan_material_derives_the_bip352_addresses(self):
+        config = {"sp_descriptor": spscan_descriptor(_SCAN, _SPEND), "network": "main"}
+        keys = silent_payments.receive_keys(config, label_limit=1337)
+        self.assertEqual(self._address(keys, None), _BASE)
+        for label, address in _LABELED.items():
+            self.assertEqual(self._address(keys, label), address)
+
+    def test_change_label_is_label_zero(self):
+        config = {
+            "sp_descriptor": spscan_descriptor(_CHANGE_CASE["scan"], _CHANGE_CASE["spend"]),
+            "network": "main",
+        }
+        keys = silent_payments.receive_keys(config)
+        self.assertEqual(self._address(keys, 0), _CHANGE_CASE["change"])
+
+    def test_two_key_form_matches_the_spscan_form(self):
+        from embit import ec
+        from embit.networks import NETWORKS
+
+        scan_wif = ec.PrivateKey(bytes.fromhex(_SCAN)).wif(NETWORKS["main"])
+        spend_pub = ec.PrivateKey(bytes.fromhex(_SPEND)).get_public_key().sec().hex()
+        keys = silent_payments.receive_keys(
+            {"sp_descriptor": f"sp({scan_wif},{spend_pub})", "network": "main"}
+        )
+        self.assertEqual(self._address(keys, None), _BASE)
+
+    def test_address_round_trips_and_rejects_a_bad_checksum(self):
+        network, scan, spend = silent_payments.decode_address(_BASE)
+        self.assertEqual(network, "main")
+        self.assertEqual(silent_payments.encode_address("main", scan, spend), _BASE)
+        self.assertEqual(silent_payments.decode_address(_BASE.upper())[0], "main")
+        self.assertIsNone(silent_payments.decode_address(_BASE[:-1] + "q"))
+
+    def test_material_it_cannot_derive_is_none_not_a_guess(self):
+        for material in (
+            "sp(spscan1qqqq)",
+            "sp(L1cBq8Z9QXUYpH6aVtCQuUz4HX8gF1DgwoEm3r9zYHiDj5jczaDo,xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8/0h)",
+        ):
+            self.assertIsNone(
+                silent_payments.receive_keys({"sp_descriptor": material, "network": "main"})
+            )
+
 if __name__ == "__main__":
     unittest.main()

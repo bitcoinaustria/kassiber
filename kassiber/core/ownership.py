@@ -39,6 +39,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from ..errors import AppError
 from ..wallet_descriptors import derive_descriptor_targets, normalize_chain, normalize_network
 from .address_scripts import address_to_scriptpubkey
+from . import silent_payments
 from .lightning.bolt11 import decode_payment_hash, display_invoice
 from .onchain import normalized_script_hex, parse_identification_legs
 from .ownership_policy_epochs import retired_policy_materials
@@ -95,6 +96,10 @@ _BOLT11_RE = re.compile(
     rf"(?:lightning:)?ln(?:bcrt|bc|tbs|tb|sb)\d*[munp]?1{_BECH32_DATA}+", re.IGNORECASE
 )
 
+# A BIP352 silent-payment address: matched by its scan and spend keys against
+# the profile's silent-payment wallets (see ``classify_silent_payment_address``).
+_SP_ADDRESS_RE = re.compile(rf"(?:sp|tsp|sprt)1{_BECH32_DATA}{{8,}}", re.IGNORECASE)
+
 _UNSUPPORTED_FORMATS: tuple[tuple[str, re.Pattern[str], str], ...] = (
     (
         "lightning_offer",
@@ -110,11 +115,6 @@ _UNSUPPORTED_FORMATS: tuple[tuple[str, re.Pattern[str], str], ...] = (
         "lightning_address",
         re.compile(r"[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+", re.IGNORECASE),
         "Lightning addresses point to a server and cannot be checked on this device.",
-    ),
-    (
-        "silent_payment_address",
-        re.compile(rf"(?:sp|tsp|sprt)1{_BECH32_DATA}{{8,}}", re.IGNORECASE),
-        "Silent payment addresses are not supported yet.",
     ),
     (
         "outpoint",
@@ -486,9 +486,10 @@ def parse_tokens(
     Duplicates (same normalized token + type) collapse to one entry.
 
     BOLT11 invoices parse to their payment hash (shown shortened; the full
-    invoice is not kept). Other recognized non-address formats (offers, LNURLs,
-    silent-payment addresses, outpoints, xpubs) and private keys land in the
-    second list with ``status: "unsupported"`` rather than as addresses.
+    invoice is not kept) and silent-payment addresses to their own type. Other
+    recognized non-address formats (offers, LNURLs, outpoints, xpubs) and
+    private keys land in the second list with ``status: "unsupported"`` rather
+    than as addresses.
     """
     parsed: list[dict[str, Any]] = []
     invalid: list[dict[str, Any]] = []
@@ -532,6 +533,31 @@ def parse_tokens(
                     "type": "lightning_invoice",
                     "chain": "lightning",
                     "network": invoice.network,
+                }
+            )
+            return
+        if forced_type != "txid" and _SP_ADDRESS_RE.fullmatch(text):
+            decoded = silent_payments.decode_address(text)
+            if decoded is None:
+                invalid.append(
+                    {
+                        "input": text,
+                        "type": "silent_payment_address",
+                        "reason": "not a valid silent payment address",
+                    }
+                )
+                return
+            key = ("silent_payment_address", text.lower())
+            if key in seen:
+                return
+            seen.add(key)
+            parsed.append(
+                {
+                    "input": text,
+                    "normalized": text.lower(),
+                    "type": "silent_payment_address",
+                    "chain": "bitcoin",
+                    "network": decoded[0],
                 }
             )
             return
@@ -1123,6 +1149,112 @@ def _ownership_note(matches: Sequence[OwnedMatch]) -> str:
     return note
 
 
+def _network_family(network: str) -> str:
+    if network == "main":
+        return "main"
+    return "regtest" if network == "regtest" else "test"
+
+
+def silent_payment_receivers(
+    wallets: Sequence[Mapping[str, Any]],
+) -> list[tuple[Mapping[str, Any], Any]]:
+    """Each silent-payment wallet with its receive keys (``None``: cannot check)."""
+    receivers: list[tuple[Mapping[str, Any], Any]] = []
+    for wallet in wallets:
+        config = _wallet_config(wallet)
+        if not silent_payments.has_silent_payment_sync_material(config):
+            continue
+        receivers.append((wallet, silent_payments.receive_keys(config)))
+    return receivers
+
+
+def classify_silent_payment_address(
+    token: Mapping[str, Any],
+    receivers: Sequence[tuple[Mapping[str, Any], Any]],
+) -> dict[str, Any]:
+    """Match a silent-payment address against the wallets that could issue it.
+
+    Owned needs both keys to match: the scan key alone is shared by every
+    address a wallet issues, but a spend key outside the checked labels means
+    Kassiber cannot say this wallet receives there, so it stays ``unknown``.
+    A wallet whose material cannot be decoded also keeps a miss ``unknown``
+    rather than ``external``.
+    """
+    decoded = silent_payments.decode_address(str(token["input"]))
+    result: dict[str, Any] = {
+        "input": token["input"],
+        "type": "silent_payment_address",
+        "chain": "bitcoin",
+        "ownership_ambiguous": False,
+        "matches": [],
+    }
+    if decoded is None:  # parse_tokens already validated; defensive
+        return {**result, "status": "invalid", "classification": "invalid", "note": "not a valid silent payment address"}
+    family, scan_pubkey, spend_pubkey = decoded
+    scan_only: list[str] = []
+    undecodable = False
+    for wallet, keys in receivers:
+        if keys is None:
+            undecodable = True
+            continue
+        if keys.scan_pubkey != scan_pubkey or _network_family(keys.network) != family:
+            continue
+        label = next(
+            (m for m, candidate in keys.spend_pubkeys if candidate == spend_pubkey),
+            False,
+        )
+        if label is False:
+            scan_only.append(str(wallet["label"]))
+            continue
+        where = (
+            "silent payment address"
+            if label is None
+            else "change label" if label == 0 else f"label #{label}"
+        )
+        match = {
+            "wallet": str(wallet["label"]),
+            "account": _account_label(wallet),
+            "chain": "bitcoin",
+            "network": keys.network,
+            "branch": "silent-payment" if label is None else "label",
+            "address_index": label,
+            "derivation_path": None,
+            "match_source": "silent_payment",
+        }
+        return {
+            **result,
+            "status": "owned",
+            "classification": "owned_address",
+            "canonical_wallet": str(wallet["label"]),
+            "canonical_wallet_id": str(wallet["id"]),
+            "matches": [match],
+            "note": f"Owned by '{wallet['label']}' ({where}).",
+        }
+    if scan_only:
+        return {
+            **result,
+            "status": "unknown",
+            "classification": "unknown",
+            "note": (
+                f"Uses the scan key of {', '.join(repr(l) for l in scan_only)}, but "
+                f"not its spend key or a label it checked (0-{silent_payments.LABEL_CHECK_LIMIT})."
+            ),
+        }
+    if undecodable:
+        return {
+            **result,
+            "status": "unknown",
+            "classification": "unknown",
+            "note": "A silent-payment wallet's key material could not be checked.",
+        }
+    return {
+        **result,
+        "status": "external",
+        "classification": "external_address",
+        "note": "Not issued by any silent-payment wallet in this profile.",
+    }
+
+
 def classify_lightning_invoice(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1519,6 +1651,7 @@ def identify(
 
     results: list[dict[str, Any]] = []
     wallet_id_set = {str(wallet["id"]) for wallet in wallets}
+    sp_receivers: list[tuple[Mapping[str, Any], Any]] | None = None
     for token in parsed:
         if token["type"] == "address":
             results.append(classify_address(token, index))
@@ -1527,6 +1660,11 @@ def identify(
             results.append(
                 classify_lightning_invoice(conn, profile_id, token, wallet_id_set)
             )
+            continue
+        if token["type"] == "silent_payment_address":
+            if sp_receivers is None:
+                sp_receivers = silent_payment_receivers(wallets)
+            results.append(classify_silent_payment_address(token, sp_receivers))
             continue
         txid = str(token["normalized"])
         legs = load_local_tx_legs(conn, profile_id, txid)

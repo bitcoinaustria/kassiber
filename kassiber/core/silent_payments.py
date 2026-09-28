@@ -882,3 +882,180 @@ def normalize_scan_payload(
     else:
         meta["utxos"] = list(outputs_by_outpoint.values())
     return records, meta
+
+
+# --- Receiving addresses -----------------------------------------------------
+#
+# A BIP352 address is bech32m over version 0 and B_scan || B_spend. The scan
+# private key needed to compute label addresses stays inside these functions;
+# callers only ever see public keys and address strings.
+
+_ADDRESS_HRPS = {"sp": "main", "tsp": "test", "sprt": "regtest"}
+_SPSCAN_HRPS = {"spscan", "tspscan"}
+_LABEL_TAG = "BIP0352/Label"
+# Labels 0 (change) through 50 are checked. A wallet can mint more, but an
+# address past the checked range fails closed to "unknown" rather than owned.
+LABEL_CHECK_LIMIT = 50
+
+
+@dataclass(frozen=True)
+class SilentPaymentReceiveKeys:
+    network: str
+    scan_pubkey: bytes
+    # ``(None, B_spend)`` for the unlabeled address, ``(m, B_m)`` for label m.
+    spend_pubkeys: tuple[tuple[int | None, bytes], ...]
+
+
+def _bech32m_payload(text: str, hrps: Any) -> tuple[str, bytes] | None:
+    """Decode version-0 bech32m without BIP173's 90-character cap."""
+    from embit import bech32
+
+    value = str(text or "").strip()
+    if value != value.lower() and value != value.upper():
+        return None
+    value = value.lower()
+    separator = value.rfind("1")
+    hrp, data = value[:separator], value[separator + 1 :]
+    if separator < 1 or hrp not in hrps or len(data) < 7:
+        return None
+    if any(char not in bech32.CHARSET for char in data):
+        return None
+    words = [bech32.CHARSET.find(char) for char in data]
+    if bech32.bech32_verify_checksum(hrp, words) != bech32.Encoding.BECH32M:
+        return None
+    if words[0] != 0:
+        return None
+    payload = bech32.convertbits(words[1:-6], 5, 8, False)
+    return (hrp, bytes(payload)) if payload is not None else None
+
+
+def address_hrp(network: str) -> str:
+    if network == "main":
+        return "sp"
+    return "sprt" if network == "regtest" else "tsp"
+
+
+def decode_address(text: str) -> tuple[str, bytes, bytes] | None:
+    """``(network family, B_scan, B_spend)`` for a silent-payment address."""
+    decoded = _bech32m_payload(text, _ADDRESS_HRPS)
+    if decoded is None or len(decoded[1]) != 66:
+        return None
+    hrp, payload = decoded
+    return _ADDRESS_HRPS[hrp], payload[:33], payload[33:]
+
+
+def encode_address(network: str, scan_pubkey: bytes, spend_pubkey: bytes) -> str:
+    from embit import bech32
+
+    words = [0] + bech32.convertbits(scan_pubkey + spend_pubkey, 8, 5, True)
+    return bech32.bech32_encode(bech32.Encoding.BECH32M, address_hrp(network), words)
+
+
+def _split_key_path(expr: str) -> tuple[str, str]:
+    text = _strip_origin(expr)
+    key, _, path = text.partition("/")
+    return key, path
+
+
+def _scan_secret(expr: str) -> bytes | None:
+    from embit import bip32, ec
+
+    key, path = _split_key_path(expr)
+    if "*" in path:
+        return None
+    try:
+        if _PRIVATE_EXTENDED_RE.match(key):
+            node = bip32.HDKey.from_string(key)
+            if path:
+                node = node.derive(f"m/{path}")
+            return node.key.secret
+        if _WIF_LIKE_RE.match(key):
+            return ec.PrivateKey.from_wif(key).secret
+    except Exception:  # noqa: BLE001 - undecodable material is "cannot check"
+        return None
+    return None
+
+
+def _spend_pubkey(expr: str) -> bytes | None:
+    from embit import bip32
+
+    key, path = _split_key_path(expr)
+    if "*" in path or "'" in path or "h" in path.lower():
+        return None
+    try:
+        if _COMPRESSED_PUBKEY_RE.match(key) and not path:
+            return bytes.fromhex(key)
+        if _PUBLIC_EXTENDED_RE.match(key):
+            node = bip32.HDKey.from_string(key)
+            if path:
+                node = node.derive(f"m/{path}")
+            return node.key.sec()
+    except Exception:  # noqa: BLE001 - undecodable material is "cannot check"
+        return None
+    return None
+
+
+def _tweak_add(point: bytes, tweak: bytes) -> bytes:
+    """``point + tweak·G`` on either embit backend.
+
+    The ctypes backend tweaks its argument in place, so it gets a fresh copy;
+    the pure-Python backend returns the sum from ``ec_pubkey_add`` instead.
+    """
+    from embit.util import secp256k1
+
+    add = getattr(secp256k1, "ec_pubkey_add", None)
+    if add is not None:
+        return bytes(add(point, tweak))
+    result = bytes(bytearray(point))
+    secp256k1.ec_pubkey_tweak_add(result, tweak)
+    return result
+
+
+def receive_keys(
+    config: Mapping[str, Any], *, label_limit: int = LABEL_CHECK_LIMIT
+) -> SilentPaymentReceiveKeys | None:
+    """The public keys behind a wallet's receiving addresses, or ``None``.
+
+    ``None`` means the material is missing or in a form this cannot derive
+    (a hardened public path, a wildcard) — callers must treat that as "cannot
+    check", never as "not this wallet's".
+    """
+    from embit import ec, hashes
+    from embit.util import secp256k1
+
+    material = str_or_none(config.get(CONFIG_DESCRIPTOR)) if isinstance(config, Mapping) else None
+    if not material:
+        return None
+    try:
+        args = _descriptor_args(_compact_descriptor(material))
+    except AppError:
+        return None
+    scan_secret: bytes | None
+    spend: bytes | None
+    if len(args) == 1:
+        decoded = _bech32m_payload(_strip_origin(args[0]), _SPSCAN_HRPS)
+        if decoded is None or len(decoded[1]) != 65:
+            return None
+        scan_secret, spend = decoded[1][:32], decoded[1][32:]
+    elif len(args) == 2:
+        scan_secret, spend = _scan_secret(args[0]), _spend_pubkey(args[1])
+    else:
+        return None
+    if scan_secret is None or spend is None:
+        return None
+    try:
+        scan_pubkey = ec.PrivateKey(scan_secret).get_public_key().sec()
+        spend_point = secp256k1.ec_pubkey_parse(spend)
+        spend_pubkeys: list[tuple[int | None, bytes]] = [(None, spend)]
+        for label in range(max(0, label_limit) + 1):
+            tweak = hashes.tagged_hash(_LABEL_TAG, scan_secret + label.to_bytes(4, "big"))
+            labeled = _tweak_add(spend_point, tweak)
+            spend_pubkeys.append((label, secp256k1.ec_pubkey_serialize(labeled)))
+    except Exception:  # noqa: BLE001 - an invalid key is "cannot check"
+        return None
+    network = normalize_network_value("bitcoin", config.get("network"))
+    return SilentPaymentReceiveKeys(
+        network=network,
+        scan_pubkey=scan_pubkey,
+        spend_pubkeys=tuple(spend_pubkeys),
+    )
