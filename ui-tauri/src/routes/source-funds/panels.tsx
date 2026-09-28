@@ -923,7 +923,7 @@ export function DisclosureNodeOverrides({
   }
   const buttonClass = (active: boolean, tone: "show" | "hide") =>
     [
-      "rounded border px-2 py-0.5 text-xs transition-colors",
+      "rounded-md border px-2 py-0.5 text-xs transition-colors",
       active
         ? tone === "show"
           ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"

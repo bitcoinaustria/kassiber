@@ -122,7 +122,7 @@ export function WalletBalanceHistoryCard({
       className={cn(
         "gap-0 overflow-hidden py-0",
         isHero
-          ? "min-h-36 rounded-2xl border-white/55 bg-background/50 shadow-[0_12px_34px_rgba(0,0,0,0.06)] backdrop-blur-xl dark:border-white/10 dark:bg-background/35"
+          ? "min-h-36 rounded-(--kb-radius-inset) bg-card/70 shadow-none"
           : "shadow-none",
       )}
     >
@@ -173,7 +173,7 @@ export function WalletBalanceHistoryCard({
       </CardHeader>
       <CardContent className={cn("px-3 py-3 sm:px-6", isHero && "pt-2 sm:pt-2")}>
         {query.isLoading ? (
-          <Skeleton className={cn("w-full rounded-xl", isHero ? "h-28" : "h-24")} />
+          <Skeleton className={cn("w-full rounded-lg", isHero ? "h-28" : "h-24")} />
         ) : (
           <>
             <div className="h-24 w-full">

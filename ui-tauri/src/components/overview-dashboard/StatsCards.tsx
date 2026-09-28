@@ -51,7 +51,7 @@ export const StatsCards = ({
   const marketRateDetail = marketRateDetailLabel(snapshot, to);
   return (
     <div
-      className="overflow-hidden rounded-lg border bg-card"
+      className="kb-surface overflow-hidden"
       role={isRefreshing ? "status" : undefined}
       aria-live={isRefreshing ? "polite" : undefined}
     >

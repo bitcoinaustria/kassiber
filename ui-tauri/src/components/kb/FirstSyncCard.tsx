@@ -109,7 +109,7 @@ export function FirstSyncCard({
         <div className="flex items-start gap-3">
           <span
             className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl",
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
               failed
                 ? "bg-destructive/10 text-destructive"
                 : "bg-primary/10 text-primary",

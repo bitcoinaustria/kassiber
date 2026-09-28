@@ -95,8 +95,8 @@ describe("Privacy Mirror exposure report", () => {
     expect(html).toContain('data-testid="privacy-mirror-attention"');
     expect(html).toContain("Findings about your activity");
     expect(html.indexOf('data-testid="privacy-mirror-attention"')).toBeLessThan(html.indexOf('data-testid="privacy-mirror-context"'));
-    expect(html).toContain('<details class="rounded-lg border bg-card" data-testid="privacy-mirror-context">');
-    expect(html).toContain('<details class="rounded-lg border bg-card" data-testid="privacy-mirror-coverage">');
+    expect(html).toContain('<details class="kb-surface" data-testid="privacy-mirror-context">');
+    expect(html).toContain('<details class="kb-surface" data-testid="privacy-mirror-coverage">');
     expect(html.match(/<details[^>]*\sopen=""/g)).toBeNull();
     expect(html).toContain("3 missing nodes");
     expect(html).toContain("The analysis reached a bound.");

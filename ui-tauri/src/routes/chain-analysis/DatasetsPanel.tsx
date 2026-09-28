@@ -112,7 +112,7 @@ export function DatasetsPanel({ onError }: { onError: (value: unknown) => void }
       else
           useAssistantDraftStore.getState().setDraft(prompt);
   };
-  return <section className="space-y-5 rounded-xl border bg-card p-4 sm:p-6">
+  return <section className="kb-surface space-y-5 p-(--kb-card-padding)">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h2 className="flex items-center gap-2 text-lg font-semibold">

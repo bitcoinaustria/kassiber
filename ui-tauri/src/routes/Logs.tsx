@@ -466,7 +466,7 @@ export function Logs() {
         </DialogContent>
       </Dialog>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card">
+      <div className="kb-surface flex min-h-0 flex-1 flex-col overflow-hidden">
         <LogsTableControls
           hasTableFilters={hasTableFilters}
           levelFilter={levelFilter}

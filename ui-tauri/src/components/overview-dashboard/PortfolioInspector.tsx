@@ -115,7 +115,7 @@ export function PortfolioInspector({
           aria-label={
             collapsed ? t("inspector.expandAria") : t("inspector.collapseAria")
           }
-          className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-muted/45 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => setCollapsed((current) => !current)}
           onMouseDown={(event) => event.preventDefault()}
         >
@@ -207,7 +207,7 @@ function HeaderInspectorMetric({
   hidden: boolean;
 }) {
   return (
-    <div className="min-w-[92px] rounded bg-muted/20 px-2 py-1">
+    <div className="min-w-[92px] rounded-md bg-muted/20 px-2 py-1">
       <p className="truncate text-3xs font-medium text-muted-foreground">
         {label}
       </p>

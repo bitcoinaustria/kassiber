@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { BalanceRow, Reports } from "./model";
 
-const panelClass = "rounded-lg border bg-card p-4";
+const panelClass = "kb-surface-inset p-4";
 
 export function FinancialReports({ reports, money }: { reports: Reports; money: (value: string) => string }) {
   const { t } = useTranslation("accountingReview");

@@ -88,7 +88,7 @@ export const RecentTransactionsTable = ({
 
   return (
     <>
-      <div className={cn("overflow-hidden rounded-lg border bg-card", className)}>
+      <div className={cn("kb-surface overflow-hidden", className)}>
       <div className="flex items-center justify-between gap-3 border-b px-3 py-2.5 sm:px-4">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">

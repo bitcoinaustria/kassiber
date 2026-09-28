@@ -199,7 +199,7 @@ function CodeOutput({ value, label }: { value: string; label: string }) {
     }
   };
   return (
-    <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+    <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Label>{label}</Label>
         <Button type="button" size="sm" variant="outline" onClick={() => void copy()}>
@@ -285,7 +285,7 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
   }
   if (statusQuery.error) {
     return (
-      <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+      <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
         <p>{errorMessage(statusQuery.error)}</p>
         <Button type="button" size="sm" variant="outline" onClick={() => void statusQuery.refetch()}>
           <RefreshCw className="size-4" />
@@ -298,14 +298,14 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
   return (
     <div className="space-y-6">
       {error ? (
-        <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
           {error}
         </div>
       ) : null}
 
       {!status?.configured ? (
         <div className="space-y-6">
-        <section className="space-y-4 rounded-md border bg-background p-4">
+        <section className="space-y-4 rounded-lg border bg-background p-4">
           <div className="space-y-1">
             <h3 className="flex items-center gap-2 text-sm font-semibold">
               <ShieldCheck className="size-4 text-muted-foreground" />
@@ -314,7 +314,7 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
             <p className="text-sm text-muted-foreground">{t("sync.enableDescription")}</p>
           </div>
           {!encryptedWorkspace ? (
-            <p className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+            <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
               {t("sync.encryptionRequired")}
             </p>
           ) : null}
@@ -336,7 +336,7 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
             {t("sync.enableButton")}
           </Button>
         </section>
-        <section className="space-y-4 rounded-md border bg-background p-4">
+        <section className="space-y-4 rounded-lg border bg-background p-4">
           <div className="space-y-1">
             <h3 className="text-sm font-semibold">{t("sync.joinThisDevice")}</h3>
             <p className="text-sm text-muted-foreground">{t("sync.inviteDescription")}</p>
@@ -358,7 +358,7 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
         </div>
       ) : (
         <>
-          <section className="space-y-3 rounded-md border bg-background p-4">
+          <section className="space-y-3 rounded-lg border bg-background p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
@@ -402,7 +402,7 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
               <h3 className="text-sm font-semibold">{t("sync.mailboxTitle")}</h3>
               <p className="text-sm text-muted-foreground">{t("sync.mailboxDescription")}</p>
             </div>
-            <div className="space-y-3 rounded-md border bg-background p-4">
+            <div className="space-y-3 rounded-lg border bg-background p-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>{t("sync.transportKind")}</Label>
@@ -479,7 +479,7 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
               </Button>
             </div>
             {status.transports.map((transport) => (
-              <div key={transport.id} className="flex flex-col gap-3 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div key={transport.id} className="flex flex-col gap-3 rounded-lg border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{transport.label}</p>
                   <p className="truncate text-xs text-muted-foreground">{transport.kind}{transport.last_error_code ? ` · ${transport.last_error_code}` : ""}</p>
@@ -492,7 +492,7 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
           </section>
 
           {status.notices.length > 0 ? (
-            <section className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-4">
+            <section className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
               <h3 className="flex items-center gap-2 text-sm font-semibold"><AlertTriangle className="size-4" />{t("sync.noticesTitle")}</h3>
               {status.notices.map((notice) => <p key={notice.id} className="font-mono text-xs">{notice.severity}: {notice.code}</p>)}
             </section>
@@ -501,7 +501,7 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
           <section className="space-y-4">
             <div className="space-y-1"><h3 className="text-sm font-semibold">{t("sync.inviteTitle")}</h3><p className="text-sm text-muted-foreground">{t("sync.inviteDescription")}</p></div>
             <div className="grid gap-4 xl:grid-cols-2">
-              <div className="space-y-3 rounded-md border bg-background p-4">
+              <div className="space-y-3 rounded-lg border bg-background p-4">
                 <h4 className="text-sm font-medium">{t("sync.joinThisDevice")}</h4>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2"><Label htmlFor="sync-join-member">{t("sync.memberName")}</Label><Input id="sync-join-member" value={joinMemberName} onChange={(event) => setJoinMemberName(event.target.value)} /></div>
@@ -518,7 +518,7 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
                 <Button type="button" size="sm" disabled={!joinRequest || !invitationCode || join.isPending} onClick={() => void run(() => join.mutateAsync({ request_id: joinRequest?.request_id, invitation: invitationCode }))}>{t("sync.joinButton")}</Button>
               </div>
 
-              <div className="space-y-3 rounded-md border bg-background p-4">
+              <div className="space-y-3 rounded-lg border bg-background p-4">
                 <h4 className="text-sm font-medium">{t("sync.inviteSomeone")}</h4>
                 <div className="space-y-2"><Label htmlFor="sync-request-code">{t("sync.joinRequestCode")}</Label><Textarea id="sync-request-code" value={joinRequestCode} onChange={(event) => setJoinRequestCode(event.target.value)} className="min-h-24 font-mono text-xs" /></div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -538,13 +538,13 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
           <section className="space-y-3">
             <h3 className="text-sm font-semibold">{t("sync.peopleDevicesTitle")}</h3>
             {status.members_list.map((member) => (
-              <div key={member.id} className="flex flex-col gap-3 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div key={member.id} className="flex flex-col gap-3 rounded-lg border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div><p className="text-sm font-medium">{member.display_name} <Badge variant="outline">{roleLabel(member.role)}</Badge></p><p className="text-xs text-muted-foreground">{t("sync.activeDevices", { count: member.active_devices })}</p></div>
                 {localRole === "owner" && member.id !== status.local_member_id && !member.revoked_at ? <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => void run(() => revokeMember.mutateAsync({ member_id: member.id }))}>{t("sync.revoke")}</Button> : null}
               </div>
             ))}
             {status.devices_list.map((device) => (
-              <div key={device.id} className="flex flex-col gap-3 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div key={device.id} className="flex flex-col gap-3 rounded-lg border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div><p className="text-sm font-medium">{device.label} {device.local_device ? <Badge variant="secondary">{t("sync.thisDevice")}</Badge> : null}</p><p className="text-xs text-muted-foreground">{device.member_name}</p></div>
                 {localRole === "owner" && !device.local_device && !device.revoked_at ? <Button type="button" size="sm" variant="ghost" disabled={pending} onClick={() => void run(() => revokeDevice.mutateAsync({ device_id: device.id }))}>{t("sync.revoke")}</Button> : null}
               </div>
@@ -554,12 +554,12 @@ export function SyncSettingsPanel({ encryptedWorkspace }: { encryptedWorkspace: 
           {status.conflicts.length > 0 ? <section className="space-y-3">
             <div><h3 className="text-sm font-semibold">{t("sync.conflictsTitle")}</h3><p className="text-sm text-muted-foreground">{t("sync.conflictsDescription")}</p></div>
             {status.conflicts.map((conflict) => (
-              <div key={conflict.id} className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 p-4">
+              <div key={conflict.id} className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
                 <div><p className="text-sm font-medium">{conflict.entity_table} · {conflict.field}</p><p className="font-mono text-xs text-muted-foreground">{conflict.entity_key}</p></div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {[[conflict.first_event_id, conflict.first_value], [conflict.second_event_id, conflict.second_value]].map(([eventId, value], index) => {
                     const author = conflict.events.find((item) => item.id === eventId);
-                    return <div key={String(eventId)} className="space-y-2 rounded-md border bg-background p-3"><p className="text-xs text-muted-foreground">{author?.display_name ?? t("sync.unknownAuthor")}</p><pre className="overflow-auto whitespace-pre-wrap text-xs">{displayValue(value)}</pre><Button type="button" size="sm" disabled={resolveConflict.isPending} onClick={() => void run(() => resolveConflict.mutateAsync({ conflict_id: conflict.id, source_event_id: eventId }))}>{t("sync.keepChoice", { number: index + 1 })}</Button></div>;
+                    return <div key={String(eventId)} className="space-y-2 rounded-lg border bg-background p-3"><p className="text-xs text-muted-foreground">{author?.display_name ?? t("sync.unknownAuthor")}</p><pre className="overflow-auto whitespace-pre-wrap text-xs">{displayValue(value)}</pre><Button type="button" size="sm" disabled={resolveConflict.isPending} onClick={() => void run(() => resolveConflict.mutateAsync({ conflict_id: conflict.id, source_event_id: eventId }))}>{t("sync.keepChoice", { number: index + 1 })}</Button></div>;
                   })}
                 </div>
               </div>

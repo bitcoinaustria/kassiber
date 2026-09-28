@@ -62,7 +62,7 @@ export function AiProvidersSettingsPanel({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-md border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 space-y-1">
           <Label htmlFor="settings-ai-features">{t("ai.featuresLabel")}</Label>
           <p className="text-sm text-muted-foreground">
@@ -99,21 +99,21 @@ export function AiProvidersSettingsPanel({
       </div>
 
       {policyWarning ? (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
           {policyWarning}
         </div>
       ) : null}
 
       {providersQuery.isLoading ? (
-        <div className="rounded-md border bg-background p-4 text-sm text-muted-foreground">
+        <div className="rounded-lg border bg-background p-4 text-sm text-muted-foreground">
           {t("ai.loadingProviders")}
         </div>
       ) : providersQuery.isError ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           {t("ai.loadError")}
         </div>
       ) : data.providers.length === 0 ? (
-        <div className="rounded-md border border-dashed bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+        <div className="rounded-lg border border-dashed bg-muted/20 p-6 text-center text-sm text-muted-foreground">
           {t("ai.noProviders")}
         </div>
       ) : (
@@ -135,7 +135,7 @@ export function AiProvidersSettingsPanel({
             return (
               <div
                 key={row.name}
-                className="space-y-3 rounded-md border bg-background p-4"
+                className="space-y-3 rounded-lg border bg-background p-4"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1">

@@ -71,7 +71,7 @@ export function ToolConsentDialog({
                 <summary className="cursor-pointer select-none text-2xs font-medium uppercase text-muted-foreground">
                   {t("consent.arguments")}
                 </summary>
-                <pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded bg-background/75 px-2 py-1 font-mono text-2xs text-muted-foreground">
+                <pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-md bg-background/75 px-2 py-1 font-mono text-2xs text-muted-foreground">
                   {JSON.stringify(request?.argumentsPreview ?? {}, null, 2)}
                 </pre>
               </details>

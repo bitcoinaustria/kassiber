@@ -39,7 +39,7 @@ export function BookNetworkSettings({ children }: { children?: ReactNode } = {})
       }
     } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)); }
   };
-  return <section className="space-y-3 rounded-md border bg-background p-4">
+  return <section className="space-y-3 rounded-lg border bg-background p-4">
     <h3 className="text-sm font-medium">{t("bookNetwork.title")}</h3>
     {(bindingQuery.isLoading || needsInventory && query.isLoading) && <p>{t("common:state.loading")}</p>}
     {bindingQuery.isError && <Button variant="outline" onClick={() => void bindingQuery.refetch()}>{t("common:actions.retry")}</Button>}
@@ -52,12 +52,12 @@ export function BookNetworkSettings({ children }: { children?: ReactNode } = {})
     </> : inventory && <>
       <p className="text-xs text-muted-foreground">{t("bookNetwork.help")}</p>
       <label className="flex max-w-sm flex-col gap-1 text-sm">{t("bookNetwork.environment")}
-        <select className="rounded border bg-background p-2" value={environment} onChange={event => setEnvironment(event.target.value)}>
+        <select className="rounded-md border bg-background p-2" value={environment} onChange={event => setEnvironment(event.target.value)}>
           {(["main", "test", "signet", "regtest"] as const).map(value => <option key={value} value={value}>{t(`bookNetwork.environments.${value}`)}</option>)}
         </select>
       </label>
       {environment === "regtest" && <label className="flex flex-col gap-1 text-sm">{t("bookNetwork.instance")}
-        <div className="flex gap-2"><input className="min-w-0 flex-1 rounded border bg-background p-2 font-mono text-xs" value={instance} onChange={event => setInstance(event.target.value)} /><Button variant="outline" onClick={() => setInstance(crypto.randomUUID())}>{t("bookNetwork.newInstance")}</Button></div>
+        <div className="flex gap-2"><input className="min-w-0 flex-1 rounded-md border bg-background p-2 font-mono text-xs" value={instance} onChange={event => setInstance(event.target.value)} /><Button variant="outline" onClick={() => setInstance(crypto.randomUUID())}>{t("bookNetwork.newInstance")}</Button></div>
       </label>}
       {inventory.wallets.map(wallet => <div key={wallet.wallet_id} className="text-sm">
         <span>{wallet.label}</span><span className="ml-2 text-xs text-muted-foreground">{wallet.environments.join(", ") || t("bookNetwork.unknown")}</span>

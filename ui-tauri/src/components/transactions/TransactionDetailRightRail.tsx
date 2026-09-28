@@ -83,7 +83,7 @@ export function TransactionDetailRightRail({
         items={reviewChecklistItems}
         onJump={onJumpTab}
       />
-      <div className="rounded-md border bg-card p-3">
+      <div className="kb-surface-inset p-3">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
           <Hash
             className="size-4 text-muted-foreground"

@@ -59,7 +59,7 @@ export function DeveloperToolsSettingsPanel({
           {t("developer.openLogs")}
         </Button>
       ) : null}
-      <div className="rounded-md border bg-background p-3 text-sm">
+      <div className="rounded-lg border bg-background p-3 text-sm">
         <p className="font-medium">{t("developer.bufferHeading")}</p>
         <p className="text-muted-foreground">
           {t("developer.bufferDescription", {

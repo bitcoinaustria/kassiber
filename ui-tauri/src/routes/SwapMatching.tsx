@@ -1072,7 +1072,7 @@ function CustodyComponentResolver() {
                             return (
                               <div
                                 key={allocation.id}
-                                className="rounded bg-muted/50 px-2 py-1.5 font-mono"
+                                className="rounded-md bg-muted/50 px-2 py-1.5 font-mono"
                               >
                                 {t("swap.components.audit.allocationEdge", {
                                   source: source
@@ -1143,7 +1143,7 @@ function CustodyComponentResolver() {
             scroll region instead of a blank gap. `sm:max-w-4xl` must carry the
             same breakpoint as the primitive's `sm:max-w-lg` to override it. */}
         <DialogContent className="grid w-[calc(100vw-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-w-4xl xl:max-w-5xl">
-          <DialogHeader className="border-b px-6 py-4 pr-14 text-left">
+          <DialogHeader className="border-b px-(--kb-card-padding) py-4 pr-12 text-left">
             <DialogTitle>
               {editingComponent?.state === "active"
                 ? t("swap.components.revisionDialog.reviseTitle")
@@ -1256,7 +1256,7 @@ function PairedSwaps({
 
   return (
     <div className="min-w-0">
-      <div className="overflow-hidden rounded-lg border bg-card">
+      <div className="kb-surface overflow-hidden">
         <header className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
           <div className="min-w-0 space-y-1">
             <h2 className="text-base font-semibold">{title}</h2>
@@ -1275,7 +1275,7 @@ function PairedSwaps({
 
         {actionError ? (
           <div className="border-t px-3 py-3 sm:px-6">
-            <div className="rounded border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
               {actionError}
             </div>
           </div>
@@ -1287,13 +1287,13 @@ function PairedSwaps({
           </div>
         ) : isError ? (
           <div className="border-t px-6 py-6">
-            <div className="rounded border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
               {t("swap.paired.loadFailed", { error: String(error) })}
             </div>
           </div>
         ) : pairs.length === 0 ? (
           <div className="border-t px-6 py-8">
-            <div className="rounded border border-dashed border-muted-foreground/40 p-6 text-center text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-muted-foreground/40 p-6 text-center text-sm text-muted-foreground">
               {emptyText}
             </div>
           </div>
@@ -2286,7 +2286,7 @@ function PairingReview({
   return (
     <div className="min-w-0">
       <Collapsible open={rulesExpanded} onOpenChange={setRulesExpanded}>
-        <div className="overflow-hidden rounded-lg border bg-card">
+        <div className="kb-surface overflow-hidden">
           <header className="flex flex-col gap-2.5 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
             <div className="min-w-0 space-y-1">
               <h2 className="text-base font-semibold">{pageTitle}</h2>
@@ -2509,10 +2509,10 @@ function PairingReview({
                 rules.map((rule) => (
                   <div
                     key={rule.id}
-                    className="flex flex-wrap items-center gap-2 rounded border border-border/60 bg-background px-2 py-1"
+                    className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-background px-2 py-1"
                   >
                     <span className="font-medium">{rule.name ?? t("swap.rules.unnamed")}</span>
-                    <code className="rounded bg-muted px-1 text-2xs">
+                    <code className="rounded-md bg-muted px-1 text-2xs">
                       {Object.entries(rule.predicate)
                         .filter(([, v]) => v !== null && v !== "")
                         .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
@@ -2549,13 +2549,13 @@ function PairingReview({
             </div>
           ) : isError ? (
             <div className="border-t px-6 py-6">
-              <div className="rounded border border-destructive/40 bg-destructive/10 p-3 text-sm">
+              <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
                 {t("swap.table.loadFailed", { error: String(error) })}
               </div>
             </div>
           ) : candidates.length === 0 ? (
             <div className="border-t px-6 py-8">
-              <div className="rounded border border-dashed border-muted-foreground/40 p-6 text-center text-sm text-muted-foreground">
+              <div className="rounded-lg border border-dashed border-muted-foreground/40 p-6 text-center text-sm text-muted-foreground">
                 {emptyText}
               </div>
             </div>
@@ -3609,10 +3609,10 @@ function KeymapHelpDialog({ open, onClose, bindings }: KeymapHelpDialogProps) {
                 {items.map((binding) => (
                   <li
                     key={`${category}-${binding.description}`}
-                    className="flex items-center justify-between gap-3 rounded border border-border/40 bg-background/50 px-2 py-1"
+                    className="flex items-center justify-between gap-3 rounded-md border border-border/40 bg-background/50 px-2 py-1"
                   >
                     <span>{binding.description}</span>
-                    <kbd className="rounded bg-muted px-1.5 text-xs">
+                    <kbd className="rounded-md bg-muted px-1.5 text-xs">
                       {formatKeybindingKeys(binding.keys)}
                     </kbd>
                   </li>

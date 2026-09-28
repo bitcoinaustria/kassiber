@@ -101,7 +101,7 @@ export function ReviewProposalView({ artifact }: { artifact: ReviewArtifact }) {
 
 export function ReviewProposalCard({ artifact, applied = false }: { artifact: ReviewArtifact; applied?: boolean }) {
   const { t } = useTranslation("assistant");
-  return <section className="my-3 space-y-3 rounded-lg border border-primary/40 bg-card p-4" aria-label={t("review.proposal.title")}>
+  return <section className="kb-surface-inset my-3 space-y-3 border-primary/40 p-4" aria-label={t("review.proposal.title")}>
     <h3 className="font-medium">{t("review.proposal.title")} <span className="ml-2 text-xs font-normal text-muted-foreground">{t(applied ? "review.status.applied" : "review.status.proposed")}</span></h3>
     <ReviewProposalView artifact={artifact} />
   </section>;
@@ -109,7 +109,7 @@ export function ReviewProposalCard({ artifact, applied = false }: { artifact: Re
 
 export function ReviewReceiptCard({ receipt }: { receipt: ReviewReceipt }) {
   const { t } = useTranslation("assistant");
-  return <section className="my-3 space-y-3 rounded-lg border bg-card p-4" aria-label={t("review.receipt.title")}>
+  return <section className="kb-surface-inset my-3 space-y-3 p-4" aria-label={t("review.receipt.title")}>
     <h3 className="font-medium">{t("review.receipt.title")}</h3>
     <p className="text-xs text-muted-foreground">{t("review.receipt.verified", { count: receipt.operations.length })}</p>
     <p className="break-all text-xs text-muted-foreground"><time dateTime={receipt.created_at}>{receipt.created_at}</time> · {receipt.id}</p>

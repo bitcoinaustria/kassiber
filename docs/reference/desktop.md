@@ -112,6 +112,21 @@ frosted surface, and dialogs hang from one anchor below the title bar
 (`--kb-dialog-top`, capped by `--kb-dialog-max-h`) instead of centring, so a
 dialog whose content changes size grows downward rather than jumping.
 
+Screens share one layout scale, defined as tokens in `globals.css`. Every page
+renders in the `lib/screen-layout.ts` frame: one gutter (`--kb-page-gutter`)
+and one gap between blocks (`--kb-page-gap`). Corners come in three surface
+tiers, outermost largest: the window tier (`--kb-radius-window`) for the page
+panel, dialogs, the palette and the lock and setup panels; the card tier
+(`Card` or `.kb-surface`) for a panel on a page; the inset tier
+(`.kb-surface-inset`) for a tile inside a card. Controls stay `rounded-md` and
+chips `rounded-full`. The title bar names the page and is its `h1`, so a page
+does not repeat its name or add an eyebrow line. A page shows a title only when
+the title bar does not already say it, such as a settings section or a wallet's
+name, and that title uses `pageTitleClassName`.
+`src/styles/layoutScale.test.ts` fails on bare `rounded` (square, because
+`--radius` is 0), arbitrary radii and shadows, page glass, and hand-rolled
+`rounded-* border bg-card` cards outside a short allowlist.
+
 The command palette (Cmd/Ctrl+K) opens as a launcher: the main pages and
 everyday actions with their shortcuts, before anything is typed. Page shortcuts
 come from the native menu, so the browser preview does not show them. The

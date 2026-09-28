@@ -991,9 +991,9 @@ function TransactionDetailBody({
             </span>
           ) : null}
           <span className="hidden items-center gap-1.5 whitespace-nowrap sm:inline-flex">
-            <kbd className="rounded border bg-muted px-1">⌘S</kbd> {t("sheet.footer.shortcutSave")} ·{" "}
-            <kbd className="rounded border bg-muted px-1">1-5</kbd> {t("sheet.footer.shortcutTabs")} ·{" "}
-            <kbd className="rounded border bg-muted px-1">e</kbd> {t("sheet.footer.shortcutExclude")}
+            <kbd className="rounded-md border bg-muted px-1">⌘S</kbd> {t("sheet.footer.shortcutSave")} ·{" "}
+            <kbd className="rounded-md border bg-muted px-1">1-5</kbd> {t("sheet.footer.shortcutTabs")} ·{" "}
+            <kbd className="rounded-md border bg-muted px-1">e</kbd> {t("sheet.footer.shortcutExclude")}
           </span>
           {saveError ? (
             <span className="basis-full text-destructive sm:basis-auto">

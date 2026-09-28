@@ -69,7 +69,7 @@ export function WatchAction({ query, caseId, output = false, onError }: {
     const options: Rule[] = output ? ["output_spent", "confirmations", "attribution_changed", "findings_changed"] : query?.mode === "path" ? ["connection_supported", "findings_changed"] : ["findings_changed"];
     return <div className="text-xs">
     <Button size="sm" variant="ghost" onClick={() => { setOpen(!open); setPlan(null); }}>{t("watch.action")}</Button>
-    {open && <div className="my-2 flex flex-wrap items-center gap-2 rounded border p-3">
+    {open && <div className="my-2 flex flex-wrap items-center gap-2 rounded-lg border p-3">
       <p className="basis-full text-muted-foreground">{t("watch.localOnly")}</p>
       {!bound && <p className="basis-full">{binding.isFetching ? t("scopeLoading") : binding.isError ? binding.error.message : <Link to="/settings/bitcoin" className="underline">{t("watch.bindBook")}</Link>}</p>}
       {bound && <p className="basis-full text-muted-foreground">{scopedQuery?.chain ? `${scopedQuery.chain} / ${scopedQuery.network}` : t("watch.bookScope", { environment: binding.data?.data?.environment })}</p>}
@@ -123,7 +123,7 @@ export function WatchInbox({ onOpen, onError }: {
     const busy = remove.isPending || configure.isPending || acknowledge.isPending || evaluate.isPending;
     const items = watches.data?.data?.items ?? [];
     const refresh = async () => { await Promise.all([watches.refetch(), events.refetch()]); };
-    return <details className="rounded border">
+    return <details className="rounded-md border">
     <summary className="cursor-pointer px-4 py-3 text-sm font-medium">{t("watch.inbox")} {events.data?.data?.unread_count ? `(${events.data.data.unread_count})` : ""}</summary>
     <div className="space-y-3 px-4 pb-4 text-xs">
       <p className="text-muted-foreground">{t("watch.localOnly")}</p>

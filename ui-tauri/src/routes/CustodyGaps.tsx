@@ -1243,7 +1243,7 @@ export function CustodyGapsContent({ focusGapId, onFocusGap }: { focusGapId?: st
           <CardContent className="flex items-center gap-3 px-4">
             <TriangleAlert className="size-5 text-amber-600" />
             <div>
-              <p className="text-2xl font-semibold">
+              <p className="text-xl font-semibold tracking-tight tabular-nums">
                 {snapshot.summary.needs_review}
               </p>
               <p className="text-xs text-muted-foreground">
@@ -1256,7 +1256,7 @@ export function CustodyGapsContent({ focusGapId, onFocusGap }: { focusGapId?: st
           <CardContent className="flex items-center gap-3 px-4">
             <WalletCards className="size-5 text-muted-foreground" />
             <div>
-              <p className="text-2xl font-semibold">{snapshot.summary.total}</p>
+              <p className="text-xl font-semibold tracking-tight tabular-nums">{snapshot.summary.total}</p>
               <p className="text-xs text-muted-foreground">
                 {t("summary.detected")}
               </p>

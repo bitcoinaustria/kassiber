@@ -698,7 +698,7 @@ export function BookRow({
     0,
   );
   return (
-    <div className="rounded-lg border bg-background p-3">
+    <div className="kb-surface p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">

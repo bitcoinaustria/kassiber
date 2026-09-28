@@ -24,7 +24,7 @@ export function ReportImpactDetails({ impact, observation }: {
   const evidence = (value: Evidence) => value.status === "observed"
     ? t(value.confirmed ? "watch.report.confirmed" : "watch.report.unconfirmed", { height: value.block_height ?? "?" })
     : t(`watch.report.${value.status}`);
-  return <details className="w-full rounded border p-3">
+  return <details className="w-full rounded-lg border p-3">
     <summary className="cursor-pointer font-medium">{t("watch.report.title", { start: impact.period_start_year, end: impact.period_end_year })} · {t(`watch.report.${impact.report_state}`)}</summary>
     <div className="mt-2 space-y-2">
       <p>{t("watch.report.evidence", { before: evidence(observation.before), after: evidence(observation.after) })}</p>

@@ -23,7 +23,7 @@ export function DataSettingsPanel({
           <FileInput className="size-4 text-muted-foreground" aria-hidden="true" />
           <h3 className="text-sm font-semibold">{t("data.importHeading")}</h3>
         </div>
-        <div className="flex flex-col gap-3 rounded-md border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="max-w-prose text-sm text-muted-foreground">
             {t("data.importDescription")}
           </p>
@@ -99,7 +99,7 @@ export function DataStorageSettingsPanel({
     <div className="space-y-6">
       <DataSettingsPanel status={status} onOpenImports={onOpenImports} />
 
-      <section className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 p-4">
+      <section className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
         <div className="space-y-1">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-destructive">
             <AlertTriangle className="size-4" aria-hidden="true" />
@@ -109,7 +109,7 @@ export function DataStorageSettingsPanel({
             {t("data.dangerDescription")}
           </p>
         </div>
-        <div className="flex flex-col gap-3 rounded-md border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-lg border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 space-y-1">
             <p className="text-sm font-medium">{t("data.resetWelcomeTitle")}</p>
             <p className="text-sm text-muted-foreground">
@@ -125,7 +125,7 @@ export function DataStorageSettingsPanel({
             {t("data.resetWelcomeButton")}
           </Button>
         </div>
-        <div className="flex flex-col gap-3 rounded-md border border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 space-y-1">
             <p className="text-sm font-medium">{t("data.resetBookTitle")}</p>
             <p className="text-sm text-muted-foreground">
@@ -143,7 +143,7 @@ export function DataStorageSettingsPanel({
             {t("data.resetBookButton")}
           </Button>
         </div>
-        <div className="flex flex-col gap-3 rounded-md border border-destructive/30 bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 space-y-1">
             <p className="text-sm font-medium text-destructive">
               {t("data.deleteBooksTitle")}
@@ -163,7 +163,7 @@ export function DataStorageSettingsPanel({
           </Button>
         </div>
         {resetRegtestAvailable ? (
-          <div className="flex flex-col gap-3 rounded-md border border-destructive/30 bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0 space-y-1">
               <p className="text-sm font-medium text-destructive">
                 {t("data.resetRegtestTitle")}

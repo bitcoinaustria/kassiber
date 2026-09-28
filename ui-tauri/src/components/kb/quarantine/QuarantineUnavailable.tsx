@@ -10,7 +10,7 @@ export function QuarantineUnavailable({ message }: QuarantineUnavailableProps) {
   const { t } = useTranslation("journals");
   return (
     <div className={screenPanelClassName}>
-      <div className="rounded-lg border bg-card p-4">
+      <div className="kb-surface p-(--kb-card-padding)">
         <h2 className="text-base font-semibold">
           {t("quarantine.unavailable.title")}
         </h2>

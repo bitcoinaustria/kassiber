@@ -128,7 +128,7 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                               i18nKey="classify.tagsFocusHint"
                               ns="transactions"
                               components={[
-                                <kbd className="rounded border bg-muted px-1" />,
+                                <kbd className="rounded-md border bg-muted px-1" />,
                               ]}
                             />
                           </span>

@@ -11,7 +11,7 @@ interface MetricCardProps {
 
 export function MetricCard({ label, value, detail, icon }: MetricCardProps) {
   return (
-    <Card className="gap-2.5 rounded-xl py-4">
+    <Card className="gap-2.5 py-4">
       <CardContent className="space-y-2 px-4">
         <div className="flex items-center gap-2 text-muted-foreground">
           {icon}

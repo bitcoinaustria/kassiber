@@ -208,7 +208,7 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                               {t("tax.excluded")}
                               <DirtyDot active={dirtyExcluded} />
                               <span className="text-xs font-normal text-muted-foreground">
-                                (<kbd className="rounded border bg-muted px-1">e</kbd>)
+                                (<kbd className="rounded-md border bg-muted px-1">e</kbd>)
                               </span>
                             </Label>
                             <Switch

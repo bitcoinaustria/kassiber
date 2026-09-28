@@ -71,7 +71,7 @@ export function ChatHistorySettingsCard() {
         : t("chatHistory.effectiveNotStored");
 
   return (
-    <div className="space-y-3 rounded-md border bg-background p-4">
+    <div className="space-y-3 rounded-lg border bg-background p-4">
       <div className="flex items-start gap-3">
         <MessagesSquare
           className="mt-0.5 size-4 shrink-0 text-muted-foreground"

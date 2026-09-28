@@ -125,7 +125,7 @@ function ToolInput({
       <p className="mb-0.5 text-3xs font-medium uppercase text-muted-foreground">
         {label}
       </p>
-      <pre className="max-h-28 max-w-full overflow-auto whitespace-pre-wrap break-words rounded bg-muted/55 px-1.5 py-0.5 font-mono text-3xs text-muted-foreground">
+      <pre className="max-h-28 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/55 px-1.5 py-0.5 font-mono text-3xs text-muted-foreground">
         {JSON.stringify(input, null, 2)}
       </pre>
     </section>
@@ -156,13 +156,13 @@ function ToolOutput({
         {error ? "Error" : label}
       </p>
       {isPlainText ? (
-        <p className="rounded bg-muted/55 px-1.5 py-0.5 text-xs leading-snug text-muted-foreground">
+        <p className="rounded-md bg-muted/55 px-1.5 py-0.5 text-xs leading-snug text-muted-foreground">
           {formatted}
         </p>
       ) : (
         <pre
           className={cn(
-            "max-h-32 overflow-auto whitespace-pre-wrap break-words rounded px-1.5 py-0.5 font-mono text-3xs",
+            "max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md px-1.5 py-0.5 font-mono text-3xs",
             error
               ? "max-w-full bg-destructive/10 text-destructive"
               : "max-w-full bg-muted/55 text-muted-foreground",

@@ -10,7 +10,6 @@ import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { Button } from "@/components/ui/button";
 import { useDaemon } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
-import { screenPanelClassName } from "@/lib/screen-layout";
 import { formatSats } from "@/lib/localeFormat";
 import {
   reportableEntryMetricFilterIds,
@@ -81,17 +80,15 @@ export function JournalReportableEntries() {
 
   if (isError || data?.error || !data?.data) {
     return (
-      <div className={screenPanelClassName}>
-        <div className="rounded-xl border bg-card p-4">
-          <h2 className="text-base font-semibold">
-            {t("reportable.unavailable.title")}
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {error instanceof Error
-              ? error.message
-              : data?.error?.message ?? t("reportable.unavailable.fallback")}
-          </p>
-        </div>
+      <div className="kb-surface p-(--kb-card-padding)">
+        <h2 className="text-base font-semibold">
+          {t("reportable.unavailable.title")}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {error instanceof Error
+            ? error.message
+            : data?.error?.message ?? t("reportable.unavailable.fallback")}
+        </p>
       </div>
     );
   }

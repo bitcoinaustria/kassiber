@@ -39,7 +39,7 @@ export const BooksHealthPanel = ({
   const needsJournals = Boolean(snapshot.status?.needsJournals);
 
   return (
-    <div className={cn("overflow-hidden rounded-lg border bg-card", className)}>
+    <div className={cn("kb-surface overflow-hidden", className)}>
       <div className="flex items-center justify-between gap-3 px-3 pt-3 sm:px-4">
         <div className="flex items-center gap-2">
           <span

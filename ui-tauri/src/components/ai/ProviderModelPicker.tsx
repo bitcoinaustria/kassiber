@@ -594,7 +594,7 @@ export function ProviderModelPicker({
                         aria-pressed={!localOnly}
                         onClick={() => setLocalOnly(false)}
                         className={cn(
-                          "rounded px-1.5 py-1 text-muted-foreground",
+                          "rounded-md px-1.5 py-1 text-muted-foreground",
                           !localOnly && "bg-background text-foreground shadow-sm",
                         )}
                       >
@@ -605,7 +605,7 @@ export function ProviderModelPicker({
                         aria-pressed={localOnly}
                         onClick={() => setLocalOnly(true)}
                         className={cn(
-                          "rounded px-1.5 py-1 text-muted-foreground",
+                          "rounded-md px-1.5 py-1 text-muted-foreground",
                           localOnly && "bg-background text-foreground shadow-sm",
                         )}
                       >

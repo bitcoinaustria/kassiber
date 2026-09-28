@@ -24,6 +24,7 @@ import {
   Wallet,
 } from "lucide-react";
 
+import { MetricCard } from "@/components/kb/MetricCard";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { Button } from "@/components/ui/button";
@@ -701,18 +702,12 @@ interface SummaryCardProps {
 
 function SummaryCard({ label, value, detail, icon: Icon }: SummaryCardProps) {
   return (
-    <Card className="gap-3 py-4">
-      <CardContent className="flex items-center justify-between px-4">
-        <div className="space-y-1">
-          <p className="text-sm text-muted-foreground">{label}</p>
-          <p className="text-2xl font-semibold tracking-tight">{value}</p>
-          <p className="text-xs text-muted-foreground">{detail}</p>
-        </div>
-        <div className="flex size-10 items-center justify-center rounded-md border bg-muted/40">
-          <Icon className="size-5 text-muted-foreground" aria-hidden="true" />
-        </div>
-      </CardContent>
-    </Card>
+    <MetricCard
+      label={label}
+      value={value}
+      detail={detail}
+      icon={<Icon className="size-4" aria-hidden="true" />}
+    />
   );
 }
 
@@ -812,7 +807,7 @@ function ProfileCard({
   return (
     <div
       className={cn(
-        "relative flex min-h-[178px] flex-col justify-between rounded-xl border p-4 text-left transition-colors hover:bg-muted/35",
+        "kb-surface-inset relative flex min-h-[178px] flex-col justify-between p-4 text-left transition-colors hover:bg-muted/35",
         isActive ? "border-foreground bg-muted/45" : "bg-background",
       )}
     >

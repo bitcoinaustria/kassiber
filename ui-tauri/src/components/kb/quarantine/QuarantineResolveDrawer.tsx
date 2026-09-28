@@ -120,7 +120,7 @@ function ResolveStepCard({
   return (
     <section
       className={cn(
-        "rounded-lg border bg-card p-4",
+        "kb-surface-inset p-4",
         step.tone === "alert" && "border-red-500/25 bg-red-500/[0.04]",
         step.tone === "warning" && "border-amber-500/25 bg-amber-500/[0.05]",
         step.tone === "good" && "border-emerald-500/25 bg-emerald-500/[0.04]",

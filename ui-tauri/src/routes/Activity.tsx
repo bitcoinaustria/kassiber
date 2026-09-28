@@ -131,7 +131,7 @@ export function Activity() {
             {t("activity.provenance")}
           </p>
           {staleCount > 0 ? (
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
               <CalendarClock className="size-4" aria-hidden="true" />
               <span>{t("activity.staleEdits", { count: staleCount })}</span>
               <Button
@@ -149,7 +149,7 @@ export function Activity() {
           ) : null}
         </header>
 
-        <section className="grid gap-3 rounded-md border bg-card p-3">
+        <section className="kb-surface grid gap-3 p-3">
           <div className="flex items-center gap-2 text-sm font-medium">
             <SlidersHorizontal className="size-4 text-muted-foreground" aria-hidden="true" />
             {t("activity.filters")}

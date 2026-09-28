@@ -1072,13 +1072,13 @@ export function SyncBackendSettingsModal({
       }}
     >
       <DialogContent className="w-full max-w-[760px] overflow-hidden p-0 sm:max-w-[760px]">
-        <DialogHeader className="border-b px-6 py-5">
+        <DialogHeader className="border-b px-(--kb-card-padding) py-4 pr-12">
           <DialogTitle>{modalCopy.title}</DialogTitle>
           <DialogDescription>{modalCopy.description}</DialogDescription>
         </DialogHeader>
 
         <ScrollArea className="max-h-[calc(88vh-150px)]">
-          <div className="space-y-5 p-6">
+          <div className="space-y-5 p-(--kb-card-padding)">
             {showTypePicker ? (
               <section className="space-y-3">
                 <div>
@@ -1303,13 +1303,13 @@ export function SyncBackendSettingsModal({
             </section>
 
             {type.net !== "LN" && selectedKindIsExplorerApi ? (
-              <div className="rounded-md border border-sky-500/25 bg-sky-500/5 p-3 text-xs text-muted-foreground">
+              <div className="rounded-lg border border-sky-500/25 bg-sky-500/5 p-3 text-xs text-muted-foreground">
                 {t("backendModal.explorerApiNote")}
               </div>
             ) : null}
 
             {type.net === "BTC" ? (
-              <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
+              <label className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm">
                 <span>
                   <span className="block font-medium">
                     {t("backendModal.silentPaymentsLabel")}
@@ -1330,7 +1330,7 @@ export function SyncBackendSettingsModal({
             ) : null}
 
             {type.net === "BTC" && silentPayments ? (
-              <section className="space-y-3 rounded-md border p-3">
+              <section className="space-y-3 rounded-lg border p-3">
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   {t("backendModal.silentPaymentsScannerConfigHint")}
                 </p>
@@ -1372,10 +1372,10 @@ export function SyncBackendSettingsModal({
             ) : null}
 
             {type.net !== "LN" ? (
-              <section className="space-y-3 rounded-md border p-3">
+              <section className="space-y-3 rounded-lg border p-3">
                 <div
                   className={cn(
-                    "flex items-start gap-2 rounded-md border p-3 text-xs",
+                    "flex items-start gap-2 rounded-lg border p-3 text-xs",
                     connectionTrust.className,
                   )}
                 >
@@ -1533,7 +1533,7 @@ export function SyncBackendSettingsModal({
                 <section className="grid gap-3 border-t p-3 sm:grid-cols-2">
                   {showElectrumEndpointParts && backendSource === "custom" && (
                     <>
-                      <label className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 text-sm">
+                      <label className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3 text-sm">
                         <span>
                           <span className="block font-medium">
                             {t("backendModal.useSslLabel")}
@@ -1562,7 +1562,7 @@ export function SyncBackendSettingsModal({
                           }}
                         />
                       </label>
-                      <label className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 text-sm">
+                      <label className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3 text-sm">
                         <span>
                           <span className="block font-medium">
                             {t("backendModal.trustSelfSignedLabel")}
@@ -1606,7 +1606,7 @@ export function SyncBackendSettingsModal({
                   )}
                   {showHttpTlsSettings && (
                     <>
-                      <label className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 text-sm sm:col-span-2">
+                      <label className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3 text-sm sm:col-span-2">
                         <span>
                           <span className="block font-medium">
                             {t("backendModal.trustSelfSignedLabel")}
@@ -1650,7 +1650,7 @@ export function SyncBackendSettingsModal({
                   {proxyCapable && (
                     <>
                       {onionEndpoint ? (
-                        <div className="rounded-md border border-sky-500/25 bg-sky-500/10 p-3 text-xs leading-relaxed text-sky-800 sm:col-span-2 dark:text-sky-200">
+                        <div className="rounded-lg border border-sky-500/25 bg-sky-500/10 p-3 text-xs leading-relaxed text-sky-800 sm:col-span-2 dark:text-sky-200">
                           <div className="text-sm font-medium">
                             {t("backendModal.onionDetectedTitle")}
                           </div>
@@ -1659,7 +1659,7 @@ export function SyncBackendSettingsModal({
                           </p>
                         </div>
                       ) : null}
-                      <label className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 text-sm sm:col-span-2">
+                      <label className="flex items-center justify-between gap-3 rounded-lg border bg-background p-3 text-sm sm:col-span-2">
                         <span>
                           <span className="block font-medium">
                             {t("backendModal.useProxyLabel")}
@@ -1719,7 +1719,7 @@ export function SyncBackendSettingsModal({
 
             {isLnd && (
               <section className="grid gap-3 sm:grid-cols-2">
-                <label className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm sm:col-span-2">
+                <label className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm sm:col-span-2">
                   <span>
                     <span className="block font-medium">
                       {t("backendModal.trustTlsLabel")}
@@ -1835,7 +1835,7 @@ export function SyncBackendSettingsModal({
               </section>
             )}
 
-            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm">
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
@@ -1876,13 +1876,13 @@ export function SyncBackendSettingsModal({
                 readOnly
                 aria-label={t("backendModal.testLogAria")}
                 value={testLog}
-                className="mt-3 min-h-32 w-full resize-none rounded-md border bg-background p-3 font-mono text-xs leading-5"
+                className="mt-3 min-h-32 w-full resize-none rounded-lg border bg-background p-3 font-mono text-xs leading-5"
               />
             </div>
           </div>
         </ScrollArea>
 
-        <DialogFooter className="flex-row items-center justify-between gap-3 border-t px-6 py-4 sm:justify-between">
+        <DialogFooter className="flex-row items-center justify-between gap-3 border-t px-(--kb-card-padding) py-3 sm:justify-between">
           <div>
             {initial && onDelete ? (
               <Button

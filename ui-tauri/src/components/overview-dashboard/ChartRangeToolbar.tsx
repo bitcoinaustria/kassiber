@@ -128,7 +128,7 @@ export function ChartRangeToolbar({
     outgoingMarkerMinimumBtc === DEFAULT_OUTGOING_MARKER_MIN_BTC;
   const chipClass = (active: boolean) =>
     cn(
-      "rounded px-1.5 py-0.5 text-xs font-medium tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      "rounded-md px-1.5 py-0.5 text-xs font-medium tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       active
         ? "bg-muted text-foreground"
         : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
