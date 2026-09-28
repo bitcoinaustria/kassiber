@@ -153,6 +153,16 @@ def verify_unlock(conn: Any) -> None:
     try:
         conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
     except _database_error_classes() as exc:
+        if _is_lock_contention(exc):
+            # Another connection holds a lock: the key may well be right.
+            # Reporting this as a wrong passphrase would feed auth backoff and
+            # tell the user (or an agent) to re-enter or re-enroll it.
+            raise AppError(
+                "the encrypted database is busy in another process",
+                code="database_busy",
+                hint="Retry when the other Kassiber process finishes its write.",
+                retryable=True,
+            ) from None
         raise AppError(
             "wrong passphrase or unsupported database format",
             code="unlock_failed",
@@ -160,6 +170,20 @@ def verify_unlock(conn: Any) -> None:
             retryable=True,
             details={"driver_error": str(exc)},
         ) from None
+
+
+_LOCK_CONTENTION_CODES = frozenset({5, 6})  # SQLITE_BUSY, SQLITE_LOCKED
+# Matches db.DB_BUSY_TIMEOUT_SECONDS (not imported: db imports this module).
+UNLOCK_BUSY_TIMEOUT_SECONDS = 30.0
+
+
+def _is_lock_contention(exc: BaseException) -> bool:
+    code = getattr(exc, "sqlite_errorcode", None)
+    if isinstance(code, int):
+        return (code & 0xFF) in _LOCK_CONTENTION_CODES
+    # sqlcipher3 exceptions carry no error code; SQLite's messages are stable.
+    text = str(exc).lower()
+    return "database is locked" in text or "database table is locked" in text
 
 
 @contextmanager
@@ -203,7 +227,11 @@ def open_encrypted(
     """
 
     sqlcipher = require_sqlcipher()
-    conn = sqlcipher.connect(str(path), detect_types=detect_types)
+    conn = sqlcipher.connect(
+        str(path),
+        detect_types=detect_types,
+        timeout=UNLOCK_BUSY_TIMEOUT_SECONDS,
+    )
     try:
         apply_keying(
             conn,

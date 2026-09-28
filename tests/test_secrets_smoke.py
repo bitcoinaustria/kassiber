@@ -1270,6 +1270,83 @@ class CredentialMigrationTests(unittest.TestCase):
                 Path(result["backup_path"]).read_text(encoding="utf-8"),
             )
 
+    def test_migrate_credentials_command_lifts_token_for_existing_backend(self):
+        # The helper test above passes an `open_db` connection. The command
+        # opens SQLCipher itself, so pin the real command path as well.
+        from kassiber.backends import get_db_backend
+        from kassiber.secrets.cli import cmd_secrets_migrate_credentials
+
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            seed = open_db(str(data_root))
+            seed.close()
+            migrate_plaintext_to_encrypted(
+                data_root / "kassiber.sqlite3", "tracer-pass-12345"
+            )
+            self._seed_backend(
+                data_root, "btcpay", "btcpay", "https://btcpay.example.com"
+            )
+            env_file = Path(root) / "backends.env"
+            env_file.write_text(
+                "KASSIBER_BACKEND_BTCPAY_KIND=btcpay\n"
+                "KASSIBER_BACKEND_BTCPAY_URL=https://btcpay.example.com\n"
+                "KASSIBER_BACKEND_BTCPAY_TOKEN=tok-cli-456\n",
+                encoding="utf-8",
+            )
+
+            read_fd, write_fd = os.pipe()
+            os.write(write_fd, b"tracer-pass-12345")
+            os.close(write_fd)
+            try:
+                result = cmd_secrets_migrate_credentials(
+                    SimpleNamespace(
+                        data_root=str(data_root),
+                        env_file=str(env_file),
+                        dry_run=False,
+                        db_passphrase_fd=read_fd,
+                        non_interactive=True,
+                    )
+                )
+            finally:
+                with suppress(OSError):
+                    os.close(read_fd)
+
+            self.assertEqual(len(result["migrated"]), 1)
+            self.assertTrue(result["rewritten"])
+            self.assertNotIn("TOKEN", env_file.read_text(encoding="utf-8"))
+            conn = open_db(str(data_root), passphrase="tracer-pass-12345")
+            try:
+                self.assertEqual(get_db_backend(conn, "btcpay")["token"], "tok-cli-456")
+            finally:
+                conn.close()
+
+    def test_lock_contention_is_not_reported_as_a_wrong_passphrase(self):
+        from kassiber.secrets import sqlcipher as sqlcipher_module
+
+        if not sqlcipher_available():
+            self.skipTest("SQLCipher is required")
+        with tempfile.TemporaryDirectory() as root:
+            data_root = Path(root) / "data"
+            data_root.mkdir()
+            seed = open_db(str(data_root))
+            seed.close()
+            database = data_root / "kassiber.sqlite3"
+            migrate_plaintext_to_encrypted(database, "tracer-pass-12345")
+            holder = open_encrypted(database, "tracer-pass-12345")
+            try:
+                holder.execute("BEGIN EXCLUSIVE")
+                with patch.object(sqlcipher_module, "UNLOCK_BUSY_TIMEOUT_SECONDS", 0.05):
+                    with self.assertRaises(AppError) as busy:
+                        open_encrypted(database, "tracer-pass-12345", quiet_unlock_errors=True)
+            finally:
+                holder.rollback()
+                holder.close()
+            self.assertEqual(busy.exception.code, "database_busy")
+            self.assertTrue(busy.exception.retryable)
+            reopened = open_encrypted(database, "tracer-pass-12345")
+            reopened.close()
+
     def test_migration_skips_unknown_backend(self):
         from kassiber.secrets.credentials import migrate_dotenv_credentials
 

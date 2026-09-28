@@ -38,7 +38,7 @@ from ..projects import (
 from ..secrets.credentials import scan_dotenv_for_secrets
 from ..secrets.prompt import prompt_passphrase, read_passphrase_from_fd
 from ..secrets.sqlcipher import looks_like_plaintext_sqlite
-from ..operator.modes import remembered_unlock_allowed
+from ..operator.modes import effective_unlock_mode, remembered_unlock_allowed
 from ..secrets.unlock_store import (
     load_remembered_passphrase,
     remembered_unlock_database_identity,
@@ -252,11 +252,27 @@ def _open_db_with_resolved_passphrase(
             "database authorization requires local interaction",
             code="interaction_required",
             hint=(
-                "Run the command in a controlling terminal or pass the database "
-                "passphrase through --db-passphrase-fd."
+                "The database is encrypted. For agent or scripted work, ask the "
+                "user to run `kassiber operator unlock` in their own terminal "
+                "(same --project/--data-root selection), then retry; never ask "
+                "for the passphrase itself. A controlling process that already "
+                "holds the secret may pass --db-passphrase-fd instead."
             ),
+            details={
+                "reason": "database_passphrase",
+                "unlock_mode": _unlock_mode_for_guidance(data_root),
+                "user_command": "kassiber operator unlock",
+            },
             retryable=False,
         ) from None
+
+
+def _unlock_mode_for_guidance(data_root) -> str | None:
+    # Guidance only; the effective mode was already enforced before open.
+    try:
+        return effective_unlock_mode(data_root)
+    except (AppError, OSError, ValueError):
+        return None
 
 
 def resolve_db_passphrase_for_bypass(
