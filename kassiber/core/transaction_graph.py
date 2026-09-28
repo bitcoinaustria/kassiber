@@ -39,7 +39,13 @@ from .ownership_transfers import (
     _norm_chain_network,
     _parse_onchain_tx,
 )
-from .onchain import output_address, output_script, output_value_sats
+from .onchain import (
+    merge_ownership_txs,
+    output_address,
+    output_script,
+    output_value_sats,
+    parse_ownership_tx,
+)
 from .repo import current_context_snapshot
 from .sync import normalize_backend_kind
 from .sync_backends import (
@@ -614,7 +620,88 @@ def _local_wallet_outpoint_amounts(
         amount_msat = _int_or_none(_row_get(amount_row, "amount"))
         if outpoint is not None and amount_msat is not None and amount_msat >= 0:
             amounts[outpoint.lower()] = amount_msat // SATS_TO_MSAT
+    if liquid_axis and txid:
+        # The inventory only holds outputs a sync saw unspent. Spent inputs and
+        # another owned wallet's output come from the stored observations.
+        observed, conflicted = _observed_liquid_leg_sats(
+            conn,
+            profile_id,
+            txid,
+            wanted=wanted,
+            policy_asset_id=policy_asset_id,
+            axis_asset=axis_asset,
+        )
+        for outpoint, value_sats in observed.items():
+            amounts.setdefault(outpoint, value_sats)
+        for outpoint in conflicted:
+            amounts.pop(outpoint, None)
     return amounts
+
+
+def _observed_liquid_leg_sats(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    txid: str,
+    *,
+    wanted: tuple[str, str],
+    policy_asset_id: str | None,
+    axis_asset: str | None,
+) -> tuple[dict[str, int], set[str]]:
+    """Leg values this book's own Liquid observations recorded for one tx.
+
+    Each Liquid wallet persists the legs it could unblind with its own keys
+    (``role: owned``) and explicit public values, and keeps them after the
+    output is spent. Merging every local row of the transaction — the merge
+    ownership review uses — fills legs one wallet cannot see from another
+    owned wallet, without any blinding key. A leg the observations disagree
+    on is returned as conflicted so it stays hidden rather than picking a side.
+    """
+    txid = txid.lower()
+    parsed = []
+    for sibling in conn.execute(
+        """
+        SELECT raw_json FROM transactions
+        WHERE profile_id = ? AND external_id IN (?, ?)
+        """,
+        (profile_id, txid, txid.upper()),
+    ).fetchall():
+        observation = parse_ownership_tx(_row_get(sibling, "raw_json"))
+        if observation is None or str(observation.get("txid") or "").lower() != txid:
+            continue
+        if _norm_chain_network(observation.get("chain"), observation.get("network")) != wanted:
+            continue
+        parsed.append(observation)
+    merged = merge_ownership_txs(parsed)
+    if merged is None:
+        return {}, set()
+    conflicted_labels = {
+        label.rsplit(".", 1)[0] for label in merged.get("evidence_conflicts") or ()
+    }
+    legs = [
+        (f"input:{leg.get('outpoint')}", str(leg.get("outpoint") or "").lower(), leg)
+        for leg in merged["inputs"]
+    ] + [
+        (f"output:{leg.get('n')}", f"{txid}:{leg.get('n')}", leg)
+        for leg in merged["outputs"]
+    ]
+    amounts: dict[str, int] = {}
+    conflicted: set[str] = set()
+    for label, outpoint, leg in legs:
+        value_sats = _int_or_none(leg.get("value_sats"))
+        prev_txid, separator, vout = outpoint.rpartition(":")
+        if not (separator and _looks_like_txid(prev_txid) and vout.isdigit()):
+            continue
+        if label in conflicted_labels:
+            conflicted.add(outpoint)
+            continue
+        if (
+            value_sats is None
+            or value_sats < 0
+            or not _same_asset(_leg_asset(leg, policy_asset_id), axis_asset)
+        ):
+            continue
+        amounts[outpoint] = value_sats
+    return amounts, conflicted
 
 
 def _apply_foreign_asset(
@@ -2993,8 +3080,11 @@ def _is_liquid_fee_output(entry: Mapping[str, Any]) -> bool:
     OP_RETURN keeps its ``6a`` script, so it is excluded). Only called for
     confidential/Liquid transactions, so Bitcoin outputs never reach here.
     """
-    explicit_type = _string_or_none(entry.get("scriptpubkey_type") or entry.get("type"))
+    explicit_type = _string_or_none(
+        entry.get("scriptpubkey_type") or entry.get("type") or entry.get("role")
+    )
     if explicit_type and explicit_type.lower() == "fee":
+        # Liquid sync stores the fee output as ``role: fee`` with ``value_sats``.
         return True
     if _confidential_leg(entry):
         return False
@@ -3002,7 +3092,7 @@ def _is_liquid_fee_output(entry: Mapping[str, Any]) -> bool:
         return False
     if _string_or_none(entry.get("scriptpubkey") or entry.get("script_hex")):
         return False
-    return entry.get("value") is not None
+    return output_value_sats(entry) is not None
 
 
 def _leg_asset(entry: Mapping[str, Any], policy_asset_id: str | None = None) -> str | None:

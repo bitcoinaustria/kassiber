@@ -779,6 +779,138 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertNotIn("asset", payload["inputs"][0])
         self.assertEqual(payload["inputs"][1]["valueState"], "other_asset")
 
+    def _liquid_wallets(self):
+        for wallet_id in ("wallet-a", "wallet-b"):
+            self.conn.execute(
+                "UPDATE wallets SET config_json = ? WHERE id = ?",
+                (json.dumps({"chain": "liquid", "network": "liquidv1"}), wallet_id),
+            )
+
+    @staticmethod
+    def _lwk_raw(txid, vin, vout):
+        return {
+            "txid": txid,
+            "chain": "liquid",
+            "network": "liquidv1",
+            "observer": "lwk",
+            "ownership_graph_version": 1,
+            "vin": vin,
+            "vout": vout,
+        }
+
+    def test_liquid_graph_values_own_legs_from_stored_observations(self):
+        # A synced Liquid row stores the legs its wallet unblinded, and keeps
+        # them after the input is spent; the UTXO inventory no longer has it.
+        txid = "b1" * 32
+        policy = "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d"
+        self._liquid_wallets()
+        raw = self._lwk_raw(
+            txid,
+            [
+                {
+                    "txid": "aa" * 32,
+                    "vout": 0,
+                    "prevout": {"scriptpubkey": SCRIPT_A, "value_sats": 600_000, "asset_id": policy, "role": "owned"},
+                },
+                {"txid": "ab" * 32, "vout": 1},
+            ],
+            [
+                {"n": 0, "scriptpubkey": SCRIPT_B},
+                {"n": 1, "scriptpubkey": SCRIPT_A, "value_sats": 150_000, "asset_id": policy, "role": "owned"},
+                {"n": 2, "scriptpubkey": "", "value_sats": 40, "asset_id": policy, "role": "fee"},
+            ],
+        )
+        self._tx("lwk-send", "wallet-a", "outbound", 450_000_000, txid, raw, asset="LBTC")
+
+        payload = self._graph("lwk-send")
+
+        inputs = {node["id"]: node for node in payload["inputs"]}
+        outputs = {node["id"]: node for node in payload["outputs"]}
+        self.assertEqual(inputs["in-0"]["valueSats"], 600_000)
+        self.assertEqual(inputs["in-0"]["valueState"], "known")
+        self.assertEqual(inputs["in-1"]["valueState"], "confidential")
+        self.assertEqual(outputs["out-1"]["valueSats"], 150_000)
+        self.assertEqual(outputs["out-0"]["valueState"], "confidential")
+        # The fee output is the fee, not a third confidential output strand.
+        self.assertNotIn("out-2", outputs)
+        self.assertEqual(payload["fee"]["valueSats"], 40)
+        self.assertEqual(payload["supportLevel"], "partial")
+
+    def test_liquid_graph_fills_legs_from_another_owned_wallet(self):
+        txid = "b2" * 32
+        policy = "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d"
+        self._liquid_wallets()
+        vin = [
+            {
+                "txid": "ac" * 32,
+                "vout": 0,
+                "prevout": {"scriptpubkey": SCRIPT_A, "value_sats": 600_000, "asset_id": policy, "role": "owned"},
+            }
+        ]
+        fee = {"n": 1, "scriptpubkey": "", "value_sats": 40, "asset_id": policy, "role": "fee"}
+        self._tx(
+            "self-send",
+            "wallet-a",
+            "outbound",
+            599_960_000,
+            txid,
+            self._lwk_raw(txid, vin, [{"n": 0, "scriptpubkey": SCRIPT_B}, fee]),
+            asset="LBTC",
+        )
+        self._tx(
+            "self-receive",
+            "wallet-b",
+            "inbound",
+            599_960_000,
+            txid,
+            self._lwk_raw(
+                txid,
+                [{"txid": "ac" * 32, "vout": 0}],
+                [
+                    {"n": 0, "scriptpubkey": SCRIPT_B, "value_sats": 599_960, "asset_id": policy, "role": "owned"},
+                    fee,
+                ],
+            ),
+            asset="LBTC",
+        )
+
+        payload = self._graph("self-send")
+
+        self.assertEqual(payload["outputs"][0]["valueSats"], 599_960)
+        self.assertEqual(payload["inputs"][0]["valueSats"], 600_000)
+        self.assertEqual(payload["supportLevel"], "full")
+
+    def test_liquid_graph_keeps_conflicting_observations_confidential(self):
+        txid = "b3" * 32
+        policy = "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d"
+        self._liquid_wallets()
+        vin = [{"txid": "ad" * 32, "vout": 0}]
+        for tx_id, wallet_id, value in (("seen-a", "wallet-a", 500_000), ("seen-b", "wallet-b", 400_000)):
+            self._tx(
+                tx_id,
+                wallet_id,
+                "inbound",
+                value * 1000,
+                txid,
+                self._lwk_raw(
+                    txid,
+                    vin,
+                    [{"n": 0, "scriptpubkey": SCRIPT_B, "value_sats": value, "asset_id": policy, "role": "owned"}],
+                ),
+                asset="LBTC",
+            )
+
+        # Even the current UTXO inventory does not settle which one is right.
+        self._utxo(
+            "wallet-a", ADDR_B, txid, 0, amount=500_000,
+            chain="liquid", network="liquidv1", asset="LBTC",
+        )
+
+        output = self._graph("seen-a")["outputs"][0]
+
+        self.assertIsNone(output.get("valueSats"))
+        self.assertEqual(output["valueState"], "confidential")
+
     def test_outputs_carry_a_local_spend_reference(self):
         # Purely local: another row in the profile spends this output, so the panel
         # can offer an internal jump without any lookup.
