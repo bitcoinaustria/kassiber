@@ -109,7 +109,11 @@ tagged `ownership_derived` in the transfer audit (its journal entry reads
    never transaction identity. A single outbound fanning to ≥2 recorded
    destinations is decomposed into per-leg moves. Multi-source consolidations
    and any group whose amounts don't fully conserve (a destination wasn't
-   synced) are left to the `owned_fanout_unresolved` quarantine.
+   synced) are left to the `owned_fanout_unresolved` quarantine. The custody
+   interpreter applies that hold to the whole group before arbitration, so no
+   leg books as a disposal or a fresh acquisition. A clean one-outbound,
+   one-inbound transfer is never held this way; its unmatched remainder stays a
+   presumed external disposal.
 
 **Scope.** Graph-based ownership derivation covers Bitcoin and sufficiently
 valued local Liquid evidence. A Liquid leg that remains confidential or has
@@ -248,12 +252,21 @@ Quarantine causes typically include:
 - missing cost basis
 - insufficient lots
 - ambiguous or unsupported tax semantics
-- `owned_fanout_unresolved` — a fan-out / consolidation across owned wallets that
-  no derivation pass could resolve (e.g. a destination wasn't synced)
-- `unscoped_transfer_review` — an unmatched same-import/provider group has no
-  canonical Bitcoin `(chain, network, txid)` scope. Import labels alone cannot
-  carry basis; connect the missing wallet evidence or resolve the complete
-  custody component explicitly.
+- `owned_fanout_unresolved` — one canonical `(chain, network, txid, asset)`
+  moves coins between owned wallets with more than one leg on either side
+  (fan-out, consolidation, N:M), and no derivation pass or reviewed component
+  resolved every positive leg (e.g. a destination wasn't synced, or several
+  sources lack a readable graph). Every leg of the group is held. When a leg
+  carries a readable graph, the address-ownership deriver remains the authority
+  and flags what it cannot prove; the group is then held only when some legs
+  were resolved and others were not, so an unsupported same-`txid` receipt
+  cannot hold a graph-proven external payment.
+- `unscoped_transfer_review` — outbound and inbound rows in different own
+  wallets share a non-blank import/provider id but have no canonical Bitcoin
+  `(chain, network, txid)` scope, and no pair or component covers them. Import
+  labels alone cannot carry basis, so the rows are held instead of booking a
+  disposal plus a fresh acquisition; connect the missing wallet evidence or
+  pair/resolve the custody component explicitly.
 - `ownership_transfer_*` — the address-ownership deriver proved a self-transfer
   but could not split it safely; review and pair manually, sync the destination,
   or review the consolidation:
@@ -266,14 +279,25 @@ Quarantine causes typically include:
   - `_ambiguous_output` — an output is owned by two different wallets
   - `_destination_missing_ref` — the destination wallet has no account ref
 - `pending_onchain_confirmation` — a chain sync payload explicitly reports the
-  transaction as mempool/unconfirmed. It is held out of tax booking until a
-  synced leg proves confirmation; graphless CSV/provider rows are unaffected.
+  transaction as mempool/unconfirmed. It is held out of tax booking, and out of
+  verified custody movements, until a synced leg proves confirmation; graphless
+  CSV/provider rows are unaffected. The other endpoint of a candidate movement
+  recorded under a different transaction (for example the funding leg of an
+  HTLC route whose claim is pending) is held as
+  `transfer_pair_dependency_blocked` rather than booked as a disposal.
   Esplora and Electrum payloads currently carry this explicit boolean. Bitcoin
   Core RPC wallet rows do not yet stamp it, so Core mempool activity remains on
   the prior journal path because Kassiber cannot distinguish those rows from
   graphless imports using `confirmed_at` alone.
-- `conflicting_spend` — transactions share a prevout. Sync and verify which txid
-  won; this is not a normal carrying-value pairing or bulk-pair action.
+- `conflicting_spend` — transactions share a prevout. The unconfirmed
+  replacement (or every conflicting txid when the winner is ambiguous) is held
+  from tax booking and cannot become a verified custody movement. Sync and
+  verify which txid won; this is not a normal carrying-value pairing or
+  bulk-pair action.
+- Pending and conflicting holds (and the dependency holds they cause) are
+  transient: they keep rows out of booking and custody moves, but they are not
+  persisted as custody quantity issues, so they neither freeze later basis nor
+  block report generation. Report readiness still lists them.
   Conflict detection requires stored input outpoints. Graphless CSV/provider
   rows without `vin`/prevout evidence cannot be recognized as stale RBF or
   double-spend siblings; verify or resync them from a chain-backed wallet before
