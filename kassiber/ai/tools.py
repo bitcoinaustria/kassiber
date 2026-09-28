@@ -4004,7 +4004,8 @@ def skill_reference_roots(*, root: Path | None = None) -> list[Path]:
     if root is not None:
         roots.append(root)
     roots.append(skill_reference_root())
-    roots.append(Path.cwd() / "kassiber" / "ai" / "skill_references")
+    # Never fall back to the working directory: MCP servers and broker
+    # children run inside an agent's repository, whose files are untrusted.
     bundle_root = getattr(sys, "_MEIPASS", None)
     if bundle_root:
         roots.append(Path(bundle_root) / "kassiber" / "ai" / "skill_references")

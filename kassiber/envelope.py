@@ -65,6 +65,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "operator_command",
     "operator_operation_command",
     "operator_touch_id_command",
+    "mcp_command",
     "context_command",
     "workspaces_command",
     "profiles_command",

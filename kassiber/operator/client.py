@@ -265,12 +265,29 @@ class BrokerClient:
         prepared: PreparedArguments,
         *,
         admin_authentication: bytearray | None,
+        start_broker: bool = True,
+        require_caller_context: bool = False,
     ) -> dict[str, object]:
-        broker = self.ensure_running()
+        if start_broker:
+            broker = self.ensure_running()
+        else:
+            try:
+                broker = self.ping()
+            except (OSError, EOFError, AppError):
+                raise AppError(
+                    "this project has no active operator lease",
+                    code="interaction_required",
+                    hint=(
+                        "Ask the user to run `kassiber operator unlock` in their own "
+                        "terminal, then retry. Never ask for the passphrase itself."
+                    ),
+                    details={"reason": "operator_lease_required", "unlock_mode": "brokered"},
+                    retryable=True,
+                ) from None
         generation = broker.get("generation")
         if not isinstance(generation, str):
             raise AppError("broker generation is unavailable", code="operator_protocol_error")
-        _require_caller_context_support(broker)
+        _require_caller_context_support(broker, strict=require_caller_context)
         operation_id = f"{generation}.client.{secrets.token_hex(16)}"
         try:
             return self._submit_once(
@@ -499,7 +516,11 @@ def prepare_arguments(
     return PreparedArguments(prepared, secret_values)
 
 
-def _require_caller_context_support(broker: dict[str, object]) -> None:
+def _require_caller_context_support(
+    broker: dict[str, object],
+    *,
+    strict: bool = False,
+) -> None:
     """Refuse to lose the caller's egress kill switch to an older broker.
 
     A broker from an earlier build that is still running ignores the caller
@@ -514,7 +535,7 @@ def _require_caller_context_support(broker: dict[str, object]) -> None:
         "An older operator broker is still running. Ask the user to stop it "
         "(log out, or end the `kassiber.operator.server` process) and unlock again."
     )
-    if _caller_disables_egress():
+    if strict or _caller_disables_egress():
         raise AppError(
             "the running operator broker cannot honor KASSIBER_NO_EGRESS",
             code="operator_broker_outdated",

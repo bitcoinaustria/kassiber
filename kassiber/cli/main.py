@@ -9,6 +9,7 @@ import os
 import sqlite3
 import sys
 import traceback
+from pathlib import Path
 from typing import Any, Sequence
 
 # PyInstaller's sys.executable is this sidecar, not a Python interpreter. Keep
@@ -200,6 +201,7 @@ from ..secrets.cli_input import (
 from ..secrets.prompt import read_passphrase_from_fd
 from ..secrets.sqlcipher import open_encrypted, require_sqlcipher
 from ..operator.cli import add_operator_parser, dispatch_operator, route_brokered_command
+from ..mcp.cli import add_mcp_parser, dispatch_mcp
 from ..release_verification import verify_download
 from ..tax_policy import DEFAULT_COST_BASIS_POOL_SCOPE, supported_tax_countries
 from ..update_check import (
@@ -1022,6 +1024,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Full release-key fingerprint obtained from an independent trusted source",
     )
     add_operator_parser(sub)
+    add_mcp_parser(sub)
     health = sub.add_parser(
         "health",
         help="Summarize active-project readiness and blockers",
@@ -3451,6 +3454,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         return emit(args, dispatch_operator(args))
     if args.command == "daemon":
         return daemon_runtime.run(conn, args)
+    if args.command == "mcp":
+        return dispatch_mcp(conn, args)
     if args.command == "chat":
         result = run_chat_command(args)
         if getattr(args, "stream_json", False):
@@ -6075,6 +6080,10 @@ def _configure_cli_logging(args: argparse.Namespace) -> None:
     """
     if args.command == "daemon":
         return
+    if args.command == "mcp" and getattr(args, "mcp_command", None) == "serve":
+        # Like the daemon, the MCP server logs only to the RAM ring; the
+        # client may persist whatever reaches stderr.
+        return
     root = logging.getLogger()
     level = logging.DEBUG if getattr(args, "debug", False) else logging.WARNING
     for handler in root.handlers:
@@ -6146,6 +6155,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         _enter_operator_caller_directory(args)
         _verify_operator_child_project(args)
+        if args.command == "mcp" and args.mcp_command in {"serve", "tools"}:
+            # MCP clients may launch probe copies: launch must not migrate
+            # state, create a project layout, or print an update banner into
+            # a stderr the client may persist. Each call resolves its book.
+            dispatch(None, args)
+            return 0
+        if args.command == "mcp":
+            # Before path resolution or broker routing, both of which would
+            # create a default project on a machine with no Kassiber state.
+            _require_existing_book_for_agent_read(args)
         _maybe_migrate_default_state_root(args)
         try:
             show_cached_update(args)
@@ -6230,6 +6249,37 @@ def _maybe_migrate_default_state_root(args: argparse.Namespace) -> None:
     ):
         return
     migrate_hidden_home_state_root_if_needed()
+
+
+def _require_existing_book_for_agent_read(args: argparse.Namespace) -> None:
+    """`mcp call` reads; unlike other CLI reads it never creates a book."""
+
+    from ..projects import load_catalog
+
+    if (
+        getattr(args, "data_root", None) is None
+        and getattr(args, "project", None) is None
+        and not load_catalog().get("projects")
+    ):
+        raise AppError(
+            "No Kassiber project exists on this machine yet",
+            code="not_initialized",
+            hint="Ask the user to set Kassiber up first (desktop app or `kassiber init`).",
+            retryable=False,
+        )
+    paths = resolve_runtime_paths(
+        getattr(args, "data_root", None),
+        getattr(args, "env_file", None),
+        getattr(args, "project", None),
+    )
+    database = Path(paths.database)
+    if not database.exists() or database.stat().st_size == 0:
+        raise AppError(
+            "No Kassiber book exists in the selected project yet",
+            code="not_initialized",
+            hint="Ask the user to set Kassiber up first (desktop app or `kassiber init`).",
+            retryable=False,
+        )
 
 
 class _UsageError(Exception):

@@ -127,6 +127,13 @@ remains outside that closeout.
 
 ## Desktop and handoffs
 
+- [ ] Let an agent request a brokered session that the user approves with
+  Touch ID on signed macOS builds: allow `operator unlock --auth touch-id`
+  without a terminal when explicitly requested, since the biometric prompt is
+  the user's action and no secret reaches the caller. Keep enrollment and mode
+  changes human-only, document it as the one explicit GUI prompt, and verify on
+  a signed, notarized build.
+
 - [ ] Finish the localization long tail: deferred report/exit-tax/Lightning
   reporting surfaces, shared enum-to-label helpers, and locale-aware number/date
   formatting. Follow [i18n](docs/reference/i18n.md) and the Austrian glossary;
@@ -146,6 +153,29 @@ remains outside that closeout.
   remembered unlock remain convenience over SQLCipher, never a substitute.
 
 ## Daemon, contracts, and performance
+
+- [ ] Enforce AI consent, advertisement, and scope in one daemon-owned
+  `authorize_and_execute` path shared by chat and MCP. Executors fail open
+  when the runtime state is empty, and fresh human review for `review.apply`
+  and accounting tasks is enforced only by the CLI client. Add per-tool
+  approval modes (`none` / `consent` / `local_human`), explicit per-tool
+  network/destructive/idempotent metadata pinned to the egress table (four
+  mutating tools egress with `egresses=False`), and per-call capability
+  checks, before any mutating tool is exposed through `kassiber mcp`. Consent
+  for MCP mutations must bind a plan digest and input version and must not
+  trust a host-answered elicitation alone.
+- [ ] Give brokered operations a full agent lifecycle: caller-supplied
+  operation ids (reusing the broker's dedupe), `operator operations list`,
+  `--no-wait` plus `operator operation result`, precise failed-vs-unknown for
+  pre-transaction errors, and specific startup diagnostics instead of
+  retryable `operator_broker_start_failed` (for example missing logind).
+- [ ] Extend `commands describe` to catalog v2: argument JSON schemas (types,
+  booleans, defaults, mutually exclusive groups), explicit secret-argument and
+  sensitive-output registries, emitted kinds, egress class, and pagination
+  location, with drift tests. Unify list pagination on `data.page`.
+- [ ] Echo the resolved book scope in envelopes and report silent context
+  switches (`workspaces create`, `profiles create`), so unscoped agent
+  commands cannot act on a book changed by another client.
 
 - [ ] Design general mutation-safe cancellation and worker execution beyond
   specialized AI/sync jobs. Use one SQLite connection per worker and preserve
@@ -186,6 +216,24 @@ remains outside that closeout.
   is not an acceptable final state.
 
 ## Privacy and security follow-ups
+
+- [ ] Make CLI `backup import --install` use the desktop restore contract:
+  exclusive maintenance, ownership check, job quiescing, credential
+  invalidation, and proof that the restored inner DB is encrypted with a known
+  passphrase. Today it can swap files under a live desktop or broker owner and
+  silently turn a project plaintext from a partition archive.
+- [ ] Keep encryption sticky: record that a project must be encrypted and
+  return `resume_required` or `missing_database` instead of creating a new
+  plaintext DB when the file is missing (interrupted `secrets init`, unmounted
+  volume). An agent's `status` currently answers "run `kassiber init`".
+- [ ] Surface and clean up plaintext leftovers: `kassiber.pre-encryption.sqlite3.bak`
+  and `backends.env.pre-credentials-migration-*.bak` in `secrets status`,
+  startup warnings, and the desktop, with a cleanup command after
+  `secrets verify`. Stage backup/restore/export temp trees inside the project,
+  and create project dirs 0700 and DB/attachment/export/transcript files 0600
+  regardless of umask.
+- [ ] Stop `secrets status` from connecting to the Linux Secret Service when
+  CLI remembered unlock was never enabled.
 
 - [ ] Remove deprecated argv credential forms and migrate backend/wallet test
   setup to stdin/fd. Tighten plaintext dotenv-secret warnings into refusal

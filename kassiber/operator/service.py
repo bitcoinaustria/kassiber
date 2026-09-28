@@ -1254,7 +1254,11 @@ class OperatorService:
         no_egress: bool = False,
     ) -> dict[str, object]:
         parsed, command_path, required = _parse_argv(argv)
-        if command_path.startswith("operator.") or command_path in {"daemon", "chat"}:
+        if command_path.startswith("operator.") or command_path in {
+            "daemon",
+            "chat",
+            "mcp.serve",
+        }:
             raise AppError(
                 "this command cannot run inside an operator worker",
                 code="operator_command_not_brokerable",

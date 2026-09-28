@@ -85,7 +85,7 @@ changing their subsystem.
 | Local graph analysis or acquisition | [Chain analysis](docs/reference/local-chain-analysis.md), [recurring acquisition](docs/reference/recurring-chain-acquisition.md) |
 | Source-of-funds review and exports | [Source-of-funds review](docs/reference/source-of-funds-review.md) |
 | Imports and commercial evidence | [Imports](docs/reference/imports.md), [external documents](docs/plan/08-external-document-reconciliation.md) |
-| Daemon and AI tools | [Daemon](docs/reference/daemon.md), [AI](docs/reference/ai.md), [operator broker](docs/reference/operator-broker.md) |
+| Daemon, AI tools, and external agents | [Daemon](docs/reference/daemon.md), [AI](docs/reference/ai.md), [operator broker](docs/reference/operator-broker.md), [MCP](docs/reference/mcp.md) |
 | Replication or database changes | [Device sync](docs/reference/device-sync.md), [database compatibility](docs/reference/database-compatibility.md) |
 | Lightning adapters | [Lightning discard policy](docs/reference/lightning-opsec.md) |
 | Release artifacts and signing | [Prerelease binaries](docs/reference/prerelease-binaries.md), [macOS release](docs/reference/macos-release.md), [Linux packaging](docs/reference/linux-packaging.md) |

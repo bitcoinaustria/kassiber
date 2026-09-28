@@ -106,7 +106,10 @@ routed through the broker's finite-operation queue. `kassiber chat` therefore
 fails before opening the database while the project is in `brokered` mode. Use
 the brokered accounting commands directly, or explicitly lock the broker and
 select `manual` mode before starting CLI chat. This limitation does not weaken
-the existing in-app AI consent checks.
+the existing in-app AI consent checks. `kassiber mcp serve` is also
+long-lived and is refused as a broker operation, but it submits each tool call
+as a finite `mcp call` read operation, so it works under a lease; see
+[MCP](mcp.md).
 
 On macOS, an enrolled operator-specific Keychain item may authorize an unlock
 after Touch ID through the signed desktop app's native LocalAuthentication
