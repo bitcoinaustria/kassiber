@@ -3,6 +3,10 @@ import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type WalletScope = { wallet_id: string; label: string; environments: string[]; transaction_count: number; unknown_count: number; conflict_count: number; requires_declaration: boolean };
 type Binding = { profile_id: string; state: "unbound" | "bound"; environment?: string; chain_instance_id?: string | null; domains: { chain: string; network: string }[] };
@@ -51,17 +55,18 @@ export function BookNetworkSettings({ children }: { children?: ReactNode } = {})
       <p className="text-xs text-muted-foreground">{t("bookNetwork.immutable")}</p>
     </> : inventory && <>
       <p className="text-xs text-muted-foreground">{t("bookNetwork.help")}</p>
-      <label className="flex max-w-sm flex-col gap-1 text-sm">{t("bookNetwork.environment")}
-        <select className="rounded-md border bg-background p-2" value={environment} onChange={event => setEnvironment(event.target.value)}>
-          {(["main", "test", "signet", "regtest"] as const).map(value => <option key={value} value={value}>{t(`bookNetwork.environments.${value}`)}</option>)}
-        </select>
-      </label>
+      <div className="flex max-w-sm flex-col gap-1.5"><Label htmlFor="book-network-environment">{t("bookNetwork.environment")}</Label>
+        <Select value={environment} onValueChange={setEnvironment}>
+          <SelectTrigger id="book-network-environment" className="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>{(["main", "test", "signet", "regtest"] as const).map(value => <SelectItem key={value} value={value}>{t(`bookNetwork.environments.${value}`)}</SelectItem>)}</SelectContent>
+        </Select>
+      </div>
       {environment === "regtest" && <label className="flex flex-col gap-1 text-sm">{t("bookNetwork.instance")}
-        <div className="flex gap-2"><input className="min-w-0 flex-1 rounded-md border bg-background p-2 font-mono text-xs" value={instance} onChange={event => setInstance(event.target.value)} /><Button variant="outline" onClick={() => setInstance(crypto.randomUUID())}>{t("bookNetwork.newInstance")}</Button></div>
+        <div className="flex gap-2"><Input className="min-w-0 flex-1 font-mono text-xs" value={instance} onChange={event => setInstance(event.target.value)} /><Button variant="outline" onClick={() => setInstance(crypto.randomUUID())}>{t("bookNetwork.newInstance")}</Button></div>
       </label>}
       {inventory.wallets.map(wallet => <div key={wallet.wallet_id} className="text-sm">
         <span>{wallet.label}</span><span className="ml-2 text-xs text-muted-foreground">{wallet.environments.join(", ") || t("bookNetwork.unknown")}</span>
-        {wallet.requires_declaration && <label className="mt-1 flex items-start gap-2 text-xs"><input type="checkbox" checked={declared.includes(wallet.wallet_id)} onChange={event => setDeclared(values => event.target.checked ? [...values, wallet.wallet_id] : values.filter(id => id !== wallet.wallet_id))} />{t("bookNetwork.declare")}</label>}
+        {wallet.requires_declaration && <label className="mt-1 flex items-start gap-2 text-xs"><Checkbox checked={declared.includes(wallet.wallet_id)} onCheckedChange={checked => setDeclared(values => checked === true ? [...values, wallet.wallet_id] : values.filter(id => id !== wallet.wallet_id))} />{t("bookNetwork.declare")}</label>}
       </div>)}
       <Button variant="outline" disabled={preview.isPending || bind.isPending} onClick={() => void invoke(false)}>{t("bookNetwork.preview")}</Button>
       {current && plan && <div className="space-y-2">

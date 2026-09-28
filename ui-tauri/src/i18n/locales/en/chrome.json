@@ -320,16 +320,14 @@
   },
   "bookSwitcher": {
     "title": "Switch books",
-    "description": "Pick the active book for every screen in this window.",
+    "searchPlaceholder": "Switch to a book…",
     "loading": "Loading books...",
     "loadError": "Could not load books.",
+    "noMatches": "No books match.",
     "empty": "No books were found in this data root.",
     "manageBooks": "Manage books",
     "switchError": "Could not switch books.",
     "bookSetOverview": "Book Set Overview",
-    "openedOn": "Opened {{date}}",
-    "accounts_one": "{{count}} account",
-    "accounts_other": "{{count}} accounts",
     "wallets_one": "{{count}} wallet",
     "wallets_other": "{{count}} wallets"
   },
