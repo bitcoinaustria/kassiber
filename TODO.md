@@ -176,9 +176,6 @@ remains outside that closeout.
 - [ ] Echo the resolved book scope in envelopes and report silent context
   switches (`workspaces create`, `profiles create`), so unscoped agent
   commands cannot act on a book changed by another client.
-- [ ] Launch the broker and its source-install children from a fixed
-  directory (or with a safe import path) so the first client's working
-  directory cannot shadow the installed `kassiber` package.
 
 - [ ] Design general mutation-safe cancellation and worker execution beyond
   specialized AI/sync jobs. Use one SQLite connection per worker and preserve

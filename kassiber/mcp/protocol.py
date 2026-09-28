@@ -38,11 +38,16 @@ METHOD_NOT_FOUND = -32601
 INVALID_PARAMS = -32602
 INTERNAL_ERROR = -32603
 UNSUPPORTED_PROTOCOL_VERSION = -32022
+# JSON-RPC implementation-defined server error: too much work in flight.
+SERVER_OVERLOADED = -32000
 
 MAX_MESSAGE_BYTES = 16 * 1024 * 1024
 # Tool definitions and instructions are static per server version and carry
 # no book data, so any client or cache may keep them.
 STATIC_LIST_TTL_MS = 3_600_000
+# Calls run one at a time; a client pipelining more than this many is refused
+# rather than queued without bound (each request may be megabytes).
+MAX_INFLIGHT_CALLS = 32
 # After stdin closes, accepted calls get this long to finish and be answered.
 SHUTDOWN_DRAIN_SECONDS = 30.0
 
@@ -361,7 +366,8 @@ class StdioLoop:
                     continue
                 try:
                     message = json.loads(line.decode("utf-8"))
-                except (UnicodeDecodeError, ValueError):
+                except (UnicodeDecodeError, ValueError, RecursionError):
+                    # Deeply nested JSON must not end the session.
                     self._write(_error_response(None, PARSE_ERROR, "Parse error"))
                     continue
                 self._accept(message)
@@ -400,8 +406,19 @@ class StdioLoop:
             event = threading.Event()
             with self._state_lock:
                 duplicate = key in self._inflight
-                if not duplicate:
+                overloaded = not duplicate and len(self._inflight) >= MAX_INFLIGHT_CALLS
+                if not duplicate and not overloaded:
                     self._inflight[key] = event
+            if overloaded:
+                self._write(
+                    _error_response(
+                        message.get("id"),
+                        SERVER_OVERLOADED,
+                        "Too many tool calls in flight; retry after earlier calls finish",
+                        {"limit": MAX_INFLIGHT_CALLS},
+                    )
+                )
+                return
             if duplicate:
                 self._write(
                     _error_response(message.get("id"), INVALID_REQUEST, "Request id is already in flight")

@@ -105,9 +105,10 @@ neither is ever created.
 - **`manual` encrypted books** return `interaction_required` with
   `details.reason = database_passphrase`.
 
-A broker from an earlier build that is still running cannot bind the caller's
-egress kill switch; a caller with `KASSIBER_NO_EGRESS` set is refused
-(`operator_broker_outdated`) rather than running without it.
+A broker from an earlier build that is still running cannot bind caller
+context; MCP calls are refused against it (`operator_broker_outdated`) until
+the user restarts the broker. At most 32 tool calls may be in flight; more are
+refused with a retryable `-32000` error rather than queued without bound.
 
 The agent must never ask for or relay the passphrase. `kassiber mcp serve` is
 a long-lived server and is refused as a broker operation, like `chat` and

@@ -302,7 +302,8 @@ class BookToolProvider:
             )
         argv = ["--data-root", paths.data_root]
         if self._env_file:
-            argv += ["--env-file", self._env_file]
+            # Absolute, so the path cannot change meaning in a worker.
+            argv += ["--env-file", os.path.abspath(self._env_file)]
         argv += [
             "--machine",
             "mcp",
@@ -325,6 +326,9 @@ class BookToolProvider:
                 prepared,
                 admin_authentication=None,
                 start_broker=False,
+                # Its warning would be invisible (stderr is silenced), so an
+                # older broker that ignores caller context is refused outright.
+                require_caller_context=True,
             )
         finally:
             wipe_prepared(prepared)

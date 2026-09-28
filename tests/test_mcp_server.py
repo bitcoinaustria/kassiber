@@ -533,10 +533,11 @@ class BrokeredRoutingTests(_TwoBookFixture):
     def test_lease_runs_one_scoped_mcp_call_operation(self):
         captured: dict = {}
 
-        def submit(_client, data_root, prepared, *, admin_authentication, start_broker=True):
+        def submit(_client, data_root, prepared, *, admin_authentication, **options):
             captured["argv"] = list(prepared.argv)
             captured["admin"] = admin_authentication
-            captured["start_broker"] = start_broker
+            captured["start_broker"] = options.get("start_broker", True)
+            captured["require_caller_context"] = options.get("require_caller_context")
             return {"operation_id": "gen.client.op", "state": "queued"}
 
         child = {
@@ -570,6 +571,7 @@ class BrokeredRoutingTests(_TwoBookFixture):
         argv = captured["argv"]
         self.assertIsNone(captured["admin"])
         self.assertIs(captured["start_broker"], False)
+        self.assertIs(captured["require_caller_context"], True)
         self.assertEqual(argv[argv.index("mcp") : argv.index("mcp") + 2], ["mcp", "call"])
         self.assertEqual(argv[argv.index("--workspace") + 1], "ws-id")
         self.assertEqual(argv[argv.index("--profile") + 1], "book-id")
@@ -743,3 +745,54 @@ class ReviewHardeningTests(_TwoBookFixture):
         # Each non-BMP character escapes to 12 ASCII bytes on the wire.
         self.assertTrue(outcome.is_error)
         self.assertEqual(outcome.structured["error"]["code"], "result_too_large")
+
+
+class StdioRobustnessTests(unittest.TestCase):
+    def test_deeply_nested_json_is_a_parse_error_not_a_crash(self):
+        server = McpServer(_FakeProvider(), name="kassiber", version="test")
+        nested = b"[" * 200_000 + b"]" * 200_000 + b"\n"
+        follow = (json.dumps(_request(1, "server/discover", {"_meta": MODERN_META})) + "\n").encode()
+        writer = io.BytesIO()
+        serve(server, io.BytesIO(nested + follow), writer)
+        lines = [json.loads(line) for line in writer.getvalue().decode().splitlines()]
+        self.assertEqual(lines[0]["error"]["code"], -32700)
+        self.assertEqual(lines[1]["id"], 1)
+
+    def test_calls_beyond_the_in_flight_limit_are_refused(self):
+        from kassiber.mcp import protocol
+
+        provider = _FakeProvider()
+        provider.release.clear()
+        server = McpServer(provider, name="kassiber", version="test")
+        count = protocol.MAX_INFLIGHT_CALLS + 3
+        messages = [
+            _request(n, "tools/call", {"_meta": MODERN_META, "name": "echo", "arguments": {}})
+            for n in range(count)
+        ]
+        timer = threading.Timer(0.5, provider.release.set)
+        timer.start()
+        try:
+            responses = _serve_lines(server, messages)
+        finally:
+            timer.cancel()
+        refused = [r for r in responses if r.get("error", {}).get("code") == protocol.SERVER_OVERLOADED]
+        self.assertTrue(refused)
+        self.assertEqual(len(responses), count)
+
+
+class OutdatedBrokerMcpTests(_TwoBookFixture):
+    def test_mcp_refuses_a_broker_that_ignores_caller_context(self):
+        from kassiber.operator.client import BrokerClient
+
+        with mock.patch(
+            "kassiber.operator.modes.effective_unlock_mode", return_value="brokered"
+        ), mock.patch.object(
+            BrokerClient, "status",
+            return_value={"lease": "unlocked", "default_scope": {"workspace": "w", "profile": "p"}},
+        ), mock.patch.object(
+            BrokerClient, "ping", return_value={"generation": "old"}
+        ), mock.patch.object(
+            BrokerClient, "_submit_once", side_effect=AssertionError("must not submit")
+        ):
+            outcome = self.provider().call_tool("status", {}, threading.Event())
+        self.assertEqual(outcome.structured["error"]["code"], "operator_broker_outdated")
