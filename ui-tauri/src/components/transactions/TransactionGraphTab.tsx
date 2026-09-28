@@ -44,7 +44,6 @@ import { copyText, formatShortTxid } from "./model";
 import {
   classifyRouteKind,
   classifyRouteOutRole,
-  compactGraphRows,
   looksLightning,
   looksLiquid,
   nodeTooltipTitle,
@@ -60,6 +59,15 @@ import {
   type TransactionSwapRouteLeg,
   type TransactionSwapRouteLegKey,
 } from "./TransactionGraphModel";
+import { TransactionGraph3D } from "./graph3d/TransactionGraph3D";
+import {
+  fallbackVisualSats,
+  geometryScale,
+  graphLayoutRows,
+  legWeights,
+  uniformStrandWeight,
+  type GeometryScale,
+} from "./TransactionGraphGeometry";
 
 export type {
   TransactionGraphAnnotation,
@@ -653,130 +661,6 @@ const AMOUNTLESS_FEE_STRAND_THICKNESS = 0.5;
 const GRAPH_ROW_HEIGHT = 29;
 const GRAPH_MULTI_LEG_GAP = 4;
 
-/** Drawing-only view of a leg's amount. Nothing here is accounting truth. */
-type GeometryValue = {
-  /** No usable amount: missing, or confidential on Liquid. */
-  amountless: boolean;
-  /** A known amount of zero — drawn as a stub, not a hairline. */
-  zero: boolean;
-  /** Known visual sats, or null when amountless. */
-  known: number | null;
-  /** Always-positive sats, so an unknown leg still gets a visible strand. */
-  visual: number;
-};
-
-function isAmountless(node: TransactionGraphNode) {
-  return (
-    typeof node.valueSats !== "number" ||
-    node.valueState === "confidential" ||
-    node.valueState === "other_asset"
-  );
-}
-
-function positiveKnownSats(node: TransactionGraphNode) {
-  return !isAmountless(node) && (node.valueSats as number) > 0
-    ? (node.valueSats as number)
-    : 0;
-}
-
-/**
- * How the bowtie sizes its legs. Drawing only: confidential and missing values
- * still render as confidential text, whatever width their strand gets.
- */
-type GeometryScale =
-  /** Widths follow a visual total in sats. */
-  | { kind: "value"; totalSats: number }
-  /**
-   * No leg but the fee has a known amount (a confidential Liquid row, a
-   * reference-only record, or hidden values): every unknown leg gets the same
-   * modest width instead of each claiming the full band.
-   */
-  | { kind: "uniform" };
-
-/** An unknown leg drawn at uniform width is at most this share of the band. */
-const UNIFORM_STRAND_BAND_SHARE = 1 / 6;
-
-function amountlessLegCount(rows: GraphRow[]) {
-  return rows.filter((node) => node.side !== "fee" && isAmountless(node)).length;
-}
-
-function geometryScale(inputRows: GraphRow[], destinationRows: GraphRow[]): GeometryScale {
-  const inputKnownTotal = inputRows.reduce((sum, node) => sum + positiveKnownSats(node), 0);
-  const outputKnownTotal = destinationRows.reduce((sum, node) => sum + positiveKnownSats(node), 0);
-  const inputUnknown = amountlessLegCount(inputRows);
-  const outputUnknown = amountlessLegCount(destinationRows);
-  if (!inputUnknown || !outputUnknown) {
-    // One complete side fixes the total; the other side's unknown legs share
-    // whatever it leaves unaccounted for.
-    return { kind: "value", totalSats: Math.max(inputKnownTotal, outputKnownTotal, 1) };
-  }
-  // Unknown legs on both sides leave the total open. As mempool's Liquid graph
-  // does, estimate it by assuming each unknown leg is as large as the average
-  // known one; both sides must still meet in the middle, so each side's unknown
-  // legs then share what that side leaves of the larger estimate. The fee is
-  // left out of the average: it would make every unknown leg look like dust.
-  const knownLegs = [...inputRows, ...destinationRows]
-    .filter((node) => node.side !== "fee")
-    .map(positiveKnownSats)
-    .filter((sats) => sats > 0);
-  if (!knownLegs.length) return { kind: "uniform" };
-  const average = knownLegs.reduce((sum, sats) => sum + sats, 0) / knownLegs.length;
-  return {
-    kind: "value",
-    totalSats: Math.max(
-      inputKnownTotal + average * inputUnknown,
-      outputKnownTotal + average * outputUnknown,
-      1,
-    ),
-  };
-}
-
-function fallbackVisualSats(scale: GeometryScale, rowCount: number) {
-  if (scale.kind === "uniform") return 1;
-  return Math.max(1, scale.totalSats / Math.max(1, rowCount));
-}
-
-function uniformStrandWeight(combinedWeight: number, rowCount: number) {
-  return Math.min(
-    combinedWeight / Math.max(1, rowCount),
-    combinedWeight * UNIFORM_STRAND_BAND_SHARE,
-  );
-}
-
-function geometryValues(rows: GraphRow[], fallbackSats: number) {
-  const hasAmountlessNonFeeRows = rows.some(
-    (node) => node.side !== "fee" && isAmountless(node),
-  );
-  const values: GeometryValue[] = rows.map((node) => {
-    if (isAmountless(node)) {
-      return {
-        amountless: true,
-        zero: false,
-        known: null,
-        visual: Math.max(1, fallbackSats),
-      };
-    }
-    const sats = Math.max(0, node.valueSats as number);
-    // A known fee sitting next to amountless legs would otherwise dominate the
-    // band, so it contributes a single sat of visual weight.
-    const known = node.side === "fee" && hasAmountlessNonFeeRows && sats > 0 ? 1 : sats;
-    return { amountless: false, zero: sats <= 0, known, visual: known };
-  });
-  return { values, hasAmountlessNonFeeRows };
-}
-
-function redactRowsForGeometry(rows: GraphRow[]): GraphRow[] {
-  return rows.map((node) => ({
-    ...node,
-    valueSats: null,
-    valueBtc: null,
-    valueState:
-      node.valueState === "confidential" || node.valueState === "other_asset"
-        ? node.valueState
-        : "missing",
-  }));
-}
-
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -792,40 +676,28 @@ function buildDrawableRows(
 ): DrawableGraphRow[] {
   if (!rows.length) return [];
   const centerY = height / 2;
-  const { values, hasAmountlessNonFeeRows } = geometryValues(rows, fallbackSats);
-  const unknownCount = values.filter((value) => value.amountless).length;
-  const knownTotal = values.reduce((sum, value) => sum + (value.known ?? 0), 0);
-  const totalSats = scale.kind === "value" ? scale.totalSats : 0;
-  // Unknown legs share whatever the opposite side says is unaccounted for.
-  const unknownShare = unknownCount
-    ? Math.max(1, (Math.max(totalSats, knownTotal) - knownTotal) / unknownCount)
-    : 0;
+  const weights = legWeights(rows, scale, {
+    combinedWeight,
+    fallbackSats,
+    uniformWeight,
+    hairlineWeight: AMOUNTLESS_FEE_STRAND_THICKNESS,
+  });
   const lines = rows.map((node, index) => {
-    const value = values[index];
-    const weight =
-      scale.kind === "uniform"
-        ? value.amountless
-          ? uniformWeight
-          : value.zero
-            ? 0
-            : AMOUNTLESS_FEE_STRAND_THICKNESS
-        : (combinedWeight * (value.known ?? unknownShare)) / Math.max(1, totalSats);
-    const amountlessPeerFee =
-      node.side === "fee" && hasAmountlessNonFeeRows && weight > 0;
+    const { weight, hairline, estimated, zero, visualSats } = weights[index];
     return {
       ...node,
       outerY: centerY,
       innerY: centerY,
-      thickness: amountlessPeerFee
+      thickness: hairline
         ? AMOUNTLESS_FEE_STRAND_THICKNESS
-        : value.zero
+        : zero
         ? 3
         : Math.min(combinedWeight + 0.5, Math.max(2, weight) + 1),
       weight,
       offset: 0,
-      visualValueSats: value.visual,
-      estimatedVisualValue: value.amountless,
-      zeroValue: value.zero,
+      visualValueSats: visualSats,
+      estimatedVisualValue: estimated,
+      zeroValue: zero,
     };
   });
   const visibleWeight = lines.reduce((sum, line) => sum + line.thickness, 0);
@@ -1472,22 +1344,8 @@ export function TransactionFlowDiagram({
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [hoverDetail, setHoverDetail] = useState<DrawableGraphRow | null>(null);
   const [measuredCanvasWidth, setMeasuredCanvasWidth] = useState<number | null>(null);
-  const inputRows = compactGraphRows(
-    graph.inputs,
-    "input",
-    expanded ? MAX_EXPANDED_ROWS : MAX_COMPACT_ROWS,
-  );
-  const outputRows = compactGraphRows(
-    graph.outputs,
-    "output",
-    expanded ? MAX_EXPANDED_ROWS : MAX_COMPACT_ROWS,
-  );
-  const feeRow: GraphRow | null = graph.fee ? { ...graph.fee, side: "fee" } : null;
-  const destinationRows = feeRow ? [feeRow, ...outputRows] : outputRows;
-  const layoutInputRows = hideSensitive ? redactRowsForGeometry(inputRows) : inputRows;
-  const layoutDestinationRows = hideSensitive
-    ? redactRowsForGeometry(destinationRows)
-    : destinationRows;
+  const { inputRows, destinationRows, layoutInputRows, layoutDestinationRows } =
+    graphLayoutRows(graph, hideSensitive, expanded ? MAX_EXPANDED_ROWS : MAX_COMPACT_ROWS);
   const rowCount = Math.max(inputRows.length, destinationRows.length, 2);
   const height = Math.max(280, rowCount * GRAPH_ROW_HEIGHT + 90);
   const viewportHeight = expanded
@@ -1871,6 +1729,51 @@ function graphSupportText(
   return t("graph.partialSupport");
 }
 
+function ExpandedTransactionGraph({
+  graph,
+  hideSensitive,
+}: {
+  graph: TransactionGraphPayload;
+  hideSensitive: boolean;
+}) {
+  const { t } = useTranslation("transactions");
+  const [view, setView] = useState<"2d" | "3d">("2d");
+  const flat = <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} expanded />;
+  return (
+    <div className="space-y-3">
+      <div
+        role="group"
+        aria-label={t("graph.viewToggle")}
+        className="inline-flex rounded-md border p-0.5"
+      >
+        {(["2d", "3d"] as const).map((option) => (
+          <Button
+            key={option}
+            type="button"
+            size="sm"
+            variant={view === option ? "secondary" : "ghost"}
+            aria-pressed={view === option}
+            className="h-7 px-2.5"
+            onClick={() => setView(option)}
+          >
+            {option === "2d" ? t("graph.view2d") : t("graph.view3d")}
+          </Button>
+        ))}
+      </div>
+      {view === "3d" ? (
+        <TransactionGraph3D
+          graph={graph}
+          hideSensitive={hideSensitive}
+          maxRows={MAX_EXPANDED_ROWS}
+          fallback={flat}
+        />
+      ) : (
+        flat
+      )}
+    </div>
+  );
+}
+
 export function TransactionGraphPanel({
   graph,
   loading,
@@ -1932,7 +1835,7 @@ export function TransactionGraphPanel({
               </DialogTrigger>
               <DialogContent className="w-[min(1180px,calc(100vw-2rem))] max-w-none sm:max-w-none">
                 <DialogTitle className="sr-only">{t("graph.expandedTitle")}</DialogTitle>
-                <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} expanded />
+                <ExpandedTransactionGraph graph={graph} hideSensitive={hideSensitive} />
               </DialogContent>
             </Dialog>
           </div>

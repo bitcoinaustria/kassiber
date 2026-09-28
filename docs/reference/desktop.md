@@ -224,7 +224,15 @@ transaction; conflicting observations stay confidential. Legs without a known
 amount are drawn from what is known: they share what a complete side leaves
 unaccounted for; when both sides have unknown legs, the total is estimated from
 the average known leg; and when no leg but the fee is known (or values are
-hidden), every leg gets one modest uniform width. Widths are drawing only. Lookups use the wallet's own backend first and never a server
+hidden), every leg gets one modest uniform width. Widths are drawing only. The
+expanded graph can switch to a 3D view after the Bitcoin Austria artwork lab's
+ribbon pieces: every coin is a block and its value a bundle of glass ribbons,
+drawn from the same leg widths. Every input's ribbons end in one slim glass
+collar and the outputs' ribbons start there, since a transaction spends its
+inputs together; the ribbon order does not say which input paid which output. Frosted ribbons carry no known amount, and hidden values
+give every coin the same size. The view loads three.js only when opened,
+renders only on change, needs no network, and falls back to the 2D graph
+without WebGL. Lookups use the wallet's own backend first and never a server
 Kassiber merely ships as a default, so the panel follows whatever observes the
 wallet and stays silent instead of reaching for third-party infrastructure; with
 nothing configured it offers an explicit backend-setup action. The view is

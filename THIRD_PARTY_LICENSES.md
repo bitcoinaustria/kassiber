@@ -36,6 +36,7 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `pako` | `^2.1.0` | Zlib/deflate decoding for Better Bitcoin QR descriptor import | MIT |
 | `qr-scanner` | `^1.4.2` | Local webcam QR decoding for descriptor-family connection setup | MIT |
 | `qrcode` | `^1.5.4` | On-device QR generation for signed join requests and sealed invitations | MIT |
+| `three` | `0.186.0` (exact) | Glass ribbon 3D view of a transaction graph, loaded only when that view opens; every mesh, material and light is generated locally, with no models, textures or network requests. `@types/three` supplies typings only and is not bundled | MIT |
 | `react-markdown` | `^10.1.0` | Markdown renderer for assistant chat replies (paragraphs, lists, code, links) | MIT |
 | `remark-gfm` | `^4.0.0` | GitHub-flavored markdown extensions (tables, strikethrough, task lists) for assistant chat replies | MIT |
 | `i18next` | `25.8.18` (exact) | Desktop UI localization runtime (English/German, expandable); see [docs/reference/i18n.md](docs/reference/i18n.md) | MIT |

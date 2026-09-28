@@ -46,6 +46,7 @@
     "recharts": "^3.8.1",
     "remark-gfm": "^4.0.0",
     "tailwind-merge": "^2.6.0",
+    "three": "0.186.0",
     "zod": "4.4.3",
     "zustand": "^5.0.3"
   },
@@ -60,6 +61,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
+    "@types/three": "0.186.0",
     "@vitejs/plugin-react": "^4.3.4",
     "esbuild": "^0.25.0",
     "eslint": "^9.18.0",
