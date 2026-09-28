@@ -24,6 +24,7 @@
       "title": "Assistent-Dock",
       "description": "Der schwebende Assistent am unteren Rand der App. Mit automatischem Ausblenden parkt er als Chip in der Ecke und öffnet sich, sobald du den Mauszeiger dorthin bewegst. Neue Installationen starten unten rechts.",
       "autoHide": "Automatisch ausblenden",
+      "position": "Position",
       "positionLeft": "Links",
       "positionCenter": "Mittig",
       "positionRight": "Rechts"

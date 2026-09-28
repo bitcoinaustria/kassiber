@@ -1100,6 +1100,7 @@ function AddConnectionDialogContent({
     React.useState<ConnectionCategory>("wallets");
   const [selectedId, setSelectedId] = React.useState("descriptor");
   const [sourceQuery, setSourceQuery] = React.useState("");
+  const sourceSearchRef = React.useRef<HTMLInputElement | null>(null);
   const [step, setStep] = React.useState<DialogStep>("source");
   const [form, setForm] = React.useState(() =>
     formDefaultsFor(CONNECTION_SOURCES[0], t),
@@ -5820,6 +5821,7 @@ function AddConnectionDialogContent({
               aria-hidden="true"
             />
             <input
+              ref={sourceSearchRef}
               type="search"
               value={sourceQuery}
               onChange={(event) => setSourceQuery(event.target.value)}
@@ -5938,7 +5940,17 @@ function AddConnectionDialogContent({
   return (
     <>
       <Dialog open={open} onOpenChange={(next) => { if (!isSubmitting) onOpenChange(next); }}>
-        <DialogContent className="grid h-(--kb-dialog-max-h) grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:h-[740px] sm:max-w-[960px] lg:max-w-[1040px]">
+        <DialogContent
+          className="grid h-(--kb-dialog-max-h) grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:h-[740px] sm:max-w-[960px] lg:max-w-[1040px]"
+          onOpenAutoFocus={(event) => {
+            // Open with the cursor in the source search, as the command
+            // palette does, rather than a focus ring on the first category.
+            if (sourceSearchRef.current) {
+              event.preventDefault();
+              sourceSearchRef.current.focus();
+            }
+          }}
+        >
           <DialogHeader className="px-5 pt-5 pb-4 pr-12">
             <DialogTitle>
               {isSetupStep
