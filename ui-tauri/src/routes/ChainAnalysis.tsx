@@ -14,7 +14,8 @@ import {
   useDaemon,
   useDaemonMutation,
 } from "@/daemon/client";
-import { screenShellClassName } from "@/lib/screen-layout";
+import { pageHeaderActionsClassName, pageHeaderClassName, screenShellClassName } from "@/lib/screen-layout";
+import { cn } from "@/lib/utils";
 import {
   analysisEffectiveLayers,
   analysisNodeSubject,
@@ -274,18 +275,15 @@ export function ChainAnalysisWorkbench({
       className={`${screenShellClassName} ca-workbench`}
       data-testid="chain-analysis-page"
     >
-      <header className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+      <header className={pageHeaderClassName}>
         <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {t("title")}
-          </h1>
           {workspace !== "graph" && (
             <Button variant="ghost" size="sm" onClick={() => setWorkspace("graph")}>
               <ArrowLeft className="size-4" />{t("backToInvestigation")}
             </Button>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className={cn(pageHeaderActionsClassName, "sm:ml-auto")}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild><Button variant="outline" size="sm">{t("tools")}<ChevronDown className="size-3.5" /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end">

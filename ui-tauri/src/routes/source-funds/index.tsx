@@ -6,7 +6,7 @@ import { AssistantSessionContext } from "@/components/ai/assistantSession";
 import { TransactionDetailController } from "@/components/transactions/dashboard/TransactionDetailController";
 import { Button } from "@/components/ui/button";
 import { DaemonScopeContext, useDaemon } from "@/daemon/client";
-import { screenShellClassName } from "@/lib/screen-layout";
+import { pageDescriptionClassName, pageHeaderClassName, screenShellClassName } from "@/lib/screen-layout";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
 import { formatBtc } from "./model";
@@ -73,9 +73,9 @@ function SourceFundsCase({ draftKey, initialTarget }: { draftKey: string; initia
     }
   };
   const status = !state.selectedTarget ? "selectTarget" : state.resolvedTarget.isError || (state.resolvedTarget.isSuccess && !state.selectedTxId) ? "targetUnavailable" : state.preview.isError ? "reviewUnavailable" : state.preview.isFetching || !state.report ? "loading" : state.report.explain_gates.exportable ? "exportable" : "needsEvidence";
-  return <div className={`${screenShellClassName} mx-auto max-w-6xl space-y-5`}>
-    <header className="flex flex-wrap items-start justify-between gap-3">
-      <div><h1 className="text-xl font-semibold tracking-tight">{t("header.title")}</h1><p className="mt-1 text-sm text-muted-foreground">{t("journey.description")}</p></div>
+  return <div className={`${screenShellClassName} mx-auto max-w-6xl`}>
+    <header className={pageHeaderClassName}>
+      <p className={pageDescriptionClassName}>{t("journey.description")}</p>
     </header>
     <nav aria-label={t("header.title")}>
       <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">

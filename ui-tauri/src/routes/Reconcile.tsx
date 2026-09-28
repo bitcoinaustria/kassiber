@@ -16,7 +16,6 @@ import {
   ChevronRight,
   ClipboardCopy,
   FileSpreadsheet,
-  Fingerprint,
   Globe,
   Search,
   ShieldCheck,
@@ -39,6 +38,7 @@ import { hiddenSensitiveClassName } from "@/components/kb/wallets/format";
 import { useDaemonMutation } from "@/daemon/client";
 import { copyTextWithPolicy } from "@/lib/clipboard";
 import {
+  pageDescriptionClassName,
   pageHeaderActionClassName,
   pageHeaderClassName,
   screenShellClassName,
@@ -410,20 +410,7 @@ export function Reconcile() {
   return (
     <div className={screenShellClassName}>
       <div className={pageHeaderClassName}>
-        <div className="flex min-w-0 items-start gap-3">
-          <span
-            className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary ring-1 ring-primary/25 ring-inset"
-            aria-hidden="true"
-          >
-            <Fingerprint className="size-4" />
-          </span>
-          <div className="min-w-0">
-            <h1 className="text-base font-semibold">{t("reconcile.title")}</h1>
-            <p className="mt-0.5 max-w-4xl text-xs text-muted-foreground sm:text-sm">
-              {t("reconcile.description")}
-            </p>
-          </div>
-        </div>
+        <p className={pageDescriptionClassName}>{t("reconcile.description")}</p>
       </div>
 
       <div className="rounded-lg border bg-card p-3">

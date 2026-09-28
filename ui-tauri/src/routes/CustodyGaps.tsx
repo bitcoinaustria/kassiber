@@ -5,7 +5,6 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock3,
-  Route,
   ShieldCheck,
   TriangleAlert,
   WalletCards,
@@ -28,8 +27,8 @@ import {
   useDaemonMutation,
 } from "@/daemon/client";
 import {
+  pageDescriptionClassName,
   pageHeaderClassName,
-  screenPanelClassName,
   screenShellClassName,
 } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
@@ -1203,7 +1202,7 @@ export function CustodyGapsContent({ focusGapId, onFocusGap }: { focusGapId?: st
   if (gapsQuery.isError || !snapshot) {
     const firstPage = pageEnvelopes[0];
     return (
-      <div className={screenPanelClassName}>
+      <div>
         <Card className="gap-2 py-5">
           <CardHeader>
             <CardTitle>{t("unavailable.title")}</CardTitle>
@@ -1231,17 +1230,9 @@ export function CustodyGapsContent({ focusGapId, onFocusGap }: { focusGapId?: st
   const canShowClear = canShowNoKnownCustodyGaps(snapshot, reviewGaps.length);
 
   return (
-    <div className="space-y-3 sm:space-y-4">
+    <div className="space-y-(--kb-page-gap)">
       <div className={pageHeaderClassName}>
-        <div>
-          <div className="flex items-center gap-2">
-            <Route className="size-5" aria-hidden="true" />
-            <h1 className="text-xl font-semibold">{t("title")}</h1>
-          </div>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            {t("description")}
-          </p>
-        </div>
+        <p className={pageDescriptionClassName}>{t("description")}</p>
         <Badge variant="outline" className="w-fit gap-1.5">
           <ShieldCheck className="size-3.5" /> {t("localOnly")}
         </Badge>
@@ -1400,7 +1391,7 @@ export function CustodyGapsContent({ focusGapId, onFocusGap }: { focusGapId?: st
       )}
 
       {activeGapId && !reviewGaps.some((gap) => gap.gap_id === activeGapId) ? (
-        <div className={screenPanelClassName}>
+        <div>
           <GapReviewDetails key={activeGapId} gapId={activeGapId} />
         </div>
       ) : null}

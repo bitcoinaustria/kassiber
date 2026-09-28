@@ -14,7 +14,6 @@
     "errorReturnDefaultRoot": "Rückkehr zum Standard-Projektordner nicht möglich."
   },
   "books": {
-    "title": "Bücher",
     "intro": "Jedes Buch hat eigene Steuer- und Währungseinstellungen. Nutze getrennte Bücher für private und geschäftliche Aktivität; nutze getrennte Kassiber-Dateien für verschiedene Klient:innen.",
     "newBookSet": "Neues Bücher-Set",
     "summary": {

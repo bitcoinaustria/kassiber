@@ -105,8 +105,6 @@ export function JournalReportableEntries() {
   return (
     <ReviewDataTable
       kind="journal-events"
-      eyebrow={t("reportable.eyebrow")}
-      title={t("reportable.title")}
       description={t("reportable.description")}
       rows={rows}
       metrics={metrics}
@@ -118,7 +116,7 @@ export function JournalReportableEntries() {
           ? t("reportable.badge.stale")
           : t("reportable.badge.entries", { count: snapshot.summary.count })
       }
-      shellClassName="w-full space-y-3 sm:space-y-4"
+      shellClassName="w-full space-y-(--kb-page-gap)"
       tableTitle={t("reportable.tableTitle")}
       tableDescriptionDetail={snapshot.summary.freshnessReason}
       searchPlaceholder={t("reportable.searchPlaceholder")}

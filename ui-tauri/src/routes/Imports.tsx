@@ -19,6 +19,7 @@ import {
   connectionCategoryLabel,
 } from "@/lib/connectionCatalog";
 import {
+  pageDescriptionClassName,
   pageHeaderActionClassName,
   pageHeaderClassName,
   screenShellClassName,
@@ -61,17 +62,7 @@ export function Imports() {
   return (
     <div className={screenShellClassName}>
       <div className={pageHeaderClassName}>
-        <div className="min-w-0 space-y-1">
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            {t("imports.eyebrow")}
-          </p>
-          <h2 className="text-2xl font-semibold tracking-tight">
-            {t("imports.title")}
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            {t("imports.description")}
-          </p>
-        </div>
+        <p className={pageDescriptionClassName}>{t("imports.description")}</p>
         <Button
           type="button"
           variant="outline"

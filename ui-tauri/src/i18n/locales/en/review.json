@@ -8,7 +8,6 @@
       "gaps": "Custody gaps"
     },
     "components": {
-      "title": "Custody components",
       "description": "Resolve long wallet-migration and consolidation histories as atomic custody components. One-to-many, many-to-one, N:M, on-chain, Liquid, and Lightning legs can share one reviewed interpretation without rewriting the imported transactions.",
       "readyToActivate": "Ready to activate",
       "needsCorrection": "Needs correction",
@@ -319,7 +318,6 @@
       "legCount_one": "{{count}} leg",
       "legCount_other": "{{count}} legs"
     },
-    "queueLabel": "Review queue",
     "page": {
       "swapsTitle": "Swap candidates",
       "transfersTitle": "Transfer candidates",
@@ -329,7 +327,6 @@
       "transfersEmpty": "No unpaired Bitcoin movement candidates. Wallet transfers, Boltz swaps, pegs, and refunds show up here."
     },
     "paired": {
-      "label": "Paired",
       "backToReview": "Back to review",
       "swapsTitle": "Paired swaps",
       "transfersTitle": "Paired transfers",
@@ -557,7 +554,6 @@
   },
   "reconcile": {
     "placeholder": "Paste one address or transaction id per line, for example:\nbc1qexampleaddress…\na1b2c3…  (64-char transaction id)",
-    "title": "Reconcile addresses & transactions",
     "description": "Paste addresses or transaction ids to find which belong to a wallet in this book — receive or change — and which are external. Useful for telling apart historic payments from transfers between your own wallets.",
     "removeCsvAria": "Remove imported CSV",
     "onDeviceNote": "Checked on-device against your wallets — nothing leaves this machine. Transactions not in your synced history can be verified on chain below (that one step contacts your backend).",
@@ -660,7 +656,6 @@
     }
   },
   "egress": {
-    "title": "Network Monitor",
     "subtitle": "Live RAM-only outbound ledger",
     "notMonitored": "This page records requests Kassiber makes in the daemon process. Work Kassiber hands to a separate program — the release check, the AI CLI broker, and lightning-cli — is not listed here, because that traffic leaves from a process this ledger cannot see.",
     "refresh": "Refresh",
@@ -729,7 +724,6 @@
     }
   },
   "logs": {
-    "developerTools": "Developer tools",
     "live": "Live",
     "ramNote": "Local-only RAM buffer. Nothing is written to disk unless you export.",
     "copy200": "Copy 200",
@@ -800,8 +794,6 @@
     "maskAmounts": "Hide amount scale"
   },
   "imports": {
-    "eyebrow": "Connections · imports · integrations",
-    "title": "Add connection",
     "description": "Add watch-only wallet sources, node integrations, exchange imports, and local files.",
     "connections": "Connections",
     "sourcesHeading": "Connection sources",

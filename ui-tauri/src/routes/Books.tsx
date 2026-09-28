@@ -46,6 +46,7 @@ import { Input } from "@/components/ui/input";
 import {
   pageHeaderActionClassName,
   pageHeaderActionsClassName,
+  pageDescriptionClassName,
   pageHeaderClassName,
   screenShellClassName,
 } from "@/lib/screen-layout";
@@ -428,14 +429,7 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   return (
     <div className={screenShellClassName}>
       <div className={pageHeaderClassName}>
-        <div className="min-w-0 space-y-2">
-          <h2 className="text-2xl font-semibold tracking-tight">
-            {t("books.title")}
-          </h2>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            {t("books.intro")}
-          </p>
-        </div>
+        <p className={pageDescriptionClassName}>{t("books.intro")}</p>
         <div className={pageHeaderActionsClassName}>
           <Button
             type="button"

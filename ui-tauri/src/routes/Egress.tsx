@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   Database,
   LockKeyhole,
-  Plane,
   RefreshCw,
 } from "lucide-react";
 import type { TFunction } from "i18next";
@@ -16,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  pageDescriptionClassName,
   pageHeaderActionClassName,
   pageHeaderClassName,
   screenShellClassName,
@@ -111,19 +111,9 @@ export function Egress() {
       : "neutral";
 
   return (
-    <main className={screenShellClassName}>
+    <div className={screenShellClassName}>
       <div className={pageHeaderClassName}>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Plane className="size-5 text-muted-foreground" aria-hidden="true" />
-            <h1 className="text-xl font-semibold tracking-normal">
-              {t("egress.title")}
-            </h1>
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t("egress.subtitle")}
-          </p>
-        </div>
+        <p className={pageDescriptionClassName}>{t("egress.subtitle")}</p>
         <Button
           type="button"
           size="sm"
@@ -291,7 +281,7 @@ export function Egress() {
           </div>
         </aside>
       </section>
-    </main>
+    </div>
   );
 }
 

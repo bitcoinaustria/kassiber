@@ -53,6 +53,7 @@ import { confirmAction } from "@/lib/confirmAction";
 import { isFileSaveAvailable, saveFile } from "@/lib/filePicker";
 import { appVersionLabel } from "@/lib/appVersion";
 import {
+  pageDescriptionClassName,
   pageHeaderActionClassName,
   pageHeaderActionsClassName,
   pageHeaderClassName,
@@ -336,26 +337,18 @@ export function Logs() {
   return (
     <div className={cn(screenShellClassName, "flex h-full min-h-0 flex-col")}>
       <div className={pageHeaderClassName}>
-        <div className="min-w-0 space-y-1">
-          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            {t("logs.developerTools")}
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-2xl font-semibold tracking-tight">{t("nav:book.logs")}</h2>
-            <Badge
-              variant="outline"
-              className="gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-            >
-              <span
-                className="size-2 animate-pulse rounded-full bg-emerald-500"
-                aria-hidden="true"
-              />
-              {t("logs.live")}
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {t("logs.ramNote")}
-          </p>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Badge
+            variant="outline"
+            className="gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+          >
+            <span
+              className="size-2 animate-pulse rounded-full bg-emerald-500"
+              aria-hidden="true"
+            />
+            {t("logs.live")}
+          </Badge>
+          <p className={pageDescriptionClassName}>{t("logs.ramNote")}</p>
         </div>
         <div className={pageHeaderActionsClassName}>
           <Button

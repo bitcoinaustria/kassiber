@@ -21,7 +21,6 @@ import {
   Info,
   Landmark,
   Loader2,
-  Plane,
   ShieldCheck,
 } from "lucide-react";
 
@@ -52,6 +51,7 @@ import {
   saveExportedFileAs,
 } from "@/daemon/transport";
 import {
+  pageDescriptionClassName,
   pageHeaderActionClassName,
   pageHeaderClassName,
   screenShellClassName,
@@ -166,19 +166,11 @@ export function ExitTax() {
   return (
     <div className={screenShellClassName}>
       <header className={pageHeaderClassName}>
-        <div className="flex items-start gap-3">
-          <div className="grid size-10 shrink-0 place-items-center rounded-xl border bg-card text-primary">
-            <Plane className="size-5" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">Exit tax</h1>
-            <p className="max-w-prose text-sm text-muted-foreground">
-              Estimate the Austrian Wegzugsbesteuerung on your Bitcoin if you give up tax
-              residence — a deemed disposal at fair market value. Hand the draft to your
-              Steuerberater.
-            </p>
-          </div>
-        </div>
+        <p className={pageDescriptionClassName}>
+          Estimate the Austrian Wegzugsbesteuerung on your Bitcoin if you give up tax
+          residence — a deemed disposal at fair market value. Hand the draft to your
+          Steuerberater.
+        </p>
         <div className="flex flex-wrap items-end gap-2 sm:gap-3">
           <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
             Departure date

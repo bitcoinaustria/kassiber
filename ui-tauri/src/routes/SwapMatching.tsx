@@ -109,6 +109,7 @@ import {
 } from "@/lib/custodyComponentBulk";
 import { useKeymap, type Keybinding } from "@/lib/keymap";
 import {
+  pageDescriptionClassName,
   pageHeaderActionClassName,
   pageHeaderClassName,
   screenShellClassName,
@@ -804,13 +805,10 @@ function CustodyComponentResolver() {
   };
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">{t("swap.components.title")}</h1>
-        <p className="mt-1 max-w-4xl text-sm text-muted-foreground">
-          {t("swap.components.description")}
-        </p>
-      </div>
+    <div className="space-y-(--kb-page-gap)">
+      <p className={pageDescriptionClassName}>
+        {t("swap.components.description")}
+      </p>
 
       <GuidedComponentForm />
 
@@ -1261,10 +1259,7 @@ function PairedSwaps({
       <div className="overflow-hidden rounded-lg border bg-card">
         <header className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
           <div className="min-w-0 space-y-1">
-            <p className="text-2xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-              {t("swap.paired.label")}
-            </p>
-            <h1 className="text-base font-semibold">{title}</h1>
+            <h2 className="text-base font-semibold">{title}</h2>
             <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
           </div>
           <Button
@@ -2293,15 +2288,8 @@ function PairingReview({
       <Collapsible open={rulesExpanded} onOpenChange={setRulesExpanded}>
         <div className="overflow-hidden rounded-lg border bg-card">
           <header className="flex flex-col gap-2.5 px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-4">
-            <div className="min-w-0">
-              <p className="text-2xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-                {t("swap.queueLabel")}
-              </p>
-              <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                <h1 className="text-base font-semibold">
-                  {pageTitle}
-                </h1>
-              </div>
+            <div className="min-w-0 space-y-1">
+              <h2 className="text-base font-semibold">{pageTitle}</h2>
               <p className="max-w-3xl text-sm text-muted-foreground">
                 {pageDescription}
               </p>

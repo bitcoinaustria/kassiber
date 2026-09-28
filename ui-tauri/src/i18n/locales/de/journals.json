@@ -95,8 +95,6 @@
       "title": "Hauptbuch-Einträge nicht verfügbar",
       "fallback": "Der Daemon hat keine verarbeiteten Hauptbuch-Einträge geliefert."
     },
-    "eyebrow": "Prüfung · verarbeitetes Hauptbuch",
-    "title": "Verarbeitetes Hauptbuch",
     "description": "Journaleinträge, die durch das Verarbeiten von Transaktionen in Tranchen, Bewertung, Anschaffungskosten, Erlös und Gewinn/Verlust entstehen.",
     "badge": {
       "stale": "veraltet",
@@ -142,8 +140,6 @@
       "title": "Quarantäne nicht verfügbar",
       "fallback": "Der Daemon hat keine Quarantänedaten geliefert."
     },
-    "eyebrow": "Prüf-Warteschlange",
-    "title": "Quarantäne",
     "description": "Blockierte Transaktionen, die aus Journalen und Berichten zurückgehalten werden, bis fehlende Preise, Anschaffungskosten, Assets oder Paar-Nachweise behoben sind.",
     "balanceExplanation": "Blockierte Transaktionen bleiben aus Journalen und Berichten, bis ihre Nachweise geklärt sind. Quarantäne ist weder Wallet noch Guthaben-Topf: Transaktionen bleiben ihrer Quell-Wallet zugeordnet. Beobachtete On-chain-Guthaben enthalten die Coins weiterhin; Buchsummen lassen ungeklärte Buchungseffekte aus und können sich nach der Prüfung ändern.",
     "badge": {

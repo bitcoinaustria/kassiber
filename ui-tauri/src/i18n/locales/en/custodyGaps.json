@@ -1,5 +1,4 @@
 {
-  "title": "Custody Gaps",
   "description": "Review Bitcoin that may have remained under the same legal owner while passing through wallet history that is not imported into Kassiber.",
   "localOnly": "Analyzed locally",
   "summary": {
