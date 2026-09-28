@@ -347,6 +347,8 @@ SUPPORTED_KINDS = (
     *daemon_accounting_documents.KINDS,
     "status",
     "ui.logs.snapshot",
+    "ui.agent_access.status",
+    "ui.agent_access.configure",
     "ui.egress.snapshot",
     "ui.overview.snapshot",
     "ui.workspace.overview.snapshot",
@@ -14903,6 +14905,27 @@ def _handle_ai_tool_call_consent(
     )
 
 
+def _agent_access_payload(kind: str, request: dict[str, Any]) -> dict[str, Any]:
+    from .agent_access import agent_access_status, set_agent_access
+
+    args = request.get("args") or {}
+    if not isinstance(args, dict):
+        raise AppError("agent access arguments must be an object", code="validation")
+    if kind == "ui.agent_access.status":
+        if args:
+            raise AppError("ui.agent_access.status takes no arguments", code="validation")
+        return agent_access_status()
+    unknown = sorted(set(args) - {"mcp_enabled", "ai_features_enabled"})
+    values = {key: args[key] for key in ("mcp_enabled", "ai_features_enabled") if key in args}
+    if unknown or not values or any(not isinstance(value, bool) for value in values.values()):
+        raise AppError(
+            "ui.agent_access.configure takes boolean mcp_enabled and/or ai_features_enabled",
+            code="validation",
+            details={"unknown": unknown},
+        )
+    return set_agent_access(**values)
+
+
 def handle_request(
     ctx: DaemonContext,
     request: dict[str, Any],
@@ -15406,6 +15429,17 @@ def handle_request(
                     "ui.backends.public_defaults",
                     _backend_public_defaults_payload(ctx),
                 ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind in {"ui.agent_access.status", "ui.agent_access.configure"}:
+        # A global, non-secret preference: answered without opening or
+        # unlocking any book, like the update-check consent.
+        return (
+            _with_request_id(
+                build_envelope(kind, _agent_access_payload(kind, request)),
                 request_id,
             ),
             False,

@@ -171,6 +171,7 @@ import {
   DAEMON_EVENT_CHANNEL,
 } from "@/lib/daemonFreshnessEvent";
 import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
+import { useAgentAccessMasterSync } from "@/lib/agentAccess";
 import {
   dataModeForActiveBackend,
   dataModeLabelKey,
@@ -784,6 +785,9 @@ export function AppShell() {
   const shellUnlocked = !locked && !importRootBlocked;
   const daemonEnabled = shellUnlocked;
   useLocalWatchNotifications(daemonEnabled);
+  // AI features are the master switch for external agents too: `kassiber mcp`
+  // reads this mirror, since it cannot see the renderer's settings.
+  useAgentAccessMasterSync(aiFeaturesEnabled, daemonEnabled);
   const shellProgress =
     routeProgressFromActiveMaintenance(activeMaintenanceProgress) ??
     routeProgressFromNotifications(appNotifications);

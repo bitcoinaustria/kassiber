@@ -6155,7 +6155,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         _enter_operator_caller_directory(args)
         _verify_operator_child_project(args)
-        if args.command == "mcp" and args.mcp_command in {"serve", "tools"}:
+        if args.command == "mcp" and args.mcp_command in {
+            "serve",
+            "tools",
+            "status",
+            "enable",
+            "disable",
+        }:
             # MCP clients may launch probe copies: launch must not migrate
             # state, create a project layout, or print an update banner into
             # a stderr the client may persist. Each call resolves its book.
@@ -6254,8 +6260,10 @@ def _maybe_migrate_default_state_root(args: argparse.Namespace) -> None:
 def _require_existing_book_for_agent_read(args: argparse.Namespace) -> None:
     """`mcp call` reads; unlike other CLI reads it never creates a book."""
 
+    from ..agent_access import require_mcp_access
     from ..projects import load_catalog
 
+    require_mcp_access()
     if (
         getattr(args, "data_root", None) is None
         and getattr(args, "project", None) is None

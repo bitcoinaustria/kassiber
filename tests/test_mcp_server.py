@@ -38,6 +38,33 @@ from kassiber.operator.cli import route_brokered_command
 from tests.integration.env import no_egress_guard
 
 
+_ACCESS_DIR: tempfile.TemporaryDirectory | None = None
+_PREVIOUS_ACCESS_FILE: str | None = None
+
+
+def setUpModule() -> None:
+    # External agents are off by default; these tests exercise the server
+    # with the user's opt-in recorded in a disposable preference file.
+    global _ACCESS_DIR, _PREVIOUS_ACCESS_FILE
+    from kassiber.agent_access import PATH_ENV, set_agent_access
+
+    _ACCESS_DIR = tempfile.TemporaryDirectory()
+    _PREVIOUS_ACCESS_FILE = os.environ.get(PATH_ENV)
+    os.environ[PATH_ENV] = str(Path(_ACCESS_DIR.name) / "agent-access.json")
+    set_agent_access(mcp_enabled=True)
+
+
+def tearDownModule() -> None:
+    from kassiber.agent_access import PATH_ENV
+
+    if _PREVIOUS_ACCESS_FILE is None:
+        os.environ.pop(PATH_ENV, None)
+    else:
+        os.environ[PATH_ENV] = _PREVIOUS_ACCESS_FILE
+    if _ACCESS_DIR is not None:
+        _ACCESS_DIR.cleanup()
+
+
 MODERN_META = {
     META_PROTOCOL_VERSION: "2026-07-28",
     META_CLIENT_CAPABILITIES: {},
@@ -626,7 +653,14 @@ class CommandSurfaceTests(unittest.TestCase):
     def test_mcp_commands_are_catalogued_as_local_reads(self):
         catalog = describe_command_catalog(build_parser(), ["mcp"])
         by_command = {command["command"]: command for command in catalog["commands"]}
-        self.assertEqual(set(by_command), {"mcp serve", "mcp tools", "mcp call"})
+        self.assertEqual(
+            set(by_command),
+            {"mcp serve", "mcp tools", "mcp call", "mcp status", "mcp enable", "mcp disable"},
+        )
+        for command in ("mcp status", "mcp enable", "mcp disable"):
+            self.assertFalse(by_command[command]["needs_database"])
+        # Turning disclosure on is never a leasable capability.
+        self.assertIs(cli_capability("mcp.enable"), Capability.ADMIN)
         self.assertEqual(by_command["mcp serve"]["effect"], "interactive")
         self.assertFalse(by_command["mcp serve"]["needs_database"])
         self.assertFalse(by_command["mcp tools"]["needs_database"])
@@ -848,3 +882,92 @@ class StrictJsonTests(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertEqual(payload["error"]["code"], "not_initialized")
             self.assertFalse(catalog.exists())
+
+
+class AgentAccessTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self._tmp.name) / "agent-access.json"
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_off_by_default_and_fails_closed_on_bad_files(self):
+        from kassiber.agent_access import agent_access_status
+
+        self.assertEqual(agent_access_status(self.path)["reason"], "mcp_disabled")
+        for content in ("not json", '{"schema_version": 2, "mcp_enabled": true}', '{"mcp_enabled": true}'):
+            self.path.write_text(content)
+            with self.subTest(content=content):
+                self.assertFalse(agent_access_status(self.path)["mcp_available"])
+
+    def test_the_ai_master_switch_blocks_and_restores_agent_access(self):
+        from kassiber.agent_access import agent_access_status, set_agent_access
+
+        self.assertTrue(set_agent_access(mcp_enabled=True, path=self.path)["mcp_available"])
+        off = set_agent_access(ai_features_enabled=False, path=self.path)
+        self.assertEqual((off["mcp_available"], off["reason"]), (False, "ai_features_disabled"))
+        self.assertTrue(off["mcp_enabled"], "the user's own choice is kept")
+        self.assertTrue(set_agent_access(ai_features_enabled=True, path=self.path)["mcp_available"])
+        self.assertTrue(agent_access_status(self.path)["mcp_available"])
+        if os.name != "nt":
+            self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
+
+    def test_a_disabled_server_refuses_calls_before_touching_any_book(self):
+        from kassiber.agent_access import PATH_ENV, set_agent_access
+
+        with tempfile.TemporaryDirectory() as root:
+            provider = mcp_cli.BookToolProvider(
+                data_root=str(Path(root) / "never-created"),
+                project=None, env_file=None, workspace=None, profile=None,
+            )
+            with mock.patch.dict(os.environ, {PATH_ENV: str(self.path)}):
+                refused = provider.call_tool("status", {}, threading.Event())
+                self.assertEqual(refused.structured["error"]["code"], "mcp_disabled")
+                set_agent_access(mcp_enabled=True, ai_features_enabled=False, path=self.path)
+                master = provider.call_tool("status", {}, threading.Event())
+                self.assertEqual(master.structured["error"]["code"], "ai_features_disabled")
+            self.assertFalse((Path(root) / "never-created").exists())
+
+    def test_one_shot_call_is_refused_when_disabled(self):
+        from kassiber.agent_access import PATH_ENV
+
+        with tempfile.TemporaryDirectory() as root, mock.patch.dict(os.environ, {PATH_ENV: str(self.path)}):
+            payload, code = _run_cli(
+                "--data-root", str(Path(root) / "data"), "--machine", "mcp", "call", "--tool", "status"
+            )
+        self.assertEqual(code, 1)
+        self.assertEqual(payload["error"]["code"], "mcp_disabled")
+
+    def test_agents_cannot_enable_themselves_but_can_always_disable(self):
+        from kassiber.agent_access import PATH_ENV, agent_access_status, set_agent_access
+
+        with mock.patch.dict(os.environ, {PATH_ENV: str(self.path)}):
+            payload, code = _run_cli("--machine", "mcp", "enable")
+            self.assertEqual(code, 1)
+            self.assertEqual(payload["error"]["code"], "interaction_required")
+            self.assertFalse(agent_access_status(self.path)["mcp_enabled"])
+            set_agent_access(mcp_enabled=True, path=self.path)
+            payload, code = _run_cli("--machine", "mcp", "disable")
+            self.assertEqual(code, 0, payload)
+            self.assertFalse(payload["data"]["mcp_enabled"])
+            payload, code = _run_cli("--machine", "mcp", "status")
+            self.assertEqual(payload["kind"], "mcp.status")
+
+    def test_the_desktop_configures_access_through_validated_daemon_kinds(self):
+        from kassiber import daemon
+        from kassiber.agent_access import PATH_ENV
+
+        self.assertIn("ui.agent_access.status", daemon.SUPPORTED_KINDS)
+        self.assertIn("ui.agent_access.configure", daemon.SUPPORTED_KINDS)
+        with mock.patch.dict(os.environ, {PATH_ENV: str(self.path)}):
+            status = daemon._agent_access_payload(
+                "ui.agent_access.configure",
+                {"args": {"mcp_enabled": True, "ai_features_enabled": True}},
+            )
+            self.assertTrue(status["mcp_available"])
+            for bad in ({}, {"mcp_enabled": "yes"}, {"mcp_enabled": True, "path": "/x"}):
+                with self.subTest(bad=bad), self.assertRaises(AppError):
+                    daemon._agent_access_payload("ui.agent_access.configure", {"args": bad})
+            with self.assertRaises(AppError):
+                daemon._agent_access_payload("ui.agent_access.status", {"args": {"x": 1}})

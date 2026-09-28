@@ -32,6 +32,28 @@ result redaction, with a narrower, strictly read-only allowlist.
   handles are excluded until daemon-enforced approval modes exist (see
   [TODO](../../TODO.md)).
 
+## Turning it on
+
+External agents are off by default. Until the user turns them on, the server
+still lists its tools but every call returns `mcp_disabled`. Two ways turn them on:
+
+- the desktop app: **Settings → AI → External agents (MCP)**, which then shows
+  the command for the current book;
+- `kassiber mcp enable` in the user's own terminal. It asks for confirmation
+  and refuses `--machine` and non-interactive callers, so an agent cannot turn
+  itself on.
+
+`kassiber mcp disable` or the desktop switch turn agents off again, and
+`kassiber mcp status` reports the state. AI features are the master switch:
+while they are off in the desktop, calls return `ai_features_disabled`, and
+the external-agents choice is kept for when AI is turned back on.
+
+The choice lives in `config/agent-access.json` in Kassiber's per-user state
+directory, beside the update-check consent. The file is owner-only and holds no
+secrets. The desktop writes it through `ui.agent_access.configure`, and every
+call re-reads it before resolving any project; an unreadable file counts as
+off.
+
 ## Disclosure
 
 Everything a tool returns goes to the agent host and, through it, to whatever
@@ -118,8 +140,12 @@ directly from a shell with the same result shape (`kind: mcp.call`).
 
 ## Host configuration
 
-Use absolute paths if `kassiber` is not on the host's `PATH`. Pinning the
-project and book is recommended:
+Once agents are enabled, the desktop shows a ready `claude mcp add` command
+for the current book and copies an equivalent JSON config for other hosts. Both
+use the installed terminal command, or the app's own launcher with `--cli`,
+which forwards stdio to the bundled CLI. By hand, use absolute paths if
+`kassiber` is not on the host's `PATH`. Pinning the project and book is
+recommended:
 
 ```json
 {

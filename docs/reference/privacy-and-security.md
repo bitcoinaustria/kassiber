@@ -636,7 +636,10 @@ for a tool round-trip are replayed only in daemon memory.
 
 ## External agents (MCP)
 
-`kassiber mcp serve` is a local stdio MCP server for agent hosts. Launch,
+`kassiber mcp serve` is a local stdio MCP server for agent hosts. It is off by
+default: calls are refused until the user turns on External agents in Settings
+→ AI or runs `kassiber mcp enable` in their own terminal, and never while the
+desktop's AI features switch is off. Launch,
 discovery, and listing touch nothing: no database, lock, project layout, or
 socket, loopback included. Exposed tools are the Assistant's local, read-only,
 redacted tools, with read-triggered journal rebuilds and freshness syncs

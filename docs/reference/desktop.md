@@ -275,6 +275,13 @@ back explicitly to `sqlcipher_inline` when no desktop secret service, D-Bus
 session, or unlocked collection is available. There is no
 plaintext fallback and no remember-unlock behavior.
 
+The same Settings screen carries **External agents (MCP)**, off by default and
+disabled while AI features are off. Turning it on records the choice through
+`ui.agent_access.configure` and shows a `claude mcp add` command, plus a
+copyable JSON config, pinned to the current book. The desktop also mirrors the
+AI features switch into that preference, writing only when it changed, so
+`kassiber mcp serve` refuses agents while AI is off; see [MCP](mcp.md).
+
 Settings -> Desktop -> Developer tools carries the early-stage-features switch,
 which is off by default and gates the surfaces that are not finished yet. With
 it off, Network Monitor, Logs, and Settings -> Device sync disappear from the
