@@ -98,7 +98,8 @@ neither is ever created.
   an explicit book, and the server process never sees the passphrase. A lease
   covers every book in its project; the book is the server pin, else the
   lease's default scope. Without a lease, the call returns `interaction_required` with
-  `details.reason = operator_lease_required`, without starting a broker. The
+  `details.reason = operator_lease_required` and never starts a broker, even if
+  one exits between the lease check and the submission. The
   agent asks the user to run `kassiber operator unlock --capability read` in
   their own terminal.
 - **`manual` encrypted books** return `interaction_required` with

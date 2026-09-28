@@ -533,9 +533,10 @@ class BrokeredRoutingTests(_TwoBookFixture):
     def test_lease_runs_one_scoped_mcp_call_operation(self):
         captured: dict = {}
 
-        def submit(_client, data_root, prepared, *, admin_authentication):
+        def submit(_client, data_root, prepared, *, admin_authentication, start_broker=True):
             captured["argv"] = list(prepared.argv)
             captured["admin"] = admin_authentication
+            captured["start_broker"] = start_broker
             return {"operation_id": "gen.client.op", "state": "queued"}
 
         child = {
@@ -568,6 +569,7 @@ class BrokeredRoutingTests(_TwoBookFixture):
         self.assertEqual(outcome.structured["data"], {"ok": 1})
         argv = captured["argv"]
         self.assertIsNone(captured["admin"])
+        self.assertIs(captured["start_broker"], False)
         self.assertEqual(argv[argv.index("mcp") : argv.index("mcp") + 2], ["mcp", "call"])
         self.assertEqual(argv[argv.index("--workspace") + 1], "ws-id")
         self.assertEqual(argv[argv.index("--profile") + 1], "book-id")
@@ -681,3 +683,63 @@ class StdioProcessTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PublishedSchemaEnforcementTests(unittest.TestCase):
+    def test_every_published_keyword_is_enforced_by_the_shared_validator(self):
+        from kassiber.daemon import _validate_ai_schema_value
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "code": {"type": "string", "minLength": 2, "maxLength": 4, "pattern": "^[a-f0-9]+$"},
+                "count": {"type": "integer", "exclusiveMinimum": 0, "exclusiveMaximum": 10},
+            },
+        }
+        for value in ({"code": "a"}, {"code": "abcde"}, {"code": "zz"}, {"count": 0}, {"count": 10}):
+            with self.subTest(value=value), self.assertRaises(AppError) as raised:
+                _validate_ai_schema_value(value, schema, path="tool")
+            self.assertEqual(raised.exception.code, "validation")
+        _validate_ai_schema_value({"code": "ab12", "count": 9}, schema, path="tool")
+
+    def test_out_of_bounds_mcp_arguments_are_refused_before_execution(self):
+        definitions = {d["name"]: d for d in mcp_tools.tool_definitions()}
+        constrained = [
+            (name, key, spec)
+            for name, definition in definitions.items()
+            for key, spec in definition["inputSchema"].get("properties", {}).items()
+            if isinstance(spec, dict) and "exclusiveMinimum" in spec
+        ]
+        self.assertTrue(constrained)
+        name, key, spec = constrained[0]
+        from kassiber.daemon import _validate_ai_tool_arguments
+
+        with self.assertRaises(AppError):
+            _validate_ai_tool_arguments(mcp_tools.entry_for(name), {key: spec["exclusiveMinimum"]})
+
+
+class ReviewHardeningTests(_TwoBookFixture):
+    def test_a_broker_that_exits_after_the_lease_check_is_not_restarted(self):
+        from kassiber.operator.client import BrokerClient
+
+        with mock.patch(
+            "kassiber.operator.modes.effective_unlock_mode", return_value="brokered"
+        ), mock.patch.object(
+            BrokerClient, "status",
+            return_value={"lease": "unlocked", "default_scope": {"workspace": "w", "profile": "p"}},
+        ), mock.patch.object(
+            BrokerClient, "ping", side_effect=ConnectionRefusedError()
+        ), mock.patch.object(
+            BrokerClient, "ensure_running", side_effect=AssertionError("must not start a broker")
+        ):
+            outcome = self.provider().call_tool("status", {}, threading.Event())
+        self.assertTrue(outcome.is_error)
+        self.assertEqual(outcome.structured["error"]["details"]["reason"], "operator_lease_required")
+
+    def test_oversized_results_are_refused_by_their_encoded_size(self):
+        big = {"tool": "status", "data": "\U0001F600" * (mcp_tools.MAX_RESULT_BYTES // 12 + 1)}
+        with mock.patch.object(mcp_cli.BookToolProvider, "_call", return_value=big):
+            outcome = self.provider().call_tool("status", {}, threading.Event())
+        # Each non-BMP character escapes to 12 ASCII bytes on the wire.
+        self.assertTrue(outcome.is_error)
+        self.assertEqual(outcome.structured["error"]["code"], "result_too_large")

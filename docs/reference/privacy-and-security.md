@@ -643,9 +643,10 @@ redacted tools, with read-triggered journal rebuilds and freshness syncs
 disabled, so they make no network requests. The server writes nothing to
 stderr, which hosts may persist. Its results reach the host's model; that
 disclosure is the user's choice when registering the server, and Kassiber
-cannot control the host's provider. On encrypted books the server never holds
-a passphrase: brokered books run each call through the operator lease. See
-[MCP](mcp.md).
+cannot control the host's provider. On brokered encrypted books the server
+never holds a passphrase: each call runs through the operator lease, and a
+call never starts a broker. Unattended books open per call with the
+remembered credential, like any CLI command in that mode. See [MCP](mcp.md).
 
 ## Reporting
 

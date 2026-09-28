@@ -70,8 +70,10 @@ MCP_SOURCE_TOOL_NAMES: tuple[str, ...] = (
 
 # Claude Code truncates longer tool descriptions and server instructions.
 MAX_DESCRIPTION_CHARS = 2048
-# Past this, a result costs more agent context than it is worth; narrow it.
-MAX_RESULT_CHARS = 1_000_000
+# Bound on the ASCII-escaped result text. The wire response carries it twice
+# (structuredContent plus the text block, whose JSON string escaping at most
+# doubles it), so this keeps every reply under the 16 MiB message limit.
+MAX_RESULT_BYTES = 4 * 1024 * 1024
 
 INSTRUCTIONS = (
     "Kassiber is a local-first Bitcoin accounting book. These tools are "

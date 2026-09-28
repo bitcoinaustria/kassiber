@@ -594,7 +594,8 @@ Only schemas advertised for that turn may be requested by the provider. The
 small deterministic pre-read router remains separately bounded and read-only.
 The daemon validates tool
 arguments against the catalog again at execution time, including required
-fields, types, enums, bounds, and `additionalProperties`; provider output cannot
+fields, types, enums, numeric and exclusive bounds, string lengths, patterns,
+item counts, and `additionalProperties`; provider output cannot
 smuggle a hidden network or mutation argument into a narrower tool.
 
 Read tools return bounded, redacted projections. The following boundaries

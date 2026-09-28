@@ -188,8 +188,9 @@ class BookToolProvider:
             return _error_outcome(
                 AppError("The Kassiber tool failed unexpectedly", code="tool_error")
             )
-        text = json.dumps(structured, ensure_ascii=False, separators=(",", ":"))
-        if len(text) > mcp_tools.MAX_RESULT_CHARS:
+        # ASCII escaping matches what the stdio writer puts on the wire.
+        text = json.dumps(structured, ensure_ascii=True, separators=(",", ":"))
+        if len(text) > mcp_tools.MAX_RESULT_BYTES:
             return _error_outcome(
                 AppError(
                     "The result is too large to return to an agent",
@@ -317,7 +318,14 @@ class BookToolProvider:
         ]
         prepared = prepare_arguments(argv, stdin=io.BytesIO())
         try:
-            accepted = client.submit(paths.data_root, prepared, admin_authentication=None)
+            # The lease check above did not start a broker; a broker that has
+            # since exited must not be restarted by an agent's read either.
+            accepted = client.submit(
+                paths.data_root,
+                prepared,
+                admin_authentication=None,
+                start_broker=False,
+            )
         finally:
             wipe_prepared(prepared)
         operation_id = accepted.get("operation_id")

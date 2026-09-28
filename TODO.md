@@ -164,9 +164,6 @@ remains outside that closeout.
   checks, before any mutating tool is exposed through `kassiber mcp`. Consent
   for MCP mutations must bind a plan digest and input version and must not
   trust a host-answered elicitation alone.
-- [ ] Enforce the JSON Schema keywords the AI tool schemas already declare
-  (`pattern`, `minLength`, `maxLength`, `exclusiveMinimum`), which MCP
-  publishes as a contract.
 - [ ] Give brokered operations a full agent lifecycle: caller-supplied
   operation ids (reusing the broker's dedupe), `operator operations list`,
   `--no-wait` plus `operator operation result`, precise failed-vs-unknown for

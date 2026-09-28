@@ -265,8 +265,24 @@ class BrokerClient:
         prepared: PreparedArguments,
         *,
         admin_authentication: bytearray | None,
+        start_broker: bool = True,
     ) -> dict[str, object]:
-        broker = self.ensure_running()
+        if start_broker:
+            broker = self.ensure_running()
+        else:
+            try:
+                broker = self.ping()
+            except (OSError, EOFError, AppError):
+                raise AppError(
+                    "this project has no active operator lease",
+                    code="interaction_required",
+                    hint=(
+                        "Ask the user to run `kassiber operator unlock` in their own "
+                        "terminal, then retry. Never ask for the passphrase itself."
+                    ),
+                    details={"reason": "operator_lease_required", "unlock_mode": "brokered"},
+                    retryable=True,
+                ) from None
         generation = broker.get("generation")
         if not isinstance(generation, str):
             raise AppError("broker generation is unavailable", code="operator_protocol_error")

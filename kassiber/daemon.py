@@ -5866,7 +5866,45 @@ def _validate_ai_schema_value(
                     path=f"{path}[{index}]",
                     depth=depth + 1,
                 )
+    if isinstance(value, str):
+        # Published schemas are a contract at external boundaries (MCP), so
+        # every keyword they declare is enforced, not only the types.
+        minimum_length = schema.get("minLength")
+        maximum_length = schema.get("maxLength")
+        if isinstance(minimum_length, int) and len(value) < minimum_length:
+            raise AppError(
+                f"AI tool argument {path} is too short",
+                code="validation",
+                retryable=False,
+            )
+        if isinstance(maximum_length, int) and len(value) > maximum_length:
+            raise AppError(
+                f"AI tool argument {path} is too long",
+                code="validation",
+                retryable=False,
+            )
+        pattern = schema.get("pattern")
+        if isinstance(pattern, str) and re.search(pattern, value) is None:
+            raise AppError(
+                f"AI tool argument {path} does not match its required format",
+                code="validation",
+                retryable=False,
+            )
     if isinstance(value, (int, float)) and not isinstance(value, bool):
+        exclusive_minimum = schema.get("exclusiveMinimum")
+        exclusive_maximum = schema.get("exclusiveMaximum")
+        if isinstance(exclusive_minimum, (int, float)) and value <= exclusive_minimum:
+            raise AppError(
+                f"AI tool argument {path} must be greater than its minimum",
+                code="validation",
+                retryable=False,
+            )
+        if isinstance(exclusive_maximum, (int, float)) and value >= exclusive_maximum:
+            raise AppError(
+                f"AI tool argument {path} must be less than its maximum",
+                code="validation",
+                retryable=False,
+            )
         minimum = schema.get("minimum")
         maximum = schema.get("maximum")
         if isinstance(minimum, (int, float)) and value < minimum:
