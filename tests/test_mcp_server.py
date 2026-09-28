@@ -235,6 +235,29 @@ class StdioLoopTests(unittest.TestCase):
         self.assertEqual(responses[-1]["id"], 9)
 
 
+class SubscriptionLimitTests(unittest.TestCase):
+    def test_a_malformed_subscription_envelope_gets_an_error_not_a_stream(self):
+        server = McpServer(_FakeProvider(), name="kassiber", version="test")
+        bad = _request(7, "subscriptions/listen", {"_meta": MODERN_META, "notifications": {}})
+        bad["jsonrpc"] = "invalid"
+        responses = _serve_lines(server, [bad])
+        self.assertTrue(all("method" not in item for item in responses))
+        self.assertIn("error", responses[0])
+
+    def test_open_subscriptions_are_capped(self):
+        from kassiber.mcp.protocol import MAX_SUBSCRIPTIONS
+
+        server = McpServer(_FakeProvider(), name="kassiber", version="test")
+        requests = [
+            _request(100 + index, "subscriptions/listen", {"_meta": MODERN_META, "notifications": {}})
+            for index in range(MAX_SUBSCRIPTIONS + 1)
+        ]
+        responses = _serve_lines(server, requests)
+        refused = [item for item in responses if "error" in item]
+        self.assertEqual([item["id"] for item in refused], [100 + MAX_SUBSCRIPTIONS])
+        self.assertEqual(refused[0]["error"]["data"], {"limit": MAX_SUBSCRIPTIONS})
+
+
 class CatalogProjectionTests(unittest.TestCase):
     def test_every_exposed_tool_is_a_local_read_only_catalog_tool(self):
         from kassiber import daemon

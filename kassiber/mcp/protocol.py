@@ -48,6 +48,8 @@ STATIC_LIST_TTL_MS = 3_600_000
 # Calls run one at a time; a client pipelining more than this many is refused
 # rather than queued without bound (each request may be megabytes).
 MAX_INFLIGHT_CALLS = 32
+# Open `subscriptions/listen` streams; each holds an entry until stdin ends.
+MAX_SUBSCRIPTIONS = 16
 # After stdin closes, accepted calls get this long to finish and be answered.
 SHUTDOWN_DRAIN_SECONDS = 30.0
 
@@ -431,7 +433,21 @@ class StdioLoop:
                 return
             self._calls.put((message, key, event))
             return
-        if method == "subscriptions/listen" and key is not None:
+        if method == "subscriptions/listen" and key is not None and message.get("jsonrpc") == "2.0":
+            # A malformed envelope falls through to ordinary handling, which
+            # answers it with the protocol's error instead of a stream.
+            with self._state_lock:
+                full = len(self._subscriptions) >= MAX_SUBSCRIPTIONS
+            if full:
+                self._write(
+                    _error_response(
+                        message.get("id"),
+                        SERVER_OVERLOADED,
+                        "Too many open subscriptions",
+                        {"limit": MAX_SUBSCRIPTIONS},
+                    )
+                )
+                return
             try:
                 acknowledgement = self._server.open_subscription(message)
             except McpError as exc:

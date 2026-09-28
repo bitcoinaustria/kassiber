@@ -108,7 +108,8 @@ neither is ever created.
 A broker from an earlier build that is still running cannot bind caller
 context; MCP calls are refused against it (`operator_broker_outdated`) until
 the user restarts the broker. At most 32 tool calls may be in flight; more are
-refused with a retryable `-32000` error rather than queued without bound.
+refused with a retryable `-32000` error rather than queued without bound, and
+at most 16 `subscriptions/listen` streams may be open.
 
 The agent must never ask for or relay the passphrase. `kassiber mcp serve` is
 a long-lived server and is refused as a broker operation, like `chat` and
