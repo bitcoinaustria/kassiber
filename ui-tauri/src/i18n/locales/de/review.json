@@ -555,8 +555,12 @@
   "reconcile": {
     "placeholder": "Füge eine Adresse oder Transaktions-ID pro Zeile ein, zum Beispiel:\nbc1qexampleaddress…\na1b2c3…  (64-stellige Transaktions-ID)",
     "description": "Füge Adressen oder Transaktions-IDs ein, um herauszufinden, welche zu einer Wallet in diesem Buch gehören — Empfang oder Wechsel — und welche extern sind. Nützlich, um historische Zahlungen von Übertragungen zwischen deinen eigenen Wallets zu unterscheiden.",
+    "inputTitle": "Adressen & Transaktions-IDs",
+    "entryCount_one": "{{count}} Eintrag",
+    "entryCount_other": "{{count}} Einträge",
     "removeCsvAria": "Importierte CSV entfernen",
-    "onDeviceNote": "Lokal auf dem Gerät gegen deine Wallets geprüft — nichts verlässt diese Maschine. Transaktionen, die nicht in deiner Sync-Historie sind, kannst du unten on-chain verifizieren (dieser eine Schritt kontaktiert dein Backend).",
+    "clear": "Leeren",
+    "onDeviceNote": "Lokal auf diesem Gerät gegen deine Wallets geprüft. Nichts verlässt diese Maschine, außer du verifizierst on-chain.",
     "importCsv": "CSV importieren",
     "checking": "Wird geprüft…",
     "checkOwnership": "Eigentümerschaft prüfen",
@@ -565,24 +569,28 @@
     "csvImportFailed": "CSV-Import fehlgeschlagen",
     "fileEmpty": "Diese Datei ist leer — nichts zu importieren.",
     "fileReadFailed": "Diese Datei konnte nicht gelesen werden.",
-    "metric": {
-      "checked": "Geprüft",
-      "owned": "Eigene",
-      "external": "Extern",
-      "unknown": "Unbekannt",
-      "invalid": "Ungültig"
+    "resultsTitle": "Ergebnisse",
+    "filterAll": "Alle",
+    "filterPlaceholder": "Ergebnisse filtern",
+    "empty": {
+      "title": "Einträge einfügen und prüfen",
+      "owned": "Aus einer Wallet in diesem Buch abgeleitet, als Empfangs- oder Wechseladresse mit Index.",
+      "external": "Aus keiner deiner Wallets abgeleitet.",
+      "unknown": "Nicht in deiner Sync-Historie. Verifiziere on-chain, um es zu klären."
     },
     "scanned_one": "{{count}} Wallet bis Ableitungsindex {{index}} gescannt{{verified}}.",
     "scanned_other": "{{count}} Wallets bis Ableitungsindex {{index}} gescannt{{verified}}.",
     "verifiedSuffix": " · on-chain verifiziert",
     "verifying": "Wird verifiziert…",
     "verifyOnChain": "{{count}} on-chain verifizieren",
+    "verifyHint": "Fragt {{backend}} nach den Einträgen, die deine Sync-Historie nicht klären kann. Nur dieser Schritt verlässt dieses Gerät.",
+    "verifyBackend": "Verifizieren über",
+    "listChanged": "Die Liste hat sich seit dieser Prüfung geändert. Prüfe erneut, um die Ergebnisse zu aktualisieren; die On-chain-Verifizierung nutzt die geprüfte Liste.",
     "copied": "Kopiert",
     "copyCsv": "CSV kopieren",
     "table": {
       "input": "Eingabe",
-      "wallet": "Wallet",
-      "branch": "Zweig",
+      "match": "Treffer",
       "classification": "Klassifizierung",
       "noResults": "Keine passenden Ergebnisse."
     },
@@ -595,11 +603,24 @@
       "input": "Input",
       "external": "extern"
     },
+    "type": {
+      "address": "Adresse",
+      "txid": "Transaktions-ID",
+      "lightningInvoice": "Lightning-Invoice",
+      "lightningOffer": "BOLT12-Offer",
+      "lnurl": "LNURL",
+      "lightningAddress": "Lightning-Adresse",
+      "silentPaymentAddress": "Silent-Payment-Adresse",
+      "outpoint": "Outpoint",
+      "extendedPublicKey": "Extended Public Key",
+      "privateKey": "Private Key"
+    },
     "status": {
       "owned": "Eigene",
       "external": "Extern",
       "unknown": "Unbekannt",
-      "invalid": "Ungültig"
+      "invalid": "Ungültig",
+      "unsupported": "Nicht unterstützt"
     },
     "classification": {
       "ownedAddress": "Eigene Adresse",
@@ -611,7 +632,8 @@
       "external": "Extern",
       "unknown": "Unbekannt",
       "undetermined": "Unbestimmt",
-      "invalid": "Ungültig"
+      "invalid": "Ungültig",
+      "unsupported": "Nicht unterstütztes Format"
     }
   },
   "activity": {
