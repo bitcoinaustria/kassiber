@@ -14,7 +14,6 @@
     "errorReturnDefaultRoot": "Could not return to the default project root."
   },
   "books": {
-    "title": "Books",
     "intro": "Each book has its own tax and currency settings. Use separate books for private and business activity; use separate Kassiber files for different clients.",
     "newBookSet": "New book set",
     "summary": {

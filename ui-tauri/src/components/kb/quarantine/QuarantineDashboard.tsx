@@ -482,8 +482,6 @@ export function QuarantineDashboard({
     <>
       <ReviewDataTable
         kind="quarantine"
-        eyebrow={t("quarantine.eyebrow")}
-        title={t("quarantine.title")}
         description={t("quarantine.balanceExplanation")}
         rows={rows}
         metrics={metrics}

@@ -45,7 +45,11 @@ import {
 import { confirmAction } from "@/lib/confirmAction";
 import { shouldRefreshTouchIdPassphrase } from "@/lib/appLock";
 import { setAppUpdateChecksEnabled } from "@/lib/appUpdate";
-import { screenPanelClassName } from "@/lib/screen-layout";
+import {
+  pageDescriptionClassName,
+  pageTitleClassName,
+  screenPanelClassName,
+} from "@/lib/screen-layout";
 import { setSessionUnlockPassphrase } from "@/store/sessionLock";
 import { useUiStore } from "@/store/ui";
 import { databasePassphraseHint } from "@/components/kb/Onboarding/constants";
@@ -1155,7 +1159,7 @@ export function SettingsScreen({
   return (
     <>
       <div className={screenPanelClassName}>
-        <div className="mx-auto flex w-full max-w-[1100px] min-w-0 flex-col gap-5">
+        <div className="mx-auto flex w-full max-w-[1100px] min-w-0 flex-col gap-(--kb-page-gap)">
           {deferredConnectionSetup ? (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
               <span>
@@ -1188,19 +1192,12 @@ export function SettingsScreen({
           ) : null}
 
           <div className="min-w-0">
-            <div className="mb-5 space-y-1 border-b pb-4">
-              {/* dynamic key */}
-              {/* Same label recipe as the side nav's group captions (T3Code's
-                  "Projects" label): plain sentence-case `text-xs font-medium` in
-                  the muted tone, not uppercase mono. */}
-              <p className="text-xs font-medium text-muted-foreground">
-                {t(activeMeta.groupKey as never)}
-              </p>
-              <h1 className="text-2xl font-semibold tracking-tight">
+            <div className="mb-(--kb-page-gap) space-y-1 border-b pb-(--kb-page-gap)">
+              <h2 className={pageTitleClassName}>
                 {/* dynamic key */}
                 {t(activeMeta.labelKey as never)}
-              </h1>
-              <p className="max-w-2xl text-sm text-muted-foreground">
+              </h2>
+              <p className={pageDescriptionClassName}>
                 {/* dynamic key */}
                 {t(activeMeta.descriptionKey as never)}
               </p>

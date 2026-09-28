@@ -8,7 +8,6 @@
       "gaps": "Verwahrungslücken"
     },
     "components": {
-      "title": "Verwahrungskomponenten",
       "description": "Löse lange Wallet-Migrations- und Konsolidierungsverläufe als atomare Verwahrungskomponenten. Eins-zu-viele-, Viele-zu-eins-, N:M-, On-chain-, Liquid- und Lightning-Legs können eine gemeinsame geprüfte Interpretation bilden, ohne importierte Transaktionen umzuschreiben.",
       "readyToActivate": "Bereit zur Aktivierung",
       "needsCorrection": "Korrektur nötig",
@@ -319,7 +318,6 @@
       "legCount_one": "{{count}} Leg",
       "legCount_other": "{{count}} Legs"
     },
-    "queueLabel": "Prüfungs-Warteschlange",
     "page": {
       "swapsTitle": "Swap-Kandidaten",
       "transfersTitle": "Übertragungs-Kandidaten",
@@ -329,7 +327,6 @@
       "transfersEmpty": "Keine ungepaarten Bitcoin-Bewegungs-Kandidaten. Wallet-Übertragungen, Boltz-Swaps, Pegs und Refunds erscheinen hier."
     },
     "paired": {
-      "label": "Gepaart",
       "backToReview": "Zurück zur Prüfung",
       "swapsTitle": "Gepaarte Swaps",
       "transfersTitle": "Gepaarte Übertragungen",
@@ -557,7 +554,6 @@
   },
   "reconcile": {
     "placeholder": "Füge eine Adresse oder Transaktions-ID pro Zeile ein, zum Beispiel:\nbc1qexampleaddress…\na1b2c3…  (64-stellige Transaktions-ID)",
-    "title": "Adressen & Transaktionen abgleichen",
     "description": "Füge Adressen oder Transaktions-IDs ein, um herauszufinden, welche zu einer Wallet in diesem Buch gehören — Empfang oder Wechsel — und welche extern sind. Nützlich, um historische Zahlungen von Übertragungen zwischen deinen eigenen Wallets zu unterscheiden.",
     "removeCsvAria": "Importierte CSV entfernen",
     "onDeviceNote": "Lokal auf dem Gerät gegen deine Wallets geprüft — nichts verlässt diese Maschine. Transaktionen, die nicht in deiner Sync-Historie sind, kannst du unten on-chain verifizieren (dieser eine Schritt kontaktiert dein Backend).",
@@ -660,7 +656,6 @@
     }
   },
   "egress": {
-    "title": "Network Monitor",
     "subtitle": "Live-RAM-Ledger für ausgehende Verbindungen",
     "notMonitored": "Diese Seite erfasst Anfragen, die Kassiber im Daemon-Prozess stellt. Was Kassiber an ein separates Programm übergibt — die Release-Prüfung, den AI-CLI-Broker und lightning-cli — steht hier nicht, weil dieser Verkehr aus einem Prozess stammt, den dieses Protokoll nicht sehen kann.",
     "refresh": "Aktualisieren",
@@ -729,7 +724,6 @@
     }
   },
   "logs": {
-    "developerTools": "Entwicklerwerkzeuge",
     "live": "Live",
     "ramNote": "Nur lokaler RAM-Puffer. Es wird nichts auf die Festplatte geschrieben, außer du exportierst.",
     "copy200": "200 kopieren",
@@ -800,8 +794,6 @@
     "maskAmounts": "Größenordnung ausblenden"
   },
   "imports": {
-    "eyebrow": "Verbindungen · Importe · Integrationen",
-    "title": "Verbindung hinzufügen",
     "description": "Füge Watch-only-Wallet-Quellen, Node-Integrationen, Börsen-Importe und lokale Dateien hinzu.",
     "connections": "Verbindungen",
     "sourcesHeading": "Verbindungsquellen",

@@ -95,8 +95,6 @@
       "title": "Ledger entries unavailable",
       "fallback": "The daemon did not return processed ledger entries."
     },
-    "eyebrow": "Audit · processed ledger",
-    "title": "Processed Ledger",
     "description": "Journal entries produced by processing transactions into tax lots, pricing, basis, proceeds, and gain/loss.",
     "badge": {
       "stale": "stale",
@@ -142,8 +140,6 @@
       "title": "Quarantine unavailable",
       "fallback": "The daemon did not return quarantine data."
     },
-    "eyebrow": "Review queue",
-    "title": "Quarantine",
     "description": "Blocked transactions held out of journals and reports until missing prices, basis, assets, or pair evidence are fixed.",
     "balanceExplanation": "Blocked transactions stay out of journals and reports until their evidence is fixed. Quarantine is not a wallet or balance bucket: transactions remain in their source wallet. Observed on-chain balances still include the coins; book-based totals omit unresolved accounting effects and may change after review.",
     "badge": {

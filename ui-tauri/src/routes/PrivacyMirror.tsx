@@ -9,7 +9,7 @@ import { DaemonScopeContext, useDaemon } from "@/daemon/client";
 import { analysisInvestigationSearch, type AnalysisTab, type AnalysisWorkspace } from "@/lib/chainAnalysisNavigation";
 import { formatUiNumber } from "@/lib/localeFormat";
 import { PERSONAL_RELEVANCE, groupPrivacyFindings, privacyHeadline, type PrivacyFinding, type PrivacyInvestigation, type PrivacyMirrorPayload } from "@/lib/privacyMirror";
-import { screenShellClassName } from "@/lib/screen-layout";
+import { pageDescriptionClassName, pageHeaderActionsClassName, pageHeaderClassName, screenShellClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { useChainAnalysisAssistant } from "@/hooks/useChainAnalysisAssistant";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
@@ -103,12 +103,9 @@ export function PrivacyMirrorPayloadView({ payload, onRefresh, refreshing = fals
   const gaps = coverage.missing_nodes > 0 || coverage.stale_nodes > 0 || coverage.conflicting_nodes > 0;
   return (
     <div className={screenShellClassName} data-testid="privacy-mirror-page">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground"><Eye className="size-3.5" />{t("observer")}</div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <header className={pageHeaderClassName}>
+        <p className={cn(pageDescriptionClassName, "flex items-center gap-1.5")}><Eye className="size-3.5" />{t("observer")}</p>
+        <div className={pageHeaderActionsClassName}>
           {onAsk && <Button variant="outline" size="sm" disabled={asking} onClick={() => onAsk()}><Sparkles className="size-3.5" />{t("ask")}</Button>}
           {onInvestigate && <Button variant="outline" size="sm" onClick={() => investigate()}><ArrowUpRight className="size-3.5" />{t("workbench")}</Button>}
           {onRefresh && <Button variant="ghost" size="icon-sm" aria-label={t("refresh")} disabled={refreshing} onClick={onRefresh}><RefreshCw className={cn("size-4", refreshing && "animate-spin")} /></Button>}

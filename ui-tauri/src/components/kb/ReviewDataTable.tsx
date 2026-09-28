@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/table";
 
 import {
+  pageDescriptionClassName,
   pageHeaderActionsClassName,
   pageHeaderClassName,
   screenShellClassName,
@@ -85,8 +86,6 @@ export interface ReviewMetric {
 
 interface ReviewDataTableProps {
   kind: ReviewTableKind;
-  eyebrow: string;
-  title: string;
   description: string;
   icon?: ComponentType<SVGProps<SVGSVGElement>>;
   rows: ReviewTableRow[];
@@ -176,8 +175,6 @@ const blurClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 export function ReviewDataTable({
   kind,
-  eyebrow,
-  title,
   description,
   icon: Icon,
   rows,
@@ -326,15 +323,9 @@ export function ReviewDataTable({
               <Icon className="size-4" />
             </span>
           ) : null}
-          <div className="min-w-0">
-            <p className="text-2xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-              {eyebrow}
-            </p>
-            <h1 className="mt-0.5 text-base font-semibold">{title}</h1>
-            <p className="mt-0.5 max-w-4xl text-xs text-muted-foreground sm:text-sm">
-              {description}
-            </p>
-          </div>
+          <p className={cn(pageDescriptionClassName, "self-center")}>
+            {description}
+          </p>
         </div>
         <div className={cn(pageHeaderActionsClassName, "shrink-0")}>
           {actions}

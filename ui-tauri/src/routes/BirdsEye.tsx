@@ -42,6 +42,7 @@ import {
   pageHeaderActionClassName,
   pageHeaderActionsClassName,
   pageHeaderClassName,
+  pageTitleClassName,
   screenShellClassName,
 } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
@@ -490,19 +491,12 @@ export function BirdsEyeView({
       aria-busy={isFetching || refreshWorkspace.isPending}
     >
       <div className={pageHeaderClassName}>
-        <div className="min-w-0 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-2xl font-semibold tracking-tight">
-              {to("birdsEye.title")}
-            </h2>
-            <Badge variant="secondary">{to("birdsEye.badge")}</Badge>
-            {fiat?.mixed ? (
-              <Badge variant="outline">{to("birdsEye.mixedFiatBadge")}</Badge>
-            ) : null}
-          </div>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            {title}
-          </p>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h2 className={pageTitleClassName}>{title}</h2>
+          <Badge variant="secondary">{to("birdsEye.badge")}</Badge>
+          {fiat?.mixed ? (
+            <Badge variant="outline">{to("birdsEye.mixedFiatBadge")}</Badge>
+          ) : null}
         </div>
         <div className={pageHeaderActionsClassName}>
           <Button variant="outline" className={pageHeaderActionClassName} asChild>

@@ -22,7 +22,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { pageHeaderClassName, screenShellClassName } from "@/lib/screen-layout";
+import {
+  pageDescriptionClassName,
+  pageHeaderClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import { useDaemon, useDaemonInfinite, useDaemonMutation } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { cn } from "@/lib/utils";
@@ -120,17 +124,12 @@ export function Activity() {
 
   return (
     <div className={screenShellClassName}>
-      <div className="flex w-full flex-col gap-5">
+      <div className="flex w-full flex-col gap-(--kb-page-gap)">
         <header className={pageHeaderClassName}>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <ActivityIcon className="size-4" aria-hidden="true" />
-              {t("activity.provenance")}
-            </div>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal text-foreground">
-              {t("nav:book.activity")}
-            </h1>
-          </div>
+          <p className={cn(pageDescriptionClassName, "flex items-center gap-2")}>
+            <ActivityIcon className="size-4" aria-hidden="true" />
+            {t("activity.provenance")}
+          </p>
           {staleCount > 0 ? (
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
               <CalendarClock className="size-4" aria-hidden="true" />

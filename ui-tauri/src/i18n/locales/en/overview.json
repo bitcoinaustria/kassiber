@@ -5,7 +5,6 @@
     "noRealData": "No real overview data is available for the current book."
   },
   "birdsEye": {
-    "title": "Book Set Overview",
     "badge": "Book set",
     "mixedFiatBadge": "Mixed fiat",
     "refresh": "Refresh book set",

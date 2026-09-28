@@ -1,5 +1,4 @@
 {
-  "title": "Verwahrungslücken",
   "description": "Prüfe Bitcoin, die möglicherweise beim selben Rechtsträger verblieben sind, obwohl sie eine nicht in Kassiber importierte Wallet-Historie durchlaufen haben.",
   "localOnly": "Lokal analysiert",
   "summary": {

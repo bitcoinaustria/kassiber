@@ -3233,12 +3233,13 @@ function ShellTitlebarControls({
       */}
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden pl-3 sm:gap-3 md:pl-5">
         <BreadcrumbBook daemonEnabled={daemonEnabled} />
-        <span
+        {/* The page's `h1`: pages do not repeat their own name below it. */}
+        <h1
           className="min-w-0 truncate text-sm font-medium text-sidebar-foreground"
           title={t(meta.titleKey as never) /* dynamic key */}
         >
           {t(meta.titleKey as never) /* dynamic key */}
-        </span>
+        </h1>
         {preAlphaBannerVisible ? <AlphaNotice /> : null}
       </div>
       <div className="flex shrink-0 items-center gap-0.5 pr-2 pl-2">
