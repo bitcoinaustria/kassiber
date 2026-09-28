@@ -5,7 +5,16 @@ import { useTranslation } from "react-i18next";
 import { ANALYSIS_NETWORKS, type AnalysisNetwork, useUiStore } from "@/store/ui";
 
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { SettingsDisclosure } from "./SettingsControls";
 import {
   backendExplorerBaseUrl,
   backendProtocolLabel,
@@ -229,18 +238,26 @@ function AnalysisNetworkSettings() {
   const network = useUiStore((state) => state.analysisNetwork);
   const setNetwork = useUiStore((state) => state.setAnalysisNetwork);
   return (
-    <details className="rounded-lg border bg-background p-4">
-      <summary className="cursor-pointer text-sm font-medium">{t("analysisNetwork.title")}</summary>
-      <div className="mt-3 space-y-2">
-        <label className="flex max-w-sm flex-col gap-2 text-sm">
-          {t("analysisNetwork.label")}
-          <select className="rounded-md border bg-background px-3 py-2" value={network}
-            onChange={(event) => setNetwork(event.target.value as AnalysisNetwork)}>
-            {ANALYSIS_NETWORKS.map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-        </label>
-        <p className="max-w-2xl text-xs text-muted-foreground">{t("analysisNetwork.help")}</p>
+    <SettingsDisclosure title={t("analysisNetwork.title")}>
+      <div className="flex max-w-sm flex-col gap-1.5">
+        <Label htmlFor="analysis-network">{t("analysisNetwork.label")}</Label>
+        <Select
+          value={network}
+          onValueChange={(value) => setNetwork(value as AnalysisNetwork)}
+        >
+          <SelectTrigger id="analysis-network" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ANALYSIS_NETWORKS.map((value) => (
+              <SelectItem key={value} value={value}>
+                {value}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
-    </details>
+      <p className="max-w-2xl text-xs text-muted-foreground">{t("analysisNetwork.help")}</p>
+    </SettingsDisclosure>
   );
 }
