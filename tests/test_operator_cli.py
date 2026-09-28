@@ -129,7 +129,9 @@ class OperatorCliTest(unittest.TestCase):
             captured: dict[str, object] = {}
             stderr = io.StringIO()
 
-            def submit(_client, data_root, prepared, *, admin_authentication):
+            def submit(_client, data_root, prepared, *, admin_authentication, **options):
+                captured["start_broker"] = options.get("start_broker", True)
+                captured["require_same_build"] = options.get("require_same_build", False)
                 captured["data_root"] = data_root
                 captured["argv"] = list(prepared.argv)
                 captured["secrets"] = {
@@ -167,6 +169,10 @@ class OperatorCliTest(unittest.TestCase):
         self.assertNotIn("--db-passphrase-fd", captured["argv"])
         self.assertNotIn(str(read_fd), captured["argv"])
         self.assertEqual(captured["secrets"], {})
+        # An ordinary command must never start a broker of its own build.
+        self.assertIs(captured["start_broker"], False)
+        # Brokered work goes only to this build's broker.
+        self.assertIs(captured["require_same_build"], True)
         # Machine mode writes exactly one accepted event and nothing secret.
         events = [json.loads(line) for line in stderr.getvalue().splitlines()]
         self.assertEqual(
@@ -175,7 +181,11 @@ class OperatorCliTest(unittest.TestCase):
                 {
                     "kind": "operator.operation.accepted",
                     "schema_version": 1,
-                    "data": {"operation_id": "generation.operation", "state": "queued"},
+                    "data": {
+                        "operation_id": "generation.operation",
+                        "state": "queued",
+                        "broker_build": None,
+                    },
                 }
             ],
         )

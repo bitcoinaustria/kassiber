@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 
 from ..core.runtime import resolve_db_passphrase_for_bypass
+from ..db import ensure_data_root
 from ..errors import AppError
 from ..secrets.prompt import (
     prompt_passphrase,
@@ -97,13 +98,30 @@ def cmd_backup_import(args: argparse.Namespace) -> dict:
         Path(args.target_data_root).expanduser() if args.target_data_root else None
     )
 
-    result = import_backup(
-        archive,
-        target_data_root or Path(args.data_root),
-        backup_passphrase=backup_passphrase,
-        identity_file=identity_file,
-        move_into_place=bool(args.install),
-    )
+    destination = target_data_root or Path(args.data_root)
+
+    def run_import():
+        return import_backup(
+            archive,
+            destination,
+            backup_passphrase=backup_passphrase,
+            identity_file=identity_file,
+            move_into_place=bool(args.install),
+        )
+
+    if args.install:
+        # Replacing a project's files needs the same exclusion as the desktop
+        # restore: refuse while a desktop app or broker owns it. Ownership is
+        # per project directory, so take it even before a database exists,
+        # which also keeps either role from creating one meanwhile.
+        from ..operator.project import exclusive_project_maintenance
+
+        with exclusive_project_maintenance(
+            ensure_data_root(destination), active_owner_kind=None
+        ):
+            result = run_import()
+    else:
+        result = run_import()
     return {
         "archive": str(archive),
         "staging_path": str(result.staging_path) if result.staging_path else None,

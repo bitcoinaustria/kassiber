@@ -177,6 +177,7 @@ from ..diagnostics import (
 from ..backup.cli import add_backup_parser, dispatch_backup
 from ..backends import preferred_explorer_base
 from ..envelope import build_error_envelope, write_text
+from ..secrets.sqlcipher import is_lock_contention
 from ..errors import AppError
 from ..projects import (
     create_project,
@@ -6219,7 +6220,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         raw_traceback = traceback.format_exc()
         if args.debug:
             sys.stderr.write(raw_traceback)
-        wrapped = AppError(str(exc) or exc.__class__.__name__, code="internal_error")
+        if is_lock_contention(exc):
+            # Another process (the desktop, a broker child) holds the write
+            # lock: say so and let the caller retry, not "internal error".
+            wrapped = AppError(
+                "the database is busy in another Kassiber process",
+                code="database_busy",
+                hint="Retry when the other process finishes its write.",
+                retryable=True,
+            )
+        else:
+            wrapped = AppError(str(exc) or exc.__class__.__name__, code="internal_error")
         write_error_diagnostics(
             args,
             runtime,

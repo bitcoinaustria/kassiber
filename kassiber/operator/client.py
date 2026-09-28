@@ -12,6 +12,7 @@ from typing import BinaryIO
 
 from ..errors import AppError
 from ..secrets.prompt import MAX_PASSPHRASE_BYTES
+from .build import build_identity, describe_build
 from .launcher import (
     broker_server_command,
     prepare_independent_child_environment,
@@ -56,7 +57,11 @@ class BrokerClient:
     def ensure_running(self) -> dict[str, object]:
         try:
             return self.ping()
-        except (OSError, EOFError, AppError):
+        except AppError as exc:
+            # Another build's broker holds the endpoint: spawning ours would
+            # only lose the election and wait out the startup timeout.
+            _raise_if_other_protocol(exc)
+        except (OSError, EOFError):
             pass
         environment = os.environ.copy()
         environment.pop("KASSIBER_OPERATOR_DIRECT", None)
@@ -82,7 +87,11 @@ class BrokerClient:
         while time.monotonic() < deadline:
             try:
                 return self.ping()
-            except (OSError, EOFError, AppError) as exc:
+            except AppError as exc:
+                _raise_if_other_protocol(exc)
+                last_error = exc
+                time.sleep(0.05)
+            except (OSError, EOFError) as exc:
                 last_error = exc
                 time.sleep(0.05)
         raise AppError(
@@ -160,7 +169,7 @@ class BrokerClient:
         capability: str,
         authentication_method: str,
     ) -> dict[str, object]:
-        self.ensure_running()
+        _require_same_build(self.ensure_running())
         with connect() as channel:
             channel.send_json(
                 {
@@ -176,6 +185,9 @@ class BrokerClient:
             challenge = continuation.get("challenge")
             if continuation.get("continue") != "secret" or not isinstance(challenge, str):
                 raise AppError("invalid broker unlock challenge", code="operator_protocol_error")
+            # The broker that asks for the secret must be this build too; a
+            # ping on an earlier connection could have reached another one.
+            _require_same_build(continuation)
             channel.send_secret(challenge, passphrase)
             return self._receive_data(channel)
 
@@ -187,6 +199,7 @@ class BrokerClient:
         capability: str,
     ) -> dict[str, object]:
         broker = self.ensure_native_auth_running()
+        _require_same_build(broker)
         native_auth_identity = _broker_native_auth_identity(broker)
         with connect() as channel:
             channel.send_json(
@@ -201,6 +214,37 @@ class BrokerClient:
             )
             return self._receive_data(channel)
 
+    def stop(self) -> dict[str, object]:
+        """Stop an idle broker of any build; it refuses while work or leases exist."""
+
+        try:
+            broker = self.ping()
+        except AppError as exc:
+            if exc.code != "operator_protocol_version_mismatch":
+                raise
+            # It would refuse the stop request too: only its own build can.
+            raise AppError(
+                "the running operator broker speaks another protocol version",
+                code="operator_broker_build_mismatch",
+                hint=_OTHER_PROTOCOL_HINT,
+                details={"this_build": build_identity()},
+                retryable=False,
+            ) from None
+        except (OSError, EOFError):
+            return {"broker": "stopped"}
+        try:
+            self._simple_request("restart_for_native_auth")
+        except AppError as exc:
+            if exc.code == "operator_broker_busy":
+                raise AppError(
+                    "the operator broker is still in use",
+                    code="operator_broker_busy",
+                    hint="Run `kassiber operator lock` and wait for queued work, then retry.",
+                    retryable=True,
+                ) from None
+            raise
+        return {"broker": "stopping", "broker_build": broker.get("build")}
+
     def lock(self, data_root: str) -> dict[str, object]:
         try:
             return self._simple_request("lock", data_root=data_root)
@@ -213,7 +257,7 @@ class BrokerClient:
         mode: str,
         authentication: bytearray,
     ) -> dict[str, object]:
-        self.ensure_running()
+        _require_same_build(self.ensure_running())
         with connect() as channel:
             channel.send_json(
                 {
@@ -227,6 +271,9 @@ class BrokerClient:
             challenge = continuation.get("challenge")
             if continuation.get("continue") != "secret" or not isinstance(challenge, str):
                 raise AppError("invalid broker mode challenge", code="operator_protocol_error")
+            # The broker that asks for the secret must be this build too; a
+            # ping on an earlier connection could have reached another one.
+            _require_same_build(continuation)
             channel.send_secret(challenge, authentication)
             return self._receive_data(channel)
 
@@ -238,6 +285,7 @@ class BrokerClient:
         configured: bool,
     ) -> dict[str, object]:
         broker = self.ensure_native_auth_running()
+        _require_same_build(broker)
         native_auth_identity = _broker_native_auth_identity(broker)
         with connect() as channel:
             channel.send_json(
@@ -256,6 +304,7 @@ class BrokerClient:
                     "invalid broker native-auth challenge",
                     code="operator_protocol_error",
                 )
+            _require_same_build(continuation)
             channel.send_secret(challenge, authentication)
             return self._receive_data(channel)
 
@@ -267,44 +316,60 @@ class BrokerClient:
         admin_authentication: bytearray | None,
         start_broker: bool = True,
         require_caller_context: bool = False,
+        require_same_build: bool = False,
     ) -> dict[str, object]:
         if start_broker:
             broker = self.ensure_running()
         else:
             try:
                 broker = self.ping()
-            except (OSError, EOFError, AppError):
-                raise AppError(
-                    "this project has no active operator lease",
-                    code="interaction_required",
-                    hint=(
-                        "Ask the user to run `kassiber operator unlock` in their own "
-                        "terminal, then retry. Never ask for the passphrase itself."
-                    ),
-                    details={"reason": "operator_lease_required", "unlock_mode": "brokered"},
-                    retryable=True,
-                ) from None
+            except AppError as exc:
+                _raise_if_other_protocol(exc)
+                raise _no_lease_error() from None
+            except (OSError, EOFError):
+                raise _no_lease_error() from None
         generation = broker.get("generation")
         if not isinstance(generation, str):
             raise AppError("broker generation is unavailable", code="operator_protocol_error")
+        if require_same_build:
+            _require_same_build(broker)
         _require_caller_context_support(broker, strict=require_caller_context)
         operation_id = f"{generation}.client.{secrets.token_hex(16)}"
         try:
-            return self._submit_once(
-                data_root,
-                prepared,
-                operation_id=operation_id,
-                admin_authentication=admin_authentication,
-            )
-        except (OSError, EOFError):
-            try:
-                return self._submit_once(
+            return self._accepted(
+                self._submit_once(
                     data_root,
                     prepared,
                     operation_id=operation_id,
                     admin_authentication=admin_authentication,
+                    require_same_build=require_same_build,
+                ),
+                operation_id,
+                require_same_build=require_same_build,
+                pinged_build=broker.get("build"),
+            )
+        except (OSError, EOFError):
+            try:
+                return self._accepted(
+                    self._submit_once(
+                        data_root,
+                        prepared,
+                        operation_id=operation_id,
+                        admin_authentication=admin_authentication,
+                        require_same_build=require_same_build,
+                    ),
+                    operation_id,
+                    require_same_build=require_same_build,
+                    # After a lost connection the ping may describe another
+                    # broker than the one that accepted: report no build.
+                    pinged_build=None,
                 )
             except (OSError, EOFError, AppError) as retry_exc:
+                if (
+                    isinstance(retry_exc, AppError)
+                    and retry_exc.code == "operator_broker_build_mismatch"
+                ):
+                    raise
                 try:
                     status = self.operation_status(operation_id)
                 except (OSError, EOFError, AppError):
@@ -343,22 +408,38 @@ class BrokerClient:
         *,
         operation_id: str,
         admin_authentication: bytearray | None,
+        require_same_build: bool = False,
     ) -> dict[str, object]:
+        request: dict[str, object] = {
+            "version": PROTOCOL_VERSION,
+            "action": "submit",
+            "data_root": data_root,
+            "operation_id": operation_id,
+            # The command line follows once the broker has named its build.
+            "argv_follows": True,
+            "secret_labels": list(prepared.secrets),
+            "working_directory": _caller_working_directory(),
+            "no_egress": _caller_disables_egress(),
+        }
+        if require_same_build:
+            # The broker refuses before admitting anything; the checks on
+            # its replies below cover a broker that ignores this field.
+            request["expected_build"] = build_identity()
         with connect() as channel:
-            channel.send_json(
-                {
-                    "version": PROTOCOL_VERSION,
-                    "action": "submit",
-                    "data_root": data_root,
-                    "operation_id": operation_id,
-                    "argv": prepared.argv,
-                    "secret_labels": list(prepared.secrets),
-                    "working_directory": _caller_working_directory(),
-                    "no_egress": _caller_disables_egress(),
-                }
-            )
+            channel.send_json(request)
+            response = self._receive(channel)
+            if response.get("continue") != "argv":
+                raise AppError("invalid broker submit continuation", code="operator_protocol_error")
+            # Inline arguments can carry secrets (`--token VALUE`) and book
+            # data: they, like every brokered command, go only to this build.
+            _require_same_build(response)
+            channel.send_json({"argv": prepared.argv})
             response = self._receive(channel)
             if response.get("continue") == "secrets":
+                # Command secrets and fresh admin authentication go only to
+                # this build's broker, whatever the caller asked for; the
+                # broker named its build in this very reply.
+                _require_same_build(response)
                 challenges = response.get("challenges")
                 if not isinstance(challenges, dict):
                     raise AppError("invalid broker secret challenge", code="operator_protocol_error")
@@ -396,6 +477,32 @@ class BrokerClient:
                 "reason": "broker_unreachable",
                 "hint": "Reconcile project state before retrying the operation.",
             }
+
+    def _accepted(
+        self,
+        accepted: dict[str, object],
+        operation_id: str,
+        *,
+        require_same_build: bool,
+        pinged_build: object = None,
+    ) -> dict[str, object]:
+        """Name the build that accepted the work; refuse another if required."""
+
+        accepted = dict(accepted)
+        build = accepted.pop("build", None)
+        if build is None and not require_same_build:
+            # An earlier build's acceptance does not name itself; its ping may.
+            build = pinged_build
+        if require_same_build and build != build_identity():
+            # Another broker took the endpoint after the ping. Its work never
+            # reaches the caller, so withdraw it rather than leave it queued.
+            try:
+                self.cancel(operation_id)
+            except (OSError, EOFError, AppError):
+                pass
+            _require_same_build({"build": build})
+        # Queued work runs the broker's build; callers can surface it.
+        return {**accepted, "broker_build": build}
 
     def cancel(self, operation_id: str) -> dict[str, object]:
         return self._simple_request("operation_cancel", operation_id=operation_id)
@@ -514,6 +621,56 @@ def prepare_arguments(
             _wipe(secret)
         raise
     return PreparedArguments(prepared, secret_values)
+
+
+def _no_lease_error() -> AppError:
+    return AppError(
+        "this project has no active operator lease",
+        code="interaction_required",
+        hint=(
+            "Ask the user to run `kassiber operator unlock` in their own "
+            "terminal, then retry. Never ask for the passphrase itself."
+        ),
+        details={"reason": "operator_lease_required", "unlock_mode": "brokered"},
+        retryable=True,
+    )
+
+
+_OTHER_BUILD_HINT = (
+    "Another Kassiber build runs this user's operator broker. Run "
+    "`kassiber operator lock` and `kassiber operator stop` from any build, then retry."
+)
+_OTHER_PROTOCOL_HINT = (
+    "An older or newer Kassiber build runs this user's operator broker. Run "
+    "`kassiber operator lock` and `kassiber operator stop` from that build, or "
+    "end its broker process, then retry."
+)
+
+
+def _raise_if_other_protocol(exc: AppError) -> None:
+    if exc.code == "operator_protocol_version_mismatch":
+        raise AppError(
+            "the running operator broker speaks another protocol version",
+            code="operator_broker_build_mismatch",
+            hint=_OTHER_PROTOCOL_HINT,
+            details={"this_build": build_identity()},
+            retryable=False,
+        ) from None
+
+
+def _require_same_build(broker: dict[str, object]) -> None:
+    """Hand a passphrase or an agent's work only to this build's broker."""
+
+    this_build = build_identity()
+    if broker.get("build") == this_build:
+        return
+    raise AppError(
+        f"the operator broker is {describe_build(broker.get('build'))}, not this build",
+        code="operator_broker_build_mismatch",
+        hint=_OTHER_BUILD_HINT,
+        details={"broker_build": broker.get("build"), "this_build": this_build},
+        retryable=False,
+    )
 
 
 def _require_caller_context_support(

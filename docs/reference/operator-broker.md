@@ -74,6 +74,7 @@ kassiber operator unlock
 kassiber operator unlock --duration 8h
 kassiber operator status
 kassiber operator lock
+kassiber operator stop
 kassiber operator operation status <operation-id>
 kassiber operator operation cancel <operation-id>
 kassiber operator mode manual|brokered|unattended
@@ -150,6 +151,56 @@ project transition, or ownership cleanup is active; lock active leases and
 wait for work to finish before retrying. No accepted operation is interrupted
 and terminal result caches are the only state discarded with the old broker
 generation.
+
+`kassiber operator stop` ends an idle broker of any build that speaks the
+same protocol, through the same handoff check, and reports `broker: stopping`;
+it is refused with `operator_broker_busy` while a lease or operation is live,
+so lock first. It is an admin command. An absent broker is not an error.
+
+## Several builds on one machine
+
+Every Kassiber build run by one OS user (a release app, a prerelease, a
+locally built app, a source checkout) shares the one per-user broker endpoint,
+and the broker runs its own build's code for every queued child. The broker
+therefore names its build in `ping` and `status`: version, channel, a short
+commit, whether it is packaged, and a short digest of where it runs from (the
+executable for packaged builds, the AppImage file rather than its per-launch
+mount, the package directory for source runs). The
+digest keeps worktrees and installs apart without exposing a path. This is an
+integrity guard against accidental mixing, not a boundary against same-user
+code, which can claim any identity.
+
+- `operator unlock`, `operator mode`, and the Touch ID commands refuse a
+  broker of another build with `operator_broker_build_mismatch` before any
+  secret is sent. The broker names its build in the same reply that asks for
+  the secret, so a broker that took the endpoint after an earlier check is
+  refused too. A broker without a build identity counts as another build. The
+  details name both builds; the hint is to lock and stop it first.
+- A broker speaking another protocol version fails fast with the same code
+  instead of being retried until the startup deadline. It also refuses
+  `operator stop` from this build; stop it from its own build. Builds from
+  before this binding speak an older version, so after an upgrade a broker
+  they left running is refused until it is stopped from that build or ends
+  at logout.
+- `kassiber mcp` submits tool calls only to a broker of its own build. The
+  request names the required build, so another build's broker refuses it
+  before admitting anything; work accepted by a broker that ignores that is
+  cancelled and refused.
+- Ordinary brokered commands never start a broker. Without one they return
+  `interaction_required` with `details.reason = operator_lease_required`. When
+  they reach a broker of another build, they are refused with
+  `operator_broker_build_mismatch`: the broker names its build before the
+  client sends the command line, which can carry secrets (`--token VALUE`)
+  and book data, so nothing of the command reaches another build. The
+  accepted event carries `broker_build`.
+- `operator status` reports `broker_build`, `this_build`, and `same_build`.
+
+Two desktop apps cannot open the same project at once: the second receives
+`project_in_use`. A desktop app and the broker can, as described below. A
+command that waits past the SQLite busy timeout for a write lock held by
+another Kassiber process returns retryable `database_busy` (a denied
+`database_busy` result for an AI or MCP tool call) rather than
+`internal_error`.
 
 ## Endpoint and peer validation
 

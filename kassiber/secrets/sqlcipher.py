@@ -153,7 +153,7 @@ def verify_unlock(conn: Any) -> None:
     try:
         conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
     except _database_error_classes() as exc:
-        if _is_lock_contention(exc):
+        if is_lock_contention(exc):
             # Another connection holds a lock: the key may well be right.
             # Reporting this as a wrong passphrase would feed auth backoff and
             # tell the user (or an agent) to re-enter or re-enroll it.
@@ -177,7 +177,7 @@ _LOCK_CONTENTION_CODES = frozenset({5, 6})  # SQLITE_BUSY, SQLITE_LOCKED
 UNLOCK_BUSY_TIMEOUT_SECONDS = 30.0
 
 
-def _is_lock_contention(exc: BaseException) -> bool:
+def is_lock_contention(exc: BaseException) -> bool:
     code = getattr(exc, "sqlite_errorcode", None)
     if isinstance(code, int):
         return (code & 0xFF) in _LOCK_CONTENTION_CODES

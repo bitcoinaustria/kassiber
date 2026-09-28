@@ -6489,6 +6489,13 @@ def _execute_read_only_ai_tool(
             message=str(exc),
         )
     except Exception as exc:
+        from .secrets.sqlcipher import is_lock_contention
+
+        if is_lock_contention(exc):
+            return _tool_result_denied(
+                "database_busy",
+                message="The database is busy in another Kassiber process; retry shortly.",
+            )
         traceback.print_exc(file=sys.stderr)
         sys.stderr.flush()
         _REQUEST_LOGGER.error("read-only ai tool crashed", exc_info=exc)

@@ -176,7 +176,7 @@ CLI_ACCOUNTING_DECISION_PATHS = _paths(
 CLI_ADMIN_PATHS = _paths(
     """
     daemon init projects.create chats.delete chats.clear chats.config mcp.enable
-    operator.unlock operator.lock operator.mode operator.operation.cancel
+    operator.unlock operator.lock operator.stop operator.mode operator.operation.cancel
     operator.touch-id.enroll operator.touch-id.forget
     secrets.init secrets.init-resume secrets.change-passphrase
     secrets.remember-unlock secrets.forget-unlock secrets.verify

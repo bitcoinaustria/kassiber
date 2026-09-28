@@ -129,7 +129,11 @@ neither is ever created.
 
 A broker from an earlier build that is still running cannot bind caller
 context; MCP calls are refused against it (`operator_broker_outdated`) until
-the user restarts the broker. At most 32 tool calls may be in flight; more are
+the user restarts the broker. Calls go only to a broker of the server's own
+build; another build's broker is refused with `operator_broker_build_mismatch`
+(see [several builds](operator-broker.md#several-builds-on-one-machine)).
+Arguments are validated against the tool's schema before anything is queued,
+and a brokered result is redacted again in the server process. At most 32 tool calls may be in flight; more are
 refused with a retryable `-32000` error rather than queued without bound, and
 at most 16 `subscriptions/listen` streams may be open.
 
