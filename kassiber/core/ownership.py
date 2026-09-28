@@ -1612,6 +1612,167 @@ def _legs_from_local_tx_json(
 VerifyFetcher = Callable[[str, str], "dict[str, Any] | None"]
 
 
+@dataclass
+class IdentifyPlan:
+    """Everything a reconciliation needs from the book, gathered up front.
+
+    ``prepare_identify`` does all the database work; ``finish_identify`` only
+    fetches the ``pending`` txids and classifies them against the in-memory
+    ``index``, so it can run off the thread that owns the SQLite connection.
+    """
+
+    results: list[dict[str, Any] | None]
+    pending: list[tuple[int, dict[str, Any]]]
+    index: OwnedIndex
+    wallet_count: int
+    scan_to_index: int
+    warnings: list[str]
+    verify: bool
+
+
+# Progress: (checked, total) after each on-chain lookup.
+VerifyProgress = Callable[[int, int], None]
+
+
+def prepare_identify(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    addresses: Iterable[str] | None = None,
+    txids: Iterable[str] | None = None,
+    candidates: Iterable[str] | None = None,
+    file_text: str | None = None,
+    csv_text: str | None = None,
+    wallet_ids: Sequence[str] | None = None,
+    scan_to_index: int = DEFAULT_SCAN_TO_INDEX,
+    verify: bool = False,
+) -> IdentifyPlan:
+    """Classify everything local data can settle; queue the rest for the chain.
+
+    With ``verify`` set, txids missing from local history are left as
+    ``pending`` for ``finish_identify`` to look up. Without it they resolve to
+    ``unknown`` here and nothing is pending.
+    """
+    scan_to_index = max(0, min(int(scan_to_index or 0), MAX_SCAN_TO_INDEX))
+    pre_warnings: list[str] = []
+    merged_candidates = list(candidates or [])
+    if csv_text:
+        harvested = extract_candidates_from_csv(csv_text)
+        if len(harvested) > MAX_HARVEST_CANDIDATES:
+            pre_warnings.append(
+                f"CSV yielded {len(harvested)} candidates; only the first "
+                f"{MAX_HARVEST_CANDIDATES} were checked."
+            )
+            harvested = harvested[:MAX_HARVEST_CANDIDATES]
+        merged_candidates.extend(harvested)
+    parsed, invalid = parse_tokens(addresses, txids, merged_candidates, file_text)
+    wallets = load_profile_wallets(conn, profile_id, wallet_ids)
+    index, warnings = build_owned_index(conn, profile_id, wallets, scan_to_index=scan_to_index)
+    warnings = pre_warnings + warnings
+
+    results: list[dict[str, Any] | None] = []
+    pending: list[tuple[int, dict[str, Any]]] = []
+    wallet_id_set = {str(wallet["id"]) for wallet in wallets}
+    sp_receivers: list[tuple[Mapping[str, Any], Any]] | None = None
+    for token in parsed:
+        if token["type"] == "address":
+            results.append(classify_address(token, index))
+            continue
+        if token["type"] == "lightning_invoice":
+            results.append(
+                classify_lightning_invoice(conn, profile_id, token, wallet_id_set)
+            )
+            continue
+        if token["type"] == "silent_payment_address":
+            if sp_receivers is None:
+                sp_receivers = silent_payment_receivers(wallets)
+            results.append(classify_silent_payment_address(token, sp_receivers))
+            continue
+        legs = load_local_tx_legs(conn, profile_id, str(token["normalized"]))
+        if legs is None and verify:
+            pending.append((len(results), token))
+            results.append(None)
+            continue
+        results.append(classify_txid(token, index, legs))
+
+    for entry in invalid:
+        results.append(
+            {
+                "input": entry["input"],
+                "type": entry.get("type") or "invalid",
+                "chain": "",
+                "status": entry.get("status") or "invalid",
+                "classification": entry.get("classification") or "invalid",
+                "note": entry["reason"],
+            }
+        )
+    return IdentifyPlan(
+        results=results,
+        pending=pending,
+        index=index,
+        wallet_count=len(wallets),
+        scan_to_index=scan_to_index,
+        warnings=warnings,
+        verify=verify,
+    )
+
+
+def finish_identify(
+    plan: IdentifyPlan,
+    verify_fetcher: VerifyFetcher | None = None,
+    *,
+    progress: VerifyProgress | None = None,
+    cancelled: Callable[[], bool] | None = None,
+) -> dict[str, Any]:
+    """Look up the plan's pending txids one by one and build the report.
+
+    Touches no database, so it may run on a worker thread. ``cancelled`` is
+    checked before each lookup; once it returns true the remaining txids stay
+    ``unknown`` and the report says how far the run got.
+    """
+    warnings = list(plan.warnings)
+    results = list(plan.results)
+    total = len(plan.pending)
+    for checked, (position, token) in enumerate(plan.pending):
+        txid = str(token["normalized"])
+        legs = None
+        if cancelled is not None and cancelled():
+            warnings.append(
+                f"Stopped after {checked} of {total} on-chain lookups; "
+                "the rest stay unknown."
+            )
+            for later_position, later_token in plan.pending[checked:]:
+                results[later_position] = classify_txid(later_token, plan.index, None)
+            break
+        if verify_fetcher is not None:
+            # The on-chain tier is best-effort enrichment: an unknown txid is a
+            # backend 404 (a urllib HTTPError, not AppError) and is the common
+            # reconciliation case, so a failed lookup degrades this one candidate
+            # to "unknown" rather than aborting the batch. A deterministic
+            # validation AppError (e.g. an Electrum backend with no chain set) is
+            # a broken config, not a per-txid miss — re-raise it so the run fails
+            # loudly instead of silently marking every txid unknown.
+            try:
+                legs = verify_fetcher(txid, str(token.get("chain") or ""))
+            except AppError as exc:
+                if exc.code == "validation":
+                    raise
+                warnings.append(f"On-chain verify for {txid[:12]}…: {exc}")
+                legs = None
+            except Exception as exc:  # noqa: BLE001 - network enrichment is non-fatal
+                warnings.append(f"On-chain verify for {txid[:12]}…: {exc}")
+                legs = None
+        results[position] = classify_txid(token, plan.index, legs)
+        if progress is not None:
+            progress(checked + 1, total)
+    final = [row for row in results if row is not None]
+    return {
+        "results": final,
+        "summary": summarize(final, plan.wallet_count, plan.scan_to_index, plan.verify),
+        "warnings": warnings,
+    }
+
+
 def identify(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1632,84 +1793,24 @@ def identify(
     not already in local history resolve to ``unknown``. ``csv_text`` is parsed
     by the smart CSV harvester and folded into the candidate set.
     """
-    scan_to_index = max(0, min(int(scan_to_index or 0), MAX_SCAN_TO_INDEX))
-    pre_warnings: list[str] = []
-    merged_candidates = list(candidates or [])
-    if csv_text:
-        harvested = extract_candidates_from_csv(csv_text)
-        if len(harvested) > MAX_HARVEST_CANDIDATES:
-            pre_warnings.append(
-                f"CSV yielded {len(harvested)} candidates; only the first "
-                f"{MAX_HARVEST_CANDIDATES} were checked."
-            )
-            harvested = harvested[:MAX_HARVEST_CANDIDATES]
-        merged_candidates.extend(harvested)
-    parsed, invalid = parse_tokens(addresses, txids, merged_candidates, file_text)
-    wallets = load_profile_wallets(conn, profile_id, wallet_ids)
-    index, warnings = build_owned_index(conn, profile_id, wallets, scan_to_index=scan_to_index)
-    warnings = pre_warnings + warnings
-
-    results: list[dict[str, Any]] = []
-    wallet_id_set = {str(wallet["id"]) for wallet in wallets}
-    sp_receivers: list[tuple[Mapping[str, Any], Any]] | None = None
-    for token in parsed:
-        if token["type"] == "address":
-            results.append(classify_address(token, index))
-            continue
-        if token["type"] == "lightning_invoice":
-            results.append(
-                classify_lightning_invoice(conn, profile_id, token, wallet_id_set)
-            )
-            continue
-        if token["type"] == "silent_payment_address":
-            if sp_receivers is None:
-                sp_receivers = silent_payment_receivers(wallets)
-            results.append(classify_silent_payment_address(token, sp_receivers))
-            continue
-        txid = str(token["normalized"])
-        legs = load_local_tx_legs(conn, profile_id, txid)
-        if legs is None and verify_fetcher is not None:
-            # The on-chain tier is best-effort enrichment: an unknown txid is a
-            # backend 404 (a urllib HTTPError, not AppError) and is the common
-            # reconciliation case, so a failed lookup degrades this one candidate
-            # to "unknown" rather than aborting the batch. A deterministic
-            # validation AppError (e.g. an Electrum backend with no chain set) is
-            # a broken config, not a per-txid miss — re-raise it so the run fails
-            # loudly instead of silently marking every txid unknown.
-            try:
-                legs = verify_fetcher(txid, str(token.get("chain") or ""))
-            except AppError as exc:
-                if exc.code == "validation":
-                    raise
-                warnings.append(f"On-chain verify for {txid[:12]}…: {exc}")
-                legs = None
-            except Exception as exc:  # noqa: BLE001 - network enrichment is non-fatal
-                warnings.append(f"On-chain verify for {txid[:12]}…: {exc}")
-                legs = None
-        results.append(classify_txid(token, index, legs))
-
-    for entry in invalid:
-        results.append(
-            {
-                "input": entry["input"],
-                "type": entry.get("type") or "invalid",
-                "chain": "",
-                "status": entry.get("status") or "invalid",
-                "classification": entry.get("classification") or "invalid",
-                "note": entry["reason"],
-            }
-        )
-
-    return {
-        "results": results,
-        "summary": summarize(results, wallets, scan_to_index, verify_fetcher is not None),
-        "warnings": warnings,
-    }
+    plan = prepare_identify(
+        conn,
+        profile_id,
+        addresses=addresses,
+        txids=txids,
+        candidates=candidates,
+        file_text=file_text,
+        csv_text=csv_text,
+        wallet_ids=wallet_ids,
+        scan_to_index=scan_to_index,
+        verify=verify_fetcher is not None,
+    )
+    return finish_identify(plan, verify_fetcher)
 
 
 def summarize(
     results: Sequence[Mapping[str, Any]],
-    wallets: Sequence[sqlite3.Row],
+    wallets: Sequence[sqlite3.Row] | int,
     scan_to_index: int,
     verified: bool,
 ) -> dict[str, Any]:
@@ -1731,7 +1832,7 @@ def summarize(
         "unknown": counts["unknown"],
         "invalid": counts["invalid"],
         "unsupported": counts["unsupported"],
-        "wallets_scanned": len(wallets),
+        "wallets_scanned": wallets if isinstance(wallets, int) else len(wallets),
         "scan_to_index": scan_to_index,
         "verified_on_chain": verified,
     }

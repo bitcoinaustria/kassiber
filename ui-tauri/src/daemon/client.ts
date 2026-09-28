@@ -577,6 +577,11 @@ export function useDaemonMutation<T = unknown>(
 export interface DaemonStreamMutationOptions<R> {
   dataMode?: DataMode;
   onProgress?: (record: R) => void;
+  /**
+   * Picks each run's request id, so the caller can name the run to a cancel
+   * kind while it streams. Omitted, the transport allocates one.
+   */
+  requestId?: () => string;
 }
 
 /**
@@ -597,8 +602,13 @@ export function useDaemonStreamMutation<T = unknown, R = unknown>(
     mutationKey: daemonMutationKey(dataMode, kind),
     mutationFn: async (args?: Record<string, unknown>) => {
       const daemonSession = useUiStore.getState().daemonSession;
+      const requestId = options?.requestId?.();
       const envelope = await getTransport().stream<T, R>(
-        { kind, args: scopedDaemonArgs(args, boundary) },
+        {
+          kind,
+          args: scopedDaemonArgs(args, boundary),
+          ...(requestId ? { request_id: requestId } : {}),
+        },
         {
           onRecord: (record) => {
             if (record.data !== undefined) {

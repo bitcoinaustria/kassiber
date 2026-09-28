@@ -25,6 +25,7 @@ import {
   Globe,
   Search,
   ShieldCheck,
+  Square,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -50,7 +51,12 @@ import {
 } from "@/components/ui/table";
 import { CopyButton } from "@/components/kb/CopyButton";
 import { hiddenSensitiveClassName } from "@/components/kb/wallets/format";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import {
+  useDaemon,
+  useDaemonMutation,
+  useDaemonStreamMutation,
+} from "@/daemon/client";
+import { makeDaemonRequestId } from "@/daemon/transport";
 import { copyTextWithPolicy } from "@/lib/clipboard";
 import {
   pageDescriptionClassName,
@@ -118,6 +124,12 @@ interface IdentifyReport {
 }
 
 type IdentifyArgs = { text?: string; csv_text?: string; backend?: string };
+
+/** Streamed by the daemon after each on-chain lookup. */
+interface VerifyProgress {
+  checked: number;
+  total: number;
+}
 
 interface BackendOption {
   name: string;
@@ -391,7 +403,26 @@ export function Reconcile() {
   const [csvName, setCsvName] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const check = useDaemonMutation<IdentifyReport>("ui.wallets.identify");
-  const verify = useDaemonMutation<IdentifyReport>("ui.wallets.identify_onchain");
+  // Verify streams: the daemon looks transactions up one by one on a worker,
+  // reporting progress, and Stop names this run's request id to cancel it.
+  const [verifyProgress, setVerifyProgress] = React.useState<VerifyProgress | null>(null);
+  const verifyRequestId = React.useRef<string | null>(null);
+  const verify = useDaemonStreamMutation<IdentifyReport, VerifyProgress>(
+    "ui.wallets.identify_onchain",
+    {
+      onProgress: setVerifyProgress,
+      requestId: () => {
+        const id = makeDaemonRequestId();
+        verifyRequestId.current = id;
+        return id;
+      },
+    },
+  );
+  const cancelVerify = useDaemonMutation("ui.wallets.identify_onchain.cancel");
+  const onStopVerify = () => {
+    const target = verifyRequestId.current;
+    if (target) cancelVerify.mutate({ target_request_id: target });
+  };
   const busy = check.isPending || verify.isPending;
 
   const results = React.useMemo(() => report?.results ?? [], [report]);
@@ -439,7 +470,9 @@ export function Reconcile() {
   };
 
   const runMutation = async (
-    mutation: typeof check,
+    mutation: {
+      mutateAsync: (args: IdentifyArgs) => Promise<{ data?: IdentifyReport | null }>;
+    },
     failureLabel: string,
     args: IdentifyArgs | null,
   ) => {
@@ -461,8 +494,9 @@ export function Reconcile() {
     if (!hasInput || busy) return;
     void runMutation(check, t("reconcile.checkFailed"), currentArgs());
   };
-  const onVerify = () =>
-    runMutation(
+  const onVerify = async () => {
+    setVerifyProgress(null);
+    await runMutation(
       verify,
       t("reconcile.verifyFailed"),
       checkedArgs && {
@@ -470,6 +504,9 @@ export function Reconcile() {
         ...(verifyBackend ? { backend: verifyBackend.name } : {}),
       },
     );
+    setVerifyProgress(null);
+    verifyRequestId.current = null;
+  };
   const listChanged =
     checkedArgs !== null &&
     ((checkedArgs.text ?? "") !== (trimmed ? input : "") ||
@@ -571,7 +608,12 @@ export function Reconcile() {
                 >
                   <Globe className="size-4" aria-hidden="true" />
                   {verify.isPending
-                    ? t("reconcile.verifying")
+                    ? verifyProgress && verifyProgress.total > 0
+                      ? t("reconcile.verifyingProgress", {
+                          checked: verifyProgress.checked,
+                          total: verifyProgress.total,
+                        })
+                      : t("reconcile.verifying")
                     : t("reconcile.verifyOnChain", { count: verifyCount })}
                 </Button>
                 {verifyBackends.length > 1 ? (
@@ -610,6 +652,18 @@ export function Reconcile() {
                   </DropdownMenu>
                 ) : null}
               </div>
+            ) : null}
+            {verify.isPending ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className={pageHeaderActionClassName}
+                onClick={onStopVerify}
+                disabled={cancelVerify.isPending}
+              >
+                <Square className="size-3.5" aria-hidden="true" />
+                {t("reconcile.stopVerify")}
+              </Button>
             ) : null}
             <Button
               type="button"

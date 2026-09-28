@@ -305,6 +305,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ui.wallets.detect_script_types",
   "ui.wallets.identify",
   "ui.wallets.identify_onchain",
+  "ui.wallets.identify_onchain.cancel",
   "ui.connections.sources",
   "ui.connections.btcpay.create",
   "ui.connections.btcpay.discover",
@@ -409,6 +410,7 @@ const STREAM_CAPABLE_BRIDGE_KINDS = new Set([
   "ui.backup.apply",
   "ui.review.plan",
   "ui.review.apply",
+  "ui.wallets.identify_onchain",
 ]);
 const STREAM_ONLY_BRIDGE_KINDS = new Set(["ai.chat"]);
 
