@@ -715,6 +715,14 @@ shows the regtest data mode instead of static fixtures. `pnpm dev:browser` is an
 alias for the same regtest-backed browser preview. Focused fixture objects remain
 in UI unit tests; there is no interactive mock transport.
 
+The bridge treats `KASSIBER_DEV_DATA_ROOT` as the preview's launch book. Books
+opened through the dev folder picker restart the daemon on that folder, and
+leaving them (Back to setup, Reset Welcome state, cancelling an import) restarts
+it on the launch book again. Only a bridge started without
+`KASSIBER_DEV_DATA_ROOT` falls back to the implicit default root, which on a
+developer machine is the real book, so point exploratory previews at a
+disposable one.
+
 ### Making resync do something (`demo-tick`)
 
 A freshly built book sits at the chain tip, so an in-app refresh imports

@@ -539,7 +539,8 @@ class DaemonBridgeSupervisor {
   private suspendedReason: string | null = null;
   // Seed the data root from the environment so `pnpm dev:demo` (and CI) can
   // point the bridge at a prepared book, e.g. the regtest demo book, without
-  // going through the interactive import-project flow.
+  // going through the interactive import-project flow. Clearing an imported
+  // project returns to this seed, not to the implicit default root.
   readonly dataRoot = new BridgeDataRoot(devDataRootSeed(), () =>
     this.shutdown(),
   );

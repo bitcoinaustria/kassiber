@@ -197,7 +197,8 @@ export function inspectImportProjectDirectory(
 
 export interface ImportProjectBridgeContext {
   dataRoot: {
-    set(dataRoot: string | null): void;
+    set(dataRoot: string): void;
+    reset(): void;
   };
   /** Roots the user picked with the native folder picker this session. */
   approvedDataRoots: Set<string>;
@@ -237,7 +238,7 @@ export async function runImportProjectAction(
     return { selection };
   }
   if (action === "clear") {
-    dataRoot.set(null);
+    dataRoot.reset();
     return { ok: true };
   }
   return null;
