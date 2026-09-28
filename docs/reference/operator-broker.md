@@ -164,7 +164,8 @@ locally built app, a source checkout) shares the one per-user broker endpoint,
 and the broker runs its own build's code for every queued child. The broker
 therefore names its build in `ping` and `status`: version, channel, a short
 commit, whether it is packaged, and a short digest of where it runs from (the
-executable for packaged builds, the package directory for source runs). The
+executable for packaged builds, the AppImage file rather than its per-launch
+mount, the package directory for source runs). The
 digest keeps worktrees and installs apart without exposing a path. This is an
 integrity guard against accidental mixing, not a boundary against same-user
 code, which can claim any identity.

@@ -333,6 +333,36 @@ class OperatorServerTest(unittest.TestCase):
             self._submit_with_caller_context(no_egress="1")
         self.assertEqual(raised.exception.code, "operator_protocol_error")
 
+    def test_an_appimage_has_one_identity_across_launches(self) -> None:
+        from kassiber.operator import build
+
+        identities = []
+        with tempfile.TemporaryDirectory() as tmp:
+            for mount in ("mount_a", "mount_b"):
+                sidecar = Path(tmp) / mount / "usr" / "bin" / "kassiber-sidecar"
+                sidecar.parent.mkdir(parents=True)
+                sidecar.touch()
+                with mock.patch.object(build.sys, "frozen", True, create=True), mock.patch.object(
+                    build.sys, "executable", str(sidecar)
+                ), mock.patch.dict(
+                    os.environ,
+                    {"APPIMAGE": str(Path(tmp) / "Kassiber.AppImage"), "APPDIR": str(Path(tmp) / mount)},
+                ):
+                    identities.append(build.build_identity())
+            # An executable outside the mount does not borrow the AppImage's.
+            outside = Path(tmp) / "other" / "kassiber"
+            outside.parent.mkdir()
+            outside.touch()
+            with mock.patch.object(build.sys, "frozen", True, create=True), mock.patch.object(
+                build.sys, "executable", str(outside)
+            ), mock.patch.dict(
+                os.environ,
+                {"APPIMAGE": str(Path(tmp) / "Kassiber.AppImage"), "APPDIR": str(Path(tmp) / "mount_a")},
+            ):
+                stranger = build.build_identity()
+        self.assertEqual(identities[0], identities[1])
+        self.assertNotEqual(stranger["origin"], identities[0]["origin"])
+
     def test_ping_and_status_name_the_brokers_build(self) -> None:
         from kassiber.operator.build import build_identity
 

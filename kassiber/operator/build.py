@@ -11,6 +11,7 @@ identity it likes.
 from __future__ import annotations
 
 import hashlib
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -26,7 +27,7 @@ def build_identity() -> dict[str, Any]:
     # stable location of a frozen build is its executable; source installs
     # are distinguished by the package directory they import from.
     if frozen:
-        location = str(Path(sys.executable).resolve())
+        location = _frozen_location()
     else:
         import kassiber
 
@@ -42,6 +43,24 @@ def build_identity() -> dict[str, Any]:
         # a local path to agents that read status output.
         "origin": hashlib.sha256(location.encode("utf-8")).hexdigest()[:12],
     }
+
+
+def _frozen_location() -> str:
+    executable = Path(sys.executable).resolve()
+    # An AppImage mounts itself at a fresh temporary directory on every
+    # launch, so its sidecar's path differs each time; the AppImage file is
+    # the stable artifact. Only trust APPIMAGE for an executable inside this
+    # mount (APPDIR), not one merely inheriting the variable.
+    appimage = os.environ.get("APPIMAGE")
+    appdir = os.environ.get("APPDIR")
+    if appimage and appdir:
+        try:
+            executable.relative_to(Path(appdir).resolve())
+        except ValueError:
+            pass
+        else:
+            return str(Path(appimage).resolve())
+    return str(executable)
 
 
 def describe_build(build: Any) -> str:
