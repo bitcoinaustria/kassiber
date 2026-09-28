@@ -194,3 +194,52 @@ export function inspectImportProjectDirectory(
     encrypted: resolved.encrypted,
   };
 }
+
+export interface ImportProjectBridgeContext {
+  dataRoot: {
+    set(dataRoot: string): void;
+    reset(): void;
+  };
+  /** Roots the user picked with the native folder picker this session. */
+  approvedDataRoots: Set<string>;
+  pickDirectory(): Promise<string | null>;
+}
+
+/**
+ * Run one `/__kassiber__/import-project` action. Returns the JSON payload to
+ * send, or null for an unknown action.
+ */
+export async function runImportProjectAction(
+  request: Record<string, unknown>,
+  { dataRoot, approvedDataRoots, pickDirectory }: ImportProjectBridgeContext,
+): Promise<Record<string, unknown> | null> {
+  const action = request.action;
+  if (action === "select") {
+    const picked = await pickDirectory();
+    if (!picked) {
+      return { selection: null };
+    }
+    const selection = inspectImportProjectDirectory(picked);
+    approvedDataRoots.add(selection.dataRoot);
+    dataRoot.set(selection.dataRoot);
+    return { selection };
+  }
+  if (action === "activate") {
+    if (typeof request.dataRoot !== "string" || !request.dataRoot.trim()) {
+      throw new Error("dataRoot is required.");
+    }
+    if (!approvedDataRoots.has(request.dataRoot)) {
+      throw new Error(
+        "Choose this Kassiber project with the native folder picker before opening it.",
+      );
+    }
+    const selection = inspectImportProjectDirectory(request.dataRoot);
+    dataRoot.set(selection.dataRoot);
+    return { selection };
+  }
+  if (action === "clear") {
+    dataRoot.reset();
+    return { ok: true };
+  }
+  return null;
+}
