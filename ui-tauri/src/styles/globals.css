@@ -74,16 +74,27 @@
    * window reveals more content instead of enlarging the interface.
    */
   --app-ui-scale: 0.9;
-  /* The native macOS title bar overlays this themed spacer. Other platforms
-     keep it at zero and use their normal decorated window frame. */
+  /*
+   * Window chrome (see components/kb/windowChrome.ts). On macOS the shell's
+   * first row is the title bar: WindowFrame sets its height and the traffic
+   * lights' leading inset while they are on screen. Other platforms keep both
+   * at zero and use their normal decorated window frame.
+   *
+   * `--kb-window-top-inset` is where portalled full-window surfaces start, so
+   * the title bar stays visible, and draggable, above them. Root-scoped so
+   * routed screens and portals agree.
+   */
   --kb-native-titlebar-height: 0px;
   --kb-native-titlebar-background: var(--background);
-  /* Optional warning row beneath the native desktop title bar. Root-scoped so
-     portalled full-screen surfaces reserve the same space as routed screens. */
-  --kb-warning-bar-height: 0px;
-  --kb-window-top-inset: calc(
-    var(--kb-native-titlebar-height) + var(--kb-warning-bar-height)
-  );
+  --kb-traffic-light-inset: 0px;
+  --kb-window-top-inset: var(--kb-native-titlebar-height);
+  /*
+   * The shell's title bar row on every platform: window chrome on macOS, an
+   * in-app toolbar under the native frame elsewhere. px, not rem, because the
+   * native traffic lights do not follow the UI scale and must stay centred.
+   */
+  --kb-toolbar-height: 40px;
+  --kb-toolbar-leading: max(var(--kb-traffic-light-inset), 0.5rem);
   /*
    * Frosted-glass tuning, ported from T3Code. Every frosted surface
    * (`.kb-glass-*`, the assistant composer) reads these so light and dark keep
@@ -94,12 +105,6 @@
   --glass-blur: 12px;
   --glass-opacity: 80%;
   --glass-saturation: 1.14;
-  /*
-   * Height of the floating control strip above the content panel. The strip
-   * itself is transparent (the buttons float as glass pills); this reserves
-   * its space so page content never slides underneath them.
-   */
-  --kb-topbar-height: 3rem;
   /*
    * Side-nav row surfaces, ported from T3Code's sidebar hierarchy. Rows sit on
    * their own scale rather than reusing `--sidebar-accent` for both hover and
@@ -186,8 +191,8 @@
     /*
      * The shell is exactly viewport-height and never scrolls the document, so
      * any root scrolling is pure macOS rubber-band. That bounce shifts the
-     * statically-positioned alpha banner and the `fixed` nav panel by different
-     * amounts, so the chrome visibly comes apart at the seams when an inner
+     * in-flow title bar and the `fixed` nav panel by different amounts, so
+     * the chrome visibly comes apart at the seams when an inner
      * scroller hits its end and chains upward. Nothing scrolls here by design,
      * so refusing the bounce costs no behaviour.
      */
@@ -382,45 +387,6 @@
 }
 
 /*
- * Stage-channel nav art, ported from T3Code's `.sidebar-stage-backdrop`.
- *
- * The mask lets the nav surface show through at the boundary, and `::after`
- * ramps the art into the nav's own colour so it dissolves rather than ending on
- * a hard edge. `--stage-fade` is the surface being faded into: the nav is a
- * frosted `--card` sheet, so that is what the ramp targets.
- *
- * Unlayered for the same reason as the glass classes: the element also carries
- * Tailwind utilities.
- */
-.kb-stage-backdrop {
-  --stage-fade: var(--card);
-  mask-image: linear-gradient(to bottom, black 0%, black 55%, transparent 92%);
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    black 0%,
-    black 55%,
-    transparent 92%
-  );
-}
-
-.kb-stage-backdrop::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    transparent 28%,
-    color-mix(in srgb, var(--stage-fade) 10%, transparent) 40%,
-    color-mix(in srgb, var(--stage-fade) 30%, transparent) 52%,
-    color-mix(in srgb, var(--stage-fade) 58%, transparent) 64%,
-    color-mix(in srgb, var(--stage-fade) 82%, transparent) 75%,
-    color-mix(in srgb, var(--stage-fade) 96%, transparent) 93%,
-    var(--stage-fade) 100%
-  );
-}
-
-/*
  * Stage-art palette, in the Bitcoin Austria Markenfarben — the paper the block
  * field is printed on (see BlockDeckBackdrop.tsx).
  *
@@ -428,13 +394,11 @@
  * footer's version line already says which build this is). Light and dark are
  * two different pages, which is a surface difference, not a channel one:
  *
- * - Light: pale Hellgrau-derived stock with Dunkel ink. It sits a shade warmer
- *   and darker than the near-white nav, so the band reads without going heavy —
- *   and because the page stays light, the header text on it stays dark.
- * - Dark: a graphite sheet LIFTED off the nav. The nav is already near-black, so
- *   a dark page would read as "slightly darker rectangle" and the motif would
- *   vanish; going lighter makes it a sheet laid on top. There the header text is
- *   relit to white (`.dark .kb-stage-header-content`).
+ * - Light: pale Hellgrau-derived stock with Dunkel ink, a shade warmer and
+ *   darker than the near-white chrome, so the field reads without going heavy.
+ * - Dark: a graphite sheet LIFTED off the chrome. The chrome is already
+ *   near-black, so a dark page would read as "slightly darker rectangle" and
+ *   the motif would vanish; going lighter makes it a sheet laid on top.
  *
  * `--stage-glow` is the light falling across the page and `--stage-ink` is what
  * every square is drawn in — the art is greyscale, so these two and the paper
@@ -472,15 +436,15 @@
 
 /*
  * Dark mode runs the page a step lower than light does, and it is the only
- * theme where that is a legibility question rather than a taste one: the header
- * text is relit to white here (see `.dark .kb-stage-header-content` below), and
- * white has to hold up against the *brightest* point of the art — the glow's
+ * theme where that is a legibility question rather than a taste one: white
+ * text laid over the field has to hold up against the *brightest* point of the
+ * art — the glow's
  * peak sitting over the top paper stop. At the previous values that composite
  * came out rgb(127,129,134), which is 3.9:1 against white and 2.8:1 against the
  * 72% muted variant: under the 4.5:1 AA floor for text and under even the 3:1
  * floor for UI. Paper down 10%, glow dimmed 8% and its peak from 0.42 to 0.34
  * lifts those to 5.3:1 and 3.7:1 while keeping the sheet plainly lighter than
- * the near-black nav it is laid on, which is the whole point of the dark page.
+ * the near-black chrome it is laid on, which is the whole point of the dark page.
  */
 .dark .kb-stage-blocks {
   --stage-paper-top: #3e3e44;
@@ -490,19 +454,6 @@
   --stage-glow-peak: 0.34;
   --stage-glow-soft: 0.11;
   --stage-ink: #e8e8ea;
-}
-
-/*
- * Header content sitting on the stage art, DARK MODE ONLY — that is the theme
- * whose page is dark. Rather than threading an "on backdrop" prop through the
- * brand and its buttons, redefine the nav tokens they already read: every
- * descendant relights at once and a new child inherits it for free.
- */
-.dark .kb-stage-header-content {
-  --sidebar-foreground: #ffffff;
-  --sidebar-muted-foreground: rgb(255 255 255 / 72%);
-  --sidebar-row-hover: rgb(255 255 255 / 14%);
-  --sidebar-control-surface: rgb(255 255 255 / 18%);
 }
 
 /*
@@ -541,13 +492,12 @@
  */
 
 /*
- * Frosted side-nav surface. The nav is a translucent sheet lifted off the app
- * chrome rather than an opaque slab of the same grey: a `--card` tint at
- * `--glass-opacity` plus a backdrop blur, so it reads a shade lighter than both
- * the chrome behind it and the content panel beside it (T3Code's
- * zinc-50-nav-over-zinc-25-content hierarchy). The inset highlight is the top
- * edge catching light — the detail that makes it read as glass rather than as a
- * flat fill.
+ * Frosted panel surface, used by setup's cards over the block field. A
+ * translucent sheet rather than an opaque slab: a `--card` tint at
+ * `--glass-opacity` plus a backdrop blur, so it reads a shade lighter than
+ * whatever it floats over. The inset highlight is the top edge catching
+ * light — the detail that makes it read as glass rather than as a flat fill.
+ * (The side nav used to be one of these; it now sits flush on the chrome.)
  */
 .kb-glass-panel {
   background-color: color-mix(

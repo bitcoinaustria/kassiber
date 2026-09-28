@@ -3,10 +3,16 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DIALOG_VIEWPORT_CLASSNAME } from "@/components/ui/dialog";
+import {
+  DIALOG_FULL_WINDOW_CLASSNAME,
+  DIALOG_VIEWPORT_CLASSNAME,
+} from "@/components/ui/dialog";
 import { WindowFrame } from "./WindowFrame";
 
-const uiState = vi.hoisted(() => ({ preAlphaBannerVisible: true }));
+const uiState = vi.hoisted(() => ({
+  preAlphaBannerVisible: true,
+  setPreAlphaBannerVisible: () => {},
+}));
 
 vi.mock("@/store/ui", () => ({
   useUiStore: (
@@ -36,17 +42,16 @@ describe("WindowFrame", () => {
     vi.unstubAllGlobals();
   });
 
-  it("keeps the warning above every routed screen", () => {
+  it("keeps the alpha warning on screens outside the shell as a chip, not a row", () => {
     const html = renderFrame();
 
-    expect(html).not.toContain("data-tauri-drag-region");
-    expect(html).toContain("h-[var(--kb-warning-bar-height)]");
-    expect(html).toContain("z-[60]");
-    expect(html).toContain("You can disable this banner in Settings.");
+    expect(html).toContain('aria-label="Alpha software warning"');
+    expect(html).toContain("h-(--kb-toolbar-height)");
+    expect(html).not.toContain("--kb-warning-bar-height");
     expect(html).toContain("Setup or app content");
   });
 
-  it("reserves the native title bar only inside Tauri on macOS", () => {
+  it("draws a draggable title bar strip only inside Tauri on macOS", () => {
     const macTauri = renderFrame({
       tauri: true,
       userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
@@ -60,11 +65,12 @@ describe("WindowFrame", () => {
     });
 
     expect(macTauri).toContain("--kb-native-titlebar-background");
-    expect(macBrowser).not.toContain("--kb-native-titlebar-background");
-    expect(windowsTauri).not.toContain("--kb-native-titlebar-background");
+    expect(macTauri).toContain("data-tauri-drag-region");
+    expect(macBrowser).not.toContain("data-tauri-drag-region");
+    expect(windowsTauri).not.toContain("data-tauri-drag-region");
   });
 
-  it("keeps the native title bar when the warning is disabled", () => {
+  it("hides the chip when the warning is disabled", () => {
     uiState.preAlphaBannerVisible = false;
     const html = renderFrame({
       tauri: true,
@@ -72,8 +78,7 @@ describe("WindowFrame", () => {
     });
 
     expect(html).toContain("--kb-native-titlebar-background");
-    expect(html).not.toContain("--kb-warning-bar-height");
-    expect(html).not.toContain("Alpha software");
+    expect(html).not.toContain("Alpha software warning");
   });
 
   it("pins dark native chrome to RGB 18 18 18", () => {
@@ -87,7 +92,7 @@ describe("WindowFrame", () => {
     );
   });
 
-  it("keeps portalled dialogs below the shared window inset", () => {
+  it("keeps portalled dialogs below the title bar, so it stays draggable", () => {
     expect(DIALOG_VIEWPORT_CLASSNAME).toContain(
       "top-[var(--kb-window-top-inset)]",
     );
@@ -95,5 +100,9 @@ describe("WindowFrame", () => {
     expect(DIALOG_VIEWPORT_CLASSNAME).toContain(
       "100dvh-var(--kb-window-top-inset)-2rem",
     );
+    expect(DIALOG_FULL_WINDOW_CLASSNAME).toContain(
+      "top-[var(--kb-window-top-inset)]",
+    );
+    expect(DIALOG_FULL_WINDOW_CLASSNAME).toContain("max-h-none");
   });
 });

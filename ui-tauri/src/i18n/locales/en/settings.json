@@ -571,8 +571,8 @@
     "enableLabel": "Show early-stage features",
     "enableOn": "Early-stage pages are visible in the side nav, in Settings, and in search.",
     "enableOff": "Early-stage pages are hidden or greyed out, and opening one anyway lands you back on Overview.",
-    "alphaBannerLabel": "Show the alpha warning banner",
-    "alphaBannerDescription": "The red strip across the top of the window. Hiding it does not make the software any less alpha.",
+    "alphaBannerLabel": "Show the alpha warning",
+    "alphaBannerDescription": "The red Alpha chip in the window's title bar. Hiding it does not make the software any less alpha.",
     "openLogs": "Open Logs",
     "bufferHeading": "In-memory log buffer",
     "bufferDescription": "{{retained}} retained in this GUI session. Kassiber keeps at most {{records}} records or {{bytes}}, whichever is reached first. Refreshing or closing the app clears the buffer unless you export it first."

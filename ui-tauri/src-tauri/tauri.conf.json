@@ -12,13 +12,18 @@
   "app": {
     "windows": [
       {
-        "title": "",
+        "title": "Kassiber",
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "width": 1760,
-        "height": 1160,
+        "trafficLightPosition": {
+          "x": 14,
+          "y": 22
+        },
+        "width": 1280,
+        "height": 820,
         "minWidth": 980,
-        "minHeight": 700
+        "minHeight": 700,
+        "visible": false
       }
     ],
     "security": {

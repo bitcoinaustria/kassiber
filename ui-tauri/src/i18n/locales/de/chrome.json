@@ -19,6 +19,8 @@
     "overviewLink": "Kassiber-Übersicht",
     "back": "Zurück",
     "forward": "Vorwärts",
+    "toggleSidebar": "Seitenleiste ein-/ausblenden",
+    "toggleSidebarTitle": "Seitenleiste ein-/ausblenden (Cmd/Ctrl+B)",
     "refresh": "Bücher-Set aktualisieren",
     "refreshTitle": "Bücher-Set aktualisieren (Cmd/Ctrl+R)",
     "refreshMenu": {
@@ -269,7 +271,11 @@
   },
   "preAlpha": {
     "label": "Warnung: Alpha-Software",
-    "message": "Alpha-Software: bestenfalls unzuverlässig. Prüfe alles. Dieses Banner lässt sich in den Einstellungen ausblenden."
+    "chip": "Alpha",
+    "title": "Alpha-Software",
+    "body": "Kassiber ist bestenfalls unzuverlässig. Prüfe alles, bevor du dich darauf verlässt.",
+    "hide": "Ausblenden",
+    "hideHint": "Du kannst den Hinweis unter Einstellungen → Desktop → Entwicklerwerkzeuge wieder einblenden."
   },
   "network": {
     "outboundConnections": "Ausgehende Verbindungen",

@@ -82,6 +82,29 @@ then the bundled sidecar from the app resources (one-dir candidate first), then
 the development Python fallback above. The same `KASSIBER_PYTHON` override
 applies to installed-app CLI forwarding.
 
+On macOS the window uses an overlay title bar, and the shell draws the row the
+traffic lights sit in: one 40px title bar carrying the nav toggle, history
+buttons, book breadcrumb, alpha chip, and shell actions, over a flush side nav
+and an inset page panel. Empty stretches of that row move the window through
+Tauri's `data-tauri-drag-region="deep"`, which skips buttons and links. A modal
+dialog makes the page inert, so `WindowFrame` also turns a press on the still
+visible title bar into a window drag instead of letting it dismiss the dialog.
+Portalled full-window surfaces (dialogs, sheets, the expanded chart, the lock
+screen) start below `--kb-window-top-inset` so the title bar stays reachable. In
+full screen the traffic lights are hidden and both insets drop to zero.
+Windows and Linux keep their native decorated frame; the same row is an
+in-app toolbar there with no inset and no drag region.
+
+The main window starts hidden and is sized before it is shown. The first launch
+centres a frame in the work area of the display it opens on (82% by 88%, capped
+at 1440×960 and floored at the configured minimum). After that the last frame
+is restored: macOS uses AppKit's frame autosave, which keeps the frame in the
+app's preferences and fits it onto the displays that are connected; Windows and
+Linux use `tauri-plugin-window-state`, which writes `.window-state.json` to
+Tauri's config directory. Tauri's macOS config directory is Kassiber's state
+root, which must not gain files before the default-root migration runs, which
+is why macOS does not use the plugin.
+
 The native desktop shell also carries a deliberately minimal release notifier,
 modeled on Sparrow Wallet's cadence and manual-download flow. Setup explicitly
 asks whether Kassiber may contact GitHub; no scheduled check is eligible before

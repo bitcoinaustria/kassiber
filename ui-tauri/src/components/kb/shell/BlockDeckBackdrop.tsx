@@ -4,8 +4,8 @@
  * This replaces the ledger-paper art that used to sit on these surfaces. Ruled
  * accounting stock said what the app *is*; blocks of confirmed transactions say
  * what it is *about*, which is the more interesting half and the one a Bitcoin
- * user recognises on sight. One motif now, on all three surfaces that carry
- * chrome art: the side-nav header band, the lock screen and setup.
+ * user recognises on sight. One motif, on the two surfaces that carry chrome
+ * art: the lock screen and setup.
  *
  * Geometry follows the block view in the mempool project, by way of the
  * marketing site's `LeakGoggles`: a block is a square grid of cells, every
@@ -19,14 +19,10 @@
  * had (see `.kb-stage-blocks` in globals.css), so light and dark follow the theme
  * for free, and the only variation is how dark a square sits.
  *
- * It comes in two treatments, and the split is by how close the art sits to
- * something you have to read:
- *
- * - The two full surfaces (lock screen, setup) get the field unmasked, edge to
- *   edge, drifting slowly. They are backdrops — nothing else is on them.
- * - The nav's 56px strip gets it still, zoomed in, and masked into the nav
- *   surface. It sits beside the wordmark and above every nav row, where a moving
- *   edge is something to look at instead of the nav.
+ * Both get the field unmasked, edge to edge, drifting slowly. They are
+ * backdrops — nothing else is on them. The side nav used to carry a still,
+ * masked strip of it too; that went with the unified title bar, where a band
+ * under the window chrome read as a second title bar.
  *
  * The drift is one CSS animation on the tiled rect, so the loop is seamless,
  * costs no script, and stops dead under `prefers-reduced-motion` (globals.css
@@ -66,14 +62,6 @@ const TILE_H = 2 * (BLOCK + BLOCK_GAP);
  * ~225px with ~9px cells, near the mempool block view's own proportions.
  */
 const ART_SCALE = 0.63;
-/**
- * The nav strip is zoomed further in, which is the only way a 56px band carries
- * a legible motif: at the field scale it shows ~6 rows of small cells and reads
- * as generic noise, while at this scale a dozen big squares cross it and the
- * shapes are plainly transactions. Zooming in *is* the detail reduction — same
- * art, fewer things in frame.
- */
-const NAV_SCALE = 1.2;
 
 export type DeckSquare = {
   x: number;
@@ -180,19 +168,6 @@ export const DECK_GEOMETRY = {
 };
 
 /**
- * The nav header's accent strip.
- *
- * Still, zoomed in, and dissolved into the nav by `.kb-stage-backdrop`'s mask —
- * the opposite treatment to the full-surface bands, and for one reason: this
- * sits two centimetres from the wordmark and behind the book switcher, where a
- * moving edge is something to look at instead of the nav. It is texture on the
- * chrome, not a picture.
- */
-export function SidebarStageBackdrop() {
-  return <BlockDeckBand className="h-14" scale={NAV_SCALE} still faded />;
-}
-
-/**
  * The block field as a band across a surface.
  *
  * The band measures itself rather than taking a fixed viewBox, because
@@ -204,24 +179,18 @@ export function SidebarStageBackdrop() {
  * edge, and rounding to whole rows would make the block size jump between
  * window heights instead.
  *
- * By default the art runs the full band with no mask: it is the surface's own
- * backdrop, so it should reach the edges the way a block view does. `faded`
- * hands it back to `.kb-stage-backdrop`, which dissolves it into `--card`, and
- * that is what the nav strip wants — a 56px band ending on a visible horizontal
- * edge would read as a stripe glued across the top of the nav.
+ * The art runs the full band with no mask: it is the surface's own backdrop,
+ * so it should reach the edges the way a block view does.
  */
 export function BlockDeckBand({
   className,
   scale = ART_SCALE,
   still = false,
-  faded = false,
 }: {
   className?: string;
   scale?: number;
   /** Hold the field still instead of letting it drift. */
   still?: boolean;
-  /** Mask the art into `--card` instead of letting it fill the band. */
-  faded?: boolean;
 }) {
   const hostRef = React.useRef<HTMLDivElement | null>(null);
   const [artHeight, setArtHeight] = React.useState(TILE_H);
@@ -245,7 +214,6 @@ export function BlockDeckBand({
       aria-hidden="true"
       className={cn(
         "pointer-events-none absolute inset-x-0 top-0 z-0 overflow-hidden select-none",
-        faded && "kb-stage-backdrop",
         className,
       )}
     >
