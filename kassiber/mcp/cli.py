@@ -48,6 +48,12 @@ def add_mcp_parser(subparsers: argparse._SubParsersAction) -> None:
     )
     _add_book_arguments(serve_parser)
     commands.add_parser("tools", help="Describe the tools the MCP server exposes")
+    commands.add_parser("status", help="Show whether external agents may use Kassiber")
+    commands.add_parser(
+        "enable",
+        help="Allow external agents to read Kassiber books (asks in your terminal)",
+    )
+    commands.add_parser("disable", help="Stop serving external agents")
     call = commands.add_parser("call", help="Run one MCP tool against a book and print its result")
     call.add_argument("--tool", required=True, help="MCP tool name from `kassiber mcp tools`")
     call.add_argument(
@@ -81,6 +87,8 @@ def dispatch_mcp(conn: Any, args: argparse.Namespace) -> Any:
         return run_server(args)
     if args.mcp_command == "tools":
         return emit(args, describe_tools(), kind="mcp.tools")
+    if args.mcp_command in {"status", "enable", "disable"}:
+        return emit(args, _configure_access(args), kind=f"mcp.{args.mcp_command}")
     if args.mcp_command == "call":
         arguments = _parse_arguments(args.arguments)
         result = mcp_tools.run_tool(
@@ -107,6 +115,37 @@ def _require_complete_pin(args: argparse.Namespace) -> None:
             hint="Use `kassiber workspaces list` and `kassiber profiles list` to find both.",
             retryable=False,
         )
+
+
+def _configure_access(args: argparse.Namespace) -> dict[str, Any]:
+    from ..agent_access import agent_access_status, set_agent_access
+
+    if args.mcp_command == "status":
+        return agent_access_status()
+    if args.mcp_command == "disable":
+        return set_agent_access(mcp_enabled=False)
+    # Turning disclosure on is the user's decision, never an agent's: require
+    # their own terminal (or the desktop switch), like other consent changes.
+    if args.non_interactive or not sys.stdin.isatty():
+        raise AppError(
+            "enabling external agents needs the user's own confirmation",
+            code="interaction_required",
+            hint=(
+                "Ask the user to turn on External agents in Kassiber Settings > AI, "
+                "or to run `kassiber mcp enable` in their own terminal."
+            ),
+            details={"reason": "user_consent"},
+            retryable=False,
+        )
+    sys.stderr.write(
+        "External agents you connect will read this machine's Kassiber books "
+        "(read-only), and their model provider receives what they read.\n"
+        "Allow? [y/N] "
+    )
+    sys.stderr.flush()
+    if sys.stdin.readline().strip().lower() not in {"y", "yes"}:
+        return agent_access_status()
+    return set_agent_access(mcp_enabled=True)
 
 
 def describe_tools() -> dict[str, Any]:
@@ -210,10 +249,14 @@ class BookToolProvider:
         arguments: dict[str, Any],
         cancelled: threading.Event,
     ) -> dict[str, Any]:
+        from ..agent_access import require_mcp_access
         from ..core.runtime import resolve_runtime_paths
         from ..operator.modes import effective_unlock_mode
         from ..projects import load_catalog
 
+        # First, before any project resolution: off unless the user turned
+        # external agents on and the desktop AI master switch is not off.
+        require_mcp_access()
         if self._data_root is None and not load_catalog().get("projects"):
             # Resolving the default project would create one; an agent's read
             # must not set up Kassiber on a machine where nothing exists yet.

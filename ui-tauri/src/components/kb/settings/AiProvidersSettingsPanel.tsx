@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { AiProviderForm, type ExistingAiProvider } from "@/components/kb/AiProviderForm";
 import { ChatHistorySettingsCard } from "@/components/kb/settings/ChatHistorySettingsCard";
+import { ExternalAgentsSettings } from "@/components/kb/settings/ExternalAgentsSettings";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { confirmAction } from "@/lib/confirmAction";
 import { cn } from "@/lib/utils";
@@ -77,6 +78,8 @@ export function AiProvidersSettingsPanel({
           className="shrink-0"
         />
       </div>
+
+      <ExternalAgentsSettings aiFeaturesEnabled={aiFeaturesEnabled} />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">

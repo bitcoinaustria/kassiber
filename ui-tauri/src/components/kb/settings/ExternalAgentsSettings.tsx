@@ -1,0 +1,99 @@
+import * as React from "react";
+import { useTranslation } from "react-i18next";
+
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { terminalCommandStatus, type TerminalCommandStatus } from "@/daemon/transport";
+import {
+  agentLauncher,
+  claudeCodeCommand,
+  mcpJsonConfig,
+  mcpServeArgs,
+  type AgentAccessStatus,
+} from "@/lib/agentAccess";
+import { cn } from "@/lib/utils";
+import { CommandLine, CopyButton } from "./SettingsControls";
+import type { StatusData } from "./SettingsModel";
+
+/**
+ * Off by default and subordinate to the AI master switch. The Python core
+ * enforces both on every MCP call; this row only records the user's choice
+ * and shows the command to paste into an agent.
+ */
+export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnabled: boolean }) {
+  const { t } = useTranslation("settings");
+  const accessQuery = useDaemon<AgentAccessStatus>("ui.agent_access.status");
+  const statusQuery = useDaemon<StatusData>("status");
+  const configure = useDaemonMutation("ui.agent_access.configure");
+  const [terminal, setTerminal] = React.useState<TerminalCommandStatus | null>(null);
+
+  const access =
+    accessQuery.data?.kind === "ui.agent_access.status" ? accessQuery.data.data : null;
+  const status = statusQuery.data?.kind === "status" ? statusQuery.data.data : null;
+  const enabled = aiFeaturesEnabled && access?.mcp_enabled === true;
+
+  React.useEffect(() => {
+    if (!enabled) return;
+    let disposed = false;
+    void terminalCommandStatus()
+      .then((result) => {
+        if (!disposed) setTerminal(result);
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+    };
+  }, [enabled]);
+
+  const book =
+    status?.data_root && status.current_workspace && status.current_profile
+      ? {
+          dataRoot: status.data_root,
+          workspace: status.current_workspace,
+          profile: status.current_profile,
+        }
+      : null;
+  const launcher = agentLauncher(terminal);
+  const args = book ? mcpServeArgs(book) : null;
+
+  return (
+    <div
+      className={cn(
+        "space-y-3 rounded-md border bg-background p-4",
+        !aiFeaturesEnabled && "opacity-60",
+      )}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <Label htmlFor="settings-external-agents">{t("ai.agentsLabel")}</Label>
+          <p className="text-sm text-muted-foreground">{t("ai.agentsDescription")}</p>
+        </div>
+        <Switch
+          id="settings-external-agents"
+          checked={enabled}
+          disabled={!aiFeaturesEnabled || !access || configure.isPending}
+          onCheckedChange={(checked) =>
+            configure.mutate({ mcp_enabled: checked, ai_features_enabled: aiFeaturesEnabled })
+          }
+          aria-label={t("ai.agentsAria")}
+          className="shrink-0"
+        />
+      </div>
+      {configure.isError ? (
+        <p className="text-sm text-destructive">{t("ai.agentsError")}</p>
+      ) : null}
+      {enabled && args ? (
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <CommandLine command={claudeCodeCommand(launcher, args)} />
+          </div>
+          <span className="flex shrink-0 items-center text-xs text-muted-foreground">
+            JSON
+            <CopyButton value={mcpJsonConfig(launcher, args)} label={t("ai.agentsCopyJson")} />
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}

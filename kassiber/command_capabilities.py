@@ -90,7 +90,7 @@ CLI_READ_PATHS = _paths(
     reports.balance-history reports.lightning-profitability
     reports.commercial-subledger reports.source-funds rates.pairs rates.latest
     rates.range ai.providers.list ai.providers.get ai.models
-    mcp.serve mcp.tools mcp.call
+    mcp.serve mcp.tools mcp.call mcp.status
     """
 )
 
@@ -118,7 +118,7 @@ CLI_OPERATOR_PATHS = _paths(
     attachments.rename attachments.remove attachments.gc metadata.notes.set
     metadata.notes.clear metadata.tags.create metadata.tags.add
     metadata.tags.remove metadata.bip329.import metadata.bip329.export
-    metadata.records.note.set metadata.records.note.clear
+    metadata.records.note.set metadata.records.note.clear mcp.disable
     metadata.records.tag.add metadata.records.tag.remove journals.process
     btcpay.provenance.sync btcpay.provenance.suggest documents.create
     documents.attach documents.import-report source-funds.sources.create
@@ -175,7 +175,7 @@ CLI_ACCOUNTING_DECISION_PATHS = _paths(
 
 CLI_ADMIN_PATHS = _paths(
     """
-    daemon init projects.create chats.delete chats.clear chats.config
+    daemon init projects.create chats.delete chats.clear chats.config mcp.enable
     operator.unlock operator.lock operator.mode operator.operation.cancel
     operator.touch-id.enroll operator.touch-id.forget
     secrets.init secrets.init-resume secrets.change-passphrase
@@ -218,7 +218,7 @@ DAEMON_READ_KINDS = _paths(
     ui.accounting.task_list ui.accounting.task_get ui.accounting.task_preview ui.accounting.rule_list
     ui.accounting.task_amend_preview ui.accounting.task_projection_assign_preview
     ui.accounting.document_cancel
-    status ui.logs.snapshot ui.egress.snapshot ui.overview.snapshot
+    status ui.logs.snapshot ui.agent_access.status ui.egress.snapshot ui.overview.snapshot
     ui.workspace.overview.snapshot ui.transactions.list
     ui.transactions.dashboard ui.transactions.extremes ui.transactions.resolve
     ui.transactions.graph
@@ -358,6 +358,7 @@ DAEMON_ADMIN_KINDS = _paths(
     ai.providers.move_api_key ai.providers.delete ai.providers.set_default
     ai.providers.clear_default ai.providers.acknowledge ai.test_connection
     ui.chat.sessions.delete ui.chat.sessions.clear ui.chat.history.configure
+    ui.agent_access.configure
     wallets.reveal_descriptor backends.reveal_token daemon.shutdown
     """
 )
