@@ -2,24 +2,24 @@
  * Global search: a quiet row at the top of the side nav that opens a command
  * palette.
  *
- * Both halves are ported from T3Code. The nav row is the entry point only (icon
- * + label + ⌘K hint) because the nav is ~16rem wide; the palette itself is a
- * top-anchored frosted modal — `max-w-xl`, results grouped under small caption
- * labels, first row auto-highlighted, arrows to move, Enter to run, Esc to
- * close, and a footer spelling those keys out.
+ * The nav row is the entry point only (icon + label + ⌘K hint) because the nav
+ * is ~16rem wide. The palette is a centred, top-anchored modal in the manner of
+ * the ChatGPT desktop app's: a bare input, results grouped under small caption
+ * labels, one line per row with its detail and shortcut right-aligned, first
+ * row auto-highlighted, arrows to move, Enter to run, Esc to close. Opened
+ * empty it is a launcher — the main pages and everyday actions with their
+ * shortcuts — so it doubles as the shortcut cheat sheet.
  *
  * The engine underneath is unchanged from the old top-nav search:
  * `buildAppSearchResults` over the overview snapshot, plus an on-demand
  * `ui.transactions.resolve` lookup once the query looks like a txid.
  */
 import * as React from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import {
-  ArrowDown,
   ArrowLeftRight,
-  ArrowUp,
   BarChart3,
   BookOpen,
   ClipboardList,
@@ -35,7 +35,7 @@ import {
   Wallet,
 } from "lucide-react";
 
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Kbd } from "@/components/ui/kbd";
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -43,12 +43,14 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useDaemon } from "@/daemon/client";
+import { formatShortcut } from "@/lib/shortcutLabel";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import {
   buildAppSearchResults,
+  buildAppSearchSuggestions,
   isLikelyTransactionLookupQuery,
   isSearchResultActivatable,
   searchResultForActivation,
@@ -100,6 +102,24 @@ const SEARCH_GROUP_LABEL_KEYS: Record<
   wallet: "wallets",
 };
 
+/** Headings for the launcher shown before anything is typed. */
+const SUGGESTION_GROUP_LABEL_KEYS: Partial<
+  Record<RankedSearchResult["category"], string>
+> = {
+  action: "quickActions",
+  page: "goTo",
+};
+
+/** Native-menu accelerators only exist inside the desktop app. */
+const NATIVE_SHELL =
+  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+function searchResultShortcut(result: RankedSearchResult): string | null {
+  const shortcut = result.shortcut;
+  if (!shortcut || (shortcut.nativeMenu && !NATIVE_SHELL)) return null;
+  return formatShortcut(shortcut.keys);
+}
+
 function searchResultIcon(result: RankedSearchResult) {
   const key = result.iconKey ?? result.category;
   return SEARCH_ICON_BY_KEY[key] ?? Search;
@@ -143,12 +163,16 @@ export function ShellSearch({
    */
   searchKey,
   daemonEnabled,
+  enabled = true,
 }: {
   searchKey: string;
   daemonEnabled: boolean;
+  /** False while the shell is locked: no opening, and an open palette closes. */
+  enabled?: boolean;
 }) {
   const { t } = useTranslation(["chrome", "nav", "search", "settings"]);
   const navigate = useNavigate();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const { isMobile, setOpenMobile } = useSidebar();
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
@@ -173,7 +197,24 @@ export function ShellSearch({
     { query: query.trim() },
     { enabled: daemonEnabled && shouldResolveTransaction },
   );
-  const results = React.useMemo(
+  const hasQuery = query.trim().length > 0;
+  const translate = React.useCallback(
+    // Dynamic, prefixed keys fall outside the typed-key union; resolve via a
+    // thin structural adapter over the namespace-branded translator.
+    (key: string, options?: Record<string, unknown>) =>
+      t(key as never, options as never) as unknown,
+    [t],
+  );
+  const suggestions = React.useMemo(
+    () =>
+      buildAppSearchSuggestions({
+        aiFeaturesEnabled,
+        developerToolsEnabled,
+        t: translate,
+      }),
+    [aiFeaturesEnabled, developerToolsEnabled, translate],
+  );
+  const searchResults = React.useMemo(
     () =>
       buildAppSearchResults({
         snapshot,
@@ -184,10 +225,7 @@ export function ShellSearch({
         isResolvingTransaction:
           shouldResolveTransaction &&
           (resolvedTransaction.isFetching || resolvedTransaction.isLoading),
-        // Dynamic, prefixed keys fall outside the typed-key union; resolve via
-        // a thin structural adapter over the namespace-branded translator.
-        t: (key: string, options?: Record<string, unknown>) =>
-          t(key as never, options as never) as unknown,
+        t: translate,
       }),
     [
       snapshot,
@@ -198,9 +236,10 @@ export function ShellSearch({
       resolvedTransaction.isFetching,
       resolvedTransaction.isLoading,
       shouldResolveTransaction,
-      t,
+      translate,
     ],
   );
+  const results = hasQuery ? searchResults : suggestions;
   const groups = React.useMemo(() => groupRankedResults(results), [results]);
   const resultId = (result: RankedSearchResult) =>
     `search-result-${result.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
@@ -217,6 +256,14 @@ export function ShellSearch({
       switch (actionId) {
         case "process-journals":
           runJournalProcessing();
+          return;
+        // Both run in the shell, which owns the refresh pipeline and the lock;
+        // the lock event is the one Settings already uses.
+        case "refresh-book":
+          window.dispatchEvent(new CustomEvent("kassiber:refresh-book"));
+          return;
+        case "lock-app":
+          window.dispatchEvent(new CustomEvent("kassiber:lock-app"));
           return;
         case "add-wallet":
         case "connect-btcpay":
@@ -294,7 +341,20 @@ export function ShellSearch({
     setActiveIndex(Math.max(0, results.length - 1));
   }, [activeIndex, results.length]);
 
+  // A page shortcut (⌘1–⌘9) pressed with the palette open navigates from the
+  // native menu; the palette would otherwise stay open over the new page.
   React.useEffect(() => {
+    closeSearch();
+  }, [pathname, closeSearch]);
+
+  // Locking with the palette open (idle timer, Cmd+L) must not leave it, and
+  // its actions, floating above the lock screen.
+  React.useEffect(() => {
+    if (!enabled) closeSearch();
+  }, [enabled, closeSearch]);
+
+  React.useEffect(() => {
+    if (!enabled) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== "k") return;
       if (!(event.metaKey || event.ctrlKey)) return;
@@ -305,7 +365,7 @@ export function ShellSearch({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [enabled]);
 
   const label = t(`${searchKey}.label` as never) as string;
 
@@ -319,7 +379,9 @@ export function ShellSearch({
             aria-haspopup="dialog"
             tooltip={label}
             data-testid="shell-search-trigger"
-            onClick={() => setOpen(true)}
+            onClick={() => {
+              if (enabled) setOpen(true);
+            }}
             className="h-8 gap-2 rounded-md text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
           >
             <Search className="size-4 shrink-0 opacity-80" aria-hidden="true" />
@@ -327,7 +389,7 @@ export function ShellSearch({
               {t("shell.searchLabel")}
             </span>
             <Kbd className="hidden bg-sidebar-control-surface text-sidebar-muted-foreground group-data-[collapsible=icon]:hidden md:inline-flex">
-              {"⌘"}K
+              {formatShortcut(["mod", "k"])}
             </Kbd>
           </SidebarMenuButton>
         </SidebarMenuItem>
@@ -374,10 +436,9 @@ export function ShellSearch({
             <DialogPrimitive.Title className="sr-only">
               {label}
             </DialogPrimitive.Title>
-            {/* T3Code's input row: a `px-2.5 py-1.5` wrapper around a large,
-                chrome-free control — the popup border is the field's edge, so a
-                second border inside it would read as a box in a box. */}
-            <div className="flex h-13 shrink-0 items-center gap-2.5 px-4">
+            {/* A bare input: the popup border is the field's edge, so a second
+                border, or a rule under it, would read as a box in a box. */}
+            <div className="flex h-12 shrink-0 items-center gap-2.5 px-4">
               <Search
                 className="size-4 shrink-0 text-muted-foreground"
                 aria-hidden="true"
@@ -396,36 +457,42 @@ export function ShellSearch({
                 }
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                className="min-w-0 flex-1 border-none bg-transparent text-sm text-foreground shadow-none outline-none placeholder:text-muted-foreground/80"
+                className="min-w-0 flex-1 border-none bg-transparent text-base text-foreground shadow-none outline-none placeholder:text-muted-foreground/80"
               />
             </div>
-            <div className="h-px shrink-0 bg-border" />
             <div
               id={listId}
               role="listbox"
               aria-label={label}
-              className="min-h-0 flex-1 scroll-py-2 overflow-y-auto p-2"
+              className="min-h-0 flex-1 scroll-py-2 overflow-y-auto px-2 pb-2"
             >
-              {!query.trim() ? (
+              {groups.length === 0 ? (
                 <div className="py-10 text-center text-sm text-muted-foreground">
-                  {t("shell.searchPrompt")}
-                </div>
-              ) : groups.length === 0 ? (
-                <div className="py-10 text-center text-sm text-muted-foreground">
-                  {t("shell.searchNoMatches")}
+                  {hasQuery
+                    ? t("shell.searchNoMatches")
+                    : t("shell.searchPrompt")}
                 </div>
               ) : (
                 groups.map((group) => (
                   <div key={group.category} className="not-first:mt-2">
-                    <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                    <p className="px-2.5 pt-1.5 pb-1 text-xs font-medium text-muted-foreground">
                       {t(
-                        `search.group.${SEARCH_GROUP_LABEL_KEYS[group.category]}` as never, // dynamic key
+                        `search.group.${
+                          (!hasQuery &&
+                            SUGGESTION_GROUP_LABEL_KEYS[group.category]) ||
+                          SEARCH_GROUP_LABEL_KEYS[group.category]
+                        }` as never, // dynamic key
                       )}
                     </p>
                     {group.rows.map(({ result, index }) => {
                       const active = index === activeIndex;
                       const ResultIcon = searchResultIcon(result);
                       const activatable = isSearchResultActivatable(result);
+                      const shortcut = searchResultShortcut(result);
+                      // The launcher stays one clean column of names; typed
+                      // results carry their detail, right-aligned like the
+                      // ChatGPT palette's project column, on the same line.
+                      const detail = hasQuery ? result.subtitle : undefined;
                       return (
                         <button
                           key={result.id}
@@ -434,13 +501,16 @@ export function ShellSearch({
                           role="option"
                           aria-selected={active}
                           aria-disabled={!activatable}
+                          title={
+                            detail ? `${result.title} — ${detail}` : undefined
+                          }
                           onMouseDown={(event) => {
                             event.preventDefault();
                             activateResult(result);
                           }}
                           onMouseEnter={() => setActiveIndex(index)}
                           className={cn(
-                            "flex min-h-8 w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm sm:min-h-7",
+                            "flex min-h-8 w-full items-center gap-2.5 rounded-lg px-2.5 py-1 text-left text-sm",
                             active ? "bg-accent text-accent-foreground" : "",
                           )}
                         >
@@ -448,47 +518,25 @@ export function ShellSearch({
                             className="size-4 shrink-0 text-muted-foreground"
                             aria-hidden="true"
                           />
-                          {result.subtitle ? (
-                            <span className="flex min-w-0 flex-1 flex-col">
-                              <span className="truncate text-sm text-foreground">
-                                {result.title}
-                              </span>
-                              <span className="truncate text-xs text-muted-foreground/85">
-                                {result.subtitle}
-                              </span>
+                          <span className="min-w-0 flex-1 truncate text-foreground">
+                            {result.title}
+                          </span>
+                          {detail ? (
+                            <span className="max-w-[45%] shrink truncate text-xs text-muted-foreground">
+                              {detail}
                             </span>
-                          ) : (
-                            <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                              {result.title}
-                            </span>
-                          )}
+                          ) : null}
+                          {shortcut ? (
+                            <Kbd className="shrink-0 bg-foreground/[0.06] tracking-wide">
+                              {shortcut}
+                            </Kbd>
+                          ) : null}
                         </button>
                       );
                     })}
                   </div>
                 ))
               )}
-            </div>
-            <div className="flex shrink-0 items-center gap-3 border-t bg-foreground/[0.025] px-5 py-3 text-sm font-medium text-muted-foreground max-sm:flex-col max-sm:items-start">
-              <div className="flex items-center gap-3">
-                <KbdGroup className="items-center gap-1.5">
-                  <Kbd>
-                    <ArrowUp />
-                  </Kbd>
-                  <Kbd>
-                    <ArrowDown />
-                  </Kbd>
-                  <span>{t("shell.searchHints.navigate")}</span>
-                </KbdGroup>
-                <KbdGroup className="items-center gap-1.5">
-                  <Kbd>Enter</Kbd>
-                  <span>{t("shell.searchHints.open")}</span>
-                </KbdGroup>
-                <KbdGroup className="items-center gap-1.5">
-                  <Kbd>Esc</Kbd>
-                  <span>{t("shell.searchHints.close")}</span>
-                </KbdGroup>
-              </div>
             </div>
           </DialogPrimitive.Content>
         </DialogPrimitive.Portal>

@@ -63,7 +63,9 @@ export type SearchActionId =
   | "add-wallet"
   | "connect-btcpay"
   | "import-btcpay"
-  | "process-journals";
+  | "lock-app"
+  | "process-journals"
+  | "refresh-book";
 
 export type SearchActionTarget = {
   id: SearchActionId;
@@ -91,6 +93,17 @@ export type SearchRankingHints = {
   reason?: SearchRankReason;
 };
 
+/**
+ * A global shortcut that does the same thing as the result, shown beside it.
+ * Keys are platform-neutral (see `formatShortcut`). `nativeMenu` marks an
+ * accelerator that only the desktop app's native menu provides, so a browser
+ * preview does not advertise a key that would do something else there.
+ */
+export type SearchShortcut = {
+  keys: readonly string[];
+  nativeMenu?: boolean;
+};
+
 export type SearchResult = {
   id: string;
   category: SearchResultCategory;
@@ -103,6 +116,7 @@ export type SearchResult = {
   metadata?: SearchResultMetadata;
   privacyTier?: SearchPrivacyTier;
   ranking?: SearchRankingHints;
+  shortcut?: SearchShortcut;
 };
 
 export type RankedSearchResult = SearchResult & {

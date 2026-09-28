@@ -102,6 +102,7 @@ const PAGE_RESULTS: SearchResult[] = [
     iconKey: "activity",
     route: { to: "/overview" },
     privacyTier: "public",
+    shortcut: { keys: ["mod", "1"], nativeMenu: true },
   },
   {
     id: "page:transactions",
@@ -112,6 +113,7 @@ const PAGE_RESULTS: SearchResult[] = [
     iconKey: "transaction",
     route: { to: "/transactions" },
     privacyTier: "public",
+    shortcut: { keys: ["mod", "2"], nativeMenu: true },
   },
   {
     id: "page:connections",
@@ -122,6 +124,7 @@ const PAGE_RESULTS: SearchResult[] = [
     iconKey: "wallet",
     route: { to: "/connections" },
     privacyTier: "public",
+    shortcut: { keys: ["mod", "3"], nativeMenu: true },
   },
   {
     id: "page:books",
@@ -132,6 +135,7 @@ const PAGE_RESULTS: SearchResult[] = [
     iconKey: "book",
     route: { to: "/books" },
     privacyTier: "public",
+    shortcut: { keys: ["mod", "4"], nativeMenu: true },
   },
   {
     id: "page:source-of-funds",
@@ -142,6 +146,7 @@ const PAGE_RESULTS: SearchResult[] = [
     iconKey: "shield",
     route: { to: "/source-of-funds" },
     privacyTier: "public",
+    shortcut: { keys: ["mod", "6"], nativeMenu: true },
   },
   {
     id: "page:journals",
@@ -152,6 +157,7 @@ const PAGE_RESULTS: SearchResult[] = [
     iconKey: "ledger",
     route: { to: "/journals" },
     privacyTier: "public",
+    shortcut: { keys: ["mod", "7"], nativeMenu: true },
   },
   {
     id: "page:reports",
@@ -162,6 +168,7 @@ const PAGE_RESULTS: SearchResult[] = [
     iconKey: "report",
     route: { to: "/reports" },
     privacyTier: "public",
+    shortcut: { keys: ["mod", "5"], nativeMenu: true },
   },
   {
     id: "page:exit-tax",
@@ -192,6 +199,7 @@ const PAGE_RESULTS: SearchResult[] = [
     iconKey: "shield",
     route: { to: "/quarantine" },
     privacyTier: "public",
+    shortcut: { keys: ["mod", "8"], nativeMenu: true },
   },
   {
     id: "page:egress",
@@ -242,6 +250,7 @@ const PAGE_RESULTS: SearchResult[] = [
     iconKey: "settings",
     route: { to: "/settings" },
     privacyTier: "public",
+    shortcut: { keys: ["mod", ","], nativeMenu: true },
   },
   {
     id: "page:logs",
@@ -262,6 +271,7 @@ const PAGE_RESULTS: SearchResult[] = [
     iconKey: "assistant",
     route: { to: "/assistant" },
     privacyTier: "public",
+    shortcut: { keys: ["mod", "9"], nativeMenu: true },
   },
 ];
 
@@ -276,16 +286,22 @@ const ACTION_RESULTS: SearchResult[] = [
     action: { id: "process-journals", label: "Process journals" },
     privacyTier: "public",
     ranking: { priority: 20 },
+    shortcut: { keys: ["mod", "shift", "j"] },
   },
   {
+    // The same book refresh as the title bar's refresh button: source sync,
+    // rates, auto-pairing, and journals in one pass.
     id: "action:sync-wallets",
     category: "action",
-    title: "Sync wallets",
-    subtitle: "Open Connections to refresh watch-only sources",
-    keywords: ["wallet", "wallets", "sync", "refresh", "connections"],
+    title: "Refresh book set",
+    subtitle: "Sync sources, rates, and journals",
+    // No "wallet"/"connections" keywords: actions outrank pages, so those
+    // words would put a network refresh above the Wallets page for Enter.
+    keywords: ["sync", "refresh", "update", "rescan"],
     iconKey: "sync",
-    route: { to: "/connections" },
+    action: { id: "refresh-book", label: "Refresh book set" },
     privacyTier: "public",
+    shortcut: { keys: ["mod", "r"] },
   },
   {
     id: "action:add-wallet",
@@ -296,6 +312,7 @@ const ACTION_RESULTS: SearchResult[] = [
     iconKey: "wallet",
     action: { id: "add-wallet", label: "Add wallet" },
     privacyTier: "public",
+    shortcut: { keys: ["mod", "shift", "a"] },
   },
   {
     id: "action:connect-btcpay",
@@ -338,6 +355,17 @@ const ACTION_RESULTS: SearchResult[] = [
     privacyTier: "public",
   },
   {
+    id: "action:lock-app",
+    category: "action",
+    title: "Lock Kassiber",
+    subtitle: "Lock the books until you unlock them again",
+    keywords: ["lock", "sperren", "privacy", "away", "leave"],
+    iconKey: "lock",
+    action: { id: "lock-app", label: "Lock Kassiber" },
+    privacyTier: "public",
+    shortcut: { keys: ["mod", "l"] },
+  },
+  {
     id: "action:change-passphrase",
     category: "action",
     title: "Change passphrase",
@@ -349,6 +377,61 @@ const ACTION_RESULTS: SearchResult[] = [
     privacyTier: "public",
   },
 ];
+
+/**
+ * What the palette offers before anything is typed, in nav order: the main
+ * pages and the everyday actions, each with its shortcut, so the palette is a
+ * launcher and a cheat sheet at once. The same visibility rules as search
+ * apply (AI off hides the Assistant, early-stage pages stay out).
+ */
+const SUGGESTED_RESULT_IDS = [
+  "page:overview",
+  "page:transactions",
+  "page:connections",
+  "page:reports",
+  "page:assistant",
+  "page:quarantine",
+  "page:journals",
+  "page:settings",
+  "action:sync-wallets",
+  "action:add-wallet",
+  "action:process-journals",
+  "action:lock-app",
+] as const;
+
+export function buildAppSearchSuggestions({
+  aiFeaturesEnabled,
+  developerToolsEnabled,
+  t,
+}: Pick<
+  BuildAppSearchOptions,
+  "aiFeaturesEnabled" | "developerToolsEnabled" | "t"
+>): RankedSearchResult[] {
+  const byId = new Map<string, SearchResult>();
+  for (const result of PAGE_RESULTS) {
+    byId.set(result.id, localizePageResult(result, t));
+  }
+  for (const result of ACTION_RESULTS) {
+    byId.set(result.id, localizeActionResult(result, t));
+  }
+  return SUGGESTED_RESULT_IDS.flatMap((id) => {
+    const result = byId.get(id);
+    if (!result) return [];
+    if (!aiFeaturesEnabled && result.route?.to === "/assistant") return [];
+    if (!developerToolsEnabled && isDevOnlyRoute(result.route?.to)) return [];
+    return [
+      {
+        ...result,
+        match: {
+          score: 0,
+          exactness: "contains" as const,
+          reason: "title" as const,
+          matchedText: "",
+        },
+      },
+    ];
+  });
+}
 
 export function buildAppSearchResults({
   snapshot,

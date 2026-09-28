@@ -39,11 +39,6 @@
     },
     "searchLabel": "Suchen",
     "searchPrompt": "Suche Seiten, Aktionen, Einstellungen, Wallets und Transaktionen.",
-    "searchHints": {
-      "navigate": "Navigieren",
-      "open": "Auswählen",
-      "close": "Schließen"
-    },
     "searchNoMatches": "Keine Treffer",
     "dataMode": {
       "real": "Live-Daten",
@@ -195,7 +190,9 @@
       "review": "Prüfung",
       "settings": "Einstellungen",
       "transactions": "Transaktionen",
-      "wallets": "Wallets"
+      "wallets": "Wallets",
+      "goTo": "Gehe zu",
+      "quickActions": "Schnellaktionen"
     },
     "actionReason": {
       "fromSearch": "Aus der globalen Suche geöffnet",

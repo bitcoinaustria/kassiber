@@ -780,7 +780,10 @@ export function AppShell() {
     ? isImportProjectActive(importedProjectRoot)
     : true;
   const importRootBlocked = !importRootReady || !importedProjectActive;
-  const daemonEnabled = !locked && !importRootBlocked;
+  // Locked or waiting on an import root: the lock/restore screen covers the
+  // shell, and no shell action may run from behind it — keyboard included.
+  const shellUnlocked = !locked && !importRootBlocked;
+  const daemonEnabled = shellUnlocked;
   useLocalWatchNotifications(daemonEnabled);
   const shellProgress =
     routeProgressFromActiveMaintenance(activeMaintenanceProgress) ??
@@ -1369,6 +1372,7 @@ export function AppShell() {
   );
 
   React.useEffect(() => {
+    if (!shellUnlocked) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
       const action = appWorkflowHotkeyAction(event);
@@ -1387,7 +1391,13 @@ export function AppShell() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [openAddWalletConnection, runHeaderRefresh, runMenuJournalProcessing, t]);
+  }, [
+    openAddWalletConnection,
+    runHeaderRefresh,
+    runMenuJournalProcessing,
+    shellUnlocked,
+    t,
+  ]);
 
   React.useEffect(() => {
     if (identity) return;
@@ -1623,6 +1633,15 @@ export function AppShell() {
     return () => window.removeEventListener("kassiber:lock-app", lockApp);
   }, [lockApp]);
 
+  // The command palette's "Refresh book set" runs the title bar's refresh, so
+  // it surfaces the same loader and respects the same in-flight guard.
+  React.useEffect(() => {
+    if (!shellUnlocked) return;
+    const refreshBook = () => runHeaderRefresh();
+    window.addEventListener("kassiber:refresh-book", refreshBook);
+    return () => window.removeEventListener("kassiber:refresh-book", refreshBook);
+  }, [runHeaderRefresh, shellUnlocked]);
+
   React.useEffect(() => {
     if (!("__TAURI_INTERNALS__" in window)) return;
 
@@ -1825,8 +1844,6 @@ export function AppShell() {
 
   if (!identity) return null;
 
-  const shellUnlocked = !locked && !importRootBlocked;
-
   return (
     <TooltipProvider>
       {/*
@@ -1864,6 +1881,7 @@ export function AppShell() {
             daemonEnabled={daemonEnabled}
             aiFeaturesEnabled={aiFeaturesEnabled}
             developerToolsEnabled={developerToolsEnabled}
+            searchEnabled={shellUnlocked}
           />
           {/* The panel sits flush against the nav and keeps a small gutter on
               its free sides, so its rounded corners read against the chrome. */}
@@ -2065,6 +2083,7 @@ function AppSidebar({
   daemonEnabled,
   aiFeaturesEnabled,
   developerToolsEnabled,
+  searchEnabled,
 }: {
   pathname: string;
   meta: RouteMeta;
@@ -2073,6 +2092,8 @@ function AppSidebar({
   daemonEnabled: boolean;
   aiFeaturesEnabled: boolean;
   developerToolsEnabled: boolean;
+  /** False while locked: the palette can run actions, so it must not open. */
+  searchEnabled: boolean;
 }) {
   const { t } = useTranslation("nav");
   const inSettings = pathname === "/settings" || pathname.startsWith("/settings/");
@@ -2137,7 +2158,11 @@ function AppSidebar({
           palette are reachable from settings too. */}
       <SidebarHeader className="gap-1 px-2 pt-1 pb-1">
         <SidebarBrand />
-        <ShellSearch searchKey={meta.searchKey} daemonEnabled={daemonEnabled} />
+        <ShellSearch
+          searchKey={meta.searchKey}
+          daemonEnabled={daemonEnabled}
+          enabled={searchEnabled}
+        />
       </SidebarHeader>
       {inSettings ? (
         <SettingsNavSection

@@ -39,11 +39,6 @@
     },
     "searchLabel": "Search",
     "searchPrompt": "Search pages, actions, settings, wallets, and transactions.",
-    "searchHints": {
-      "navigate": "Navigate",
-      "open": "Select",
-      "close": "Close"
-    },
     "searchNoMatches": "No matches",
     "dataMode": {
       "real": "Live data",
@@ -195,7 +190,9 @@
       "review": "Review",
       "settings": "Settings",
       "transactions": "Transactions",
-      "wallets": "Wallets"
+      "wallets": "Wallets",
+      "goTo": "Go to",
+      "quickActions": "Quick actions"
     },
     "actionReason": {
       "fromSearch": "Opened from global search",

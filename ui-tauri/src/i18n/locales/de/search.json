@@ -50,8 +50,8 @@
       "subtitle": "Lokalen, berichtsfertigen Journalstand aktualisieren"
     },
     "sync-wallets": {
-      "title": "Wallets syncen",
-      "subtitle": "Verbindungen öffnen, um Watch-only-Quellen zu aktualisieren"
+      "title": "Bücher-Set aktualisieren",
+      "subtitle": "Quellen, Kurse und Journale synchronisieren"
     },
     "add-wallet": {
       "title": "Wallet hinzufügen",
@@ -72,6 +72,10 @@
     "open-logs": {
       "title": "Logs öffnen",
       "subtitle": "Redigierte lokale Troubleshooting-Logs öffnen"
+    },
+    "lock-app": {
+      "title": "Kassiber sperren",
+      "subtitle": "Die Bücher sperren, bis du sie wieder entsperrst"
     },
     "change-passphrase": {
       "title": "Passphrase ändern",
