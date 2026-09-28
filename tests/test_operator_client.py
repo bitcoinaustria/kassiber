@@ -334,3 +334,15 @@ class OperatorClientOutdatedBrokerTest(unittest.TestCase):
             submit_once = self._submit({"KASSIBER_NO_EGRESS": ""})
         submit_once.assert_called_once()
         self.assertIn("absolute paths", stderr.getvalue())
+
+
+class OperatorClientUnreadableDirectoryTest(unittest.TestCase):
+    def test_an_unreadable_cwd_fails_instead_of_using_the_brokers(self) -> None:
+        from kassiber.operator import client as client_module
+
+        with mock.patch.object(
+            client_module.os, "getcwd", side_effect=FileNotFoundError()
+        ):
+            with self.assertRaises(AppError) as raised:
+                client_module._caller_working_directory()
+        self.assertEqual(raised.exception.code, "operator_working_directory_unavailable")

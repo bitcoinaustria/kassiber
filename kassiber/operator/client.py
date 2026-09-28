@@ -521,13 +521,20 @@ def _require_caller_context_support(broker: dict[str, object]) -> None:
     )
 
 
-def _caller_working_directory() -> str | None:
+def _caller_working_directory() -> str:
     # The broker was started from whatever directory its first client used;
     # the queued child must resolve this caller's relative paths instead.
+    # Omitting the field means "older client" to the broker, so an unreadable
+    # cwd (renamed or deleted under us) must fail rather than fall back.
     try:
         return os.getcwd()
     except OSError:
-        return None
+        raise AppError(
+            "the current working directory is no longer available",
+            code="operator_working_directory_unavailable",
+            hint="Run the command from an existing directory or pass absolute paths.",
+            retryable=False,
+        ) from None
 
 
 def _caller_disables_egress() -> bool:
