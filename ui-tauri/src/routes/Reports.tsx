@@ -969,7 +969,7 @@ function ReportMetricStrip({
               {metric.label}
               {provisional && metric.basisDependent ? (
                 <span
-                  className="rounded border border-amber-500/40 px-1 text-2xs font-medium text-amber-700 dark:text-amber-300"
+                  className="rounded-full border border-amber-500/40 px-1.5 text-2xs font-medium text-amber-700 dark:text-amber-300"
                   title="Quarantined rows, custody gaps, missing prices, or stale journals are not reflected yet."
                 >
                   Provisional
