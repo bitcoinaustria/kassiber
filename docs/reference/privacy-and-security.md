@@ -324,8 +324,10 @@ one project does not unlock another.
   FD`. Until that runs, every Kassiber command warns to stderr that the dotenv
   still carries plaintext secrets.
 - A wrong passphrase produces the structured `unlock_failed` envelope
-  rather than a partial open. The daemon refuses to start without a
-  passphrase when the file is encrypted.
+  rather than a partial open. Lock contention from another process is
+  `database_busy` instead, so it never feeds unlock backoff or a re-enrollment
+  prompt. The daemon starts locked and refuses database work until the
+  encrypted file is unlocked.
 - `kassiber secrets change-passphrase` rotates the key in place via
   `PRAGMA rekey` and verifies with `cipher_integrity_check` when the
   bundled SQLCipher build supports it.

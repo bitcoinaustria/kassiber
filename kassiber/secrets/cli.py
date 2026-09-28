@@ -44,6 +44,7 @@ from .prompt import (
     read_passphrase_from_fd,
 )
 from .sqlcipher import (
+    get_row_class,
     looks_like_plaintext_sqlite,
     open_encrypted,
     require_sqlcipher,
@@ -610,7 +611,8 @@ def cmd_secrets_migrate_credentials(args: argparse.Namespace) -> dict:
         label="Database passphrase: ",
         confirm=False,
     )
-    conn = open_encrypted(db_path, passphrase)
+    # Backend lookups index rows by column name, like every `open_db` caller.
+    conn = open_encrypted(db_path, passphrase, row_factory=get_row_class())
     try:
         result = migrate_dotenv_credentials(
             conn,
