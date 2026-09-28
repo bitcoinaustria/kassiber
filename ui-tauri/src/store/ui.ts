@@ -190,6 +190,11 @@ export interface UiState {
   developerToolsEnabled: boolean;
   /** Alpha warning chip in the shell's title bar. */
   preAlphaBannerVisible: boolean;
+  /**
+   * The user's choice to fold the side nav to its icon rail. A narrow window
+   * folds it too, without changing this preference (see AppShell).
+   */
+  navCollapsed: boolean;
   /** Native-hydrated app-wide GitHub update-check permission. */
   automaticUpdateChecks: boolean;
   /** Latest native GitHub release check; transient and never persisted. */
@@ -261,6 +266,7 @@ export interface UiState {
   setAiFeaturesEnabled: (enabled: boolean) => void;
   setDeveloperToolsEnabled: (enabled: boolean) => void;
   setPreAlphaBannerVisible: (visible: boolean) => void;
+  setNavCollapsed: (collapsed: boolean) => void;
   setAutomaticUpdateChecks: (enabled: boolean) => void;
   setAppUpdate: (update: AppUpdateCheck | null) => void;
   setAssistantModelSelection: (selection: AiModelSelection | null) => void;
@@ -418,6 +424,7 @@ export function uiStatePartialForStorage(state: UiState) {
     aiFeaturesEnabled: state.aiFeaturesEnabled,
     developerToolsEnabled: state.developerToolsEnabled,
     preAlphaBannerVisible: state.preAlphaBannerVisible,
+    navCollapsed: state.navCollapsed,
     assistantModelSelection: state.assistantModelSelection,
     assistantDockAutoHide: state.assistantDockAutoHide,
     assistantDockPosition: state.assistantDockPosition,
@@ -477,6 +484,7 @@ export const useUiStore = create<UiState>()(
       // `devMode.ts`). Restored from `kb.ui`, so it survives updates.
       developerToolsEnabled: false,
       preAlphaBannerVisible: true,
+      navCollapsed: false,
       automaticUpdateChecks: false,
       appUpdate: null,
       assistantModelSelection: null,
@@ -538,6 +546,7 @@ export const useUiStore = create<UiState>()(
         set({ developerToolsEnabled: enabled }),
       setPreAlphaBannerVisible: (visible) =>
         set({ preAlphaBannerVisible: visible }),
+      setNavCollapsed: (collapsed) => set({ navCollapsed: collapsed }),
       setAutomaticUpdateChecks: (enabled) =>
         set({
           automaticUpdateChecks: enabled,
@@ -714,6 +723,7 @@ export const useUiStore = create<UiState>()(
             restored.developerToolsEnabled ?? current.developerToolsEnabled,
           preAlphaBannerVisible:
             restored.preAlphaBannerVisible ?? current.preAlphaBannerVisible,
+          navCollapsed: restored.navCollapsed === true,
           // The owner-only native/CLI preference is canonical. Never restore
           // this permission from renderer-local storage.
           automaticUpdateChecks: current.automaticUpdateChecks,

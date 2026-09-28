@@ -74,6 +74,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -129,6 +130,7 @@ import {
   shouldStoreTouchIdPassphrase,
   shouldUseDaemonUnlock,
 } from "@/lib/appLock";
+import { formatShortcut, isMacPlatform } from "@/lib/shortcutLabel";
 import { cn } from "@/lib/utils";
 import {
   clearSessionUnlockPassphrase,
@@ -179,6 +181,11 @@ import { FirstSyncCard } from "./FirstSyncCard";
 import { AlphaNotice } from "./AlphaNotice";
 import { AssistantDock } from "./AssistantDock";
 import { useClaimWindowTitlebar, useWindowChrome } from "./windowChromeContext";
+import {
+  historyHotkeyDecision,
+  NAV_AUTO_COLLAPSE_BELOW_PX,
+  resolveNavOpen,
+} from "./shellNavigation";
 import { ExternalBrowserLink } from "./ExternalBrowserLink";
 import { nextAssistantDockCollapsed } from "./assistantDockLayout";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
@@ -613,6 +620,65 @@ function identityFromProject(
       database: project.database,
     },
   };
+}
+
+/** True while the window is narrower than `px` CSS pixels. */
+function useWindowNarrowerThan(px: number) {
+  const query = `(max-width: ${px - 1}px)`;
+  // Stable per query, or React resubscribes on every shell render (progress
+  // ticks re-render the shell often).
+  const subscribe = React.useCallback(
+    (onChange: () => void) => {
+      // `resize` as well: not every webview fires the media query's `change`
+      // (emulated viewports do not). The snapshot is a boolean, so extra
+      // notifications re-render nothing.
+      const media = window.matchMedia(query);
+      media.addEventListener("change", onChange);
+      window.addEventListener("resize", onChange);
+      return () => {
+        media.removeEventListener("change", onChange);
+        window.removeEventListener("resize", onChange);
+      };
+    },
+    [query],
+  );
+  return React.useSyncExternalStore(
+    subscribe,
+    () => window.matchMedia(query).matches,
+    () => false,
+  );
+}
+
+/**
+ * The side nav's open state: the saved preference in a wide window, folded to
+ * the rail in a narrow one (see `resolveNavOpen`). A toggle in a narrow window
+ * lasts only until the window crosses the threshold, in either direction; it
+ * is cleared during render (React's "adjust state when a prop changes"
+ * pattern) so the nav never paints a frame in the stale state.
+ */
+function useShellNavOpen() {
+  const navCollapsed = useUiStore((s) => s.navCollapsed);
+  const setNavCollapsed = useUiStore((s) => s.setNavCollapsed);
+  const narrow = useWindowNarrowerThan(NAV_AUTO_COLLAPSE_BELOW_PX);
+  const [narrowOpen, setNarrowOpen] = React.useState(false);
+  const [lastNarrow, setLastNarrow] = React.useState(narrow);
+  if (lastNarrow !== narrow) {
+    setLastNarrow(narrow);
+    setNarrowOpen(false);
+  }
+  const open = resolveNavOpen({
+    narrow,
+    navCollapsed,
+    narrowOpen: lastNarrow === narrow && narrowOpen,
+  });
+  const onOpenChange = React.useCallback(
+    (next: boolean) => {
+      if (narrow) setNarrowOpen(next);
+      else setNavCollapsed(!next);
+    },
+    [narrow, setNavCollapsed],
+  );
+  return { open, onOpenChange };
 }
 
 export function AppShell() {
@@ -1755,6 +1821,7 @@ export function AppShell() {
   // The shell draws the window's title bar row itself (see WindowFrame), so
   // the traffic lights, navigation, and shell actions share one row.
   useClaimWindowTitlebar(identity !== null);
+  const nav = useShellNavOpen();
 
   if (!identity) return null;
 
@@ -1769,7 +1836,11 @@ export function AppShell() {
         breadcrumb, and the shell actions, so there is exactly one row of chrome
         above the page.
       */}
-      <SidebarProvider className="h-full min-h-0 flex-col overflow-hidden bg-sidebar">
+      <SidebarProvider
+        open={nav.open}
+        onOpenChange={nav.onOpenChange}
+        className="h-full min-h-0 flex-col overflow-hidden bg-sidebar"
+      >
         <a
           href="#app-main"
           className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
@@ -2165,10 +2236,17 @@ function SettingsNavSection({
  */
 function SidebarBrand() {
   const { t } = useTranslation("chrome");
+  const { state, isMobile } = useSidebar();
+  const folded = state === "collapsed" && !isMobile;
   return (
-    <div className="flex h-8 min-w-0 items-center px-2 transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:-mt-9 group-data-[collapsible=icon]:opacity-0">
+    <div
+      aria-hidden={folded || undefined}
+      className="flex h-8 min-w-0 items-center px-2 transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:-mt-9 group-data-[collapsible=icon]:opacity-0"
+    >
       <Link
         to="/overview"
+        // Faded out on the rail but still in the DOM, so keep Tab off it.
+        tabIndex={folded ? -1 : undefined}
         aria-label={t("shell.overviewLink")}
         className="flex h-7 min-w-0 shrink items-center truncate rounded-md text-sm font-medium tracking-tight text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
@@ -2680,20 +2758,28 @@ function NavUser({
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
+              // Folded to the rail the name is hidden, so the button still
+              // needs one: the avatar's initials alone say nothing.
+              aria-label={t("shell.user.menuLabel", { name, detail })}
+              title={t("shell.user.menuLabel", { name, detail })}
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[collapsible=icon]:size-9! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0!"
             >
-              {/* `--muted` is the chrome's own grey in light mode, so the stock
-                  fallback vanished once the nav sat flush on the chrome; the
-                  row-active tone keeps it a visible tile. */}
-              <Avatar className="size-8 shrink-0 rounded-lg group-data-[collapsible=icon]:size-9">
-                <AvatarFallback className="rounded-lg bg-sidebar-row-active text-sm font-medium text-sidebar-foreground group-data-[collapsible=icon]:text-sm">
-                  {name
-                    .split(" ")
-                    .map((part) => part[0])
-                    .join("")
-                    .slice(0, 2)}
-                </AvatarFallback>
-              </Avatar>
+              {/* Wrapped, because the rail recipe hides every direct `<span>`
+                  child of a menu button (that is how labels fold away) and the
+                  avatar root is a span — so the profile vanished from the
+                  folded rail. `--muted` is also the chrome's own grey in light
+                  mode; the row-active tone keeps the tile visible on it. */}
+              <div className="flex shrink-0">
+                <Avatar className="size-8 rounded-lg group-data-[collapsible=icon]:size-9">
+                  <AvatarFallback className="rounded-lg bg-sidebar-row-active text-sm font-medium text-sidebar-foreground group-data-[collapsible=icon]:text-sm">
+                    {name
+                      .split(" ")
+                      .map((part) => part[0])
+                      .join("")
+                      .slice(0, 2)}
+                  </AvatarFallback>
+                </Avatar>
+              </div>
               <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                 <span className="truncate font-medium">{name}</span>
                 <span className="truncate text-xs text-muted-foreground">
@@ -2771,6 +2857,9 @@ function NavUser({
             <DropdownMenuItem onSelect={() => onLock()}>
               <LogOut className="mr-2 size-4" aria-hidden="true" />
               {t("shell.lockKassiber")}
+              <DropdownMenuShortcut>
+                {formatShortcut(["mod", "l"])}
+              </DropdownMenuShortcut>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -2919,6 +3008,32 @@ function ShellTitlebar({
   const navExpanded = state === "expanded" && !isMobile;
   const preAlphaBannerVisible = useUiStore((s) => s.preAlphaBannerVisible);
 
+  // The history buttons' keyboard twins. History stays put while locked,
+  // while typing, and while a dialog is open, where going back would pull the
+  // page out from under it. Installed even while locked, so the Windows
+  // webview's own Alt+arrow navigation is swallowed there too.
+  React.useEffect(() => {
+    const mac = isMacPlatform();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      const decision = historyHotkeyDecision(event, {
+        mac,
+        allowed:
+          controlsVisible &&
+          !isTypingTarget(event.target) &&
+          !document.querySelector(
+            '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
+          ),
+      });
+      if (!decision) return;
+      event.preventDefault();
+      if (decision === "back") window.history.back();
+      else if (decision === "forward") window.history.forward();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [controlsVisible]);
+
   return (
     <header
       data-tauri-drag-region={nativeTitlebar ? "deep" : undefined}
@@ -2949,7 +3064,9 @@ function ShellTitlebar({
               className={shellIconButtonClassName}
               aria-label={t("shell.toggleSidebar")}
               aria-expanded={navExpanded}
-              title={t("shell.toggleSidebarTitle")}
+              title={t("shell.toggleSidebarTitle", {
+                shortcut: formatShortcut(["mod", "b"]),
+              })}
               onClick={toggleSidebar}
             >
               <PanelLeft className="size-4" aria-hidden="true" />
@@ -2960,7 +3077,11 @@ function ShellTitlebar({
               size="icon"
               className={shellIconButtonClassName}
               aria-label={t("shell.back")}
-              title={t("shell.back")}
+              title={t("shell.backTitle", {
+                shortcut: formatShortcut(
+                  isMacPlatform() ? ["mod", "["] : ["alt", "left"],
+                ),
+              })}
               onClick={() => window.history.back()}
             >
               <ArrowLeft className="size-4" aria-hidden="true" />
@@ -2971,7 +3092,11 @@ function ShellTitlebar({
               size="icon"
               className={shellIconButtonClassName}
               aria-label={t("shell.forward")}
-              title={t("shell.forward")}
+              title={t("shell.forwardTitle", {
+                shortcut: formatShortcut(
+                  isMacPlatform() ? ["mod", "]"] : ["alt", "right"],
+                ),
+              })}
               onClick={() => window.history.forward()}
             >
               <ArrowRight className="size-4" aria-hidden="true" />
@@ -3108,7 +3233,9 @@ function ShellTitlebarControls({
             size="icon"
             className={cn(shellIconButtonClassName, "rounded-r-none")}
             aria-label={t("shell.refresh")}
-            title={t("shell.refreshTitle")}
+            title={t("shell.refreshTitle", {
+              shortcut: formatShortcut(["mod", "r"]),
+            })}
             onClick={() => onRefresh()}
           >
             <RefreshCw
@@ -3147,6 +3274,9 @@ function ShellTitlebarControls({
               <DropdownMenuItem onSelect={() => onRefresh()}>
                 <RefreshCw className="size-4" aria-hidden="true" />
                 {t("shell.refresh")}
+                <DropdownMenuShortcut>
+                  {formatShortcut(["mod", "r"])}
+                </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={isProcessingJournals}
@@ -3154,10 +3284,16 @@ function ShellTitlebarControls({
               >
                 <ClipboardList className="size-4" aria-hidden="true" />
                 {t("shell.refreshMenu.reprocessJournals")}
+                <DropdownMenuShortcut>
+                  {formatShortcut(["mod", "shift", "j"])}
+                </DropdownMenuShortcut>
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => onRefresh({ forceFull: true })}>
                 <RotateCcw className="size-4" aria-hidden="true" />
                 {t("shell.refreshMenu.fullRescan")}
+                <DropdownMenuShortcut>
+                  {formatShortcut(["mod", "shift", "r"])}
+                </DropdownMenuShortcut>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -3321,7 +3457,9 @@ function ShellTitlebarControls({
           size="icon"
           className={shellIconButtonClassName}
           aria-label={t("shell.lockKassiber")}
-          title={t("shell.lockKassiberTitle")}
+          title={t("shell.lockKassiberTitle", {
+            shortcut: formatShortcut(["mod", "l"]),
+          })}
           onClick={onLock}
         >
           <LockKeyhole className="size-4" aria-hidden="true" />
