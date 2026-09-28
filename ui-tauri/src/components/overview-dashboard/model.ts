@@ -25,6 +25,12 @@ import {
   type Currency,
 } from "@/lib/currency";
 import { formatShortDate } from "@/lib/date";
+import {
+  completenessHref,
+  fiatCompleteness,
+  isBasisIncompleteAt,
+  isBasisIncompleteOnDay,
+} from "@/lib/fiatCompleteness";
 import { currentUiLocale } from "@/lib/localeFormat";
 import {
   autoCandidatePeriods,
@@ -135,6 +141,12 @@ export type PortfolioChartPoint = {
   costBasisEur: number;
   priceEur?: number;
   unrealizedEur: number;
+  /**
+   * The journal basis behind costBasisEur/unrealizedEur/avg cost is incomplete
+   * at this point (quarantine, custody gap, missing price, stale journals).
+   * Consumers show "—" instead of those figures.
+   */
+  basisIncomplete?: boolean;
 };
 
 export type PortfolioChartMetric = "value" | "btc" | "basis" | "unrealized";
@@ -700,12 +712,15 @@ export function buildStatsData(
 ): StatItem[] {
   const isBitcoinMode = currency === "btc";
   const transactionCount = snapshot.status?.transactionCount ?? snapshot.txs.length;
+  // A basis that misses quarantined/unresolved rows would turn the change
+  // percentage into a confident but wrong number.
+  const basisTrusted = fiatCompleteness(snapshot.fiat).costBasisComplete;
   return [
     {
       ...statsData[0],
       value: snapshot.fiat.eurBalance,
       previousValue: isBitcoinMode ? 0 : snapshot.fiat.eurCostBasis,
-      changePercent: !isBitcoinMode && snapshot.fiat.eurCostBasis
+      changePercent: !isBitcoinMode && basisTrusted && snapshot.fiat.eurCostBasis
         ? (snapshot.fiat.eurUnrealized / snapshot.fiat.eurCostBasis) * 100
         : 0,
       isPositive: snapshot.fiat.eurUnrealized >= 0,
@@ -745,6 +760,59 @@ export function buildStatsData(
       comparisonLabelKey: "stats.comparison.journalQuarantine",
     },
   ];
+}
+
+export type BasisHintKey =
+  | "completeness.hint.incomplete"
+  | "completeness.hint.stale";
+
+/** Tooltip for basis figures shown as "—" on chart points/tooltips. */
+export function basisIncompleteHintKey(snapshot: OverviewSnapshot): BasisHintKey {
+  return fiatCompleteness(snapshot.fiat).state === "stale"
+    ? "completeness.hint.stale"
+    : "completeness.hint.incomplete";
+}
+
+export type PortfolioCompletenessDetail = {
+  copy: OverviewCopy;
+  /** Explains why a figure is "—" or amber; an `overview` i18n key. */
+  hintKey:
+    | "completeness.hint.incomplete"
+    | "completeness.hint.stale"
+    | "completeness.hint.unavailable";
+  href: OverviewHref | null;
+};
+
+/**
+ * What the fiat portfolio figures lack, or `null` when they are exact. Used by
+ * the stat card, holdings header, and chart summary so every surface agrees.
+ */
+export function portfolioCompletenessDetail(
+  snapshot: OverviewSnapshot,
+): PortfolioCompletenessDetail | null {
+  const completeness = fiatCompleteness(snapshot.fiat);
+  if (completeness.marketRateMissing) {
+    return {
+      copy: { key: "completeness.valueUnavailable" },
+      hintKey: "completeness.hint.unavailable",
+      href: null,
+    };
+  }
+  if (completeness.costBasisComplete) return null;
+  const uncoveredMsat = completeness.basisUncoveredMsat ?? 0;
+  const stale = completeness.state === "stale";
+  return {
+    copy: stale
+      ? { key: "completeness.basisStale" }
+      : uncoveredMsat > 0
+        ? {
+            key: "completeness.uncovered",
+            params: { amount: formatBtc(uncoveredMsat / 100_000_000_000) },
+          }
+        : { key: "completeness.basisIncomplete" },
+    hintKey: stale ? "completeness.hint.stale" : "completeness.hint.incomplete",
+    href: completenessHref(completeness),
+  };
 }
 
 export type TimePeriod = PeriodKey;
@@ -1014,12 +1082,19 @@ export function getDataForPeriod(
 ): PortfolioChartPoint[] {
   const resolvedPeriod = resolveAutoTimePeriod(snapshot, period);
   if (snapshot.portfolioSeries?.length) {
+    const completeness = fiatCompleteness(snapshot.fiat);
     const points = buildDatedPortfolioPoints(
       snapshot.portfolioSeries,
       resolvedPeriod,
       metric,
       currency,
       density,
+    ).map((point) =>
+      // Earlier points stay valid; from the first gap on, the journal basis
+      // no longer matches the displayed BTC.
+      isBasisIncompleteOnDay(completeness, point.date)
+        ? { ...point, basisIncomplete: true, prevYear: undefined }
+        : point,
     );
     if (points.length) return points;
   }
@@ -1656,7 +1731,7 @@ export function buildTreasuryBasePoint(
         ? point.valueEur / point.balanceBtc
         : fiatRate;
   const avgCostEur =
-    point.balanceBtc > 0 && point.costBasisEur > 0
+    !point.basisIncomplete && point.balanceBtc > 0 && point.costBasisEur > 0
       ? point.costBasisEur / point.balanceBtc
       : null;
   return {
@@ -1710,8 +1785,14 @@ export function buildTreasuryActivityPoint(
     balanceBtc > 0
       ? balanceBtc * event.priceEur
       : anchor?.valueEur ?? snapshot.fiat.eurBalance;
+  const basisIncomplete = isBasisIncompleteAt(
+    fiatCompleteness(snapshot.fiat),
+    event.occurredAt.valueOf(),
+  );
   const avgCostEur =
-    balanceBtc > 0 && costBasisEur > 0 ? costBasisEur / balanceBtc : null;
+    !basisIncomplete && balanceBtc > 0 && costBasisEur > 0
+      ? costBasisEur / balanceBtc
+      : null;
   const markerAnchor = options.markerAnchor ?? null;
   const eventDate = activityDateKey(event);
   const date = options.drawLineValues
@@ -1722,11 +1803,12 @@ export function buildTreasuryActivityPoint(
     month: formatTreasuryTick(date),
     detailLabel: formatTreasuryDetailDate(eventDate),
     thisYear: valueEur,
-    prevYear: costBasisEur,
+    prevYear: basisIncomplete ? undefined : costBasisEur,
     balanceBtc,
     valueEur,
     costBasisEur,
     unrealizedEur: valueEur - costBasisEur,
+    basisIncomplete: basisIncomplete || undefined,
     bitcoinPriceEur: event.priceEur,
     avgCostEur,
     lineBalanceBtc: options.drawLineValues ? balanceBtc : undefined,
@@ -2608,6 +2690,29 @@ export function buildOverviewReadiness(snapshot: OverviewSnapshot): OverviewRead
     };
   }
 
+  // Report blockers the journal/quarantine counts do not show on their own.
+  const completeness = fiatCompleteness(snapshot.fiat);
+  if (completeness.reasons.includes("custody_unresolved")) {
+    return {
+      title: { key: "readiness.custodyUnresolved.title" },
+      detail: { key: "readiness.custodyUnresolved.detail" },
+      icon: ShieldAlert,
+      tone: "alert",
+    };
+  }
+
+  if (completeness.reasons.includes("missing_prices")) {
+    return {
+      title: { key: "readiness.missingPrices.title" },
+      detail: {
+        key: "readiness.missingPrices.detail",
+        params: { count: completeness.missingPriceCount },
+      },
+      icon: ShieldAlert,
+      tone: "warning",
+    };
+  }
+
   if (syncingConnections) {
     return {
       title: { key: "readiness.syncInProgress.title" },
@@ -2639,6 +2744,29 @@ export function buildOverviewHealthItems(snapshot: OverviewSnapshot): OverviewHe
   const syncedConnections = snapshot.connections.filter(
     (connection) => connection.status === "synced",
   ).length;
+  const completeness = fiatCompleteness(snapshot.fiat);
+  const custodyUnresolved = completeness.reasons.includes("custody_unresolved");
+  const missingPrices = completeness.reasons.includes("missing_prices");
+  // Only rendered in the actionable state (no standing "all good" row).
+  const basisItem: OverviewHealthItem[] =
+    custodyUnresolved || missingPrices
+      ? [
+          {
+            key: "basis",
+            title: { key: "health.basis.title" },
+            value: custodyUnresolved
+              ? { key: "health.basis.custody" }
+              : {
+                  key: "health.basis.missingPrices",
+                  params: { count: completeness.missingPriceCount },
+                },
+            detail: { key: "health.basis.detail" },
+            href: custodyUnresolved ? "/journals" : "/quarantine",
+            icon: ShieldAlert,
+            tone: custodyUnresolved ? "alert" : "warning",
+          },
+        ]
+      : [];
 
   return [
     {
@@ -2671,6 +2799,7 @@ export function buildOverviewHealthItems(snapshot: OverviewSnapshot): OverviewHe
       icon: quarantines ? ShieldAlert : CheckCircle2,
       tone: quarantines ? "alert" : "good",
     },
+    ...basisItem,
     {
       key: "connections",
       title: { key: "health.connections.title" },
@@ -2727,6 +2856,29 @@ export function buildPrimaryOverviewAction(snapshot: OverviewSnapshot) {
       href: "/connections",
       icon: WalletCards,
       tone: "alert" as const,
+    };
+  }
+  // "Open reports" would be the wrong nudge while basis inputs are missing.
+  const completeness = fiatCompleteness(snapshot.fiat);
+  if (completeness.reasons.includes("custody_unresolved")) {
+    return {
+      title: { key: "readiness.custodyUnresolved.title" } as OverviewCopy,
+      detail: { key: "readiness.custodyUnresolved.detail" } as OverviewCopy,
+      href: "/journals" as const,
+      icon: ShieldAlert,
+      tone: "alert" as const,
+    };
+  }
+  if (completeness.reasons.includes("missing_prices")) {
+    return {
+      title: { key: "readiness.missingPrices.title" } as OverviewCopy,
+      detail: {
+        key: "readiness.missingPrices.detail",
+        params: { count: completeness.missingPriceCount },
+      } as OverviewCopy,
+      href: "/quarantine" as const,
+      icon: ShieldAlert,
+      tone: "warning" as const,
     };
   }
   return {

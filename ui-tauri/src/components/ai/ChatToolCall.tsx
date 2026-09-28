@@ -10,11 +10,11 @@ import {
   ToolOutput,
 } from "@/components/ai-elements";
 import type { AiChatToolCall } from "@/daemon/stream";
-import { formatFiatAmount } from "@/lib/currency";
 import { Button } from "@/components/ui/button";
 import { reviewArtifact, reviewReceipt } from "./reviewWorkflow";
 import { evidenceRequest } from "./evidenceRequest";
 import { EvidenceRequestCard } from "./EvidenceRequestCard";
+import { overviewSnapshotSummary } from "./overviewToolSummary";
 
 interface ChatToolCallProps {
   toolCall: AiChatToolCall;
@@ -120,33 +120,8 @@ function summarizeToolResult(
       const receipt = reviewReceipt(data);
       return receipt ? t("review.receipt.verified", { count: receipt.operations.length }) : null;
     }
-    case "ui.overview.snapshot": {
-      const connections = Array.isArray(data.connections)
-        ? data.connections
-        : [];
-      const txs = Array.isArray(data.txs) ? data.txs : [];
-      const fiat = asRecord(data.fiat);
-      const priceEur =
-        typeof data.priceEur === "number"
-          ? t("tool.overviewSnapshot.priceEur", {
-              value: formatMoney(data.priceEur),
-            })
-          : null;
-      const realizedYtd =
-        typeof fiat?.eurRealizedYTD === "number"
-          ? t("tool.overviewSnapshot.realizedYtd", {
-              value: formatMoney(fiat.eurRealizedYTD),
-            })
-          : null;
-      return [
-        t("tool.overviewSnapshot.connections", { count: connections.length }),
-        t("tool.overviewSnapshot.recentTransactions", { count: txs.length }),
-        priceEur,
-        realizedYtd,
-      ]
-        .filter((part): part is string => Boolean(part))
-        .join("; ");
-    }
+    case "ui.overview.snapshot":
+      return overviewSnapshotSummary(data, t);
     case "ui.workspace.health": {
       const booksSet =
         asRecord(data.workspace)?.label ?? t("tool.workspaceHealth.noBooksSet");
@@ -371,8 +346,4 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
-}
-
-function formatMoney(value: number): string {
-  return formatFiatAmount(value, "EUR");
 }

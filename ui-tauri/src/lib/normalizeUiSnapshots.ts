@@ -10,6 +10,7 @@ import type {
   QuarantineReason,
   QuarantineSnapshot,
 } from "@/components/kb/quarantine/types";
+import { normalizeFiatCompleteness } from "@/lib/fiatCompleteness";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -33,10 +34,33 @@ function normalizeNumberArray(value: unknown): number[] {
   );
 }
 
+function normalizeBalanceSummary(
+  value: unknown,
+): OverviewSnapshot["balanceSummary"] {
+  if (!isRecord(value)) return undefined;
+  if (typeof value.totalBtc !== "number" || !Number.isFinite(value.totalBtc)) {
+    return undefined;
+  }
+  return {
+    totalBtc: value.totalBtc,
+    status: typeof value.status === "string" ? value.status : "current",
+    source: typeof value.source === "string" ? value.source : "mixed",
+    needsJournals: value.needsJournals === true,
+    quarantines: finiteNumber(value.quarantines),
+    chainWalletCount: finiteNumber(value.chainWalletCount),
+    bookWalletCount: finiteNumber(value.bookWalletCount),
+    transactionWalletCount: finiteNumber(value.transactionWalletCount),
+    duplicateOutpointAdjustmentBtc: finiteNumber(
+      value.duplicateOutpointAdjustmentBtc,
+    ),
+  };
+}
+
 export function normalizeOverviewSnapshot(value: unknown): OverviewSnapshot {
   const raw = isRecord(value) ? value : {};
   const fiat = isRecord(raw.fiat) ? raw.fiat : {};
   const status = isRecord(raw.status) ? raw.status : null;
+  const balanceSummary = normalizeBalanceSummary(raw.balanceSummary);
 
   return {
     priceEur: finiteNumber(raw.priceEur),
@@ -57,7 +81,11 @@ export function normalizeOverviewSnapshot(value: unknown): OverviewSnapshot {
       eurCostBasis: finiteNumber(fiat.eurCostBasis),
       eurUnrealized: finiteNumber(fiat.eurUnrealized),
       eurRealizedYTD: finiteNumber(fiat.eurRealizedYTD),
+      // Missing/unknown completeness never reads as complete; see
+      // UNKNOWN_FIAT_COMPLETENESS.
+      completeness: normalizeFiatCompleteness(fiat.completeness),
     },
+    ...(balanceSummary ? { balanceSummary } : {}),
     taxFreeBalance: isRecord(raw.taxFreeBalance)
       ? (raw.taxFreeBalance as unknown as TaxFreeBalanceSnapshot)
       : null,

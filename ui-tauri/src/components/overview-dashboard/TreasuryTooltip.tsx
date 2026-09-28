@@ -12,6 +12,7 @@ import {
   formatFiatPrice,
   formatPortfolioMoney,
   statusLabelKeys,
+  type BasisHintKey,
   type HoveredActivityPointStore,
   useActivityFlowColors,
   type TreasuryChartPoint,
@@ -33,6 +34,8 @@ export interface TreasuryTooltipProps {
   priceEur: number;
   fiatCurrency: string;
   fiatSeriesEnabled?: boolean;
+  /** Why basis figures of an incomplete point are "—". */
+  basisHintKey?: BasisHintKey;
 }
 
 const EMPTY_SUBSCRIBE = () => () => {};
@@ -55,6 +58,7 @@ export function TreasuryTooltip({
   priceEur,
   fiatCurrency,
   fiatSeriesEnabled = true,
+  basisHintKey = "completeness.hint.incomplete",
 }: TreasuryTooltipProps) {
   const { t } = useTranslation("overview");
   const { t: tTransactions } = useTranslation("transactions");
@@ -71,6 +75,10 @@ export function TreasuryTooltip({
   const unrealizedPct = point.costBasisEur
     ? (point.unrealizedEur / Math.abs(point.costBasisEur)) * 100
     : 0;
+  // At/after the first quarantine or custody gap the journal basis misses
+  // rows, so avg cost and unrealized are "—" with the reason on hover.
+  const basisIncomplete = Boolean(point.basisIncomplete);
+  const basisHint = basisIncomplete ? t(basisHintKey) : undefined;
   const eventFlow = point.eventFlow;
   const hasEvent = point.isActivityEvent && eventFlow !== undefined;
   const groupedPoints = point.markerGroupedPoints ?? [];
@@ -278,12 +286,18 @@ export function TreasuryTooltip({
             <TooltipMetricRow
               label={t("tooltip.avgBasisAfter")}
               value={
-                point.avgCostEur === null
+                basisIncomplete || point.avgCostEur === null
                   ? "—"
                   : formatFiatPrice(point.avgCostEur, fiatCurrency)
               }
+              title={basisHint}
               hidden={hideSensitive}
             />
+          ) : null}
+          {fiatSeriesEnabled && basisHint ? (
+            <p className="text-2xs leading-4 text-amber-700 dark:text-amber-300">
+              {basisHint}
+            </p>
           ) : null}
           {point.eventStatus !== undefined || markerCount <= 1 ? (
             <TooltipMetricRow
@@ -340,25 +354,42 @@ export function TreasuryTooltip({
             <TooltipMetricRow
               label={t("tooltip.avgBasis")}
               value={
-                point.avgCostEur === null
+                basisIncomplete || point.avgCostEur === null
                   ? "—"
                   : formatFiatPrice(point.avgCostEur, fiatCurrency)
               }
+              title={basisHint}
               hidden={hideSensitive}
             />
             <TooltipMetricRow
               label={t("tooltip.unrealized")}
-              value={`${point.unrealizedEur >= 0 ? "+ " : "− "}${formatPortfolioMoney(
-                Math.abs(point.unrealizedEur),
-                priceEur,
-                "eur",
-                fiatCurrency,
-              )} (${unrealizedPct >= 0 ? "+" : "−"}${Math.abs(unrealizedPct).toFixed(
-                1,
-              )}%)`}
-              tone={point.unrealizedEur >= 0 ? "good" : "bad"}
+              value={
+                basisIncomplete
+                  ? "—"
+                  : `${point.unrealizedEur >= 0 ? "+ " : "− "}${formatPortfolioMoney(
+                      Math.abs(point.unrealizedEur),
+                      priceEur,
+                      "eur",
+                      fiatCurrency,
+                    )} (${unrealizedPct >= 0 ? "+" : "−"}${Math.abs(
+                      unrealizedPct,
+                    ).toFixed(1)}%)`
+              }
+              title={basisHint}
+              tone={
+                basisIncomplete
+                  ? "neutral"
+                  : point.unrealizedEur >= 0
+                    ? "good"
+                    : "bad"
+              }
               hidden={hideSensitive}
             />
+            {basisHint ? (
+              <p className="max-w-[260px] pt-1 text-2xs leading-4 text-amber-700 dark:text-amber-300">
+                {basisHint}
+              </p>
+            ) : null}
           </>
         ) : null}
       </div>
@@ -369,16 +400,19 @@ export function TreasuryTooltip({
 export function TooltipMetricRow({
   label,
   value,
+  title,
   tone = "neutral",
   hidden,
 }: {
   label: string;
   value: string;
+  /** Explanatory tooltip, e.g. why a value is "—". */
+  title?: string;
   tone?: "good" | "bad" | "neutral";
   hidden: boolean;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-4">
+    <div className="flex items-baseline justify-between gap-4" title={title}>
       <span className="text-muted-foreground">{label}</span>
       <span
         className={cn(

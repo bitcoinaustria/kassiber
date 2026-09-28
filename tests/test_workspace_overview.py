@@ -2,10 +2,12 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from kassiber.core import custody_journal
 from kassiber.core.ui_snapshot import (
     build_audit_changes_since_last_answer_snapshot,
+    build_overview_snapshot,
     build_workspace_overview_snapshot,
 )
 from kassiber.db import get_setting, open_db, set_setting
@@ -442,6 +444,326 @@ class WorkspaceOverviewSnapshotTest(unittest.TestCase):
             snapshot["current"]["generated_at"],
             r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$",
         )
+
+
+def _insert_market_rate(conn: sqlite3.Connection, rate: float = 60_000) -> None:
+    conn.execute(
+        """
+        INSERT INTO rates_cache(pair, timestamp, rate, source, fetched_at)
+        VALUES('BTC-EUR', '2026-06-05T00:00:00Z', ?, 'manual', ?)
+        """,
+        (rate, NOW),
+    )
+
+
+def _set_processed_tx_count(conn: sqlite3.Connection, profile_id: str, count: int) -> None:
+    conn.execute(
+        "UPDATE profiles SET last_processed_tx_count = ? WHERE id = ?",
+        (count, profile_id),
+    )
+
+
+def _insert_canonical_wallet_balance(
+    conn: sqlite3.Connection,
+    prefix: str,
+    *,
+    amount_btc: str,
+) -> None:
+    """Canonical custody quantity keeps quarantined rows, like production."""
+    conn.execute(
+        """
+        INSERT INTO journal_quantity_postings(
+            posting_id, workspace_id, profile_id, transaction_id, occurred_at,
+            asset, location_kind, location_id, amount_msat, state, created_at
+        ) VALUES(?, ?, ?, ?, '2026-06-01T08:00:00Z', 'BTC', 'wallet', ?, ?,
+                 'observed', ?)
+        """,
+        (
+            f"{prefix}-posting",
+            f"{prefix}-ws",
+            f"{prefix}-pf",
+            f"{prefix}-tx-in",
+            f"{prefix}-wal",
+            btc_to_msat("1.0"),
+            NOW,
+        ),
+    )
+    conn.execute(
+        """
+        INSERT INTO journal_quantity_balances(
+            workspace_id, profile_id, location_kind, location_id, asset,
+            amount_msat, created_at
+        ) VALUES(?, ?, 'wallet', ?, 'BTC', ?, ?)
+        """,
+        (f"{prefix}-ws", f"{prefix}-pf", f"{prefix}-wal", btc_to_msat(amount_btc), NOW),
+    )
+
+
+def _activate_book(conn: sqlite3.Connection, prefix: str) -> None:
+    set_setting(conn, "context_workspace", f"{prefix}-ws")
+    set_setting(conn, "context_profile", f"{prefix}-pf")
+    conn.commit()
+
+
+class OverviewFiatCompletenessTest(unittest.TestCase):
+    def _db(self) -> sqlite3.Connection:
+        tmp = tempfile.TemporaryDirectory(prefix="kassiber-overview-completeness-")
+        self.addCleanup(tmp.cleanup)
+        conn = open_db(Path(tmp.name) / "data")
+        self.addCleanup(conn.close)
+        return conn
+
+    def _add_quarantined_transaction(
+        self,
+        conn: sqlite3.Connection,
+        prefix: str,
+        *,
+        amount_btc: str,
+        direction: str,
+        occurred_at: str,
+    ) -> None:
+        tx_id = f"{prefix}-tx-quarantined"
+        _insert_transaction(
+            conn,
+            tx_id,
+            f"{prefix}-ws",
+            f"{prefix}-pf",
+            f"{prefix}-wal",
+            amount_btc=amount_btc,
+            fiat_currency="EUR",
+            fiat_rate=55_000,
+            occurred_at=occurred_at,
+            direction=direction,
+        )
+        _insert_quarantine(conn, f"{prefix}-ws", f"{prefix}-pf", tx_id)
+        _set_processed_tx_count(conn, f"{prefix}-pf", 3)
+
+    def test_current_book_with_market_rate_claims_complete_basis(self):
+        conn = self._db()
+        _seed_directional_book(conn, "ok", journals=True)
+        _insert_market_rate(conn)
+        _activate_book(conn, "ok")
+
+        overview = build_overview_snapshot(conn)
+        completeness = overview["fiat"]["completeness"]
+
+        self.assertEqual(completeness["state"], "complete")
+        self.assertTrue(completeness["costBasisComplete"])
+        self.assertEqual(completeness["reasons"], [])
+        self.assertEqual(completeness["quarantineCount"], 0)
+        self.assertEqual(completeness["basisCoveredMsat"], btc_to_msat("0.75"))
+        self.assertEqual(completeness["basisUncoveredMsat"], 0)
+        self.assertIsNone(completeness["earliestIncompleteAt"])
+        self.assertEqual(completeness["missingPriceCount"], 0)
+        self.assertFalse(completeness["marketRateMissing"])
+        self.assertAlmostEqual(overview["fiat"]["eurCostBasis"], 35_000)
+
+    def test_quarantined_inbound_leaves_displayed_btc_without_basis(self):
+        conn = self._db()
+        _seed_directional_book(conn, "qin", journals=True)
+        _insert_market_rate(conn)
+        self._add_quarantined_transaction(
+            conn,
+            "qin",
+            amount_btc="0.12",
+            direction="inbound",
+            occurred_at="2026-06-04T08:00:00Z",
+        )
+        _insert_canonical_wallet_balance(conn, "qin", amount_btc="0.87")
+        _activate_book(conn, "qin")
+
+        overview = build_overview_snapshot(conn)
+        completeness = overview["fiat"]["completeness"]
+
+        self.assertAlmostEqual(overview["balanceSummary"]["totalBtc"], 0.87)
+        self.assertEqual(completeness["state"], "incomplete")
+        self.assertFalse(completeness["costBasisComplete"])
+        self.assertEqual(completeness["reasons"], ["quarantines"])
+        self.assertEqual(completeness["quarantineCount"], 1)
+        self.assertEqual(completeness["quarantinedInboundMsat"], btc_to_msat("0.12"))
+        self.assertEqual(completeness["quarantinedOutboundMsat"], 0)
+        self.assertEqual(completeness["basisCoveredMsat"], btc_to_msat("0.75"))
+        self.assertEqual(completeness["basisUncoveredMsat"], btc_to_msat("0.12"))
+        self.assertEqual(completeness["earliestIncompleteAt"], "2026-06-04T08:00:00Z")
+        # The basis only reflects journaled rows, which is why the completeness
+        # block must travel with it.
+        self.assertAlmostEqual(overview["fiat"]["eurCostBasis"], 35_000)
+
+    def test_quarantined_outbound_marks_basis_incomplete_without_uncovered_btc(self):
+        conn = self._db()
+        _seed_directional_book(conn, "qout", journals=True)
+        _insert_market_rate(conn)
+        self._add_quarantined_transaction(
+            conn,
+            "qout",
+            amount_btc="0.1",
+            direction="outbound",
+            occurred_at="2026-06-04T09:00:00Z",
+        )
+        _insert_canonical_wallet_balance(conn, "qout", amount_btc="0.65")
+        _activate_book(conn, "qout")
+
+        completeness = build_overview_snapshot(conn)["fiat"]["completeness"]
+
+        self.assertEqual(completeness["state"], "incomplete")
+        self.assertFalse(completeness["costBasisComplete"])
+        self.assertEqual(completeness["quarantinedInboundMsat"], 0)
+        self.assertEqual(completeness["quarantinedOutboundMsat"], btc_to_msat("0.1"))
+        # Journaled basis still carries coins that already left, so basis is
+        # overstated: nothing is uncovered, yet the block stays incomplete.
+        self.assertEqual(completeness["basisUncoveredMsat"], 0)
+        self.assertEqual(completeness["earliestIncompleteAt"], "2026-06-04T09:00:00Z")
+
+    def test_custody_blocker_without_a_start_keeps_every_point_incomplete(self):
+        conn = self._db()
+        _seed_directional_book(conn, "nostart", journals=True)
+        _insert_market_rate(conn)
+        self._add_quarantined_transaction(
+            conn,
+            "nostart",
+            amount_btc="0.1",
+            direction="outbound",
+            occurred_at="2026-06-04T09:00:00Z",
+        )
+        _activate_book(conn, "nostart")
+
+        with patch(
+            "kassiber.core.custody_quantity_store.custody_quantity_readiness_summary",
+            side_effect=AppError(
+                "Custody state unavailable", code="custody_quantity_state_unavailable"
+            ),
+        ):
+            completeness = build_overview_snapshot(conn)["fiat"]["completeness"]
+
+        self.assertIn("custody_unresolved", completeness["reasons"])
+        # The quarantine's date must not hide that custody coverage is unknown.
+        self.assertIsNone(completeness["earliestIncompleteAt"])
+
+    def test_stale_journals_do_not_claim_coverage(self):
+        conn = self._db()
+        _seed_directional_book(conn, "stale", journals=True)
+        _insert_market_rate(conn)
+        _set_processed_tx_count(conn, "stale-pf", 1)
+        _activate_book(conn, "stale")
+
+        completeness = build_overview_snapshot(conn)["fiat"]["completeness"]
+
+        self.assertEqual(completeness["state"], "stale")
+        self.assertFalse(completeness["costBasisComplete"])
+        self.assertEqual(completeness["reasons"], ["journals_stale"])
+        self.assertIsNone(completeness["basisCoveredMsat"])
+        self.assertIsNone(completeness["basisUncoveredMsat"])
+        self.assertIsNone(completeness["earliestIncompleteAt"])
+
+    def test_missing_market_rate_is_flagged_instead_of_trusted(self):
+        conn = self._db()
+        _seed_directional_book(conn, "norate", journals=True)
+        _activate_book(conn, "norate")
+
+        overview = build_overview_snapshot(conn)
+        completeness = overview["fiat"]["completeness"]
+
+        self.assertIsNone(overview["marketRate"]["rate"])
+        self.assertEqual(completeness["state"], "unavailable")
+        self.assertTrue(completeness["costBasisComplete"])
+        self.assertEqual(completeness["reasons"], ["market_rate_missing"])
+        self.assertTrue(completeness["marketRateMissing"])
+
+    def test_custody_gap_and_missing_price_block_basis_from_earliest_date(self):
+        conn = self._db()
+        _seed_directional_book(conn, "gap", journals=True)
+        _insert_market_rate(conn)
+        conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, confirmed_at, direction, asset, amount, fee,
+                fiat_currency, fiat_rate, fiat_value, fiat_price_source,
+                kind, description, counterparty, note, excluded, raw_json, created_at
+            ) VALUES('gap-tx-unpriced', 'gap-ws', 'gap-pf', 'gap-wal', 'unpriced',
+                     'unpriced-fp', '2026-06-05T08:00:00Z', '2026-06-05T08:00:00Z',
+                     'inbound', 'BTC', ?, 0, 'EUR', NULL, NULL, NULL, 'deposit',
+                     '', '', '', 0, '{}', ?)
+            """,
+            (btc_to_msat("0.01"), NOW),
+        )
+        _set_processed_tx_count(conn, "gap-pf", 3)
+        conn.execute(
+            """
+            INSERT INTO journal_quantity_issues(
+                issue_id, workspace_id, profile_id, issue_type, state, asset,
+                amount_msat, occurred_at, transaction_ids_json, reason,
+                detail_json, blocks_from, created_at
+            ) VALUES('gap-issue', 'gap-ws', 'gap-pf', 'unresolved_quantity',
+                     'custody_suspense', 'BTC', ?, '2026-06-02T08:00:00Z',
+                     '["gap-tx-out"]', 'missing_wallet', '{}',
+                     '2026-06-02T08:00:00Z', ?)
+            """,
+            (btc_to_msat("0.05"), NOW),
+        )
+        _activate_book(conn, "gap")
+
+        completeness = build_overview_snapshot(conn)["fiat"]["completeness"]
+
+        self.assertEqual(completeness["state"], "incomplete")
+        self.assertEqual(completeness["reasons"], ["custody_unresolved", "missing_prices"])
+        self.assertEqual(completeness["missingPriceCount"], 1)
+        self.assertEqual(completeness["earliestIncompleteAt"], "2026-06-02T08:00:00Z")
+
+    def test_workspace_rollup_carries_book_and_total_completeness(self):
+        conn = self._db()
+        _seed_directional_book(conn, "roll", journals=True)
+        _insert_market_rate(conn)
+        _insert_profile(
+            conn,
+            "roll-pf-b",
+            "roll-ws",
+            "Savings",
+            processed=True,
+            active_transactions=1,
+        )
+        _insert_wallet(conn, "roll-wal-b", "roll-ws", "roll-pf-b", "Savings Wallet")
+        _insert_transaction(
+            conn,
+            "roll-b-tx",
+            "roll-ws",
+            "roll-pf-b",
+            "roll-wal-b",
+            amount_btc="0.2",
+            fiat_currency="EUR",
+            fiat_rate=40_000,
+            occurred_at="2026-06-02T08:00:00Z",
+        )
+        _insert_quarantine(conn, "roll-ws", "roll-pf-b", "roll-b-tx")
+        conn.commit()
+
+        snapshot = build_workspace_overview_snapshot(conn, {"workspace_id": "roll-ws"})
+
+        rows = {row["profileLabel"]: row for row in snapshot["fiat"]["books"]}
+        self.assertEqual(rows["Trading"]["completeness"]["state"], "complete")
+        self.assertEqual(rows["Savings"]["completeness"]["state"], "incomplete")
+        rollup = snapshot["fiat"]["completeness"]
+        self.assertEqual(rollup["state"], "incomplete")
+        self.assertFalse(rollup["costBasisComplete"])
+        self.assertEqual(rollup["reasons"], ["quarantines"])
+        self.assertEqual(rollup["quarantineCount"], 1)
+        self.assertEqual(rollup["quarantinedInboundMsat"], btc_to_msat("0.2"))
+        self.assertEqual(rollup["earliestIncompleteAt"], "2026-06-02T08:00:00Z")
+        books = {book["profile"]["label"]: book for book in snapshot["books"]}
+        self.assertIn("balanceSummary", books["Savings"])
+        self.assertIn("taxFreeBalance", books["Savings"])
+        self.assertEqual(
+            books["Savings"]["fiat"]["completeness"],
+            rows["Savings"]["completeness"],
+        )
+
+    def test_empty_overview_does_not_claim_complete_basis(self):
+        conn = self._db()
+
+        completeness = build_overview_snapshot(conn)["fiat"]["completeness"]
+
+        self.assertEqual(completeness["state"], "unavailable")
+        self.assertFalse(completeness["costBasisComplete"])
 
 
 if __name__ == "__main__":

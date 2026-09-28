@@ -28,6 +28,7 @@ vi.mock("@tanstack/react-router", async () => {
   };
 });
 
+import { normalizeOverviewSnapshot } from "@/lib/normalizeUiSnapshots";
 import { MOCK_OVERVIEW } from "@/mocks/seed";
 
 import { WalletsMetricGrid } from "./WalletsMetricGrid";
@@ -104,5 +105,61 @@ describe("wallets metric grid", () => {
     expect(html).toContain("Tax-free balance");
     expect(html).toContain("Needs journals");
     expect(html).toContain("Run journals before relying on this balance");
+  });
+
+  it("keeps the daemon's de-duplicated total and quarantine caveat through the normalizer", () => {
+    // Two chain wallets watch the same coin: tiles sum to 2 BTC, the daemon's
+    // balanceSummary says 1 BTC. The Wallets page reads the normalized payload.
+    const snapshot = normalizeOverviewSnapshot({
+      ...MOCK_OVERVIEW,
+      connections: [
+        { ...MOCK_OVERVIEW.connections[0], id: "a", balance: 1 },
+        { ...MOCK_OVERVIEW.connections[0], id: "b", balance: 1 },
+      ],
+      balanceSummary: {
+        totalBtc: 1,
+        status: "quarantines",
+        source: "chain",
+        needsJournals: false,
+        quarantines: 2,
+        chainWalletCount: 2,
+        bookWalletCount: 0,
+        transactionWalletCount: 0,
+        duplicateOutpointAdjustmentBtc: 1,
+      },
+    });
+    const html = renderToStaticMarkup(
+      createElement(WalletsMetricGrid, {
+        balanceSummary: snapshot.balanceSummary,
+        connections: snapshot.connections,
+        currency: "btc",
+        hideSensitive: false,
+        isSyncing: false,
+        priceEur: snapshot.priceEur,
+        totalBtc: snapshot.balanceSummary?.totalBtc ?? 2,
+      }),
+    );
+
+    expect(html).toContain("1.00000000");
+    expect(html).not.toContain("2.00000000");
+    expect(html).toContain("2 quarantines");
+  });
+
+  it("shows a dash for the fiat wallet total without a market rate", () => {
+    const html = renderToStaticMarkup(
+      createElement(WalletsMetricGrid, {
+        connections: MOCK_OVERVIEW.connections,
+        currency: "eur",
+        hideSensitive: false,
+        isSyncing: false,
+        marketRateMissing: true,
+        priceEur: 0,
+        totalBtc: 1.236,
+      }),
+    );
+
+    expect(html).toContain("—");
+    expect(html).toContain("No market rate · fiat value unavailable");
+    expect(html).not.toContain("€ 0,00");
   });
 });

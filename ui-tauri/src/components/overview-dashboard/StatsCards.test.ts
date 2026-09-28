@@ -23,11 +23,27 @@ vi.mock("@tanstack/react-router", async () => {
   };
 });
 
-import { MOCK_OVERVIEW } from "@/mocks/seed";
+import i18n from "@/i18n";
+import { normalizeOverviewSnapshot } from "@/lib/normalizeUiSnapshots";
+import { MOCK_OVERVIEW, type FiatCompleteness } from "@/mocks/seed";
 
 import { buildStatsData } from "./model";
 import { StatsCards } from "./StatsCards";
 import { statStatusText } from "./statStatus";
+
+const INCOMPLETE: FiatCompleteness = {
+  state: "incomplete",
+  costBasisComplete: false,
+  reasons: ["quarantines"],
+  quarantineCount: 2,
+  quarantinedInboundMsat: 12_000_000_000,
+  quarantinedOutboundMsat: 0,
+  basisCoveredMsat: 426_000_000_000,
+  basisUncoveredMsat: 0,
+  earliestIncompleteAt: null,
+  missingPriceCount: 0,
+  marketRateMissing: false,
+};
 
 describe("overview stats cards", () => {
   it("does not label the BTC balance as an estimate", () => {
@@ -108,4 +124,133 @@ describe("overview stats cards", () => {
     expect(html).not.toContain("1,234");
   });
 
+  it("marks the fiat value incomplete and names the BTC without cost basis", () => {
+    const snapshot = normalizeOverviewSnapshot({
+      ...MOCK_OVERVIEW,
+      fiat: {
+        ...MOCK_OVERVIEW.fiat,
+        completeness: {
+          ...INCOMPLETE,
+          basisUncoveredMsat: 12_000_000_000,
+          earliestIncompleteAt: "2026-02-01T00:00:00Z",
+        },
+      },
+    });
+    const html = renderToStaticMarkup(
+      createElement(StatsCards, {
+        snapshot,
+        hideSensitive: false,
+        currency: "eur",
+      }),
+    );
+
+    expect(html).toContain("Incomplete");
+    expect(html).toContain("\u20bf 0.12000000 without cost basis");
+    expect(html).toContain('href="/quarantine"');
+    expect(html).toContain("text-amber-600");
+    expect(html).not.toContain("vs cost basis");
+    // The misleading "+57.6%" unrealized-vs-basis percentage is gone.
+    expect(html).not.toMatch(/[+-]\d+\.\d%/);
+  });
+
+  it("calls a stale basis outdated and links to journals", () => {
+    const snapshot = normalizeOverviewSnapshot({
+      ...MOCK_OVERVIEW,
+      fiat: {
+        ...MOCK_OVERVIEW.fiat,
+        completeness: {
+          ...INCOMPLETE,
+          state: "stale",
+          reasons: ["journals_stale"],
+          quarantineCount: 0,
+          basisCoveredMsat: null,
+          basisUncoveredMsat: null,
+        },
+      },
+    });
+    const html = renderToStaticMarkup(
+      createElement(StatsCards, {
+        snapshot,
+        hideSensitive: false,
+        currency: "eur",
+      }),
+    );
+
+    expect(html).toContain("Outdated");
+    expect(html).toContain("Cost basis from outdated journals");
+    expect(html).toContain('href="/journals"');
+  });
+
+  it("shows a dash instead of a zero value without a market rate", () => {
+    const snapshot = normalizeOverviewSnapshot({
+      ...MOCK_OVERVIEW,
+      marketRate: { ...MOCK_OVERVIEW.marketRate, rate: null },
+      fiat: {
+        ...MOCK_OVERVIEW.fiat,
+        eurBalance: 0,
+        eurUnrealized: -198_502.4,
+        completeness: {
+          ...MOCK_OVERVIEW.fiat.completeness,
+          state: "unavailable",
+          reasons: ["market_rate_missing"],
+          marketRateMissing: true,
+        },
+      },
+    });
+    const html = renderToStaticMarkup(
+      createElement(StatsCards, {
+        snapshot,
+        hideSensitive: false,
+        currency: "eur",
+      }),
+    );
+
+    expect(html).toContain("No market rate");
+    expect(html).toContain("<span>\u2014</span>");
+    expect(html).not.toContain("-100.0%");
+    expect(html).not.toContain("\u20ac 0");
+  });
+
+  it("labels the incomplete fiat portfolio in Austrian German", async () => {
+    await i18n.changeLanguage("de");
+    try {
+      const snapshot = normalizeOverviewSnapshot({
+        ...MOCK_OVERVIEW,
+        fiat: {
+          ...MOCK_OVERVIEW.fiat,
+          completeness: { ...INCOMPLETE, basisUncoveredMsat: 12_000_000_000 },
+        },
+      });
+      const html = renderToStaticMarkup(
+        createElement(StatsCards, {
+          snapshot,
+          hideSensitive: false,
+          currency: "eur",
+        }),
+      );
+
+      expect(html).toContain("Unvollst\u00e4ndig");
+      expect(html).toContain("\u20bf 0.12000000 ohne Anschaffungskosten");
+    } finally {
+      await i18n.changeLanguage("en");
+    }
+  });
+
+  it("reports the completeness badge through statStatusText", () => {
+    const fiatPortfolioStat = buildStatsData(MOCK_OVERVIEW, "eur")[0];
+    const bitcoinBalanceStat = buildStatsData(MOCK_OVERVIEW, "btc")[0];
+
+    expect(statStatusText(fiatPortfolioStat, false, INCOMPLETE)).toBe("Incomplete");
+    // The observed BTC balance is not basis-derived.
+    expect(statStatusText(bitcoinBalanceStat, true, INCOMPLETE)).toBe("Current");
+  });
+
+  it("drops the change percentage when the basis is incomplete", () => {
+    const stat = buildStatsData(
+      { ...MOCK_OVERVIEW, fiat: { ...MOCK_OVERVIEW.fiat, completeness: INCOMPLETE } },
+      "eur",
+    )[0];
+
+    expect(stat.changePercent).toBe(0);
+  });
 });

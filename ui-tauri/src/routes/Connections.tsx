@@ -19,6 +19,7 @@ import { useDaemon } from "@/daemon/client";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { connectionCategoryLabel } from "@/lib/connectionDisplay";
 import { useCurrency } from "@/lib/currency";
+import { eurRateMissing } from "@/lib/fiatCompleteness";
 import { normalizeOverviewSnapshot } from "@/lib/normalizeUiSnapshots";
 import { screenShellClassName } from "@/lib/screen-layout";
 import { useUiStore } from "@/store/ui";
@@ -61,7 +62,11 @@ export function Connections() {
 
   const snapshot = normalizeOverviewSnapshot(data.data);
   const connections: Connection[] = snapshot.connections;
+  // Needs the normalized balanceSummary: it removes coins several chain
+  // wallets watch and carries the quarantine/stale caveat.
   const totalBtc = walletOverviewTotalBtc(snapshot);
+  // The wallet views value balances in EUR, so only a missing EUR rate hides them.
+  const marketRateMissing = eurRateMissing(snapshot);
   const filteredConnections = connections.filter(
     (connection) =>
       (kindFilter === "all" ||
@@ -98,6 +103,7 @@ export function Connections() {
         currency={currency}
         hideSensitive={hideSensitive}
         isSyncing={isSyncing}
+        marketRateMissing={marketRateMissing}
         priceEur={snapshot.priceEur}
         taxFreeBalance={snapshot.taxFreeBalance}
         totalBtc={totalBtc}
@@ -118,6 +124,7 @@ export function Connections() {
           connections={filteredConnections}
           currency={currency}
           hideSensitive={hideSensitive}
+          marketRateMissing={marketRateMissing}
           onSelectConnection={onSelectConnection}
           priceEur={snapshot.priceEur}
           taxFreeBalance={snapshot.taxFreeBalance}

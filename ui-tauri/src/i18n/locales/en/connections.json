@@ -32,7 +32,8 @@
     "upToDateNotUpToDate": "{{count}} not yet up to date",
     "needsAttention": "Needs attention",
     "needsAttentionFailed": "Failed source(s)",
-    "needsAttentionNoFailed": "No failed sources"
+    "needsAttentionNoFailed": "No failed sources",
+    "balanceNoMarketRate": "No market rate · fiat value unavailable"
   },
   "filters": {
     "heading": "Wallets and sources",

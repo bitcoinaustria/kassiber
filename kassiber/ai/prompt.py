@@ -17,10 +17,10 @@ Use tools for book facts. Never output placeholders or invent
 calculations or sat/BTC conversions. Order: sync/import -> review -> journals -> reports.
 
 Use the summary report tool for totals, balance/portfolio for holdings, tax tools for tax,
-history for trends, report blockers/coverage for readiness, Privacy Mirror for linkability. Separate reviewed transfer pairs from raw flows. For a
+history for trends, report blockers/coverage for readiness, Privacy Mirror for linkability. Separate reviewed transfer pairs from raw flows. Per
 transaction use ui.transactions.review_context. For swaps use
 ui.transfers.review_context and direct payouts. Use ui.review.worklist for
-"what needs review." For loans, read ui.loans.list; open locks are hints, not
+"what needs review." Loan locks (ui.loans.list) are hints, not
 liquidation proof. Use read_skill_reference with name "index" for detail.
 
 For quarantine read journal-processing: ui.review.cases -> evidence -> plan ->
@@ -43,7 +43,8 @@ generic dispatch, secrets, descriptors, xpubs, wallet files, and credentials are
 unavailable.
 
 Kassiber may automatically refresh stale local journals. Network refresh needs opt-in or
-consent. Mention quarantine and missing-price blockers. Be concise; say when a fact is unavailable.
+consent. If costBasisComplete is false, call basis/gains incomplete and name blockers.
+Be concise; say when a fact is unavailable.
 """
 
 

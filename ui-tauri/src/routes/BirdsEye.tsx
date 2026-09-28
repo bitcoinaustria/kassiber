@@ -38,6 +38,7 @@ import {
   type Currency,
   useCurrency,
 } from "@/lib/currency";
+import { normalizeFiatCompleteness } from "@/lib/fiatCompleteness";
 import {
   pageHeaderActionClassName,
   pageHeaderActionsClassName,
@@ -46,9 +47,10 @@ import {
   screenShellClassName,
 } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
-import type { OverviewSnapshot } from "@/mocks/seed";
+import type { FiatCompleteness, OverviewSnapshot } from "@/mocks/seed";
 import type {
   WorkspaceBookOverview,
+  WorkspaceFiatBookRow,
   WorkspaceOverviewSnapshot,
   WorkspaceTx,
 } from "@/mocks/workspaceOverview";
@@ -188,6 +190,9 @@ function workspaceChartSnapshot(
       eurCostBasis: snapshot.fiat.eurCostBasis ?? 0,
       eurUnrealized: snapshot.fiat.eurUnrealized ?? 0,
       eurRealizedYTD: snapshot.fiat.eurRealizedYTD ?? 0,
+      // The rollup is incomplete as soon as one book is; the chart stops the
+      // avg-cost line and hides unrealized from the first gap on.
+      completeness: normalizeFiatCompleteness(snapshot.fiat.completeness),
     },
     status: {
       workspace: snapshot.workspace?.label ?? null,
@@ -299,6 +304,10 @@ export function BirdsEyeView({
   const title = snapshot?.workspace?.label ?? to("birdsEye.fallbackTitle");
   const fiat = snapshot?.fiat ?? null;
   const books = React.useMemo(() => snapshot?.books ?? [], [snapshot?.books]);
+  const rollupCompleteness = normalizeFiatCompleteness(fiat?.completeness);
+  const basisIncompleteBooks = (fiat?.books ?? []).filter(
+    (row) => !normalizeFiatCompleteness(row.completeness).costBasisComplete,
+  ).length;
   const readyBooks = snapshot?.status.readyBooks ?? books.filter((book) => book.readiness.ready).length;
   const blockedBooks = snapshot?.status.blockedBooks ?? books.length - readyBooks;
   const chartSnapshot = React.useMemo(
@@ -532,12 +541,26 @@ export function BirdsEyeView({
               ? t("common:state.hidden")
               : fiat?.mixed
                 ? to("birdsEye.metric.mixed")
-                : formatFiatAmount(fiat?.eurBalance ?? 0, fiat?.fiatCurrency ?? "EUR")
+                : rollupCompleteness.marketRateMissing
+                  ? "—"
+                  : formatFiatAmount(fiat?.eurBalance ?? 0, fiat?.fiatCurrency ?? "EUR")
           }
           detail={
-            fiat?.mixed
-              ? fiat.label ?? to("birdsEye.metric.perBookFiatOnly")
-              : fiat?.fiatCurrency ?? to("birdsEye.metric.noFiatCurrency")
+            basisIncompleteBooks > 0 ? (
+              <span className="text-amber-700 dark:text-amber-300">
+                {to("birdsEye.metric.basisIncompleteBooks", {
+                  count: basisIncompleteBooks,
+                })}
+              </span>
+            ) : rollupCompleteness.marketRateMissing && !fiat?.mixed ? (
+              <span className="text-amber-700 dark:text-amber-300">
+                {to("completeness.valueUnavailable")}
+              </span>
+            ) : fiat?.mixed ? (
+              fiat.label ?? to("birdsEye.metric.perBookFiatOnly")
+            ) : (
+              fiat?.fiatCurrency ?? to("birdsEye.metric.noFiatCurrency")
+            )
           }
           icon={<BarChart3 className="size-4" aria-hidden="true" />}
         />
@@ -617,42 +640,11 @@ export function BirdsEyeView({
           <CardContent className="grid gap-2 pt-4">
             {fiat?.books.length ? (
               fiat.books.map((row) => (
-                <div
+                <FiatBookRow
                   key={row.profileId}
-                  className="rounded-lg border bg-muted/20 p-3"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">
-                        {row.profileLabel}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {row.fiatCurrency}
-                      </p>
-                    </div>
-                    <p className="text-sm font-medium">
-                      {hideSensitive
-                        ? t("common:state.hidden")
-                        : formatFiatAmount(row.balance, row.fiatCurrency)}
-                    </p>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                    <span>
-                      {to("birdsEye.fiatCard.basis", {
-                        value: hideSensitive
-                          ? t("common:state.hidden")
-                          : formatFiatAmount(row.costBasis, row.fiatCurrency),
-                      })}
-                    </span>
-                    <span>
-                      {to("birdsEye.fiatCard.ytd", {
-                        value: hideSensitive
-                          ? t("common:state.hidden")
-                          : formatFiatAmount(row.realizedYTD, row.fiatCurrency),
-                      })}
-                    </span>
-                  </div>
-                </div>
+                  row={row}
+                  hideSensitive={hideSensitive}
+                />
               ))
             ) : (
               <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
@@ -679,6 +671,86 @@ export function BirdsEyeView({
   );
 }
 
+const COMPLETENESS_BADGE_KEYS = {
+  incomplete: "completeness.badge.incomplete",
+  stale: "completeness.badge.stale",
+  unavailable: "completeness.badge.unavailable",
+} as const;
+
+/** Badge for a book whose basis is not exact, else `null`. */
+function completenessBadgeKey(completeness: FiatCompleteness) {
+  if (completeness.costBasisComplete) {
+    return completeness.marketRateMissing
+      ? "completeness.badge.noMarketRate"
+      : null;
+  }
+  return completeness.state === "complete"
+    ? COMPLETENESS_BADGE_KEYS.incomplete
+    : COMPLETENESS_BADGE_KEYS[completeness.state];
+}
+
+export function FiatBookRow({
+  row,
+  hideSensitive,
+}: {
+  row: WorkspaceFiatBookRow;
+  hideSensitive: boolean;
+}) {
+  const { t } = useTranslation(["overview", "common"]);
+  const completeness = normalizeFiatCompleteness(row.completeness);
+  const badgeKey = completenessBadgeKey(completeness);
+  // Basis and realized YTD come from the same incomplete journal, so they
+  // show "—" rather than a partial sum; the value needs a market rate.
+  const basisHidden = !completeness.costBasisComplete;
+  const hint = !completeness.costBasisComplete
+    ? t(
+        completeness.state === "stale"
+          ? "completeness.hint.stale"
+          : "completeness.hint.incomplete",
+      )
+    : completeness.marketRateMissing
+      ? t("completeness.hint.unavailable")
+      : undefined;
+  const money = (value: number, hidden: boolean) =>
+    hideSensitive
+      ? t("common:state.hidden")
+      : hidden
+        ? "—"
+        : formatFiatAmount(value, row.fiatCurrency);
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3" title={hint}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-sm font-medium">{row.profileLabel}</p>
+            {badgeKey ? (
+              <Badge
+                variant="outline"
+                className="border-amber-500/40 text-amber-700 dark:text-amber-300"
+              >
+                <AlertTriangle className="size-3" aria-hidden="true" />
+                {t(badgeKey)}
+              </Badge>
+            ) : null}
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{row.fiatCurrency}</p>
+        </div>
+        <p className="text-sm font-medium">
+          {money(row.balance, completeness.marketRateMissing)}
+        </p>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+        <span>
+          {t("birdsEye.fiatCard.basis", { value: money(row.costBasis, basisHidden) })}
+        </span>
+        <span>
+          {t("birdsEye.fiatCard.ytd", { value: money(row.realizedYTD, basisHidden) })}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function BookRow({
   book,
   hideSensitive,
@@ -693,10 +765,16 @@ export function BookRow({
   const { t } = useTranslation(["overview", "common"]);
   const ready = book.readiness.ready;
   const fiatCurrency = book.profile.fiatCurrency || book.fiat.fiatCurrency || "EUR";
-  const btcBalance = book.connections.reduce(
-    (total, connection) => total + connection.balance,
-    0,
-  );
+  const completeness = normalizeFiatCompleteness(book.fiat.completeness);
+  const badgeKey = completenessBadgeKey(completeness);
+  // balanceSummary.totalBtc already removes coins several chain wallets watch.
+  const btcBalance =
+    typeof book.balanceSummary?.totalBtc === "number"
+      ? book.balanceSummary.totalBtc
+      : book.connections.reduce(
+          (total, connection) => total + connection.balance,
+          0,
+        );
   return (
     <div className="kb-surface p-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -712,6 +790,14 @@ export function BookRow({
               {ready ? t("birdsEye.bookRow.ready") : t("birdsEye.bookRow.attention")}
             </Badge>
             <Badge variant="outline">{fiatCurrency}</Badge>
+            {badgeKey ? (
+              <Badge
+                variant="outline"
+                className="border-amber-500/40 text-amber-700 dark:text-amber-300"
+              >
+                {t(badgeKey)}
+              </Badge>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span>{t("birdsEye.bookRow.wallets", { count: book.connections.length })}</span>
@@ -730,7 +816,9 @@ export function BookRow({
           <span>
             {hideSensitive
               ? t("common:state.hidden")
-              : formatFiatAmount(book.fiat.eurBalance, fiatCurrency)}
+              : completeness.marketRateMissing
+                ? "—"
+                : formatFiatAmount(book.fiat.eurBalance, fiatCurrency)}
           </span>
         </div>
       </div>

@@ -265,6 +265,22 @@ Unsupported file/BTCPay/Lightning-style sources show an unsupported state, and
 Liquid sources show an unblind blocker unless Kassiber has descriptor material
 that can unblind outputs locally.
 
+Overview, Wallets, the book-set overview, and the Reports metric strip read the
+daemon's `fiat.completeness` block (see [the daemon reference](daemon.md)) instead of
+trusting cost basis as-is. While it is incomplete, the fiat portfolio card turns amber
+and shows an Incomplete or Outdated badge instead of the "vs cost basis"
+percentage. It names the BTC without cost basis and links to Quarantine, or to
+Journals when stale. The holdings header and chart summary drop their unrealized
+percentage. Chart points from the first gap on show cost basis, average cost, and
+unrealized as "—" with an explanation, the average-cost line stops there, and
+earlier points keep their values. Without a market rate, fiat values show "—"
+instead of €0 or -100 %. Custody gaps and missing prices also show in the
+readiness pill and Book readiness panel. Book-set rows get a per-book badge, and
+the fiat total says how many books are incomplete. Reports marks cost basis,
+gain/loss, and estimated tax as Provisional while journals are stale or
+quarantines, custody gaps, or missing prices exist. Reports copy stays English
+under the deferred reporting-language policy in [i18n.md](i18n.md).
+
 Privacy Mirror is the dedicated desktop page for local privacy linkage. It
 reads `ui.reports.privacy_mirror` and shows exposure summary, adversary cards,
 wallet/transaction/UTXO rows, timeline, coverage, unknowns, evidence

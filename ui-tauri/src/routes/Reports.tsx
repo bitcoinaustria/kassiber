@@ -71,6 +71,8 @@ import {
 } from "@/lib/reportExportStatus";
 import { reportYearFromSearch } from "@/lib/reportYear";
 import { exportBasename } from "@/lib/exportFile";
+import { normalizeFiatCompleteness } from "@/lib/fiatCompleteness";
+import type { FiatCompleteness, OverviewSnapshot } from "@/mocks/seed";
 import {
   pageHeaderActionClassName,
   pageHeaderActionsClassName,
@@ -276,6 +278,13 @@ function ReportOverview() {
   const { data, isLoading, isFetching, isError, error } =
     useDaemon<CapitalGainsReport>("ui.reports.capital_gains", reportArgs);
   const wallets = useDaemon<WalletListData>("ui.wallets.list");
+  // Local read (no egress): carries custody-gap and missing-price signals the
+  // capital-gains payload does not, so the strip can say "provisional".
+  const overview = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
+  const overviewFiat = overview.data?.data?.fiat;
+  const completeness = overviewFiat
+    ? normalizeFiatCompleteness(overviewFiat.completeness)
+    : null;
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const returnedReportYear = data?.data?.year;
   const reportYearMismatch =
@@ -323,6 +332,7 @@ function ReportOverview() {
       selectedYear={selectedYear}
       onYearChange={setSelectedYear}
       wallets={wallets.data?.data?.wallets ?? []}
+      completeness={completeness}
     />
   );
 }
@@ -333,6 +343,8 @@ interface ReportsViewProps {
   selectedYear: number | null;
   onYearChange: (year: number) => void;
   wallets: WalletListData["wallets"];
+  /** Book completeness from ui.overview.snapshot; `null` while not loaded. */
+  completeness: FiatCompleteness | null;
 }
 
 function ReportsView({
@@ -341,6 +353,7 @@ function ReportsView({
   selectedYear,
   onYearChange,
   wallets,
+  completeness,
 }: ReportsViewProps) {
   const year = report.year;
   const effectiveYear = selectedYear ?? year;
@@ -448,7 +461,8 @@ function ReportsView({
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-  const readiness = buildReportReadiness(report, lots, effectiveYear);
+  const readiness = buildReportReadiness(report, lots, effectiveYear, completeness);
+  const provisional = reportFiguresProvisional(report, completeness);
   const periodLabel = formatReportPeriod(effectiveYear, jurisdiction.locale);
   const currentExportStatus = reportExportStatusForYear(
     exportStatus,
@@ -652,6 +666,7 @@ function ReportsView({
         estimatedTax={estimatedTax}
         year={effectiveYear}
         formatNumber={fmt}
+        provisional={provisional}
       />
 
       <div className="grid grid-cols-1 items-start gap-3 2xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -870,6 +885,7 @@ function ReportMetricStrip({
   estimatedTax,
   year,
   formatNumber,
+  provisional = false,
 }: {
   hideSensitive: boolean;
   jurisdiction: (typeof JURISDICTIONS)[string];
@@ -878,11 +894,15 @@ function ReportMetricStrip({
   estimatedTax: number;
   year: number;
   formatNumber: (value: number) => string;
+  /** Journals stale, quarantine, custody gap, or missing prices. */
+  provisional?: boolean;
 }) {
   const metrics: Array<{
     label: string;
     value: ReactNode;
     sub: string;
+    /** Depends on the journal basis and must carry the provisional badge. */
+    basisDependent?: boolean;
   }> = [
     {
       label: "Proceeds",
@@ -901,6 +921,7 @@ function ReportMetricStrip({
         </span>
       ),
       sub: "Applied to disposed rows",
+      basisDependent: true,
     },
     {
       label: "Gain / loss",
@@ -917,6 +938,7 @@ function ReportMetricStrip({
         </span>
       ),
       sub: `${year} tax year`,
+      basisDependent: true,
     },
     {
       label: jurisdiction.rateLabel,
@@ -925,7 +947,12 @@ function ReportMetricStrip({
           {formatMoney(jurisdiction.ccy, estimatedTax, formatNumber)}
         </span>
       ),
-      sub: totals.gain > 0 ? "Estimated liability" : "No positive gain",
+      sub: provisional
+        ? "Provisional until blockers are resolved"
+        : totals.gain > 0
+          ? "Estimated liability"
+          : "No positive gain",
+      basisDependent: true,
     },
   ];
 
@@ -938,8 +965,16 @@ function ReportMetricStrip({
             className="group relative isolate overflow-hidden p-3 transition-colors before:absolute before:inset-0 before:z-0 before:origin-left before:scale-x-0 before:bg-muted/45 before:content-[''] before:transition-transform before:duration-200 before:ease-out hover:before:scale-x-100 focus-within:before:scale-x-100"
           >
             <div className="pointer-events-none relative z-20 space-y-1.5">
-            <p className="text-xs font-medium text-muted-foreground">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
               {metric.label}
+              {provisional && metric.basisDependent ? (
+                <span
+                  className="rounded-full border border-amber-500/40 px-1.5 text-2xs font-medium text-amber-700 dark:text-amber-300"
+                  title="Quarantined rows, custody gaps, missing prices, or stale journals are not reflected yet."
+                >
+                  Provisional
+                </span>
+              ) : null}
             </p>
             <p className="min-w-0 text-lg leading-tight font-semibold tracking-tight tabular-nums sm:text-xl">
               {metric.value}
@@ -2253,10 +2288,23 @@ function formatReportPeriod(year: number, locale: string) {
   return `${from} - ${to}`;
 }
 
+function reportFiguresProvisional(
+  report: CapitalGainsReport,
+  completeness: FiatCompleteness | null,
+) {
+  return (
+    Boolean(report.status?.needsJournals) ||
+    (report.status?.quarantines ?? 0) > 0 ||
+    // Unknown completeness (older daemon, overview not loaded) is never final.
+    !completeness?.costBasisComplete
+  );
+}
+
 function buildReportReadiness(
   report: CapitalGainsReport,
   lots: DisposedLot[],
   year: number,
+  completeness: FiatCompleteness | null = null,
 ): ReportReadiness {
   const needsJournals = Boolean(report.status?.needsJournals);
   const quarantines = report.status?.quarantines ?? 0;
@@ -2285,6 +2333,37 @@ function buildReportReadiness(
       tone: "alert",
       icon: ShieldAlert,
       action: { label: "Review queue", href: "/quarantine" },
+    };
+  }
+
+  if (completeness?.reasons.includes("custody_unresolved")) {
+    return {
+      title: "Custody gaps open",
+      detail: "Unresolved custody gaps block final cost basis; figures are provisional.",
+      tone: "alert",
+      icon: ShieldAlert,
+      action: { label: "Open ledger", href: "/journals" },
+    };
+  }
+
+  if (completeness?.reasons.includes("missing_prices")) {
+    const count = completeness.missingPriceCount;
+    return {
+      title: "Prices missing",
+      detail: `${count} transaction${count === 1 ? " has" : "s have"} no price; figures are provisional.`,
+      tone: "warning",
+      icon: AlertTriangle,
+      action: { label: "Review queue", href: "/quarantine" },
+    };
+  }
+
+  if (!completeness?.costBasisComplete) {
+    return {
+      title: "Completeness unknown",
+      detail: "Kassiber could not confirm that the cost basis is complete; figures are provisional.",
+      tone: "warning",
+      icon: AlertTriangle,
+      action: { label: "Open ledger", href: "/journals" },
     };
   }
 
