@@ -320,16 +320,14 @@
   },
   "bookSwitcher": {
     "title": "Bücher wechseln",
-    "description": "Wähle das aktive Buch für jeden Bildschirm in diesem Fenster.",
+    "searchPlaceholder": "Zu einem Buch wechseln…",
     "loading": "Bücher werden geladen…",
     "loadError": "Die Bücher konnten nicht geladen werden.",
+    "noMatches": "Keine passenden Bücher.",
     "empty": "In diesem Datenverzeichnis wurden keine Bücher gefunden.",
     "manageBooks": "Bücher verwalten",
     "switchError": "Die Bücher konnten nicht gewechselt werden.",
     "bookSetOverview": "Buchsatz-Übersicht",
-    "openedOn": "Geöffnet {{date}}",
-    "accounts_one": "{{count}} Account",
-    "accounts_other": "{{count}} Accounts",
     "wallets_one": "{{count}} Wallet",
     "wallets_other": "{{count}} Wallets"
   },

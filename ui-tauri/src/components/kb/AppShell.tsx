@@ -2311,14 +2311,15 @@ function BreadcrumbBook({ daemonEnabled }: { daemonEnabled: boolean }) {
 
   return (
     <span className="inline-flex shrink-0 items-center gap-2">
+      <BookSwitcherPopover
+        open={bookSwitcherOpen}
+        onOpenChange={setBookSwitcherOpen}
+      >
       <button
         type="button"
         aria-label={label}
         title={label}
-        aria-haspopup="dialog"
-        aria-expanded={bookSwitcherOpen}
-        onClick={() => setBookSwitcherOpen(true)}
-        className="group inline-flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 -mx-1 hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        className="group inline-flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 -mx-1 hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-[state=open]:bg-sidebar-row-active"
       >
         <Folder
           className="size-3.5 shrink-0 text-sidebar-muted-foreground"
@@ -2332,13 +2333,10 @@ function BreadcrumbBook({ daemonEnabled }: { daemonEnabled: boolean }) {
           aria-hidden="true"
         />
       </button>
+      </BookSwitcherPopover>
       <span aria-hidden="true" className="text-sidebar-muted-foreground/40">
         /
       </span>
-      <BookSwitcherPopover
-        open={bookSwitcherOpen}
-        onClose={() => setBookSwitcherOpen(false)}
-      />
     </span>
   );
 }
