@@ -190,6 +190,8 @@ describe("classified quarantine rows", () => {
     expect(root.priority).toBe("High");
     expect(root.event).toBe("An intermediate wallet is missing");
     expect(root.transactionAction?.tab).toBe("details");
+    // The table button only opens the row; "Connect wallet" lives in the panel.
+    expect(root.transactionAction?.label).toBe("Open transaction");
   });
 
   it("flags explanations that quote amounts so tables can mask them", () => {

@@ -170,7 +170,12 @@ function explainedQuarantineRow(
     metricFilterIds: categoryFilterIds(category),
     transactionAction: {
       transactionId: openTarget,
-      label: primary ? explainActionLabel(primary, t) : t("quarantine.cta.openTransaction"),
+      // The button only opens a transaction; the cause panel runs the actions
+      // themselves, so the label must not promise a sync or an import.
+      label:
+        primary?.kind === "resolve_root"
+          ? explainActionLabel(primary, t)
+          : t("quarantine.cta.openTransaction"),
       tab:
         openTarget === item.transaction_id
           ? sheetTabForCause(item.reason, category, item.evidence)
