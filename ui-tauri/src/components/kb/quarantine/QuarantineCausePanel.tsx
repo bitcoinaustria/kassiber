@@ -218,7 +218,7 @@ export function QuarantineCausePanel({
       ) : null}
 
       {summary.count ? (
-        <div className="rounded-lg border bg-card p-4">
+        <div className="kb-surface p-(--kb-card-padding)">
           <h2 className="text-base font-semibold">{t("quarantine.panel.title")}</h2>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             {t("quarantine.panel.intro")}
@@ -348,7 +348,7 @@ function QuarantineCauseCard({
   return (
     <li
       className={cn(
-        "rounded-lg border bg-card p-4",
+        "kb-surface p-(--kb-card-padding)",
         group.blocks_reports && "border-red-300 dark:border-red-900/60",
       )}
     >
@@ -474,7 +474,7 @@ function QuarantineAssumptions({
     },
   ].filter((block) => block.data.count > 0);
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <div className="kb-surface p-(--kb-card-padding)">
       <h3 className="text-sm font-semibold">{t("quarantine.assumptions.title")}</h3>
       <p className="mt-1 text-xs text-muted-foreground">{t("quarantine.assumptions.intro")}</p>
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
