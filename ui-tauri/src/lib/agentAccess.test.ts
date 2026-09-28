@@ -22,17 +22,47 @@ const terminal = (overrides: Partial<TerminalCommandStatus>): TerminalCommandSta
 });
 
 describe("agentLauncher", () => {
-  it("prefers the terminal command when it is on PATH", () => {
-    expect(agentLauncher(terminal({ installed: true, pathOnPath: true }))).toEqual(["kassiber"]);
-  });
-
-  it("uses the installed command path when it is not on PATH", () => {
+  it("ignores a package-managed CLI the native status reports for macOS and Linux", () => {
+    // The real native shape: another installation's command, installed, while
+    // the app's own forwarding target is not the terminal command.
     expect(
-      agentLauncher(terminal({ installed: true, commandPath: "/home/u/.local/bin/kassiber" })),
-    ).toEqual(["/home/u/.local/bin/kassiber"]);
+      agentLauncher(
+        terminal({
+          platform: "macos",
+          available: false,
+          installed: true,
+          pathOnPath: true,
+          commandPath: "/opt/homebrew/bin/kassiber",
+          targetPath: "/Applications/Kassiber.app/Contents/Resources/bin/kassiber",
+        }),
+      ),
+    ).toEqual(["/Applications/Kassiber.app/Contents/Resources/bin/kassiber"]);
+    expect(
+      agentLauncher(
+        terminal({
+          available: false,
+          installed: true,
+          commandPath: "/usr/bin/kassiber",
+          targetPath: "/home/u/Kassiber.AppImage",
+        }),
+      ),
+    ).toEqual(["/home/u/Kassiber.AppImage", "--cli"]);
   });
 
-  it("forwards through the app executable with --cli otherwise", () => {
+  it("never prefers a kassiber on PATH, which may be another installation", () => {
+    expect(
+      agentLauncher(
+        terminal({
+          installed: true,
+          pathOnPath: true,
+          commandPath: "/opt/homebrew/bin/kassiber",
+          targetPath: "/Applications/Kassiber.app/Contents/Resources/bin/kassiber",
+        }),
+      ),
+    ).toEqual(["/Applications/Kassiber.app/Contents/Resources/bin/kassiber"]);
+  });
+
+  it("forwards through the app executable with --cli, by its stable path", () => {
     expect(agentLauncher(terminal({ targetPath: "/opt/Kassiber.AppImage" }))).toEqual([
       "/opt/Kassiber.AppImage",
       "--cli",
@@ -40,6 +70,20 @@ describe("agentLauncher", () => {
     expect(
       agentLauncher(terminal({ targetPath: "/Applications/Kassiber.app/Contents/Resources/bin/kassiber" })),
     ).toEqual(["/Applications/Kassiber.app/Contents/Resources/bin/kassiber"]);
+  });
+
+  it("uses the installer's own command where the app has no forwarding target", () => {
+    expect(
+      agentLauncher(
+        terminal({
+          platform: "windows",
+          available: false,
+          installed: true,
+          commandPath: "C:\\Program Files\\Kassiber\\bin\\kassiber.exe",
+          targetPath: "C:\\Program Files\\Kassiber\\Kassiber.exe",
+        }),
+      ),
+    ).toEqual(["C:\\Program Files\\Kassiber\\bin\\kassiber.exe"]);
   });
 
   it("falls back to kassiber outside the desktop app", () => {

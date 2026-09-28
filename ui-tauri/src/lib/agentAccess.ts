@@ -18,19 +18,27 @@ export interface AgentBook {
 }
 
 /**
- * The command an agent host should run: the installed terminal command when it
- * is on PATH, otherwise the app's own launcher (`--cli` forwards stdio to the
- * bundled CLI, so the host talks MCP straight to it).
+ * The command an agent host should run: this desktop's own launcher, by its
+ * stable absolute path (the AppImage file, the bundled CLI; `--cli` forwards
+ * stdio to the bundled CLI). A `kassiber` found on PATH may be another
+ * installation (Homebrew, a system package, another build), whose MCP server
+ * this desktop's broker refuses, so it is never preferred.
  */
 export function agentLauncher(terminal: TerminalCommandStatus | null): string[] {
-  if (!terminal || !terminal.available) return ["kassiber"];
-  if (terminal.installed && terminal.pathOnPath) return [terminal.command || "kassiber"];
-  if (terminal.installed && terminal.commandPath) return [terminal.commandPath];
-  if (!terminal.targetPath) return ["kassiber"];
-  const name = terminal.targetPath.split(/[\\/]/).pop() ?? "";
-  return /^kassiber(\.exe)?$/i.test(name)
-    ? [terminal.targetPath]
-    : [terminal.targetPath, "--cli"];
+  if (terminal?.platform === "windows") {
+    // The installer's own CLI executable, beside this app.
+    return terminal.installed && terminal.commandPath ? [terminal.commandPath] : ["kassiber"];
+  }
+  // Whether or not a terminal command is installed (and which one), agents
+  // start this desktop's own target, the build whose broker they talk to.
+  if (terminal?.targetPath) {
+    const name = terminal.targetPath.split(/[\\/]/).pop() ?? "";
+    return /^kassiber(\.exe)?$/i.test(name)
+      ? [terminal.targetPath]
+      : [terminal.targetPath, "--cli"];
+  }
+  // Outside the desktop app (browser preview, source runs).
+  return ["kassiber"];
 }
 
 export function mcpServeArgs(book: AgentBook): string[] {
