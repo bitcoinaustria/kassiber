@@ -19,7 +19,8 @@ import { createInterface } from "node:readline";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { inspectImportProjectDirectory } from "./vite/importProject";
+import { BridgeDataRoot, devDataRootSeed } from "./vite/bridgeDataRoot";
+import { runImportProjectAction } from "./vite/importProject";
 
 const DAEMON_BRIDGE_PATH = "/__kassiber__/daemon";
 const DAEMON_BRIDGE_STREAM_PATH = "/__kassiber__/daemon/stream";
@@ -538,9 +539,11 @@ class DaemonBridgeSupervisor {
   private suspendedReason: string | null = null;
   // Seed the data root from the environment so `pnpm dev:demo` (and CI) can
   // point the bridge at a prepared book, e.g. the regtest demo book, without
-  // going through the interactive import-project flow.
-  private dataRoot: string | null =
-    process.env.KASSIBER_DEV_DATA_ROOT?.trim() || null;
+  // going through the interactive import-project flow. Clearing an imported
+  // project returns to this seed, not to the implicit default root.
+  readonly dataRoot = new BridgeDataRoot(devDataRootSeed(), () =>
+    this.shutdown(),
+  );
   private readonly pending = new Map<string, PendingBridgeRequest>();
   private stderrTail = "";
 
@@ -563,16 +566,6 @@ class DaemonBridgeSupervisor {
     });
   }
 
-  setDataRoot(dataRoot: string | null) {
-    if (this.dataRoot === dataRoot) return;
-    this.dataRoot = dataRoot;
-    this.shutdown();
-  }
-
-  getDataRoot() {
-    return this.dataRoot;
-  }
-
   // While suspended the bridge must refuse to serve rather than respawn the
   // daemon: with dataRoot cleared, a respawn would silently fall back to the
   // developer's real ~/.kassiber book (background jobs would then run against
@@ -584,7 +577,7 @@ class DaemonBridgeSupervisor {
 
   resume(dataRoot: string | null) {
     this.suspendedReason = null;
-    this.setDataRoot(dataRoot);
+    this.dataRoot.set(dataRoot);
   }
 
   shutdown() {
@@ -661,11 +654,7 @@ class DaemonBridgeSupervisor {
         "Install uv or run ./scripts/bootstrap-dev-env.sh and restart the preview.";
       throw new Error(message);
     }
-    const args = [...runner.args];
-    if (this.dataRoot) {
-      args.push("--data-root", this.dataRoot);
-    }
-    args.push("daemon");
+    const args = this.dataRoot.daemonArgs(runner.args);
     console.info(`[kassiber bridge] starting daemon with ${runner.label}`);
     const child = spawn(runner.command, args, {
       cwd: repoRoot,
@@ -1121,42 +1110,20 @@ async function handleBridgeImportProject(
   }
 
   try {
-    const action = request.action;
-    if (action === "select") {
-      const paths = await pickFileViaNativeBridge({
-        title: "Open Kassiber books",
-        directory: true,
-        multiple: false,
-      });
-      if (!paths[0]) {
-        writeJson(res, 200, { selection: null });
-        return;
-      }
-      const selection = inspectImportProjectDirectory(paths[0]);
-      approvedDataRoots.add(selection.dataRoot);
-      supervisor.setDataRoot(selection.dataRoot);
-      writeJson(res, 200, {
-        selection,
-      });
-      return;
-    }
-    if (action === "activate") {
-      if (typeof request.dataRoot !== "string" || !request.dataRoot.trim()) {
-        throw new Error("dataRoot is required.");
-      }
-      if (!approvedDataRoots.has(request.dataRoot)) {
-        throw new Error(
-          "Choose this Kassiber project with the native folder picker before opening it.",
-        );
-      }
-      const selection = inspectImportProjectDirectory(request.dataRoot);
-      supervisor.setDataRoot(selection.dataRoot);
-      writeJson(res, 200, { selection });
-      return;
-    }
-    if (action === "clear") {
-      supervisor.setDataRoot(null);
-      writeJson(res, 200, { ok: true });
+    const payload = await runImportProjectAction(request, {
+      dataRoot: supervisor.dataRoot,
+      approvedDataRoots,
+      pickDirectory: async () => {
+        const paths = await pickFileViaNativeBridge({
+          title: "Open Kassiber books",
+          directory: true,
+          multiple: false,
+        });
+        return paths[0] ?? null;
+      },
+    });
+    if (payload) {
+      writeJson(res, 200, payload);
       return;
     }
     writeJsonError(
@@ -1233,7 +1200,7 @@ async function handleBridgeResetRegtest(
 
   const repoRoot = path.resolve(__dirname, "..");
   const dataRoot = path.join(regtestDemoHome(), "data");
-  const previousDataRoot = supervisor.getDataRoot();
+  const previousDataRoot = supervisor.dataRoot.get();
   try {
     // Stop the daemon and refuse to serve until the reset completes. Merely
     // clearing the data root is not enough: the next UI query would respawn
@@ -1246,7 +1213,7 @@ async function handleBridgeResetRegtest(
     await runHarnessStep(repoRoot, ["demo-down", "--purge"]);
     const up = await runHarnessStep(repoRoot, ["demo-up"]);
     if (up.code !== 0) {
-      supervisor.setDataRoot(previousDataRoot);
+      supervisor.dataRoot.set(previousDataRoot);
       writeJsonError(
         res,
         500,
@@ -1258,7 +1225,7 @@ async function handleBridgeResetRegtest(
     }
     writeJson(res, 200, { ok: true, dataRoot });
   } catch (error) {
-    supervisor.setDataRoot(previousDataRoot);
+    supervisor.dataRoot.set(previousDataRoot);
     writeJsonError(
       res,
       500,
