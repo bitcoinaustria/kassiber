@@ -78,11 +78,8 @@ export const OnboardingStepActions = ({
 
 export const OnboardingStepFrame = ({ children }: { children: ReactNode }) => {
   return (
-    // Frosted rather than an opaque sheet: there is now ledger art behind this
-    // panel, and `backdrop-filter` only has something to do where the backdrop
-    // varies. It reads as glass over the art at the top of the flow and settles
-    // into a plain tinted panel below it, which is the same behaviour the nav's
-    // frosted header has.
+    // The `--card`-tinted frosted panel, so the step reads as one sheet laid on
+    // the setup page, the same material as its sticky footer bar.
     <div className="kb-glass-panel flex w-full flex-col-reverse gap-8 rounded-lg border border-line md:min-h-[78dvh] md:flex-row lg:rounded-lg">
       {children}
     </div>

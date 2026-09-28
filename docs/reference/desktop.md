@@ -93,7 +93,9 @@ Portalled full-window surfaces (dialogs, sheets, the expanded chart, the lock
 screen) start below `--kb-window-top-inset` so the title bar stays reachable. In
 full screen the traffic lights are hidden and both insets drop to zero.
 Windows and Linux keep their native decorated frame; the same row is an
-in-app toolbar there with no inset and no drag region.
+in-app toolbar there with no inset and no drag region. Screens outside the shell
+(setup, loading, the error boundary) and the lock and import-restore screens use
+the same outline: the title bar row on the chrome and an inset page panel.
 
 The side nav remembers whether it was folded to its icon rail, and folds by
 itself while the window is narrower than 1100px without changing that choice;

@@ -85,7 +85,6 @@
    * routed screens and portals agree.
    */
   --kb-native-titlebar-height: 0px;
-  --kb-native-titlebar-background: var(--background);
   --kb-traffic-light-inset: 0px;
   --kb-window-top-inset: var(--kb-native-titlebar-height);
   /*
@@ -387,76 +386,6 @@
 }
 
 /*
- * Stage-art palette, in the Bitcoin Austria Markenfarben — the paper the block
- * field is printed on (see BlockDeckBackdrop.tsx).
- *
- * One page for every build — the art does not vary by release channel (the nav
- * footer's version line already says which build this is). Light and dark are
- * two different pages, which is a surface difference, not a channel one:
- *
- * - Light: pale Hellgrau-derived stock with Dunkel ink, a shade warmer and
- *   darker than the near-white chrome, so the field reads without going heavy.
- * - Dark: a graphite sheet LIFTED off the chrome. The chrome is already
- *   near-black, so a dark page would read as "slightly darker rectangle" and
- *   the motif would vanish; going lighter makes it a sheet laid on top.
- *
- * `--stage-glow` is the light falling across the page and `--stage-ink` is what
- * every square is drawn in — the art is greyscale, so these two and the paper
- * stops are the whole palette.
- */
-.kb-stage-blocks {
-  --stage-paper-top: #f3f1ec;
-  --stage-paper-mid: #eae7e0;
-  --stage-paper-bottom: #dedad1;
-  --stage-glow: #ffffff;
-  --stage-glow-peak: 0.42;
-  --stage-glow-soft: 0.14;
-  --stage-ink: #222222;
-}
-
-/*
- * The field drifts, because the chain does — slowly enough to be something you
- * notice only if you stop and look, which is the right amount for chrome behind
- * a passphrase prompt. `--kb-deck-w` is the pattern's period, handed in by the
- * component, so travelling exactly that far and starting over is invisible.
- *
- * Motion preference is honoured by the global `prefers-reduced-motion` rule at
- * the end of this file, which zeroes every animation on the page including this
- * one; it needs no override of its own.
- */
-@keyframes kb-stage-drift {
-  to {
-    transform: translateX(calc(var(--kb-deck-w) * -1));
-  }
-}
-
-.kb-stage-blocks-field {
-  animation: kb-stage-drift 300s linear infinite;
-}
-
-/*
- * Dark mode runs the page a step lower than light does, and it is the only
- * theme where that is a legibility question rather than a taste one: white
- * text laid over the field has to hold up against the *brightest* point of the
- * art — the glow's
- * peak sitting over the top paper stop. At the previous values that composite
- * came out rgb(127,129,134), which is 3.9:1 against white and 2.8:1 against the
- * 72% muted variant: under the 4.5:1 AA floor for text and under even the 3:1
- * floor for UI. Paper down 10%, glow dimmed 8% and its peak from 0.42 to 0.34
- * lifts those to 5.3:1 and 3.7:1 while keeping the sheet plainly lighter than
- * the near-black chrome it is laid on, which is the whole point of the dark page.
- */
-.dark .kb-stage-blocks {
-  --stage-paper-top: #3e3e44;
-  --stage-paper-mid: #32323a;
-  --stage-paper-bottom: #26262c;
-  --stage-glow: #bec2c7;
-  --stage-glow-peak: 0.34;
-  --stage-glow-soft: 0.11;
-  --stage-ink: #e8e8ea;
-}
-
-/*
  * Invisible hit-area floor for small controls.
  *
  * **px, not rem** — that is the whole point. The UI is rem-based off a root
@@ -738,8 +667,6 @@
   --kb-accent: #ff3341;
   /* Already 4.95:1 on dark mode's chip, so small red text needs no separate value. */
   --kb-accent-text: #ff3341;
-  /* Match the non-native macOS chrome treatment exactly (RGB 18 18 18). */
-  --kb-native-titlebar-background: #121212;
 
   --background: oklch(0.145 0 0);
   --app-chrome: oklch(0.18 0 0);

@@ -4,7 +4,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { Wordmark } from "@/components/kb/Wordmark";
-import { BlockDeckBand } from "@/components/kb/shell/BlockDeckBackdrop";
 import { dispatchDaemonAuthRequired, useDaemon } from "@/daemon/client";
 import {
   canImportProjects,
@@ -697,17 +696,9 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   };
 
   return (
+    // Setup sits in the window frame's inset panel (see WindowFrame), the
+    // same outline as the dashboard; the steps scroll inside it.
     <section className="relative h-full overflow-hidden bg-paper text-ink">
-      {/* The same unmasked block field as the lock screen: setup and the locked
-          window are the two surfaces you see before there are any books, so they
-          share a backdrop.
-
-          The scroll moved off this section and onto the div below it, which is
-          what lets the field go unmasked. Left on the section, the art scrolls
-          with the steps, and a tall step scrolls its bottom edge into view —
-          which is what the old fade was hiding. Now the art holds still and the
-          fields move over it. */}
-      <BlockDeckBand className="h-full" />
       <div
         className={cn(
           "relative z-10 mx-auto flex h-full max-w-7xl flex-col items-center gap-8 overflow-y-auto px-4 py-6 sm:px-8 lg:px-10",
