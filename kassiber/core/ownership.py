@@ -39,6 +39,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from ..errors import AppError
 from ..wallet_descriptors import derive_descriptor_targets, normalize_chain, normalize_network
 from .address_scripts import address_to_scriptpubkey
+from .lightning.bolt11 import decode_payment_hash, display_invoice
 from .onchain import normalized_script_hex, parse_identification_legs
 from .ownership_policy_epochs import retired_policy_materials
 from .wallets import (
@@ -78,6 +79,70 @@ _CASE_INSENSITIVE_PREFIXES = (
 # are all alnum) within sane length bounds. Anything else (spaces, punctuation,
 # a pasted label or URI) is flagged invalid rather than silently "external".
 _ADDRESS_RE = re.compile(r"[0-9A-Za-z]{8,150}")
+
+_BECH32_DATA = "[02-9ac-hj-np-z]"
+
+# Formats that are not on-chain addresses but would otherwise pass the address
+# shape check (or fail it with a misleading "not a valid-looking address"): a
+# pasted invoice, offer or xpub then reads "not supported yet" instead of
+# "external". Order matters only for shared prefixes; each entry is
+# (result type, pattern, note). Matching is case-insensitive where the format
+# is (bech32 payment strings, not base58 keys).
+# A BOLT11 invoice: matched by its payment hash against the book's Lightning
+# history (see ``classify_lightning_invoice``). The encoded string is never
+# kept or echoed — the Lightning discard policy drops it after decoding.
+_BOLT11_RE = re.compile(
+    rf"(?:lightning:)?ln(?:bcrt|bc|tbs|tb|sb)\d*[munp]?1{_BECH32_DATA}+", re.IGNORECASE
+)
+
+_UNSUPPORTED_FORMATS: tuple[tuple[str, re.Pattern[str], str], ...] = (
+    (
+        "lightning_offer",
+        re.compile(rf"(?:lightning:)?ln[oir]1{_BECH32_DATA}+", re.IGNORECASE),
+        "BOLT12 offers and invoices are not supported yet.",
+    ),
+    (
+        "lnurl",
+        re.compile(rf"(?:lightning:)?lnurl1{_BECH32_DATA}+", re.IGNORECASE),
+        "LNURLs point to a server and cannot be checked on this device.",
+    ),
+    (
+        "lightning_address",
+        re.compile(r"[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+", re.IGNORECASE),
+        "Lightning addresses point to a server and cannot be checked on this device.",
+    ),
+    (
+        "silent_payment_address",
+        re.compile(rf"(?:sp|tsp|sprt)1{_BECH32_DATA}{{8,}}", re.IGNORECASE),
+        "Silent payment addresses are not supported yet.",
+    ),
+    (
+        "outpoint",
+        re.compile(r"[0-9a-f]{64}:\d+", re.IGNORECASE),
+        "Outpoints are not supported yet; check the transaction id instead.",
+    ),
+    (
+        "extended_public_key",
+        re.compile(r"(?:[xyztuv]|[YZUV])pub[1-9A-HJ-NP-Za-km-z]{100,}"),
+        "Extended public keys are not checked here; add one as a wallet to match its addresses.",
+    ),
+)
+
+# Kassiber is watch-only: private key material pasted by mistake is named but
+# never echoed back, anywhere in the token (a descriptor can embed one).
+_PRIVATE_KEY_RE = re.compile(r"(?:[xyztuv]|[YZUV])prv[1-9A-HJ-NP-Za-km-z]{100,}")
+_PRIVATE_KEY_NOTE = (
+    "Private keys are never used. Kassiber is watch-only and kept nothing of this entry."
+)
+
+
+def _unsupported_format(text: str) -> tuple[str, str] | None:
+    """Return ``(type, note)`` for a recognized non-address format, else None."""
+    for token_type, pattern, note in _UNSUPPORTED_FORMATS:
+        if pattern.fullmatch(text):
+            return token_type, note
+    return None
+
 
 # Address HRPs that make a token unambiguously a bech32/bech32m/blech32 address.
 _BECH32_ADDRESS_PREFIXES = (
@@ -419,6 +484,11 @@ def parse_tokens(
     ``--address`` / ``--txid`` force the type; ``--candidate`` and file lines are
     auto-classified. Whitespace, blank lines and ``#`` comments are ignored.
     Duplicates (same normalized token + type) collapse to one entry.
+
+    BOLT11 invoices parse to their payment hash (shown shortened; the full
+    invoice is not kept). Other recognized non-address formats (offers, LNURLs,
+    silent-payment addresses, outpoints, xpubs) and private keys land in the
+    second list with ``status: "unsupported"`` rather than as addresses.
     """
     parsed: list[dict[str, Any]] = []
     invalid: list[dict[str, Any]] = []
@@ -427,6 +497,63 @@ def parse_tokens(
     def _add(raw: str, forced_type: str | None) -> None:
         text = str(raw or "").strip()
         if not text or text.startswith("#"):
+            return
+        if _PRIVATE_KEY_RE.search(text):
+            invalid.append(
+                {
+                    "input": "private key (not shown)",
+                    "type": "private_key",
+                    "status": "unsupported",
+                    "classification": "unsupported",
+                    "reason": _PRIVATE_KEY_NOTE,
+                }
+            )
+            return
+        if forced_type != "txid" and _BOLT11_RE.fullmatch(text):
+            invoice = decode_payment_hash(text)
+            shown = display_invoice(text)
+            if invoice is None:
+                invalid.append(
+                    {
+                        "input": shown,
+                        "type": "lightning_invoice",
+                        "reason": "not a valid Lightning invoice",
+                    }
+                )
+                return
+            key = ("lightning_invoice", invoice.payment_hash)
+            if key in seen:
+                return
+            seen.add(key)
+            parsed.append(
+                {
+                    "input": shown,
+                    "normalized": invoice.payment_hash,
+                    "type": "lightning_invoice",
+                    "chain": "lightning",
+                    "network": invoice.network,
+                }
+            )
+            return
+        unsupported = None if forced_type == "txid" else _unsupported_format(text)
+        if unsupported is not None:
+            unsupported_type, note = unsupported
+            key = (unsupported_type, text.lower())
+            if key in seen:
+                return
+            seen.add(key)
+            invalid.append(
+                {
+                    # BOLT12 strings carry payment details like BOLT11 ones.
+                    "input": display_invoice(text)
+                    if unsupported_type == "lightning_offer"
+                    else text,
+                    "type": unsupported_type,
+                    "status": "unsupported",
+                    "classification": "unsupported",
+                    "reason": note,
+                }
+            )
             return
         token_type = forced_type or classify_token_type(text)
         if token_type == "txid":
@@ -996,6 +1123,63 @@ def _ownership_note(matches: Sequence[OwnedMatch]) -> str:
     return note
 
 
+def classify_lightning_invoice(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    token: Mapping[str, Any],
+    wallet_ids: set[str],
+) -> dict[str, Any]:
+    """Match an invoice's payment hash against the book's Lightning history.
+
+    A hit names the node that paid or received it; a payment hash seen both
+    leaving and arriving is a payment between your own nodes. A miss is
+    ``unknown``, not external: an unsynced node or an invoice nobody paid
+    leaves no trace here, which says nothing about who issued it.
+    """
+    rows = conn.execute(
+        """
+        SELECT t.wallet_id, t.direction, w.label
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE t.profile_id = ? AND t.payment_hash = ?
+        """,
+        (profile_id, token["normalized"]),
+    ).fetchall()
+    rows = [row for row in rows if str(row["wallet_id"]) in wallet_ids]
+    result: dict[str, Any] = {
+        "input": token["input"],
+        "type": "lightning_invoice",
+        "chain": "lightning",
+        "ownership_ambiguous": False,
+        "matches": [],
+    }
+    if not rows:
+        return {
+            **result,
+            "status": "unknown",
+            "classification": "unknown",
+            "note": "Not in this profile's synced Lightning history.",
+        }
+    labels = sorted({str(row["label"]) for row in rows})
+    named = ", ".join(f"'{label}'" for label in labels)
+    directions = {str(row["direction"] or "") for row in rows}
+    if {"inbound", "outbound"} <= directions:
+        classification, note = "self_transfer", f"Paid between your own wallets: {named}."
+    elif "outbound" in directions:
+        classification, note = "outbound_payment", f"Paid by {named}."
+    elif "inbound" in directions:
+        classification, note = "inbound_receipt", f"Received by {named}."
+    else:
+        classification, note = "touches_wallet", f"Recorded by {named}."
+    return {
+        **result,
+        "status": "owned",
+        "classification": classification,
+        "wallets": labels,
+        "note": note,
+    }
+
+
 def classify_txid(
     token: Mapping[str, Any],
     index: OwnedIndex,
@@ -1334,9 +1518,15 @@ def identify(
     warnings = pre_warnings + warnings
 
     results: list[dict[str, Any]] = []
+    wallet_id_set = {str(wallet["id"]) for wallet in wallets}
     for token in parsed:
         if token["type"] == "address":
             results.append(classify_address(token, index))
+            continue
+        if token["type"] == "lightning_invoice":
+            results.append(
+                classify_lightning_invoice(conn, profile_id, token, wallet_id_set)
+            )
             continue
         txid = str(token["normalized"])
         legs = load_local_tx_legs(conn, profile_id, txid)
@@ -1366,8 +1556,8 @@ def identify(
                 "input": entry["input"],
                 "type": entry.get("type") or "invalid",
                 "chain": "",
-                "status": "invalid",
-                "classification": "invalid",
+                "status": entry.get("status") or "invalid",
+                "classification": entry.get("classification") or "invalid",
                 "note": entry["reason"],
             }
         )
@@ -1385,7 +1575,13 @@ def summarize(
     scan_to_index: int,
     verified: bool,
 ) -> dict[str, Any]:
-    counts: dict[str, int] = {"owned": 0, "external": 0, "unknown": 0, "invalid": 0}
+    counts: dict[str, int] = {
+        "owned": 0,
+        "external": 0,
+        "unknown": 0,
+        "invalid": 0,
+        "unsupported": 0,
+    }
     for item in results:
         status = str(item.get("status") or "")
         if status in counts:
@@ -1396,6 +1592,7 @@ def summarize(
         "external": counts["external"],
         "unknown": counts["unknown"],
         "invalid": counts["invalid"],
+        "unsupported": counts["unsupported"],
         "wallets_scanned": len(wallets),
         "scan_to_index": scan_to_index,
         "verified_on_chain": verified,
@@ -1446,8 +1643,15 @@ def redact_result_for_ai(item: Mapping[str, Any]) -> dict[str, Any]:
     precedent: the model learns which wallet owns a candidate and the
     classification, never the descriptor geometry.
     """
+    # An xpub is wallet structure the AI surface never carries, even echoed
+    # back from its own input.
+    hidden_types = {
+        "extended_public_key": "extended public key (not shown)",
+        "lightning_invoice": "Lightning invoice (not shown)",
+    }
+    shown_input = hidden_types.get(str(item.get("type") or ""), item.get("input", ""))
     redacted: dict[str, Any] = {
-        "input": item.get("input", ""),
+        "input": shown_input,
         "type": item.get("type", ""),
         "chain": item.get("chain", ""),
         "status": item.get("status", ""),

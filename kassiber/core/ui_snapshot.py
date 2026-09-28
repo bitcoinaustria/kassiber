@@ -6399,6 +6399,7 @@ def _empty_identify_payload() -> dict[str, Any]:
             "external": 0,
             "unknown": 0,
             "invalid": 0,
+            "unsupported": 0,
             "wallets_scanned": 0,
             "scan_to_index": 0,
             "verified_on_chain": False,
