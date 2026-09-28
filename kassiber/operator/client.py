@@ -12,7 +12,11 @@ from typing import BinaryIO
 
 from ..errors import AppError
 from ..secrets.prompt import MAX_PASSPHRASE_BYTES
-from .launcher import broker_server_command, prepare_independent_child_environment
+from .launcher import (
+    broker_server_command,
+    prepare_independent_child_environment,
+    trusted_launch_directory,
+)
 from .protocol import (
     MAX_SECRET_PAYLOAD_BYTES,
     PROTOCOL_VERSION,
@@ -63,6 +67,8 @@ class BrokerClient:
             "stderr": subprocess.DEVNULL,
             "env": environment,
             "close_fds": True,
+            # Never the first client's directory: see trusted_launch_directory.
+            "cwd": trusted_launch_directory(),
         }
         if os.name == "nt":
             popen_args["creationflags"] = (

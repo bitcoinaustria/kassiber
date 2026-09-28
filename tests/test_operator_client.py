@@ -346,3 +346,23 @@ class OperatorClientUnreadableDirectoryTest(unittest.TestCase):
             with self.assertRaises(AppError) as raised:
                 client_module._caller_working_directory()
         self.assertEqual(raised.exception.code, "operator_working_directory_unavailable")
+
+
+class OperatorBrokerLaunchDirectoryTest(unittest.TestCase):
+    def test_broker_starts_in_the_package_location_not_the_callers_directory(self) -> None:
+        from kassiber.operator import client as client_module
+
+        client = BrokerClient()
+        with tempfile.TemporaryDirectory() as caller:
+            previous = os.getcwd()
+            os.chdir(caller)
+            try:
+                with mock.patch.object(
+                    client, "ping", side_effect=[ConnectionRefusedError(), {"generation": "g"}]
+                ), mock.patch.object(client_module.subprocess, "Popen") as popen:
+                    client.ensure_running()
+            finally:
+                os.chdir(previous)
+        cwd = popen.call_args.kwargs["cwd"]
+        self.assertNotEqual(os.path.realpath(cwd), os.path.realpath(caller))
+        self.assertTrue(os.path.isdir(os.path.join(cwd, "kassiber")))

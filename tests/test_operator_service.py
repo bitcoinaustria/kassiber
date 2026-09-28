@@ -1780,7 +1780,8 @@ class OperatorServiceTest(unittest.TestCase):
         options = popen.call_args.kwargs
         # The launch directory stays the broker's, so a source install's
         # `python -m kassiber` import path cannot come from the caller.
-        self.assertNotIn("cwd", options)
+        self.assertEqual(options["cwd"], operator_runner.trusted_launch_directory())
+        self.assertNotEqual(os.path.realpath(options["cwd"]), os.path.realpath(caller))
         self.assertEqual(
             options["env"][operator_runner.CALLER_WORKING_DIRECTORY_ENV],
             caller,

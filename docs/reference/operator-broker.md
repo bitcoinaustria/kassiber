@@ -359,9 +359,10 @@ capacity cannot deadlock a later command-specific secret handoff.
 The submitting client also sends its working directory and whether its own
 `KASSIBER_NO_EGRESS` kill switch is set. The admitted operation binds both,
 including in the replay fingerprint, so a reused operation id must repeat the
-same caller context. The child is still launched from the broker's directory,
-which keeps a source install's `python -m kassiber` import path independent of
-the caller. It changes into the caller's directory before dispatch, so
+same caller context. The broker and its children are launched from the
+directory the running `kassiber` package was imported from (never a client's
+directory), so a source install's `python -m kassiber` import path cannot be
+shadowed by an agent's repository before the lease pipe is read. It changes into the caller's directory before dispatch, so
 relative `--output`, `--file`, and proposal paths mean what they meant to the
 caller; a vanished directory fails the operation rather than falling back.
 The caller's egress kill switch can only tighten the child's environment.

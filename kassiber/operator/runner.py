@@ -6,7 +6,11 @@ import os
 import subprocess
 import threading
 
-from .launcher import cli_child_command, prepare_independent_child_environment
+from .launcher import (
+    cli_child_command,
+    prepare_independent_child_environment,
+    trusted_launch_directory,
+)
 from .project import canonical_project
 from .service import Operation, OperationResult
 
@@ -66,11 +70,13 @@ def run_cli_operation(operation: Operation, passphrase: bytearray) -> OperationR
             "stdout": subprocess.PIPE,
             "stderr": subprocess.PIPE,
             "env": environment,
+            # Launching in the caller's directory would put it first on a source
+            # install's `python -m kassiber` import path before the passphrase
+            # pipe is read. Start in the package's own location instead; the
+            # child changes into the caller's directory once modules resolve.
+            "cwd": trusted_launch_directory(),
         }
         if operation.working_directory is not None:
-            # Launching with `cwd=` would put the caller's directory first on a
-            # source install's `python -m kassiber` import path. The child
-            # changes directory itself once its modules are resolved.
             environment[CALLER_WORKING_DIRECTORY_ENV] = operation.working_directory
         if os.name == "nt":
             startup = subprocess.STARTUPINFO()
