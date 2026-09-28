@@ -386,6 +386,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.wallets.detect_script_types",
     "ui.wallets.identify",
     "ui.wallets.identify_onchain",
+    "ui.wallets.identify_onchain.cancel",
     "ui.connections.sources",
     "ui.connections.btcpay.create",
     "ui.connections.btcpay.discover",
@@ -511,6 +512,10 @@ const STREAMING_DAEMON_KINDS: &[&str] = &[
     // already a streaming kind above.
     "ui.review.plan",
     "ui.review.apply",
+    // On-chain verification looks transactions up one by one on a backend
+    // from a worker thread, reporting progress; a long list outlives the
+    // ordinary request timeout, and Stop cancels it cooperatively.
+    "ui.wallets.identify_onchain",
 ];
 
 // Daemon kinds that exercise the AI runtime (model calls, chat sessions, tool

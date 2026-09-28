@@ -582,6 +582,8 @@
     "scanned_other": "Scanned {{count}} wallets to derivation index {{index}}{{verified}}.",
     "verifiedSuffix": " · verified on-chain",
     "verifying": "Verifying…",
+    "verifyingProgress": "Verifying {{checked}} of {{total}}…",
+    "stopVerify": "Stop",
     "verifyOnChain": "Verify {{count}} on chain",
     "verifyHint": "Asks {{backend}} about the entries your synced history cannot settle. This is the only step that leaves this device.",
     "verifyBackend": "Verify with",

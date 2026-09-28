@@ -730,6 +730,16 @@ First sync progress phases are `discovery`, `backend_fetch`, `decode_enrich`,
 `ui.wallets.sync.progress` and `ui.freshness.run.progress` records include the
 phase plus source identifiers.
 
+`ui.wallets.identify_onchain` (Reconcile's "Verify on chain") prepares the whole
+reconciliation on the main thread, then looks up the transactions local history
+cannot settle one by one on a worker thread that never touches SQLite. It
+streams `ui.wallets.identify_onchain.progress` records (`checked`, `total`)
+before the terminal report. `ui.wallets.identify_onchain.cancel` with
+`target_request_id` stops the run between lookups; the remaining transactions
+stay `unknown`, and the report carries `cancelled: true` and a warning saying how
+far it got. A cancel that arrives before its run starts is held briefly and still
+applies. When no lookup is needed, the report is returned directly.
+
 Checkpoints are persisted per source. Electrum stores script-hash statuses,
 known txids, dirty mempool scripts, header timestamps, and highest used branch
 indexes; repeated syncs batch `blockchain.scripthash.subscribe` and skip

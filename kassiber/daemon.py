@@ -184,7 +184,6 @@ from .core.ui_snapshot import (
     build_wallet_utxos_snapshot,
     build_wallet_identify_snapshot_for_ai,
     build_wallet_identify_snapshot,
-    build_wallet_identify_onchain_snapshot,
     build_wallets_list_snapshot,
     build_workspace_health_snapshot,
     build_workspace_overview_snapshot,
@@ -237,6 +236,7 @@ from .daemon_sync_replication import SYNC_UI_KINDS, dispatch_sync_ui
 from .daemon_accounting import ACCOUNTING_UI_KINDS, dispatch_accounting_ui
 from . import daemon_accounting_ai
 from . import daemon_accounting_documents
+from . import daemon_ownership_verify
 from .projects import (
     create_project,
     get_project,
@@ -376,6 +376,7 @@ SUPPORTED_KINDS = (
     "ui.privacy_hygiene.snapshot",
     "ui.wallets.identify",
     "ui.wallets.identify_onchain",
+    "ui.wallets.identify_onchain.cancel",
     "ui.loans.list",
     "ui.loans.link",
     "ui.loans.mark",
@@ -1194,6 +1195,9 @@ class DaemonContext:
     )
     accounting_document_jobs: daemon_accounting_documents.DocumentJobs = field(
         default_factory=daemon_accounting_documents.DocumentJobs
+    )
+    active_verifications: daemon_ownership_verify.ActiveVerifications = field(
+        default_factory=daemon_ownership_verify.ActiveVerifications
     )
 
 
@@ -15796,17 +15800,23 @@ def handle_request(
         )
 
     if kind == "ui.wallets.identify_onchain":
+        # Streams from a worker thread when lookups are pending; the worker
+        # writes its own progress and terminal records (see the module).
         return (
-            _with_request_id(
-                build_envelope(
-                    "ui.wallets.identify_onchain",
-                    build_wallet_identify_onchain_snapshot(
-                        ctx.conn,
-                        ctx.runtime_config,
-                        request.get("args"),
-                    ),
-                ),
+            daemon_ownership_verify.start(
+                ctx,
+                out,
                 request_id,
+                _request_id_registry_key(request_id),
+                request.get("args"),
+            ),
+            False,
+        )
+
+    if kind == "ui.wallets.identify_onchain.cancel":
+        return (
+            daemon_ownership_verify.cancel(
+                ctx, request_id, _coerce_args_dict(request_id, request.get("args"))
             ),
             False,
         )

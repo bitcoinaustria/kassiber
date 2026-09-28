@@ -6447,43 +6447,48 @@ def build_wallet_identify_snapshot(
     return report
 
 
-def build_wallet_identify_onchain_snapshot(
+def prepare_wallet_identify_onchain(
     conn: sqlite3.Connection,
     runtime_config: dict[str, object] | None,
     args: Any,
-) -> dict[str, Any]:
-    """Reconcile with the opt-in on-chain tier: txids not in local history are
-    fetched through an Esplora/Electrum backend for a per-leg verdict.
+) -> tuple[core_ownership.IdentifyPlan, dict[str, Any], dict[str, Any]] | None:
+    """Everything the opt-in on-chain tier needs from the book, on this thread.
 
-    This contacts the network, so it is a mutating daemon kind (the desktop
-    "Verify on chain" action), never a read tool and never exposed to the AI.
+    Returns the reconciliation plan (txids not in local history left pending),
+    the resolved Esplora/Electrum backend, and the book context, or ``None``
+    without an active profile. The lookups themselves contact the network and
+    run later through ``core_ownership.finish_identify`` (the desktop "Verify
+    on chain" action) — never a read tool and never exposed to the AI.
     """
     context, profile = _active_context_and_profile(conn)
     if profile is None:
-        return _empty_identify_payload()
+        return None
     inputs = _identify_inputs(args)
     scan_to_index = inputs["scan_to_index"]
     if scan_to_index is None:
         scan_to_index = core_ownership.DEFAULT_SCAN_TO_INDEX
     backend_name = args.get("backend") if isinstance(args, dict) else None
     backend = core_sync_backends.resolve_verify_backend(runtime_config, backend_name)
-    with core_sync_backends.verify_session(backend) as fetcher:
-        report = core_ownership.identify(
-            conn,
-            profile["id"],
-            addresses=inputs["addresses"],
-            txids=inputs["txids"],
-            candidates=inputs["candidates"],
-            file_text=inputs["text"],
-            csv_text=inputs["csv_text"],
-            scan_to_index=scan_to_index,
-            verify_fetcher=fetcher,
-        )
-    report["context"] = {
+    plan = core_ownership.prepare_identify(
+        conn,
+        profile["id"],
+        addresses=inputs["addresses"],
+        txids=inputs["txids"],
+        candidates=inputs["candidates"],
+        file_text=inputs["text"],
+        csv_text=inputs["csv_text"],
+        scan_to_index=scan_to_index,
+        verify=True,
+    )
+    book = {
         "workspace": context["workspace_label"] or None,
         "profile": context["profile_label"] or None,
     }
-    return report
+    return plan, backend, book
+
+
+def empty_identify_payload() -> dict[str, Any]:
+    return _empty_identify_payload()
 
 
 def build_wallet_identify_snapshot_for_ai(

@@ -239,7 +239,8 @@ kassiber wallets identify --txid <64-hex> --verify-on-chain --verify-backend mem
   `--address` / `--txid` / `--candidate` / `--file` / `--csv` is required.
 - The desktop **Reconcile** screen is the GUI peer: it runs the cache-only
   check inline and offers a "Verify on chain" button for any `unknown` txids
-  (daemon kinds `ui.wallets.identify` and the mutating `ui.wallets.identify_onchain`).
+  (daemon kinds `ui.wallets.identify` and the mutating `ui.wallets.identify_onchain`,
+  which streams progress and can be stopped between lookups).
 
 ## Imports
 

@@ -582,6 +582,8 @@
     "scanned_other": "{{count}} Wallets bis Ableitungsindex {{index}} gescannt{{verified}}.",
     "verifiedSuffix": " · on-chain verifiziert",
     "verifying": "Wird verifiziert…",
+    "verifyingProgress": "Verifiziere {{checked}} von {{total}}…",
+    "stopVerify": "Stoppen",
     "verifyOnChain": "{{count}} on-chain verifizieren",
     "verifyHint": "Fragt {{backend}} nach den Einträgen, die deine Sync-Historie nicht klären kann. Nur dieser Schritt verlässt dieses Gerät.",
     "verifyBackend": "Verifizieren über",

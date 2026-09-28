@@ -274,6 +274,7 @@ DAEMON_OPERATOR_KINDS = _paths(
     ui.report.blockers
     ui.rates.latest ui.attachments.add ui.attachments.copy
     ui.attachments.rename ui.attachments.remove ui.wallets.identify_onchain
+    ui.wallets.identify_onchain.cancel
     ui.backends.create ui.backends.update ui.backends.set_default
     ui.backends.bitcoinrpc.test ui.backends.btcpay.test
     ui.backends.detect_core ui.backends.electrum.test ui.backends.http.test
