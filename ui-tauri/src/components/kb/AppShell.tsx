@@ -38,6 +38,7 @@ import {
   MessageSquareText,
   Moon,
   Network,
+  PanelLeft,
   Plane,
   Plus,
   RefreshCw,
@@ -93,7 +94,6 @@ import {
   SidebarMenuSubItem,
   SidebarProvider,
   SidebarRail,
-  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -150,10 +150,7 @@ import {
   type SettingsSectionId,
 } from "@/components/kb/settingsSections";
 import { ShellSearch } from "@/components/kb/shell/ShellSearch";
-import {
-  BlockDeckBand,
-  SidebarStageBackdrop,
-} from "@/components/kb/shell/BlockDeckBackdrop";
+import { BlockDeckBand } from "@/components/kb/shell/BlockDeckBackdrop";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantScreenContext } from "@/components/ai/assistantSession";
 import { assistantScreenContextFor } from "@/components/ai/assistantScreenContext";
@@ -179,7 +176,9 @@ import {
 } from "@/components/kb/dataMode";
 import { isTypingTarget } from "@/lib/keymap";
 import { FirstSyncCard } from "./FirstSyncCard";
+import { AlphaNotice } from "./AlphaNotice";
 import { AssistantDock } from "./AssistantDock";
+import { useClaimWindowTitlebar, useWindowChrome } from "./windowChromeContext";
 import { ExternalBrowserLink } from "./ExternalBrowserLink";
 import { nextAssistantDockCollapsed } from "./assistantDockLayout";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
@@ -314,23 +313,19 @@ const APP_IS_DEV_BUILD = APP_VERSION === "dev";
 const NATIVE_MENU_EVENT = "kassiber:intent";
 const ACTIVE_PROGRESS_CLEAR_GRACE_MS = 750;
 /*
- * T3Code's ghost icon-button recipe, for the controls that float over the
- * content panel: no chrome at rest, a `--accent` fill on hover, a muted glyph
- * against foreground-coloured text, and `rounded-lg` rather than a pill.
+ * Title-bar icon buttons. The whole title bar sits on the window chrome, the
+ * same surface as the nav, so its buttons use the nav's row tones: no chrome
+ * at rest, a `--sidebar-row-hover` fill on hover (a plain `--accent` fill is
+ * the chrome's own colour in light mode, so it never showed), and a muted
+ * glyph that lifts to the foreground.
  */
 const shellIconButtonClassName =
-  "size-8 rounded-lg border border-transparent text-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background [&>svg]:text-muted-foreground hover:[&>svg]:text-foreground";
+  "size-8 shrink-0 rounded-md border border-transparent text-sidebar-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar [&>svg]:text-sidebar-muted-foreground hover:[&>svg]:text-sidebar-foreground";
 /*
  * T3Code's nav-row recipe: rows sit quiet in a muted foreground with a faint
  * hover fill, and the current page lifts onto its own surface. Both tones come
  * from `--sidebar-row-*` so hover and active never collapse into one colour.
  */
-/* Same recipe on the nav surface, where hover/glyph read from `sidebar-*`. */
-const navIconButtonClassName =
-  // Sized off the same variables as the nav rows: 8 tall next to an h-8 row when
-  // expanded, and the rail's own icon metrics when collapsed, so the collapse
-  // trigger reads as one of the sidebar's buttons rather than a stray control.
-  "size-8 shrink-0 rounded-md border border-transparent text-sidebar-foreground hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar [&>svg]:text-sidebar-muted-foreground hover:[&>svg]:text-sidebar-foreground group-data-[collapsible=icon]:size-(--sidebar-icon-button) group-data-[collapsible=icon]:[&>svg]:size-(--sidebar-icon-glyph)";
 const navRowClassName =
   "h-8 gap-2 rounded-md text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground data-[active=true]:bg-sidebar-row-active data-[active=true]:text-sidebar-foreground";
 const navSubRowClassName =
@@ -1757,166 +1752,172 @@ export function AppShell() {
     };
   }, [locked, pathname]);
 
+  // The shell draws the window's title bar row itself (see WindowFrame), so
+  // the traffic lights, navigation, and shell actions share one row.
+  useClaimWindowTitlebar(identity !== null);
+
   if (!identity) return null;
+
+  const shellUnlocked = !locked && !importRootBlocked;
 
   return (
     <TooltipProvider>
-      <div className="flex h-full flex-col overflow-hidden bg-sidebar">
-        {/*
-          The shell is a two-column frame: the side nav owns all navigation
-          (brand, book switcher, search, pages, settings), and the content panel
-          carries only its own page plus a floating strip of shell controls.
-          There is no full-width top bar — the controls float over the panel.
-        */}
-        <SidebarProvider className="min-h-0 flex-1 bg-sidebar">
-          <a
-            href="#app-main"
-            className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
-          >
-            {t("shell.skipToContent")}
-          </a>
-          <div className="flex min-h-0 min-w-0 flex-1">
-            <AppSidebar
-              pathname={pathname}
-              meta={routeMeta}
-              onLock={lockApp}
-              onProjectSelect={switchProject}
-              daemonEnabled={daemonEnabled}
-              aiFeaturesEnabled={aiFeaturesEnabled}
-              developerToolsEnabled={developerToolsEnabled}
-            />
-            {/* `pl-3` is two gutters: the nav card is shifted right by one, so
-                this is what leaves a matching gap on the seam between them. */}
-            <div className="min-h-0 w-full min-w-0 overflow-hidden lg:pt-1.5 lg:pr-1.5 lg:pb-1.5 lg:pl-3">
-              <div className="relative flex h-full w-full min-w-0 flex-col items-center justify-start overflow-hidden bg-background lg:rounded-xl">
-                <ShellFloatingControls
-                  meta={routeMeta}
-                  onLock={lockApp}
-                  onRefresh={runHeaderRefresh}
-                  isRefreshing={isSyncing}
-                  daemonEnabled={daemonEnabled}
-                />
-                {importRootBlocked ? (
-                  <main
-                    id="app-main"
-                    ref={mainRef}
-                    tabIndex={-1}
-                    className={appMainClassName}
-                  >
-                    <ImportRootRestoreScreen
-                      error={importRootError}
-                      onReset={resetLocalUiSession}
-                    />
-                  </main>
-                ) : locked ? (
-                  <main
-                    id="app-main"
-                    ref={mainRef}
-                    tabIndex={-1}
-                    className={appMainClassName}
-                  >
-                    <LockScreen
-                      reason={lockedScreen.reason}
-                      passphraseRequired={lockedScreen.passphraseRequired}
-                      onUnlock={unlockApp}
-                      onTouchIdUnlock={unlockWithTouchId}
-                      touchIdEnabled={appLockPolicy.touchIdUnlock}
-                      touchIdPlatformSupported={touchIdPlatformSupported}
-                      touchIdStatus={touchIdStatus}
-                      autoTouchIdPrompt={
-                        appLockPolicy.touchIdUnlock &&
-                        touchIdAutoPromptPending
-                      }
-                      onReset={resetLocalUiSession}
-                    />
-                  </main>
-                ) : (
-                  aiFeaturesEnabled ? (
-                    <AssistantSessionProvider screenContext={assistantScreenContext}>
-                      <main
-                        id="app-main"
-                        ref={mainRef}
-                        tabIndex={-1}
-                        className={cn(
-                          appMainClassName,
-                          // A live conversation expands the dock (even under
-                          // auto-hide), so reserve real space for it. Otherwise
-                          // the parked pill / minimized chip only needs a
-                          // sliver; the legacy scroll-collapse path applies when
-                          // auto-hide is off and there is no thread.
-                          isAssistantRoute || assistantDockSuppressed
-                            ? "pb-0"
-                            : // Expanded thread needs the full reserve; a minimized
-                              // "Working + follow-up" surface still sets expanded
-                              // so it gets a mid-size pad instead of the pill sliver.
-                              assistantDockExpanded && !assistantDockMinimized
-                              ? "pb-[240px]"
-                              : assistantDockExpanded && assistantDockMinimized
-                                ? "pb-36"
-                                : assistantDockMinimized
-                                  ? "pb-6"
-                                  : assistantDockAutoHide
-                                    ? "pb-6"
-                                    : assistantCollapsed
-                                      ? "pb-16"
-                                      : "pb-[240px]",
-                        )}
-                      >
-                        <RouteErrorBoundary>
-                          <Outlet />
-                        </RouteErrorBoundary>
-                      </main>
-                      {isAssistantRoute || assistantDockSuppressed ? null : (
-                        <AssistantDock
-                          collapsed={assistantCollapsed}
-                          autoHide={assistantDockAutoHide}
-                          position={assistantDockPosition}
-                          className="absolute inset-x-0 bottom-0 z-20"
-                        />
-                      )}
-                    </AssistantSessionProvider>
-                  ) : (
+      {/*
+        The shell is the window: a title bar row across the top, the side nav
+        flush on the same chrome below it, and the page on an inset panel. The
+        title bar carries the traffic lights (macOS), the nav controls, the
+        breadcrumb, and the shell actions, so there is exactly one row of chrome
+        above the page.
+      */}
+      <SidebarProvider className="h-full min-h-0 flex-col overflow-hidden bg-sidebar">
+        <a
+          href="#app-main"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
+        >
+          {t("shell.skipToContent")}
+        </a>
+        <ShellTitlebar
+          meta={routeMeta}
+          onLock={lockApp}
+          onRefresh={runHeaderRefresh}
+          isRefreshing={isSyncing}
+          daemonEnabled={daemonEnabled}
+          controlsVisible={shellUnlocked}
+        />
+        <div className="flex min-h-0 min-w-0 flex-1">
+          <AppSidebar
+            pathname={pathname}
+            meta={routeMeta}
+            onLock={lockApp}
+            onProjectSelect={switchProject}
+            daemonEnabled={daemonEnabled}
+            aiFeaturesEnabled={aiFeaturesEnabled}
+            developerToolsEnabled={developerToolsEnabled}
+          />
+          {/* The panel sits flush against the nav and keeps a small gutter on
+              its free sides, so its rounded corners read against the chrome. */}
+          <div className="min-h-0 w-full min-w-0 overflow-hidden md:pr-1.5 md:pb-1.5">
+            <div className="relative flex h-full w-full min-w-0 flex-col items-center justify-start overflow-hidden bg-background md:rounded-xl md:border md:border-border/70">
+              {importRootBlocked ? (
+                <main
+                  id="app-main"
+                  ref={mainRef}
+                  tabIndex={-1}
+                  className={appMainClassName}
+                >
+                  <ImportRootRestoreScreen
+                    error={importRootError}
+                    onReset={resetLocalUiSession}
+                  />
+                </main>
+              ) : locked ? (
+                <main
+                  id="app-main"
+                  ref={mainRef}
+                  tabIndex={-1}
+                  className={appMainClassName}
+                >
+                  <LockScreen
+                    reason={lockedScreen.reason}
+                    passphraseRequired={lockedScreen.passphraseRequired}
+                    onUnlock={unlockApp}
+                    onTouchIdUnlock={unlockWithTouchId}
+                    touchIdEnabled={appLockPolicy.touchIdUnlock}
+                    touchIdPlatformSupported={touchIdPlatformSupported}
+                    touchIdStatus={touchIdStatus}
+                    autoTouchIdPrompt={
+                      appLockPolicy.touchIdUnlock &&
+                      touchIdAutoPromptPending
+                    }
+                    onReset={resetLocalUiSession}
+                  />
+                </main>
+              ) : (
+                aiFeaturesEnabled ? (
+                  <AssistantSessionProvider screenContext={assistantScreenContext}>
                     <main
                       id="app-main"
                       ref={mainRef}
                       tabIndex={-1}
-                      className={appMainClassName}
+                      className={cn(
+                        appMainClassName,
+                        // A live conversation expands the dock (even under
+                        // auto-hide), so reserve real space for it. Otherwise
+                        // the parked pill / minimized chip only needs a
+                        // sliver; the legacy scroll-collapse path applies when
+                        // auto-hide is off and there is no thread.
+                        isAssistantRoute || assistantDockSuppressed
+                          ? "pb-0"
+                          : // Expanded thread needs the full reserve; a minimized
+                            // "Working + follow-up" surface still sets expanded
+                            // so it gets a mid-size pad instead of the pill sliver.
+                            assistantDockExpanded && !assistantDockMinimized
+                            ? "pb-[240px]"
+                            : assistantDockExpanded && assistantDockMinimized
+                              ? "pb-36"
+                              : assistantDockMinimized
+                                ? "pb-6"
+                                : assistantDockAutoHide
+                                  ? "pb-6"
+                                  : assistantCollapsed
+                                    ? "pb-16"
+                                    : "pb-[240px]",
+                      )}
                     >
                       <RouteErrorBoundary>
                         <Outlet />
                       </RouteErrorBoundary>
                     </main>
-                  )
-                )}
-                {!locked && !importRootBlocked ? (
-                  <>
-                    <RouteTopProgressLine
-                      // While the full-screen sync card is up it already shows
-                      // this progress (plus the blur scrim), so suppress the
-                      // hairline here — it returns once "Continue in background"
-                      // minimizes the card.
-                      active={shellBusy && !showSyncCard}
-                      progress={shellProgress}
-                      announce={!showSyncCard}
-                    />
-                    {showSyncCard ? (
-                      <FirstSyncCard
-                        progress={syncCardProgress}
-                        title={activeMaintenanceProgress?.title}
-                        isFirstSync={isFirstSync}
-                        failed={bookRefreshFailed}
-                        failedPhase={activeMaintenanceProgress?.phase}
-                        failureDetail={activeMaintenanceProgress?.body}
-                        onDismiss={minimizeSyncCard}
+                    {isAssistantRoute || assistantDockSuppressed ? null : (
+                      <AssistantDock
+                        collapsed={assistantCollapsed}
+                        autoHide={assistantDockAutoHide}
+                        position={assistantDockPosition}
+                        className="absolute inset-x-0 bottom-0 z-20"
                       />
-                    ) : null}
-                  </>
-                ) : null}
-              </div>
+                    )}
+                  </AssistantSessionProvider>
+                ) : (
+                  <main
+                    id="app-main"
+                    ref={mainRef}
+                    tabIndex={-1}
+                    className={appMainClassName}
+                  >
+                    <RouteErrorBoundary>
+                      <Outlet />
+                    </RouteErrorBoundary>
+                  </main>
+                )
+              )}
+              {shellUnlocked ? (
+                <>
+                  <RouteTopProgressLine
+                    // While the full-screen sync card is up it already shows
+                    // this progress (plus the blur scrim), so suppress the
+                    // hairline here — it returns once "Continue in background"
+                    // minimizes the card.
+                    active={shellBusy && !showSyncCard}
+                    progress={shellProgress}
+                    announce={!showSyncCard}
+                  />
+                  {showSyncCard ? (
+                    <FirstSyncCard
+                      progress={syncCardProgress}
+                      title={activeMaintenanceProgress?.title}
+                      isFirstSync={isFirstSync}
+                      failed={bookRefreshFailed}
+                      failedPhase={activeMaintenanceProgress?.phase}
+                      failureDetail={activeMaintenanceProgress?.body}
+                      onDismiss={minimizeSyncCard}
+                    />
+                  ) : null}
+                </>
+              ) : null}
             </div>
           </div>
-        </SidebarProvider>
-      </div>
+        </div>
+      </SidebarProvider>
     </TooltipProvider>
   );
 }
@@ -1982,8 +1983,8 @@ function RouteTopProgressLine({
  *
  * Two modes share one frame: the book navigation, and — on any `/settings/*`
  * route — the settings navigation, which takes over the whole nav rather than
- * squeezing a second rail into the page. The frame itself is a frosted panel
- * (`.kb-glass-panel`) lifted off the app chrome.
+ * squeezing a second rail into the page. The frame sits flush on the window
+ * chrome under the title bar; only the page panel beside it is inset.
  */
 function AppSidebar({
   pathname,
@@ -2056,35 +2057,16 @@ function AppSidebar({
     <Sidebar
       variant="sidebar"
       collapsible="icon"
-      /* A card under the top strip, on the same terms as the content panel: the
-         same 1.5 gutter on every free side, the same corner radius, and a
-         hairline all the way round. The frosted nav and the panel land within a
-         few percent of each other in lightness by design (T3Code's quiet
-         hierarchy), so that hairline is what keeps the two surfaces apart.
-         The card keeps its full width and only shifts right by one gutter — the
-         seam gap comes from the content panel's own `pl-3` instead. Narrowing it
-         here would eat the collapsed rail, which is only 3rem wide to begin
-         with. */
-      className="kb-glass-panel top-[calc(var(--kb-window-top-inset,0px)+(--spacing(1.5)))] left-1.5 h-[calc(100svh-var(--kb-window-top-inset,0px)-(--spacing(3)))] overflow-hidden rounded-xl border border-sidebar-border/70"
+      /* The same chrome as the title bar above it, so the two read as one
+         L-shaped surface around the page panel. The panel's own hairline is
+         the seam, so the nav drops the recipe's right border. */
+      className="top-(--kb-toolbar-height) h-[calc(100svh-var(--kb-toolbar-height))] group-data-[side=left]:border-r-0"
     >
       {/* Header stays mounted across both nav modes, so the wordmark and the ⌘K
-          palette are reachable from settings too. `relative` + the children's
-          `z-10` let the stage art sit behind them; the art renders nothing at
-          all on a stable release. */}
-      <SidebarHeader className="relative gap-1 px-2 pt-2 pb-1">
-        <SidebarStageBackdrop />
-        <div className="relative z-10 flex flex-col gap-1">
-          {/*
-            Only the brand row is relit, and only in dark mode (the CSS is
-            `.dark`-scoped): the art fades out before the search row, so
-            relighting that row too would put white text on the near-white faded
-            tail. The class is unconditional because every channel now draws art.
-          */}
-          <div className="kb-stage-header-content">
-            <SidebarBrand />
-          </div>
-          <ShellSearch searchKey={meta.searchKey} daemonEnabled={daemonEnabled} />
-        </div>
+          palette are reachable from settings too. */}
+      <SidebarHeader className="gap-1 px-2 pt-1 pb-1">
+        <SidebarBrand />
+        <ShellSearch searchKey={meta.searchKey} daemonEnabled={daemonEnabled} />
       </SidebarHeader>
       {inSettings ? (
         <SettingsNavSection
@@ -2173,63 +2155,25 @@ function SettingsNavSection({
 }
 
 /**
- * Nav header, arranged as T3Code arranges it.
+ * The wordmark row at the top of the nav.
  *
- * T3Code puts the nav-collapse control and the wordmark side by side on the very
- * top-left row — its toggle is `fixed` at the window corner and the brand is
- * pushed right by exactly the control's width to sit beside it. The book
- * switcher is NOT on this row: T3Code keeps its equivalent (the project-scope
- * picker) on its own row further down, which is what leaves this row roomy
- * enough for the history controls to join the toggle.
- *
- * Collapsed to the icon rail, only the toggle survives — the wordmark and the
- * history buttons would not fit, and the toggle is what gets the nav back.
+ * The collapse toggle and history buttons live in the title bar now, where
+ * they hold still whichever way the nav is folded. Collapsed to the icon rail
+ * the wordmark would not fit, so the row folds away with the shadcn group-label
+ * recipe (negative margin + fade), which slides the rows below up in step with
+ * the rail instead of jumping.
  */
 function SidebarBrand() {
   const { t } = useTranslation("chrome");
-  const { state, isMobile } = useSidebar();
-  const collapsed = state === "collapsed" && !isMobile;
   return (
-    <div
-      className={cn(
-        "flex h-8 min-w-0 items-center gap-0.5",
-        collapsed && "justify-center",
-      )}
-    >
-      <SidebarTrigger className={navIconButtonClassName} />
-      {collapsed ? null : (
-        <>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={navIconButtonClassName}
-            aria-label={t("shell.back")}
-            title={t("shell.back")}
-            onClick={() => window.history.back()}
-          >
-            <ArrowLeft className="size-4" aria-hidden="true" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={navIconButtonClassName}
-            aria-label={t("shell.forward")}
-            title={t("shell.forward")}
-            onClick={() => window.history.forward()}
-          >
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </Button>
-          <Link
-            to="/overview"
-            aria-label={t("shell.overviewLink")}
-            className="ml-1 flex h-7 min-w-0 shrink items-center truncate rounded-md text-sm font-medium tracking-tight text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            Kassiber.app
-          </Link>
-        </>
-      )}
+    <div className="flex h-8 min-w-0 items-center px-2 transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:-mt-9 group-data-[collapsible=icon]:opacity-0">
+      <Link
+        to="/overview"
+        aria-label={t("shell.overviewLink")}
+        className="flex h-7 min-w-0 shrink items-center truncate rounded-md text-sm font-medium tracking-tight text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        Kassiber.app
+      </Link>
     </div>
   );
 }
@@ -2272,21 +2216,21 @@ function BreadcrumbBook({ daemonEnabled }: { daemonEnabled: boolean }) {
         aria-haspopup="dialog"
         aria-expanded={bookSwitcherOpen}
         onClick={() => setBookSwitcherOpen(true)}
-        className="group inline-flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 -mx-1 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        className="group inline-flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 -mx-1 hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
         <Folder
-          className="size-3.5 shrink-0 text-muted-foreground"
+          className="size-3.5 shrink-0 text-sidebar-muted-foreground"
           aria-hidden="true"
         />
-        <span className="max-w-40 truncate text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+        <span className="max-w-40 truncate text-sm font-medium text-sidebar-muted-foreground transition-colors group-hover:text-sidebar-foreground">
           {bookLabel}
         </span>
         <ChevronsUpDown
-          className="size-3 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-muted-foreground"
+          className="size-3 shrink-0 text-sidebar-muted-foreground/50 transition-colors group-hover:text-sidebar-muted-foreground"
           aria-hidden="true"
         />
       </button>
-      <span aria-hidden="true" className="text-muted-foreground/40">
+      <span aria-hidden="true" className="text-sidebar-muted-foreground/40">
         /
       </span>
       <BookSwitcherPopover
@@ -2738,8 +2682,11 @@ function NavUser({
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[collapsible=icon]:size-9! group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0!"
             >
+              {/* `--muted` is the chrome's own grey in light mode, so the stock
+                  fallback vanished once the nav sat flush on the chrome; the
+                  row-active tone keeps it a visible tile. */}
               <Avatar className="size-8 shrink-0 rounded-lg group-data-[collapsible=icon]:size-9">
-                <AvatarFallback className="rounded-lg text-sm font-medium group-data-[collapsible=icon]:text-sm">
+                <AvatarFallback className="rounded-lg bg-sidebar-row-active text-sm font-medium text-sidebar-foreground group-data-[collapsible=icon]:text-sm">
                   {name
                     .split(" ")
                     .map((part) => part[0])
@@ -2936,29 +2883,126 @@ function AppVersion() {
   );
 }
 
-/**
- * Floating shell controls.
- *
- * The old full-width top bar is gone: its navigation half moved into the side
- * nav (brand, book switcher, search), and what is left — the book-refresh split
- * button, notifications, and the view toggles — floats over the content panel as
- * frosted-glass pills. The strip still occupies its own row rather than
- * overlaying, so nothing on the page ever hides behind a button.
- */
-function ShellFloatingControls({
-  meta,
-  onLock,
-  onRefresh,
-  isRefreshing,
-  daemonEnabled,
-}: {
+type ShellTitlebarControlsProps = {
   meta: RouteMeta;
   onLock: () => void;
   onRefresh: (options?: { forceFull?: boolean }) => void;
   isRefreshing: boolean;
   daemonEnabled: boolean;
-}) {
+};
+
+/**
+ * The window's title bar row, modelled on the unified title bar of native Mac
+ * apps such as the ChatGPT desktop app.
+ *
+ * On macOS the traffic lights sit at its leading edge and every empty stretch
+ * of the row moves the window: Tauri's `"deep"` drag region covers the whole
+ * subtree and skips buttons, links, and anything focusable. On Windows and
+ * Linux the native frame keeps its own title bar, so the same row is a plain
+ * toolbar with no inset and no drag region.
+ *
+ * The leading cluster (nav toggle, history) sits over the nav column and
+ * tracks its width, so the breadcrumb lines up with the page panel while the
+ * nav is open and follows the buttons once it folds to the rail. The buttons
+ * themselves never move, whichever way the nav is folded.
+ *
+ * Locked, the row keeps only its chrome: the lock screen covers the rest of
+ * the window, and shell actions must not stay reachable above it.
+ */
+function ShellTitlebar({
+  controlsVisible,
+  ...controls
+}: ShellTitlebarControlsProps & { controlsVisible: boolean }) {
+  const { t } = useTranslation("chrome");
+  const { nativeTitlebar } = useWindowChrome();
+  const { state, isMobile, toggleSidebar } = useSidebar();
+  const navExpanded = state === "expanded" && !isMobile;
+  const preAlphaBannerVisible = useUiStore((s) => s.preAlphaBannerVisible);
+
+  return (
+    <header
+      data-tauri-drag-region={nativeTitlebar ? "deep" : undefined}
+      className={cn(
+        "relative flex h-(--kb-toolbar-height) w-full shrink-0 items-center select-none",
+        // Locked, the row carries only the alpha chip. Without a native title
+        // bar the lock screen starts at the window's top edge, so lift the row
+        // above it; unlocked it must stay below dialogs.
+        controlsVisible ? "z-20" : "z-[60]",
+      )}
+    >
+      <div
+        className={cn(
+          // The collapsed width is the three buttons plus their gaps and the
+          // trailing pad; `min-w-fit` covers a UI scale where they outgrow it.
+          "flex h-full shrink-0 items-center gap-0.5 pr-2 pl-(--kb-toolbar-leading) md:min-w-fit md:transition-[width] md:duration-200 md:ease-linear",
+          navExpanded
+            ? "md:w-(--sidebar-width)"
+            : "md:w-[calc(var(--kb-toolbar-leading)+6.75rem)]",
+        )}
+      >
+        {controlsVisible ? (
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={shellIconButtonClassName}
+              aria-label={t("shell.toggleSidebar")}
+              aria-expanded={navExpanded}
+              title={t("shell.toggleSidebarTitle")}
+              onClick={toggleSidebar}
+            >
+              <PanelLeft className="size-4" aria-hidden="true" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={shellIconButtonClassName}
+              aria-label={t("shell.back")}
+              title={t("shell.back")}
+              onClick={() => window.history.back()}
+            >
+              <ArrowLeft className="size-4" aria-hidden="true" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={shellIconButtonClassName}
+              aria-label={t("shell.forward")}
+              title={t("shell.forward")}
+              onClick={() => window.history.forward()}
+            >
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </Button>
+          </>
+        ) : null}
+      </div>
+      {controlsVisible ? (
+        <ShellTitlebarControls {...controls} />
+      ) : preAlphaBannerVisible ? (
+        <div className="flex flex-1 justify-end pr-3">
+          <AlphaNotice />
+        </div>
+      ) : null}
+    </header>
+  );
+}
+
+/**
+ * The breadcrumb and shell actions on the title bar's page side: the
+ * book-refresh split button, notifications, and the view toggles.
+ */
+function ShellTitlebarControls({
+  meta,
+  onLock,
+  onRefresh,
+  isRefreshing,
+  daemonEnabled,
+}: ShellTitlebarControlsProps) {
   const { t } = useTranslation(["chrome", "nav"]);
+  const preAlphaBannerVisible = useUiStore((s) => s.preAlphaBannerVisible);
   const navigate = useNavigate();
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const setHideSensitive = useUiStore((s) => s.setHideSensitive);
@@ -3034,31 +3078,25 @@ function ShellFloatingControls({
       : t("notifications.label");
 
   return (
-    /*
-      There is no top bar: this row paints nothing at all. It reserves the
-      controls' height inside the content panel — so page content never scrolls
-      under a button — and the buttons themselves sit bare on the panel, as
-      T3Code's workspace controls do.
-    */
-    <div
-      className="relative z-20 flex h-[var(--kb-topbar-height)] w-full shrink-0 items-center justify-between gap-2 px-3 sm:gap-3 sm:px-4 md:px-5"
-    >
+    <>
       {/*
         T3Code's breadcrumb, shape for shape: the owning scope leads in muted
         text, a 40%-opacity `/` separates, and the current item sits in the
         foreground weight. It is not an ancestor chain — T3Code has no
-        Breadcrumb component and no deeper trail than these two levels.
+        Breadcrumb component and no deeper trail than these two levels. The
+        rest of this cluster is empty title bar, which is what drags.
       */}
-      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden pl-3 sm:gap-3 md:pl-5">
         <BreadcrumbBook daemonEnabled={daemonEnabled} />
         <span
-          className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
+          className="min-w-0 truncate text-sm font-medium text-sidebar-foreground"
           title={t(meta.titleKey as never) /* dynamic key */}
         >
           {t(meta.titleKey as never) /* dynamic key */}
         </span>
+        {preAlphaBannerVisible ? <AlphaNotice /> : null}
       </div>
-      <div className="flex shrink-0 items-center gap-0.5 pl-2">
+      <div className="flex shrink-0 items-center gap-0.5 pr-2 pl-2">
         {/* Split control: primary click runs an incremental book refresh; the
             caret opens the other "bring the book current" actions. The book
             refresh already chains source sync + auto-pair + journals, so this
@@ -3264,7 +3302,7 @@ function ShellFloatingControls({
           size="icon"
           className={cn(
             shellIconButtonClassName,
-            hideSensitive && "bg-accent [&>svg]:text-foreground",
+            hideSensitive && "bg-sidebar-row-active [&>svg]:text-sidebar-foreground",
           )}
           aria-label={hideSensitive ? t("sensitive.show") : t("sensitive.hide")}
           aria-pressed={hideSensitive}
@@ -3289,7 +3327,7 @@ function ShellFloatingControls({
           <LockKeyhole className="size-4" aria-hidden="true" />
         </Button>
       </div>
-    </div>
+    </>
   );
 }
 

@@ -19,6 +19,8 @@
     "overviewLink": "Kassiber overview",
     "back": "Back",
     "forward": "Forward",
+    "toggleSidebar": "Toggle sidebar",
+    "toggleSidebarTitle": "Toggle sidebar (Cmd/Ctrl+B)",
     "refresh": "Refresh book set",
     "refreshTitle": "Refresh book set (Cmd/Ctrl+R)",
     "refreshMenu": {
@@ -269,7 +271,11 @@
   },
   "preAlpha": {
     "label": "Alpha software warning",
-    "message": "Alpha software: unreliable at best. Review everything. You can disable this banner in Settings."
+    "chip": "Alpha",
+    "title": "Alpha software",
+    "body": "Kassiber is unreliable at best. Review everything before you rely on it.",
+    "hide": "Hide",
+    "hideHint": "You can show it again in Settings → Desktop → Developer tools."
   },
   "network": {
     "outboundConnections": "Outbound connections",

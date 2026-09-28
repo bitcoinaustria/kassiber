@@ -39,6 +39,8 @@ use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItem, MenuItemBuilder, S
 use tauri::{Emitter, Manager, State, Url};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_dialog::DialogExt;
+#[cfg(not(target_os = "macos"))]
+use tauri_plugin_window_state::{StateFlags, WindowExt};
 
 const SCHEMA_VERSION: u8 = 1;
 const DEFAULT_STATE_DIR: &str = ".kassiber";
@@ -3210,39 +3212,136 @@ fn configure_linux_webview_environment() {
     }
 }
 
+/// What the main window remembers between launches on Windows and Linux. Full
+/// screen is left out: reopening straight into full screen surprises more than
+/// it helps, and the frame saved from it would be the screen's own.
+#[cfg(not(target_os = "macos"))]
+const MAIN_WINDOW_STATE_FLAGS: StateFlags = StateFlags::SIZE
+    .union(StateFlags::POSITION)
+    .union(StateFlags::MAXIMIZED);
+
+/// AppKit's defaults key for the main window's saved frame.
 #[cfg(target_os = "macos")]
-fn install_native_titlebar_drag_region(
+const MAIN_WINDOW_FRAME_AUTOSAVE_NAME: &str = "KassiberMainWindow";
+
+/// First-launch size of the main window, in logical pixels: most of the screen
+/// it opens on, capped so a large display does not get a wall of empty page,
+/// never below the window's minimum, and never larger than the work area.
+fn first_launch_window_size(
+    (area_width, area_height): (f64, f64),
+    (min_width, min_height): (f64, f64),
+) -> (f64, f64) {
+    const SHARE: (f64, f64) = (0.82, 0.88);
+    const MAX: (f64, f64) = (1440.0, 960.0);
+    let fit = |area: f64, share: f64, min: f64, max: f64| {
+        (area * share).min(max).max(min).min(area).round()
+    };
+    (
+        fit(area_width, SHARE.0, min_width, MAX.0),
+        fit(area_height, SHARE.1, min_height, MAX.1),
+    )
+}
+
+/// Centres a screen-relative frame in the work area of the monitor the window
+/// opens on.
+///
+/// `set_size` sets the content size, but the work area has to hold the whole
+/// window: on Windows and Linux the native frame adds a title bar and borders
+/// (on macOS the overlay title bar adds nothing). The frame is measured on the
+/// hidden window and taken out of the area before sizing, and added back when
+/// centring.
+fn apply_first_launch_frame(
     window: &tauri::WebviewWindow<tauri::Wry>,
-) -> Result<(), String> {
-    use objc2::{MainThreadMarker, MainThreadOnly};
-    use objc2_app_kit::{NSAutoresizingMaskOptions, NSView, NSWindow};
-    use objc2_foundation::{NSPoint, NSRect, NSSize};
-
-    // Keep in sync with NATIVE_TITLEBAR_HEIGHT in WindowFrame.tsx.
-    const TITLEBAR_HEIGHT: f64 = 28.0;
-
-    let marker = MainThreadMarker::new().ok_or("window setup must run on the main thread")?;
-    let ns_window = window.ns_window().map_err(|error| error.to_string())? as *const NSWindow;
-    let ns_window = unsafe { ns_window.as_ref() }.ok_or("native window is unavailable")?;
-    let content_view = ns_window
-        .contentView()
-        .ok_or("native content view is unavailable")?;
-    let bounds = content_view.bounds();
-    let frame = NSRect::new(
-        NSPoint::new(0.0, bounds.size.height - TITLEBAR_HEIGHT),
-        NSSize::new(bounds.size.width, TITLEBAR_HEIGHT),
+    min_size: (f64, f64),
+) -> tauri::Result<()> {
+    let monitor = match window.current_monitor()? {
+        Some(monitor) => Some(monitor),
+        None => window.primary_monitor()?,
+    };
+    let Some(monitor) = monitor else {
+        return Ok(());
+    };
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area();
+    let (outer, inner) = (window.outer_size()?, window.inner_size()?);
+    let frame = (
+        outer.width.saturating_sub(inner.width),
+        outer.height.saturating_sub(inner.height),
     );
-    let drag_region = NSView::initWithFrame(NSView::alloc(marker), frame);
-    drag_region.setAutoresizingMask(
-        NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewMinYMargin,
+    let (width, height) = first_launch_window_size(
+        (
+            area.size.width.saturating_sub(frame.0) as f64 / scale,
+            area.size.height.saturating_sub(frame.1) as f64 / scale,
+        ),
+        min_size,
     );
+    let size = tauri::LogicalSize::new(width, height).to_physical::<u32>(scale);
+    window.set_size(size)?;
+    let outer_width = size.width + frame.0;
+    let outer_height = size.height + frame.1;
+    window.set_position(tauri::PhysicalPosition::new(
+        area.position.x + (area.size.width.saturating_sub(outer_width) / 2) as i32,
+        area.position.y + (area.size.height.saturating_sub(outer_height) / 2) as i32,
+    ))
+}
 
-    // A transparent NSView reports `mouseDownCanMoveWindow = true`. Keeping
-    // this small native view above the WKWebView gives AppKit ownership of the
-    // title-bar gesture, including while a portalled chart/dialog is open.
-    content_view.addSubview(&drag_region);
-    ns_window.setMovableByWindowBackground(true);
-    Ok(())
+/// Puts back the user's last frame, or the first-launch default when there is
+/// none, and keeps saving it from here on.
+///
+/// macOS uses AppKit's frame autosave, as native Mac apps do: the frame lives
+/// in the app's preferences, AppKit refits it to the screens that are actually
+/// connected, and it never records a full-screen frame. Tauri's config
+/// directory there is Kassiber's state root, which must not gain files before
+/// the default-root migration has run.
+///
+/// AppKit applies a saved frame at once, while Tauri's size and position calls
+/// are queued for the event loop, so the default is only queued when AppKit
+/// had nothing to restore.
+#[cfg(target_os = "macos")]
+fn restore_main_window_frame(
+    window: &tauri::WebviewWindow<tauri::Wry>,
+    min_size: (f64, f64),
+) -> tauri::Result<()> {
+    use objc2_app_kit::NSWindow;
+    use objc2_foundation::NSString;
+
+    let ns_window = window.ns_window()? as *const NSWindow;
+    // SAFETY: Tauri runs `setup` on the main thread, and the pointer is the
+    // live main window it just created.
+    let Some(ns_window) = (unsafe { ns_window.as_ref() }) else {
+        return apply_first_launch_frame(window, min_size);
+    };
+    let name = NSString::from_str(MAIN_WINDOW_FRAME_AUTOSAVE_NAME);
+    let restored = ns_window.setFrameUsingName(&name);
+    ns_window.setFrameAutosaveName(&name);
+    if restored {
+        Ok(())
+    } else {
+        apply_first_launch_frame(window, min_size)
+    }
+}
+
+/// Windows and Linux use the window-state plugin, which saves on close and
+/// only restores a position that still lands on a connected monitor. Its
+/// restore is queued behind the default, so a saved frame wins.
+#[cfg(not(target_os = "macos"))]
+fn restore_main_window_frame(
+    window: &tauri::WebviewWindow<tauri::Wry>,
+    min_size: (f64, f64),
+) -> tauri::Result<()> {
+    apply_first_launch_frame(window, min_size)?;
+    window.restore_state(MAIN_WINDOW_STATE_FLAGS)
+}
+
+/// Sizes the hidden main window, then shows it. The window is created hidden
+/// (`visible: false`) so it never flashes at the configured fallback size.
+fn show_main_window(
+    window: &tauri::WebviewWindow<tauri::Wry>,
+    min_size: (f64, f64),
+) -> tauri::Result<()> {
+    restore_main_window_frame(window, min_size)?;
+    window.show()?;
+    window.set_focus()
 }
 
 pub fn run() {
@@ -3278,9 +3377,23 @@ pub fn run() {
         }));
     }
 
-    builder
+    builder = builder
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_deep_link::init());
+
+    // After single-instance and deep-link, which have to register first.
+    #[cfg(not(target_os = "macos"))]
+    {
+        builder = builder.plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(MAIN_WINDOW_STATE_FLAGS)
+                // Restored by `show_main_window`, after the first-launch default.
+                .skip_initial_state("main")
+                .build(),
+        );
+    }
+
+    builder
         .setup(move |app| {
             let resource_dir = app.path().resource_dir().ok();
             let migration_status = supervisor::run_cli(
@@ -3298,10 +3411,18 @@ pub fn run() {
             app.manage(menu_handles);
             app.manage(AppRuntimeState::new());
 
-            #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
-                if let Err(error) = install_native_titlebar_drag_region(&window) {
-                    eprintln!("kassiber: failed to install native title bar: {error}");
+                let min_size = app
+                    .config()
+                    .app
+                    .windows
+                    .iter()
+                    .find(|config| config.label == "main")
+                    .map(|config| (config.min_width.unwrap_or(0.0), config.min_height.unwrap_or(0.0)))
+                    .unwrap_or((0.0, 0.0));
+                if let Err(error) = show_main_window(&window, min_size) {
+                    eprintln!("kassiber: failed to restore the window frame: {error}");
+                    let _ = window.show();
                 }
             }
 
@@ -5770,5 +5891,25 @@ mod tests {
 
     fn fake_kassiber_sqlite_bytes() -> &'static [u8] {
         b"SQLite format 3\0CREATE TABLE IF NOT EXISTS settings (key TEXT, value TEXT); CREATE TABLE IF NOT EXISTS workspaces (id TEXT, label TEXT); CREATE TABLE IF NOT EXISTS profiles (id TEXT, workspace_id TEXT, label TEXT, fiat_currency TEXT);"
+    }
+
+    #[test]
+    fn first_launch_window_fits_laptop_screens() {
+        let min = (980.0, 700.0);
+        // 13" MacBook Air work area: the old fixed 1760x1160 overflowed it.
+        assert_eq!(super::first_launch_window_size((1470.0, 923.0), min), (1205.0, 812.0));
+        // 1440x900 laptop with a visible Dock.
+        assert_eq!(super::first_launch_window_size((1440.0, 875.0), min), (1181.0, 770.0));
+        // 1366x768 Windows laptop: the minimum height wins over the share.
+        assert_eq!(super::first_launch_window_size((1366.0, 728.0), min), (1120.0, 700.0));
+    }
+
+    #[test]
+    fn first_launch_window_caps_large_screens_and_never_exceeds_the_work_area() {
+        let min = (980.0, 700.0);
+        assert_eq!(super::first_launch_window_size((1920.0, 1032.0), min), (1440.0, 908.0));
+        assert_eq!(super::first_launch_window_size((2560.0, 1415.0), min), (1440.0, 960.0));
+        // Smaller than the minimum: fill the work area rather than overflow it.
+        assert_eq!(super::first_launch_window_size((960.0, 600.0), min), (960.0, 600.0));
     }
 }

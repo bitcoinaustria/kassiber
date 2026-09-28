@@ -228,6 +228,10 @@ layouts stay legacy, while `~/.kassiber/{bin,run}` stay fixed. An active legacy
 desktop or operator owner defers migration; startup keeps using the legacy root
 until that process stops. `kassiber status` reports the effective root.
 
+- Main-window geometry (size, position, maximized) is kept outside the state
+  root: in the app's AppKit preferences on macOS, and in
+  `.window-state.json` under Tauri's config directory on Windows and Linux. It
+  holds no book, account, or path data.
 - `<state-root>/config/projects.json` — global project catalog. Contains only
   project id/name/path/encrypted status/last-opened metadata. It must never
   contain passphrases, verifier hashes, wrapped keys, descriptors, xpubs,

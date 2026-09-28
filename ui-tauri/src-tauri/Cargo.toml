@@ -32,10 +32,17 @@ apple-native-keyring-store = { version = "1.0.0", features = ["keychain"] }
 block2 = "0.6.2"
 core-foundation = "0.10.1"
 objc2 = "0.6.4"
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSView", "NSWindow"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSWindow"] }
 objc2-foundation = "0.3.2"
 security-framework = { version = "3.7", features = ["OSX_10_15"] }
 security-framework-sys = "2.17.0"
+
+# Remembers the main window's frame across launches. macOS uses AppKit's own
+# frame autosave instead: Tauri's config directory there is Kassiber's state
+# root, which must not gain files before the default-root migration has run.
+# Held on 2.4 because 2.5 requires a newer Tauri runtime than this lockfile's.
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+tauri-plugin-window-state = "~2.4"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-native-keyring-store = "1.0.0"

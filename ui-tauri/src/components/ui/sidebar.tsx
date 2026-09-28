@@ -137,9 +137,9 @@ function SidebarProvider({
             {
               "--sidebar-width": SIDEBAR_WIDTH,
               "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
-              // Collapsed-rail metrics. A caller that widens the rail (macOS
-              // puts the traffic lights on it) overrides these so the targets
-              // grow with it instead of floating in the extra space.
+              // Collapsed-rail metrics. A caller that widens the rail
+              // overrides these so the targets grow with it instead of
+              // floating in the extra space.
               "--sidebar-icon-button": SIDEBAR_ICON_BUTTON,
               "--sidebar-icon-glyph": SIDEBAR_ICON_GLYPH,
               ...style,
@@ -250,8 +250,8 @@ function Sidebar({
       >
         {/* The surface is painted by `sidebar-container` above (which also takes
             the caller's className), so the inner wrapper stays transparent —
-            otherwise it covers any custom container surface, e.g. the app
-            shell's frosted `.kb-glass-panel`. */}
+            otherwise it covers any custom container surface a caller
+            paints through `className`. */}
         <div
           data-sidebar="sidebar"
           data-slot="sidebar-inner"

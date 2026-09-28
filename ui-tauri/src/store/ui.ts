@@ -188,7 +188,7 @@ export interface UiState {
   identity: Identity | null;
   aiFeaturesEnabled: boolean;
   developerToolsEnabled: boolean;
-  /** Alpha warning banner across the top of the shell. */
+  /** Alpha warning chip in the shell's title bar. */
   preAlphaBannerVisible: boolean;
   /** Native-hydrated app-wide GitHub update-check permission. */
   automaticUpdateChecks: boolean;
