@@ -15,14 +15,16 @@
   "shell": {
     "skipToContent": "Zum Hauptinhalt springen",
     "lockKassiber": "Kassiber sperren",
-    "lockKassiberTitle": "Kassiber sperren (Cmd/Ctrl+L)",
+    "lockKassiberTitle": "Kassiber sperren ({{shortcut}})",
     "overviewLink": "Kassiber-Übersicht",
     "back": "Zurück",
+    "backTitle": "Zurück ({{shortcut}})",
     "forward": "Vorwärts",
+    "forwardTitle": "Vorwärts ({{shortcut}})",
     "toggleSidebar": "Seitenleiste ein-/ausblenden",
-    "toggleSidebarTitle": "Seitenleiste ein-/ausblenden (Cmd/Ctrl+B)",
+    "toggleSidebarTitle": "Seitenleiste ein-/ausblenden ({{shortcut}})",
     "refresh": "Bücher-Set aktualisieren",
-    "refreshTitle": "Bücher-Set aktualisieren (Cmd/Ctrl+R)",
+    "refreshTitle": "Bücher-Set aktualisieren ({{shortcut}})",
     "refreshMenu": {
       "options": "Aktualisierungsoptionen",
       "reprocessJournals": "Journale neu verarbeiten",
@@ -64,7 +66,8 @@
     "user": {
       "fallbackWorkspace": "Meine Bücher",
       "fallbackProfile": "Privat",
-      "books": "Bücher"
+      "books": "Bücher",
+      "menuLabel": "{{name}} · {{detail}}: Bücher und Sperren"
     },
     "version": {
       "devTitle": "Kassiber lokaler Dev-Build ({{commit}})",

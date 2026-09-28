@@ -95,6 +95,15 @@ full screen the traffic lights are hidden and both insets drop to zero.
 Windows and Linux keep their native decorated frame; the same row is an
 in-app toolbar there with no inset and no drag region.
 
+The side nav remembers whether it was folded to its icon rail, and folds by
+itself while the window is narrower than 1100px without changing that choice;
+the profile stays on the rail either way. Back and forward also run from
+Cmd/Ctrl+[ and ] or Alt+Left/Right. History stays put while typing, with a
+dialog open, or while locked; on Windows and Linux the shell swallows Alt+arrows
+then, because WebView2 would otherwise navigate by itself. Tooltips and menus
+write shortcuts in the platform's notation (`⌘⇧A` on macOS, `Ctrl+Shift+A`
+elsewhere).
+
 The main window starts hidden and is sized before it is shown. The first launch
 centres a frame in the work area of the display it opens on (82% by 88%, capped
 at 1440×960 and floored at the configured minimum). After that the last frame

@@ -15,14 +15,16 @@
   "shell": {
     "skipToContent": "Skip to main content",
     "lockKassiber": "Lock Kassiber",
-    "lockKassiberTitle": "Lock Kassiber (Cmd/Ctrl+L)",
+    "lockKassiberTitle": "Lock Kassiber ({{shortcut}})",
     "overviewLink": "Kassiber overview",
     "back": "Back",
+    "backTitle": "Back ({{shortcut}})",
     "forward": "Forward",
+    "forwardTitle": "Forward ({{shortcut}})",
     "toggleSidebar": "Toggle sidebar",
-    "toggleSidebarTitle": "Toggle sidebar (Cmd/Ctrl+B)",
+    "toggleSidebarTitle": "Toggle sidebar ({{shortcut}})",
     "refresh": "Refresh book set",
-    "refreshTitle": "Refresh book set (Cmd/Ctrl+R)",
+    "refreshTitle": "Refresh book set ({{shortcut}})",
     "refreshMenu": {
       "options": "Refresh options",
       "reprocessJournals": "Reprocess journals",
@@ -64,7 +66,8 @@
     "user": {
       "fallbackWorkspace": "My Books",
       "fallbackProfile": "Private",
-      "books": "Books"
+      "books": "Books",
+      "menuLabel": "{{name}} · {{detail}}: books and lock"
     },
     "version": {
       "devTitle": "Kassiber local dev build ({{commit}})",
