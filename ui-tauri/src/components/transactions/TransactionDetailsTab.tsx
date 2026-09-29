@@ -267,38 +267,39 @@ export function TransactionFlowSection({ ctx }: { ctx: TransactionDetailTabConte
   const analysisSearch = transactionAnalysisSearch(
     activeGraphData?.transaction ?? (activeSwapTransactionRef ? {} : transaction),
   );
+  const lookupButton =
+    canPublicGraphLookup && !publicGraphLookup && publicLookupCanAddToGraph(activeGraphData) ? (
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-8 text-xs"
+        onClick={() => enablePublicGraphLookup?.()}
+      >
+        {t("graph.lookupOnChain")}
+      </Button>
+    ) : null;
+  // A drawn graph carries the lookup beside its title; without one it leads.
+  const drawn =
+    Boolean(activeGraphData) &&
+    (activeGraphData?.supportLevel === "full" || activeGraphData?.supportLevel === "partial") &&
+    Boolean(activeGraphData?.inputs.length || activeGraphData?.outputs.length);
   return (
     <div className="space-y-3">
-      <div className="overflow-hidden rounded-md border">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {t(tradeKind ? "recordFlow.title" : "graph.sectionTitle")}
-          {canPublicGraphLookup &&
-          !publicGraphLookup &&
-          publicLookupCanAddToGraph(activeGraphData) ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-6 text-2xs normal-case"
-              onClick={() => enablePublicGraphLookup?.()}
-            >
-              {t("graph.lookupOnChain")}
-            </Button>
-          ) : null}
-        </div>
-        <div className="p-3">
-          <TransactionGraphPanel
-            graphlessContent={tradeKind ? <TransactionRecordFlow transaction={transaction} kind={tradeKind} hideSensitive={hideSensitive} /> : undefined}
-            graph={activeGraphData}
-            loading={graphPanelLoading}
-            error={graphPanelError}
-            hideSensitive={hideSensitive}
-            selectedSwapLeg={activeSwapLeg}
-            onSelectSwapLeg={setSelectedSwapLeg}
-            onResolveIssue={resolveGraphIssue}
-            onOpenTransaction={onOpenTransaction}
-          />
-        </div>
+      <div className="kb-surface p-(--kb-card-padding)">
+        {!drawn && lookupButton ? <div className="mb-3 flex justify-end">{lookupButton}</div> : null}
+        <TransactionGraphPanel
+          graphlessContent={tradeKind ? <TransactionRecordFlow transaction={transaction} kind={tradeKind} hideSensitive={hideSensitive} /> : undefined}
+          graph={activeGraphData}
+          loading={graphPanelLoading}
+          error={graphPanelError}
+          hideSensitive={hideSensitive}
+          selectedSwapLeg={activeSwapLeg}
+          onSelectSwapLeg={setSelectedSwapLeg}
+          onResolveIssue={resolveGraphIssue}
+          onOpenTransaction={onOpenTransaction}
+          headerAction={drawn ? lookupButton : null}
+        />
       </div>
       {analysisSearch.subject ? <Button
         variant="outline"
@@ -361,7 +362,8 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         hint={t("details.priceAtTimeHint")}
                       />
                     </div>
-                    <div className="grid gap-3 lg:grid-cols-2">
+                    {/* Beside the coins the column is narrow: the two tables stack there. */}
+                    <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-1">
                       <div className="overflow-hidden rounded-md border">
                         <div className="border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                           {t("details.sourceRecord")}
