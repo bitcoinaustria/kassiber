@@ -61,12 +61,11 @@ import {
 } from "./TransactionGraphModel";
 import { TransactionGraph3D } from "./graph3d/TransactionGraph3D";
 import {
-  fallbackVisualSats,
-  geometryScale,
+  BOWTIE_LINE_LIMIT,
+  bowtieLines,
+  bowtieTotal,
+  graphIsLiquid,
   graphLayoutRows,
-  legWeights,
-  uniformStrandWeight,
-  type GeometryScale,
 } from "./TransactionGraphGeometry";
 
 export type {
@@ -652,14 +651,13 @@ type DrawableGraphRow = GraphRow & {
   thickness: number;
   weight: number;
   offset: number;
-  visualValueSats: number;
+  curveBase: number;
   estimatedVisualValue: boolean;
   zeroValue: boolean;
 };
 
-const AMOUNTLESS_FEE_STRAND_THICKNESS = 0.5;
+const ZERO_VALUE_STRAND_THICKNESS = 3;
 const GRAPH_ROW_HEIGHT = 29;
-const GRAPH_MULTI_LEG_GAP = 4;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -667,94 +665,34 @@ function clamp(value: number, min: number, max: number) {
 
 function buildDrawableRows(
   rows: GraphRow[],
-  scale: GeometryScale,
+  total: number,
   height: number,
   combinedWeight: number,
   curveWidth: number,
-  fallbackSats: number,
-  uniformWeight: number,
 ): DrawableGraphRow[] {
-  if (!rows.length) return [];
-  const centerY = height / 2;
-  const weights = legWeights(rows, scale, {
+  // The outer ends keep this view's 40px top margin and scrolling height.
+  const lines = bowtieLines(rows, total, {
+    height,
     combinedWeight,
-    fallbackSats,
-    uniformWeight,
-    hairlineWeight: AMOUNTLESS_FEE_STRAND_THICKNESS,
+    curveWidth,
+    outerTop: 40,
+    outerSpan: Math.max(120, height - 80),
+    zeroThickness: ZERO_VALUE_STRAND_THICKNESS,
   });
-  const lines = rows.map((node, index) => {
-    const { weight, hairline, estimated, zero, visualSats } = weights[index];
+  return rows.map((node, index) => {
+    const line = lines[index];
     return {
       ...node,
-      outerY: centerY,
-      innerY: centerY,
-      thickness: hairline
-        ? AMOUNTLESS_FEE_STRAND_THICKNESS
-        : zero
-        ? 3
-        : Math.min(combinedWeight + 0.5, Math.max(2, weight) + 1),
-      weight,
-      offset: 0,
-      visualValueSats: visualSats,
-      estimatedVisualValue: estimated,
-      zeroValue: zero,
+      outerY: line.outerY,
+      innerY: line.innerY,
+      thickness: line.thickness,
+      weight: line.weight,
+      offset: line.offset,
+      curveBase: line.curveBase,
+      estimatedVisualValue: line.estimated,
+      zeroValue: line.zeroValue,
     };
   });
-  const visibleWeight = lines.reduce((sum, line) => sum + line.thickness, 0);
-  const spacing =
-    lines.length <= 1
-      ? 0
-      : Math.max(
-          GRAPH_MULTI_LEG_GAP,
-          (Math.max(120, height - 80) - visibleWeight) / Math.max(1, lines.length - 1),
-        );
-  // Uniform legs claim no share of a total, so they meet in a knot as wide as
-  // they are rather than fanning out to fill the full band.
-  const bandWeight =
-    scale.kind === "uniform"
-      ? Math.min(combinedWeight, lines.reduce((sum, line) => sum + line.weight, 0))
-      : combinedWeight;
-  const innerTop = centerY - bandWeight / 2;
-  const innerBottom = innerTop + bandWeight + 0.5;
-  let lastOuter = 40;
-  let lastInner = innerTop;
-  let offset = 0;
-  let minOffset = 0;
-  let maxOffset = 0;
-  let lastWeight = 0;
-  let pad = 0;
-  lines.forEach((line) => {
-    if (lines.length === 1) {
-      line.outerY = centerY;
-    } else {
-      line.outerY = lastOuter + line.thickness / 2;
-    }
-    line.innerY = clamp(
-      lastInner + line.weight / 2,
-      innerTop + line.thickness / 2,
-      innerBottom - line.thickness / 2,
-    );
-    lastOuter += line.thickness + spacing;
-    lastInner += line.weight;
-
-    const t = (lastWeight + line.weight) / 2;
-    const dx = Math.max(1, 0.75 * curveWidth);
-    const dy = 1.5 * (line.innerY - line.outerY);
-    const angle = Math.atan2(dy, dx);
-    if (Math.sin(angle) !== 0) {
-      offset += clamp((t * (1 - Math.cos(angle))) / Math.sin(angle), -t, t);
-    }
-    line.offset = offset;
-    minOffset = Math.min(minOffset, offset);
-    maxOffset = Math.max(maxOffset, offset);
-    pad = Math.max(pad, line.thickness / 2);
-    lastWeight = line.weight;
-  });
-
-  return lines.map((line) => ({
-    ...line,
-    offset: line.offset - minOffset + pad + (maxOffset - minOffset),
-  }));
 }
 
 type StrandGradientIds = {
@@ -812,10 +750,13 @@ function makeBowtiePath(
 ) {
   const start = edgePadding + strandMarkerLead(node);
   const end = centerX + 1;
-  const maxOffset = Math.max(0, end - start - 44);
-  const offset = Math.min(node.offset, maxOffset);
-  const curveStart = Math.min(Math.max(start + 5, edgePadding + offset), end - 28);
-  const curveEnd = clamp(end - offset - 10, curveStart + 18, end - 4);
+  // mempool's makePath: both curve ends move out by the offset, from a start the
+  // side's widest strand and largest offset set.
+  const curveStart = Math.min(
+    Math.max(start + 5, edgePadding + node.curveBase - node.offset),
+    end - 28,
+  );
+  const curveEnd = clamp(end - node.offset - 10, curveStart + 18, end - 4);
   const midpoint = (curveStart + curveEnd) / 2;
   let outerY = node.outerY;
   if (Math.round(outerY) === Math.round(node.innerY)) {
@@ -1344,8 +1285,14 @@ export function TransactionFlowDiagram({
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [hoverDetail, setHoverDetail] = useState<DrawableGraphRow | null>(null);
   const [measuredCanvasWidth, setMeasuredCanvasWidth] = useState<number | null>(null);
-  const { inputRows, destinationRows, layoutInputRows, layoutDestinationRows } =
-    graphLayoutRows(graph, hideSensitive, expanded ? MAX_EXPANDED_ROWS : MAX_COMPACT_ROWS);
+  const {
+    inputRows,
+    destinationRows,
+    layoutInputRows,
+    layoutDestinationRows,
+    totalInputRows,
+    totalDestinationRows,
+  } = graphLayoutRows(graph, hideSensitive, expanded ? MAX_EXPANDED_ROWS : MAX_COMPACT_ROWS);
   const rowCount = Math.max(inputRows.length, destinationRows.length, 2);
   const height = Math.max(280, rowCount * GRAPH_ROW_HEIGHT + 90);
   const viewportHeight = expanded
@@ -1369,30 +1316,21 @@ export function TransactionFlowDiagram({
   const centerX = canvasWidth / 2;
   const edgePadding = expanded ? 84 : 64;
   const curveWidth = centerX - edgePadding - 12;
-  const scale = geometryScale(layoutInputRows, layoutDestinationRows);
-  const fallbackSats = fallbackVisualSats(scale, rowCount);
+  const total = bowtieTotal(totalInputRows, totalDestinationRows, graphIsLiquid(graph));
   const combinedWeight = Math.min(expanded ? 96 : 82, Math.max(26, Math.floor((canvasWidth - 2 * edgePadding) / 9)));
-  const uniformWeight = uniformStrandWeight(
-    combinedWeight,
-    Math.max(layoutInputRows.length, layoutDestinationRows.length),
-  );
   const inputDrawRows = buildDrawableRows(
     layoutInputRows,
-    scale,
+    total,
     height,
     combinedWeight,
     curveWidth,
-    fallbackSats,
-    uniformWeight,
   );
   const outputDrawRows = buildDrawableRows(
     layoutDestinationRows,
-    scale,
+    total,
     height,
     combinedWeight,
     curveWidth,
-    fallbackSats,
-    uniformWeight,
   );
   // The visible strand and its wide invisible hit target follow the same path.
   const pathFor = (node: DrawableGraphRow) => {
@@ -1729,48 +1667,29 @@ function graphSupportText(
   return t("graph.partialSupport");
 }
 
-function ExpandedTransactionGraph({
+/**
+ * The transaction graph in 3D, after the artwork lab's ribbon pieces. The flat
+ * bowtie is only the fallback where WebGL is missing or fails.
+ */
+function TransactionGraphView({
   graph,
   hideSensitive,
+  expanded = false,
 }: {
   graph: TransactionGraphPayload;
   hideSensitive: boolean;
+  expanded?: boolean;
 }) {
-  const { t } = useTranslation("transactions");
-  const [view, setView] = useState<"2d" | "3d">("2d");
-  const flat = <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} expanded />;
   return (
-    <div className="space-y-3">
-      <div
-        role="group"
-        aria-label={t("graph.viewToggle")}
-        className="inline-flex rounded-md border p-0.5"
-      >
-        {(["2d", "3d"] as const).map((option) => (
-          <Button
-            key={option}
-            type="button"
-            size="sm"
-            variant={view === option ? "secondary" : "ghost"}
-            aria-pressed={view === option}
-            className="h-7 px-2.5"
-            onClick={() => setView(option)}
-          >
-            {option === "2d" ? t("graph.view2d") : t("graph.view3d")}
-          </Button>
-        ))}
-      </div>
-      {view === "3d" ? (
-        <TransactionGraph3D
-          graph={graph}
-          hideSensitive={hideSensitive}
-          maxRows={MAX_EXPANDED_ROWS}
-          fallback={flat}
-        />
-      ) : (
-        flat
-      )}
-    </div>
+    <TransactionGraph3D
+      graph={graph}
+      hideSensitive={hideSensitive}
+      maxRows={BOWTIE_LINE_LIMIT}
+      size={expanded ? "expanded" : "compact"}
+      fallback={
+        <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} expanded={expanded} />
+      }
+    />
   );
 }
 
@@ -1835,12 +1754,12 @@ export function TransactionGraphPanel({
               </DialogTrigger>
               <DialogContent className="w-[min(1180px,calc(100vw-2rem))] max-w-none sm:max-w-none">
                 <DialogTitle className="sr-only">{t("graph.expandedTitle")}</DialogTitle>
-                <ExpandedTransactionGraph graph={graph} hideSensitive={hideSensitive} />
+                <TransactionGraphView graph={graph} hideSensitive={hideSensitive} expanded />
               </DialogContent>
             </Dialog>
           </div>
           <AnnotationStrip annotations={graph.annotations} />
-          <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} />
+          <TransactionGraphView graph={graph} hideSensitive={hideSensitive} />
           <TransactionInputsOutputsPanel
             graph={graph}
             hideSensitive={hideSensitive}

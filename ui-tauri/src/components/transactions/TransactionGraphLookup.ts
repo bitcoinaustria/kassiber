@@ -1,6 +1,7 @@
 import { exchangeTransfer } from "./ExchangeTransferModel";
 import type { TransactionDetailTabContext } from "./TransactionDetailTabContext";
 import type {
+  TransactionGraphPayload,
   TransactionSwapRoute,
   TransactionSwapRouteLegKey,
 } from "./TransactionGraphModel";
@@ -83,6 +84,20 @@ export function hasPublicGraphLookupReference(
 ) {
   if (!transaction || !looksLikeTxid(transaction.explorerId)) return false;
   return graphLookupChain(transaction) !== null;
+}
+
+/**
+ * Whether asking the wallet's backend for public references could add to the
+ * graph shown, mirroring when the daemon actually looks anything up: a row with
+ * no local graph, or a Bitcoin graph whose spent outputs lack their amounts. A
+ * local Liquid graph is never replaced, and no backend can reveal a
+ * confidential amount.
+ */
+export function publicLookupCanAddToGraph(graph: TransactionGraphPayload | null | undefined) {
+  if (!graph) return false;
+  if (graph.supportLevel === "graphless") return true;
+  if (graph.transaction?.chain === "liquid") return false;
+  return graph.inputs.some((node) => node.valueState === "missing");
 }
 
 export function isPublicGraphLookupApproved(

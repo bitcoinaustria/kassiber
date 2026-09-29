@@ -1,220 +1,182 @@
 import {
-  fallbackVisualSats,
-  geometryScale,
+  BOWTIE_LINE_LIMIT,
+  bowtieLines,
+  bowtieMinimumSpan,
+  bowtieTotal,
+  graphIsLiquid,
   graphLayoutRows,
-  legWeights,
-  uniformStrandWeight,
+  type BowtieLine,
 } from "../TransactionGraphGeometry";
 import type { GraphRow, TransactionGraphPayload } from "../TransactionGraphModel";
 
 /**
- * The ribbon piece from the Bitcoin Austria artwork lab, laid out for one
- * transaction. A coin is a block and its value a bundle of ribbons. Every
- * input's ribbons run into one glass collar and new ribbons leave it for
- * the outputs: a transaction spends its inputs together, so no ribbon links a
- * particular input to a particular output. Widths come from the same geometry
- * as the 2D graph; nothing here is accounting truth.
+ * mempool's bowtie in glass, after the Bitcoin Austria artwork lab: one ribbon
+ * per input and per output, as thick as mempool draws that strand, with a block
+ * for the coin at its outer end. The ribbons meet in one glass collar, because
+ * a transaction spends its inputs together; their order does not say which
+ * input paid which output. Nothing here is accounting truth.
  *
- * Units are scene units. x runs from inputs to outputs, y is up, z is depth.
+ * Positions come from mempool's default 1200 × 600 canvas with a band of up to
+ * 100 px; one scene unit is 100 px. x runs from inputs to outputs, y is up.
  */
 
-export const RIBBON_PITCH = 0.3;
-export const RIBBON_HEIGHT = 0.2;
+const CANVAS_WIDTH = 1200;
+const CANVAS_HEIGHT = 600;
+const COMBINED_WEIGHT = 100;
+/** Where a ribbon leaves its block: the block sits just outside. */
+const OUTER_EDGE = 70;
+const UNIT = 1 / 100;
+/** mempool draws a zero-value output as a short stub of this length and width. */
+const ZERO_STUB_LENGTH = 60;
+const ZERO_THICKNESS = 4;
+const CURVE_SAMPLES = 40;
+
 export const RIBBON_DEPTH = 0.07;
-export const BLOCK_WIDTH = 0.5;
-export const BLOCK_DEPTH = 0.62;
-/** At the collar the ribbons close up, so the bundle reads as one flow. */
-const WAIST_PITCH = RIBBON_HEIGHT * 1.12;
-const LEG_GAP = 0.36;
-const ZERO_BLOCK_HEIGHT = RIBBON_PITCH * 0.6;
-/** A leg never gets fewer ribbons than this, so dust stays visible. */
-const MIN_RIBBONS = 1;
-/** Hard ceiling per side, whatever the weights say. */
-const MAX_RIBBONS_PER_SIDE = 600;
+export const BLOCK_WIDTH = 0.42;
+export const BLOCK_DEPTH = 0.5;
+/** A coin never shrinks below this height, so dust stays a visible block. */
+const MIN_BLOCK_HEIGHT = 0.03;
 
 export type RibbonLeg = {
   id: string;
   side: "input" | "output";
   row: GraphRow;
-  ribbons: number;
-  /** No known amount: its ribbons are drawn frosted. */
+  /** No known amount: its ribbon is drawn frosted. */
   estimated: boolean;
   owned: boolean;
-  zero: boolean;
-  /** Block centre and extent. */
+  zeroValue: boolean;
+  /** Block centre and height, in scene units. */
   x: number;
-  top: number;
-  bottom: number;
+  y: number;
+  height: number;
 };
 
 export type RibbonPath = {
   legId: string;
   side: "input" | "output";
   estimated: boolean;
-  from: [number, number];
-  to: [number, number];
+  fee: boolean;
+  /** Ribbon width across its path, in scene units. */
+  thickness: number;
+  /** Centreline, outer end first. */
+  points: Array<[number, number]>;
 };
 
 export type RibbonLayout = {
+  /** One block per input and output; the fee has a ribbon and no coin. */
   legs: RibbonLeg[];
   ribbons: RibbonPath[];
-  /** The network fee: a single thin filament out of the collar. */
-  fee: { from: [number, number]; to: [number, number]; estimated: boolean } | null;
-  /** The glass collar the ribbons meet in, around the waist at x = 0. */
+  /** The collar around the band where both sides meet. */
   center: { halfHeight: number };
-  span: number;
-  /** True when no leg carries a known amount, so every bundle is the same size. */
-  uniform: boolean;
 };
 
-/** Ribbons per side: enough to show proportions, few enough to read. */
-function ribbonBudget(legCount: number) {
-  return Math.max(legCount, Math.min(40, Math.max(12, legCount * 3)));
+function bezier(p0: number, p1: number, p2: number, p3: number, t: number) {
+  const u = 1 - t;
+  return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
 }
 
-function ribbonCounts(weights: number[], budget: number) {
-  // A side's weights can add up to more than the band (a graph with no inputs
-  // gives every output the whole band); scale them back so the budget holds.
-  const total = weights.reduce((sum, weight) => sum + Math.max(0, weight), 0);
-  const scale = total > 1 ? 1 / total : 1;
-  const counts = weights.map((weight) =>
-    Math.max(MIN_RIBBONS, Math.round(Math.max(0, weight) * scale * budget)),
-  );
-  const sum = counts.reduce((acc, count) => acc + count, 0);
-  if (sum <= MAX_RIBBONS_PER_SIDE) return counts;
-  return counts.map((count) =>
-    Math.max(MIN_RIBBONS, Math.floor((count * MAX_RIBBONS_PER_SIDE) / sum)),
-  );
+/**
+ * mempool's makePath for the left side: straight out of the coin, one cubic
+ * curve whose start and end shift by the line's offset, straight into the band.
+ */
+function strandPoints(line: BowtieLine): Array<[number, number]> {
+  const start = OUTER_EDGE;
+  const end = CANVAS_WIDTH / 2;
+  // mempool's makePath: both curve ends move out by the offset, from a start the
+  // side's widest strand and largest offset set.
+  const curveStart = Math.max(start + 5, OUTER_EDGE + line.curveBase - line.offset);
+  const curveEnd = Math.max(curveStart + 18, end - line.offset - 10);
+  const midpoint = (curveStart + curveEnd) / 2;
+  const points: Array<[number, number]> = [[start, line.outerY]];
+  for (let step = 0; step <= CURVE_SAMPLES; step += 1) {
+    const t = step / CURVE_SAMPLES;
+    points.push([
+      bezier(curveStart, midpoint, midpoint, curveEnd, t),
+      bezier(line.outerY, line.outerY, line.innerY, line.innerY, t),
+    ]);
+  }
+  points.push([end, line.innerY]);
+  return points;
 }
 
-function stackLegs(
-  rows: GraphRow[],
-  counts: number[],
-  flags: Array<{ estimated: boolean; zero: boolean }>,
-  side: "input" | "output",
-  x: number,
-): RibbonLeg[] {
-  const heights = rows.map((_, index) =>
-    flags[index].zero ? ZERO_BLOCK_HEIGHT : counts[index] * RIBBON_PITCH,
-  );
-  const total = heights.reduce((sum, height) => sum + height, 0) + LEG_GAP * (rows.length - 1);
-  let cursor = total / 2;
-  return rows.map((row, index) => {
-    const top = cursor;
-    const bottom = cursor - heights[index];
-    cursor = bottom - LEG_GAP;
-    return {
-      id: `${side}:${row.id}`,
-      side,
-      row,
-      ribbons: flags[index].zero ? 0 : counts[index],
-      estimated: flags[index].estimated,
-      owned: row.ownership === "owned",
-      zero: flags[index].zero,
-      x,
-      top,
-      bottom,
-    };
-  });
-}
-
-/** Slot centres of a closed-up bundle of `count` ribbons centred on y = 0. */
-function centerSlots(count: number) {
-  const top = (count * WAIST_PITCH) / 2;
-  return Array.from({ length: count }, (_, index) => top - WAIST_PITCH * (index + 0.5));
+function mirrored(points: Array<[number, number]>): Array<[number, number]> {
+  return points.map(([x, y]) => [CANVAS_WIDTH - x, y]);
 }
 
 export function ribbonLayout(
   graph: TransactionGraphPayload,
   hideSensitive: boolean,
-  maxRows: number,
+  maxRows = BOWTIE_LINE_LIMIT,
 ): RibbonLayout {
-  const { layoutInputRows, layoutDestinationRows } = graphLayoutRows(graph, hideSensitive, maxRows);
-  const scale = geometryScale(layoutInputRows, layoutDestinationRows);
-  const rowCount = Math.max(layoutInputRows.length, layoutDestinationRows.length, 2);
+  // mempool keeps `lineLimit` legs and folds the rest into one more-leg.
+  const { layoutInputRows, layoutDestinationRows, totalInputRows, totalDestinationRows } =
+    graphLayoutRows(graph, hideSensitive, maxRows + 1);
+  const total = bowtieTotal(totalInputRows, totalDestinationRows, graphIsLiquid(graph));
+  // The 3D view has no scrolling: both sides share one span, tall enough for
+  // the fuller side at minimum spacing, so their outer ends fill the same height.
+  const span = Math.max(
+    CANVAS_HEIGHT,
+    bowtieMinimumSpan(layoutInputRows, total, COMBINED_WEIGHT, ZERO_THICKNESS),
+    bowtieMinimumSpan(layoutDestinationRows, total, COMBINED_WEIGHT, ZERO_THICKNESS),
+  );
   const options = {
-    combinedWeight: 1,
-    fallbackSats: fallbackVisualSats(scale, rowCount),
-    uniformWeight: uniformStrandWeight(1, rowCount),
-    hairlineWeight: 0,
+    height: span,
+    combinedWeight: COMBINED_WEIGHT,
+    curveWidth: CANVAS_WIDTH / 2 - OUTER_EDGE - 12,
+    outerTop: 0,
+    outerSpan: span,
+    zeroThickness: ZERO_THICKNESS,
   };
-  const inputWeights = legWeights(layoutInputRows, scale, options);
-  const destinationWeights = legWeights(layoutDestinationRows, scale, options);
-  const feeIndex = layoutDestinationRows.findIndex((row) => row.side === "fee");
-  const outputRows = layoutDestinationRows.filter((row) => row.side !== "fee");
-  const outputWeights = destinationWeights.filter((_, index) => index !== feeIndex);
-
-  const budget = ribbonBudget(Math.max(layoutInputRows.length, outputRows.length));
-  const inputCounts = ribbonCounts(
-    inputWeights.map((leg) => leg.weight),
-    budget,
-  );
-  const outputCounts = ribbonCounts(
-    outputWeights.map((leg) => leg.weight),
-    budget,
-  );
-  const inputStackHeight =
-    inputCounts.reduce((sum, count) => sum + count, 0) * RIBBON_PITCH +
-    LEG_GAP * Math.max(0, layoutInputRows.length - 1);
-  const outputStackHeight =
-    outputCounts.reduce((sum, count) => sum + count, 0) * RIBBON_PITCH +
-    LEG_GAP * Math.max(0, outputRows.length - 1);
-  // Longer runs keep tall fan-ins from folding into steep S-curves.
-  const span = Math.max(3.4, Math.max(inputStackHeight, outputStackHeight) * 0.42);
-
-  const inputs = stackLegs(layoutInputRows, inputCounts, inputWeights, "input", -span);
-  const outputs = stackLegs(outputRows, outputCounts, outputWeights, "output", span);
-
+  const toScene = (x: number, y: number): [number, number] => [
+    (x - CANVAS_WIDTH / 2) * UNIT,
+    (span / 2 - y) * UNIT,
+  ];
+  const legs: RibbonLeg[] = [];
   const ribbons: RibbonPath[] = [];
-  const inputSlots = centerSlots(inputs.reduce((sum, leg) => sum + leg.ribbons, 0));
-  const outputSlots = centerSlots(outputs.reduce((sum, leg) => sum + leg.ribbons, 0));
-  // Both sides end inside the collar, which hides where they meet.
-  const centerInner = 0;
-  let slot = 0;
-  for (const leg of inputs) {
-    for (let index = 0; index < leg.ribbons; index += 1) {
+  const place = (rows: GraphRow[], side: "input" | "output") => {
+    bowtieLines(rows, total, options).forEach((line, index) => {
+      const row = rows[index];
+      const id = `${side}:${row.id}`;
+      const fee = row.side === "fee";
+      const outer: Array<[number, number]> = line.zeroValue
+        ? [
+            [OUTER_EDGE, line.outerY],
+            [OUTER_EDGE + ZERO_STUB_LENGTH, line.outerY],
+          ]
+        : strandPoints(line);
+      const points = (side === "input" ? outer : mirrored(outer)).map(([x, y]) => toScene(x, y));
       ribbons.push({
-        legId: leg.id,
-        side: "input",
-        estimated: leg.estimated,
-        from: [leg.x + BLOCK_WIDTH / 2 - 0.04, leg.top - RIBBON_PITCH * (index + 0.5)],
-        to: [-centerInner, inputSlots[slot]],
+        legId: id,
+        side,
+        estimated: line.estimated,
+        fee,
+        thickness: line.thickness * UNIT,
+        points,
       });
-      slot += 1;
-    }
-  }
-  slot = 0;
-  for (const leg of outputs) {
-    for (let index = 0; index < leg.ribbons; index += 1) {
-      ribbons.push({
-        legId: leg.id,
-        side: "output",
-        estimated: leg.estimated,
-        from: [centerInner, outputSlots[slot]],
-        to: [leg.x - BLOCK_WIDTH / 2 + 0.04, leg.top - RIBBON_PITCH * (index + 0.5)],
+      if (fee) return;
+      const blockCentre = OUTER_EDGE - BLOCK_WIDTH / UNIT / 2;
+      const [x, y] = toScene(
+        side === "input" ? blockCentre : CANVAS_WIDTH - blockCentre,
+        line.outerY,
+      );
+      legs.push({
+        id,
+        side,
+        row,
+        estimated: line.estimated,
+        owned: row.ownership === "owned",
+        zeroValue: line.zeroValue,
+        x,
+        y,
+        height: Math.max(MIN_BLOCK_HEIGHT, line.thickness * UNIT),
       });
-      slot += 1;
-    }
-  }
-
-  const halfHeight =
-    (Math.max(inputSlots.length, outputSlots.length, 1) * WAIST_PITCH) / 2 + RIBBON_PITCH * 0.35;
-  const feeRow = feeIndex >= 0 ? layoutDestinationRows[feeIndex] : null;
-  const outputTop = outputs.length ? outputs[0].top : halfHeight;
-  const fee = feeRow
-    ? {
-        from: [centerInner, halfHeight - RIBBON_PITCH * 0.2] as [number, number],
-        to: [span * 0.72, Math.max(outputTop, halfHeight) + RIBBON_PITCH * 2.2] as [number, number],
-        estimated: destinationWeights[feeIndex].estimated,
-      }
-    : null;
-
+    });
+  };
+  place(layoutInputRows, "input");
+  place(layoutDestinationRows, "output");
   return {
-    legs: [...inputs, ...outputs],
+    legs,
     ribbons,
-    fee,
-    center: { halfHeight },
-    span,
-    uniform: scale.kind === "uniform",
+    center: { halfHeight: ((COMBINED_WEIGHT + 0.5) / 2) * UNIT },
   };
 }

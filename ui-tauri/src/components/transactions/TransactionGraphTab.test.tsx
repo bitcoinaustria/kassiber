@@ -1,5 +1,6 @@
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -17,6 +18,16 @@ import {
   sensitiveGraphText,
   type TransactionGraphPayload,
 } from "./TransactionGraphModel";
+
+// The glass scene needs WebGL, which Node has not; these tests read the flat
+// bowtie the 3D view falls back to. graph3d/ tests the scene itself.
+vi.mock("./graph3d/TransactionGraph3D", () => ({
+  TransactionGraph3D: ({ fallback, size }: { fallback: ReactNode; size?: string }) => (
+    <div data-testid="transaction-graph-3d" data-size={size}>
+      {fallback}
+    </div>
+  ),
+}));
 
 const STRAND_MARKER_LEAD_RATIO = 0.5;
 
@@ -209,8 +220,11 @@ describe("TransactionFlowDiagram", () => {
     const outputStrands = [
       ...html.matchAll(/data-testid="transaction-output-strand"/g),
     ];
-    // 300 outputs collapse to MAX_EXPANDED_ROWS (249 visible + 1 overflow).
-    expect(outputStrands).toHaveLength(250);
+    const feeStrands = [...html.matchAll(/data-testid="transaction-fee-strand"/g)];
+    // The destination side keeps MAX_EXPANDED_ROWS strands, the fee among them
+    // as mempool counts it: the fee, 248 outputs and one overflow.
+    expect(feeStrands).toHaveLength(1);
+    expect(outputStrands).toHaveLength(249);
   });
 
   it("does not reserve a bordered hover dock inside the drawing area", () => {
@@ -375,162 +389,85 @@ describe("TransactionFlowDiagram", () => {
     expect(new Set(visiblePaths.map((match) => match[1])).size).toBe(visiblePaths.length);
   });
 
-  it("keeps known Liquid fees thinner than confidential output strands", () => {
-    const confidentialLiquidGraph: TransactionGraphPayload = {
-      ...graph,
-      transaction: {
-        ...graph.transaction,
-        id: "liquid-confidential",
-        inputCount: 72,
-        outputCount: 2,
-        feeRateSatVb: null,
-      },
-      supportLevel: "partial",
-      inputs: Array.from({ length: 8 }, (_, index) => ({
-        id: `conf-in-${index}`,
-        outpoint: `${index.toString(16).repeat(64)}:${index}`,
-        valueSats: null,
-        valueBtc: null,
-        valueState: "confidential" as const,
-        role: "input",
-        ownership: "owned",
-      })),
-      outputs: [
-        {
-          id: "conf-out-0",
-          outpoint:
-            "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789:0",
-          valueSats: 0,
-          valueBtc: 0,
-          valueState: "confidential" as const,
-          role: "change",
-          ownership: "owned",
-        },
-        {
-          id: "conf-out-1",
-          outpoint:
-            "bbcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789:1",
-          valueSats: null,
-          valueBtc: null,
-          valueState: "confidential" as const,
-          role: "external_recipient",
-          ownership: "external",
-        },
-      ],
-      fee: {
-        id: "fee",
-        label: "Fee",
-        valueSats: 51,
-        valueBtc: 0.00000051,
-        role: "fee",
-        ownership: "network_fee",
-      },
-    };
-    const html = renderToStaticMarkup(
+  // mempool's calcTotalValue/initLines on Liquid: with unknown legs on both
+  // sides, unknown legs are assumed as large as the average known leg of their
+  // side, and the explicit fee is a known output like any other.
+  const liquidLeg = (id: string, index: number, sats: number | null) => ({
+    id,
+    outpoint: `${index.toString(16).repeat(64)}:${index}`,
+    valueSats: sats,
+    valueBtc: sats == null ? null : sats / 1e8,
+    valueState: sats == null ? ("confidential" as const) : ("known" as const),
+    role: "leg",
+    ownership: "unknown",
+  });
+  const liquidGraph = (
+    inputs: ReturnType<typeof liquidLeg>[],
+    outputs: ReturnType<typeof liquidLeg>[],
+    fee: number | null,
+  ): TransactionGraphPayload => ({
+    ...graph,
+    transaction: { ...graph.transaction, id: "liquid", chain: "liquid", inputCount: inputs.length, outputCount: outputs.length },
+    supportLevel: "partial",
+    inputs,
+    outputs,
+    fee: fee == null ? null : { id: "fee", label: "Fee", valueSats: fee, valueBtc: fee / 1e8, role: "fee", ownership: "network_fee" },
+  });
+  const strandWidths = (html: string, testId: string) =>
+    [...html.matchAll(new RegExp(`data-testid="${testId}"[^>]*stroke-width="([^"]+)"`, "g"))].map(
+      (match) => Number(match[1]),
+    );
+  const render = (payload: TransactionGraphPayload) =>
+    renderToStaticMarkup(
       <TooltipProvider>
-        <TransactionFlowDiagram graph={confidentialLiquidGraph} hideSensitive={false} />
+        <TransactionFlowDiagram graph={payload} hideSensitive={false} />
       </TooltipProvider>,
     );
 
-    const feeWidth = Number(
-      html.match(/data-testid="transaction-fee-strand"[^>]*stroke-width="([^"]+)"/)?.[1],
+  it("sizes an all-confidential Liquid row as mempool does, fee included", () => {
+    const html = render(
+      liquidGraph([liquidLeg("a", 0, null), liquidLeg("b", 1, null)], [liquidLeg("c", 2, null), liquidLeg("d", 3, null)], 40),
     );
-    const outputWidths = [
-      ...html.matchAll(
-        /data-testid="transaction-output-strand"[^>]*stroke-width="([^"]+)"/g,
+    const inputs = strandWidths(html, "transaction-input-strand");
+    const outputs = strandWidths(html, "transaction-output-strand");
+    const fee = strandWidths(html, "transaction-fee-strand");
+    // Total 3 × fee: each output, and the fee, take a third of the band; the
+    // two inputs split all of it.
+    expect(outputs[0]).toBeCloseTo(fee[0]);
+    expect(outputs[1]).toBeCloseTo(fee[0]);
+    expect(inputs[0]).toBeGreaterThan(outputs[0]);
+  });
+
+  it("gives every leg an equal share on both sides when no amount is known at all", () => {
+    const html = render(
+      liquidGraph(
+        [0, 1, 2, 3, 4, 5].map((index) => liquidLeg(`in-${index}`, index, null)),
+        [liquidLeg("out-0", 6, null), liquidLeg("out-1", 7, null)],
+        null,
       ),
-    ].map((match) => Number(match[1]));
-
-    expect(outputWidths).toHaveLength(2);
-    expect(Number.isFinite(feeWidth)).toBe(true);
-    expect(feeWidth).toBeLessThanOrEqual(2);
-    expect(feeWidth).toBeLessThan(Math.min(...outputWidths));
+    );
+    // A strand's stroke is two units wider than its share of the band.
+    const band = (values: number[]) => values.reduce((sum, value) => sum + value - 2, 0);
+    const inputs = strandWidths(html, "transaction-input-strand");
+    const outputs = strandWidths(html, "transaction-output-strand");
+    expect(inputs).toHaveLength(6);
+    expect(Math.abs(band(inputs) - band(outputs))).toBeLessThan(1);
+    expect(outputs[0]).toBeCloseTo(outputs[1]);
   });
 
-  it("draws Liquid legs of unknown size at one modest width, not as the full band", () => {
-    const confidential = (id: string, index: number) => ({
-      id,
-      outpoint: `${index.toString(16).repeat(64)}:${index}`,
-      valueSats: null,
-      valueBtc: null,
-      valueState: "confidential" as const,
-      role: index < 2 ? "input" : "output",
-      ownership: "unknown",
-    });
-    const allConfidential: TransactionGraphPayload = {
-      ...graph,
-      transaction: { ...graph.transaction, id: "liquid-all-confidential", inputCount: 2, outputCount: 2 },
-      supportLevel: "partial",
-      inputs: [confidential("in-0", 0), confidential("in-1", 1)],
-      outputs: [confidential("out-0", 2), confidential("out-1", 3)],
-      fee: { id: "fee", label: "Fee", valueSats: 40, valueBtc: 0.0000004, role: "fee", ownership: "network_fee" },
-    };
-    const html = renderToStaticMarkup(
-      <TooltipProvider>
-        <TransactionFlowDiagram graph={allConfidential} hideSensitive={false} />
-      </TooltipProvider>,
+  it("assumes an unknown Liquid output as large as the side's average known leg", () => {
+    const html = render(
+      liquidGraph(
+        [liquidLeg("in-0", 0, null), liquidLeg("in-1", 1, null)],
+        [liquidLeg("own", 2, 1_000_000), liquidLeg("other", 3, null)],
+        40,
+      ),
     );
-    const widths = (testId: string) =>
-      [...html.matchAll(new RegExp(`data-testid="${testId}"[^>]*stroke-width="([^"]+)"`, "g"))].map(
-        (match) => Number(match[1]),
-      );
-
-    const strands = [...widths("transaction-input-strand"), ...widths("transaction-output-strand")];
-    expect(strands).toHaveLength(4);
-    // Only the fee is known, so no leg may look larger than another.
-    expect(new Set(strands).size).toBe(1);
-    expect(strands[0]).toBeLessThan(20);
-    expect(widths("transaction-fee-strand")[0]).toBeLessThan(strands[0]);
-  });
-
-  it("sizes an unknown Liquid leg like the known ones when both sides are open", () => {
-    const receive: TransactionGraphPayload = {
-      ...graph,
-      transaction: { ...graph.transaction, id: "liquid-receive", inputCount: 2, outputCount: 2 },
-      supportLevel: "partial",
-      inputs: [0, 1].map((index) => ({
-        id: `in-${index}`,
-        outpoint: `${index.toString(16).repeat(64)}:${index}`,
-        valueSats: null,
-        valueBtc: null,
-        valueState: "confidential" as const,
-        role: "input",
-        ownership: "external",
-      })),
-      outputs: [
-        {
-          id: "own",
-          outpoint: `${"a".repeat(64)}:0`,
-          valueSats: 1_000_000,
-          valueBtc: 0.01,
-          valueState: "known",
-          role: "owned_destination",
-          ownership: "owned",
-        },
-        {
-          id: "other",
-          outpoint: `${"a".repeat(64)}:1`,
-          valueSats: null,
-          valueBtc: null,
-          valueState: "confidential",
-          role: "external_recipient",
-          ownership: "external",
-        },
-      ],
-      fee: { id: "fee", label: "Fee", valueSats: 40, valueBtc: 0.0000004, role: "fee", ownership: "network_fee" },
-    };
-    const html = renderToStaticMarkup(
-      <TooltipProvider>
-        <TransactionFlowDiagram graph={receive} hideSensitive={false} />
-      </TooltipProvider>,
-    );
-    const outputs = [
-      ...html.matchAll(/data-testid="transaction-output-strand"[^>]*stroke-width="([^"]+)"/g),
-    ].map((match) => Number(match[1]));
-
-    expect(outputs).toHaveLength(2);
-    // Before, the other recipient got only what the fee left over and looked like dust.
-    expect(Math.abs(outputs[0] - outputs[1])).toBeLessThan(1);
+    const [own, other] = strandWidths(html, "transaction-output-strand");
+    // Known outputs: 1,000,000 and the 40 sat fee, so the unknown one is
+    // assumed at their average, about half the own output.
+    expect(other / own).toBeGreaterThan(0.4);
+    expect(other / own).toBeLessThan(0.6);
   });
 
   it("uses known opposite-side totals only as visual weight for confidential Liquid legs", () => {
@@ -1101,6 +1038,18 @@ describe("TransactionInputsOutputsPanel", () => {
 });
 
 describe("TransactionGraphPanel", () => {
+  it("draws the graph in 3D, with the flat bowtie only as its fallback", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionGraphPanel graph={graph} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+    expect(html).toContain('data-testid="transaction-graph-3d" data-size="compact"');
+    expect(html).not.toContain('role="group"');
+    const shell = html.indexOf('data-testid="transaction-graph-3d"');
+    expect(html.indexOf('data-testid="transaction-flow-diagram"')).toBeGreaterThan(shell);
+  });
+
   it("places the inputs and outputs detail below the flow diagram", () => {
     const html = renderToStaticMarkup(
       <TooltipProvider>

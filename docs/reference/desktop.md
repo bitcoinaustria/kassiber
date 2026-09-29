@@ -220,23 +220,29 @@ leg, reference-only or confidential records can show amountless public
 references, and unsupported imports get an explicit empty state instead of a
 guessed graph. Liquid legs this book's wallets unblinded during sync keep their
 values, including spent inputs and another owned wallet's legs of the same
-transaction; conflicting observations stay confidential. Legs without a known
-amount are drawn from what is known: they share what a complete side leaves
-unaccounted for; when both sides have unknown legs, the total is estimated from
-the average known leg; and when no leg but the fee is known (or values are
-hidden), every leg gets one modest uniform width. Widths are drawing only. The
-expanded graph can switch to a 3D view after the Bitcoin Austria artwork lab's
-ribbon pieces: every coin is a block and its value a bundle of glass ribbons,
-drawn from the same leg widths. Every input's ribbons end in one slim glass
-collar and the outputs' ribbons start there, since a transaction spends its
-inputs together; the ribbon order does not say which input paid which output. Frosted ribbons carry no known amount, and hidden values
-give every coin the same size. The view loads three.js only when opened,
-renders only on change, needs no network, and falls back to the 2D graph
+transaction; conflicting observations stay confidential. Strand widths and
+positions follow mempool's bowtie graph unchanged (`TransactionGraphGeometry.ts`
+ports its calcTotalValue, initLines and linesFromWeights): on Bitcoin the total
+is the outputs plus the fee; on Liquid, with unknown legs on both sides, unknown
+legs are assumed as large as the average known leg of their side and the
+explicit fee is a known output; without any total every leg gets an equal
+share; the outer ends of both sides fill the same height; legs past 250 fold
+into one "+N more" leg. Widths are drawing only. The graph is drawn in 3D,
+inline and in the expanded dialog, as that bowtie in glass after the Bitcoin
+Austria artwork lab: one ribbon per input and output, as thick as mempool's
+strand, with a block for the coin at its outer end (the fee has none). The
+ribbons meet in one slim glass collar, since a transaction spends its inputs
+together; their order does not say which input paid which output. Frosted
+ribbons carry no known amount, and hidden values give every leg an equal share
+of the same shape. The view loads three.js only when a graph is shown,
+renders only on change, needs no network, and falls back to the flat bowtie
 without WebGL. After a wallet sync returns, a bounded background pass fills
 missing graph references through that wallet's backend. Its completion refreshes
-local graph queries. **Look up on-chain** remains available, primarily for rows
-without a synced wallet and for rows left incomplete by the pass's limits or a
-backend failure. Opening the panel never starts a network request.
+local graph queries. The "Look up on-chain" action appears only where a lookup
+could still add something: a row with no local graph, or a Bitcoin graph whose
+spent outputs lack their amounts, mostly rows without a synced wallet or left
+incomplete by the pass's limits or a backend failure; a local Liquid graph is
+never replaced. Opening the panel never starts a network request.
 Manual lookups use the wallet's own backend first and never a server
 Kassiber merely ships as a default, so the panel follows whatever observes the
 wallet and stays silent instead of reaching for third-party infrastructure; with

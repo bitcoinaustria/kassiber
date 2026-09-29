@@ -22,94 +22,138 @@ const graph = (
   inputs: TransactionGraphNode[],
   outputs: TransactionGraphNode[],
   fee: number | null = 1_000,
+  chain = "bitcoin",
 ): TransactionGraphPayload => ({
-  transaction: { id: "tx" },
+  transaction: { id: "tx", chain },
   supportLevel: "full",
   inputs,
   outputs,
-  fee: fee == null ? null : { id: "fee", valueSats: fee, valueBtc: fee / 1e8, role: "fee", ownership: "network_fee" },
+  fee:
+    fee == null
+      ? null
+      : { id: "fee", valueSats: fee, valueBtc: fee / 1e8, role: "fee", ownership: "network_fee" },
 });
 
-const ribbonsOf = (layout: ReturnType<typeof ribbonLayout>, id: string) =>
-  layout.legs.find((entry) => entry.row.id === id)?.ribbons ?? 0;
+type Layout = ReturnType<typeof ribbonLayout>;
+const ribbon = (layout: Layout, id: string) =>
+  layout.ribbons.find((entry) => entry.legId.endsWith(`:${id}`))!;
+const blocks = (layout: Layout, side: "input" | "output") =>
+  layout.legs.filter((entry) => entry.side === side);
+// mempool spreads the strands' outer edges, the fee's included, over the full
+// height on each side.
+const outerSpan = (layout: Layout, side: "input" | "output") => {
+  const ends = layout.ribbons
+    .filter((entry) => entry.side === side)
+    .map((entry) => ({ y: entry.points[0][1], half: entry.thickness / 2 }));
+  return (
+    Math.max(...ends.map((end) => end.y + end.half)) - Math.min(...ends.map((end) => end.y - end.half))
+  );
+};
 
-const send = graph([leg("in", 50_000_000, "owned")], [leg("pay", 10_000_000), leg("change", 39_999_000, "owned")]);
+const send = graph(
+  [leg("in", 50_000_000, "owned")],
+  [leg("pay", 10_000_000), leg("change", 39_999_000, "owned")],
+);
 
 describe("ribbon layout", () => {
-  it("ends every ribbon in the collar, never running input to output", () => {
-    const layout = ribbonLayout(send, false, 250);
-    for (const ribbon of layout.ribbons) {
-      if (ribbon.side === "input") expect(ribbon.to[0]).toBeCloseTo(0);
-      else expect(ribbon.from[0]).toBeCloseTo(0);
-    }
-    expect(layout.ribbons.some((ribbon) => ribbon.side === "input")).toBe(true);
-    expect(layout.ribbons.some((ribbon) => ribbon.side === "output")).toBe(true);
+  it("draws one ribbon and one coin per input and output, as mempool draws one strand", () => {
+    const inputs = Array.from({ length: 72 }, (_, index) => leg(`in${index}`, 100_000 + index, "owned"));
+    const layout = ribbonLayout(graph(inputs, [leg("a", 3_000_000), leg("b", 4_000_000)], 500), false);
+    expect(blocks(layout, "input")).toHaveLength(72);
+    expect(blocks(layout, "output")).toHaveLength(2);
+    // The fee is a ribbon of its own, with no coin at its end.
+    expect(layout.ribbons).toHaveLength(72 + 2 + 1);
+    expect(layout.ribbons.filter((entry) => entry.fee)).toHaveLength(1);
   });
 
-  it("gives each leg ribbons in proportion to its amount, and dust at least one", () => {
-    const layout = ribbonLayout(send, false, 250);
-    expect(ribbonsOf(layout, "change")).toBeGreaterThan(ribbonsOf(layout, "pay") * 3);
-    expect(ribbonsOf(layout, "in")).toBe(ribbonsOf(layout, "pay") + ribbonsOf(layout, "change"));
-    const dusty = ribbonLayout(
-      graph([leg("in", 100_000_000, "owned")], [leg("dust", 546), leg("rest", 99_998_454, "owned")]),
-      false,
-      250,
+  it("spreads both sides over the same height, however many legs each has", () => {
+    const inputs = Array.from({ length: 24 }, (_, index) => leg(`in${index}`, 1_000_000, "owned"));
+    const layout = ribbonLayout(graph(inputs, [leg("a", 12_000_000), leg("b", 11_999_000)], 1_000), false);
+    expect(outerSpan(layout, "output")).toBeGreaterThan(0);
+    expect(Math.abs(outerSpan(layout, "input") - outerSpan(layout, "output"))).toBeLessThan(
+      outerSpan(layout, "input") * 0.02,
     );
-    expect(ribbonsOf(dusty, "dust")).toBe(1);
   });
 
-  it("marks owned blocks and frosts legs whose amount is not known", () => {
+  it("makes each ribbon as thick as its amount and meets them all in the band", () => {
+    const layout = ribbonLayout(send, false);
+    expect(ribbon(layout, "change").thickness).toBeGreaterThan(ribbon(layout, "pay").thickness * 3);
+    for (const entry of layout.ribbons) {
+      const end = entry.points[entry.points.length - 1];
+      expect(end[0]).toBeCloseTo(0);
+      expect(Math.abs(end[1])).toBeLessThanOrEqual(layout.center.halfHeight + 1e-9);
+    }
+  });
+
+  it("frosts legs without a known amount and keeps the book's own coins blue", () => {
     const layout = ribbonLayout(
       graph(
         [leg("own", 600_000, "owned"), leg("foreign", null, "external", "confidential")],
-        [leg("recipient", null, "external", "confidential"), leg("mine", 150_000, "owned")],
+        [leg("recipient", null, "external", "confidential"), leg("mychange", 150_000, "owned")],
         40,
+        "liquid",
       ),
       false,
-      250,
     );
     const byId = Object.fromEntries(layout.legs.map((entry) => [entry.row.id, entry]));
     expect(byId.own.owned).toBe(true);
     expect(byId.own.estimated).toBe(false);
     expect(byId.foreign.estimated).toBe(true);
-    expect(byId.recipient.estimated).toBe(true);
-    expect(layout.ribbons.filter((ribbon) => ribbon.legId === "output:recipient").every((ribbon) => ribbon.estimated)).toBe(true);
-    expect(layout.uniform).toBe(false);
+    expect(ribbon(layout, "recipient").estimated).toBe(true);
   });
 
-  it("draws every coin the same size when nothing but the fee is known", () => {
-    const confidential = (id: string) => leg(id, null, "external", "confidential");
-    const layout = ribbonLayout(
-      graph([confidential("a"), confidential("b")], [confidential("c"), confidential("d")], 40),
-      false,
-      250,
+  it("keeps mempool's 250 legs and folds the rest into one more-leg", () => {
+    const inputs = Array.from({ length: 300 }, (_, index) => leg(`in${index}`, 10_000, "owned"));
+    const layout = ribbonLayout(graph(inputs, [leg("out", 2_999_000)], 1_000), false);
+    expect(blocks(layout, "input")).toHaveLength(251);
+    expect(blocks(layout, "input").at(-1)?.row.overflowCount).toBe(50);
+    // Even then both sides fill the same height.
+    expect(Math.abs(outerSpan(layout, "input") - outerSpan(layout, "output"))).toBeLessThan(
+      outerSpan(layout, "input") * 0.02,
     );
-    expect(layout.uniform).toBe(true);
-    expect(new Set(layout.legs.map((entry) => entry.ribbons)).size).toBe(1);
+  });
+
+  it("counts the fee towards the destination side's 250 legs", () => {
+    const outputs = Array.from({ length: 300 }, (_, index) => leg(`out${index}`, 10_000));
+    const layout = ribbonLayout(graph([leg("in", 3_001_000, "owned")], outputs, 1_000), false);
+    const destination = layout.ribbons.filter((entry) => entry.side === "output");
+    // The fee and 249 outputs stay individual, then one more-leg for the other 51.
+    expect(destination).toHaveLength(251);
+    expect(blocks(layout, "output").at(-1)?.row.overflowCount).toBe(51);
+  });
+
+  it("fits zero-value stubs into the shared height", () => {
+    const outputs = Array.from({ length: 260 }, (_, index) => leg(`z${index}`, index % 2 ? 0 : 5_000));
+    const layout = ribbonLayout(graph([leg("in", 1_000_000, "owned"), leg("in2", 400_000, "owned")], outputs, 1_000), false);
+    expect(Math.abs(outerSpan(layout, "input") - outerSpan(layout, "output"))).toBeLessThan(
+      outerSpan(layout, "output") * 0.02,
+    );
+  });
+
+  it("sums a Liquid total over every leg, not the folded ones", () => {
+    const inputs = [
+      ...Array.from({ length: 250 }, (_, index) => leg(`in${index}`, 10_000, "owned")),
+      ...Array.from({ length: 10 }, (_, index) => leg(`conf${index}`, null, "external", "confidential")),
+      leg("late", 5_000_000, "owned"),
+    ];
+    const outputs = [leg("a", null, "external", "confidential"), leg("b", null, "external", "confidential")];
+    const folded = ribbonLayout(graph(inputs, outputs, 40, "liquid"), false);
+    const unfolded = ribbonLayout(graph(inputs, outputs, 40, "liquid"), false, 400);
+    // The two outputs share the same estimated total either way.
+    expect(ribbon(folded, "a").thickness).toBeCloseTo(ribbon(unfolded, "a").thickness);
   });
 
   it("gives hidden values no say in the shape", () => {
     const other = graph([leg("in", 90_000_000, "owned")], [leg("pay", 80_000_000), leg("change", 9_999_000, "owned")]);
     const shape = (payload: TransactionGraphPayload) =>
-      ribbonLayout(payload, true, 250).legs.map((entry) => entry.ribbons);
+      ribbonLayout(payload, true).ribbons.map((entry) => [entry.thickness, entry.points]);
     expect(shape(send)).toEqual(shape(other));
-    // A hidden fee is an unknown amount too, and is drawn frosted.
-    expect(ribbonLayout(send, true, 250).fee?.estimated).toBe(true);
-    expect(ribbonLayout(send, false, 250).fee?.estimated).toBe(false);
+    expect(ribbonLayout(send, true).ribbons.every((entry) => entry.estimated)).toBe(true);
   });
 
-  it("keeps the ribbon count bounded when one side's widths overflow the band", () => {
-    // No inputs: every amountless output would otherwise claim the whole band.
-    const outputs = Array.from({ length: 250 }, (_, index) => leg(`o${index}`, null));
-    const layout = ribbonLayout(graph([], outputs, null), false, 250);
-    expect(layout.ribbons.length).toBeLessThanOrEqual(600);
-    expect(layout.legs.every((entry) => entry.ribbons >= 1)).toBe(true);
-  });
-
-  it("draws the fee as a single filament, not as ribbons", () => {
-    const layout = ribbonLayout(send, false, 250);
-    expect(layout.fee).not.toBeNull();
-    expect(layout.legs.some((entry) => entry.row.side === "fee")).toBe(false);
-    expect(ribbonLayout(graph([leg("in", 1_000, "owned")], [leg("out", 1_000)], null), false, 250).fee).toBeNull();
+  it("draws a zero-value output as a stub that never reaches the band", () => {
+    const layout = ribbonLayout(graph([leg("in", 1_000_000, "owned")], [leg("opreturn", 0), leg("out", 999_000)]), false);
+    const stub = ribbon(layout, "opreturn");
+    expect(Math.abs(stub.points[stub.points.length - 1][0])).toBeGreaterThan(1);
   });
 });
