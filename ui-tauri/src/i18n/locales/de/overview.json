@@ -335,6 +335,8 @@
     "fetchRates": "Kurse abrufen"
   },
   "treasury": {
+    "basisIncompleteFrom": "Anschaffungskosten ab {{date}} unvollständig",
+    "basisIncomplete": "Anschaffungskosten unvollständig",
     "series": {
       "bitcoinBalance": "Bitcoin-Guthaben",
       "portfolioValue": "Portfoliowert",

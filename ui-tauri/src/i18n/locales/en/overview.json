@@ -335,6 +335,8 @@
     "fetchRates": "Fetch rates"
   },
   "treasury": {
+    "basisIncompleteFrom": "Cost basis incomplete from {{date}}",
+    "basisIncomplete": "Cost basis incomplete",
     "series": {
       "bitcoinBalance": "Bitcoin Balance",
       "portfolioValue": "Portfolio Value",

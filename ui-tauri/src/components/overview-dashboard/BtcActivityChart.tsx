@@ -38,6 +38,7 @@ import type { OverviewSnapshot } from "@/mocks/seed";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
 
 import { ActivityScatterDot } from "./ActivityScatterDot";
+import { BasisIncompleteRegion } from "./BasisIncompleteRegion";
 import { ChartControlsSheet } from "./ChartControlsSheet";
 import {
   activeMarketFiatCurrency,
@@ -46,6 +47,7 @@ import {
   activityMarkerView,
   autoFitDomain,
   basisIncompleteHintKey,
+  basisIncompleteRange,
   brushedActivityMarkers,
   blurClass,
   bucketActivityMarkers,
@@ -140,7 +142,8 @@ export const BtcActivityChart = ({
   const to = t as OverviewTranslate;
   // Basis-derived figures (avg cost, unrealized) are only exact while the
   // daemon says the journal basis covers the displayed BTC.
-  const basisTrusted = fiatCompleteness(snapshot.fiat).costBasisComplete;
+  const completeness = fiatCompleteness(snapshot.fiat);
+  const basisTrusted = completeness.costBasisComplete;
   const completenessDetail = portfolioCompletenessDetail(snapshot);
   const basisHintKey = basisIncompleteHintKey(snapshot);
   const bookKey = useUiStore((state) => bookIdentityKey(state.identity));
@@ -813,6 +816,11 @@ export const BtcActivityChart = ({
     // single instant): the category axis stays in charge rather than handing
     // recharts a degenerate log domain.
     const powerLawDomain = xScaleLog ? powerLawXDomain(plotData) : null;
+    const incompleteRange = basisIncompleteRange(
+      completeness,
+      plotData,
+      fiatSeriesEnabled && seriesVisible.basis,
+    );
     const xAxisTicks = portfolioAxisTicks(
       balancePoints.length ? balancePoints : selectedChartDisplayData,
       period,
@@ -1130,12 +1138,18 @@ export const BtcActivityChart = ({
                         : undefined
                     }
                     margin={{
-                      top: 12,
+                      top: incompleteRange ? 44 : 12,
                       right: expanded ? 8 : 4,
                       bottom: plottedData.length > 3 ? (expanded ? 14 : 8) : 0,
                       left: expanded ? 8 : 4,
                     }}
                   >
+                  {incompleteRange && (
+                    <BasisIncompleteRegion
+                      range={incompleteRange}
+                      logTime={powerLawDomain !== null}
+                    />
+                  )}
                   <CartesianGrid
                     strokeDasharray="0"
                     vertical

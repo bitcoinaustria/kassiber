@@ -294,7 +294,10 @@ percentage. It names the BTC without cost basis and links to Quarantine, or to
 Journals when stale. The holdings header and chart summary drop their unrealized
 percentage. Chart points from the first gap on show cost basis, average cost, and
 unrealized as "—" with an explanation, the average-cost line stops there, and
-earlier points keep their values. Without a market rate, fiat values show "—"
+earlier points keep their values. When average cost is visible, a neutral frosted
+region marks the plot from the first incomplete day onward (the whole plot if
+the start is unknown), with a small localized label above the plot.
+Without a market rate, fiat values show "—"
 instead of €0 or -100 %. Custody gaps and missing prices also show in the
 readiness pill and Book readiness panel. Book-set rows get a per-book badge, and
 the fiat total says how many books are incomplete. Reports marks cost basis,
