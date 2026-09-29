@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import copy
+import queue
+from contextvars import ContextVar
+
 import json
 import logging
 import re
@@ -34,6 +38,9 @@ from .core import freshness as core_freshness
 from .core import rates as core_rates
 from .core import sync_backends as core_sync_backends
 from .core import wallets as core_wallets
+from .core import transaction_graph as core_transaction_graph
+from .core.wallet_graph_references import fill_wallet_graph_references
+from .proxy import require_egress_enabled
 from .core.repo import current_context_snapshot
 from .core.sync import full_scan_checkpoint, sync_progress_emitter
 from .core.ui_snapshot import build_report_blockers_snapshot
@@ -62,6 +69,7 @@ class FreshnessDaemonContext(Protocol):
     freshness_stop_event: threading.Event
     db_passphrase: str | None
     freshness_worker: threading.Thread | None
+    graph_followups: queue.Queue
 
 
 AUTO_SYNC_PROFILE_MIN_INTERVAL_SECONDS = 60
@@ -76,6 +84,131 @@ _AUTO_SYNC_CONNECTION: sqlite3.Connection | None = None
 # Foreground and background refreshes use separate database connections. Admission must cover recovery and prefetch as well as apply.
 # Reentrancy permits maintenance/report-read paths to call a foreground helper.
 _FRESHNESS_EXECUTION_LOCK = threading.RLock()
+
+
+# Only a live daemon request or opted-in sync pass installs a collector. These
+# grants are never persisted or reconstructed from queued/recovered jobs.
+_GRAPH_SYNC_FOLLOWUPS: ContextVar[list[dict[str, Any]] | None] = ContextVar(
+    "graph_sync_followups", default=None,
+)
+
+
+def _graph_effective_backend_name(conn, runtime_config, wallet):
+    """The backend the wallet syncs through: its own, else the chosen default."""
+    config = json.loads(wallet["config_json"] or "{}")
+    name = str(config.get("backend") or "").strip().lower()
+    if not name:
+        name = core_transaction_graph._explicitly_chosen_default_backend_name(conn, runtime_config)
+    return name or None
+
+
+def _graph_sync_grant(conn, runtime_config, job, wallet, automatic_trigger):
+    if _GRAPH_SYNC_FOLLOWUPS.get() is None:
+        return None
+    try:
+        require_egress_enabled()
+    except AppError:
+        return None
+    name = _graph_effective_backend_name(conn, runtime_config, wallet)
+    backend = (runtime_config.get("backends") or {}).get(name)
+    if not name or not backend:
+        return None
+    return {
+        "profile_id": job["profile_id"], "wallet_id": wallet["id"],
+        "sync_job_id": job["id"], "backend_name": name,
+        "wallet_signature": _graph_wallet_signature(wallet),
+        "backend": copy.deepcopy(backend),
+        "stored_backend": _graph_stored_backend(conn, name),
+        "automatic_trigger": automatic_trigger,
+    }
+
+
+def _graph_wallet_signature(wallet):
+    config = json.loads(wallet["config_json"] or "{}")
+    config.pop("last_synced_at", None)
+    return {"kind": wallet["kind"], "config": config}
+
+
+def _graph_stored_backend(conn, name):
+    row = conn.execute("SELECT * FROM backends WHERE lower(name) = ?", (name,)).fetchone()
+    return dict(row) if row is not None else None
+
+
+def _run_graph_followup(conn, runtime_config, out, grant, stop_event):
+    profile_id, wallet_id = grant["profile_id"], grant["wallet_id"]
+
+    def require_grant():
+        require_egress_enabled()
+        profile = _active_profile_row(conn)
+        wallet = conn.execute(
+            "SELECT * FROM wallets WHERE id = ? AND profile_id = ?", (wallet_id, profile_id),
+        ).fetchone()
+        source_job = core_freshness.get_job(conn, grant["sync_job_id"])
+        source = core_freshness.get_source_state(conn, profile_id, source_job["source_key"])
+        if (stop_event.is_set() or profile is None or profile["id"] != profile_id
+                or wallet is None or _graph_wallet_signature(wallet) != grant["wallet_signature"]
+                # A wallet that inherits the default loses the grant when the
+                # default moves, even if the old backend stays configured.
+                or _graph_effective_backend_name(conn, runtime_config, wallet) != grant["backend_name"]
+                or source_job["status"] != core_freshness.JOB_DONE or source_job["cancel_requested"]
+                or (source and source.get("paused"))
+                or (runtime_config.get("backends") or {}).get(grant["backend_name"]) != grant["backend"]
+                or _graph_stored_backend(conn, grant["backend_name"]) != grant["stored_backend"]):
+            raise AppError("Graph reference sync grant ended", code="cancelled", retryable=False)
+        trigger = grant["automatic_trigger"]
+        if trigger:
+            policy = core_freshness.get_policy(conn, profile_id)
+            enabled = policy.background_enabled if trigger == "background" else policy.report_read_sync
+            if not enabled or not policy.source_classes.get(core_freshness.SOURCE_ONCHAIN, False):
+                raise AppError("Automatic sync permission ended", code="cancelled", retryable=False)
+
+    try:
+        require_grant()
+    except AppError:
+        return
+    key = core_freshness.source_key("wallet_graph", wallet_id)
+    # This daemon's sole graph worker owns dispatch. A running row here can
+    # only be left by an interrupted worker; ordinary foreground recovery must
+    # not steal a graph job while this worker is actually fetching it.
+    interrupted = conn.execute(
+        """SELECT id FROM freshness_jobs WHERE profile_id = ? AND source_key = ?
+           AND job_type = ? AND status = 'running'""",
+        (profile_id, key, core_freshness.JOB_GRAPH_REFERENCES),
+    ).fetchall()
+    for row in interrupted:
+        core_freshness.cancel_job(conn, row["id"])
+        core_freshness.run_job(conn, row["id"], _freshness_handlers(runtime_config))
+    jobs = _enqueue_freshness_jobs(conn, profile_id, [{
+        "job_type": core_freshness.JOB_GRAPH_REFERENCES,
+        "source_key": key, "source_type": core_freshness.SOURCE_ONCHAIN,
+        "source_label": "Transaction graph references", "priority": 200,
+    }])
+    if not jobs:
+        return
+
+    def handler(conn, job, progress, check_cancelled):
+        def check():
+            check_cancelled()
+            require_grant()
+            state = core_freshness.get_source_state(conn, profile_id, key)
+            if state and state.get("paused"):
+                raise AppError("Graph reference source paused", code="cancelled", retryable=False)
+        check()
+        state = core_freshness.get_source_state(conn, profile_id, key) or {}
+        progress({"phase": core_freshness.PHASE_BACKEND_FETCH})
+        return fill_wallet_graph_references(
+            conn, profile_id, wallet_id, runtime_config,
+            backend_name=grant["backend_name"], check_cancelled=check,
+            after_rowid=int(state.get("checkpoint", {}).get("after_rowid", 0)),
+        )
+
+    completed = _run_requested_freshness_jobs(
+        conn, profile_id, jobs, {core_freshness.JOB_GRAPH_REFERENCES: handler}, limit=1,
+    )
+    if completed:
+        _emit_background_freshness_event(out, "ui.freshness.background", {
+            "profile": {"id": profile_id}, "completed": completed,
+        })
 
 
 def _freshness_execution(mode: Literal["foreground", "background", "automatic"]):
@@ -1098,6 +1231,7 @@ def _freshness_handlers(
         check_cancelled: Callable[[], None],
     ) -> Mapping[str, Any]:
         profile, wallet = _load_freshness_profile_wallet(conn, job)
+        graph_grant = _graph_sync_grant(conn, runtime_config, job, wallet, automatic_trigger)
         force_full = _job_force_full(job)
         checkpoint = _source_checkpoint_for_job(conn, profile["id"], job["source_key"], job)
         prefetched_fetches = _prefetched_onchain_fetches_for_job(
@@ -1141,6 +1275,8 @@ def _freshness_handlers(
         progress({"phase": core_freshness.PHASE_IMPORT, "wallet": wallet["label"]})
         _mark_daemon_wallet_synced(conn, wallet)
         conn.commit()
+        if graph_grant is not None:
+            _GRAPH_SYNC_FOLLOWUPS.get().append(graph_grant)
         return {"wallet": wallet["label"], "status": "synced", **outcome}
 
     def btcpay_wallet(
@@ -1361,7 +1497,11 @@ def _freshness_handlers(
         )
         return {"status": "synced", **payload}
 
+    def expired_graph_grant(conn, job, progress, check_cancelled):
+        raise AppError("Graph references require a new wallet sync", code="cancelled", retryable=False)
+
     return {
+        core_freshness.JOB_GRAPH_REFERENCES: expired_graph_grant,
         core_freshness.JOB_ONCHAIN_WALLET: onchain_wallet,
         core_freshness.JOB_BTCPAY_WALLET: btcpay_wallet,
         core_freshness.JOB_BTCPAY_PROVENANCE: btcpay_provenance,
@@ -1783,7 +1923,14 @@ def _start_freshness_background_worker(
     ctx: FreshnessDaemonContext,
     *,
     passphrase: str | None = None,
+    graph_followups: list[dict[str, Any]] | None = None,
 ) -> None:
+    # Called after the request response was written. Never let an already live
+    # worker consume a foreground grant before that response.
+    if not hasattr(ctx, "graph_followups"):
+        ctx.graph_followups = queue.Queue()
+    for grant in graph_followups or []:
+        ctx.graph_followups.put(grant)
     if ctx.freshness_worker is not None and ctx.freshness_worker.is_alive():
         return
     if ctx.freshness_stop_event.is_set():
@@ -1795,7 +1942,7 @@ def _start_freshness_background_worker(
         if profile is None:
             return
         policy = core_freshness.get_policy(ctx.conn, profile["id"])
-        if not policy.background_enabled:
+        if not policy.background_enabled and ctx.graph_followups.empty():
             return
     except sqlite3.Error:
         return
@@ -1843,7 +1990,25 @@ def _start_freshness_background_worker(
         try:
             while not stop_event.wait(FRESHNESS_BACKGROUND_POLL_SECONDS):
                 try:
-                    _freshness_background_tick(worker_conn, ctx.runtime_config, ctx.out)
+                    # Drain only previously published grants; a tick's own
+                    # successful sync hands off after the tick has returned.
+                    grants = {}
+                    while not ctx.graph_followups.empty():
+                        grant = ctx.graph_followups.get_nowait()
+                        grants[(grant["profile_id"], grant["wallet_id"])] = grant
+                    for grant in grants.values():
+                        if stop_event.is_set():
+                            break
+                        _run_graph_followup(worker_conn, ctx.runtime_config, ctx.out, grant, stop_event)
+                    followups = []
+                    token = _GRAPH_SYNC_FOLLOWUPS.set(followups)
+                    try:
+                        if not stop_event.is_set():
+                            _freshness_background_tick(worker_conn, ctx.runtime_config, ctx.out)
+                    finally:
+                        _GRAPH_SYNC_FOLLOWUPS.reset(token)
+                    for grant in followups:
+                        ctx.graph_followups.put(grant)
                 except Exception as exc:
                     worker_conn.rollback()
                     _LOGGER.error("freshness background tick failed", exc_info=exc)
@@ -1906,6 +2071,9 @@ def _stop_freshness_background_worker(
     # Never clear the worker slot or replace its stop event while a worker can
     # still own a database connection for the current project.
     ctx.freshness_worker = None
+    if hasattr(ctx, "graph_followups"):
+        while not ctx.graph_followups.empty():
+            ctx.graph_followups.get_nowait()
     if reset_event:
         ctx.freshness_stop_event = threading.Event()
     return True

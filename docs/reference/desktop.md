@@ -232,7 +232,12 @@ collar and the outputs' ribbons start there, since a transaction spends its
 inputs together; the ribbon order does not say which input paid which output. Frosted ribbons carry no known amount, and hidden values
 give every coin the same size. The view loads three.js only when opened,
 renders only on change, needs no network, and falls back to the 2D graph
-without WebGL. Lookups use the wallet's own backend first and never a server
+without WebGL. After a wallet sync returns, a bounded background pass fills
+missing graph references through that wallet's backend. Its completion refreshes
+local graph queries. **Look up on-chain** remains available, primarily for rows
+without a synced wallet and for rows left incomplete by the pass's limits or a
+backend failure. Opening the panel never starts a network request.
+Manual lookups use the wallet's own backend first and never a server
 Kassiber merely ships as a default, so the panel follows whatever observes the
 wallet and stays silent instead of reaching for third-party infrastructure; with
 nothing configured it offers an explicit backend-setup action. The view is

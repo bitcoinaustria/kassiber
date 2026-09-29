@@ -51,6 +51,7 @@ _SAFE_OBSERVER_PROJECTION_CONFLICT_KINDS = frozenset(
     }
 )
 
+JOB_GRAPH_REFERENCES = "wallet_graph_references"
 JOB_ONCHAIN_WALLET = "onchain_wallet_history"
 JOB_BTCPAY_WALLET = "btcpay_wallet_source"
 JOB_BTCPAY_PROVENANCE = "btcpay_provenance"
@@ -59,6 +60,7 @@ JOB_JOURNAL_REFRESH = "journal_refresh"
 JOB_TYPES = frozenset(
     {
         JOB_ONCHAIN_WALLET,
+        JOB_GRAPH_REFERENCES,
         JOB_BTCPAY_WALLET,
         JOB_BTCPAY_PROVENANCE,
         JOB_MARKET_RATES,
@@ -650,7 +652,7 @@ def _set_cancelled(
         source_label=job["source_label"],
         status=STATUS_PARTIALLY_STALE,
         stale_reason="cancelled",
-        blocking_reports=True,
+        blocking_reports=job["job_type"] != JOB_GRAPH_REFERENCES,
         last_phase=job.get("phase"),
         checkpoint=(state or {}).get("checkpoint", {}),
     )
@@ -893,6 +895,11 @@ def recover_interrupted_jobs(
     recovered: list[dict[str, Any]] = []
     for row in rows:
         job = _row_payload(row)
+        # Graph follow-ups may still be working on their own connection while
+        # a foreground sync starts. Only their live worker/new sync grant may
+        # resume them; ordinary recovery cannot manufacture graph permission.
+        if job["job_type"] == JOB_GRAPH_REFERENCES:
+            continue
         state = get_source_state(conn, job["profile_id"], job["source_key"])
         conn.execute(
             """
@@ -1196,7 +1203,7 @@ def _mark_error(
         source_label=job["source_label"],
         status=source_status,
         stale_reason=exc.code or "freshness_job_failed",
-        blocking_reports=True,
+        blocking_reports=job["job_type"] != JOB_GRAPH_REFERENCES,
         rate_limited_until=cooldown_until,
         cooldown_reason=cooldown_reason,
         retry_count=int(job.get("attempts") or 0),
@@ -1464,6 +1471,7 @@ __all__ = [
     "JOB_JOURNAL_REFRESH",
     "JOB_MARKET_RATES",
     "JOB_ONCHAIN_WALLET",
+    "JOB_GRAPH_REFERENCES",
     "PHASE_BACKEND_FETCH",
     "PHASE_DECODE_ENRICH",
     "PHASE_DISCOVERY",
