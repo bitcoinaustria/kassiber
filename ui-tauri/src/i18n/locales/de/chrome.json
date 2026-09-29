@@ -40,11 +40,6 @@
     "searchLabel": "Suchen",
     "searchPrompt": "Suche Seiten, Aktionen, Einstellungen, Wallets und Transaktionen.",
     "searchNoMatches": "Keine Treffer",
-    "dataMode": {
-      "real": "Live-Daten",
-      "regtest": "Regtest",
-      "toggle": "Datenquelle umschalten"
-    },
     "support": {
       "title": "Support",
       "bugReport": "Fehlerbericht",
