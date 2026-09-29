@@ -1,7 +1,7 @@
 import { Mesh, SphereGeometry } from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 
-import { DARK_TONES, LIGHT_TONES, glass, satin } from "../../glass3d/materials";
+import { DARK_TONES, LIGHT_TONES, coinMaterial, glass, satin } from "../../glass3d/materials";
 import { createGlassStage, type GlassScene, type GlassSceneLook } from "../../glass3d/stage";
 import type { UtxoBlocksLayout } from "./utxoBlocksLayout";
 
@@ -13,7 +13,9 @@ export function createUtxoBlocksScene(
 ): GlassScene {
   return createGlassStage(canvas, look, (content, own) => {
     const tones = look.dark ? DARK_TONES : LIGHT_TONES;
-    const clear = own(glass(tones.known));
+    // The wallet's own coins, as blue as its coins in the transaction graph;
+    // an unconfirmed coin is frosted, the graph's cue for "not settled".
+    const clear = own(coinMaterial(true, look.dark));
     const frosted = own(glass(tones.estimated));
     const marker = own(satin(look.dark ? "#e2e8f0" : "#3f4a5c"));
     for (const block of layout.blocks) {

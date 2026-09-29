@@ -18,7 +18,7 @@ import {
 } from "./ribbonLayout";
 
 // This scene and its shared three.js dependencies load only when the 3D view opens.
-import { glass, satin, LIGHT_TONES, DARK_TONES } from "../../kb/glass3d/materials";
+import { coinMaterial, glass, satin, LIGHT_TONES, DARK_TONES } from "../../kb/glass3d/materials";
 import { createGlassStage, type GlassScene, type GlassSceneLook } from "../../kb/glass3d/stage";
 export type { GlassScene, GlassSceneLook } from "../../kb/glass3d/stage";
 
@@ -142,8 +142,8 @@ export function createGlassScene(
       center: own(glass(tones.center, 1.4)),
       // The dark line along each ribbon edge that gives the lab pieces their drawing.
       edge: own(satin(look.dark ? "#0b1220" : "#3f4a5c")),
-      owned: own(satin("#2563eb")),
-      external: own(satin(look.dark ? "#64748b" : "#7b8798")),
+      owned: own(coinMaterial(true, look.dark)),
+      external: own(coinMaterial(false, look.dark)),
     } satisfies Record<string, Material>;
 
     const ribbonGroups = {
