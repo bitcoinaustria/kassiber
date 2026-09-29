@@ -552,9 +552,12 @@ function TransactionIoColumn({
 function TransactionIoTotalsPane({
   graph,
   hideSensitive,
+  className = "md:grid-cols-2",
 }: {
   graph: TransactionGraphPayload;
   hideSensitive: boolean;
+  /** Column template, so each total sits under its own list. */
+  className?: string;
 }) {
   const { t } = useTranslation("transactions");
   const rows: Array<{
@@ -567,7 +570,7 @@ function TransactionIoTotalsPane({
   ];
   return (
     <div
-      className="mt-2 grid gap-4 border-t pt-2 md:grid-cols-2"
+      className={cn("mt-2 grid gap-4 border-t pt-2", className)}
       data-testid="transaction-inputs-outputs-totals"
     >
       {rows.map((row) => (
@@ -1765,7 +1768,14 @@ function TransactionFlowLayout({
         </div>
         <div className="min-w-0 [grid-area:out]">{column("output")}</div>
       </div>
-      <TransactionIoTotalsPane graph={graph} hideSensitive={hideSensitive} />
+      <TransactionIoTotalsPane
+        graph={graph}
+        hideSensitive={hideSensitive}
+        className={cn(
+          "@min-[40rem]:grid-cols-2",
+          "@min-[64rem]:grid-cols-[minmax(13rem,1fr)_minmax(0,2.6fr)_minmax(13rem,1fr)] @min-[64rem]:[&>*:last-child]:col-start-3",
+        )}
+      />
     </section>
   );
 }
