@@ -1070,7 +1070,7 @@ describe("TransactionGraphPanel", () => {
     expect(html.indexOf('data-testid="transaction-flow-diagram"')).toBeGreaterThan(shell);
   });
 
-  it("puts the inputs before the graph and the outputs after it, as an explorer does", () => {
+  it("lists the inputs and outputs below the graph, as mempool does", () => {
     const html = renderToStaticMarkup(
       <TooltipProvider>
         <TransactionGraphPanel graph={graph} hideSensitive={false} />
@@ -1082,11 +1082,8 @@ describe("TransactionGraphPanel", () => {
     const outputs = html.indexOf(">Outputs<");
     expect(html).toContain('data-testid="transaction-flow-layout"');
     expect(diagram).toBeGreaterThan(-1);
-    expect(inputs).toBeGreaterThan(-1);
-    expect(inputs).toBeLessThan(diagram);
-    expect(outputs).toBeGreaterThan(diagram);
-    // Beside the graph every row is listed, with no "show all" toggle.
-    expect(html).not.toContain("Show all");
+    expect(inputs).toBeGreaterThan(diagram);
+    expect(outputs).toBeGreaterThan(inputs);
     expect(html).toContain('aria-label="Expand"');
     expect(html).toContain('title="Expand"');
     expect(html).not.toContain('>Expand</button>');
