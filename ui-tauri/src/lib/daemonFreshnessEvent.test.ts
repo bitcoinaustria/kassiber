@@ -10,6 +10,21 @@ const event = (kind: string, data: unknown) => ({
 });
 
 describe("classifyDaemonFreshnessEvent", () => {
+  it("refreshes daemon reads, including transaction graphs, after graph follow-up", () => {
+    expect(
+      classifyDaemonFreshnessEvent(
+        event("ui.freshness.background", {
+          profile: { id: "book-1" },
+          completed: [{
+            job_type: "wallet_graph_references",
+            status: "done",
+            result: { scanned: 2, attempted: 1, cached: 1, skipped: 1, failed: 0, prevouts_requested: 1 },
+          }],
+        }),
+      ),
+    ).toBe("refresh");
+  });
+
   it("invalidates daemon reads after a clean background run", () => {
     expect(
       classifyDaemonFreshnessEvent(

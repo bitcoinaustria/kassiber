@@ -11,6 +11,9 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections import defaultdict
+from contextvars import ContextVar
+from dataclasses import dataclass
+from typing import Callable
 from time import monotonic
 from typing import Any, Collection, Mapping, NamedTuple, Sequence
 
@@ -75,6 +78,29 @@ COINBASE_PREVOUT_VOUT = 0xFFFFFFFF
 # strand count without bound; the remainder collapses into one overflow node.
 MAX_GRAPH_NODES_PER_SIDE = 250
 MAX_GRAPH_PREVTX_LOOKUPS = MAX_GRAPH_NODES_PER_SIDE
+
+@dataclass
+class GraphLookupControl:
+    """Request-local limits for a consented background reference pass."""
+
+    check_cancelled: Callable[[], None]
+    prevouts_remaining: int = 250
+    prevouts_requested: int = 0
+    # Set when a row needed more previous outputs than the pass had left, so the
+    # pass can stop there and resume from that row instead of skipping it.
+    budget_refused: bool = False
+
+
+_graph_lookup_control: ContextVar[GraphLookupControl | None] = ContextVar(
+    "graph_lookup_control", default=None,
+)
+
+
+def _check_graph_lookup() -> None:
+    control = _graph_lookup_control.get()
+    if control is not None:
+        control.check_cancelled()
+
 
 _MISSING = object()
 
@@ -1094,6 +1120,7 @@ def _enrich_reference_graph_raw(
     *,
     liquid: bool,
     allow_public_lookup: bool,
+    backend_name: str | None = None,
 ) -> Mapping[str, Any]:
     """Use local cached references, optionally filling them from a chosen backend.
 
@@ -1165,6 +1192,17 @@ def _enrich_reference_graph_raw(
         if liquid
         else _graph_lookup_backends(conn, row, runtime_config)
     )
+    if backend_name is not None:
+        # Background sync consent covers this server only, with no fallback.
+        configured = (runtime_config or {}).get("backends", {}).get(backend_name)
+        selected = (_normalized_graph_lookup_backend(
+            _graph_backend_from_mapping(backend_name, configured)
+        ) if isinstance(configured, Mapping) else None)
+        backends = [selected] if (
+            selected is not None
+            and any(b.get("name") == backend_name for b in backends)
+            and _graph_backend_matches(selected, chain, network)
+        ) else []
     if not backends:
         return _with_graph_lookup_warning(
             raw,
@@ -1177,6 +1215,7 @@ def _enrich_reference_graph_raw(
     for backend in backends:
         if monotonic() >= deadline:
             break
+        _check_graph_lookup()
         fetched = _fetch_reference_graph_from_backend(
             conn,
             backend,
@@ -1467,6 +1506,17 @@ def _attach_bitcoin_prevouts(
         )
 
     if missing:
+        _check_graph_lookup()
+        control = _graph_lookup_control.get()
+        if control is not None:
+            if len(missing) > control.prevouts_remaining:
+                control.budget_refused = True
+                return _with_graph_lookup_warning(
+                    enriched, "bitcoin_reference_lookup_prevout_limit",
+                    "The background previous-output request budget is exhausted.",
+                )
+            control.prevouts_remaining -= len(missing)
+            control.prevouts_requested += len(missing)
         for prev_txid, prev_raw in fetch_missing(missing).items():
             cached_prev[prev_txid] = _store_graph_lookup_cache(
                 conn,
@@ -1488,6 +1538,7 @@ def _bitcoinrpc_missing_prevout_graphs(
 ) -> dict[str, Mapping[str, Any]]:
     fetched: dict[str, Mapping[str, Any]] = {}
     for prev_txid in missing:
+        _check_graph_lookup()
         remaining = deadline - monotonic()
         if remaining <= 0:
             break
@@ -2048,6 +2099,7 @@ def _store_graph_lookup_cache(
     txid: str,
     raw: Mapping[str, Any],
 ) -> dict[str, Any]:
+    _check_graph_lookup()
     normalized_txid = str(txid).strip().lower()
     # The durable cache deliberately stores the smallest normalized public graph
     # shape needed to rebuild the UI graph. Do not persist Sparrow-style raw
@@ -2142,11 +2194,13 @@ def _electrum_missing_prevout_graphs(
     missing: Sequence[str],
 ) -> dict[str, Mapping[str, Any]]:
     requests = [("blockchain.transaction.get", [prev_txid]) for prev_txid in missing]
-    raw_hexes = electrum_call_many(
-        client,
-        requests,
-        batch_size=backend_batch_size(backend),
-    )
+    raw_hexes = []
+    size = backend_batch_size(backend)
+    for offset in range(0, len(requests), size):
+        _check_graph_lookup()
+        raw_hexes.extend(electrum_call_many(
+            client, requests[offset:offset + size], batch_size=size,
+        ))
     return {
         prev_txid: _bitcoin_electrum_decoded_to_graph_raw(
             prev_txid,

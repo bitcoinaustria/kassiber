@@ -668,6 +668,8 @@ Job types are separate so partial success stays usable:
 - `btcpay_provenance` for BTCPay comment/label enrichment on existing wallets.
 - `market_rate_coverage` for incremental missing-minute rate coverage.
 - `journal_refresh` for follow-up local journal processing.
+- `wallet_graph_references` for bounded background graph-cache completion after
+  successful wallet sync, scoped to that wallet's selected backend.
 
 Market-rate jobs first seed the bundled Kraken BTC hourly BTC-EUR/BTC-USD
 archive into `rates_cache` when missing, then fetch a small latest quote from
@@ -743,6 +745,27 @@ records use `ui.workspace.freshness.run.progress` and include the workspace and
 profile/book currently being processed. The terminal payload groups per-book
 results, rate-limit/backoff state, blocking-source counts, and a summary of
 which books refreshed and which remain blocked.
+
+Successful wallet-history jobs captured during a live daemon request publish
+in-memory graph grants only after the response has been written (Assistant
+callbacks publish after returning their result). An enabled automatic-sync pass
+hands off after that pass returns. The freshness worker can service these grants
+even when recurring background sync is off; without a grant it performs no graph
+lookup. Graph work uses its own connection and does not hold the foreground sync
+execution slot. Foreground recovery leaves running graph jobs to this worker.
+Recovered jobs alone cannot authorize graph traffic.
+
+Each graph pass scans at most 1,000 local rows, attempts at most 50 incomplete
+transactions and reserves at most 250 uncached prevout fetches across the entire
+pass. It stops starting new rows after 30 seconds; an in-flight lookup retains
+its existing timeout. Electrum prevouts use `electrum_call_many` batches, with
+cancellation checked between batches. Complete/local/cached graphs are skipped;
+Liquid graphs already present on the row are never replaced. A private source
+checkpoint advances the scan even past failed rows so the next sync can cover
+leftovers. Job results contain counts only. Completion emits the existing
+`ui.freshness.background` event, whose desktop query invalidation includes
+`ui.transactions.graph`. Ordinary graph reads remain local, and the explicit
+lookup button remains available.
 
 When `background_enabled` is true, the daemon starts an opt-in freshness worker
 while the app is running. The worker opens its own SQLite connection, enqueues

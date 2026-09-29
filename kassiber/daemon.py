@@ -263,6 +263,7 @@ from .daemon_swap_review import (
 )
 from .daemon_chain_analysis_watches import start_worker as _start_watch_worker, stop_worker as _stop_watch_worker
 from .daemon_freshness import (
+    _GRAPH_SYNC_FOLLOWUPS,
     _apply_sync_failure_blocker,
     _auto_maintain_for_read,
     _clear_unlocked_passphrase as _clear_unlocked_passphrase_base,
@@ -1183,6 +1184,7 @@ class DaemonContext:
     select_project_on_open: bool = True
     db_passphrase: str | None = None
     backup_sessions: daemon_backup.BackupSessions = field(default_factory=daemon_backup.BackupSessions)
+    graph_followups: queue.Queue = field(default_factory=queue.Queue)
     freshness_worker: threading.Thread | None = None
     watch_worker: threading.Thread | None = None
     watch_stop_event: threading.Event = field(default_factory=threading.Event)
@@ -1325,6 +1327,8 @@ def _drain_daemon_main_thread_tasks(ctx: DaemonContext) -> None:
         except queue.Empty:
             return
         rid_token = current_request_id.set(task.request_id)
+        followups = []
+        graph_token = _GRAPH_SYNC_FOLLOWUPS.set(followups)
         try:
             if ctx.conn is None:
                 raise AppError(
@@ -1339,6 +1343,9 @@ def _drain_daemon_main_thread_tasks(ctx: DaemonContext) -> None:
             task.response.put((True, payload))
         finally:
             current_request_id.reset(rid_token)
+            _GRAPH_SYNC_FOLLOWUPS.reset(graph_token)
+        if followups:
+            _start_freshness_background_worker(ctx, graph_followups=followups)
 
 
 def _start_stdin_reader(input_stream: TextIO) -> queue.Queue[str]:
@@ -18315,6 +18322,8 @@ def run(
                 _request_id_registry_key(request.get("request_id"))
             )
             started = time.monotonic()
+            graph_followups = []
+            graph_token = _GRAPH_SYNC_FOLLOWUPS.set(graph_followups)
             try:
                 if logged:
                     _REQUEST_LOGGER.debug(
@@ -18400,10 +18409,11 @@ def run(
                 should_shutdown = False
             finally:
                 current_request_id.reset(rid_token)
+                _GRAPH_SYNC_FOLLOWUPS.reset(graph_token)
 
             if response is not None:
                 out.write(response)
-            _start_freshness_background_worker(ctx)
+            _start_freshness_background_worker(ctx, graph_followups=graph_followups)
             _start_watch_worker(ctx)
             _drain_daemon_main_thread_tasks(ctx)
             if should_shutdown:

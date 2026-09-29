@@ -81,6 +81,7 @@ configurable.
 | `wallets sync` against a user-configured Esplora backend | your configured URL | Esplora over HTTP(S) | same categories as `mempool` above |
 | `wallets sync` against a user-configured Electrum backend | your configured `ssl://` or `tcp://` URL | Electrum JSON-RPC over raw TCP/TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against a `bitcoinrpc` backend | your configured URL | HTTP(S) POST with Basic auth | nothing leaves your machine if the node is local |
+| Successful daemon wallet sync explicitly requested by the user (including a consented Assistant sync), or sync under its enabled automatic-sync feature; follow-up starts after sync returns | only that synced wallet's selected backend, including an explicitly chosen default; no fallback to another server | existing Esplora HTTP(S), Core RPC, or Electrum transport, with its proxy policy and no redirects | transaction IDs and spent previous-transaction IDs from that wallet's incomplete graph rows, IP and request timing; at most 50 transactions and 250 uncached prevout fetches per pass; launch, display, status and idle paths do not grant this access |
 | Explicit **Acquire observations** confirmation, CLI `chain-analysis acquire apply --plan …`, or once-only consent to the on-device Assistant's acquisition tool | only the backend and proxy bound into that plan | bounded, genesis-checked Esplora HTTP(S), Core RPC, or Electrum requests; HTTP redirects refused | selected transaction IDs and queried ancestors/spenders, query timing and IP; the plan itself, local graph queries, PSBT analysis and dataset imports make no network requests |
 | `wallets sync` for a `silent-payment` wallet with a local scanner file | local filesystem path configured by you | local file read | no network request by Kassiber; scanner output and detected Taproot outputs stay local; on POSIX the scanner file must be user-owned and `0600` |
 | `wallets sync` for a `silent-payment` wallet in server-assisted mode | your explicitly configured HTTP(S) SP-capable backend URL/path | HTTP(S) POST through that backend's proxy setting, if any | IP, User-Agent, scan request timing, scan birthday/range, the watch-only `sp()` scan material needed by that backend, and scan completeness depends on that backend not omitting candidates |
@@ -97,6 +98,12 @@ jobs recheck the current source-class and triggering-feature settings before
 starting transport work; disabling either cancels that work. A manual refresh
 executes only the jobs selected by that action, including its prefetch stage.
 An already transmitted request cannot be recalled.
+Graph follow-ups use an in-memory grant tied to the successful sync, active book,
+wallet configuration and backend. They recheck cancellation, the no-egress switch,
+and any automatic-sync permission before transport and cache writes. Locking or
+switching projects discards pending grants; persisted jobs cannot grant access
+on restart. Only sanitized public references enter the existing local graph cache;
+they establish neither ownership nor accounting facts.
 
 Raw transport checkpoints, including cached script and transaction memberships,
 remain in local source state. Sanitized job results and desktop/AI freshness
