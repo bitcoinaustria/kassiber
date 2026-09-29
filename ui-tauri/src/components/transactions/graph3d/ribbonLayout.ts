@@ -16,11 +16,13 @@ import type { GraphRow, TransactionGraphPayload } from "../TransactionGraphModel
  * a transaction spends its inputs together; their order does not say which
  * input paid which output. Nothing here is accounting truth.
  *
- * Positions come from mempool's default 1200 × 600 canvas with a band of up to
- * 100 px; one scene unit is 100 px. x runs from inputs to outputs, y is up.
+ * Positions come from a 1500 × 600 canvas with mempool's band of up to 100 px;
+ * one scene unit is 100 px. x runs from inputs to outputs, y is up. mempool
+ * sizes its canvas to the page; 2.5 : 1 matches the sheet's graph panel, so the
+ * piece fills its width instead of leaving it half empty.
  */
 
-const CANVAS_WIDTH = 1200;
+const CANVAS_WIDTH = 1500;
 const CANVAS_HEIGHT = 600;
 const COMBINED_WEIGHT = 100;
 /** Where a ribbon leaves its block: the block sits just outside. */
