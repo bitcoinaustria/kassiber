@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Eye } from "lucide-react";
+import { Copy, ExternalLink, Eye } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
@@ -8,22 +8,17 @@ import { Button } from "@/components/ui/button";
 import { TabsContent } from "@/components/ui/tabs";
 import { useDaemon } from "@/daemon/client";
 import { transactionAnalysisSearch } from "@/lib/chainAnalysisNavigation";
-import { transactionTypeLabel } from "@/lib/transactionTypeLabel";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
-import {
-  DetailField,
-  DirtyDot,
-  LedgerRow,
-  networkLabel,
-} from "./TransactionDetailSheetParts";
+import { DirtyDot, InfoHint } from "./TransactionDetailSheetParts";
 import { exchangeTransfer } from "./ExchangeTransferModel";
 import { TransactionRecordFlow } from "./TransactionRecordFlow";
 import { TransactionGraphTechnicalDetails } from "./TransactionGraphTechnicalDetails";
 import { CommercialProvenancePanel } from "./TransactionDetailCommercialPanel";
 import {
   blurClass,
+  copyText,
   currencyFormatter,
   formatShortTxid,
   SATS_PER_BTC,
@@ -301,16 +296,68 @@ export function TransactionFlowSection({ ctx }: { ctx: TransactionDetailTabConte
           headerAction={drawn ? lookupButton : null}
         />
       </div>
-      {analysisSearch.subject ? <Button
-        variant="outline"
-        size="sm"
-        className="self-start"
-        onClick={() => void navigate({ to: "/chain-analysis", search: analysisSearch })}
-      >
-        <Eye className="size-3.5" aria-hidden="true" />
-        {tPrivacy("investigateTransaction")}
-      </Button> : null}
-      <TransactionGraphTechnicalDetails graph={activeGraphData} hideSensitive={hideSensitive} />
+      <TransactionGraphTechnicalDetails
+        graph={activeGraphData}
+        hideSensitive={hideSensitive}
+        action={
+          analysisSearch.subject ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-xs"
+              onClick={() => void navigate({ to: "/chain-analysis", search: analysisSearch })}
+            >
+              <Eye className="size-3.5" aria-hidden="true" />
+              {tPrivacy("investigateTransaction")}
+            </Button>
+          ) : null
+        }
+      />
+    </div>
+  );
+}
+
+/** One label and value in the compact facts block. */
+function Fact({
+  label,
+  hint,
+  copyValue,
+  hidden,
+  dirty,
+  mono,
+  wide,
+  children,
+}: {
+  label: string;
+  hint?: ReactNode;
+  copyValue?: string;
+  hidden?: boolean;
+  dirty?: boolean;
+  mono?: boolean;
+  wide?: boolean;
+  children: ReactNode;
+}) {
+  const { t } = useTranslation("transactions");
+  return (
+    <div className={cn("min-w-0", wide && "col-span-2")}>
+      <dt className="flex items-center gap-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="truncate">{label}</span>
+        {hint ? <InfoHint label={t("infoHint.fieldMeaning", { label })}>{hint}</InfoHint> : null}
+        <DirtyDot active={dirty} />
+        {copyValue ? (
+          <button
+            type="button"
+            className="ml-auto rounded-sm text-muted-foreground hover:text-foreground"
+            aria-label={t("infoHint.copy", { label })}
+            onClick={() => copyText(copyValue)}
+          >
+            <Copy className="size-3" aria-hidden="true" />
+          </button>
+        ) : null}
+      </dt>
+      <dd className={cn("mt-0.5 min-w-0 truncate text-sm font-medium", mono && "font-mono text-xs", blurClass(Boolean(hidden)))}>
+        {children}
+      </dd>
     </div>
   );
 }
@@ -330,155 +377,89 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     commercialContextLoading,
     showSourceExternalId,
     tags,
+    sourceLabel,
+    explorer,
+    openExplorer,
   } = ctx;
   return (
     <>
                   {/* Details — read-only source-of-record + book metadata */}
                   <TabsContent value="details" className="mt-4 space-y-4">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <DetailField
+                    {/* One compact block: the header already names network and
+                        counterparty, so they are not repeated here. */}
+                    <dl className="kb-surface-inset grid grid-cols-2 gap-x-4 gap-y-3 p-3">
+                      <Fact
                         label={t("details.transactionId")}
-                        value={formatShortTxid(transactionDisplayId)}
+                        hint={t("details.transactionIdHint")}
                         copyValue={transactionDisplayId}
                         hidden={hideSensitive}
-                        hint={t("details.transactionIdHint")}
-                      />
-                      <DetailField
-                        label={t("details.priceAtTime")}
-                        value={
-                          localDraft.pricingSourceKind === "manual_override" &&
-                          localDraft.manualPrice
-                            ? t("details.manualPerBtc", {
-                                price: localDraft.manualPrice,
-                                currency: localDraft.manualCurrency,
-                              })
-                            : transaction.rate
-                              ? t("details.perBtc", {
-                                  value: currencyFormatter.format(transaction.rate),
-                                })
-                              : t("details.priceMissing")
-                        }
-                        hidden={hideSensitive}
-                        hint={t("details.priceAtTimeHint")}
-                      />
-                    </div>
-                    {/* Beside the coins the column is narrow: the two tables stack there. */}
-                    <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-1">
-                      <div className="overflow-hidden rounded-md border">
-                        <div className="border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          {t("details.sourceRecord")}
-                        </div>
-                        <LedgerRow
-                          label={t("details.type")}
-                          value={transactionTypeLabel(
-                            t,
-                            transaction.sourceType ?? transaction.direction,
-                          )}
-                        />
-                        <LedgerRow
-                          label={t("details.network")}
-                          value={networkLabel(transaction)}
-                        />
-                        <LedgerRow
-                          label={t("details.counterparty")}
-                          value={
-                            transaction.counterparty ? (
-                              <span className={blurClass(hideSensitive)}>
-                                {transaction.counterparty}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">
-                                {t("details.counterpartyNone")}
-                              </span>
-                            )
-                          }
-                        />
-                        {showSourceExternalId ? (
-                          <LedgerRow
-                            label={t("details.externalId")}
-                            value={formatShortTxid(transaction.txnId)}
-                            hint={t("details.externalIdHint")}
-                          />
-                        ) : null}
-                      </div>
-                      <div className="overflow-hidden rounded-md border">
-                        <div className="border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          {t("details.bookMetadata")}
-                        </div>
-                        <LedgerRow
-                          label={t("details.label")}
-                          value={
-                            <span className="inline-flex items-center gap-1.5">
-                              {localDraft.label}
-                              <DirtyDot active={dirtyLabel} />
-                            </span>
-                          }
-                        />
-                        <LedgerRow
-                          label={t("details.tags")}
-                          value={
-                            tags.length ? (
-                              <div
-                                className={cn(
-                                  "flex flex-wrap items-center gap-1",
-                                  blurClass(hideSensitive),
-                                )}
-                              >
-                                {tags.map((tag) => (
-                                  <Badge
-                                    key={tag}
-                                    variant="secondary"
-                                    className="rounded-md"
-                                  >
-                                    {tag}
-                                  </Badge>
-                                ))}
-                                {dirtyTags ? <DirtyDot active /> : null}
-                              </div>
-                            ) : (
-                              <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                                {t("details.tagsNone")}
-                                <DirtyDot active={dirtyTags} />
-                              </span>
-                            )
-                          }
-                        />
-                        <LedgerRow
-                          label={t("details.included")}
-                          value={
-                            <span className="inline-flex items-center gap-1.5">
-                              {localDraft.excluded
-                                ? t("details.includedNo")
-                                : t("details.includedYes")}
-                              <DirtyDot active={dirtyExcluded} />
-                            </span>
-                          }
-                        />
-                        <LedgerRow
-                          label={t("details.note")}
-                          value={
-                            <span className="flex items-baseline gap-1.5">
-                              {localDraft.note ? (
-                                <span
-                                  className={cn(
-                                    "line-clamp-2 min-w-0 whitespace-pre-line",
-                                    blurClass(hideSensitive),
-                                  )}
-                                >
-                                  {localDraft.note}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">
-                                  {t("details.noteNone")}
-                                </span>
-                              )}
-                              <DirtyDot active={dirtyNote} />
-                            </span>
-                          }
-                          hint={t("details.noteHint")}
-                        />
-                      </div>
-                    </div>
+                        mono
+                      >
+                        {formatShortTxid(transactionDisplayId)}
+                      </Fact>
+                      <Fact label={t("details.priceAtTime")} hint={t("details.priceAtTimeHint")} hidden={hideSensitive}>
+                        {localDraft.pricingSourceKind === "manual_override" && localDraft.manualPrice
+                          ? t("details.manualPerBtc", {
+                              price: localDraft.manualPrice,
+                              currency: localDraft.manualCurrency,
+                            })
+                          : transaction.rate
+                            ? t("details.perBtc", { value: currencyFormatter.format(transaction.rate) })
+                            : t("details.priceMissing")}
+                      </Fact>
+                      <Fact label={t("sourceRecord.source")} hidden={hideSensitive}>
+                        {sourceLabel}
+                      </Fact>
+                      <Fact label={t("details.explorer")}>
+                        {explorer ? (
+                          <button
+                            type="button"
+                            className="inline-flex max-w-full items-center gap-1 truncate text-left underline-offset-2 hover:underline"
+                            onClick={openExplorer}
+                          >
+                            <span className="truncate">{explorer.label}</span>
+                            <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground">{t("sourceRecord.noExplorer")}</span>
+                        )}
+                      </Fact>
+                      <Fact label={t("details.label")} dirty={dirtyLabel}>
+                        {localDraft.label}
+                      </Fact>
+                      <Fact label={t("details.tags")} dirty={dirtyTags} hidden={hideSensitive}>
+                        {tags.length ? (
+                          <span className="flex flex-wrap gap-1">
+                            {tags.map((tag) => (
+                              <Badge key={tag} variant="secondary" className="rounded-md">
+                                {tag}
+                              </Badge>
+                            ))}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">{t("details.tagsNone")}</span>
+                        )}
+                      </Fact>
+                      <Fact label={t("details.included")} dirty={dirtyExcluded}>
+                        {localDraft.excluded ? t("details.includedNo") : t("details.includedYes")}
+                      </Fact>
+                      {showSourceExternalId ? (
+                        <Fact label={t("details.externalId")} hint={t("details.externalIdHint")} mono>
+                          {formatShortTxid(transaction.txnId)}
+                        </Fact>
+                      ) : (
+                        <Fact label={t("sourceRecord.kassiberRow")} copyValue={transaction.id} hidden={hideSensitive} mono>
+                          {transaction.id}
+                        </Fact>
+                      )}
+                      <Fact label={t("details.note")} hint={t("details.noteHint")} dirty={dirtyNote} hidden={hideSensitive} wide>
+                        {localDraft.note ? (
+                          <span className="line-clamp-2 whitespace-pre-line">{localDraft.note}</span>
+                        ) : (
+                          <span className="text-muted-foreground">{t("details.noteNone")}</span>
+                        )}
+                      </Fact>
+                    </dl>
                     <CommercialProvenancePanel
                       context={commercialContext}
                       loading={commercialContextLoading}

@@ -451,12 +451,57 @@ export type ChecklistItem = {
 export function ReviewChecklist({
   items,
   onJump,
+  compact = false,
 }: {
   items: Array<ChecklistItem & { tab?: string }>;
   onJump?: (tab: string) => void;
+  /** One row of steps above the tabs instead of a card in the rail. */
+  compact?: boolean;
 }) {
   const { t } = useTranslation("transactions");
   const completed = items.filter((i) => i.done).length;
+  if (compact) {
+    return (
+      <div
+        role="group"
+        aria-label={t("sheet.checklist.title")}
+        className="flex flex-wrap items-center gap-1.5 text-xs"
+      >
+        <span className="mr-1 inline-flex items-center gap-1 font-medium text-muted-foreground">
+          <ListChecks className="size-3.5" aria-hidden="true" />
+          <span className="tabular-nums">
+            {completed}/{items.length}
+          </span>
+        </span>
+        {items.map((item) => {
+          const interactive = Boolean(item.tab && onJump);
+          const Tag = interactive ? "button" : "span";
+          return (
+            <Tag
+              key={item.key}
+              type={interactive ? "button" : undefined}
+              onClick={interactive && item.tab ? () => onJump?.(item.tab as string) : undefined}
+              title={item.hint}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5",
+                item.done
+                  ? "border-emerald-500/30 text-foreground"
+                  : item.warn
+                    ? "border-amber-500/40 text-amber-700 dark:text-amber-300"
+                    : "border-dashed text-muted-foreground",
+                interactive && "hover:bg-muted/60",
+              )}
+            >
+              {item.done ? (
+                <Check className="size-3 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+              ) : null}
+              {item.label}
+            </Tag>
+          );
+        })}
+      </div>
+    );
+  }
   return (
     <div className="kb-surface-inset p-3">
       <div className="mb-3 flex items-center justify-between gap-2">

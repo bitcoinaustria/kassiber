@@ -18,6 +18,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { transactionTypeLabel } from "@/lib/transactionTypeLabel";
 import { TransactionDetailSheetFrame } from "./TransactionDetailSheetFrame";
 import { TransactionTrailContext } from "./TransactionDetailTrail";
 import { useDaemon } from "@/daemon/client";
@@ -57,6 +58,7 @@ import { TransactionSplitPayoutCard } from "./TransactionSplitPayoutCard";
 import {
   DirtyDot,
   QuarantineBanner,
+  ReviewChecklist,
   balanceImpactDirection,
   countDirty,
   diffDraft,
@@ -878,6 +880,9 @@ function TransactionDetailBody({
     hideSensitive,
     currency,
     transactionDisplayId,
+    sourceLabel: `${sourceName} · ${transactionTypeLabel(t, sourceType)}`,
+    explorer,
+    openExplorer: () => onOpenExplorer(transaction),
     feeBtc,
     commercialContext,
     commercialContextLoading,
@@ -970,7 +975,7 @@ function TransactionDetailBody({
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* Wide: the coins on the left, the record's tabs and rail on the right.
             Narrow: the same blocks stacked. */}
-        <div className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_minmax(440px,520px)] xl:items-start">
+        <div className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_minmax(400px,460px)] xl:items-start">
           <div className="min-w-0 space-y-4">
             {reviewBanner ? (
               <QuarantineBanner
@@ -1004,6 +1009,7 @@ function TransactionDetailBody({
           </div>
 
           <div className="min-w-0 space-y-4 xl:sticky xl:top-0">
+            <ReviewChecklist items={reviewChecklistItems} onJump={setActiveTab} compact />
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="details">{t("sheet.tab.details")}</TabsTrigger>
@@ -1042,12 +1048,6 @@ function TransactionDetailBody({
               <TransactionLinkedTab ctx={tabContext} />
             </Tabs>
             <TransactionDetailRightRail
-              transaction={transaction}
-              sourceName={sourceName}
-              sourceType={sourceType}
-              explorer={explorer}
-              reviewChecklistItems={reviewChecklistItems}
-              onJumpTab={setActiveTab}
               hideSensitive={hideSensitive}
               attachments={attachments}
               onAddAttachmentFiles={onAddAttachmentFiles}
@@ -1063,7 +1063,6 @@ function TransactionDetailBody({
               onRevertHistory={onRevertHistory}
               onProcessJournals={onProcessJournals}
               isProcessingJournals={isProcessingJournals}
-              onOpenExplorer={onOpenExplorer}
             />
           </div>
         </div>

@@ -45,6 +45,10 @@ export type TransactionDetailTabContext = {
   hideSensitive: boolean;
   currency: Currency;
   transactionDisplayId: string;
+  /** Where the row comes from, e.g. "Cold storage · Send". */
+  sourceLabel: string;
+  explorer: { label: string } | null;
+  openExplorer: () => void;
   feeBtc: number;
   commercialContext?: CommercialContextData;
   commercialContextLoading?: boolean;

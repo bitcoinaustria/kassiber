@@ -650,6 +650,7 @@
     }
   },
   "details": {
+    "explorer": "Explorer",
     "transactionId": "Transaktions-ID",
     "transactionIdHint": "Kanonische on-chain-Kennung oder Import-Zeilen-ID, je nach Quelle.",
     "priceAtTime": "Preis zum Zeitpunkt",
