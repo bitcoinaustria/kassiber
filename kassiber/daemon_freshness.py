@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from functools import wraps
 from typing import Any, Callable, Literal, Mapping, Protocol
 
+from . import egress_policy
 from .backends import merge_db_backends
 from .cli.handlers import (
     apply_transfer_rules,
@@ -1733,6 +1734,10 @@ def _freshness_background_tick(
     runtime_config: dict[str, object],
     out: FreshnessOutputChannel,
 ) -> None:
+    # Offline mode pauses background refresh instead of failing every job
+    # against the blocked transport; it resumes when offline mode is off.
+    if egress_policy.offline_mode_enabled():
+        return
     profile = _active_profile_row(conn)
     if profile is None:
         return

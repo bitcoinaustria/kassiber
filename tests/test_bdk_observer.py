@@ -1148,7 +1148,7 @@ class BdkDependencyContractTest(TestCase):
                 observer.backend = {"kind": kind, "url": endpoint}
                 observer.backend_kind = core_sync.normalize_backend_kind(kind)
                 with mock.patch.object(bdk, "EsploraClient") as native, mock.patch(
-                    "kassiber.core.chain_observer.bdk._truthy_env", return_value=False,
+                    "kassiber.egress_policy.egress_block_reason", return_value=None,
                 ):
                     with self.assertRaises(AppError) as raised:
                         observer._client()

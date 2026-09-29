@@ -31,6 +31,7 @@ from .core import chain_analysis_runtime
 from .daemon_chain_analysis import job_starter as chain_analysis_job_starter
 from . import daemon_agent_session
 from . import daemon_backup
+from . import egress_policy
 from . import daemon_accounting_tasks
 from .command_capabilities import daemon_capability
 from .secrets.auth_backoff import AuthAttemptBackoff, AUTH_BACKOFF_FILENAME
@@ -357,6 +358,8 @@ SUPPORTED_KINDS = (
     "ui.agent_access.lock",
     "ui.agent_access.pairing",
     "ui.egress.snapshot",
+    "ui.network.offline",
+    "ui.network.offline.set",
     "ui.overview.snapshot",
     "ui.workspace.overview.snapshot",
     "ui.transactions.list",
@@ -4195,6 +4198,29 @@ def _egress_snapshot_payload(
         allowlist_complete=ctx.conn is not None,
         db_header=db_header_proof(db_path),
     )
+
+
+def _network_offline_payload(kind: str, request: dict[str, Any]) -> dict[str, Any]:
+    args = _coerce_args_dict(request.get("request_id"), request.get("args"))
+    allowed = {"enabled"} if kind == "ui.network.offline.set" else set()
+    unknown = sorted(set(args) - allowed)
+    if unknown:
+        raise AppError(
+            f"{kind} received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    if kind == "ui.network.offline.set":
+        enabled = args.get("enabled")
+        if type(enabled) is not bool:
+            raise AppError(
+                "ui.network.offline.set requires a boolean enabled",
+                code="validation",
+                retryable=False,
+            )
+        egress_policy.set_offline_mode(enabled)
+    return egress_policy.offline_status()
 
 
 def _logs_snapshot_int(
@@ -15557,6 +15583,17 @@ def handle_request(
         return (
             _with_request_id(
                 build_envelope("ui.egress.snapshot", _egress_snapshot_payload(ctx, request)),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind in {"ui.network.offline", "ui.network.offline.set"}:
+        # A machine-wide preference shared with every CLI process, answered
+        # without opening or unlocking a book, like the agent-access switch.
+        return (
+            _with_request_id(
+                build_envelope(kind, _network_offline_payload(kind, request)),
                 request_id,
             ),
             False,

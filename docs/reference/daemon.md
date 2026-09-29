@@ -569,6 +569,13 @@ consumers must change how they parse daemon envelopes.
 views should prefer it over persisted UI identity when deciding whether a
 local-auth action needs a passphrase or a plaintext acknowledgement.
 
+`ui.network.offline` returns `{offline, environment_blocked}`, and
+`ui.network.offline.set` takes `{enabled: bool}` and returns the same shape.
+Both answer without opening or unlocking a book: the switch is the
+machine-wide [offline mode](privacy-and-security.md#offline-mode) preference
+that every CLI process also reads. `environment_blocked` reports
+`KASSIBER_NO_EGRESS`, which the switch cannot lift.
+
 Errors use the standard error envelope shape and also echo `request_id` when
 the request supplied one. Malformed JSON and non-object requests cannot carry
 a caller request id, so they return `request_id: null`. `daemon.shutdown`
@@ -654,6 +661,8 @@ itself. Persistent state lives in SQLite under `freshness_jobs` and
 Within the daemon, refresh execution is serialized across recovery, queueing,
 batch fetch and apply. A background tick skips an occupied execution slot; an
 explicit competing refresh returns retryable `project_operation_in_progress`.
+While [offline mode](privacy-and-security.md#offline-mode) is on, the
+background tick returns before reading the book and resumes once it is off.
 Report-read sync preserves its opt-out/no-op behavior, and reports contention
 through its existing failed maintenance result. Cancellation controls remain
 available while a refresh owns the slot. Exact selected jobs completed by

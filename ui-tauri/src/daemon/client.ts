@@ -309,6 +309,7 @@ const TARGETED_DAEMON_QUERY_INVALIDATIONS: Record<string, readonly string[]> = {
   "ui.agent_access.unlock": ["ui.agent_access.status"],
   "ui.agent_access.lock": ["ui.agent_access.status"],
   "ui.agent_access.pairing": ["ui.agent_access.status"],
+  "ui.network.offline.set": ["ui.network.offline"],
   "ui.custody.review.apply": [
     "ui.custody.gaps.list",
     "ui.custody.gaps.review_context",

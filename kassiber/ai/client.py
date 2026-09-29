@@ -29,6 +29,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from .. import egress_policy
 from ..egress_ledger import get_egress_ledger, http_request_bytes_out
 from ..errors import AppError
 from ..redaction import provider_error_body_preview
@@ -734,6 +735,8 @@ class OpenAIResponsesClient:
     ):
         if self._cancelled.is_set():
             raise AppError("AI request cancelled", code="ai_cancelled")
+        # Offline mode keeps an on-device (loopback) model and blocks the rest.
+        egress_policy.require_online("Remote AI providers are", url=self.base_url)
         url = f"{self.base_url.rstrip('/')}/{path.lstrip('/')}"
         request = urllib.request.Request(
             url,

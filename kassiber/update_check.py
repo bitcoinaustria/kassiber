@@ -315,6 +315,10 @@ def set_update_checks_enabled(enabled: bool, path: Path | None = None) -> Path:
 
 
 def require_update_checks_enabled(path: Path | None = None) -> None:
+    # Imported here: egress_policy reuses this module's private-file helpers.
+    from . import egress_policy
+
+    egress_policy.require_online("GitHub update checks are")
     if update_checks_enabled(path):
         return
     raise AppError(

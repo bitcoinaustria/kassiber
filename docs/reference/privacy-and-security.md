@@ -213,6 +213,27 @@ provider CLI processes. The update checker has its own
 separate `KASSIBER_TEST_NO_EGRESS` variable and cannot intercept native-library
 sockets; native transport policy therefore also needs explicit routing tests.
 
+### Offline mode
+
+**Offline** in the title-bar connection panel, **Settings → Privacy → Work
+offline**, and `kassiber offline on|off|status` set one machine-wide switch,
+in the manner of Sparrow Wallet's offline mode. It is stored in an owner-only
+`config/offline-mode.json` under the state root, so the desktop daemon and
+every CLI process read it before connecting. A file that exists but is
+unreadable, symlinked, or of an unknown schema counts as offline. Reading or
+changing the switch contacts nothing and needs no unlocked book.
+
+While it is on, every boundary `KASSIBER_NO_EGRESS` covers refuses with
+`network_egress_disabled`, loopback nodes included. So do the paths that
+variable leaves out: remote AI providers (HTTP and the CLI provider broker),
+LAN and Tor device sync and discovery, GitHub update checks, and Core
+Lightning `lightning-cli` calls. An AI provider on a loopback URL stays
+available, because an on-device model sends nothing off the machine.
+Background refresh pauses instead of failing each job, and the connection
+panel shows every connection as offline and disables checks. The switch does
+not govern the system browser or recall a request already sent, and it cannot
+lift `KASSIBER_NO_EGRESS`, which still applies on top.
+
 ## Local storage
 
 Fresh installs use `$XDG_DATA_HOME/kassiber` on Linux (falling back to

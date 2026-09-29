@@ -300,7 +300,8 @@
       "warning": "Verbindungsproblem",
       "online": "Verbindungen online",
       "neutral": "Verbindungen nicht geprüft",
-      "none": "Nichts verbunden"
+      "none": "Nichts verbunden",
+      "offlineMode": "Offline-Modus"
     },
     "health": {
       "healthy": "In Ordnung",
@@ -308,7 +309,8 @@
       "checking": "Wird geprüft",
       "notCheckable": "Nicht prüfbar",
       "notChecked": "Nicht geprüft",
-      "skipped": "Prüfung übersprungen"
+      "skipped": "Prüfung übersprungen",
+      "offline": "Offline"
     },
     "unsupportedTitle": "Gespeicherte HTTP-Explorer-Endpunkte werden hier aufgeführt, aber nicht aktiv aus der Shell geprüft. Die Verbindungsprüfung testet Electrum-/Fulcrum-Backends und freigegebene reine Anzeige-HTTP-Prüfungen.",
     "checkPassed": "Verbindungsprüfung erfolgreich.",
@@ -316,7 +318,14 @@
     "coreReachable": "Bitcoin Core erreichbar.",
     "coreWalletRpcUnavailable": "Bitcoin-Core-Wallet-RPC ist nicht verfügbar.",
     "coreInitialBlockDownload": "Bitcoin Core ist noch im Initial Block Download.",
-    "corePruned": "Bitcoin Core ist erreichbar, aber gepruned."
+    "corePruned": "Bitcoin Core ist erreichbar, aber gepruned.",
+    "offlineMode": {
+      "label": "Offline",
+      "switch": "Offline arbeiten",
+      "on": "Der Offline-Modus ist an. Kassiber baut keine Verbindungen auf, bis du ihn ausschaltest.",
+      "environment": "KASSIBER_NO_EGRESS blockiert Verbindungen für diesen Prozess.",
+      "failed": "Der Offline-Modus konnte nicht geändert werden."
+    }
   },
   "bookSwitcher": {
     "title": "Bücher wechseln",
