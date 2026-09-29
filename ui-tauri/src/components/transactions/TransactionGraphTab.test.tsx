@@ -220,8 +220,11 @@ describe("TransactionFlowDiagram", () => {
     const outputStrands = [
       ...html.matchAll(/data-testid="transaction-output-strand"/g),
     ];
-    // 300 outputs collapse to MAX_EXPANDED_ROWS (249 visible + 1 overflow).
-    expect(outputStrands).toHaveLength(250);
+    const feeStrands = [...html.matchAll(/data-testid="transaction-fee-strand"/g)];
+    // The destination side keeps MAX_EXPANDED_ROWS strands, the fee among them
+    // as mempool counts it: the fee, 248 outputs and one overflow.
+    expect(feeStrands).toHaveLength(1);
+    expect(outputStrands).toHaveLength(249);
   });
 
   it("does not reserve a bordered hover dock inside the drawing area", () => {

@@ -116,8 +116,8 @@ export function ribbonLayout(
   // the fuller side at minimum spacing, so their outer ends fill the same height.
   const span = Math.max(
     CANVAS_HEIGHT,
-    bowtieMinimumSpan(layoutInputRows, total, COMBINED_WEIGHT),
-    bowtieMinimumSpan(layoutDestinationRows, total, COMBINED_WEIGHT),
+    bowtieMinimumSpan(layoutInputRows, total, COMBINED_WEIGHT, ZERO_THICKNESS),
+    bowtieMinimumSpan(layoutDestinationRows, total, COMBINED_WEIGHT, ZERO_THICKNESS),
   );
   const options = {
     height: span,

@@ -113,6 +113,23 @@ describe("ribbon layout", () => {
     );
   });
 
+  it("counts the fee towards the destination side's 250 legs", () => {
+    const outputs = Array.from({ length: 300 }, (_, index) => leg(`out${index}`, 10_000));
+    const layout = ribbonLayout(graph([leg("in", 3_001_000, "owned")], outputs, 1_000), false);
+    const destination = layout.ribbons.filter((entry) => entry.side === "output");
+    // The fee and 249 outputs stay individual, then one more-leg for the other 51.
+    expect(destination).toHaveLength(251);
+    expect(blocks(layout, "output").at(-1)?.row.overflowCount).toBe(51);
+  });
+
+  it("fits zero-value stubs into the shared height", () => {
+    const outputs = Array.from({ length: 260 }, (_, index) => leg(`z${index}`, index % 2 ? 0 : 5_000));
+    const layout = ribbonLayout(graph([leg("in", 1_000_000, "owned"), leg("in2", 400_000, "owned")], outputs, 1_000), false);
+    expect(Math.abs(outerSpan(layout, "input") - outerSpan(layout, "output"))).toBeLessThan(
+      outerSpan(layout, "output") * 0.02,
+    );
+  });
+
   it("sums a Liquid total over every leg, not the folded ones", () => {
     const inputs = [
       ...Array.from({ length: 250 }, (_, index) => leg(`in${index}`, 10_000, "owned")),

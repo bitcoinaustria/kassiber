@@ -206,14 +206,19 @@ export function bowtieLines(
  * The least span that fits `rows` at minimum spacing: sides share the larger of
  * this and the drawing height, so a 250-leg side is not taller than its peer.
  */
-export function bowtieMinimumSpan(rows: GraphRow[], total: number, combinedWeight: number) {
+export function bowtieMinimumSpan(
+  rows: GraphRow[],
+  total: number,
+  combinedWeight: number,
+  zeroThickness: number,
+) {
   const weights = bowtieWeights(rows, total, combinedWeight);
   const thickness = rows.reduce((sum, row, index) => {
     const value = legValue(row);
     return (
       sum +
       (value === 0
-        ? 0
+        ? zeroThickness
         : Math.min(combinedWeight + 0.5, Math.max(MIN_WEIGHT - 1, weights[index]) + 1))
     );
   }, 0);
@@ -258,7 +263,11 @@ export function graphLayoutRows(
     feeRow ? (liquid ? [...outputRows, feeRow] : [feeRow, ...outputRows]) : outputRows;
   const redact = (rows: GraphRow[]) => (hideSensitive ? redactRowsForGeometry(rows) : rows);
   const inputRows = compactGraphRows(graph.inputs, "input", maxRows);
-  const destinationRows = withFee(compactGraphRows(graph.outputs, "output", maxRows));
+  // The fee counts towards the destination side's limit, as mempool truncates
+  // its outputs with the fee already among them; it always stays visible.
+  const destinationRows = withFee(
+    compactGraphRows(graph.outputs, "output", feeRow ? Math.max(1, maxRows - 1) : maxRows),
+  );
   return {
     inputRows,
     destinationRows,
