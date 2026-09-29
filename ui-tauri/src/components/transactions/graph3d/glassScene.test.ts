@@ -6,7 +6,8 @@ import { ribbonGeometry } from "./glassScene";
 describe("glass ribbon mesh", () => {
   it("faces every triangle outward, sides and end caps alike", () => {
     // A straight ribbon along +x: every face normal must point away from its axis.
-    const geometry = ribbonGeometry([0, 0], [4, 0]);
+    const path = Array.from({ length: 9 }, (_, index) => [index / 2, 0] as const);
+    const geometry = ribbonGeometry(path, 0.2);
     const position = geometry.getAttribute("position");
     const index = geometry.getIndex()!;
     const corner = (at: number) => new Vector3().fromBufferAttribute(position, index.getX(at));

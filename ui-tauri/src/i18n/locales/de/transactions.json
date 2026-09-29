@@ -716,7 +716,6 @@
     "view3dLoading": "3D-Ansicht wird vorbereitet …",
     "view3dUnavailable": "Die 3D-Ansicht ist auf diesem Gerät nicht verfügbar, daher wird der 2D-Graph gezeigt.",
     "view3dLegend": "Klare Bänder: bekannte Beträge. Milchige Bänder: Betrag unbekannt. Blaue Blöcke: deine Wallets. Alle Inputs werden im Glasring gemeinsam ausgegeben; die Reihenfolge der Bänder sagt nicht, welcher Input welchen Output bezahlt hat.",
-    "view3dLegendUniform": "Hier ist kein Betrag bekannt, deshalb teilt jede Seite dieselbe Breite gleichmäßig auf ihre Coins auf. Blaue Blöcke: deine Wallets. Die Reihenfolge der Bänder sagt nicht, welcher Input welchen Output bezahlt hat.",
     "feeRate": "Gebührensatz",
     "fullSupport": "Bewerteter Bitcoin-Input/Output-Graph",
     "graphless": "Kein Graph für diese Quelle",

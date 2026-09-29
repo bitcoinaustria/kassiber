@@ -5,23 +5,20 @@ import {
   type TransactionGraphPayload,
 } from "./TransactionGraphModel";
 
-/**
- * How wide each leg of a transaction is drawn. Shared by the 2D bowtie and the
- * 3D ribbon view so both tell the same story. Drawing only: confidential and
- * missing values still render as such, whatever width their leg gets.
+/*
+ * Strand widths and positions after mempool's bowtie graph
+ * (frontend/src/app/components/tx-bowtie-graph: calcTotalValue, initLines and
+ * linesFromWeights), shared by the 3D ribbon view and the flat fallback so both
+ * tell the same story. Drawing only: an estimated width never becomes a
+ * displayed amount.
  */
 
-/** Drawing-only view of a leg's amount. Nothing here is accounting truth. */
-type GeometryValue = {
-  /** No usable amount: missing, or confidential on Liquid. */
-  amountless: boolean;
-  /** A known amount of zero — drawn as a stub, not a hairline. */
-  zero: boolean;
-  /** Known visual sats, or null when amountless. */
-  known: number | null;
-  /** Always-positive sats, so an unknown leg still gets a visible strand. */
-  visual: number;
-};
+/** mempool's `lineLimit`: legs past it fold into one "+N more" leg. */
+export const BOWTIE_LINE_LIMIT = 250;
+/** mempool's `minWeight`: the thinnest strand is this wide. */
+const MIN_WEIGHT = 2;
+/** The least space between two strands' outer ends, as in mempool. */
+const MIN_SPACING = 4;
 
 export function isAmountless(node: TransactionGraphNode) {
   return (
@@ -31,103 +28,174 @@ export function isAmountless(node: TransactionGraphNode) {
   );
 }
 
-function positiveKnownSats(node: TransactionGraphNode) {
-  return !isAmountless(node) && (node.valueSats as number) > 0
-    ? (node.valueSats as number)
-    : 0;
+/** A leg's value as mempool reads it: `null` when unknown (confidential, missing, another asset). */
+export function legValue(node: TransactionGraphNode): number | null {
+  return isAmountless(node) ? null : Math.max(0, node.valueSats as number);
 }
 
-export type GeometryScale =
-  /** Widths follow a visual total in sats. */
-  | { kind: "value"; totalSats: number }
-  /**
-   * No leg but the fee has a known amount (a confidential Liquid row, a
-   * reference-only record, or hidden values): every unknown leg gets the same
-   * modest width instead of each claiming the full band.
-   */
-  | { kind: "uniform" };
-
-/** A leg drawn at uniform width takes at most this share of the full band. */
-const UNIFORM_STRAND_BAND_SHARE = 1 / 6;
-
-function amountlessLegCount(rows: GraphRow[]) {
-  return rows.filter((node) => node.side !== "fee" && isAmountless(node)).length;
+/** How many transaction legs a row stands for: a folded row counts all of them. */
+function legCount(row: GraphRow) {
+  return row.overflow ? Math.max(1, row.overflowCount ?? 1) : 1;
 }
 
-export function geometryScale(inputRows: GraphRow[], destinationRows: GraphRow[]): GeometryScale {
-  const inputKnownTotal = inputRows.reduce((sum, node) => sum + positiveKnownSats(node), 0);
-  const outputKnownTotal = destinationRows.reduce((sum, node) => sum + positiveKnownSats(node), 0);
-  const inputUnknown = amountlessLegCount(inputRows);
-  const outputUnknown = amountlessLegCount(destinationRows);
-  if (!inputUnknown || !outputUnknown) {
-    // One complete side fixes the total; the other side's unknown legs share
-    // whatever it leaves unaccounted for.
-    return { kind: "value", totalSats: Math.max(inputKnownTotal, outputKnownTotal, 1) };
-  }
-  // Unknown legs on both sides leave the total open. As mempool's Liquid graph
-  // does, estimate it by assuming each unknown leg is as large as the average
-  // known one; both sides must still meet in the middle, so each side's unknown
-  // legs then share what that side leaves of the larger estimate. The fee is
-  // left out of the average: it would make every unknown leg look like dust.
-  const knownLegs = [...inputRows, ...destinationRows]
-    .filter((node) => node.side !== "fee")
-    .map(positiveKnownSats)
-    .filter((sats) => sats > 0);
-  if (!knownLegs.length) return { kind: "uniform" };
-  const average = knownLegs.reduce((sum, sats) => sum + sats, 0) / knownLegs.length;
-  return {
-    kind: "value",
-    totalSats: Math.max(
-      inputKnownTotal + average * inputUnknown,
-      outputKnownTotal + average * outputUnknown,
-      1,
-    ),
-  };
+function knownTotal(rows: GraphRow[]) {
+  return rows.reduce((sum, row) => sum + (legValue(row) ?? 0), 0);
 }
 
-export function fallbackVisualSats(scale: GeometryScale, rowCount: number) {
-  if (scale.kind === "uniform") return 1;
-  return Math.max(1, scale.totalSats / Math.max(1, rowCount));
+function unknownLegs(rows: GraphRow[]) {
+  return rows.reduce((sum, row) => sum + (legValue(row) === null ? legCount(row) : 0), 0);
 }
 
 /**
- * Where no leg but the fee has a known amount, both sides share one band, as
- * mempool's graph does, so a 72-input consolidation into two outputs uses the
- * same room on each side. The band is only as wide as the busier side needs at
- * a modest width per leg, so a small all-confidential row stays thin.
+ * mempool's calcTotalValue. Bitcoin: the outputs plus the fee, which sits among
+ * the destination rows here. Liquid: with unknown legs on both sides the total
+ * is indeterminate, so unknown legs are assumed to be as large as the average
+ * known leg on their side; otherwise the larger known side is the total.
  */
-export function uniformBandWeight(
-  combinedWeight: number,
+export function bowtieTotal(
   inputRows: GraphRow[],
   destinationRows: GraphRow[],
+  liquid: boolean,
 ) {
-  const legs = Math.max(amountlessLegCount(inputRows), amountlessLegCount(destinationRows), 1);
-  return Math.min(combinedWeight, combinedWeight * UNIFORM_STRAND_BAND_SHARE * legs);
+  const totalOutput = knownTotal(destinationRows);
+  if (!liquid) return totalOutput;
+  const totalInput = knownTotal(inputRows);
+  const unknownInputs = unknownLegs(inputRows);
+  const unknownOutputs = unknownLegs(destinationRows);
+  if (unknownInputs && unknownOutputs) {
+    const inputLegs = inputRows.reduce((sum, row) => sum + legCount(row), 0);
+    const outputLegs = destinationRows.reduce((sum, row) => sum + legCount(row), 0);
+    const knownInputCount = inputLegs - unknownInputs || 1;
+    const knownOutputCount = outputLegs - unknownOutputs || 1;
+    return Math.max(
+      totalInput + (totalInput / knownInputCount) * unknownInputs,
+      totalOutput + (totalOutput / knownOutputCount) * unknownOutputs,
+    );
+  }
+  return Math.max(totalInput, totalOutput);
 }
 
-function geometryValues(rows: GraphRow[], fallbackSats: number) {
-  const hasAmountlessNonFeeRows = rows.some(
-    (node) => node.side !== "fee" && isAmountless(node),
+/**
+ * mempool's initLines: each leg's share of the band where the legs meet. Unknown
+ * legs split what the total leaves after this side's known legs; without any
+ * total every leg gets the same share.
+ */
+export function bowtieWeights(rows: GraphRow[], total: number, combinedWeight: number) {
+  if (!total) return rows.map(() => combinedWeight / Math.max(1, rows.length));
+  const unknownRows = rows.filter((row) => legValue(row) === null).length;
+  const unknownShare = unknownRows ? (total - knownTotal(rows)) / unknownRows : 0;
+  return rows.map((row) =>
+    Math.max(0, (combinedWeight * (legValue(row) ?? unknownShare)) / total),
   );
-  const values: GeometryValue[] = rows.map((node) => {
-    if (isAmountless(node)) {
-      return {
-        amountless: true,
-        zero: false,
-        known: null,
-        visual: Math.max(1, fallbackSats),
-      };
-    }
-    const sats = Math.max(0, node.valueSats as number);
-    // A known fee sitting next to amountless legs would otherwise dominate the
-    // band, so it contributes a single sat of visual weight.
-    const known = node.side === "fee" && hasAmountlessNonFeeRows && sats > 0 ? 1 : sats;
-    return { amountless: false, zero: sats <= 0, known, visual: known };
-  });
-  return { values, hasAmountlessNonFeeRows };
 }
 
-export function redactRowsForGeometry(rows: GraphRow[]): GraphRow[] {
+export type BowtieLine = {
+  /** Centre of the strand's outer end. */
+  outerY: number;
+  /** Centre of the strand where it meets the band. */
+  innerY: number;
+  thickness: number;
+  /** Share of the band, in the same unit as `combinedWeight`. */
+  weight: number;
+  /** Horizontal shift of the curve that keeps neighbouring strands apart. */
+  offset: number;
+  /** A known amount of zero: drawn as a stub that never reaches the band. */
+  zeroValue: boolean;
+  /** No known amount: the width is an estimate. */
+  estimated: boolean;
+};
+
+/**
+ * mempool's linesFromWeights: strand thickness, the outer ends spread over the
+ * same span on both sides, and the inner ends stacked into the band.
+ */
+export function bowtieLines(
+  rows: GraphRow[],
+  total: number,
+  {
+    height,
+    combinedWeight,
+    curveWidth,
+    outerTop,
+    outerSpan,
+    zeroThickness,
+  }: {
+    height: number;
+    combinedWeight: number;
+    /** Horizontal run of a strand's curve, for the overlap correction. */
+    curveWidth: number;
+    /** Where the first outer end starts, and the span the outer ends fill. */
+    outerTop: number;
+    outerSpan: number;
+    zeroThickness: number;
+  },
+): BowtieLine[] {
+  if (!rows.length) return [];
+  const weights = bowtieWeights(rows, total, combinedWeight);
+  const lines: BowtieLine[] = rows.map((row, index) => {
+    const value = legValue(row);
+    return {
+      outerY: height / 2,
+      innerY: height / 2,
+      thickness:
+        value === 0
+          ? zeroThickness
+          : Math.min(combinedWeight + 0.5, Math.max(MIN_WEIGHT - 1, weights[index]) + 1),
+      weight: weights[index],
+      offset: 0,
+      zeroValue: value === 0,
+      estimated: value === null,
+    };
+  });
+  const visibleWeight = lines.reduce((sum, line) => sum + line.thickness, 0);
+  const spacing =
+    lines.length <= 1
+      ? 0
+      : Math.max(MIN_SPACING, (outerSpan - visibleWeight) / (lines.length - 1));
+  const innerTop = height / 2 - combinedWeight / 2;
+  const innerBottom = innerTop + combinedWeight + 0.5;
+  let lastOuter = outerTop;
+  let lastInner = innerTop;
+  let offset = 0;
+  let minOffset = 0;
+  let maxOffset = 0;
+  let lastWeight = 0;
+  let pad = 0;
+  lines.forEach((line) => {
+    if (line.zeroValue) {
+      line.outerY = lines.length === 1 ? height / 2 : lastOuter + line.thickness / 2;
+      lastOuter += line.thickness + spacing;
+      return;
+    }
+    line.outerY = lines.length === 1 ? height / 2 : lastOuter + line.thickness / 2;
+    line.innerY = Math.min(
+      innerBottom - line.thickness / 2,
+      Math.max(innerTop + line.thickness / 2, lastInner + line.weight / 2),
+    );
+    lastOuter += line.thickness + spacing;
+    lastInner += line.weight;
+
+    // Parallel curves must stay >= t apart at their inflection point.
+    const t = (lastWeight + line.weight) / 2;
+    const dx = Math.max(1, 0.75 * curveWidth);
+    const dy = 1.5 * (line.innerY - line.outerY);
+    const angle = Math.atan2(dy, dx);
+    if (Math.sin(angle) !== 0) {
+      offset += Math.max(Math.min((t * (1 - Math.cos(angle))) / Math.sin(angle), t), -t);
+    }
+    line.offset = offset;
+    minOffset = Math.min(minOffset, offset);
+    maxOffset = Math.max(maxOffset, offset);
+    pad = Math.max(pad, line.thickness / 2);
+    lastWeight = line.weight;
+  });
+  return lines.map((line) => ({
+    ...line,
+    offset: line.offset - minOffset + pad + (maxOffset - minOffset),
+  }));
+}
+
+function redactRowsForGeometry(rows: GraphRow[]): GraphRow[] {
   return rows.map((node) => ({
     ...node,
     valueSats: null,
@@ -139,67 +207,6 @@ export function redactRowsForGeometry(rows: GraphRow[]): GraphRow[] {
   }));
 }
 
-export type LegWeight = {
-  /** Width of the leg where it meets the transaction, in band units. */
-  weight: number;
-  /** A fee next to unknown legs: drawn as a hairline, whatever its weight. */
-  hairline: boolean;
-  /** The leg has no known amount, so its width is an estimate. */
-  estimated: boolean;
-  /** A known amount of zero. */
-  zero: boolean;
-  visualSats: number;
-};
-
-/**
- * One side's leg widths. `combinedWeight` is the width of the band where all
- * legs meet; `uniformBand` and `hairlineWeight` are in the same unit.
- */
-export function legWeights(
-  rows: GraphRow[],
-  scale: GeometryScale,
-  {
-    combinedWeight,
-    fallbackSats,
-    uniformBand,
-    hairlineWeight,
-  }: {
-    combinedWeight: number;
-    fallbackSats: number;
-    uniformBand: number;
-    hairlineWeight: number;
-  },
-): LegWeight[] {
-  const { values, hasAmountlessNonFeeRows } = geometryValues(rows, fallbackSats);
-  const unknownCount = values.filter((value) => value.amountless).length;
-  const knownTotal = values.reduce((sum, value) => sum + (value.known ?? 0), 0);
-  const totalSats = scale.kind === "value" ? scale.totalSats : 0;
-  // Unknown legs share whatever the opposite side says is unaccounted for.
-  const unknownShare = unknownCount
-    ? Math.max(1, (Math.max(totalSats, knownTotal) - knownTotal) / unknownCount)
-    : 0;
-  // Each side splits the shared band evenly; the fee never takes a share.
-  const uniformWeight = uniformBand / Math.max(1, amountlessLegCount(rows));
-  return rows.map((node, index) => {
-    const value = values[index];
-    const weight =
-      scale.kind === "uniform"
-        ? value.zero
-          ? 0
-          : value.amountless && node.side !== "fee"
-            ? uniformWeight
-            : hairlineWeight
-        : (combinedWeight * (value.known ?? unknownShare)) / Math.max(1, totalSats);
-    return {
-      weight,
-      hairline: node.side === "fee" && hasAmountlessNonFeeRows && weight > 0,
-      estimated: value.amountless,
-      zero: value.zero,
-      visualSats: value.visual,
-    };
-  });
-}
-
 export type GraphLayoutRows = {
   inputRows: GraphRow[];
   destinationRows: GraphRow[];
@@ -208,7 +215,10 @@ export type GraphLayoutRows = {
   layoutDestinationRows: GraphRow[];
 };
 
-/** The legs a drawing shows: compacted inputs, and the fee ahead of the outputs. */
+/**
+ * The legs a drawing shows. On Bitcoin the fee leads the outputs, as mempool
+ * puts it first; on Liquid it is an output of its own and comes last.
+ */
 export function graphLayoutRows(
   graph: TransactionGraphPayload,
   hideSensitive: boolean,
@@ -217,7 +227,12 @@ export function graphLayoutRows(
   const inputRows = compactGraphRows(graph.inputs, "input", maxRows);
   const outputRows = compactGraphRows(graph.outputs, "output", maxRows);
   const feeRow: GraphRow | null = graph.fee ? { ...graph.fee, side: "fee" } : null;
-  const destinationRows = feeRow ? [feeRow, ...outputRows] : outputRows;
+  const liquid = graph.transaction?.chain === "liquid";
+  const destinationRows = feeRow
+    ? liquid
+      ? [...outputRows, feeRow]
+      : [feeRow, ...outputRows]
+    : outputRows;
   return {
     inputRows,
     destinationRows,
@@ -226,4 +241,8 @@ export function graphLayoutRows(
       ? redactRowsForGeometry(destinationRows)
       : destinationRows,
   };
+}
+
+export function graphIsLiquid(graph: TransactionGraphPayload) {
+  return graph.transaction?.chain === "liquid";
 }

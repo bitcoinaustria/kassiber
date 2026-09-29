@@ -697,7 +697,6 @@
     "view3dLoading": "Preparing the 3D view…",
     "view3dUnavailable": "The 3D view is not available on this device, so the 2D graph is shown.",
     "view3dLegend": "Clear ribbons: known amounts. Frosted ribbons: amount not known. Blue blocks: your wallets. All inputs are spent together in the glass ring; the order of the ribbons does not say which input paid which output.",
-    "view3dLegendUniform": "No amount is known here, so each side splits the same width evenly between its coins. Blue blocks: your wallets. The order of the ribbons does not say which input paid which output.",
     "feeRate": "Fee rate",
     "fullSupport": "Valued Bitcoin input/output graph",
     "graphless": "No graph for this source",

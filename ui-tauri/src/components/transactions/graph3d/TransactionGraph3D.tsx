@@ -261,7 +261,7 @@ export function TransactionGraph3D({
         ) : null}
       </div>
       <p className="text-xs text-muted-foreground">
-        {layout.uniform ? t("graph.view3dLegendUniform") : t("graph.view3dLegend")}
+        {t("graph.view3dLegend")}
       </p>
     </div>
   );

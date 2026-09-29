@@ -14,7 +14,6 @@ import {
   BLOCK_DEPTH,
   BLOCK_WIDTH,
   RIBBON_DEPTH,
-  RIBBON_HEIGHT,
   type RibbonLayout,
 } from "./ribbonLayout";
 
@@ -23,17 +22,10 @@ import { glass, satin, LIGHT_TONES, DARK_TONES } from "../../kb/glass3d/material
 import { createGlassStage, type GlassScene, type GlassSceneLook } from "../../kb/glass3d/stage";
 export type { GlassScene, GlassSceneLook } from "../../kb/glass3d/stage";
 
-const SEGMENTS = 56;
 const EDGE = 0.014;
 const PROFILE_STEPS = 4;
-// The straight lead-in and lead-out of each ribbon, as in the lab's ribbon().
-const CURVE_START = 0.14;
-const CURVE_END = 0.86;
-
-function smootherstep(value: number) {
-  const t = Math.min(1, Math.max(0, value));
-  return t * t * t * (t * (t * 6 - 15) + 10);
-}
+/** Ribbons thinner than this get no edge lines: the lines would swallow them. */
+const EDGED_THICKNESS = 0.08;
 
 /** A stadium cross-section: flat faces towards the viewer, round edges. */
 function profile(height: number, depth: number) {
@@ -51,26 +43,17 @@ function profile(height: number, depth: number) {
   return points;
 }
 
-function centreline(from: [number, number], to: [number, number]) {
-  return Array.from({ length: SEGMENTS + 1 }, (_, index) => {
-    const t = index / SEGMENTS;
-    const bend = smootherstep((t - CURVE_START) / (CURVE_END - CURVE_START));
-    return [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * bend] as const;
-  });
-}
-
 /**
- * A flat ribbon swept along an S-curve in the xy plane, capped at both ends.
- * `offset` shifts it across the curve, for the edge lines beside a ribbon.
+ * A flat ribbon swept along a centreline in the xy plane, capped at both ends.
+ * `height` is its width across the path; `offset` shifts it sideways, for the
+ * edge lines beside a ribbon.
  */
 export function ribbonGeometry(
-  from: [number, number],
-  to: [number, number],
-  height = RIBBON_HEIGHT,
+  path: ReadonlyArray<readonly [number, number]>,
+  height: number,
   depth = RIBBON_DEPTH,
   offset = 0,
 ) {
-  const path = centreline(from, to);
   const ring = profile(height, depth);
   const positions: number[] = [];
   const indices: number[] = [];
@@ -166,21 +149,28 @@ export function createGlassScene(
     const ribbonGroups = {
       known: [] as BufferGeometry[],
       estimated: [] as BufferGeometry[],
+      fee: [] as BufferGeometry[],
+      feeEstimated: [] as BufferGeometry[],
       edge: [] as BufferGeometry[],
     };
     for (const ribbon of layout.ribbons) {
-      ribbonGroups[ribbon.estimated ? "estimated" : "known"].push(
-        ribbonGeometry(ribbon.from, ribbon.to),
-      );
+      const kind = ribbon.fee
+        ? ribbon.estimated
+          ? "feeEstimated"
+          : "fee"
+        : ribbon.estimated
+          ? "estimated"
+          : "known";
+      ribbonGroups[kind].push(ribbonGeometry(ribbon.points, ribbon.thickness));
       // Only along the edges: a full backing would darken the glass it shows through.
+      if (ribbon.fee || ribbon.thickness < EDGED_THICKNESS) continue;
       for (const side of [1, -1]) {
         ribbonGroups.edge.push(
           ribbonGeometry(
-            ribbon.from,
-            ribbon.to,
+            ribbon.points,
             EDGE * 2,
             RIBBON_DEPTH * 0.7,
-            side * (RIBBON_HEIGHT / 2 + EDGE * 0.4),
+            side * (ribbon.thickness / 2 + EDGE * 0.4),
           ),
         );
       }
@@ -193,21 +183,20 @@ export function createGlassScene(
       geometries.forEach((geometry) => geometry.dispose());
       if (merged) content.add(new Mesh(merged, materials[kind]));
     }
-    if (layout.fee) {
-      content.add(
-        new Mesh(
-          ribbonGeometry(layout.fee.from, layout.fee.to, RIBBON_HEIGHT * 0.34, RIBBON_DEPTH * 0.8),
-          layout.fee.estimated ? materials.feeEstimated : materials.fee,
-        ),
-      );
-    }
     for (const leg of layout.legs) {
-      const height = Math.max(0.08, leg.top - leg.bottom);
       const block = new Mesh(
-        new RoundedBoxGeometry(BLOCK_WIDTH, height, BLOCK_DEPTH, 3, 0.05),
+        new RoundedBoxGeometry(
+          BLOCK_WIDTH,
+          leg.height,
+          // Thin coins are shallow too: seen from above, a deep block would
+          // cover the gap to its neighbour and a fan-in would read as one wall.
+          Math.min(BLOCK_DEPTH, Math.max(0.08, leg.height * 3)),
+          3,
+          Math.min(0.05, leg.height / 2.5),
+        ),
         leg.owned ? materials.owned : materials.external,
       );
-      block.position.set(leg.x, (leg.top + leg.bottom) / 2, 0);
+      block.position.set(leg.x, leg.y, 0);
       content.add(block);
     }
     content.add(
