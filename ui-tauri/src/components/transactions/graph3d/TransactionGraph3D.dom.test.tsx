@@ -5,6 +5,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import "@/i18n";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 import type { TransactionGraphPayload } from "../TransactionGraphModel";
 import { TransactionGraph3D } from "./TransactionGraph3D";
@@ -26,12 +27,14 @@ describe("3D transaction graph", () => {
   it("falls back to the 2D graph where WebGL is not available", () => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
     render(
-      <TransactionGraph3D
-        graph={graph}
-        hideSensitive={false}
-        maxRows={250}
-        fallback={<div data-testid="flat-graph" />}
-      />,
+      <TooltipProvider>
+        <TransactionGraph3D
+          graph={graph}
+          hideSensitive={false}
+          maxRows={250}
+          fallback={<div data-testid="flat-graph" />}
+        />
+      </TooltipProvider>,
     );
     expect(screen.getByTestId("flat-graph")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain("not available");

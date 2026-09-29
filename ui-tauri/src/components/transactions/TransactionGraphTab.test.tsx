@@ -772,6 +772,26 @@ describe("TransactionFlowDiagram", () => {
 });
 
 describe("TransactionInputsOutputsPanel", () => {
+  it("opens an input's own funding row inside the book", () => {
+    const traced: TransactionGraphPayload = {
+      ...graph,
+      inputs: [{ ...graph.inputs[0], txid: "ab".repeat(32), fundedByTransactionId: "funding-row" }, ...graph.inputs.slice(1)],
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel graph={traced} hideSensitive={false} onOpenTransaction={() => {}} />
+      </TooltipProvider>,
+    );
+    expect(html).toContain("Open the transaction that created this input");
+    // Hidden values keep the book's history closed, as for spends.
+    const hidden = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionInputsOutputsPanel graph={traced} hideSensitive onOpenTransaction={() => {}} />
+      </TooltipProvider>,
+    );
+    expect(hidden).not.toContain("Open the transaction that created this input");
+  });
+
   it("shows block distance only when both ends have a known height", () => {
     const withHeights: TransactionGraphPayload = {
       ...graph,
@@ -1050,18 +1070,23 @@ describe("TransactionGraphPanel", () => {
     expect(html.indexOf('data-testid="transaction-flow-diagram"')).toBeGreaterThan(shell);
   });
 
-  it("places the inputs and outputs detail below the flow diagram", () => {
+  it("puts the inputs before the graph and the outputs after it, as an explorer does", () => {
     const html = renderToStaticMarkup(
       <TooltipProvider>
         <TransactionGraphPanel graph={graph} hideSensitive={false} />
       </TooltipProvider>,
     );
 
-    expect(html.indexOf('data-testid="transaction-flow-diagram"')).toBeGreaterThan(-1);
-    expect(html.indexOf('data-testid="transaction-inputs-outputs-panel"')).toBeGreaterThan(-1);
-    expect(html.indexOf('data-testid="transaction-inputs-outputs-panel"')).toBeGreaterThan(
-      html.indexOf('data-testid="transaction-flow-diagram"'),
-    );
+    const diagram = html.indexOf('data-testid="transaction-flow-diagram"');
+    const inputs = html.indexOf(">Inputs<");
+    const outputs = html.indexOf(">Outputs<");
+    expect(html).toContain('data-testid="transaction-flow-layout"');
+    expect(diagram).toBeGreaterThan(-1);
+    expect(inputs).toBeGreaterThan(-1);
+    expect(inputs).toBeLessThan(diagram);
+    expect(outputs).toBeGreaterThan(diagram);
+    // Beside the graph every row is listed, with no "show all" toggle.
+    expect(html).not.toContain("Show all");
     expect(html).toContain('aria-label="Expand"');
     expect(html).toContain('title="Expand"');
     expect(html).not.toContain('>Expand</button>');

@@ -911,6 +911,45 @@ class TransactionGraphTest(unittest.TestCase):
         self.assertIsNone(output.get("valueSats"))
         self.assertEqual(output["valueState"], "confidential")
 
+    def test_inputs_carry_a_local_funding_reference(self):
+        # Purely local: another row in the profile created this input's coin, so
+        # the panel can step back through the book's history without a lookup.
+        funding_txid = "a4" * 32
+        txid = "a5" * 32
+        self._tx(
+            "funding-row",
+            "wallet-a",
+            "inbound",
+            600_000_000,
+            funding_txid,
+            {
+                "txid": funding_txid,
+                "vin": [{"txid": "a6" * 32, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_B, "value": 610_000}}],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_A, "value": 600_000}],
+            },
+        )
+        self._tx(
+            "spending-row",
+            "wallet-a",
+            "outbound",
+            590_000_000,
+            txid,
+            {
+                "txid": txid,
+                "vin": [
+                    {"txid": funding_txid, "vout": 0, "prevout": {"scriptpubkey": SCRIPT_A, "value": 600_000}},
+                    {"txid": "a7" * 32, "vout": 1, "prevout": {"scriptpubkey": SCRIPT_A, "value": 5_000}},
+                ],
+                "vout": [{"n": 0, "scriptpubkey": SCRIPT_B, "value": 590_000}],
+            },
+        )
+
+        inputs = self._graph("spending-row")["inputs"]
+
+        self.assertEqual(inputs[0]["fundedByTransactionId"], "funding-row")
+        # An input whose previous transaction is not in the book gets no jump.
+        self.assertNotIn("fundedByTransactionId", inputs[1])
+
     def test_outputs_carry_a_local_spend_reference(self):
         # Purely local: another row in the profile spends this output, so the panel
         # can offer an internal jump without any lookup.

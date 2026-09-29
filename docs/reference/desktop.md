@@ -234,7 +234,11 @@ strand, with a block for the coin at its outer end (the fee has none). The
 ribbons meet in one slim glass collar, since a transaction spends its inputs
 together; their order does not say which input paid which output. Frosted
 ribbons carry no known amount, and hidden values give every leg an equal share
-of the same shape. The view loads three.js only when a graph is shown,
+of the same shape. Inputs sit beside the graph on the left and outputs on the
+right when the panel is wide enough. An input whose coin a row in this book
+created, and an output this book later spent, open that row in place: the book's
+own history can be walked back and forth like an explorer, without a request.
+The view loads three.js only when a graph is shown,
 renders only on change, needs no network, and falls back to the flat bowtie
 without WebGL. After a wallet sync returns, a bounded background pass fills
 missing graph references through that wallet's backend. Its completion refreshes

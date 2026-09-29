@@ -381,10 +381,13 @@ function TransactionIoRow({
     formatNodeAmount(node, hideSensitive, t) ||
     t("graph.inputsOutputs.unknownAmount");
   const canOpenExplorer = Boolean(explorerTarget && !hideSensitive && !node.overflow);
-  const spendTarget =
-    onOpenTransaction && !hideSensitive && node.spentByTransactionId
-      ? node.spentByTransactionId
-      : null;
+  // Following the money inside the book, backwards through an input's own
+  // funding row or forwards through an output's spend, as an explorer would.
+  const bookTarget = !onOpenTransaction || hideSensitive
+    ? null
+    : side === "input"
+      ? node.fundedByTransactionId ?? null
+      : node.spentByTransactionId ?? null;
   const content = (
     <>
       <TransactionIoMarker side={side} />
@@ -418,18 +421,23 @@ function TransactionIoRow({
       </div>
     </>
   );
-  if (spendTarget) {
+  if (bookTarget) {
     // Following the money inside the book beats leaving for an explorer.
-    const openLabel = t("graph.inputsOutputs.openSpendingTransaction", {
-      reference: formatShortTxid(node.spentByTxid ?? ""),
-    });
+    const openLabel =
+      side === "input"
+        ? t("graph.inputsOutputs.openFundingTransaction", {
+            reference: formatShortTxid(node.txid ?? ""),
+          })
+        : t("graph.inputsOutputs.openSpendingTransaction", {
+            reference: formatShortTxid(node.spentByTxid ?? ""),
+          });
     return (
       <button
         type="button"
         className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 text-left first:border-t-0 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={openLabel}
         title={openLabel}
-        onClick={() => onOpenTransaction?.(spendTarget)}
+        onClick={() => onOpenTransaction?.(bookTarget)}
       >
         {content}
       </button>
@@ -470,6 +478,7 @@ function TransactionIoColumn({
   graph,
   onOpenExplorer,
   onOpenTransaction,
+  fill = false,
 }: {
   title: string;
   nodes: TransactionGraphNode[];
@@ -477,13 +486,15 @@ function TransactionIoColumn({
   hideSensitive: boolean;
   expanded: boolean;
   onToggleExpanded: () => void;
+  /** Beside the graph: every row, scrolling within the graph's height. */
+  fill?: boolean;
   explorerSettings: ExplorerSettings;
   graph: TransactionGraphPayload;
   onOpenExplorer: (target: ExplorerTarget) => void;
   onOpenTransaction?: (transactionId: string) => void;
 }) {
   const { t } = useTranslation("transactions");
-  const visibleNodes = expanded ? nodes : nodes.slice(0, MAX_DETAIL_COLLAPSED_ROWS);
+  const visibleNodes = expanded || fill ? nodes : nodes.slice(0, MAX_DETAIL_COLLAPSED_ROWS);
   const hiddenCount = Math.max(0, nodes.length - visibleNodes.length);
   return (
     <div className="min-w-0">
@@ -495,7 +506,12 @@ function TransactionIoColumn({
           {formatCount(nodes.length)}
         </div>
       </div>
-      <div className={cn("overflow-auto pr-1", expanded ? "max-h-[520px]" : "max-h-[360px]")}>
+      <div
+        className={cn(
+          "overflow-auto pr-1",
+          fill ? "max-h-[360px]" : expanded ? "max-h-[520px]" : "max-h-[360px]",
+        )}
+      >
         {visibleNodes.map((node) => (
           <TransactionIoRow
             key={`${side}-${node.id}`}
@@ -512,7 +528,7 @@ function TransactionIoColumn({
             blockHeight={graph.transaction?.blockHeight}
           />
         ))}
-        {nodes.length > MAX_DETAIL_COLLAPSED_ROWS ? (
+        {!fill && nodes.length > MAX_DETAIL_COLLAPSED_ROWS ? (
           <button
             type="button"
             className="flex w-full items-center gap-1 border-t py-2 text-left text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -621,6 +637,7 @@ export function TransactionInputsOutputsPanel({
           explorerSettings={explorerSettings}
           graph={graph}
           onOpenExplorer={handleOpenExplorer}
+          onOpenTransaction={onOpenTransaction}
         />
         <TransactionIoColumn
           title={t("graph.inputsOutputs.outputs")}
@@ -1657,7 +1674,8 @@ function graphSupportText(
   graph: TransactionGraphPayload,
   t: TFunction<"transactions">,
 ) {
-  if (graph.supportLevel !== "partial") return t("graph.fullSupport");
+  // A complete graph needs no caption; only a partial one explains itself.
+  if (graph.supportLevel !== "partial") return null;
   if (graph.unsupportedReason === "confidential_values_hidden") {
     return t("graph.confidentialSupport");
   }
@@ -1693,6 +1711,65 @@ function TransactionGraphView({
   );
 }
 
+function openExplorerTarget(target: ExplorerTarget) {
+  void openExternalUrl(target.url).catch((error) => {
+    console.warn("Failed to open explorer URL", error);
+  });
+}
+
+/**
+ * The graph with its inputs and outputs beside it, the way an explorer reads a
+ * transaction: inputs on the left, outputs on the right, the drawing between.
+ * A narrow panel stacks the lists below the graph instead.
+ */
+function TransactionFlowLayout({
+  graph,
+  hideSensitive,
+  expanded = false,
+  onOpenTransaction,
+}: {
+  graph: TransactionGraphPayload;
+  hideSensitive: boolean;
+  expanded?: boolean;
+  onOpenTransaction?: (transactionId: string) => void;
+}) {
+  const { t } = useTranslation("transactions");
+  const explorerSettings = useUiStore((state) => state.explorerSettings);
+  const column = (side: "input" | "output") => (
+    <TransactionIoColumn
+      title={t(side === "input" ? "graph.inputsOutputs.inputs" : "graph.inputsOutputs.outputs")}
+      nodes={side === "input" ? graph.inputs : graph.outputs}
+      side={side}
+      hideSensitive={hideSensitive}
+      expanded
+      onToggleExpanded={() => {}}
+      fill
+      explorerSettings={explorerSettings}
+      graph={graph}
+      onOpenExplorer={openExplorerTarget}
+      onOpenTransaction={onOpenTransaction}
+    />
+  );
+  return (
+    <section className="@container" data-testid="transaction-flow-layout">
+      <div
+        className={cn(
+          "grid gap-4 [grid-template-areas:'graph'_'in'_'out']",
+          "@min-[40rem]:grid-cols-2 @min-[40rem]:[grid-template-areas:'graph_graph'_'in_out']",
+          "@min-[64rem]:grid-cols-[minmax(13rem,1fr)_minmax(0,2.6fr)_minmax(13rem,1fr)] @min-[64rem]:items-center @min-[64rem]:[grid-template-areas:'in_graph_out']",
+        )}
+      >
+        <div className="min-w-0 [grid-area:in]">{column("input")}</div>
+        <div className="min-w-0 [grid-area:graph]">
+          <TransactionGraphView graph={graph} hideSensitive={hideSensitive} expanded={expanded} />
+        </div>
+        <div className="min-w-0 [grid-area:out]">{column("output")}</div>
+      </div>
+      <TransactionIoTotalsPane graph={graph} hideSensitive={hideSensitive} />
+    </section>
+  );
+}
+
 export function TransactionGraphPanel({
   graph,
   loading,
@@ -1703,9 +1780,12 @@ export function TransactionGraphPanel({
   onResolveIssue,
   onOpenTransaction,
   graphlessContent,
+  headerAction,
 }: {
   graph?: TransactionGraphPayload;
   graphlessContent?: ReactNode;
+  /** Shown beside the title, e.g. the explicit on-chain lookup. */
+  headerAction?: ReactNode;
   loading?: boolean;
   error?: string | null;
   hideSensitive: boolean;
@@ -1739,6 +1819,8 @@ export function TransactionGraphPanel({
                 {graphSupportText(graph, t)}
               </div>
             </div>
+            <div className="flex items-center gap-2">
+            {headerAction}
             <Dialog>
               <DialogTrigger asChild>
                 <Button
@@ -1752,15 +1834,20 @@ export function TransactionGraphPanel({
                   <Maximize2 className="size-4" aria-hidden="true" />
                 </Button>
               </DialogTrigger>
-              <DialogContent className="w-[min(1180px,calc(100vw-2rem))] max-w-none sm:max-w-none">
+              <DialogContent className="w-[min(1680px,calc(100vw-2rem))] max-w-none sm:max-w-none">
                 <DialogTitle className="sr-only">{t("graph.expandedTitle")}</DialogTitle>
-                <TransactionGraphView graph={graph} hideSensitive={hideSensitive} expanded />
+                <TransactionFlowLayout
+                  graph={graph}
+                  hideSensitive={hideSensitive}
+                  expanded
+                  onOpenTransaction={onOpenTransaction}
+                />
               </DialogContent>
             </Dialog>
+            </div>
           </div>
           <AnnotationStrip annotations={graph.annotations} />
-          <TransactionGraphView graph={graph} hideSensitive={hideSensitive} />
-          <TransactionInputsOutputsPanel
+          <TransactionFlowLayout
             graph={graph}
             hideSensitive={hideSensitive}
             onOpenTransaction={onOpenTransaction}

@@ -728,7 +728,8 @@
       "title": "Inputs & outputs",
       "total": "Total",
       "unknownAmount": "Unknown amount",
-      "unknownReference": "Unknown reference"
+      "unknownReference": "Unknown reference",
+      "openFundingTransaction": "Open the transaction that created this input, {{reference}}"
     },
     "legAria": "{{role}} graph leg",
     "liquidBody": "Kassiber does not have public Liquid input/output references for this row yet. Configure or refresh a Liquid backend so the graph can use generic confidential strands.",
@@ -821,6 +822,14 @@
       "no_active_profile": "No active book, so there is no transaction graph to read.",
       "not_found": "This transaction is not in the active book.",
       "partial_graph_values_missing": "Amounts are missing for one or more legs. References and ownership hints still draw; fee and fee rate may be incomplete."
+    },
+    "legend": {
+      "known": "Known amount",
+      "unknown": "Amount unknown",
+      "own": "Your wallet",
+      "other": "Other",
+      "fee": "Fee",
+      "readingLabel": "How to read the graph"
     }
   },
   "commercial": {

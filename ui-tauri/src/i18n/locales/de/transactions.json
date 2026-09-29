@@ -747,7 +747,8 @@
       "title": "Inputs & Outputs",
       "total": "Summe",
       "unknownAmount": "Unbekannter Betrag",
-      "unknownReference": "Unbekannte Referenz"
+      "unknownReference": "Unbekannte Referenz",
+      "openFundingTransaction": "Transaktion öffnen, die diesen Input erzeugt hat: {{reference}}"
     },
     "legAria": "{{role}}-Graph-Strang",
     "liquidBody": "Kassiber hat für diese Zeile noch keine öffentlichen Liquid-Input-/Output-Referenzen. Richte ein Liquid-Backend ein oder aktualisiere es, damit der Graph generische vertrauliche Stränge verwenden kann.",
@@ -840,6 +841,14 @@
       "no_active_profile": "Kein aktives Buch, daher gibt es keinen Transaktions-Graph.",
       "not_found": "Diese Transaktion ist nicht im aktiven Buch.",
       "partial_graph_values_missing": "Für ein oder mehrere Legs fehlen die Beträge. Referenzen und Eigentums-Hinweise werden trotzdem gezeichnet; Gebühr und Gebührenrate können unvollständig sein."
+    },
+    "legend": {
+      "known": "Bekannter Betrag",
+      "unknown": "Betrag unbekannt",
+      "own": "Deine Wallet",
+      "other": "Fremd",
+      "fee": "Gebühr",
+      "readingLabel": "So liest du den Graphen"
     }
   },
   "commercial": {
