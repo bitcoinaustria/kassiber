@@ -483,6 +483,46 @@ describe("TransactionFlowDiagram", () => {
     expect(widths("transaction-fee-strand")[0]).toBeLessThan(strands[0]);
   });
 
+  it("gives both sides the same room when no amount is known", () => {
+    const confidential = (id: string, index: number) => ({
+      id,
+      outpoint: `${index.toString(16).repeat(64)}:${index}`,
+      valueSats: null,
+      valueBtc: null,
+      valueState: "confidential" as const,
+      role: "leg",
+      ownership: "unknown",
+    });
+    const fanIn: TransactionGraphPayload = {
+      ...graph,
+      transaction: { ...graph.transaction, id: "liquid-fan-in", inputCount: 6, outputCount: 2 },
+      supportLevel: "partial",
+      inputs: [0, 1, 2, 3, 4, 5].map((index) => confidential(`in-${index}`, index)),
+      outputs: [confidential("out-0", 6), confidential("out-1", 7)],
+      fee: { id: "fee", label: "Fee", valueSats: 40, valueBtc: 0.0000004, role: "fee", ownership: "network_fee" },
+    };
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionFlowDiagram graph={fanIn} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+    // A strand's stroke is two units wider than the width it takes in the band:
+    // one for the strand's minimum body, one for its visible outline.
+    const widths = (testId: string) =>
+      [...html.matchAll(new RegExp(`data-testid="${testId}"[^>]*stroke-width="([^"]+)"`, "g"))].map(
+        (match) => Number(match[1]) - 2,
+      );
+    const inputs = widths("transaction-input-strand");
+    const outputs = widths("transaction-output-strand");
+    const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
+
+    expect(inputs).toHaveLength(6);
+    expect(outputs).toHaveLength(2);
+    expect(Math.abs(sum(inputs) - sum(outputs))).toBeLessThan(1);
+    expect(outputs[0]).toBeCloseTo(outputs[1]);
+    expect(outputs[0]).toBeGreaterThan(inputs[0] * 2.5);
+  });
+
   it("sizes an unknown Liquid leg like the known ones when both sides are open", () => {
     const receive: TransactionGraphPayload = {
       ...graph,

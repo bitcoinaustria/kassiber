@@ -65,7 +65,7 @@ import {
   geometryScale,
   graphLayoutRows,
   legWeights,
-  uniformStrandWeight,
+  uniformBandWeight,
   type GeometryScale,
 } from "./TransactionGraphGeometry";
 
@@ -672,14 +672,14 @@ function buildDrawableRows(
   combinedWeight: number,
   curveWidth: number,
   fallbackSats: number,
-  uniformWeight: number,
+  uniformBand: number,
 ): DrawableGraphRow[] {
   if (!rows.length) return [];
   const centerY = height / 2;
   const weights = legWeights(rows, scale, {
     combinedWeight,
     fallbackSats,
-    uniformWeight,
+    uniformBand,
     hairlineWeight: AMOUNTLESS_FEE_STRAND_THICKNESS,
   });
   const lines = rows.map((node, index) => {
@@ -708,8 +708,8 @@ function buildDrawableRows(
           GRAPH_MULTI_LEG_GAP,
           (Math.max(120, height - 80) - visibleWeight) / Math.max(1, lines.length - 1),
         );
-  // Uniform legs claim no share of a total, so they meet in a knot as wide as
-  // they are rather than fanning out to fill the full band.
+  // Uniform legs claim no share of a total: both sides meet in the shared
+  // uniform band rather than fanning out to fill the full one.
   const bandWeight =
     scale.kind === "uniform"
       ? Math.min(combinedWeight, lines.reduce((sum, line) => sum + line.weight, 0))
@@ -1372,9 +1372,10 @@ export function TransactionFlowDiagram({
   const scale = geometryScale(layoutInputRows, layoutDestinationRows);
   const fallbackSats = fallbackVisualSats(scale, rowCount);
   const combinedWeight = Math.min(expanded ? 96 : 82, Math.max(26, Math.floor((canvasWidth - 2 * edgePadding) / 9)));
-  const uniformWeight = uniformStrandWeight(
+  const uniformBand = uniformBandWeight(
     combinedWeight,
-    Math.max(layoutInputRows.length, layoutDestinationRows.length),
+    layoutInputRows,
+    layoutDestinationRows,
   );
   const inputDrawRows = buildDrawableRows(
     layoutInputRows,
@@ -1383,7 +1384,7 @@ export function TransactionFlowDiagram({
     combinedWeight,
     curveWidth,
     fallbackSats,
-    uniformWeight,
+    uniformBand,
   );
   const outputDrawRows = buildDrawableRows(
     layoutDestinationRows,
@@ -1392,7 +1393,7 @@ export function TransactionFlowDiagram({
     combinedWeight,
     curveWidth,
     fallbackSats,
-    uniformWeight,
+    uniformBand,
   );
   // The visible strand and its wide invisible hit target follow the same path.
   const pathFor = (node: DrawableGraphRow) => {

@@ -47,7 +47,7 @@ export type GeometryScale =
    */
   | { kind: "uniform" };
 
-/** An unknown leg drawn at uniform width is at most this share of the band. */
+/** A leg drawn at uniform width takes at most this share of the full band. */
 const UNIFORM_STRAND_BAND_SHARE = 1 / 6;
 
 function amountlessLegCount(rows: GraphRow[]) {
@@ -90,11 +90,19 @@ export function fallbackVisualSats(scale: GeometryScale, rowCount: number) {
   return Math.max(1, scale.totalSats / Math.max(1, rowCount));
 }
 
-export function uniformStrandWeight(combinedWeight: number, rowCount: number) {
-  return Math.min(
-    combinedWeight / Math.max(1, rowCount),
-    combinedWeight * UNIFORM_STRAND_BAND_SHARE,
-  );
+/**
+ * Where no leg but the fee has a known amount, both sides share one band, as
+ * mempool's graph does, so a 72-input consolidation into two outputs uses the
+ * same room on each side. The band is only as wide as the busier side needs at
+ * a modest width per leg, so a small all-confidential row stays thin.
+ */
+export function uniformBandWeight(
+  combinedWeight: number,
+  inputRows: GraphRow[],
+  destinationRows: GraphRow[],
+) {
+  const legs = Math.max(amountlessLegCount(inputRows), amountlessLegCount(destinationRows), 1);
+  return Math.min(combinedWeight, combinedWeight * UNIFORM_STRAND_BAND_SHARE * legs);
 }
 
 function geometryValues(rows: GraphRow[], fallbackSats: number) {
@@ -145,7 +153,7 @@ export type LegWeight = {
 
 /**
  * One side's leg widths. `combinedWeight` is the width of the band where all
- * legs meet; `uniformWeight` and `hairlineWeight` are in the same unit.
+ * legs meet; `uniformBand` and `hairlineWeight` are in the same unit.
  */
 export function legWeights(
   rows: GraphRow[],
@@ -153,12 +161,12 @@ export function legWeights(
   {
     combinedWeight,
     fallbackSats,
-    uniformWeight,
+    uniformBand,
     hairlineWeight,
   }: {
     combinedWeight: number;
     fallbackSats: number;
-    uniformWeight: number;
+    uniformBand: number;
     hairlineWeight: number;
   },
 ): LegWeight[] {
@@ -170,14 +178,16 @@ export function legWeights(
   const unknownShare = unknownCount
     ? Math.max(1, (Math.max(totalSats, knownTotal) - knownTotal) / unknownCount)
     : 0;
+  // Each side splits the shared band evenly; the fee never takes a share.
+  const uniformWeight = uniformBand / Math.max(1, amountlessLegCount(rows));
   return rows.map((node, index) => {
     const value = values[index];
     const weight =
       scale.kind === "uniform"
-        ? value.amountless
-          ? uniformWeight
-          : value.zero
-            ? 0
+        ? value.zero
+          ? 0
+          : value.amountless && node.side !== "fee"
+            ? uniformWeight
             : hairlineWeight
         : (combinedWeight * (value.known ?? unknownShare)) / Math.max(1, totalSats);
     return {

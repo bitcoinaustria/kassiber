@@ -77,15 +77,25 @@ describe("ribbon layout", () => {
     expect(layout.uniform).toBe(false);
   });
 
-  it("draws every coin the same size when nothing but the fee is known", () => {
+  it("splits one shared band evenly on each side when nothing but the fee is known", () => {
     const confidential = (id: string) => leg(id, null, "external", "confidential");
-    const layout = ribbonLayout(
+    const even = ribbonLayout(
       graph([confidential("a"), confidential("b")], [confidential("c"), confidential("d")], 40),
       false,
       250,
     );
-    expect(layout.uniform).toBe(true);
-    expect(new Set(layout.legs.map((entry) => entry.ribbons)).size).toBe(1);
+    expect(even.uniform).toBe(true);
+    expect(new Set(even.legs.map((entry) => entry.ribbons)).size).toBe(1);
+
+    const fanIn = ribbonLayout(
+      graph([confidential("a"), confidential("b"), confidential("c")], [confidential("d")], 40),
+      false,
+      250,
+    );
+    const ribbons = (side: "input" | "output") =>
+      fanIn.legs.filter((entry) => entry.side === side).map((entry) => entry.ribbons);
+    expect(new Set(ribbons("input")).size).toBe(1);
+    expect(ribbons("output")[0]).toBe(ribbons("input").reduce((total, count) => total + count, 0));
   });
 
   it("gives hidden values no say in the shape", () => {

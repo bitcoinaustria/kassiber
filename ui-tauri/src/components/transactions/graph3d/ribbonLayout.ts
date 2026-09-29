@@ -3,7 +3,7 @@ import {
   geometryScale,
   graphLayoutRows,
   legWeights,
-  uniformStrandWeight,
+  uniformBandWeight,
 } from "../TransactionGraphGeometry";
 import type { GraphRow, TransactionGraphPayload } from "../TransactionGraphModel";
 
@@ -135,7 +135,7 @@ export function ribbonLayout(
   const options = {
     combinedWeight: 1,
     fallbackSats: fallbackVisualSats(scale, rowCount),
-    uniformWeight: uniformStrandWeight(1, rowCount),
+    uniformBand: uniformBandWeight(1, layoutInputRows, layoutDestinationRows),
     hairlineWeight: 0,
   };
   const inputWeights = legWeights(layoutInputRows, scale, options);
