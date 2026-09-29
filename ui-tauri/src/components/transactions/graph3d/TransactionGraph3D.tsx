@@ -10,6 +10,8 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
+import { cn } from "@/lib/utils";
+
 import type { TransactionGraphPayload } from "../TransactionGraphModel";
 import type { GlassScene } from "./glassScene";
 import { ribbonLayout } from "./ribbonLayout";
@@ -79,11 +81,14 @@ export function TransactionGraph3D({
   graph,
   hideSensitive,
   maxRows,
+  size = "expanded",
   fallback,
 }: {
   graph: TransactionGraphPayload;
   hideSensitive: boolean;
   maxRows: number;
+  /** Inline in the detail sheet, or the full expanded dialog. */
+  size?: "compact" | "expanded";
   fallback: ReactNode;
 }) {
   const { t } = useTranslation("transactions");
@@ -232,7 +237,11 @@ export function TransactionGraph3D({
           role="img"
           aria-label={t("graph.view3dAria")}
           tabIndex={0}
-          className="relative h-[min(64vh,560px)] w-full cursor-grab touch-none overflow-hidden rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+          className={cn(
+            "relative w-full cursor-grab touch-none overflow-hidden rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing",
+            size === "expanded" ? "h-[min(64vh,560px)]" : "h-[380px]",
+          )}
+          data-size={size}
           data-testid="transaction-graph-3d"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}

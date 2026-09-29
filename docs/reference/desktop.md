@@ -228,19 +228,22 @@ hidden), both sides share one band that each splits evenly between its legs,
 only as wide as the busier side needs at a modest width per leg, so a
 72-input consolidation uses the same room for its two outputs. Widths are
 drawing only. The
-expanded graph can switch to a 3D view after the Bitcoin Austria artwork lab's
-ribbon pieces: every coin is a block and its value a bundle of glass ribbons,
+graph is drawn in 3D, inline and in the expanded dialog, after the Bitcoin
+Austria artwork lab's ribbon pieces: every coin is a block and its value a
+bundle of glass ribbons,
 drawn from the same leg widths. Every input's ribbons end in one slim glass
 collar and the outputs' ribbons start there, since a transaction spends its
 inputs together; the ribbon order does not say which input paid which output.
 Frosted ribbons carry no known amount, and hidden values give every coin on a
-side the same size. The view loads three.js only when opened,
-renders only on change, needs no network, and falls back to the 2D graph
+side the same size. The view loads three.js only when a graph is shown,
+renders only on change, needs no network, and falls back to the flat bowtie
 without WebGL. After a wallet sync returns, a bounded background pass fills
 missing graph references through that wallet's backend. Its completion refreshes
-local graph queries. **Look up on-chain** remains available, primarily for rows
-without a synced wallet and for rows left incomplete by the pass's limits or a
-backend failure. Opening the panel never starts a network request.
+local graph queries. The "Look up on-chain" action appears only where a lookup
+could still add something: a row with no local graph, or a Bitcoin graph whose
+spent outputs lack their amounts, mostly rows without a synced wallet or left
+incomplete by the pass's limits or a backend failure; a local Liquid graph is
+never replaced. Opening the panel never starts a network request.
 Manual lookups use the wallet's own backend first and never a server
 Kassiber merely ships as a default, so the panel follows whatever observes the
 wallet and stays silent instead of reaching for third-party infrastructure; with

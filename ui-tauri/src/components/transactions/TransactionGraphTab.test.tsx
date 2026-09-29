@@ -1,5 +1,6 @@
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -17,6 +18,16 @@ import {
   sensitiveGraphText,
   type TransactionGraphPayload,
 } from "./TransactionGraphModel";
+
+// The glass scene needs WebGL, which Node has not; these tests read the flat
+// bowtie the 3D view falls back to. graph3d/ tests the scene itself.
+vi.mock("./graph3d/TransactionGraph3D", () => ({
+  TransactionGraph3D: ({ fallback, size }: { fallback: ReactNode; size?: string }) => (
+    <div data-testid="transaction-graph-3d" data-size={size}>
+      {fallback}
+    </div>
+  ),
+}));
 
 const STRAND_MARKER_LEAD_RATIO = 0.5;
 
@@ -1141,6 +1152,18 @@ describe("TransactionInputsOutputsPanel", () => {
 });
 
 describe("TransactionGraphPanel", () => {
+  it("draws the graph in 3D, with the flat bowtie only as its fallback", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TransactionGraphPanel graph={graph} hideSensitive={false} />
+      </TooltipProvider>,
+    );
+    expect(html).toContain('data-testid="transaction-graph-3d" data-size="compact"');
+    expect(html).not.toContain('role="group"');
+    const shell = html.indexOf('data-testid="transaction-graph-3d"');
+    expect(html.indexOf('data-testid="transaction-flow-diagram"')).toBeGreaterThan(shell);
+  });
+
   it("places the inputs and outputs detail below the flow diagram", () => {
     const html = renderToStaticMarkup(
       <TooltipProvider>

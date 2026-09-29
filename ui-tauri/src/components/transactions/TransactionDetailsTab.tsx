@@ -38,6 +38,7 @@ import {
 } from "./TransactionGraphTab";
 import {
   preloadableSwapLegGraphLookupArgs,
+  publicLookupCanAddToGraph,
   transactionGraphLookupReferenceArgs,
 } from "./TransactionGraphLookup";
 import {
@@ -422,7 +423,9 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                     <div className="overflow-hidden rounded-md border">
                       <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {t(tradeKind ? "recordFlow.title" : "graph.sectionTitle")}
-                        {canPublicGraphLookup && !publicGraphLookup ? (
+                        {canPublicGraphLookup &&
+                        !publicGraphLookup &&
+                        publicLookupCanAddToGraph(activeGraphData) ? (
                           <Button
                             type="button"
                             size="sm"
