@@ -254,6 +254,7 @@ def _ai_client_for(provider: dict):
     return ai_client_for_locator(
         base_url=provider["base_url"],
         api_key=get_ai_provider_api_key_for_use(provider),
+        kind=provider.get("kind"),
     )
 
 

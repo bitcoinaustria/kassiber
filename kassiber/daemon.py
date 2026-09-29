@@ -72,6 +72,7 @@ from .ai.prompt import (
     normalize_system_prompt_kind,
 )
 from .ai.providers import (
+    AI_PROVIDER_KINDS,
     AI_PROVIDER_SECRET_STORE_SQLCIPHER,
     acknowledge_remote_use,
     ai_provider_secret_ref_namespace,
@@ -9244,6 +9245,7 @@ def _run_ai_chat_stream(
                 base_url=provider_snapshot["base_url"],
                 api_key=provider_snapshot.get("api_key"),
                 timeout=validated["timeout_seconds"],
+                kind=provider_snapshot.get("kind"),
             )
             cancel = getattr(client, "cancel", None)
             if callable(cancel):
@@ -17916,6 +17918,7 @@ def handle_request(
         client = ai_client_for_locator(
             base_url=provider["base_url"],
             api_key=_resolve_ai_provider_api_key(ctx, provider, args),
+            kind=provider.get("kind"),
         )
         snapshot = ctx.ai_discovery_cache.get(
             ("models", provider["name"]),
@@ -17981,6 +17984,21 @@ def handle_request(
                         )
                     if has_stored_api_key or canonical_url == stored_url:
                         api_key_text = _resolve_ai_provider_api_key(ctx, stored, args) or ""
+        # Only a provider marked local keeps working in offline mode, so the
+        # test uses the kind the form is about to save, else the saved one.
+        provider_kind = args.get("kind")
+        if provider_kind is not None and provider_kind not in AI_PROVIDER_KINDS:
+            raise AppError(
+                "ai.test_connection kind must be one of: " + ", ".join(AI_PROVIDER_KINDS),
+                code="validation",
+            )
+        stored_name = args.get("provider")
+        if provider_kind is None and isinstance(stored_name, str) and stored_name.strip():
+            try:
+                stored_kind_row = get_db_ai_provider(ctx.conn, stored_name)
+            except AppError:
+                stored_kind_row = None
+            provider_kind = stored_kind_row.get("kind") if stored_kind_row else None
         # Use a tight timeout so a dead URL surfaces a clean error before
         # the Tauri supervisor's `DAEMON_INVOKE_TIMEOUT` (15s) kills the
         # daemon process. Test connection is interactive — a 10s ceiling
@@ -17989,6 +18007,7 @@ def handle_request(
             base_url=canonical_url,
             api_key=api_key_text or None,
             timeout=10.0,
+            kind=provider_kind,
         )
         # Strict mode: surface 4xx as `ai_request_invalid` so a missing
         # `/v1` suffix or a typoed host fails the test instead of

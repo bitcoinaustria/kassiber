@@ -335,9 +335,10 @@ export function NetworkStatusIndicator({
   const [healthRecords, setHealthRecords] = React.useState<
     Record<string, ConnectionHealthRecord>
   >({});
-  const [offlineSwitchFailed, setOfflineSwitchFailed] = React.useState(false);
   const offlineMode = useOfflineMode(daemonEnabled);
-  const offline = offlineMode.offline;
+  // Rows, checks and the indicator treat KASSIBER_NO_EGRESS like the switch:
+  // backend connections are blocked either way.
+  const offline = offlineMode.blocked;
   const maintenanceActive = useUiStore(
     (state) => state.activeMaintenanceProgress?.state === "running",
   );
@@ -544,14 +545,6 @@ export function NetworkStatusIndicator({
     [navigate],
   );
 
-  const setOfflineMode = React.useCallback(
-    (next: boolean) => {
-      setOfflineSwitchFailed(false);
-      offlineMode.setOffline(next).catch(() => setOfflineSwitchFailed(true));
-    },
-    [offlineMode],
-  );
-
   const openConnectionSettings = React.useCallback(() => {
     void navigate({ to: "/settings/bitcoin" });
     setOpen(false);
@@ -582,22 +575,11 @@ export function NetworkStatusIndicator({
             {t("network.outboundConnections")}
           </DropdownMenuLabel>
           <div className="flex items-center gap-3">
-            <label
-              className="flex items-center gap-2 text-xs font-medium text-muted-foreground"
-              title={
-                offlineMode.environmentBlocked
-                  ? t("network.offlineMode.environment")
-                  : undefined
-              }
-            >
+            <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
               <Switch
-                checked={offline}
-                disabled={
-                  !offlineMode.known ||
-                  offlineMode.pending ||
-                  offlineMode.environmentBlocked
-                }
-                onCheckedChange={setOfflineMode}
+                checked={offlineMode.offline}
+                disabled={!offlineMode.known || offlineMode.pending}
+                onCheckedChange={offlineMode.setOffline}
                 aria-label={t("network.offlineMode.switch")}
               />
               {t("network.offlineMode.label")}
@@ -622,21 +604,21 @@ export function NetworkStatusIndicator({
             </Button>
           </div>
         </div>
-        {offline || offlineSwitchFailed ? (
+        {offline || offlineMode.failed ? (
           <p
             className={cn(
               "m-0 px-3 pb-2 text-xs",
-              offlineSwitchFailed
+              offlineMode.failed
                 ? "text-red-700 dark:text-red-300"
                 : "text-muted-foreground",
             )}
-            role={offlineSwitchFailed ? "alert" : undefined}
+            role={offlineMode.failed ? "alert" : undefined}
           >
-            {offlineSwitchFailed
+            {offlineMode.failed
               ? t("network.offlineMode.failed")
-              : offlineMode.environmentBlocked
-                ? t("network.offlineMode.environment")
-                : t("network.offlineMode.on")}
+              : offlineMode.offline
+                ? t("network.offlineMode.on")
+                : t("network.offlineMode.environment")}
           </p>
         ) : null}
         <DropdownMenuSeparator />

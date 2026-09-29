@@ -13,6 +13,7 @@ import json
 import time
 import uuid
 
+from .. import egress_policy
 from ..backends import get_db_backend
 from ..db import database_instance_id
 from ..errors import AppError
@@ -406,6 +407,9 @@ def dispatch(conn, profile_id, operation, args):
     if operation == "sources.revoke":
         return revoke(conn, profile_id, args)
     arguments(args, ("id",), ("id",))
+    # The worker pauses acquisition while offline, so queueing now would wait
+    # silently; say so instead.
+    egress_policy.require_online("Outbound chain acquisition is")
     row = _row(conn, profile_id, args["id"])
     _validate(conn, profile_id, row)
     conn.execute("UPDATE chain_analysis_acquisition_grants SET next_run_at=? WHERE id=?", (int(time.time()), row["id"]))

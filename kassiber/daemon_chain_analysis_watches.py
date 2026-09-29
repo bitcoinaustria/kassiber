@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import threading
 
+from . import egress_policy
 from .db import database_instance_id, open_db
 from .envelope import build_event_envelope
 from .errors import AppError
@@ -28,10 +29,15 @@ def worker_tick(conn, *, cancelled=lambda: False):
     if not has_pending_work(conn):
         return
     profiles = conn.execute("SELECT profile_id FROM chain_analysis_watches WHERE enabled=1 UNION SELECT profile_id FROM chain_analysis_acquisition_grants WHERE status='active' ORDER BY profile_id").fetchall()
+    # Offline mode pauses authorized acquisition, like background refresh: a
+    # due grant keeps its schedule instead of failing each pass. Local watch
+    # evaluation needs no network and keeps running.
+    acquire = not egress_policy.offline_mode_enabled()
     for row in profiles:
         if cancelled():
             return
-        backfill.run_due(conn, row["profile_id"], cancelled=cancelled)
+        if acquire:
+            backfill.run_due(conn, row["profile_id"], cancelled=cancelled)
         if not cancelled() and conn.execute("SELECT 1 FROM chain_analysis_watches WHERE profile_id=? AND enabled=1 LIMIT 1", (row["profile_id"],)).fetchone():
             watches.evaluate_due(conn, row["profile_id"], cancelled=cancelled)
         conn.commit()

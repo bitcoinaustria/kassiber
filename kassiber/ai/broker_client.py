@@ -169,6 +169,9 @@ class BrokerAIClient:
 
     @staticmethod
     def _single_result(request: dict[str, Any], *, timeout: float) -> Any:
+        # Status and model discovery start the provider CLIs too, and those
+        # can reach their vendors (sign-in refresh, model catalogs).
+        egress_policy.require_online("Remote AI providers are")
         node = _node_executable()
         script = _broker_script()
         if not node or not script.is_file():

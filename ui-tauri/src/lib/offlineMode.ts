@@ -1,3 +1,5 @@
+import * as React from "react";
+
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 
 export interface OfflineModeStatus {
@@ -6,23 +8,32 @@ export interface OfflineModeStatus {
 }
 
 export interface OfflineModeState {
-  /** Nothing may connect: the user's switch, or `KASSIBER_NO_EGRESS`. */
+  /** The user's switch: nothing connects off this device. */
   offline: boolean;
-  /** The operator's process override; the switch cannot lift it. */
+  /**
+   * `KASSIBER_NO_EGRESS` blocks backend connections for this process. It
+   * covers fewer paths than the switch, so the switch stays usable.
+   */
   environmentBlocked: boolean;
+  /** Either one: backend connections can neither run nor be checked. */
+  blocked: boolean;
   /** The daemon has answered, so `offline` is the real state. */
   known: boolean;
   pending: boolean;
-  setOffline: (offline: boolean) => Promise<unknown>;
+  /** The last change was refused. */
+  failed: boolean;
+  setOffline: (offline: boolean) => void;
 }
 
 export function offlineModeFromStatus(
   status: OfflineModeStatus | null | undefined,
-): Pick<OfflineModeState, "offline" | "environmentBlocked" | "known"> {
+): Pick<OfflineModeState, "offline" | "environmentBlocked" | "blocked" | "known"> {
+  const offline = status?.offline === true;
   const environmentBlocked = status?.environment_blocked === true;
   return {
-    offline: status?.offline === true || environmentBlocked,
+    offline,
     environmentBlocked,
+    blocked: offline || environmentBlocked,
     known: status != null,
   };
 }
@@ -38,11 +49,21 @@ export function useOfflineMode(enabled = true): OfflineModeState {
     retry: false,
   });
   const mutation = useDaemonMutation<OfflineModeStatus>("ui.network.offline.set");
+  const [failed, setFailed] = React.useState(false);
+  const { mutateAsync } = mutation;
+  const setOffline = React.useCallback(
+    (offline: boolean) => {
+      setFailed(false);
+      mutateAsync({ enabled: offline }).catch(() => setFailed(true));
+    },
+    [mutateAsync],
+  );
   const status =
     query.data?.kind === "ui.network.offline" ? query.data.data : null;
   return {
     ...offlineModeFromStatus(status),
     pending: mutation.isPending,
-    setOffline: (offline) => mutation.mutateAsync({ enabled: offline }),
+    failed,
+    setOffline,
   };
 }

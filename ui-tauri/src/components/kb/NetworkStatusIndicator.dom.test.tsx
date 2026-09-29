@@ -116,14 +116,37 @@ describe("NetworkStatusIndicator offline mode", () => {
     expect(probeCalls()).toBe(0);
   });
 
-  it("cannot lift the operator's process override", async () => {
+  it("keeps the switch usable under the operator's process override", async () => {
+    // KASSIBER_NO_EGRESS blocks backends but not AI providers, device sync or
+    // update checks, so the switch must still be able to block those.
     daemon.reads["ui.network.offline"] = { offline: false, environment_blocked: true };
     await openPanel();
 
     const toggle = screen.getByRole("switch", { name: "network.offlineMode.switch" });
-    expect(toggle.getAttribute("aria-checked")).toBe("true");
-    expect(toggle.hasAttribute("disabled")).toBe(true);
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(toggle.hasAttribute("disabled")).toBe(false);
     expect(screen.getByText("network.offlineMode.environment")).toBeTruthy();
+    expect(screen.getByLabelText("network.health.offline")).toBeTruthy();
+    const check = screen.getByRole("button", { name: "network.checkConnections" });
+    expect(check.hasAttribute("disabled")).toBe(true);
+
+    await act(async () => {
+      fireEvent.click(toggle);
+    });
+    expect(daemon.mutations["ui.network.offline.set"]).toHaveBeenCalledWith({ enabled: true });
+    expect(probeCalls()).toBe(0);
+  });
+
+  it("says so when the switch cannot be changed", async () => {
+    daemon.mutations["ui.network.offline.set"] = vi.fn(async () => {
+      throw new Error("refused");
+    });
+    await openPanel();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("switch", { name: "network.offlineMode.switch" }));
+    });
+    expect(screen.getByRole("alert").textContent).toBe("network.offlineMode.failed");
   });
 
   it("checks only when asked while online", async () => {

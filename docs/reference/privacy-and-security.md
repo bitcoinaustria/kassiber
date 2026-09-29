@@ -225,14 +225,33 @@ changing the switch contacts nothing and needs no unlocked book.
 
 While it is on, every boundary `KASSIBER_NO_EGRESS` covers refuses with
 `network_egress_disabled`, loopback nodes included. So do the paths that
-variable leaves out: remote AI providers (HTTP and the CLI provider broker),
-LAN and Tor device sync and discovery, GitHub update checks, and Core
-Lightning `lightning-cli` calls. An AI provider on a loopback URL stays
-available, because an on-device model sends nothing off the machine.
-Background refresh pauses instead of failing each job, and the connection
-panel shows every connection as offline and disables checks. The switch does
-not govern the system browser or recall a request already sent, and it cannot
-lift `KASSIBER_NO_EGRESS`, which still applies on top.
+variable leaves out: remote AI providers (HTTP chat, model discovery and
+connection tests, and every CLI provider broker call, status and model
+listing included), LAN and Tor device sync and discovery, GitHub update
+checks, and Core Lightning `lightning-cli` calls. Only an AI provider marked
+local keeps working, and local providers must use a loopback URL. A loopback
+URL alone is not enough: a remote or TEE provider reached through a local
+gateway or tunnel still forwards the request off the machine. Kassiber cannot
+see what a local server does with a request, so a local model server that
+forwards some models to its vendor's cloud is outside what the switch can
+enforce.
+
+Background refresh and authorized chain-analysis acquisition pause instead of
+failing each job; an explicit source run refuses. The connection panel shows
+every connection as offline and disables checks. An Electrum session that is
+already open re-checks the switch before every request, so switching offline
+during a sync stops it at the next request. A native BDK/LWK scan finishes the
+wallet it started. The daemon handles desktop requests in order, so the
+desktop switch takes effect once a sync that is running in the foreground
+returns; `kassiber offline on` from a terminal applies immediately. The switch
+does not govern the system browser or recall a request already sent.
+
+`KASSIBER_NO_EGRESS` still applies on top, and the switch cannot lift it.
+Because that variable covers fewer paths, the desktop keeps the switch usable
+while it is set and says which connections it already blocks. `kassiber
+offline` runs directly, like `kassiber update`, also in brokered mode: it is a
+preference for this user account, not an access control, so any process
+running as that user, an agent included, can change it.
 
 ## Local storage
 

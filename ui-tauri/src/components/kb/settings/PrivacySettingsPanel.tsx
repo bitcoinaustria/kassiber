@@ -250,7 +250,6 @@ export function PrivacySettingsPanel({
   const { t } = useTranslation("settings");
   const [filter, setFilter] = React.useState<ExposureFilter | null>(null);
   const offlineMode = useOfflineMode();
-  const [offlineSwitchFailed, setOfflineSwitchFailed] = React.useState(false);
 
   // Only enabled backends actually send traffic off the machine.
   const enabled = React.useMemo(
@@ -286,26 +285,18 @@ export function PrivacySettingsPanel({
         <SettingsSwitchRow
           label={t("privacy.offlineLabel")}
           description={
-            offlineMode.environmentBlocked
-              ? t("privacy.offlineEnvironment")
-              : offlineMode.offline
-                ? t("privacy.offlineOn")
-                : t("privacy.offlineOff")
+            offlineMode.offline ? t("privacy.offlineOn") : t("privacy.offlineOff")
           }
           checked={offlineMode.offline}
-          onCheckedChange={(next) => {
-            setOfflineSwitchFailed(false);
-            offlineMode
-              .setOffline(next)
-              .catch(() => setOfflineSwitchFailed(true));
-          }}
-          disabled={
-            !offlineMode.known ||
-            offlineMode.pending ||
-            offlineMode.environmentBlocked
-          }
+          onCheckedChange={offlineMode.setOffline}
+          disabled={!offlineMode.known || offlineMode.pending}
         />
-        {offlineSwitchFailed ? (
+        {offlineMode.environmentBlocked && !offlineMode.offline ? (
+          <p className="text-xs text-muted-foreground">
+            {t("privacy.offlineEnvironment")}
+          </p>
+        ) : null}
+        {offlineMode.failed ? (
           <p className="text-xs text-red-700 dark:text-red-300" role="alert">
             {t("privacy.offlineFailed")}
           </p>

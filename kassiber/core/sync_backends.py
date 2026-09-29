@@ -400,6 +400,9 @@ class ElectrumClient:
                 "params": params or [],
             }
         ).encode("utf-8") + b"\n"
+        # Checked per request, not only at connect: offline mode switched on
+        # during a sync must stop an already open session.
+        require_egress_enabled()
         self.socket.sendall(payload)
         get_egress_ledger().record(
             subsystem="sync",
@@ -456,6 +459,7 @@ class ElectrumClient:
                 )
             )
         payload = ("\n".join(payload_lines) + "\n").encode("utf-8")
+        require_egress_enabled()
         self.socket.sendall(payload)
         get_egress_ledger().record(
             subsystem="sync",

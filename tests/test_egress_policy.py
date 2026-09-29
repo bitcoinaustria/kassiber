@@ -103,18 +103,24 @@ def test_transport_guard_names_offline_mode(preference):
 )
 def test_require_online_allows_on_device_urls(preference, url):
     egress_policy.set_offline_mode(True)
-    egress_policy.require_online("Remote AI providers are", url=url)
+    egress_policy.require_online("Remote AI providers are", on_device_url=url)
 
 
 @pytest.mark.parametrize(
     "url",
-    ["https://api.openai.com/v1", "http://192.168.1.20:11434/v1", "http://localhost.example/v1", None],
+    [
+        "https://api.openai.com/v1",
+        "http://192.168.1.20:11434/v1",
+        "http://localhost.example/v1",
+        "ftp://127.0.0.1/v1",
+        None,
+    ],
 )
 def test_require_online_blocks_everything_else(preference, url):
-    egress_policy.require_online("Remote AI providers are", url=url)
+    egress_policy.require_online("Remote AI providers are", on_device_url=url)
     egress_policy.set_offline_mode(True)
     with pytest.raises(AppError) as excinfo:
-        egress_policy.require_online("Remote AI providers are", url=url)
+        egress_policy.require_online("Remote AI providers are", on_device_url=url)
     _assert_offline_error(excinfo)
 
 
@@ -136,15 +142,74 @@ def test_ai_client_keeps_local_models_and_blocks_remote_ones(preference):
     opener = mock.Mock()
     opener.open.return_value = io.BytesIO(b"{}")
     with mock.patch.object(ai_client.urllib.request, "build_opener", return_value=opener):
-        local = ai_client.OpenAIResponsesClient(base_url="http://127.0.0.1:11434/v1")
+        local = ai_client.ai_client_for_locator("http://127.0.0.1:11434/v1", kind="local")
         local._open("models", method="GET", body=None, accept_sse=False)
         assert opener.open.call_count == 1
 
-        remote = ai_client.OpenAIResponsesClient(base_url="https://api.openai.com/v1", api_key="test-key")
+        remote = ai_client.ai_client_for_locator(
+            "https://api.openai.com/v1", api_key="test-key", kind="remote"
+        )
         with pytest.raises(AppError) as excinfo:
             remote._open("models", method="GET", body=None, accept_sse=False)
     _assert_offline_error(excinfo)
     assert opener.open.call_count == 1
+
+
+@pytest.mark.parametrize("kind", ["remote", "tee", None])
+def test_ai_client_blocks_a_loopback_gateway_to_a_remote_model(preference, kind):
+    # A local gateway or tunnel on a loopback URL still forwards the prompt off
+    # the machine; only a provider marked local counts as on-device.
+    from kassiber.ai import client as ai_client
+
+    egress_policy.set_offline_mode(True)
+    client = ai_client.ai_client_for_locator("http://127.0.0.1:4000/v1", api_key="k", kind=kind)
+    with mock.patch.object(ai_client.urllib.request, "build_opener") as build_opener:
+        with pytest.raises(AppError) as excinfo:
+            client._open("models", method="GET", body=None, accept_sse=False)
+    _assert_offline_error(excinfo)
+    build_opener.assert_not_called()
+
+
+def test_cli_provider_broker_refuses_before_spawning(preference):
+    from kassiber.ai import broker_client
+    from kassiber.ai.contracts import CLI_PROVIDER_LOCATORS
+
+    egress_policy.set_offline_mode(True)
+    client = broker_client.BrokerAIClient(locator=CLI_PROVIDER_LOCATORS[0])
+    with (
+        mock.patch.object(broker_client.subprocess, "run") as run,
+        mock.patch.object(broker_client.subprocess, "Popen") as popen,
+    ):
+        # Model discovery and runtime status start the provider CLIs too.
+        for probe in (client.list_models, broker_client.BrokerAIClient.runtime_status):
+            with pytest.raises(AppError) as excinfo:
+                probe()
+            _assert_offline_error(excinfo)
+        with pytest.raises(AppError) as excinfo:
+            list(client.stream_chat(messages=[{"role": "user", "content": "hi"}], model="m"))
+        _assert_offline_error(excinfo)
+    run.assert_not_called()
+    popen.assert_not_called()
+
+
+def test_open_electrum_session_stops_once_offline(preference):
+    from kassiber.core import sync_backends
+
+    client = sync_backends.ElectrumClient({"name": "fulcrum", "url": "ssl://fulcrum.example:50002"})
+    client.socket = mock.Mock()
+    client.reader = io.BytesIO(b'{"jsonrpc": "2.0", "id": 1, "result": 1}\n')
+    assert client.call("server.ping") == 1
+    assert client.socket.sendall.call_count == 1
+
+    # Switched on mid-sync: the already open session sends nothing more.
+    egress_policy.set_offline_mode(True)
+    with pytest.raises(AppError) as excinfo:
+        client.call("blockchain.scripthash.get_history", ["00" * 32])
+    _assert_offline_error(excinfo)
+    with pytest.raises(AppError) as excinfo:
+        client.batch_call([("blockchain.scripthash.get_history", ["00" * 32])])
+    _assert_offline_error(excinfo)
+    assert client.socket.sendall.call_count == 1
 
 
 def test_lan_discovery_and_sync_refuse_offline(preference):
@@ -183,6 +248,38 @@ def test_core_lightning_refuses_before_spawning(preference):
             cln.call_core_lightning({"kind": "coreln"}, "getinfo")
     _assert_offline_error(excinfo)
     run.assert_not_called()
+
+
+def test_background_acquisition_pauses_offline_but_watches_still_run(preference):
+    from kassiber import daemon_chain_analysis_watches as watch_worker
+
+    egress_policy.set_offline_mode(True)
+    conn = mock.Mock()
+    conn.execute.return_value.fetchall.return_value = [{"profile_id": "p1"}]
+    conn.execute.return_value.fetchone.return_value = (1,)
+    with (
+        mock.patch.object(watch_worker, "has_pending_work", return_value=True),
+        mock.patch.object(watch_worker.backfill, "run_due") as run_due,
+        mock.patch.object(watch_worker.watches, "evaluate_due") as evaluate_due,
+    ):
+        watch_worker.worker_tick(conn)
+        run_due.assert_not_called()
+        evaluate_due.assert_called_once()
+
+        egress_policy.set_offline_mode(False)
+        watch_worker.worker_tick(conn)
+        run_due.assert_called_once()
+
+
+def test_explicit_acquisition_run_refuses_offline(preference):
+    from kassiber.core import chain_analysis_backfill
+
+    egress_policy.set_offline_mode(True)
+    conn = mock.Mock()
+    with pytest.raises(AppError) as excinfo:
+        chain_analysis_backfill.dispatch(conn, "p1", "sources.run", {"id": "grant"})
+    _assert_offline_error(excinfo)
+    conn.execute.assert_not_called()
 
 
 def test_background_refresh_pauses_offline(preference):

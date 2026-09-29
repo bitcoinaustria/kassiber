@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 
 from .db import DEFAULT_CONFIG_DIRNAME, default_state_root
 from .errors import AppError
-from .update_check import _atomic_write_private, read_small_private_file
+from .private_files import atomic_write_private, read_small_private_file
 
 NO_EGRESS_ENV = "KASSIBER_NO_EGRESS"
 OFFLINE_PREFERENCE_ENV = "KASSIBER_OFFLINE_PREFERENCE_FILE"
@@ -70,14 +70,24 @@ def offline_mode_enabled(path: Path | None = None) -> bool:
 
 def set_offline_mode(enabled: bool, path: Path | None = None) -> Path:
     destination = path or preference_path()
+    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        destination.parent.chmod(0o700)
+    except OSError:
+        # Best effort for existing directories; the file itself is owner-only.
+        pass
     document = {"schema_version": OFFLINE_SCHEMA_VERSION, "enabled": bool(enabled)}
-    _atomic_write_private(destination, json.dumps(document, sort_keys=True) + "\n")
+    atomic_write_private(destination, json.dumps(document, sort_keys=True) + "\n")
     return destination
+
+
+def _environment_blocks_egress() -> bool:
+    return str(os.environ.get(NO_EGRESS_ENV) or "").strip().lower() in _TRUTHY
 
 
 def egress_block_reason() -> str | None:
     """Why outbound connections are blocked right now, or ``None``."""
-    if str(os.environ.get(NO_EGRESS_ENV) or "").strip().lower() in _TRUTHY:
+    if _environment_blocks_egress():
         return REASON_ENVIRONMENT
     if offline_mode_enabled():
         return REASON_OFFLINE_MODE
@@ -85,11 +95,25 @@ def egress_block_reason() -> str | None:
 
 
 def offline_status() -> dict[str, bool]:
-    """The switch state the desktop shows, without contacting anything."""
+    """The switch state the desktop shows, without contacting anything.
+
+    ``offline`` is the user's switch alone. ``environment_blocked`` reports
+    ``KASSIBER_NO_EGRESS``, which covers fewer paths than the switch, so the
+    desktop keeps the switch usable while it is set.
+    """
     return {
         "offline": offline_mode_enabled(),
-        "environment_blocked": egress_block_reason() == REASON_ENVIRONMENT,
+        "environment_blocked": _environment_blocks_egress(),
     }
+
+
+def _offline_error(subject: str) -> AppError:
+    return AppError(
+        f"{subject} disabled: Kassiber is in offline mode",
+        code="network_egress_disabled",
+        hint="Turn off offline mode to connect.",
+        retryable=False,
+    )
 
 
 def egress_disabled_error(subject: str = "Outbound requests are") -> AppError | None:
@@ -98,12 +122,7 @@ def egress_disabled_error(subject: str = "Outbound requests are") -> AppError | 
     if reason is None:
         return None
     if reason == REASON_OFFLINE_MODE:
-        return AppError(
-            f"{subject} disabled: Kassiber is in offline mode",
-            code="network_egress_disabled",
-            hint="Turn off offline mode to connect.",
-            retryable=False,
-        )
+        return _offline_error(subject)
     return AppError(
         f"{subject} disabled by {NO_EGRESS_ENV}",
         code="network_egress_disabled",
@@ -120,9 +139,12 @@ def require_egress_enabled(subject: str = "Outbound requests are") -> None:
 
 def _is_loopback_url(url: str) -> bool:
     try:
-        host = (urlsplit(url).hostname or "").rstrip(".").lower()
+        parsed = urlsplit(url)
     except ValueError:
         return False
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    host = (parsed.hostname or "").rstrip(".").lower()
     if host == "localhost":
         return True
     try:
@@ -131,21 +153,18 @@ def _is_loopback_url(url: str) -> bool:
         return False
 
 
-def require_online(subject: str, *, url: str | None = None) -> None:
+def require_online(subject: str, *, on_device_url: str | None = None) -> None:
     """Refuse a connection outside the shared transport while offline.
 
     For the paths ``KASSIBER_NO_EGRESS`` does not cover by design — AI
     providers, LAN device sync and update checks — offline mode still has to
-    hold. A ``url`` on this machine (loopback) is allowed: an on-device model
-    sends nothing off the machine, which is the point of working offline.
+    hold. ``on_device_url`` is the base URL of an AI provider already marked
+    local; it passes only on loopback. A loopback URL alone is not enough: a
+    remote or TEE provider behind a local gateway or tunnel would still send
+    the request off the machine.
     """
     if not offline_mode_enabled():
         return
-    if url is not None and _is_loopback_url(url):
+    if on_device_url is not None and _is_loopback_url(on_device_url):
         return
-    raise AppError(
-        f"{subject} disabled: Kassiber is in offline mode",
-        code="network_egress_disabled",
-        hint="Turn off offline mode to connect.",
-        retryable=False,
-    )
+    raise _offline_error(subject)
