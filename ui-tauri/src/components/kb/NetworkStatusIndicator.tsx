@@ -24,6 +24,14 @@ import {
 } from "@/components/ui/table";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
+import {
+  AUTOMATIC_CONNECTION_CHECK_INTERVAL_MS,
+  AUTOMATIC_CONNECTION_CHECK_RETRY_MS,
+  automaticCheckDelay,
+  currentHealthRecord,
+  useConnectionHealthStore,
+  type ConnectionHealthRecord,
+} from "@/store/connectionHealth";
 import { useOfflineMode } from "@/lib/offlineMode";
 import {
   abbreviateEndpointMiddle,
@@ -52,12 +60,30 @@ import {
   type ConnectionHealthRow,
 } from "./NetworkStatusIndicatorModel";
 
-type ConnectionHealthRecord = {
-  status: ConnectionHealthStatus;
-  fingerprint?: string;
-  message?: string;
-  checkedAt?: string;
+type InUseBackendsData = {
+  backends: Array<{ name: string }>;
 };
+
+type ActiveBookData = {
+  activeWorkspaceId?: string;
+  activeProfileId?: string;
+};
+
+/** The daemon's `expected_scope` guard: refuse if another book is open. */
+type BookScope = { workspace_id: string; profile_id: string };
+
+type ProbeOptions = {
+  /** Sent with every probe, so the daemon refuses once the book changed. */
+  expectedScope?: BookScope;
+  /** Checked before each probe; a round stops as soon as it turns false. */
+  shouldContinue?: () => boolean;
+};
+
+function isStaleBookError(error: unknown): boolean {
+  const envelope = (error as { envelope?: { error?: { code?: unknown } } })
+    ?.envelope;
+  return envelope?.error?.code === "stale_context";
+}
 
 const OUTBOUND_CONNECTION_ROW_LIMIT = 8;
 
@@ -173,7 +199,7 @@ function rowHealthStatus(
   if (row.probeKind === "unsupported") {
     return "unavailable";
   }
-  return records[row.id]?.status ?? "unknown";
+  return currentHealthRecord(records, row)?.status ?? "unknown";
 }
 
 type TFn = TFunction<"chrome">;
@@ -328,13 +354,21 @@ export function NetworkStatusIndicator({
     readNetworkStatus(),
   );
   const [open, setOpen] = React.useState(false);
-  const [checking, setChecking] = React.useState(false);
+  const autoCheckDescriptionId = React.useId();
   const [documentVisible, setDocumentVisible] = React.useState(() =>
     readDocumentVisible(),
   );
-  const [healthRecords, setHealthRecords] = React.useState<
-    Record<string, ConnectionHealthRecord>
-  >({});
+  // Results outlive this component (it remounts with the shell), so the
+  // indicator keeps its last known state instead of reverting to unchecked.
+  const checking = useConnectionHealthStore((state) => state.checking);
+  const healthRecords = useConnectionHealthStore((state) => state.records);
+  const clearHealthResults = useConnectionHealthStore(
+    (state) => state.clearResults,
+  );
+  const autoCheckBooks = useUiStore((state) => state.connectionAutoCheckBooks);
+  const setConnectionAutoCheck = useUiStore(
+    (state) => state.setConnectionAutoCheck,
+  );
   const offlineMode = useOfflineMode(daemonEnabled);
   // Rows, checks and the indicator treat KASSIBER_NO_EGRESS like the switch:
   // backend connections are blocked either way.
@@ -346,6 +380,32 @@ export function NetworkStatusIndicator({
     "ui.backends.settings.list",
     undefined,
     { enabled: daemonEnabled },
+  );
+  // The automatic check is opted into per book, so it needs to know which
+  // book is open. A local read, like the backend list.
+  const activeBookQuery = useDaemon<ActiveBookData>(
+    "ui.profiles.snapshot",
+    undefined,
+    { enabled: daemonEnabled },
+  );
+  const activeWorkspaceId = activeBookQuery.data?.data?.activeWorkspaceId;
+  const activeProfileId = activeBookQuery.data?.data?.activeProfileId;
+  const bookScope = React.useMemo<BookScope | null>(
+    () =>
+      activeWorkspaceId && activeProfileId
+        ? { workspace_id: activeWorkspaceId, profile_id: activeProfileId }
+        : null,
+    [activeWorkspaceId, activeProfileId],
+  );
+  const connectionAutoCheck =
+    bookScope !== null && autoCheckBooks.includes(bookScope.profile_id);
+  // The daemon's own answer to "which backends does this book sync from",
+  // defaults included. Asked only once this book opted in, and bound to it:
+  // the daemon refuses if another book is open by the time it answers.
+  const inUseBackendsQuery = useDaemon<InUseBackendsData>(
+    "ui.backends.list",
+    bookScope ? { expected_scope: bookScope } : undefined,
+    { enabled: daemonEnabled && connectionAutoCheck },
   );
   const testElectrum = useDaemonMutation<BackendProbeEnvelope>(
     "ui.backends.electrum.test",
@@ -385,6 +445,17 @@ export function NetworkStatusIndicator({
       ),
     [connectionRows],
   );
+  const automaticRows = React.useMemo(() => {
+    const inUse = new Set(
+      (inUseBackendsQuery.data?.kind === "ui.backends.list"
+        ? inUseBackendsQuery.data.data?.backends ?? []
+        : []
+      ).map((backend) => backend.name),
+    );
+    return checkableRows.filter(
+      (row) => row.backendId !== undefined && inUse.has(row.backendId),
+    );
+  }, [checkableRows, inUseBackendsQuery.data]);
   const healthSnapshots = React.useMemo(
     () =>
       connectionRows.map((row) => ({
@@ -393,7 +464,7 @@ export function NetworkStatusIndicator({
     [connectionRows, healthRecords],
   );
   // Offline mode is a choice, not a fault: the indicator goes quiet rather
-  // than red, and cached results from before the switch stop counting.
+  // than red, and results from before the switch are dropped (below).
   const indicatorTone = offline
     ? "neutral"
     : connectionHealthTone(status, healthSnapshots);
@@ -408,8 +479,8 @@ export function NetworkStatusIndicator({
         : connectionIndicatorLabel(indicatorTone, t);
   const Icon =
     offline || status === "offline" || nothingConnected ? WifiOff : Wifi;
-  const lastCheckedAt = Object.values(healthRecords)
-    .map((record) => record.checkedAt)
+  const lastCheckedAt = connectionRows
+    .map((row) => currentHealthRecord(healthRecords, row)?.checkedAt)
     .filter((value): value is string => Boolean(value))
     .sort()
     .at(-1);
@@ -438,35 +509,45 @@ export function NetworkStatusIndicator({
     };
   }, []);
 
-  // Only the refresh button calls this. There is no timer and no mount
-  // effect, which is what keeps the indicator offline until asked -- not a
-  // flag, which would just be a second place to get it wrong.
-  const runConnectionChecks = React.useCallback(async () => {
-    if (!canCheckConnections) return;
+  // Two callers only: the refresh button, which checks every listed
+  // connection, and the opt-in timer below, which checks the book's own.
+  // Nothing probes on mount, so the indicator stays unchecked until asked.
+  const probeConnections = React.useCallback(async (
+    rows: ConnectionHealthRow[],
+    options: ProbeOptions = {},
+  ) => {
+    const health = useConnectionHealthStore.getState();
+    if (health.checking || rows.length === 0) return;
     const now = new Date().toISOString();
-    setChecking(true);
+    // Results from a round that offline mode interrupted must not come back.
+    const generation = health.generation;
+    health.setChecking(true);
     const results: Array<[string, ConnectionHealthRecord]> = [];
     // The Python daemon currently executes foreground requests serially. Send
     // probes one at a time so later probes do not spend their supervisor
     // timeout waiting behind earlier network calls.
-    for (const row of checkableRows) {
+    for (const row of rows) {
       if (
-        useUiStore.getState().activeMaintenanceProgress?.state === "running"
+        useUiStore.getState().activeMaintenanceProgress?.state === "running" ||
+        options.shouldContinue?.() === false
       ) {
         break;
       }
       try {
         const request = connectionProbeRequest(row);
+        const args = options.expectedScope
+          ? { ...request.args, expected_scope: options.expectedScope }
+          : request.args;
         const envelope =
           request.kind === "electrum"
-            ? await testElectrum.mutateAsync(request.args)
+            ? await testElectrum.mutateAsync(args)
             : request.kind === "bitcoinrpc"
-              ? await testBitcoinRpc.mutateAsync(request.args)
+              ? await testBitcoinRpc.mutateAsync(args)
               : request.kind === "lightning"
-                ? await testLightning.mutateAsync(request.args)
+                ? await testLightning.mutateAsync(args)
                 : request.kind === "btcpay"
-                  ? await testBtcpay.mutateAsync(request.args)
-                  : await testHttp.mutateAsync(request.args);
+                  ? await testBtcpay.mutateAsync(args)
+                  : await testHttp.mutateAsync(args);
         const payload = envelope.data;
         const coreHealth =
           row.probeKind === "bitcoinrpc"
@@ -489,6 +570,8 @@ export function NetworkStatusIndicator({
           },
         ]);
       } catch (error) {
+        // Another book is open now: its servers are not this round's to check.
+        if (isStaleBookError(error)) break;
         results.push([
           row.id,
           {
@@ -501,17 +584,9 @@ export function NetworkStatusIndicator({
         ]);
       }
     }
-    setHealthRecords((current) => {
-      const next = { ...current };
-      for (const [id, record] of results) {
-        next[id] = record;
-      }
-      return next;
-    });
-    setChecking(false);
+    health.recordResults(results, generation);
+    health.setChecking(false);
   }, [
-    canCheckConnections,
-    checkableRows,
     t,
     testBtcpay,
     testBitcoinRpc,
@@ -519,6 +594,90 @@ export function NetworkStatusIndicator({
     testHttp,
     testLightning,
   ]);
+
+  const runConnectionChecks = React.useCallback(() => {
+    if (!canCheckConnections) return Promise.resolve();
+    return probeConnections(checkableRows);
+  }, [canCheckConnections, checkableRows, probeConnections]);
+
+  const automaticCheckActive =
+    connectionAutoCheck &&
+    offlineMode.known &&
+    !offline &&
+    canRunConnectionHealthChecks({
+      // A round in progress defers the next one inside the timer instead of
+      // restarting it.
+      checking: false,
+      checkableConnectionCount: automaticRows.length,
+      daemonEnabled,
+      documentVisible,
+      maintenanceActive,
+      networkStatus: status,
+    });
+  // The book is part of the key, so switching books restarts the timer and
+  // a round in flight for the previous book stops at its next probe.
+  const automaticRowsKey = [
+    bookScope?.profile_id ?? "",
+    ...automaticRows.map((row) => `${row.id}|${row.fingerprint}`),
+  ].join("\n");
+  const probeConnectionsRef = React.useRef(probeConnections);
+  const automaticRowsRef = React.useRef(automaticRows);
+  const bookScopeRef = React.useRef(bookScope);
+  React.useEffect(() => {
+    probeConnectionsRef.current = probeConnections;
+    automaticRowsRef.current = automaticRows;
+    bookScopeRef.current = bookScope;
+  });
+
+  // The opt-in timer. It runs only while every gate holds (this book opted
+  // in, online, visible, no maintenance) and probes only backends this book's
+  // wallets use -- never rate providers or other listed services. The last
+  // round's time lives in the session store, so remounting does not re-probe
+  // early; hiding the window pauses it.
+  React.useEffect(() => {
+    if (!automaticCheckActive) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const run = () => {
+      if (cancelled) return;
+      const health = useConnectionHealthStore.getState();
+      if (health.checking) {
+        // A manual check is running. Try again shortly rather than skip
+        // this round and wait a whole interval.
+        timer = setTimeout(run, AUTOMATIC_CONNECTION_CHECK_RETRY_MS);
+        return;
+      }
+      health.markAutomaticCheck(Date.now());
+      void probeConnectionsRef
+        .current(automaticRowsRef.current, {
+          expectedScope: bookScopeRef.current ?? undefined,
+          shouldContinue: () => !cancelled,
+        })
+        .finally(() => {
+          if (!cancelled) schedule();
+        });
+    };
+    const schedule = () => {
+      timer = setTimeout(
+        run,
+        automaticCheckDelay(
+          useConnectionHealthStore.getState().lastAutomaticCheckAt,
+          Date.now(),
+        ),
+      );
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [automaticCheckActive, automaticRowsKey]);
+
+  // Blocked connections make earlier results meaningless, and they must not
+  // reappear as current once the switch is off again.
+  React.useEffect(() => {
+    if (offline) clearHealthResults();
+  }, [offline, clearHealthResults]);
 
   const openSettingsConnection = React.useCallback(
     (row: ConnectionHealthRow) => {
@@ -675,7 +834,7 @@ export function NetworkStatusIndicator({
                         : rowHealthStatus(row, healthRecords);
                       const record = offline
                         ? undefined
-                        : healthRecords[row.id];
+                        : currentHealthRecord(healthRecords, row);
                       const rowStatusText = connectionStatusText(
                         row,
                         rowStatus,
@@ -743,11 +902,40 @@ export function NetworkStatusIndicator({
             </div>
           )}
         </div>
-        {lastCheckedAt && !offline ? (
-          <div className="border-t px-3 py-2 text-xs text-muted-foreground">
-            {t("network.lastChecked", {
-              time: new Date(lastCheckedAt).toLocaleTimeString(currentUiLocale()),
-            })}
+        {connectionRows.length > 0 ? (
+          <div className="space-y-1 border-t px-3 py-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+              <label className="flex items-center gap-2">
+                <Switch
+                  checked={connectionAutoCheck}
+                  disabled={offline || bookScope === null}
+                  onCheckedChange={(next) => {
+                    if (bookScope) {
+                      setConnectionAutoCheck(bookScope.profile_id, next);
+                    }
+                  }}
+                  aria-label={t("network.autoCheck.label", {
+                    minutes: AUTOMATIC_CONNECTION_CHECK_INTERVAL_MS / 60_000,
+                  })}
+                  aria-describedby={autoCheckDescriptionId}
+                />
+                {t("network.autoCheck.label", {
+                  minutes: AUTOMATIC_CONNECTION_CHECK_INTERVAL_MS / 60_000,
+                })}
+              </label>
+              {lastCheckedAt && !offline ? (
+                <span>
+                  {t("network.lastChecked", {
+                    time: new Date(lastCheckedAt).toLocaleTimeString(
+                      currentUiLocale(),
+                    ),
+                  })}
+                </span>
+              ) : null}
+            </div>
+            <p id={autoCheckDescriptionId} className="m-0">
+              {t("network.autoCheck.description")}
+            </p>
           </div>
         ) : null}
       </DropdownMenuContent>

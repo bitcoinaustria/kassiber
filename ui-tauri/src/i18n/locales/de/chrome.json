@@ -325,6 +325,10 @@
       "on": "Der Offline-Modus ist an. Kassiber verbindet sich mit nichts außerhalb dieses Geräts, bis du ihn ausschaltest.",
       "environment": "KASSIBER_NO_EGRESS blockiert Wallet- und Backend-Verbindungen für diesen Prozess. Schalte den Offline-Modus ein, um auch AI-Provider, Geräte-Sync und Update-Prüfungen zu blockieren.",
       "failed": "Der Offline-Modus konnte nicht geändert werden."
+    },
+    "autoCheck": {
+      "label": "Verbindungen dieses Buchs alle {{minutes}} Minuten prüfen",
+      "description": "Nur solange dieses Fenster offen ist. Jede Prüfung zeigt den Servern, mit denen dieses Buch synchronisiert, dass Kassiber läuft."
     }
   },
   "bookSwitcher": {

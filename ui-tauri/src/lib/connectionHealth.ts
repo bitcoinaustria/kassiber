@@ -155,9 +155,10 @@ export function canRunConnectionHealthChecks({
   maintenanceActive,
   networkStatus,
 }: ConnectionHealthCheckGateInput): boolean {
-  // Whether the user asked is not a field here: the caller is a click
-  // handler, and there is no other caller. This answers the narrower
-  // question of whether a check the user *did* ask for can run right now.
+  // Whether the user asked is not a field here: the callers are the check
+  // button and the automatic timer, which only runs after its explicit
+  // opt-in. This answers the narrower question of whether a check the user
+  // asked for can run right now.
   return (
     daemonEnabled &&
     documentVisible &&
