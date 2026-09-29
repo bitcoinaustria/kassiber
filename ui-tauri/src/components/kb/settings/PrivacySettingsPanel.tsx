@@ -9,6 +9,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { useOfflineMode } from "@/lib/offlineMode";
 import { cn } from "@/lib/utils";
 import { SettingsSwitchRow } from "./SettingsControls";
 import {
@@ -248,6 +249,7 @@ export function PrivacySettingsPanel({
 }) {
   const { t } = useTranslation("settings");
   const [filter, setFilter] = React.useState<ExposureFilter | null>(null);
+  const offlineMode = useOfflineMode();
 
   // Only enabled backends actually send traffic off the machine.
   const enabled = React.useMemo(
@@ -276,6 +278,31 @@ export function PrivacySettingsPanel({
 
   return (
     <div className="space-y-6">
+      <section className="space-y-3">
+        <h3 className="text-sm font-semibold">
+          {t("privacy.offlineHeading")}
+        </h3>
+        <SettingsSwitchRow
+          label={t("privacy.offlineLabel")}
+          description={
+            offlineMode.offline ? t("privacy.offlineOn") : t("privacy.offlineOff")
+          }
+          checked={offlineMode.offline}
+          onCheckedChange={offlineMode.setOffline}
+          disabled={!offlineMode.known || offlineMode.pending}
+        />
+        {offlineMode.environmentBlocked && !offlineMode.offline ? (
+          <p className="text-xs text-muted-foreground">
+            {t("privacy.offlineEnvironment")}
+          </p>
+        ) : null}
+        {offlineMode.failed ? (
+          <p className="text-xs text-red-700 dark:text-red-300" role="alert">
+            {t("privacy.offlineFailed")}
+          </p>
+        ) : null}
+      </section>
+
       <section className="space-y-3">
         <h3 className="text-sm font-semibold">
           {t("privacy.onScreenHeading")}

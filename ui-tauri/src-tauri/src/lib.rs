@@ -218,6 +218,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.chain_analysis.sources.run",
     "status",
     "ui.egress.snapshot",
+    "ui.network.offline",
+    "ui.network.offline.set",
     "ui.overview.snapshot",
     "ui.workspace.overview.snapshot",
     "ui.transactions.list",

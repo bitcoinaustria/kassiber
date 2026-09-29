@@ -6,25 +6,20 @@ import base64
 import http.client
 import io
 import ipaddress
-import os
 import socket
 import ssl
 from urllib import error as urlerror
 from urllib import parse as urlparse
 from urllib import request as urlrequest
 
+from . import egress_policy
 from .egress_ledger import get_egress_ledger, http_request_bytes_out
 from .errors import AppError
 
 
 def require_egress_enabled():
-    """Check the operator's process override before opening a transport."""
-    if str(os.environ.get("KASSIBER_NO_EGRESS") or "").strip().lower() in {"1", "true", "yes", "on"}:
-        raise AppError(
-            "Outbound requests are disabled by KASSIBER_NO_EGRESS",
-            code="network_egress_disabled",
-            retryable=False,
-        )
+    """Check the process override and offline mode before opening a transport."""
+    egress_policy.require_egress_enabled()
 
 
 def _with_default_proxy_scheme(proxy_url, default_scheme="socks5h"):

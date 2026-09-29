@@ -461,7 +461,10 @@ channel pass through unchanged.
 Settings → AI providers exposes a **Test connection** action. It calls the
 daemon's `ai.test_connection` kind with the *currently entered* base URL and
 API key (or, when editing without changing the API-key field, the saved key)
-and reports the model count without persisting anything. For built-in CLI
+and reports the model count without persisting anything. It also passes the
+form's privacy kind (`kind`), since in [offline mode](privacy-and-security.md#offline-mode)
+only a provider marked local may be tested; without it the saved provider's
+kind applies. For built-in CLI
 locators, model discovery and authentication readiness come from the broker's
 native runtime probes. For HTTP providers, the
 connection test probes `/v1/models`; it does not spend tokens on a generation,

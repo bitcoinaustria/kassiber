@@ -651,7 +651,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
         with patch(
             "kassiber.core.chain_observer.lwk.require_lwk", return_value=fake_lwk
         ), patch(
-            "kassiber.core.chain_observer.lwk._truthy_env", return_value=False
+            "kassiber.egress_policy.egress_block_reason", return_value=None
         ):
             with self.assertRaises(AppError) as raised:
                 observer._client(network)
@@ -668,7 +668,7 @@ class LwkDescriptorContractTest(unittest.TestCase):
         with patch(
             "kassiber.core.chain_observer.lwk.require_lwk", return_value=fake_lwk
         ), patch(
-            "kassiber.core.chain_observer.lwk._truthy_env", return_value=False
+            "kassiber.egress_policy.egress_block_reason", return_value=None
         ):
             self.assertEqual(observer._client(network), "electrum-client")
         fake_lwk.ElectrumClient.assert_called_once_with(

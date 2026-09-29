@@ -29,6 +29,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from .. import egress_policy
 from ..egress_ledger import get_egress_ledger, http_request_bytes_out
 from ..errors import AppError
 from ..redaction import provider_error_body_preview
@@ -697,6 +698,9 @@ class OpenAIResponsesClient:
     api_key: str | None = None
     timeout: float = DEFAULT_TIMEOUT_SECONDS
     user_agent: str = "kassiber/ai"
+    # A provider marked local (always a loopback URL). Only such a provider
+    # keeps working in offline mode; a loopback gateway to a remote model does not.
+    on_device: bool = False
     _cancelled: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
     _active_response: Any = field(default=None, init=False, repr=False)
 
@@ -734,6 +738,11 @@ class OpenAIResponsesClient:
     ):
         if self._cancelled.is_set():
             raise AppError("AI request cancelled", code="ai_cancelled")
+        # Offline mode keeps an on-device model and blocks the rest.
+        egress_policy.require_online(
+            "Remote AI providers are",
+            on_device_url=self.base_url if self.on_device else None,
+        )
         url = f"{self.base_url.rstrip('/')}/{path.lstrip('/')}"
         request = urllib.request.Request(
             url,
@@ -1036,11 +1045,18 @@ def ai_client_for_locator(
     *,
     api_key: str | None = None,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    kind: str | None = None,
 ):
+    """Build the client for a provider locator.
+
+    ``kind`` is the provider's privacy kind. Only ``"local"`` lets an HTTP
+    provider through offline mode; omit it and the client counts as remote.
+    """
     if is_cli_provider_locator(base_url):
         return BrokerAIClient(locator=base_url, timeout=timeout)
     return OpenAIResponsesClient(
         base_url=base_url,
         api_key=api_key,
         timeout=timeout,
+        on_device=kind == "local",
     )

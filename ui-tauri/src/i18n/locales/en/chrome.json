@@ -300,7 +300,8 @@
       "warning": "Connection issue",
       "online": "Connections online",
       "neutral": "Connections not checked",
-      "none": "Nothing connected"
+      "none": "Nothing connected",
+      "offlineMode": "Offline mode"
     },
     "health": {
       "healthy": "Healthy",
@@ -308,7 +309,8 @@
       "checking": "Checking",
       "notCheckable": "Not checkable",
       "notChecked": "Not checked",
-      "skipped": "Check skipped"
+      "skipped": "Check skipped",
+      "offline": "Offline"
     },
     "unsupportedTitle": "Saved HTTP explorer endpoints are listed here but not actively probed from the shell. The health checker probes Electrum / Fulcrum backends and approved display-only HTTP checks.",
     "checkPassed": "Connection check passed.",
@@ -316,7 +318,14 @@
     "coreReachable": "Bitcoin Core reachable.",
     "coreWalletRpcUnavailable": "Bitcoin Core wallet RPC is unavailable.",
     "coreInitialBlockDownload": "Bitcoin Core is still in initial block download.",
-    "corePruned": "Bitcoin Core is reachable but pruned."
+    "corePruned": "Bitcoin Core is reachable but pruned.",
+    "offlineMode": {
+      "label": "Offline",
+      "switch": "Work offline",
+      "on": "Offline mode is on. Kassiber connects to nothing off this device until you turn it off.",
+      "environment": "KASSIBER_NO_EGRESS blocks wallet and backend connections for this process. Turn on offline mode to also block AI providers, device sync and update checks.",
+      "failed": "Offline mode could not be changed."
+    }
   },
   "bookSwitcher": {
     "title": "Switch books",

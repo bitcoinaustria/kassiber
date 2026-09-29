@@ -8,11 +8,11 @@ from __future__ import annotations
 from collections import deque
 from contextlib import nullcontext
 import json
-import os
 import re
 import time
 from urllib import error as urlerror, request as urlrequest, parse as urlparse
 
+from .. import egress_policy
 from ..backends import get_db_backend, backend_timeout
 from ..errors import AppError
 from ..time_utils import now_iso
@@ -131,12 +131,7 @@ class _Budget:
     def request(self):
         # This boundary covers HTTP requests and the initial Electrum handshake,
         # before either transport resolves or connects to even a loopback host.
-        if str(os.environ.get("KASSIBER_NO_EGRESS") or "").strip().lower() in {"1", "true", "yes", "on"}:
-            raise AppError(
-                "Outbound chain acquisition is disabled by KASSIBER_NO_EGRESS",
-                code="network_egress_disabled",
-                retryable=False,
-            )
+        egress_policy.require_egress_enabled("Outbound chain acquisition is")
         if self.count >= self.maximum or self.bytes_read >= MAX_TOTAL_BYTES or time.monotonic() >= self.deadline:
             invalid("Acquisition budget reached", "acquisition_budget")
         self.count += 1

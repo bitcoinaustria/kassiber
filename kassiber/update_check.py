@@ -12,9 +12,7 @@ from __future__ import annotations
 import json
 import os
 import re
-import stat
 import sys
-import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -23,10 +21,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
-from . import __version__
+from . import __version__, egress_policy
 from .build_info import packaged_build_info
 from .db import DEFAULT_CONFIG_DIRNAME, default_state_root
 from .errors import AppError
+from .private_files import atomic_write_private, read_small_private_file
 
 
 _RELEASES_PER_PAGE = 20
@@ -97,73 +96,6 @@ def _has_exact_schema_version(payload: Any, expected: int) -> bool:
         and type(payload.get("schema_version")) is int
         and payload["schema_version"] == expected
     )
-
-
-def _atomic_write_private(destination: Path, text: str) -> None:
-    """Atomically replace `destination` with owner-only (0600) UTF-8 content."""
-
-    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd, temporary_name = tempfile.mkstemp(
-        prefix=f".{destination.name}.",
-        suffix=".tmp",
-        dir=destination.parent,
-    )
-    temporary = Path(temporary_name)
-    try:
-        try:
-            os.fchmod(fd, 0o600)
-        except (AttributeError, OSError):
-            # mkstemp already creates the file owner-only; this is hardening.
-            pass
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, destination)
-    finally:
-        try:
-            temporary.unlink()
-        except OSError:
-            # Cleanup must not hide the original write/replace failure.
-            pass
-
-
-def read_small_private_file(path: Path, limit: int) -> bytes | None:
-    """Read a regular, non-symlinked file of at most `limit` bytes, or None.
-
-    Shared fail-closed reader for the consent file and similar small local
-    contracts: symlinks, special files, and oversized content all read as
-    absent rather than raising.
-    """
-
-    try:
-        if stat.S_ISLNK(os.lstat(path).st_mode):
-            return None
-    except OSError:
-        return None
-    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NONBLOCK", 0)
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    try:
-        descriptor = os.open(path, flags)
-    except OSError:
-        return None
-    try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            return None
-        with os.fdopen(descriptor, "rb") as handle:
-            descriptor = -1
-            raw = handle.read(limit + 1)
-    except OSError:
-        return None
-    finally:
-        if descriptor >= 0:
-            try:
-                os.close(descriptor)
-            except OSError:
-                # Best-effort cleanup after the read path has already failed.
-                pass
-    return raw if len(raw) <= limit else None
 
 
 def parse_version(value: str) -> ParsedVersion | None:
@@ -289,7 +221,7 @@ def update_checks_enabled(
 def set_update_checks_enabled(enabled: bool, path: Path | None = None) -> Path:
     """Atomically persist the global update-check consent as owner-only JSON.
 
-    `_atomic_write_private` finishes with `os.replace`, so a concurrent reader
+    `atomic_write_private` finishes with `os.replace`, so a concurrent reader
     observes either the old consent or the new one and never a torn file. That
     is the whole ordering guarantee this preference needs; there is deliberately
     no cross-process lock, which previously made revoking consent wait on an
@@ -307,7 +239,7 @@ def set_update_checks_enabled(enabled: bool, path: Path | None = None) -> Path:
         "schema_version": PREFERENCE_SCHEMA_VERSION,
         "enabled": bool(enabled),
     }
-    _atomic_write_private(
+    atomic_write_private(
         destination,
         json.dumps(document, sort_keys=True) + "\n",
     )
@@ -315,6 +247,7 @@ def set_update_checks_enabled(enabled: bool, path: Path | None = None) -> Path:
 
 
 def require_update_checks_enabled(path: Path | None = None) -> None:
+    egress_policy.require_online("GitHub update checks are")
     if update_checks_enabled(path):
         return
     raise AppError(
@@ -453,7 +386,7 @@ def _cache_document(result: Mapping[str, Any]) -> dict[str, Any]:
 
 def write_cache(result: Mapping[str, Any], path: Path | None = None) -> None:
     destination = path or cache_path()
-    _atomic_write_private(
+    atomic_write_private(
         destination,
         json.dumps(_cache_document(result), sort_keys=True) + "\n",
     )

@@ -62,6 +62,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "accounting_command",
     "backends_command",
     "commands_command",
+    "offline_command",
     "operator_command",
     "operator_operation_command",
     "operator_touch_id_command",

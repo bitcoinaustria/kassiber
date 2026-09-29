@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import os
 import re
 import json
 from decimal import Decimal
 from typing import Any, Mapping
 from urllib import parse as urlparse
 
+from ... import egress_policy
 from ...backends import backend_value
 from ...egress_ledger import endpoint_from_url, get_egress_ledger
 from ...envelope import json_ready
@@ -28,10 +28,6 @@ from .store import CoveragePoint, StoredObserverState
 
 LWK_OBSERVER_STATE_VERSION = 1
 _LIQUID_BRANCH_STEP_RE = re.compile(r"/(?P<branch>[01])/\*")
-
-
-def _truthy_env(name: str) -> bool:
-    return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def lwk_compatibility_reason(backend: Mapping[str, Any], sync_state: Any) -> str | None:
@@ -374,12 +370,7 @@ class LwkObserver:
         endpoint = str(self.backend.get("url") or "").strip()
         if not endpoint:
             raise AppError("LWK observer backend is missing its endpoint", code="validation")
-        if _truthy_env("KASSIBER_NO_EGRESS"):
-            raise AppError(
-                "Outbound chain observation is disabled by KASSIBER_NO_EGRESS",
-                code="network_egress_disabled",
-                retryable=False,
-            )
+        egress_policy.require_egress_enabled("Outbound chain observation is")
         kind = normalize_backend_kind(self.backend["kind"])
         if kind == "esplora":
             raise AppError(

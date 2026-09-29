@@ -205,6 +205,7 @@ from ..secrets.sqlcipher import open_encrypted, require_sqlcipher
 from ..operator.cli import add_operator_parser, dispatch_operator, route_brokered_command
 from ..mcp.cli import add_mcp_parser, dispatch_mcp
 from ..release_verification import verify_download
+from .. import egress_policy
 from ..tax_policy import DEFAULT_COST_BASIS_POOL_SCOPE, supported_tax_countries
 from ..update_check import (
     check_for_update,
@@ -253,6 +254,7 @@ def _ai_client_for(provider: dict):
     return ai_client_for_locator(
         base_url=provider["base_url"],
         api_key=get_ai_provider_api_key_for_use(provider),
+        kind=provider.get("kind"),
     )
 
 
@@ -1004,6 +1006,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Show the persisted update-check permission without contacting GitHub",
     )
+    offline = sub.add_parser(
+        "offline",
+        help="Show or change offline mode, which blocks every outbound connection",
+    )
+    offline_sub = offline.add_subparsers(dest="offline_command", required=True)
+    offline_sub.add_parser(
+        "status",
+        help="Show whether offline mode is on without contacting anything",
+    )
+    offline_sub.add_parser(
+        "on",
+        help="Block every outbound connection until offline mode is turned off",
+    )
+    offline_sub.add_parser("off", help="Allow configured connections again")
     verify_release = sub.add_parser(
         "verify-download",
         help="Verify a release artifact against a PGP-signed SHA-256 manifest",
@@ -3502,6 +3518,10 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             sys.stdout.flush()
             return None
         return emit(args, result)
+    if args.command == "offline":
+        if args.offline_command in {"on", "off"}:
+            egress_policy.set_offline_mode(args.offline_command == "on")
+        return emit(args, egress_policy.offline_status())
     if args.command == "verify-download":
         return emit(
             args,

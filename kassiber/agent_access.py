@@ -18,7 +18,7 @@ from typing import Any
 from .db import DEFAULT_CONFIG_DIRNAME
 from .errors import AppError
 from .projects import default_state_root
-from .update_check import _atomic_write_private, read_small_private_file
+from .private_files import atomic_write_private, read_small_private_file
 
 
 SCHEMA_VERSION = 1
@@ -90,7 +90,7 @@ def set_agent_access(
             current_ai if ai_features_enabled is None else bool(ai_features_enabled)
         ),
     }
-    _atomic_write_private(destination, json.dumps(document, sort_keys=True) + "\n")
+    atomic_write_private(destination, json.dumps(document, sort_keys=True) + "\n")
     return agent_access_status(destination)
 
 

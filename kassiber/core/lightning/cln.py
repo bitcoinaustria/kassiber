@@ -40,6 +40,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
+from ... import egress_policy
 from ...backends import backend_timeout, backend_value, redact_backend_url
 from ...envelope import json_ready
 from ...errors import AppError
@@ -292,6 +293,8 @@ def call_core_lightning(
             code="validation",
             hint="Only read-only list/get/bookkeeper methods are allowed.",
         )
+    # lightning-cli is an external process, outside the shared transport.
+    egress_policy.require_online("Core Lightning calls are")
     base = _base_command(backend, method, args)
     command, env_extra, _stdin, _redacted = _commando_invocation(backend, base)
     env = dict(os.environ)

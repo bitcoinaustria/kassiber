@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes
 from spake2 import SPAKE2_A, SPAKE2_B
 
+from ... import egress_policy
 from ...egress_ledger import get_egress_ledger
 from ...errors import AppError
 from .bundle import MAX_BUNDLE_BYTES, build_bundle
@@ -332,6 +333,7 @@ class MdnsAdvertisement:
 
 
 def discover_lan_services(*, timeout_seconds: float = 1.5) -> list[dict[str, Any]]:
+    egress_policy.require_online("LAN device discovery is")
     from zeroconf import ServiceBrowser, ServiceListener, Zeroconf
 
     results: dict[str, dict[str, Any]] = {}
@@ -386,6 +388,7 @@ class LanSyncServer:
         advertise_port: int | None = None,
         advertise_mdns: bool = True,
     ) -> None:
+        egress_policy.require_online("LAN device sync is")
         book = _active_book(conn, profile_id)
         device = _local_device(conn, book)
         self.profile_id = profile_id
@@ -619,6 +622,7 @@ def connect_lan(
     timeout_seconds: float = 30.0,
     connector: Callable[[str, int, float], socket.socket] | None = None,
 ) -> LanSyncResult:
+    egress_policy.require_online("LAN device sync is")
     book = _active_book(conn, profile_id)
     offer = LanPairingOffer.decode(offer_code)
     local_device = _local_device(conn, book)

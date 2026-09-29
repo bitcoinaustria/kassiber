@@ -59,7 +59,7 @@ CLI_READ_PATHS = _paths(
     accounting.evidence-list accounting.bank-preview accounting.bank-list accounting.bank-reconcile
     accounting.item-list accounting.schedule-list
     accounting.evidence-upload-list
-    status update verify-download health next-actions commands.describe projects.list projects.show
+    status update verify-download offline.status health next-actions commands.describe projects.list projects.show
     operator.status operator.operation.status operator.touch-id.status
     chats.list chats.show secrets.status sync.status sync.transport.list
     sync.gc.status sync.members.list sync.devices.list sync.conflicts.list
@@ -100,7 +100,7 @@ CLI_OPERATOR_PATHS = _paths(
     chain-analysis.sources.authorize chain-analysis.sources.revoke chain-analysis.sources.run
     chain-analysis.datasets.import chain-analysis.datasets.revoke chain-analysis.datasets.discard
     chain-analysis.cases.save chain-analysis.cases.delete chain-analysis.labels.upsert chain-analysis.labels.delete chain-analysis.labels.import chain-analysis.acquire.apply
-    networks.bind networks.split
+    networks.bind networks.split offline.on offline.off
     projects.select chat backends.create backends.update backends.set-default
     backends.clear-default context.set workspaces.create profiles.create
     accounts.create wallets.create wallets.update
@@ -218,7 +218,7 @@ DAEMON_READ_KINDS = _paths(
     ui.accounting.task_list ui.accounting.task_get ui.accounting.task_preview ui.accounting.rule_list
     ui.accounting.task_amend_preview ui.accounting.task_projection_assign_preview
     ui.accounting.document_cancel
-    status ui.logs.snapshot ui.agent_access.status ui.egress.snapshot ui.overview.snapshot
+    status ui.logs.snapshot ui.agent_access.status ui.egress.snapshot ui.network.offline ui.overview.snapshot
     ui.workspace.overview.snapshot ui.transactions.list
     ui.transactions.dashboard ui.transactions.extremes ui.transactions.resolve
     ui.transactions.graph
@@ -298,6 +298,7 @@ DAEMON_OPERATOR_KINDS = _paths(
     ui.profiles.create ui.profiles.rename
     ui.profiles.switch ui.rates.kraken_csv.import ui.rates.rebuild
     ui.maintenance.configure ui.maintenance.run ui.freshness.configure
+    ui.network.offline.set
     ui.freshness.run ui.freshness.cancel ui.freshness.pause
     ui.freshness.resume ui.workspace.freshness.run ui.workspace.create
     ui.workspace.rename ui.wallets.create ui.wallets.import_file

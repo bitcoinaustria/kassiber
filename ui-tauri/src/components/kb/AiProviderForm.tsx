@@ -167,7 +167,9 @@ export function AiProviderForm({
       if (!/^https?:\/\//.test(trimmedUrl) && !isNativeAiProviderLocator(trimmedUrl)) {
         throw new Error(t("aiProvider.errorUrlScheme"));
       }
-      const args: Record<string, unknown> = { base_url: trimmedUrl };
+      // The kind decides whether the test may run in offline mode: only a
+      // local provider keeps working there.
+      const args: Record<string, unknown> = { base_url: trimmedUrl, kind };
       const trimmedKey = apiKey.trim();
       if (trimmedKey) {
         args.api_key = trimmedKey;

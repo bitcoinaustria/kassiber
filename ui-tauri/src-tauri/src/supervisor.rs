@@ -799,6 +799,7 @@ fn timeout_is_safe_to_retry(kind: &str) -> bool {
             | "ui.egress.snapshot"
             | "ui.freshness.status"
             | "ui.logs.snapshot"
+            | "ui.network.offline"
             | "ui.next_actions"
             | "ui.overview.snapshot"
             | "ui.profiles.snapshot"

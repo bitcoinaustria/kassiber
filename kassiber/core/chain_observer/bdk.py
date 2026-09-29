@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import struct
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 from urllib import parse as urlparse
 
+from ... import egress_policy
 from ...backends import backend_batch_size, backend_timeout, backend_value
 from ...egress_ledger import endpoint_from_url, get_egress_ledger
 from ...errors import AppError
@@ -42,10 +42,6 @@ def require_bdk() -> Any:
             retryable=False,
         ) from exc
     return bdk
-
-
-def _truthy_env(name: str) -> bool:
-    return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _network(value: str) -> Any:
@@ -239,12 +235,7 @@ class BdkObserver:
                 details={"capability": "proxy_transport", "observer": "bdk"},
                 retryable=False,
             )
-        if _truthy_env("KASSIBER_NO_EGRESS"):
-            raise AppError(
-                "Outbound chain observation is disabled by KASSIBER_NO_EGRESS",
-                code="network_egress_disabled",
-                retryable=False,
-            )
+        egress_policy.require_egress_enabled("Outbound chain observation is")
         if self.backend_kind == "esplora":
             raise AppError(
                 "BDK cannot enforce the configured HTTP endpoint and proxy policy",

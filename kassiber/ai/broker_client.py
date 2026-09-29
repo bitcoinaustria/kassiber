@@ -11,6 +11,7 @@ import threading
 from pathlib import Path
 from typing import Any, Iterator
 
+from .. import egress_policy
 from ..errors import AppError
 from .contracts import (
     ChatDelta,
@@ -168,6 +169,9 @@ class BrokerAIClient:
 
     @staticmethod
     def _single_result(request: dict[str, Any], *, timeout: float) -> Any:
+        # Status and model discovery start the provider CLIs too, and those
+        # can reach their vendors (sign-in refresh, model catalogs).
+        egress_policy.require_online("Remote AI providers are")
         node = _node_executable()
         script = _broker_script()
         if not node or not script.is_file():
@@ -292,6 +296,8 @@ class BrokerAIClient:
                     "Sensitive context cannot continue an active tool session",
                     code="ai_request_invalid", retryable=False,
                 )
+        # The broker runs remote CLI providers (Claude, Codex, OpenCode).
+        egress_policy.require_online("Remote AI providers are")
         node = _node_executable()
         script = _broker_script()
         self._check_cancelled()

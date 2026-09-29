@@ -6,6 +6,7 @@ import { currentUiLocale } from "@/lib/localeFormat";
 import type { TFunction } from "i18next";
 
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
+import { useOfflineMode } from "@/lib/offlineMode";
 import {
   abbreviateEndpointMiddle,
   canRunConnectionHealthChecks,
@@ -196,7 +198,9 @@ function connectionStatusText(
   row: ConnectionHealthRow,
   status: ConnectionHealthStatus,
   t: TFn,
+  offline = false,
 ) {
+  if (offline) return t("network.health.offline");
   if (status === "unavailable" && row.probeKind === "unsupported") {
     return t("network.health.skipped");
   }
@@ -331,6 +335,10 @@ export function NetworkStatusIndicator({
   const [healthRecords, setHealthRecords] = React.useState<
     Record<string, ConnectionHealthRecord>
   >({});
+  const offlineMode = useOfflineMode(daemonEnabled);
+  // Rows, checks and the indicator treat KASSIBER_NO_EGRESS like the switch:
+  // backend connections are blocked either way.
+  const offline = offlineMode.blocked;
   const maintenanceActive = useUiStore(
     (state) => state.activeMaintenanceProgress?.state === "running",
   );
@@ -384,22 +392,28 @@ export function NetworkStatusIndicator({
       })),
     [connectionRows, healthRecords],
   );
-  const indicatorTone = connectionHealthTone(status, healthSnapshots);
+  // Offline mode is a choice, not a fault: the indicator goes quiet rather
+  // than red, and cached results from before the switch stop counting.
+  const indicatorTone = offline
+    ? "neutral"
+    : connectionHealthTone(status, healthSnapshots);
   const nothingConnected =
     backendSettingsQuery.isSuccess && connectionRows.length === 0;
-  const label =
-    status === "offline"
+  const label = offline
+    ? t("network.indicator.offlineMode")
+    : status === "offline"
       ? networkStatusLabel(status)
       : nothingConnected
         ? t("network.indicator.none")
         : connectionIndicatorLabel(indicatorTone, t);
-  const Icon = status === "offline" || nothingConnected ? WifiOff : Wifi;
+  const Icon =
+    offline || status === "offline" || nothingConnected ? WifiOff : Wifi;
   const lastCheckedAt = Object.values(healthRecords)
     .map((record) => record.checkedAt)
     .filter((value): value is string => Boolean(value))
     .sort()
     .at(-1);
-  const canCheckConnections = canRunConnectionHealthChecks({
+  const canCheckConnections = !offline && canRunConnectionHealthChecks({
     checking,
     checkableConnectionCount: checkableRows.length,
     daemonEnabled,
@@ -560,25 +574,53 @@ export function NetworkStatusIndicator({
           <DropdownMenuLabel className="p-0">
             {t("network.outboundConnections")}
           </DropdownMenuLabel>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            disabled={!canCheckConnections}
-            aria-label={t("network.checkConnections")}
-            title={t("network.checkConnections")}
-            onClick={(event) => {
-              event.preventDefault();
-              void runConnectionChecks();
-            }}
-          >
-            <RefreshCw
-              className={cn("size-3.5", checking && "animate-spin")}
-              aria-hidden="true"
-            />
-          </Button>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <Switch
+                checked={offlineMode.offline}
+                disabled={!offlineMode.known || offlineMode.pending}
+                onCheckedChange={offlineMode.setOffline}
+                aria-label={t("network.offlineMode.switch")}
+              />
+              {t("network.offlineMode.label")}
+            </label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              disabled={!canCheckConnections}
+              aria-label={t("network.checkConnections")}
+              title={t("network.checkConnections")}
+              onClick={(event) => {
+                event.preventDefault();
+                void runConnectionChecks();
+              }}
+            >
+              <RefreshCw
+                className={cn("size-3.5", checking && "animate-spin")}
+                aria-hidden="true"
+              />
+            </Button>
+          </div>
         </div>
+        {offline || offlineMode.failed ? (
+          <p
+            className={cn(
+              "m-0 px-3 pb-2 text-xs",
+              offlineMode.failed
+                ? "text-red-700 dark:text-red-300"
+                : "text-muted-foreground",
+            )}
+            role={offlineMode.failed ? "alert" : undefined}
+          >
+            {offlineMode.failed
+              ? t("network.offlineMode.failed")
+              : offlineMode.offline
+                ? t("network.offlineMode.on")
+                : t("network.offlineMode.environment")}
+          </p>
+        ) : null}
         <DropdownMenuSeparator />
         <div className="px-1 py-1">
           {backendSettingsQuery.isLoading ? (
@@ -628,19 +670,21 @@ export function NetworkStatusIndicator({
                   <OutboundConnectionsColgroup />
                   <TableBody>
                     {connectionRows.map((row) => {
-                      const rowStatus = rowHealthStatus(row, healthRecords);
-                      const record = healthRecords[row.id];
+                      const rowStatus = offline
+                        ? "unavailable"
+                        : rowHealthStatus(row, healthRecords);
+                      const record = offline
+                        ? undefined
+                        : healthRecords[row.id];
                       const rowStatusText = connectionStatusText(
                         row,
                         rowStatus,
                         t,
+                        offline,
                       );
-                      const rowStatusTitle = connectionStatusTitle(
-                        row,
-                        rowStatus,
-                        t,
-                        record,
-                      );
+                      const rowStatusTitle = offline
+                        ? rowStatusText
+                        : connectionStatusTitle(row, rowStatus, t, record);
                       const routeLabel = connectionRouteLabel(row, t);
                       const routeTitle = connectionRouteTitle(row, t);
                       const routeKind = connectionRouteKind(row);
@@ -699,7 +743,7 @@ export function NetworkStatusIndicator({
             </div>
           )}
         </div>
-        {lastCheckedAt ? (
+        {lastCheckedAt && !offline ? (
           <div className="border-t px-3 py-2 text-xs text-muted-foreground">
             {t("network.lastChecked", {
               time: new Date(lastCheckedAt).toLocaleTimeString(currentUiLocale()),

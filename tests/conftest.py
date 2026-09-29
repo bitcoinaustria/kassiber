@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import tempfile
 import time
 from pathlib import Path
 
@@ -25,6 +26,25 @@ from tests.integration.env import env_flag, no_egress_guard
 _EGRESS_STACK: contextlib.ExitStack | None = None
 _PREVIOUS_TEST_NO_EGRESS: str | None = None
 _PREVIOUS_PYTHONPATH: str | None = None
+_PREVIOUS_OFFLINE_PREFERENCE: str | None = None
+_OFFLINE_PREFERENCE_DIR: tempfile.TemporaryDirectory | None = None
+
+
+def _isolate_offline_preference() -> None:
+    """Point offline mode at a throwaway file for the whole session.
+
+    The real preference lives in the user's state root, so a developer who
+    left the app offline would otherwise see transport tests fail, and daemon
+    subprocesses inherit the variable too.
+    """
+    global _PREVIOUS_OFFLINE_PREFERENCE, _OFFLINE_PREFERENCE_DIR
+    if _OFFLINE_PREFERENCE_DIR is not None:
+        return
+    _PREVIOUS_OFFLINE_PREFERENCE = os.environ.get("KASSIBER_OFFLINE_PREFERENCE_FILE")
+    _OFFLINE_PREFERENCE_DIR = tempfile.TemporaryDirectory(prefix="kassiber-offline-")
+    os.environ["KASSIBER_OFFLINE_PREFERENCE_FILE"] = str(
+        Path(_OFFLINE_PREFERENCE_DIR.name) / "offline-mode.json"
+    )
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -50,6 +70,7 @@ def pytest_configure(config: pytest.Config) -> None:
     service/provider probes" clause is *not* covered here -- a test that
     needs that asserts it directly.
     """
+    _isolate_offline_preference()
     if env_flag("KASSIBER_INTEGRATION"):
         return
 
@@ -73,7 +94,14 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:
-    global _EGRESS_STACK
+    global _EGRESS_STACK, _OFFLINE_PREFERENCE_DIR
+    if _OFFLINE_PREFERENCE_DIR is not None:
+        if _PREVIOUS_OFFLINE_PREFERENCE is None:
+            os.environ.pop("KASSIBER_OFFLINE_PREFERENCE_FILE", None)
+        else:
+            os.environ["KASSIBER_OFFLINE_PREFERENCE_FILE"] = _PREVIOUS_OFFLINE_PREFERENCE
+        _OFFLINE_PREFERENCE_DIR.cleanup()
+        _OFFLINE_PREFERENCE_DIR = None
     if _EGRESS_STACK is None:
         return
     _EGRESS_STACK.close()

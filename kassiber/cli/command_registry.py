@@ -21,6 +21,7 @@ _NO_BOOTSTRAP_DATABASE_PREFIXES = {
     "projects",
     "operator",
     "secrets",
+    "offline",
     "update",
     "verify-download",
 }

@@ -797,6 +797,12 @@ mode.
   blocks BDK/LWK observer construction, shared backend HTTP/SOCKS and Python
   Electrum connections, and chain-analysis acquisition, including loopback.
   It is not used suite-wide and is not an OS-wide network firewall.
+- `tests/conftest.py` also points `KASSIBER_OFFLINE_PREFERENCE_FILE` at a
+  disposable file for the whole run, so the user's real
+  [offline mode](privacy-and-security.md#offline-mode) choice cannot make
+  transport tests fail and no test can change it. Exploratory
+  `kassiber offline on|off` runs change the machine-wide switch unless that
+  variable points elsewhere.
 - Tapes must include provenance (`backend_kind`, network, regtest anchor, and
   issue number) and fail closed: an adapter request absent from the tape raises
   `TapeMiss`, while unused recorded interactions fail the replay test.

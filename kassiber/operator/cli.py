@@ -28,7 +28,16 @@ from .service import _wipe
 
 
 _DIRECT_COMMANDS = frozenset(
-    {"commands", "daemon", "chat", "operator", "projects", "update", "verify-download"}
+    {
+        "commands",
+        "daemon",
+        "chat",
+        "offline",
+        "operator",
+        "projects",
+        "update",
+        "verify-download",
+    }
 )
 
 
