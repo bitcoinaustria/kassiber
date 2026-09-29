@@ -16,32 +16,31 @@
   "books": {
     "intro": "Jedes Buch hat eigene Steuer- und Währungseinstellungen. Nutze getrennte Bücher für private und geschäftliche Aktivität; nutze getrennte Kassiber-Dateien für verschiedene Klient:innen.",
     "newBookSet": "Neues Bücher-Set",
-    "summary": {
-      "sets": "Sets",
-      "setsDetail": "Bücher-Sets",
-      "books": "Bücher",
-      "booksDetail": "Einzelne Bücher",
-      "wallets": "Wallets",
-      "walletsDetail": "{{count}} Accounts"
-    },
     "meta": {
       "since": "seit {{date}}"
     },
     "workspace": {
       "overview": "Bücher-Set-Übersicht",
-      "newBook": "Neues Buch"
+      "newBook": "Neues Buch",
+      "actions": "Aktionen für {{name}}",
+      "rename": "Buchsatz umbenennen",
+      "empty": "In diesem Buchsatz gibt es noch keine Bücher.",
+      "newBookIn": "Neues Buch in {{name}}"
+    },
+    "row": {
+      "open": "Öffnen",
+      "lastOpened": "Zuletzt geöffnet"
+    },
+    "filter": {
+      "placeholder": "Bücher filtern",
+      "noMatches": "Keine passenden Bücher."
     },
     "profileCard": {
       "settings": "Bucheinstellungen für {{name}}",
-      "current": "Aktuelle Bücher: {{name}}",
       "switchTo": "Zu den Büchern {{name}} wechseln",
-      "opened": "Geöffnet {{date}}",
-      "active": "Aktiv",
-      "taxPolicy": "Steuerprofil",
       "buckets": "Buckets",
       "wallets": "Wallets",
-      "currentLabel": "Aktuell",
-      "switchLabel": "Wechseln"
+      "currentLabel": "Aktuell"
     },
     "create": {
       "title": "Neues Buch",
@@ -115,14 +114,6 @@
       "errorGeneric": "Bücher-Set konnte nicht erstellt werden."
     },
     "switch": {
-      "title": "Bücher wechseln?",
-      "descriptionFromTo": "Von {{current}} zu {{next}} wechseln.",
-      "descriptionGeneric": "Zu diesen Büchern wechseln.",
-      "taxPolicy": "Steuerprofil",
-      "buckets": "Buckets",
-      "wallets": "Wallets",
-      "switchHere": "Hier wechseln",
-      "switchAndOpenOverview": "Wechseln und Übersicht öffnen",
       "errorGeneric": "Bücher konnten nicht gewechselt werden."
     }
   },

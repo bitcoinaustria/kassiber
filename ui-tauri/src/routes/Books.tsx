@@ -2,39 +2,32 @@
  * Books switcher screen.
  */
 
-import {
-  useEffect,
-  useState,
-  type ComponentType,
-  type SVGProps,
-} from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import {
-  ArrowRight,
-  BriefcaseBusiness,
-  CheckCircle2,
   Eye,
   FolderPlus,
   Landmark,
+  Loader2,
+  MoreHorizontal,
   Pencil,
   Plus,
-  Users,
-  Wallet,
+  Search,
+  Settings2,
 } from "lucide-react";
 
-import { MetricCard } from "@/components/kb/MetricCard";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -154,8 +147,9 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
     workspace: { id: string; name: string };
   }>("ui.workspace.rename");
   const [activeId, setActiveId] = useState(snapshot.activeProfileId);
-  const [pendingSwitch, setPendingSwitch] =
-    useState<PendingProfileSwitch | null>(null);
+  // The book being opened: rows show its spinner and lock the others.
+  const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [profileWorkspace, setProfileWorkspace] = useState<Workspace | null>(
     null,
   );
@@ -187,32 +181,37 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   >(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const workspaces = snapshot.workspaces;
-  const activeProfile = findProfile(workspaces, activeId);
   const profileCount = workspaces.reduce((a, w) => a + w.profiles.length, 0);
-  const walletCount = workspaces.reduce(
-    (total, workspace) =>
-      total +
-      workspace.profiles.reduce((profileTotal, p) => profileTotal + p.wallets, 0),
-    0,
-  );
-  const accountCount = workspaces.reduce(
-    (total, workspace) =>
-      total +
-      workspace.profiles.reduce(
-        (profileTotal, p) => profileTotal + p.accounts,
-        0,
-      ),
-    0,
-  );
+  const visibleWorkspaces = filterWorkspaces(workspaces, query);
 
   useEffect(() => {
     setActiveId(snapshot.activeProfileId);
   }, [snapshot.activeProfileId]);
 
-  const requestSwitch = (workspace: Workspace, profile: Profile) => {
-    if (profile.id === activeId) return;
+  // Opening a book is a switch, not an edit, so it happens at once and lands
+  // on its Overview — the switcher in the title bar does the same without
+  // leaving the page.
+  const openBook = (profile: Profile) => {
+    if (profile.id === activeId || switchProfile.isPending) return;
     setSwitchError(null);
-    setPendingSwitch({ workspace, profile });
+    setPendingOpenId(profile.id);
+    switchProfile.mutate(
+      { profile_id: profile.id },
+      {
+        onSuccess: () => {
+          setActiveId(profile.id);
+          void navigate({ to: "/overview" });
+        },
+        onError: (error) => {
+          setSwitchError(
+            error instanceof Error
+              ? error.message
+              : t("books.switch.errorGeneric"),
+          );
+        },
+        onSettled: () => setPendingOpenId(null),
+      },
+    );
   };
 
   const requestCreateProfile = (
@@ -287,31 +286,6 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
             error instanceof Error
               ? error.message
               : t("books.create.errorGeneric"),
-          );
-        },
-      },
-    );
-  };
-
-  const confirmSwitch = (openOverview: boolean) => {
-    if (!pendingSwitch || switchProfile.isPending) return;
-    const nextProfile = pendingSwitch.profile;
-    setSwitchError(null);
-    switchProfile.mutate(
-      { profile_id: nextProfile.id },
-      {
-        onSuccess: () => {
-          setActiveId(nextProfile.id);
-          setPendingSwitch(null);
-          if (openOverview) {
-            void navigate({ to: "/overview" });
-          }
-        },
-        onError: (error) => {
-          setSwitchError(
-            error instanceof Error
-              ? error.message
-              : t("books.switch.errorGeneric"),
           );
         },
       },
@@ -432,8 +406,24 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
       <div className={pageHeaderClassName}>
         <p className={pageDescriptionClassName}>{t("books.intro")}</p>
         <div className={pageHeaderActionsClassName}>
+          {profileCount > BOOK_FILTER_THRESHOLD ? (
+            <div className="relative w-56">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("books.filter.placeholder")}
+                aria-label={t("books.filter.placeholder")}
+                className="h-8 pl-8"
+              />
+            </div>
+          ) : null}
           <Button
             type="button"
+            variant="outline"
             className={pageHeaderActionClassName}
             data-testid="create-workspace-button"
             onClick={() => {
@@ -447,33 +437,22 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <SummaryCard
-          label={t("books.summary.sets")}
-          value={workspaces.length}
-          detail={t("books.summary.setsDetail")}
-          icon={BriefcaseBusiness}
-        />
-        <SummaryCard
-          label={t("books.summary.books")}
-          value={profileCount}
-          detail={t("books.summary.booksDetail")}
-          icon={Users}
-        />
-        <SummaryCard
-          label={t("books.summary.wallets")}
-          value={walletCount}
-          detail={t("books.summary.walletsDetail", { count: accountCount })}
-          icon={Wallet}
-        />
-      </div>
+      {switchError ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+        >
+          {switchError}
+        </div>
+      ) : null}
 
-      <div className="space-y-4">
-        {workspaces.map((workspace) => (
+      <div className="space-y-(--kb-page-gap)">
+        {visibleWorkspaces.map((workspace) => (
           <WorkspaceSection
             key={workspace.id}
             workspace={workspace}
             activeId={activeId}
+            pendingId={pendingOpenId}
             onCreateProfile={() => requestCreateProfile(workspace)}
             onOpenBirdsEye={() =>
               void navigate({
@@ -481,25 +460,18 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
                 params: { workspaceId: workspace.id },
               })
             }
-            onPick={(profile) => requestSwitch(workspace, profile)}
+            onPick={openBook}
             onRename={(profile) => requestRenameProfile(workspace, profile)}
             onRenameWorkspace={() => requestRenameWorkspace(workspace)}
           />
         ))}
+        {visibleWorkspaces.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            {t("books.filter.noMatches")}
+          </p>
+        ) : null}
       </div>
 
-      <ProfileSwitchDialog
-        currentProfile={activeProfile?.profile ?? null}
-        errorMessage={switchError}
-        isSubmitting={switchProfile.isPending}
-        pendingSwitch={pendingSwitch}
-        onCancel={() => {
-          setSwitchError(null);
-          setPendingSwitch(null);
-        }}
-        onOpenOverview={() => confirmSwitch(true)}
-        onSwitchHere={() => confirmSwitch(false)}
-      />
       <CreateProfileDialog
         errorMessage={profileError}
         isSubmitting={createProfile.isPending}
@@ -655,26 +627,9 @@ function BooksView({ snapshot }: { snapshot: ProfilesSnapshot }) {
   );
 }
 
-interface PendingProfileSwitch {
-  workspace: Workspace;
-  profile: Profile;
-}
-
 interface PendingProfileRename {
   workspace: Workspace;
   profile: Profile;
-}
-
-function findProfile(workspaces: Workspace[], profileId: string) {
-  for (const workspace of workspaces) {
-    const profile = workspace.profiles.find(
-      (candidate) => candidate.id === profileId,
-    );
-    if (profile) {
-      return { workspace, profile };
-    }
-  }
-  return null;
 }
 
 function formatWorkspaceMeta(
@@ -693,27 +648,44 @@ function formatWorkspaceMeta(
   return parts.join(" · ");
 }
 
-interface SummaryCardProps {
-  label: string;
-  value: number;
-  detail: string;
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
+const BOOK_FILTER_THRESHOLD = 6;
+
+/**
+ * Books whose name or tax policy match, under their set; a set whose own name
+ * matches keeps all of its books.
+ */
+function filterWorkspaces(workspaces: Workspace[], query: string): Workspace[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return workspaces;
+  return workspaces
+    .map((workspace) =>
+      workspace.name.toLowerCase().includes(needle)
+        ? workspace
+        : {
+            ...workspace,
+            profiles: workspace.profiles.filter((profile) =>
+              `${profile.name} ${profile.taxPolicy}`.toLowerCase().includes(needle),
+            ),
+          },
+    )
+    .filter((workspace) => workspace.profiles.length > 0);
 }
 
-function SummaryCard({ label, value, detail, icon: Icon }: SummaryCardProps) {
+function bookInitials(name: string) {
   return (
-    <MetricCard
-      label={label}
-      value={value}
-      detail={detail}
-      icon={<Icon className="size-4" aria-hidden="true" />}
-    />
+    name
+      .split(/\s+/)
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "?"
   );
 }
 
 interface WorkspaceSectionProps {
   workspace: Workspace;
   activeId: string;
+  pendingId?: string | null;
   onCreateProfile: () => void;
   onOpenBirdsEye: () => void;
   onPick: (profile: Profile) => void;
@@ -721,9 +693,14 @@ interface WorkspaceSectionProps {
   onRenameWorkspace: () => void;
 }
 
+/**
+ * One book set: a header with its identity and set-level actions, then its
+ * books as rows — a list to scan and act on, not a wall of tiles.
+ */
 export function WorkspaceSection({
   workspace,
   activeId,
+  pendingId = null,
   onCreateProfile,
   onOpenBirdsEye,
   onPick,
@@ -732,159 +709,178 @@ export function WorkspaceSection({
 }: WorkspaceSectionProps) {
   const { t } = useTranslation(["onboarding", "common"]);
   return (
-    <Card>
-      <CardHeader className="flex flex-col gap-3 border-b pb-5 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-1">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Landmark className="size-4 text-muted-foreground" aria-hidden="true" />
-            {workspace.name}
-          </CardTitle>
-          <CardDescription>
+    <section className="kb-surface overflow-hidden" aria-label={workspace.name}>
+      <header className="flex items-center gap-3 border-b px-(--kb-card-padding) py-3">
+        <span
+          className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+          aria-hidden="true"
+        >
+          <Landmark className="size-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-sm font-semibold">{workspace.name}</h2>
+          <p className="truncate text-xs text-muted-foreground">
             {formatWorkspaceMeta(t, workspace)}
-          </CardDescription>
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            data-testid={`birds-eye-${workspace.id}`}
-            onClick={onOpenBirdsEye}
-          >
-            <Eye className="size-4" aria-hidden="true" />
-            {t("books.workspace.overview")}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="gap-2"
-            onClick={onRenameWorkspace}
-          >
-            <Pencil className="size-4" aria-hidden="true" />
-            {t("common:actions.edit")}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onCreateProfile}
-          >
-            <Plus className="size-4" aria-hidden="true" />
-            {t("books.workspace.newBook")}
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="grid gap-3 pt-5 md:grid-cols-2 xl:grid-cols-3">
-        {workspace.profiles.map((profile) => (
-          <ProfileCard
-            key={profile.id}
-            profile={profile}
-            isActive={profile.id === activeId}
-            onPick={() => onPick(profile)}
-            onRename={() => onRename(profile)}
-          />
-        ))}
-      </CardContent>
-    </Card>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          data-testid={`birds-eye-${workspace.id}`}
+          onClick={onOpenBirdsEye}
+        >
+          <Eye className="size-4" aria-hidden="true" />
+          {t("books.workspace.overview")}
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              aria-label={t("books.workspace.actions", { name: workspace.name })}
+            >
+              <MoreHorizontal className="size-4" aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onSelect={onCreateProfile}>
+              <Plus aria-hidden="true" />
+              {t("books.workspace.newBook")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onRenameWorkspace}>
+              <Pencil aria-hidden="true" />
+              {t("books.workspace.rename")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </header>
+      {workspace.profiles.length === 0 ? (
+        <p className="px-(--kb-card-padding) py-4 text-sm text-muted-foreground">
+          {t("books.workspace.empty")}
+        </p>
+      ) : (
+        <ul className="divide-y">
+          {workspace.profiles.map((profile) => (
+            <BookRow
+              key={profile.id}
+              profile={profile}
+              isActive={profile.id === activeId}
+              isPending={profile.id === pendingId}
+              locked={pendingId !== null}
+              onPick={() => onPick(profile)}
+              onRename={() => onRename(profile)}
+            />
+          ))}
+        </ul>
+      )}
+      <button
+        type="button"
+        onClick={onCreateProfile}
+        className="flex w-full items-center gap-2 border-t px-(--kb-card-padding) py-2.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground focus-visible:bg-muted/40 focus-visible:outline-none"
+      >
+        <Plus className="size-4" aria-hidden="true" />
+        {t("books.workspace.newBookIn", { name: workspace.name })}
+      </button>
+    </section>
   );
 }
 
-interface ProfileCardProps {
+interface BookRowProps {
   profile: Profile;
   isActive: boolean;
+  isPending: boolean;
+  locked: boolean;
   onPick: () => void;
   onRename: () => void;
 }
 
-function ProfileCard({
+function BookRow({
   profile,
   isActive,
+  isPending,
+  locked,
   onPick,
   onRename,
-}: ProfileCardProps) {
+}: BookRowProps) {
   const { t } = useTranslation("onboarding");
   return (
-    <div
+    <li
       className={cn(
-        "kb-surface-inset relative flex min-h-[178px] flex-col justify-between p-4 text-left transition-colors hover:bg-muted/35",
-        isActive ? "border-foreground bg-muted/45" : "bg-background",
+        "flex items-center gap-3 px-(--kb-card-padding) py-3",
+        isActive && "bg-muted/40",
       )}
+      aria-current={isActive ? "true" : undefined}
     >
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="absolute top-3 right-3 z-10 size-8"
-        aria-label={t("books.profileCard.settings", { name: profile.name })}
-        onClick={onRename}
-      >
-        <Pencil className="size-3.5" aria-hidden="true" />
-      </Button>
-      <button
-        type="button"
-        aria-current={isActive ? "true" : undefined}
-        aria-label={
+      <span
+        className={cn(
+          "flex size-9 shrink-0 items-center justify-center rounded-lg text-xs font-semibold",
           isActive
-            ? t("books.profileCard.current", { name: profile.name })
-            : t("books.profileCard.switchTo", { name: profile.name })
-        }
-        onClick={onPick}
-        className="flex flex-1 flex-col justify-between text-left"
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-muted-foreground",
+        )}
+        aria-hidden="true"
       >
-        <div className="space-y-3">
-          <div className="flex items-start justify-between gap-3 pr-10">
-            <div className="min-w-0">
-              <p className="truncate font-medium">{profile.name}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("books.profileCard.opened", { date: profile.lastOpened })}
-              </p>
-            </div>
-            {isActive && (
-              <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                <CheckCircle2 className="size-3" aria-hidden="true" />
-                {t("books.profileCard.active")}
-              </span>
-            )}
-          </div>
-
-          <div className="rounded-lg border bg-muted/30 p-3">
-            <p className="text-xs font-medium text-muted-foreground">
-              {t("books.profileCard.taxPolicy")}
-            </p>
-            <p className="mt-1 text-sm">{profile.taxPolicy}</p>
-          </div>
+        {bookInitials(profile.name)}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-medium">{profile.name}</span>
+          {isActive ? (
+            <Badge variant="secondary" className="shrink-0">
+              {t("books.profileCard.currentLabel")}
+            </Badge>
+          ) : null}
         </div>
-
-        <div className="mt-4 flex items-end justify-between gap-3">
-          <div className="flex gap-4 text-sm">
-            <span>
-              <span className="block text-xs text-muted-foreground">
-                {t("books.profileCard.buckets")}
-              </span>
-              {profile.accounts}
-            </span>
-            <span>
-              <span className="block text-xs text-muted-foreground">
-                {t("books.profileCard.wallets")}
-              </span>
-              {profile.wallets}
-            </span>
-          </div>
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 text-sm font-medium",
-              isActive ? "text-foreground" : "text-muted-foreground",
-            )}
+        <p className="truncate text-xs text-muted-foreground">
+          {profile.taxPolicy}
+        </p>
+      </div>
+      <dl className="hidden shrink-0 grid-cols-[4.5rem_4.5rem_7rem] gap-x-4 text-xs md:grid">
+        <div>
+          <dt className="text-muted-foreground">{t("books.profileCard.wallets")}</dt>
+          <dd className="tabular-nums">{profile.wallets}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">{t("books.profileCard.buckets")}</dt>
+          <dd className="tabular-nums">{profile.accounts}</dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-muted-foreground">{t("books.row.lastOpened")}</dt>
+          <dd className="truncate">{profile.lastOpened}</dd>
+        </div>
+      </dl>
+      <div className="flex w-28 shrink-0 items-center justify-end gap-1">
+        {isActive ? null : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={locked}
+            aria-label={t("books.profileCard.switchTo", { name: profile.name })}
+            onClick={onPick}
           >
-            {isActive
-              ? t("books.profileCard.currentLabel")
-              : t("books.profileCard.switchLabel")}
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </span>
-        </div>
-      </button>
-    </div>
+            {isPending ? (
+              <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+            ) : null}
+            {t("books.row.open")}
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          aria-label={t("books.profileCard.settings", { name: profile.name })}
+          title={t("books.profileCard.settings", { name: profile.name })}
+          onClick={onRename}
+        >
+          <Settings2 className="size-4" aria-hidden="true" />
+        </Button>
+      </div>
+    </li>
   );
 }
 
@@ -1409,114 +1405,6 @@ function RenameWorkspaceDialog({
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-interface ProfileSwitchDialogProps {
-  currentProfile: Profile | null;
-  errorMessage: string | null;
-  isSubmitting: boolean;
-  pendingSwitch: PendingProfileSwitch | null;
-  onCancel: () => void;
-  onOpenOverview: () => void;
-  onSwitchHere: () => void;
-}
-
-function ProfileSwitchDialog({
-  currentProfile,
-  errorMessage,
-  isSubmitting,
-  pendingSwitch,
-  onCancel,
-  onOpenOverview,
-  onSwitchHere,
-}: ProfileSwitchDialogProps) {
-  const { t } = useTranslation(["onboarding", "common"]);
-  const profile = pendingSwitch?.profile;
-  const workspace = pendingSwitch?.workspace;
-
-  return (
-    <Dialog
-      open={Boolean(pendingSwitch)}
-      onOpenChange={(open) => !open && onCancel()}
-    >
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{t("books.switch.title")}</DialogTitle>
-          <DialogDescription>
-            {currentProfile && profile
-              ? t("books.switch.descriptionFromTo", {
-                  current: currentProfile.name,
-                  next: profile.name,
-                })
-              : t("books.switch.descriptionGeneric")}
-          </DialogDescription>
-        </DialogHeader>
-
-        {profile && workspace && (
-          <div className="rounded-lg border bg-muted/25 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate font-medium">{profile.name}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {workspace.name} · {workspace.currency} ·{" "}
-                  {workspace.jurisdiction}
-                </p>
-              </div>
-            </div>
-            <div className="mt-3 rounded-md border bg-background/70 p-3">
-              <p className="text-xs font-medium text-muted-foreground">
-                {t("books.switch.taxPolicy")}
-              </p>
-              <p className="mt-1 text-sm">{profile.taxPolicy}</p>
-            </div>
-            <div className="mt-3 flex gap-4 text-sm">
-              <span>
-                <span className="block text-xs text-muted-foreground">
-                  {t("books.switch.buckets")}
-                </span>
-                {profile.accounts}
-              </span>
-              <span>
-                <span className="block text-xs text-muted-foreground">
-                  {t("books.switch.wallets")}
-                </span>
-                {profile.wallets}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {errorMessage && (
-          <p className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {errorMessage}
-          </p>
-        )}
-
-        <DialogFooter className="gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isSubmitting}
-            onClick={onCancel}
-          >
-            {t("common:actions.cancel")}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={isSubmitting}
-            onClick={onSwitchHere}
-          >
-            {t("books.switch.switchHere")}
-          </Button>
-          <Button type="button" disabled={isSubmitting} onClick={onOpenOverview}>
-            {t("books.switch.switchAndOpenOverview")}
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
