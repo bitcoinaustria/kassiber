@@ -1,6 +1,7 @@
 import {
   BOWTIE_LINE_LIMIT,
   bowtieLines,
+  bowtieMinimumSpan,
   bowtieTotal,
   graphIsLiquid,
   graphLayoutRows,
@@ -69,10 +70,6 @@ export type RibbonLayout = {
   center: { halfHeight: number };
 };
 
-function toScene(x: number, y: number): [number, number] {
-  return [(x - CANVAS_WIDTH / 2) * UNIT, (CANVAS_HEIGHT / 2 - y) * UNIT];
-}
-
 function bezier(p0: number, p1: number, p2: number, p3: number, t: number) {
   const u = 1 - t;
   return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
@@ -85,9 +82,10 @@ function bezier(p0: number, p1: number, p2: number, p3: number, t: number) {
 function strandPoints(line: BowtieLine): Array<[number, number]> {
   const start = OUTER_EDGE;
   const end = CANVAS_WIDTH / 2;
-  const offset = Math.min(line.offset, Math.max(0, end - start - 44));
-  const curveStart = Math.min(Math.max(start + 5, OUTER_EDGE + offset), end - 28);
-  const curveEnd = Math.min(Math.max(end - offset - 10, curveStart + 18), end - 4);
+  // mempool's makePath: both curve ends move out by the offset, from a start the
+  // side's widest strand and largest offset set.
+  const curveStart = Math.max(start + 5, OUTER_EDGE + line.curveBase - line.offset);
+  const curveEnd = Math.max(curveStart + 18, end - line.offset - 10);
   const midpoint = (curveStart + curveEnd) / 2;
   const points: Array<[number, number]> = [[start, line.outerY]];
   for (let step = 0; step <= CURVE_SAMPLES; step += 1) {
@@ -110,22 +108,29 @@ export function ribbonLayout(
   hideSensitive: boolean,
   maxRows = BOWTIE_LINE_LIMIT,
 ): RibbonLayout {
-  const { layoutInputRows, layoutDestinationRows } = graphLayoutRows(
-    graph,
-    hideSensitive,
-    maxRows,
+  // mempool keeps `lineLimit` legs and folds the rest into one more-leg.
+  const { layoutInputRows, layoutDestinationRows, totalInputRows, totalDestinationRows } =
+    graphLayoutRows(graph, hideSensitive, maxRows + 1);
+  const total = bowtieTotal(totalInputRows, totalDestinationRows, graphIsLiquid(graph));
+  // The 3D view has no scrolling: both sides share one span, tall enough for
+  // the fuller side at minimum spacing, so their outer ends fill the same height.
+  const span = Math.max(
+    CANVAS_HEIGHT,
+    bowtieMinimumSpan(layoutInputRows, total, COMBINED_WEIGHT),
+    bowtieMinimumSpan(layoutDestinationRows, total, COMBINED_WEIGHT),
   );
-  const total = bowtieTotal(layoutInputRows, layoutDestinationRows, graphIsLiquid(graph));
-  // Everything stays on screen: the 3D view has no scrolling, so the outer ends
-  // of every leg share the full height on both sides.
   const options = {
-    height: CANVAS_HEIGHT,
+    height: span,
     combinedWeight: COMBINED_WEIGHT,
     curveWidth: CANVAS_WIDTH / 2 - OUTER_EDGE - 12,
     outerTop: 0,
-    outerSpan: CANVAS_HEIGHT,
+    outerSpan: span,
     zeroThickness: ZERO_THICKNESS,
   };
+  const toScene = (x: number, y: number): [number, number] => [
+    (x - CANVAS_WIDTH / 2) * UNIT,
+    (span / 2 - y) * UNIT,
+  ];
   const legs: RibbonLeg[] = [];
   const ribbons: RibbonPath[] = [];
   const place = (rows: GraphRow[], side: "input" | "output") => {

@@ -102,11 +102,28 @@ describe("ribbon layout", () => {
     expect(ribbon(layout, "recipient").estimated).toBe(true);
   });
 
-  it("folds legs past mempool's line limit into one more-leg", () => {
+  it("keeps mempool's 250 legs and folds the rest into one more-leg", () => {
     const inputs = Array.from({ length: 300 }, (_, index) => leg(`in${index}`, 10_000, "owned"));
     const layout = ribbonLayout(graph(inputs, [leg("out", 2_999_000)], 1_000), false);
-    expect(blocks(layout, "input")).toHaveLength(250);
-    expect(blocks(layout, "input").at(-1)?.row.overflowCount).toBe(51);
+    expect(blocks(layout, "input")).toHaveLength(251);
+    expect(blocks(layout, "input").at(-1)?.row.overflowCount).toBe(50);
+    // Even then both sides fill the same height.
+    expect(Math.abs(outerSpan(layout, "input") - outerSpan(layout, "output"))).toBeLessThan(
+      outerSpan(layout, "input") * 0.02,
+    );
+  });
+
+  it("sums a Liquid total over every leg, not the folded ones", () => {
+    const inputs = [
+      ...Array.from({ length: 250 }, (_, index) => leg(`in${index}`, 10_000, "owned")),
+      ...Array.from({ length: 10 }, (_, index) => leg(`conf${index}`, null, "external", "confidential")),
+      leg("late", 5_000_000, "owned"),
+    ];
+    const outputs = [leg("a", null, "external", "confidential"), leg("b", null, "external", "confidential")];
+    const folded = ribbonLayout(graph(inputs, outputs, 40, "liquid"), false);
+    const unfolded = ribbonLayout(graph(inputs, outputs, 40, "liquid"), false, 400);
+    // The two outputs share the same estimated total either way.
+    expect(ribbon(folded, "a").thickness).toBeCloseTo(ribbon(unfolded, "a").thickness);
   });
 
   it("gives hidden values no say in the shape", () => {

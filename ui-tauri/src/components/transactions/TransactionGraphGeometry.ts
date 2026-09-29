@@ -97,8 +97,13 @@ export type BowtieLine = {
   thickness: number;
   /** Share of the band, in the same unit as `combinedWeight`. */
   weight: number;
-  /** Horizontal shift of the curve that keeps neighbouring strands apart. */
+  /**
+   * mempool's normalised curve offset: both curve ends move this far towards
+   * the outer edge, which keeps neighbouring strands apart.
+   */
   offset: number;
+  /** mempool's `pad + maxOffset`: where the side's curves start before any offset. */
+  curveBase: number;
   /** A known amount of zero: drawn as a stub that never reaches the band. */
   zeroValue: boolean;
   /** No known amount: the width is an estimate. */
@@ -143,6 +148,7 @@ export function bowtieLines(
           : Math.min(combinedWeight + 0.5, Math.max(MIN_WEIGHT - 1, weights[index]) + 1),
       weight: weights[index],
       offset: 0,
+      curveBase: 0,
       zeroValue: value === 0,
       estimated: value === null,
     };
@@ -191,8 +197,27 @@ export function bowtieLines(
   });
   return lines.map((line) => ({
     ...line,
-    offset: line.offset - minOffset + pad + (maxOffset - minOffset),
+    offset: line.offset - minOffset,
+    curveBase: pad + (maxOffset - minOffset),
   }));
+}
+
+/**
+ * The least span that fits `rows` at minimum spacing: sides share the larger of
+ * this and the drawing height, so a 250-leg side is not taller than its peer.
+ */
+export function bowtieMinimumSpan(rows: GraphRow[], total: number, combinedWeight: number) {
+  const weights = bowtieWeights(rows, total, combinedWeight);
+  const thickness = rows.reduce((sum, row, index) => {
+    const value = legValue(row);
+    return (
+      sum +
+      (value === 0
+        ? 0
+        : Math.min(combinedWeight + 0.5, Math.max(MIN_WEIGHT - 1, weights[index]) + 1))
+    );
+  }, 0);
+  return thickness + MIN_SPACING * Math.max(0, rows.length - 1);
 }
 
 function redactRowsForGeometry(rows: GraphRow[]): GraphRow[] {
@@ -213,6 +238,9 @@ export type GraphLayoutRows = {
   /** The rows geometry is computed from: amounts removed when values are hidden. */
   layoutInputRows: GraphRow[];
   layoutDestinationRows: GraphRow[];
+  /** Every leg before folding, for the total: mempool sums before it truncates. */
+  totalInputRows: GraphRow[];
+  totalDestinationRows: GraphRow[];
 };
 
 /**
@@ -224,22 +252,22 @@ export function graphLayoutRows(
   hideSensitive: boolean,
   maxRows: number,
 ): GraphLayoutRows {
-  const inputRows = compactGraphRows(graph.inputs, "input", maxRows);
-  const outputRows = compactGraphRows(graph.outputs, "output", maxRows);
   const feeRow: GraphRow | null = graph.fee ? { ...graph.fee, side: "fee" } : null;
   const liquid = graph.transaction?.chain === "liquid";
-  const destinationRows = feeRow
-    ? liquid
-      ? [...outputRows, feeRow]
-      : [feeRow, ...outputRows]
-    : outputRows;
+  const withFee = (outputRows: GraphRow[]) =>
+    feeRow ? (liquid ? [...outputRows, feeRow] : [feeRow, ...outputRows]) : outputRows;
+  const redact = (rows: GraphRow[]) => (hideSensitive ? redactRowsForGeometry(rows) : rows);
+  const inputRows = compactGraphRows(graph.inputs, "input", maxRows);
+  const destinationRows = withFee(compactGraphRows(graph.outputs, "output", maxRows));
   return {
     inputRows,
     destinationRows,
-    layoutInputRows: hideSensitive ? redactRowsForGeometry(inputRows) : inputRows,
-    layoutDestinationRows: hideSensitive
-      ? redactRowsForGeometry(destinationRows)
-      : destinationRows,
+    layoutInputRows: redact(inputRows),
+    layoutDestinationRows: redact(destinationRows),
+    totalInputRows: redact(graph.inputs.map((node) => ({ ...node, side: "input" as const }))),
+    totalDestinationRows: redact(
+      withFee(graph.outputs.map((node) => ({ ...node, side: "output" as const }))),
+    ),
   };
 }
 

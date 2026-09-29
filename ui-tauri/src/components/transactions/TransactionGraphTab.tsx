@@ -651,6 +651,7 @@ type DrawableGraphRow = GraphRow & {
   thickness: number;
   weight: number;
   offset: number;
+  curveBase: number;
   estimatedVisualValue: boolean;
   zeroValue: boolean;
 };
@@ -687,6 +688,7 @@ function buildDrawableRows(
       thickness: line.thickness,
       weight: line.weight,
       offset: line.offset,
+      curveBase: line.curveBase,
       estimatedVisualValue: line.estimated,
       zeroValue: line.zeroValue,
     };
@@ -748,10 +750,13 @@ function makeBowtiePath(
 ) {
   const start = edgePadding + strandMarkerLead(node);
   const end = centerX + 1;
-  const maxOffset = Math.max(0, end - start - 44);
-  const offset = Math.min(node.offset, maxOffset);
-  const curveStart = Math.min(Math.max(start + 5, edgePadding + offset), end - 28);
-  const curveEnd = clamp(end - offset - 10, curveStart + 18, end - 4);
+  // mempool's makePath: both curve ends move out by the offset, from a start the
+  // side's widest strand and largest offset set.
+  const curveStart = Math.min(
+    Math.max(start + 5, edgePadding + node.curveBase - node.offset),
+    end - 28,
+  );
+  const curveEnd = clamp(end - node.offset - 10, curveStart + 18, end - 4);
   const midpoint = (curveStart + curveEnd) / 2;
   let outerY = node.outerY;
   if (Math.round(outerY) === Math.round(node.innerY)) {
@@ -1280,8 +1285,14 @@ export function TransactionFlowDiagram({
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [hoverDetail, setHoverDetail] = useState<DrawableGraphRow | null>(null);
   const [measuredCanvasWidth, setMeasuredCanvasWidth] = useState<number | null>(null);
-  const { inputRows, destinationRows, layoutInputRows, layoutDestinationRows } =
-    graphLayoutRows(graph, hideSensitive, expanded ? MAX_EXPANDED_ROWS : MAX_COMPACT_ROWS);
+  const {
+    inputRows,
+    destinationRows,
+    layoutInputRows,
+    layoutDestinationRows,
+    totalInputRows,
+    totalDestinationRows,
+  } = graphLayoutRows(graph, hideSensitive, expanded ? MAX_EXPANDED_ROWS : MAX_COMPACT_ROWS);
   const rowCount = Math.max(inputRows.length, destinationRows.length, 2);
   const height = Math.max(280, rowCount * GRAPH_ROW_HEIGHT + 90);
   const viewportHeight = expanded
@@ -1305,7 +1316,7 @@ export function TransactionFlowDiagram({
   const centerX = canvasWidth / 2;
   const edgePadding = expanded ? 84 : 64;
   const curveWidth = centerX - edgePadding - 12;
-  const total = bowtieTotal(layoutInputRows, layoutDestinationRows, graphIsLiquid(graph));
+  const total = bowtieTotal(totalInputRows, totalDestinationRows, graphIsLiquid(graph));
   const combinedWeight = Math.min(expanded ? 96 : 82, Math.max(26, Math.floor((canvasWidth - 2 * edgePadding) / 9)));
   const inputDrawRows = buildDrawableRows(
     layoutInputRows,
