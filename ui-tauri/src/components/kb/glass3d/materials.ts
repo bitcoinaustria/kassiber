@@ -61,3 +61,11 @@ export function satin(color: string) {
   });
 }
 
+
+/**
+ * A coin block: the book's own coins in satin blue, anyone else's in grey, as
+ * the transaction graph draws them. Every 3D view uses these for coins.
+ */
+export function coinMaterial(owned: boolean, dark: boolean) {
+  return satin(owned ? "#2563eb" : dark ? "#64748b" : "#7b8798");
+}

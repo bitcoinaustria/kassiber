@@ -569,6 +569,10 @@
     }
   },
   "utxos": {
+    "blocks3dAria": "{{count}} unspent coins as glass blocks, taller for larger amounts. Drag to turn.",
+    "blocks3dLoading": "Preparing the coin view…",
+    "blocks3dLegend": "Each block is one unspent coin, as tall as its amount relative to this wallet's largest. Frosted: not yet confirmed.",
+    "blocks3dLegendHidden": "Each block is one unspent coin. Values are hidden, so every block has the same height. Frosted: not yet confirmed.",
     "title": "UTXOs",
     "countOf": "{{returned}} of {{total}}",
     "loading": "Loading coin inventory…",

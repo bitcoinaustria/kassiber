@@ -269,7 +269,11 @@ address or safe label, and source freshness. It shows all rows returned by the
 daemon payload, reports when that payload is capped, offers sorting by size,
 chain date, confirmations, or outpoint, and can open the UTXO's transaction in a
 configured/public explorer after the same privacy warning used by transaction
-detail explorer links. The table is
+detail explorer links. Above the table, the wallet's coins of its main asset
+show as glass blocks in the transaction graph's style, one per coin and as tall
+as its amount relative to the wallet's largest, unconfirmed coins frosted;
+hidden values give every block the same height in outpoint order. Without
+WebGL only the table shows. The table is
 inventory-only: there is no spend, PSBT, signing, broadcast, coin-selection, or
 freeze action.
 Unsupported file/BTCPay/Lightning-style sources show an unsupported state, and

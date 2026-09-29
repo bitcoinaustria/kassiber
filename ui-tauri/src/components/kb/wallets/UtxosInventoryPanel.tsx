@@ -7,6 +7,8 @@ import {
   type UIEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
+
+import { UtxoBlocks3D } from "./utxo3d/UtxoBlocks3D";
 import type { TFunction } from "i18next";
 
 import i18n from "@/i18n";
@@ -828,6 +830,7 @@ export function UtxosInventoryPanel({
           />
         ) : (
           <>
+            <UtxoBlocks3D rows={rows} hideSensitive={hideSensitive} />
             <div className={WALLET_TABLE_VIEWPORT_CLASS} onScroll={handleRowsScroll}>
               {stale ? (
                 <div className="flex items-start gap-2 border-b bg-amber-50 px-4 py-2.5 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">

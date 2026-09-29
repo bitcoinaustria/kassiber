@@ -569,6 +569,10 @@
     }
   },
   "utxos": {
+    "blocks3dAria": "{{count}} unverbrauchte Coins als Glasblöcke, höher bei größeren Beträgen. Zum Drehen ziehen.",
+    "blocks3dLoading": "Coin-Ansicht wird vorbereitet…",
+    "blocks3dLegend": "Jeder Block ist eine unverbrauchte Coin, so hoch wie ihr Betrag im Verhältnis zur größten Coin dieser Wallet. Milchig: noch nicht bestätigt.",
+    "blocks3dLegendHidden": "Jeder Block ist eine unverbrauchte Coin. Die Werte sind ausgeblendet, deshalb sind alle Blöcke gleich hoch. Milchig: noch nicht bestätigt.",
     "title": "UTXOs",
     "countOf": "{{returned}} von {{total}}",
     "loading": "Coin-Bestand wird geladen…",
