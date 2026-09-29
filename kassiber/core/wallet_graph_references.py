@@ -26,7 +26,9 @@ def fill_wallet_graph_references(
     """Called only with a live sync grant; display reads never call this function.
 
     The scan cursor lives in private freshness checkpoint state. It advances even
-    on lookup failures, so a few unavailable transactions cannot starve the rest.
+    on lookup failures, so a few unavailable transactions cannot starve the rest;
+    a row the pass has no previous-output budget left for is not passed over, the
+    next pass starts with it.
     """
     summary = {"scanned": 0, "attempted": 0, "cached": 0, "skipped": 0, "failed": 0}
     control = graph.GraphLookupControl(check_cancelled, MAX_PREVOUT_FETCHES)
@@ -49,6 +51,7 @@ def fill_wallet_graph_references(
             if summary["attempted"] >= MAX_TRANSACTIONS or monotonic() >= deadline:
                 exhausted = False
                 break
+            resume_rowid = last_rowid
             last_rowid = row["scan_rowid"]
             summary["scanned"] += 1
             raw = graph._json_obj(row["raw_json"])
@@ -73,6 +76,12 @@ def fill_wallet_graph_references(
                 backend_name=backend_name,
             )
             check_cancelled()
+            if control.budget_refused:
+                # Nothing was requested for this row; start the next pass with it.
+                summary["attempted"] -= 1
+                last_rowid = resume_rowid
+                exhausted = False
+                break
             if fetched.get("_graphLookupWarning"):
                 summary["failed"] += 1
             else:

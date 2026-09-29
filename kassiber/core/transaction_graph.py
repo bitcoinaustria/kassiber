@@ -86,6 +86,9 @@ class GraphLookupControl:
     check_cancelled: Callable[[], None]
     prevouts_remaining: int = 250
     prevouts_requested: int = 0
+    # Set when a row needed more previous outputs than the pass had left, so the
+    # pass can stop there and resume from that row instead of skipping it.
+    budget_refused: bool = False
 
 
 _graph_lookup_control: ContextVar[GraphLookupControl | None] = ContextVar(
@@ -1507,6 +1510,7 @@ def _attach_bitcoin_prevouts(
         control = _graph_lookup_control.get()
         if control is not None:
             if len(missing) > control.prevouts_remaining:
+                control.budget_refused = True
                 return _with_graph_lookup_warning(
                     enriched, "bitcoin_reference_lookup_prevout_limit",
                     "The background previous-output request budget is exhausted.",

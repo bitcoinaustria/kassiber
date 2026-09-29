@@ -159,6 +159,35 @@ def test_shared_prevout_budget_and_electrum_batching(book, monkeypatch):
         assert book._graph('row-1')['supportLevel'] == 'full'
 
 
+def test_budget_refused_row_is_first_in_the_next_pass(book, monkeypatch):
+    # The first row takes the whole prevout budget and its parents keep failing;
+    # the second row must still get its own pass instead of being skipped forever.
+    monkeypatch.setattr(refs, 'MAX_PREVOUT_FETCHES', 2)
+    book.runtime['backends']['own']['kind'] = 'electrum'
+    book.runtime['backends']['own']['url'] = 'ssl://own.invalid:50002'
+    book.conn.execute("UPDATE backends SET kind='electrum',url='ssl://own.invalid:50002' WHERE name='own'")
+    parents = ['a' * 64, 'b' * 64, 'c' * 64]
+    ids = [add(book, n) for n in (1, 2)]
+    decoded = {
+        ids[0]: {'vin': [{'txid': p, 'vout': 0} for p in parents[:2]], 'vout': [{'value_sats': 99000, 'script_hex': fixtures.SCRIPT_A}]},
+        ids[1]: {'vin': [{'txid': parents[2], 'vout': 0}], 'vout': [{'value_sats': 99000, 'script_hex': fixtures.SCRIPT_A}]},
+        parents[2]: {'vin': [], 'vout': [{'value_sats': 100000, 'script_hex': fixtures.SCRIPT_B}]},
+    }
+    class Client(fixtures._FakeElectrumClient):
+        responses = {txid: txid for txid in (ids[0], ids[1], parents[2])}
+        calls = []
+        def batch_call(self, requests):
+            if any(params and params[0] in parents[:2] for _method, params in requests):
+                raise OSError('parents unavailable')
+            return super().batch_call(requests)
+    with patch.object(graph, 'ElectrumClient', Client), patch.object(graph, 'decode_raw_transaction', side_effect=lambda value: decoded[value]):
+        for _ in range(2):
+            grants, _ = sync(book)
+            follow(book, grants[0])
+    with patch.object(graph, 'ElectrumClient', side_effect=AssertionError('display egress')):
+        assert book._graph('row-2')['supportLevel'] == 'full'
+
+
 def test_liquid_local_graph_is_preserved(book):
     local = raw('1' * 64)
     add(book, payload=local, asset='LBTC')
