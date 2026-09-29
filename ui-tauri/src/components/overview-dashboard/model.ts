@@ -26,6 +26,7 @@ import {
 } from "@/lib/currency";
 import { formatShortDate } from "@/lib/date";
 import {
+  basisIncompleteFromMs,
   completenessHref,
   fiatCompleteness,
   isBasisIncompleteAt,
@@ -44,6 +45,7 @@ import {
 } from "@/lib/period";
 import { useUiStore } from "@/store/ui";
 import {
+  type FiatCompleteness,
   type OverviewSnapshot,
   type PortfolioPoint,
   type Tx as OverviewTx,
@@ -765,6 +767,26 @@ export function buildStatsData(
 export type BasisHintKey =
   | "completeness.hint.incomplete"
   | "completeness.hint.stale";
+
+/** The frosted interval within the selected chart window, if basis is visible. */
+export function basisIncompleteRange(
+  completeness: FiatCompleteness,
+  points: readonly Pick<TreasuryChartPoint, "date">[],
+  visible: boolean,
+) {
+  if (!visible) return null;
+  const from = basisIncompleteFromMs(completeness);
+  if (from === null) return null;
+  const index = points.findIndex((point) =>
+    isBasisIncompleteOnDay(completeness, point.date),
+  );
+  if (index < 0) return null;
+  return { from, firstDate: points[index].date, coversAll: index === 0 };
+}
+
+export type BasisIncompleteRange = NonNullable<
+  ReturnType<typeof basisIncompleteRange>
+>;
 
 /** Tooltip for basis figures shown as "—" on chart points/tooltips. */
 export function basisIncompleteHintKey(snapshot: OverviewSnapshot): BasisHintKey {
