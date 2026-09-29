@@ -98,6 +98,8 @@ def test_remote_handoff_has_no_private_gap_or_location_payload(book):
 
 @pytest.mark.parametrize("kind,handler", [
     ("ui.backends.bitcoinrpc.test", "_test_bitcoinrpc_backend_payload"),
+    # The desktop's opt-in automatic connection check sends its book's scope.
+    ("ui.backends.electrum.test", "_test_electrum_backend_payload"),
     ("ui.wallets.create", "_create_wallet_payload"),
 ])
 def test_expected_scope_prevents_setup_before_egress_or_write(book, kind, handler):
@@ -117,6 +119,24 @@ def test_expected_scope_prevents_setup_before_egress_or_write(book, kind, handle
         assert envelope["data"] == {"ok": True}
         assert operation.call_args.args[-1] == {}
     assert "expected_scope" in request["args"]  # Caller packet remains immutable.
+
+
+def test_expected_scope_binds_the_automatic_check_backend_list_to_its_book(book):
+    # The automatic connection check asks which backends the book that opted
+    # in uses; once another book is open, the answer must not be that book's.
+    conn, _runtime = book
+    ctx = SimpleNamespace(conn=conn, runtime_config={}, backup_sessions=BackupSessions())
+    request = {"request_id": "in-use", "kind": "ui.backends.list", "args": {
+        "expected_scope": {"workspace_id": "ws", "profile_id": "different-book"},
+    }}
+    with patch.object(daemon, "build_backends_list_snapshot", return_value={"backends": []}) as snapshot:
+        with pytest.raises(AppError) as raised:
+            daemon.handle_request(ctx, request, Mock())
+        assert raised.value.code == "stale_context"
+        snapshot.assert_not_called()
+        request["args"]["expected_scope"]["profile_id"] = "profile"
+        envelope, _ = daemon.handle_request(ctx, request, Mock())
+        assert envelope["data"] == {"backends": []}
 
 
 def test_handoff_schema_is_in_review_pack_and_rejects_extra_authority():

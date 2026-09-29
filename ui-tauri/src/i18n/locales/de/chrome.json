@@ -327,7 +327,8 @@
       "failed": "Der Offline-Modus konnte nicht geändert werden."
     },
     "autoCheck": {
-      "label": "Verbindungen dieses Buchs alle {{minutes}} Minuten prüfen"
+      "label": "Verbindungen dieses Buchs alle {{minutes}} Minuten prüfen",
+      "description": "Nur solange dieses Fenster offen ist. Jede Prüfung zeigt den Servern, mit denen dieses Buch synchronisiert, dass Kassiber läuft."
     }
   },
   "bookSwitcher": {

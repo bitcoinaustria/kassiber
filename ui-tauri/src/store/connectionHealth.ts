@@ -11,14 +11,22 @@ export type ConnectionHealthRecord = {
 
 /** How often the opt-in automatic check probes the book's connections. */
 export const AUTOMATIC_CONNECTION_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+/** A due round that meets a running manual check waits this long, then retries. */
+export const AUTOMATIC_CONNECTION_CHECK_RETRY_MS = 15 * 1000;
 
 interface ConnectionHealthState {
   records: Record<string, ConnectionHealthRecord>;
+  /** Bumped by `clearResults`, so a round that started earlier cannot write back. */
+  generation: number;
   checking: boolean;
   /** When the last automatic round started, so a remount does not re-probe. */
   lastAutomaticCheckAt: number | null;
   setChecking: (checking: boolean) => void;
-  recordResults: (results: Array<[string, ConnectionHealthRecord]>) => void;
+  recordResults: (
+    results: Array<[string, ConnectionHealthRecord]>,
+    generation: number,
+  ) => void;
+  clearResults: () => void;
   markAutomaticCheck: (at: number) => void;
 }
 
@@ -28,17 +36,21 @@ interface ConnectionHealthState {
 export const useConnectionHealthStore = create<ConnectionHealthState>()(
   (set) => ({
     records: {},
+    generation: 0,
     checking: false,
     lastAutomaticCheckAt: null,
     setChecking: (checking) => set({ checking }),
-    recordResults: (results) =>
+    recordResults: (results, generation) =>
       set((state) => {
+        if (generation !== state.generation) return {};
         const records = { ...state.records };
         for (const [id, record] of results) {
           records[id] = record;
         }
         return { records };
       }),
+    clearResults: () =>
+      set((state) => ({ records: {}, generation: state.generation + 1 })),
     markAutomaticCheck: (at) => set({ lastAutomaticCheckAt: at }),
   }),
 );

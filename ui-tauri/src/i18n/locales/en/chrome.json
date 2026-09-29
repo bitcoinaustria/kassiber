@@ -327,7 +327,8 @@
       "failed": "Offline mode could not be changed."
     },
     "autoCheck": {
-      "label": "Check this book's connections every {{minutes}} minutes"
+      "label": "Check this book's connections every {{minutes}} minutes",
+      "description": "Only while this window is open. Each check tells the servers this book syncs from that Kassiber is running."
     }
   },
   "bookSwitcher": {

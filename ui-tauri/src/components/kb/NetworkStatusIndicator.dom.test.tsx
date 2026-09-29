@@ -21,11 +21,13 @@ vi.hoisted(() => {
 
 const daemon = vi.hoisted(() => ({
   reads: {} as Record<string, unknown>,
+  queryArgs: {} as Record<string, unknown>,
   mutations: {} as Record<string, ReturnType<typeof vi.fn>>,
 }));
 
 vi.mock("@/daemon/client", () => ({
-  useDaemon: (kind: string) => {
+  useDaemon: (kind: string, args?: unknown) => {
+    daemon.queryArgs[kind] = args;
     const data = daemon.reads[kind];
     return {
       data: data === undefined ? undefined : { kind, data },
@@ -46,7 +48,10 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-import { useConnectionHealthStore } from "@/store/connectionHealth";
+import {
+  AUTOMATIC_CONNECTION_CHECK_RETRY_MS,
+  useConnectionHealthStore,
+} from "@/store/connectionHealth";
 import { useUiStore } from "@/store/ui";
 
 import { NetworkStatusIndicator } from "./NetworkStatusIndicator";
@@ -75,21 +80,27 @@ async function openPanel() {
   return trigger;
 }
 
+const ACTIVE_BOOK = { activeWorkspaceId: "w1", activeProfileId: "p1", workspaces: [] };
+const BOOK_SCOPE = { workspace_id: "w1", profile_id: "p1" };
+
 function resetStores() {
   useConnectionHealthStore.setState({
     records: {},
+    generation: 0,
     checking: false,
     lastAutomaticCheckAt: null,
   });
-  useUiStore.setState({ connectionAutoCheck: false });
+  useUiStore.setState({ connectionAutoCheckBooks: [] });
 }
 
 describe("NetworkStatusIndicator offline mode", () => {
   beforeEach(() => {
     resetStores();
     daemon.mutations = {};
+    daemon.queryArgs = {};
     daemon.reads = {
       "ui.network.offline": { offline: false, environment_blocked: false },
+      "ui.profiles.snapshot": ACTIVE_BOOK,
       "ui.backends.settings.list": {
         backends: [
           { name: "fulcrum", kind: "electrum", url: "ssl://fulcrum.example:50002", has_url: true },
@@ -171,6 +182,26 @@ describe("NetworkStatusIndicator offline mode", () => {
     });
     expect(daemon.mutations["ui.backends.electrum.test"]).toHaveBeenCalledTimes(1);
   });
+
+  it("drops earlier results once offline mode turns on", async () => {
+    const view = render(<NetworkStatusIndicator daemonEnabled />);
+    await act(async () => {
+      fireEvent.pointerDown(screen.getByRole("button"), { button: 0, ctrlKey: false });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "network.checkConnections" }));
+    });
+    expect(screen.getAllByLabelText("network.health.healthy")).toHaveLength(1);
+
+    daemon.reads["ui.network.offline"] = { offline: true, environment_blocked: false };
+    view.rerender(<NetworkStatusIndicator daemonEnabled />);
+    daemon.reads["ui.network.offline"] = { offline: false, environment_blocked: false };
+    view.rerender(<NetworkStatusIndicator daemonEnabled />);
+
+    // A result from before the switch says nothing about the connection now.
+    expect(screen.queryAllByLabelText("network.health.healthy")).toHaveLength(0);
+    expect(useConnectionHealthStore.getState().records).toEqual({});
+  });
 });
 
 describe("NetworkStatusIndicator automatic checks", () => {
@@ -178,8 +209,10 @@ describe("NetworkStatusIndicator automatic checks", () => {
     vi.useFakeTimers();
     resetStores();
     daemon.mutations = {};
+    daemon.queryArgs = {};
     daemon.reads = {
       "ui.network.offline": { offline: false, environment_blocked: false },
+      "ui.profiles.snapshot": ACTIVE_BOOK,
       "ui.backends.settings.list": {
         backends: [
           { name: "fulcrum", kind: "electrum", url: "ssl://fulcrum.example:50002", has_url: true },
@@ -216,13 +249,18 @@ describe("NetworkStatusIndicator automatic checks", () => {
   });
 
   it("probes only the book's own connections, then every interval", async () => {
-    useUiStore.setState({ connectionAutoCheck: true });
+    useUiStore.setState({ connectionAutoCheckBooks: ["p1"] });
     render(<NetworkStatusIndicator daemonEnabled />);
     await advance(0);
 
+    // Both the in-use list and each probe are bound to the book that opted in.
+    expect(daemon.queryArgs["ui.backends.list"]).toEqual({ expected_scope: BOOK_SCOPE });
     const electrum = daemon.mutations["ui.backends.electrum.test"];
     expect(electrum).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(electrum.mock.calls[0])).toContain("fulcrum.example");
+    expect(electrum.mock.calls[0][0]).toMatchObject({
+      url: "ssl://fulcrum.example:50002",
+      expected_scope: BOOK_SCOPE,
+    });
     expect(daemon.mutations["ui.backends.http.test"]?.mock.calls.length ?? 0).toBe(0);
 
     await advance(5 * 60 * 1000 - 1000);
@@ -232,8 +270,52 @@ describe("NetworkStatusIndicator automatic checks", () => {
     expect(probeCalls()).toBe(2);
   });
 
+  it("applies the opt-in to that book only", async () => {
+    useUiStore.setState({ connectionAutoCheckBooks: ["p1"] });
+    daemon.reads["ui.profiles.snapshot"] = { ...ACTIVE_BOOK, activeProfileId: "p2" };
+    await openPanel();
+    await advance(30 * 60 * 1000);
+    expect(probeCalls()).toBe(0);
+    const toggle = screen.getByRole("switch", { name: "network.autoCheck.label" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+
+    await act(async () => {
+      fireEvent.click(toggle);
+    });
+    expect(useUiStore.getState().connectionAutoCheckBooks).toEqual(["p1", "p2"]);
+  });
+
+  it("stops a round once another book is open", async () => {
+    useUiStore.setState({ connectionAutoCheckBooks: ["p1"] });
+    daemon.mutations["ui.backends.electrum.test"] = vi.fn(async () => {
+      throw Object.assign(new Error("stale"), {
+        envelope: { kind: "error", error: { code: "stale_context" } },
+      });
+    });
+    render(<NetworkStatusIndicator daemonEnabled />);
+    await advance(0);
+    expect(probeCalls()).toBe(1);
+    // The refusal is not a verdict on this book's server.
+    expect(useConnectionHealthStore.getState().records).toEqual({});
+  });
+
+  it("waits for a running manual check instead of skipping the round", async () => {
+    useUiStore.setState({ connectionAutoCheckBooks: ["p1"] });
+    useConnectionHealthStore.setState({ checking: true });
+    render(<NetworkStatusIndicator daemonEnabled />);
+    await advance(0);
+    expect(probeCalls()).toBe(0);
+    expect(useConnectionHealthStore.getState().lastAutomaticCheckAt).toBeNull();
+
+    await act(async () => {
+      useConnectionHealthStore.setState({ checking: false });
+    });
+    await advance(AUTOMATIC_CONNECTION_CHECK_RETRY_MS);
+    expect(probeCalls()).toBe(1);
+  });
+
   it("stays silent while offline mode is on", async () => {
-    useUiStore.setState({ connectionAutoCheck: true });
+    useUiStore.setState({ connectionAutoCheckBooks: ["p1"] });
     daemon.reads["ui.network.offline"] = { offline: true, environment_blocked: false };
     render(<NetworkStatusIndicator daemonEnabled />);
     await advance(30 * 60 * 1000);
@@ -241,7 +323,7 @@ describe("NetworkStatusIndicator automatic checks", () => {
   });
 
   it("does not re-probe early when the panel remounts", async () => {
-    useUiStore.setState({ connectionAutoCheck: true });
+    useUiStore.setState({ connectionAutoCheckBooks: ["p1"] });
     const first = render(<NetworkStatusIndicator daemonEnabled />);
     await advance(0);
     expect(probeCalls()).toBe(1);
