@@ -183,6 +183,8 @@ export interface UiState {
   appScale: number;
   hideSensitive: boolean;
   clearClipboard: boolean;
+  /** Opt-in: probe the active book's connections on a timer. */
+  connectionAutoCheck: boolean;
   explorerSettings: ExplorerSettings;
   appLockPolicy: AppLockPolicy;
   identity: Identity | null;
@@ -260,6 +262,7 @@ export interface UiState {
   resetAppScale: () => void;
   setHideSensitive: (hideSensitive: boolean) => void;
   setClearClipboard: (clearClipboard: boolean) => void;
+  setConnectionAutoCheck: (connectionAutoCheck: boolean) => void;
   setExplorerSettings: (settings: Partial<ExplorerSettings>) => void;
   setAppLockPolicy: (policy: Partial<AppLockPolicy>) => void;
   setIdentity: (identity: Identity | null) => void;
@@ -417,6 +420,7 @@ export function uiStatePartialForStorage(state: UiState) {
     theme: state.theme,
     hideSensitive: state.hideSensitive,
     clearClipboard: state.clearClipboard,
+    connectionAutoCheck: state.connectionAutoCheck,
     appScale: state.appScale,
     explorerSettings: state.explorerSettings,
     appLockPolicy: state.appLockPolicy,
@@ -476,6 +480,7 @@ export const useUiStore = create<UiState>()(
       appScale: DEFAULT_APP_SCALE,
       hideSensitive: false,
       clearClipboard: true,
+      connectionAutoCheck: false,
       explorerSettings: DEFAULT_EXPLORER_SETTINGS,
       appLockPolicy: DEFAULT_APP_LOCK_POLICY,
       identity: null,
@@ -523,6 +528,8 @@ export const useUiStore = create<UiState>()(
       resetAppScale: () => set({ appScale: DEFAULT_APP_SCALE }),
       setHideSensitive: (hideSensitive) => set({ hideSensitive }),
       setClearClipboard: (clearClipboard) => set({ clearClipboard }),
+      setConnectionAutoCheck: (connectionAutoCheck) =>
+        set({ connectionAutoCheck }),
       setExplorerSettings: (settings) =>
         set((state) => ({
           explorerSettings: { ...state.explorerSettings, ...settings },
@@ -709,6 +716,8 @@ export const useUiStore = create<UiState>()(
           analysisNetwork: normalizeAnalysisNetwork(restored.analysisNetwork ?? current.analysisNetwork),
           appScale: normalizeAppScale(restored.appScale ?? current.appScale),
           clearClipboard: restored.clearClipboard ?? current.clearClipboard,
+          // Only an explicit opt-in starts the timer; anything else is off.
+          connectionAutoCheck: restored.connectionAutoCheck === true,
           explorerSettings: {
             ...DEFAULT_EXPLORER_SETTINGS,
             ...(restored.explorerSettings ?? current.explorerSettings),

@@ -46,6 +46,9 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+import { useConnectionHealthStore } from "@/store/connectionHealth";
+import { useUiStore } from "@/store/ui";
+
 import { NetworkStatusIndicator } from "./NetworkStatusIndicator";
 
 const PROBE_KINDS = [
@@ -72,8 +75,18 @@ async function openPanel() {
   return trigger;
 }
 
+function resetStores() {
+  useConnectionHealthStore.setState({
+    records: {},
+    checking: false,
+    lastAutomaticCheckAt: null,
+  });
+  useUiStore.setState({ connectionAutoCheck: false });
+}
+
 describe("NetworkStatusIndicator offline mode", () => {
   beforeEach(() => {
+    resetStores();
     daemon.mutations = {};
     daemon.reads = {
       "ui.network.offline": { offline: false, environment_blocked: false },
@@ -157,5 +170,87 @@ describe("NetworkStatusIndicator offline mode", () => {
       fireEvent.click(screen.getByRole("button", { name: "network.checkConnections" }));
     });
     expect(daemon.mutations["ui.backends.electrum.test"]).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("NetworkStatusIndicator automatic checks", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    resetStores();
+    daemon.mutations = {};
+    daemon.reads = {
+      "ui.network.offline": { offline: false, environment_blocked: false },
+      "ui.backends.settings.list": {
+        backends: [
+          { name: "fulcrum", kind: "electrum", url: "ssl://fulcrum.example:50002", has_url: true },
+          { name: "spare", kind: "electrum", url: "ssl://spare.example:50002", has_url: true },
+          {
+            name: "coingecko",
+            kind: "coingecko",
+            url: "https://api.coingecko.com/api/v3",
+            has_url: true,
+            url_safe_for_http_probe: true,
+          },
+        ],
+        summary: { count: 3, default_backend: "fulcrum" },
+      },
+      // Only the backend this book's wallets sync from.
+      "ui.backends.list": { backends: [{ name: "fulcrum" }] },
+    };
+  });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  async function advance(ms: number) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  it("never probes on a timer without the opt-in", async () => {
+    render(<NetworkStatusIndicator daemonEnabled />);
+    await advance(30 * 60 * 1000);
+    expect(probeCalls()).toBe(0);
+  });
+
+  it("probes only the book's own connections, then every interval", async () => {
+    useUiStore.setState({ connectionAutoCheck: true });
+    render(<NetworkStatusIndicator daemonEnabled />);
+    await advance(0);
+
+    const electrum = daemon.mutations["ui.backends.electrum.test"];
+    expect(electrum).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(electrum.mock.calls[0])).toContain("fulcrum.example");
+    expect(daemon.mutations["ui.backends.http.test"]?.mock.calls.length ?? 0).toBe(0);
+
+    await advance(5 * 60 * 1000 - 1000);
+    expect(electrum).toHaveBeenCalledTimes(1);
+    await advance(1000);
+    expect(electrum).toHaveBeenCalledTimes(2);
+    expect(probeCalls()).toBe(2);
+  });
+
+  it("stays silent while offline mode is on", async () => {
+    useUiStore.setState({ connectionAutoCheck: true });
+    daemon.reads["ui.network.offline"] = { offline: true, environment_blocked: false };
+    render(<NetworkStatusIndicator daemonEnabled />);
+    await advance(30 * 60 * 1000);
+    expect(probeCalls()).toBe(0);
+  });
+
+  it("does not re-probe early when the panel remounts", async () => {
+    useUiStore.setState({ connectionAutoCheck: true });
+    const first = render(<NetworkStatusIndicator daemonEnabled />);
+    await advance(0);
+    expect(probeCalls()).toBe(1);
+    first.unmount();
+
+    await openPanel();
+    await advance(60 * 1000);
+    expect(probeCalls()).toBe(1);
+    // The cached result still describes the connection after the remount.
+    expect(screen.getAllByLabelText("network.health.healthy")).toHaveLength(1);
   });
 });
