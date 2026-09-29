@@ -2524,6 +2524,10 @@ const TransactionsTable = ({
           }
         }}
         onOpenExplorer={(transaction) => setExplorerTransaction(transaction)}
+        // Following a coin: the sheet resolves the exact row by id, loaded or not.
+        onOpenTransaction={(transactionId) =>
+          openTransactionDetail({ id: transactionId } as Transaction, "details")
+        }
         onSave={async (transactionId, draft) => {
           try {
             await saveTransactionDraft(transactionId, draft);

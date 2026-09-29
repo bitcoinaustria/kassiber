@@ -1,4 +1,5 @@
 import {
+  ArrowLeft,
   CalendarClock,
   ExternalLink,
   Network,
@@ -54,6 +55,8 @@ export function TransactionDetailHeader({
   explorer,
   onOpenExplorer,
   onClose,
+  onBack,
+  backLabel,
 }: {
   transaction: Transaction;
   flow: TransactionFlow;
@@ -69,6 +72,9 @@ export function TransactionDetailHeader({
   explorer: ExplorerSummary;
   onOpenExplorer: (transaction: Transaction) => void;
   onClose: () => void;
+  /** Return along the coins followed inside the sheet. */
+  onBack?: () => void;
+  backLabel?: string | null;
 }) {
   const { t } = useTranslation(["transactions"]);
   const StatusIcon = transactionStatusIcons[reviewStatus];
@@ -81,6 +87,21 @@ export function TransactionDetailHeader({
     <SheetHeader className="border-b p-0">
       <div className="flex items-start justify-between gap-4 px-4 pt-5 pb-4 sm:px-6 sm:pt-6">
         <div className="min-w-0">
+          {onBack ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="-ml-2 mb-1 h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+              onClick={onBack}
+            >
+              <ArrowLeft className="size-3.5" aria-hidden="true" />
+              <span>{t("detailHeader.back")}</span>
+              {backLabel ? (
+                <span className={cn("font-mono", blurClass(hideSensitive))}>{backLabel}</span>
+              ) : null}
+            </Button>
+          ) : null}
           <div className="mb-2 flex flex-wrap items-center gap-1.5">
             <HeaderChip className={transactionFlowStyles[flow]}>
               {t(transactionFlowLabels[flow])}

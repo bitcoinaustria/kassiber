@@ -23,6 +23,7 @@
     "layerTransition": "Bitcoin-Swap"
   },
   "detailHeader": {
+    "back": "Zurück zu",
     "valueThen": "FMV damals",
     "valueNow": "Marktwert jetzt",
     "unassignedWallet": "Nicht zugewiesene Wallet",

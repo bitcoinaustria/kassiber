@@ -133,7 +133,11 @@ function fallbackRouteKind(pair: PairRow) {
   return classifyRouteKind(pairRouteArgs(pair));
 }
 
-export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContext }) {
+/**
+ * The transaction's coins: the glass graph and the input/output lists. Shown
+ * beside the tabs rather than inside one, so the graph never scrolls away.
+ */
+export function TransactionFlowSection({ ctx }: { ctx: TransactionDetailTabContext }) {
   const { t } = useTranslation("transactions");
   const { t: tPrivacy } = useTranslation("privacyMirror");
   const navigate = useNavigate();
@@ -142,17 +146,7 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
   );
   const {
     transaction,
-    localDraft,
-    dirtyLabel,
-    dirtyTags,
-    dirtyNote,
-    dirtyExcluded,
-    transactionDisplayId,
     hideSensitive,
-    commercialContext,
-    commercialContextLoading,
-    showSourceExternalId,
-    tags,
     graphData,
     graphLoading,
     graphError,
@@ -273,6 +267,69 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
   const analysisSearch = transactionAnalysisSearch(
     activeGraphData?.transaction ?? (activeSwapTransactionRef ? {} : transaction),
   );
+  return (
+    <div className="space-y-3">
+      <div className="overflow-hidden rounded-md border">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {t(tradeKind ? "recordFlow.title" : "graph.sectionTitle")}
+          {canPublicGraphLookup &&
+          !publicGraphLookup &&
+          publicLookupCanAddToGraph(activeGraphData) ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-6 text-2xs normal-case"
+              onClick={() => enablePublicGraphLookup?.()}
+            >
+              {t("graph.lookupOnChain")}
+            </Button>
+          ) : null}
+        </div>
+        <div className="p-3">
+          <TransactionGraphPanel
+            graphlessContent={tradeKind ? <TransactionRecordFlow transaction={transaction} kind={tradeKind} hideSensitive={hideSensitive} /> : undefined}
+            graph={activeGraphData}
+            loading={graphPanelLoading}
+            error={graphPanelError}
+            hideSensitive={hideSensitive}
+            selectedSwapLeg={activeSwapLeg}
+            onSelectSwapLeg={setSelectedSwapLeg}
+            onResolveIssue={resolveGraphIssue}
+            onOpenTransaction={onOpenTransaction}
+          />
+        </div>
+      </div>
+      {analysisSearch.subject ? <Button
+        variant="outline"
+        size="sm"
+        className="self-start"
+        onClick={() => void navigate({ to: "/chain-analysis", search: analysisSearch })}
+      >
+        <Eye className="size-3.5" aria-hidden="true" />
+        {tPrivacy("investigateTransaction")}
+      </Button> : null}
+      <TransactionGraphTechnicalDetails graph={activeGraphData} hideSensitive={hideSensitive} />
+    </div>
+  );
+}
+
+export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContext }) {
+  const { t } = useTranslation("transactions");
+  const {
+    transaction,
+    localDraft,
+    dirtyLabel,
+    dirtyTags,
+    dirtyNote,
+    dirtyExcluded,
+    transactionDisplayId,
+    hideSensitive,
+    commercialContext,
+    commercialContextLoading,
+    showSourceExternalId,
+    tags,
+  } = ctx;
   return (
     <>
                   {/* Details — read-only source-of-record + book metadata */}
@@ -420,47 +477,6 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                         />
                       </div>
                     </div>
-                    <div className="overflow-hidden rounded-md border">
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        {t(tradeKind ? "recordFlow.title" : "graph.sectionTitle")}
-                        {canPublicGraphLookup &&
-                        !publicGraphLookup &&
-                        publicLookupCanAddToGraph(activeGraphData) ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-6 text-2xs normal-case"
-                            onClick={() => enablePublicGraphLookup?.()}
-                          >
-                            {t("graph.lookupOnChain")}
-                          </Button>
-                        ) : null}
-                      </div>
-                      <div className="p-3">
-                        <TransactionGraphPanel
-                          graphlessContent={tradeKind ? <TransactionRecordFlow transaction={transaction} kind={tradeKind} hideSensitive={hideSensitive} /> : undefined}
-                          graph={activeGraphData}
-                          loading={graphPanelLoading}
-                          error={graphPanelError}
-                          hideSensitive={hideSensitive}
-                          selectedSwapLeg={activeSwapLeg}
-                          onSelectSwapLeg={setSelectedSwapLeg}
-                          onResolveIssue={resolveGraphIssue}
-                          onOpenTransaction={onOpenTransaction}
-                        />
-                      </div>
-                    </div>
-                    {analysisSearch.subject ? <Button
-                      variant="outline"
-                      size="sm"
-                      className="self-start"
-                      onClick={() => void navigate({ to: "/chain-analysis", search: analysisSearch })}
-                    >
-                      <Eye className="size-3.5" aria-hidden="true" />
-                      {tPrivacy("investigateTransaction")}
-                    </Button> : null}
-                    <TransactionGraphTechnicalDetails graph={activeGraphData} hideSensitive={hideSensitive} />
                     <CommercialProvenancePanel
                       context={commercialContext}
                       loading={commercialContextLoading}

@@ -23,6 +23,7 @@
     "layerTransition": "Bitcoin swap"
   },
   "detailHeader": {
+    "back": "Back to",
     "valueThen": "FMV then",
     "valueNow": "marked now",
     "unassignedWallet": "Unassigned wallet",
