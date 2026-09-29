@@ -5,6 +5,7 @@ import {
   Network,
   X,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ export function TransactionDetailHeader({
   valueNowEur,
   pricedChange,
   timelineSteps,
+  checklist,
   explorer,
   onOpenExplorer,
   onClose,
@@ -69,6 +71,8 @@ export function TransactionDetailHeader({
   valueNowEur: number | null;
   pricedChange: number | null;
   timelineSteps: TimelineStep[];
+  /** The review steps, at the far end of the timeline bar. */
+  checklist?: ReactNode;
   explorer: ExplorerSummary;
   onOpenExplorer: (transaction: Transaction) => void;
   onClose: () => void;
@@ -217,8 +221,9 @@ export function TransactionDetailHeader({
           </Button>
         </div>
       </div>
-      <div className="border-t bg-muted/50 px-4 py-2 sm:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t bg-muted/50 px-4 py-2 sm:px-6">
         <StatusTimeline steps={timelineSteps} />
+        {checklist}
       </div>
     </SheetHeader>
   );

@@ -65,7 +65,7 @@ export function TransactionGraph3D({
       }
       ariaLabel={t("graph.view3dAria")}
       loadingLabel={t("graph.view3dLoading")}
-      className={size === "expanded" ? "h-[min(64vh,560px)]" : "h-[380px]"}
+      className={size === "expanded" ? "h-[min(64vh,560px)]" : "h-[380px] xl:h-[440px]"}
       testId="transaction-graph-3d"
       unavailable={
         <div className="space-y-2">

@@ -965,6 +965,7 @@ function TransactionDetailBody({
         valueNowEur={valueNowEur}
         pricedChange={pricedChange}
         timelineSteps={timelineSteps}
+        checklist={<ReviewChecklist items={reviewChecklistItems} onJump={setActiveTab} />}
         explorer={explorer}
         onOpenExplorer={onOpenExplorer}
         onClose={() => onOpenChange(false)}
@@ -1009,7 +1010,6 @@ function TransactionDetailBody({
           </div>
 
           <div className="min-w-0 space-y-4 xl:sticky xl:top-0">
-            <ReviewChecklist items={reviewChecklistItems} onJump={setActiveTab} compact />
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="details">{t("sheet.tab.details")}</TabsTrigger>
