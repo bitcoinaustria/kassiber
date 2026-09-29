@@ -180,6 +180,7 @@ def build_transaction_graph_snapshot(
     )
     _annotate_graph(graph, row, owned_index, semantics, raw=enriched_raw)
     _annotate_local_spends(row, graph, bundle.outpoint_spends)
+    _annotate_local_funding(conn, profile_id, row, graph)
     _annotate_block_heights(conn, profile_id, row, graph)
     warnings = list(graph.pop("_warnings", []))
     warnings.extend(
@@ -2674,6 +2675,54 @@ def _annotate_local_spends(
         # user is already on.
         if transaction_id and str(transaction_id) != row_id:
             node["spentByTransactionId"] = str(transaction_id)
+
+
+def _annotate_local_funding(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    row: Mapping[str, Any],
+    graph: dict[str, Any],
+) -> None:
+    """Tag inputs whose previous transaction is a row in this book.
+
+    Purely local: the funding transaction is looked up among the profile's own
+    rows by txid, on the same chain and network, so the detail view can step
+    back through the book's history the way an explorer does, without a request.
+    A row funding itself, or an ambiguous chain scope, gets no reference.
+    """
+    inputs = graph.get("inputs")
+    if not isinstance(inputs, list) or not inputs:
+        return
+    txids = {
+        str(node.get("txid")).lower()
+        for node in inputs
+        if _looks_like_txid(node.get("txid"))
+    }
+    if not txids:
+        return
+    row_id = str(_row_get(row, "id") or "")
+    wanted = _row_chain_network(row)
+    placeholders = ", ".join("?" for _ in txids)
+    funding: dict[str, str] = {}
+    for candidate in conn.execute(
+        f"""
+        SELECT t.id, lower(t.external_id) AS txid, t.asset, t.raw_json,
+               w.kind AS wallet_kind, w.config_json AS wallet_config_json
+        FROM transactions t
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE t.profile_id = ? AND lower(t.external_id) IN ({placeholders})
+        ORDER BY t.occurred_at, t.created_at, t.id
+        """,
+        (profile_id, *sorted(txids)),
+    ).fetchall():
+        candidate_id = str(_row_get(candidate, "id"))
+        if candidate_id == row_id or _row_chain_network(candidate) != wanted:
+            continue
+        funding.setdefault(str(_row_get(candidate, "txid")), candidate_id)
+    for node in inputs:
+        txid = str(node.get("txid") or "").lower()
+        if txid in funding:
+            node["fundedByTransactionId"] = funding[txid]
 
 
 def _inferred_incoming_payment_output_ids(

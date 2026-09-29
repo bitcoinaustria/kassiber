@@ -31,6 +31,8 @@ export type TransactionGraphNode = {
   role?: string;
   overflow?: boolean;
   overflowCount?: number;
+  /** The book's own row that created this input's coin, when it has one. */
+  fundedByTransactionId?: string;
   /** Locally known spend of this output; the id is set when the row is local. */
   spentByTxid?: string;
   spentByTransactionId?: string;
