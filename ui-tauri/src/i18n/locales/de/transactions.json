@@ -23,6 +23,7 @@
     "layerTransition": "Bitcoin-Swap"
   },
   "detailHeader": {
+    "back": "Zurück zu",
     "valueThen": "FMV damals",
     "valueNow": "Marktwert jetzt",
     "unassignedWallet": "Nicht zugewiesene Wallet",
@@ -649,6 +650,7 @@
     }
   },
   "details": {
+    "explorer": "Explorer",
     "transactionId": "Transaktions-ID",
     "transactionIdHint": "Kanonische on-chain-Kennung oder Import-Zeilen-ID, je nach Quelle.",
     "priceAtTime": "Preis zum Zeitpunkt",

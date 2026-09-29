@@ -1,9 +1,11 @@
 import {
+  ArrowLeft,
   CalendarClock,
   ExternalLink,
   Network,
   X,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -51,9 +53,12 @@ export function TransactionDetailHeader({
   valueNowEur,
   pricedChange,
   timelineSteps,
+  checklist,
   explorer,
   onOpenExplorer,
   onClose,
+  onBack,
+  backLabel,
 }: {
   transaction: Transaction;
   flow: TransactionFlow;
@@ -66,9 +71,14 @@ export function TransactionDetailHeader({
   valueNowEur: number | null;
   pricedChange: number | null;
   timelineSteps: TimelineStep[];
+  /** The review steps, at the far end of the timeline bar. */
+  checklist?: ReactNode;
   explorer: ExplorerSummary;
   onOpenExplorer: (transaction: Transaction) => void;
   onClose: () => void;
+  /** Return along the coins followed inside the sheet. */
+  onBack?: () => void;
+  backLabel?: string | null;
 }) {
   const { t } = useTranslation(["transactions"]);
   const StatusIcon = transactionStatusIcons[reviewStatus];
@@ -81,6 +91,21 @@ export function TransactionDetailHeader({
     <SheetHeader className="border-b p-0">
       <div className="flex items-start justify-between gap-4 px-4 pt-5 pb-4 sm:px-6 sm:pt-6">
         <div className="min-w-0">
+          {onBack ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="-ml-2 mb-1 h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+              onClick={onBack}
+            >
+              <ArrowLeft className="size-3.5" aria-hidden="true" />
+              <span>{t("detailHeader.back")}</span>
+              {backLabel ? (
+                <span className={cn("font-mono", blurClass(hideSensitive))}>{backLabel}</span>
+              ) : null}
+            </Button>
+          ) : null}
           <div className="mb-2 flex flex-wrap items-center gap-1.5">
             <HeaderChip className={transactionFlowStyles[flow]}>
               {t(transactionFlowLabels[flow])}
@@ -196,8 +221,9 @@ export function TransactionDetailHeader({
           </Button>
         </div>
       </div>
-      <div className="border-t bg-muted/50 px-4 py-2 sm:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t bg-muted/50 px-4 py-2 sm:px-6">
         <StatusTimeline steps={timelineSteps} />
+        {checklist}
       </div>
     </SheetHeader>
   );

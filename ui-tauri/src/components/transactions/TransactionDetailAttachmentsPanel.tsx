@@ -27,7 +27,7 @@ import { isFilePickerAvailable, pickFiles } from "@/lib/filePicker";
 import { cn } from "@/lib/utils";
 
 import { blurClass } from "./model";
-import type { AttachmentItem } from "./TransactionDetailSheetParts";
+import { InfoHint, type AttachmentItem } from "./TransactionDetailSheetParts";
 
 const MAX_ATTACHMENT_LABEL_LENGTH = 200;
 
@@ -299,6 +299,7 @@ export function AttachmentsPanel({
             aria-hidden="true"
           />
           {t("attachments.title")}
+          <InfoHint label={t("attachments.title")}>{t("attachments.emptyBody")}</InfoHint>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-xs tabular-nums text-muted-foreground">
@@ -501,11 +502,7 @@ export function AttachmentsPanel({
             );
           })}
         </ul>
-      ) : (
-        <p className="mb-2 text-xs text-muted-foreground">
-          {t("attachments.emptyBody")}
-        </p>
-      )}
+      ) : null}
       {pickerError ? (
         <p
           role="alert"

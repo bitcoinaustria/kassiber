@@ -18,7 +18,9 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { transactionTypeLabel } from "@/lib/transactionTypeLabel";
 import { TransactionDetailSheetFrame } from "./TransactionDetailSheetFrame";
+import { TransactionTrailContext } from "./TransactionDetailTrail";
 import { useDaemon } from "@/daemon/client";
 import { type Currency } from "@/lib/currency";
 import type { ExplorerSettings } from "@/lib/explorer";
@@ -56,6 +58,7 @@ import { TransactionSplitPayoutCard } from "./TransactionSplitPayoutCard";
 import {
   DirtyDot,
   QuarantineBanner,
+  ReviewChecklist,
   balanceImpactDirection,
   countDirty,
   diffDraft,
@@ -81,6 +84,7 @@ import { TransactionDetailRightRail } from "./TransactionDetailRightRail";
 import {
   TransactionClassifyTab,
   TransactionDetailsTab,
+  TransactionFlowSection,
   TransactionLinkedTab,
   TransactionPricingTab,
   TransactionTaxTab,
@@ -166,6 +170,8 @@ export function TransactionDetailSheet(props: TransactionDetailSheetProps) {
       onOpenChange={props.onOpenChange}
       isLoading={props.isLoading}
       onRetry={props.onRetry}
+      transaction={props.transaction}
+      onOpenTransaction={props.onOpenTransaction}
     >
       {props.transaction && props.draft
         ? <TransactionDetailBody key={props.transaction.id} {...props} />
@@ -218,12 +224,17 @@ function TransactionDetailBody({
   onLinkLoan,
   onOpenChange,
   onOpenExplorer,
-  onOpenTransaction,
   onSave,
   onSaveAndNext,
   hasNext,
+  onOpenTransaction: openTransactionProp,
 }: TransactionDetailSheetProps) {
   const { t } = useTranslation(["transactions", "common"]);
+  // The frame keeps the trail of coins followed; without it, open directly.
+  const trail = React.useContext(TransactionTrailContext);
+  const onOpenTransaction = trail?.follow ?? openTransactionProp;
+  const onBack = trail?.back;
+  const backLabel = trail?.backLabel ?? null;
   const { t: tJournals } = useTranslation("journals");
   // "graph" and "ledger" folded into Details; remap old deep links.
   const visibleInitialTab =
@@ -869,6 +880,9 @@ function TransactionDetailBody({
     hideSensitive,
     currency,
     transactionDisplayId,
+    sourceLabel: `${sourceName} · ${transactionTypeLabel(t, sourceType)}`,
+    explorer,
+    openExplorer: () => onOpenExplorer(transaction),
     feeBtc,
     commercialContext,
     commercialContextLoading,
@@ -951,13 +965,18 @@ function TransactionDetailBody({
         valueNowEur={valueNowEur}
         pricedChange={pricedChange}
         timelineSteps={timelineSteps}
+        checklist={<ReviewChecklist items={reviewChecklistItems} onJump={setActiveTab} />}
         explorer={explorer}
         onOpenExplorer={onOpenExplorer}
         onClose={() => onOpenChange(false)}
+        onBack={onBack}
+        backLabel={backLabel}
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        {/* Wide: the coins on the left, the record's tabs and rail on the right.
+            Narrow: the same blocks stacked. */}
+        <div className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_minmax(400px,460px)] xl:items-start">
           <div className="min-w-0 space-y-4">
             {reviewBanner ? (
               <QuarantineBanner
@@ -987,6 +1006,10 @@ function TransactionDetailBody({
               />
             ) : null}
 
+            <TransactionFlowSection ctx={tabContext} />
+          </div>
+
+          <div className="min-w-0 space-y-4 xl:sticky xl:top-0">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="details">{t("sheet.tab.details")}</TabsTrigger>
@@ -1024,32 +1047,24 @@ function TransactionDetailBody({
 
               <TransactionLinkedTab ctx={tabContext} />
             </Tabs>
+            <TransactionDetailRightRail
+              hideSensitive={hideSensitive}
+              attachments={attachments}
+              onAddAttachmentFiles={onAddAttachmentFiles}
+              onAddAttachmentLinks={onAddAttachmentLinks}
+              onReuseEvidence={onReuseEvidence}
+              onOpenAttachment={onOpenAttachment}
+              onRenameAttachment={onRenameAttachment}
+              onRemoveAttachment={onRemoveAttachment}
+              historyEvents={historyEvents}
+              historyStale={historyStale}
+              historyLoading={historyLoading}
+              isRevertingHistory={isRevertingHistory}
+              onRevertHistory={onRevertHistory}
+              onProcessJournals={onProcessJournals}
+              isProcessingJournals={isProcessingJournals}
+            />
           </div>
-
-          <TransactionDetailRightRail
-            transaction={transaction}
-            sourceName={sourceName}
-            sourceType={sourceType}
-            explorer={explorer}
-            reviewChecklistItems={reviewChecklistItems}
-            onJumpTab={setActiveTab}
-            hideSensitive={hideSensitive}
-            attachments={attachments}
-            onAddAttachmentFiles={onAddAttachmentFiles}
-            onAddAttachmentLinks={onAddAttachmentLinks}
-            onReuseEvidence={onReuseEvidence}
-            onOpenAttachment={onOpenAttachment}
-            onRenameAttachment={onRenameAttachment}
-            onRemoveAttachment={onRemoveAttachment}
-            historyEvents={historyEvents}
-            historyStale={historyStale}
-            historyLoading={historyLoading}
-            isRevertingHistory={isRevertingHistory}
-            onRevertHistory={onRevertHistory}
-            onProcessJournals={onProcessJournals}
-            isProcessingJournals={isProcessingJournals}
-            onOpenExplorer={onOpenExplorer}
-          />
         </div>
       </div>
 

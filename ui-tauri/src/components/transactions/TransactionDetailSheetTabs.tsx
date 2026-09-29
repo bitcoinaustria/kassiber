@@ -7,7 +7,7 @@ export {
   isPublicGraphLookupApproved,
   transactionGraphLookupArgs,
 } from "./TransactionGraphLookup";
-export { TransactionDetailsTab } from "./TransactionDetailsTab";
+export { TransactionDetailsTab, TransactionFlowSection } from "./TransactionDetailsTab";
 export { TransactionClassifyTab } from "./TransactionClassifyTab";
 export { TransactionPricingTab } from "./TransactionPricingTab";
 export { TransactionTaxTab } from "./TransactionTaxTab";

@@ -23,6 +23,7 @@
     "layerTransition": "Bitcoin swap"
   },
   "detailHeader": {
+    "back": "Back to",
     "valueThen": "FMV then",
     "valueNow": "marked now",
     "unassignedWallet": "Unassigned wallet",
@@ -630,6 +631,7 @@
     }
   },
   "details": {
+    "explorer": "Explorer",
     "transactionId": "Transaction ID",
     "transactionIdHint": "Canonical on-chain identifier or import row id, depending on the source.",
     "priceAtTime": "Price at time",

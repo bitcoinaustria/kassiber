@@ -34,6 +34,8 @@ vi.mock("react", async original => {
     useCallback: (callback: unknown, deps: unknown[]) => memo(() => callback, deps),
     useRef: (initial: unknown) => memo(() => ({ current: initial }), []),
     useEffect: (effect: () => void, deps: unknown[]) => memo(() => { hooks.effects.push(effect); }, deps),
+    // No provider outside React: every context reads its default value.
+    useContext: (context: { _currentValue?: unknown }) => context._currentValue,
   };
 });
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }) }));

@@ -317,7 +317,7 @@ export type TimelineStep = {
 
 export function StatusTimeline({ steps }: { steps: TimelineStep[] }) {
   return (
-    <ol className="flex w-full flex-wrap items-center gap-x-2 gap-y-1">
+    <ol className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
       {steps.map((step, idx) => (
         <li key={step.key} className="flex min-w-0 items-center gap-1.5">
           <span
@@ -448,6 +448,7 @@ export type ChecklistItem = {
   warn?: boolean;
 };
 
+/** The review steps as one row of pills, each jumping to the tab that settles it. */
 export function ReviewChecklist({
   items,
   onJump,
@@ -458,75 +459,43 @@ export function ReviewChecklist({
   const { t } = useTranslation("transactions");
   const completed = items.filter((i) => i.done).length;
   return (
-    <div className="kb-surface-inset p-3">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm font-semibold">
-          <ListChecks
-            className="size-4 text-muted-foreground"
-            aria-hidden="true"
-          />
-          {t("sheet.checklist.title")}
-        </div>
-        <span className="text-xs tabular-nums text-muted-foreground">
-          {completed} / {items.length}
+    <div
+      role="group"
+      aria-label={t("sheet.checklist.title")}
+      className="flex flex-wrap items-center gap-1.5 text-xs"
+    >
+      <span className="mr-1 inline-flex items-center gap-1 font-medium text-muted-foreground">
+        <ListChecks className="size-3.5" aria-hidden="true" />
+        <span className="tabular-nums">
+          {completed}/{items.length}
         </span>
-      </div>
-      <ul className="space-y-1.5">
-        {items.map((item) => {
-          const interactive = Boolean(item.tab && onJump);
-          const Tag = interactive ? "button" : "div";
-          return (
-            <li key={item.key}>
-              <Tag
-                type={interactive ? "button" : undefined}
-                onClick={
-                  interactive && item.tab
-                    ? () => onJump?.(item.tab as string)
-                    : undefined
-                }
-                className={cn(
-                  "flex w-full items-start gap-2 rounded-md text-left text-sm",
-                  interactive &&
-                    "group -mx-1.5 w-[calc(100%+0.75rem)] px-1.5 py-1 transition-colors hover:bg-muted/60",
-                )}
-                title={item.hint}
-              >
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border",
-                    item.done
-                      ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                      : item.warn
-                        ? "border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                        : "border-border bg-muted/40 text-muted-foreground",
-                  )}
-                >
-                  {item.done ? (
-                    <Check className="size-2.5" aria-hidden="true" />
-                  ) : null}
-                </span>
-                <span
-                  className={cn(
-                    "min-w-0 flex-1",
-                    item.done
-                      ? "text-foreground"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  {item.label}
-                </span>
-                {interactive ? (
-                  <ChevronRight
-                    aria-hidden="true"
-                    className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-foreground"
-                  />
-                ) : null}
-              </Tag>
-            </li>
-          );
-        })}
-      </ul>
+      </span>
+      {items.map((item) => {
+        const interactive = Boolean(item.tab && onJump);
+        const Tag = interactive ? "button" : "span";
+        return (
+          <Tag
+            key={item.key}
+            type={interactive ? "button" : undefined}
+            onClick={interactive && item.tab ? () => onJump?.(item.tab as string) : undefined}
+            title={item.hint}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border bg-background/60 px-2 py-0.5 outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              item.done
+                ? "border-emerald-500/30 text-foreground"
+                : item.warn
+                  ? "border-amber-500/40 text-amber-700 dark:text-amber-300"
+                  : "border-dashed text-muted-foreground",
+              interactive && "hover:bg-muted",
+            )}
+          >
+            {item.done ? (
+              <Check className="size-3 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+            ) : null}
+            {item.label}
+          </Tag>
+        );
+      })}
     </div>
   );
 }

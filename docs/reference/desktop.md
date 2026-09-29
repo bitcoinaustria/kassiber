@@ -213,7 +213,8 @@ phrases, API keys, passwords, bearer tokens, cookies, raw daemon arguments,
 raw AI prompts, imported rows, database files, and stack locals are excluded or
 redacted.
 
-Transaction detail includes a Transaction flow panel on the Details tab. The
+Transaction detail shows a Transaction flow panel beside its tabs, above them
+in narrow windows; the review checklist sits in the header's timeline bar. The
 panel uses `ui.transactions.graph` to draw a local, read-only flow view: valued
 Bitcoin vin/vout become proportional input/output strands with a distinct fee
 leg, reference-only or confidential records can show amountless public
@@ -237,7 +238,8 @@ ribbons carry no known amount, and hidden values give every leg an equal share
 of the same shape. As on mempool, the inputs and outputs are listed below the
 graph, inputs on the left. An input whose coin a row in this book
 created, and an output this book later spent, open that row in place: the book's
-own history can be walked back and forth like an explorer, without a request.
+own history can be walked back and forth like an explorer, without a request,
+and the header's Back button returns along the coins followed.
 The view loads three.js only when a graph is shown,
 renders only on change, needs no network, and falls back to the flat bowtie
 without WebGL. After a wallet sync returns, a bounded background pass fills
