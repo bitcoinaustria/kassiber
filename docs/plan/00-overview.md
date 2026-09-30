@@ -38,7 +38,8 @@ Out of scope unless a future design says otherwise:
   `../reference/general-accounting-acceptance.md`
 - remote multi-user service
 - mobile
-- broad altcoin product scope
+- broad altcoin product scope in core; third-party asset extensions are
+  proposed in [19-extensions.md](19-extensions.md)
 
 ## Current Architecture
 
@@ -98,6 +99,7 @@ checklists and test counts are not current delivery evidence.
 | Source of funds | v1 landed | desktop review workstation, reviewed transaction-flow links, disclosure preview, immutable snapshots, and gated PDF export |
 | Custody lineage | Design/active | separate quantity from tax, reconcile complete policies automatically, and review durable missing-wallet bridges |
 | Local chain analysis | Audited / proposed expansion | share observed graph facts across transaction understanding and privacy; keep ownership hypotheses, observer knowledge and economic meaning separate |
+| Extensions | Proposed | bundled and installed extensions on one API; general-ledger and device-sync removal decided; feature split and open decisions in [19-extensions.md](19-extensions.md) |
 | Packaging | Release-gated | bundled CLI runtime; public releases follow [local signing and notarization](../reference/macos-release.md) |
 
 ## Stack
@@ -138,6 +140,8 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
 - `17-general-accounting-and-private-ai-spec.md`: consolidated One-Shot
   organizational-accounting specification, private-user compatibility, scoped
   AI assistance, security requirements, and K2/annex acceptance criteria
+- `19-extensions.md`: proposed extension model, core/extension/removal
+  split, monorepo boundary checks, and asset-model prerequisites
 
 ## Highest-Risk Drift Points
 
