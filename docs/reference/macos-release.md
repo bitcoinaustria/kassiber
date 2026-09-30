@@ -1,7 +1,7 @@
 # macOS release runbook
 
 Kassiber separates build, protected-CI Developer ID signing and notarization,
-and offline OpenPGP release authentication. The Developer ID identity is stored
+and SSH-signed release-manifest authentication. The Developer ID identity is stored
 only as an encrypted GitHub environment secret and imported into an ephemeral
 runner keychain. The Apple team is `6Q4R2C3GJK` (Bitcoin Austria); changing
 that trust root requires a reviewed code change in `scripts/macos_release.py`.
@@ -49,10 +49,9 @@ that trust root requires a reviewed code change in `scripts/macos_release.py`.
    prevent-self-review while only one operator is available. This is explicit
    single-person authorization, not a four-eyes process. A second independent
    reviewer can be added later without changing the signing pipeline.
-   Complete the separate offline
-   [OpenPGP key ceremony](release-signing.md), publish/independently verify its
-   public fingerprint, and enable `packaging/release/signing-policy.json`.
-   Without that policy final publication intentionally fails.
+   The separate [SSH release key](release-signing.md) is pinned in the enabled
+   `packaging/release/signing-policy.json`. Without an enabled policy final
+   publication intentionally fails.
 
 The repository implements the workflow, not account administration. Confirm
 the environments, secret names, protection rules and actual key validity before
@@ -130,11 +129,22 @@ Preview locally with `python3 scripts/release_notes.py --version v<VERSION>
    Also exercise both Homebrew installation routes with the candidate assets
    and verify the installed app's Developer ID seal after Homebrew finishes.
    Archive verification alone cannot prove that an installer preserved it.
-5. Only now use the existing offline OpenPGP manifest signing procedure and
-   attach its `.asc`. Dispatch `finalize-signed-release` on `main`. It checks
-   the exact complete file set, pinned OpenPGP identity, Developer ID signatures,
-   tickets, Gatekeeper assessment and matching app contents across all three
-   macOS distributions before publication. Homebrew gets the final hashes.
+5. Only now sign the manifest with the SSH release key through the Bitwarden
+   agent, following [release signing](release-signing.md#creating-a-signed-release):
+
+   ```bash
+   export SSH_AUTH_SOCK="$HOME/.bitwarden-ssh-agent.sock"
+   uv run --locked python scripts/release_manifest.py sign \
+     --manifest kassiber-<VERSION>-manifest.txt \
+     --public-key ~/.ssh/kassiber-release.pub
+   ```
+
+   Approve the single signing request, then attach the resulting
+   `kassiber-<VERSION>-manifest.txt.sig`. Dispatch `finalize-signed-release`
+   on `main`. It checks the exact complete file set, the pinned SSH release-key
+   fingerprint, Developer ID signatures, tickets, Gatekeeper assessment and
+   matching app contents across all three macOS distributions before
+   publication. Homebrew gets the final hashes.
    The macOS formula keeps the app intact under `libexec`, disabling Python
    metadata cleanup for that subtree and preserving `@rpath` library IDs.
    The sealed-artifact checks reject linkage that would still require rewriting.
@@ -207,7 +217,7 @@ provenance. The tag-based `prepare_macos_release.py` helper is for releases and
 does not prepare these candidates.
 
 Every intermediate state is a draft. A failed notarization, expired identity,
-missing ticket, mismatched version/hash or missing OpenPGP signature must never
+missing ticket, mismatched version/hash or missing manifest signature must never
 fall back to unsigned publication. A successful notarization leaves its JSON
 response in the workflow's `notarization-evidence` artifact. For timeouts or
 rejections, inspect the Apple submission in `notarytool history/log` using
@@ -218,8 +228,8 @@ DMG (without clobbering another input), then dispatch `notarize-macos` on main
 with the tag and its printed SHA-256. Rerun notarization with the same input
 hash if the workflow failed before promotion. If promotion partially failed,
 the draft may contain mixed intermediate files: never sign its manifest until
-a successful full rerun completes and local verification passes. Once an
-`.asc` exists, notarization refuses mutations. A published release is immutable
+a successful full rerun completes and local verification passes. Once a
+`.sig` exists, notarization refuses mutations. A published release is immutable
 to these helpers: corrections require a new version/tag, not replacement.
 If publication succeeds but the subsequent Homebrew push fails, rerun
 `finalize-signed-release` with the same inputs. It re-verifies the complete

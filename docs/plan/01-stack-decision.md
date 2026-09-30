@@ -35,9 +35,8 @@ Adopt the following stack:
   desktop/CLI permission. macOS exposes **Check for Updates…**, but the action
   also refuses network access while that permission is disabled.
   The notification trusts GitHub/TLS and is not an authenticated release
-  announcement. Builds carry a versioned SHA-256 manifest; the Sparrow-style
-  OpenPGP signature becomes authoritative only after the permanent release key
-  and fingerprint are published. The complete disclosure lives in
+  announcement. Builds carry a versioned SHA-256 manifest; signed releases add
+  a Sparrow-style detached OpenSSH signature from the pinned release key. The complete disclosure lives in
   [Privacy & security](../reference/privacy-and-security.md).
 
 Rust scope stays small: process supervision, stdin/stdout framing, OS path

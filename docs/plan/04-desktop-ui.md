@@ -618,8 +618,9 @@ column stores the ref ID, not the raw value.
   (Sectigo, etc.).
 - Linux: GPG signing keys for `.deb`. AppImage signing optional.
 - Platform code-signing credentials use the platform's protected CI/HSM
-  integration and never live in the repo. The OpenPGP release private key stays
-  offline and never enters CI; only its public key is committed.
+  integration and never live in the repo. The SSH release private key stays in
+  the owner's password-manager vault and never enters CI; only its public key
+  is committed.
 
 ### 5.4 Update model
 
@@ -638,9 +639,9 @@ Per [01-stack-decision.md](01-stack-decision.md) and
   A shared advisory lock serializes checks with consent writes so revocation
   cannot return while an authorized request is still in flight.
 - The update announcement relies on HTTPS plus GitHub repository control.
-  Release builds carry a versioned SHA-256 manifest; future signed releases add
-  a detached OpenPGP signature verified against Kassiber's independently
-  published full release-key fingerprint.
+  Release builds carry a versioned SHA-256 manifest; signed releases add a
+  detached OpenSSH signature verified against Kassiber's independently
+  published SHA256 release-key fingerprint.
 - `User-Agent` is `kassiber/<version>` and the checker sends no project, book,
   wallet, device, installation, hostname, or build-hash identifier.
 
@@ -682,7 +683,7 @@ green before merging the phase's PRs.
       CI fails on any new dep with a license incompatible with
       AGPL-3.0-only.
 - [ ] Platform code-signing identities use protected CI/HSM integrations and
-      never live in the repo; the OpenPGP release private key remains offline.
+      never live in the repo; the SSH release private key never enters CI.
 - [ ] Bundled Python tree is read-only at runtime; user-writable state
       stays under the effective OS-native or retained legacy state root.
 - [ ] Bundled Python and Rust crates have a documented refresh cadence:

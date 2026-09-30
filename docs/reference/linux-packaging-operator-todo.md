@@ -17,12 +17,8 @@ source-only pull request.
   requested release tag unless its commit is in `origin/main` history; that
   runtime check does not replace protected tag administration.
 - [ ] Run `publish-linux-channels.yml` once with every `publish_*` input false.
-  This verifies the release assets and renders all channel definitions without
-  changing an external service.
-- [ ] Complete the separate offline general release-key ceremony, commit its
-  public key and primary fingerprint, and enable
-  `packaging/release/signing-policy.json`. Dry-run rendering works while that
-  policy is disabled; every external channel publication deliberately fails.
+  This verifies the release's SSH-signed `<manifest>.sig` and assets, and
+  renders all channel definitions without changing an external service.
 - [ ] Enable immutable GitHub releases if available to the organization. The
   workflow also binds every mutating job to checksums derived from the
   authenticated versioned release manifest in its `prepare` job; never bypass

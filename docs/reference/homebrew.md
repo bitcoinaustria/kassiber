@@ -88,7 +88,7 @@ uses the following sequence:
    it in the gated workflow. Generate the final DMG, app ZIP, and CLI archive
    from that same sealed app.
 2. Generate `kassiber-<version>-manifest.txt` over the final release asset set
-   and obtain its detached OpenPGP signature offline.
+   and sign it with the SSH release key (`<manifest>.sig`).
 3. `finalize-signed-release.yml` authenticates the manifest signature, checks
    the exact asset set, and verifies the macOS signatures, tickets, provenance,
    and smoke tests without rebuilding or replacing release files.
@@ -171,7 +171,7 @@ installs and upgrades work without Apple code signing or notarization. What
 signing changes is Gatekeeper friction, and it differs per package:
 
 The Homebrew repository checksum protects against download corruption and
-asset replacement after the tap commit. A Kassiber OpenPGP signature over the
+asset replacement after the tap commit. A Kassiber SSH signature over the
 source manifest separately authenticates those checksums to the independently
 published release key; neither mechanism replaces the other.
 

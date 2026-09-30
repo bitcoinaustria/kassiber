@@ -59,7 +59,7 @@ on:
         default: ""
         type: string
       draft_release:
-        description: "Release builds always remain drafts until platform and OpenPGP verification"
+        description: "Release builds always remain drafts until platform and manifest-signature verification"
         required: true
         default: true
         type: boolean
