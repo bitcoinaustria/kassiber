@@ -480,7 +480,11 @@ export function BtcpaySetupPanel({
           {ledgerGroup && ledgerGroup.first === key ? (
             <p className="text-xs text-muted-foreground">
               {ledgerGroup.labels.length > 1
-                ? `${t("add.btcpay.notice.ledgerShared", { methods: ledgerGroup.labels.join(" + ") })} `
+                ? `${t("add.btcpay.notice.ledgerShared", {
+                    methods: new Intl.ListFormat(currentUiLocale(), { type: "conjunction" }).format(
+                      ledgerGroup.labels,
+                    ),
+                  })} `
                 : ""}
               {t("add.btcpay.notice.ledgerScope")}
             </p>
