@@ -51,12 +51,41 @@ def test_digest_fails_closed(tmp_path):
         release.check_digest(artifact, "0" * 64)
 
 
-def test_signing_never_runs_in_ci(tmp_path, monkeypatch):
-    monkeypatch.setenv("CI", "true")
+PROTECTED_SIGNING_ENV = {
+    "CI": "true",
+    "GITHUB_ACTIONS": "true",
+    "GITHUB_WORKFLOW_REF": release.SIGNING_WORKFLOW_REF,
+    "GITHUB_EVENT_NAME": "workflow_dispatch",
+    "GITHUB_REF": "refs/heads/main",
+}
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"GITHUB_WORKFLOW_REF": "bitcoinaustria/kassiber/.github/workflows/ci.yml@refs/heads/main"},
+        {"GITHUB_WORKFLOW_REF": "someone/fork/.github/workflows/notarize-macos.yml@refs/heads/main"},
+        {"GITHUB_EVENT_NAME": "pull_request"},
+        {"GITHUB_REF": "refs/heads/feature"},
+        {"GITHUB_ACTIONS": ""},
+    ],
+)
+def test_signing_refuses_untrusted_ci(tmp_path, monkeypatch, override):
+    for key, value in {**PROTECTED_SIGNING_ENV, **override}.items():
+        monkeypatch.setenv(key, value)
     with patch.object(release, "run") as run:
-        with pytest.raises(ValueError, match="locally"):
+        with pytest.raises(ValueError, match="protected notarize-macos"):
             release.sign(argparse.Namespace())
         run.assert_not_called()
+
+
+def test_signing_context_allows_local_and_protected_ci(monkeypatch):
+    for key in PROTECTED_SIGNING_ENV:
+        monkeypatch.delenv(key, raising=False)
+    release.require_trusted_signing_context()
+    for key, value in PROTECTED_SIGNING_ENV.items():
+        monkeypatch.setenv(key, value)
+    release.require_trusted_signing_context()
 
 
 def test_embedded_build_identity(tmp_path):
