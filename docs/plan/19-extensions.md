@@ -2,7 +2,7 @@
 
 Status: proposed 2026-09-29. On 2026-09-30 the owner decided the
 contribution policy and the removal of the general ledger and device sync.
-The device-sync removal is implemented; everything else is a proposal. Tasks move to
+Both removals are implemented; everything else is a proposal. Tasks move to
 [TODO.md](../../TODO.md) as each step is accepted; see
 [open decisions](#open-decisions).
 
@@ -23,8 +23,8 @@ accounting decision shared by the CLI, desktop and AI.
 Audit at `a5f8aa41`, rechecked against `cea200b8` for BTCPay, offline mode
 and the transaction graph:
 
-- There is no plugin loading, entry point or discovery.
-  `core/accounting/jurisdiction.py` explicitly refuses plugin imports.
+- There is no plugin loading, entry point or discovery. The removed
+  ledger's jurisdiction loader explicitly refused plugin imports.
 - Integration points are closed lists. Adding an exchange touches eight places
   ([add-exchange playbook](../../skills/kassiber/references/add-exchange.md)).
   A report is wired into the CLI `if` chain, the daemon kind allowlist and
@@ -90,10 +90,13 @@ books by default. A second country has no seam until this move happens.
   an extension on the stable API if an organization needs it. The BTC
   subledger export stays core.
 
-  Migration: stop creating `gl_*` tables in new databases. When an existing
-  database has no ledger rows, drop the `external_documents` triggers
-  (`accounting/evidence.py:41`) and then the tables. When it has rows, leave
-  tables and triggers intact; no authored data is deleted.
+  Implemented 2026-09-30; the code is on git tag `archive/general-ledger`.
+  New databases get no `gl_*` tables. Opening a database whose leftover
+  tables are all empty drops the ledger's `external_documents` triggers and
+  then the tables. Populated tables and their triggers stay intact
+  (`core/legacy_ledger.py`); book deletion, reset, and partition fail closed
+  with `legacy_ledger_present` until the user backs up and runs
+  `kassiber maintenance purge-legacy-ledger --confirm`.
 - **Device sync (plan 13).** Owner decision 2026-09-30. It spans every table,
   would require every extension to declare replication semantics, and carries
   five transports plus an unaudited SPAKE2 pairing implementation. Encrypted
@@ -380,7 +383,7 @@ use exact base units.
 
 ## Sequence
 
-1. Remove the general ledger, device sync, and the small items above.
+1. Remove the general ledger (done), device sync, and the small items above.
 2. Untangle chain-analysis triggers and imports; move collaborative-transaction
    evidence to a neutral core module.
 3. Replace closed lists with internal registries: importers, reports, rates,

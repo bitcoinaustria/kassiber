@@ -18,12 +18,6 @@ Do not use Kassiber as the sole basis for filings or financial decisions.
   including an Austrian plugin and E 1kv exports.
 - An optional AI assistant using local or explicitly authorized remote providers.
 
-An opt-in [general ledger](docs/reference/general-accounting.md) is under
-implementation for organizational books. It is separate from Bitcoin tax
-journals and is operated through the CLI and agent tools, with action review in
-the existing Assistant. Complete organizational bookkeeping and K2 support
-are not yet claimed.
-
 ## Install
 
 Download desktop or CLI packages from

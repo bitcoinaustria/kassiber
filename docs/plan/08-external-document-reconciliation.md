@@ -1,10 +1,8 @@
 # External Document Reconciliation
 
-> This document describes the original BTC-side implementation. The accepted
-> opt-in organizational-accounting and document-AI extension is governed by
-> [plan 17](17-general-accounting-and-private-ai-spec.md), which supersedes the
-> product-wide general-ledger prohibition below. The BTC reconciliation and security contracts remain binding; the broader
-> product scope belongs to plan 17.
+> This document describes the BTC-side implementation. Plan 17's opt-in
+> general ledger was removed under [plan 19](19-extensions.md#removed), so the
+> product-wide general-ledger exclusion below applies again.
 
 **Status:** Initial schema, CLI commands, daemon-safe list/suggest/review
 surfaces, and CSV subledger export have landed. Rich desktop workflow and AI
@@ -13,7 +11,7 @@ extraction remain future work.
 history sync, `btcpay provenance`, `documents`, `reports commercial-subledger`,
 `TODO.md`, and this boundary doc.
 **Boundary:** This subsystem reconciles BTC evidence. Invoice issuance, ERP,
-and automatic filing are outside it; the opt-in general ledger is separate.
+and automatic filing are outside it, as is a general ledger.
 
 ## Problem
 

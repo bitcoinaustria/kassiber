@@ -580,14 +580,10 @@ rows, and stack locals. `--save` writes the artifact under
   `rates set` with values you trust.
 - **Austrian tax support is partial, not complete.** Kassiber ships a reviewed
   RP2-backed Austrian `§ 27b EStG` handoff for the current E 1kv / exit-tax
-  slice. The opt-in accounting implementation adds versioned 2025 `K2` and
-  annex working papers with reviewed applicability, retained evidence and
-  explicit specialist inputs; it is not a certified universal corporate-tax
-  calculator or `K1` support. Existing personal-tax output does not become a
-  corporate declaration by selecting a company profile. Domestic-provider
-  offsets, withholding, carryforwards and required annexes need explicit
-  review. FinanzOnline submission remains excluded. Pilot completeness and
-  final accounting/security review remain outstanding on the implementation branch.
+  slice. There is no `K1`/`K2` corporate-tax support; personal-tax output
+  does not become a corporate declaration by selecting a company profile.
+  Domestic-provider offsets, withholding, and carryforwards need explicit
+  review. FinanzOnline submission remains excluded.
 - **Generic tax output is not tax advice.** It is accounting software
   output built on local wallet history and available pricing, not a
   substitute for jurisdiction-specific review.

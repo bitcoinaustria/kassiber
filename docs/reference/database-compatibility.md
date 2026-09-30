@@ -15,6 +15,7 @@ and asserts the resulting behavior, not merely that schema creation succeeds.
 | Removed device-sync records | Tested: `sync_*` tables are dropped once with a `device-sync-removal-v1` audit of event and open-conflict counts; authored rows keep their values and uncommitted legacy active components remain ineffective | Tested: same | Tested: fresh books create no `sync_*` objects and the removal step only probes `sqlite_master` once applied | Device sync was removed (plan 19). Authored rows are never deleted; unused `transaction_edit_events.sync_*` columns stay in older books and are omitted from partitions. Missing modern evidence commitments are not reconstructed from mutable current rows. |
 | Journals built before the pre-arbitration custody holds | Not applicable | Not applicable | Tested in `test_wages_semantic_migration.py` | `custody-fail-closed-holds-v1` marks every processed book stale once, so the next (automatic) rebuild applies the unscoped, fan-out, pending and replaced-spend holds. Retained journals and evidence are unchanged until then. |
 | Ancient REAL BTC to INTEGER msat rebuild | Tested with a focused legacy transaction/holdings fixture | Same migration path | Not applicable to a fresh current database | Amounts convert exactly and all later transaction metadata columns survive the rebuild. |
+| Removed general-ledger storage (`gl_*`) | Not applicable | Not applicable | Tested in `test_legacy_ledger.py` | New databases get no `gl_*` objects. If every leftover table is empty, opening drops the ledger's `external_documents` triggers and then its tables; otherwise tables and triggers stay intact, the read-only probe writes nothing, and book deletion, reset, and partition fail with `legacy_ledger_present` until an explicit `kassiber maintenance purge-legacy-ledger --confirm`. |
 
 Primary automated coverage:
 
@@ -27,6 +28,7 @@ Primary automated coverage:
 - `tests/test_custody_filed_report_exports.py`
 - `tests/test_observer_custody_boundaries.py`
 - `tests/test_samourai_import.py`
+- `tests/test_legacy_ledger.py`
 
 ## Intentionally not inferred during upgrade
 

@@ -1,5 +1,8 @@
 # General accounting: dependency triage and three-cut stack
 
+**Status:** Removed 2026-09-30 per [plan 19](19-extensions.md#removed); the implementation is preserved at git tag `archive/general-ledger`.
+Historical record only; links to the deleted general-accounting reference docs resolve at that tag.
+
 Updated: 2026-09-07. This supersedes the earlier seven-cut and two-cut breakdowns.
 The accepted full scope remains [spec 17](17-general-accounting-and-private-ai-spec.md),
 but publication is not merge approval or completed organizational acceptance.

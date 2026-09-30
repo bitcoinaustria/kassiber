@@ -1,12 +1,15 @@
 # Austrian Corporate-Tax Handoff (K1 / K2)
 
+**Status:** Removed 2026-09-30 per [plan 19](19-extensions.md#removed); the implementation is preserved at git tag `archive/general-ledger`.
+Historical record only; links to the deleted general-accounting reference docs resolve at that tag.
+
 > Historical research draft. The user's accepted full-accounting scope and
 > privacy-preserving AI requirements are consolidated in
 > [plan 17](17-general-accounting-and-private-ai-spec.md). Its requirements
 > supersede this draft's general-ledger prohibition and staged delivery scope.
 > Legal/form claims below remain research inputs requiring current verification.
 
-**Status:** Superseded research baseline; do not execute its staged delivery
+**Former status:** Superseded research baseline; do not execute its staged delivery
 plan. [Spec 17](17-general-accounting-and-private-ai-spec.md) owns accepted
 scope and [the acceptance record](../reference/general-accounting-acceptance.md)
 owns delivery evidence. Source and form claims below describe the dated research.

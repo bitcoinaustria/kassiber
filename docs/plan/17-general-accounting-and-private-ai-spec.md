@@ -1,6 +1,9 @@
 # General accounting and private AI: consolidated implementation specification
 
-**Status:** Implementation authorized and in progress; not production-ready.
+**Status:** Removed 2026-09-30 per [plan 19](19-extensions.md#removed); the implementation is preserved at git tag `archive/general-ledger`.
+Historical record only; links to the deleted general-accounting reference docs resolve at that tag.
+
+**Former status:** Implementation authorized and in progress; not production-ready.
 **Updated:** 2026-09-05.
 **Delivery:** One complete product outcome through the reviewed
 [dependency-aware PR stack](18-general-accounting-pr-stack.md), with a retained
