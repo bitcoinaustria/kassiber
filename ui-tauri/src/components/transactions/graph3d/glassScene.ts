@@ -27,6 +27,7 @@ import {
   type GlassSceneLook,
 } from "../../kb/glass3d/stage";
 export type { GlassScene, GlassSceneLook } from "../../kb/glass3d/stage";
+export { warmGlassRenderer } from "../../kb/glass3d/stage";
 
 const EDGE = 0.014;
 const PROFILE_STEPS = 4;

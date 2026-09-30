@@ -242,9 +242,12 @@ own history can be walked back and forth like an explorer, without a request,
 and the header's Back button returns along the coins followed. Pointing at a
 leg in the drawing lights it, shows its card and marks its row in the list;
 pointing at a row lights its leg, and clicking a leg brings its row into view.
-The view loads three.js only when a graph is shown,
+The view loads three.js only when a graph is shown or loading,
 renders only on change, needs no network, and falls back to the flat bowtie
-without WebGL. After a wallet sync returns, a bounded background pass fills
+without WebGL. Every glass view draws through one shared renderer, which keeps
+its environment light and compiled shaders between graphs; it is warmed while a
+graph loads, compiles before the first draw without blocking the page, and is
+released 30 s after its last view. After a wallet sync returns, a bounded background pass fills
 missing graph references through that wallet's backend. Its completion refreshes
 local graph queries. The "Look up on-chain" action appears only where a lookup
 could still add something: a row with no local graph, or a Bitcoin graph whose
