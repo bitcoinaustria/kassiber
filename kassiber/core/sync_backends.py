@@ -1381,11 +1381,12 @@ def _observer_discovered_targets(observer_updates):
 
 
 def _current_observed_txids(conn, wallet_id, observer_id):
-    """Txids whose every active row in this wallet still matches its proof.
+    """Txids whose every active row this observer alone wrote, unchanged since.
 
-    A row edited, merged or re-imported since this observer last wrote it no
-    longer matches its persisted graph/quantity hashes, and a row another
-    observer wrote names a different observer, so neither is reusable.
+    A row edited, merged or re-imported since then no longer matches its
+    persisted graph/quantity hashes. A row normalized from several observers'
+    records, as script families of one wallet share a transaction, is not what
+    this observer alone would write, even after the other families are gone.
     """
 
     from .chain_observer.provenance import row_has_current_authoritative_observation
@@ -1413,11 +1414,7 @@ def _current_observed_txids(conn, wallet_id, observer_id):
             observer_ids = json.loads(row["observation_observer_ids_json"] or "[]")
         except (TypeError, ValueError):
             observer_ids = []
-        if (
-            isinstance(observer_ids, list)
-            and observer_id in observer_ids
-            and row_has_current_authoritative_observation(row)
-        ):
+        if observer_ids == [observer_id] and row_has_current_authoritative_observation(row):
             current.add(txid)
         else:
             stale.add(txid)

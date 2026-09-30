@@ -305,8 +305,10 @@ reused only when all of these hold:
 
 - its fingerprint is unchanged;
 - the state came from the same Kassiber release;
-- every active row for it in the wallet still matches the graph and quantity
-  hashes this observer persisted.
+- every active row for it in the wallet was written by this observer alone
+  and still matches the graph and quantity hashes it persisted. A row once
+  normalized from several script families stays stale after one of them is
+  gone.
 
 Mempool transactions, forced and reorg rebuilds, and wallets with several
 script families always emit every record. Retractions still come from the

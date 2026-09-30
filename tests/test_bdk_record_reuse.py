@@ -313,7 +313,7 @@ class CurrentObservedTxidsTest(TestCase):
         self.profile = self.conn.execute("SELECT * FROM profiles").fetchone()
         self.wallet = self.conn.execute("SELECT * FROM wallets").fetchone()
 
-    def _observe(self, txid, observer_id):
+    def _observe(self, txid, *observer_ids):
         record = {
             "txid": txid,
             "occurred_at": "2026-01-01T00:00:00Z",
@@ -334,15 +334,17 @@ class CurrentObservedTxidsTest(TestCase):
             self.conn, self.profile, self.wallet,
             application_revision="apply", chain="bitcoin", network="main",
             entries=[{"external_id": txid, "asset": "BTC", "direction": "inbound",
-                      "observer_ids": [observer_id], "observer_kinds": ["bdk"]}],
+                      "observer_ids": list(observer_ids), "observer_kinds": ["bdk"]}],
             resolved_records=outcome["_observer_resolved_records"],
         )
 
     def test_only_unmodified_rows_of_this_observer_are_reusable(self):
-        edited, foreign = "44" * 32, "55" * 32
+        edited, foreign, shared = "44" * 32, "55" * 32, "66" * 32
         self._observe(PARENT, "bdk:one")
         self._observe(edited, "bdk:one")
         self._observe(foreign, "bdk:two")
+        # A former script-family union stays stale after the other family is gone.
+        self._observe(shared, "bdk:one", "bdk:two")
         self.conn.execute(
             "UPDATE transactions SET amount = amount + 1 WHERE external_id = ?", (edited,)
         )
