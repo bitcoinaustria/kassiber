@@ -217,7 +217,7 @@ If imported transactions carry `fiat_rate` or `fiat_value`, Kassiber stores both
 the legacy numeric value and an exact decimal string plus pricing provenance.
 Generic imports default to `pricing_source_kind=generic_import`; source-specific
 exports may pass stronger kinds such as `exchange_execution`,
-`btcpay_invoice`, or `btcpay_payment`. Stronger later pricing can replace weaker
+`btcpay_invoice`, `btcpay_payment`, or `btcpay_payout`. Stronger later pricing can replace weaker
 earlier pricing for the same transaction.
 
 Pricing provenance is separate from observer authority. When a supporting import
@@ -844,21 +844,18 @@ Behavior:
 - `Comment` becomes the transaction note if the note is empty
 - `Labels` become Kassiber tags
 
-You can also sync confirmed on-chain wallet history directly from a BTCPay store:
+For a live BTCPay connection, follow the setup guide in
+[BTCPay Server](backends.md#btcpay-server-greenfield-api): create a read-only
+(or wallet-history) key with `btcpay key-url`, inspect it with `btcpay
+inspect`, and apply the per-store plan with `btcpay setup`. The desktop Add
+Connection flow runs the same plan. The older single-store commands remain:
 
 ```bash
-printf %s "$BTCPAY_TOKEN" | python3 -m kassiber backends create btcpay-prod \
-  --kind btcpay \
-  --url https://btcpay.example.com \
-  --token-stdin
-
 python3 -m kassiber wallets create \
   --label btcpay-shop \
   --kind custom \
   --backend btcpay-prod \
   --store-id <store-id>
-
-python3 -m kassiber wallets sync --wallet btcpay-shop
 
 python3 -m kassiber wallets sync-btcpay \
   --wallet btcpay-shop \
@@ -869,33 +866,28 @@ python3 -m kassiber wallets sync-btcpay \
 `--token-stdin` keeps the Greenfield API key out of shell history and the
 process listing. Use `--token-fd <FD>` instead when stdin is already in use.
 The argv form `--token <value>` still works for legacy scripts but warns.
-In the desktop app, Add Connection can create that BTCPay instance from URL +
-API key, discover store/payment-method ids, and then finish setup in one of two
-ways. `BTCPay-only` creates Kassiber wallet sources for the selected
-sync-supported payment methods, so running a BTCPay store by itself is enough
-for confirmed wallet-history sync. `Existing wallets` maps those BTCPay payment
-methods onto already configured settlement wallets; descriptor/file sync remains
-the balance source and BTCPay is used as provenance/metadata for matching
-transactions.
 
-That API-backed wallet path reuses the same BTCPay normalization and metadata
+The API-backed wallet path reuses the same BTCPay normalization and metadata
 rules as the file import, but only imports confirmed rows from the remote wallet
-history and records their confirmation timestamp for later rate lookup.
-`wallets sync-btcpay --wallet ... --backend ... --store-id ...` still works
-too. It stores the same BTCPay config on the wallet and runs the sync
-immediately, so later `wallets sync` or `wallets sync --all` calls can reuse
-that wallet config.
+history and records their confirmation timestamp for later rate lookup. Wallet
+syncs refresh the store's invoice and payout provenance first, so a send that
+completed payouts explain books its miner fee separately. A BTCPay payment
+ledger (`btcpay setup --route STORE:BTC-LN=payment_ledger`) books Lightning and
+bitcoin plugin payments from the same provenance instead of wallet history; see
+[payment ledgers](backends.md#payment-ledgers).
 
 Merchant provenance is a separate path so invoice/payment facts do not duplicate
 wallet balances:
 
 ```bash
+python3 -m kassiber btcpay provenance sync --all
 python3 -m kassiber btcpay provenance sync \
   --backend btcpay-prod \
   --store-id <store-id>
 
+python3 -m kassiber btcpay provenance list --record-type payout
 python3 -m kassiber btcpay provenance suggest
-python3 -m kassiber btcpay provenance links
+python3 -m kassiber btcpay provenance links --state suggested
 python3 -m kassiber btcpay provenance review \
   --link <link-id> \
   --state reviewed \
@@ -905,15 +897,21 @@ python3 -m kassiber btcpay provenance review \
 `btcpay provenance sync` stores stable invoice/payment ids, raw BTCPay payload
 snapshots, transaction ids/payment hashes when present, and exact fiat facts
 from the invoice/payment record. It also normalizes safe invoice metadata for
-the desktop transaction detail view: payment-request ids, order ids, order
-URLs, and origin hints such as BTCPay POS/app/external-order. Raw BTCPay
+the desktop transaction detail view: payment-request ids and titles, order ids,
+order URLs, and origin hints such as BTCPay POS, Crowdfund, plugin apps,
+WooCommerce/Shopify orders, and external orders. Refunds and payouts are stored
+as `payout` records with their payout proof txid or Lightning payment hash; they
+are suggested only against outbound transactions and review as `refund`,
+`expense`, `transfer`, or `none` with `btcpay_payout` pricing. Raw BTCPay
 invoice JSON remains backend provenance and is not exposed to the desktop
 detail panel. `suggest` creates deterministic review items from
-txid/payment-hash matches and document/invoice references. Only `review`
-applies authoritative `btcpay_invoice` / `btcpay_payment` pricing or a
-commercial kind such as `income` to the wallet transaction; unreviewed BTCPay
-file imports and wallet-history sync remain conservative `deposit` /
-`withdrawal` transport rows.
+txid/payment-hash matches, payment-ledger rows, and document/invoice
+references. Only `review` applies authoritative `btcpay_invoice` /
+`btcpay_payment` pricing or a commercial kind such as `income` to the wallet
+transaction; unreviewed BTCPay file imports, wallet-history sync, and payment
+ledgers remain conservative `deposit` / `withdrawal` transport rows. Several
+payouts proven by one send are reviewed together and priced at their combined
+value.
 
 External evidence uses the same managed attachment store as transaction
 attachments:

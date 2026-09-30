@@ -170,17 +170,17 @@ kassiber wallets create \
   --change-descriptor-file <change-descriptor-file>
 ```
 
-BTCPay backend + sync template:
+BTCPay backend + setup template:
 
 ```bash
+kassiber btcpay key-url --server-url <btcpay-base-url> --preset read_only
 printf %s "$BTCPAY_TOKEN" | kassiber backends create <btcpay-backend-name> \
   --kind btcpay \
   --url <btcpay-base-url> \
   --token-stdin
-kassiber wallets sync-btcpay \
-  --wallet <wallet-label> \
-  --backend <btcpay-backend-name> \
-  --store-id <btcpay-store-id>
+kassiber btcpay inspect --backend <btcpay-backend-name>
+kassiber btcpay setup --backend <btcpay-backend-name> --label <label> --recommended
+kassiber wallets sync --all
 ```
 
 The `--token-stdin` form keeps the secret out of shell history and the
