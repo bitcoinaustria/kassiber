@@ -91,7 +91,6 @@ configurable.
 | Explicit BTCPay, Lightning, or other configured service sync; or background freshness after its matching source class is enabled in Settings | the configured service | its configured HTTP(S), RPC, or proxy transport | IP, request timing, and the service/account identifiers required by that integration |
 | Explicit BTCPay **Check key and stores** during setup, or CLI `btcpay inspect` / `btcpay setup` | the BTCPay server of that instance | Greenfield HTTP(S) GET through the instance's proxy setting | IP, request timing, the API key, and that Kassiber read the server version, the key's own permissions, the store list, each store's enabled payment methods, and the first receive addresses BTCPay previews for on-chain store wallets. Kassiber never requests payment-method configuration (derivation schemes, Lightning connection strings); preview addresses stay in memory for local wallet recognition. BTCPay wallet and payment-ledger syncs also read that store's invoices, payment requests, and payouts. `btcpay key-url` and the desktop key link make no request; the user's browser opens BTCPay |
 | `ai models`, `chat`, or `ai.test_connection` against a configured remote/TEE provider after setup/settings acknowledgement | your configured provider URL or CLI provider | OpenAI Responses-compatible HTTP(S) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider. The model picker does not auto-poll providers or run a timer; remote model discovery fails closed until acknowledgement on both the desktop and the CLI (`kassiber ai providers update <name> --acknowledge`) |
-| Explicit cross-device sync/pairing after configuring and enabling replication | the configured folder, WebDAV, S3, LAN peer, or Tor onion transport | local filesystem, HTTPS/S3, authenticated LAN TCP, or Tor | transport endpoint sees encrypted mailbox objects and request timing; replication remains disabled by default |
 | Clicking an external documentation, explorer, release, or evidence link | the selected URL in the system browser | browser HTTP(S) | normal browser IP, cookies, referrer policy, and request metadata; Kassiber never preloads those pages |
 | consented AI tools inside `chat` or the desktop Assistant: those that mutate the book (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`, `ui.rates.latest`) and those that only read but do so off-machine (`ui.connections.node.snapshot`, `ui.reports.lightning_profitability`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row. A tool that leaves the machine always prompts, even when it changes nothing, and is never chosen by the assistant's automatic context reads |
 
@@ -236,8 +235,7 @@ While it is on, every boundary `KASSIBER_NO_EGRESS` covers refuses with
 `network_egress_disabled`, loopback nodes included. So do the paths that
 variable leaves out: remote AI providers (HTTP chat, model discovery and
 connection tests, and every CLI provider broker call, status and model
-listing included), LAN and Tor device sync and discovery, GitHub update
-checks, and Core Lightning `lightning-cli` calls. Only an AI provider marked
+listing included), GitHub update checks, and Core Lightning `lightning-cli` calls. Only an AI provider marked
 local keeps working, and local providers must use a loopback URL. A loopback
 URL alone is not enough: a remote or TEE provider reached through a local
 gateway or tunnel still forwards the request off the machine. Kassiber cannot
@@ -299,8 +297,7 @@ until that process stops. `kassiber status` reports the effective root.
   stored backend credentials. Versioned BDK/LWK observer state and opaque LWK
   values live only in this database; the bindings receive no path and may not
   create a side database, wallet file, cache, or state directory. These derived
-  rows are excluded from diagnostics, audit packages, AI/desktop payloads, and
-  cross-device authored-event replication.
+  rows are excluded from diagnostics, audit packages, and AI/desktop payloads.
 - Persisted AI chat sessions also live inside that database
   (`ai_chat_sessions` / `ai_chat_messages`) — never as separate plaintext
   files. The default `auto` policy persists only when the database is
@@ -383,6 +380,11 @@ one project does not unlock another.
 - A `.kassiber` backup file does **not** recover a forgotten passphrase.
   The DB inside the backup is encrypted under whatever project passphrase was
   active when the backup was produced.
+- Kassiber has no device sync. To use a book on another device, restore an
+  encrypted `.kassiber` backup there. A file-sync tool such as Syncthing can
+  carry backup archives, but never file-sync a live project directory while
+  any device has it open: the SQLite/SQLCipher file, its WAL, and conflict
+  copies corrupt or fork.
 
 Switching projects in the desktop daemon closes the current SQLite connection,
 stops background freshness workers, clears the in-memory passphrase, and then

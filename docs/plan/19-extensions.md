@@ -2,7 +2,7 @@
 
 Status: proposed 2026-09-29. On 2026-09-30 the owner decided the
 contribution policy and the removal of the general ledger and device sync.
-Everything else is a proposal, and nothing is implemented. Tasks move to
+The device-sync removal is implemented; everything else is a proposal. Tasks move to
 [TODO.md](../../TODO.md) as each step is accepted; see
 [open decisions](#open-decisions).
 
@@ -32,8 +32,8 @@ and the transaction graph:
   300 `kind ==` branches. The Rust daemon-kind allowlist is compiled.
 - The existing seams are the Lightning adapter registry
   (`core/lightning/registry.py`), the `ChainObserver` protocol,
-  `POLICY_BUILDERS` in `tax_policy.py`, RP2 country plugins, and the
-  replication `ObjectTransport` protocol.
+  `POLICY_BUILDERS` in `tax_policy.py`, and RP2 country plugins. (The
+  replication `ObjectTransport` protocol left with device sync.)
 - BTC is hard-wired in units (`msat.py`), rate pairs (`BTC-USD`, `BTC-EUR`),
   and importers that skip or reject non-BTC rows. Custody quantity is already
   per asset.
@@ -101,6 +101,12 @@ books by default. A second country has no seam until this move happens.
   archives with a file-sync tool such as Syncthing. A live project directory
   must not be file-synced while any device has it open: SQLite and SQLCipher
   files with their WAL and conflict copies corrupt or fork.
+
+  Implemented 2026-09-30: the code, CLI group, daemon kinds, desktop panel and
+  sync-only dependencies are gone. Opening an older book drops its `sync_*`
+  tables once and records a `device-sync-removal-v1` migration audit; authored
+  rows keep their local values, and unused `transaction_edit_events.sync_*`
+  columns stay in place.
 - Small items: the NWC connection entry without an adapter, `saved_views`
   (one consumer), the AI-only swap-review context, and the unreachable
   pre-custody normalizer branches already listed in TODO.

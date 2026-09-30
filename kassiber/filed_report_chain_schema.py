@@ -1,6 +1,6 @@
 """Local observer dependencies and append-only attachments to the change inbox.
 
-Physical chain evidence is installation-local; these tables never replicate.
+Physical chain evidence is installation-local.
 The existing saved/filed snapshot remains the report's immutable authority.
 """
 

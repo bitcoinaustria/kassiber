@@ -61,8 +61,7 @@ CLI_READ_PATHS = _paths(
     accounting.evidence-upload-list
     status update verify-download offline.status health next-actions commands.describe projects.list projects.show
     operator.status operator.operation.status operator.touch-id.status
-    chats.list chats.show secrets.status sync.status sync.transport.list
-    sync.gc.status sync.members.list sync.devices.list sync.conflicts.list
+    chats.list chats.show secrets.status
     networks.inventory networks.plan networks.split-plan
     backends.list backends.kinds backends.get context.show context.current
     workspaces.list profiles.list profiles.get accounts.list wallets.list
@@ -180,11 +179,7 @@ CLI_ADMIN_PATHS = _paths(
     operator.touch-id.enroll operator.touch-id.forget
     secrets.init secrets.init-resume secrets.change-passphrase
     secrets.remember-unlock secrets.forget-unlock secrets.verify
-    secrets.migrate-credentials backup.export backup.import sync.enable
-    sync.disable sync.transport.add sync.transport.remove sync.lan.listen
-    sync.lan.connect sync.lan.discover sync.tor.listen sync.tor.connect
-    sync.gc.run sync.join-request sync.invite sync.join sync.push sync.pull
-    sync.members.revoke sync.devices.revoke sync.conflicts.resolve
+    secrets.migrate-credentials backup.export backup.import
     backends.delete backends.reveal-token wallets.delete imports.rollback
     wallets.reveal-descriptor ai.providers.create ai.providers.update
     ai.providers.delete ai.providers.set-default ai.providers.clear-default
@@ -248,8 +243,7 @@ DAEMON_READ_KINDS = _paths(
     ui.audit.changes_since_last_answer
     ui.audit.evidence.summary ui.review.worklist ui.maintenance.settings
     ui.review.cases ui.review.request_input ui.review.plan ui.review.receipt
-    ui.sync.status ui.sync.transports.list ui.sync.members.list
-    ui.sync.devices.list ui.sync.conflicts.list ui.freshness.status
+    ui.freshness.status
     ui.workspace.health ui.projects.list ui.next_actions ui.review.badges
     ui.wallets.ledger_preview ui.wallets.analyze_file ui.wallets.preview_descriptor
     ui.imports.list
@@ -347,10 +341,7 @@ DAEMON_ACCOUNTING_DECISION_KINDS = _paths(
 
 DAEMON_ADMIN_KINDS = _paths(
     """
-    ui.backends.delete ui.sync.enable ui.sync.disable
-    ui.sync.transports.configure ui.sync.transports.delete ui.sync.push
-    ui.sync.pull ui.sync.join_request ui.sync.invite ui.sync.join
-    ui.sync.members.revoke ui.sync.devices.revoke ui.sync.conflicts.resolve
+    ui.backends.delete
     ui.workspace.delete ui.profiles.reset_data ui.projects.create
     ui.projects.select ui.backup.export ui.backup.preview ui.backup.apply ui.backup.cancel
     ui.secrets.init ui.secrets.change_passphrase

@@ -378,9 +378,6 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, case_id
 
 
 def _build(conn, profile):
-    if conn.execute("SELECT 1 FROM sync_conflicts WHERE profile_id = ? AND status = 'open' LIMIT 1",
-                    (profile["id"],)).fetchone():
-        raise _error("Review is blocked by unresolved synchronization conflicts", "sync_conflicts_open")
     state = custody_journal.build_ledger_state(conn, _profile(conn, profile))
     # Match the canonical store projection: one reason per live raw anchor;
     # synthetic engine-only rows do not become separately actionable cases.

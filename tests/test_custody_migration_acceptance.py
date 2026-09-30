@@ -167,7 +167,7 @@ def _active_component(
     return activate_component(conn, component["id"], activated_at=NOW)
 
 
-def _insert_replication_state(conn: sqlite3.Connection, conflicted_id: str) -> None:
+def _insert_concurrent_active_revision(conn: sqlite3.Connection, conflicted_id: str) -> None:
     competing = update_component(
         conn,
         conflicted_id,
@@ -178,90 +178,13 @@ def _insert_replication_state(conn: sqlite3.Connection, conflicted_id: str) -> N
     activate_component(
         conn, competing["id"], activated_at="2026-01-04T00:00:00Z"
     )
-    # Reproduce the authored state that can arrive from a concurrent peer: two
+    # Reproduce the authored state an older concurrent edit left behind: two
     # active revisions in one lineage. Lifecycle columns are mutable by design;
     # economics remain immutable and both revisions stay visible but ineffective.
     conn.execute(
         "UPDATE custody_components SET state = 'active', activated_at = ? "
         "WHERE id = ?",
         ("2026-01-04T00:00:01Z", conflicted_id),
-    )
-    conn.execute(
-        """
-        INSERT INTO sync_members(
-            id, workspace_id, profile_id, display_name, signing_public_key_b64,
-            role, added_hlc, added_at, inviter_member_id, record_signature
-        ) VALUES('member', 'ws', 'profile', 'Owner', 'public', 'owner',
-                 '1:0:replica', ?, 'member', 'member-signature')
-        """,
-        (NOW,),
-    )
-    conn.execute(
-        """
-        INSERT INTO sync_devices(
-            id, workspace_id, profile_id, member_id, recipient_public_key,
-            label, paired_hlc, paired_at, record_signer_member_id,
-            record_signature
-        ) VALUES('device', 'ws', 'profile', 'member', 'age-public', 'Laptop',
-                 '1:0:replica', ?, 'member', 'device-signature')
-        """,
-        (NOW,),
-    )
-    conn.execute(
-        """
-        INSERT INTO sync_replicas(
-            id, workspace_id, profile_id, member_id, device_id, last_seq,
-            last_hlc, last_event_hash, created_at
-        ) VALUES('replica', 'ws', 'profile', 'member', 'device', 2,
-                 '2:0:replica', 'event-hash-2', ?)
-        """,
-        (NOW,),
-    )
-    conn.execute(
-        """
-        INSERT INTO sync_books(
-            profile_id, workspace_id, book_id, enabled, local_member_id,
-            local_device_id, local_replica_id, hmac_key_b64, created_at,
-            updated_at
-        ) VALUES('profile', 'ws', 'book', 1, 'member', 'device', 'replica',
-                 'aG1hYy1rZXk=', ?, ?)
-        """,
-        (NOW, NOW),
-    )
-    for seq, state in ((1, "superseded"), (2, "active")):
-        conn.execute(
-            """
-            INSERT INTO sync_events(
-                id, workspace_id, profile_id, replica_id, replica_seq, hlc,
-                author_member_id, event_type, entity_table, entity_key,
-                payload_json, context_json, previous_hash, event_hash,
-                signature, created_at, applied_at
-            ) VALUES(?, 'ws', 'profile', 'replica', ?, ?, 'member', 'row.upsert',
-                     'custody_components', ?, ?, '{}', ?, ?, 'signature', ?, ?)
-            """,
-            (
-                f"event-{seq}",
-                seq,
-                f"{seq}:0:replica",
-                json.dumps([conflicted_id], separators=(",", ":")),
-                json.dumps({"row": {"state": state}}, separators=(",", ":")),
-                None if seq == 1 else "event-hash-1",
-                f"event-hash-{seq}",
-                NOW,
-                NOW,
-            ),
-        )
-    conn.execute(
-        """
-        INSERT INTO sync_conflicts(
-            id, workspace_id, profile_id, entity_table, entity_key, field,
-            local_event_id, remote_event_id, local_value_json,
-            remote_value_json, status, created_at
-        ) VALUES('lifecycle-conflict', 'ws', 'profile', 'custody_components', ?,
-                 'state', 'event-1', 'event-2', '"superseded"', '"active"',
-                 'resolved', ?)
-        """,
-        (json.dumps([conflicted_id], separators=(",", ":")), NOW),
     )
     reconcile_active_memberships(conn, profile_id="profile")
 
@@ -368,7 +291,7 @@ def _build_current_fixture(root) -> sqlite3.Connection:
         """,
         (NOW,),
     )
-    _insert_replication_state(conn, conflicted["id"])
+    _insert_concurrent_active_revision(conn, conflicted["id"])
     _insert_filed_history(conn, active["id"])
     conn.execute(
         "INSERT INTO settings(key, value) VALUES('test_fixture_schema_version', ?)",
@@ -463,12 +386,6 @@ def test_pre_durable_anchor_migration_preserves_authored_and_tax_history(tmp_pat
             "custody_gap_reviews",
             "filed_report_snapshots",
             "custody_filed_report_impacts",
-            "sync_books",
-            "sync_members",
-            "sync_devices",
-            "sync_replicas",
-            "sync_events",
-            "sync_conflicts",
         )
     }
     _downgrade_to_pre_durable_anchor(conn)

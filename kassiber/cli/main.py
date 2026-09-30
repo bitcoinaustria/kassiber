@@ -198,7 +198,6 @@ from ..log_ring import sanitize_traceback_text
 from ..db import migrate_hidden_home_state_root_if_needed
 from ..secrets.migration import create_empty_encrypted_database
 from ..secrets.cli import add_secrets_parser, dispatch_secrets
-from ..core.sync_replication.cli import add_sync_parser, dispatch_sync
 from .accounting import add_accounting_parser, dispatch_accounting
 from ..secrets.cli_input import (
     add_secret_stdin_options,
@@ -1271,7 +1270,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_secrets_parser(sub)
     add_backup_parser(sub)
-    add_sync_parser(sub)
     add_chain_analysis_parser(sub)
     add_review_parser(sub)
     add_accounting_parser(sub)
@@ -3677,8 +3675,6 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         return emit(args, dispatch_secrets(args))
     if args.command == "backup":
         return emit(args, dispatch_backup(args))
-    if args.command == "sync":
-        return emit(args, dispatch_sync(conn, args))
     if args.command == "chain-analysis":
         return emit(args, dispatch_chain_analysis(conn, args))
     if args.command == "review":

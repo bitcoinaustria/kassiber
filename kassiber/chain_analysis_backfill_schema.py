@@ -1,4 +1,4 @@
-"""Derived acquisition state; never replicated or treated as custody authority."""
+"""Derived acquisition state; never treated as custody authority."""
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS chain_analysis_acquisition_grants (
     id TEXT PRIMARY KEY,

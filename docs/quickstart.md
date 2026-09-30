@@ -99,6 +99,9 @@ caveats. To produce a single-file portable backup:
 python3 -m kassiber backup export --file ~/backups/kassiber-$(date +%F).kassiber
 ```
 
+The same archive moves a book to another device with `backup import`. A
+file-sync tool can carry archives; do not file-sync a live project directory.
+
 ## 2. Create and sync a wallet
 
 ```bash
@@ -143,7 +146,7 @@ python3 -m kassiber transfers pair --tx-out <out-id> --tx-in <in-id> \
 ```
 
 Auto-pair rule predicates reject unknown or malformed fields. A malformed
-legacy or replicated rule remains visible as disabled and is never applied;
+legacy rule remains visible as disabled and is never applied;
 delete and recreate it instead of re-enabling it.
 
 For 1:N, N:1, N:M, or multi-wallet histories with missing intermediate

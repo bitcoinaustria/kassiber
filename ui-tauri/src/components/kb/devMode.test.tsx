@@ -46,7 +46,6 @@ describe("pre-release dev mode", () => {
       "/egress",
       "/logs",
       "/settings/lightning",
-      "/settings/sync",
     ]);
   });
 
@@ -126,7 +125,7 @@ describe("pre-release dev mode", () => {
     ).toMatchObject({ developerToolsEnabled: true });
   });
 
-  it("keeps dev-only pages and device sync out of the app search", () => {
+  it("keeps dev-only pages out of the app search", () => {
     // One query per surface, so a page dropping out of PAGE_RESULTS cannot make
     // this pass vacuously — each query has to match something when dev mode is on.
     for (const query of [
@@ -134,7 +133,6 @@ describe("pre-release dev mode", () => {
       "custody gaps",
       "network monitor",
       "logs",
-      "device sync",
     ]) {
       const options = { query, aiFeaturesEnabled: true, t };
       const off = buildAppSearchResults({
@@ -148,11 +146,10 @@ describe("pre-release dev mode", () => {
       const dev = (route: string | undefined) =>
         Boolean(route && devOnly.includes(route as (typeof devOnly)[number]));
 
-      expect(on.some((r) => dev(r.route?.to) || r.id === "page:custody-gaps" || r.id === "page:custody-components" || r.id === "setting:data-sync")).toBe(
+      expect(on.some((r) => dev(r.route?.to) || r.id === "page:custody-gaps" || r.id === "page:custody-components")).toBe(
         true,
       );
       expect(off.some((r) => dev(r.route?.to) || r.id === "page:custody-gaps" || r.id === "page:custody-components")).toBe(false);
-      expect(off.some((r) => r.id === "setting:data-sync")).toBe(false);
     }
   });
 });

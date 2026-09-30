@@ -20,7 +20,8 @@ Each database contains:
 - preserved Samourai parent/postmix metadata, with deliberately missing
   descriptor material;
 - processed journal/report-derived rows but no filed-report assertion;
-- two replication events and one unresolved custody conflict.
+- two replication events and one unresolved custody conflict (device sync
+  was later removed; current code drops them on open).
 
 The fixture builder is intentionally run with the historical source tree first
 on `PYTHONPATH`. It refuses to overwrite an existing output directory. After

@@ -125,12 +125,13 @@ class HistoricalCustodyCompatibilityTests(unittest.TestCase):
             1,
         )
 
-        self.assertEqual(conn.execute("SELECT COUNT(*) FROM sync_events").fetchone()[0], 2)
-        conflict = conn.execute(
-            "SELECT * FROM sync_conflicts WHERE id = 'custody-conflict'"
-        ).fetchone()
-        self.assertEqual(conflict["status"], "open")
-        self.assertEqual(conflict["entity_table"], "custody_components")
+        # Device sync was removed: its events and conflict are dropped, while
+        # the concurrent revisions above stay ineffective on their own.
+        self.assertIsNone(
+            conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE name IN ('sync_events', 'sync_conflicts')"
+            ).fetchone()
+        )
 
     def test_pre_432_database_upgrades_without_reinterpreting_custody(self):
         self._assert_migrated_fixture(

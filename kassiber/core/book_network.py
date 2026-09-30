@@ -324,36 +324,6 @@ def observation_matches_binding(binding, row, *, unscoped=False):
     return not (unscoped and expected_instance and instance != expected_instance)
 
 
-def validate_replicated_binding(conn, profile_id, row):
-    """Validate signed authored scope without trusting transported domain IDs."""
-    environment = row.get("environment")
-    instance = row.get("chain_instance_id")
-    if environment not in ENVIRONMENTS or row.get("revision") != 1:
-        _error("Invalid replicated network binding", code="sync_schema_forbidden")
-    try:
-        uuid.UUID(str(row.get("environment_id")))
-        if environment == "regtest":
-            if str(uuid.UUID(str(instance))) != instance:
-                raise ValueError("noncanonical instance")
-        elif instance is not None:
-            raise ValueError("unexpected instance")
-    except (ValueError, TypeError, AttributeError):
-        _error("Invalid replicated chain instance", code="sync_schema_forbidden")
-    if json.loads(row["domains_json"]) != _domains(environment, instance):
-        _error("Replicated domains do not match the environment", code="sync_schema_forbidden")
-    declarations = json.loads(row["acknowledgements_json"])
-    if not isinstance(declarations, list) or any(not isinstance(value, str) for value in declarations):
-        _error("Invalid replicated network declarations", code="sync_schema_forbidden")
-    inventory = inventory_book_network(conn, profile_id)
-    for wallet in inventory["wallets"]:
-        if wallet["conflict_count"] or any(value != environment for value in wallet["environments"]) or any(value != instance for value in wallet["chain_instances"]):
-            _error("Replicated network binding conflicts with local history")
-        if wallet["requires_declaration"] and wallet["wallet_id"] not in declarations:
-            _error("Replicated network binding has unreviewed local sources")
-    if any(not item["valid"] or item["environment"] not in (None, environment) or item["chain_instance_id"] not in (None, instance) for item in inventory["reference_scopes"]):
-        _error("Replicated network binding conflicts with local observations")
-
-
 def wallet_for_network_sync(conn, profile_id, wallet):
     """Choose routing from authored book scope without rewriting wallet history."""
     config = _json(wallet["config_json"])

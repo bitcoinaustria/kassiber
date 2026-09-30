@@ -306,8 +306,8 @@ artifact fails. Preview and apply use recorded observations and prices with
 identical semantics, without an extra sync/repricing pass only at application.
 
 Applied receipts reference the existing transaction/component audit history;
-they are included as bounded audit summaries and are not replicated as authored
-accounting decisions. SQLCipher snapshots use the same binding and an ephemeral
+they are included as bounded audit summaries, not as authored accounting
+decisions. SQLCipher snapshots use the same binding and an ephemeral
 in-memory encryption key; decrypted book pages are never exported to disk for
 planning. Detailed component and guided-review contracts remain documented in
 [custody-components.md](custody-components.md).

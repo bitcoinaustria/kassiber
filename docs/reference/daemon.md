@@ -55,14 +55,6 @@ ordinary webview invoke allowlist.
 Chat capability selection, `tool_profile` defaults, and execution validation
 are defined in [AI tool use](ai.md#tool-use).
 
-The `ui.sync.*` family backs Settings → Device sync and is never registered as
-an AI tool. It operates only on the active encrypted profile. Mailbox push/pull
-can emit unsolicited `ui.sync.progress` records through
-`build_event_envelope`; these carry `event: true` and no `request_id`, while the
-terminal response still matches the invoked kind. Transport responses expose
-only safe endpoint-origin/presence metadata, never credentials or full remote
-paths. See [`device-sync.md`](device-sync.md).
-
 `ui.reports.privacy_hygiene` is a local-only, read-only privacy facts payload
 shared by Settings -> Privacy, `kassiber reports privacy-hygiene`, and the
 assistant read tool `ui_reports_privacy_hygiene`. It performs no network probe,

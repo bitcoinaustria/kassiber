@@ -27,16 +27,14 @@ After a reset, use a new instance and book; never reuse an old identity to
 reinterpret historical transactions. Custom signet challenges are not configured
 by this interface; the signet choice denotes the standard public network.
 
-Wallet creation, updates, import batches, sync preflight/publication, replicated
-row publication, journal construction and report preparation share the same
-policy. Reviewed unknown connections use the book's routing default without
+Wallet creation, updates, import batches, sync preflight/publication, journal
+construction and report preparation share the same policy. Reviewed unknown connections use the book's routing default without
 rewriting their historical config. Parallel sync results pin the environment
 identity and cannot publish after a new binding. Explicit backend instance
 assignments must match. Publicly shared graph caches need explicit matching
 instance provenance before a regtest book can reuse them.
 
-Bindings replicate as authored immutable scope. Conflicting peer bindings reject
-replay instead of using last-writer-wins. Backend credentials and observer
+Bindings are authored immutable scope. Backend credentials and observer
 ownership authority remain local.
 
 ## Split mixed history without changing the original

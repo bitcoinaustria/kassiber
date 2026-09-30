@@ -236,7 +236,6 @@ from .egress_ledger import (
 )
 from .envelope import build_envelope, build_error_envelope, build_event_envelope, json_ready
 from .errors import AppError
-from .daemon_sync_replication import SYNC_UI_KINDS, dispatch_sync_ui
 from .daemon_accounting import ACCOUNTING_UI_KINDS, dispatch_accounting_ui
 from . import daemon_accounting_ai
 from . import daemon_accounting_documents
@@ -534,7 +533,6 @@ SUPPORTED_KINDS = (
     "ui.maintenance.settings",
     "ui.maintenance.configure",
     "ui.maintenance.run",
-    *SYNC_UI_KINDS,
     "ui.freshness.status",
     "ui.freshness.configure",
     "ui.freshness.run",
@@ -16646,34 +16644,6 @@ def handle_request(
         return (
             _with_request_id(
                 build_envelope(kind, dispatch_accounting_ui(ctx.conn, kind=kind, args=args)),
-                request_id,
-            ),
-            False,
-        )
-
-    if kind in SYNC_UI_KINDS:
-        args = _coerce_args_dict(request_id, request.get("args"))
-
-        def sync_progress(stage: str, details: Mapping[str, Any]) -> None:
-            out.write(
-                build_event_envelope(
-                    "ui.sync.progress",
-                    {"stage": stage, **dict(details)},
-                )
-            )
-
-        return (
-            _with_request_id(
-                build_envelope(
-                    kind,
-                    dispatch_sync_ui(
-                        ctx.conn,
-                        data_root=ctx.data_root,
-                        kind=kind,
-                        args=args,
-                        progress=sync_progress,
-                    ),
-                ),
                 request_id,
             ),
             False,

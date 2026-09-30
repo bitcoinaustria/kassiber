@@ -295,10 +295,6 @@ remains outside that closeout.
 - [ ] Complete explicit, opt-in guided Tor setup under
   [issue #311](https://github.com/bitcoinaustria/kassiber/issues/311). No silent
   install/start, global routing, or clearnet fallback for onion endpoints.
-- [ ] Replace or independently audit the pinned SPAKE2 implementation before
-  claiming hardened long-term LAN pairing. Preserve the one-guess session,
-  strict deadline, and Ed25519 device proof while evaluating a replacement;
-  the existing implementation does not claim constant-time behavior.
 - [ ] Reassess the transitive `glib` VariantStrIter advisory during the next
   Tauri/GTK upgrade. Its recorded `not_used` dismissal is not an upstream fix;
   verify the dependency graph and affected usage before changing that assessment.

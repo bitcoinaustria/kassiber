@@ -7746,30 +7746,6 @@ def build_report_blockers_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             conn,
             {"id": health["profile"]["id"], **journals},
         )
-        sync_conflicts = conn.execute(
-            """
-            SELECT id, entity_table, entity_key, field, created_at
-            FROM sync_conflicts
-            WHERE profile_id = ? AND status = 'open'
-            ORDER BY created_at, id
-            LIMIT 20
-            """,
-            (health["profile"]["id"],),
-        ).fetchall()
-        if sync_conflicts:
-            blockers.append(
-                {
-                    "id": "sync_conflicts",
-                    "severity": "blocking",
-                    "title": "Conflicting synced edits",
-                    "detail": (
-                        f"{len(sync_conflicts)} high-stakes concurrent edit(s) need "
-                        "a human decision before journals can be processed."
-                    ),
-                    "daemon_kind": "ui.sync.conflicts.list",
-                    "conflicts": [dict(row) for row in sync_conflicts],
-                }
-            )
         authored_active_components = list(
             core_custody_components.iter_authored_active_components(
                 conn,

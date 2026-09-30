@@ -86,7 +86,7 @@ def persist_authored_evidence_snapshots(
 
 
 def evidence_commitment_id(component_id: str, ordinal: int) -> str:
-    """Return the stable wire identity for one evidence commitment slot."""
+    """Return the stable identity for one evidence commitment slot."""
 
     encoded = json.dumps(
         ["custody-component-evidence-v1", str(component_id), int(ordinal)],
@@ -97,10 +97,10 @@ def evidence_commitment_id(component_id: str, ordinal: int) -> str:
 
 
 def _commitment_detail_hash(snapshot: EvidenceSnapshot) -> str:
-    """Hash decision-material evidence that survives private replication.
+    """Hash decision-material evidence without raw payloads.
 
-    Raw JSON never leaves its device and transaction fingerprints are replaced
-    by a keyed sync identifier. Observation lifecycle fields may also change
+    Raw JSON and transaction fingerprints stay in the local snapshot.
+    Observation lifecycle fields may also change
     without contradicting the reviewed custody quantity: a mempool transaction
     can confirm, move during a reorg, receive a better timestamp, or gain richer
     raw graph detail. Those fields remain in the author's immutable audit
@@ -208,7 +208,7 @@ def persist_component_evidence_commitments(
     snapshots: Sequence[EvidenceSnapshot],
     created_at: str,
 ) -> int:
-    """Persist the payload-free, replicated commitment set exactly once."""
+    """Persist the payload-free commitment set exactly once."""
 
     ordered = tuple(
         sorted(
@@ -298,12 +298,11 @@ def component_evidence_status(
     conn: sqlite3.Connection,
     component: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Compare author commitments with this replica's canonical anchors.
+    """Compare author commitments with this book's canonical anchors.
 
-    This never reads or creates the author's raw activation snapshot.  The
-    status therefore has the same semantics on the author and on a receiver:
-    absent, incomplete, conflicted, or locally unverifiable commitments fail
-    closed.
+    This never reads or creates the author's raw activation snapshot, so the
+    status has the same semantics in a restored or partitioned copy: absent,
+    incomplete, or locally unverifiable commitments fail closed.
     """
 
     component_id = str(component.get("id") or "")
@@ -343,23 +342,6 @@ def component_evidence_status(
     ordinal_values = [int(row["ordinal"]) for row in commitments]
     if len(commitments) != int(expected) or ordinal_values != list(range(int(expected))):
         return result("commitments_incomplete", False)
-
-    commitment_keys = {json.dumps([row["id"]], separators=(",", ":")) for row in commitments}
-    if commitment_keys:
-        placeholders = ", ".join("?" for _ in commitment_keys)
-        conflict = conn.execute(
-            f"""
-            SELECT 1 FROM sync_conflicts
-            WHERE profile_id = ?
-              AND entity_table = 'custody_component_evidence_commitments'
-              AND entity_key IN ({placeholders})
-              AND status = 'open'
-            LIMIT 1
-            """,
-            (profile_id, *sorted(commitment_keys)),
-        ).fetchone()
-        if conflict is not None:
-            return result("commitments_conflicted", False)
 
     legs = component.get("legs")
     if legs is None:

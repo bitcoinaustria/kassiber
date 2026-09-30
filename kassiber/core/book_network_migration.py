@@ -9,16 +9,130 @@ import io
 import shutil
 import json
 import os
+import re
 import sqlite3
 import tarfile
 import tempfile
 from pathlib import Path
 
 from ..backup.age_cli import encrypt_age_stream
-from ..db import open_db, resolve_attachments_root
+from ..db import RETIRED_DEVICE_SYNC_COLUMNS, open_db, resolve_attachments_root
 from .attachments import _resolve_stored_path, _hash_file
 from .book_network import ENVIRONMENTS, _digest, _error, inventory_book_network, plan_book_network, apply_book_network
-from .sync_replication.schema_allowlist import SYNC_TABLES, public_wallet_config
+
+_PRIVATE_EXTENDED_KEY = re.compile(r"(?:^|[^a-z])(xprv|yprv|zprv|tprv|uprv|vprv)[a-z0-9]*", re.IGNORECASE)
+_WIF_PRIVATE_KEY = re.compile(r"(?<![A-Za-z0-9])[5KLc9][1-9A-HJ-NP-Za-km-z]{50,51}(?![A-Za-z0-9])")
+_RAW_HEX_PRIVATE_KEY = re.compile(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{64}(?![0-9A-Fa-f])")
+# Wallet configuration a partition carries: public watch policy only. Anything
+# else (backend bindings, credentials, private or confidential descriptors)
+# stays in the original book and must be reconnected explicitly.
+_PUBLIC_WALLET_CONFIG_FIELDS = frozenset(
+    {
+        "addresses",
+        "chain",
+        "network",
+        "chain_instance_id",
+        "gap_limit",
+        "policy_asset",
+        "altbestand",
+        "descriptor_source",
+        "synthesize_change",
+        "script_types",
+        "descriptor",
+        "change_descriptor",
+        "xpub",
+        "deprecated",
+    }
+)
+
+
+def _is_public_watch_material(value):
+    if not isinstance(value, str) or not value.strip():
+        return False
+    text = value.strip()
+    if (
+        _PRIVATE_EXTENDED_KEY.search(text)
+        or _WIF_PRIVATE_KEY.search(text)
+        or _RAW_HEX_PRIVATE_KEY.search(text)
+    ):
+        return False
+    # Confidential descriptors carry blinding material; the user re-enters it.
+    lowered = text.lower()
+    return not (lowered.startswith("ct(") or "slip77(" in lowered)
+
+
+def public_wallet_config(raw):
+    """Project wallet config onto the public watch policy a partition keeps."""
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+    if not isinstance(raw, dict):
+        return {}
+    output = {}
+    for key in sorted(_PUBLIC_WALLET_CONFIG_FIELDS):
+        if key not in raw:
+            continue
+        value = raw[key]
+        if key in {"descriptor", "change_descriptor", "xpub"}:
+            if _is_public_watch_material(value):
+                output[key] = value
+            continue
+        output[key] = value
+    return output
+
+
+def _profile_scope(table):
+    return f"SELECT * FROM {table} WHERE profile_id = ?"
+
+
+# The book's authored tables, in dependency order. Each query selects one
+# profile's rows; derived journals, caches, secrets and settings are absent.
+AUTHORED_SCOPES = {
+    "workspaces": "SELECT * FROM workspaces WHERE id = (SELECT workspace_id FROM profiles WHERE id = ?)",
+    "profiles": "SELECT * FROM profiles WHERE id = ?",
+    "filed_report_snapshots": _profile_scope("filed_report_snapshots"),
+    "accounts": _profile_scope("accounts"),
+    "wallets": _profile_scope("wallets"),
+    "transactions": _profile_scope("transactions"),
+    "tags": _profile_scope("tags"),
+    "transaction_tags": "SELECT tt.* FROM transaction_tags tt JOIN transactions t ON t.id = tt.transaction_id WHERE t.profile_id = ?",
+    **{
+        table: _profile_scope(table)
+        for table in (
+            "custody_components",
+            "custody_component_legs",
+            "custody_component_allocations",
+            "custody_component_economic_terms",
+            "custody_component_evidence_commitments",
+            "custody_gap_reviews",
+            "custody_gap_review_relation_sets",
+            "custody_gap_review_transactions",
+            "custody_filed_report_impacts",
+            "custody_filed_report_impact_resolutions",
+            "transaction_pairs",
+            "direct_swap_payouts",
+            "transaction_pair_dismissals",
+            "loan_legs",
+            "swap_matching_rules",
+            "saved_views",
+            "bip329_labels",
+            "attachments",
+            "external_documents",
+        )
+    },
+    "external_document_attachments": "SELECT j.* FROM external_document_attachments j JOIN external_documents d ON d.id = j.document_id WHERE d.profile_id = ?",
+    "commercial_links": _profile_scope("commercial_links"),
+    "source_funds_sources": _profile_scope("source_funds_sources"),
+    "source_funds_links": _profile_scope("source_funds_links"),
+    "source_funds_link_attachments": "SELECT j.* FROM source_funds_link_attachments j JOIN source_funds_links l ON l.id = j.link_id WHERE l.profile_id = ?",
+    "source_funds_source_attachments": "SELECT j.* FROM source_funds_source_attachments j JOIN source_funds_sources s ON s.id = j.source_id WHERE s.profile_id = ?",
+    "source_funds_cases": _profile_scope("source_funds_cases"),
+    "source_funds_snapshots": "SELECT s.* FROM source_funds_snapshots s JOIN source_funds_cases c ON c.id = s.case_id WHERE c.profile_id = ?",
+    "source_funds_recipients": _profile_scope("source_funds_recipients"),
+    "book_network_bindings": _profile_scope("book_network_bindings"),
+}
 
 # Disposable SDK state is deliberately not carried. Historical observer proofs
 # and policy epochs are retained; new sources must be reconnected explicitly.
@@ -39,7 +153,7 @@ SHARED = {"profiles", "workspaces", "accounts", "tags"}
 
 
 def _rows(conn, profile_id):
-    scopes = {spec.table: spec.scope_sql for spec in SYNC_TABLES if spec.table not in HISTORICAL_ONLY}
+    scopes = {table: sql for table, sql in AUTHORED_SCOPES.items() if table not in HISTORICAL_ONLY}
     scopes.update(EXTRA_SCOPES)
     tables = {}
     for table, sql in scopes.items():
@@ -177,7 +291,11 @@ def export_network_partition(conn, profile_id, args, *, data_root, output_path, 
             target.execute("PRAGMA foreign_keys=OFF")
             for table, rows in kept.items():
                 for source in rows:
-                    row = dict(source)
+                    row = {
+                        column: value
+                        for column, value in dict(source).items()
+                        if column not in RETIRED_DEVICE_SYNC_COLUMNS.get(table, ())
+                    }
                     if table == "profiles":
                         row.update(last_processed_at=None, last_processed_tx_count=0, last_processed_input_version=0)
                     if table == "wallets":

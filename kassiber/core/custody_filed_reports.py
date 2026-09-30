@@ -450,7 +450,7 @@ def register_saved_report_export(
     )
     # Each completed export is a distinct user action, even when its bytes match a
     # previous export. A content-derived identity would collapse audit events and
-    # can collide across replicas whose local timestamps differ.
+    # can collide across restored copies whose local timestamps differ.
     snapshot_id = str(uuid.uuid4())
     create_filed_report_snapshot(
         conn,
@@ -740,7 +740,7 @@ def append_custody_impacts(
     """Persist the previewed amendment warnings exactly once per review.
 
     This sealed row is activation audit history, not a mutable current-report
-    projection. It therefore replicates with the authored snapshot and review.
+    projection. It therefore travels with the authored snapshot and review.
     Exact post-review gains remain explicitly pending until journals rebuild.
     """
 

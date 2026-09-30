@@ -56,7 +56,7 @@ def install(conn):
     """Install the closed source allowlist, including optional later migrations.
 
     No executescript: installing a derived projection must not commit a caller's
-    import/review transaction. Triggers capture ordinary SQL and replication too.
+    import/review transaction. Triggers capture every SQL write path.
     """
     objects = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type IN ('table','trigger')")}
     required = {statement.split()[5].split("(", 1)[0] for statement in DDL if statement.startswith("CREATE TABLE")}

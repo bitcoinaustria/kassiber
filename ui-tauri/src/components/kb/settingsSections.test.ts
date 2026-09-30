@@ -25,8 +25,6 @@ describe("settings section hash mapping", () => {
       security: "security-lock",
       lock: "security-lock",
       backends: "network-bitcoin",
-      sync: "data-sync",
-      replication: "data-sync",
       rates: "network-market",
       ai: "assistant-ai",
       assistant: "assistant-ai",
@@ -40,9 +38,6 @@ describe("settings section hash mapping", () => {
   });
 
   it("treats menu aliases as equivalents", () => {
-    expect(settingsSectionForHash("replication")).toBe(
-      settingsSectionForHash("sync"),
-    );
     expect(settingsSectionForHash("assistant")).toBe(
       settingsSectionForHash("ai"),
     );

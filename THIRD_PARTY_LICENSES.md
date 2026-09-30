@@ -29,13 +29,10 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `sqlcipher3` | `>=0.6.2,<1` | Python binding around SQLCipher 4; wheels bundle a SQLCipher community build for at-rest database encryption | Zlib (binding) + BSD-style (SQLCipher community) |
 | `pyrage` | `>=1.3,<2` | In-process `age` implementation used by the `tar | age` backup format when no system `age`/`rage` binary is available | Apache-2.0 / MIT |
 | `keyring` | `>=25.6,<26` | Native macOS Keychain, Windows Credential Manager, and Linux Secret Service access for opt-in CLI remembered unlock | MIT |
-| `cryptography` | `>=50.0.0,<51` | Ed25519 event signatures, LAN HKDF/AES-GCM key confirmation, and authenticated direct-sync frames | Apache-2.0 OR BSD-3-Clause |
-| `spake2` | `0.9` | Password-authenticated key exchange for explicit LAN/Tor direct pairing | MIT |
-| `zeroconf` | `>=0.150,<1` | Rotating, unlinkable mDNS advertisement for the opt-in LAN fast path | LGPL-2.1-or-later |
+| `cryptography` | `>=50.0.0,<51` (dev only) | Self-signed TLS certificates for the regtest chain-observer oracle test; the application does not import it | Apache-2.0 OR BSD-3-Clause |
 | `PyYAML` | `>=6,<7` | Structured parsing for the repository-wide GitHub Actions pin-policy test | MIT |
 | `pako` | `^2.1.0` | Zlib/deflate decoding for Better Bitcoin QR descriptor import | MIT |
 | `qr-scanner` | `^1.4.2` | Local webcam QR decoding for descriptor-family connection setup | MIT |
-| `qrcode` | `^1.5.4` | On-device QR generation for signed join requests and sealed invitations | MIT |
 | `three` | `0.186.0` (exact) | Glass ribbon 3D view of a transaction graph, loaded only when that view opens; every mesh, material and light is generated locally, with no models, textures or network requests. `@types/three` supplies typings only and is not bundled | MIT |
 | `react-markdown` | `^10.1.0` | Markdown renderer for assistant chat replies (paragraphs, lists, code, links) | MIT |
 | `remark-gfm` | `^4.0.0` | GitHub-flavored markdown extensions (tables, strikethrough, task lists) for assistant chat replies | MIT |
@@ -56,11 +53,11 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 
 ## Notable downstream license note
 
-The September 2026 security refresh keeps the existing dependency ownership:
-`cryptography` supplies reviewed cryptographic primitives unavailable in Python's
-standard library; it is not replaced with custom signing or encryption code.
-Frontend overrides select patched compatible versions for existing router,
-provider-broker and build-tool dependencies, rather than adding new frameworks.
+The September 2026 security refresh uses frontend overrides to select patched
+compatible versions for existing router, provider-broker and build-tool
+dependencies, rather than adding new frameworks. Device sync was removed on
+2026-09-30 together with its `spake2`, `zeroconf` and `qrcode` dependencies;
+`cryptography` remains only as a test dependency.
 The package-manager lockfiles remain the authoritative transitive inventory.
 
 ### Optional accounting document tools (not bundled)

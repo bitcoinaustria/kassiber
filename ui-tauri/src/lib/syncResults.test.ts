@@ -40,8 +40,8 @@ describe("syncResults", () => {
       "Journals were already current.",
     );
     expect(
-      describeJournalStep({ status: "failed", error: { code: "sync_conflicts_open", message: "Resolve conflicts" } }),
-    ).toBe("Journals could not be updated: Resolve conflicts");
+      describeJournalStep({ status: "failed", error: { code: "tax_failed", message: "Tax processing failed" } }),
+    ).toBe("Journals could not be updated: Tax processing failed");
     for (const status of ["failed", "cancelled", "disabled", "deferred"]) {
       expect(journalStepNeedsAttention({ status })).toBe(true);
     }

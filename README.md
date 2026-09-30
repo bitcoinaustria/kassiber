@@ -56,10 +56,11 @@ Machine mode returns structured JSON and requests interaction instead of prompti
 
 ## Privacy
 
-Accounting state is stored locally by default. Optional [device sync](docs/reference/device-sync.md)
-replicates selected authored records. Wallet sync, release checks, and remote AI
+Accounting state is stored locally. Wallet sync, release checks, and remote AI
 can contact external services when authorized. Kassiber is watch-only and does
-not sign or broadcast payments.
+not sign or broadcast payments. To use a book on another device, move an
+encrypted backup archive; a file-sync tool can carry the archive, but never
+file-sync a live project directory while it is open.
 
 Optional SQLCipher encryption protects the project database. Attachments,
 exports, and some configuration remain outside that boundary. Read the

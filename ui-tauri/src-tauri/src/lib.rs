@@ -145,8 +145,8 @@ const DEEP_LINK_ROUTE_HOSTS: &[(&str, &str)] = &[
 ];
 
 // Mirrors the React `settingsSectionForHash` map in
-// `ui-tauri/src/components/kb/settingsSections.ts`. Aliases (`sync`/
-// `replication` → data-sync, `assistant` → ai) are accepted at the deep-link boundary so the
+// `ui-tauri/src/components/kb/settingsSections.ts`. Aliases (`assistant` → ai,
+// `backends` → bitcoin, …) are accepted at the deep-link boundary so the
 // Rust allowlist matches the section-resolution logic on the React side; the
 // React helper does the final hash → section-id lookup.
 const DEEP_LINK_SETTINGS_SECTIONS: &[&str] = &[
@@ -166,8 +166,6 @@ const DEEP_LINK_SETTINGS_SECTIONS: &[&str] = &[
     "security",
     "lock",
     "backends",
-    "sync",
-    "replication",
     "rates",
     "ai",
     "assistant",
@@ -331,23 +329,6 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.maintenance.settings",
     "ui.maintenance.configure",
     "ui.maintenance.run",
-    "ui.sync.status",
-    "ui.sync.enable",
-    "ui.sync.disable",
-    "ui.sync.transports.list",
-    "ui.sync.transports.configure",
-    "ui.sync.transports.delete",
-    "ui.sync.push",
-    "ui.sync.pull",
-    "ui.sync.join_request",
-    "ui.sync.invite",
-    "ui.sync.join",
-    "ui.sync.members.list",
-    "ui.sync.members.revoke",
-    "ui.sync.devices.list",
-    "ui.sync.devices.revoke",
-    "ui.sync.conflicts.list",
-    "ui.sync.conflicts.resolve",
     "ui.workspace.health",
     "ui.workspace.freshness.run",
     "ui.audit.evidence.summary",
@@ -504,9 +485,6 @@ const STREAMING_DAEMON_KINDS: &[&str] = &[
     "ui.source_funds.assemble",
     "ui.wallets.document_import.preview",
     "ui.wallets.document_import.import",
-    "ui.sync.push",
-    "ui.sync.pull",
-    "ui.sync.join",
     // Backup export/preview/apply stream a whole container (SQLCipher database
     // plus retained attachments) through tar and age. On a large book that
     // outlives the ordinary request timeout, and killing it mid-restore is

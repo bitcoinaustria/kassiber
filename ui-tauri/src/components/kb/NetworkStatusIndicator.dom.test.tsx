@@ -141,8 +141,8 @@ describe("NetworkStatusIndicator offline mode", () => {
   });
 
   it("keeps the switch usable under the operator's process override", async () => {
-    // KASSIBER_NO_EGRESS blocks backends but not AI providers, device sync or
-    // update checks, so the switch must still be able to block those.
+    // KASSIBER_NO_EGRESS blocks backends but not AI providers or update
+    // checks, so the switch must still be able to block those.
     daemon.reads["ui.network.offline"] = { offline: false, environment_blocked: true };
     await openPanel();
 

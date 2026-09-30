@@ -2247,7 +2247,7 @@ class FreshnessTest(unittest.TestCase):
         conn = self._db()
         profile_id = _seed_profile(conn)
         self._seed_address_wallet(conn, profile_id)
-        step = Mock(side_effect=AppError("journal boom", code="sync_conflicts_open"))
+        step = Mock(side_effect=AppError("journal boom", code="tax_failed"))
         with patch.object(
             daemon_freshness, "prefetch_wallets_from_backend", return_value={}
         ), patch.object(
@@ -2261,7 +2261,7 @@ class FreshnessTest(unittest.TestCase):
 
         self.assertEqual(payload["results"][0]["status"], "synced")
         self.assertEqual(payload["journals"]["status"], "failed")
-        self.assertEqual(payload["journals"]["error"]["code"], "sync_conflicts_open")
+        self.assertEqual(payload["journals"]["error"]["code"], "tax_failed")
 
     def test_book_refresh_reports_journals_disabled_by_policy(self):
         conn = self._db()

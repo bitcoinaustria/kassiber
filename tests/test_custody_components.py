@@ -25,11 +25,6 @@ from kassiber.core.custody_components import (
 from kassiber.core.chain_observer.provenance import (
     persist_chain_observation_provenance,
 )
-from kassiber.core.sync_replication.schema_allowlist import (
-    SYNC_TABLE_MAP,
-    serialize_row,
-    validate_wire_row,
-)
 from kassiber.db import open_db
 from kassiber.errors import AppError
 
@@ -441,51 +436,6 @@ class CustodySchemaTests(unittest.TestCase):
             finally:
                 conn.close()
 
-    def test_sync_projection_excludes_local_evidence_and_location_reference(self):
-        with tempfile.TemporaryDirectory() as root:
-            conn = open_db(root)
-            try:
-                _scope(conn)
-                component = create_component(
-                    conn,
-                    workspace_id="ws",
-                    profile_id="profile",
-                    component_type="manual_bridge",
-                    evidence_kind="manual_claim",
-                    evidence_grade="reviewed",
-                    evidence={"secret_anchor": "do-not-sync"},
-                    legs=[
-                        _leg("source", 10, rail="untracked", occurred_at=NOW),
-                        {
-                            **_leg("destination", 10, wallet="btc", occurred_at=NOW),
-                            "location_ref": "private-channel-or-script-reference",
-                        },
-                    ],
-                )
-                component_row = conn.execute(
-                    "SELECT * FROM custody_components WHERE id = ?", (component["id"],)
-                ).fetchone()
-                header = serialize_row(
-                    SYNC_TABLE_MAP["custody_components"],
-                    component_row,
-                    hmac_key_b64="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-                )
-                self.assertNotIn("evidence_json", header)
-                self.assertNotIn("conversion_metadata_json", header)
-                leg_row = conn.execute(
-                    "SELECT * FROM custody_component_legs WHERE component_id = ? ORDER BY ordinal LIMIT 1",
-                    (component["id"],),
-                ).fetchone()
-                leg = serialize_row(
-                    SYNC_TABLE_MAP["custody_component_legs"],
-                    leg_row,
-                    hmac_key_b64="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-                )
-                self.assertNotIn("location_ref", leg)
-                self.assertEqual(NOW, leg["occurred_at"])
-            finally:
-                conn.close()
-
 
 class CustodyComponentApiTests(unittest.TestCase):
     def setUp(self):
@@ -596,59 +546,6 @@ class CustodyComponentApiTests(unittest.TestCase):
         )
 
         self.assertEqual([item["id"] for item in components], [active["id"]])
-
-    def test_new_nullable_sync_fields_are_backward_compatible(self):
-        transaction = self.conn.execute("SELECT * FROM transactions WHERE id = 'out'").fetchone()
-        tx_payload = serialize_row(
-            SYNC_TABLE_MAP["transactions"],
-            transaction,
-            hmac_key_b64="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-        )
-        tx_payload.pop("swap_refund_funding_vout")
-        validate_wire_row("transactions", tx_payload)
-
-        component = self._balanced_component()
-        component_row = self.conn.execute(
-            "SELECT * FROM custody_components WHERE id = ?", (component["id"],)
-        ).fetchone()
-        component_payload = serialize_row(
-            SYNC_TABLE_MAP["custody_components"],
-            component_row,
-            hmac_key_b64="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-        )
-        component_payload.pop("expected_leg_count")
-        component_payload.pop("expected_allocation_count")
-        validate_wire_row("custody_components", component_payload)
-
-        self.conn.execute(
-            """
-            INSERT INTO transaction_pairs(
-                id, workspace_id, profile_id, out_transaction_id,
-                in_transaction_id, component_id, created_at
-            ) VALUES('compat', 'ws', 'profile', 'out', 'in-1', ?, ?)
-            """,
-            (component["id"], NOW),
-        )
-        pair = self.conn.execute("SELECT * FROM transaction_pairs WHERE id = 'compat'").fetchone()
-        pair_payload = serialize_row(
-            SYNC_TABLE_MAP["transaction_pairs"],
-            pair,
-            hmac_key_b64="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-        )
-        pair_payload.pop("component_id")
-        validate_wire_row("transaction_pairs", pair_payload)
-
-        leg = self.conn.execute(
-            "SELECT * FROM custody_component_legs WHERE component_id = ? LIMIT 1",
-            (component["id"],),
-        ).fetchone()
-        leg_payload = serialize_row(
-            SYNC_TABLE_MAP["custody_component_legs"],
-            leg,
-            hmac_key_b64="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-        )
-        leg_payload.pop("anchor_transaction_id")
-        validate_wire_row("custody_component_legs", leg_payload)
 
     def test_component_header_created_at_must_be_a_timestamp(self):
         with self.assertRaises(AppError) as caught:
@@ -1251,17 +1148,6 @@ class CustodyComponentApiTests(unittest.TestCase):
                 )
             },
         )
-        suspense_row = self.conn.execute(
-            "SELECT * FROM custody_component_legs "
-            "WHERE component_id = ? AND role = 'suspense'",
-            (component["id"],),
-        ).fetchone()
-        suspense_payload = serialize_row(
-            SYNC_TABLE_MAP["custody_component_legs"],
-            suspense_row,
-            hmac_key_b64="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-        )
-        validate_wire_row("custody_component_legs", suspense_payload)
 
     def test_suspense_requires_review_allocation_scope_and_source_time(self):
         base = [
@@ -1395,22 +1281,6 @@ class CustodyComponentApiTests(unittest.TestCase):
         self.assertEqual(
             "custody_component_leg_role_unknown", report["issues"][0]["code"]
         )
-
-        component = self._balanced_component()
-        row = self.conn.execute(
-            "SELECT * FROM custody_component_legs WHERE component_id = ? "
-            "ORDER BY ordinal LIMIT 1",
-            (component["id"],),
-        ).fetchone()
-        payload = serialize_row(
-            SYNC_TABLE_MAP["custody_component_legs"],
-            row,
-            hmac_key_b64="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-        )
-        payload["role"] = "future_custody_role"
-        with self.assertRaises(AppError) as raised:
-            validate_wire_row("custody_component_legs", payload)
-        self.assertEqual("sync_schema_incompatible", raised.exception.code)
 
     def test_anchor_coverage_mismatch_cannot_activate_even_when_manually_reviewed(self):
         _tx(self.conn, "mismatch-in", "btc", "inbound", "BTC", 90)
@@ -2624,8 +2494,8 @@ class CustodyComponentApiTests(unittest.TestCase):
             {issue["code"] for issue in listed["validation"]["issues"]},
         )
 
-        # Replication can deliver an authored-active header without going
-        # through local activation. Both routes must then become ineffective
+        # An older or restored book can hold an authored-active header that
+        # never went through local activation. Both routes must then become ineffective
         # instead of letting arrival order choose which network wins.
         self.conn.execute(
             "UPDATE custody_components SET state = 'active' WHERE id = ?",

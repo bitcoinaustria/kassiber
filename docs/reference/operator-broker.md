@@ -366,8 +366,7 @@ routing, and broker admission:
    decisions, exclusions, classification, and comparable interpretation
    changes.
 4. `admin` — secret reveal/backup, passphrase and unlock-policy changes,
-   destructive deletes/resets, credential management, and replication member
-   or device administration.
+   destructive deletes/resets, and credential management.
 
 The first three grants are cumulative. Unknown commands and daemon kinds fail
 closed. Admin work always consumes a fresh, challenge-bound authorization for
