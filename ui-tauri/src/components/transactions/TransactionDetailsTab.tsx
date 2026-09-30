@@ -153,16 +153,6 @@ export function TransactionFlowSection({ ctx }: { ctx: TransactionDetailTabConte
     canPublicGraphLookup = false,
     enablePublicGraphLookup,
   } = ctx;
-  const reviewCommercial = useDaemonMutation("ui.btcpay.provenance.review");
-  const [commercialReviewError, setCommercialReviewError] = useState<string | null>(null);
-  const reviewCommercialLink = (link: string, decision: CommercialReviewDecision) => {
-    setCommercialReviewError(null);
-    reviewCommercial
-      .mutateAsync({ link, ...decision })
-      .catch((error: unknown) =>
-        setCommercialReviewError(error instanceof Error ? error.message : String(error)),
-      );
-  };
   const displayGraphData = graphWithPairFallbackRoute(graphData, transaction);
   const swapRoute = displayGraphData?.swapRoute ?? null;
   const [selectedSwapLeg, setSelectedSwapLeg] = useState<TransactionSwapRouteLegKey | null>(null);
@@ -394,6 +384,16 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     explorer,
     openExplorer,
   } = ctx;
+  const reviewCommercial = useDaemonMutation("ui.btcpay.provenance.review");
+  const [commercialReviewError, setCommercialReviewError] = useState<string | null>(null);
+  const reviewCommercialLink = (link: string, decision: CommercialReviewDecision) => {
+    setCommercialReviewError(null);
+    reviewCommercial
+      .mutateAsync({ link, ...decision })
+      .catch((error: unknown) =>
+        setCommercialReviewError(error instanceof Error ? error.message : String(error)),
+      );
+  };
   return (
     <>
                   {/* Details — read-only source-of-record + book metadata */}
