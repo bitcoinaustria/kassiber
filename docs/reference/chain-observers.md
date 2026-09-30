@@ -296,6 +296,22 @@ BDK wallet from the same public descriptors and replaces the derived aggregate
 atomically. It does not invoke the compatibility protocol client, retain a
 second graph, or alter authored accounting evidence.
 
+An incremental refresh re-emits only the transactions whose record could have
+changed. BDK state keeps one fingerprint per canonical transaction. It covers
+everything the record is built from except the fee and depth: inputs with
+resolved previous outputs, outputs, chain position, first-seen time, the
+transaction's owned scripts, and the backend name. A confirmed transaction is
+reused only when all of these hold:
+
+- its fingerprint is unchanged;
+- the state came from the same Kassiber release;
+- every active row for it in the wallet still matches the graph and quantity
+  hashes this observer persisted.
+
+Mempool transactions, forced and reorg rebuilds, and wallets with several
+script families always emit every record. Retractions still come from the
+complete canonical set, and outputs remain a complete snapshot.
+
 Every observer record attests which of its own graph's scripts the wallet
 owns in `observer_owned_scripts`. A graph with an unresolved input keeps every
 tracked script, because that input could spend one of them. Rows written

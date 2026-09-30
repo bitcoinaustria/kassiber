@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import struct
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 from urllib import parse as urlparse
 
+from ... import __version__ as KASSIBER_VERSION
 from ... import egress_policy
 from ...backends import backend_batch_size, backend_timeout, backend_value
 from ...egress_ledger import endpoint_from_url, get_egress_ledger
@@ -16,6 +18,7 @@ from ...proxy import is_onion_endpoint
 from ...redaction import redact_operational_text, redact_secret_text
 from ...util import parse_bool
 from ...wallet_descriptors import branch_descriptor
+from ..onchain import graph_scoped_scripts
 from ..sync import emit_sync_progress, normalize_backend_kind
 from .bdk_persistence import SqlCipherBdkPersistence, deserialize_changeset
 from .contract import ChainFacts, ObserverApplication, ObserverPrepareRequest
@@ -25,6 +28,39 @@ from .store import CoveragePoint, StoredObserverState
 
 
 BDK_OBSERVER_STATE_VERSION = 1
+# Bump when the record built from a transaction's fingerprinted inputs changes.
+# The Kassiber version is part of it too, so every release re-emits once.
+RECORD_FINGERPRINT_VERSION = f"1:{KASSIBER_VERSION}"
+
+
+def _record_fingerprint(
+    txid: str,
+    vin: Sequence[Mapping[str, Any]],
+    vout: Sequence[Mapping[str, Any]],
+    position: Mapping[str, Any],
+    observed_at: Any,
+    owned_scripts: Sequence[str],
+    backend_name: str,
+) -> str:
+    """Hash every input of a transaction's record except its fee and depth.
+
+    The fee follows from the inputs and outputs once every previous output is
+    known, which ``vin`` records. Depth grows with each block but stored rows
+    keep their first-seen depth, so it would only force pointless re-emission.
+    """
+
+    payload = {
+        "version": RECORD_FINGERPRINT_VERSION,
+        "txid": txid,
+        "vin": list(vin),
+        "vout": list(vout),
+        "position": {key: value for key, value in position.items() if key != "confirmations"},
+        "observed_at": observed_at,
+        "owned_scripts": list(owned_scripts),
+        "backend": backend_name,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:32]
 
 
 def require_bdk() -> Any:
@@ -210,6 +246,7 @@ class BdkObserver:
         self.gap_limit = max(1, int(gap_limit))
         self._wallet = None
         self._persistence = None
+        self._record_fingerprints: dict[str, str] = {}
 
     def _identity_checkpoint(self, checkpoint: Mapping[str, Any]) -> Mapping[str, Any]:
         instances = checkpoint.get("observer_instances")
@@ -503,7 +540,23 @@ class BdkObserver:
             "confirmations": 0,
         }
 
-    def _facts(self, wallet: Any, prior_state: StoredObserverState | None) -> ChainFacts:
+    def _facts(
+        self,
+        wallet: Any,
+        prior_state: StoredObserverState | None,
+        *,
+        reusable_txids: frozenset[str] = frozenset(),
+        prior_fingerprints: Mapping[str, str] | None = None,
+    ) -> ChainFacts:
+        """Project the wallet's canonical history into Kassiber facts.
+
+        ``reusable_txids`` names transactions whose stored rows still match
+        their persisted observation. A confirmed one whose fingerprint is
+        unchanged since the prior state yields no record: its stored row is
+        already exactly what this observer would write. Retractions and outputs
+        stay complete snapshots either way.
+        """
+
         from ..sync_backends import record_from_bitcoin_esplora_tx
 
         graph = self._persistence.aggregate.tx_graph_changeset()
@@ -526,11 +579,12 @@ class BdkObserver:
         tip_height = int(wallet.latest_checkpoint().height)
         records = []
         canonical_txids = []
+        fingerprints: dict[str, str] = {}
+        backend_name = str(self.backend["name"])
         for canonical in wallet.transactions():
             tx = canonical.transaction
             txid = str(tx.compute_txid())
             canonical_txids.append(txid)
-            details = wallet.tx_details(tx.compute_txid())
             position = self._position(canonical.chain_position, tip_height)
             vin = []
             for txin in tx.input():
@@ -551,6 +605,25 @@ class BdkObserver:
                         "witness": [bytes(item).hex() for item in txin.witness],
                     }
                 )
+            vout = [
+                {
+                    "value": int(output.value.to_sat()),
+                    "scriptpubkey": bytes(output.script_pubkey.to_bytes()).hex(),
+                }
+                for output in tx.output()
+            ]
+            owned_scripts = graph_scoped_scripts({"vin": vin, "vout": vout}, tracked)
+            fingerprint = _record_fingerprint(
+                txid, vin, vout, position, first_seen.get(txid), owned_scripts, backend_name
+            )
+            fingerprints[txid] = fingerprint
+            if (
+                position["status"]["confirmed"]
+                and txid in reusable_txids
+                and (prior_fingerprints or {}).get(txid) == fingerprint
+            ):
+                continue
+            details = wallet.tx_details(tx.compute_txid())
             owns_input = any(
                 item.get("prevout") is not None
                 and item["prevout"].get("scriptpubkey") in tracked
@@ -567,20 +640,14 @@ class BdkObserver:
             raw = {
                 "txid": txid,
                 "vin": vin,
-                "vout": [
-                    {
-                        "value": int(output.value.to_sat()),
-                        "scriptpubkey": bytes(output.script_pubkey.to_bytes()).hex(),
-                    }
-                    for output in tx.output()
-                ],
+                "vout": vout,
                 "fee": int(details.fee.to_sat()) if details is not None and details.fee is not None else 0,
                 "observed_at": first_seen.get(txid),
                 **position,
                 "observer": "bdk",
-                "observer_owned_scripts": sorted(tracked),
+                "observer_owned_scripts": owned_scripts,
             }
-            record = record_from_bitcoin_esplora_tx(raw, tracked, str(self.backend["name"]))
+            record = record_from_bitcoin_esplora_tx(raw, tracked, backend_name)
             if record is not None:
                 # Observer updates cross a JSON-only boundary. Decimal text is
                 # exact and the importer already accepts it without a float
@@ -588,6 +655,7 @@ class BdkObserver:
                 record["amount"] = str(record["amount"])
                 record["fee"] = str(record["fee"])
                 records.append(record)
+        self._record_fingerprints = fingerprints
 
         outputs = []
         highest_used: dict[bool, int] = {}
@@ -689,7 +757,25 @@ class BdkObserver:
             else:
                 self._sync_revealed_horizon(client, wallet)
             wallet.persist(persister)
-            facts = self._facts(wallet, retraction_state)
+            reusable_txids: frozenset[str] = frozenset()
+            prior_fingerprints: Mapping[str, str] = {}
+            if (
+                wallet_state is not None
+                and not use_full_scan
+                and wallet_state.payload.get("record_fingerprint_version") == RECORD_FINGERPRINT_VERSION
+                and isinstance(wallet_state.payload.get("record_fingerprints"), Mapping)
+                and callable(request.options.get("current_record_txids"))
+            ):
+                # Only an incremental sync of this exact release reuses rows,
+                # and only rows whose stored evidence still matches its proof.
+                prior_fingerprints = wallet_state.payload["record_fingerprints"]
+                reusable_txids = frozenset(request.options["current_record_txids"]())
+            facts = self._facts(
+                wallet,
+                retraction_state,
+                reusable_txids=reusable_txids,
+                prior_fingerprints=prior_fingerprints,
+            )
         except AppError:
             raise
         except Exception as exc:
@@ -714,6 +800,8 @@ class BdkObserver:
                 "schema_version": BDK_OBSERVER_STATE_VERSION,
                 "bdk_changeset": self._persistence.payload(),
                 "canonical_txids": list(facts.freshness_checkpoint.get("canonical_txids") or []),
+                "record_fingerprint_version": RECORD_FINGERPRINT_VERSION,
+                "record_fingerprints": dict(sorted(self._record_fingerprints.items())),
             },
             "facts": {
                 "transaction_records": list(facts.transaction_records),

@@ -1380,6 +1380,50 @@ def _observer_discovered_targets(observer_updates):
     return list(targets.values())
 
 
+def _current_observed_txids(conn, wallet_id, observer_id):
+    """Txids whose every active row in this wallet still matches its proof.
+
+    A row edited, merged or re-imported since this observer last wrote it no
+    longer matches its persisted graph/quantity hashes, and a row another
+    observer wrote names a different observer, so neither is reusable.
+    """
+
+    from .chain_observer.provenance import row_has_current_authoritative_observation
+
+    current: set[str] = set()
+    stale: set[str] = set()
+    for row in conn.execute(
+        """
+        SELECT tx.external_id, tx.wallet_id, tx.direction, tx.asset, tx.amount,
+               tx.fee, tx.amount_includes_fee, tx.raw_json,
+               proof.authority_version AS observation_authority_version,
+               proof.graph_hash AS observation_graph_hash,
+               proof.quantity_hash AS observation_quantity_hash,
+               proof.observer_ids_json AS observation_observer_ids_json
+        FROM transactions tx
+        LEFT JOIN chain_observation_provenance proof ON proof.transaction_id = tx.id
+        WHERE tx.wallet_id = ? AND tx.excluded = 0
+        """,
+        (wallet_id,),
+    ):
+        txid = canonical_txid(row["external_id"])
+        if txid is None:
+            continue
+        try:
+            observer_ids = json.loads(row["observation_observer_ids_json"] or "[]")
+        except (TypeError, ValueError):
+            observer_ids = []
+        if (
+            isinstance(observer_ids, list)
+            and observer_id in observer_ids
+            and row_has_current_authoritative_observation(row)
+        ):
+            current.add(txid)
+        else:
+            stale.add(txid)
+    return current - stale
+
+
 def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
     """Prepare supported Bitcoin/Liquid descriptor refreshes through dependencies."""
 
@@ -1566,6 +1610,20 @@ def prepare_dependency_observer_fetch(conn, profile, wallet, discovery):
                         backend_kind=discovery.kind,
                         force_full=discovery.force_full,
                         checkpoint=dict(state.checkpoint or {}),
+                        options=(
+                            # Several script families re-normalize a shared
+                            # transaction from all of their records, so each
+                            # must keep emitting every one.
+                            {
+                                "current_record_txids": (
+                                    lambda identity_id=identity.id: _current_observed_txids(
+                                        conn, str(wallet["id"]), identity_id
+                                    )
+                                )
+                            }
+                            if dependency_kind == "bdk" and len(identities) == 1 and conn is not None
+                            else {}
+                        ),
                     ),
                 )
             )
