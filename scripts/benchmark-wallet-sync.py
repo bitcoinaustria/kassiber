@@ -61,6 +61,11 @@ RPC_TIMEOUT = 600
 SEND_ROUND = 500
 FANOUT_SATS = 5_000_000
 PROFILE_TOP = 25
+# Coinbases mature after 100 blocks; mine in steps until the faucet can fund.
+MATURITY_BLOCKS = 101
+FUNDING_STEP_BLOCKS = 50
+FUNDING_MAX_BLOCKS = 3_000
+PROXY_VARIABLES = {"http_proxy", "https_proxy", "all_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"}
 SCHEMA_VERSION = 1
 
 JOURNAL_STEP = """\
@@ -122,11 +127,18 @@ def _require_loopback(url: str, what: str) -> None:
         raise SystemExit(f"{what} must be a loopback URL, got {url!r}")
 
 
+class _RefuseRedirects(request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise RuntimeError(f"Bitcoin Core RPC redirected to {newurl!r}; refusing to follow")
+
+
 class CoreRpc:
     def __init__(self, url: str, username: str, password: str) -> None:
         _require_loopback(url, "Bitcoin Core RPC")
         self.url = url.rstrip("/")
         self.auth = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
+        # Ambient proxy settings must never carry the RPC password off the host.
+        self._opener = request.build_opener(request.ProxyHandler({}), _RefuseRedirects())
 
     def _post(self, payload: Any, wallet: str | None) -> Any:
         endpoint = f"{self.url}/wallet/{wallet}" if wallet else self.url
@@ -135,7 +147,7 @@ class CoreRpc:
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json", "Authorization": f"Basic {self.auth}"},
         )
-        with request.urlopen(req, timeout=RPC_TIMEOUT) as response:
+        with self._opener.open(req, timeout=RPC_TIMEOUT) as response:
             return json.loads(response.read().decode("utf-8"))
 
     def call(self, method: str, params: Sequence[Any] = (), *, wallet: str | None = None) -> Any:
@@ -172,7 +184,8 @@ class Chain:
         self.faucet = f"kassiber-bench-faucet-{run_id}"
         self.owner = f"kassiber-bench-owner-{run_id}"
         for name in (self.faucet, self.owner):
-            rpc.call("createwallet", [name, False, False, "", False, True, True])
+            # load_on_startup=False: a kept node must not reload old runs' wallets.
+            rpc.call("createwallet", [name, False, False, "", False, True, False])
         self.mining = rpc.call("getnewaddress", ["mining", "bech32"], wallet=self.faucet)
         self.receive = rpc.batch(
             [("getnewaddress", [f"receive {index}", "bech32"]) for index in range(addresses)],
@@ -193,7 +206,7 @@ class Chain:
     def close(self) -> None:
         for name in (self.faucet, self.owner):
             try:
-                self.rpc.call("unloadwallet", [name])
+                self.rpc.call("unloadwallet", [name, False])
             except Exception:
                 pass
 
@@ -201,9 +214,20 @@ class Chain:
         self.rpc.call("generatetoaddress", [blocks, self.mining])
 
     def fund_faucet(self, coins: int) -> None:
-        # 110 blocks leave ten 50 BTC coinbases spendable; a fan-out keeps enough
-        # confirmed coins that each round of sends needs no unconfirmed change.
-        self.mine(110)
+        # A fan-out keeps enough confirmed coins that each round of sends needs
+        # no unconfirmed change. A reused chain pays smaller subsidies after
+        # each 150-block halving, so mine until the faucet can afford it.
+        needed = coins * FANOUT_SATS + 100_000_000
+        self.mine(MATURITY_BLOCKS)
+        mined = MATURITY_BLOCKS
+        while self._spendable_sats() < needed:
+            if mined >= FUNDING_MAX_BLOCKS:
+                raise RuntimeError(
+                    "regtest subsidy too small to fund the faucet; recreate the stack without "
+                    "KASSIBER_REGTEST_REUSE_CORE"
+                )
+            self.mine(FUNDING_STEP_BLOCKS)
+            mined += FUNDING_STEP_BLOCKS
         outputs = {}
         for address in self.rpc.batch(
             [("getnewaddress", ["fanout", "bech32"]) for _ in range(coins)], wallet=self.faucet
@@ -211,6 +235,10 @@ class Chain:
             outputs[address] = _btc(FANOUT_SATS)
         self.rpc.call("sendmany", ["", outputs], wallet=self.faucet)
         self.mine()
+
+    def _spendable_sats(self) -> int:
+        trusted = self.rpc.call("getbalances", wallet=self.faucet)["mine"]["trusted"]
+        return int(Decimal(str(trusted)) * 100_000_000)
 
     def _send_rounds(self, wallet: str, sends: list[tuple[str, int]]) -> None:
         for start in range(0, len(sends), SEND_ROUND):
@@ -273,6 +301,7 @@ class Book:
             for key, value in os.environ.items()
             if not key.startswith(("KASSIBER_BACKEND_", "SATBOOKS_BACKEND_"))
             and key not in {"KASSIBER_DEFAULT_BACKEND", "SATBOOKS_DEFAULT_BACKEND", "KASSIBER_NO_EGRESS"}
+            and key not in PROXY_VARIABLES
         }
         # The socket guard is test-only and allows loopback; the product kill
         # switch would also refuse the loopback Fulcrum that BDK talks to.
