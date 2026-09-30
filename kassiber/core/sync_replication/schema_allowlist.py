@@ -809,6 +809,7 @@ NEVER_SYNC_TABLES = PRIVATE_OBSERVER_TABLES | frozenset({"chain_analysis_watches
         "custody_component_transaction_memberships",
         "btcpay_provenance_records",
         "btcpay_account_routes",
+        "btcpay_store_sync_states",
         "sync_member_private_keys",
         "sync_device_private_keys",
         "sync_books",

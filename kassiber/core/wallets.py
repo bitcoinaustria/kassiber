@@ -76,6 +76,9 @@ REDACTED_CONFIG_VALUE = "[redacted]"
 BTCPAY_SYNC_SOURCE = "btcpay"
 BTCPAY_DEFAULT_PAYMENT_METHOD_ID = "BTC-CHAIN"
 BTCPAY_PROVENANCE_CONFIG_KEY = "btcpay_provenance"
+# Hash of a store wallet's first receive addresses (never the addresses or
+# xpub). Lets setup detect two stores that pay into the same wallet.
+BTCPAY_WALLET_FINGERPRINT_CONFIG_KEY = "btcpay_wallet_fingerprint"
 BULLBITCOIN_WALLET_NETWORK_CONFIG_KEY = "bullbitcoin_wallet_network"
 BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY = "bullbitcoin_wallet_exports"
 BULLBITCOIN_WALLET_NETWORKS = ("bitcoin", "liquid", "lightning")
@@ -92,6 +95,10 @@ WALLET_SAFE_CONFIG_FIELDS = (
     "sync_source",
     "store_id",
     "payment_method_id",
+    # BTCPay payment ledgers: "payments" plus the Lightning/plugin methods booked.
+    "source_mode",
+    "payment_method_ids",
+    BTCPAY_WALLET_FINGERPRINT_CONFIG_KEY,
     BTCPAY_PROVENANCE_CONFIG_KEY,
     BULLBITCOIN_WALLET_NETWORK_CONFIG_KEY,
     BULLBITCOIN_WALLET_EXPORTS_CONFIG_KEY,
@@ -422,11 +429,13 @@ def normalize_btcpay_payment_method_id(value):
     payment_method_id = str_or_none(value)
     if payment_method_id is None:
         raise AppError("BTCPay payment method id cannot be empty", code="validation")
-    # BTCPay treats payment method ids as "{CRYPTO}-{TYPE}" — e.g. BTC-CHAIN,
-    # LBTC-CHAIN, BTC-LN. Canonicalize to upper case here so wallet config,
-    # sync URLs, and the allowlist gate all agree regardless of how the
-    # caller typed it.
-    return payment_method_id.upper()
+    # BTCPay 2.x names payment methods "{CRYPTO}-{TYPE}" — e.g. BTC-CHAIN,
+    # LBTC-CHAIN, BTC-LN. Canonicalize case and BTCPay 1.x aliases
+    # (BTC, BTC-LightningNetwork, BTC_LNURLPAY) so wallet config, sync URLs,
+    # and the allowlist gate all agree regardless of how the caller typed it.
+    from ..btcpay.payment_methods import canonical_payment_method_id
+
+    return canonical_payment_method_id(payment_method_id)
 
 
 def parse_wallet_config(args):
@@ -530,6 +539,11 @@ def parse_wallet_config(args):
         )
         has_btcpay_flag = True
     if has_btcpay_flag:
+        from ..btcpay.payment_methods import require_wallet_history_payment_method
+
+        config["payment_method_id"] = require_wallet_history_payment_method(
+            config.get("payment_method_id") or BTCPAY_DEFAULT_PAYMENT_METHOD_ID
+        )
         config["sync_source"] = BTCPAY_SYNC_SOURCE
     bull_network = wallet_bullbitcoin_wallet_network(config)
     if bull_network:
@@ -1023,7 +1037,7 @@ def reveal_wallet_secrets(conn, workspace_ref, profile_ref, wallet_ref):
 
 
 @network_write
-def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
+def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates, *, commit=True):
     _, profile = resolve_scope(conn, workspace_ref, profile_ref)
     wallet = resolve_wallet(conn, profile["id"], wallet_ref)
     new_label = updates.get("label")
@@ -1136,7 +1150,8 @@ def update_wallet(conn, workspace_ref, profile_ref, wallet_ref, updates):
             ],
         )
         invalidate_journals(conn, profile["id"])
-        conn.commit()
+        if commit:
+            conn.commit()
     except Exception:
         # The daemon reuses its connection. Never leave a successful wallet
         # row update or a partial epoch rollover pending for an unrelated later

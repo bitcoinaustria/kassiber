@@ -7,6 +7,7 @@ import mimetypes
 import sqlite3
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlparse
@@ -17,6 +18,7 @@ from ..msat import btc_to_msat, dec, msat_to_btc
 from ..time_utils import UNKNOWN_OCCURRED_AT, now_iso, parse_timestamp
 from ..util import str_or_none
 from . import attachments as core_attachments
+from .custody_evidence import row_boundary_amounts
 from . import freshness as core_freshness
 from . import pricing
 
@@ -26,6 +28,11 @@ LINK_STATES = ("suggested", "reviewed", "rejected")
 CONFIDENCE_LEVELS = ("exact", "strong", "weak", "unknown")
 RECONCILIATION_STATES = ("unreviewed", "matched", "mismatch", "ignored")
 COMMERCIAL_KINDS = ("income", "expense", "refund", "transfer", "none")
+RECORD_TYPES = ("invoice", "payment", "payout")
+# A payout is an outgoing merchant flow; income would contradict it.
+PAYOUT_COMMERCIAL_KINDS = ("expense", "refund", "transfer", "none")
+# Payout states whose proof may already reference a broadcast transaction.
+PAYOUT_MATCHABLE_STATES = ("inprogress", "completed")
 DEFAULT_PAGE_SIZE = 100
 SUGGESTION_LIMIT = 500
 TRANSACTION_APPLY_COLUMNS = (
@@ -119,6 +126,18 @@ def _computed_rate(fiat_value: Any, crypto_amount: Any) -> str | None:
     if amount == 0:
         return None
     return _exact(dec(fiat_value) / amount)
+
+
+# Invoices priced in bitcoin (common for Point of Sale and crowdfund apps)
+# carry no fiat price; their "value" is the bitcoin amount itself.
+BITCOIN_DENOMINATIONS = frozenset({"BTC", "SATS", "SAT", "MSAT", "LBTC"})
+
+
+def _fiat_currency(value: Any) -> str | None:
+    code = str(value or "").strip().upper()
+    if not code or code in BITCOIN_DENOMINATIONS:
+        return None
+    return code
 
 
 def _stable_payment_id(payment: Mapping[str, Any]) -> str:
@@ -299,6 +318,114 @@ def delete_btcpay_account_routes_for_backend(
     return len(routes)
 
 
+# BTCPay has no push channel Kassiber listens to: store data is only as new as
+# the last user-triggered sync, so readers get the age with the data.
+BTCPAY_STORE_STALE_AFTER_SECONDS = 24 * 60 * 60
+
+
+def record_btcpay_store_sync(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    backend_name: str,
+    store_id: str,
+    error_code: str | None = None,
+    error_message: str | None = None,
+    invoices_seen: int | None = None,
+    payouts_seen: int | None = None,
+    commit: bool = False,
+) -> None:
+    """Record one store refresh attempt; a failure keeps the last success.
+
+    ``error_message`` must already be redacted by the caller.
+    """
+
+    now = now_iso()
+    success_at = None if error_code else now
+    error_message = str(error_message)[:500] if error_code and error_message else None
+    conn.execute(
+        """
+        INSERT INTO btcpay_store_sync_states(
+            profile_id, backend_name, store_id, last_attempt_at,
+            last_success_at, last_error_code, last_error_message,
+            invoices_seen, payouts_seen, updated_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(profile_id, backend_name, store_id) DO UPDATE SET
+            last_attempt_at = excluded.last_attempt_at,
+            last_success_at = COALESCE(excluded.last_success_at, last_success_at),
+            last_error_code = excluded.last_error_code,
+            last_error_message = excluded.last_error_message,
+            invoices_seen = COALESCE(excluded.invoices_seen, invoices_seen),
+            payouts_seen = COALESCE(excluded.payouts_seen, payouts_seen),
+            updated_at = excluded.updated_at
+        """,
+        (
+            profile_id,
+            str(backend_name).strip().lower(),
+            store_id,
+            now,
+            success_at,
+            error_code,
+            error_message,
+            invoices_seen,
+            payouts_seen,
+            now,
+        ),
+    )
+    if commit:
+        conn.commit()
+
+
+def _utc_datetime(value: Any) -> datetime:
+    return datetime.fromisoformat(parse_timestamp(value).replace("Z", "+00:00"))
+
+
+def _store_sync_payload(row: sqlite3.Row | Mapping[str, Any] | None, now: str) -> dict[str, Any]:
+    if row is None:
+        return {
+            "last_attempt_at": None,
+            "last_success_at": None,
+            "last_error_code": None,
+            "age_seconds": None,
+            "stale": True,
+            "never_synced": True,
+        }
+    last_success = row["last_success_at"]
+    age = None
+    if last_success:
+        try:
+            age = max(0, int((_utc_datetime(now) - _utc_datetime(last_success)).total_seconds()))
+        except (AppError, TypeError, ValueError):
+            age = None
+    return {
+        "last_attempt_at": row["last_attempt_at"],
+        "last_success_at": last_success,
+        "last_error_code": row["last_error_code"],
+        "age_seconds": age,
+        "stale": age is None or age > BTCPAY_STORE_STALE_AFTER_SECONDS or bool(row["last_error_code"]),
+        "never_synced": not last_success,
+    }
+
+
+def btcpay_store_sync_states(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    stores: Sequence[tuple[str, str]],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Freshness for ``(backend_name, store_id)`` pairs, keyed the same way."""
+
+    now = now_iso()
+    wanted = {(str(backend).strip().lower(), str(store)) for backend, store in stores}
+    if not wanted:
+        return {}
+    rows = conn.execute(
+        "SELECT * FROM btcpay_store_sync_states WHERE profile_id = ?",
+        (profile_id,),
+    ).fetchall()
+    by_key = {(row["backend_name"], row["store_id"]): row for row in rows}
+    return {key: _store_sync_payload(by_key.get(key), now) for key in sorted(wanted)}
+
+
 def upsert_btcpay_provenance(
     conn: sqlite3.Connection,
     workspace: Mapping[str, Any],
@@ -306,6 +433,7 @@ def upsert_btcpay_provenance(
     *,
     backend_name: str,
     invoices: Sequence[Mapping[str, Any]],
+    commit: bool = True,
 ) -> dict[str, Any]:
     inserted = 0
     updated = 0
@@ -337,8 +465,9 @@ def upsert_btcpay_provenance(
             origin_app_id=invoice.get("origin_app_id"),
             origin_label=invoice.get("origin_label"),
             origin_url=invoice.get("origin_url") or invoice.get("order_url"),
-            fiat_currency=invoice.get("currency"),
-            fiat_value_exact=_exact(invoice.get("amount")),
+            origin_source=invoice.get("origin_source"),
+            fiat_currency=_fiat_currency(invoice.get("currency")),
+            fiat_value_exact=_exact(invoice.get("amount")) if _fiat_currency(invoice.get("currency")) else None,
             fiat_rate_exact=None,
             pricing_timestamp=invoice.get("created_at"),
             raw_json=invoice.get("invoice"),
@@ -354,8 +483,9 @@ def upsert_btcpay_provenance(
             asset = _asset_from_payment_method(payment_method_id)
             amount_msat = _amount_msat(payment.get("amount"))
             payment_stable = f"btcpay:{invoice['store_id']}:invoice:{invoice_id}:payment:{payment_id}"
-            fiat_value = payment.get("invoice_amount") or invoice.get("amount")
-            rate = payment.get("rate") or _computed_rate(fiat_value, payment.get("amount"))
+            payment_currency = _fiat_currency(payment.get("invoice_currency") or invoice.get("currency"))
+            fiat_value = (payment.get("invoice_amount") or invoice.get("amount")) if payment_currency else None
+            rate = (payment.get("rate") or _computed_rate(fiat_value, payment.get("amount"))) if payment_currency else None
             _, was_insert = _upsert_record(
                 conn,
                 workspace,
@@ -380,7 +510,8 @@ def upsert_btcpay_provenance(
                 origin_app_id=invoice.get("origin_app_id"),
                 origin_label=invoice.get("origin_label"),
                 origin_url=invoice.get("origin_url") or invoice.get("order_url"),
-                fiat_currency=payment.get("invoice_currency") or invoice.get("currency"),
+                origin_source=invoice.get("origin_source"),
+                fiat_currency=payment_currency,
                 fiat_value_exact=_exact(fiat_value),
                 fiat_rate_exact=_exact(rate),
                 pricing_timestamp=payment.get("received_at") or invoice.get("created_at"),
@@ -389,11 +520,78 @@ def upsert_btcpay_provenance(
             )
             inserted += int(was_insert)
             updated += int(not was_insert)
-    conn.commit()
+    if commit:
+        conn.commit()
     return {
         "invoices_seen": len(invoices),
         "records_inserted": inserted,
         "records_updated": updated,
+    }
+
+
+def upsert_btcpay_payouts(
+    conn: sqlite3.Connection,
+    workspace: Mapping[str, Any],
+    profile: Mapping[str, Any],
+    *,
+    backend_name: str,
+    payouts: Sequence[Mapping[str, Any]],
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Store refunds and payouts as ``payout`` provenance records.
+
+    ``invoice_id`` is set for invoice refunds so the transaction context can
+    show which sale a refund reversed. Payout rows never change balances; a
+    reviewed link to the outbound wallet transaction is the only way they
+    affect a transaction's kind or pricing.
+    """
+
+    inserted = 0
+    updated = 0
+    now = _now()
+    for payout in payouts:
+        payout_id = str(payout["payout_id"])
+        fiat_value = payout.get("fiat_value")
+        _, was_insert = _upsert_record(
+            conn,
+            workspace,
+            profile,
+            backend_name=backend_name,
+            store_id=payout["store_id"],
+            payment_method_id=payout.get("payout_method_id"),
+            record_type="payout",
+            stable_key=f"btcpay:{payout['store_id']}:payout:{payout_id}",
+            invoice_id=payout.get("invoice_id"),
+            payment_id=payout_id,
+            order_id=None,
+            status=payout.get("state"),
+            occurred_at=payout.get("occurred_at"),
+            asset=payout.get("asset"),
+            amount=_amount_msat(payout.get("amount")),
+            txid=payout.get("txid"),
+            payment_hash=payout.get("payment_hash"),
+            destination=payout.get("destination"),
+            payment_request_id=None,
+            origin_kind=payout.get("origin_kind"),
+            origin_app_id=payout.get("pull_payment_id"),
+            origin_label=payout.get("origin_label"),
+            origin_url=payout.get("origin_url"),
+            origin_source="btcpay_payout",
+            fiat_currency=payout.get("fiat_currency"),
+            fiat_value_exact=_exact(fiat_value),
+            fiat_rate_exact=_computed_rate(fiat_value, payout.get("amount")) if fiat_value else None,
+            pricing_timestamp=payout.get("occurred_at"),
+            raw_json=payout.get("payout"),
+            now=now,
+        )
+        inserted += int(was_insert)
+        updated += int(not was_insert)
+    if commit:
+        conn.commit()
+    return {
+        "payouts_seen": len(payouts),
+        "payout_records_inserted": inserted,
+        "payout_records_updated": updated,
     }
 
 
@@ -428,6 +626,7 @@ def _upsert_record(
     pricing_timestamp,
     raw_json,
     now,
+    origin_source=None,
 ):
     existing = conn.execute(
         "SELECT id FROM btcpay_provenance_records WHERE profile_id = ? AND stable_key = ?",
@@ -442,7 +641,7 @@ def _upsert_record(
                 invoice_id = ?, payment_id = ?, order_id = ?, status = ?, occurred_at = ?,
                 asset = ?, amount = ?, txid = ?, payment_hash = ?, destination = ?,
                 payment_request_id = ?, origin_kind = ?, origin_app_id = ?,
-                origin_label = ?, origin_url = ?, fiat_currency = ?,
+                origin_label = ?, origin_url = ?, origin_source = ?, fiat_currency = ?,
                 fiat_value_exact = ?, fiat_rate_exact = ?,
                 pricing_timestamp = ?, raw_json = ?, updated_at = ?
             WHERE id = ?
@@ -467,6 +666,7 @@ def _upsert_record(
                 origin_app_id,
                 origin_label,
                 origin_url,
+                origin_source,
                 fiat_currency,
                 fiat_value_exact,
                 fiat_rate_exact,
@@ -485,9 +685,9 @@ def _upsert_record(
             record_type, stable_key, invoice_id, payment_id, order_id, status,
             occurred_at, asset, amount, txid, payment_hash, destination,
             payment_request_id, origin_kind, origin_app_id, origin_label, origin_url,
-            fiat_currency, fiat_value_exact, fiat_rate_exact, pricing_timestamp,
+            origin_source, fiat_currency, fiat_value_exact, fiat_rate_exact, pricing_timestamp,
             raw_json, created_at, updated_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             row_id,
@@ -513,6 +713,7 @@ def _upsert_record(
             origin_app_id,
             origin_label,
             origin_url,
+            origin_source,
             fiat_currency,
             fiat_value_exact,
             fiat_rate_exact,
@@ -539,7 +740,7 @@ def list_btcpay_records(
     params: list[Any] = [profile["id"]]
     if record_type:
         where.append("record_type = ?")
-        params.append(_normalize_choice(record_type, ("invoice", "payment"), label="record type"))
+        params.append(_normalize_choice(record_type, RECORD_TYPES, label="record type"))
     params.append(max(1, min(int(limit or 100), 1000)))
     rows = conn.execute(
         f"""
@@ -818,19 +1019,28 @@ def import_prior_tax_report(
 def _matching_transactions_for_record(conn, profile_id, record):
     clauses = []
     params: list[Any] = [profile_id]
+    direction_clause = ""
+    if _row_value(record, "record_type") == "payout":
+        # Payouts leave the merchant's wallet; the receiving side (for example
+        # a refund to the user's own wallet) must never absorb the match.
+        direction_clause = " AND direction = 'outbound'"
     if record["txid"]:
         clauses.append("external_id = ?")
         params.append(record["txid"])
     if record["payment_hash"]:
         clauses.append("payment_hash = ?")
         params.append(record["payment_hash"])
+    if _row_value(record, "stable_key"):
+        # BTCPay payment ledgers book each payment under its provenance key.
+        clauses.append("external_id = ?")
+        params.append(record["stable_key"])
     if not clauses:
         return []
     return conn.execute(
         f"""
-        SELECT id, amount, fiat_value_exact, fiat_value
+        SELECT id, direction, amount, fee, amount_includes_fee, fiat_value_exact, fiat_value
         FROM transactions
-        WHERE profile_id = ? AND ({' OR '.join(clauses)})
+        WHERE profile_id = ? AND ({' OR '.join(clauses)}){direction_clause}
         ORDER BY occurred_at ASC, id ASC
         """,
         params,
@@ -844,13 +1054,18 @@ def suggest_links(
     hooks: CommercialHooks,
     *,
     limit=SUGGESTION_LIMIT,
+    commit=True,
 ):
     workspace, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     rows = conn.execute(
         """
         SELECT p.*
         FROM btcpay_provenance_records p
-        WHERE p.profile_id = ? AND p.record_type = 'payment'
+        WHERE p.profile_id = ?
+          AND (
+            p.record_type = 'payment'
+            OR (p.record_type = 'payout' AND LOWER(COALESCE(p.status, '')) IN ('inprogress', 'completed'))
+          )
         ORDER BY COALESCE(p.occurred_at, p.created_at) DESC
         LIMIT ?
         """,
@@ -867,7 +1082,7 @@ def suggest_links(
         confidence = (
             "exact"
             if row["amount"] is not None
-            and int(row["amount"]) == abs(int(tx["amount"]))
+            and int(row["amount"]) == abs(row_boundary_amounts(tx).principal_msat)
             else "strong"
         )
         link = _upsert_link(
@@ -880,7 +1095,7 @@ def suggest_links(
             link_type="btcpay_payment_transaction",
             state="suggested",
             confidence=confidence,
-            method="txid_or_payment_hash",
+            method="payout_proof" if row["record_type"] == "payout" else "txid_or_payment_hash",
             allocation_amount=row["amount"],
             allocation_fiat_exact=row["fiat_value_exact"],
             reconciliation_state="unreviewed",
@@ -896,7 +1111,8 @@ def suggest_links(
     document_transaction_links = _suggest_document_transaction_links(conn, workspace, profile, now)
     suggestions.extend(document_transaction_links["links"])
     created += document_transaction_links["created"]
-    conn.commit()
+    if commit:
+        conn.commit()
     unique_suggestions = {}
     for suggestion in suggestions:
         unique_suggestions[suggestion["id"]] = suggestion
@@ -1169,6 +1385,8 @@ def get_transaction_commercial_context(
                p.fiat_rate_exact AS payment_fiat_rate_exact,
                p.pricing_timestamp AS payment_pricing_timestamp,
                p.updated_at AS payment_updated_at,
+               p.backend_name AS payment_backend_name,
+               p.store_id AS payment_store_id,
                inv.id AS invoice_record_id, inv.record_type AS invoice_record_type,
                inv.invoice_id AS invoice_invoice_id,
                inv.payment_id AS invoice_payment_id,
@@ -1209,9 +1427,15 @@ def get_transaction_commercial_context(
     documents: dict[str, dict[str, Any]] = {}
     btcpay_matches = []
     links = []
+    stores: set[tuple[str, str]] = set()
+    payout_rows = []
     for row in rows:
         link = _link_context_payload(row)
         links.append(link)
+        if row["payment_store_id"] and row["payment_backend_name"]:
+            stores.add((row["payment_backend_name"], row["payment_store_id"]))
+        if row["payment_record_type"] == "payout" and row["link_type"] == "btcpay_payment_transaction":
+            payout_rows.append(row)
         if row["ctx_document_id"]:
             documents[row["ctx_document_id"]] = _document_context_payload(row)
         payment = _btcpay_record_context_payload(row, "payment")
@@ -1226,12 +1450,32 @@ def get_transaction_commercial_context(
                     "origin": _origin_context(payment, invoice),
                 }
             )
+    payout_batch = None
+    if len(payout_rows) > 1:
+        values = [row["payment_fiat_value_exact"] for row in payout_rows]
+        currencies = {row["payment_fiat_currency"] for row in payout_rows if row["payment_fiat_currency"]}
+        payout_batch = {
+            "size": len(payout_rows),
+            "link_ids": [row["id"] for row in payout_rows],
+            "amount_msat": sum(abs(int(row["payment_amount"] or 0)) for row in payout_rows),
+            "fiat_currency": next(iter(currencies)) if len(currencies) == 1 else None,
+            "fiat_value_exact": _exact(sum(dec(value) for value in values))
+            if all(values) and len(currencies) == 1 and all(row["payment_fiat_currency"] for row in payout_rows)
+            else None,
+            "mixed_currencies": len(currencies) > 1,
+        }
+    freshness = [
+        {"backend": backend, "store_id": store_id, **state}
+        for (backend, store_id), state in btcpay_store_sync_states(conn, profile["id"], sorted(stores)).items()
+    ]
     return {
         "transaction_id": tx["id"],
         "transaction_external_id": tx["external_id"] or "",
         "links": links,
         "btcpay": btcpay_matches,
         "documents": list(documents.values()),
+        "payout_batch": payout_batch,
+        "btcpay_freshness": freshness,
     }
 
 
@@ -1279,6 +1523,12 @@ def review_link(
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     link_before = _get_link_row(conn, profile["id"], link_ref)
     state = _normalize_choice(state, LINK_STATES, label="link state")
+    owner_id = _payout_batch_owner_id(conn, profile["id"], link_before)
+    if owner_id and (state == "reviewed" or link_before["state"] == "reviewed"):
+        # One payout transaction carries one reviewed kind and price. Reviewing
+        # or reopening any payout of a reviewed batch acts on the whole batch.
+        link_ref = owner_id
+        link_before = _get_link_row(conn, profile["id"], owner_id)
     reconciliation = _normalize_choice(
         reconciliation_state,
         RECONCILIATION_STATES,
@@ -1298,8 +1548,12 @@ def review_link(
     apply_snapshot_json = link_before["applied_transaction_snapshot_json"]
     reviewed_snapshot_json = link_before["reviewed_record_snapshot_json"]
     reviewed_snapshot_sha256 = link_before["reviewed_record_snapshot_sha256"]
+    batch_link_ids: list[str] = []
+    reopened_batch: list[str] = []
     if link_before["state"] == "reviewed" and state != "reviewed" and link_before["transaction_id"]:
         restored = _restore_reviewed_link_transaction(conn, profile, link_before)
+        if restored:
+            reopened_batch = _reviewed_batch_member_ids(conn, profile["id"], link_before)
     if state == "reviewed" and not reviewed_snapshot_sha256:
         reviewed_snapshot_json, reviewed_snapshot_sha256 = _reviewed_record_snapshot_for_link(
             conn, link_before
@@ -1310,6 +1564,7 @@ def review_link(
         )
         applied = apply_result["applied"]
         apply_snapshot_json = apply_result["snapshot_json"]
+        batch_link_ids = apply_result.get("batch_link_ids") or []
     reviewed_at = now if state == "reviewed" else link_before["reviewed_at"]
     conn.execute(
         """
@@ -1335,13 +1590,86 @@ def review_link(
             link_ref,
         ),
     )
+    for member_id in batch_link_ids:
+        member = _get_link_row(conn, profile["id"], member_id)
+        member_snapshot, member_sha = (
+            (member["reviewed_record_snapshot_json"], member["reviewed_record_snapshot_sha256"])
+            if member["reviewed_record_snapshot_sha256"]
+            else _reviewed_record_snapshot_for_link(conn, member)
+        )
+        conn.execute(
+            """
+            UPDATE commercial_links
+            SET state = 'reviewed', reconciliation_state = ?, commercial_kind = ?,
+                reviewed_record_snapshot_json = ?, reviewed_record_snapshot_sha256 = ?,
+                reviewed_at = ?, updated_at = ?
+            WHERE profile_id = ? AND id = ?
+            """,
+            (reconciliation, commercial, member_snapshot, member_sha, now, now, profile["id"], member_id),
+        )
+    for member_id in reopened_batch:
+        conn.execute(
+            """
+            UPDATE commercial_links
+            SET state = ?, reconciliation_state = ?, updated_at = ?
+            WHERE profile_id = ? AND id = ?
+            """,
+            (state, reconciliation, now, profile["id"], member_id),
+        )
     if applied or restored:
         hooks.invalidate_journals(conn, profile["id"])
     conn.commit()
     link = get_link(conn, profile["id"], link_ref)
     link["applied_to_transaction"] = applied
     link["restored_transaction"] = restored
+    link["batch_link_ids"] = batch_link_ids or reopened_batch
     return link
+
+
+def _payout_links_on_transaction(conn, profile_id, transaction_id, *, exclude_id=None, states=("suggested", "reviewed")):
+    placeholders = ",".join("?" for _ in states)
+    return conn.execute(
+        f"""
+        SELECT cl.*
+        FROM commercial_links cl
+        JOIN btcpay_provenance_records p ON p.id = cl.btcpay_record_id
+        WHERE cl.profile_id = ? AND cl.transaction_id = ?
+          AND cl.link_type = 'btcpay_payment_transaction'
+          AND p.record_type = 'payout'
+          AND cl.state IN ({placeholders})
+          AND cl.id != COALESCE(?, '')
+        ORDER BY cl.created_at ASC, cl.id ASC
+        """,
+        (profile_id, transaction_id, *states, exclude_id),
+    ).fetchall()
+
+
+def _payout_batch_owner_id(conn, profile_id, link):
+    """The reviewed payout link that applied its batch to this link's transaction."""
+
+    if not link["transaction_id"] or link["link_type"] != "btcpay_payment_transaction":
+        return None
+    tx = conn.execute(
+        "SELECT commercial_applied_link_id FROM transactions WHERE profile_id = ? AND id = ?",
+        (profile_id, link["transaction_id"]),
+    ).fetchone()
+    owner_id = tx["commercial_applied_link_id"] if tx else None
+    if not owner_id or owner_id == link["id"]:
+        return None
+    payout_ids = {
+        row["id"]
+        for row in _payout_links_on_transaction(conn, profile_id, link["transaction_id"], states=("suggested", "reviewed"))
+    }
+    return owner_id if owner_id in payout_ids and link["id"] in payout_ids else None
+
+
+def _reviewed_batch_member_ids(conn, profile_id, owner):
+    return [
+        row["id"]
+        for row in _payout_links_on_transaction(
+            conn, profile_id, owner["transaction_id"], exclude_id=owner["id"], states=("reviewed",)
+        )
+    ]
 
 
 def _reviewed_record_snapshot_for_link(conn, link):
@@ -1385,6 +1713,10 @@ def _restore_reviewed_link_transaction(conn, profile, link):
 
 
 def _btcpay_origin_attachment_label(record) -> str:
+    if record["origin_kind"] == "refund":
+        return "BTCPay refund"
+    if record["origin_kind"] in ("pull_payment", "store_payout"):
+        return "BTCPay payout"
     if record["origin_kind"] == "payment_request":
         return "BTCPay payment request"
     if record["origin_kind"] == "crowdfund":
@@ -1483,7 +1815,20 @@ def _apply_reviewed_link_to_transaction(conn, profile, link, commercial_kind):
             hint="Reject the existing reviewed link before reviewing this payment again.",
             details={"btcpay_record_id": record["id"], "reviewed_link_id": existing_reviewed["id"]},
         )
-    if record["record_type"] == "payment":
+    if record["record_type"] == "payout":
+        if tx["direction"] != "outbound":
+            raise AppError(
+                "BTCPay payouts can only be reviewed against outbound transactions",
+                code="validation",
+                details={"btcpay_record_id": record["id"], "transaction_direction": tx["direction"]},
+            )
+        if commercial_kind not in (None, *PAYOUT_COMMERCIAL_KINDS):
+            raise AppError(
+                "A BTCPay payout cannot be reviewed as income",
+                code="validation",
+                hint="Review refunds as refund and supplier or payroll payouts as expense.",
+            )
+    if record["record_type"] in ("payment", "payout"):
         matches = _matching_transactions_for_record(conn, profile["id"], record)
         if len(matches) != 1 or matches[0]["id"] != tx["id"]:
             raise AppError(
@@ -1492,13 +1837,15 @@ def _apply_reviewed_link_to_transaction(conn, profile, link, commercial_kind):
                 hint="Resolve the duplicate txid/payment-hash rows before reviewing this provenance link.",
                 details={"btcpay_record_id": record["id"], "matches": len(matches)},
             )
+    batch = _payout_batch_members(conn, profile, link, record, tx) if record["record_type"] == "payout" else []
     if record["asset"] and record["asset"] != tx["asset"]:
         raise AppError(
             "BTCPay payment asset does not match the target transaction asset",
             code="validation",
             details={"payment_asset": record["asset"], "transaction_asset": tx["asset"]},
         )
-    if record["fiat_currency"] and tx["fiat_currency"] and record["fiat_currency"] != tx["fiat_currency"]:
+    record_currency = _fiat_currency(record["fiat_currency"])
+    if record_currency and tx["fiat_currency"] and record_currency != tx["fiat_currency"]:
         raise AppError(
             "BTCPay invoice currency does not match the target transaction currency",
             code="validation",
@@ -1538,10 +1885,22 @@ def _apply_reviewed_link_to_transaction(conn, profile, link, commercial_kind):
         if tx["commercial_applied_link_id"] == link["id"] and link["applied_transaction_snapshot_json"]
         else _transaction_snapshot(tx)
     )
-    source_kind = pricing.SOURCE_BTCPAY_PAYMENT if record["record_type"] == "payment" else pricing.SOURCE_BTCPAY_INVOICE
+    source_kind = {
+        "payment": pricing.SOURCE_BTCPAY_PAYMENT,
+        "payout": pricing.SOURCE_BTCPAY_PAYOUT,
+    }.get(record["record_type"], pricing.SOURCE_BTCPAY_INVOICE)
     amount = abs(int(record["amount"] or 0))
-    fiat_value = record["fiat_value_exact"]
-    rate = record["fiat_rate_exact"]
+    fiat_value = record["fiat_value_exact"] if record_currency else None
+    rate = record["fiat_rate_exact"] if record_currency else None
+    if batch:
+        # Batched payouts price the transaction together: the summed payout
+        # value over the summed payout amount. A member without a fiat value
+        # leaves the transaction on its existing pricing.
+        members = [record, *(member_record for _, member_record in batch)]
+        amount = sum(abs(int(member["amount"] or 0)) for member in members)
+        priced = all(member["fiat_value_exact"] and _fiat_currency(member["fiat_currency"]) for member in members)
+        fiat_value = _exact(sum(dec(member["fiat_value_exact"]) for member in members)) if priced else None
+        rate = None
     if not rate and fiat_value and amount > 0:
         rate = _exact(dec(fiat_value) / msat_to_btc(amount))
     if fiat_value or rate:
@@ -1551,22 +1910,25 @@ def _apply_reviewed_link_to_transaction(conn, profile, link, commercial_kind):
             source_kind=source_kind,
             quality=pricing.QUALITY_EXACT,
             provider="btcpay",
-            pair=f"{record['asset'] or 'BTC'}-{record['fiat_currency']}" if record["fiat_currency"] else None,
+            pair=f"{record['asset'] or 'BTC'}-{record_currency}" if record_currency else None,
             pricing_timestamp=record["pricing_timestamp"] or record["occurred_at"],
             fetched_at=record["updated_at"],
-            granularity="invoice_payment",
+            granularity=(
+                "payout_batch" if batch else "payout" if record["record_type"] == "payout" else "invoice_payment"
+            ),
             method="reviewed_commercial_link",
             external_ref=record["stable_key"],
         )
         updates.update(payload)
-        if record["fiat_currency"]:
-            updates["fiat_currency"] = record["fiat_currency"]
+        if record_currency:
+            updates["fiat_currency"] = record_currency
     if commercial_kind and commercial_kind != "transfer":
         updates["kind"] = commercial_kind
     elif commercial_kind is None or commercial_kind == "transfer":
         updates["kind"] = json.loads(snapshot_json).get("kind")
+    batch_link_ids = [member_link["id"] for member_link, _ in batch]
     if not updates:
-        return {"applied": False, "snapshot_json": snapshot_json}
+        return {"applied": False, "snapshot_json": snapshot_json, "batch_link_ids": batch_link_ids}
     updates["commercial_applied_link_id"] = link["id"]
     assignments = ", ".join(f"{column} = ?" for column in updates)
     conn.execute(
@@ -1574,7 +1936,60 @@ def _apply_reviewed_link_to_transaction(conn, profile, link, commercial_kind):
         (*updates.values(), profile["id"], link["transaction_id"]),
     )
     _attach_btcpay_origin_url(conn, profile, link["transaction_id"], record)
-    return {"applied": True, "snapshot_json": snapshot_json}
+    for _, member_record in batch:
+        _attach_btcpay_origin_url(conn, profile, link["transaction_id"], member_record)
+    return {"applied": True, "snapshot_json": snapshot_json, "batch_link_ids": batch_link_ids}
+
+
+def _payout_batch_members(conn, profile, link, record, tx):
+    """Other payouts proven by the same transaction, validated as one batch."""
+
+    members = []
+    for member_link in _payout_links_on_transaction(conn, profile["id"], tx["id"], exclude_id=link["id"]):
+        member = conn.execute(
+            "SELECT * FROM btcpay_provenance_records WHERE id = ?",
+            (member_link["btcpay_record_id"],),
+        ).fetchone()
+        if member is None:
+            continue
+        matches = _matching_transactions_for_record(conn, profile["id"], member)
+        if len(matches) != 1 or matches[0]["id"] != tx["id"]:
+            raise AppError(
+                "A payout in this batch matches more than one wallet transaction",
+                code="ambiguous",
+                hint="Resolve the duplicate rows, or reject that payout's suggestion, before reviewing the batch.",
+                details={"btcpay_record_id": member["id"], "matches": len(matches)},
+            )
+        elsewhere = conn.execute(
+            """
+            SELECT id FROM commercial_links
+            WHERE profile_id = ? AND btcpay_record_id = ? AND state = 'reviewed'
+              AND link_type = 'btcpay_payment_transaction' AND transaction_id != ?
+            LIMIT 1
+            """,
+            (profile["id"], member["id"], tx["id"]),
+        ).fetchone()
+        if elsewhere:
+            raise AppError(
+                "A payout in this batch is already reviewed against another transaction",
+                code="conflict",
+                details={"btcpay_record_id": member["id"], "reviewed_link_id": elsewhere["id"]},
+            )
+        if (member["asset"] or record["asset"]) != (record["asset"] or member["asset"]):
+            raise AppError(
+                "Payouts in one transaction must share an asset",
+                code="validation",
+                details={"btcpay_record_id": member["id"]},
+            )
+        if member["fiat_currency"] and record["fiat_currency"] and member["fiat_currency"] != record["fiat_currency"]:
+            raise AppError(
+                "Payouts in one transaction use different currencies",
+                code="validation",
+                hint="Kassiber prices a batch in one currency. Reject the payouts that should not set this transaction's price.",
+                details={"currencies": sorted({member["fiat_currency"], record["fiat_currency"]})},
+            )
+        members.append((member_link, member))
+    return members
 
 
 def build_reviewed_subledger_rows(conn, workspace_ref, profile_ref, hooks: CommercialHooks):
@@ -1659,12 +2074,20 @@ def _record_payload(row):
         "origin_app_id": row["origin_app_id"] or "",
         "origin_label": row["origin_label"] or "",
         "origin_url": row["origin_url"] or "",
+        "origin_source": _row_value(row, "origin_source") or "",
         "fiat_currency": row["fiat_currency"] or "",
         "fiat_value_exact": row["fiat_value_exact"] or "",
         "fiat_rate_exact": row["fiat_rate_exact"] or "",
         "pricing_timestamp": row["pricing_timestamp"] or "",
         "updated_at": row["updated_at"],
     }
+
+
+def _row_value(row, key):
+    try:
+        return row[key]
+    except (IndexError, KeyError):
+        return None
 
 
 def _document_context_payload(row):
@@ -1698,9 +2121,9 @@ def _btcpay_record_context_payload(row, prefix):
         "origin_app_id": row[f"{prefix}_origin_app_id"] or "",
         "origin_label": row[f"{prefix}_origin_label"] or "",
         "origin_url": row[f"{prefix}_origin_url"] or "",
-        "fiat_currency": row[f"{prefix}_fiat_currency"] or "",
-        "fiat_value_exact": row[f"{prefix}_fiat_value_exact"] or "",
-        "fiat_rate_exact": row[f"{prefix}_fiat_rate_exact"] or "",
+        "fiat_currency": _fiat_currency(row[f"{prefix}_fiat_currency"]) or "",
+        "fiat_value_exact": (row[f"{prefix}_fiat_value_exact"] or "") if _fiat_currency(row[f"{prefix}_fiat_currency"]) else "",
+        "fiat_rate_exact": (row[f"{prefix}_fiat_rate_exact"] or "") if _fiat_currency(row[f"{prefix}_fiat_currency"]) else "",
         "pricing_timestamp": row[f"{prefix}_pricing_timestamp"] or "",
         "updated_at": row[f"{prefix}_updated_at"],
     }

@@ -3107,12 +3107,12 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.btcpay.provenance.list",
-        description="Read bounded redacted BTCPay invoice/payment provenance records.",
+        description="Read bounded redacted BTCPay invoice, payment, and payout (refund) provenance records.",
         parameters={
             "type": "object",
             "additionalProperties": False,
             "properties": {
-                "record_type": {"type": "string"},
+                "record_type": {"type": "string", "enum": ["invoice", "payment", "payout"]},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 200},
             },
         },

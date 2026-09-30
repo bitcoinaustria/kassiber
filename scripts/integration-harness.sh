@@ -1434,10 +1434,14 @@ run_lightning_business() {
 run_btcpay_seed_smoke() (
   local seed_path
   local data_root
+  local multistore_root
+  local multistore_path
   seed_path="${TMPDIR:-/tmp}/kassiber-btcpay-regtest-seed-${KASSIBER_REGTEST_COMPOSE_PROJECT}.json"
   data_root="${TMPDIR:-/tmp}/kassiber-btcpay-regtest-data-${KASSIBER_REGTEST_COMPOSE_PROJECT}"
-  trap 'if [ -z "${KASSIBER_REGTEST_KEEP:-}" ]; then rm -rf "$data_root" "$seed_path"; fi' EXIT
-  rm -rf "$data_root"
+  multistore_root="${TMPDIR:-/tmp}/kassiber-btcpay-regtest-multistore-${KASSIBER_REGTEST_COMPOSE_PROJECT}"
+  multistore_path="${TMPDIR:-/tmp}/kassiber-btcpay-regtest-multistore-${KASSIBER_REGTEST_COMPOSE_PROJECT}.json"
+  trap 'if [ -z "${KASSIBER_REGTEST_KEEP:-}" ]; then rm -rf "$data_root" "$seed_path" "$multistore_root" "$multistore_path"; fi' EXIT
+  rm -rf "$data_root" "$multistore_root"
   py -m dev.regtest.btcpay_seed \
     --base-url "http://127.0.0.1:$KASSIBER_REGTEST_BTCPAY_PORT" \
     --kassiber-data-root "$data_root" \
@@ -1463,6 +1467,31 @@ print(
     f"pricing={commercial.get('pricing_source_kind')} "
     f"payment_request={commercial.get('payment_request_id')} "
     f"seed={os.environ['KASSIBER_BTCPAY_SEED_PATH']}"
+)
+PY
+  # Multi-store, multi-key Greenfield setup: shared store wallets, a read-only
+  # key, a store-scoped wallet-history key, Lightning/LNURL, real PoS and
+  # payment-request invoices, and a refund paid on-chain.
+  py -m dev.regtest.btcpay_multistore \
+    --base-url "http://127.0.0.1:$KASSIBER_REGTEST_BTCPAY_PORT" \
+    --kassiber-data-root "$multistore_root" \
+    --electrum-url "tcp://127.0.0.1:$KASSIBER_REGTEST_BITCOIN_ELECTRUM_PORT" \
+    --json-output "$multistore_path" >/dev/null
+  KASSIBER_BTCPAY_MULTISTORE_PATH="$multistore_path" py - <<'PY'
+import json
+import os
+
+with open(os.environ["KASSIBER_BTCPAY_MULTISTORE_PATH"], "r", encoding="utf-8") as handle:
+    summary = json.load(handle)
+print(
+    "BTCPay multi-store setup exercised: "
+    f"mappings={summary['read_only_mappings']} "
+    f"provenance_routes={summary['read_only_account_routes']} "
+    f"wallet_sources={summary['cafe_wallet_sources']} "
+    f"payment_ledgers={summary['payment_ledgers']} "
+    f"payment_suggestions={summary['store_payment_suggestions']} "
+    f"refund_reviewed={summary['refund_review_applied']} "
+    f"refund_fee_msat={summary['refund_fee_msat']}"
 )
 PY
 )

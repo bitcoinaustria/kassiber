@@ -79,7 +79,7 @@ CLI_READ_PATHS = _paths(
     transfers.list transfers.gaps.list transfers.gaps.history transfers.gaps.plan
     transfers.components.list transfers.components.show transfers.components.plan
     transfers.payouts.list transfers.suggest transfers.rules.list views.list
-    btcpay.provenance.list btcpay.provenance.links documents.list
+    btcpay.provenance.list btcpay.provenance.links btcpay.key-url documents.list
     source-funds.sources.list source-funds.links.list source-funds.cases.list
     source-funds.review-context source-funds.request-input
     source-funds.coverage source-funds.recipients.list reports.summary
@@ -120,7 +120,7 @@ CLI_OPERATOR_PATHS = _paths(
     metadata.tags.remove metadata.bip329.import metadata.bip329.export
     metadata.records.note.set metadata.records.note.clear mcp.disable
     metadata.records.tag.add metadata.records.tag.remove journals.process
-    btcpay.provenance.sync btcpay.provenance.suggest documents.create
+    btcpay.provenance.sync btcpay.provenance.suggest btcpay.inspect btcpay.setup documents.create
     documents.attach documents.import-report source-funds.sources.create
     source-funds.sources.attach
     source-funds.links.create source-funds.links.attach source-funds.suggest
@@ -253,7 +253,7 @@ DAEMON_READ_KINDS = _paths(
     ui.workspace.health ui.projects.list ui.next_actions ui.review.badges
     ui.wallets.ledger_preview ui.wallets.analyze_file ui.wallets.preview_descriptor
     ui.imports.list
-    ui.wallets.detect_script_types ui.connections.sources
+    ui.wallets.detect_script_types ui.connections.sources ui.connections.btcpay.key_guide
     ui.connections.node.snapshot ui.reports.lightning_profitability
     ui.metadata.bip329.preview ai.providers.list ai.providers.get
     ai.provider_runtime.status ai.list_models

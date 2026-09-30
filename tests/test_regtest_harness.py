@@ -729,6 +729,20 @@ class RegtestHarnessTest(unittest.TestCase):
         self.assertIn("KASSIBER_REGTEST_MOCKTIME", harness)
         self.assertIn("-mocktime=${KASSIBER_REGTEST_MOCKTIME:-0}", compose)
 
+    def test_btcpay_lane_exercises_multi_store_greenfield_setup(self):
+        harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
+        lane = harness.split("run_btcpay_seed_smoke() (", 1)[1].split("run_btcpay_regtest() {", 1)[0]
+        scenario = (ROOT / "dev" / "regtest" / "btcpay_multistore.py").read_text(encoding="utf-8")
+
+        self.assertIn("py -m dev.regtest.btcpay_multistore", lane)
+        self.assertIn('rm -rf "$data_root" "$seed_path" "$multistore_root" "$multistore_path"', lane)
+        for command in ('"btcpay", "inspect"', '"btcpay", "setup"', '"btcpay", "key-url"', '"--record-type", "payout"'):
+            self.assertIn(command, scenario)
+        self.assertIn("btcpay.store.canviewstoresettings", scenario)
+        self.assertIn('f"btcpay.store.canmodifystoresettings:{cafe_id}"', scenario)
+        self.assertIn('"payment_ledger"', scenario)
+        self.assertIn("refund_fee_msat", lane)
+
     def test_demo_up_includes_real_mempool_ui_by_default_with_opt_out(self):
         harness = (ROOT / "scripts" / "integration-harness.sh").read_text(encoding="utf-8")
         compose = (ROOT / "dev" / "regtest" / "compose.mempool.yml").read_text(encoding="utf-8")

@@ -160,7 +160,14 @@ class BtcpayIncrementalTest(unittest.TestCase):
                 ("store-two", "LBTC-CHAIN", True),
             ],
         )
-        self.assertIn("/api/v1/stores", opener.urls[0])
+        self.assertEqual(
+            opener.urls[:3],
+            [
+                "https://btcpay.example/api/v1/server/info",
+                "https://btcpay.example/api/v1/api-keys/current",
+                "https://btcpay.example/api/v1/stores",
+            ],
+        )
         self.assertTrue(
             any("/api/v1/stores/store-one/payment-methods?" in url for url in opener.urls)
         )
@@ -495,7 +502,8 @@ class BtcpayIncrementalTest(unittest.TestCase):
             metadata=second_metadata,
         )
         self.assertEqual(records, [])
-        self.assertEqual(len(second_opener.urls), 3)
+        # Unchanged pages are not re-hydrated: no per-invoice payment request.
+        self.assertEqual(len(second_opener.urls), 2)
         self.assertEqual(second_metadata["pages_fetched"], 2)
         self.assertTrue(second_metadata["stopped_by_known_page"])
 
@@ -756,7 +764,8 @@ class BtcpayIncrementalTest(unittest.TestCase):
 
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["order_id"], "order-old-corrected")
-        self.assertEqual(len(second_opener.urls), 5)
+        # page0 is unchanged (no hydration), page1 changed (+1 hydration), page2 ends.
+        self.assertEqual(len(second_opener.urls), 4)
         self.assertTrue(second_metadata["stopped_by_known_page"])
 
     def test_invoice_provenance_deep_audit_finds_older_metadata_edit(self):
