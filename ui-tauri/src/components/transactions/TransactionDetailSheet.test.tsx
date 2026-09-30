@@ -6,7 +6,10 @@ import { DEFAULT_EXPLORER_SETTINGS } from "@/lib/explorer";
 import { draftForTransaction } from "./model";
 import { toDashboardTransaction } from "./dashboard/model";
 
-vi.mock("@/daemon/client", () => ({ useDaemon: () => ({ isLoading: true }) }));
+vi.mock("@/daemon/client", () => ({
+  useDaemon: () => ({ isLoading: true }),
+  useDaemonMutation: () => ({ isPending: false, mutateAsync: async () => ({}) }),
+}));
 vi.mock("@/components/ui/sheet", () => ({
   // Model Radix exit presence: closed content can remain mounted.
   Sheet: ({ children }: PropsWithChildren<{ open: boolean }>) => <div data-frame="sheet">{children}</div>,

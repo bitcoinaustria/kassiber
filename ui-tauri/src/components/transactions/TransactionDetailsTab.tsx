@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TabsContent } from "@/components/ui/tabs";
-import { useDaemon } from "@/daemon/client";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { transactionAnalysisSearch } from "@/lib/chainAnalysisNavigation";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
@@ -15,7 +15,10 @@ import { DirtyDot, InfoHint } from "./TransactionDetailSheetParts";
 import { exchangeTransfer } from "./ExchangeTransferModel";
 import { TransactionRecordFlow } from "./TransactionRecordFlow";
 import { TransactionGraphTechnicalDetails } from "./TransactionGraphTechnicalDetails";
-import { CommercialProvenancePanel } from "./TransactionDetailCommercialPanel";
+import {
+  CommercialProvenancePanel,
+  type CommercialReviewDecision,
+} from "./TransactionDetailCommercialPanel";
 import {
   blurClass,
   copyText,
@@ -150,6 +153,16 @@ export function TransactionFlowSection({ ctx }: { ctx: TransactionDetailTabConte
     canPublicGraphLookup = false,
     enablePublicGraphLookup,
   } = ctx;
+  const reviewCommercial = useDaemonMutation("ui.btcpay.provenance.review");
+  const [commercialReviewError, setCommercialReviewError] = useState<string | null>(null);
+  const reviewCommercialLink = (link: string, decision: CommercialReviewDecision) => {
+    setCommercialReviewError(null);
+    reviewCommercial
+      .mutateAsync({ link, ...decision })
+      .catch((error: unknown) =>
+        setCommercialReviewError(error instanceof Error ? error.message : String(error)),
+      );
+  };
   const displayGraphData = graphWithPairFallbackRoute(graphData, transaction);
   const swapRoute = displayGraphData?.swapRoute ?? null;
   const [selectedSwapLeg, setSelectedSwapLeg] = useState<TransactionSwapRouteLegKey | null>(null);
@@ -464,6 +477,9 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                       context={commercialContext}
                       loading={commercialContextLoading}
                       hidden={hideSensitive}
+                      onReview={reviewCommercialLink}
+                      reviewPending={reviewCommercial.isPending}
+                      reviewError={commercialReviewError}
                     />
                   </TabsContent>
 

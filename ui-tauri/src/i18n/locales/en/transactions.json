@@ -838,9 +838,11 @@
     "title": "Commercial provenance",
     "loading": "Loading…",
     "btcpayPayment": "BTCPay payment",
+    "btcpayPayout": "BTCPay payout",
     "linked": "Linked",
     "invoice": "Invoice",
     "paidInvoice": "Paid invoice",
+    "refundedInvoice": "Refunded invoice",
     "unknown": "Unknown",
     "paymentRequest": "Payment request",
     "origin": "BTCPay source",
@@ -870,7 +872,33 @@
       "pos": "BTCPay POS",
       "app": "BTCPay app",
       "externalOrder": "External order",
-      "paymentRequest": "Payment request"
+      "paymentRequest": "Payment request",
+      "crowdfund": "BTCPay crowdfund",
+      "ecommerce": "Online shop",
+      "refund": "Refund",
+      "pullPayment": "Pull payment",
+      "storePayout": "Store payout"
+    },
+    "review": {
+      "kindLabel": "Record this transaction as",
+      "confirm": "Confirm match",
+      "reject": "Not related",
+      "reopen": "Reopen review",
+      "reopenEffect": "Restores the transaction's previous price and kind.",
+      "effectPrice": "Uses the BTCPay value in {{currency}} as this transaction's price.",
+      "effectKind": "Records it as {{kind}}.",
+      "effectKeepKind": "Keeps the transaction's current kind.",
+      "batchEffect_one": "Confirms the {{count}} payout in this transaction.",
+      "batchEffect_other": "Confirms all {{count}} payouts in this transaction together, priced at their combined value.",
+      "batchReopen_one": "Reopens the {{count}} payout in this transaction.",
+      "batchReopen_other": "Reopens all {{count}} payouts in this transaction.",
+      "batchMixedCurrencies": "These payouts use different currencies. Mark the ones that should not price this transaction as not related first."
+    },
+    "freshness": {
+      "asOf": "BTCPay data as of {{when}}. BTCPay does not send updates to Kassiber; sync the connection to refresh it.",
+      "stale": "BTCPay data as of {{when}} may be out of date. BTCPay does not send updates to Kassiber; sync the connection to refresh it.",
+      "failed": "The last BTCPay refresh failed. This data is from {{when}} and may be out of date.",
+      "never": "This store has not been refreshed from BTCPay yet."
     }
   },
   "pricing": {
