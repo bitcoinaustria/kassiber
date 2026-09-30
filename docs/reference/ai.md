@@ -7,9 +7,7 @@ the [checked-in CLI skill](../../skills/kassiber/SKILL.md).
 Accounting, imports, matching, and reports remain deterministic and work without
 AI. Models can propose classifications, extract document fields, and help resolve
 missing evidence; those outputs require the same validation and review as other
-inputs. Opt-in organizational work follows the
-[general-accounting contract](general-accounting.md) and its separate disclosure
-and mutation approvals.
+inputs.
 
 ## HTTP transport
 
@@ -773,8 +771,7 @@ program-derived facts.
 Remote inference requires an explicit privacy decision. Provider branding or a
 local proxy alone does not establish confidentiality. Verify the selected
 transport and provider protections against the
-[privacy model](privacy-and-security.md#ai-provider-configuration); selected
-financial context follows the stricter [general-accounting disclosure contract](general-accounting.md).
+[privacy model](privacy-and-security.md#ai-provider-configuration).
 
 ## Related files
 

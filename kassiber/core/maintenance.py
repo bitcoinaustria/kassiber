@@ -8,6 +8,7 @@ from typing import Any
 
 from ..db import resolve_attachments_root
 from ..errors import AppError
+from . import legacy_ledger
 from .chain_observer import delete_profile_observer_state
 from .repo import current_context_snapshot
 
@@ -114,14 +115,9 @@ def reset_current_profile_data(
             code="state_not_ready",
             hint="Select a books set and book before resetting book data.",
         )
-    # General-ledger evidence and source history are retained records, not
-    # re-creatable caches. The testing reset must never erase their inputs.
-    if conn.execute("SELECT 1 FROM gl_books WHERE profile_id = ?", (profile_id,)).fetchone():
-        raise AppError(
-            "An accounting book cannot be cleared with the testing reset.",
-            code="accounting_retention_required",
-            hint="Keep the retained book and create a separate book for testing.",
-        )
+    # Archived general-ledger rows from an earlier version are retained
+    # records, not re-creatable caches; the testing reset must not erase them.
+    legacy_ledger.require_absent(conn, profile_ids=[profile_id], action="resetting its data")
 
     attachments_root = _attachments_root_path(data_root)
     attachment_paths = _managed_attachment_paths_for_profile(

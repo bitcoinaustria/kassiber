@@ -70,59 +70,6 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   history coverage; decide whether custody-gap review leaves the developer
   gate.
 
-## Organizational accounting acceptance
-
-The accepted scope is [spec 17](docs/plan/17-general-accounting-and-private-ai-spec.md).
-Implementation and measured acceptance are distinct; the
-[coverage record](docs/reference/general-accounting-acceptance.md) owns evidence
-and remaining gaps. Private portfolio use must not require corporate setup.
-The [three-cut policy](docs/plan/18-general-accounting-pr-stack.md) preserves the
-separation of deterministic core, ordinary opaque tasks, and selected financial
-AI. The non-reproduced SQLCipher observation is an accepted residual risk,
-not fixed or disproven. Other technical failures still block delivery; #551
-remains outside that closeout.
-
-- [ ] Close out the accounting cuts with independent review and required
-  per-cut/full verification on the source being delivered. Historical green
-  checkpoints do not prove a later revision or packaged runtime.
-- [ ] Confirm the organization's actual source population, accounting regime,
-  opening balances, and K2/annex/year applicability. Do not assume every Verein
-  files K2. Missing pilot facts and measurements remain product-acceptance gaps,
-  not automatic code-merge blockers.
-- [ ] Complete the spec's coverage and acceptance matrix for exact double-entry
-  books, manual/proposed postings, bank imports, source allocations, required
-  schedules, reconciliation, financial reports, and two-year close/correction.
-  Use retained artifacts and the independent arithmetic verifier; implementation
-  checkpoints alone do not complete this requirement.
-- [ ] Prove RP2 point-in-time/regime/pool suitability and retain replay context
-  and result artifacts. Keep book valuation adjustments distinct from tax basis.
-- [ ] Verify retained encrypted evidence, local OCR/extraction/search, reviewed
-  batch proposals, and remote disclosure controls across real multi-round
-  workflows. Preserve action-specific approval, separate disclosure grants,
-  cancellation, idempotency, and manual fallback.
-- [ ] Complete narrow country-pack and AT K2/required-annex coverage, including
-  applicability, carryforwards, and independent close exports. K1 and additional
-  country/form adapters need separately resolved scope. EBICS and FinanzOnline
-  submission remain excluded.
-- [ ] Complete CLI/scoped-agent and minimal localized Assistant-consent proof,
-  adversarial accounting/privacy tests, golden books, package/build verification,
-  and review. Include legacy personal workflows, book isolation, retained
-  evidence, backup/restore, diagnostics exclusions, and local ledger storage.
-- [ ] **AF-1:** finish a selected period from one task on a frozen mixed
-  100-record benchmark. Cover every selected record and measure routine-case
-  accuracy, exceptions, corrections, repeated inputs, and active user time.
-- [ ] **AF-2:** execute approved close, final K2/annex working papers, and export
-  through actual agent tools; verify retained artifacts rather than instructions.
-- [ ] **AF-3:** turn an approved correction into a versioned, book-scoped,
-  revocable proposal rule. Prove reuse, conflicts, and revocation without
-  extending posting/disclosure consent or rewriting earlier decisions.
-- [ ] **AF-4:** resolve missing evidence, ambiguous partial payments, and
-  conflicting classifications within the same task. Preserve independent work
-  and resume without duplicate actions or revived permissions. Existing
-  deterministic amendment/resumption tests do not replace agent/pilot proof.
-- [ ] **AF-5:** complete a private portfolio/assignment workflow through actual
-  agent tools and verify recomputed reports without organizational setup.
-
 ## Imports, source evidence, and wallet workflows
 
 - [ ] Offer a stored import run's `column_map` as the default for a repeat
@@ -187,7 +134,7 @@ remains outside that closeout.
 - [ ] Enforce AI consent, advertisement, and scope in one daemon-owned
   `authorize_and_execute` path shared by chat and MCP. Executors fail open
   when the runtime state is empty, and fresh human review for `review.apply`
-  and accounting tasks is enforced only by the CLI client. Add per-tool
+  is enforced only by the CLI client. Add per-tool
   approval modes (`none` / `consent` / `local_human`), explicit per-tool
   network/destructive/idempotent metadata pinned to the egress table (four
   mutating tools egress with `egresses=False`), and per-call capability

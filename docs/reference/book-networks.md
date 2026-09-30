@@ -45,11 +45,12 @@ environment and connections, review the computed partition, then choose the
 backup destination and encryption passphrase (CLI also accepts an age recipient).
 The source project is never moved, pruned, or rewritten.
 
-A profile configured for general accounting cannot be partitioned. Its ledger,
-evidence and retained accounting decisions belong to the complete book and cannot
-be copied safely by connection. The plan reports `accounting_partition_unsupported`;
-export fails with `book_network_review_required`. Keep that book intact and use a
-complete project backup when preserving its accounting history.
+A book that still holds archived general-ledger rows from an earlier version
+cannot be partitioned; those rows cannot be split by connection. The plan
+reports `legacy_ledger_present` and export fails with
+`book_network_review_required`. Back up the project, then remove the archived
+data with `kassiber maintenance purge-legacy-ledger --confirm` if it is no
+longer needed.
 
 The partition retains original immutable row IDs. Authored relationships must be
 closed within the selected connections: a custody component or other linked

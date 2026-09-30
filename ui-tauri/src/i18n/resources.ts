@@ -1,5 +1,3 @@
-import deAccountingReview from "./locales/de/accountingReview.json";
-import enAccountingReview from "./locales/en/accountingReview.json";
 /**
  * Static resource bundles. Translations are bundled into the app so the active
  * language switches synchronously with no flash of untranslated content.
@@ -54,7 +52,6 @@ export const defaultNS = "common";
 
 export const resources = {
   en: {
-    accountingReview: enAccountingReview,
     common: enCommon,
     nav: enNav,
     chrome: enChrome,
@@ -73,7 +70,6 @@ export const resources = {
     search: enSearch,
   },
   de: {
-    accountingReview: deAccountingReview,
     common: deCommon,
     nav: deNav,
     chrome: deChrome,

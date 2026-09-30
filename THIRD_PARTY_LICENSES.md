@@ -60,24 +60,14 @@ dependencies, rather than adding new frameworks. Device sync was removed on
 `cryptography` remains only as a test dependency.
 The package-manager lockfiles remain the authoritative transitive inventory.
 
-### Optional accounting document tools (not bundled)
+### Optional document tools (not bundled)
 
-Accounting adds no mandatory engine or OCR dependency. Its isolated POSIX
-document worker can invoke already installed `pdftotext`/`pdftoppm` from
-[Poppler](https://poppler.freedesktop.org/) and
-[Tesseract](https://github.com/tesseract-ocr/tesseract) for explicit local PDF/OCR
-requests. Tesseract uses the [Apache-2.0 license](https://github.com/tesseract-ocr/tesseract/blob/main/LICENSE).
-Poppler is GPL-licensed; consult the actual distributor's COPYING files and
-upstream license terms before any future bundling. Neither native binaries nor
-OCR trained-data files are copied into Kassiber by this feature.
-
-The installer/operator owns versions, native security updates and language-data
-installation. Capability checks fail explicitly when tools/languages are
-missing; no silent downloads, hosted OCR, or plaintext document caches are
-introduced. Native parsing is currently POSIX-only; plain UTF-8/manual reviewed
-transcription remains available without these tools. Regression tests exercise
-synthetic OCR workers and real Poppler; real Tesseract testing is conditional
-on a preinstalled runtime. See [general accounting](docs/reference/general-accounting.md).
+Document OCR import can invoke an already installed `pdfinfo`/`pdftoppm` from
+[Poppler](https://poppler.freedesktop.org/) to render explicitly selected local
+PDF pages. Poppler is GPL-licensed; consult the actual distributor's COPYING
+files and upstream license terms before any future bundling. No native binary
+is copied into Kassiber, and the import fails explicitly when the tools are
+missing.
 
 In the current tested RP2 install path, one runtime dependency worth calling out explicitly is:
 

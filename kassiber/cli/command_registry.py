@@ -26,7 +26,6 @@ _NO_BOOTSTRAP_DATABASE_PREFIXES = {
     "verify-download",
 }
 _NO_BOOTSTRAP_DATABASE_PATHS = {
-    "accounting.verify-package",
     "backends.kinds",
     "chat",
     "daemon",

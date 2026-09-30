@@ -17,14 +17,11 @@ transfer pairing, review/quarantine workflows, CLI/desktop UX, and
 accountant-facing BTC subledger exports. Source-of-funds reporting is in scope
 as a reviewed, path-scoped provenance report, not as chain-surveillance scoring.
 
-RP2 owns the existing crypto lot/tax calculation path. Opt-in organizational
-accounting adds a separate general ledger, book valuation adjustments, and
-jurisdiction working papers; see plan 17. It does not reinterpret current
-wallet buckets or personal tax journals as double-entry books.
+RP2 owns the existing crypto lot/tax calculation path. Wallet buckets and
+personal tax journals are not double-entry books. The opt-in general ledger of
+plans 17/18 was removed on 2026-09-30 under [plan 19](19-extensions.md#removed);
+an organization that needs one would get it as an extension.
 
-The accepted product direction serves private individuals, businesses, and
-associations. Organizational accounting is opt-in per book. Portfolio and
-personal-tax workflows remain available without ledger or corporate setup.
 AI assistance extends through scoped local processing and explicitly approved
 remote disclosures under the existing daemon, secret, and consent contracts.
 
@@ -32,10 +29,8 @@ Out of scope unless a future design says otherwise:
 
 - invoice issuance, payment initiation, RKSV, EBICS, and FinanzOnline transmission;
   reviewed VAT/tax supporting records do not imply an automatic filing engine
-- unreviewed production claims for the general ledger; the integrated local
-  implementation follows `17-general-accounting-and-private-ai-spec.md` and
-  its remaining acceptance gates are recorded in
-  `../reference/general-accounting-acceptance.md`
+- a general ledger, double-entry bookkeeping, or K1/K2 corporate-tax
+  working papers in core
 - remote multi-user service
 - mobile
 - broad altcoin product scope in core; third-party asset extensions are
@@ -56,7 +51,7 @@ Out of scope unless a future design says otherwise:
 
 The production accounting path is observations and reviewed evidence →
 `core/custody_journal.py` → finalized tax projection → RP2 → stored journals
-and reports. The optional general ledger remains separate. See
+and reports. See
 [the tax implementation boundary](../reference/tax.md#implementation-boundary)
 and [the daemon contract](../reference/daemon.md#desktop-invoke-contract).
 
@@ -78,10 +73,11 @@ and [the daemon contract](../reference/daemon.md#desktop-invoke-contract).
 ## Reading historical plans
 
 Plan 02 records completed extraction. Plan 04 is the historical desktop roadmap;
-use current reference docs for commands and TODO for unfinished gates. Plan 16
-corporate-tax research is superseded by plan 17, which also replaces plan 08’s
-product-wide general-ledger exclusion. The chain-analysis audit records a dated
-baseline. Shipped design documents retain their domain invariants; historical
+use current reference docs for commands and TODO for unfinished gates. Plans
+16 (Austrian corporate-tax handoff), 17 and 18 describe the general ledger
+removed under plan 19; their code is preserved at git tag
+`archive/general-ledger`. The chain-analysis audit records a dated baseline.
+Shipped design documents retain their domain invariants; historical
 checklists and test counts are not current delivery evidence.
 
 ## Track Status
@@ -91,15 +87,14 @@ checklists and test counts are not current delivery evidence.
 | Core extraction | Landed | keep logic in shared core, not CLI/UI copies |
 | Attachments | Landed | use shipped `attachments`; keep links/file blobs bounded |
 | Austrian RP2 path | Active | processing and review-gated E 1kv PDF/XLSX export work; domestic-provider KESt metadata pending |
-| Organizational accounting and AI | Under implementation | opt-in CLI/Agent workflow under plan 17; delivery limits and unresolved gates live in the [acceptance record](../reference/general-accounting-acceptance.md) |
-| Austrian corporate handoff | Proposed | K2 and required annexes consume reviewed accounting/tax facts; plan 16 is historical research superseded in scope by plan 17 |
+| Organizational accounting and AI | Removed | plans 16-18 removed 2026-09-30 under plan 19; code preserved at git tag `archive/general-ledger` |
 | Desktop UI | In progress | Tauri 2 + React + TypeScript with a Python sidecar daemon, per [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md) |
 | Project storage | Implemented | per-project databases; [compatibility](../reference/database-compatibility.md) covers legacy upgrades |
 | External documents | Design | reconcile BTC evidence without becoming ERP/invoicing |
 | Source of funds | v1 landed | desktop review workstation, reviewed transaction-flow links, disclosure preview, immutable snapshots, and gated PDF export |
 | Custody lineage | Design/active | separate quantity from tax, reconcile complete policies automatically, and review durable missing-wallet bridges |
 | Local chain analysis | Audited / proposed expansion | share observed graph facts across transaction understanding and privacy; keep ownership hypotheses, observer knowledge and economic meaning separate |
-| Extensions | Proposed | bundled and installed extensions on one API; general-ledger and device-sync removal decided; feature split and open decisions in [19-extensions.md](19-extensions.md) |
+| Extensions | Proposed | bundled and installed extensions on one API; general ledger removed, device-sync removal decided; feature split and open decisions in [19-extensions.md](19-extensions.md) |
 | Packaging | Release-gated | bundled CLI runtime; public releases follow [local signing and notarization](../reference/macos-release.md) |
 
 ## Stack
@@ -135,11 +130,12 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
 - `17-local-chain-analysis.md`: audited current capabilities, primary-source
   research and shared local investigation architecture for Bitcoin, Liquid
   and the user's Lightning evidence
-- `16-austrian-corporate-tax-handoff.md`: K1/K2 corporate-tax handoff
-  research; earlier subledger-only scope superseded by plan 17
-- `17-general-accounting-and-private-ai-spec.md`: consolidated One-Shot
-  organizational-accounting specification, private-user compatibility, scoped
-  AI assistance, security requirements, and K2/annex acceptance criteria
+- `16-austrian-corporate-tax-handoff.md`: removed K1/K2 corporate-tax
+  handoff research (historical)
+- `17-general-accounting-and-private-ai-spec.md`: removed general-ledger
+  specification (historical)
+- `18-general-accounting-pr-stack.md`: removed general-ledger delivery stack
+  (historical)
 - `19-extensions.md`: proposed extension model, core/extension/removal
   split, monorepo boundary checks, and asset-model prerequisites
 
@@ -148,9 +144,8 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
 - treating historical phase lists as live work
 - implementing schema sketches without checking shipped tables
 - describing target project storage as current behavior
-- confusing proposed organizational accounting with shipped functionality, or
-  making organizational setup mandatory for private portfolio users
-- treating `K2` and `K1` as the same Austrian crypto path
+- reintroducing general-ledger records or making organizational setup
+  mandatory for private portfolio users
 - treating source-of-funds reports as automatic proof when reviewed links or
   source evidence are missing
 - duplicating RP2 crypto lot math or assuming its personal-tax result is always

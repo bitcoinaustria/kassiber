@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { ReviewProposalView, ReviewReceiptCard } from "./ReviewWorkflowCard";
 import { reviewApprovalAvailable, reviewArtifact, reviewReceipt } from "./reviewWorkflow";
 import { Button } from "@/components/ui/button";
-import { AccountingTaskConsentDialog } from "./AccountingTaskConsentDialog";
 
 import type {
   AiToolConsentDecision,
@@ -36,9 +35,6 @@ export function ToolConsentDialog({
   onDecision,
 }: ToolConsentDialogProps) {
   const { t } = useTranslation("assistant");
-  if (request?.name === "ui.accounting.task_apply") {
-    return <AccountingTaskConsentDialog key={request.callId} request={request} onDecision={onDecision} />;
-  }
   if (request?.name === "ui.review.apply") {
     return <ReviewConsentDialog key={request.callId} request={request} onDecision={onDecision} />;
   }

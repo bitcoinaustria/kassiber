@@ -18,18 +18,11 @@ a shared contract need verification across its callers, including AI projections
   attached document does not grant ownership, carry basis, or establish tax facts.
 - BTC quantities use integer msat. Preserve exact amounts and fail closed on
   ambiguous inputs; unresolved custody must not become a guessed taxable event.
-- Preserve the Bitcoin subledger and personal workflows. General accounting is
-  a separate opt-in ledger under [plan 17](docs/plan/17-general-accounting-and-private-ai-spec.md),
-  delivered through CLI/Agent tools and exact review in the existing Assistant.
-  Do not rebuild dedicated accounting routes, navigation, Settings switches, or
-  forms. Wallet accounts and RP2 journals are not general-ledger records.
-- Keep financial-disclosure authorization separate from task-mutation consent.
-  Ordinary accounting AI tools receive opaque task state. Selected financial
-  context requires the provider protections and explicit disclosure flow in
-  [general accounting](docs/reference/general-accounting.md).
+- Preserve the Bitcoin subledger and personal workflows. Wallet accounts and
+  RP2 journals are not a double-entry ledger; the opt-in general ledger was
+  removed under [plan 19](docs/plan/19-extensions.md#removed).
 - Keep report-readiness barriers intact. Technical security, correctness, and
-  reliability failures block delivery; missing pilot data is tracked separately
-  in [the acceptance record](docs/reference/general-accounting-acceptance.md).
+  reliability failures block delivery.
 
 ## Privacy and authority
 
