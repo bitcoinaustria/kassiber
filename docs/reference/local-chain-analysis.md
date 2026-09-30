@@ -305,8 +305,8 @@ indexed lookup. Those measurements are examples, not service guarantees.
 
 The graph/result can be exported as JSON or CSV from the workspace. Exports are
 explicit files containing the chosen investigation data. The new local tables
-live in the project's SQLite/SQLCipher database and do not enter authored
-cross-device replication.
+live in the project's SQLite/SQLCipher database and are not authored
+accounting records.
 
 ## CLI and agents
 
@@ -424,8 +424,7 @@ subjects retain their specific domain. Missing network values derive from the
 bound domain, and ambiguous bare subjects require disambiguation. The
 unchanged preview is verified again at activation. Changing the book/domain or
 rule version makes the watch unavailable instead of reinterpreting its subject.
-The watch definition, baseline, inbox and progress are local book data and do not
-replicate. Inbox append and baseline/cursor advancement are one atomic transaction.
+The watch definition, baseline, inbox and progress are local book data. Inbox append and baseline/cursor advancement are one atomic transaction.
 Evaluation failures/cancellation leave the previous checkpoint intact.
 
 An unlocked daemon owns a separate identity-checked database connection and checks
@@ -490,7 +489,7 @@ inbox receipt. Neither refresh, rebuild nor acknowledgement rewrites the origina
 export, changes its saved/filed state, or asserts an amended filing. The desktop
 item links to the current transaction when it still exists and to journals and
 reports for review. Dependencies, chain impact attachments and their resolutions
-stay local and do not enter replication; no watcher, acquisition permission,
+stay local; no watcher, acquisition permission,
 background network call or additional report snapshot system is introduced.
 
 For reports containing balances, asset selection also includes booked holdings

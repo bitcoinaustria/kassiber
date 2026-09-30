@@ -26,7 +26,7 @@ Each transaction occurrence has a block-hash/position key, preserving historical
 
 Confirmation depth comes from a verified tip and retained block membership, with an observation timestamp. Tip changes update a small shared overlay instead of rewriting every historical transaction. Chain Analysis and watches read the same values; an uncertain reorg cannot supply a current confirmation count.
 
-The derived tables and execution permissions are not replicated. Existing saved cases and PDFs remain frozen. Source assertions enter the shared incremental index without entering wallet imports, journals or owned-output inventory.
+The derived tables and execution permissions stay local. Existing saved cases and PDFs remain frozen. Source assertions enter the shared incremental index without entering wallet imports, journals or owned-output inventory.
 
 Verification lives in `tests/test_chain_analysis_backfill.py`: durable quota, scope/source fencing, revocation during transport, crash-conservative reservations, wrong genesis, repeated TXIDs, input occurrence resolution, Merkle mismatch, multi-step reorg and CLI/agent boundaries. `tests/test_chain_analysis_backfill_integration.py` exercises a real encrypted book, shared worker, index and watch inbox, including lock cancellation and confirmation thresholds. The disposable Core lane in `tests/integration/test_live_chain_analysis.py` also covers bounded range resumption and a real node reorg.
 

@@ -124,7 +124,7 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
 - `10-secret-management.md`: SQLCipher/backup secret-handling boundary
 - `11-exit-tax-deemed-disposal.md`: Wegzugsbesteuerung / deemed-disposal report design
 - `12-collateralized-loans.md`: collateralized-loan leg modeling
-- `13-device-sync.md`: shipped cross-device / multi-user sync guardrails (mailbox-first, no trusted server; issue #309)
+- `13-device-sync.md`: removed cross-device / multi-user sync design (removed 2026-09-30 per plan 19; archived at tag `archive/device-sync`)
 - `14-custody-lineage.md`: custody quantity/tax separation, durable
   missing-wallet bridges, and long-horizon reconciliation
 - `15-custody-simplification.md`: bounded simplification after the custody

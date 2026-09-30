@@ -45,7 +45,7 @@ does not prove which commitment output belonged to the node. Otherwise these
 paths fail closed into review. Reproducible proofs are recalculated whenever
 journals run; it is derived state, not a second authored ledger. Manual gap
 closures and any judgment that cannot be reproduced from that evidence are
-versioned custody components and replicate as authored records. A future
+versioned custody components, stored as authored records. A future
 Bitcoin layer plugs in by emitting the same country-neutral legs, conservation
 units, anchors, and evidence grade; it does not add logic to a country tax
 module.
@@ -72,7 +72,7 @@ with Elements regtest; signet never aliases another network. Known network
 contradictions fail closed even when the authored legs omit network fields and
 only their imported wallet anchors reveal the mismatch. Reviewed conversion
 mode may cross these domains because it does not claim quantity continuity. A
-component with incomplete, conflicting, or half-replicated evidence remains
+component with incomplete or conflicting evidence remains
 visible but cannot book. Its known transaction anchors quarantine fail-closed,
 and even a header with no arrived legs blocks report readiness.
 
@@ -343,17 +343,12 @@ present the validated effects. Creating or activating the final component stays
 behind the existing explicit-consent gate. A remote model may not infer a
 suspense residual or activate a bridge from amount similarity alone.
 
-Updates create immutable revisions. Replication preserves concurrent revisions
-and out-of-order revision links; derived active memberships rebuild only after a
-complete replay. Competing active revisions stay visible and ineffective until
-the user resolves them. Signed cross-replica version-vector dependencies are
-deferred until their complete prefix arrives, so mailbox delivery order cannot
-apply a component before its wallet or transaction anchors. Same-id rewrites of
-economic header, leg, or allocation facts are rejected at both SQLite and replay
-boundaries; correction means a new revision, while lifecycle transitions remain
+Updates create immutable revisions. Competing active revisions (for example
+from an older book) stay visible and ineffective until the user resolves them.
+Same-id rewrites of economic header, leg, or allocation facts are rejected by
+SQLite; correction means a new revision, while lifecycle transitions remain
 legal. Every new header commits to its exact leg/allocation counts, so later
-child inserts and direct or signed child/header deletes cannot rewrite the
-revision; whole profile/workspace deletion can still cascade. Transaction
+child inserts and direct child/header deletes cannot rewrite the revision; whole profile/workspace deletion can still cascade. Transaction
 fingerprint deduplication retains the existing signed wire identity for rows and
 references, preventing a device-local id alias from creating a false tombstone
 or leaking into a component anchor. Arbitrary local evidence and leg
@@ -381,8 +376,8 @@ or filed outside Kassiber remains `reports filed-snapshots {create,list}`.
 
 A guided custody bridge preview lists every overlapping saved/filed period and
 an amendment warning. Confirmation atomically seals the component, review, and
-impact history. These authored audit facts replicate, while raw report files do
-not. The activation preview can state the new quantity classification exactly,
+impact history. These are authored audit facts; raw report files are not
+stored in them. The activation preview can state the new quantity classification exactly,
 but quantity-final is not tax-final: global lot selection and gains require a
 fresh journal rebuild. Until then `after_gain_summary.status` is explicitly
 `pending_journal_rebuild`; it is never populated from stale journal totals.
@@ -392,8 +387,8 @@ updates the activation-time impact row. The resolution records `no_change`,
 `saved_report_changed`, or `review_required`; the latter is deliberately a
 review instruction rather than a claim that an amendment is legally required.
 
-Saved/filed snapshots, impacts, and their bounded resolutions are on the
-positive replication allowlist and are included in audit packages. The report
+Saved/filed snapshots, impacts, and their bounded resolutions are authored
+records and are included in audit packages. The report
 files, artifact names/paths, raw transactions, and raw custody evidence never
 enter these rows. Existing databases receive the resolution table additively;
 profile reset and project migration preserve the same parent-before-child

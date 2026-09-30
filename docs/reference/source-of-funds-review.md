@@ -75,7 +75,7 @@ revision and input version. Every native claim must be fully selected by the
 quantity arbiter. The report can then retain the user's already reviewed
 compressed disclosure without creating a second MOVE or adding intermediate
 wallet identities to it. A stale journal, retired component or retracted route
-invalidates the certificate. These derived records never replicate.
+invalidates the certificate. These records are derived, not authored.
 
 The CLI and built-in assistant cross the same interface:
 

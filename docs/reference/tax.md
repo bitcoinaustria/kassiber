@@ -129,7 +129,7 @@ Every carrying-value pair is also checked at the write boundary and again when
 journals are rebuilt. If both legs have known Bitcoin network domains, they must
 agree: mainnet, testnet, signet, and regtest basis can never be carried into one
 another. This physical guard is country-neutral and also protects historical or
-replicated pair rows created before the current command validation.
+legacy pair rows created before the current command validation.
 
 The pipeline is only as complete as the ownership index and recorded rows.
 Kassiber keeps prior descriptor, xpub script-type, and address-list ownership

@@ -37,9 +37,6 @@ and the full gate live in [CONTRIBUTING.md](../CONTRIBUTING.md).
 - Metadata history, custody revisions, and report amendments are append-only.
   Reverts append forward edits. Export completion may establish a saved artifact;
   only explicit user action establishes a filed report.
-- Replicate only the authored-table allowlist. Derived data, execution grants,
-  backend/provider secrets, and private wallet material stay outside replication. Read
-  [device sync](../docs/reference/device-sync.md) before changing replay or storage.
 - URL attachments remain literal references without fetching or indexing.
   Evidence reuse copies managed files to a new attachment identity, never a
   shared `stored_relpath` that deletion could invalidate.
@@ -64,5 +61,5 @@ and the full gate live in [CONTRIBUTING.md](../CONTRIBUTING.md).
   book-switch, cancellation, and source-revision checks.
 
 For adapters, read the root task index before editing: observation transport,
-Lightning sanitization, graph visibility, and replication have different trust
+Lightning sanitization, and graph visibility have different trust
 boundaries that must survive reuse across CLI, desktop, and AI.

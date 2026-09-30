@@ -1,8 +1,8 @@
 # Cross-Device / Multi-User Sync (Untrusted-Storage-First)
 
-**Status:** Implemented 2026-07-10 (S1-S5). This remains the security and
-architecture guardrail; operator instructions live in
-[docs/reference/device-sync.md](../reference/device-sync.md).
+**Status:** Removed 2026-09-30 per [plan 19](19-extensions.md); the
+implementation is preserved at git tag `archive/device-sync`. Implemented
+2026-07-10 (S1-S5); this document is kept as the design record only.
 **Driving issue:** [bitcoinaustria/kassiber#309](https://github.com/bitcoinaustria/kassiber/issues/309)
 (P1, effort XL) — the issue was rewritten 2026-07-09 to match this design
 (mailbox-first, multi-user in scope); if issue and doc drift again, this

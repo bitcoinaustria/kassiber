@@ -338,7 +338,7 @@ AI features switch into that preference, writing only when it changed, so
 
 Settings -> Desktop -> Developer tools carries the early-stage-features switch,
 which is off by default and gates the surfaces that are not finished yet. With
-it off, Network Monitor, Logs, and Settings -> Device sync disappear from the
+it off, Network Monitor, Logs, and Settings -> Lightning disappear from the
 side nav, the settings rail, and app search, while Activity, Custody Gaps, Exit
 Calculator, and Privacy Mirror stay in the nav as greyed-out, inert rows. The
 nav treatment is a signpost, not the barrier: every one of those routes carries

@@ -522,8 +522,7 @@ Kassiber does not receive BTCPay webhooks or any other push updates. Store data
 is as current as the last sync, which is either explicit (`wallets sync`,
 `btcpay provenance sync --all`, the desktop refresh) or background freshness
 once the BTCPay source class is enabled. Every store refresh records its last
-attempt, last success, and last error locally (`btcpay_store_sync_states`, not
-replicated). `btcpay inspect` reports each configured store's `sync_state` and
+attempt, last success, and last error locally (`btcpay_store_sync_states`). `btcpay inspect` reports each configured store's `sync_state` and
 a `stale_store_data` warning when a store was not refreshed for a day or its
 last refresh failed; the transaction commercial panel shows the same age.
 

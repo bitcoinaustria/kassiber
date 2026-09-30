@@ -163,8 +163,8 @@ wallet deletion and confirmed book reset remove observer rows; clearing this
 derived state does not touch transactions, notes, attachments, edit history or
 custody components.
 
-These tables are absent from the positive replication allowlist and every
-public snapshot, AI, diagnostics and audit query. Backup includes them only as
+These tables are absent from every public snapshot, AI, diagnostics and audit
+query. Backup includes them only as
 pages in the encrypted main SQLCipher database. Dependency and compatibility
 facts cannot be applied together: the coordinator raises
 `observer_projection_conflict` instead of running a shadow observer or falling
@@ -205,9 +205,8 @@ and for the pre-existing ambiguity cases
 `excluded_exact_transaction_row`). One refresh producing opposite directions for
 the same transaction is `conflicting_observer_projection_records`.
 
-The retirement sets `excluded`, which is a replicated, high-stakes column: device
-sync records it as an ordinary signed row change. It is deterministic across
-replicas, so steady-state convergence is unaffected.
+The retirement sets `excluded`, a high-stakes column, deterministically from the
+observed rows.
 
 ## Capability matrix
 
@@ -340,7 +339,7 @@ transactions, retractions, inventory, coverage and freshness. `put` and
 
 The public JSON observer state stores only Kassiber's representation version
 and canonical txids used for retraction. LWK's own bytes are not JSON-decoded,
-logged, replicated, exported, exposed over desktop IPC, or returned to AI
+logged, exported, exposed over desktop IPC, or returned to AI
 tools. Unknown namespace versions fail with
 `observer_state_rebuild_required`; clearing and rebuilding this derived state
 does not alter authored transaction metadata.
@@ -502,8 +501,7 @@ possible.
 
 LWK is the authoritative supported Electrum-route wollet state and unblinding
 engine. Private view/blinding material stays inside SQLCipher and must never
-enter logs, diagnostics, audit packages, AI tools, daemon/event payloads or
-replication.
+enter logs, diagnostics, audit packages, AI tools or daemon/event payloads.
 
 ## Descriptor ingress inventory
 
