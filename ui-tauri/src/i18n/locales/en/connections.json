@@ -1205,7 +1205,9 @@
         "configuredVia": "Already set up with the key {{names}}.",
         "lightningLinks": "Payments link to {{wallets}} by payment hash.",
         "alreadyConfigured": "Configured",
-        "ledgerScope": "Books what passes through BTCPay: settled payments in, completed payouts and refunds out. Record withdrawals made outside BTCPay, such as closing channels or moving funds off the node, separately."
+        "ledgerScope": "Books what passes through BTCPay: settled payments in, completed payouts and refunds out. Record withdrawals made outside BTCPay, such as closing channels or moving funds off the node, separately.",
+        "ledgerShared": "{{methods}} are booked in one ledger for this store.",
+        "ledgerSameAs": "Booked in the same ledger as {{method}}."
       },
       "manualTitle": "Enter the store manually",
       "manualBody": "This key cannot list stores. Enter the store ID from the BTCPay store settings.",

@@ -351,6 +351,19 @@ export function BtcpaySetupPanel({
     );
   };
 
+  // Lightning and LNURL of one store (or one plugin rail) share a ledger:
+  // explain it once, on the first method of each group.
+  const ledgerGroups = new Map<string, { first: string; labels: string[] }>();
+  for (const entry of entries) {
+    if (entry.choice.action !== "payment_ledger") continue;
+    const groupKey = `${entry.method.store_id}\u0000${entry.method.ledger_group ?? entry.method.payment_method_id}`;
+    const group = ledgerGroups.get(groupKey);
+    if (group) group.labels.push(entry.method.label);
+    else ledgerGroups.set(groupKey, { first: entry.key, labels: [entry.method.label] });
+  }
+  const ledgerGroupFor = (method: BtcpayPlanMethod) =>
+    ledgerGroups.get(`${method.store_id}\u0000${method.ledger_group ?? method.payment_method_id}`);
+
   const renderMethod = (method: BtcpayPlanMethod) => {
     const key = btcpayRouteKey(method.store_id, method.payment_method_id);
     const entry = entries.find((candidate) => candidate.key === key);
@@ -363,16 +376,20 @@ export function BtcpaySetupPanel({
       .map((member) => storeName(plan, member.store_id))
       .filter((name, index, all) => all.indexOf(name) === index);
     const reasonKey = recommendation?.reason ? `add.btcpay.reason.${recommendation.reason}` : null;
-    const reasonText = reasonKey
-      ? t(reasonKey as "add.btcpay.reason.already_configured", {
-          defaultValue: recommendation?.reason_text ?? "",
-        })
-      : null;
+    // The "Configured" badge already says a route exists.
+    const reasonText =
+      reasonKey && recommendation?.reason !== "already_configured"
+        ? t(reasonKey as "add.btcpay.reason.already_configured", {
+            defaultValue: recommendation?.reason_text ?? "",
+          })
+        : null;
+    const ledgerGroup = choice.action === "payment_ledger" ? ledgerGroupFor(method) : undefined;
     return (
       <div
         key={key}
         className={cn(
-          "grid gap-3 rounded-md border border-border/60 bg-background/70 p-3 text-sm md:grid-cols-[minmax(0,1fr)_minmax(190px,0.7fr)]",
+          // Stack on a narrow pane so the action never truncates.
+          "grid gap-3 rounded-md border border-border/60 bg-background/70 p-3 text-sm @xl:grid-cols-[minmax(0,1fr)_minmax(220px,0.75fr)]",
           choice.action === "skip" && "opacity-70",
         )}
       >
@@ -460,8 +477,17 @@ export function BtcpaySetupPanel({
               );
             })}
           </select>
-          {choice.action === "payment_ledger" ? (
-            <p className="text-xs text-muted-foreground">{t("add.btcpay.notice.ledgerScope")}</p>
+          {ledgerGroup && ledgerGroup.first === key ? (
+            <p className="text-xs text-muted-foreground">
+              {ledgerGroup.labels.length > 1
+                ? `${t("add.btcpay.notice.ledgerShared", { methods: ledgerGroup.labels.join(" + ") })} `
+                : ""}
+              {t("add.btcpay.notice.ledgerScope")}
+            </p>
+          ) : ledgerGroup ? (
+            <p className="text-xs text-muted-foreground">
+              {t("add.btcpay.notice.ledgerSameAs", { method: ledgerGroup.labels[0] })}
+            </p>
           ) : null}
           {choice.action === "existing_wallet" ? (
             <select
@@ -861,6 +887,7 @@ export function BtcpaySetupPanel({
             <p className="text-xs text-muted-foreground">{t("add.btcpay.storesBody")}</p>
           </div>
           <Notice tone="neutral">{t("add.btcpay.staleNote")}</Notice>
+          <div className="@container space-y-3">
           {plan.stores.map((store) => {
             const methods = plan.payment_methods.filter((method) => method.store_id === store.id);
             const missing = STORE_CAPABILITIES.filter(
@@ -902,6 +929,7 @@ export function BtcpaySetupPanel({
               </div>
             );
           })}
+          </div>
           {plan.payment_methods.length === 0 ? (
             <div className="space-y-3 rounded-md border border-dashed border-border/70 p-3">
               <div className="space-y-1">

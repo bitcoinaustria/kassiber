@@ -4901,15 +4901,23 @@ function AddConnectionDialogContent({
     </div>
   );
 
+  // A BTCPay plan lists every store and payment method, so it gets the
+  // width; the source summary shrinks to a narrow rail.
+  const wideSetup = setupKind === "btcpay";
   const renderSetupStep = () => (
-    <div className="grid min-h-0 grid-cols-1 lg:h-full lg:grid-cols-[310px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden">
+    <div
+      className={cn(
+        "grid min-h-0 grid-cols-1 lg:h-full lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden",
+        wideSetup ? "lg:grid-cols-[240px_minmax(0,1fr)]" : "lg:grid-cols-[310px_minmax(0,1fr)]",
+      )}
+    >
       <div className="min-h-0 overflow-y-auto border-b p-5 lg:border-r lg:border-b-0">
         {renderSourceSummary()}
       </div>
       <div className="min-h-0 overflow-y-auto p-5">
         <form
           id="connection-setup-form"
-          className="mx-auto max-w-xl space-y-4"
+          className={cn("mx-auto space-y-4", wideSetup ? "max-w-3xl" : "max-w-xl")}
           onSubmit={onSetupSubmit}
         >
           {renderSetupFields()}

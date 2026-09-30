@@ -1205,7 +1205,9 @@
         "configuredVia": "Bereits mit dem Key {{names}} eingerichtet.",
         "lightningLinks": "Zahlungen werden über den Payment Hash mit {{wallets}} verknüpft.",
         "alreadyConfigured": "Eingerichtet",
-        "ledgerScope": "Verbucht, was über BTCPay läuft: abgeschlossene Zahlungen als Eingang, abgeschlossene Auszahlungen und Rückerstattungen als Ausgang. Abhebungen außerhalb von BTCPay, etwa geschlossene Channels oder Überträge vom Node, erfasst du gesondert."
+        "ledgerScope": "Verbucht, was über BTCPay läuft: abgeschlossene Zahlungen als Eingang, abgeschlossene Auszahlungen und Rückerstattungen als Ausgang. Abhebungen außerhalb von BTCPay, etwa geschlossene Channels oder Überträge vom Node, erfasst du gesondert.",
+        "ledgerShared": "{{methods}} werden für diesen Store in einem gemeinsamen Ledger verbucht.",
+        "ledgerSameAs": "Wird im selben Ledger wie {{method}} verbucht."
       },
       "manualTitle": "Store manuell eingeben",
       "manualBody": "Dieser Key kann keine Stores auflisten. Gib die Store-ID aus den BTCPay-Store-Einstellungen ein.",
