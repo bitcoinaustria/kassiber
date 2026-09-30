@@ -45,6 +45,7 @@ from . import import_batches
 from . import output_inventory as core_output_inventory
 from . import wallets as core_wallets
 from .chain_observer.provenance import row_has_current_authoritative_observation
+from .onchain import graph_scoped_scripts
 from ..importers import GENERIC_LEDGER_KIND_DIRECTIONS as SUPPORTED_TRANSACTION_KINDS
 from .privacy_hops import privacy_boundary_from_import_record
 from .sync import sync_progress_emitter
@@ -920,6 +921,31 @@ def _attestation_upgrade(existing: Mapping[str, Any], incoming: Mapping[str, Any
     return isinstance(scripts, list) and len(scripts) > 0
 
 
+def _attestation_rescope(existing: Mapping[str, Any], incoming: Mapping[str, Any]) -> str | None:
+    """Return the stored payload with its attestation narrowed to its own graph.
+
+    Until September 2026 every row repeated the wallet's whole owned-script set,
+    so stored bytes grew as rows x scripts. When an authoritative
+    re-observation attests exactly the owned scripts of the stored graph, only
+    that list changes; the rest of the stored evidence stays as recorded.
+    """
+    old = _raw_json_payload(existing)
+    new = _raw_json_payload(incoming)
+    if old is None or new is None:
+        return None
+    old_scripts = old.get("observer_owned_scripts")
+    new_scripts = new.get("observer_owned_scripts")
+    if not isinstance(old_scripts, list) or not isinstance(new_scripts, list):
+        return None
+    old_set = {str(value).strip().lower() for value in old_scripts if value}
+    new_set = {str(value).strip().lower() for value in new_scripts if value}
+    if not new_set or not new_set < old_set:
+        return None
+    if graph_scoped_scripts(old, old_set) != sorted(new_set):
+        return None
+    return json.dumps({**old, "observer_owned_scripts": sorted(new_set)}, sort_keys=True)
+
+
 def _same_lnd_settlement_identity(existing: Mapping[str, Any], normalized: Mapping[str, Any]) -> bool:
     """A date refresh cannot repair or reinterpret conflicting native identity."""
     if not (
@@ -1792,6 +1818,7 @@ def insert_wallet_records(
     updated = 0
     unchanged = 0
     superseded = 0
+    rescoped = 0
     inserted_records: list[dict[str, Any]] = []
     updated_records: list[dict[str, Any]] = []
     observer_resolved_records: list[dict[str, str]] = []
@@ -1942,6 +1969,19 @@ def insert_wallet_records(
                     )
                 )
             else:
+                narrowed = (
+                    _attestation_rescope(existing, normalized)
+                    if authoritative_chain_observer
+                    else None
+                )
+                if narrowed is not None:
+                    # Not an update: accounting inputs are unchanged. The sync
+                    # persists this row's provenance for the new payload next.
+                    conn.execute(
+                        "UPDATE transactions SET raw_json = ? WHERE id = ?",
+                        (narrowed, existing["id"]),
+                    )
+                    rescoped += 1
                 unchanged += 1
             skipped += 1
             if progress is not None and (index % 200 == 0 or index == total):
@@ -2075,6 +2115,8 @@ def insert_wallet_records(
     }
     if authoritative_chain_observer:
         outcome["_observer_resolved_records"] = observer_resolved_records
+        if rescoped:
+            outcome["attestations_narrowed"] = rescoped
         if superseded:
             outcome["observer_superseded"] = superseded
             outcome["observer_superseded_records"] = superseded_records

@@ -59,6 +59,7 @@ from . import esplora_history
 from . import silent_payments
 from .address_scripts import address_to_scriptpubkey
 from .onchain import (
+    graph_scoped_scripts,
     input_script,
     input_value_sats,
     normalized_script_hex,
@@ -2563,7 +2564,7 @@ def _record_from_bitcoin_graph(
     raw = {
         **tx,
         "fee": int(fee_sats),
-        "observer_owned_scripts": sorted(tracked),
+        "observer_owned_scripts": graph_scoped_scripts(tx, tracked),
     }
     boundary = privacy_boundary_from_import_record(tx)
     if collaborative:
@@ -3802,8 +3803,12 @@ def record_from_bitcoinrpc_details(
     if isinstance(raw_graph, dict):
         # Inbound rows also attest their current script scope, even when Core
         # cannot resolve foreign parents. Other connected wallets may supply
-        # those complementary prevouts during canonical event reconciliation.
-        raw_graph = {**raw_graph, "observer_owned_scripts": sorted(tracked_scripts or ())}
+        # those complementary prevouts during canonical event reconciliation,
+        # so a graph with an unresolved input keeps the whole scope.
+        raw_graph = {
+            **raw_graph,
+            "observer_owned_scripts": graph_scoped_scripts(raw_graph, tracked_scripts),
+        }
     amount_total = Decimal("0")
     fee_total = Decimal("0")
     has_send = False
@@ -3880,7 +3885,11 @@ def record_from_bitcoinrpc_details(
         raw_payload = {
             **(raw_graph if isinstance(raw_graph, dict) else {"source": "bitcoinrpc_wallet_details", "details": details}),
             "component": {"fee_attribution": "implicit_wallet_delta"},
-            "observer_owned_scripts": sorted(tracked_scripts or ()),
+            "observer_owned_scripts": (
+                graph_scoped_scripts(raw_graph, tracked_scripts)
+                if isinstance(raw_graph, dict)
+                else sorted(tracked_scripts or ())
+            ),
         }
         privacy_boundary = privacy_boundary_from_import_record(raw_payload) or "collaborative"
         raw_payload["privacy_boundary"] = privacy_boundary

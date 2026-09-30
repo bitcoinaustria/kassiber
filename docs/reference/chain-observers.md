@@ -296,6 +296,15 @@ BDK wallet from the same public descriptors and replaces the derived aggregate
 atomically. It does not invoke the compatibility protocol client, retain a
 second graph, or alter authored accounting evidence.
 
+Every observer record attests which of its own graph's scripts the wallet
+owns in `observer_owned_scripts`. A graph with an unresolved input keeps every
+tracked script, because that input could spend one of them. Rows written
+before this scoping carried the wallet's whole script set. The next
+authoritative re-observation that attests exactly the stored graph's owned
+scripts narrows that list in place. Nothing else in the stored evidence
+changes, the row counts as unchanged, and its provenance is persisted again in
+the same savepoint.
+
 The live oracle waits for Electrum Merkle state before comparing transport
 projections so backend indexing races are not mistaken for observer state.
 The incremental request proves mempool-to-confirmed transitions without the
