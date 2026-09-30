@@ -75,7 +75,10 @@ def main() -> int:
     args = parser.parse_args()
     try:
         prepare(args)
-    except (ValueError, OSError, subprocess.CalledProcessError) as exc:
+    except ValueError as exc:
+        # Validation messages are fixed strings without paths or secrets.
+        parser.exit(1, f"Release preparation failed: {exc}; no release published.\n")
+    except (OSError, subprocess.CalledProcessError) as exc:
         parser.exit(1, f"Release preparation failed ({type(exc).__name__}); no release published.\n")
     return 0
 

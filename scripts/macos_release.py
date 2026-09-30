@@ -377,9 +377,28 @@ def verify_app(app: Path, commit: str, version: str, *, ticket: bool, candidate_
         run("/usr/bin/syspolicy_check", "distribution", app)
 
 
+SIGNING_WORKFLOW_REF = "bitcoinaustria/kassiber/.github/workflows/notarize-macos.yml@refs/heads/main"
+
+
+def require_trusted_signing_context() -> None:
+    """Allow CI signing only in the protected notarization workflow on main.
+
+    Local signing stays available. In CI, the Developer ID key exists only in
+    the ``macos-notarization`` environment of a manually dispatched
+    notarize-macos run from protected main; any other CI context is refused.
+    """
+
+    if not os.environ.get("CI"):
+        return
+    if (os.environ.get("GITHUB_ACTIONS") != "true"
+            or os.environ.get("GITHUB_WORKFLOW_REF") != SIGNING_WORKFLOW_REF
+            or os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch"
+            or os.environ.get("GITHUB_REF") != "refs/heads/main"):
+        raise ValueError("CI signing runs only in the protected notarize-macos workflow on main")
+
+
 def sign(args: argparse.Namespace) -> None:
-    if os.environ.get("CI"):
-        raise ValueError("Signing must run locally, not in CI")
+    require_trusted_signing_context()
     if not re.fullmatch(r"[0-9A-Fa-f]{40}", args.identity):
         raise ValueError("Select an exact keychain certificate SHA-1 fingerprint")
     check_digest(args.archive, args.sha256)
