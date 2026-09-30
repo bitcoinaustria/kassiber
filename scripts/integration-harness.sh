@@ -1225,6 +1225,14 @@ run_bitcoin_electrum() {
   run_with_bitcoin_core run_bitcoin_electrum_parity_smoke
 }
 
+run_sync_benchmark_lane() {
+  py scripts/benchmark-wallet-sync.py "$@"
+}
+
+run_sync_benchmark() {
+  run_with_bitcoin_core run_sync_benchmark_lane "$@"
+}
+
 run_regtest_demo_full() {
   export KASSIBER_REGTEST_REQUIRE_ELEMENTS=1
   run_with_bitcoin_core run_demo_full
@@ -1658,6 +1666,9 @@ case "$MODE" in
   bitcoin-electrum)
     run_bitcoin_electrum
     ;;
+  sync-benchmark)
+    run_sync_benchmark "${@:2}"
+    ;;
   chain-observers)
     run_chain_observers "${2:-all}"
     ;;
@@ -1698,7 +1709,7 @@ case "$MODE" in
     ( run_regtest_demo_full )
     ;;
   *)
-    echo "usage: $0 [fast|chain-analysis|bitcoin-core|bitcoin-electrum|chain-observers [all|bitcoin|liquid]|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|custody-desktop|lightning-business|btcpay|silent-payments|all]" >&2
+    echo "usage: $0 [fast|chain-analysis|bitcoin-core|bitcoin-electrum|sync-benchmark [options]|chain-observers [all|bitcoin|liquid]|slow|demo|demo-full|demo-up|demo-tick [N]|demo-down [--purge]|boltz-liquid|custody-desktop|lightning-business|btcpay|silent-payments|all]" >&2
     exit 2
     ;;
 esac

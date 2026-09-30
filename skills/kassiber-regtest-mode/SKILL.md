@@ -19,6 +19,7 @@ cannot be reproduced in the fast replay lane.
 | Persistent local demo book for UI/dev | `./scripts/integration-harness.sh demo-up` | yes |
 | Add fresh activity to persistent demo | `./scripts/integration-harness.sh demo-tick [N]` | yes, existing demo node |
 | Stop or remove persistent demo | `./scripts/integration-harness.sh demo-down [--purge]` | yes |
+| Time one large wallet's sync and journal step | `./scripts/integration-harness.sh sync-benchmark [--txs N]` | yes |
 
 Use `demo-full` for test proof. Use `demo-up` for interactive development; it
 must leave reports immediately readable. Use `demo-tick` when the app refresh
