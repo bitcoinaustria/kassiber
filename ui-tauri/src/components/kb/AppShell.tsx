@@ -44,7 +44,6 @@ import {
   RefreshCw,
   RotateCcw,
   Route,
-  Server,
   Settings,
   ShieldAlert,
   Sun,
@@ -172,10 +171,7 @@ import {
 } from "@/lib/daemonFreshnessEvent";
 import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
 import { useAgentAccessMasterSync } from "@/lib/agentAccess";
-import {
-  dataModeForActiveBackend,
-  dataModeLabelKey,
-} from "@/components/kb/dataMode";
+import { dataModeForActiveBackend } from "@/components/kb/dataMode";
 import { isTypingTarget } from "@/lib/keymap";
 import { FirstSyncCard } from "./FirstSyncCard";
 import { AlphaNotice } from "./AlphaNotice";
@@ -2410,9 +2406,6 @@ function SidebarActions({
     setExplorerSettings,
   ]);
 
-  const dataModeLabel = t(
-    `shell.dataMode.${dataModeLabelKey(normalizedDataMode)}`,
-  );
   const supportActive = pathname === "/diagnostics";
   // Controlled, so a click on the collapsed rail can force them open while it
   // expands the nav (see `useRailSubmenuTrigger`).
@@ -2458,17 +2451,6 @@ function SidebarActions({
               <span>{t("nav:book.logs")}</span>
             </Link>
           </SidebarMenuButton>
-        </SidebarMenuItem>
-      ) : null}
-      {developerToolsEnabled ? (
-        <SidebarMenuItem>
-          <div className="flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-            <Server className="size-4 shrink-0" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate group-data-[collapsible=icon]:hidden">
-              {dataModeLabel}
-            </span>
-            <span className="size-2 rounded-full bg-emerald-500 group-data-[collapsible=icon]:hidden" />
-          </div>
         </SidebarMenuItem>
       ) : null}
       <SidebarMenuItem>
