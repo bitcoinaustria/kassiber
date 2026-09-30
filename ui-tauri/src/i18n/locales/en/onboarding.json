@@ -16,32 +16,31 @@
   "books": {
     "intro": "Each book has its own tax and currency settings. Use separate books for private and business activity; use separate Kassiber files for different clients.",
     "newBookSet": "New book set",
-    "summary": {
-      "sets": "Sets",
-      "setsDetail": "Book sets",
-      "books": "Books",
-      "booksDetail": "Individual books",
-      "wallets": "Wallets",
-      "walletsDetail": "{{count}} accounts"
-    },
     "meta": {
       "since": "since {{date}}"
     },
     "workspace": {
       "overview": "Book Set Overview",
-      "newBook": "New book"
+      "newBook": "New book",
+      "actions": "Actions for {{name}}",
+      "rename": "Rename book set",
+      "empty": "No books in this set yet.",
+      "newBookIn": "New book in {{name}}"
+    },
+    "row": {
+      "open": "Open",
+      "lastOpened": "Last opened"
+    },
+    "filter": {
+      "placeholder": "Filter books",
+      "noMatches": "No books match."
     },
     "profileCard": {
       "settings": "Book settings for {{name}}",
-      "current": "Current books: {{name}}",
       "switchTo": "Switch to {{name}} books",
-      "opened": "Opened {{date}}",
-      "active": "Active",
-      "taxPolicy": "Tax policy",
       "buckets": "Buckets",
       "wallets": "Wallets",
-      "currentLabel": "Current",
-      "switchLabel": "Switch"
+      "currentLabel": "Current"
     },
     "create": {
       "title": "New book",
@@ -115,14 +114,6 @@
       "errorGeneric": "Could not create book set."
     },
     "switch": {
-      "title": "Switch books?",
-      "descriptionFromTo": "Switch from {{current}} to {{next}}.",
-      "descriptionGeneric": "Switch to these books.",
-      "taxPolicy": "Tax policy",
-      "buckets": "Buckets",
-      "wallets": "Wallets",
-      "switchHere": "Switch here",
-      "switchAndOpenOverview": "Switch and open Overview",
       "errorGeneric": "Could not switch books."
     }
   },
