@@ -62,10 +62,23 @@ jobs:
             exit 1
           fi
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - name: Install package inspection tools
+      - name: Install package inspection and signature tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cpio gnupg rpm
+          sudo apt-get install -y cpio openssh-client rpm
+      - name: Require OpenSSH signature verification
+        # ssh-keygen -Y verify needs OpenSSH 8.1+.
+        run: |
+          set -euo pipefail
+          openssh_version="$(ssh -V 2>&1)"
+          echo "$openssh_version"
+          if ! [[ "$openssh_version" =~ ^OpenSSH_([0-9]+)\.([0-9]+) ]]; then
+            echo "Unrecognized OpenSSH version; release signatures cannot be verified." >&2
+            exit 1
+          fi
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          (( major > 8 || (major == 8 && minor >= 1) ))
       - name: Load release signing policy
         id: release-signing
         env:
@@ -75,7 +88,9 @@ jobs:
           policy_json="$(python3 scripts/release_manifest.py policy \
             --policy packaging/release/signing-policy.json)"
           policy_enabled="$(python3 -c 'import json,sys; print(str(json.loads(sys.argv[1])["enabled"]).lower())' "$policy_json")"
-          fingerprint="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["primary_fingerprint"])' "$policy_json")"
+          # Older tags carry the disabled schema-1 policy, which has no
+          # "fingerprint" field; they may still render an unsigned dry run.
+          fingerprint="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("fingerprint", ""))' "$policy_json")"
           public_key_path="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["public_key_path"])' "$policy_json")"
           if [ "$policy_enabled" != true ] && [ "$PUBLISH_REQUESTED" = true ]; then
             echo "Linux channel publication requires an enabled, code-reviewed release signing policy." >&2
@@ -129,11 +144,11 @@ jobs:
           if [ "$RELEASE_SIGNING_ENABLED" = true ]; then
             gh release download "$RELEASE_TAG_NAME" \
               --repo "$GITHUB_REPOSITORY" --dir release \
-              --pattern "$manifest_name.asc"
+              --pattern "$manifest_name.sig"
             python3 scripts/release_manifest.py verify-release \
               --release-dir release \
               --manifest "release/$manifest_name" \
-              --signature "release/$manifest_name.asc" \
+              --signature "release/$manifest_name.sig" \
               --public-key "$RELEASE_PUBLIC_KEY_PATH" \
               --fingerprint "$RELEASE_SIGNING_FINGERPRINT" \
               --allow-subset
@@ -317,11 +332,24 @@ jobs:
           release_policy_json="$(python3 scripts/release_manifest.py policy \
             --policy packaging/release/signing-policy.json \
             --require-enabled)"
-          release_fingerprint="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["primary_fingerprint"])' "$release_policy_json")"
-          if [ "$fingerprint" = "$release_fingerprint" ]; then
-            echo "Linux archive signing must use a primary key distinct from the offline release key." >&2
-            exit 1
-          fi
+          release_fingerprint="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["fingerprint"])' "$release_policy_json")"
+          # The release key is an OpenSSH key, so it cannot share an OpenPGP
+          # fingerprint with this key. Also refuse the archive key if any of
+          # its (sub)keys is the same key material as the release key.
+          mapfile -t archive_key_fingerprints < <(
+            gpg --batch --with-colons --list-secret-keys \
+              | awk -F: '$1 == "fpr" { print toupper($10) }'
+          )
+          for archive_key_fingerprint in "${archive_key_fingerprints[@]}"; do
+            if archive_ssh_key="$(gpg --batch --export-ssh-key "${archive_key_fingerprint}!" 2>/dev/null)"; then
+              archive_ssh_fingerprint="$(printf '%s\n' "$archive_ssh_key" \
+                | ssh-keygen -E sha256 -lf - | awk '{ print $2 }')"
+              if [ "$archive_ssh_fingerprint" = "$release_fingerprint" ]; then
+                echo "Linux archive signing must use key material distinct from the release key." >&2
+                exit 1
+              fi
+            fi
+          done
           if [ -n "$ARCHIVE_KEY_PASSPHRASE" ]; then
             warmup="$RUNNER_TEMP/kassiber-signing-warmup"
             printf 'Kassiber archive signing warm-up\n' > "$warmup"

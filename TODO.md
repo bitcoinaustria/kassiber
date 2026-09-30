@@ -264,11 +264,14 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   validation and clean-Mac signed/notarized installation, Windows signing,
   and Linux repository/artifact signatures. Resolve the desktop plan's AGPL
   packaging opinion or explicit residual-risk acceptance gate before shipping.
-- [ ] Establish the permanent offline OpenPGP release key, publish its public
-  key and full fingerprint independently, add reviewed verification policy and
-  client key material, and activate draft-only two-person finalization. Keep
-  the offline release key separate from the CI-held Linux archive key. GitHub
-  update notices remain a separate notification-only HTTPS trust path.
+- [ ] Publish the SSH release-key fingerprint
+  `SHA256:UzYeHzOEIbanmYDAylIaGhI6dGFvhNOkszPXwUgzo9M` on the Kassiber website
+  and through one independent Bitcoin Austria channel, compare them with this
+  repository, and only then embed the key in packaged builds. Add two-person
+  finalization once a second operator exists, and consider moving the key to
+  an `ed25519-sk` hardware key; see [release signing](docs/reference/release-signing.md).
+  Keep it separate from the CI-held Linux archive key. GitHub update notices
+  remain a separate notification-only HTTPS trust path.
 
 ## Deferred product decisions
 

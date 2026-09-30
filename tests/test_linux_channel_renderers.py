@@ -101,6 +101,9 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
         self.assertNotIn("dnf upgrade", workflow)
         self.assertIn("scripts/release_manifest.py verify-release", workflow)
         self.assertIn("packaging/release/signing-policy.json", workflow)
+        self.assertIn('--signature "release/$manifest_name.sig"', workflow)
+        self.assertNotIn('$manifest_name.asc', workflow)
+        self.assertIn('gpg --batch --export-ssh-key "${archive_key_fingerprint}!"', workflow)
         self.assertIn("git merge-base --is-ancestor HEAD origin/main", workflow)
         self.assertIn("LINUX_ARCHIVE_GPG_FINGERPRINT", workflow)
 
@@ -150,6 +153,9 @@ class LinuxChannelWorkflowTest(unittest.TestCase):
 
         self.assertIn("environment: release-production", workflow)
         self.assertIn("scripts/release_manifest.py verify-release", workflow)
+        self.assertIn('manifest.txt.sig" >> "$GITHUB_OUTPUT"', workflow)
+        self.assertNotIn("gnupg", workflow)
+        self.assertNotIn(".asc", workflow)
         self.assertIn("gh release download", workflow)
         self.assertIn("gh release edit", workflow)
         self.assertIn("--draft=false", workflow)

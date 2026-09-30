@@ -182,9 +182,9 @@ off. Consent writes are atomic and take effect immediately. See
 [Privacy & security](privacy-and-security.md) for the outbound-request disclosure.
 The update announcement remains unsigned and relies on HTTPS plus control of
 the Kassiber GitHub repository. Release builds include a versioned SHA-256
-manifest; future signed releases will attach its OpenPGP signature after the
-permanent public key and fingerprint are independently published. The notifier
-does not claim that downloaded bytes are authenticated. See
+manifest, and signed releases attach its detached OpenSSH signature from the
+pinned release key. The notifier does not verify downloads or claim that
+downloaded bytes are authenticated. See
 [release signing](release-signing.md).
 
 For a real installable `.app` built locally on Apple Silicon (without

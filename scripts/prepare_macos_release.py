@@ -16,7 +16,7 @@ REPO = "bitcoinaustria/kassiber"
 def require_unsigned_draft(tag: str, *, expected_commit: str | None = None) -> None:
     release = json.loads(run("gh", "release", "view", tag, "--repo", REPO,
                              "--json", "isDraft,assets"))
-    if not release["isDraft"] or any(a["name"].endswith(".asc") for a in release["assets"]):
+    if not release["isDraft"] or any(a["name"].endswith(".sig") for a in release["assets"]):
         raise ValueError("Require an unsigned draft release")
     if expected_commit is not None:
         commit = json.loads(run("gh", "api", f"repos/{REPO}/commits/{tag}"))["sha"]

@@ -67,8 +67,20 @@ jobs:
             echo "Release tag must point to a commit in origin/main history." >&2
             exit 1
           fi
-      - name: Install manifest verification tool
-        run: brew install gnupg
+      - name: Require OpenSSH signature verification
+        # ssh-keygen -Y verify needs OpenSSH 8.1+; the runner image ships it.
+        run: |
+          set -euo pipefail
+          command -v ssh-keygen
+          openssh_version="$(ssh -V 2>&1)"
+          echo "$openssh_version"
+          if ! [[ "$openssh_version" =~ ^OpenSSH_([0-9]+)\.([0-9]+) ]]; then
+            echo "Unrecognized OpenSSH version; release signatures cannot be verified." >&2
+            exit 1
+          fi
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          (( major > 8 || (major == 8 && minor >= 1) ))
       - name: Load enabled release signing policy
         id: release-signing
         run: |
@@ -76,7 +88,7 @@ jobs:
           policy_json="$(python3 scripts/release_manifest.py policy \
             --policy packaging/release/signing-policy.json \
             --require-enabled)"
-          echo "fingerprint=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["primary_fingerprint"])' "$policy_json")" >> "$GITHUB_OUTPUT"
+          echo "fingerprint=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["fingerprint"])' "$policy_json")" >> "$GITHUB_OUTPUT"
           echo "public_key_path=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["public_key_path"])' "$policy_json")" >> "$GITHUB_OUTPUT"
       - name: Inspect and download existing release assets
         id: release
@@ -113,7 +125,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" --dir release
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "manifest=release/kassiber-${version}-manifest.txt" >> "$GITHUB_OUTPUT"
-          echo "signature=release/kassiber-${version}-manifest.txt.asc" >> "$GITHUB_OUTPUT"
+          echo "signature=release/kassiber-${version}-manifest.txt.sig" >> "$GITHUB_OUTPUT"
           echo "draft=$actual_draft" >> "$GITHUB_OUTPUT"
           echo "prerelease=$expected_prerelease" >> "$GITHUB_OUTPUT"
       - name: Authenticate the complete release set

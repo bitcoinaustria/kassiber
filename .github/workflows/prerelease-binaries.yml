@@ -59,7 +59,7 @@ on:
         default: ""
         type: string
       draft_release:
-        description: "Release builds always remain drafts until platform and OpenPGP verification"
+        description: "Release builds always remain drafts until platform and manifest-signature verification"
         required: true
         default: true
         type: boolean
@@ -889,10 +889,10 @@ jobs:
           set -euo pipefail
           if [ "$RELEASE_SIGNING_ENABLED" = "true" ]; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Signed release metadata is published only after offline verification by the finalizer."
+            echo "Signed release metadata is published only after the finalizer verifies the manifest signature."
           elif [ "$RELEASE_IS_DRAFT" = "true" ]; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Release is a draft pending offline PGP signing; skipping Homebrew update."
+            echo "Release is a draft pending release-manifest signing; skipping Homebrew update."
           elif [ -n "$HOMEBREW_TAP_TOKEN" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else

@@ -3,8 +3,8 @@
 Kassiber is still in early development. Version tags stage draft release
 artifacts, while pull requests that touch packaging inputs run the same build
 matrix without publishing. New public releases must complete the
-[local signing / CI notarization runbook](macos-release.md) and offline
-OpenPGP verification; older unsigned downloads are not retroactively signed.
+[local signing / CI notarization runbook](macos-release.md) and SSH
+release-manifest signing; older unsigned downloads are not retroactively signed.
 
 ## What Runs Automatically
 
@@ -69,11 +69,12 @@ gh workflow run prerelease-binaries.yml \
 ```
 
 The build always leaves a draft, regardless of `draft_release` or whether the
-OpenPGP policy is enabled. Follow the [macOS release runbook](macos-release.md)
-to sign locally, notarize in CI, and verify the final artifacts **before**
-signing their manifest offline. Only `finalize-signed-release.yml` on `main`
-can publish after authenticating the exact asset set against the enabled,
-code-reviewed signing policy and checking the sealed macOS distributions.
+release-signing policy is enabled. Follow the
+[macOS release runbook](macos-release.md) to sign locally, notarize in CI, and
+verify the final artifacts **before** signing their manifest with the SSH
+release key. Only `finalize-signed-release.yml` on `main` can publish after
+authenticating the exact asset set against the enabled, code-reviewed signing
+policy and checking the sealed macOS distributions.
 It then updates Homebrew from the authenticated hashes. A failed tap push can
 be retried without replacing release assets. The documented authorization
 model supports one maintainer; a second operator is not silently required.
@@ -156,10 +157,11 @@ kassiber-<version>-manifest.txt
 The versioned manifest uses Sparrow's `sha256sum` shape plus comment headers
 that bind its format revision and semantic version; standard `sha256sum
 --check` ignores those headers and remains compatible.
-Once the permanent Kassiber release key is published, signed releases also
-carry `kassiber-<version>-manifest.txt.asc`. The manifest signature
-authenticates every artifact hash without requiring a separate PGP signature
-for every package. See [Release signing](release-signing.md).
+Signed releases also carry `kassiber-<version>-manifest.txt.sig`, a detached
+OpenSSH signature from the Kassiber release key
+(`SHA256:UzYeHzOEIbanmYDAylIaGhI6dGFvhNOkszPXwUgzo9M`). The manifest signature
+authenticates every artifact hash without requiring a separate signature for
+every package. See [Release signing](release-signing.md).
 
 When the repository secret `HOMEBREW_TAP_TOKEN` is configured, successful
 release publishes also update `bitcoinaustria/homebrew-kassiber` with a cask

@@ -43,7 +43,7 @@ elif tool == 'gh':
         elif field == 'targetCommitish': print(os.environ.get('MOCK_TARGET', 'a' * 40))
         elif field == 'assets':
             if os.environ.get('MOCK_ASSET_FAILURE'): sys.exit(1)
-            print('manifest.asc' if os.environ.get('MOCK_SIGNED') else (
+            print('manifest.sig' if os.environ.get('MOCK_SIGNED') else (
                 '' if os.environ.get('MOCK_NO_INPUT') else 'kassiber-macos-signing-input.dmg'))
         else: raise AssertionError(args)
     elif args[:2] == ['release', 'download']:

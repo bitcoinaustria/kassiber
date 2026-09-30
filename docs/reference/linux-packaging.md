@@ -149,11 +149,17 @@ credential-free copy before it pushes its project-owned repository.
 
 `.github/workflows/publish-linux-channels.yml` is manual,
 defaults every external publish switch to false, and puts every mutating job
-behind `linux-packaging-production`. During the current key-transition state it
-may use the versioned manifest only to render a no-publication dry run. Once the
-code-reviewed release-signing policy is enabled, it authenticates the detached
-manifest signature before deriving any APT/DNF, AUR, or Nix input;
-external publication fails closed without that signature.
+behind `linux-packaging-production`. The code-reviewed release-signing policy
+is enabled, so it authenticates the detached OpenSSH manifest signature
+(`kassiber-<version>-manifest.txt.sig`) against the pinned release key before
+deriving any APT/DNF, AUR, or Nix input. Every run, including a dry run, fails
+closed without that signature. A tag whose checked-out policy is still disabled
+can only render a no-publication dry run from the unsigned manifest.
+
+The APT/DNF archive key remains a separate OpenPGP key because package managers
+require OpenPGP. Before signing, the workflow refuses an archive key if any
+primary key or subkey that GnuPG can export in SSH form is the same key
+material as the SSH release key.
 
 Every job that checks out Kassiber pins its checkout to `tag_name`, so the
 signing policy that verified the release is the same policy that gates

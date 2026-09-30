@@ -1,16 +1,22 @@
-"""Sparrow-style OpenPGP release manifest verification.
+"""Sparrow-style release manifest verification with OpenSSH signatures.
 
 Kassiber signs one deterministic SHA-256 manifest rather than signing each
-package separately.  The OpenPGP signature authenticates the manifest; the
-manifest then authenticates the selected release artifact.
+package separately.  A detached OpenSSH signature (``ssh-keygen -Y sign``)
+authenticates the manifest; the manifest then authenticates the selected
+release artifact.
 
-The verifier deliberately uses an isolated temporary GnuPG home and requires
-an expected full fingerprint.  Importing a public key supplied alongside a
-release is not a trust decision by itself.
+The verifier requires an expected full SHA256 key fingerprint and compares it
+to the supplied public key in Python before it runs ``ssh-keygen``.  It never
+passes a caller-supplied ``allowed_signers`` file to ``ssh-keygen``: it writes
+one canonical entry for the pinned key, principal, and namespace into a private
+temporary directory.  A public key shipped next to a download is therefore
+never a trust decision by itself.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -28,41 +34,190 @@ from .update_check import _has_exact_schema_version, parse_version
 
 
 MAX_MANIFEST_BYTES = 1024 * 1024
-MAX_SIGNATURE_BYTES = 128 * 1024
-MAX_PUBLIC_KEY_BYTES = 2 * 1024 * 1024
+MAX_SIGNATURE_BYTES = 16 * 1024
+MAX_PUBLIC_KEY_BYTES = 16 * 1024
 MAX_SIGNING_POLICY_BYTES = 64 * 1024
+MAX_SSH_KEYGEN_OUTPUT_BYTES = 16 * 1024
+SIGNING_POLICY_SCHEMA_VERSION = 2
+RELEASE_SIGNATURE_NAMESPACE = "kassiber-release"
+RELEASE_SIGNER_PRINCIPAL = "release@kassiber"
+RELEASE_SIGNATURE_SUFFIX = ".sig"
+MINIMUM_OPENSSH_VERSION = "8.1"
+SSH_KEYGEN_TIMEOUT_SECONDS = 30
 _MANIFEST_LINE = re.compile(
     r"(?P<sha256>[0-9a-f]{64})  (?P<filename>[A-Za-z0-9][A-Za-z0-9._+-]{0,254})"
 )
-_FINGERPRINT = re.compile(r"(?:[0-9A-F]{40}|[0-9A-F]{64})")
+_FINGERPRINT = re.compile(r"SHA256:[A-Za-z0-9+/]{43}")
 _MANIFEST_HEADER = "# Kassiber release manifest v1"
 _MANIFEST_VERSION_PREFIX = "# Version: "
-_REJECTED_SIGNATURE_STATUSES = frozenset(
-    {
-        "BADSIG",
-        "ERRSIG",
-        "EXPSIG",
-        "EXPKEYSIG",
-        "REVKEYSIG",
-        "KEYEXPIRED",
-        "KEYREVOKED",
-        "SIGEXPIRED",
-    }
+_SSH_SIGNATURE_HEADER = b"-----BEGIN SSH SIGNATURE-----"
+# Ed25519 now; an ed25519-sk hardware key later needs only new key material.
+_ACCEPTED_SSH_KEY_TYPES = frozenset({"ssh-ed25519", "sk-ssh-ed25519@openssh.com"})
+_ED25519_PUBLIC_KEY_BYTES = 32
+_GOOD_SIGNATURE = re.compile(
+    r"Good "
+    + re.escape(f'"{RELEASE_SIGNATURE_NAMESPACE}"')
+    + r" signature for "
+    + re.escape(RELEASE_SIGNER_PRINCIPAL)
+    + r" with [A-Z0-9-]+ key (?P<fingerprint>SHA256:[A-Za-z0-9+/]{43})"
 )
-_ACCEPTED_OPENPGP_HASH_ALGORITHMS = frozenset({"8", "9", "10", "11"})
+# ssh-keygen releases before 8.1 reject -Y as an unknown option and print usage.
+_UNSUPPORTED_SSH_KEYGEN = re.compile(
+    r"(?:unknown|illegal|invalid|unrecognized) option|usage: ssh-keygen",
+    re.IGNORECASE,
+)
 
 
 def normalize_fingerprint(value: str) -> str:
-    """Normalize a displayed OpenPGP fingerprint and require its full form."""
+    """Require a complete OpenSSH ``SHA256:`` key fingerprint."""
 
-    normalized = "".join(value.split()).upper()
+    normalized = value.strip() if isinstance(value, str) else ""
     if not _FINGERPRINT.fullmatch(normalized):
         raise AppError(
-            "OpenPGP fingerprint must be a full 40- or 64-character hexadecimal fingerprint",
+            "Release-key fingerprint must be a complete OpenSSH SHA256 fingerprint",
             code="invalid_release_fingerprint",
-            hint="Copy the complete Kassiber release-key fingerprint from an independent trusted source.",
+            hint=(
+                "Copy the complete SHA256:... Kassiber release-key fingerprint "
+                "from an independent trusted source."
+            ),
         )
     return normalized
+
+
+def _read_ssh_string(blob: bytes, offset: int) -> tuple[bytes, int]:
+    if offset + 4 > len(blob):
+        raise ValueError("truncated SSH key length")
+    length = int.from_bytes(blob[offset : offset + 4], "big")
+    start = offset + 4
+    end = start + length
+    if end > len(blob):
+        raise ValueError("truncated SSH key field")
+    return blob[start:end], end
+
+
+def _parse_key_fields(key_type: str, encoded: str) -> tuple[str, bytes]:
+    if key_type not in _ACCEPTED_SSH_KEY_TYPES:
+        raise ValueError("unsupported SSH key type")
+    try:
+        blob = base64.b64decode(encoded.encode("ascii"), validate=True)
+    except (UnicodeEncodeError, binascii.Error) as exc:
+        raise ValueError("invalid SSH key encoding") from exc
+    fields: list[bytes] = []
+    offset = 0
+    while offset < len(blob):
+        field, offset = _read_ssh_string(blob, offset)
+        fields.append(field)
+    expected_fields = 2 if key_type == "ssh-ed25519" else 3
+    if (
+        len(fields) != expected_fields
+        or fields[0] != key_type.encode("ascii")
+        or len(fields[1]) != _ED25519_PUBLIC_KEY_BYTES
+        or (expected_fields == 3 and not fields[2].startswith(b"ssh:"))
+    ):
+        raise ValueError("malformed SSH key")
+    return key_type, blob
+
+
+def _single_key_line(raw: bytes, *, label: str, code: str) -> str:
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError as exc:
+        raise AppError(
+            f"{label.capitalize()} is not an OpenSSH text file",
+            code=code,
+        ) from exc
+    lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    if len(lines) != 1:
+        raise AppError(
+            f"{label.capitalize()} must contain exactly one key entry",
+            code=code,
+        )
+    return lines[0]
+
+
+def parse_ssh_public_key(raw: bytes) -> tuple[str, bytes]:
+    """Parse one ``<type> <base64> [comment]`` OpenSSH public-key line."""
+
+    tokens = _single_key_line(
+        raw, label="release public key", code="invalid_release_public_key"
+    ).split()
+    if len(tokens) < 2:
+        raise AppError(
+            "Release public key is not an OpenSSH public key",
+            code="invalid_release_public_key",
+        )
+    try:
+        return _parse_key_fields(tokens[0], tokens[1])
+    except ValueError as exc:
+        raise AppError(
+            "Release public key must be one OpenSSH Ed25519 or Ed25519-SK public key",
+            code="invalid_release_public_key",
+        ) from exc
+
+
+def ssh_key_fingerprint(blob: bytes) -> str:
+    """Return the OpenSSH ``SHA256:`` fingerprint of a public-key blob."""
+
+    digest = hashlib.sha256(blob).digest()
+    return "SHA256:" + base64.b64encode(digest).decode("ascii").rstrip("=")
+
+
+def ssh_public_key_fingerprint(raw: bytes) -> str:
+    return ssh_key_fingerprint(parse_ssh_public_key(raw)[1])
+
+
+def allowed_signers_entry(key_type: str, blob: bytes) -> str:
+    """Render the only allowed_signers entry Kassiber trusts for releases."""
+
+    encoded = base64.b64encode(blob).decode("ascii")
+    return (
+        f'{RELEASE_SIGNER_PRINCIPAL} namespaces="{RELEASE_SIGNATURE_NAMESPACE}" '
+        f"{key_type} {encoded}\n"
+    )
+
+
+def _parse_allowed_signers(raw: bytes) -> tuple[str, bytes]:
+    tokens = _single_key_line(
+        raw, label="release allowed_signers file", code="invalid_release_signing_policy"
+    ).split()
+    if (
+        len(tokens) < 4
+        or tokens[0] != RELEASE_SIGNER_PRINCIPAL
+        or tokens[1] != f'namespaces="{RELEASE_SIGNATURE_NAMESPACE}"'
+    ):
+        raise AppError(
+            "Release allowed_signers entry must name only the release principal and namespace",
+            code="invalid_release_signing_policy",
+        )
+    try:
+        return _parse_key_fields(tokens[2], tokens[3])
+    except ValueError as exc:
+        raise AppError(
+            "Release allowed_signers entry has no valid OpenSSH Ed25519 key",
+            code="invalid_release_signing_policy",
+        ) from exc
+
+
+def _policy_path(root: Path, value: str, *, label: str) -> Path:
+    relative = Path(value)
+    if relative.is_absolute():
+        raise AppError(
+            f"Release {label} path must be repository-relative",
+            code="invalid_release_signing_policy",
+        )
+    resolved = (root / relative).resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise AppError(
+            f"Release {label} path escapes the repository",
+            code="invalid_release_signing_policy",
+        ) from exc
+    return resolved
 
 
 def load_release_signing_policy(
@@ -71,7 +226,11 @@ def load_release_signing_policy(
     repository_root: str | os.PathLike[str],
     require_enabled: bool = False,
 ) -> dict[str, object]:
-    """Load the code-reviewed release trust root used by publication jobs."""
+    """Load the code-reviewed release trust root used by publication jobs.
+
+    An enabled policy must pin a fingerprint that matches both the committed
+    public key and the committed ``allowed_signers`` entry.
+    """
 
     policy_path = Path(path).expanduser()
     raw = _require_small_regular_file(
@@ -86,39 +245,51 @@ def load_release_signing_policy(
             "Release signing policy is not valid JSON",
             code="invalid_release_signing_policy",
         ) from exc
-    if not _has_exact_schema_version(payload, 1):
+    if not _has_exact_schema_version(payload, SIGNING_POLICY_SCHEMA_VERSION):
         raise AppError(
             "Release signing policy has no supported schema",
             code="invalid_release_signing_policy",
         )
     enabled = payload.get("enabled")
-    fingerprint = payload.get("primary_fingerprint")
+    fingerprint = payload.get("fingerprint")
+    namespace = payload.get("namespace")
+    principal = payload.get("principal")
     public_key_value = payload.get("public_key_path")
+    allowed_signers_value = payload.get("allowed_signers_path")
     if (
         not isinstance(enabled, bool)
         or not isinstance(fingerprint, str)
         or not isinstance(public_key_value, str)
         or not public_key_value
+        or not isinstance(allowed_signers_value, str)
+        or not allowed_signers_value
     ):
         raise AppError(
             "Release signing policy fields are invalid",
             code="invalid_release_signing_policy",
         )
-    root = Path(repository_root).expanduser().resolve()
-    public_key_relative = Path(public_key_value)
-    if public_key_relative.is_absolute():
+    if namespace != RELEASE_SIGNATURE_NAMESPACE or principal != RELEASE_SIGNER_PRINCIPAL:
         raise AppError(
-            "Release public key path must be repository-relative",
+            "Release signing policy must use the Kassiber release namespace and principal",
             code="invalid_release_signing_policy",
+            details={
+                "expected_namespace": RELEASE_SIGNATURE_NAMESPACE,
+                "expected_principal": RELEASE_SIGNER_PRINCIPAL,
+            },
         )
-    public_key_path = (root / public_key_relative).resolve()
-    try:
-        public_key_path.relative_to(root)
-    except ValueError as exc:
-        raise AppError(
-            "Release public key path escapes the repository",
-            code="invalid_release_signing_policy",
-        ) from exc
+    root = Path(repository_root).expanduser().resolve()
+    public_key_path = _policy_path(root, public_key_value, label="public key")
+    allowed_signers_path = _policy_path(
+        root, allowed_signers_value, label="allowed_signers"
+    )
+    result: dict[str, object] = {
+        "enabled": enabled,
+        "fingerprint": "",
+        "namespace": RELEASE_SIGNATURE_NAMESPACE,
+        "principal": RELEASE_SIGNER_PRINCIPAL,
+        "public_key_path": str(public_key_path),
+        "allowed_signers_path": str(allowed_signers_path),
+    }
     if not enabled:
         if fingerprint.strip():
             raise AppError(
@@ -129,25 +300,41 @@ def load_release_signing_policy(
             raise AppError(
                 "Signed release publication is not enabled",
                 code="release_signing_not_enabled",
-                hint="Complete the offline key ceremony and enable the code-reviewed signing policy first.",
+                hint="Publish the release key and enable the code-reviewed signing policy first.",
             )
-        return {
-            "enabled": False,
-            "primary_fingerprint": "",
-            "public_key_path": str(public_key_path),
-        }
+        return result
 
     normalized = normalize_fingerprint(fingerprint)
-    _require_small_regular_file(
-        public_key_path,
-        limit=MAX_PUBLIC_KEY_BYTES,
-        label="release public key",
+    public_key_type, public_key_blob = parse_ssh_public_key(
+        _require_small_regular_file(
+            public_key_path,
+            limit=MAX_PUBLIC_KEY_BYTES,
+            label="release public key",
+        )
     )
-    return {
-        "enabled": True,
-        "primary_fingerprint": normalized,
-        "public_key_path": str(public_key_path),
-    }
+    if not hmac.compare_digest(ssh_key_fingerprint(public_key_blob), normalized):
+        raise AppError(
+            "Release public key does not match the pinned policy fingerprint",
+            code="invalid_release_signing_policy",
+            details={"expected_fingerprint": normalized},
+        )
+    allowed_type, allowed_blob = _parse_allowed_signers(
+        _require_small_regular_file(
+            allowed_signers_path,
+            limit=MAX_PUBLIC_KEY_BYTES,
+            label="release allowed_signers file",
+        )
+    )
+    if allowed_type != public_key_type or not hmac.compare_digest(
+        allowed_blob, public_key_blob
+    ):
+        raise AppError(
+            "Release allowed_signers key does not match the pinned public key",
+            code="invalid_release_signing_policy",
+            details={"expected_fingerprint": normalized},
+        )
+    result["fingerprint"] = normalized
+    return result
 
 
 def _open_regular_file(path: Path, *, label: str):
@@ -380,7 +567,7 @@ def _verify_release_artifact_entries(
             code="release_verification_file_error",
         )
 
-    metadata_names = {manifest_name, f"{manifest_name}.asc"}
+    metadata_names = {manifest_name, f"{manifest_name}{RELEASE_SIGNATURE_SUFFIX}"}
     actual_names: set[str] = set()
     try:
         candidates = list(release_dir.iterdir())
@@ -473,229 +660,192 @@ def verify_release_artifacts(
     )
 
 
-def _gpg_command(executable: str | None) -> str:
-    candidate = executable or shutil.which("gpg")
+def ssh_keygen_command(executable: str | None = None) -> str:
+    candidate = executable or shutil.which("ssh-keygen")
     if not candidate:
         raise AppError(
-            "GnuPG is required to verify this OpenPGP release signature",
-            code="gpg_unavailable",
-            hint="Install GnuPG, then run kassiber verify-download again.",
+            "OpenSSH's ssh-keygen is required to verify this release signature",
+            code="ssh_keygen_unavailable",
+            hint=(
+                f"Install OpenSSH {MINIMUM_OPENSSH_VERSION} or newer, "
+                "then run kassiber verify-download again."
+            ),
         )
     return candidate
 
 
-def _gpgv_command(gpg_executable: str) -> str:
-    gpg_path = Path(gpg_executable)
-    sibling_name = "gpgv.exe" if gpg_path.suffix.lower() == ".exe" else "gpgv"
-    sibling = gpg_path.with_name(sibling_name)
-    if sibling.is_file():
-        return str(sibling)
-    candidate = shutil.which(sibling_name)
-    if not candidate:
-        raise AppError(
-            "GnuPG's gpgv verifier is required to verify this release signature",
-            code="gpg_unavailable",
-            hint="Install the complete GnuPG package, then run kassiber verify-download again.",
-        )
-    return candidate
+def _bounded_text(value: bytes | None) -> str:
+    return (value or b"")[: MAX_SSH_KEYGEN_OUTPUT_BYTES].decode("utf-8", errors="replace")
 
 
-def _run_gpg(command: list[str], *, operation: str) -> subprocess.CompletedProcess[str]:
-    try:
-        return subprocess.run(
-            command,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            encoding="utf-8",
-            errors="replace",
-            timeout=30,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise AppError(
-            f"GnuPG could not {operation}",
-            code="release_signature_verification_failed",
-        ) from exc
+def ssh_keygen_output_is_unsupported(output: str) -> bool:
+    """Whether ssh-keygen rejected ``-Y`` because it predates OpenSSH 8.1."""
+
+    return _UNSUPPORTED_SSH_KEYGEN.search(output) is not None
 
 
-def _primary_fingerprints(colon_output: str) -> set[str]:
-    fingerprints: set[str] = set()
-    awaiting_primary = False
-    for line in colon_output.splitlines():
-        fields = line.split(":")
-        record_type = fields[0] if fields else ""
-        if record_type == "pub":
-            awaiting_primary = True
-        elif record_type == "sub":
-            awaiting_primary = False
-        elif record_type == "fpr" and awaiting_primary and len(fields) > 9:
-            fingerprints.add(fields[9].upper())
-            awaiting_primary = False
-    return fingerprints
+def _unsupported_ssh_keygen_error() -> AppError:
+    return AppError(
+        f"This ssh-keygen cannot verify OpenSSH signatures (OpenSSH {MINIMUM_OPENSSH_VERSION} or newer is required)",
+        code="ssh_keygen_unsupported",
+        hint=(
+            f"Install OpenSSH {MINIMUM_OPENSSH_VERSION} or newer, "
+            "then run kassiber verify-download again."
+        ),
+    )
 
 
-def valid_signature_fingerprints(status_output: str) -> set[str]:
-    fingerprints: set[str] = set()
-    for line in status_output.splitlines():
-        if not line.startswith("[GNUPG:] VALIDSIG "):
-            continue
-        fields = line.split()
-        if len(fields) >= 3:
-            fingerprints.add(fields[2].upper())
-        # GnuPG appends the primary-key fingerprint for subkey signatures.
-        if len(fields) >= 12 and _FINGERPRINT.fullmatch(fields[-1].upper()):
-            fingerprints.add(fields[-1].upper())
-    return fingerprints
-
-
-def signature_status_has_failure(status_output: str) -> bool:
-    for line in status_output.splitlines():
-        if not line.startswith("[GNUPG:] "):
-            continue
-        fields = line.split()
-        if len(fields) >= 2 and fields[1] in _REJECTED_SIGNATURE_STATUSES:
-            return True
-        if (
-            len(fields) >= 10
-            and fields[1] == "VALIDSIG"
-            and fields[9] not in _ACCEPTED_OPENPGP_HASH_ALGORITHMS
-        ):
-            return True
-    return False
-
-
-def _verify_openpgp_signature_bytes(
+def verify_signature_bytes(
     manifest_bytes: bytes,
     signature_bytes: bytes,
     public_key_bytes: bytes,
     expected_fingerprint: str,
     *,
-    gpg_executable: str | None = None,
+    ssh_keygen_executable: str | None = None,
 ) -> str:
-    expected = normalize_fingerprint(expected_fingerprint)
-    gpg = _gpg_command(gpg_executable)
-    gpgv = _gpgv_command(gpg)
+    """Verify a detached OpenSSH signature over manifest bytes.
 
-    with tempfile.TemporaryDirectory(prefix="kassiber-gpg-") as temporary_home:
-        home = Path(temporary_home)
-        home.chmod(0o700)
-        manifest_path = home / "release-manifest.txt"
-        signature_path = home / "release-manifest.txt.asc"
-        public_key_path = home / "release-public-key.asc"
-        keyring_path = home / "release-public-key.gpg"
-        manifest_path.write_bytes(manifest_bytes)
+    The supplied key must hash to ``expected_fingerprint`` before
+    ``ssh-keygen`` sees it; the fingerprint is the root of trust.
+    """
+
+    expected = normalize_fingerprint(expected_fingerprint)
+    key_type, blob = parse_ssh_public_key(public_key_bytes)
+    if not hmac.compare_digest(ssh_key_fingerprint(blob), expected):
+        raise AppError(
+            "Release public key does not match the expected fingerprint",
+            code="release_fingerprint_mismatch",
+            hint="Obtain the public key and full fingerprint again from independent trusted sources.",
+            details={"expected_fingerprint": expected},
+        )
+    if not signature_bytes.lstrip().startswith(_SSH_SIGNATURE_HEADER):
+        raise AppError(
+            "Release signature is not a detached OpenSSH signature",
+            code="release_signature_verification_failed",
+            hint="Do not install or run the release artifact.",
+            details={"expected_fingerprint": expected},
+        )
+    ssh_keygen = ssh_keygen_command(ssh_keygen_executable)
+
+    with tempfile.TemporaryDirectory(prefix="kassiber-sshsig-") as temporary:
+        workspace = Path(temporary)
+        workspace.chmod(0o700)
+        allowed_signers_path = workspace / "allowed_signers"
+        signature_path = workspace / f"release-manifest.txt{RELEASE_SIGNATURE_SUFFIX}"
+        allowed_signers_path.write_text(
+            allowed_signers_entry(key_type, blob),
+            encoding="ascii",
+            newline="\n",
+        )
         signature_path.write_bytes(signature_bytes)
-        public_key_path.write_bytes(public_key_bytes)
-        common = [
-            gpg,
-            "--no-options",
-            "--no-auto-key-retrieve",
-            "--batch",
-            "--no-tty",
-            "--homedir",
-            str(home),
-        ]
-        listed = _run_gpg(
-            [
-                *common,
-                "--with-colons",
-                "--fingerprint",
-                "--show-keys",
-                str(public_key_path),
-            ],
-            operation="inspect the release public key",
-        )
-        if listed.returncode != 0 or expected not in _primary_fingerprints(listed.stdout):
-            raise AppError(
-                "Release public key does not match the expected fingerprint",
-                code="release_fingerprint_mismatch",
-                hint="Obtain the public key and full fingerprint again from independent trusted sources.",
-                details={"expected_fingerprint": expected},
+        try:
+            completed = subprocess.run(
+                [
+                    ssh_keygen,
+                    "-Y",
+                    "verify",
+                    "-f",
+                    str(allowed_signers_path),
+                    "-I",
+                    RELEASE_SIGNER_PRINCIPAL,
+                    "-n",
+                    RELEASE_SIGNATURE_NAMESPACE,
+                    "-s",
+                    str(signature_path),
+                ],
+                input=manifest_bytes,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=SSH_KEYGEN_TIMEOUT_SECONDS,
+                check=False,
             )
-        dearmored = _run_gpg(
-            [
-                *common,
-                "--yes",
-                "--dearmor",
-                "--output",
-                str(keyring_path),
-                str(public_key_path),
-            ],
-            operation="prepare the release public key",
-        )
-        if dearmored.returncode != 0:
+        except (OSError, subprocess.TimeoutExpired) as exc:
             raise AppError(
-                "Could not prepare the release public key",
-                code="invalid_release_public_key",
-            )
-        verified = _run_gpg(
-            [
-                gpgv,
-                "--status-fd",
-                "1",
-                "--keyring",
-                str(keyring_path),
-                str(signature_path),
-                str(manifest_path),
-            ],
-            operation="verify the release signature",
-        )
-        valid_fingerprints = valid_signature_fingerprints(verified.stdout)
-        if (
-            verified.returncode != 0
-            or signature_status_has_failure(verified.stdout)
-            or expected not in valid_fingerprints
-        ):
-            raise AppError(
-                "Release manifest has no valid signature from the expected Kassiber release key",
+                "ssh-keygen could not verify the release signature",
                 code="release_signature_verification_failed",
                 hint="Do not install or run the release artifact.",
                 details={"expected_fingerprint": expected},
-            )
-    return expected
+            ) from exc
+
+    stdout = _bounded_text(completed.stdout)
+    stderr = _bounded_text(completed.stderr)
+    signed_by = {
+        match.group("fingerprint")
+        for line in stdout.splitlines()
+        if (match := _GOOD_SIGNATURE.fullmatch(line.strip()))
+    }
+    if completed.returncode == 0 and signed_by == {expected}:
+        return expected
+    if completed.returncode != 0 and ssh_keygen_output_is_unsupported(f"{stdout}\n{stderr}"):
+        raise _unsupported_ssh_keygen_error()
+    raise AppError(
+        "Release manifest has no valid signature from the expected Kassiber release key",
+        code="release_signature_verification_failed",
+        hint="Do not install or run the release artifact.",
+        details={"expected_fingerprint": expected},
+    )
 
 
-def verify_openpgp_signature(
+def _read_signed_inputs(
+    manifest_path: Path,
+    signature_path: Path,
+    public_key_path: Path,
+) -> tuple[bytes, bytes, bytes]:
+    return (
+        _require_small_regular_file(
+            manifest_path,
+            limit=MAX_MANIFEST_BYTES,
+            label="release manifest",
+        ),
+        _require_small_regular_file(
+            signature_path,
+            limit=MAX_SIGNATURE_BYTES,
+            label="release signature",
+        ),
+        _require_small_regular_file(
+            public_key_path,
+            limit=MAX_PUBLIC_KEY_BYTES,
+            label="release public key",
+        ),
+    )
+
+
+def verify_manifest_signature(
     manifest: str | os.PathLike[str],
     signature: str | os.PathLike[str],
     public_key: str | os.PathLike[str],
     expected_fingerprint: str,
     *,
-    gpg_executable: str | None = None,
+    ssh_keygen_executable: str | None = None,
 ) -> str:
-    """Verify a detached signature in an isolated keyring, pinned by fingerprint."""
+    """Verify a detached manifest signature, pinned by key fingerprint."""
 
     manifest_path = Path(manifest).expanduser()
-    signature_path = Path(signature).expanduser()
-    public_key_path = Path(public_key).expanduser()
-    manifest_bytes = _require_small_regular_file(
+    manifest_bytes, signature_bytes, public_key_bytes = _read_signed_inputs(
         manifest_path,
-        limit=MAX_MANIFEST_BYTES,
-        label="release manifest",
-    )
-    signature_bytes = _require_small_regular_file(
-        signature_path,
-        limit=MAX_SIGNATURE_BYTES,
-        label="release signature",
-    )
-    public_key_bytes = _require_small_regular_file(
-        public_key_path,
-        limit=MAX_PUBLIC_KEY_BYTES,
-        label="release public key",
+        Path(signature).expanduser(),
+        Path(public_key).expanduser(),
     )
     _parse_release_manifest_bytes(
         manifest_bytes,
         source=str(manifest_path),
         expected_version=_release_version_from_manifest_name(manifest_path.name),
     )
-    return _verify_openpgp_signature_bytes(
+    return verify_signature_bytes(
         manifest_bytes,
         signature_bytes,
         public_key_bytes,
         expected_fingerprint,
-        gpg_executable=gpg_executable,
+        ssh_keygen_executable=ssh_keygen_executable,
     )
+
+
+def _signature_result(signer: str) -> dict[str, str]:
+    return {
+        "signer_fingerprint": signer,
+        "signer_principal": RELEASE_SIGNER_PRINCIPAL,
+        "signature_namespace": RELEASE_SIGNATURE_NAMESPACE,
+    }
 
 
 def verify_download(
@@ -705,34 +855,23 @@ def verify_download(
     public_key: str | os.PathLike[str],
     expected_fingerprint: str,
     *,
-    gpg_executable: str | None = None,
+    ssh_keygen_executable: str | None = None,
 ) -> dict[str, object]:
     """Authenticate the manifest first, then verify the selected artifact hash."""
 
     manifest_path = Path(manifest).expanduser()
     signature_path = Path(signature).expanduser()
-    public_key_path = Path(public_key).expanduser()
-    manifest_bytes = _require_small_regular_file(
+    manifest_bytes, signature_bytes, public_key_bytes = _read_signed_inputs(
         manifest_path,
-        limit=MAX_MANIFEST_BYTES,
-        label="release manifest",
-    )
-    signature_bytes = _require_small_regular_file(
         signature_path,
-        limit=MAX_SIGNATURE_BYTES,
-        label="release signature",
+        Path(public_key).expanduser(),
     )
-    public_key_bytes = _require_small_regular_file(
-        public_key_path,
-        limit=MAX_PUBLIC_KEY_BYTES,
-        label="release public key",
-    )
-    signer = _verify_openpgp_signature_bytes(
+    signer = verify_signature_bytes(
         manifest_bytes,
         signature_bytes,
         public_key_bytes,
         expected_fingerprint,
-        gpg_executable=gpg_executable,
+        ssh_keygen_executable=ssh_keygen_executable,
     )
     entries = _parse_release_manifest_bytes(
         manifest_bytes,
@@ -749,7 +888,7 @@ def verify_download(
         **artifact_result,
         "manifest": manifest_path.name,
         "signature": signature_path.name,
-        "signer_fingerprint": signer,
+        **_signature_result(signer),
     }
 
 
@@ -760,7 +899,7 @@ def verify_release_directory(
     public_key: str | os.PathLike[str],
     expected_fingerprint: str,
     *,
-    gpg_executable: str | None = None,
+    ssh_keygen_executable: str | None = None,
     require_complete: bool = True,
 ) -> dict[str, object]:
     """Authenticate a complete release set before any publication step."""
@@ -768,7 +907,6 @@ def verify_release_directory(
     release_path = Path(release_dir).expanduser()
     manifest_path = Path(manifest).expanduser()
     signature_path = Path(signature).expanduser()
-    public_key_path = Path(public_key).expanduser()
     try:
         metadata_is_local = (
             manifest_path.parent.resolve() == release_path.resolve()
@@ -781,32 +919,22 @@ def verify_release_directory(
             "Release manifest and signature must be inside the release directory",
             code="release_artifact_set_mismatch",
         )
-    if signature_path.name != f"{manifest_path.name}.asc":
+    if signature_path.name != f"{manifest_path.name}{RELEASE_SIGNATURE_SUFFIX}":
         raise AppError(
             "Release signature filename does not match the manifest",
             code="release_artifact_set_mismatch",
         )
-    manifest_bytes = _require_small_regular_file(
+    manifest_bytes, signature_bytes, public_key_bytes = _read_signed_inputs(
         manifest_path,
-        limit=MAX_MANIFEST_BYTES,
-        label="release manifest",
-    )
-    signature_bytes = _require_small_regular_file(
         signature_path,
-        limit=MAX_SIGNATURE_BYTES,
-        label="release signature",
+        Path(public_key).expanduser(),
     )
-    public_key_bytes = _require_small_regular_file(
-        public_key_path,
-        limit=MAX_PUBLIC_KEY_BYTES,
-        label="release public key",
-    )
-    signer = _verify_openpgp_signature_bytes(
+    signer = verify_signature_bytes(
         manifest_bytes,
         signature_bytes,
         public_key_bytes,
         expected_fingerprint,
-        gpg_executable=gpg_executable,
+        ssh_keygen_executable=ssh_keygen_executable,
     )
     entries = _parse_release_manifest_bytes(
         manifest_bytes,
@@ -822,7 +950,7 @@ def verify_release_directory(
     return {
         **result,
         "signature": signature_path.name,
-        "signer_fingerprint": signer,
+        **_signature_result(signer),
     }
 
 
@@ -841,7 +969,7 @@ def generate_release_manifest(
             code="release_verification_file_error",
         )
     output = directory / release_manifest_name(version)
-    excluded = set(excluded_names) | {output.name, f"{output.name}.asc"}
+    excluded = set(excluded_names) | {output.name, f"{output.name}{RELEASE_SIGNATURE_SUFFIX}"}
     artifacts: list[Path] = []
     for candidate in directory.iterdir():
         if candidate.name in excluded:

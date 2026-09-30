@@ -145,22 +145,25 @@ decide whether to show a release link. It never treats the response as
 permission to download or execute anything.
 
 The release workflow generates a Sparrow-style versioned SHA-256 manifest, and
-`kassiber verify-download` can authenticate a detached OpenPGP signature before
-checking an artifact hash. No permanent Kassiber release public key or
-fingerprint has been published yet, so current manifests and packages remain
-unauthenticated. During this transition the verifier requires both a local
-public-key file and the full primary-key fingerprint obtained independently. It
-inspects and dearmors the key into a temporary isolated keyring, performs no
-network lookup, pins the full fingerprint, verifies the manifest with `gpgv`,
-and only then hashes the selected artifact. See
-[release signing](release-signing.md).
+`kassiber verify-download` authenticates its detached OpenSSH signature before
+checking an artifact hash. Releases published before the SSH release key
+(`SHA256:UzYeHzOEIbanmYDAylIaGhI6dGFvhNOkszPXwUgzo9M`) carry no signature and
+remain unauthenticated. The verifier requires both a local public-key file and
+the full SHA256 fingerprint obtained independently; packaged builds do not
+embed the key. It hashes the key in Python and pins the fingerprint, writes one
+canonical allowed-signers entry to a private temporary directory, runs
+`ssh-keygen -Y verify` locally without a shell or network lookup, and only then
+hashes the selected artifact. See [release signing](release-signing.md).
 
 Release finalization and external Linux channel publication use the same
-code-reviewed public key and primary fingerprint once that policy is enabled.
-The general release private key never enters CI. A separate protected archive
-key signs mutable APT/DNF metadata and RPMs; it has a distinct primary identity
-so compromise of that CI-held subkey cannot authenticate a general release
-manifest.
+code-reviewed public key and fingerprint from the enabled signing policy. The
+release private key never enters CI; it stays in the owner's password-manager
+vault and signs only through its SSH agent with per-use approval. The owner
+accepted on 2026-09-30 that this key is not offline, so a compromised vault
+account or unlocked workstation could forge a release signature. A separate
+protected OpenPGP archive key signs mutable APT/DNF metadata and RPMs. It
+cannot produce a release-manifest signature, and the channel workflow refuses
+an archive key that reuses the release key material.
 
 On Linux, the update checker treats `.deb`/`.rpm` installs as manual and shows
 the GitHub release link with no `apt`/`dnf` command. Package contents cannot

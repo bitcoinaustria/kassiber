@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Generate and offline-sign Sparrow-style Kassiber release manifests."""
+"""Generate, SSH-sign, and verify Sparrow-style Kassiber release manifests."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -17,112 +16,167 @@ if str(ROOT) not in sys.path:
 
 from kassiber.errors import AppError
 from kassiber.release_verification import (
+    MAX_MANIFEST_BYTES,
+    MAX_PUBLIC_KEY_BYTES,
+    MAX_SIGNATURE_BYTES,
+    RELEASE_SIGNATURE_NAMESPACE,
+    RELEASE_SIGNATURE_SUFFIX,
+    _require_small_regular_file,
     generate_release_manifest,
     load_release_signing_policy,
     normalize_fingerprint,
     parse_release_manifest,
-    signature_status_has_failure,
-    valid_signature_fingerprints,
+    ssh_keygen_command,
+    ssh_keygen_output_is_unsupported,
+    ssh_public_key_fingerprint,
     verify_release_artifacts,
     verify_release_directory,
+    verify_signature_bytes,
 )
 
-
-def _gpg_executable(value: str | None) -> str:
-    executable = value or shutil.which("gpg")
-    if not executable:
-        raise AppError(
-            "GnuPG is required to sign a release manifest",
-            code="gpg_unavailable",
-        )
-    return executable
+DEFAULT_POLICY = ROOT / "packaging" / "release" / "signing-policy.json"
+# Generous: the Bitwarden SSH agent waits for a per-use approval click.
+SIGNING_TIMEOUT_SECONDS = 600
 
 
-def _run_capture(command: list[str]) -> subprocess.CompletedProcess[str]:
+def _install_signature(temporary: Path, signature: Path, *, overwrite: bool) -> None:
+    if overwrite:
+        os.replace(temporary, signature)
+        return
     try:
-        return subprocess.run(
-            command,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            encoding="utf-8",
-            errors="replace",
-            timeout=30,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+        # Atomic no-clobber publication: fails if the signature appeared meanwhile.
+        os.link(temporary, signature)
+    except FileExistsError as exc:
         raise AppError(
-            "GnuPG could not inspect the release signing key",
+            f"Signature already exists: {signature}",
+            code="release_signature_exists",
+            hint="Pass --overwrite only when intentionally replacing this signature.",
+        ) from exc
+    except OSError as exc:
+        raise AppError(
+            f"Could not write release signature: {signature}",
             code="release_signing_failed",
         ) from exc
 
 
 def sign_manifest(
     manifest: Path,
-    fingerprint: str,
+    public_key: Path,
+    expected_fingerprint: str,
     *,
+    signing_key: Path | None = None,
     output: Path | None = None,
-    gpg_executable: str | None = None,
+    ssh_keygen_executable: str | None = None,
     overwrite: bool = False,
 ) -> Path:
-    """Sign a manifest with an exact full-fingerprint key selection."""
+    """Sign a manifest with the pinned SSH release key.
 
-    expected = normalize_fingerprint(fingerprint)
+    ``public_key`` must hash to ``expected_fingerprint`` before anything is
+    signed. By default ``ssh-keygen -Y sign`` receives that public key and
+    asks the agent in ``SSH_AUTH_SOCK`` for the matching private key.
+    ``signing_key`` exists for tests that sign with a throwaway private key.
+    """
+
+    expected = normalize_fingerprint(expected_fingerprint)
+    public_key_bytes = _require_small_regular_file(
+        public_key,
+        limit=MAX_PUBLIC_KEY_BYTES,
+        label="release public key",
+    )
+    if ssh_public_key_fingerprint(public_key_bytes) != expected:
+        raise AppError(
+            "Release public key does not match the pinned policy fingerprint",
+            code="release_fingerprint_mismatch",
+            hint="Select the Kassiber release public key named in the signing policy.",
+            details={"expected_fingerprint": expected},
+        )
     parse_release_manifest(manifest)
-    signature = output or manifest.with_name(f"{manifest.name}.asc")
+    manifest_bytes = _require_small_regular_file(
+        manifest,
+        limit=MAX_MANIFEST_BYTES,
+        label="release manifest",
+    )
+    signature = output or manifest.with_name(f"{manifest.name}{RELEASE_SIGNATURE_SUFFIX}")
     if signature.exists() and not overwrite:
         raise AppError(
             f"Signature already exists: {signature}",
             code="release_signature_exists",
             hint="Pass --overwrite only when intentionally replacing this signature.",
         )
-    gpg = _gpg_executable(gpg_executable)
+    ssh_keygen = ssh_keygen_command(ssh_keygen_executable)
+    # -U makes ssh-keygen use only the agent key: it must never fall back to a
+    # private-key file that happens to sit next to the release .pub.
+    key_source = ["-f", str(signing_key)] if signing_key else ["-U", "-f", str(public_key)]
+    try:
+        # The manifest goes over stdin and the signature comes back on stdout,
+        # so ssh-keygen never names, prompts for, or overwrites a file itself.
+        completed = subprocess.run(
+            [
+                ssh_keygen,
+                "-Y",
+                "sign",
+                "-n",
+                RELEASE_SIGNATURE_NAMESPACE,
+                *key_source,
+            ],
+            input=manifest_bytes,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=SIGNING_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise AppError(
+            "ssh-keygen could not sign the release manifest",
+            code="release_signing_failed",
+        ) from exc
+    signature_bytes = completed.stdout or b""
+    if completed.returncode != 0 or not signature_bytes:
+        stderr = (completed.stderr or b"")[:4096].decode("utf-8", errors="replace")
+        if ssh_keygen_output_is_unsupported(stderr):
+            raise AppError(
+                "This ssh-keygen cannot create OpenSSH signatures",
+                code="ssh_keygen_unsupported",
+                hint="Install OpenSSH 8.1 or newer.",
+            )
+        raise AppError(
+            "ssh-keygen could not sign the release manifest",
+            code="release_signing_failed",
+            hint="Check that SSH_AUTH_SOCK points at the agent holding the release key and approve the request.",
+        )
+    if len(signature_bytes) > MAX_SIGNATURE_BYTES:
+        raise AppError(
+            "ssh-keygen produced an unexpectedly large signature",
+            code="release_signing_failed",
+        )
+    try:
+        verify_signature_bytes(
+            manifest_bytes,
+            signature_bytes,
+            public_key_bytes,
+            expected,
+            ssh_keygen_executable=ssh_keygen,
+        )
+    except AppError as exc:
+        raise AppError(
+            "The new release signature did not verify against the pinned fingerprint",
+            code="release_signing_failed",
+            details={"expected_fingerprint": expected, "verification_error": exc.code},
+        ) from exc
+
     temporary = signature.with_name(f".{signature.name}.{os.getpid()}.tmp")
     temporary.unlink(missing_ok=True)
     try:
-        completed = subprocess.run(
-            [
-                gpg,
-                "--armor",
-                "--detach-sign",
-                "--digest-algo",
-                "SHA512",
-                "--local-user",
-                expected,
-                "--output",
-                str(temporary),
-                str(manifest),
-            ],
-            check=False,
-        )
-        if completed.returncode != 0:
-            raise AppError(
-                "GnuPG could not sign the release manifest",
-                code="release_signing_failed",
-            )
-        verified = _run_capture(
-            [
-                gpg,
-                "--batch",
-                "--no-auto-key-retrieve",
-                "--status-fd",
-                "1",
-                "--verify",
-                str(temporary),
-                str(manifest),
-            ]
-        )
-        if (
-            verified.returncode != 0
-            or signature_status_has_failure(verified.stdout)
-            or expected not in valid_signature_fingerprints(verified.stdout)
-        ):
-            raise AppError(
-                "The new release signature did not verify against the expected fingerprint",
-                code="release_signing_failed",
-                details={"expected_fingerprint": expected},
-            )
-        os.replace(temporary, signature)
+        with temporary.open("xb") as handle:
+            handle.write(signature_bytes)
+            handle.flush()
+            os.fsync(handle.fileno())
+        _install_signature(temporary, signature, overwrite=overwrite)
+    except OSError as exc:
+        raise AppError(
+            f"Could not write release signature: {signature}",
+            code="release_signing_failed",
+        ) from exc
     finally:
         temporary.unlink(missing_ok=True)
     return signature
@@ -137,11 +191,20 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument("--version", required=True)
     generate.add_argument("--exclude", action="append", default=[])
 
-    sign = subparsers.add_parser("sign", help="Create an ASCII-armored detached OpenPGP signature")
+    sign = subparsers.add_parser(
+        "sign",
+        help="Create a detached OpenSSH signature with the release key from SSH_AUTH_SOCK",
+    )
     sign.add_argument("--manifest", required=True, type=Path)
-    sign.add_argument("--fingerprint", required=True)
+    sign.add_argument(
+        "--public-key",
+        required=True,
+        type=Path,
+        help="Release public key (.pub); its private key must be in the SSH agent",
+    )
+    sign.add_argument("--policy", type=Path, default=DEFAULT_POLICY)
     sign.add_argument("--output", type=Path)
-    sign.add_argument("--gpg")
+    sign.add_argument("--ssh-keygen")
     sign.add_argument("--overwrite", action="store_true")
 
     verify_artifacts = subparsers.add_parser(
@@ -161,7 +224,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify_release.add_argument("--signature", required=True, type=Path)
     verify_release.add_argument("--public-key", required=True, type=Path)
     verify_release.add_argument("--fingerprint", required=True)
-    verify_release.add_argument("--gpg")
+    verify_release.add_argument("--ssh-keygen")
     verify_release.add_argument("--allow-subset", action="store_true")
 
     policy = subparsers.add_parser(
@@ -184,17 +247,24 @@ def main(argv: list[str] | None = None) -> int:
             )
             payload = {"manifest": str(path), "entries": len(parse_release_manifest(path))}
         elif args.command == "sign":
+            policy = load_release_signing_policy(
+                args.policy,
+                repository_root=ROOT,
+                require_enabled=True,
+            )
+            fingerprint = str(policy["fingerprint"])
             path = sign_manifest(
                 args.manifest,
-                args.fingerprint,
+                args.public_key.expanduser(),
+                fingerprint,
                 output=args.output,
-                gpg_executable=args.gpg,
+                ssh_keygen_executable=args.ssh_keygen,
                 overwrite=args.overwrite,
             )
             payload = {
                 "manifest": str(args.manifest),
                 "signature": str(path),
-                "signer_fingerprint": normalize_fingerprint(args.fingerprint),
+                "signer_fingerprint": fingerprint,
             }
         elif args.command == "verify-artifacts":
             payload = verify_release_artifacts(
@@ -209,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.signature,
                 args.public_key,
                 args.fingerprint,
-                gpg_executable=args.gpg,
+                ssh_keygen_executable=args.ssh_keygen,
                 require_complete=not args.allow_subset,
             )
         else:
