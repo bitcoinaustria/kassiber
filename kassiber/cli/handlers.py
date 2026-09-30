@@ -145,11 +145,20 @@ from ..wallet_descriptors import (
 )
 from ..wallet_setup import BSMS_DESCRIPTOR_SOURCE, parse_bsms_descriptor_record
 from ..importers import load_import_records
+from ..btcpay.client import normalize_server_url as normalize_btcpay_server_url
+from ..btcpay.permissions import MODIFY_STORE_SETTINGS as BTCPAY_MODIFY_STORE_SETTINGS
+from ..btcpay.permissions import build_authorize_url as build_btcpay_authorize_url
+from ..btcpay.payment_methods import asset_for_payment_method
+from ..btcpay.permissions import key_setup_guide as btcpay_key_setup_guide
+from ..core import btcpay_ledger as core_btcpay_ledger
+from ..core import btcpay_setup as core_btcpay_setup
 from ..sync_btcpay import (
     DEFAULT_PAGE_SIZE as BTCPAY_DEFAULT_PAGE_SIZE,
     DEFAULT_PAYMENT_METHOD_ID as BTCPAY_DEFAULT_PAYMENT_METHOD_ID,
     fetch_btcpay_invoice_provenance,
+    fetch_btcpay_payouts,
     fetch_btcpay_records,
+    inspect_btcpay_backend,
     require_wallet_history_payment_method,
 )
 
@@ -2489,6 +2498,69 @@ def sync_wallet(
     return results
 
 
+def _is_missing_wallet_history_permission(exc):
+    details = exc.details if isinstance(exc.details, dict) else {}
+    missing = str(details.get("missing_permission") or "")
+    return exc.code == "auth_error" and (
+        missing == BTCPAY_MODIFY_STORE_SETTINGS or (not missing and details.get("http_status") == 403)
+    )
+
+
+def _btcpay_error_summary(exc):
+    return {
+        "status": "unavailable",
+        "code": exc.code,
+        "message": redact_backend_text(str(exc)),
+        "hint": redact_backend_text(exc.hint) if exc.hint else "",
+        "missing_permission": (exc.details or {}).get("missing_permission")
+        if isinstance(exc.details, dict)
+        else None,
+    }
+
+
+def _sync_store_provenance(
+    conn,
+    runtime_config,
+    profile,
+    *,
+    backend_name,
+    store_id,
+    checkpoint,
+    commit,
+    suggest=True,
+):
+    """Refresh one store's invoices, payouts, and local link suggestions.
+
+    Runs with every wallet-history import and wallet mapping so provenance is
+    never older than the balances it explains. Provenance is secondary to the
+    balance import, so a failure (for example a key without invoice access) is
+    reported in the outcome instead of failing the wallet sync.
+    """
+
+    try:
+        outcome = sync_btcpay_commercial_provenance(
+            conn,
+            runtime_config,
+            profile["workspace_id"],
+            profile["id"],
+            backend_name,
+            store_id,
+            BTCPAY_DEFAULT_PAGE_SIZE,
+            checkpoint=checkpoint,
+            commit=commit,
+            suggest=suggest,
+        )
+    except AppError as exc:
+        summary = _btcpay_error_summary(exc)
+        if exc.code not in {"auth_error", "not_found"}:
+            summary["status"] = "error"
+            summary["retryable"] = bool(exc.retryable)
+        return summary, checkpoint
+    next_checkpoint = outcome.pop("freshness_checkpoint", checkpoint)
+    outcome["status"] = "synced"
+    return outcome, next_checkpoint
+
+
 def _sync_btcpay_wallet(
     conn,
     runtime_config,
@@ -2519,46 +2591,211 @@ def _sync_btcpay_wallet(
             code="validation",
             hint="Create a BTCPay backend with `kassiber backends create --kind btcpay --url <server> --token-stdin` or `--token-fd FD`.",
         )
+    if core_btcpay_ledger.is_payment_ledger_config(config):
+        return _sync_btcpay_payment_ledger(
+            conn,
+            runtime_config,
+            profile,
+            wallet,
+            backend,
+            config,
+            checkpoint,
+            page_size=page_size,
+            commit=commit,
+        )
+    store_id = btcpay_config["store_id"]
+    payment_method_id = btcpay_config["payment_method_id"]
+    previous_provenance = checkpoint.get("invoice_provenance")
+    # Payouts first: they tell the wallet import how much of a send was fee.
+    provenance, provenance_checkpoint = _sync_store_provenance(
+        conn,
+        runtime_config,
+        profile,
+        backend_name=backend["name"],
+        store_id=store_id,
+        checkpoint=previous_provenance if isinstance(previous_provenance, dict) else {},
+        commit=commit,
+        suggest=False,
+    )
     btcpay_meta = {}
     records = fetch_btcpay_records(
         backend,
-        store_id=btcpay_config["store_id"],
-        payment_method_id=btcpay_config["payment_method_id"],
+        store_id=store_id,
+        payment_method_id=payment_method_id,
         page_size=page_size,
         checkpoint=checkpoint,
         metadata=btcpay_meta,
+    )
+    payout_totals = core_btcpay_ledger.payout_totals_by_txid(
+        conn,
+        profile["id"],
+        asset=asset_for_payment_method(payment_method_id) or "BTC",
+    )
+    fees_backfilled = core_btcpay_ledger.backfill_payout_fees(conn, profile["id"], wallet["id"], payout_totals)
+    fees_separated = core_btcpay_ledger.apply_payout_fees(
+        records,
+        payout_totals,
+        core_btcpay_ledger.outbound_fees_by_txid(conn, profile["id"], wallet["id"]),
     )
     outcome = _import_records_for_sync(
         conn,
         profile,
         wallet,
         records,
-        f"btcpay:{backend['name']}:{btcpay_config['store_id']}",
+        f"btcpay:{backend['name']}:{store_id}",
         apply_btcpay=True,
-        commit=commit,
+        commit=False,
     )
+    if fees_backfilled and not outcome.get("journal_invalidated"):
+        _import_coordinator_hooks().invalidate_journals(conn, profile["id"])
+        outcome["journal_invalidated"] = True
+    if provenance.get("status") == "synced":
+        provenance["suggestions"] = _refresh_commercial_suggestions(conn, profile)
+    if commit:
+        conn.commit()
     outcome["backend"] = backend["name"]
     outcome["backend_kind"] = kind
     outcome["backend_url"] = redact_backend_url(backend["url"])
-    outcome["store_id"] = btcpay_config["store_id"]
-    outcome["payment_method_id"] = btcpay_config["payment_method_id"]
+    outcome["store_id"] = store_id
+    outcome["payment_method_id"] = payment_method_id
     outcome["page_size"] = page_size
     outcome["fetched"] = len(records)
+    outcome["payout_fees"] = {"separated": fees_separated, "backfilled": fees_backfilled}
     if btcpay_meta:
         checkpoint.update(
             {
                 "backend": {"name": backend["name"], "kind": kind},
                 "btcpay_pages": btcpay_meta.get("btcpay_pages", {}),
                 "btcpay_pagination": btcpay_meta.get("btcpay_pagination", {}),
-                "store_id": btcpay_config["store_id"],
-                "payment_method_id": btcpay_config["payment_method_id"],
+                "store_id": store_id,
+                "payment_method_id": payment_method_id,
             }
         )
-        outcome["freshness_checkpoint"] = checkpoint
         outcome["pages_fetched"] = btcpay_meta.get("pages_fetched", 0)
         outcome["stopped_by_known_page"] = bool(btcpay_meta.get("stopped_by_known_page"))
         outcome["stop_reason"] = btcpay_meta.get("stop_reason")
         outcome["deep_audit"] = btcpay_meta.get("deep_audit")
+    checkpoint["invoice_provenance"] = provenance_checkpoint
+    outcome["invoice_provenance"] = provenance
+    if btcpay_meta or provenance_checkpoint:
+        outcome["freshness_checkpoint"] = checkpoint
+    return outcome
+
+
+def _refresh_commercial_suggestions(conn, profile):
+    suggested = core_commercial.suggest_links(
+        conn,
+        profile["workspace_id"],
+        profile["id"],
+        _commercial_hooks(),
+        commit=False,
+    )
+    return {"created": suggested["created"], "total": len(suggested["suggestions"])}
+
+
+def _sync_btcpay_payment_ledger(
+    conn,
+    runtime_config,
+    profile,
+    wallet,
+    backend,
+    config,
+    checkpoint,
+    *,
+    page_size,
+    commit,
+):
+    """Book a store's Lightning or plugin payments from BTCPay's records.
+
+    The ledger is the balance source, so unlike enrichment a failed
+    provenance refresh fails the sync: booking from stale records would
+    silently understate the balance.
+    """
+
+    btcpay_config = core_wallets.wallet_btcpay_sync_config(config)
+    store_id = btcpay_config["store_id"]
+    payment_method_ids = core_btcpay_ledger.ledger_payment_method_ids(config)
+    if not payment_method_ids:
+        raise AppError(
+            f"Wallet '{wallet['label']}' has no BTCPay payment methods to book",
+            code="validation",
+            hint="Run `kassiber btcpay setup --backend NAME --route STORE:BTC-LN=payment_ledger` to rebuild it.",
+            retryable=False,
+        )
+    previous = checkpoint.get("invoice_provenance")
+    provenance = sync_btcpay_commercial_provenance(
+        conn,
+        runtime_config,
+        profile["workspace_id"],
+        profile["id"],
+        backend["name"],
+        store_id,
+        page_size,
+        checkpoint=previous if isinstance(previous, dict) else {},
+        suggest=False,
+        commit=commit,
+    )
+    provenance_checkpoint = provenance.pop("freshness_checkpoint", {})
+    # A ledger is a balance source: missing payouts or double-booked payments
+    # must stop the sync rather than book a wrong balance.
+    if provenance.get("payouts_available") is False:
+        raise AppError(
+            f"BTCPay payouts for store {store_id} cannot be read, so '{wallet['label']}' would miss refunds and payouts",
+            code="auth_error" if provenance.get("payouts_permission_missing") else "unavailable",
+            hint="Use a key with the view-payouts permission (the read-only preset includes it), or keep this store's Lightning invoices as provenance only.",
+            details={"store_id": store_id, "payouts_permission_missing": bool(provenance.get("payouts_permission_missing"))},
+            retryable=False,
+        )
+    duplicates = core_btcpay_ledger.existing_rows_tracked_elsewhere(conn, profile["id"], wallet["id"])
+    if duplicates["count"]:
+        raise AppError(
+            f"{duplicates['count']} payment(s) in '{wallet['label']}' are also booked by {', '.join(duplicates['wallets'])}",
+            code="conflict",
+            hint=(
+                "Counting them twice would overstate the balance and income. Exclude those payments in this ledger, "
+                "or archive the ledger and keep the store's Lightning invoices as provenance."
+            ),
+            details={"duplicates": duplicates["count"], "wallets": duplicates["wallets"]},
+            retryable=False,
+        )
+    records, counts = core_btcpay_ledger.ledger_records(
+        conn,
+        profile["id"],
+        store_id=store_id,
+        payment_method_ids=payment_method_ids,
+    )
+    records, held = core_btcpay_ledger.split_tracked_elsewhere(conn, profile["id"], wallet["id"], records)
+    outcome = _import_records_for_sync(
+        conn,
+        profile,
+        wallet,
+        records,
+        f"btcpay-ledger:{backend['name']}:{store_id}",
+        commit=False,
+    )
+    provenance["status"] = "synced"
+    provenance["suggestions"] = _refresh_commercial_suggestions(conn, profile)
+    if commit:
+        conn.commit()
+    checkpoint["invoice_provenance"] = provenance_checkpoint
+    outcome.update(
+        {
+            "backend": backend["name"],
+            "backend_kind": "btcpay",
+            "backend_url": redact_backend_url(backend["url"]),
+            "store_id": store_id,
+            "source_mode": core_btcpay_ledger.LEDGER_SOURCE_MODE,
+            "payment_method_ids": payment_method_ids,
+            "fetched": len(records) + len(held),
+            "ledger": {
+                **counts,
+                "held_tracked_elsewhere": len(held),
+            },
+            "payouts_permission_missing": bool(provenance.get("payouts_permission_missing")),
+            "invoice_provenance": provenance,
+            "freshness_checkpoint": checkpoint,
+        }
+    )
     return outcome
 
 
@@ -2582,6 +2819,14 @@ def enrich_wallet_from_btcpay_provenance(
     page_size=BTCPAY_DEFAULT_PAGE_SIZE,
     commit=True,
 ):
+    """Enrich a mapped settlement wallet from its BTCPay store routes.
+
+    With a wallet-history key, BTCPay wallet comments and labels become notes
+    and tags on the matching transactions. A read-only key cannot read that
+    history; the route then relies on invoice and payout provenance alone,
+    which is refreshed for every mapped store either way.
+    """
+
     config = json.loads(wallet["config_json"] or "{}")
     checkpoint = {}
     try:
@@ -2589,7 +2834,11 @@ def enrich_wallet_from_btcpay_provenance(
     except (KeyError, IndexError, TypeError):
         checkpoint = {}
     route_checkpoints = checkpoint.get("routes") if isinstance(checkpoint.get("routes"), dict) else {}
+    invoice_checkpoints = (
+        checkpoint.get("invoice_routes") if isinstance(checkpoint.get("invoice_routes"), dict) else {}
+    )
     next_route_checkpoints = {}
+    next_invoice_checkpoints = {}
     routes = core_wallets.wallet_btcpay_provenance_config(config)
     totals = {
         "routes": 0,
@@ -2597,8 +2846,10 @@ def enrich_wallet_from_btcpay_provenance(
         "btcpay_notes_set": 0,
         "btcpay_tags_added": 0,
         "btcpay_tags_created": 0,
+        "labels_unavailable_routes": 0,
     }
     route_results = []
+    stores_synced = {}
     for route in routes:
         backend = resolve_backend(runtime_config, route["backend"])
         kind = core_sync.normalize_backend_kind(backend["kind"])
@@ -2610,51 +2861,93 @@ def enrich_wallet_from_btcpay_provenance(
             )
         route_key = f"{backend['name']}:{route['store_id']}:{route['payment_method_id']}"
         btcpay_meta = {}
-        records = fetch_btcpay_records(
-            backend,
-            store_id=route["store_id"],
-            payment_method_id=route["payment_method_id"],
-            page_size=page_size,
-            checkpoint=route_checkpoints.get(route_key, {}),
-            metadata=btcpay_meta,
-        )
-        metadata = core_imports.apply_btcpay_metadata(
-            conn,
-            profile,
-            wallet,
-            records,
-            _import_coordinator_hooks(),
-            commit=False,
-        )
         route_result = {
             "backend": backend["name"],
             "backend_kind": kind,
             "backend_url": redact_backend_url(backend["url"]),
             "store_id": route["store_id"],
             "payment_method_id": route["payment_method_id"],
-            "fetched": len(records),
-            "pages_fetched": btcpay_meta.get("pages_fetched", 0),
-            "stopped_by_known_page": bool(btcpay_meta.get("stopped_by_known_page")),
-            "stop_reason": btcpay_meta.get("stop_reason"),
-            "deep_audit": btcpay_meta.get("deep_audit"),
-            **metadata,
         }
-        next_route_checkpoints[route_key] = {
-            "backend": {"name": backend["name"], "kind": kind},
-            "btcpay_pages": btcpay_meta.get("btcpay_pages", {}),
-            "btcpay_pagination": btcpay_meta.get("btcpay_pagination", {}),
-            "store_id": route["store_id"],
-            "payment_method_id": route["payment_method_id"],
-        }
+        try:
+            records = fetch_btcpay_records(
+                backend,
+                store_id=route["store_id"],
+                payment_method_id=route["payment_method_id"],
+                page_size=page_size,
+                checkpoint=route_checkpoints.get(route_key, {}),
+                metadata=btcpay_meta,
+            )
+        except AppError as exc:
+            if not _is_missing_wallet_history_permission(exc):
+                raise
+            records = None
+            route_result.update(
+                {
+                    "fetched": 0,
+                    "labels": "unavailable_read_only_key",
+                    "btcpay_notes_set": 0,
+                    "btcpay_tags_added": 0,
+                    "btcpay_tags_created": 0,
+                }
+            )
+            totals["labels_unavailable_routes"] += 1
+            if route_key in route_checkpoints:
+                next_route_checkpoints[route_key] = route_checkpoints[route_key]
+        if records is not None:
+            metadata = core_imports.apply_btcpay_metadata(
+                conn,
+                profile,
+                wallet,
+                records,
+                _import_coordinator_hooks(),
+                commit=False,
+            )
+            route_result.update(
+                {
+                    "fetched": len(records),
+                    "labels": "synced",
+                    "pages_fetched": btcpay_meta.get("pages_fetched", 0),
+                    "stopped_by_known_page": bool(btcpay_meta.get("stopped_by_known_page")),
+                    "stop_reason": btcpay_meta.get("stop_reason"),
+                    "deep_audit": btcpay_meta.get("deep_audit"),
+                    **metadata,
+                }
+            )
+            next_route_checkpoints[route_key] = {
+                "backend": {"name": backend["name"], "kind": kind},
+                "btcpay_pages": btcpay_meta.get("btcpay_pages", {}),
+                "btcpay_pagination": btcpay_meta.get("btcpay_pagination", {}),
+                "store_id": route["store_id"],
+                "payment_method_id": route["payment_method_id"],
+            }
+            totals["fetched"] += len(records)
+            totals["btcpay_notes_set"] += metadata["btcpay_notes_set"]
+            totals["btcpay_tags_added"] += metadata["btcpay_tags_added"]
+            totals["btcpay_tags_created"] += metadata["btcpay_tags_created"]
+        store_key = f"{backend['name']}:{route['store_id']}"
+        if store_key not in stores_synced:
+            provenance, provenance_checkpoint = _sync_store_provenance(
+                conn,
+                runtime_config,
+                profile,
+                backend_name=backend["name"],
+                store_id=route["store_id"],
+                checkpoint=invoice_checkpoints.get(store_key) if isinstance(invoice_checkpoints.get(store_key), dict) else {},
+                commit=False,
+            )
+            stores_synced[store_key] = provenance
+            next_invoice_checkpoints[store_key] = provenance_checkpoint
+        route_result["invoice_provenance"] = stores_synced[store_key]
         route_results.append(route_result)
         totals["routes"] += 1
-        totals["fetched"] += len(records)
-        totals["btcpay_notes_set"] += metadata["btcpay_notes_set"]
-        totals["btcpay_tags_added"] += metadata["btcpay_tags_added"]
-        totals["btcpay_tags_created"] += metadata["btcpay_tags_created"]
     if commit:
         conn.commit()
-    checkpoint.update({"routes": dict(sorted(next_route_checkpoints.items()))})
+    checkpoint.update(
+        {
+            "routes": dict(sorted(next_route_checkpoints.items())),
+            "invoice_routes": dict(sorted(next_invoice_checkpoints.items())),
+        }
+    )
     return {
         **totals,
         "route_results": route_results,
@@ -2762,6 +3055,9 @@ def sync_btcpay_into_wallet(
                 "store_id": store_id,
                 "payment_method_id": payment_method_id,
                 "sync_source": core_wallets.BTCPAY_SYNC_SOURCE,
+                # Wallet history replaces any payment-ledger mode.
+                core_btcpay_ledger.SOURCE_MODE_CONFIG_KEY: None,
+                core_btcpay_ledger.LEDGER_PAYMENT_METHODS_CONFIG_KEY: None,
             },
             "clear": [],
         },
@@ -2896,7 +3192,19 @@ def sync_btcpay_commercial_provenance(
     store_id,
     page_size,
     checkpoint=None,
+    *,
+    include_payouts=True,
+    suggest=True,
+    commit=True,
 ):
+    """Refresh one store's invoice and payout provenance.
+
+    Payouts need the read-only payouts permission; a key without it still
+    syncs invoices and reports ``payouts_permission_missing``. Local link
+    suggestions are refreshed afterwards (no network I/O); suggestions never
+    change a transaction until the user reviews them.
+    """
+
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     backend = resolve_backend(runtime_config, backend_name)
     kind = core_sync.normalize_backend_kind(backend["kind"])
@@ -2908,20 +3216,70 @@ def sync_btcpay_commercial_provenance(
         )
     btcpay_meta = {}
     checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
-    invoices = fetch_btcpay_invoice_provenance(
-        backend,
-        store_id=store_id,
-        page_size=page_size,
-        checkpoint=checkpoint,
-        metadata=btcpay_meta,
-    )
+    payout_meta = {}
+    payouts = None
+    # Read everything before writing anything, so a failed refresh leaves the
+    # previous provenance intact and only its sync state records the failure.
+    try:
+        invoices = fetch_btcpay_invoice_provenance(
+            backend,
+            store_id=store_id,
+            page_size=page_size,
+            checkpoint=checkpoint,
+            metadata=btcpay_meta,
+        )
+        if include_payouts:
+            payouts = fetch_btcpay_payouts(backend, store_id, metadata=payout_meta)
+    except AppError as exc:
+        core_commercial.record_btcpay_store_sync(
+            conn,
+            profile["id"],
+            backend_name=backend["name"],
+            store_id=store_id,
+            error_code=str(exc.code or "error"),
+            error_message=redact_backend_text(str(exc)),
+            commit=commit,
+        )
+        raise
     outcome = core_commercial.upsert_btcpay_provenance(
         conn,
         workspace,
         profile,
         backend_name=backend["name"],
         invoices=invoices,
+        commit=False,
     )
+    if payouts is not None:
+        outcome.update(
+            core_commercial.upsert_btcpay_payouts(
+                conn,
+                workspace,
+                profile,
+                backend_name=backend["name"],
+                payouts=payouts,
+                commit=False,
+            )
+        )
+    core_commercial.record_btcpay_store_sync(
+        conn,
+        profile["id"],
+        backend_name=backend["name"],
+        store_id=store_id,
+        invoices_seen=len(invoices),
+        payouts_seen=len(payouts) if payouts is not None else None,
+    )
+    suggestions = None
+    if suggest:
+        suggested = core_commercial.suggest_links(
+            conn,
+            profile["workspace_id"],
+            profile["id"],
+            _commercial_hooks(),
+            commit=False,
+        )
+        suggestions = {"created": suggested["created"], "total": len(suggested["suggestions"])}
+    if commit:
+        conn.commit()
     checkpoint.update(
         {
             "backend": {"name": backend["name"], "kind": kind},
@@ -2938,10 +3296,220 @@ def sync_btcpay_commercial_provenance(
         "store_id": store_id,
         "page_size": page_size,
         "pages_fetched": btcpay_meta.get("pages_fetched", 0),
+        "invoices_hydrated": btcpay_meta.get("invoices_hydrated", 0),
         "stopped_by_known_page": bool(btcpay_meta.get("stopped_by_known_page")),
         "stop_reason": btcpay_meta.get("stop_reason"),
         "deep_audit": btcpay_meta.get("deep_audit"),
+        "payouts_available": payout_meta.get("payouts_available") if include_payouts else None,
+        "payouts_permission_missing": bool(payout_meta.get("payouts_permission_missing")),
+        "suggestions": suggestions,
         "freshness_checkpoint": checkpoint,
+    }
+
+
+def btcpay_key_guide(runtime_config, server_url=None, backend_name=None, preset="read_only", store_ids=None, *, store_scope=None):
+    """Permissions and a pre-filled BTCPay authorization link (no network I/O)."""
+
+    if backend_name:
+        backend = resolve_backend(runtime_config, backend_name)
+        if core_sync.normalize_backend_kind(backend["kind"]) != "btcpay":
+            raise AppError(
+                f"Backend '{backend['name']}' is not a BTCPay instance",
+                code="validation",
+            )
+        server_url = backend.get("url")
+    normalized = normalize_btcpay_server_url(server_url) if server_url else None
+    guide = btcpay_key_setup_guide(normalized, preset=preset, store_scope=store_scope)
+    if normalized and store_ids:
+        guide["authorize_url"] = build_btcpay_authorize_url(normalized, preset=preset, store_ids=store_ids)
+        guide["store_ids"] = list(store_ids)
+    guide["server_url"] = normalized
+    if not normalized:
+        guide["hint"] = "Pass --server-url or --backend to get a pre-filled authorization link."
+    return guide
+
+
+def inspect_btcpay_setup(conn, runtime_config, workspace_ref, profile_ref, backend_name):
+    """Inspect a saved BTCPay instance and return the shared setup plan."""
+
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    backend = resolve_backend(runtime_config, backend_name)
+    if core_sync.normalize_backend_kind(backend["kind"]) != "btcpay":
+        raise AppError(
+            f"Backend '{backend['name']}' has kind '{backend['kind']}', expected 'btcpay'",
+            code="validation",
+        )
+    inspection = inspect_btcpay_backend(backend)
+    plan = core_btcpay_setup.plan_btcpay_setup(
+        conn,
+        profile["id"],
+        inspection,
+        backend_name=backend["name"],
+        runtime_config=runtime_config,
+        server_url=backend.get("url"),
+    )
+    _chain, network = core_btcpay_setup.detected_network(plan)
+    plan["detected_network"] = network
+    plan["backend_url"] = redact_backend_url(backend.get("url"))
+    return plan
+
+
+def parse_btcpay_route_spec(spec):
+    """Parse ``STORE[:METHOD]=ACTION[@WALLET]`` into a plan override."""
+
+    raw = str(spec or "").strip()
+    target, separator, choice = raw.partition("=")
+    if not separator or not target.strip() or not choice.strip():
+        raise AppError(
+            f"Invalid --route '{spec}'",
+            code="validation",
+            hint="Use STORE[:METHOD]=ACTION[@WALLET], for example AbC123:BTC-CHAIN=existing_wallet@Shop Trezor.",
+        )
+    store_id, _, payment_method_id = target.strip().partition(":")
+    action, _, wallet = choice.strip().partition("@")
+    return (
+        core_wallets.normalize_btcpay_store_id(store_id.strip()),
+        core_wallets.normalize_btcpay_payment_method_id(payment_method_id.strip() or BTCPAY_DEFAULT_PAYMENT_METHOD_ID),
+    ), {"action": action.strip().lower(), "wallet": wallet.strip() or None}
+
+
+def apply_btcpay_setup(
+    conn,
+    runtime_config,
+    workspace_ref,
+    profile_ref,
+    backend_name,
+    label,
+    *,
+    route_specs=(),
+    use_recommendations=False,
+    dry_run=False,
+    sync_provenance=True,
+):
+    """CLI counterpart of the desktop BTCPay setup, on the same core planner."""
+
+    workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    overrides = dict(parse_btcpay_route_spec(spec) for spec in route_specs)
+    if not overrides and not use_recommendations:
+        raise AppError(
+            "Choose what to set up",
+            code="validation",
+            hint="Pass --recommended to apply the suggested plan, or --route STORE[:METHOD]=ACTION for each payment method.",
+        )
+    plan = inspect_btcpay_setup(conn, runtime_config, workspace_ref, profile_ref, backend_name)
+    backend = resolve_backend(runtime_config, backend_name)
+    routes = core_btcpay_setup.routes_from_plan(
+        plan,
+        overrides=overrides,
+        use_recommendations=use_recommendations,
+    )
+    routes = core_btcpay_setup.normalize_setup_routes(routes, allow_only_skips=True)
+    core_btcpay_setup.validate_setup_routes(
+        conn,
+        profile["id"],
+        routes,
+        backend_name=backend["name"],
+        runtime_config=runtime_config,
+        server_url=backend.get("url"),
+    )
+    result = {
+        "backend": backend["name"],
+        "dry_run": bool(dry_run),
+        "routes": routes,
+        "warnings": plan.get("warnings") or [],
+        "api_key": plan.get("api_key"),
+    }
+    if dry_run:
+        return result
+    applied = core_btcpay_setup.apply_setup_routes(
+        conn,
+        workspace,
+        profile,
+        backend_name=backend["name"],
+        routes=routes,
+        label=label,
+    )
+    provenance = []
+    if sync_provenance:
+        for store_id in applied["provenance_store_ids"]:
+            try:
+                outcome = sync_btcpay_commercial_provenance(
+                    conn,
+                    runtime_config,
+                    workspace_ref,
+                    profile_ref,
+                    backend["name"],
+                    store_id,
+                    BTCPAY_DEFAULT_PAGE_SIZE,
+                )
+                outcome.pop("freshness_checkpoint", None)
+                provenance.append({"status": "synced", **outcome})
+            except AppError as exc:
+                conn.rollback()
+                provenance.append({"store_id": store_id, **_btcpay_error_summary(exc), "status": "error"})
+    result.update(
+        {
+            "wallet_sources": applied["wallet_sources"],
+            "payment_ledgers": applied["payment_ledgers"],
+            "reused_wallets": applied["reused_wallets"],
+            "mappings": applied["mappings"],
+            "account_routes": applied["account_routes"],
+            "skipped": applied["skipped"],
+            "provenance": provenance,
+        }
+    )
+    return result
+
+
+def sync_all_btcpay_commercial_provenance(
+    conn,
+    runtime_config,
+    workspace_ref,
+    profile_ref,
+    page_size,
+    *,
+    include_payouts=True,
+):
+    """Refresh invoices and payouts for every BTCPay store this book uses."""
+
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    btcpay_backends = [
+        str(backend.get("name") or name).lower()
+        for name, backend in (runtime_config.get("backends") or {}).items()
+        if isinstance(backend, dict) and str(backend.get("kind") or "").lower() == "btcpay"
+    ]
+    routes = core_btcpay_setup.list_existing_routes(conn, profile["id"], backend_names=btcpay_backends)
+    stores = sorted({(route["backend"], route["store_id"]) for route in routes if not route.get("deprecated")})
+    results = []
+    for backend_name, store_id in stores:
+        try:
+            outcome = sync_btcpay_commercial_provenance(
+                conn,
+                runtime_config,
+                workspace_ref,
+                profile_ref,
+                backend_name,
+                store_id,
+                page_size,
+                include_payouts=include_payouts,
+            )
+            outcome.pop("freshness_checkpoint", None)
+            results.append({"status": "synced", **outcome})
+        except AppError as exc:
+            conn.rollback()
+            results.append(
+                {
+                    "backend": backend_name,
+                    "store_id": store_id,
+                    **_btcpay_error_summary(exc),
+                    "status": "error",
+                }
+            )
+    return {
+        "stores": len(stores),
+        "synced": sum(1 for result in results if result["status"] == "synced"),
+        "failed": sum(1 for result in results if result["status"] == "error"),
+        "results": results,
     }
 
 

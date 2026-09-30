@@ -248,19 +248,10 @@ Adapters drop preimages, encoded bolt11 strings, onion route hops,
 route hints, and `failure_source_pubkey` before any payload reaches the
 local DB. Private channels surface with `peer_pubkey=null` by default.
 
-BTCPay backends now serve two separate Kassiber flows:
-
-- wallet-history sync imports confirmed on-chain rows into configured wallets
-  and keeps them as conservative transport transactions
-- merchant provenance sync (`btcpay provenance sync`) reads invoice/payment
-  records into separate provenance tables, preserving stable invoice/payment ids
-  and raw payload snapshots without duplicating wallet balances
-
-Use a Greenfield API key with wallet-history permissions for
-`wallets sync-btcpay` and invoice-view permissions for
-`btcpay provenance sync`. The review command is the gate that turns a matched
-BTCPay payment into authoritative `btcpay_payment` pricing or a commercial
-transaction kind.
+BTCPay backends serve two separate Kassiber flows, described in
+[BTCPay Server](#btcpay-server-greenfield-api): wallet-history import for store
+wallets and merchant provenance (invoices, payments, refunds, payouts) that
+explains transactions without adding balances.
 
 `bitcoinrpc` supports Bitcoin descriptor/xpub/address wallet refresh. For
 descriptor/xpub wallets Kassiber imports ranged watch-only descriptors into a
@@ -363,41 +354,193 @@ events from `bkpr-listincome` become wallet transactions (routed events
 do not, avoiding the double-count with the per-forward aggregate), and
 no raw RPC payloads are stored on disk.
 
-### BTCPay Greenfield API
+### BTCPay Server (Greenfield API)
 
-Use this to pull confirmed on-chain wallet transactions directly from a BTCPay server instead of exporting CSV or JSON from the UI.
+Kassiber reads BTCPay Server through read-only Greenfield `GET` requests. It
+never creates invoices or payouts, changes a store, or reads payment-method
+configuration (derivation schemes and Lightning connection strings stay in
+BTCPay). Each saved `btcpay` backend is one server URL plus one API key.
 
-- create a backend with `--kind btcpay`, `--url https://btcpay.example.com`,
-  and a piped `--token-stdin` (preferred) or `--token-fd FD` for the
-  Greenfield API key — the argv form `--token <value>` still works for
-  legacy scripts but emits a deprecation warning and leaks to shell history
-- store the BTCPay wallet config on the wallet with `wallets create/update --backend <btcpay-backend> --store-id <store-id>`
-- `wallets sync-btcpay --wallet <label> --backend <btcpay-backend> --store-id <store-id>` keeps the legacy one-off CLI shape and now stores that config on the wallet too
-- the desktop Add Connection dialog can create the BTCPay instance inline from
-  URL + API key, discover stores/payment methods, and then either create one
-  BTCPay-backed wallet source per selected sync-supported payment method or map
-  those payment methods onto existing settlement wallets without sending the
-  user through backend settings first
-- once the config is stored, `wallets sync --wallet <label>` and `wallets sync --all` reuse it automatically
-- use one Kassiber wallet per real underlying wallet / BTCPay-backed balance source; if multiple BTCPay stores point at the same underlying wallet balance, keep them on one Kassiber wallet or holdings will be duplicated
-- when a Liquid or multisig settlement wallet is already configured elsewhere,
-  store BTCPay as provenance on that wallet instead of adding a second wallet
-  source for the same balance — use `wallets attach-btcpay --wallet <label>
-  --backend <btcpay-backend> --store-id <store-id>` from the CLI, or the
-  desktop Add Connection "Map existing wallets" mode
-- Kassiber requests confirmed rows only, then normalizes them through the existing BTCPay import pipeline so comments become notes and labels become tags
-- the Greenfield wallet-transaction endpoint currently requires the `btcpay.store.canmodifystoresettings` permission on the API key
+#### 1. Create an API key
+
+| Preset | Permission | What Kassiber can do |
+| --- | --- | --- |
+| `read_only` | `btcpay.store.canviewstoresettings` | Stores, enabled payment methods, invoices and payments, payment requests, refunds and payouts, and the on-chain address preview used to recognise which wallet a store pays into. Enough for Lightning and plugin payment ledgers and for stores whose wallet you already track. The key cannot change the store. |
+| `wallet_history` | `btcpay.store.canmodifystoresettings` | Everything above plus each store's on-chain wallet as BTCPay records it, with labels, comments, and payout fees. BTCPay exposes wallet history only under this permission, which can also change the store, including where it receives payments. |
+
+`kassiber btcpay key-url --server-url https://btcpay.example.com [--preset
+read_only] [--scope all|single] [--store-id ID]` prints the permissions, manual
+steps, and a pre-filled `/api-keys/authorize` link; it makes no network
+request. The desktop **Open BTCPay to create this key** button opens the same
+link in your browser, where you sign in and approve; BTCPay then shows the new
+key on its API Keys page. Paste it into the desktop form, or pipe it into
+`backends create --kind btcpay --token-stdin`.
+
+BTCPay's authorize page grants a store permission either on all stores or on
+exactly one store it asks you to pick. `--scope all` (the default for
+`read_only`) gives one key for every store, including stores added later;
+`--scope single` (the default for `wallet_history`) limits the key to one
+store. `--store-id` pins the permission to named stores.
+URLs pasted from the browser are normalised: a trailing `/api/v1`, store page,
+or slash is removed.
+
+#### 2. Inspect the key and stores
+
+`kassiber btcpay inspect --backend NAME` (desktop: **Check key and stores**)
+reads the server version and sync state, the key's own permissions, every
+visible store, its enabled payment methods, and the first receive addresses of
+each on-chain store wallet. It reports:
+
+- the key's scope (all stores or selected stores) and risk
+  (`read_only`, `can_write`, `can_modify_store`, `server_admin`), plus any
+  permission broader than Kassiber needs;
+- per store, which capabilities the key grants and which permissions are
+  missing;
+- per payment method, its rail and a recommendation, see below;
+- stores that pay into the same wallet (same address preview), existing
+  wallets Kassiber already tracks for a store (local ownership match of the
+  preview addresses), other saved keys for the same server, the detected
+  network, and transport warnings for plain `http://`.
+
+The preview addresses are only used in memory; the plan carries an opaque
+`wallet_fingerprint`.
+
+#### 3. Choose what Kassiber does per payment method
+
+| Action | Use it for |
+| --- | --- |
+| `wallet_source` | Import BTCPay's confirmed on-chain wallet history as a Kassiber wallet. Needs the `wallet_history` key. Comments become notes, labels become tags, and payout fees are booked as fees. |
+| `existing_wallet` | The store pays into a wallet you already track (descriptor, xpub, Liquid). The wallet keeps its own chain sync; BTCPay adds invoice provenance and, with a history key, labels and comments. Recommended automatically when the preview addresses belong to that wallet. |
+| `payment_ledger` | The store settles into something Kassiber cannot watch: a Lightning node or wallet, a plugin rail, or a layer-two wallet. BTCPay's settled payments and completed payouts become the wallet's balance. Recommended for Lightning when no Lightning node is connected to the book, and for bitcoin plugin rails. |
+| `provenance_only` | Keep invoices, payments, and payouts only. Used when a connected Lightning node already books the payments, for a store that shares a wallet already imported through another store, or with a read-only key for an on-chain wallet Kassiber does not track yet. |
+| `skip` | Ignore, or remove a previous route. Non-bitcoin assets are skipped. |
+
+`kassiber btcpay setup --backend NAME --label LABEL --recommended` applies the
+suggested plan; `--route STORE[:METHOD]=ACTION[@WALLET]` overrides single
+payment methods and `--dry-run` shows the routes without writing. The desktop
+applies the same plan through `ui.connections.btcpay.create`. The core refuses
+plans that would import one store wallet twice or book one store's Lightning
+payments through two keys. For an on-chain store with a read-only key, create a
+wallet-history key to import the wallet from BTCPay, or map the store to a
+wallet you already track.
+
+#### Multiple stores and keys
+
+- One key can cover many stores; discovery lists every store it can see.
+- A second key for the same server (for example one per store owner, or a
+  wallet-history key scoped to one store) is saved as another backend. The plan
+  lists `sibling_backends` and flags stores already imported through another
+  key, so a store wallet is never imported twice.
+- Stores sharing one wallet are imported once: the first store (by name) takes
+  the wallet source or mapping and the others keep provenance, or all of them
+  map onto the same tracked wallet.
+- Rotate a key with `backends update NAME --token-stdin`; routes reference the
+  backend name, and provenance records are keyed by store id, not by key.
+
+#### Payment methods and plugins
+
+| Payment method | Kassiber behaviour |
+| --- | --- |
+| `BTC-CHAIN`, `LBTC-CHAIN` | Wallet source, mapping, or provenance. BTCPay 1.x ids (`BTC`) are accepted. |
+| `BTC-LN` | Payment ledger, or provenance when the node that receives the payments (LND, Core Lightning) is connected to the book; Kassiber then links BTCPay payments to it by payment hash. Plugin wallets behind `BTC-LN` (Boltz → Liquid, Breez, Blink, Strike, Nostr Wallet Connect, …) usually cannot be watched, so the ledger is the balance source. |
+| `BTC-LNURL` (LNURL, Lightning Address) | Same as `BTC-LN`, booked in the same Lightning ledger for the store. |
+| Other `BTC-…` plugin rails | Payment ledger, one per rail. |
+| Plugin rails in an unknown currency, altcoins, and Liquid assets (`ARKADE`, `XMR-CHAIN`, `USDT-CHAIN`, …) | Provenance or skipped; Kassiber books only payments it can confirm are bitcoin. |
+
+#### Payment ledgers
+
+A payment ledger is a wallet whose rows come from BTCPay's records: each
+settled invoice payment is a receipt and each completed payout or refund a
+send, identified by its provenance key so reruns update rows in place and
+commercial links match exactly. BTCPay's payment is the income evidence;
+review the suggested link to apply its invoice price.
+
+- The ledger sees only what passes through BTCPay. Withdrawals from the node
+  or wallet outside BTCPay (closing channels, sweeping to cold storage) need
+  their own record, for example a transfer to the receiving wallet.
+- Lightning routing fees of payouts are not reported by BTCPay; the payout
+  amount is booked.
+- A payment another connected wallet already books by payment hash in the
+  same direction, such as the store's own LND node, is held back and reported
+  as `held_tracked_elsewhere` instead of being counted twice. A payment from
+  your own wallet into your store books outbound there and inbound in the
+  ledger, which is a transfer, not a duplicate. If such a wallet is connected
+  after the ledger already booked those payments, the ledger sync stops with a
+  `conflict` naming that wallet until you exclude the ledger's copies or
+  archive the ledger and keep the store's Lightning invoices as provenance.
+- The ledger needs to read payouts as well as invoices; without payouts it
+  would overstate the balance, so setup does not offer it and the sync refuses.
+- Pending payments are reported as `pending` and booked once they settle.
+- A ledger sync fails when BTCPay cannot be read, instead of booking from old
+  records.
+
+A store payment method that already imports wallet history or books a payment
+ledger keeps doing so until that wallet is archived; setup does not offer a
+different action for it, and a store mapped to a tracked wallet cannot also be
+imported or booked as a ledger. This keeps one balance source per store wallet.
+
+#### What is synced
+
+Wallet syncs of a BTCPay wallet source or mapped wallet also refresh that
+store's invoices, payment requests, and payouts, then create local link
+suggestions (`btcpay provenance links --state suggested`). `btcpay provenance
+sync --all` refreshes every configured store. Invoice origins recognise BTCPay
+Point of Sale and Crowdfund apps, payment requests (titles are loaded when an
+invoice has no description), plugin app routes, and WooCommerce/Shopify orders.
+Unpaid invoices are not hydrated, unchanged pages are skipped, and open
+(New/Processing) invoices are re-checked until they settle. Invoices priced in
+bitcoin (`BTC`, `SATS`, common for Point of Sale and crowdfund apps) carry no
+fiat price: reviewing them sets the commercial kind and leaves the
+transaction's pricing to market rates.
+
+Payouts cover invoice refunds (pull payments named `Refund {invoiceId}`),
+pull-payment claims, and store payouts created by plugins such as Prism or
+payroll tools. A completed payout's proof carries the txid or Lightning payment
+hash; Kassiber suggests it only against an outbound transaction and reviews it
+as `refund` or `expense`, never income. Reviewing applies the payout's fiat
+value as `btcpay_payout` pricing. Lightning preimages and encoded BOLT11/LNURL
+destinations are not stored.
+
+A send that pays several payouts at once is reviewed as one batch: confirming
+any of its payouts confirms all of them, prices the transaction at their summed
+fiat value (`payout_batch` granularity), and reopening any of them restores the
+transaction. Payouts in different fiat currencies are refused as a batch.
+
+#### Fees
+
+BTCPay's wallet history reports each send as the net wallet change with the
+miner fee folded in. When completed payouts explain a send, the difference is
+booked as the fee (principal = the payouts, fee = the rest) on the next wallet
+sync, including sends imported before their payouts completed. A remainder
+above 0.002 BTC or at least half the send stays in the send, because it is
+more likely an output Kassiber does not know about. Other sends keep BTCPay's
+fee-inclusive amount, which is exact for balances.
+
+#### Freshness
+
+Kassiber does not receive BTCPay webhooks or any other push updates. Store data
+is as current as the last sync, which is either explicit (`wallets sync`,
+`btcpay provenance sync --all`, the desktop refresh) or background freshness
+once the BTCPay source class is enabled. Every store refresh records its last
+attempt, last success, and last error locally (`btcpay_store_sync_states`, not
+replicated). `btcpay inspect` reports each configured store's `sync_state` and
+a `stale_store_data` warning when a store was not refreshed for a day or its
+last refresh failed; the transaction commercial panel shows the same age.
 
 ## Notes by backend type
 
 ### BTCPay
 
-Use this when a BTCPay store is the authoritative transaction source for a real wallet balance, or when BTCPay should enrich existing settlement wallets with store-side payment metadata.
+Use BTCPay when a store's invoices, payments, refunds, and payouts should
+explain your wallet transactions, or when BTCPay is the only record of a store
+wallet's history.
 
-- best fit for merchant stores where BTCPay comments/labels are part of the local bookkeeping story
-- current refresh is confirmed-only and reuses the BTCPay import pipeline so comments become notes and labels become tags
-- BTCPay-only mode is enough when BTCPay has all relevant store wallet history; existing-wallet mode is better when on-chain or Liquid wallets are already tracked separately
-- this is not full invoice/payment provenance yet; stable invoice ids and raw payload snapshots are still later work
+- prefer a read-only key plus a watch-only descriptor wallet for each store
+  wallet; the wallet-history key trades safety for BTCPay's own labels
+- one Kassiber wallet per real wallet: stores sharing a wallet map onto it once
+- Lightning, LNURL, and plugin rails stay provenance; track the node or wallet
+  that receives the funds as its own connection
+- see [BTCPay Server](#btcpay-server-greenfield-api) for setup and limits
 
 ### Esplora
 

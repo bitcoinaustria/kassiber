@@ -1,11 +1,24 @@
-"""BTCPay Greenfield API fetcher for confirmed on-chain wallet transactions.
+"""BTCPay Greenfield fetchers used by the CLI, daemon, and freshness jobs.
 
-The public entry point is `fetch_btcpay_records(backend, store_id, ...)`,
-which hits `GET /api/v1/stores/{storeId}/payment-methods/{paymentMethodId}/wallet/transactions`,
-pages through the result with `skip`/`limit`, requests confirmed rows only,
-and returns records in the same shape `kassiber.importers.normalize_btcpay_record`
-already produces. That lets the CLI coordinator reuse the normal BTCPay
-import path for transaction insertion plus note/tag metadata application.
+Every function here performs user-triggered, read-only ``GET`` requests
+through ``kassiber.btcpay.client.GreenfieldClient``:
+
+- ``fetch_btcpay_records``: confirmed on-chain wallet history
+  (``/payment-methods/{id}/wallet/transactions``), normalised into the same
+  shape as the BTCPay CSV importer so comments become notes and labels
+  become tags. BTCPay gates this endpoint behind the store *modify*
+  permission.
+- ``fetch_btcpay_invoice_provenance``: invoices with their payments, for
+  commercial provenance. Needs only read permissions.
+- ``fetch_btcpay_payouts``: refunds, pull-payment claims, and store payouts.
+- ``inspect_btcpay_backend`` / ``discover_btcpay_wallet_sources``: setup
+  inspection (server, key permissions, stores, payment methods, wallets).
+- ``probe_btcpay_instance`` / ``probe_btcpay_wallet``: one-request checks.
+
+Wallet history and invoices are paged with an incremental checkpoint: a page
+whose stable ids and fingerprint match the previous run is skipped, the walk
+stops after a window of unchanged pages, and one older page is re-audited per
+run so edits deep in history are still picked up.
 """
 
 from __future__ import annotations
@@ -13,14 +26,24 @@ from __future__ import annotations
 import datetime as _dt
 import hashlib
 import json
-from urllib import error as urlerror
+from typing import Any, Mapping
 from urllib import parse as urlparse
-from urllib import request as urlrequest
 
-from .backends import backend_timeout, backend_value
+from .backends import backend_value
+from .btcpay.client import GreenfieldClient, GreenfieldHttpError, greenfield_app_error
+from .btcpay.discovery import InspectionResult, inspect_btcpay_connection
+from .btcpay.origins import classify_invoice_origin, payment_request_id_for
+from .btcpay.payment_methods import (
+    WALLET_HISTORY_PAYMENT_METHOD_IDS,
+    canonical_payment_method_id,
+    classify_payment_method,
+    is_wallet_history_payment_method,
+    require_wallet_history_payment_method,
+    split_payment_method_id,
+)
+from .btcpay.payouts import normalize_payout
 from .core.sync import emit_sync_progress
 from .errors import AppError
-from .http_client import request_with_retry
 from .importers import normalize_btcpay_record, parse_btcpay_labels
 from .proxy import build_proxy_opener
 
@@ -32,11 +55,100 @@ MAX_PAGES = 10_000
 INCREMENTAL_UNCHANGED_PAGE_WINDOW = 5
 INCREMENTAL_DEEP_AUDIT_PAGES = 1
 
-# Kassiber currently understands wallet-history sync for Bitcoin and Liquid
-# on-chain only. Adding a new entry here is the single step required to
-# extend support — both the desktop discovery UI and the daemon validation
-# paths read from this allowlist.
-WALLET_HISTORY_PAYMENT_METHOD_IDS = frozenset({"BTC-CHAIN", "LBTC-CHAIN"})
+WALLET_HISTORY_PERMISSION_HINT = (
+    "Greenfield wallet endpoints currently require the "
+    "`btcpay.store.canmodifystoresettings` permission. Keep this store as "
+    "invoice provenance with a read-only key, or map it to a watch-only wallet "
+    "you already track."
+)
+INVOICE_PERMISSION_HINT = "Grant the API key the BTCPay 'View invoices' permission."
+STORE_PERMISSION_HINT = "Grant the API key 'View your stores' (btcpay.store.canviewstoresettings)."
+
+# Invoice states whose payment list can still change or that may carry
+# payments. Expired/New invoices without an additional status were never paid.
+_INVOICE_STATES_WITH_PAYMENTS = {"settled", "processing", "invalid", "paid", "confirmed", "complete"}
+_INVOICE_STATES_OPEN = {"new", "processing", "paid"}
+_UNPAID_ADDITIONAL_STATUSES = {"", "none"}
+
+
+def _backend_http_opener(backend):
+    return build_proxy_opener(
+        backend_value(backend, "tor_proxy", "proxy"),
+        source_label="BTCPay",
+    )
+
+
+def _client(backend, opener=None, *, missing_token_hint=None) -> GreenfieldClient:
+    return GreenfieldClient.from_backend(
+        backend,
+        opener=opener,
+        opener_factory=_backend_http_opener,
+        missing_token_hint=missing_token_hint,
+    )
+
+
+def _require_store(store_id):
+    if not store_id:
+        raise AppError("BTCPay store id is required", code="validation")
+
+
+def _require_page_size(page_size):
+    if page_size <= 0:
+        raise AppError("BTCPay page_size must be positive", code="validation")
+
+
+def _json_array(payload, url_label):
+    if not isinstance(payload, list):
+        raise AppError(
+            f"BTCPay response for {url_label} was not a JSON array",
+            code="protocol_error",
+        )
+    return payload
+
+
+def _wallet_transactions_path(store_id, payment_method_id, legacy=False):
+    store_q = urlparse.quote(store_id, safe="")
+    if legacy:
+        currency, _ = split_payment_method_id(payment_method_id)
+        code_q = urlparse.quote(currency, safe="")
+        return f"/api/v1/stores/{store_q}/payment-methods/onchain/{code_q}/wallet/transactions"
+    payment_q = urlparse.quote(payment_method_id, safe="")
+    return f"/api/v1/stores/{store_q}/payment-methods/{payment_q}/wallet/transactions"
+
+
+def _wallet_page_fetcher(client, store_id, payment_method_id, page_size, api_state):
+    def fetch_page(skip, limit=None):
+        query = {
+            "statusFilter": DEFAULT_STATUS_FILTER,
+            "skip": str(skip),
+            "limit": str(limit or page_size),
+        }
+        legacy = bool(api_state.get("legacy_wallet_paths"))
+        try:
+            page = client.get_url(client.url(_wallet_transactions_path(store_id, payment_method_id, legacy), query))
+        except GreenfieldHttpError as exc:
+            if exc.status == 404 and not legacy and not exc.error_code:
+                # BTCPay 1.x keeps wallet endpoints under /payment-methods/onchain/{code}.
+                try:
+                    page = client.get_url(
+                        client.url(_wallet_transactions_path(store_id, payment_method_id, True), query)
+                    )
+                except GreenfieldHttpError as legacy_exc:
+                    raise greenfield_app_error(
+                        exc if legacy_exc.status == 404 else legacy_exc,
+                        context="wallet history",
+                        permission_hint=WALLET_HISTORY_PERMISSION_HINT,
+                    ) from legacy_exc
+                api_state["legacy_wallet_paths"] = True
+            else:
+                raise greenfield_app_error(
+                    exc,
+                    context="wallet history",
+                    permission_hint=WALLET_HISTORY_PERMISSION_HINT,
+                ) from exc
+        return _json_array(page, "wallet transactions")
+
+    return fetch_page
 
 
 def fetch_btcpay_records(
@@ -48,45 +160,15 @@ def fetch_btcpay_records(
     checkpoint=None,
     metadata=None,
 ):
-    if not store_id:
-        raise AppError("BTCPay store id is required", code="validation")
-    require_wallet_history_payment_method(payment_method_id)
-    base = backend_value(backend, "url")
-    if not base:
-        raise AppError("BTCPay instance is missing 'url'", code="config_error")
-    token = backend_value(backend, "token")
-    if not token:
-        raise AppError(
-            "BTCPay instance is missing 'token' (api key)",
-            code="config_error",
-            hint="Store the api key with `kassiber backends update --token-stdin` or `--token-fd FD`.",
-        )
-    if page_size <= 0:
-        raise AppError("BTCPay page_size must be positive", code="validation")
-    timeout = backend_timeout(backend)
-    http_opener = opener or _backend_http_opener(backend)
+    _require_store(store_id)
+    payment_method_id = require_wallet_history_payment_method(payment_method_id)
+    client = _client(backend, opener)
+    _require_page_size(page_size)
     checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
     previous_pages = checkpoint.get("btcpay_pages") or {}
     previous_pagination = checkpoint.get("btcpay_pagination") or {}
-
-    def fetch_page(skip):
-        url = _build_list_url(base, store_id, payment_method_id, skip, page_size)
-        page = _http_get_json(
-            http_opener,
-            url,
-            token,
-            timeout,
-            permission_hint=(
-                "Greenfield wallet endpoints currently require the "
-                "`btcpay.store.canmodifystoresettings` permission."
-            ),
-        )
-        if not isinstance(page, list):
-            raise AppError(
-                f"BTCPay response for {url} was not a JSON array",
-                code="protocol_error",
-            )
-        return page
+    api_state = {"legacy_wallet_paths": bool(previous_pagination.get("legacy_wallet_paths"))}
+    fetch_page = _wallet_page_fetcher(client, store_id, payment_method_id, page_size, api_state)
 
     records, next_pages, page_metadata = _fetch_incremental_pages(
         fetch_page=fetch_page,
@@ -102,11 +184,14 @@ def fetch_btcpay_records(
         ],
         max_pages_message=f"BTCPay sync exceeded {MAX_PAGES} pages; aborting for safety",
     )
+    pagination = dict(page_metadata["pagination"])
+    if api_state.get("legacy_wallet_paths"):
+        pagination["legacy_wallet_paths"] = True
     if metadata is not None:
         metadata.update(
             {
                 "btcpay_pages": _sorted_page_map(next_pages),
-                "btcpay_pagination": page_metadata["pagination"],
+                "btcpay_pagination": pagination,
                 "pages_fetched": page_metadata["pages_fetched"],
                 "stopped_by_known_page": page_metadata["stopped_by_known_page"],
                 "stop_reason": page_metadata["stop_reason"],
@@ -126,50 +211,49 @@ def fetch_btcpay_invoice_provenance(
     checkpoint=None,
     metadata=None,
 ):
-    """Fetch invoice/payment provenance without importing wallet balances."""
+    """Fetch invoice/payment provenance without importing wallet balances.
 
-    if not store_id:
-        raise AppError("BTCPay store id is required", code="validation")
-    base = backend_value(backend, "url")
-    if not base:
-        raise AppError("BTCPay instance is missing 'url'", code="config_error")
-    token = backend_value(backend, "token")
-    if not token:
-        raise AppError(
-            "BTCPay instance is missing 'token' (api key)",
-            code="config_error",
-            hint="Store the api key with `kassiber backends update --token-stdin` or `--token-fd FD`.",
-        )
-    if page_size <= 0:
-        raise AppError("BTCPay page_size must be positive", code="validation")
-    timeout = backend_timeout(backend)
-    http_opener = opener or _backend_http_opener(backend)
+    Invoice pages are fingerprinted as listed. Only pages that changed are
+    hydrated, and only invoices that can carry payments trigger the
+    per-invoice payment request older servers need when the list omits
+    ``paymentMethods``. Open invoices (New/Processing) always count as changed
+    so a second partial payment is not missed.
+    """
+
+    _require_store(store_id)
+    client = _client(backend, opener)
+    _require_page_size(page_size)
     checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
     previous_pages = checkpoint.get("btcpay_invoice_pages") or {}
     previous_pagination = checkpoint.get("btcpay_invoice_pagination") or {}
+    store_q = urlparse.quote(store_id, safe="")
+    lookup_state: dict[str, Any] = {"payment_request_titles": None, "hydrated": 0}
 
     def fetch_page(skip):
-        url = _build_invoices_url(base, store_id, skip, page_size)
-        page = _http_get_json(
-            http_opener,
-            url,
-            token,
-            timeout,
-            permission_hint="Grant the API key the BTCPay 'View invoices' permission.",
+        page = client.get_json(
+            f"/api/v1/stores/{store_q}/invoices",
+            {"skip": str(skip), "take": str(page_size), "includePaymentMethods": "true"},
+            context="invoices",
+            permission_hint=INVOICE_PERMISSION_HINT,
         )
-        if not isinstance(page, list):
-            raise AppError(
-                f"BTCPay response for {url} was not a JSON array",
-                code="protocol_error",
-            )
-        return _hydrate_invoice_payment_methods(
-            base,
-            store_id,
-            page,
-            http_opener,
-            token,
-            timeout,
-        )
+        return _json_array(page, "invoices")
+
+    def normalize_page(page):
+        hydrated = _hydrate_invoice_payment_methods(client, store_id, page, lookup_state)
+        normalized = [_normalize_invoice_provenance(store_id, invoice) for invoice in hydrated]
+        unlabeled = [
+            index
+            for index, invoice in enumerate(normalized)
+            if invoice["origin_kind"] == "payment_request"
+            and invoice["origin_label"] == invoice["payment_request_id"]
+        ]
+        if unlabeled:
+            titles = _payment_request_titles(client, store_id, lookup_state)
+            for index in unlabeled:
+                title = titles.get(normalized[index]["payment_request_id"])
+                if title:
+                    normalized[index]["origin_label"] = title
+        return normalized
 
     invoices, next_pages, page_metadata = _fetch_incremental_pages(
         fetch_page=fetch_page,
@@ -178,10 +262,9 @@ def fetch_btcpay_invoice_provenance(
         previous_pagination=previous_pagination,
         fingerprint_fn=_invoice_page_fingerprint,
         stable_ids_fn=_invoice_page_stable_ids,
-        normalize_page=lambda page: [
-            _normalize_invoice_provenance(store_id, invoice) for invoice in page
-        ],
+        normalize_page=normalize_page,
         max_pages_message=f"BTCPay invoice sync exceeded {MAX_PAGES} pages; aborting for safety",
+        force_changed_fn=_invoice_page_has_open_invoice,
     )
     if metadata is not None:
         metadata.update(
@@ -193,9 +276,68 @@ def fetch_btcpay_invoice_provenance(
                 "stop_reason": page_metadata["stop_reason"],
                 "deep_audit": page_metadata.get("deep_audit"),
                 "changed_pages": page_metadata["changed_pages"],
+                "invoices_hydrated": lookup_state["hydrated"],
             }
         )
     return invoices
+
+
+def fetch_btcpay_payouts(backend, store_id, *, opener=None, metadata=None):
+    """Fetch refunds, pull-payment claims, and store payouts for one store.
+
+    Cancelled payouts are excluded. A key without the payouts permission is
+    not an error: invoice provenance still works, and ``metadata`` reports
+    ``payouts_permission_missing`` so the caller can explain the gap.
+    """
+
+    _require_store(store_id)
+    client = _client(backend, opener)
+    store_q = urlparse.quote(store_id, safe="")
+    payouts_payload, payouts_error = client.get_optional_json(
+        f"/api/v1/stores/{store_q}/payouts",
+        {"includeCancelled": "false"},
+        tolerate=(403, 404),
+    )
+    if payouts_error is not None:
+        if metadata is not None:
+            metadata.update(
+                {
+                    "payouts_available": False,
+                    "payouts_permission_missing": payouts_error.status == 403,
+                    "payouts_seen": 0,
+                }
+            )
+        return []
+    payouts = _json_array(payouts_payload, "payouts")
+    pull_payments: dict[str, Mapping[str, Any]] = {}
+    if any(isinstance(payout, Mapping) and payout.get("pullPaymentId") for payout in payouts):
+        pull_payload, pull_error = client.get_optional_json(
+            f"/api/v1/stores/{store_q}/pull-payments",
+            {"includeArchived": "true"},
+            tolerate=(403, 404),
+        )
+        if pull_error is None and isinstance(pull_payload, list):
+            pull_payments = {
+                str(item.get("id")): item
+                for item in pull_payload
+                if isinstance(item, Mapping) and item.get("id")
+            }
+    normalized = []
+    for payout in payouts:
+        if not isinstance(payout, Mapping):
+            raise AppError("BTCPay payout record was not a JSON object", code="protocol_error")
+        record = normalize_payout(store_id, payout, pull_payments=pull_payments)
+        if record is not None:
+            normalized.append(record)
+    if metadata is not None:
+        metadata.update(
+            {
+                "payouts_available": True,
+                "payouts_permission_missing": False,
+                "payouts_seen": len(normalized),
+            }
+        )
+    return normalized
 
 
 def probe_btcpay_wallet(
@@ -206,37 +348,11 @@ def probe_btcpay_wallet(
 ):
     """Validate one BTCPay wallet-history request without walking the paginator."""
 
-    if not store_id:
-        raise AppError("BTCPay store id is required", code="validation")
-    require_wallet_history_payment_method(payment_method_id)
-    base = backend_value(backend, "url")
-    if not base:
-        raise AppError("BTCPay instance is missing 'url'", code="config_error")
-    token = backend_value(backend, "token")
-    if not token:
-        raise AppError(
-            "BTCPay instance is missing 'token' (api key)",
-            code="config_error",
-            hint="Store the api key with `kassiber backends update --token-stdin` or `--token-fd FD`.",
-        )
-    timeout = backend_timeout(backend)
-    http_opener = opener or _backend_http_opener(backend)
-    url = _build_list_url(base, store_id, payment_method_id, 0, 1)
-    page = _http_get_json(
-        http_opener,
-        url,
-        token,
-        timeout,
-        permission_hint=(
-            "Greenfield wallet endpoints currently require the "
-            "`btcpay.store.canmodifystoresettings` permission."
-        ),
-    )
-    if not isinstance(page, list):
-        raise AppError(
-            f"BTCPay response for {url} was not a JSON array",
-            code="protocol_error",
-        )
+    _require_store(store_id)
+    payment_method_id = require_wallet_history_payment_method(payment_method_id)
+    client = _client(backend, opener)
+    fetch_page = _wallet_page_fetcher(client, store_id, payment_method_id, 1, {})
+    page = fetch_page(0, 1)
     return {"checked": True, "rows_seen": len(page)}
 
 
@@ -244,151 +360,43 @@ def probe_btcpay_instance(backend, opener=None):
     """Validate BTCPay reachability and API-key store access.
 
     Connection health checks do not know which store/payment-method route a
-    backend will eventually serve.  Keep that periodic probe narrower than
-    full setup discovery: fetch only the store catalog and never walk payment
-    methods or wallet history.
+    backend will eventually serve. Keep that probe to a single store-catalog
+    request; setup inspection is the explicit, richer path.
     """
 
-    base = backend_value(backend, "url")
-    if not base:
-        raise AppError("BTCPay instance is missing 'url'", code="config_error")
-    token = backend_value(backend, "token")
-    if not token:
-        raise AppError(
-            "BTCPay instance is missing 'token' (api key)",
-            code="config_error",
-            hint="Enter a Greenfield API key for this BTCPay instance.",
-        )
-    timeout = backend_timeout(backend)
-    http_opener = opener or _backend_http_opener(backend)
-    stores_url = _build_stores_url(base)
-    stores = _http_get_json(
-        http_opener,
-        stores_url,
-        token,
-        timeout,
+    client = _client(
+        backend,
+        opener,
+        missing_token_hint="Enter a Greenfield API key for this BTCPay instance.",
+    )
+    stores = client.get_json(
+        "/api/v1/stores",
+        context="the store list",
         permission_hint="Grant the API key access to view stores.",
     )
-    if not isinstance(stores, list):
-        raise AppError(
-            f"BTCPay response for {stores_url} was not a JSON array",
-            code="protocol_error",
-        )
+    _json_array(stores, "stores")
     return {"checked": True, "stores_seen": len(stores)}
 
 
-def discover_btcpay_wallet_sources(backend, opener=None):
-    """Return stores and enabled on-chain payment methods for setup forms.
+def inspect_btcpay_backend(backend, opener=None, **kwargs) -> InspectionResult:
+    """Full setup inspection. See ``kassiber.btcpay.discovery``."""
 
-    The discovery path intentionally does not request payment-method config,
-    because those payloads may contain wallet material. Kassiber only needs
-    the stable store id and payment method id to configure a confirmed wallet
-    history sync.
+    client = _client(
+        backend,
+        opener,
+        missing_token_hint="Enter a Greenfield API key for this BTCPay instance.",
+    )
+    return inspect_btcpay_connection(client, **kwargs)
+
+
+def discover_btcpay_wallet_sources(backend, opener=None):
+    """Return the public inspection payload (stores, payment methods, key, server).
+
+    The address previews used for wallet recognition are dropped; call
+    ``inspect_btcpay_backend`` when local ownership matching needs them.
     """
 
-    base = backend_value(backend, "url")
-    if not base:
-        raise AppError("BTCPay instance is missing 'url'", code="config_error")
-    token = backend_value(backend, "token")
-    if not token:
-        raise AppError(
-            "BTCPay instance is missing 'token' (api key)",
-            code="config_error",
-            hint="Enter a Greenfield API key for this BTCPay instance.",
-        )
-    timeout = backend_timeout(backend)
-    http_opener = opener or _backend_http_opener(backend)
-    stores_url = _build_stores_url(base)
-    raw_stores = _http_get_json(
-        http_opener,
-        stores_url,
-        token,
-        timeout,
-        permission_hint=(
-            "Grant the API key access to view stores, or enter the store ID manually."
-        ),
-    )
-    if not isinstance(raw_stores, list):
-        raise AppError(
-            f"BTCPay response for {stores_url} was not a JSON array",
-            code="protocol_error",
-        )
-
-    stores = []
-    payment_methods = []
-    for raw_store in raw_stores:
-        store = _normalize_store(raw_store)
-        stores.append(store)
-        methods_url = _build_payment_methods_url(base, store["id"])
-        raw_methods = _http_get_json(
-            http_opener,
-            methods_url,
-            token,
-            timeout,
-            permission_hint=(
-                "Grant the API key store-settings access to inspect enabled payment methods."
-            ),
-        )
-        if not isinstance(raw_methods, list):
-            raise AppError(
-                f"BTCPay response for {methods_url} was not a JSON array",
-                code="protocol_error",
-            )
-        for raw_method in raw_methods:
-            method = _normalize_payment_method(store["id"], raw_method)
-            if method is not None:
-                payment_methods.append(method)
-    return {"stores": stores, "payment_methods": payment_methods}
-
-
-def _build_list_url(base, store_id, payment_method_id, skip, limit):
-    base = base.rstrip("/")
-    store_q = urlparse.quote(store_id, safe="")
-    payment_q = urlparse.quote(payment_method_id, safe="")
-    query = urlparse.urlencode(
-        {
-            "statusFilter": DEFAULT_STATUS_FILTER,
-            "skip": str(skip),
-            "limit": str(limit),
-        }
-    )
-    return f"{base}/api/v1/stores/{store_q}/payment-methods/{payment_q}/wallet/transactions?{query}"
-
-
-def _build_stores_url(base):
-    return f"{base.rstrip('/')}/api/v1/stores"
-
-
-def _build_payment_methods_url(base, store_id):
-    store_q = urlparse.quote(store_id, safe="")
-    query = urlparse.urlencode({"onlyEnabled": "true"})
-    return f"{base.rstrip('/')}/api/v1/stores/{store_q}/payment-methods?{query}"
-
-
-def _build_invoices_url(base, store_id, skip, limit):
-    store_q = urlparse.quote(store_id, safe="")
-    query = urlparse.urlencode(
-        {
-            "skip": str(skip),
-            "take": str(limit),
-            "includePaymentMethods": "true",
-        }
-    )
-    return f"{base.rstrip('/')}/api/v1/stores/{store_q}/invoices?{query}"
-
-
-def _build_invoice_payment_methods_url(base, store_id, invoice_id):
-    store_q = urlparse.quote(store_id, safe="")
-    invoice_q = urlparse.quote(invoice_id, safe="")
-    query = urlparse.urlencode({"onlyAccountedPayments": "true"})
-    return f"{base.rstrip('/')}/api/v1/stores/{store_q}/invoices/{invoice_q}/payment-methods?{query}"
-
-
-def _backend_http_opener(backend):
-    return build_proxy_opener(
-        backend_value(backend, "tor_proxy", "proxy"),
-        source_label="BTCPay",
-    )
+    return inspect_btcpay_backend(backend, opener=opener).public
 
 
 def _page_sort_key(item):
@@ -468,6 +476,7 @@ def _fetch_incremental_pages(
     stable_ids_fn,
     normalize_page,
     max_pages_message,
+    force_changed_fn=None,
 ):
     previous_pages = _sorted_page_map(previous_pages)
     previous_pagination = (
@@ -522,7 +531,7 @@ def _fetch_incremental_pages(
             fingerprint=fingerprint,
             stable_ids=stable_ids,
             page_size=page_size,
-        )
+        ) and not (force_changed_fn is not None and force_changed_fn(page))
         if unchanged:
             next_pages[page_key] = previous
             stopped_by_known_page = True
@@ -667,6 +676,8 @@ def _invoice_page_fingerprint_rows(page):
             {
                 "id": _invoice_stable_id(invoice),
                 "status": invoice.get("status"),
+                "additionalStatus": invoice.get("additionalStatus"),
+                "paidAmount": invoice.get("paidAmount"),
                 "orderId": invoice.get("orderId") or metadata.get("orderId"),
                 "orderUrl": invoice.get("orderUrl") or metadata.get("orderUrl"),
                 "paymentRequestId": invoice.get("paymentRequestId")
@@ -686,8 +697,38 @@ def _invoice_page_fingerprint(page):
     ).hexdigest()
 
 
-def _hydrate_invoice_payment_methods(base, store_id, invoices, http_opener, token, timeout):
+def _invoice_status(invoice):
+    return str(invoice.get("status") or "").strip().lower()
+
+
+def _invoice_additional_status(invoice):
+    return str(invoice.get("additionalStatus") or "").strip().lower()
+
+
+def _invoice_may_have_payments(invoice):
+    if _invoice_status(invoice) in _INVOICE_STATES_WITH_PAYMENTS:
+        return True
+    return _invoice_additional_status(invoice) not in _UNPAID_ADDITIONAL_STATUSES
+
+
+def _invoice_is_open(invoice):
+    """An invoice that is still collecting or confirming payments."""
+
+    if not isinstance(invoice, dict):
+        return False
+    status = _invoice_status(invoice)
+    if status == "processing":
+        return True
+    return status in _INVOICE_STATES_OPEN and _invoice_additional_status(invoice) not in _UNPAID_ADDITIONAL_STATUSES
+
+
+def _invoice_page_has_open_invoice(page):
+    return any(_invoice_is_open(invoice) for invoice in page)
+
+
+def _hydrate_invoice_payment_methods(client, store_id, invoices, lookup_state):
     hydrated = []
+    store_q = urlparse.quote(store_id, safe="")
     for invoice in invoices:
         if not isinstance(invoice, dict):
             hydrated.append(invoice)
@@ -703,22 +744,18 @@ def _hydrate_invoice_payment_methods(base, store_id, invoices, http_opener, toke
             hydrated.append(invoice)
             continue
         invoice_id = invoice.get("id") or invoice.get("invoiceId")
-        if not invoice_id:
+        if not invoice_id or not _invoice_may_have_payments(invoice):
             hydrated.append(invoice)
             continue
-        methods_url = _build_invoice_payment_methods_url(base, store_id, str(invoice_id))
-        methods = _http_get_json(
-            http_opener,
-            methods_url,
-            token,
-            timeout,
-            permission_hint="Grant the API key the BTCPay 'View invoices' permission.",
+        invoice_q = urlparse.quote(str(invoice_id), safe="")
+        methods = client.get_json(
+            f"/api/v1/stores/{store_q}/invoices/{invoice_q}/payment-methods",
+            {"onlyAccountedPayments": "true"},
+            context="invoice payments",
+            permission_hint=INVOICE_PERMISSION_HINT,
         )
-        if not isinstance(methods, list):
-            raise AppError(
-                f"BTCPay response for {methods_url} was not a JSON array",
-                code="protocol_error",
-            )
+        methods = _json_array(methods, "invoice payment methods")
+        lookup_state["hydrated"] = int(lookup_state.get("hydrated") or 0) + 1
         copy = dict(invoice)
         copy["paymentMethods"] = methods
         copy["payments"] = _payments_from_invoice_payment_methods(methods)
@@ -726,12 +763,33 @@ def _hydrate_invoice_payment_methods(base, store_id, invoices, http_opener, toke
     return hydrated
 
 
+def _payment_request_titles(client, store_id, lookup_state):
+    """Load payment-request titles once per sync, tolerating a key without access."""
+
+    if lookup_state.get("payment_request_titles") is not None:
+        return lookup_state["payment_request_titles"]
+    store_q = urlparse.quote(store_id, safe="")
+    payload, error = client.get_optional_json(
+        f"/api/v1/stores/{store_q}/payment-requests",
+        tolerate=(403, 404),
+    )
+    titles = {}
+    if error is None and isinstance(payload, list):
+        for item in payload:
+            if isinstance(item, Mapping) and item.get("id") and item.get("title"):
+                titles[str(item["id"])] = str(item["title"])
+    lookup_state["payment_request_titles"] = titles
+    return titles
+
+
 def _payments_from_invoice_payment_methods(methods):
     payments = []
     for method in methods:
         if not isinstance(method, dict):
             continue
-        payment_method_id = method.get("paymentMethodId")
+        payment_method_id = canonical_payment_method_id(
+            method.get("paymentMethodId") or method.get("paymentMethod")
+        ) or None
         method_payments = method.get("payments") or []
         if not isinstance(method_payments, list):
             continue
@@ -757,7 +815,7 @@ def _looks_like_txid(value):
 
 
 def _is_chain_payment_method(payment_method_id):
-    return str(payment_method_id or "").strip().upper().endswith("-CHAIN")
+    return canonical_payment_method_id(payment_method_id).endswith("-CHAIN")
 
 
 def _txid_from_payment_id(value, payment_method_id=None):
@@ -770,110 +828,12 @@ def _txid_from_payment_id(value, payment_method_id=None):
     return None
 
 
-def _http_get_json(opener, url, token, timeout, *, permission_hint=None):
-    request = urlrequest.Request(
-        url,
-        headers={
-            "Accept": "application/json",
-            "Authorization": f"token {token}",
-        },
-    )
-    def open_once():
-        with opener.open(request, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8"))
-
-    try:
-        return request_with_retry(url, open_once, source_label="BTCPay")
-    except AppError as exc:
-        cause = exc.__cause__
-        if isinstance(cause, urlerror.HTTPError) and cause.code == 401:
-            raise AppError(
-                "BTCPay rejected the API key (HTTP 401)",
-                code="auth_error",
-                hint="Check that `token` on the backend is current and not revoked.",
-            ) from cause
-        if isinstance(cause, urlerror.HTTPError) and cause.code == 403:
-            raise AppError(
-                "BTCPay API key is missing the required permission (HTTP 403)",
-                code="auth_error",
-                hint=permission_hint
-                or "Check the permissions granted to the Greenfield API key.",
-            ) from cause
-        if isinstance(cause, urlerror.HTTPError) and cause.code == 404:
-            raise AppError(
-                "BTCPay store or payment method not found (HTTP 404)",
-                code="not_found",
-                hint="Verify --store-id and --payment-method-id (default BTC-CHAIN).",
-            ) from cause
-        if isinstance(cause, urlerror.HTTPError):
-            if cause.code in {429, 503}:
-                raise
-            raise AppError(str(exc), code="protocol_error") from cause
-        if isinstance(cause, urlerror.URLError):
-            raise AppError(str(exc), code="network_error", retryable=True) from cause
-        raise
-
-
-def _normalize_store(raw_store):
-    if not isinstance(raw_store, dict):
-        raise AppError("BTCPay store record was not a JSON object", code="protocol_error")
-    store_id = raw_store.get("id") or raw_store.get("storeId")
-    if not store_id:
-        raise AppError("BTCPay store record is missing 'id'", code="protocol_error")
-    label = raw_store.get("name") or raw_store.get("label") or store_id
-    return {
-        "id": str(store_id),
-        "name": str(label),
-        "default_currency": raw_store.get("defaultCurrency"),
-    }
-
-
-def _normalize_payment_method(store_id, raw_method):
-    if not isinstance(raw_method, dict):
-        raise AppError(
-            "BTCPay payment-method record was not a JSON object",
-            code="protocol_error",
-        )
-    method_id = (
-        raw_method.get("paymentMethodId")
-        or raw_method.get("paymentMethod")
-        or raw_method.get("id")
-    )
-    if not method_id:
-        crypto_code = raw_method.get("cryptoCode") or raw_method.get("currency")
-        payment_type = str(raw_method.get("paymentType") or "").lower()
-        if crypto_code and ("chain" in payment_type or "onchain" in payment_type):
-            method_id = f"{crypto_code}-CHAIN"
-    if not method_id:
-        return None
-    method_id = str(method_id)
-    sync_supported = _is_wallet_history_payment_method(method_id)
-    return {
-        "store_id": store_id,
-        "payment_method_id": method_id,
-        "label": str(raw_method.get("name") or raw_method.get("label") or method_id),
-        "enabled": bool(raw_method.get("enabled", True)),
-        "sync_supported": sync_supported,
-    }
-
-
-def _is_wallet_history_payment_method(payment_method_id):
-    normalized = str(payment_method_id or "").strip().upper()
-    return normalized in WALLET_HISTORY_PAYMENT_METHOD_IDS
-
-
-def require_wallet_history_payment_method(payment_method_id):
-    value = str(payment_method_id or "")
-    if _is_wallet_history_payment_method(value):
-        return value
-    raise AppError(
-        f"BTCPay payment method '{payment_method_id}' is not available through wallet-history sync",
-        code="validation",
-        hint=(
-            "Use an on-chain method such as BTC-CHAIN or LBTC-CHAIN. "
-            "BTC-LN requires invoice/settlement provenance ingest before Kassiber can match it to a settlement wallet."
-        ),
-    )
+def _payment_hash_from_payment_id(value, payment_method_id=None):
+    # BTCPay identifies a Lightning payment by its payment hash.
+    raw = str(value or "").strip().lower()
+    if _looks_like_txid(raw) and classify_payment_method(payment_method_id)["rail"] in {"lightning", "lnurl"}:
+        return raw
+    return None
 
 
 def _is_confirmed_transaction(tx):
@@ -912,7 +872,7 @@ def _to_record(tx, payment_method_id):
     return normalize_btcpay_record(csv_shaped)
 
 
-def _normalize_invoice_provenance(store_id, invoice):
+def _normalize_invoice_provenance(store_id, invoice, *, payment_request_titles=None):
     if not isinstance(invoice, dict):
         raise AppError("BTCPay invoice record was not a JSON object", code="protocol_error")
     invoice_id = invoice.get("id") or invoice.get("invoiceId")
@@ -923,23 +883,28 @@ def _normalize_invoice_provenance(store_id, invoice):
         payments = []
     metadata = _invoice_metadata(invoice)
     order_id = _str_or_none(invoice.get("orderId") or metadata.get("orderId"))
-    origin = _invoice_origin(invoice, metadata, order_id)
+    origin = classify_invoice_origin(
+        invoice,
+        metadata,
+        order_id,
+        payment_request_titles=payment_request_titles,
+    )
     return {
         "store_id": store_id,
         "invoice": invoice,
         "invoice_id": str(invoice_id),
         "order_id": order_id,
         "order_url": _str_or_none(metadata.get("orderUrl") or invoice.get("orderUrl")),
-        "payment_request_id": _str_or_none(
-            metadata.get("paymentRequestId")
-            or metadata.get("payment_request_id")
-            or invoice.get("paymentRequestId")
-        ),
+        "payment_request_id": payment_request_id_for(invoice, metadata, order_id),
         "origin_kind": origin["kind"],
         "origin_app_id": origin["app_id"],
+        "origin_app_type": origin["app_type"],
+        "origin_source": origin["source"],
         "origin_label": origin["label"],
         "origin_url": origin["url"],
         "status": _str_or_none(invoice.get("status")),
+        "additional_status": _str_or_none(invoice.get("additionalStatus")),
+        "invoice_type": _str_or_none(invoice.get("type")),
         "created_at": _btcpay_time(invoice.get("createdTime") or invoice.get("created")),
         "currency": _str_or_none(invoice.get("currency")),
         "amount": _str_or_none(invoice.get("amount")),
@@ -949,12 +914,12 @@ def _normalize_invoice_provenance(store_id, invoice):
 
 def _normalize_invoice_payment(invoice, payment):
     details = payment.get("details") if isinstance(payment.get("details"), dict) else {}
-    method = (
+    method = canonical_payment_method_id(
         payment.get("paymentMethod")
         or payment.get("paymentMethodId")
         or payment.get("paymentMethodData")
         or details.get("paymentMethod")
-    )
+    ) or None
     payment_id = (
         payment.get("id")
         or payment.get("paymentId")
@@ -979,6 +944,7 @@ def _normalize_invoice_payment(invoice, payment):
             or payment.get("amount")
             or details.get("value")
         ),
+        "fee": _str_or_none(payment.get("fee") or details.get("fee")),
         "rate": _str_or_none(payment.get("rate") or details.get("rate")),
         "txid": _str_or_none(
             payment.get("transactionId")
@@ -992,6 +958,7 @@ def _normalize_invoice_payment(invoice, payment):
             or payment.get("preimageHash")
             or details.get("paymentHash")
             or details.get("preimageHash")
+            or _payment_hash_from_payment_id(payment_id, method)
         ),
         "destination": _str_or_none(
             payment.get("destination")
@@ -1009,86 +976,6 @@ def _invoice_metadata(invoice):
     if isinstance(metadata, dict):
         return metadata
     return {}
-
-
-def _invoice_origin(invoice, metadata, order_id):
-    order_url = _str_or_none(metadata.get("orderUrl") or invoice.get("orderUrl"))
-    app_id = _str_or_none(
-        metadata.get("appId")
-        or metadata.get("app_id")
-        or metadata.get("applicationId")
-    )
-    app_name = _str_or_none(
-        metadata.get("appName")
-        or metadata.get("app_name")
-        or metadata.get("applicationName")
-    )
-    item_desc = _str_or_none(metadata.get("itemDesc") or metadata.get("itemDescription"))
-    pos_data = metadata.get("posData")
-    pos_label = _pos_data_label(pos_data)
-    payment_request_id = _str_or_none(
-        metadata.get("paymentRequestId")
-        or metadata.get("payment_request_id")
-        or invoice.get("paymentRequestId")
-    )
-
-    lower_order_url = (order_url or "").lower()
-    lower_order_id = (order_id or "").lower()
-    lower_app_name = (app_name or "").lower()
-    lower_app_id = (app_id or "").lower()
-    if pos_data is not None or "/pos" in lower_order_url or lower_order_id.startswith("pos"):
-        return {
-            "kind": "pos",
-            "app_id": app_id,
-            "label": app_name or item_desc or pos_label or order_id,
-            "url": order_url,
-        }
-    if (
-        "crowdfund" in lower_app_name
-        or "crowdfund" in lower_app_id
-        or "/crowdfund" in lower_order_url
-        or lower_order_id.startswith("crowdfund")
-    ):
-        return {
-            "kind": "crowdfund",
-            "app_id": app_id,
-            "label": app_name or item_desc or order_id,
-            "url": order_url,
-        }
-    if payment_request_id:
-        return {
-            "kind": "payment_request",
-            "app_id": None,
-            "label": item_desc or payment_request_id,
-            "url": order_url,
-        }
-    if app_id or app_name:
-        # Unknown BTCPay apps/plugins are provenance, not matching semantics.
-        # Exact provider matching belongs in the dedicated provider evidence path.
-        return {
-            "kind": "app",
-            "app_id": app_id,
-            "label": app_name or item_desc or order_id,
-            "url": order_url,
-        }
-    if order_url or order_id:
-        return {
-            "kind": "external_order",
-            "app_id": None,
-            "label": item_desc or order_id,
-            "url": order_url,
-        }
-    return {"kind": "unknown", "app_id": None, "label": item_desc, "url": order_url}
-
-
-def _pos_data_label(pos_data):
-    if not isinstance(pos_data, dict):
-        return None
-    for key in ("title", "name", "itemDesc", "itemDescription", "description"):
-        value = _str_or_none(pos_data.get(key))
-        if value:
-            return value
-    return None
 
 
 def _str_or_none(value):
@@ -1125,7 +1012,11 @@ __all__ = [
     "WALLET_HISTORY_PAYMENT_METHOD_IDS",
     "discover_btcpay_wallet_sources",
     "fetch_btcpay_invoice_provenance",
+    "fetch_btcpay_payouts",
     "fetch_btcpay_records",
+    "inspect_btcpay_backend",
+    "is_wallet_history_payment_method",
+    "probe_btcpay_instance",
     "probe_btcpay_wallet",
     "require_wallet_history_payment_method",
 ]

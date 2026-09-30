@@ -392,6 +392,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.connections.sources",
     "ui.connections.btcpay.create",
     "ui.connections.btcpay.discover",
+    "ui.connections.btcpay.key_guide",
     "ui.connections.btcpay.test",
     "ui.connections.node.snapshot",
     "ui.reports.lightning_profitability",

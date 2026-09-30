@@ -2655,6 +2655,7 @@ CREATE TABLE IF NOT EXISTS btcpay_provenance_records (
     origin_app_id TEXT,
     origin_label TEXT,
     origin_url TEXT,
+    origin_source TEXT,
     fiat_currency TEXT,
     fiat_value_exact TEXT,
     fiat_rate_exact TEXT,
@@ -2687,6 +2688,20 @@ CREATE TABLE IF NOT EXISTS btcpay_account_routes (
 
 CREATE INDEX IF NOT EXISTS idx_btcpay_account_routes_profile_backend
     ON btcpay_account_routes(profile_id, backend_name);
+
+CREATE TABLE IF NOT EXISTS btcpay_store_sync_states (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    backend_name TEXT NOT NULL,
+    store_id TEXT NOT NULL,
+    last_attempt_at TEXT,
+    last_success_at TEXT,
+    last_error_code TEXT,
+    last_error_message TEXT,
+    invoices_seen INTEGER,
+    payouts_seen INTEGER,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(profile_id, backend_name, store_id)
+);
 
 CREATE TABLE IF NOT EXISTS external_documents (
     id TEXT PRIMARY KEY,
@@ -6485,6 +6500,7 @@ def _ensure_commercial_reconciliation_schema(conn):
     ensure_column(conn, "btcpay_provenance_records", "origin_app_id", "TEXT")
     ensure_column(conn, "btcpay_provenance_records", "origin_label", "TEXT")
     ensure_column(conn, "btcpay_provenance_records", "origin_url", "TEXT")
+    ensure_column(conn, "btcpay_provenance_records", "origin_source", "TEXT")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_btcpay_provenance_profile_payment_request "
         "ON btcpay_provenance_records(profile_id, payment_request_id) "
@@ -6510,6 +6526,25 @@ def _ensure_commercial_reconciliation_schema(conn):
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_btcpay_account_routes_profile_backend "
         "ON btcpay_account_routes(profile_id, backend_name)"
+    )
+    # Last time Kassiber loaded each store's invoices and payouts. BTCPay does
+    # not push updates, so this is what staleness warnings are measured from.
+    conn.execute(
+        """
+            CREATE TABLE IF NOT EXISTS btcpay_store_sync_states (
+                profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                backend_name TEXT NOT NULL,
+                store_id TEXT NOT NULL,
+                last_attempt_at TEXT,
+                last_success_at TEXT,
+                last_error_code TEXT,
+                last_error_message TEXT,
+                invoices_seen INTEGER,
+                payouts_seen INTEGER,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(profile_id, backend_name, store_id)
+            )
+        """
     )
     conn.execute(
         """

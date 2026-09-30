@@ -246,45 +246,69 @@ kassiber wallets identify --txid <64-hex> --verify-on-chain --verify-backend mem
 
 Import into an existing wallet when the file represents the same real wallet.
 
-BTCPay:
+BTCPay (Greenfield API):
 
 ```bash
-kassiber wallets import-btcpay --wallet btcpay --file /path/to/export.csv --input-format csv
+# 1. Permissions and a pre-filled BTCPay link; no network request.
+kassiber btcpay key-url --server-url https://btcpay.example.com --preset read_only
+# 2. Save the key the user created (never paste it into chat).
 printf %s "$BTCPAY_TOKEN" | kassiber backends create btcpay-prod \
   --kind btcpay --url https://btcpay.example.com --token-stdin
-kassiber wallets create --label btcpay-shop --kind custom --backend btcpay-prod --store-id <store-id>
-kassiber wallets sync --wallet btcpay-shop
-kassiber wallets sync-btcpay --wallet btcpay-shop --backend btcpay-prod --store-id <store-id>
+# 3. Read-only inspection: key scope/risk, stores, payment methods, shared
+#    store wallets, recognised tracked wallets, store freshness, and a
+#    suggested plan.
+kassiber btcpay inspect --backend btcpay-prod
+# 4. Apply the plan, or override single payment methods.
+kassiber btcpay setup --backend btcpay-prod --label Shop --recommended --dry-run
+kassiber btcpay setup --backend btcpay-prod --label Shop \
+  --route <store-id>:BTC-CHAIN=existing_wallet@<wallet-label> \
+  --route <store-id>:BTC-LN=payment_ledger
+kassiber wallets sync --all
+kassiber btcpay provenance sync --all
 ```
 
-`wallets sync-btcpay` keeps the old explicit CLI shape, but it now stores the
-same BTCPay backend/store config on the wallet so later `wallets sync` and
-`wallets sync --all` can reuse it. Desktop setup should ask for store ID only
-and let Kassiber use the default BTC on-chain payment method internally.
+Key presets: `read_only` (`btcpay.store.canviewstoresettings`) reads invoices,
+payments, refunds/payouts, payment requests, and the address preview used to
+recognise which wallet a store pays into; it cannot change the store.
+`wallet_history` (`btcpay.store.canmodifystoresettings`) is the only way BTCPay
+exposes its own on-chain wallet history, labels, and payout fees, and it can
+also change the store's payout wallet. BTCPay's own records are an accurate
+balance source; do not push users towards watch-only wallets. Explain the
+permission trade-off and let the user choose: a wallet-history key, or mapping
+the store to a wallet they already track.
+
+Setup actions per store payment method: `wallet_source` (import BTCPay wallet
+history), `existing_wallet` (the store pays into a wallet Kassiber tracks),
+`payment_ledger` (Lightning, LNURL, and bitcoin plugin rails Kassiber cannot
+watch: BTCPay's settled payments and completed payouts become the balance),
+`provenance_only` (Lightning already booked by a connected node, stores sharing
+an already imported wallet), `skip`. A payment ledger only sees what passes
+through BTCPay; withdrawals made outside it need their own record, and it needs
+a key that can read payouts. A configured wallet source or ledger stays until
+its wallet is archived. One wallet
+is imported once: stores that share a wallet, or the same store reached through
+a second API key, must not become two wallet sources or two ledgers; the core
+rejects such plans. Each API key is its own backend; one key can serve many
+stores.
+
+BTCPay does not push updates. Store data is only as current as the last sync:
+check `sync_state` / the `stale_store_data` warning in `btcpay inspect` and
+suggest a sync before period-end answers that depend on BTCPay data.
+
+`wallets import-btcpay --file` remains the CSV path. `wallets create --store-id`
+and `wallets sync-btcpay` keep the older single-store shape and store the
+same config, so later `wallets sync` reuses it. Wallet syncs also refresh that
+store's invoices and payouts and create local link suggestions; review them with
+`btcpay provenance links --state suggested` and `btcpay provenance review`
+(refunds and payouts review as `refund` or `expense` against the outbound
+transaction, never as income; several payouts paid by one send review together
+at their combined value). Sends that completed payouts explain book the miner
+fee separately.
 
 Do not ask users to paste raw BTCPay API tokens into chat. Prefer
 `--token-stdin` (with a local `printf %s "$VAR" | kassiber ...` pipe) or
 `--token-fd <FD>`. The argv form `--token <value>` still works for legacy
 scripts but warns and leaks to shell history.
-
-CLI-only template:
-
-```bash
-printf %s "$BTCPAY_TOKEN" | kassiber backends create <btcpay-backend-name> \
-  --kind btcpay \
-  --url <btcpay-base-url> \
-  --token-stdin
-kassiber wallets create \
-  --label <wallet-label> \
-  --kind custom \
-  --backend <btcpay-backend-name> \
-  --store-id <btcpay-store-id>
-kassiber wallets sync --wallet <wallet-label>
-kassiber wallets sync-btcpay \
-  --wallet <wallet-label> \
-  --backend <btcpay-backend-name> \
-  --store-id <btcpay-store-id>
-```
 
 Phoenix:
 

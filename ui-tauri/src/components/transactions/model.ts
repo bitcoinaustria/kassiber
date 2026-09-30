@@ -116,6 +116,7 @@ export type PricingSourceKind =
   | "btcpay_wallet_export"
   | "btcpay_invoice"
   | "btcpay_payment"
+  | "btcpay_payout"
   | "manual_override"
   | "manual_rate_cache"
   | "fmv_provider";
@@ -477,6 +478,8 @@ export const pricingSourceStyles: Record<PricingSelectionValue, string> = {
   btcpay_invoice:
     "bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-600/20 dark:bg-orange-900/25 dark:text-orange-300 dark:ring-orange-400/20",
   btcpay_payment:
+    "bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-600/20 dark:bg-orange-900/25 dark:text-orange-300 dark:ring-orange-400/20",
+  btcpay_payout:
     "bg-orange-50 text-orange-700 ring-1 ring-inset ring-orange-600/20 dark:bg-orange-900/25 dark:text-orange-300 dark:ring-orange-400/20",
   manual_rate_cache:
     "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-900/30 dark:text-sky-400 dark:ring-sky-400/20",

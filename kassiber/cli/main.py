@@ -131,6 +131,10 @@ from .handlers import (
     attach_btcpay_provenance_to_wallet,
     attach_bullbitcoin_wallet_export_to_wallet,
     sync_btcpay_commercial_provenance,
+    sync_all_btcpay_commercial_provenance,
+    btcpay_key_guide,
+    inspect_btcpay_setup,
+    apply_btcpay_setup,
     sync_btcpay_into_wallet,
     sync_wallet,
     update_transaction_pair,
@@ -138,6 +142,7 @@ from .handlers import (
 from ..core import accounts as core_accounts
 from ..core import attachments as core_attachments
 from ..core import commercial as core_commercial
+from ..btcpay.permissions import KEY_PRESETS as BTCPAY_KEY_PRESETS
 from ..core import custody_components as core_custody_components
 from ..core import custody_component_planner as core_custody_component_planner
 from ..core import custody_filed_reports as core_custody_filed_reports
@@ -2863,18 +2868,100 @@ def build_parser() -> argparse.ArgumentParser:
 
     btcpay = sub.add_parser("btcpay")
     btcpay_sub = btcpay.add_subparsers(dest="btcpay_command", required=True)
+    btcpay_key_url = btcpay_sub.add_parser(
+        "key-url",
+        help="Print the permissions Kassiber needs and a pre-filled BTCPay key authorization link (no network access)",
+    )
+    btcpay_key_url_target = btcpay_key_url.add_mutually_exclusive_group()
+    btcpay_key_url_target.add_argument("--server-url", dest="server_url")
+    btcpay_key_url_target.add_argument("--backend", help="Use the server URL of a saved BTCPay instance")
+    btcpay_key_url.add_argument(
+        "--preset",
+        choices=tuple(BTCPAY_KEY_PRESETS),
+        default="read_only",
+        help="read_only (recommended) or wallet_history (adds BTCPay's own wallet history)",
+    )
+    btcpay_key_url.add_argument(
+        "--scope",
+        choices=("all", "single"),
+        dest="store_scope",
+        default=None,
+        help="all: one key for every store (default for read_only); single: BTCPay asks for one store",
+    )
+    btcpay_key_url.add_argument(
+        "--store-id",
+        action="append",
+        dest="store_ids",
+        default=None,
+        help="Scope the key to this store (repeatable); omit to choose stores in BTCPay",
+    )
+    btcpay_inspect = btcpay_sub.add_parser(
+        "inspect",
+        help="Inspect a BTCPay instance: key permissions, stores, payment methods, shared wallets, and a setup plan",
+    )
+    btcpay_inspect.add_argument("--workspace")
+    btcpay_inspect.add_argument("--profile")
+    btcpay_inspect.add_argument("--backend", required=True)
+    btcpay_setup = btcpay_sub.add_parser(
+        "setup",
+        help="Apply a BTCPay setup plan: wallet sources, wallet mappings, payment ledgers, and invoice/payout provenance routes",
+    )
+    btcpay_setup.add_argument("--workspace")
+    btcpay_setup.add_argument("--profile")
+    btcpay_setup.add_argument("--backend", required=True)
+    btcpay_setup.add_argument(
+        "--label",
+        required=True,
+        help="Connection label used to name wallets imported from BTCPay",
+    )
+    btcpay_setup.add_argument(
+        "--recommended",
+        action="store_true",
+        help="Apply the suggested action for every payment method (see `btcpay inspect`)",
+    )
+    btcpay_setup.add_argument(
+        "--route",
+        action="append",
+        dest="route_specs",
+        default=None,
+        metavar="STORE[:METHOD]=ACTION[@WALLET]",
+        help=(
+            "Choose an action for one payment method: wallet_source, existing_wallet@<wallet>, "
+            "payment_ledger (Lightning and Bitcoin plugin rails), provenance_only, or skip "
+            "(repeatable; METHOD defaults to BTC-CHAIN)"
+        ),
+    )
+    btcpay_setup.add_argument("--dry-run", action="store_true", dest="dry_run")
+    btcpay_setup.add_argument(
+        "--no-sync",
+        action="store_false",
+        dest="sync_provenance",
+        help="Save the routes without loading invoices and payouts now",
+    )
     btcpay_provenance = btcpay_sub.add_parser("provenance")
     btcpay_provenance_sub = btcpay_provenance.add_subparsers(dest="btcpay_provenance_command", required=True)
     btcpay_sync = btcpay_provenance_sub.add_parser("sync")
     btcpay_sync.add_argument("--workspace")
     btcpay_sync.add_argument("--profile")
-    btcpay_sync.add_argument("--backend", required=True)
-    btcpay_sync.add_argument("--store-id", required=True, dest="store_id")
+    btcpay_sync.add_argument("--backend")
+    btcpay_sync.add_argument("--store-id", dest="store_id")
+    btcpay_sync.add_argument(
+        "--all",
+        action="store_true",
+        dest="sync_all",
+        help="Refresh every BTCPay store configured in this book",
+    )
+    btcpay_sync.add_argument(
+        "--no-payouts",
+        action="store_false",
+        dest="include_payouts",
+        help="Skip refunds and payouts",
+    )
     btcpay_sync.add_argument("--page-size", type=int, default=BTCPAY_DEFAULT_PAGE_SIZE, dest="page_size")
     btcpay_list = btcpay_provenance_sub.add_parser("list")
     btcpay_list.add_argument("--workspace")
     btcpay_list.add_argument("--profile")
-    btcpay_list.add_argument("--record-type", choices=("invoice", "payment"))
+    btcpay_list.add_argument("--record-type", choices=core_commercial.RECORD_TYPES)
     btcpay_list.add_argument("--limit", type=int, default=100)
     btcpay_suggest = btcpay_provenance_sub.add_parser("suggest")
     btcpay_suggest.add_argument("--workspace")
@@ -5233,8 +5320,70 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
     if args.command == "btcpay":
         commercial_hooks = _commercial_hooks()
+        if args.btcpay_command == "key-url":
+            return emit(
+                args,
+                btcpay_key_guide(
+                    args.runtime_config,
+                    args.server_url,
+                    args.backend,
+                    args.preset,
+                    args.store_ids,
+                    store_scope=args.store_scope,
+                ),
+            )
+        if args.btcpay_command == "setup":
+            return emit(
+                args,
+                apply_btcpay_setup(
+                    conn,
+                    args.runtime_config,
+                    args.workspace,
+                    args.profile,
+                    args.backend,
+                    args.label,
+                    route_specs=args.route_specs or [],
+                    use_recommendations=args.recommended,
+                    dry_run=args.dry_run,
+                    sync_provenance=args.sync_provenance,
+                ),
+            )
+        if args.btcpay_command == "inspect":
+            return emit(
+                args,
+                inspect_btcpay_setup(
+                    conn,
+                    args.runtime_config,
+                    args.workspace,
+                    args.profile,
+                    args.backend,
+                ),
+            )
         if args.btcpay_command == "provenance":
             if args.btcpay_provenance_command == "sync":
+                if args.sync_all:
+                    if args.backend or args.store_id:
+                        raise AppError(
+                            "Use either --all or --backend/--store-id",
+                            code="validation",
+                        )
+                    return emit(
+                        args,
+                        sync_all_btcpay_commercial_provenance(
+                            conn,
+                            args.runtime_config,
+                            args.workspace,
+                            args.profile,
+                            args.page_size,
+                            include_payouts=args.include_payouts,
+                        ),
+                    )
+                if not args.backend or not args.store_id:
+                    raise AppError(
+                        "btcpay provenance sync needs --backend and --store-id, or --all",
+                        code="validation",
+                        hint="Run `kassiber btcpay inspect --backend NAME` to list the stores a key can read.",
+                    )
                 return emit(
                     args,
                     sync_btcpay_commercial_provenance(
@@ -5245,6 +5394,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         args.backend,
                         args.store_id,
                         args.page_size,
+                        include_payouts=args.include_payouts,
                     ),
                 )
             if args.btcpay_provenance_command == "list":

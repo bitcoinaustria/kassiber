@@ -22,6 +22,7 @@ SOURCE_EXCHANGE_EXECUTION = "exchange_execution"
 SOURCE_BTCPAY_WALLET_EXPORT = "btcpay_wallet_export"
 SOURCE_BTCPAY_INVOICE = "btcpay_invoice"
 SOURCE_BTCPAY_PAYMENT = "btcpay_payment"
+SOURCE_BTCPAY_PAYOUT = "btcpay_payout"
 SOURCE_MANUAL_OVERRIDE = "manual_override"
 SOURCE_MANUAL_RATE_CACHE = "manual_rate_cache"
 SOURCE_FMV_PROVIDER = "fmv_provider"
@@ -40,6 +41,7 @@ SOURCE_PRIORITY = {
     SOURCE_EXCHANGE_EXECUTION: 70,
     SOURCE_BTCPAY_INVOICE: 80,
     SOURCE_BTCPAY_PAYMENT: 80,
+    SOURCE_BTCPAY_PAYOUT: 80,
     SOURCE_MANUAL_OVERRIDE: 100,
 }
 
@@ -98,6 +100,7 @@ def import_quality(source_kind: str) -> str:
         SOURCE_EXCHANGE_EXECUTION,
         SOURCE_BTCPAY_INVOICE,
         SOURCE_BTCPAY_PAYMENT,
+        SOURCE_BTCPAY_PAYOUT,
         SOURCE_MANUAL_OVERRIDE,
     }:
         return QUALITY_EXACT

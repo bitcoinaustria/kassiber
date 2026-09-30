@@ -77,6 +77,9 @@ def command_needs_database(args: argparse.Namespace) -> bool:
         return False
     if path == "wallets.import-ledger" and bool(getattr(args, "dry_run", False)):
         return False
+    if path == "btcpay.key-url" and not getattr(args, "backend", None):
+        # A link from --server-url is pure; only --backend reads a saved instance.
+        return False
     return True
 
 

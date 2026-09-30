@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TabsContent } from "@/components/ui/tabs";
-import { useDaemon } from "@/daemon/client";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { transactionAnalysisSearch } from "@/lib/chainAnalysisNavigation";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
@@ -15,7 +15,10 @@ import { DirtyDot, InfoHint } from "./TransactionDetailSheetParts";
 import { exchangeTransfer } from "./ExchangeTransferModel";
 import { TransactionRecordFlow } from "./TransactionRecordFlow";
 import { TransactionGraphTechnicalDetails } from "./TransactionGraphTechnicalDetails";
-import { CommercialProvenancePanel } from "./TransactionDetailCommercialPanel";
+import {
+  CommercialProvenancePanel,
+  type CommercialReviewDecision,
+} from "./TransactionDetailCommercialPanel";
 import {
   blurClass,
   copyText,
@@ -381,6 +384,16 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
     explorer,
     openExplorer,
   } = ctx;
+  const reviewCommercial = useDaemonMutation("ui.btcpay.provenance.review");
+  const [commercialReviewError, setCommercialReviewError] = useState<string | null>(null);
+  const reviewCommercialLink = (link: string, decision: CommercialReviewDecision) => {
+    setCommercialReviewError(null);
+    reviewCommercial
+      .mutateAsync({ link, ...decision })
+      .catch((error: unknown) =>
+        setCommercialReviewError(error instanceof Error ? error.message : String(error)),
+      );
+  };
   return (
     <>
                   {/* Details — read-only source-of-record + book metadata */}
@@ -464,6 +477,9 @@ export function TransactionDetailsTab({ ctx }: { ctx: TransactionDetailTabContex
                       context={commercialContext}
                       loading={commercialContextLoading}
                       hidden={hideSensitive}
+                      onReview={reviewCommercialLink}
+                      reviewPending={reviewCommercial.isPending}
+                      reviewError={commercialReviewError}
                     />
                   </TabsContent>
 

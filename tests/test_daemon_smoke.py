@@ -4109,7 +4109,22 @@ class DaemonSmokeTest(unittest.TestCase):
                         ]["wallet"]
                     )
                     self.assertEqual(received[0]["auth"], "token inline-secret")
-                    self.assertIn("onlyEnabled=true", received[1]["path"])
+                    self.assertEqual(
+                        [entry["path"] for entry in received[:3]],
+                        ["/api/v1/server/info", "/api/v1/api-keys/current", "/api/v1/stores"],
+                    )
+                    self.assertIn("onlyEnabled=true", received[3]["path"])
+                    # This fake server exposes neither key introspection nor an
+                    # address preview; the plan still recommends a route per method.
+                    self.assertFalse(envelope["data"]["api_key"]["known"])
+                    recommendations = {
+                        method["payment_method_id"]: method["recommendation"]["action"]
+                        for method in methods
+                    }
+                    self.assertEqual(recommendations["BTC-CHAIN"], "wallet_source")
+                    self.assertEqual(recommendations["LBTC-CHAIN"], "existing_wallet")
+                    self.assertEqual(recommendations["BTC-LN"], "provenance_only")
+                    self.assertIn("authorize_url", envelope["data"]["key_read_only"])
                 finally:
                     if proc.poll() is None:
                         proc.terminate()

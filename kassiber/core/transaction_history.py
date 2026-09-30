@@ -104,6 +104,7 @@ PRICING_SOURCE_LABELS = {
     "btcpay_wallet_export": "BTCPay wallet export",
     "btcpay_invoice": "BTCPay invoice",
     "btcpay_payment": "BTCPay payment",
+    "btcpay_payout": "BTCPay payout",
     "manual_override": "Manual override",
     "manual_rate_cache": "Manual rate cache",
     "fmv_provider": "Provider fair-market price",

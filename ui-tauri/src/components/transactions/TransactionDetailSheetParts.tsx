@@ -589,12 +589,35 @@ export type CommercialBtcpayMatch = {
   } | null;
 };
 
+export type CommercialPayoutBatch = {
+  size: number;
+  link_ids: string[];
+  amount_msat: number;
+  fiat_currency: string | null;
+  fiat_value_exact: string | null;
+  mixed_currencies: boolean;
+};
+
+/** When Kassiber last loaded a BTCPay store; BTCPay never pushes updates. */
+export type CommercialBtcpayFreshness = {
+  backend: string;
+  store_id: string;
+  last_attempt_at: string | null;
+  last_success_at: string | null;
+  last_error_code: string | null;
+  age_seconds: number | null;
+  stale: boolean;
+  never_synced: boolean;
+};
+
 export type CommercialContextData = {
   transaction_id: string;
   transaction_external_id: string;
   links: CommercialContextLink[];
   btcpay: CommercialBtcpayMatch[];
   documents: CommercialContextDocument[];
+  payout_batch?: CommercialPayoutBatch | null;
+  btcpay_freshness?: CommercialBtcpayFreshness[];
 };
 
 export function balanceImpactDirection(

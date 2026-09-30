@@ -425,24 +425,72 @@ truth for icons, copy, and ordering, but uses this list to verify it isn't
 advertising a "ready" connection backed by a wallet kind or import format
 the daemon does not implement.
 
-`ui.connections.btcpay.create` configures a BTCPay store in one of two modes.
-The default `wallet_sources` mode creates wallets configured for confirmed
-Greenfield wallet-history sync from a BTCPay instance, so a BTCPay-only setup is
-enough when BTCPay is the source of the wallet history. The `existing_wallets`
-mode maps selected BTCPay payment methods onto already configured settlement
-wallets and stores BTCPay provenance routes there; those wallets keep their
-normal descriptor/file sync source while BTCPay comments and labels enrich
-matching transactions. Both modes accept either a saved `backend` or inline
-instance credentials (`backend_label`, `server_url`, `api_key`) plus `label`,
-`store_id`, and either optional `payment_method_id` (default `BTC-CHAIN`) or
-`payment_method_ids` for bulk setup. In `wallet_sources`, bulk setup creates one
-Kassiber wallet per selected payment method and suffixes labels with the
-payment method id. In `existing_wallets`, callers pass `routes` containing
-`wallet` and `payment_method_id`. Inline credentials create a local `btcpay`
-backend row first, then store only the redacted backend reference on the
-wallet. Use one Kassiber wallet per real underlying BTCPay-backed wallet
-balance; stores that share the same BTCPay wallet should not be duplicated as
-separate Kassiber wallets.
+`ui.connections.btcpay.create` applies a reviewed BTCPay setup. The desktop
+always sends `mode: "account"` with `label`, either a saved `backend` or inline
+instance credentials (`backend_label`, `server_url`, `api_key`, and the
+`network` that discovery detected), `routes`, and `sync_provenance`. Each route
+names `store_id`, `payment_method_id`, and an `action`:
+
+- `wallet_source` creates a `custom` wallet that imports BTCPay's confirmed
+  wallet history. The wallet config records the payment method's chain, the
+  detected network, and the store wallet's `wallet_fingerprint`.
+- `existing_wallet` adds a `btcpay_provenance` route to the wallet named in
+  `wallet`; that wallet keeps its own descriptor/file sync. BTCPay wallet
+  sources cannot be mapping targets.
+- `payment_ledger` creates (or extends) a `custom` wallet with
+  `source_mode: "payments"` that books the store's settled payments and
+  completed payouts for Lightning/LNURL (one ledger per store) or a bitcoin
+  plugin rail (one per rail). It is returned in `payment_ledgers`.
+- `provenance_only` stores a walletless account route for invoices, payouts,
+  and payment requests (Lightning booked by a connected node, shared wallets,
+  on-chain stores a read-only key cannot import).
+- `skip` removes an existing route for that store payment method.
+
+The core validates the whole route set before any write and rejects plans that
+would import the same store wallet twice, either inside the request (same
+`wallet_fingerprint`) or next to an existing wallet source, including one
+created through another API key for the same server, and plans that would book
+one store rail's payments through two keys. Routes are written in one
+transaction; invoice and payout provenance is then fetched per store and a
+failure is reported per store in `provenance` instead of undoing the routes.
+The legacy `wallet_sources` and `existing_wallets` modes remain for older
+callers. Inline credentials create a local `btcpay` backend row first; wallets
+only ever reference its name.
+
+`ui.connections.btcpay.discover` accepts the same saved-backend or inline
+credential shape, inspects the server with read-only Greenfield requests, and
+returns the shared setup plan from `core/btcpay_setup.py`: `server` (version,
+sync state, transport), `api_key` (scope, risk, excess permissions; never the
+key), `stores` with per-store capabilities and missing permissions,
+`payment_methods` with rail, settlement hint, `ledger_group`, detected network,
+an opaque `wallet_fingerprint`, local ownership recognition (`owned_by`),
+shared-wallet and other-key notes, per-action availability, and a
+`recommendation`, plus `warnings`, `sibling_backends`, `existing_routes`,
+`book_network`, `detected_network`, and `key_upgrade`/`key_read_only` guides.
+Configured stores carry a local `sync_state` (last attempt, last success, last
+error code, `stale`); stale ones add a `stale_store_data` warning because
+BTCPay never pushes updates. It reads
+`/server/info`, `/api-keys/current`, `/stores`, each store's enabled payment
+methods, and the on-chain address preview. It never requests payment-method
+configuration, which carries derivation schemes and Lightning connection
+strings. Preview addresses stay inside the core for fingerprinting and
+ownership matching. Nothing is persisted.
+
+`ui.connections.btcpay.key_guide` performs no network I/O. Given `preset`
+(`read_only` or `wallet_history`), optional `store_scope` (`all` or `single`;
+defaults `all` for read-only and `single` for wallet history), and either
+`server_url` or a saved `backend`, it returns the required permissions, manual
+steps, and a pre-filled `/api-keys/authorize` link the user opens in their own
+browser.
+
+`ui.connections.btcpay.test` makes a single Greenfield request against
+the saved-backend or inline instance credentials plus `store_id` (and optional
+`payment_method_id`, defaulting to `BTC-CHAIN`) to confirm that wallet history
+is readable. It returns `{backend, store_id, payment_method_id, ok: true}` on
+success, and otherwise propagates the structured error codes (`auth_error`
+with `details.missing_permission`, `not_found`, `network_error`) the sync path
+uses. `ui.backends.btcpay.test` stays a one-request store-list probe for
+connection health. Nothing is persisted.
 
 `ui.connections.bullbitcoin_wallet.create` configures Bull's unified mobile
 wallet CSV in one of two modes. The default `wallet_sources` mode accepts
@@ -454,27 +502,14 @@ containing `wallet` plus `network`; it stores Bull export routes on those
 wallets so their normal descriptor/file source remains authoritative while Bull
 metadata enriches matching rows during `ui.wallets.sync`.
 
-`ui.connections.btcpay.discover` accepts the same saved-backend or inline
-instance credential shape as `create`, performs read-only Greenfield discovery,
-and returns safe store ids/names plus enabled payment method ids. It does not
-persist anything and does not request payment-method config bodies, because
-those may contain wallet material. Desktop setup should default to selecting all
-sync-supported payment methods for the chosen store and leave unsupported
-methods for future source-specific adapters.
-
-`ui.connections.btcpay.test` makes a single Greenfield request against
-the saved-backend or inline instance credentials plus `store_id` (and optional
-`payment_method_id`, defaulting to `BTC-CHAIN`) to confirm the credentials and
-store reference resolve. It returns
-`{backend, store_id, payment_method_id, ok: true}` on success, and otherwise
-propagates the same structured error codes (`auth_error`, `not_found`,
-`network_error`) the sync path uses. Nothing is persisted.
-
 `ui.transactions.commercial_context` reads the reviewed or suggested
 commercial provenance for one transaction. It joins wallet transactions to
 BTCPay payments, their parent invoices, payment-request ids when present,
 normalized origin hints such as POS/app/external-order, and linked external
-documents. The payload is a redacted UI read model; it does not expose raw
+documents. `payout_batch` summarises several payouts proven by the same send
+(count, summed amount and fiat value), which review together, and
+`btcpay_freshness` gives each contributing store's last successful refresh and
+`stale` flag. The payload is a redacted UI read model; it does not expose raw
 BTCPay invoice JSON, rejected matches, payment hashes, destination addresses,
 full origin URLs, payment-method configuration, descriptors, xpubs, or API
 tokens.
@@ -677,8 +712,11 @@ Job types are separate so partial success stays usable:
 
 - `onchain_wallet_history` for descriptor/address wallet history through
   Esplora, Electrum, or Bitcoin Core.
-- `btcpay_wallet_source` for BTCPay confirmed wallet-history imports.
-- `btcpay_provenance` for BTCPay comment/label enrichment on existing wallets.
+- `btcpay_wallet_source` for BTCPay confirmed wallet-history imports and
+  payment ledgers. Both refresh the store's provenance first; payment ledgers
+  fail when it cannot be read.
+- `btcpay_provenance` for BTCPay comment/label enrichment on mapped wallets and
+  invoice/payout provenance for mapped and provenance-only stores.
 - `market_rate_coverage` for incremental missing-minute rate coverage.
 - `journal_refresh` for follow-up local journal processing.
 - `wallet_graph_references` for bounded background graph-cache completion after

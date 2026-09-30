@@ -18,11 +18,14 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   place a principal shortfall at the funding timestamp. Prove fee timing,
   in-transit custody, and cross-period balances/basis/reports. Looser matching
   or quarantine exclusion is not a fix.
-- [ ] Resolve the reported BTCPay folded-in-fee disposal cases: a standalone
-  payment can overstate proceeds, and an owned-plus-external batched payment
-  can absorb the external outflow into transfer fees. Recover fee evidence
-  from an authoritative source or expose an explicit fee-unknown state;
-  correct net holdings alone do not prove correct tax treatment.
+- [ ] Resolve the remaining BTCPay folded-in-fee disposal cases. Sends that
+  completed BTCPay payouts explain now book their fee separately; a send BTCPay
+  did not create as a payout (for example from its wallet send page) still
+  carries the fee inside the amount and can overstate proceeds, and an
+  owned-plus-external batched payment can absorb the external outflow into
+  transfer fees. Recover fee evidence from an authoritative source or expose
+  an explicit fee-unknown state; correct net holdings alone do not prove
+  correct tax treatment.
 - [ ] Resolve the deferred unknown-change-script case: a self-transfer's change
   outside the ownership index can appear as an external disposal. Archived
   policies, historical derivation floors, and bounded deeper scans mitigate
@@ -131,8 +134,9 @@ remains outside that closeout.
   `detect_active_script_types`. Keep pinned script types available, backend
   scope explicit, and fallback behavior documented when no history is found.
 - [ ] Build the dedicated commercial reconciliation queue/workbench on the
-  existing BTCPay provenance/document APIs; transaction-detail context already
-  exists. Scale reviewed suggestion resolution without duplicating balances.
+  existing BTCPay provenance/document APIs; transaction detail already shows
+  suggested payments/payouts with confirm/reject review. Scale reviewed
+  suggestion resolution without duplicating balances.
 - [ ] Improve dense source-of-funds graph presentation after real-user feedback.
   Preserve the existing editor and reviewed evidence workflow.
 - [ ] Add optional configured-backend observations to source-of-funds review

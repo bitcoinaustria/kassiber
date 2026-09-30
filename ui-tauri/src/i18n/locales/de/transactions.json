@@ -857,9 +857,11 @@
     "title": "Kommerzielle Herkunft",
     "loading": "Wird geladen…",
     "btcpayPayment": "BTCPay-Zahlung",
+    "btcpayPayout": "BTCPay-Auszahlung",
     "linked": "Verknüpft",
     "invoice": "Rechnung",
     "paidInvoice": "Bezahlte Rechnung",
+    "refundedInvoice": "Erstattete Rechnung",
     "unknown": "Unbekannt",
     "paymentRequest": "Zahlungsanforderung",
     "origin": "BTCPay-Quelle",
@@ -889,7 +891,33 @@
       "pos": "BTCPay POS",
       "app": "BTCPay-App",
       "externalOrder": "Externe Bestellung",
-      "paymentRequest": "Zahlungsanforderung"
+      "paymentRequest": "Zahlungsanforderung",
+      "crowdfund": "BTCPay-Crowdfund",
+      "ecommerce": "Onlineshop",
+      "refund": "Rückerstattung",
+      "pullPayment": "Pull Payment",
+      "storePayout": "Store-Auszahlung"
+    },
+    "review": {
+      "kindLabel": "Diese Transaktion erfassen als",
+      "confirm": "Zuordnung bestätigen",
+      "reject": "Gehört nicht dazu",
+      "reopen": "Prüfung wieder öffnen",
+      "reopenEffect": "Stellt den vorherigen Preis und die vorherige Art der Transaktion wieder her.",
+      "effectPrice": "Verwendet den BTCPay-Wert in {{currency}} als Preis dieser Transaktion.",
+      "effectKind": "Erfasst sie als {{kind}}.",
+      "effectKeepKind": "Behält die aktuelle Art der Transaktion.",
+      "batchEffect_one": "Bestätigt die {{count}} Auszahlung in dieser Transaktion.",
+      "batchEffect_other": "Bestätigt alle {{count}} Auszahlungen in dieser Transaktion gemeinsam, bewertet mit ihrem Gesamtwert.",
+      "batchReopen_one": "Öffnet die {{count}} Auszahlung in dieser Transaktion wieder.",
+      "batchReopen_other": "Öffnet alle {{count}} Auszahlungen in dieser Transaktion wieder.",
+      "batchMixedCurrencies": "Diese Auszahlungen verwenden unterschiedliche Währungen. Markiere zuerst jene als nicht zugehörig, die den Preis dieser Transaktion nicht bestimmen sollen."
+    },
+    "freshness": {
+      "asOf": "BTCPay-Daten mit Stand {{when}}. BTCPay sendet Kassiber keine Updates; synchronisiere die Verbindung, um sie zu aktualisieren.",
+      "stale": "BTCPay-Daten mit Stand {{when}} sind möglicherweise veraltet. BTCPay sendet Kassiber keine Updates; synchronisiere die Verbindung, um sie zu aktualisieren.",
+      "failed": "Die letzte Aktualisierung aus BTCPay ist fehlgeschlagen. Diese Daten stammen vom {{when}} und sind möglicherweise veraltet.",
+      "never": "Dieser Store wurde noch nicht aus BTCPay aktualisiert."
     }
   },
   "pricing": {

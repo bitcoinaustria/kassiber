@@ -261,6 +261,22 @@ BTCPay-payment-to-wallet-transaction link as income, and checks that the
 commercial subledger uses `btcpay_payment` pricing. The seed JSON records the
 invoice ids, txids, scenarios, currencies, origin kinds, reviewed link id, and
 applied pricing proof so failures can be replayed locally.
+
+The same lane then runs the multi-store Greenfield scenario
+(`python -m dev.regtest.btcpay_multistore`) in a second temporary book. It adds
+a Pop-up store that shares the first store's wallet, a Café store with its own
+hot wallet plus Lightning (an external node string) and LNURL, a real Point of
+Sale sale and payment request created through BTCPay's public app routes, and a
+Café sale refunded in EUR whose payout is paid on-chain. It issues a read-only
+key for all stores and a wallet-history key scoped to the Café, then drives the
+CLI: `btcpay key-url`, `btcpay inspect` for both keys, `btcpay setup
+--recommended` (both shared stores map onto a watch-only descriptor wallet,
+Lightning and LNURL share one Café payment ledger, and the read-only Café
+wallet stays provenance-only), `btcpay setup --route …=wallet_source` for the
+Café key, `wallets sync --all`, and a refund review against the outbound Café
+transaction. It checks that the refund send books its miner fee separately and
+that the synced Café store reports fresh data, and fails on any wrong
+recommendation, missing payout txid, leaked key material, or unapplied review.
 The persistent demo book starts the same BTCPay overlay by default:
 
 ```bash

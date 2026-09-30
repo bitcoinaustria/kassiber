@@ -657,7 +657,17 @@ def _wallet_backend_references(conn, backend_name):
             config = json.loads(row["config_json"] or "{}")
         except (TypeError, ValueError, json.JSONDecodeError):
             continue
-        if str_or_none(config.get("backend")) != backend_name:
+        referenced = str_or_none(config.get("backend")) == backend_name
+        if not referenced:
+            # BTCPay mappings on settlement wallets reference the backend
+            # inside `btcpay_provenance`; deleting it would strand the route.
+            routes = config.get("btcpay_provenance")
+            referenced = isinstance(routes, list) and any(
+                isinstance(route, dict)
+                and str(route.get("backend") or "").strip().lower() == str(backend_name or "").strip().lower()
+                for route in routes
+            )
+        if not referenced:
             continue
         matches.append(f"{row['workspace_label']}/{row['profile_label']}/{row['wallet_label']}")
     return matches

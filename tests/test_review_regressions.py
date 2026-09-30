@@ -9490,9 +9490,16 @@ class ReviewRegressionTest(unittest.TestCase):
             self.assertEqual(data["btcpay_notes_set"], 1)
             self.assertEqual(data["btcpay_tags_added"], 1)
             self.assertEqual(data["btcpay_tags_created"], 1)
+            # The fake server has no invoice endpoint; provenance degrades
+            # without failing the wallet-history import.
+            self.assertEqual(data["invoice_provenance"]["status"], "unavailable")
+            self.assertEqual(data["invoice_provenance"]["code"], "not_found")
             self.assertTrue(any("skip=0" in path and "limit=2" in path for path in received["paths"]))
             self.assertTrue(any("skip=2" in path for path in received["paths"]))
-            self.assertTrue(all("statusFilter=Confirmed" in path for path in received["paths"]))
+            wallet_paths = [path for path in received["paths"] if "/wallet/transactions" in path]
+            self.assertTrue(all("statusFilter=Confirmed" in path for path in wallet_paths))
+            # Wallet syncs also refresh the store's invoice and payout provenance.
+            self.assertTrue(any("/api/v1/stores/STORE1/invoices?" in path for path in received["paths"]))
             for auth in received["auth"]:
                 self.assertEqual(auth, "token testkey")
         finally:
@@ -9685,7 +9692,10 @@ class ReviewRegressionTest(unittest.TestCase):
             self.assertTrue(any("skip=0" in path and "limit=2" in path for path in received["paths"]))
             self.assertTrue(any("skip=2" in path for path in received["paths"]))
             self.assertTrue(any("limit=100" in path for path in received["paths"]))
-            self.assertTrue(all("statusFilter=Confirmed" in path for path in received["paths"]))
+            wallet_paths = [path for path in received["paths"] if "/wallet/transactions" in path]
+            self.assertTrue(all("statusFilter=Confirmed" in path for path in wallet_paths))
+            # Wallet syncs also refresh the store's invoice and payout provenance.
+            self.assertTrue(any("/api/v1/stores/STORE1/invoices?" in path for path in received["paths"]))
             for auth in received["auth"]:
                 self.assertEqual(auth, "token testkey")
         finally:
