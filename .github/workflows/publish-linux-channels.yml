@@ -88,7 +88,9 @@ jobs:
           policy_json="$(python3 scripts/release_manifest.py policy \
             --policy packaging/release/signing-policy.json)"
           policy_enabled="$(python3 -c 'import json,sys; print(str(json.loads(sys.argv[1])["enabled"]).lower())' "$policy_json")"
-          fingerprint="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["fingerprint"])' "$policy_json")"
+          # Older tags carry the disabled schema-1 policy, which has no
+          # "fingerprint" field; they may still render an unsigned dry run.
+          fingerprint="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("fingerprint", ""))' "$policy_json")"
           public_key_path="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["public_key_path"])' "$policy_json")"
           if [ "$policy_enabled" != true ] && [ "$PUBLISH_REQUESTED" = true ]; then
             echo "Linux channel publication requires an enabled, code-reviewed release signing policy." >&2

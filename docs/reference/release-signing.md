@@ -22,8 +22,8 @@ It is also separate from the Linux archive key. PR #465's APT/DNF publisher
 keeps a time-bounded OpenPGP archive signing key in the protected packaging
 environment because package managers require OpenPGP there. That key never
 authenticates a release manifest: the verifier accepts only the pinned SSH key.
-The channel workflow also refuses an archive key whose primary key or subkey
-is the same key material as the release key.
+The channel workflow also refuses an archive key if any primary key or subkey
+that GnuPG can export in SSH form is the same key material as the release key.
 
 ## Release key
 
@@ -95,9 +95,9 @@ uv run --locked python scripts/release_manifest.py sign \
 ```
 
 `--public-key` is a copy of the committed public key; the matching private key
-must be in the agent only. Keep no private key file named
-`~/.ssh/kassiber-release`, because `ssh-keygen` falls back to the private key
-file next to a `.pub` when the agent does not hold that key.
+must be in the agent only. The helper passes `-U`, so `ssh-keygen` signs only
+through the agent and never falls back to a private-key file next to the
+`.pub`. This needs a current OpenSSH on the signing workstation.
 
 The helper loads the enabled policy and refuses a public key whose fingerprint
 differs from it. It refuses to overwrite an existing signature unless you pass
@@ -199,7 +199,7 @@ key will sign. Sign it with the old key in the `kassiber-key-transition`
 namespace (and, when possible, with the new key as well):
 
 ```bash
-ssh-keygen -Y sign -n kassiber-key-transition -f ~/.ssh/kassiber-release.pub transition.txt
+ssh-keygen -Y sign -n kassiber-key-transition -U -f ~/.ssh/kassiber-release.pub transition.txt
 ```
 
 Publish the statement and signatures through the same three channels as the

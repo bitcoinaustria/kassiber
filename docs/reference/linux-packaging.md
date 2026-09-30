@@ -157,8 +157,9 @@ closed without that signature. A tag whose checked-out policy is still disabled
 can only render a no-publication dry run from the unsigned manifest.
 
 The APT/DNF archive key remains a separate OpenPGP key because package managers
-require OpenPGP. Before signing, the workflow refuses an archive key whose
-primary key or subkey is the same key material as the SSH release key.
+require OpenPGP. Before signing, the workflow refuses an archive key if any
+primary key or subkey that GnuPG can export in SSH form is the same key
+material as the SSH release key.
 
 Every job that checks out Kassiber pins its checkout to `tag_name`, so the
 signing policy that verified the release is the same policy that gates

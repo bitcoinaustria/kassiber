@@ -223,7 +223,8 @@ def test_signing_helper_uses_the_release_namespace_and_public_key_for_the_agent(
         commands.append(list(command))
         if command[1:3] == ["-Y", "sign"]:
             # Stand in for the agent: sign with the throwaway private key.
-            command = [*command[:-1], str(signed_release["private_key"])]
+            command = [part for part in command[:-1] if part != "-U"]
+            command.append(str(signed_release["private_key"]))
         return real_run(command, **kwargs)
 
     with mock.patch.object(release_manifest_script.subprocess, "run", side_effect=record):
@@ -234,6 +235,7 @@ def test_signing_helper_uses_the_release_namespace_and_public_key_for_the_agent(
         )
     signing = commands[0]
     assert signing[1:5] == ["-Y", "sign", "-n", "kassiber-release"]
+    assert "-U" in signing
     assert signing[signing.index("-f") + 1] == str(signed_release["public_key"])
 
 

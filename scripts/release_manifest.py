@@ -104,6 +104,9 @@ def sign_manifest(
             hint="Pass --overwrite only when intentionally replacing this signature.",
         )
     ssh_keygen = ssh_keygen_command(ssh_keygen_executable)
+    # -U makes ssh-keygen use only the agent key: it must never fall back to a
+    # private-key file that happens to sit next to the release .pub.
+    key_source = ["-f", str(signing_key)] if signing_key else ["-U", "-f", str(public_key)]
     try:
         # The manifest goes over stdin and the signature comes back on stdout,
         # so ssh-keygen never names, prompts for, or overwrites a file itself.
@@ -114,8 +117,7 @@ def sign_manifest(
                 "sign",
                 "-n",
                 RELEASE_SIGNATURE_NAMESPACE,
-                "-f",
-                str(signing_key or public_key),
+                *key_source,
             ],
             input=manifest_bytes,
             stdout=subprocess.PIPE,
