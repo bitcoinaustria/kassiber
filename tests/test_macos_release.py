@@ -295,7 +295,7 @@ def release_preparation(tmp_path):
         changed = state["phase"] == state["change_after"]
         if command[:3] == ("gh", "release", "view"):
             return json.dumps({"isDraft": not (changed and state["change"] == "published"),
-                               "assets": [{"name": "manifest.txt.asc"}]
+                               "assets": [{"name": "manifest.txt.sig"}]
                                if changed and state["change"] == "signed" else []})
         if command[:2] == ("gh", "api"):
             if "/actions/runs/" in command[2]:

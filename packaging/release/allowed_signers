@@ -1,0 +1,4 @@
+# Kassiber release manifest signer for ssh-keygen -Y verify.
+# Compare this fingerprint with independent publications before trusting it:
+# SHA256:UzYeHzOEIbanmYDAylIaGhI6dGFvhNOkszPXwUgzo9M
+release@kassiber namespaces="kassiber-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILAm3bbSbPI3QCjLFDrMPP1vGhqt3O3BieWJhTGToVBy kassiber-release

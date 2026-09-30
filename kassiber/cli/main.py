@@ -1010,24 +1010,24 @@ def build_parser() -> argparse.ArgumentParser:
     offline_sub.add_parser("off", help="Allow configured connections again")
     verify_release = sub.add_parser(
         "verify-download",
-        help="Verify a release artifact against a PGP-signed SHA-256 manifest",
+        help="Verify a release artifact against an SSH-signed SHA-256 manifest",
     )
     verify_release.add_argument("artifact", help="Downloaded Kassiber release artifact")
     verify_release.add_argument("--manifest", required=True, help="Kassiber release manifest")
     verify_release.add_argument(
         "--signature",
         required=True,
-        help="Detached ASCII-armored OpenPGP signature for the manifest",
+        help="Detached OpenSSH signature (.sig) for the manifest",
     )
     verify_release.add_argument(
         "--public-key",
         required=True,
-        help="Kassiber release public-key file obtained from a trusted source",
+        help="Kassiber release OpenSSH public key (.pub) obtained from a trusted source",
     )
     verify_release.add_argument(
         "--fingerprint",
         required=True,
-        help="Full release-key fingerprint obtained from an independent trusted source",
+        help="Full SHA256:... release-key fingerprint obtained from an independent trusted source",
     )
     add_operator_parser(sub)
     add_mcp_parser(sub)

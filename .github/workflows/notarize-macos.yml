@@ -89,8 +89,8 @@ jobs:
           git merge-base --is-ancestor "$commit" origin/main
           mkdir incoming
           gh release download "$TAG" --dir incoming
-          # Never rewrite a set an operator has already OpenPGP-signed.
-          test -z "$(find incoming -name '*.asc' -print -quit)"
+          # Never rewrite a set whose manifest an operator has already signed.
+          test -z "$(find incoming -name '*.sig' -print -quit)"
           if [ -n "$BUILD_RUN_ID" ]; then
             test "$CANDIDATE" = false
             test -z "$SOURCE_COMMIT"
@@ -167,7 +167,7 @@ jobs:
           # Persist the exact signed bytes before contacting Apple. No clobber.
           test "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true
           asset_names="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
-          test -z "$(printf '%s\n' "$asset_names" | sed -n '/\.asc$/p')"
+          test -z "$(printf '%s\n' "$asset_names" | sed -n '/\.sig$/p')"
           gh release upload "$TAG" incoming/kassiber-macos-signing-input.dmg
       - name: Notarize and verify sealed distributions
         id: notary
@@ -227,7 +227,7 @@ jobs:
             test "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$COMMIT"
           fi
           asset_names="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
-          test -z "$(printf '%s\n' "$asset_names" | sed -n '/\.asc$/p')"
+          test -z "$(printf '%s\n' "$asset_names" | sed -n '/\.sig$/p')"
           cp notarized/kassiber-macos-arm64.app.zip incoming/
           cp notarized/kassiber-macos-arm64.dmg incoming/
           cp notarized/kassiber-cli-macos-arm64.tar.gz incoming/
@@ -242,7 +242,7 @@ jobs:
             gh release upload "$TAG" --clobber \
               incoming/kassiber-macos-arm64.app.zip incoming/kassiber-macos-arm64.dmg \
               incoming/kassiber-cli-macos-arm64.tar.gz "incoming/kassiber-$VERSION-manifest.txt"
-            echo 'Notarized draft ready. Download and independently verify the final artifacts before offline OpenPGP signing.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'Notarized draft ready. Download and independently verify the final artifacts before signing the release manifest.' >> "$GITHUB_STEP_SUMMARY"
           fi
           if printf '%s\n' "$asset_names" | grep -Fxq kassiber-macos-signing-input.dmg; then
             gh release delete-asset "$TAG" kassiber-macos-signing-input.dmg --yes

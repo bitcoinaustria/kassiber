@@ -892,7 +892,7 @@ jobs:
             echo "Signed release metadata is published only after offline verification by the finalizer."
           elif [ "$RELEASE_IS_DRAFT" = "true" ]; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Release is a draft pending offline PGP signing; skipping Homebrew update."
+            echo "Release is a draft pending release-manifest signing; skipping Homebrew update."
           elif [ -n "$HOMEBREW_TAP_TOKEN" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else

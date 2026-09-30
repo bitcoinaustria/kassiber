@@ -1,6 +1,9 @@
 {
-  "schema_version": 1,
-  "enabled": false,
-  "primary_fingerprint": "",
-  "public_key_path": "packaging/release/kassiber-release.asc"
+  "schema_version": 2,
+  "enabled": true,
+  "fingerprint": "SHA256:UzYeHzOEIbanmYDAylIaGhI6dGFvhNOkszPXwUgzo9M",
+  "namespace": "kassiber-release",
+  "principal": "release@kassiber",
+  "public_key_path": "packaging/release/kassiber-release.pub",
+  "allowed_signers_path": "packaging/release/allowed_signers"
 }
