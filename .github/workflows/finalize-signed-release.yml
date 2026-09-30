@@ -109,16 +109,20 @@ jobs:
           esac
           release_state="$(gh release view "$RELEASE_TAG_NAME" \
             --repo "$GITHUB_REPOSITORY" \
-            --json isDraft,isPrerelease,tagName \
-            --jq '[.tagName, (.isPrerelease | tostring), (.isDraft | tostring)] | @tsv')"
-          IFS=$'\t' read -r actual_tag actual_prerelease actual_draft \
+            --json databaseId,isDraft,isPrerelease,tagName \
+            --jq '[.tagName, (.isPrerelease | tostring), (.isDraft | tostring), (.databaseId | tostring)] | @tsv')"
+          IFS=$'\t' read -r actual_tag actual_prerelease actual_draft release_id \
             <<< "$release_state"
+          [[ "$release_id" =~ ^[0-9]+$ ]]
           test "$actual_tag" = "$RELEASE_TAG_NAME"
           test "$actual_prerelease" = "$expected_prerelease"
           # Published releases may be re-verified to retry a failed tap push.
           # This workflow never replaces release assets.
           case "$actual_draft" in true|false) ;; *) exit 1 ;; esac
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG_NAME" \
+          # GET /releases/tags/{tag} returns 404 for drafts; bind the release
+          # by its numeric id and require the id to still carry this tag.
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" --jq .tag_name)" = "$RELEASE_TAG_NAME"
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" \
             --jq '[.assets[] | {id, name, size, digest}] | sort_by(.name)' > release-assets.json
           mkdir release
           gh release download "$RELEASE_TAG_NAME" \
@@ -127,6 +131,7 @@ jobs:
           echo "manifest=release/kassiber-${version}-manifest.txt" >> "$GITHUB_OUTPUT"
           echo "signature=release/kassiber-${version}-manifest.txt.sig" >> "$GITHUB_OUTPUT"
           echo "draft=$actual_draft" >> "$GITHUB_OUTPUT"
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
           echo "prerelease=$expected_prerelease" >> "$GITHUB_OUTPUT"
       - name: Authenticate the complete release set
         env:
@@ -191,10 +196,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG_NAME: ${{ inputs.tag_name }}
           RELEASE_WAS_DRAFT: ${{ steps.release.outputs.draft }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
         run: |
           set -euo pipefail
           test "$(gh release view "$RELEASE_TAG_NAME" --json isDraft --jq .isDraft)" = "$RELEASE_WAS_DRAFT"
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG_NAME" \
+          test "$(gh release view "$RELEASE_TAG_NAME" --json databaseId --jq .databaseId)" = "$RELEASE_ID"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .tag_name)" = "$RELEASE_TAG_NAME"
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
             --jq '[.assets[] | {id, name, size, digest}] | sort_by(.name)' > current-assets.json
           cmp release-assets.json current-assets.json
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG_NAME" --jq .sha)" = \
