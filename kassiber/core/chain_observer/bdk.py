@@ -247,6 +247,7 @@ class BdkObserver:
         self._wallet = None
         self._persistence = None
         self._record_fingerprints: dict[str, str] = {}
+        self._reused_records = 0
 
     def _identity_checkpoint(self, checkpoint: Mapping[str, Any]) -> Mapping[str, Any]:
         instances = checkpoint.get("observer_instances")
@@ -580,6 +581,7 @@ class BdkObserver:
         records = []
         canonical_txids = []
         fingerprints: dict[str, str] = {}
+        reused = 0
         backend_name = str(self.backend["name"])
         for canonical in wallet.transactions():
             tx = canonical.transaction
@@ -622,6 +624,7 @@ class BdkObserver:
                 and txid in reusable_txids
                 and (prior_fingerprints or {}).get(txid) == fingerprint
             ):
+                reused += 1
                 continue
             details = wallet.tx_details(tx.compute_txid())
             owns_input = any(
@@ -656,6 +659,7 @@ class BdkObserver:
                 record["fee"] = str(record["fee"])
                 records.append(record)
         self._record_fingerprints = fingerprints
+        self._reused_records = reused
 
         outputs = []
         highest_used: dict[bool, int] = {}
@@ -817,6 +821,8 @@ class BdkObserver:
                     for point in facts.coverage
                 ],
                 "freshness_checkpoint": dict(facts.freshness_checkpoint),
+                # Stored rows this refresh confirmed unchanged without a record.
+                "reused_records": int(self._reused_records),
             },
         }
 

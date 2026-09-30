@@ -746,8 +746,12 @@ def apply_fetch_observer_updates(
     records_by_observer: list[
         tuple[Any, Sequence[Mapping[str, Any]]]
     ] = []
+    reused_records = 0
     for prepared in fetch.observer_updates:
         facts = apply_prepared_observer_update(conn, prepared)
+        prepared_facts = prepared.update.get("facts") if isinstance(prepared.update, Mapping) else None
+        if isinstance(prepared_facts, Mapping):
+            reused_records += int(prepared_facts.get("reused_records") or 0)
         record_observer_policy_coverage(conn, prepared.identity, facts.coverage)
         records_by_observer.append((prepared.identity, facts.transaction_records))
         observer_records.extend(facts.transaction_records)
@@ -877,6 +881,8 @@ def apply_fetch_observer_updates(
     # Observer facts are an authoritative full output snapshot. Preserve an
     # empty list so spending the final output clears the prior inventory.
     adapter_meta["utxos"] = outputs
+    if reused_records:
+        adapter_meta["observer_records_reused"] = reused_records
     if retracted:
         adapter_meta["observer_retracted_external_ids"] = list(
             dict.fromkeys(str(value) for value in retracted if str(value))
@@ -1129,6 +1135,13 @@ def sync_wallet_from_backend(
         outcome["sync_mode"] = "descriptor" if sync_state.descriptor_plan else "addresses"
     outcome["target_count"] = len(sync_state.targets)
     outcome["records_fetched"] = len(normalized_records)
+    reused_records = int(adapter_meta.pop("observer_records_reused", 0) or 0)
+    if reused_records:
+        # Rows the observer confirmed unchanged without re-emitting them are
+        # unchanged rows, exactly as if their records had been merged again.
+        outcome["records_reused"] = reused_records
+        outcome["unchanged"] = int(outcome.get("unchanged") or 0) + reused_records
+        outcome["skipped"] = int(outcome.get("skipped") or 0) + reused_records
     if "updated" not in outcome and isinstance(outcome.get("updated_records"), list):
         outcome["updated"] = len(outcome["updated_records"])
     if retracted_external_ids:

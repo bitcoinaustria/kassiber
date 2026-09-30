@@ -161,6 +161,7 @@ class RecordReuseTest(TestCase):
 
         self.assertEqual(again.transaction_records, ())
         self.assertEqual(wallet.tx_details.call_count, 0)
+        self.assertEqual(observer._reused_records, 2)
         self.assertEqual(refreshed, fingerprints)
         # Retractions and outputs never depend on which records were emitted.
         self.assertEqual(again.freshness_checkpoint["canonical_txids"], sorted([PARENT, SPEND]))
@@ -236,6 +237,7 @@ class PrepareReuseGateTest(TestCase):
         prior = StoredObserverState(identity=observer.identity, payload=payload, coverage=())
         facts = ChainFacts(freshness_checkpoint={"canonical_txids": [PARENT]})
         observer._record_fingerprints = {PARENT: "f" * 32}
+        observer._reused_records = 1
         request = ObserverPrepareRequest(
             backend_name="fulcrum",
             backend_kind="electrum",
@@ -270,6 +272,7 @@ class PrepareReuseGateTest(TestCase):
         self.assertEqual(kwargs["prior_fingerprints"], {PARENT: "e" * 32})
         self.assertEqual(prepared["state"]["record_fingerprints"], {PARENT: "f" * 32})
         self.assertEqual(prepared["state"]["record_fingerprint_version"], RECORD_FINGERPRINT_VERSION)
+        self.assertEqual(prepared["facts"]["reused_records"], 1)
 
     def test_another_release_force_full_reorg_or_no_supplier_reuse_nothing(self):
         cases = {
