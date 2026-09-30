@@ -1441,27 +1441,6 @@ def process_journals(
         progress("preparing")
         _, profile = resolve_scope(conn, workspace_ref, profile_ref)
         require_tax_processing_supported(profile)
-        sync_conflicts = int(
-            conn.execute(
-                "SELECT COUNT(*) FROM sync_conflicts "
-                "WHERE profile_id = ? AND status = 'open'",
-                (profile["id"],),
-            ).fetchone()[0]
-        )
-        if sync_conflicts:
-            raise AppError(
-                "journal processing is blocked by unresolved sync conflicts",
-                code="sync_conflicts_open",
-                hint=(
-                    "Run `kassiber sync conflicts list` and resolve every "
-                    "high-stakes conflict first."
-                ),
-                details={
-                    "profile_id": profile["id"],
-                    "open_conflicts": sync_conflicts,
-                },
-                retryable=False,
-            )
         conn.execute("SAVEPOINT journals_process")
         try:
             progress("repairing")

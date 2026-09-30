@@ -13,9 +13,6 @@ from kassiber.core.accounts import (
 from kassiber.core import wallets as core_wallets
 from kassiber.cli.handlers import process_journals
 from kassiber.cli.main import build_parser
-from kassiber.core.sync_replication.schema_allowlist import SYNC_TABLE_MAP
-from kassiber.core.sync_replication.crypto import encode_secret
-from kassiber.core.sync_replication.merge import _prepare_actual_row
 from kassiber.core.ui_snapshot import (
     build_profiles_snapshot,
     build_report_blockers_snapshot,
@@ -171,38 +168,6 @@ class CostBasisPoolPolicyTests(unittest.TestCase):
         self.assertEqual(
             row["last_processed_input_version"], row["journal_input_version"]
         )
-
-    def test_replication_contract_is_additive_and_high_stakes(self):
-        spec = SYNC_TABLE_MAP["profiles"]
-        self.assertIn("cost_basis_pool_scope", spec.columns)
-        self.assertIn("cost_basis_pool_scope", spec.optional_columns)
-        self.assertIn("cost_basis_pool_scope", spec.high_stakes_fields)
-
-        legacy_wire_row = {
-            "id": "legacy-profile",
-            "workspace_id": self.profile["workspace_id"],
-            "label": "Legacy peer",
-            "fiat_currency": "EUR",
-            "tax_country": "generic",
-            "tax_long_term_days": 365,
-            "gains_algorithm": "FIFO",
-            "require_coarse_review": 0,
-            "bitcoin_rail_carrying_value": 1,
-            "created_at": "2026-01-01T00:00:00Z",
-        }
-        actual, _wire_pk = _prepare_actual_row(
-            self.conn,
-            book={
-                "profile_id": self.profile["id"],
-                "hmac_key_b64": encode_secret(b"pool-policy-test-key"),
-            },
-            spec=spec,
-            wire_row=legacy_wire_row,
-            blobs={},
-            attachments_root=None,
-            created_files=[],
-        )
-        self.assertEqual(actual["cost_basis_pool_scope"], "global")
 
     def test_legacy_profile_migrates_to_global(self):
         profile_id = self.profile["id"]

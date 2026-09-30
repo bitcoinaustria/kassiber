@@ -16,7 +16,6 @@ from kassiber.core.accounting.package import export_close, verify_package
 from kassiber.core.accounts import create_profile, create_workspace
 from kassiber.core.maintenance import reset_current_profile_data
 from kassiber.core.repo import resolve_scope
-from kassiber.core.sync_replication.schema_allowlist import NEVER_SYNC_TABLES, SYNC_TABLE_MAP, validate_wire_row
 from kassiber.daemon_accounting import ACCOUNTING_UI_KINDS, dispatch_accounting_ui
 from kassiber.db import open_db, resolve_database_path
 from kassiber.diagnostics import collect_public_diagnostics
@@ -136,30 +135,6 @@ def test_verifier_rejects_float_and_bool_report_amounts(book):
             verify_package(dict(package, snapshot_json=source, snapshot_digest=hashlib.sha256(source.encode()).hexdigest()))
 
 
-def test_retained_document_sync_updates_without_replacing_evidence(book):
-    from kassiber.core.sync_replication.merge import _insert_or_update_with_collision_notice
-
-    conn, scope, _ = book
-    workspace = conn.execute("SELECT workspace_id FROM profiles WHERE id=?", (scope,)).fetchone()[0]
-    conn.execute("""INSERT INTO external_documents
-        (id,workspace_id,profile_id,document_type,label,created_at,updated_at)
-        VALUES ('retained-source',?,?, 'invoice','Original','2025-01-01','2025-01-01')""", (workspace, scope))
-    retained = evidence.retain_evidence(conn, scope, content=b"retained original",
-        media_type="text/plain", name="Original", source_document_id="retained-source")
-    actual = dict(conn.execute("SELECT * FROM external_documents WHERE id='retained-source'").fetchone())
-    actual["label"] = "Reviewed label"
-    _insert_or_update_with_collision_notice(conn, book={"profile_id": scope},
-        spec=SYNC_TABLE_MAP["external_documents"], actual=actual, event={"id": "synthetic-sync-event"})
-    assert conn.execute("SELECT label FROM external_documents WHERE id='retained-source'").fetchone()[0] == "Reviewed label"
-    assert evidence.read_evidence_bytes(conn, scope, retained["id"]) == b"retained original"
-    with pytest.raises(AppError) as exc:
-        _insert_or_update_with_collision_notice(conn, book={"profile_id": scope},
-            spec=SYNC_TABLE_MAP["external_documents"], actual=dict(actual, label=None), event={"id": "synthetic-bad-event"})
-    assert exc.value.code == "sync_row_constraint"
-    with pytest.raises(Exception, match="accounting_evidence_retained"):
-        conn.execute("INSERT OR REPLACE INTO external_documents SELECT * FROM external_documents WHERE id='retained-source'")
-
-
 def test_overflowing_wire_amount_rejected_by_shared_ledger_guard(book):
     conn, scope, _ = book
     with pytest.raises(AppError):
@@ -263,14 +238,6 @@ def test_verifier_rejects_invalid_unicode_as_typed_error():
 def test_new_tables_never_sync_and_ai_not_implicitly_enabled(book):
     from kassiber.ai import tools
 
-    conn, _, _ = book
-    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name GLOB 'gl_*'")}
-    assert tables <= NEVER_SYNC_TABLES
-    assert not tables & set(SYNC_TABLE_MAP)
-    for table in tables:
-        with pytest.raises(AppError) as exc:
-            validate_wire_row(table, {})
-        assert exc.value.code == "sync_schema_forbidden"
     # Only explicitly reviewed, opaque task tools enter ordinary AI.
     allowed = {"ui.accounting.task_get", "ui.accounting.task_preview",
                "ui.accounting.task_apply", "ui.accounting.task_cancel"}

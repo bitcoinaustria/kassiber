@@ -346,11 +346,10 @@ def _component_claims_and_issues(
             )
         else:
             # Materialization is the single evidence authority. It compares
-            # the replicated, author-bound commitments with this replica's
-            # canonical anchors before setting ``effective_state=active``.
-            # Raw activation snapshots are author-local audit material and
-            # intentionally do not replicate, so journal projection must not
-            # introduce a second snapshot gate here.
+            # the author-bound commitments with this book's canonical anchors
+            # before setting ``effective_state=active``. Raw activation
+            # snapshots are author-local audit material, so journal projection
+            # must not introduce a second snapshot gate here.
             component_error = _component_evidence_drift(
                 component,
                 transaction_ids,
@@ -448,7 +447,7 @@ def _component_evidence_drift(
 ) -> AppError | None:
     """Apply the stronger author-local quantity/identity check when available.
 
-    Replicated author commitments are validated while the component is
+    Author commitments are validated while the component is
     materialized and control ``effective_state``. Raw snapshots additionally
     bind private fingerprint/raw-JSON detail on the authoring device. Those
     details remain immutable audit evidence, but observation lifecycle changes

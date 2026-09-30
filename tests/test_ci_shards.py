@@ -39,7 +39,6 @@ class PythonShardContractTest(unittest.TestCase):
             "tests/test_cli_entrypoint_smoke.py": CLI_SMOKE_SHARD,
             "tests/test_proxy.py": "serial-network",
             "tests/test_sync_backends.py": "serial-network",
-            "tests/test_sync_replication_s5.py": "serial-network",
             "tests/test_cli_chat.py": "serial-daemon",
             "tests/test_daemon_smoke.py": "serial-daemon",
             "tests/test_chain_analysis_consent.py": "daemon-cli",

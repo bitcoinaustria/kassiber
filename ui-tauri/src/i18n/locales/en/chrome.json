@@ -318,7 +318,7 @@
       "label": "Offline",
       "switch": "Work offline",
       "on": "Offline mode is on. Kassiber connects to nothing off this device until you turn it off.",
-      "environment": "KASSIBER_NO_EGRESS blocks wallet and backend connections for this process. Turn on offline mode to also block AI providers, device sync and update checks.",
+      "environment": "KASSIBER_NO_EGRESS blocks wallet and backend connections for this process. Turn on offline mode to also block AI providers and update checks.",
       "failed": "Offline mode could not be changed."
     },
     "autoCheck": {

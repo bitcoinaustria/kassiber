@@ -10,7 +10,6 @@ from ..db import resolve_attachments_root
 from ..errors import AppError
 from .chain_observer import delete_profile_observer_state
 from .repo import current_context_snapshot
-from .sync_replication.events import sync_enabled
 
 
 def _count_where(
@@ -115,13 +114,6 @@ def reset_current_profile_data(
             code="state_not_ready",
             hint="Select a books set and book before resetting book data.",
         )
-    if sync_enabled(conn, profile_id):
-        raise AppError(
-            "Book data cannot be reset while cross-device sync is enabled.",
-            code="sync_reset_requires_disable",
-            hint="Disable replication for this book before resetting its local data.",
-        )
-
     # General-ledger evidence and source history are retained records, not
     # re-creatable caches. The testing reset must never erase their inputs.
     if conn.execute("SELECT 1 FROM gl_books WHERE profile_id = ?", (profile_id,)).fetchone():

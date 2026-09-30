@@ -45,7 +45,7 @@ export type AppRoutePath =
   | "/assistant";
 
 // Mirrors the Rust `DEEP_LINK_SETTINGS_SECTIONS` allowlist. Aliases
-// (`sync`/`replication` → data-sync, `assistant` → ai) round-trip from deep
+// (`assistant` → ai, `backends` → bitcoin, …) round-trip from deep
 // links and the native menu — drop them from this union and Rust would emit strings the
 // type system says are impossible.
 export type SettingsMenuSection =
@@ -63,8 +63,6 @@ export type SettingsMenuSection =
   | "security"
   | "lock"
   | "backends"
-  | "sync"
-  | "replication"
   | "rates"
   | "ai"
   | "assistant"
@@ -220,7 +218,7 @@ export function dispatchMenuIntent(
       return;
 
     case "open-settings":
-      // `sync`/`replication` resolve to a section the router hides while
+      // `lightning` resolves to a section the router hides while
       // early-stage features are off; say so instead of bouncing to Overview.
       if (
         !deps.developerToolsEnabled &&

@@ -140,15 +140,13 @@ describe("dispatchMenuIntent — early-stage gate", () => {
     },
   );
 
-  it("diverts the sync/replication settings aliases too", () => {
-    for (const section of ["sync", "replication"] as const) {
-      const deps = makeDeps({ developerToolsEnabled: false });
-      dispatchMenuIntent({ action: "open-settings", section }, deps);
-      expect(deps.navigate).toHaveBeenCalledWith({
-        to: "/settings",
-        hash: "developer",
-      });
-    }
+  it("diverts the hidden Lightning settings section too", () => {
+    const deps = makeDeps({ developerToolsEnabled: false });
+    dispatchMenuIntent({ action: "open-settings", section: "lightning" }, deps);
+    expect(deps.navigate).toHaveBeenCalledWith({
+      to: "/settings",
+      hash: "developer",
+    });
   });
 
   it("leaves finished routes and other settings sections alone", () => {

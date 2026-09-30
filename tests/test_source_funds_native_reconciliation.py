@@ -7,7 +7,6 @@ import pytest
 from kassiber.cli.handlers import process_journals
 from kassiber.core import custody_components, custody_gaps, custody_journal, source_funds
 from kassiber.core.custody_reconciliation_store import load_current_reconciliations, replace_reconciliations
-from kassiber.core.sync_replication.schema_allowlist import NEVER_SYNC_TABLES, SYNC_TABLE_MAP
 from tests.test_custody_lineage_flagship import _FlagshipTreasury, _Transaction, _review_candidate, BTC
 from tests.test_source_funds_custody_projection import _hooks
 
@@ -60,8 +59,6 @@ def test_recovered_native_history_preserves_reviewed_report(recovered_book):
     assert report(book)['explain_gates']['exportable']
     links = book.conn.execute("SELECT from_transaction_id FROM source_funds_links WHERE to_transaction_id='in-c' AND state='reviewed'").fetchall()
     assert [row[0] for row in links] == ['out-a']
-    assert 'journal_custody_reconciliations' in NEVER_SYNC_TABLES
-    assert 'journal_custody_reconciliations' not in SYNC_TABLE_MAP
 
 
 @pytest.mark.parametrize('change', ['history_retracted', 'component_retired', 'book_stale'])

@@ -1593,7 +1593,7 @@ def validate_conservation(
         }
     )
     if unknown_roles:
-        # Replicated rows and newer databases can bypass the normal input
+        # Restored rows and newer databases can bypass the normal input
         # normalizer. Return a typed validation result instead of indexing a
         # fixed role bucket and crashing with KeyError.
         return {
@@ -2545,46 +2545,13 @@ def validate_planned_active_batch(
     return issues
 
 
-def _replicated_lineage_issues(
+def _lineage_issues(
     conn: sqlite3.Connection,
     row: sqlite3.Row,
 ) -> list[dict[str, Any]]:
     """Return reviewable lineage conflicts without hiding authored rows."""
 
     issues: list[dict[str, Any]] = []
-    lifecycle_conflicts = conn.execute(
-        """
-        SELECT id, field
-        FROM sync_conflicts
-        WHERE profile_id = ?
-          AND entity_table = 'custody_components'
-          AND entity_key = ?
-          AND status = 'open'
-          AND field IN (
-              'state', 'activated_at', 'superseded_by_component_id',
-              'superseded_at', 'expected_evidence_count', '__exists__'
-          )
-        ORDER BY field, id
-        """,
-        (
-            row["profile_id"],
-            json.dumps([row["id"]], separators=(",", ":")),
-        ),
-    ).fetchall()
-    if lifecycle_conflicts:
-        issues.append(
-            {
-                "code": "component_lifecycle_conflict",
-                "message": (
-                    "an unresolved replicated lifecycle conflict keeps this "
-                    "revision ineffective"
-                ),
-                "conflicts": [
-                    {"conflict_id": conflict["id"], "field": conflict["field"]}
-                    for conflict in lifecycle_conflicts
-                ],
-            }
-        )
     if row["state"] == "active":
         competing = [
             {"component_id": other["id"], "revision": int(other["revision"])}
@@ -3376,7 +3343,7 @@ def _db_anchor_validation(
 
         # Enriched anchors must pass the same route-wide and chronological
         # checks as authored pure inputs. Canonical transaction timestamps are
-        # used above, so replicated or stale authored values cannot reverse an
+        # used above, so restored or stale authored values cannot reverse an
         # otherwise valid edge.
         additional_issues = [
             *_allocation_chronology_issues(
@@ -3726,7 +3693,7 @@ def _materialize_component(
             *anchor_validation["warnings"],
         ]
     validation["anchors"] = anchor_validation
-    lineage_issues = _replicated_lineage_issues(conn, row)
+    lineage_issues = _lineage_issues(conn, row)
     if lineage_issues:
         validation = dict(validation)
         validation["activatable"] = False
@@ -4287,10 +4254,9 @@ def activate_component(
         _validated_component=_validated_component,
     )
     if component["state"] == "active":
-        # Idempotent reads of a received active revision must not manufacture a
-        # device-local activation snapshot from the receiver's current rows.
-        # The author-bound replicated commitments remain the sole activation
-        # proof; membership reconciliation is handled by sync replay.
+        # Idempotent reads of an active revision must not manufacture a new
+        # activation snapshot from the current rows. The commitments captured
+        # at activation remain the sole activation proof.
         return component
 
     timestamp = activated_at or _now_iso()
@@ -4351,8 +4317,8 @@ def activate_component(
                 details={"component_id": component_id, "transaction_ids": transaction_ids},
             ) from exc
         # Bind the exact current observation evidence while the reviewed
-        # activation is still inside this savepoint.  Raw payload remains
-        # local; the deterministic payload-free commitments replicate.
+        # activation is still inside this savepoint.  Raw payload stays out
+        # of the deterministic payload-free commitments.
         from .custody_quantity_store import capture_component_evidence
 
         expected_evidence_count = capture_component_evidence(
@@ -4416,10 +4382,10 @@ def supersede_component(
         if row["state"] == "active":
             _invalidate_journals(conn, row["profile_id"])
     if row["state"] == "active":
-        # A replicated conflict can leave two raw-active revisions with no
-        # effective memberships.  Superseding the losing revision is the
-        # manual resolution; immediately restore memberships for the surviving
-        # effective component instead of waiting for another sync replay.
+        # Competing raw-active revisions can have no effective memberships.
+        # Superseding the losing revision is the manual resolution;
+        # immediately restore memberships for the surviving effective
+        # component.
         reconcile_active_memberships(conn, profile_id=row["profile_id"])
     return get_component(conn, component_id)
 
@@ -4518,8 +4484,8 @@ def iter_authored_active_components(
     usable interpretations. An authored ``active`` header must still claim every
     transaction anchor
     that has arrived locally when its remaining legs are incomplete, invalid,
-    or overlap another active component.  Otherwise row-wise replication can
-    temporarily turn the raw anchors back into ordinary acquisitions or
+    or overlap another active component.  Otherwise an incomplete revision
+    could turn the raw anchors back into ordinary acquisitions or
     disposals.  Projection decides whether each returned component is usable
     or must produce a component-wide quarantine.
 
@@ -4570,7 +4536,7 @@ def reconcile_active_memberships(
     *,
     profile_id: str,
 ) -> dict[str, Any]:
-    """Rebuild the local uniqueness guard after row-wise replication.
+    """Rebuild the local uniqueness guard from authored active components.
 
     Invalid, incomplete, or overlapping active rows remain authored as active
     for conflict/audit visibility but receive no effective membership. Journal
@@ -4578,7 +4544,7 @@ def reconcile_active_memberships(
     so their known anchors are quarantined rather than interpreted raw.
     """
 
-    # Replication reconciliation is an integrity operation, not a paginated UI
+    # Membership reconciliation is an integrity operation, not a paginated UI
     # read. Truncating here would delete valid membership rows for every active
     # component after the first 1,000 in a long migration history.
     profile_route_issues = _profile_active_route_issues(

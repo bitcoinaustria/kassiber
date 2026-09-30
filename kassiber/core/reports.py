@@ -105,7 +105,7 @@ AUSTRIAN_E1KV_CATEGORY_LABELS = {
 # the income entry but falls back to the generic "income" bucket because the
 # lookup misses on the importer's provenance kind (`lnd_invoice`, …). The
 # `NULLIF` matches the engine, which treats an empty override as unset; only a
-# replicated or hand-edited row can hold one, and the two must not disagree.
+# legacy or hand-edited row can hold one, and the two must not disagree.
 _TAX_SUMMARY_INCOME_TRANSACTION_TYPE_BY_KIND = {
     "airdrop": "airdrop",
     "hard_fork": "hardfork",

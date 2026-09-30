@@ -2,7 +2,7 @@
 
 Chat persistence is optional and is not accounting evidence.  This module
 therefore records the narrow facts around a consented custody write inside the
-book's SQLCipher boundary.  Raw proposals stay local and never replicate;
+book's SQLCipher boundary.  Raw proposals stay local;
 ``redacted_audit_summary`` is the only representation intended for an audit
 package.
 """

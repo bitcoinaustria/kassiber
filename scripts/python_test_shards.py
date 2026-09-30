@@ -64,8 +64,6 @@ _NETWORK_SERIAL_MODULES = frozenset(
         "test_proxy",
         "test_regtest_backend_stack",
         "test_sync_backends",
-        "test_sync_replication_s4",
-        "test_sync_replication_s5",
     }
 )
 _DAEMON_SERIAL_MODULES = frozenset({"test_cli_chat", "test_daemon_smoke", "test_mcp_server"})
@@ -93,7 +91,6 @@ _SECURITY_TOKENS = (
     "privacy",
     "secret",
     "security",
-    "sync_replication",
 )
 _DAEMON_CLI_TOKENS = (
     "ai_core",

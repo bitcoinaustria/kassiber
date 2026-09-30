@@ -23,7 +23,6 @@ export const DEV_HIDDEN_ROUTES = [
   "/egress",
   "/logs",
   "/settings/lightning",
-  "/settings/sync",
 ] as const;
 
 const DEV_ONLY_ROUTES = new Set<string>([
@@ -74,7 +73,6 @@ export function isDevLockedRoute(route: string): boolean {
 
 /** Settings sections (see `SettingsSectionId`) hidden while dev mode is off. */
 const DEV_ONLY_SETTINGS_SECTIONS = new Set<string>([
-  "data-sync",
   "network-lightning",
 ]);
 
@@ -92,9 +90,9 @@ export function isDevOnlyConnectionSource(id: string): boolean {
 
 /**
  * Same question for a settings *slug* — what the native menu and the
- * `kassiber://settings/<slug>` deep links carry. Several aliases resolve to one
- * section (`sync`, `replication` → `data-sync`), so route the slug through the
- * canonical map rather than listing the aliases again here.
+ * `kassiber://settings/<slug>` deep links carry. Several aliases can resolve to
+ * one section, so route the slug through the canonical map rather than listing
+ * the aliases again here.
  */
 export function isDevOnlySettingsSlug(
   slug: string | null | undefined,

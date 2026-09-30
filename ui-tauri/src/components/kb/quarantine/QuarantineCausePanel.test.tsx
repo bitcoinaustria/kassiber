@@ -144,11 +144,11 @@ describe("quarantine cause panel", () => {
           freshness: {
             needs_processing: false,
             last_processed_at: "2026-09-01T00:00:00Z",
-            last_error: { code: "sync_conflicts_open", message: "Resolve sync conflicts.", at: "2026-09-02T00:00:00Z" },
+            last_error: { code: "tax_failed", message: "Tax processing failed.", at: "2026-09-02T00:00:00Z" },
           },
         }),
       ),
-    ).toContain("Resolve sync conflicts. The list shows the state before that attempt.");
+    ).toContain("Tax processing failed. The list shows the state before that attempt.");
   });
 
   it("renders the same explanation in Austrian German", () => {

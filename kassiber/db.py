@@ -549,7 +549,7 @@ _CUSTODY_MIGRATION_EXPLANATIONS = {
         "later source retraction cannot erase the reviewed reference."
     ),
     "payload_free_evidence_commitments": (
-        "Seals existing active authored evidence with replicable hashes while "
+        "Seals existing active authored evidence with payload-free hashes while "
         "retaining raw evidence only in the local snapshot table."
     ),
 }
@@ -845,8 +845,8 @@ CREATE TABLE IF NOT EXISTS wallets (
 );
 
 -- Private dependency-observer state. These rows live only in the main
--- SQLite/SQLCipher store; no public, audit, AI, diagnostic, or replication
--- surface selects them. ``logical_wallet_id`` lets one grouped wallet own
+-- SQLite/SQLCipher store; no public, audit, AI, or diagnostic surface
+-- selects them. ``logical_wallet_id`` lets one grouped wallet own
 -- multiple observer instances while ``source_wallet_id`` identifies the
 -- concrete descriptor source that is refreshed.
 CREATE TABLE IF NOT EXISTS chain_observer_instances (
@@ -885,7 +885,7 @@ CREATE TABLE IF NOT EXISTS chain_observer_coverage (
 -- disposable observer state.  Their random ids do not fingerprint descriptor
 -- or xpub material.  ``private_material_json`` remains inside SQLCipher and is
 -- used only to recognize outputs from retired policies; it is excluded from
--- public, AI, audit, diagnostic, and replication surfaces.
+-- public, AI, audit, and diagnostic surfaces.
 CREATE TABLE IF NOT EXISTS wallet_policy_epochs (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -946,9 +946,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     wallet_id TEXT NOT NULL REFERENCES wallets(id) ON DELETE CASCADE,
     external_id TEXT,
-    -- Closed, public discriminator for the meaning of external_id. Raw import
-    -- payloads stay local; peers need only this marker to retain native chain
-    -- identity after replication strips raw_json.
+    -- Closed, public discriminator for the meaning of external_id, so native
+    -- chain identity survives projections that omit raw_json.
     external_id_kind TEXT CHECK(external_id_kind IS NULL OR external_id_kind = 'txid'),
     fingerprint TEXT NOT NULL UNIQUE,
     occurred_at TEXT NOT NULL,
@@ -1042,7 +1041,7 @@ CREATE TABLE IF NOT EXISTS transaction_graph_cache (
 CREATE INDEX IF NOT EXISTS idx_transaction_graph_cache_updated
     ON transaction_graph_cache(updated_at DESC);
 
--- Local investigations are separate from accounting and authored replication.
+-- Local investigations are separate from accounting and authored records.
 -- Fetched observations never grant wallet ownership or custody authority.
 CREATE TABLE IF NOT EXISTS chain_analysis_observations (
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -1155,9 +1154,8 @@ CREATE TABLE IF NOT EXISTS transaction_tags (
 -- without deleting the whole wallet. `column_map_json` is the confirmed plan, so
 -- a recurring export from the same platform can reuse it.
 --
--- Local provenance about *this device's* import history, deliberately outside
--- replication (like fetched BTCPay provenance): the imported transactions
--- themselves replicate, the record of which local file produced them does not.
+-- Local provenance about *this device's* import history (like fetched BTCPay
+-- provenance): it records which local file produced the imported transactions.
 CREATE TABLE IF NOT EXISTS import_batches (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -1274,14 +1272,7 @@ CREATE TABLE IF NOT EXISTS transaction_edit_events (
     journal_input_version_after INTEGER NOT NULL DEFAULT 0,
     last_processed_input_version INTEGER NOT NULL DEFAULT 0,
     last_processed_at TEXT,
-    last_processed_tx_count INTEGER NOT NULL DEFAULT 0,
-    sync_event_id TEXT,
-    sync_replica_id TEXT,
-    sync_replica_seq INTEGER,
-    sync_hlc TEXT,
-    sync_author_member_id TEXT,
-    sync_signature TEXT,
-    sync_context_json TEXT
+    last_processed_tx_count INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS transaction_edit_fields (
@@ -1310,342 +1301,6 @@ CREATE INDEX IF NOT EXISTS idx_transaction_edit_fields_event
 
 CREATE INDEX IF NOT EXISTS idx_transaction_edit_fields_field
     ON transaction_edit_fields(field, event_id);
-
--- Cross-device replication is strictly opt-in. Merely opening a database
--- creates these empty schema tables, but no identity, key, event, transport,
--- listener, or other behavior exists until a profile is explicitly enabled.
-CREATE TABLE IF NOT EXISTS sync_books (
-    profile_id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    book_id TEXT NOT NULL UNIQUE,
-    enabled INTEGER NOT NULL DEFAULT 1,
-    local_member_id TEXT NOT NULL,
-    local_device_id TEXT NOT NULL,
-    local_replica_id TEXT NOT NULL,
-    hmac_key_b64 TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS sync_members (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    display_name TEXT NOT NULL,
-    signing_public_key_b64 TEXT NOT NULL,
-    role TEXT NOT NULL CHECK(role IN ('owner', 'editor', 'auditor')),
-    added_hlc TEXT NOT NULL,
-    added_at TEXT NOT NULL,
-    revoked_hlc TEXT,
-    revoked_at TEXT,
-    revoked_context_json TEXT,
-    inviter_member_id TEXT,
-    record_signature TEXT NOT NULL,
-    UNIQUE(profile_id, signing_public_key_b64)
-);
-
-CREATE INDEX IF NOT EXISTS idx_sync_members_profile_active
-    ON sync_members(profile_id, role, revoked_at);
-
-CREATE TABLE IF NOT EXISTS sync_member_private_keys (
-    member_id TEXT PRIMARY KEY REFERENCES sync_members(id) ON DELETE CASCADE,
-    signing_private_key_b64 TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS sync_devices (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    member_id TEXT NOT NULL REFERENCES sync_members(id) ON DELETE CASCADE,
-    recipient_public_key TEXT NOT NULL,
-    label TEXT NOT NULL,
-    paired_hlc TEXT NOT NULL,
-    paired_at TEXT NOT NULL,
-    last_seen_at TEXT,
-    revoked_hlc TEXT,
-    revoked_at TEXT,
-    revoked_context_json TEXT,
-    record_signer_member_id TEXT,
-    record_signature TEXT NOT NULL,
-    UNIQUE(profile_id, recipient_public_key)
-);
-
-CREATE INDEX IF NOT EXISTS idx_sync_devices_profile_active
-    ON sync_devices(profile_id, member_id, revoked_at);
-
-CREATE TABLE IF NOT EXISTS sync_device_private_keys (
-    device_id TEXT PRIMARY KEY REFERENCES sync_devices(id) ON DELETE CASCADE,
-    age_identity TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS sync_replicas (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    member_id TEXT NOT NULL REFERENCES sync_members(id) ON DELETE CASCADE,
-    device_id TEXT NOT NULL REFERENCES sync_devices(id) ON DELETE CASCADE,
-    last_seq INTEGER NOT NULL DEFAULT 0,
-    last_hlc TEXT,
-    last_event_hash TEXT,
-    last_seen_at TEXT,
-    created_at TEXT NOT NULL,
-    UNIQUE(profile_id, member_id, device_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_sync_replicas_profile
-    ON sync_replicas(profile_id, id);
-
-CREATE TABLE IF NOT EXISTS sync_events (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    replica_id TEXT NOT NULL,
-    replica_seq INTEGER NOT NULL,
-    hlc TEXT NOT NULL,
-    author_member_id TEXT NOT NULL,
-    event_type TEXT NOT NULL,
-    entity_table TEXT NOT NULL,
-    entity_key TEXT NOT NULL,
-    payload_json TEXT NOT NULL,
-    context_json TEXT NOT NULL,
-    previous_hash TEXT,
-    event_hash TEXT NOT NULL,
-    signature TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    applied_at TEXT NOT NULL,
-    UNIQUE(replica_id, replica_seq)
-);
-
-CREATE INDEX IF NOT EXISTS idx_sync_events_profile_hlc
-    ON sync_events(profile_id, hlc, replica_id, replica_seq);
-
-CREATE INDEX IF NOT EXISTS idx_sync_events_entity
-    ON sync_events(profile_id, entity_table, entity_key, hlc);
-
-CREATE TABLE IF NOT EXISTS sync_row_state (
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    entity_table TEXT NOT NULL,
-    entity_key TEXT NOT NULL,
-    row_hash TEXT,
-    last_event_id TEXT REFERENCES sync_events(id) ON DELETE SET NULL,
-    last_hlc TEXT NOT NULL,
-    tombstoned INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY(profile_id, entity_table, entity_key)
-);
-
-CREATE INDEX IF NOT EXISTS idx_sync_row_state_profile_table
-    ON sync_row_state(profile_id, entity_table, tombstoned);
-
-CREATE TABLE IF NOT EXISTS sync_tombstones (
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    entity_table TEXT NOT NULL,
-    entity_key TEXT NOT NULL,
-    event_id TEXT NOT NULL REFERENCES sync_events(id) ON DELETE CASCADE,
-    hlc TEXT NOT NULL,
-    deleted_by_member_id TEXT NOT NULL,
-    deleted_at TEXT NOT NULL,
-    gc_after TEXT,
-    PRIMARY KEY(profile_id, entity_table, entity_key)
-);
-
-CREATE TABLE IF NOT EXISTS sync_ingests (
-    id TEXT PRIMARY KEY,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    replica_id TEXT NOT NULL,
-    first_seq INTEGER NOT NULL,
-    last_seq INTEGER NOT NULL,
-    bundle_hash TEXT NOT NULL,
-    prior_bundle_hash TEXT,
-    ingested_at TEXT NOT NULL,
-    UNIQUE(profile_id, bundle_hash)
-);
-
-CREATE INDEX IF NOT EXISTS idx_sync_ingests_replica_range
-    ON sync_ingests(profile_id, replica_id, first_seq, last_seq);
-
-CREATE TABLE IF NOT EXISTS sync_conflicts (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    entity_table TEXT NOT NULL,
-    entity_key TEXT NOT NULL,
-    field TEXT NOT NULL,
-    local_event_id TEXT NOT NULL,
-    remote_event_id TEXT NOT NULL,
-    local_value_json TEXT,
-    remote_value_json TEXT,
-    status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'resolved')),
-    resolution_event_id TEXT,
-    resolved_by_member_id TEXT,
-    resolved_at TEXT,
-    created_at TEXT NOT NULL,
-    UNIQUE(profile_id, entity_table, entity_key, field, local_event_id, remote_event_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_sync_conflicts_profile_open
-    ON sync_conflicts(profile_id, status, created_at);
-
-CREATE TABLE IF NOT EXISTS sync_notices (
-    id TEXT PRIMARY KEY,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    code TEXT NOT NULL,
-    severity TEXT NOT NULL CHECK(severity IN ('info', 'warning', 'blocking')),
-    replica_id TEXT,
-    member_id TEXT,
-    details_json TEXT NOT NULL DEFAULT '{}',
-    acknowledged_at TEXT,
-    created_at TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_sync_notices_profile_open
-    ON sync_notices(profile_id, acknowledged_at, created_at);
-
-CREATE TABLE IF NOT EXISTS sync_bundle_exports (
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    replica_id TEXT NOT NULL,
-    last_seq INTEGER NOT NULL DEFAULT 0,
-    last_bundle_hash TEXT,
-    exported_at TEXT,
-    PRIMARY KEY(profile_id, replica_id)
-);
-
-CREATE TABLE IF NOT EXISTS sync_pending_events (
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    replica_id TEXT NOT NULL,
-    replica_seq INTEGER NOT NULL,
-    event_json TEXT NOT NULL,
-    bundle_hash TEXT NOT NULL,
-    received_at TEXT NOT NULL,
-    PRIMARY KEY(profile_id, replica_id, replica_seq)
-);
-
-CREATE INDEX IF NOT EXISTS idx_sync_pending_events_next
-    ON sync_pending_events(profile_id, replica_id, replica_seq);
-
-CREATE TABLE IF NOT EXISTS sync_rejected_events (
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    replica_id TEXT NOT NULL,
-    replica_seq INTEGER NOT NULL,
-    event_hash TEXT NOT NULL,
-    reason TEXT NOT NULL,
-    received_at TEXT NOT NULL,
-    PRIMARY KEY(profile_id, replica_id, replica_seq)
-);
-
-CREATE TABLE IF NOT EXISTS sync_pending_blobs (
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    bundle_hash TEXT NOT NULL,
-    content_hmac TEXT NOT NULL,
-    payload BLOB NOT NULL,
-    PRIMARY KEY(profile_id, bundle_hash, content_hmac)
-);
-
-CREATE TABLE IF NOT EXISTS sync_field_state (
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    entity_table TEXT NOT NULL,
-    entity_key TEXT NOT NULL,
-    field TEXT NOT NULL,
-    event_id TEXT NOT NULL REFERENCES sync_events(id) ON DELETE CASCADE,
-    hlc TEXT NOT NULL,
-    value_json TEXT,
-    PRIMARY KEY(profile_id, entity_table, entity_key, field)
-);
-
-CREATE TABLE IF NOT EXISTS sync_id_map (
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    entity_table TEXT NOT NULL,
-    wire_id TEXT NOT NULL,
-    local_id TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    PRIMARY KEY(profile_id, entity_table, wire_id)
-);
-
-CREATE TABLE IF NOT EXISTS sync_join_requests (
-    id TEXT PRIMARY KEY,
-    member_id TEXT NOT NULL,
-    device_id TEXT NOT NULL,
-    replica_id TEXT NOT NULL,
-    member_name TEXT NOT NULL,
-    device_label TEXT NOT NULL,
-    signing_public_key_b64 TEXT NOT NULL,
-    signing_private_key_b64 TEXT NOT NULL,
-    recipient_public_key TEXT NOT NULL,
-    age_identity TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    consumed_at TEXT
-);
-
-CREATE TABLE IF NOT EXISTS sync_transports (
-    id TEXT PRIMARY KEY,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    kind TEXT NOT NULL CHECK(kind IN ('folder', 'webdav', 's3')),
-    label TEXT NOT NULL,
-    config_json TEXT NOT NULL,
-    credential_json TEXT NOT NULL DEFAULT '{}',
-    enabled INTEGER NOT NULL DEFAULT 1,
-    last_push_at TEXT,
-    last_pull_at TEXT,
-    last_error_at TEXT,
-    last_error_code TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    UNIQUE(profile_id, label)
-);
-
-CREATE INDEX IF NOT EXISTS idx_sync_transports_profile_enabled
-    ON sync_transports(profile_id, enabled, kind);
-
-CREATE TABLE IF NOT EXISTS sync_mailbox_heads (
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    transport_id TEXT NOT NULL REFERENCES sync_transports(id) ON DELETE CASCADE,
-    replica_id TEXT NOT NULL,
-    last_seq INTEGER NOT NULL,
-    bundle_hash TEXT NOT NULL,
-    head_hash TEXT NOT NULL,
-    observed_at TEXT NOT NULL,
-    PRIMARY KEY(profile_id, transport_id, replica_id)
-);
-
-CREATE TABLE IF NOT EXISTS sync_peer_status (
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    transport_id TEXT NOT NULL REFERENCES sync_transports(id) ON DELETE CASCADE,
-    replica_id TEXT NOT NULL,
-    member_id TEXT NOT NULL,
-    device_id TEXT NOT NULL,
-    last_head_seq INTEGER NOT NULL DEFAULT 0,
-    last_head_hash TEXT,
-    last_seen_at TEXT,
-    last_bundle_at TEXT,
-    status TEXT NOT NULL DEFAULT 'never_seen',
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY(profile_id, transport_id, replica_id)
-);
-
-CREATE TABLE IF NOT EXISTS sync_replica_acknowledgements (
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    observer_replica_id TEXT NOT NULL,
-    subject_replica_id TEXT NOT NULL,
-    acknowledged_seq INTEGER NOT NULL DEFAULT 0,
-    observed_hlc TEXT,
-    observed_at TEXT NOT NULL,
-    PRIMARY KEY(profile_id, observer_replica_id, subject_replica_id)
-);
-
-CREATE TABLE IF NOT EXISTS sync_tombstone_gc_log (
-    id TEXT PRIMARY KEY,
-    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    entity_table TEXT NOT NULL,
-    entity_key TEXT NOT NULL,
-    delete_event_id TEXT NOT NULL,
-    delete_hlc TEXT NOT NULL,
-    quorum_json TEXT NOT NULL,
-    horizon_days INTEGER NOT NULL,
-    compacted_at TEXT NOT NULL,
-    UNIQUE(profile_id, entity_table, entity_key, delete_event_id)
-);
 
 CREATE TABLE IF NOT EXISTS journal_entries (
     id TEXT PRIMARY KEY,
@@ -1728,8 +1383,8 @@ CREATE TABLE IF NOT EXISTS journal_wallet_holdings (
     created_at TEXT NOT NULL
 );
 
--- Local canonical quantity state. These tables are derived independently of RP2
--- and are deliberately absent from the replication allowlist.
+-- Local canonical quantity state. These tables are derived independently of
+-- RP2.
 CREATE TABLE IF NOT EXISTS journal_quantity_postings (
     posting_id TEXT NOT NULL,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -2116,7 +1771,7 @@ BEGIN
           AND r.profile_id = NEW.profile_id
     ) THEN RAISE(ABORT, 'custody_gap_review_transaction_review_scope_mismatch') END;
     -- A durable review anchor must survive source retraction and must remain
-    -- importable into a fresh replica after that retraction. Reject only a
+    -- importable into a fresh book after that retraction. Reject only a
     -- colliding live transaction from another book; absence is intentional.
     SELECT CASE WHEN EXISTS (
         SELECT 1 FROM transactions t WHERE t.id = NEW.transaction_id
@@ -2137,7 +1792,7 @@ END;
 -- Local-only, append-only evidence that a custody write proposed by the AI
 -- crossed an explicit consent boundary.  Chat history is optional and cannot
 -- serve as this audit trail.  Proposal payloads remain inside SQLCipher and
--- are deliberately absent from replication and public/audit-package exports.
+-- are deliberately absent from public/audit-package exports.
 -- Application receipts bind one consented portable review to existing domain history.
 -- Investigation and preview remain read-only; raw chain evidence is never copied here.
 CREATE TABLE IF NOT EXISTS review_workflow_receipts (
@@ -2198,8 +1853,8 @@ END;
 
 -- Durable activation audit history tying an authored custody review to every
 -- overlapping saved/filed report. The row is sealed by the confirmed review
--- and replicates with that authored decision; it is not a mutable projection
--- of current journal state.
+-- as part of that authored decision; it is not a mutable projection of
+-- current journal state.
 CREATE TABLE IF NOT EXISTS custody_filed_report_impacts (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -2932,8 +2587,8 @@ CREATE TABLE IF NOT EXISTS ai_provider_secret_refs (
 # states are closed because they carry conservation/activation semantics.
 #
 # ``evidence_json``, ``conversion_metadata_json`` and leg ``location_ref`` are
-# local-only detail.  The replication allowlist projects privacy-safe summary
-# fields and transaction/wallet anchors, never these arbitrary JSON/ref values.
+# local-only detail.  Portable projections carry privacy-safe summary fields
+# and transaction/wallet anchors, never these arbitrary JSON/ref values.
 CUSTODY_COMPONENT_SCHEMA = """
 CREATE TABLE IF NOT EXISTS custody_components (
     id TEXT PRIMARY KEY,
@@ -2962,10 +2617,10 @@ CREATE TABLE IF NOT EXISTS custody_components (
     notes TEXT,
     change_reason TEXT,
     -- Revision links are authored identifiers, not immediate relational
-    -- dependencies.  A sync snapshot can replay two mutually-linked headers
-    -- in either order, and concurrent replicas can legitimately retain two
+    -- dependencies.  A partition or restore can insert two mutually-linked
+    -- headers in either order, and a book can legitimately retain two
     -- competing revisions until review.  Application validation checks the
-    -- links after replay; an immediate self-FK would reject valid evidence.
+    -- links after insertion; an immediate self-FK would reject valid evidence.
     supersedes_component_id TEXT,
     superseded_by_component_id TEXT,
     activated_at TEXT,
@@ -2974,8 +2629,8 @@ CREATE TABLE IF NOT EXISTS custody_components (
 );
 
 -- These are lookup indexes, deliberately not uniqueness constraints.  Local
--- mutation APIs still serialize revisions, while replication must preserve
--- concurrent drafts/actives so the conflict is visible and reviewable.
+-- mutation APIs serialize revisions, while restored or legacy books may hold
+-- concurrent drafts/actives that must stay visible and reviewable.
 CREATE INDEX IF NOT EXISTS idx_custody_components_lineage_active
     ON custody_components(profile_id, lineage_id) WHERE state = 'active';
 
@@ -3080,7 +2735,7 @@ END;
 
 -- Author-bound, payload-free commitments to the canonical evidence visible at
 -- activation.  Raw evidence payloads remain in the local-only
--- custody_authored_evidence_snapshots table; these rows are safe to replicate.
+-- custody_authored_evidence_snapshots table; these rows carry no payload.
 -- The deterministic id is a hash of (component_id, ordinal), so two authors
 -- cannot silently publish different evidence into the same ordinal.
 CREATE TABLE IF NOT EXISTS custody_component_evidence_commitments (
@@ -3111,7 +2766,7 @@ END;
 
 -- A book reset preserves the profile row, so delete-immutability cannot use
 -- profile absence as its authorization signal. This local-only guard is
--- populated and cleared inside the reset transaction; it is not replicated.
+-- populated and cleared inside the reset transaction.
 CREATE TABLE IF NOT EXISTS custody_component_purge_authorizations (
     profile_id TEXT PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE
 );
@@ -3228,7 +2883,7 @@ END;
 -- Derived local guard used by atomic activation.  Multiple legs in one
 -- component may anchor the same transaction (for example principal + fee),
 -- while one transaction can belong to at most one effective active component.
--- This table is rebuilt/validated from components and is never replicated.
+-- This table is rebuilt/validated from components.
 CREATE TABLE IF NOT EXISTS custody_component_transaction_memberships (
     component_id TEXT NOT NULL REFERENCES custody_components(id) ON DELETE CASCADE,
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -4443,7 +4098,7 @@ def custody_gap_review_transaction_id(review_id, role, transaction_id):
 
 
 def custody_gap_review_transaction_v1_id(review_id, role, ordinal):
-    """Return the retired ordinal-keyed wire id accepted during replay."""
+    """Return the retired id of the unreleased ordinal-keyed relation shape."""
 
     encoded = json.dumps(
         [
@@ -4578,50 +4233,6 @@ def _create_custody_gap_review_transaction_table(conn):
     )
 
 
-def _v1_review_relation_wire_identity(conn, row):
-    """Recover the portable relation tuple from its original signed upsert.
-
-    Alias catalogs are intentionally device-local projections and two peers
-    may know different subsets.  A migrated v1 row therefore takes its review
-    and transaction identities from the immutable signed event that authored
-    that exact ordinal row. A row never captured before upgrade has no portable
-    identity yet and safely falls back to its local tuple; capture will derive
-    its first v2 wire identity after migration.
-    """
-
-    entity_key = json.dumps([str(row["id"])], ensure_ascii=True, separators=(",", ":"))
-    events = conn.execute(
-        """
-        SELECT payload_json
-        FROM sync_events
-        WHERE profile_id = ?
-          AND entity_table = 'custody_gap_review_transactions'
-          AND entity_key = ?
-          AND event_type = 'row.upsert'
-        ORDER BY replica_id, replica_seq, id
-        """,
-        (row["profile_id"], entity_key),
-    ).fetchall()
-    for event in events:
-        try:
-            payload = json.loads(str(event["payload_json"] or "{}"))
-        except (TypeError, ValueError, json.JSONDecodeError):
-            continue
-        wire_row = payload.get("row") if isinstance(payload, dict) else None
-        if not isinstance(wire_row, dict):
-            continue
-        if (
-            str(wire_row.get("id") or "") == str(row["id"])
-            and str(wire_row.get("role") or "") == str(row["role"])
-            and type(wire_row.get("ordinal")) is int
-        ):
-            review_id = str(wire_row.get("review_id") or "")
-            transaction_id = str(wire_row.get("transaction_id") or "")
-            if review_id and transaction_id:
-                return review_id, transaction_id
-    return str(row["review_id"]), str(row["transaction_id"])
-
-
 def _ensure_custody_gap_review_transaction_schema(conn):
     """Replace the unreleased ordinal-keyed relation shape with set identity."""
 
@@ -4676,13 +4287,10 @@ def _ensure_custody_gap_review_transaction_schema(conn):
             """,
         ).fetchall()
         for row in rows:
-            wire_review_id, wire_transaction_id = _v1_review_relation_wire_identity(
-                conn, row
-            )
             relation_id = custody_gap_review_transaction_id(
-                wire_review_id,
+                row["review_id"],
                 row["role"],
-                wire_transaction_id,
+                row["transaction_id"],
             )
             conn.execute(
                 """
@@ -4698,33 +4306,6 @@ def _ensure_custody_gap_review_transaction_schema(conn):
                     row["profile_id"],
                     row["role"],
                     row["transaction_id"],
-                    row["created_at"],
-                ),
-            )
-            # A delayed signed v1 tombstone/upsert still names the ordinal row
-            # id. Redirect that portable alias before dropping the legacy row.
-            conn.execute(
-                """
-                UPDATE sync_id_map
-                SET local_id = ?
-                WHERE profile_id = ?
-                  AND entity_table = 'custody_gap_review_transactions'
-                  AND local_id = ?
-                """,
-                (relation_id, row["profile_id"], row["id"]),
-            )
-            conn.execute(
-                """
-                INSERT INTO sync_id_map(
-                    profile_id, entity_table, wire_id, local_id, created_at
-                ) VALUES(?, 'custody_gap_review_transactions', ?, ?, ?)
-                ON CONFLICT(profile_id, entity_table, wire_id)
-                DO UPDATE SET local_id = excluded.local_id
-                """,
-                (
-                    row["profile_id"],
-                    row["id"],
-                    relation_id,
                     row["created_at"],
                 ),
             )
@@ -4749,7 +4330,7 @@ def backfill_custody_gap_review_relations(
 ):
     """Insert any missing durable review anchors without rewriting history.
 
-    Existing databases and replicas can contain only a prefix of the relation
+    Existing databases can contain only a prefix of the relation
     rows.  Repair therefore works per ``(role, transaction_id)`` instead of
     treating the first child row as proof that the whole review was migrated.
     An authored transaction identity remains valid after source retraction;
@@ -4959,7 +4540,7 @@ def _backfill_legacy_componentless_review_transactions(conn):
     return backfill_legacy_componentless_review_relations(conn)
 
 
-def _custody_replicable_detail_hash(payload_json):
+def _custody_evidence_detail_hash(payload_json):
     payload = json.loads(payload_json)
     if not isinstance(payload, dict):
         raise ValueError("custody evidence payload is invalid")
@@ -4987,9 +4568,9 @@ def _backfill_local_custody_evidence_commitments(conn):
     """Migrate only evidence that an older local activation already bound.
 
     Current transaction rows are deliberately never consulted here.  A
-    received component without the author's commitments must remain
-    ineffective instead of being blessed by whatever this replica happens to
-    know today.  A genuinely transactionless active component is the sole safe
+    component without the author's commitments must remain ineffective
+    instead of being blessed by whatever this database happens to know
+    today.  A genuinely transactionless active component is the sole safe
     zero-evidence backfill.
     """
 
@@ -5018,7 +4599,7 @@ def _backfill_local_custody_evidence_commitments(conn):
             commitment_snapshots = sorted(
                 (
                     snapshot["quantity_hash"],
-                    _custody_replicable_detail_hash(snapshot["payload_json"]),
+                    _custody_evidence_detail_hash(snapshot["payload_json"]),
                     snapshot["created_at"],
                 )
                 for snapshot in snapshots
@@ -5243,6 +4824,121 @@ def _migrate_inline_ownership_history(conn) -> int:
     return migrated
 
 
+DEVICE_SYNC_REMOVAL_MIGRATION = "device-sync-removal-v1"
+# Removed 2026-09-30 (plan 19). Children precede the tables they reference so
+# dropping never cascades into another retired table mid-migration.
+RETIRED_DEVICE_SYNC_TABLES = (
+    "sync_mailbox_heads",
+    "sync_peer_status",
+    "sync_transports",
+    "sync_member_private_keys",
+    "sync_device_private_keys",
+    "sync_replicas",
+    "sync_devices",
+    "sync_members",
+    "sync_field_state",
+    "sync_row_state",
+    "sync_tombstones",
+    "sync_events",
+    "sync_ingests",
+    "sync_conflicts",
+    "sync_notices",
+    "sync_bundle_exports",
+    "sync_pending_events",
+    "sync_rejected_events",
+    "sync_pending_blobs",
+    "sync_id_map",
+    "sync_join_requests",
+    "sync_replica_acknowledgements",
+    "sync_tombstone_gc_log",
+    "sync_books",
+)
+RETIRED_DEVICE_SYNC_INDEXES = (
+    "idx_transaction_edit_events_sync_event",
+    "idx_transaction_edit_events_sync_replica_seq",
+)
+# Existing books keep these nullable columns: dropping a column rewrites the
+# table. Nothing reads or writes them, and fresh books do not create them.
+RETIRED_DEVICE_SYNC_COLUMNS = {
+    "transaction_edit_events": frozenset(
+        {
+            "sync_event_id",
+            "sync_replica_id",
+            "sync_replica_seq",
+            "sync_hlc",
+            "sync_author_member_id",
+            "sync_signature",
+            "sync_context_json",
+        }
+    ),
+}
+
+
+def _drop_device_sync_schema(conn) -> int:
+    """Remove the retired device-sync tables and indexes from an older book.
+
+    Replication kept its identities, keys, signed events, conflicts and
+    transport settings in ``sync_*`` tables and never installed triggers on
+    core tables; nothing else reads them. Authored book rows are untouched.
+    A book without any of these objects is left alone by a read-only probe, so
+    repeat opens perform no writes.
+    """
+
+    names = (*RETIRED_DEVICE_SYNC_TABLES, *RETIRED_DEVICE_SYNC_INDEXES)
+    placeholders = ", ".join("?" for _ in names)
+    present = {
+        str(row[0]): str(row[1])
+        for row in conn.execute(
+            f"SELECT name, type FROM sqlite_master WHERE name IN ({placeholders})",
+            names,
+        ).fetchall()
+    }
+    if not present:
+        return 0
+
+    def count(table, where=""):
+        if present.get(table) != "table":
+            return 0
+        return int(conn.execute(f"SELECT COUNT(*) FROM {table} {where}").fetchone()[0])
+
+    impact = {
+        "schema_version": 1,
+        "migration": DEVICE_SYNC_REMOVAL_MIGRATION,
+        "changes": [
+            {
+                "name": "device_sync_removed",
+                "sync_enabled_book_count": count("sync_books"),
+                "signed_event_count": count("sync_events"),
+                "open_conflict_count": count("sync_conflicts", "WHERE status = 'open'"),
+                "transport_count": count("sync_transports"),
+                "explanation": (
+                    "Drops device-sync identities, keys, signed events, "
+                    "conflicts and transport settings. Authored book rows keep "
+                    "their current local values; open conflicts no longer "
+                    "block journals."
+                ),
+            }
+        ],
+    }
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO schema_migration_audits(
+            id, migration_name, schema_version, impact_json, created_at
+        ) VALUES(?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        """,
+        (
+            DEVICE_SYNC_REMOVAL_MIGRATION,
+            DEVICE_SYNC_REMOVAL_MIGRATION,
+            json.dumps(impact, sort_keys=True, separators=(",", ":")),
+        ),
+    )
+    for index in RETIRED_DEVICE_SYNC_INDEXES:
+        conn.execute(f"DROP INDEX IF EXISTS {index}")
+    for table in RETIRED_DEVICE_SYNC_TABLES:
+        conn.execute(f"DROP TABLE IF EXISTS {table}")
+    return 1
+
+
 def ensure_schema_compat(conn):
     """Apply one-shot backfills not covered by `CREATE TABLE IF NOT EXISTS`.
 
@@ -5428,25 +5124,8 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "transactions", "at_regime_override", "TEXT")
     ensure_column(conn, "transactions", "at_category_override", "TEXT")
     ensure_column(conn, "transactions", "privacy_boundary", "TEXT")
-    ensure_column(conn, "transaction_edit_events", "sync_event_id", "TEXT")
-    ensure_column(conn, "transaction_edit_events", "sync_replica_id", "TEXT")
-    ensure_column(conn, "transaction_edit_events", "sync_replica_seq", "INTEGER")
-    ensure_column(conn, "transaction_edit_events", "sync_hlc", "TEXT")
-    ensure_column(conn, "transaction_edit_events", "sync_author_member_id", "TEXT")
-    ensure_column(conn, "transaction_edit_events", "sync_signature", "TEXT")
-    ensure_column(conn, "transaction_edit_events", "sync_context_json", "TEXT")
-    ensure_column(conn, "sync_members", "revoked_context_json", "TEXT")
-    ensure_column(conn, "sync_devices", "revoked_context_json", "TEXT")
-    ensure_column(conn, "sync_devices", "record_signer_member_id", "TEXT")
-    conn.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_transaction_edit_events_sync_event "
-        "ON transaction_edit_events(sync_event_id) WHERE sync_event_id IS NOT NULL"
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_transaction_edit_events_sync_replica_seq "
-        "ON transaction_edit_events(sync_replica_id, sync_replica_seq) "
-        "WHERE sync_replica_id IS NOT NULL"
-    )
+    if _drop_device_sync_schema(conn):
+        conn.commit()
     ensure_column(conn, "journal_entries", "fiat_value_exact", "TEXT")
     ensure_column(conn, "journal_entries", "unit_cost_exact", "TEXT")
     ensure_column(conn, "journal_entries", "cost_basis_exact", "TEXT")
@@ -7051,8 +6730,8 @@ def _ensure_direct_swap_payout_schema(conn):
 def _ensure_legacy_custody_write_freeze_triggers(conn):
     """Reject compatibility-row changes while their component is active.
 
-    Local mutation services retire the linked revision first. Replication or
-    older code that tries to mutate a booked compatibility row therefore fails
+    Local mutation services retire the linked revision first. Older code
+    that tries to mutate a booked compatibility row therefore fails
     closed instead of leaving the row and authored aggregate inconsistent.
     """
 

@@ -157,7 +157,7 @@ def require_online(subject: str, *, on_device_url: str | None = None) -> None:
     """Refuse a connection outside the shared transport while offline.
 
     For the paths ``KASSIBER_NO_EGRESS`` does not cover by design — AI
-    providers, LAN device sync and update checks — offline mode still has to
+    providers and update checks — offline mode still has to
     hold. ``on_device_url`` is the base URL of an AI provider already marked
     local; it passes only on loopback. A loopback URL alone is not enough: a
     remote or TEE provider behind a local gateway or tunnel would still send

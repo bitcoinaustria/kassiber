@@ -13,7 +13,6 @@ from kassiber.core import maintenance as core_maintenance
 from kassiber.core import sync as core_sync
 from kassiber.core import wallets as core_wallets
 from kassiber.core.chain_observer import (
-    PRIVATE_OBSERVER_TABLES,
     ChainFacts,
     ChainObserver,
     CoveragePoint,
@@ -29,7 +28,6 @@ from kassiber.core.chain_observer import (
     persist_observer_state,
     prepare_observer_update,
 )
-from kassiber.core.sync_replication.schema_allowlist import SYNC_TABLES
 from kassiber.core.ui_snapshot import build_wallets_list_snapshot
 from kassiber.db import open_db, set_setting
 from kassiber.diagnostics import collect_public_diagnostics
@@ -800,7 +798,7 @@ class ChainObserverContractTest(unittest.TestCase):
             0,
         )
 
-    def test_public_ai_diagnostics_audit_and_replication_surfaces_exclude_state(self):
+    def test_public_ai_diagnostics_and_audit_surfaces_exclude_state(self):
         marker = "observer-state-must-never-egress"
         observer, prepared = self._prepare(FakeObserver(self.conn, marker=marker))
         self._apply_and_commit(prepared)
@@ -824,8 +822,6 @@ class ChainObserverContractTest(unittest.TestCase):
             "chain observer state and derivation coverage",
             audit_package.SENSITIVE_MATERIAL_EXCLUSIONS,
         )
-        replicated_tables = {spec.table for spec in SYNC_TABLES}
-        self.assertTrue(PRIVATE_OBSERVER_TABLES.isdisjoint(replicated_tables))
 
 
 class ObserverIdentityTest(unittest.TestCase):

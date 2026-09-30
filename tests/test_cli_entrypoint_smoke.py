@@ -72,11 +72,6 @@ HELP_PATHS = (
     ("backup",),
     ("backup", "export"),
     ("backup", "import"),
-    ("sync",),
-    ("sync", "transport", "add"),
-    ("sync", "lan"),
-    ("sync", "tor"),
-    ("sync", "gc"),
     ("backends", "reveal-token"),
     ("wallets", "reveal-descriptor"),
 )
@@ -94,6 +89,13 @@ def test_help_surfaces_parse_in_process(cli_parser, command_path):
         cli_parser.parse_args([*command_path, "--help"])
     assert raised.value.code == 0
     assert "usage:" in output.getvalue().lower()
+
+
+def test_removed_device_sync_command_group_is_rejected(cli_parser):
+    # Wallet sync stays `wallets sync`; the top-level `sync` group was removed.
+    with contextlib.redirect_stderr(io.StringIO()), pytest.raises(SystemExit) as raised:
+        cli_parser.parse_args(["sync", "status"])
+    assert raised.value.code == 2
 
 
 def test_version_is_database_free(cli_parser):

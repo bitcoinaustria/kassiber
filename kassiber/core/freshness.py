@@ -118,7 +118,7 @@ _LOG_ERROR_CODES = frozenset("""
     observer_state_invalid observer_state_rebuild_required observer_state_stale
     observer_update_already_applied observer_update_discarded protocol_error rate_limited
     report_freshness_blocked silent_payment_scanner_invalid silent_payment_scanner_unavailable
-    source_overlap source_overlap_retry stale_context state_not_ready sync_conflicts_open
+    source_overlap source_overlap_retry stale_context state_not_ready
     sync_state_missing tax_failed unsupported upstream_error validation
 """.split())
 _LOG_SQLITE_NAMES = frozenset(name for name in dir(sqlite3) if name.startswith("SQLITE_"))

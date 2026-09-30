@@ -212,20 +212,6 @@ def test_open_electrum_session_stops_once_offline(preference):
     assert client.socket.sendall.call_count == 1
 
 
-def test_lan_discovery_and_sync_refuse_offline(preference):
-    from kassiber.core.sync_replication import lan
-
-    egress_policy.set_offline_mode(True)
-    with pytest.raises(AppError) as excinfo:
-        lan.discover_lan_services(timeout_seconds=0.01)
-    _assert_offline_error(excinfo)
-    with mock.patch.object(lan.socket, "socket") as make_socket:
-        with pytest.raises(AppError) as excinfo:
-            lan.LanSyncServer(None, profile_id="profile")
-    _assert_offline_error(excinfo)
-    make_socket.assert_not_called()
-
-
 def test_update_check_refuses_offline_even_with_consent(preference, tmp_path):
     from kassiber import update_check
 

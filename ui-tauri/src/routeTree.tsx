@@ -405,13 +405,6 @@ const settingsAiRoute = createRoute({
   component: () => <Settings section="assistant-ai" />,
 });
 
-const settingsSyncRoute = createRoute({
-  getParentRoute: () => appLayoutRoute,
-  path: "/settings/sync",
-  beforeLoad: requireDeveloperTools,
-  component: () => <Settings section="data-sync" />,
-});
-
 const settingsDataRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/settings/data",
@@ -507,7 +500,6 @@ const routeTree = rootRoute.addChildren([
     settingsPrivacyRoute,
     settingsSecurityRoute,
     settingsAiRoute,
-    settingsSyncRoute,
     settingsDataRoute,
     settingsTerminalRoute,
     settingsDeveloperRoute,

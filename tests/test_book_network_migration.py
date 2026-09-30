@@ -95,6 +95,39 @@ class NetworkPartitionTests(unittest.TestCase):
             self.assertEqual(target.execute("PRAGMA foreign_key_check").fetchall(), [])
         self.assertEqual(self.conn.total_changes, before)
 
+    def test_partition_of_older_book_omits_retired_device_sync_columns(self):
+        import sqlite3
+        import tarfile
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from kassiber.core.book_network_migration import plan_network_partition, export_network_partition
+        from kassiber.db import RETIRED_DEVICE_SYNC_COLUMNS
+        retired = sorted(RETIRED_DEVICE_SYNC_COLUMNS["transaction_edit_events"])
+        for column in retired:
+            self.conn.execute(f"ALTER TABLE transaction_edit_events ADD COLUMN {column} TEXT")
+        self.conn.execute(
+            "INSERT INTO transaction_edit_events(id, workspace_id, profile_id, transaction_id, source, changed_at, sync_signature) "
+            "VALUES('edit-main', 'ws-1', 'profile-1', 'main', 'user', ?, 'old-device-signature')",
+            (fixtures.NOW,),
+        )
+        plan = plan_network_partition(self.conn, "profile-1", self.args)
+        with tempfile.TemporaryDirectory() as folder, patch(
+            "kassiber.core.book_network_migration.encrypt_age_stream",
+            side_effect=lambda source, output, **kwargs: output.write(source.read()),
+        ):
+            output = Path(folder) / "partition.age"
+            export_network_partition(self.conn, "profile-1", {**self.args, "plan_id": plan["plan_id"]}, data_root=folder, output_path=output, recipient="age1test")
+            with tarfile.open(output) as archive:
+                payload = archive.extractfile("kassiber.sqlite3").read()
+            database = Path(folder) / "partition.sqlite3"
+            database.write_bytes(payload)
+            target = sqlite3.connect(database)
+            self.addCleanup(target.close)
+            self.assertEqual(target.execute("SELECT id FROM transaction_edit_events").fetchall(), [("edit-main",)])
+            columns = {row[1] for row in target.execute("PRAGMA table_info(transaction_edit_events)")}
+            self.assertTrue(columns.isdisjoint(retired))
+
     def test_authored_relation_across_partition_blocks_copy(self):
         from kassiber.core.book_network_migration import plan_network_partition
         from tests.custody_projection_fixtures import insert_reviewed_projection
