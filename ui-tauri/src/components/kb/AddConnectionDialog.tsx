@@ -4847,7 +4847,7 @@ function AddConnectionDialogContent({
               className="min-w-0 flex-1 border-none bg-transparent text-base text-foreground shadow-none outline-none placeholder:text-muted-foreground/80"
             />
           </div>
-          <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
+          <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto overscroll-none p-2">
           {visibleSources.length === 0 ? (
             <p className="px-2.5 py-2 text-sm text-muted-foreground">
               {sourceQuery.trim()

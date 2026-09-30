@@ -1576,7 +1576,7 @@ function PairedDetailSheet({
   const sourceKey = pairSourceLabelKey(pair?.pair_source ?? null);
   return (
     <Sheet open={Boolean(pair)} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto p-0 sm:max-w-2xl">
+      <SheetContent className="w-full overflow-y-auto overscroll-none p-0 sm:max-w-2xl">
         {pair ? (
           <>
             <SheetHeader className="border-b p-4 sm:p-6">
@@ -3148,7 +3148,7 @@ function SwapCandidateDetailSheet({
   const presentationType = candidate ? candidatePairType(candidate) : "transfer";
   return (
     <Sheet open={Boolean(candidate)} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto p-0 sm:max-w-2xl">
+      <SheetContent className="w-full overflow-y-auto overscroll-none p-0 sm:max-w-2xl">
         {candidate ? (
           <>
             <SheetHeader className="border-b p-4 sm:p-6">

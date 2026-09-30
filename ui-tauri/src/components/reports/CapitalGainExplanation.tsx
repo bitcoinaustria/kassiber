@@ -63,7 +63,7 @@ export function CapitalGainExplanation({ reference, hideSensitive }: { reference
   const [open, setOpen] = useState(false);
   return <Dialog open={open} onOpenChange={setOpen}>
     <DialogTrigger asChild><Button size="sm" variant="ghost">{t("explanation.open")}</Button></DialogTrigger>
-    {open && <DialogContent className="max-w-3xl! overflow-y-auto">
+    {open && <DialogContent className="max-w-3xl! overflow-y-auto overscroll-none">
       <DialogTitle>{t("explanation.title")}</DialogTitle>
       <DialogDescription>{t("explanation.description")}</DialogDescription>
       <ExplanationBody reference={reference} hideSensitive={hideSensitive} />

@@ -701,7 +701,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     <section className="relative h-full overflow-hidden bg-paper text-ink">
       <div
         className={cn(
-          "relative z-10 mx-auto flex h-full max-w-7xl flex-col items-center gap-8 overflow-y-auto px-4 py-6 sm:px-8 lg:px-10",
+          "relative z-10 mx-auto flex h-full max-w-7xl flex-col items-center gap-8 overflow-y-auto overscroll-none px-4 py-6 sm:px-8 lg:px-10",
           className,
         )}
       >

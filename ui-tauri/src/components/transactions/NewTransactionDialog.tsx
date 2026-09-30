@@ -201,7 +201,7 @@ export function NewTransactionDialog({
           <DialogDescription>{t("newDialog.description")}</DialogDescription>
         </DialogHeader>
 
-        <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto px-5 pb-3">
+        <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-none px-5 pb-3">
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="space-y-3">
             <section className="rounded-lg border p-2">

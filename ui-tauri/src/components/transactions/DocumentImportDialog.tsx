@@ -505,7 +505,7 @@ export function DocumentImportDialog() {
           <DialogDescription>{t("documentImport.description")}</DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-3">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-none px-5 pb-3">
           <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
             <div className="space-y-1.5">
               <Label htmlFor="document-import-source">
