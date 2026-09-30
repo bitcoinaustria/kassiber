@@ -76,6 +76,18 @@ REASONS = {
     ),
     "plugin_rail": "Plugin payment method in an unknown currency; invoices are kept as provenance.",
     "not_ledger_rail": "Only Lightning and Bitcoin plugin payment methods can be booked from BTCPay's payments.",
+    "payouts_permission_missing": (
+        "The key cannot read payouts, so BTCPay's payments alone would overstate the balance. Keep the invoices "
+        "only, or use a key that can read payouts."
+    ),
+    "configured_balance_source": (
+        "Kassiber already takes this payment method's balance from a wallet set up here. Archive that wallet to "
+        "set it up differently."
+    ),
+    "mapped_to_wallet": (
+        "This payment method is mapped to a wallet Kassiber tracks. Skip the mapping first so the wallet is not "
+        "counted twice."
+    ),
     "network_mismatch": "This store's wallet is on a different network than this book.",
     "wallet_recognised": "Kassiber already tracks the wallet this store pays into.",
     "shared_wallet_already_imported": "Another store already imports this same wallet.",
@@ -331,6 +343,8 @@ def _action_availability(method: Mapping[str, Any], capabilities: Mapping[str, A
         ledger = entry(False, "not_ledger_rail")
     elif invoices is False:
         ledger = entry(False, "invoices_permission_missing")
+    elif capabilities.get("payouts") is False:
+        ledger = entry(False, "payouts_permission_missing")
     else:
         ledger = entry(True)
     return {
@@ -340,6 +354,43 @@ def _action_availability(method: Mapping[str, Any], capabilities: Mapping[str, A
         "provenance_only": provenance,
         "skip": entry(True),
     }
+
+
+def _balance_conflict(existing: str, requested: str, *, same_key: bool) -> str | None:
+    """Why ``requested`` cannot join a store method already set up as ``existing``.
+
+    A wallet source or payment ledger keeps booking until its wallet is
+    archived, so a later choice on the same key cannot replace it; a mapped
+    wallet already holds the balance, so importing the store too would count
+    it twice. Choices through another key never add a second balance source.
+    """
+
+    if existing in {"wallet_source", "payment_ledger"}:
+        if same_key and requested != existing:
+            return "configured_balance_source"
+        if not same_key and requested in BALANCE_ACTIONS:
+            return "configured_via_other_key"
+    if existing == "existing_wallet" and requested in {"wallet_source", "payment_ledger"}:
+        return "mapped_to_wallet" if same_key else "configured_via_other_key"
+    return None
+
+
+def _lock_configured_actions(
+    actions: dict[str, dict[str, Any]],
+    own_routes: Sequence[Mapping[str, Any]],
+    other_routes: Sequence[Mapping[str, Any]],
+) -> None:
+    routes = [(route, True) for route in own_routes] + [(route, False) for route in other_routes]
+    for action, availability in actions.items():
+        if not availability.get("available"):
+            continue
+        for route, same_key in routes:
+            if route.get("deprecated"):
+                continue
+            reason = _balance_conflict(route["action"], action, same_key=same_key)
+            if reason:
+                availability.update({"available": False, "reason": reason, "reason_text": REASONS.get(reason)})
+                break
 
 
 def plan_btcpay_setup(
@@ -403,6 +454,7 @@ def plan_btcpay_setup(
         ]
         method["shared_with"] = shared_with
         method["actions"] = _action_availability(method, capabilities)
+        _lock_configured_actions(method["actions"], own_routes, other_routes)
         if method.get("rail") in {RAIL_LIGHTNING, RAIL_LNURL}:
             method["lightning_wallets"] = lightning_wallets
 
@@ -440,6 +492,8 @@ def plan_btcpay_setup(
             action, reason = "provenance_only", "read_only_key_upgrade"
         else:
             action, reason = "wallet_source", "import_btcpay_wallet_history"
+        if action == "payment_ledger" and capabilities.get("payouts") is False:
+            action, reason = "provenance_only", "payouts_permission_missing"
         if action in {"provenance_only", "payment_ledger"} and capabilities.get("invoices") is False:
             action, reason = "skip", "invoices_permission_missing"
         if fingerprint and action in {"wallet_source", "existing_wallet"}:
@@ -514,6 +568,27 @@ def validate_setup_routes(
 
     backend_key = backend_name.strip().lower()
     sibling_backends = [name for name in same_server_backends(runtime_config, server_url) if name != backend_key]
+    existing_by_key: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for existing in list_existing_routes(conn, profile_id, backend_names=[backend_key, *sibling_backends]):
+        if not existing.get("deprecated"):
+            existing_by_key.setdefault((existing["store_id"], existing["payment_method_id"]), []).append(existing)
+    for route in routes:
+        for existing in existing_by_key.get((route["store_id"], route["payment_method_id"]), []):
+            reason = _balance_conflict(existing["action"], route["action"], same_key=existing["backend"] == backend_key)
+            if reason:
+                raise AppError(
+                    f"Store {route['store_id']} {route['payment_method_id']} is already set up as {existing['action']}"
+                    + (f" ('{existing['wallet']}')" if existing.get("wallet") else ""),
+                    code="conflict",
+                    hint=REASONS[reason],
+                    details={
+                        "reason": reason,
+                        "existing_action": existing["action"],
+                        "existing_wallet": existing.get("wallet"),
+                        "existing_backend": existing["backend"],
+                    },
+                    retryable=False,
+                )
     if sibling_backends:
         sibling_routes = list_existing_routes(conn, profile_id, backend_names=sibling_backends)
         sibling_sources = {

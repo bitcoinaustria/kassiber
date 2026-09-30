@@ -251,6 +251,17 @@ class BatchPayoutReviewTest(_BookTest):
         states = {row["id"]: row["state"] for row in self.conn.execute("SELECT id, state FROM commercial_links")}
         self.assertEqual({states[self.links["po-1"]], states[self.links["po-2"]]}, {"suggested"})
 
+    def test_a_reviewed_batch_is_reopened_before_single_payouts_are_rejected(self):
+        commercial.review_link(self.conn, "ws", "prof", self.links["po-2"], self._hooks(), state="reviewed", commercial_kind="expense")
+        for link_id in (self.links["po-1"], self.links["po-2"]):
+            with self.assertRaises(AppError):
+                commercial.review_link(self.conn, "ws", "prof", link_id, self._hooks(), state="rejected")
+        commercial.review_link(self.conn, "ws", "prof", self.links["po-1"], self._hooks(), state="suggested")
+        rejected = commercial.review_link(self.conn, "ws", "prof", self.links["po-1"], self._hooks(), state="rejected")
+        self.assertEqual(rejected["state"], "rejected")
+        states = {row["id"]: row["state"] for row in self.conn.execute("SELECT id, state FROM commercial_links")}
+        self.assertEqual(states[self.links["po-2"]], "suggested")
+
     def test_batch_with_mixed_currencies_is_refused(self):
         self.conn.execute(
             "UPDATE btcpay_provenance_records SET fiat_currency = 'USD' WHERE payment_id = 'po-1'"
@@ -437,6 +448,42 @@ class PaymentLedgerTest(_BookTest):
         self.assertEqual(state["last_error_code"], "auth_error")
 
 
+    def test_ledger_refuses_to_book_without_payouts(self):
+        routes = dict(self.routes)
+        routes["/api/v1/stores/S1/payouts"] = (403, {"code": "missing-permission", "missingPermission": "btcpay.store.canviewpayouts"})
+        with self.assertRaises(AppError) as ctx:
+            self._sync("ln", routes)
+        self.assertEqual(ctx.exception.code, "auth_error")
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM transactions WHERE wallet_id = 'ln'").fetchone()[0], 0)
+
+    def test_ledger_stops_when_a_connected_node_duplicates_booked_payments(self):
+        self._sync("ln", self.routes)
+        self._wallet("node", "Shop node", {"chain": "bitcoin"}, kind="lnd")
+        self.conn.execute(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint, occurred_at, direction,
+                asset, amount, fee, kind, raw_json, payment_hash, payment_hash_source, created_at
+            ) VALUES('node-in', 'ws', 'prof', 'node', 'lnd:invoice:x', 'fp-node', '2026-01-02T00:00:00Z', 'inbound',
+                     'BTC', 50000000, 0, 'lnd_invoice', '{}', ?, 'lnd', ?)
+            """,
+            (HASH_PAID, now_iso()),
+        )
+        self.conn.commit()
+        with self.assertRaises(AppError) as ctx:
+            self._sync("ln", self.routes)
+        self.assertEqual(ctx.exception.code, "conflict")
+        self.assertEqual(ctx.exception.details["wallets"], ["Shop node"])
+
+        # Excluding the ledger's copy resolves it; the node's row then links alone.
+        self.conn.execute("UPDATE transactions SET excluded = 1 WHERE wallet_id = 'ln' AND payment_hash = ?", (HASH_PAID,))
+        self.conn.commit()
+        self._sync("ln", self.routes)
+        record = self.conn.execute("SELECT * FROM btcpay_provenance_records WHERE payment_id = ?", (HASH_PAID,)).fetchone()
+        matches = commercial._matching_transactions_for_record(self.conn, "prof", record)
+        self.assertEqual([row["id"] for row in matches], ["node-in"])
+
+
 class StoreSyncStateTest(_BookTest):
     def test_success_clears_the_error_and_age_marks_staleness(self):
         commercial.record_btcpay_store_sync(self.conn, "prof", backend_name="shop", store_id="S1", error_code="unavailable", error_message="down")
@@ -483,11 +530,11 @@ class LedgerPlanTest(_BookTest):
         }
         return InspectionResult(public=public, private={"previews": {}}, grant=None)
 
-    def _plan(self):
+    def _plan(self, inspection=None):
         return btcpay_setup.plan_btcpay_setup(
             self.conn,
             "prof",
-            self._inspection(),
+            inspection or self._inspection(),
             backend_name="shop",
             runtime_config=self.runtime_config,
             server_url="https://pay.example.com",
@@ -522,6 +569,36 @@ class LedgerPlanTest(_BookTest):
         self.assertEqual(methods["BTC-LN"]["recommendation"]["action"], "provenance_only")
         self.assertEqual(methods["BTC-LN"]["recommendation"]["reason"], "lightning_settles_elsewhere")
         self.assertTrue(methods["BTC-LN"]["actions"]["payment_ledger"]["available"])
+
+    def test_a_key_without_payouts_cannot_book_a_ledger(self):
+        inspection = self._inspection()
+        inspection.public["stores"][0]["capabilities"]["payouts"] = False
+        methods = {m["payment_method_id"]: m for m in self._plan(inspection)["payment_methods"]}
+        self.assertFalse(methods["BTC-LN"]["actions"]["payment_ledger"]["available"])
+        self.assertEqual(methods["BTC-LN"]["actions"]["payment_ledger"]["reason"], "payouts_permission_missing")
+        self.assertEqual(methods["BTC-LN"]["recommendation"]["action"], "provenance_only")
+
+    def test_a_configured_ledger_cannot_be_switched_while_it_books(self):
+        routes = btcpay_setup.normalize_setup_routes(btcpay_setup.routes_from_plan(self._plan()))
+        btcpay_setup.apply_setup_routes(self.conn, self.workspace, self.profile, backend_name="shop", routes=routes, label="Café")
+        methods = {m["payment_method_id"]: m for m in self._plan()["payment_methods"]}
+        actions = methods["BTC-LN"]["actions"]
+        self.assertTrue(actions["payment_ledger"]["available"])
+        self.assertEqual(
+            {name for name, entry in actions.items() if not entry["available"] and entry["reason"] == "configured_balance_source"},
+            {"provenance_only", "skip"},
+        )
+        for action in ("provenance_only", "skip"):
+            with self.assertRaises(AppError) as ctx:
+                btcpay_setup.validate_setup_routes(
+                    self.conn,
+                    "prof",
+                    [{"store_id": "S1", "payment_method_id": "BTC-LN", "action": action}],
+                    backend_name="shop",
+                    runtime_config=self.runtime_config,
+                    server_url="https://pay.example.com",
+                )
+            self.assertEqual(ctx.exception.details["reason"], "configured_balance_source")
 
     def test_on_chain_methods_cannot_be_booked_as_a_ledger(self):
         with self.assertRaises(AppError):

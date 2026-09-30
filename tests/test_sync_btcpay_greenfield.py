@@ -662,6 +662,25 @@ class SetupPlanTest(unittest.TestCase):
                 server_url="https://pay.example.com",
             )
 
+    def test_a_mapped_store_wallet_cannot_also_be_imported(self):
+        plan = self._plan(["btcpay.store.canmodifystoresettings"])
+        routes = btcpay_setup.normalize_setup_routes(btcpay_setup.routes_from_plan(plan))
+        workspace = self.conn.execute("SELECT * FROM workspaces WHERE id = 'ws'").fetchone()
+        profile = self.conn.execute("SELECT * FROM profiles WHERE id = 'prof'").fetchone()
+        btcpay_setup.apply_setup_routes(self.conn, workspace, profile, backend_name="shop-ro", routes=routes, label="Shop")
+        replanned = {(m["store_id"], m["payment_method_id"]): m for m in self._plan(["btcpay.store.canmodifystoresettings"])["payment_methods"]}
+        self.assertEqual(replanned[("S1", "BTC-CHAIN")]["actions"]["wallet_source"]["reason"], "mapped_to_wallet")
+        with self.assertRaises(AppError) as ctx:
+            btcpay_setup.validate_setup_routes(
+                self.conn,
+                "prof",
+                [{"store_id": "S1", "payment_method_id": "BTC-CHAIN", "action": "wallet_source"}],
+                backend_name="shop-ro",
+                runtime_config=self.runtime_config,
+                server_url="https://pay.example.com",
+            )
+        self.assertEqual(ctx.exception.details["reason"], "mapped_to_wallet")
+
     def test_mapping_onto_a_btcpay_wallet_source_is_refused(self):
         workspace = self.conn.execute("SELECT * FROM workspaces WHERE id = 'ws'").fetchone()
         profile = self.conn.execute("SELECT * FROM profiles WHERE id = 'prof'").fetchone()

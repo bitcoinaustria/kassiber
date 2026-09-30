@@ -346,8 +346,11 @@ def split_tracked_elsewhere(
     return keep, held
 
 
-def existing_rows_tracked_elsewhere(conn: sqlite3.Connection, profile_id: str, wallet_id: str) -> int:
-    """Ledger rows that became duplicates after another wallet was connected."""
+def existing_rows_tracked_elsewhere(conn: sqlite3.Connection, profile_id: str, wallet_id: str) -> dict[str, Any]:
+    """Ledger rows that became duplicates after another wallet was connected.
+
+    Returns the count and the labels of the wallets that book them too.
+    """
 
     keys = [
         (row["payment_hash"], row["direction"])
@@ -359,7 +362,24 @@ def existing_rows_tracked_elsewhere(conn: sqlite3.Connection, profile_id: str, w
             (profile_id, wallet_id),
         ).fetchall()
     ]
-    return len(_payment_hashes_elsewhere(conn, profile_id, wallet_id, keys))
+    duplicates = _payment_hashes_elsewhere(conn, profile_id, wallet_id, keys)
+    wallets: list[str] = []
+    hashes = sorted({payment_hash for payment_hash, _ in duplicates})
+    for start in range(0, len(hashes), _SQL_CHUNK):
+        chunk = hashes[start : start + _SQL_CHUNK]
+        placeholders = ",".join("?" for _ in chunk)
+        for row in conn.execute(
+            f"""
+            SELECT DISTINCT w.label FROM transactions t JOIN wallets w ON w.id = t.wallet_id
+            WHERE t.profile_id = ? AND t.wallet_id != ? AND t.excluded = 0
+              AND LOWER(t.payment_hash) IN ({placeholders})
+            ORDER BY w.label
+            """,
+            (profile_id, wallet_id, *chunk),
+        ).fetchall():
+            if row["label"] not in wallets:
+                wallets.append(row["label"])
+    return {"count": len(duplicates), "wallets": wallets}
 
 
 __all__ = [

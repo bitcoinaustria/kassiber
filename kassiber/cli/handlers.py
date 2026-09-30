@@ -2736,6 +2736,28 @@ def _sync_btcpay_payment_ledger(
         commit=commit,
     )
     provenance_checkpoint = provenance.pop("freshness_checkpoint", {})
+    # A ledger is a balance source: missing payouts or double-booked payments
+    # must stop the sync rather than book a wrong balance.
+    if provenance.get("payouts_available") is False:
+        raise AppError(
+            f"BTCPay payouts for store {store_id} cannot be read, so '{wallet['label']}' would miss refunds and payouts",
+            code="auth_error" if provenance.get("payouts_permission_missing") else "unavailable",
+            hint="Use a key with the view-payouts permission (the read-only preset includes it), or keep this store's Lightning invoices as provenance only.",
+            details={"store_id": store_id, "payouts_permission_missing": bool(provenance.get("payouts_permission_missing"))},
+            retryable=False,
+        )
+    duplicates = core_btcpay_ledger.existing_rows_tracked_elsewhere(conn, profile["id"], wallet["id"])
+    if duplicates["count"]:
+        raise AppError(
+            f"{duplicates['count']} payment(s) in '{wallet['label']}' are also booked by {', '.join(duplicates['wallets'])}",
+            code="conflict",
+            hint=(
+                "Counting them twice would overstate the balance and income. Exclude those payments in this ledger, "
+                "or archive the ledger and keep the store's Lightning invoices as provenance."
+            ),
+            details={"duplicates": duplicates["count"], "wallets": duplicates["wallets"]},
+            retryable=False,
+        )
     records, counts = core_btcpay_ledger.ledger_records(
         conn,
         profile["id"],
@@ -2768,9 +2790,6 @@ def _sync_btcpay_payment_ledger(
             "ledger": {
                 **counts,
                 "held_tracked_elsewhere": len(held),
-                "existing_tracked_elsewhere": core_btcpay_ledger.existing_rows_tracked_elsewhere(
-                    conn, profile["id"], wallet["id"]
-                ),
             },
             "payouts_permission_missing": bool(provenance.get("payouts_permission_missing")),
             "invoice_provenance": provenance,

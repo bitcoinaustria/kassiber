@@ -283,7 +283,9 @@ history), `existing_wallet` (the store pays into a wallet Kassiber tracks),
 watch: BTCPay's settled payments and completed payouts become the balance),
 `provenance_only` (Lightning already booked by a connected node, stores sharing
 an already imported wallet), `skip`. A payment ledger only sees what passes
-through BTCPay; withdrawals made outside it need their own record. One wallet
+through BTCPay; withdrawals made outside it need their own record, and it needs
+a key that can read payouts. A configured wallet source or ledger stays until
+its wallet is archived. One wallet
 is imported once: stores that share a wallet, or the same store reached through
 a second API key, must not become two wallet sources or two ledgers; the core
 rejects such plans. Each API key is its own backend; one key can serve many

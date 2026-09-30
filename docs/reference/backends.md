@@ -464,13 +464,20 @@ review the suggested link to apply its invoice price.
   same direction, such as the store's own LND node, is held back and reported
   as `held_tracked_elsewhere` instead of being counted twice. A payment from
   your own wallet into your store books outbound there and inbound in the
-  ledger, which is a transfer, not a duplicate. Rows the ledger booked before
-  such a wallet was connected are not removed automatically; the sync reports
-  them as `existing_tracked_elsewhere` so you can exclude them, or archive the
-  ledger wallet and keep the store's Lightning invoices as provenance.
+  ledger, which is a transfer, not a duplicate. If such a wallet is connected
+  after the ledger already booked those payments, the ledger sync stops with a
+  `conflict` naming that wallet until you exclude the ledger's copies or
+  archive the ledger and keep the store's Lightning invoices as provenance.
+- The ledger needs to read payouts as well as invoices; without payouts it
+  would overstate the balance, so setup does not offer it and the sync refuses.
 - Pending payments are reported as `pending` and booked once they settle.
 - A ledger sync fails when BTCPay cannot be read, instead of booking from old
   records.
+
+A store payment method that already imports wallet history or books a payment
+ledger keeps doing so until that wallet is archived; setup does not offer a
+different action for it, and a store mapped to a tracked wallet cannot also be
+imported or booked as a ledger. This keeps one balance source per store wallet.
 
 #### What is synced
 

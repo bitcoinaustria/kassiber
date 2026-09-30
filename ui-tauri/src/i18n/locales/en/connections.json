@@ -1197,7 +1197,10 @@
         "read_only_key_upgrade": "This key cannot read BTCPay's wallet history. Create a wallet-history key to import the store wallet from BTCPay, or map it to a wallet Kassiber already tracks.",
         "wallet_history_permission_missing": "Needs a key with BTCPay wallet-history access.",
         "invoices_permission_missing": "The key cannot read invoices for this store.",
-        "not_on_chain": "Only on-chain Bitcoin and Liquid can be imported as a wallet."
+        "not_on_chain": "Only on-chain Bitcoin and Liquid can be imported as a wallet.",
+        "payouts_permission_missing": "The key cannot read payouts, so BTCPay's payments alone would overstate the balance. Keep the invoices only, or use a key that can read payouts.",
+        "configured_balance_source": "Kassiber already takes this payment method's balance from a wallet set up here. Archive that wallet to set it up differently.",
+        "mapped_to_wallet": "This payment method is mapped to a wallet Kassiber tracks. Skip the mapping first so the wallet is not counted twice."
       },
       "notice": {
         "recognised": "Recognised as your wallet “{{wallet}}”.",

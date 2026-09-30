@@ -1040,7 +1040,7 @@ def _matching_transactions_for_record(conn, profile_id, record):
         f"""
         SELECT id, direction, amount, fee, amount_includes_fee, fiat_value_exact, fiat_value
         FROM transactions
-        WHERE profile_id = ? AND ({' OR '.join(clauses)}){direction_clause}
+        WHERE profile_id = ? AND excluded = 0 AND ({' OR '.join(clauses)}){direction_clause}
         ORDER BY occurred_at ASC, id ASC
         """,
         params,
@@ -1524,6 +1524,15 @@ def review_link(
     link_before = _get_link_row(conn, profile["id"], link_ref)
     state = _normalize_choice(state, LINK_STATES, label="link state")
     owner_id = _payout_batch_owner_id(conn, profile["id"], link_before)
+    if state == "rejected" and link_before["state"] == "reviewed" and (
+        owner_id or _reviewed_batch_member_ids(conn, profile["id"], link_before)
+    ):
+        raise AppError(
+            "This payout was reviewed together with the other payouts of its transaction",
+            code="validation",
+            hint="Reopen the review first, then mark the payouts that do not belong as not related.",
+            retryable=False,
+        )
     if owner_id and (state == "reviewed" or link_before["state"] == "reviewed"):
         # One payout transaction carries one reviewed kind and price. Reviewing
         # or reopening any payout of a reviewed batch acts on the whole batch.
