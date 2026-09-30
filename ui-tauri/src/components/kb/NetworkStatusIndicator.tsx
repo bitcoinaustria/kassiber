@@ -820,7 +820,7 @@ export function NetworkStatusIndicator({
                 </TableHeader>
               </Table>
               <div
-                className="max-h-[26rem] overflow-y-auto overscroll-contain border-t"
+                className="max-h-[26rem] overflow-y-auto overscroll-none border-t"
                 style={{
                   maxHeight: `${OUTBOUND_CONNECTION_ROW_LIMIT * 3.25}rem`,
                 }}

@@ -973,7 +973,7 @@ function TransactionDetailBody({
         backLabel={backLabel}
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-none">
         {/* Wide: the coins on the left, the record's tabs and rail on the right.
             Narrow: the same blocks stacked. */}
         <div className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_minmax(400px,460px)] xl:items-start">

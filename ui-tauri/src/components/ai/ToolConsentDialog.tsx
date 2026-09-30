@@ -140,7 +140,7 @@ function ReviewConsentDialog({ request, onDecision }: { request: AiToolConsentRe
         <DialogTitle>{t("consent.apply.title")}</DialogTitle>
         <DialogDescription id={descriptionId}>{t("consent.apply.description")}</DialogDescription>
       </DialogHeader>
-      <div className="min-h-0 overflow-y-auto p-5"><ReviewConsentBody request={request} /></div>
+      <div className="min-h-0 overflow-y-auto overscroll-none p-5"><ReviewConsentBody request={request} /></div>
       <div className="flex flex-wrap justify-end gap-2 border-t bg-background px-5 py-4">
         <Button ref={cancelRef} variant="outline" className="min-h-11" disabled={pending} onClick={() => void decide("deny")}>{t("consent.apply.cancel")}</Button>
         <Button className="min-h-11" disabled={pending || !canApprove} onClick={() => void decide("allow_once")}>{t(request.reviewPreview?.status === "applied" ? "consent.apply.returnReceipt" : "consent.apply.confirm")}</Button>

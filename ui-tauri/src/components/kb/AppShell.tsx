@@ -399,7 +399,7 @@ function notificationProgressValue(value: number | undefined) {
 }
 
 const appMainClassName =
-  "relative min-h-0 w-full min-w-0 flex-1 overflow-auto overscroll-contain bg-background text-foreground";
+  "relative min-h-0 w-full min-w-0 flex-1 overflow-auto overscroll-none bg-background text-foreground";
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -3585,7 +3585,7 @@ function CurrencyToggle() {
 function LockedFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="fixed inset-x-0 top-(--kb-toolbar-height) bottom-0 z-50 flex bg-sidebar md:px-1.5 md:pb-1.5">
-      <div className="flex min-w-0 flex-1 items-center justify-center overflow-y-auto bg-background px-4 text-foreground md:rounded-(--kb-radius-window) md:border md:border-border/70">
+      <div className="flex min-w-0 flex-1 items-center justify-center overflow-y-auto overscroll-none bg-background px-4 text-foreground md:rounded-(--kb-radius-window) md:border md:border-border/70">
         {children}
       </div>
     </div>

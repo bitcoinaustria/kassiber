@@ -261,7 +261,7 @@ export function ChartControlsSheet({
           </div>
         </SheetHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-none">
           {/* Series live in the legend row above the chart, the time range in
               the chart's own footer toolbar. This panel is the dots. */}
           <div className="space-y-5 p-4 sm:p-6">

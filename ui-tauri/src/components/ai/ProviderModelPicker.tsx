@@ -483,7 +483,7 @@ export function ProviderModelPicker({
           className="w-[min(34rem,calc(100vw-2rem))] overflow-hidden p-0"
         >
           <div className="flex h-[min(27rem,70vh)] min-h-72">
-            <div className="flex w-14 shrink-0 flex-col gap-1 overflow-y-auto border-r border-border/60 bg-muted/40 p-1">
+            <div className="flex w-14 shrink-0 flex-col gap-1 overflow-y-auto overscroll-none border-r border-border/60 bg-muted/40 p-1">
               {visibleGroups.map(({ provider }) => {
                 const active = activeGroup?.provider.name === provider.name;
                 const runtimeName = runtimeProviderName(provider);
@@ -629,7 +629,7 @@ export function ProviderModelPicker({
               </div>
 
               <div
-                className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5"
+                className="min-h-0 flex-1 overflow-y-auto overscroll-none p-1.5"
                 data-model-picker-content
               >
                 {!activeGroup ? (

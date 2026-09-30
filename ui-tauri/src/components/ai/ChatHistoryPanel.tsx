@@ -77,7 +77,7 @@ export function ChatHistoryPanel() {
         <History className="size-4" aria-hidden="true" />
         {t("history.trigger")}
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="max-h-96 w-80 overflow-y-auto">
+      <DropdownMenuSubContent className="max-h-96 w-80 overflow-y-auto overscroll-none">
         <DropdownMenuLabel>{t("history.savedChats")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {list.isLoading ? (

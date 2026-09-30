@@ -40,7 +40,7 @@ const ConversationContent = React.forwardRef<
       className={cn(
         "flex min-h-0 w-full flex-1 flex-col",
         contentClassName ? "gap-0 px-0" : "gap-5 px-1",
-        scrollable ? "overflow-y-auto" : "overflow-visible",
+        scrollable ? "overflow-y-auto overscroll-none" : "overflow-visible",
         className,
       )}
       {...props}

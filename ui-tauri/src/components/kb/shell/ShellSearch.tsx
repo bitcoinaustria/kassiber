@@ -463,7 +463,7 @@ export function ShellSearch({
               id={listId}
               role="listbox"
               aria-label={label}
-              className="min-h-0 flex-1 scroll-py-2 overflow-y-auto px-2 pb-2"
+              className="min-h-0 flex-1 scroll-py-2 overflow-y-auto overscroll-none px-2 pb-2"
             >
               {groups.length === 0 ? (
                 <div className="py-10 text-center text-sm text-muted-foreground">

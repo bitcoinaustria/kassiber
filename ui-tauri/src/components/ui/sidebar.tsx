@@ -385,11 +385,12 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="sidebar-content"
       data-sidebar="content"
       className={cn(
-        // `overscroll-contain` (upstream ships the default `auto`): without it,
+        // `overscroll-none` (upstream ships the default `auto`): without it,
         // reaching either end of the nav chains the scroll to the document and
         // rubber-bands the whole shell, which pulls the frosted panel away from
-        // the banner above it. The main content scroller already does this.
-        "flex min-h-0 flex-1 flex-col gap-2 overflow-auto overscroll-contain group-data-[collapsible=icon]:overflow-hidden",
+        // the banner above it. `none` rather than `contain` so the nav itself
+        // doesn't bounce either. The main content scroller already does this.
+        "flex min-h-0 flex-1 flex-col gap-2 overflow-auto overscroll-none group-data-[collapsible=icon]:overflow-hidden",
         className
       )}
       {...props}

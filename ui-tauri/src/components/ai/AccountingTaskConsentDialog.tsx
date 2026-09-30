@@ -51,7 +51,7 @@ export function AccountingTaskConsentDialog({ request, onDecision }: {
         <DialogTitle>{t("consent.accountingTask.title")}</DialogTitle>
         <DialogDescription id={descriptionId}>{t("consent.accountingTask.description")}</DialogDescription>
       </DialogHeader>
-      <div className="min-h-0 overflow-y-auto p-5">
+      <div className="min-h-0 overflow-y-auto overscroll-none p-5">
         {hidden ? <p role="alert">{t("consent.accountingTask.hidden")}</p>
           : verified ? <TaskPreviewCard value={verified.preview} book={verified.book} />
           : <p role="alert">{t("consent.accountingTask.unavailable")}</p>}
