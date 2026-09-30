@@ -12,22 +12,6 @@ import traceback
 from pathlib import Path
 from typing import Any, Sequence
 
-# PyInstaller's sys.executable is this sidecar, not a Python interpreter. Keep
-# these two fixed parser jobs ahead of daemon/key/database bootstrap. Bytes are
-# supplied only on stdin; there is no arbitrary module or CLI dispatch here.
-if getattr(sys, "frozen", False) and sys.argv[1:2] == ["--accounting-document-worker"]:
-    if os.name != "posix":
-        raise SystemExit(2)
-    if sys.argv[2:3] == ["text"] and len(sys.argv) == 4:
-        from ..core.accounting._document_text_worker import main as _text_worker
-        sys.argv = [sys.argv[0], *sys.argv[3:]]
-        raise SystemExit(_text_worker())
-    if sys.argv[2:3] == ["ocr"] and len(sys.argv) == 8:
-        from ..core.accounting._document_ocr_worker import main as _ocr_worker
-        sys.argv = [sys.argv[0], *sys.argv[3:]]
-        raise SystemExit(_ocr_worker())
-    raise SystemExit(2)
-
 from .. import daemon as daemon_runtime
 from .. import daemon_freshness
 from ..ai import (
@@ -49,6 +33,7 @@ from ..ai.providers import (
 )
 from ..build_info import version_text
 from ..core import chat_history as core_chat_history
+from ..core import legacy_ledger
 from ..core import document_import as core_document_import
 from ..importers import (
     preview_generic_ledger_records,
@@ -198,7 +183,6 @@ from ..log_ring import sanitize_traceback_text
 from ..db import migrate_hidden_home_state_root_if_needed
 from ..secrets.migration import create_empty_encrypted_database
 from ..secrets.cli import add_secrets_parser, dispatch_secrets
-from .accounting import add_accounting_parser, dispatch_accounting
 from ..secrets.cli_input import (
     add_secret_stdin_options,
     enforce_single_stdin_consumer,
@@ -1106,11 +1090,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="One-shot prompt; pass '-' to read it from stdin. Omit for REPL mode.",
     )
     chat.add_argument("--prompt", dest="prompt_text", help="One-shot prompt text.")
-    chat.add_argument("--accounting-selection", metavar="PATH", help=(
-        "Opt-in selected financial assistance: bounded local JSON with profile_id, question, purpose and selection. "
-        "Requires --accounting-selection-sha256 and an interactive terminal; fresh tool-free no-history turn, "
-        "separate disclosure and draft/field approvals. Select the matching book with context set first."))
-    chat.add_argument("--accounting-selection-sha256", metavar="SHA256", help="SHA-256 of exact --accounting-selection file bytes.")
     chat.add_argument(
         "--file",
         metavar="PATH",
@@ -1180,7 +1159,7 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument(
         "--yes",
         action="store_true",
-        help="Non-interactively allow mutating AI tools, except ui.review.apply and accounting task actions (fresh review required).",
+        help="Non-interactively allow mutating AI tools, except ui.review.apply (fresh review required).",
     )
     chat.add_argument(
         "--allow-tool",
@@ -1188,7 +1167,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Non-interactively allow only this mutating tool name; repeat or "
             "pass comma-separated names. Other mutating tools still prompt on a TTY "
-            "or deny without one. ui.review.apply and accounting task actions always require fresh interactive review."
+            "or deny without one. ui.review.apply always requires fresh interactive review."
         ),
     )
     chat.add_argument(
@@ -1208,10 +1187,6 @@ def build_parser() -> argparse.ArgumentParser:
             "session to PATH as NDJSON. The file is plaintext and includes "
             "prompts and redacted tool results."
         ),
-    )
-    chat.add_argument(
-        "--accounting-export", nargs=3, action="append", metavar=("TASK_ID", "STEP", "PATH"),
-        help="CLI-only exact destination for export_close or export_tax; repeat for another task/step. Fresh interactive review required; never overwrites.",
     )
     chat.add_argument(
         "--plain",
@@ -1272,7 +1247,19 @@ def build_parser() -> argparse.ArgumentParser:
     add_backup_parser(sub)
     add_chain_analysis_parser(sub)
     add_review_parser(sub)
-    add_accounting_parser(sub)
+    maintenance = sub.add_parser(
+        "maintenance", help="Repair or remove storage left by earlier Kassiber versions"
+    )
+    maintenance_sub = maintenance.add_subparsers(dest="maintenance_command", required=True)
+    purge_legacy_ledger = maintenance_sub.add_parser(
+        "purge-legacy-ledger",
+        help="Permanently remove archived general-ledger tables from an earlier version",
+    )
+    purge_legacy_ledger.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Required to delete; without it the command reports what would be removed. Back up the project first.",
+    )
 
     backends = sub.add_parser("backends")
     backends_sub = backends.add_subparsers(dest="backends_command", required=True)
@@ -3679,8 +3666,18 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         return emit(args, dispatch_chain_analysis(conn, args))
     if args.command == "review":
         return emit(args, dispatch_review(conn, args))
-    if args.command == "accounting":
-        return emit(args, dispatch_accounting(conn, args))
+    if args.command == "maintenance" and args.maintenance_command == "purge-legacy-ledger":
+        if not args.confirm:
+            return emit(
+                args,
+                {
+                    **legacy_ledger.purge_plan(conn),
+                    "applied": False,
+                    "hint": "Back up the project first (`kassiber backup export`), then re-run with --confirm. The archived ledger data cannot be recovered afterwards.",
+                },
+                kind="maintenance.purge-legacy-ledger.plan",
+            )
+        return emit(args, legacy_ledger.purge(conn), kind="maintenance.purge-legacy-ledger")
     if args.command == "backends":
         if args.backends_command == "list":
             return emit(args, core_accounts.list_backends(args.runtime_config))

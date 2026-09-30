@@ -43,7 +43,7 @@ it.each([["en", enSettings], ["de", deSettings]] as const)("explains the account
   };
   hooks.states = [["wallet"]];
   hooks.invoke.mockResolvedValue({ data: { profile_id: "p", inventory_digest: "before", plan_id: "blocked", can_apply: false,
-    blockers: [{ code: "accounting_partition_unsupported" }], counts: { wallets: 1 } } });
+    blockers: [{ code: "legacy_ledger_present" }], counts: { wallets: 1 } } });
   const renderPartition = () => {
     hooks.cursor = 0;
     return NetworkPartitionSettings({ profileId: "p", inventoryDigest: "before", environment: "main", instance: "",
@@ -52,8 +52,8 @@ it.each([["en", enSettings], ["de", deSettings]] as const)("explains the account
   button(renderPartition(), messages.bookNetwork.preview)!.onClick();
   await vi.waitFor(() => expect(hooks.invoke).toHaveBeenCalledOnce());
   const tree = renderPartition();
-  expect(JSON.stringify(tree)).toContain(messages.bookNetwork.partition.blockers.accounting_partition_unsupported);
-  expect(JSON.stringify(tree)).not.toContain("bookNetwork.partition.blockers.accounting_partition_unsupported");
+  expect(JSON.stringify(tree)).toContain(messages.bookNetwork.partition.blockers.legacy_ledger_present);
+  expect(JSON.stringify(tree)).not.toContain("bookNetwork.partition.blockers.legacy_ledger_present");
   expect(button(tree, messages.bookNetwork.partition.export)).toBeUndefined();
 });
 it("requires a current preview and invalidates it when source history changes", async () => {

@@ -304,7 +304,7 @@ class CatalogProjectionTests(unittest.TestCase):
                 self.assertFalse(entry.egresses)
                 self.assertFalse(entry.requires_consent)
                 self.assertNotIn(entry.daemon_kind, excluded_kinds)
-                self.assertFalse(entry.name.startswith(("ui.chain_analysis.", "ui.accounting.", "ui.custody.")))
+                self.assertFalse(entry.name.startswith(("ui.chain_analysis.", "ui.custody.")))
 
     def test_definitions_are_portable_across_hosts(self):
         definitions = mcp_tools.tool_definitions()

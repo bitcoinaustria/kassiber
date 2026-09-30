@@ -59,7 +59,7 @@ _KIND_SUBCOMMAND_ATTRS = (
     "networks_command",
     "chain_analysis_command",
     "chain_analysis_action",
-    "accounting_command",
+    "maintenance_command",
     "backends_command",
     "commands_command",
     "offline_command",
