@@ -88,6 +88,29 @@ def output_script(entry: Mapping[str, Any]) -> Any:
     return script
 
 
+def graph_scoped_scripts(graph: Mapping[str, Any], scripts: Any) -> list[str]:
+    """Return the given scripts that this graph's own inputs and outputs use.
+
+    An observer attests which of a transaction's scripts are the wallet's; the
+    answer never needs scripts the graph does not contain. An input without a
+    resolved previous output could still spend one of them, so an incomplete
+    graph keeps every given script. The caller keeps the ownership judgment.
+    """
+
+    given = {str(value).strip().lower() for value in scripts or () if value}
+    in_graph: set[str] = set()
+    for vin in graph.get("vin") or []:
+        script = input_script(vin) if isinstance(vin, Mapping) else None
+        if not script:
+            return sorted(given)
+        in_graph.add(str(script).strip().lower())
+    for vout in graph.get("vout") or []:
+        script = output_script(vout) if isinstance(vout, Mapping) else None
+        if script:
+            in_graph.add(str(script).strip().lower())
+    return sorted(given & in_graph)
+
+
 def output_address(entry: Mapping[str, Any]) -> str | None:
     address = entry.get("scriptpubkey_address") or entry.get("address")
     nested = entry.get("scriptPubKey")

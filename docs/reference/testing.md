@@ -794,25 +794,28 @@ password.
 September 2026 reference, measured on the benchmark host without profiling.
 The runs used 2,000 payments over 400 addresses (2,200 rows) and 5,000 over
 1,000 (5,500 rows), each with a tenth as many spends. Cells give sync +
-journal step:
+journal step, before and after BDK stopped re-emitting unchanged
+transactions and the owned-script attestation was scoped to each graph:
 
-| Step | 2,200 rows | 5,500 rows |
-| --- | ---: | ---: |
-| First sync | 14.3 s + 17.9 s | 83.1 s + 93.2 s |
-| Unchanged resync (median of 3) | 18.1 s + 5.1 s | 99.2 s + 26.9 s |
-| 25 new payments | 15.3 s + 18.9 s | 86.8 s + 92.9 s |
-| Forced full replay | 18.4 s + 5.1 s | 100.6 s + 27.0 s |
+| Step | 2,200 rows before | after | 5,500 rows before | after |
+| --- | ---: | ---: | ---: | ---: |
+| First sync | 14.3 s + 17.9 s | 10.6 s + 6.6 s | 83.1 s + 93.2 s | 59.9 s + 18.4 s |
+| Unchanged resync (median of 3) | 18.1 s + 5.1 s | 4.4 s + 1.8 s | 99.2 s + 26.9 s | 9.6 s + 6.6 s |
+| 25 new payments | 15.3 s + 18.9 s | 4.4 s + 6.4 s | 86.8 s + 92.9 s | 10.2 s + 18.6 s |
+| Forced full replay | 18.4 s + 5.1 s | 11.7 s + 1.9 s | 100.6 s + 27.0 s | 61.9 s + 6.8 s |
 
-An unchanged resync costs more than the first sync, because the BDK route
-re-emits every wallet transaction and the apply step re-processes each one.
-The owned-script attestation grows as rows × scripts:
+Before, an unchanged resync cost more than the first sync: the BDK route
+re-emitted every wallet transaction, and every row repeated the wallet's whole
+owned-script set, so storage grew as rows × scripts:
 
-| | 2,200 rows | 5,500 rows |
-| --- | ---: | ---: |
-| Stored `raw_json` | 65.6 MB | 401.6 MB |
-| Owned-script share of `raw_json` | 96.6% | 98.6% |
-| Database size | 84.8 MB | 444.4 MB |
-| Peak memory, first journal step | 612 MB | 2,615 MB |
+| | 2,200 rows before | after | 5,500 rows before | after |
+| --- | ---: | ---: | ---: | ---: |
+| Stored `raw_json` | 65.6 MB | 2.4 MB | 401.6 MB | 5.9 MB |
+| Database size | 84.8 MB | 22.0 MB | 444.4 MB | 50.4 MB |
+| Peak memory, first journal step | 612 MB | 144 MB | 2,615 MB | 267 MB |
+
+The first sync still grows faster than the row count, and an unchanged
+journal step still runs every automatic-pairing pass.
 
 Poke the node like BTCPayServer's `docker-bitcoin-cli.sh`:
 
