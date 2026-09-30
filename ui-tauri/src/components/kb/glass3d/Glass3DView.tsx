@@ -18,6 +18,8 @@ const YAW_LIMIT = 0.95;
 const PITCH_LIMIT = 0.6;
 const DRAG_RADIANS_PER_PIXEL = 0.008;
 const KEY_STEP = 0.08;
+/** A press that moves less than this is a click on a part, not a turn. */
+const CLICK_SLOP = 4;
 
 type Status = "loading" | "ready" | "unavailable";
 
@@ -75,7 +77,8 @@ function surfaceColor(element: HTMLElement) {
  * drag or arrow keys to turn, Home or double-click to reset. The scene module
  * (and three.js with it) loads only through `load`, so callers keep it lazy.
  * Without WebGL, or when the scene fails or loses its context, `unavailable`
- * shows instead.
+ * shows instead. Scenes with parts report the part under the pointer and a
+ * click on it; the caller decides which part is lit.
  */
 export function Glass3DView({
   scene: sceneInput,
@@ -86,6 +89,10 @@ export function Glass3DView({
   unavailable,
   children,
   testId,
+  highlightedPart = null,
+  onHoverPart,
+  onSelectPart,
+  overlay,
 }: {
   /** What the scene is drawn from; a new value rebuilds the scene. */
   scene: unknown;
@@ -98,6 +105,12 @@ export function Glass3DView({
   /** Shown below the drawing, e.g. a legend. */
   children?: ReactNode;
   testId?: string;
+  /** The part drawn lit, e.g. the leg under the pointer or a hovered list row. */
+  highlightedPart?: string | null;
+  onHoverPart?: (part: string | null) => void;
+  onSelectPart?: (part: string) => void;
+  /** Laid over the drawing without taking the pointer, e.g. a hover card. */
+  overlay?: ReactNode;
 }) {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<{ scene: GlassScene; draw: () => void } | null>(null);
@@ -105,6 +118,9 @@ export function Glass3DView({
   const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
   const loadRef = useRef(load);
   loadRef.current = load;
+  const hoverRef = useRef<{ part: string | null; frame: number }>({ part: null, frame: 0 });
+  const onHoverRef = useRef(onHoverPart);
+  onHoverRef.current = onHoverPart;
   const [status, setStatus] = useState<Status>("loading");
   const [dark, setDark] = useState(isDark);
 
@@ -185,6 +201,46 @@ export function Glass3DView({
     return teardown;
   }, [sceneInput, dark]);
 
+  useEffect(() => {
+    const current = sceneRef.current;
+    if (!current || status !== "ready") return;
+    current.scene.highlight(highlightedPart);
+    current.draw();
+  }, [highlightedPart, status]);
+
+  useEffect(() => {
+    const hover = hoverRef.current;
+    return () => cancelAnimationFrame(hover.frame);
+  }, []);
+
+  const reportHover = (part: string | null) => {
+    const hover = hoverRef.current;
+    if (hover.part === part) return;
+    hover.part = part;
+    const shell = shellRef.current;
+    if (shell) shell.style.cursor = part && onSelectPart ? "pointer" : "";
+    onHoverRef.current?.(part);
+  };
+
+  // One pick per frame at most, however fast the pointer moves.
+  const hoverAt = (clientX: number, clientY: number) => {
+    const shell = shellRef.current;
+    const hover = hoverRef.current;
+    if (!shell || !onHoverPart || hover.frame) return;
+    hover.frame = requestAnimationFrame(() => {
+      hover.frame = 0;
+      const rect = shell.getBoundingClientRect();
+      const part = sceneRef.current?.scene.pick(clientX - rect.left, clientY - rect.top) ?? null;
+      reportHover(part);
+    });
+  };
+
+  const leave = () => {
+    cancelAnimationFrame(hoverRef.current.frame);
+    hoverRef.current.frame = 0;
+    reportHover(null);
+  };
+
   const turn = (yaw: number, pitch: number) => {
     viewRef.current = { yaw: clamp(yaw, YAW_LIMIT), pitch: clamp(pitch, PITCH_LIMIT) };
     const current = sceneRef.current;
@@ -199,14 +255,24 @@ export function Glass3DView({
   };
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
-    if (!drag) return;
+    if (!drag) {
+      hoverAt(event.clientX, event.clientY);
+      return;
+    }
     turn(
       drag.yaw + (event.clientX - drag.x) * DRAG_RADIANS_PER_PIXEL,
       drag.pitch + (event.clientY - drag.y) * DRAG_RADIANS_PER_PIXEL,
     );
   };
-  const onPointerUp = () => {
+  const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
     dragRef.current = null;
+    if (!drag) return;
+    const still = Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < CLICK_SLOP;
+    const part = hoverRef.current.part;
+    if (still && part) onSelectPart?.(part);
+    // The turn moved the drawing under the pointer.
+    else hoverAt(event.clientX, event.clientY);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const { yaw, pitch } = viewRef.current;
@@ -245,7 +311,10 @@ export function Glass3DView({
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
+          onPointerCancel={() => {
+            dragRef.current = null;
+          }}
+          onPointerLeave={leave}
           onDoubleClick={() => turn(REST_VIEW.yaw, REST_VIEW.pitch)}
           onKeyDown={onKeyDown}
         />
@@ -257,6 +326,9 @@ export function Glass3DView({
           >
             {loadingLabel}
           </div>
+        ) : null}
+        {status === "ready" && overlay ? (
+          <div className="pointer-events-none absolute inset-0">{overlay}</div>
         ) : null}
       </div>
       {children}

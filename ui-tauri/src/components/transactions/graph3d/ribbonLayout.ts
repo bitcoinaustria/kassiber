@@ -57,6 +57,7 @@ export type RibbonLeg = {
 export type RibbonPath = {
   legId: string;
   side: "input" | "output";
+  row: GraphRow;
   estimated: boolean;
   fee: boolean;
   /** Ribbon width across its path, in scene units. */
@@ -151,6 +152,7 @@ export function ribbonLayout(
       ribbons.push({
         legId: id,
         side,
+        row,
         estimated: line.estimated,
         fee,
         thickness: line.thickness * UNIT,

@@ -55,7 +55,10 @@ describe("3D transaction graph scene", () => {
     // WebGL present, scene loads: count how often the scene is built.
     stubWebgl();
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
-    const scene = { resize: vi.fn(), setView: vi.fn(), render: vi.fn(), dispose: vi.fn() };
+    const scene = {
+      resize: vi.fn(), setView: vi.fn(), render: vi.fn(), dispose: vi.fn(),
+      pick: vi.fn(() => null), highlight: vi.fn(),
+    };
     const createGlassScene = vi.fn(() => scene);
     vi.doMock("./glassScene", () => ({ createGlassScene }));
     const { TransactionGraph3D: Fresh } = await import("./TransactionGraph3D");

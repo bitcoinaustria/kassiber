@@ -1,7 +1,7 @@
 import {
   Box3, Color, DirectionalLight, Group, HemisphereLight, Mesh,
-  NeutralToneMapping, OrthographicCamera, PMREMGenerator, Scene,
-  Sphere, SRGBColorSpace, Vector3, WebGLRenderer,
+  NeutralToneMapping, OrthographicCamera, PMREMGenerator, Raycaster, Scene,
+  Sphere, SRGBColorSpace, Vector2, Vector3, WebGLRenderer,
   type Material, type WebGLRenderTarget,
 } from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
@@ -13,7 +13,30 @@ export type GlassScene = {
   setView: (yaw: number, pitch: number) => void;
   /** Explicit draw; no animation loop or background work. */
   render: () => void;
+  /** The part under a point, in CSS pixels from the canvas's top left. */
+  pick: (x: number, y: number) => string | null;
+  /** Light one part up, or none. Draw afterwards. */
+  highlight: (part: string | null) => void;
   dispose: () => void;
+};
+
+/** A pointer over the scene, with what a scene needs to find its part. */
+export type GlassPointer = {
+  /** Cast from the camera through the pointer. */
+  raycaster: Raycaster;
+  /** The pointer, in CSS pixels. */
+  x: number;
+  y: number;
+  /** Where a point of the content lands on screen, in CSS pixels. */
+  toScreen: (x: number, y: number) => [number, number];
+  /** CSS pixels per scene unit at the current frame. */
+  pixelsPerUnit: number;
+};
+
+/** A scene whose parts can be pointed at, e.g. the legs of a transaction. */
+export type GlassPicking = {
+  pick: (pointer: GlassPointer) => string | null;
+  highlight: (part: string | null) => void;
 };
 
 /**
@@ -23,7 +46,10 @@ export type GlassScene = {
 export function createGlassStage(
   canvas: HTMLCanvasElement,
   look: GlassSceneLook,
-  populate: (content: Group, own: <T extends Material>(material: T) => T) => void,
+  populate: (
+    content: Group,
+    own: <T extends Material>(material: T) => T,
+  ) => GlassPicking | void,
   { minHalfWidth = 4.4, minHalfHeight = 2.5 } = {},
 ): GlassScene {
   const renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: "low-power" });
@@ -73,7 +99,7 @@ export function createGlassStage(
     key.position.set(-4, 7, 8);
     scene.add(key);
 
-    populate(content, (material) => {
+    const picking = populate(content, (material) => {
       materials.add(material);
       return material;
     });
@@ -91,6 +117,9 @@ export function createGlassStage(
     camera.lookAt(0, 0, 0);
     let frame = { halfWidth: 0, halfHeight: 0 };
     let size = { width: 1, height: 1 };
+    const raycaster = new Raycaster();
+    const ndc = new Vector2();
+    const probe = new Vector3();
 
     // The camera looks at the pivot, so the frame is symmetric around it. It only
     // grows: turning never clips the piece, and never zooms back in.
@@ -137,6 +166,25 @@ export function createGlassStage(
       },
       render() {
         renderer.render(scene, camera);
+      },
+      pick(x, y) {
+        if (!picking || !frame.halfWidth) return null;
+        ndc.set((x / size.width) * 2 - 1, 1 - (y / size.height) * 2);
+        raycaster.setFromCamera(ndc, camera);
+        content.updateMatrixWorld(true);
+        return picking.pick({
+          raycaster,
+          x,
+          y,
+          toScreen(px, py) {
+            probe.set(px, py, 0).applyMatrix4(content.matrixWorld).project(camera);
+            return [((probe.x + 1) / 2) * size.width, ((1 - probe.y) / 2) * size.height];
+          },
+          pixelsPerUnit: size.width / (camera.right - camera.left),
+        });
+      },
+      highlight(part) {
+        picking?.highlight(part);
       },
       dispose,
     };
