@@ -5,8 +5,19 @@ import type { ReactNode } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// The UI store persists the currency switch; give it somewhere to write.
+vi.hoisted(() => {
+  const storage = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => void storage.set(key, value),
+    removeItem: (key: string) => void storage.delete(key),
+  });
+});
+
 import "@/i18n";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useUiStore } from "@/store/ui";
 
 import { TransactionGraphPanel } from "./TransactionGraphTab";
 import type { TransactionGraphPayload } from "./TransactionGraphModel";
@@ -29,12 +40,15 @@ const graph: TransactionGraphPayload = {
   fee: { id: "fee", valueSats: 1_000, valueBtc: 0.00001, role: "fee", ownership: "network_fee" },
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  useUiStore.setState({ currency: "btc" });
+});
 
-function mount() {
+function mount({ fiatPrice, hideSensitive = false }: { fiatPrice?: number | null; hideSensitive?: boolean } = {}) {
   render(
     <TooltipProvider>
-      <TransactionGraphPanel graph={graph} hideSensitive={false} />
+      <TransactionGraphPanel graph={graph} hideSensitive={hideSensitive} fiatPrice={fiatPrice} />
     </TooltipProvider>,
   );
 }
@@ -64,5 +78,26 @@ describe("transaction graph and its legs list", () => {
     expect(screen.getByTestId("transaction-graph-hover-detail")).toBeTruthy();
     fireEvent.pointerLeave(hitPath);
     expect(row("output:out-0").dataset.active).toBeUndefined();
+  });
+
+  it("shows the legs in fiat at the transaction's price and switches on a click", () => {
+    useUiStore.setState({ currency: "eur" });
+    mount({ fiatPrice: 50_000 });
+    const change = row("output:out-1");
+    // 0.00199 BTC at € 50.000 per BTC.
+    expect(change.textContent).toContain("99,50");
+    fireEvent.click(screen.getAllByRole("button", { name: "Show amounts in bitcoin" })[0]);
+    expect(useUiStore.getState().currency).toBe("btc");
+    expect(row("output:out-1").textContent).toContain("₿ 0.00199000");
+  });
+
+  it("keeps the legs in bitcoin without a price, and never shows fiat for hidden values", () => {
+    useUiStore.setState({ currency: "eur" });
+    mount({ fiatPrice: null });
+    expect(row("output:out-1").textContent).toContain("₿ 0.00199000");
+    expect(screen.queryByRole("button", { name: "Show amounts in bitcoin" })).toBeNull();
+    cleanup();
+    mount({ fiatPrice: 50_000, hideSensitive: true });
+    expect(row("output:out-1").textContent).not.toContain("€");
   });
 });
