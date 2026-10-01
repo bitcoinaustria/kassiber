@@ -45,6 +45,27 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   changing Neu-first would change existing users' tax outcomes.
 - [ ] Evaluate per-wallet physical-lot attribution only if a jurisdiction
   requires it. Current per-wallet basis allocation is not a physical-lot claim.
+- [ ] Stop an Austrian Neu shortfall from aborting the whole report.
+  `infer_outbound_regimes` tags a sale Neu whenever the wallet holds any Neu,
+  even when the sale needs more, and the engine has no Alt fallback for
+  explicit regimes (for example 1 BTC Alt plus 0.1 BTC Neu, then a 0.5 BTC
+  sale). Decide between splitting the disposal across regimes and capping the
+  Neu tag with the Wahlrecht ordering entry above; done when that book
+  processes with test-pinned results and a stale migration.
+- [ ] Decide the Austrian treatment of a Neu swap's fee basis. The pool drops by
+  amount plus fee, but only the amount's basis is carried, so the fee's share
+  is neither realized nor carried. Needs legal review before any change.
+- [ ] Stop parsing user description text as Austrian notes markers. A
+  description containing an `at_regime=`, `at_pool=`, or `at_swap_link=` token
+  can add, duplicate, or conflict with the adapter's markers. Done when markers
+  travel as typed fields (plan 20 phase 4) or user text is escaped.
+- [ ] Keep transfer-leg quantities exact in the transfer audit. They pass
+  through `float` before `dec()`, which loses msat above about 15 significant
+  digits.
+- [ ] Reconcile [plan 06](docs/plan/06-austrian-tax-engine.md)'s "Neuvermögen
+  from 2023 uses moving average" with the code, which applies the Neu moving
+  average to every Neu disposal from 2021-03-01. Confirm against the
+  KryptowährungsVO and fix whichever is wrong.
 - [ ] Run phase 0 of the [tax engine plan](docs/plan/20-kassiber-tax-engine.md):
   a pure Rust crate and PyO3 binding in the dev environment and one packaged
   build, a decimal type that reproduces RP2's results, and FIFO plus moving

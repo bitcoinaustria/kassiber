@@ -116,8 +116,8 @@ RP2's observable outputs. Do not translate RP2 source; that would keep RP2's
 Apache-2.0 obligations on the new engine. Four fork files are copyright
 bitcoinaustria (`plugin/country/at.py`, `plugin/country/at_native_tax_engine.py`,
 `plugin/accounting_method/moving_average.py`, and
-`plugin/accounting_method/moving_average_at.py`); they may be reused after
-their authorship is confirmed from the fork's history. If
+`plugin/accounting_method/moving_average_at.py`). The fork's history shows
+every commit to them is by the Kassiber owner, so they may be ported directly. If
 legal certainty matters, add this question to the legal opinion that
 [the stack ADR](01-stack-decision.md) already requires.
 
@@ -134,12 +134,19 @@ legal certainty matters, add this question to the legal opinion that
 
 ### Boundary
 
-The request carries a `schema_version`, the profile's tax policy, and the
-finalized projection as typed events: msat as integers, fiat as decimal
-strings, ids that anchor back to imported evidence. The response maps
-one-to-one onto `TaxEngineLedgerResult`. The Python adapter shrinks to
-building the request and reading the response. Drift tests on both sides pin
-the schema.
+In phases 0-3 the boundary sits where RP2 sits today, beneath the adapter.
+`kassiber.core.engines.native` mirrors the part of RP2's interface the adapter
+calls, and one engine call answers each RP2 call; the
+[tax engine reference](../reference/tax-engine.md) owns that format. The same
+adapter code then drives either backend, which is what makes the comparison
+exact.
+
+Phase 4 lifts the boundary to the projection: the request carries a
+`schema_version`, the profile's tax policy, and the finalized projection as
+typed events (msat as integers, fiat as decimal strings, ids that anchor back
+to imported evidence), and the response maps one-to-one onto
+`TaxEngineLedgerResult`. The Python adapter then shrinks to building the
+request and reading the response. Drift tests on both sides pin the schema.
 
 ### Engine
 
@@ -181,6 +188,42 @@ A country is a compiled-in manifest plus optional hooks:
 
 The tier is shown in the UI, in reports, and to the in-product AI. Countries
 are not loaded at runtime.
+
+### Phase 0 decisions
+
+Recorded 2026-10-01, from the behavioral specs written before implementation:
+
+- **Crates.** `tax-engine/core` is the pure engine; `tax-engine/python` is the
+  PyO3 0.25 binding (abi3, CPython 3.10 and newer), built by an exactly pinned
+  maturin as a uv workspace member. Both declare Rust 1.77, and CI builds them
+  with exactly that toolchain.
+- **Decimal.** Fixed-size Rust decimals hold about 28 digits and normalize
+  exponents, so the engine has its own decimal type over `num-bigint` that
+  matches CPython's `decimal` exactly, checked against generated CPython
+  vectors.
+- **Precision.** Importing RP2 set 32-digit precision only on the importing
+  thread, so the same book was stored with different values depending on
+  whether the CLI, the daemon's main thread, or its background worker processed
+  it. Kassiber now pins 32 digits with round-half-even for every thread
+  (`kassiber/__init__.py`), and the parity target is RP2 and the adapter
+  computing at 32 digits.
+- **Listed differences.** The native backend raises Kassiber error classes
+  instead of RP2's, and does not write RP2's temporary configuration file.
+
+### Findings for follow-up
+
+The specs found current behavior that parity deliberately keeps. Each is a
+TODO entry, because fixing it changes results and needs its own reviewed
+change:
+
+- An Austrian sale is tagged Neu whenever the wallet holds any Neu, even when
+  the sale needs more, and RP2 has no Alt fallback, so the whole report aborts.
+- On a Neu swap the fee's share of pool basis is neither realized nor carried.
+- Description text is parsed for Austrian markers, so user text can add or
+  conflict with `at_regime`, `at_pool`, or `at_swap_link`.
+- Transfer-leg quantities in the transfer audit pass through `float`.
+- [Plan 06](06-austrian-tax-engine.md) says Neu moving average applies from
+  2023; the code applies it to every Neu disposal from 2021-03-01.
 
 ## Verification
 
