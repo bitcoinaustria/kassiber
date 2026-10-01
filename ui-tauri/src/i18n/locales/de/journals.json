@@ -444,7 +444,7 @@
       "reviewedSuspensePair": {
         "title": "Ein Transfer-Paar geht nicht auf",
         "why": "Diese Transaktion ist mit einer anderen als Bewegung zwischen deinen Wallets gepaart, aber es kam weniger an, als abging. Die Differenz wird offen gehalten, daher sind die Anschaffungskosten ab hier nicht endgültig.",
-        "provide": "Öffne das Paar und prüfe, ob beide Seiten dieselbe Bewegung sind. Gehören sie nicht zusammen, entkopple sie; ist es ein echter Transfer, erfasse, wohin die Differenz ging."
+        "provide": "Vergleiche bei jedem Paar unten die beiden Seiten. Sind es verschiedene Transaktionen, entkopple sie. War es wirklich eine Bewegung zwischen deinen Wallets, öffne sie und erfasse, wohin die Differenz ging."
       }
     },
     "category": {
@@ -543,6 +543,21 @@
     "fact": {
       "pairTxidsDiffer": "Die beiden Seiten sind verschiedene On-chain-Transaktionen; eine Bewegung zwischen deinen Wallets hat nur eine Transaktions-ID.",
       "pairReceiptFirst": "Der Eingang ist früher datiert als die Zahlung, mit der er gepaart ist."
+    },
+    "pair": {
+      "title_one": "Das Paar",
+      "title_other": "Die {{count}} Paare",
+      "sent": "Gesendet",
+      "received": "Empfangen",
+      "unpair": "Entkoppeln…",
+      "open": "Öffnen",
+      "confirmTitle": "Diese zwei Transaktionen entkoppeln?",
+      "confirmBody": "Kassiber bucht sie dann einzeln: die Zahlung aus {{outWallet}} als Veräußerung und den Eingang in {{inWallet}} als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst. Die offen gehaltene Differenz entfällt, und die Journale werden neu berechnet, damit die wartenden Transaktionen frei werden.",
+      "confirmUndo": "Du kannst sie unter Übertragungen & Verwahrung wieder paaren.",
+      "confirm": "Entkoppeln und neu berechnen",
+      "cancel": "Abbrechen",
+      "unpairing": "Wird entkoppelt…",
+      "failed": "Entkoppeln fehlgeschlagen: {{message}}"
     }
   },
   "review": {

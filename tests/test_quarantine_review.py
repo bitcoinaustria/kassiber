@@ -231,6 +231,16 @@ class QuarantineReviewTest(unittest.TestCase):
         self.assertNotEqual(evidence["pair_counterpart_transaction_id"], root_item["transaction_id"])
         self.assertTrue(evidence["pair_txids_differ"])
         self.assertTrue(evidence["pair_receipt_before_spend"])
+        legs = evidence["pair_legs"]
+        self.assertEqual(
+            (legs["out"]["transaction_id"], legs["out"]["wallet"], legs["out"]["amount_msat"]),
+            ("out", "A", 10 * BTC),
+        )
+        self.assertEqual(
+            (legs["in"]["transaction_id"], legs["in"]["wallet"], legs["in"]["external_id"]),
+            ("in", "C", "b" * 64),
+        )
+        self.assertEqual(legs["in"]["occurred_at"], "2023-12-31T21:00:00Z")
         self.assertIn(
             {"kind": "review_pair", "transaction_id": root_item["transaction_id"], "pair_id": pair["id"]},
             root_item["actions"],

@@ -138,8 +138,14 @@ function render(
   {
     onOpenTransaction = vi.fn(),
     onShowWaiting = vi.fn(),
+    onUnpair = vi.fn(async () => undefined),
     hideSensitive = false,
-  }: { onOpenTransaction?: ReturnType<typeof vi.fn>; onShowWaiting?: ReturnType<typeof vi.fn>; hideSensitive?: boolean } = {},
+  }: {
+    onOpenTransaction?: ReturnType<typeof vi.fn>;
+    onShowWaiting?: ReturnType<typeof vi.fn>;
+    onUnpair?: (pairId: string) => Promise<void>;
+    hideSensitive?: boolean;
+  } = {},
 ) {
   return renderToStaticMarkup(
     <QuarantineCausePanel
@@ -150,6 +156,7 @@ function render(
       onConnectWallet={() => {}}
       onImportHistory={() => {}}
       onShowWaiting={onShowWaiting}
+      onUnpair={onUnpair}
       hideSensitive={hideSensitive}
     />,
   );

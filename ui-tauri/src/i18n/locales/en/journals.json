@@ -444,7 +444,7 @@
       "reviewedSuspensePair": {
         "title": "A transfer pair doesn't add up",
         "why": "This transaction is paired with another as a move between your wallets, but less arrived than left. The difference is held open, so cost basis from here on can't be final.",
-        "provide": "Open the pair and check that both sides are the same movement. If they are unrelated, unpair them; if it is a real transfer, record where the difference went."
+        "provide": "Compare the two sides of each pair below. If they are different transactions, unpair them. If one really was a move between your wallets, open it and record where the difference went."
       }
     },
     "category": {
@@ -543,6 +543,21 @@
     "fact": {
       "pairTxidsDiffer": "The two sides are different on-chain transactions; one movement between your wallets has a single transaction id.",
       "pairReceiptFirst": "The receipt is dated before the payment it is paired with."
+    },
+    "pair": {
+      "title_one": "The pair",
+      "title_other": "The {{count}} pairs",
+      "sent": "Sent",
+      "received": "Received",
+      "unpair": "Unpair…",
+      "open": "Open",
+      "confirmTitle": "Unpair these two transactions?",
+      "confirmBody": "Kassiber then books them on their own: the payment from {{outWallet}} as a disposal and the receipt in {{inWallet}} as a purchase at its market value, unless you classify them otherwise. The difference held open goes away, and journals are recalculated so the transactions waiting on it can clear.",
+      "confirmUndo": "You can pair them again from Transfers & Custody.",
+      "confirm": "Unpair and recalculate",
+      "cancel": "Cancel",
+      "unpairing": "Unpairing…",
+      "failed": "Could not unpair: {{message}}"
     }
   },
   "review": {
