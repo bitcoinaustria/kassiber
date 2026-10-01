@@ -549,15 +549,20 @@
       "title_other": "The {{count}} pairs",
       "sent": "Sent",
       "received": "Received",
-      "unpair": "Unpair…",
+      "unpair": "Unpair",
       "open": "Open",
-      "confirmTitle": "Unpair these two transactions?",
       "confirmBody": "Kassiber then books them on their own: the payment from {{outWallet}} as a disposal and the receipt in {{inWallet}} as a purchase at its market value, unless you classify them otherwise. The difference held open goes away, and journals are recalculated so the transactions waiting on it can clear.",
       "confirmUndo": "You can pair them again from Transfers & Custody.",
-      "confirm": "Unpair and recalculate",
       "cancel": "Cancel",
       "unpairing": "Unpairing…",
-      "failed": "Could not unpair: {{message}}"
+      "unpairAll": "Unpair all {{count}} pairs",
+      "allDiffer": "All {{count}} pairs join two different on-chain transactions, so none of them is one movement between your wallets.",
+      "confirmTitle_one": "Unpair these two transactions?",
+      "confirmTitle_other": "Unpair these {{count}} pairs?",
+      "confirmBodyMany": "Kassiber then books each side on its own: each payment as a disposal and each receipt as a purchase at its market value, unless you classify them otherwise. The differences held open go away, and journals are recalculated once so the transactions waiting on them can clear.",
+      "confirm_one": "Unpair and recalculate",
+      "confirm_other": "Unpair {{count}} and recalculate",
+      "failedSome": "{{failed}} of {{count}} could not be unpaired: {{message}}"
     }
   },
   "review": {

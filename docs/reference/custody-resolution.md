@@ -179,10 +179,12 @@ auto-pairing never recreates a pair the owner removed.
 The desktop's Quarantine page leads with what needs the user and how many
 rows only wait, then one card per cause (what was seen, what to do, its
 action), then the rows split into Needs you, Waiting and All, each paged by
-the daemon. A suspense left by pairs lists each pair side by side; its Unpair
+the daemon. A suspense left by pairs lists each pair side by side; Unpair
 confirms what the two transactions are booked as on their own (a disposal and
 a purchase at market value, unless classified otherwise), then recalculates
-journals. The side-nav badge counts the causes. The page keeps the gap
+journals. When every pair joins two different on-chain transactions, one
+"Unpair all" does this for all of them with one confirmation and one
+recalculation. The side-nav badge counts the causes. The page keeps the gap
 editor behind developer tools and offers exclusion only for price and
 decision questions.
 
