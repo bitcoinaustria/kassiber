@@ -169,16 +169,20 @@ held row when none is on record, so the side-nav counts what needs the user.
 A `reviewed_residual_suspense` hold most often comes from a pair whose legs
 are not one movement: a pair review splits whatever the source sent beyond
 the destination and fee into a suspense leg. When the held transaction is one
-leg of a current pair, the evidence names the `pair_id` and the other leg, and
-says whether the legs carry different same-asset txids or the receipt
-predates the spend; the first action is `review_pair`, which opens that pair
-where it can be unpaired. Unpairing removes the suspense on the next journal
-run.
+leg of a current pair, the evidence names the `pair_id` and the other leg,
+both legs as `pair_legs` (wallet, amount, time, txid), and whether the legs
+carry different same-asset txids or the receipt predates the spend; the first
+action is `review_pair`, which opens that pair where it can be unpaired.
+Unpairing removes the suspense on the next journal run, and journal
+auto-pairing never recreates a pair the owner removed.
 
 The desktop's Quarantine page leads with what needs the user and how many
 rows only wait, then one card per cause (what was seen, what to do, its
 action), then the rows split into Needs you, Waiting and All, each paged by
-the daemon. The side-nav badge counts the causes. The page keeps the gap
+the daemon. A suspense left by pairs lists each pair side by side; its Unpair
+confirms what the two transactions are booked as on their own (a disposal and
+a purchase at market value, unless classified otherwise), then recalculates
+journals. The side-nav badge counts the causes. The page keeps the gap
 editor behind developer tools and offers exclusion only for price and
 decision questions.
 

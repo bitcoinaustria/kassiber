@@ -401,6 +401,16 @@ export function QuarantineDashboard({
     [closeDetail, detailQueue, knownItems, openDetail, queryClient, saveTransactionDraft],
   );
 
+  const unpair = async (pairId: string) => {
+    await unpairTransfer.mutateAsync({ pair_id: pairId });
+    useUiStore.getState().addNotification({
+      title: tTransactions("notification.pairRemoved.title"),
+      body: tTransactions("notification.pairRemoved.body"),
+      tone: "success",
+      dedupeKey: `transfer-unpair-${pairId}`,
+    });
+  };
+
   const openFromList = (
     transactionId: string,
     tab: QuarantineSheetTab,
@@ -426,6 +436,7 @@ export function QuarantineDashboard({
         onConnectWallet={() => setDialog({ mode: "connect" })}
         onImportHistory={(walletId) => setDialog({ mode: "import", walletId })}
         onShowWaiting={() => onScopeChange("waiting")}
+        onUnpair={unpair}
         onOpenTransaction={(transactionId, tab, context) =>
           openDetail(
             transactionId,
@@ -623,15 +634,7 @@ export function QuarantineDashboard({
             dedupeKey: `attachment-remove-${item.id}`,
           });
         }}
-        onUnpair={async (pairId) => {
-          await unpairTransfer.mutateAsync({ pair_id: pairId });
-          useUiStore.getState().addNotification({
-            title: tTransactions("notification.pairRemoved.title"),
-            body: tTransactions("notification.pairRemoved.body"),
-            tone: "success",
-            dedupeKey: `transfer-unpair-${pairId}`,
-          });
-        }}
+        onUnpair={unpair}
         isUnpairing={unpairTransfer.isPending}
         onOpenPairingReview={() => {
           const focus = detailTransaction?.id;

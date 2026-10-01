@@ -63,6 +63,17 @@ export interface QuarantineEvidence {
   pair_txids_differ?: boolean;
   /** The receipt is older than the spend it is paired with. */
   pair_receipt_before_spend?: boolean;
+  /** Both sides of that pair, as the book holds them. */
+  pair_legs?: { out: QuarantinePairLeg; in: QuarantinePairLeg };
+}
+
+export interface QuarantinePairLeg {
+  transaction_id: string;
+  wallet: string;
+  asset: string;
+  amount_msat: number;
+  occurred_at: string | null;
+  external_id: string;
 }
 
 export interface QuarantineRoot {
