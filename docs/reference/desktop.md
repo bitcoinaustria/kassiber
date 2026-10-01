@@ -247,7 +247,10 @@ renders only on change, needs no network, and falls back to the flat bowtie
 without WebGL. Every glass view draws through one shared renderer, which keeps
 its environment light and compiled shaders between graphs; it is warmed while a
 graph loads, compiles before the first draw without blocking the page, and is
-released 30 s after its last view. After a wallet sync returns, a bounded background pass fills
+released 30 s after its last view. The header's amount and the listed legs and
+totals follow the app's bitcoin/fiat switch, and clicking an amount flips it;
+legs are priced at the transaction's own price and stay in bitcoin without one,
+for hidden values, and on another swap leg's graph. After a wallet sync returns, a bounded background pass fills
 missing graph references through that wallet's backend. Its completion refreshes
 local graph queries. The "Look up on-chain" action appears only where a lookup
 could still add something: a row with no local graph, or a Bitcoin graph whose
