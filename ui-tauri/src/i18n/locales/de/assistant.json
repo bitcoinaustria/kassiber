@@ -350,6 +350,7 @@
       "price_override": "Preis setzen",
       "exclude": "Aus dem Journal ausschließen",
       "custody_component": "Verwahrung einordnen",
+      "unpair": "Transfer-Paar entkoppeln",
       "rate": "Kurs in der Fiat-Währung des Buchs pro BTC",
       "value": "Wert in der Fiat-Währung des Buchs",
       "activate": "Aktivieren",

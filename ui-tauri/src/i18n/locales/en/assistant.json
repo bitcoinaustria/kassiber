@@ -350,6 +350,7 @@
       "price_override": "Set price",
       "exclude": "Exclude from ledger",
       "custody_component": "Record custody interpretation",
+      "unpair": "Unpair transfer pair",
       "rate": "Rate in book fiat currency per BTC",
       "value": "Value in book fiat currency",
       "activate": "Activate",

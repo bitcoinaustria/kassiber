@@ -4,6 +4,8 @@ import tempfile
 import unittest
 
 from kassiber.cli import handlers
+from kassiber.cli.handlers import _metadata_hooks
+from kassiber.core import review_workflow
 from kassiber.core.custody_components import activate_component, create_component
 from kassiber.core.ui_snapshot import (
     build_journals_quarantine_snapshot,
@@ -247,6 +249,53 @@ class QuarantineReviewTest(unittest.TestCase):
         )
         group = next(group for group in snapshot["summary"]["groups"] if group["key"] == root_item["group_key"])
         self.assertEqual(group["actions"][0]["kind"], "review_pair")
+
+    def test_a_pair_left_suspense_is_fixed_by_one_reviewed_unpair(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            conn.execute("UPDATE transactions SET external_id = ? WHERE id = 'out'", ("a" * 64,))
+            conn.execute(
+                "UPDATE transactions SET external_id = ?, occurred_at = ? WHERE id = 'in'",
+                ("b" * 64, "2023-12-31T21:00:00Z"),
+            )
+            conn.commit()
+            pair = handlers.create_transaction_pair(conn, "Books", "Book", "out", "in")
+            handlers.process_journals(conn, "Books", "Book")
+            profile = conn.execute("SELECT * FROM profiles WHERE id = 'profile'").fetchone()
+            hooks = review_workflow.ReviewHooks(metadata=_metadata_hooks())
+
+            cases = review_workflow.inspect_cases(conn, profile, limit=100)
+            paired = [case for case in cases["cases"] if "unpair" in case["supported_operations"]]
+            operations = [{"type": "unpair", "pair_id": pair["id"], "reason": "Different txids; not one movement"}]
+            artifact = review_workflow.plan_review(
+                conn, profile, operations=operations,
+                expected_input_version=cases["input_version"], hooks=hooks,
+            )
+            # The preview changed nothing yet.
+            self.assertIn(pair["id"], {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")})
+            receipt = review_workflow.apply_review(
+                conn, profile, artifact=artifact, idempotency_key="fix-1", hooks=hooks,
+            )
+            remaining = build_journals_quarantine_snapshot(conn, {"limit": 50})["summary"]["count"]
+            pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
+            with self.assertRaises(AppError):
+                review_workflow.plan_review(
+                    conn, profile,
+                    operations=[{"type": "unpair", "pair_id": "missing", "reason": "x"}],
+                    expected_input_version=receipt["result_input_version"], hooks=hooks,
+                )
+
+        self.assertTrue(paired)
+        self.assertEqual(paired[0]["pair"]["pair_id"], pair["id"])
+        self.assertTrue(paired[0]["pair"]["pair_txids_differ"])
+        # The server-computed preview says what the fix does to the book.
+        self.assertGreater(artifact["before"]["quarantine_count"], 0)
+        self.assertEqual(artifact["after"]["quarantine_count"], 0)
+        self.assertEqual(receipt["status"], "verified")
+        self.assertEqual(receipt["verification"]["quarantine_count"], 0)
+        self.assertEqual(set(receipt["transaction_ids"]), {"out", "in"})
+        self.assertNotIn(pair["id"], pairs_after)
+        self.assertEqual(remaining, 0)
 
     def test_a_suspense_without_a_pair_offers_no_pair_review(self):
         with tempfile.TemporaryDirectory() as root:

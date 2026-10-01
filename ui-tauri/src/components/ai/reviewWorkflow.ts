@@ -50,7 +50,7 @@ export function reviewArtifact(value: unknown, allowAcquisitions = false): Revie
     typeof row.digest === "string" && /^[a-f0-9]{64}$/.test(row.digest) &&
     Array.isArray(row.operations) && row.operations.length > 0 && row.operations.length <= 50 &&
     row.operations.every((operation) => reviewRecord(operation) &&
-      ["price_override", "exclude", "custody_component", ...(allowAcquisitions ? ["kind_override"] : [])].includes(String(operation.type))) &&
+      ["price_override", "exclude", "custody_component", "unpair", ...(allowAcquisitions ? ["kind_override"] : [])].includes(String(operation.type))) &&
     effects(row.before) && effects(row.after) ? row as ReviewArtifact : null;
 }
 export function reviewReceipt(value: unknown): ReviewReceipt | null {

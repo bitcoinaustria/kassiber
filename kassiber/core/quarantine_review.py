@@ -105,7 +105,7 @@ def _blocking_transaction_ids(conn: sqlite3.Connection, profile_id: str) -> set[
     return blocking
 
 
-def _pairs_by_transaction(conn: sqlite3.Connection, profile_id: str) -> dict[str, Mapping[str, Any]]:
+def pairs_by_transaction(conn: sqlite3.Connection, profile_id: str) -> dict[str, Mapping[str, Any]]:
     """Each paired transaction's current pair review, keyed by either leg."""
 
     from . import custody_authored_migration
@@ -124,7 +124,13 @@ def _pairs_by_transaction(conn: sqlite3.Connection, profile_id: str) -> dict[str
     return pairs
 
 
-def _pair_evidence(transaction_id: str, pair: Mapping[str, Any]) -> dict[str, Any]:
+def pairs_by_id(conn: sqlite3.Connection, profile_id: str) -> dict[str, Mapping[str, Any]]:
+    """Every current pair review, by its id."""
+
+    return {str(pair["id"]): pair for pair in pairs_by_transaction(conn, profile_id).values()}
+
+
+def pair_evidence(transaction_id: str, pair: Mapping[str, Any]) -> dict[str, Any]:
     """What a suspense-holding pair looks like, for the user to judge it.
 
     Two legs of one movement between your wallets share one on-chain txid and
@@ -420,7 +426,7 @@ def review_quarantine(
     profile_id = str(profile["id"])
     wallets = _wallets(conn, profile_id)
     blocking = _blocking_transaction_ids(conn, profile_id)
-    pairs = _pairs_by_transaction(conn, profile_id)
+    pairs = pairs_by_transaction(conn, profile_id)
     rows = conn.execute(
         """
         SELECT
@@ -509,7 +515,7 @@ def review_quarantine(
         root = _root_summary(by_id[root_id]) if root_id is not None else None
         evidence = _evidence(reason, detail, row, wallets)
         if evidence.get("blocker_code") == "reviewed_residual_suspense" and transaction_id in pairs:
-            evidence.update(_pair_evidence(transaction_id, pairs[transaction_id]))
+            evidence.update(pair_evidence(transaction_id, pairs[transaction_id]))
         additional = [
             str(entry.get("reason"))
             for entry in detail.get("additional_reasons") or []
