@@ -164,6 +164,11 @@ function copyReference(node: TransactionGraphNode) {
   return node.outpoint || node.address || node.txid || null;
 }
 
+/** One name per leg across the drawing and the list; the fee counts as an output. */
+function graphPart(side: GraphRow["side"], id: string) {
+  return `${side === "input" ? "input" : "output"}:${id}`;
+}
+
 function nodeDetailReference(
   node: TransactionGraphNode,
   hidden: boolean,
@@ -367,6 +372,8 @@ function TransactionIoRow({
   onOpenExplorer,
   onOpenTransaction,
   blockHeight,
+  active = false,
+  onHoverPart,
 }: {
   node: TransactionGraphNode;
   side: "input" | "output";
@@ -375,8 +382,21 @@ function TransactionIoRow({
   onOpenExplorer: (target: ExplorerTarget) => void;
   onOpenTransaction?: (transactionId: string) => void;
   blockHeight?: number | null;
+  /** Lit with its leg in the drawing above. */
+  active?: boolean;
+  onHoverPart?: (part: string | null) => void;
 }) {
   const { t } = useTranslation("transactions");
+  const part = graphPart(side, node.id);
+  // The row and its leg in the drawing light up together, from either side.
+  const linked = {
+    "data-graph-part": part,
+    "data-active": active || undefined,
+    onPointerEnter: () => onHoverPart?.(part),
+    onPointerLeave: () => onHoverPart?.(null),
+    onFocus: () => onHoverPart?.(part),
+    onBlur: () => onHoverPart?.(null),
+  };
   const amount =
     formatNodeAmount(node, hideSensitive, t) ||
     t("graph.inputsOutputs.unknownAmount");
@@ -434,10 +454,11 @@ function TransactionIoRow({
     return (
       <button
         type="button"
-        className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 text-left first:border-t-0 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={ioRowClassName}
         aria-label={openLabel}
         title={openLabel}
         onClick={() => onOpenTransaction?.(bookTarget)}
+        {...linked}
       >
         {content}
       </button>
@@ -451,21 +472,28 @@ function TransactionIoRow({
     return (
       <button
         type="button"
-        className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 text-left first:border-t-0 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={ioRowClassName}
         aria-label={openLabel}
         title={openLabel}
         onClick={() => onOpenExplorer(explorerTarget)}
+        {...linked}
       >
         {content}
       </button>
     );
   }
   return (
-    <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 first:border-t-0">
+    <div
+      className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 first:border-t-0 data-[active]:bg-muted/45"
+      {...linked}
+    >
       {content}
     </div>
   );
 }
+
+const ioRowClassName =
+  "grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 text-left first:border-t-0 hover:bg-muted/35 data-[active]:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function TransactionIoColumn({
   title,
@@ -478,6 +506,8 @@ function TransactionIoColumn({
   graph,
   onOpenExplorer,
   onOpenTransaction,
+  activePart,
+  onHoverPart,
 }: {
   title: string;
   nodes: TransactionGraphNode[];
@@ -489,6 +519,8 @@ function TransactionIoColumn({
   graph: TransactionGraphPayload;
   onOpenExplorer: (target: ExplorerTarget) => void;
   onOpenTransaction?: (transactionId: string) => void;
+  activePart?: string | null;
+  onHoverPart?: (part: string | null) => void;
 }) {
   const { t } = useTranslation("transactions");
   const visibleNodes = expanded ? nodes : nodes.slice(0, MAX_DETAIL_COLLAPSED_ROWS);
@@ -518,6 +550,8 @@ function TransactionIoColumn({
             onOpenExplorer={onOpenExplorer}
             onOpenTransaction={onOpenTransaction}
             blockHeight={graph.transaction?.blockHeight}
+            active={activePart === graphPart(side, node.id)}
+            onHoverPart={onHoverPart}
           />
         ))}
         {nodes.length > MAX_DETAIL_COLLAPSED_ROWS ? (
@@ -594,10 +628,14 @@ export function TransactionInputsOutputsPanel({
   graph,
   hideSensitive,
   onOpenTransaction,
+  activePart = null,
+  onHoverPart,
 }: {
   graph: TransactionGraphPayload;
   hideSensitive: boolean;
   onOpenTransaction?: (transactionId: string) => void;
+  activePart?: string | null;
+  onHoverPart?: (part: string | null) => void;
 }) {
   const { t } = useTranslation("transactions");
   const explorerSettings = useUiStore((state) => state.explorerSettings);
@@ -630,6 +668,8 @@ export function TransactionInputsOutputsPanel({
           graph={graph}
           onOpenExplorer={handleOpenExplorer}
           onOpenTransaction={onOpenTransaction}
+          activePart={activePart}
+          onHoverPart={onHoverPart}
         />
         <TransactionIoColumn
           title={t("graph.inputsOutputs.outputs")}
@@ -647,6 +687,8 @@ export function TransactionInputsOutputsPanel({
           graph={graph}
           onOpenExplorer={handleOpenExplorer}
           onOpenTransaction={onOpenTransaction}
+          activePart={activePart}
+          onHoverPart={onHoverPart}
         />
       </div>
       <TransactionIoTotalsPane graph={graph} hideSensitive={hideSensitive} />
@@ -1269,10 +1311,15 @@ export function TransactionFlowDiagram({
   graph,
   hideSensitive,
   expanded = false,
+  activePart = null,
+  onHoverPart,
 }: {
   graph: TransactionGraphPayload;
   hideSensitive: boolean;
   expanded?: boolean;
+  /** A leg lit from outside the drawing, e.g. its row in the list below. */
+  activePart?: string | null;
+  onHoverPart?: (part: string | null) => void;
 }) {
   const { t } = useTranslation("transactions");
   const graphInstanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
@@ -1346,6 +1393,14 @@ export function TransactionFlowDiagram({
     const side = node.side === "input" ? "input" : "output";
     const make = node.zeroValue ? makeZeroValuePath : makeBowtiePath;
     return make(node, side, canvasWidth, edgePadding, centerX);
+  };
+  const isActive = (node: DrawableGraphRow) =>
+    hoverDetail
+      ? hoverDetail.id === node.id && hoverDetail.side === node.side
+      : activePart === graphPart(node.side, node.id);
+  const hover = (node: DrawableGraphRow | null) => {
+    setHoverDetail(node);
+    onHoverPart?.(node ? graphPart(node.side, node.id) : null);
   };
 
   return (
@@ -1473,12 +1528,12 @@ export function TransactionFlowDiagram({
               node={node}
               path={pathFor(node)}
               testId="transaction-input-strand"
-              active={hoverDetail?.id === node.id && hoverDetail.side === node.side}
+              active={isActive(node)}
               gradientIds={gradientIds}
               markerIds={markerIds}
               hideSensitive={hideSensitive}
-              onHover={setHoverDetail}
-              onLeave={() => setHoverDetail(null)}
+              onHover={hover}
+              onLeave={() => hover(null)}
             />
           ))}
           {outputDrawRows.map((node) => (
@@ -1487,47 +1542,53 @@ export function TransactionFlowDiagram({
               node={node}
               path={pathFor(node)}
               testId={node.side === "fee" ? "transaction-fee-strand" : "transaction-output-strand"}
-              active={hoverDetail?.id === node.id && hoverDetail.side === node.side}
+              active={isActive(node)}
               gradientIds={gradientIds}
               markerIds={markerIds}
               hideSensitive={hideSensitive}
-              onHover={setHoverDetail}
-              onLeave={() => setHoverDetail(null)}
+              onHover={hover}
+              onLeave={() => hover(null)}
             />
           ))}
         </svg>
         </div>
       </div>
-      {hoverDetail ? (
-        <div
-          data-testid="transaction-graph-hover-detail"
-          className="pointer-events-none absolute bottom-2 left-3 max-w-[min(520px,calc(100%-1.5rem))] rounded-md border border-white/10 bg-[#101114]/95 px-3 py-2 text-xs text-white shadow-lg"
-        >
-          <div className="grid min-w-0 gap-1">
-            <div className="truncate font-medium">
-              {sensitiveGraphText(
-                nodeDisplayTitle(hoverDetail, t),
-                hideSensitive,
-                t("graph.hidden"),
-              )}
-            </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-white/70">
-              {formatNodeAmount(hoverDetail, hideSensitive, t) ? (
-                <span>{formatNodeAmount(hoverDetail, hideSensitive, t)}</span>
-              ) : null}
-              <span>{roleLabel(hoverDetail.role, t)}</span>
-              <span>{ownershipBoundaryLabel(hoverDetail, t)}</span>
-              {copyReference(hoverDetail) ? (
-                <span className={cn("truncate font-mono", hideSensitive && "sensitive")}>
-                  {hideSensitive
-                    ? t("graph.hidden")
-                    : formatShortTxid(copyReference(hoverDetail) ?? "")}
-                </span>
-              ) : null}
-            </div>
-          </div>
+      {hoverDetail ? <GraphLegCard node={hoverDetail} hideSensitive={hideSensitive} /> : null}
+    </div>
+  );
+}
+
+/** The card for the leg under the pointer, over the drawing's lower left. */
+function GraphLegCard({
+  node,
+  hideSensitive,
+}: {
+  node: TransactionGraphNode;
+  hideSensitive: boolean;
+}) {
+  const { t } = useTranslation("transactions");
+  const amount = formatNodeAmount(node, hideSensitive, t);
+  const reference = copyReference(node);
+  return (
+    <div
+      data-testid="transaction-graph-hover-detail"
+      className="pointer-events-none absolute bottom-2 left-3 max-w-[min(520px,calc(100%-1.5rem))] rounded-md border border-white/10 bg-[#101114]/95 px-3 py-2 text-xs text-white shadow-lg"
+    >
+      <div className="grid min-w-0 gap-1">
+        <div className="truncate font-medium">
+          {sensitiveGraphText(nodeDisplayTitle(node, t), hideSensitive, t("graph.hidden"))}
         </div>
-      ) : null}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-white/70">
+          {amount ? <span>{amount}</span> : null}
+          <span>{roleLabel(node.role, t)}</span>
+          <span>{ownershipBoundaryLabel(node, t)}</span>
+          {reference ? (
+            <span className={cn("truncate font-mono", hideSensitive && "sensitive")}>
+              {hideSensitive ? t("graph.hidden") : formatShortTxid(reference)}
+            </span>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1685,10 +1746,16 @@ function TransactionGraphView({
   graph,
   hideSensitive,
   expanded = false,
+  activePart,
+  onHoverPart,
+  onSelectPart,
 }: {
   graph: TransactionGraphPayload;
   hideSensitive: boolean;
   expanded?: boolean;
+  activePart: string | null;
+  onHoverPart: (part: string | null) => void;
+  onSelectPart: (part: string) => void;
 }) {
   return (
     <TransactionGraph3D
@@ -1696,8 +1763,18 @@ function TransactionGraphView({
       hideSensitive={hideSensitive}
       maxRows={BOWTIE_LINE_LIMIT}
       size={expanded ? "expanded" : "compact"}
+      activePart={activePart}
+      onHoverPart={onHoverPart}
+      onSelectPart={onSelectPart}
+      renderLeg={(row) => <GraphLegCard node={row} hideSensitive={hideSensitive} />}
       fallback={
-        <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} expanded={expanded} />
+        <TransactionFlowDiagram
+          graph={graph}
+          hideSensitive={hideSensitive}
+          expanded={expanded}
+          activePart={activePart}
+          onHoverPart={onHoverPart}
+        />
       }
     />
   );
@@ -1718,13 +1795,31 @@ function TransactionFlowLayout({
   expanded?: boolean;
   onOpenTransaction?: (transactionId: string) => void;
 }) {
+  // One lit leg for the drawing and the list: pointing at either lights both.
+  const [activePart, setActivePart] = useState<string | null>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
+  // A click on a leg brings its row into view instead of leaving the sheet.
+  const revealRow = (part: string) => {
+    const row = [...(sectionRef.current?.querySelectorAll<HTMLElement>("[data-graph-part]") ?? [])]
+      .find((element) => element.dataset.graphPart === part);
+    row?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
   return (
-    <section className="space-y-3" data-testid="transaction-flow-layout">
-      <TransactionGraphView graph={graph} hideSensitive={hideSensitive} expanded={expanded} />
+    <section ref={sectionRef} className="space-y-3" data-testid="transaction-flow-layout">
+      <TransactionGraphView
+        graph={graph}
+        hideSensitive={hideSensitive}
+        expanded={expanded}
+        activePart={activePart}
+        onHoverPart={setActivePart}
+        onSelectPart={revealRow}
+      />
       <TransactionInputsOutputsPanel
         graph={graph}
         hideSensitive={hideSensitive}
         onOpenTransaction={onOpenTransaction}
+        activePart={activePart}
+        onHoverPart={setActivePart}
       />
     </section>
   );

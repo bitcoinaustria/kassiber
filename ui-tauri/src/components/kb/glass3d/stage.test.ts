@@ -98,4 +98,38 @@ describe("shared glass stage", () => {
     expect(lastCamera().projectionMatrix.elements.every(Number.isFinite)).toBe(true);
     stage.dispose();
   });
+
+  it("hands a pointer to the scene's picker and forwards its highlight", () => {
+    const highlight = vi.fn();
+    let seen: { x: number; y: number; centre: [number, number] } | null = null;
+    const stage = createGlassStage(canvas, look, (content, own) => {
+      const box = new Mesh(new BoxGeometry(1, 1, 1), own(new MeshPhysicalMaterial()));
+      box.userData.part = "box";
+      content.add(box);
+      return {
+        pick(pointer) {
+          seen = { x: pointer.x, y: pointer.y, centre: pointer.toScreen(0, 0) };
+          return (pointer.raycaster.intersectObject(box)[0]?.object.userData.part as string) ?? null;
+        },
+        highlight,
+      };
+    });
+    stage.resize(880, 500);
+    stage.setView(0, 0);
+    expect(stage.pick(440, 250)).toBe("box");
+    expect(seen!.centre[0]).toBeCloseTo(440);
+    expect(seen!.centre[1]).toBeCloseTo(250);
+    expect(stage.pick(10, 10)).toBeNull();
+    stage.highlight("box");
+    expect(highlight).toHaveBeenCalledWith("box");
+    stage.dispose();
+  });
+
+  it("has nothing to pick in a scene without parts", () => {
+    const stage = createGlassStage(canvas, look, () => {});
+    stage.resize(880, 500);
+    stage.setView(0, 0);
+    expect(stage.pick(440, 250)).toBeNull();
+    stage.dispose();
+  });
 });

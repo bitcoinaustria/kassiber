@@ -10,8 +10,14 @@ with `import type`. All geometry and environment lighting are generated locally.
   callback receives a content group and `own(material)` for registering materials,
   including unused materials that must be released on failure.
 - The returned `GlassScene` exposes `resize(width, height)`,
-  `setView(yaw, pitch)`, `render()`, and `dispose()`. Call resize and setView
-  before the first render. Drawing is explicit; no animation loop runs.
+  `setView(yaw, pitch)`, `render()`, `pick(x, y)`, `highlight(part)` and
+  `dispose()`. Call resize and setView before the first render. Drawing is
+  explicit; no animation loop runs.
+- A scene with parts returns `{ pick, highlight }` from populate. `pick`
+  receives a `GlassPointer` (a camera ray, the pointer in CSS pixels,
+  `toScreen` and `pixelsPerUnit`) and names the part there or returns null.
+  `Glass3DView` picks at most once a frame, reports hover and clicks, and
+  lights whatever part its caller passes as `highlightedPart`.
 - The stage centres the content and uses an orthographic frame that only grows
   when rotated. Defaults retain the graph's minimum half-frame of 4.4 × 2.5.
   Disposal releases content mesh geometry, owned/attached materials, the
