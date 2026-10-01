@@ -81,7 +81,7 @@ export function QuarantineQueue({
       ? t("quarantine.queue.attentionEmpty")
       : scope === "waiting"
         ? t("quarantine.queue.waitingEmpty")
-        : t("quarantine.empty");
+        : t("quarantine.emptyTitle");
   return (
     <section className="kb-surface" aria-label={t("quarantine.tableTitle")}>
       <div className="flex flex-col gap-3 border-b p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">

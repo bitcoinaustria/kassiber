@@ -7,7 +7,6 @@ import type {
 } from "@/mocks/seed";
 import type {
   QuarantineAction,
-  QuarantineAssumption,
   QuarantineCategory,
   QuarantineScope,
   QuarantineEvidence,
@@ -128,24 +127,6 @@ function normalizeQuarantineFreshness(value: unknown): QuarantineFreshness | nul
   };
 }
 
-function normalizeQuarantineAssumption(value: unknown): QuarantineAssumption {
-  const raw = isRecord(value) ? value : {};
-  return {
-    count: finiteNumber(raw.count),
-    amount_msat: finiteNumber(raw.amount_msat),
-    items: arrayOrEmpty<unknown>(raw.items)
-      .filter(isRecord)
-      .map((item) => ({
-        transaction_id: nullableString(item.transaction_id) ?? "",
-        occurred_at: nullableString(item.occurred_at),
-        wallet: nullableString(item.wallet) ?? "",
-        amount_msat: finiteNumber(item.amount_msat),
-        external_id: nullableString(item.external_id) ?? "",
-      }))
-      .filter((item) => item.transaction_id),
-  };
-}
-
 function normalizeQuarantineGroup(value: Record<string, unknown>): QuarantineGroup {
   return {
     key: nullableString(value.key) ?? "",
@@ -181,7 +162,6 @@ export function normalizeQuarantineSnapshot(value: unknown): QuarantineSnapshot 
   const byReason = arrayOrEmpty<unknown>(summary.by_reason).filter(
     (entry): entry is QuarantineReason => isRecord(entry),
   );
-  const assumptions = isRecord(summary.assumptions) ? summary.assumptions : null;
 
   return {
     summary: {
@@ -216,16 +196,6 @@ export function normalizeQuarantineSnapshot(value: unknown): QuarantineSnapshot 
               : "all") as QuarantineScope,
           }
         : {}),
-      assumptions: assumptions
-        ? {
-            presumed_external_outbound: normalizeQuarantineAssumption(
-              assumptions.presumed_external_outbound,
-            ),
-            unclassified_inbound: normalizeQuarantineAssumption(
-              assumptions.unclassified_inbound,
-            ),
-          }
-        : null,
     },
     items: arrayOrEmpty<QuarantineItem>(raw.items),
   };

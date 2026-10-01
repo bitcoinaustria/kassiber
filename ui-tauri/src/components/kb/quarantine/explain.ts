@@ -473,3 +473,36 @@ export function quarantineRowTarget(item: QuarantineItem): {
     context: quarantineDetailContext(item),
   };
 }
+
+/** One review proposal covers at most this many repairs (the daemon's bound). */
+export const MAX_FIX_OPERATIONS = 50;
+
+/** The audit reasons stored with each unpair. */
+const UNPAIR_REASON = {
+  decided:
+    "The paired legs carry different on-chain txids of the same asset, so they are not one movement between own wallets.",
+  chosen: "The owner reviewed the pair from quarantine and unpaired it.",
+} as const;
+
+/**
+ * Root rows Kassiber can fix without a judgement call: a pair that left a
+ * suspense and joins two different on-chain transactions. One movement
+ * between your own wallets has a single txid, so the pair cannot be one.
+ */
+export function decidedFixes(items: QuarantineItem[]): QuarantineItem[] {
+  const seen = new Set<string>();
+  const fixes: QuarantineItem[] = [];
+  for (const item of items) {
+    const pairId = item.evidence?.pair_id;
+    if (item.is_downstream || !pairId || !item.evidence?.pair_txids_differ || seen.has(pairId)) continue;
+    seen.add(pairId);
+    fixes.push(item);
+    if (fixes.length === MAX_FIX_OPERATIONS) break;
+  }
+  return fixes;
+}
+
+/** The review operations that unpair those rows' pairs. */
+export function fixOperations(fixes: QuarantineItem[], why: keyof typeof UNPAIR_REASON = "decided") {
+  return fixes.map((item) => ({ type: "unpair", pair_id: item.evidence!.pair_id!, reason: UNPAIR_REASON[why] }));
+}

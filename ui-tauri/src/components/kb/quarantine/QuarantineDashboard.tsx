@@ -38,7 +38,6 @@ import {
 import { useCurrency } from "@/lib/currency";
 import {
   pageDescriptionClassName,
-  pageHeaderActionsClassName,
   pageHeaderClassName,
   screenShellClassName,
 } from "@/lib/screen-layout";
@@ -50,11 +49,8 @@ import { cn } from "@/lib/utils";
 import type { Tx } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 
-import { QuarantineActions } from "./QuarantineActions";
 import {
-  QuarantineAssumptions,
   QuarantineCausePanel,
-  type UnpairFailure,
 } from "./QuarantineCausePanel";
 import { QuarantineQueue } from "./QuarantineQueue";
 import {
@@ -152,9 +148,6 @@ export function QuarantineDashboard({
   const attachmentOpen =
     useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
   const unpairTransfer = useDaemonMutation("ui.transfers.unpair");
-  // Many pairs at once must not refetch the whole page after each one; the
-  // recalculation that follows refreshes everything once.
-  const unpairQuietly = useDaemonMutation("ui.transfers.unpair", { invalidateQueries: false });
   const revertHistory = useDaemonMutation("ui.transactions.history.revert");
   const overviewQuery = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const transactionQuery = useDaemon<TransactionResolveEnvelope>(
@@ -421,28 +414,6 @@ export function QuarantineDashboard({
     });
   };
 
-  const unpairMany = async (pairIds: string[], onProgress?: (done: number) => void) => {
-    const failed: UnpairFailure[] = [];
-    for (const [index, pairId] of pairIds.entries()) {
-      try {
-        await unpairQuietly.mutateAsync({ pair_id: pairId });
-      } catch (error) {
-        failed.push({ pairId, message: error instanceof Error ? error.message : String(error) });
-      }
-      onProgress?.(index + 1);
-    }
-    const removed = pairIds.length - failed.length;
-    if (removed) {
-      useUiStore.getState().addNotification({
-        title: t("quarantine.pair.removedTitle", { count: removed }),
-        body: t("quarantine.pair.removedBody"),
-        tone: "success",
-        dedupeKey: "quarantine-unpair",
-      });
-    }
-    return failed;
-  };
-
   const openFromList = (
     transactionId: string,
     tab: QuarantineSheetTab,
@@ -451,14 +422,14 @@ export function QuarantineDashboard({
 
   return (
     <div className={cn(screenShellClassName)}>
-      <div className={pageHeaderClassName}>
-        <p className={cn(pageDescriptionClassName, "self-center")}>
-          {t("quarantine.page.description")}
-        </p>
-        <div className={cn(pageHeaderActionsClassName, "shrink-0")}>
-          <QuarantineActions attentionCount={counts.attention} />
+      {/* With nothing held, the empty state says what the page is for. */}
+      {summary.count ? (
+        <div className={pageHeaderClassName}>
+          <p className={cn(pageDescriptionClassName, "self-center")}>
+            {t("quarantine.page.description")}
+          </p>
         </div>
-      </div>
+      ) : null}
 
       <QuarantineCausePanel
         snapshot={attention}
@@ -471,7 +442,6 @@ export function QuarantineDashboard({
           setShowQueue(true);
           onScopeChange("waiting");
         }}
-        onUnpair={unpairMany}
         onOpenTransaction={(transactionId, tab, context) =>
           openDetail(
             transactionId,
@@ -504,17 +474,11 @@ export function QuarantineDashboard({
           onHide={() => setShowQueue(false)}
         />
       ) : (
-        <p className="kb-surface p-(--kb-card-padding) text-sm text-muted-foreground">
-          {t("quarantine.empty")}
-        </p>
+        <div className="kb-surface space-y-1 p-(--kb-card-padding)" data-testid="quarantine-empty">
+          <p className="text-base font-semibold">{t("quarantine.emptyTitle")}</p>
+          <p className="text-sm text-muted-foreground">{t("quarantine.emptyBody")}</p>
+        </div>
       )}
-
-      <QuarantineAssumptions
-        assumptions={summary.assumptions ?? null}
-        hideSensitive={hideSensitive}
-        onConnectWallet={() => setDialog({ mode: "connect" })}
-        onOpenTransaction={(transactionId, tab) => openDetail(transactionId, tab, null, [])}
-      />
 
       {dialog ? (
         <AddConnectionDialog

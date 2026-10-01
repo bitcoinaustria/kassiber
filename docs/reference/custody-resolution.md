@@ -206,10 +206,13 @@ conversion amounts unless the user edits them.
 ## Resolve with the CLI or chat
 
 The agent investigates through typed tools; Kassiber computes and validates the
-accounting consequences. **Investigate with assistant** on Quarantine starts the
-same workflow available to external agents through the CLI. The UI displays the
-proposed changes and their computed effects, then asks for one approval of that
-exact proposal. Manual component editing remains available.
+accounting consequences. On Quarantine, **Fix all** previews and applies the
+repairs Kassiber decides itself (pairs that join two different on-chain
+transactions) as one reviewed proposal. **Fix with assistant** hands the
+remaining causes to the same workflow available to external agents through the
+CLI. Either way the UI displays the proposed changes and their computed effects,
+then asks for one approval of that exact proposal. Manual component editing
+remains available.
 
 Terminal chat waits for the daemon's revalidated `review_preview` and prints
 the complete proposal or historical retry receipt before asking for approval.
@@ -228,7 +231,8 @@ The shared `core/review_workflow.py` module exposes four operations:
 | `review receipt` / `ui.review.receipt` | Retrieve the historical execution and verification result by receipt ID or idempotency key in the active book. |
 
 Supported batch operations are exact price overrides, explicitly justified
-exclusions, typed custody components, and local inbound `kind_override` declarations. The CLI accepts the existing component
+exclusions, pair-review removal (`unpair`), typed custody components, and local
+inbound `kind_override` declarations. The CLI accepts the existing component
 create/revise/state actions. AI batches create components; conversion components
 remain drafts until separately reviewed. Missing-wallet gap investigation keeps
 its existing local-provider-only tools (`ui.custody.review.plan/apply`) and is
@@ -284,6 +288,12 @@ kassiber --machine review receipt --idempotency-key review-2026-09-05-1
   }
 ]
 ```
+
+An `unpair` operation (`pair_id`, `reason`) removes a pair review; a case
+whose suspense came from a pair lists `unpair` in `supported_operations` and
+names the pair with its legs. The Quarantine page uses it for **Fix all** and
+for unpairing a single pair the owner judged, so either path stores the
+recalculated journals in the same transaction.
 
 Prices are decimal strings. A price assertion still needs evidence: the module
 checks arithmetic and records the reviewed assertion, rather than proving an

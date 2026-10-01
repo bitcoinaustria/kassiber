@@ -20,7 +20,10 @@ from typing import Any, Mapping
 from ..errors import AppError
 from ..secrets import sqlcipher
 from ..time_utils import now_iso
-from . import custody_component_planner, custody_components, custody_journal, metadata, quarantine_resolution, tax_events
+from . import (
+    custody_component_planner, custody_components, custody_journal, custody_review_terms,
+    metadata, quarantine_resolution, quarantine_review, tax_events,
+)
 
 MAX_OPERATIONS = 50
 MAX_ARTIFACT_BYTES = 1_000_000
@@ -60,6 +63,16 @@ def _version(conn, profile) -> int:
     return int(_profile(conn, profile)["journal_input_version"] or 0)
 
 
+def _detail(value) -> dict[str, Any]:
+    if isinstance(value, Mapping):
+        return dict(value)
+    try:
+        parsed = json.loads(value or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def inspect_cases(conn, profile, *, limit=20, cursor=None) -> dict[str, Any]:
     """Read current cases inside one consistent, read-only SQLite snapshot."""
     owns_transaction = not conn.in_transaction
@@ -94,6 +107,8 @@ def _inspect_cases(conn, profile, *, limit, cursor):
     # Inspect current canonical blockers even if the stored journal is stale.
     state = _build(conn, profile)
     reasons = {str(q["transaction_id"]): str(q["reason"]) for q in state["quarantines"]}
+    details = {str(q["transaction_id"]): _detail(q.get("detail_json")) for q in state["quarantines"]}
+    pairs = quarantine_review.pairs_by_transaction(conn, str(profile["id"]))
     ids = sorted(tx for tx in reasons if tx > after)
     cases = []
     for transaction_id in ids[:limit]:
@@ -103,14 +118,21 @@ def _inspect_cases(conn, profile, *, limit, cursor):
         ).fetchone()
         if row is None:
             continue
-        cases.append({
+        case = {
             **dict(row), "reason": reasons[transaction_id],
             "case_id": "quarantine:" + transaction_id,
             "missing_evidence": [{"code": reasons[transaction_id], "status": "unresolved"}],
             "supported_operations": (["price_override"] if "price" in reasons[transaction_id]
                                      else ["custody_component"] if any(word in reasons[transaction_id]
                                           for word in ("custody", "privacy", "transfer", "swap")) else []),
-        })
+        }
+        # A suspense a pair left is answered by the pair: name it, and what
+        # the two legs show, so a proposal can unpair it.
+        if (details[transaction_id].get("blocker_code") == "reviewed_residual_suspense"
+                and transaction_id in pairs):
+            case["pair"] = quarantine_review.pair_evidence(transaction_id, pairs[transaction_id])
+            case["supported_operations"] = ["unpair", *case["supported_operations"]]
+        cases.append(case)
     next_cursor = None
     if len(ids) > limit:
         next_cursor = base64.urlsafe_b64encode(_json({
@@ -225,6 +247,16 @@ def _operations(operations):
             allowed = {"action", "components", "component_id", "spec", "activate", "reason"}
             if set(operation["request"]) - allowed:
                 raise _error("Custody review request contains unsupported fields")
+            continue
+        if kind == "unpair":
+            if set(operation) != {"type", "pair_id", "reason"}:
+                raise _error("Unpair review requires exactly pair_id and reason")
+            for key in ("pair_id", "reason"):
+                if not isinstance(operation[key], str) or not operation[key].strip():
+                    raise _error(f"Review operation requires {key}")
+                operation[key] = operation[key].strip()
+            if len(operation["reason"]) > 2000:
+                raise _error("Review reason exceeds 2000 characters")
             continue
         allowed = {"type", "transaction_id", "reason"}
         if kind == "price_override":
@@ -344,6 +376,18 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, case_id
                 expected_input_version=_version(conn, profile), authored_source=authored_source,
                 commit=False, **operation["request"],
             )
+        elif kind == "unpair":
+            pair = quarantine_review.pairs_by_id(conn, str(profile["id"])).get(operation["pair_id"])
+            if pair is None:
+                raise _error("Review pair was not found", "not_found")
+            custody_review_terms.delete_pair_review(
+                conn, str(profile["id"]), operation["pair_id"], commit=False,
+                authored_source=authored_source,
+            )
+            result = {
+                "pair_id": operation["pair_id"],
+                "transaction_ids": [str(pair["out_transaction_id"]), str(pair["in_transaction_id"])],
+            }
         else:
             tx = conn.execute("SELECT * FROM transactions WHERE id = ? AND profile_id = ?",
                               (operation["transaction_id"], profile["id"])).fetchone()
@@ -472,6 +516,7 @@ def _receipt_transaction_ids(results):
         result = item["result"]
         if result.get("transaction_id"):
             ids.add(result["transaction_id"])
+        ids.update(result.get("transaction_ids", ()))
         components = result.get("components", [])
         if result.get("component"):
             components = [*components, result["component"]]
