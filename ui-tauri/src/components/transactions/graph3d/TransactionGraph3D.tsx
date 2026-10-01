@@ -6,22 +6,23 @@ import { Glass3DView } from "@/components/kb/glass3d/Glass3DView";
 import { InfoHint } from "../TransactionDetailSheetParts";
 
 import type { TransactionGraphPayload } from "../TransactionGraphModel";
-import { ribbonLayout } from "./ribbonLayout";
+import { legendKeys, ribbonLayout, type LegendKey, type RibbonLayout } from "./ribbonLayout";
 
-const LEGEND = [
+const LEGEND: ReadonlyArray<{ key: LegendKey; swatch: string }> = [
   { key: "known", swatch: "bg-[#8fb4ff] ring-1 ring-inset ring-white/40" },
   { key: "unknown", swatch: "bg-slate-300/80 ring-1 ring-inset ring-white/60 dark:bg-slate-400/60" },
   { key: "own", swatch: "bg-[#2563eb]" },
   { key: "other", swatch: "bg-[#7b8798] dark:bg-[#64748b]" },
   { key: "fee", swatch: "bg-[#f5b544]" },
-] as const;
+];
 
 /** Swatches instead of a paragraph; the reading note sits behind the hint. */
-function GraphLegend() {
+function GraphLegend({ layout }: { layout: RibbonLayout }) {
   const { t } = useTranslation("transactions");
+  const shown = legendKeys(layout);
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-      {LEGEND.map((item) => (
+      {LEGEND.filter((item) => shown.has(item.key)).map((item) => (
         <span key={item.key} className="inline-flex items-center gap-1.5">
           <span className={`inline-block size-2.5 rounded-sm ${item.swatch}`} aria-hidden="true" />
           {t(`graph.legend.${item.key}`)}
@@ -51,9 +52,14 @@ export function TransactionGraph3D({
   fallback: ReactNode;
 }) {
   const { t } = useTranslation("transactions");
+  // Keyed on the parts the drawing reads, not the payload wrapper: a copied
+  // or refetched payload with the same legs must not rebuild the WebGL scene.
+  const { inputs, outputs, fee } = graph;
+  const chain = graph.transaction?.chain;
   const layout = useMemo(
-    () => ribbonLayout(graph, hideSensitive, maxRows),
-    [graph, hideSensitive, maxRows],
+    () =>
+      ribbonLayout({ inputs, outputs, fee, transaction: { chain } }, hideSensitive, maxRows),
+    [inputs, outputs, fee, chain, hideSensitive, maxRows],
   );
   return (
     <Glass3DView
@@ -76,7 +82,7 @@ export function TransactionGraph3D({
         </div>
       }
     >
-      <GraphLegend />
+      <GraphLegend layout={layout} />
     </Glass3DView>
   );
 }
