@@ -289,11 +289,23 @@ export function QuarantineCausePanel({
                 onOpenRoot={(transactionId) => openRoot(group, transactionId)}
                 onShowWaiting={onShowWaiting}
                 rootItems={rootItems}
-                onUnpair={async (pairId) => {
-                  await onUnpair(pairId);
+                onUnpair={async (pairIds) => {
+                  const failed: Array<{ pairId: string; message: string }> = [];
+                  for (const pairId of pairIds) {
+                    try {
+                      await onUnpair(pairId);
+                    } catch (error) {
+                      failed.push({
+                        pairId,
+                        message: error instanceof Error ? error.message : String(error),
+                      });
+                    }
+                  }
                   // Unpairing changes the book; the held rows only clear on
                   // the next calculation, which the confirmation promised.
-                  onProcessJournals();
+                  // One calculation covers every pair that was removed.
+                  if (failed.length < pairIds.length) onProcessJournals();
+                  return failed;
                 }}
                 isProcessingJournals={isProcessingJournals}
               />
@@ -332,7 +344,7 @@ function QuarantineCauseCard({
   onOpenRoot: (transactionId: string) => void;
   onShowWaiting: () => void;
   rootItems: Map<string, QuarantineItem>;
-  onUnpair: (pairId: string) => Promise<void>;
+  onUnpair: (pairIds: string[]) => Promise<Array<{ pairId: string; message: string }>>;
   isProcessingJournals: boolean;
 }) {
   const { t } = useTranslation("journals");
@@ -486,7 +498,8 @@ function PairLegLine({
   return (
     <div className="grid grid-cols-[5.5rem_minmax(0,1fr)_auto] items-baseline gap-x-3 text-sm">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className={cn("min-w-0 truncate", sensitiveClass(hideSensitive))}>
+      {/* Wraps rather than truncates: the wallet is what the owner compares. */}
+      <span className={cn("min-w-0 break-words", sensitiveClass(hideSensitive))}>
         {formatShortDate(leg.occurred_at)} · {leg.wallet}
       </span>
       <span className={cn("tabular-nums", sensitiveClass(hideSensitive))}>
@@ -496,7 +509,11 @@ function PairLegLine({
   );
 }
 
-/** Each pair behind a suspense, side by side, with Unpair and Open. */
+/**
+ * Each pair behind a suspense in its own box, with Unpair and Open. When
+ * every pair joins two different on-chain transactions, one action removes
+ * them all, with one confirmation and one recalculation.
+ */
 function QuarantinePairList({
   pairs,
   hideSensitive,
@@ -508,38 +525,67 @@ function QuarantinePairList({
   hideSensitive: boolean;
   isProcessingJournals: boolean;
   onOpen: (transactionId: string) => void;
-  onUnpair: (pairId: string) => Promise<void>;
+  onUnpair: (pairIds: string[]) => Promise<Array<{ pairId: string; message: string }>>;
 }) {
   const { t } = useTranslation("journals");
-  const [confirming, setConfirming] = React.useState<QuarantineItem | null>(null);
+  const [confirming, setConfirming] = React.useState<QuarantineItem[]>([]);
   const [pending, setPending] = React.useState(false);
   const [failure, setFailure] = React.useState<string | null>(null);
-  const legs = confirming?.evidence?.pair_legs;
+  // Two legs of one movement share one txid: different txids decide it.
+  const allDiffer = pairs.length > 1 && pairs.every((item) => item.evidence?.pair_txids_differ);
+  const ask = (items: QuarantineItem[]) => {
+    setFailure(null);
+    setConfirming(items);
+  };
   const confirm = async () => {
-    const pairId = confirming?.evidence?.pair_id;
-    if (!pairId) return;
+    const pairIds = confirming
+      .map((item) => item.evidence?.pair_id)
+      .filter((pairId): pairId is string => Boolean(pairId));
+    if (!pairIds.length) return;
     setPending(true);
     setFailure(null);
     try {
-      await onUnpair(pairId);
-      setConfirming(null);
-    } catch (error) {
-      setFailure(error instanceof Error ? error.message : String(error));
+      const failed = await onUnpair(pairIds);
+      if (failed.length) {
+        setConfirming(confirming.filter((item) => failed.some((entry) => entry.pairId === item.evidence?.pair_id)));
+        setFailure(
+          t("quarantine.pair.failedSome", {
+            failed: failed.length,
+            count: pairIds.length,
+            message: failed[0].message,
+          }),
+        );
+      } else {
+        setConfirming([]);
+      }
     } finally {
       setPending(false);
     }
   };
+  const single = confirming.length === 1 ? confirming[0].evidence?.pair_legs : null;
   return (
-    <div className="mt-3 border-t pt-2" data-testid="quarantine-pairs">
+    <div className="mt-3 space-y-2 border-t pt-3" data-testid="quarantine-pairs">
+      {allDiffer ? (
+        <div className="flex flex-col gap-3 rounded-md bg-muted/50 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="max-w-2xl text-sm">{t("quarantine.pair.allDiffer", { count: pairs.length })}</p>
+          <Button type="button" className="shrink-0" disabled={isProcessingJournals} onClick={() => ask(pairs)}>
+            {t("quarantine.pair.unpairAll", { count: pairs.length })}
+          </Button>
+        </div>
+      ) : null}
       <p className="text-xs font-medium text-muted-foreground">
         {t("quarantine.pair.title", { count: pairs.length })}
       </p>
-      <ul className="mt-1 divide-y">
+      <ul className="space-y-2">
         {pairs.map((item) => {
           const pairLegs = item.evidence!.pair_legs!;
-          const facts = causeFacts(item.evidence, t);
+          // The banner above already says every pair joins different txids.
+          const facts = causeFacts(
+            allDiffer ? { ...item.evidence, pair_txids_differ: false } : item.evidence,
+            t,
+          );
           return (
-            <li key={item.transaction_id} className="space-y-1 py-2">
+            <li key={item.transaction_id} className="kb-surface-inset space-y-1 p-3">
               <PairLegLine label={t("quarantine.pair.sent")} leg={pairLegs.out} hideSensitive={hideSensitive} />
               <PairLegLine label={t("quarantine.pair.received")} leg={pairLegs.in} hideSensitive={hideSensitive} />
               {facts.length ? (
@@ -550,18 +596,17 @@ function QuarantinePairList({
                 </ul>
               ) : null}
               <div className="flex flex-wrap gap-2 pt-1">
+                {/* With "Unpair all" offered, one pair at a time is the lesser path. */}
                 <Button
                   type="button"
                   size="sm"
+                  variant={allDiffer ? "outline" : "default"}
                   disabled={isProcessingJournals}
-                  onClick={() => {
-                    setFailure(null);
-                    setConfirming(item);
-                  }}
+                  onClick={() => ask([item])}
                 >
                   {t("quarantine.pair.unpair")}
                 </Button>
-                <Button type="button" size="sm" variant="outline" onClick={() => onOpen(item.transaction_id)}>
+                <Button type="button" size="sm" variant="ghost" onClick={() => onOpen(item.transaction_id)}>
                   {t("quarantine.pair.open")}
                 </Button>
               </div>
@@ -570,42 +615,51 @@ function QuarantinePairList({
         })}
       </ul>
       <Dialog
-        open={Boolean(confirming)}
+        open={confirming.length > 0}
         onOpenChange={(open) => {
-          if (!open && !pending) setConfirming(null);
+          if (!open && !pending) setConfirming([]);
         }}
       >
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{t("quarantine.pair.confirmTitle")}</DialogTitle>
-            <DialogDescription className={sensitiveClass(hideSensitive)}>
-              {legs
+            <DialogTitle>
+              {t("quarantine.pair.confirmTitle", { count: confirming.length })}
+            </DialogTitle>
+            <DialogDescription className={single ? sensitiveClass(hideSensitive) : undefined}>
+              {single
                 ? t("quarantine.pair.confirmBody", {
-                    outWallet: legs.out.wallet,
-                    inWallet: legs.in.wallet,
+                    outWallet: single.out.wallet,
+                    inWallet: single.in.wallet,
                   })
-                : null}
+                : t("quarantine.pair.confirmBodyMany")}
             </DialogDescription>
           </DialogHeader>
-          {legs ? (
-            <div className="space-y-1 rounded-md border p-3">
-              <PairLegLine label={t("quarantine.pair.sent")} leg={legs.out} hideSensitive={hideSensitive} />
-              <PairLegLine label={t("quarantine.pair.received")} leg={legs.in} hideSensitive={hideSensitive} />
-            </div>
-          ) : null}
+          <ul className="max-h-72 space-y-2 overflow-y-auto">
+            {confirming.map((item) => {
+              const legs = item.evidence?.pair_legs;
+              return legs ? (
+                <li key={item.transaction_id} className="kb-surface-inset space-y-1 p-3">
+                  <PairLegLine label={t("quarantine.pair.sent")} leg={legs.out} hideSensitive={hideSensitive} />
+                  <PairLegLine label={t("quarantine.pair.received")} leg={legs.in} hideSensitive={hideSensitive} />
+                </li>
+              ) : null;
+            })}
+          </ul>
           <p className="text-xs text-muted-foreground">{t("quarantine.pair.confirmUndo")}</p>
           {failure ? (
             <p className="text-sm text-destructive" role="alert">
-              {t("quarantine.pair.failed", { message: failure })}
+              {failure}
             </p>
           ) : null}
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={pending} onClick={() => setConfirming(null)}>
+            <Button type="button" variant="outline" disabled={pending} onClick={() => setConfirming([])}>
               {t("quarantine.pair.cancel")}
             </Button>
             <Button type="button" disabled={pending} onClick={() => void confirm()}>
               {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-              {pending ? t("quarantine.pair.unpairing") : t("quarantine.pair.confirm")}
+              {pending
+                ? t("quarantine.pair.unpairing")
+                : t("quarantine.pair.confirm", { count: confirming.length })}
             </Button>
           </DialogFooter>
         </DialogContent>

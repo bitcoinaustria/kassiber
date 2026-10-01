@@ -549,15 +549,20 @@
       "title_other": "Die {{count}} Paare",
       "sent": "Gesendet",
       "received": "Empfangen",
-      "unpair": "Entkoppeln…",
+      "unpair": "Entkoppeln",
       "open": "Öffnen",
-      "confirmTitle": "Diese zwei Transaktionen entkoppeln?",
       "confirmBody": "Kassiber bucht sie dann einzeln: die Zahlung aus {{outWallet}} als Veräußerung und den Eingang in {{inWallet}} als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst. Die offen gehaltene Differenz entfällt, und die Journale werden neu berechnet, damit die wartenden Transaktionen frei werden.",
       "confirmUndo": "Du kannst sie unter Übertragungen & Verwahrung wieder paaren.",
-      "confirm": "Entkoppeln und neu berechnen",
       "cancel": "Abbrechen",
       "unpairing": "Wird entkoppelt…",
-      "failed": "Entkoppeln fehlgeschlagen: {{message}}"
+      "unpairAll": "Alle {{count}} Paare entkoppeln",
+      "allDiffer": "Alle {{count}} Paare verbinden zwei verschiedene On-chain-Transaktionen; keines ist also eine Bewegung zwischen deinen Wallets.",
+      "confirmTitle_one": "Diese zwei Transaktionen entkoppeln?",
+      "confirmTitle_other": "Diese {{count}} Paare entkoppeln?",
+      "confirmBodyMany": "Kassiber bucht dann jede Seite einzeln: jede Zahlung als Veräußerung und jeden Eingang als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst. Die offen gehaltenen Differenzen entfallen, und die Journale werden einmal neu berechnet, damit die wartenden Transaktionen frei werden.",
+      "confirm_one": "Entkoppeln und neu berechnen",
+      "confirm_other": "{{count}} entkoppeln und neu berechnen",
+      "failedSome": "{{failed}} von {{count}} konnten nicht entkoppelt werden: {{message}}"
     }
   },
   "review": {

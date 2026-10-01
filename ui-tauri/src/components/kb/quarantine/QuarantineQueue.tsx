@@ -2,6 +2,7 @@ import { ArrowRight, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatSats } from "@/lib/localeFormat";
 import { cn } from "@/lib/utils";
 
@@ -82,27 +83,18 @@ export function QuarantineQueue({
     <section className="kb-surface" aria-label={t("quarantine.tableTitle")}>
       <div className="flex flex-col gap-3 border-b p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
         <h2 className="text-sm font-medium sm:text-base">{t("quarantine.tableTitle")}</h2>
-        <div
-          role="tablist"
-          aria-label={t("quarantine.queue.scopeAria")}
-          className="flex flex-wrap gap-2"
-        >
-          {QUARANTINE_SCOPES.map((option) => (
-            <Button
-              key={option}
-              type="button"
-              role="tab"
-              aria-selected={scope === option}
-              size="sm"
-              variant={scope === option ? "default" : "outline"}
-              className="h-8 gap-1.5"
-              onClick={() => onScopeChange(option)}
-            >
-              {t(`quarantine.queue.scope.${option}`)}
-              <span className="tabular-nums opacity-70">{counts[option]}</span>
-            </Button>
-          ))}
-        </div>
+        {/* A selector, not an action: drawn as tabs so it reads as "what you
+            are looking at" beside the page's buttons. */}
+        <Tabs value={scope} onValueChange={(next) => onScopeChange(next as QuarantineScope)}>
+          <TabsList aria-label={t("quarantine.queue.scopeAria")}>
+            {QUARANTINE_SCOPES.map((option) => (
+              <TabsTrigger key={option} value={option} className="gap-1.5 px-3">
+                {t(`quarantine.queue.scope.${option}`)}
+                <span className="text-xs tabular-nums text-muted-foreground">{counts[option]}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
       </div>
 
       {loading ? (
