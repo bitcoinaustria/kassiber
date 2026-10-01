@@ -140,7 +140,7 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                     </div>
                     )}
                     <div className="rounded-md border bg-background p-3">
-                      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                      <div className="grid gap-3 @2xl:grid-cols-[minmax(0,1fr)_auto] @2xl:items-end">
                         <div className="min-w-0 space-y-1.5">
                           <Label
                             htmlFor="tx-tax-treatment"
@@ -165,7 +165,7 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                               updateDraft("taxable", option.taxable);
                             }}
                           >
-                            <SelectTrigger id="tx-tax-treatment" className="h-9">
+                            <SelectTrigger id="tx-tax-treatment" className="h-9 w-full">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -183,7 +183,7 @@ export function TransactionTaxTab({ ctx }: { ctx: TransactionDetailTabContext })
                             </SelectContent>
                           </Select>
                         </div>
-                        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                        <div className="flex flex-wrap items-center gap-2 @2xl:justify-end">
                           <div className="flex h-9 items-center gap-2 rounded-md border px-2.5">
                             <Label
                               htmlFor="tx-taxable"
