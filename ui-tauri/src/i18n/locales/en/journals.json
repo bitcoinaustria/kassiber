@@ -142,7 +142,8 @@
       "fallback": "The daemon did not return quarantine data."
     },
     "tableTitle": "Quarantined transactions",
-    "empty": "No quarantined transactions in the active book.",
+    "emptyTitle": "Nothing in quarantine",
+    "emptyBody": "When Kassiber can't book a transaction, it shows up here with what to do.",
     "actions": {
       "fixWithAssistant": "Fix with assistant"
     },
@@ -486,21 +487,6 @@
       "neverBody": "Journals have not been processed yet. Recalculate to see which transactions need attention.",
       "failedTitle": "The last journal update failed",
       "failedBody": "{{message}} The list shows the state before that attempt."
-    },
-    "assumptions": {
-      "title": "Assumptions Kassiber made",
-      "intro": "These transactions are not in quarantine, but they change your results if the assumption is wrong.",
-      "outboundTitle_one": "{{count}} outflow booked as a disposal",
-      "outboundTitle_other": "{{count}} outflows booked as disposals",
-      "outboundWhy": "No wallet of yours received these coins, so Kassiber treats them as sold or spent at market value.",
-      "outboundFix": "If some went to your own wallet, connect that wallet: they become transfers without tax effect. Classify real payments to confirm them.",
-      "inboundTitle_one": "{{count}} receipt of unknown origin booked as a purchase",
-      "inboundTitle_other": "{{count}} receipts of unknown origin booked as purchases",
-      "inboundWhy": "These receipts have no recorded origin, so Kassiber books them as purchases at market value on the day received.",
-      "inboundFix": "If they came from an older wallet of yours, connect it so the original cost basis and holding period are kept. If they are income, classify them.",
-      "total": "Total {{amount}}",
-      "showMore_one": "{{count}} more not shown",
-      "showMore_other": "{{count}} more not shown"
     },
     "paging": {
       "range": "Rows {{from}}–{{to}} of {{total}}",

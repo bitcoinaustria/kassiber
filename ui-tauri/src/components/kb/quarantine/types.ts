@@ -133,20 +133,6 @@ export interface QuarantineGroup {
   root_count: number;
 }
 
-export interface QuarantineAssumptionItem {
-  transaction_id: string;
-  occurred_at: string | null;
-  wallet: string;
-  amount_msat: number;
-  external_id: string;
-}
-
-export interface QuarantineAssumption {
-  count: number;
-  amount_msat: number;
-  items: QuarantineAssumptionItem[];
-}
-
 export interface QuarantineFreshness {
   needs_processing: boolean;
   status?: string | null;
@@ -174,10 +160,6 @@ export interface QuarantineSnapshot {
     by_category?: Array<{ category: QuarantineCategory; count: number }>;
     groups?: QuarantineGroup[];
     group_count?: number;
-    assumptions?: {
-      presumed_external_outbound: QuarantineAssumption;
-      unclassified_inbound: QuarantineAssumption;
-    } | null;
     /** Whole-book counts; absent from daemons that predate the scopes. */
     attention_count?: number;
     waiting_count?: number;

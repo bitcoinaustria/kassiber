@@ -29,7 +29,7 @@ vi.mock("@/daemon/client", () => ({
 
 import { useUiStore } from "@/store/ui";
 
-import { QuarantineAssumptions, QuarantineCausePanel } from "./QuarantineCausePanel";
+import { QuarantineCausePanel } from "./QuarantineCausePanel";
 import type { QuarantineGroup, QuarantineItem, QuarantineSnapshot } from "./types";
 
 const ROOT: QuarantineItem = {
@@ -121,14 +121,6 @@ function snapshot(
       waiting_count: 2,
       scope: "attention",
       scope_count: 1,
-      assumptions: {
-        presumed_external_outbound: {
-          count: 1,
-          amount_msat: 50_000_000_000,
-          items: [{ transaction_id: "pay", occurred_at: "2025-02-01T00:00:00Z", wallet: "Hot", amount_msat: 50_000_000_000, external_id: "" }],
-        },
-        unclassified_inbound: { count: 0, amount_msat: 0, items: [] },
-      },
       ...overrides,
     },
     items,
@@ -295,33 +287,9 @@ describe("quarantine cause panel", () => {
     expect(
       render(
         snapshot(
-          { count: 0, groups: [], blocking_count: 0, reports_blocked: false, assumptions: null },
+          { count: 0, groups: [], blocking_count: 0, reports_blocked: false },
           [],
         ),
-      ),
-    ).toBe("");
-  });
-});
-
-describe("quarantine assumptions", () => {
-  it("folds the bookings Kassiber assumed, apart from the quarantine", () => {
-    const render = (hideSensitive: boolean) =>
-      renderToStaticMarkup(
-        <QuarantineAssumptions
-          assumptions={snapshot().summary.assumptions ?? null}
-          hideSensitive={hideSensitive}
-          onConnectWallet={() => {}}
-          onOpenTransaction={() => {}}
-        />,
-      );
-    const html = render(false);
-    expect(html).toContain("<details");
-    expect(html).toContain("1 outflow booked as a disposal");
-    expect(sensitiveCount(html)).toBe(0);
-    expect(sensitiveCount(render(true))).toBeGreaterThanOrEqual(2);
-    expect(
-      renderToStaticMarkup(
-        <QuarantineAssumptions assumptions={null} hideSensitive={false} onConnectWallet={() => {}} onOpenTransaction={() => {}} />,
       ),
     ).toBe("");
   });

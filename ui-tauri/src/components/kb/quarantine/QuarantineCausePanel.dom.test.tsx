@@ -143,7 +143,6 @@ function snapshotOf(roots: QuarantineItem[], rootCount = roots.length): Quaranti
       waiting_count: 3,
       scope: "attention",
       scope_count: rootCount,
-      assumptions: null,
     },
     items: roots,
   };

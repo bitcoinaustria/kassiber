@@ -240,10 +240,9 @@ describe("quarantine snapshot normalizer", () => {
     const snapshot = normalizeQuarantineSnapshot({ summary: { count: 2 }, items: [] });
     expect(snapshot.summary.freshness).toBeNull();
     expect(snapshot.summary.groups).toEqual([]);
-    expect(snapshot.summary.assumptions).toBeNull();
   });
 
-  it("passes groups, freshness and assumptions through", () => {
+  it("passes groups and freshness through", () => {
     const snapshot = normalizeQuarantineSnapshot({
       summary: {
         count: 3,
@@ -269,13 +268,6 @@ describe("quarantine snapshot normalizer", () => {
             actions: [{ kind: "review_custody_gap", gap_id: "gap-1" }],
           },
         ],
-        assumptions: {
-          presumed_external_outbound: {
-            count: 1,
-            amount_msat: 5,
-            items: [{ transaction_id: "pay", wallet: "Hot", amount_msat: 5 }, { wallet: "x" }],
-          },
-        },
       },
       items: [],
     });
@@ -283,8 +275,6 @@ describe("quarantine snapshot normalizer", () => {
     expect(snapshot.summary.offset).toBe(100);
     expect(snapshot.summary.groups?.[0].wallets).toEqual(["A"]);
     expect(snapshot.summary.groups?.[0].actions[0].gap_id).toBe("gap-1");
-    expect(snapshot.summary.assumptions?.presumed_external_outbound.items).toHaveLength(1);
-    expect(snapshot.summary.assumptions?.unclassified_inbound.count).toBe(0);
   });
 });
 

@@ -142,7 +142,8 @@
       "fallback": "Der Daemon hat keine Quarantänedaten geliefert."
     },
     "tableTitle": "Transaktionen in Quarantäne",
-    "empty": "Keine Transaktionen in Quarantäne im aktiven Buch.",
+    "emptyTitle": "Nichts in Quarantäne",
+    "emptyBody": "Kann Kassiber eine Transaktion nicht buchen, erscheint sie hier, zusammen mit dem, was zu tun ist.",
     "actions": {
       "fixWithAssistant": "Mit Assistent beheben"
     },
@@ -486,21 +487,6 @@
       "neverBody": "Die Journale wurden noch nicht verarbeitet. Berechne neu, um zu sehen, welche Transaktionen Aufmerksamkeit brauchen.",
       "failedTitle": "Die letzte Journal-Aktualisierung ist fehlgeschlagen",
       "failedBody": "{{message}} Die Liste zeigt den Stand vor diesem Versuch."
-    },
-    "assumptions": {
-      "title": "Annahmen, die Kassiber getroffen hat",
-      "intro": "Diese Transaktionen sind nicht in Quarantäne, verändern aber dein Ergebnis, falls die Annahme falsch ist.",
-      "outboundTitle_one": "{{count}} Abgang als Veräußerung gebucht",
-      "outboundTitle_other": "{{count}} Abgänge als Veräußerung gebucht",
-      "outboundWhy": "Keine deiner Wallets hat diese Coins erhalten, daher behandelt Kassiber sie als zum Marktwert verkauft oder ausgegeben.",
-      "outboundFix": "Ging ein Teil an eine eigene Wallet, verbinde sie: Dann werden daraus Transfers ohne Steuerwirkung. Klassifiziere echte Zahlungen, um sie zu bestätigen.",
-      "inboundTitle_one": "{{count}} Eingang unbekannter Herkunft als Kauf gebucht",
-      "inboundTitle_other": "{{count}} Eingänge unbekannter Herkunft als Kauf gebucht",
-      "inboundWhy": "Für diese Eingänge ist keine Herkunft erfasst, daher bucht Kassiber sie als Kauf zum Marktwert am Eingangstag.",
-      "inboundFix": "Kamen sie von einer älteren Wallet von dir, verbinde sie, damit die ursprünglichen Anschaffungskosten und die Haltedauer erhalten bleiben. Handelt es sich um Einkommen, klassifiziere sie.",
-      "total": "Gesamt {{amount}}",
-      "showMore_one": "{{count}} weitere nicht angezeigt",
-      "showMore_other": "{{count}} weitere nicht angezeigt"
     },
     "paging": {
       "range": "Zeilen {{from}}–{{to}} von {{total}}",

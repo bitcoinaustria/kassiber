@@ -50,7 +50,6 @@ import type { Tx } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 
 import {
-  QuarantineAssumptions,
   QuarantineCausePanel,
 } from "./QuarantineCausePanel";
 import { QuarantineQueue } from "./QuarantineQueue";
@@ -423,11 +422,14 @@ export function QuarantineDashboard({
 
   return (
     <div className={cn(screenShellClassName)}>
-      <div className={pageHeaderClassName}>
-        <p className={cn(pageDescriptionClassName, "self-center")}>
-          {t("quarantine.page.description")}
-        </p>
-      </div>
+      {/* With nothing held, the empty state says what the page is for. */}
+      {summary.count ? (
+        <div className={pageHeaderClassName}>
+          <p className={cn(pageDescriptionClassName, "self-center")}>
+            {t("quarantine.page.description")}
+          </p>
+        </div>
+      ) : null}
 
       <QuarantineCausePanel
         snapshot={attention}
@@ -472,17 +474,11 @@ export function QuarantineDashboard({
           onHide={() => setShowQueue(false)}
         />
       ) : (
-        <p className="kb-surface p-(--kb-card-padding) text-sm text-muted-foreground">
-          {t("quarantine.empty")}
-        </p>
+        <div className="kb-surface space-y-1 p-(--kb-card-padding)" data-testid="quarantine-empty">
+          <p className="text-base font-semibold">{t("quarantine.emptyTitle")}</p>
+          <p className="text-sm text-muted-foreground">{t("quarantine.emptyBody")}</p>
+        </div>
       )}
-
-      <QuarantineAssumptions
-        assumptions={summary.assumptions ?? null}
-        hideSensitive={hideSensitive}
-        onConnectWallet={() => setDialog({ mode: "connect" })}
-        onOpenTransaction={(transactionId, tab) => openDetail(transactionId, tab, null, [])}
-      />
 
       {dialog ? (
         <AddConnectionDialog
