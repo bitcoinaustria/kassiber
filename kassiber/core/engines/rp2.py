@@ -60,6 +60,13 @@ from ..loans import (
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 
 _RP2_MODULES = None
+# The calculation backend under this adapter (plan 20). RP2 is the product
+# default; tests select the native engine with ``_use_tax_engine_backend``.
+# Product code has no setting or environment variable for it.
+_TAX_ENGINE_BACKENDS = ("rp2", "native")
+_TAX_ENGINE_BACKEND = "rp2"
+# The engine identity recorded in each realized entry's calculation metadata.
+_CALCULATION_ENGINE_NAMES = {"rp2": "rp2", "native": "kassiber_tax"}
 GENERIC_BITCOIN_RAIL_QUARANTINE_REASON = "bitcoin_rail_carry_basis_unresolved"
 _RP2_EARN_TRANSACTION_TYPES = {
     "airdrop",
@@ -204,8 +211,39 @@ def _disable_rp2_disk_logger(
             pass
 
 
+def _tax_engine_backend() -> str:
+    """The selected calculation backend: ``"rp2"`` or ``"native"``."""
+    return _TAX_ENGINE_BACKEND
+
+
+@contextmanager
+def _use_tax_engine_backend(name: str) -> Iterator[None]:
+    """Test-only: run the adapter on ``name``'s calculation backend.
+
+    The choice is process-wide, so worker threads see it too. The native
+    backend never imports ``rp2``.
+    """
+    global _TAX_ENGINE_BACKEND
+    if name not in _TAX_ENGINE_BACKENDS:
+        raise ValueError(f"Unknown tax engine backend {name!r}")
+    previous = _TAX_ENGINE_BACKEND
+    _TAX_ENGINE_BACKEND = name
+    try:
+        yield
+    finally:
+        _TAX_ENGINE_BACKEND = previous
+
+
+def _native_backend():
+    from . import native
+
+    return native
+
+
 def _get_rp2_modules() -> dict[str, Any]:
     global _RP2_MODULES
+    if _tax_engine_backend() == "native":
+        return _native_backend().MODULES
     if _RP2_MODULES is not None:
         return _RP2_MODULES
     try:
@@ -237,6 +275,8 @@ def _rp2_decimal(value: Any):
 
 
 def _load_at_country_module():
+    if _tax_engine_backend() == "native":
+        return _native_backend()
     try:
         return import_module("rp2.plugin.country.at")
     except ModuleNotFoundError as exc:
@@ -495,6 +535,15 @@ def _rp2_configuration(
         raise AppError("RP2 configuration requires at least one wallet")
     if not sorted_assets:
         raise AppError("RP2 configuration requires at least one asset")
+    if _tax_engine_backend() == "native":
+        # The native backend takes the settings directly; no file is written.
+        yield Configuration(
+            _make_rp2_country(profile),
+            assets=sorted_assets,
+            exchanges=sorted_wallet_labels,
+            holders=[holder_label],
+        )
+        return
     content = "\n".join(
         [
             "[general]",
@@ -563,6 +612,12 @@ def _rp2_configuration(
             pass
 
 
+def _accounting_method_module(method_name: str):
+    if _tax_engine_backend() == "native":
+        return _native_backend().accounting_method_module(method_name)
+    return import_module(f"rp2.plugin.accounting_method.{method_name}")
+
+
 def _build_rp2_accounting_engine(profile: Mapping[str, Any]):
     modules = _get_rp2_modules()
     method_name = str(profile["gains_algorithm"]).strip().lower()
@@ -573,7 +628,7 @@ def _build_rp2_accounting_engine(profile: Mapping[str, Any]):
     if method_name not in set(policy.accounting_methods):
         raise AppError(f"Unsupported RP2 accounting method '{profile['gains_algorithm']}'")
     try:
-        method_module = import_module(f"rp2.plugin.accounting_method.{method_name}")
+        method_module = _accounting_method_module(method_name)
     except ModuleNotFoundError as exc:
         raise AppError(f"RP2 accounting method '{profile['gains_algorithm']}' is not available") from exc
     years_to_methods = modules["AVLTree"]()
@@ -1480,7 +1535,7 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
             entry["at_kennzahl"] = event["at_kennzahl"]
         entry["capital_gains_type"] = event["capital_gains_type"]
         entry["calculation"] = {
-            "schema_version": 1, "engine": "rp2",
+            "schema_version": 1, "engine": _CALCULATION_ENGINE_NAMES[_tax_engine_backend()],
             "method": _profile_str(profile, "gains_algorithm"),
             "fragments": event["calculation_fragments"],
         }

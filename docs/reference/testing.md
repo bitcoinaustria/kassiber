@@ -22,12 +22,23 @@ verifies imports for the packages that most often go missing in ad-hoc shells
 Debian/Ubuntu it fails early with the required SQLCipher system package command
 if the development headers are not available.
 
-`uv sync --locked` builds the [tax engine](../plan/20-kassiber-tax-engine.md) from `tax-engine/` with
+`uv sync --locked` builds the [tax engine](tax-engine.md) from `tax-engine/` with
 maturin, so a Rust toolchain (1.77 or newer, from rustup) must be on `PATH`.
 uv rebuilds the binding whenever a Rust source file changes. The scripts set
 `MATURIN_NO_INSTALL_RUST=1` so a missing toolchain fails instead of maturin
 downloading one. The engine's own tests run with
 `cargo test --manifest-path tax-engine/Cargo.toml --locked`.
+
+## Tax engine backends
+
+Tests run the tax calculation on the product's default backend. Set
+`KASSIBER_TEST_TAX_ENGINE` to change that for a whole pytest run: `rp2` or
+`native` selects one backend, and `shadow` runs every
+`GenericRP2TaxEngine.build_ledger_state` call on both and fails on any
+difference in the journal result (`tests/tax_engine_compare.py` ignores only
+generated entry ids and the engine identity). Product code reads no such
+variable, so subprocesses such as a test's daemon use the default. See the
+[tax engine](tax-engine.md) for how the backends relate.
 
 ## Tiers
 

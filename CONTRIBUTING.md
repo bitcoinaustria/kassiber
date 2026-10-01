@@ -28,7 +28,7 @@ Python development uses the locked `uv` environment:
 ```
 
 The script checks system prerequisites, including the Rust toolchain that
-builds the [tax engine](docs/plan/20-kassiber-tax-engine.md), runs `uv sync --locked`,
+builds the [tax engine](docs/reference/tax-engine.md), runs `uv sync --locked`,
 and verifies imports. Use `uv run --locked` for Python commands so a stale lockfile fails
 instead of being rewritten. End-user pip installation remains a packaging
 contract, not a second contributor workflow.
