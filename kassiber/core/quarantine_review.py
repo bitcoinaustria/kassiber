@@ -137,6 +137,18 @@ def _pair_evidence(transaction_id: str, pair: Mapping[str, Any]) -> dict[str, An
     evidence: dict[str, Any] = {
         "pair_id": str(pair["id"]),
         "pair_counterpart_transaction_id": in_id if transaction_id == out_id else out_id,
+        # Both sides as the book holds them, so the owner can compare them.
+        "pair_legs": {
+            side: {
+                "transaction_id": str(pair.get(f"{side}_transaction_id") or ""),
+                "wallet": str(pair.get(f"{side}_wallet") or ""),
+                "asset": str(pair.get(f"{side}_asset") or ""),
+                "amount_msat": int(pair.get(f"{side}_full_amount_msat") or 0),
+                "occurred_at": pair.get(f"{side}_occurred_at"),
+                "external_id": str(pair.get(f"{side}_external_id") or ""),
+            }
+            for side in ("out", "in")
+        },
     }
     out_txid = _canonical_txid(pair.get("out_external_id"))
     in_txid = _canonical_txid(pair.get("in_external_id"))
