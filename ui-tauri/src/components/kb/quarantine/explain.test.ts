@@ -14,9 +14,12 @@ import {
   causeCopy,
   causeFacts,
   causeKeyFor,
+  decidedFixes,
   detailContextFor,
   exclusionFitsReason,
+  fixOperations,
   isWaiting,
+  MAX_FIX_OPERATIONS,
   quarantineRowTarget,
   sheetTabForCause,
 } from "./explain";
@@ -284,3 +287,31 @@ describe("quarantine snapshot normalizer", () => {
     expect(snapshot.summary.assumptions?.unclassified_inbound.count).toBe(0);
   });
 });
+
+describe("fixes Kassiber decides itself", () => {
+  const row = (id: string, evidence: QuarantineItem["evidence"], downstream = false) =>
+    ({ transaction_id: id, is_downstream: downstream, evidence }) as QuarantineItem;
+
+  it("takes only pairs of two different txids, once per pair, never a waiting row", () => {
+    const fixes = decidedFixes([
+      row("a", { pair_id: "p1", pair_txids_differ: true }),
+      // The other held leg of the same pair: one unpair clears both.
+      row("b", { pair_id: "p1", pair_txids_differ: true }),
+      row("c", { pair_id: "p2", pair_txids_differ: false }),
+      row("d", { pair_id: "p3", pair_txids_differ: true }, true),
+      row("e", { pair_txids_differ: true }),
+      row("f", { pair_id: "p4", pair_txids_differ: true }),
+    ]);
+    expect(fixes.map((item) => item.transaction_id)).toEqual(["a", "f"]);
+    expect(fixOperations(fixes).map((operation) => operation.pair_id)).toEqual(["p1", "p4"]);
+    expect(fixOperations(fixes, "chosen")[0].reason).not.toEqual(fixOperations(fixes)[0].reason);
+  });
+
+  it("stops at the daemon's bound for one proposal", () => {
+    const rows = Array.from({ length: MAX_FIX_OPERATIONS + 5 }, (_, index) =>
+      row(`t${index}`, { pair_id: `p${index}`, pair_txids_differ: true }),
+    );
+    expect(decidedFixes(rows)).toHaveLength(MAX_FIX_OPERATIONS);
+  });
+});
+

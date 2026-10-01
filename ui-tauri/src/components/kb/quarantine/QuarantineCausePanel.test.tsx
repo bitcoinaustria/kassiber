@@ -22,6 +22,8 @@ vi.mock("@/components/ui/button", () => ({
 }));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
 vi.mock("@/daemon/client", () => ({
+  DaemonRequestError: class extends Error {},
+  useDaemonMutation: () => ({ mutateAsync: vi.fn() }),
   useDaemonStreamMutation: () => ({ mutate, isPending: false }),
 }));
 
@@ -138,12 +140,10 @@ function render(
   {
     onOpenTransaction = vi.fn(),
     onShowWaiting = vi.fn(),
-    onUnpair = vi.fn(async () => []),
     hideSensitive = false,
   }: {
     onOpenTransaction?: ReturnType<typeof vi.fn>;
     onShowWaiting?: ReturnType<typeof vi.fn>;
-    onUnpair?: (pairIds: string[]) => Promise<Array<{ pairId: string; message: string }>>;
     hideSensitive?: boolean;
   } = {},
 ) {
@@ -156,7 +156,6 @@ function render(
       onConnectWallet={() => {}}
       onImportHistory={() => {}}
       onShowWaiting={onShowWaiting}
-      onUnpair={onUnpair}
       hideSensitive={hideSensitive}
     />,
   );

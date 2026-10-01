@@ -144,8 +144,7 @@
     "tableTitle": "Quarantined transactions",
     "empty": "No quarantined transactions in the active book.",
     "actions": {
-      "investigate": "Investigate with assistant",
-      "investigateEmpty": "Nothing in quarantine to investigate"
+      "fixWithAssistant": "Fix with assistant"
     },
     "ownerFallback": "Active book",
     "detail": {
@@ -516,11 +515,18 @@
       "needsYou_other": "{{count}} transactions need you",
       "waiting_one": "{{count}} more only waits on it and clears by itself.",
       "waiting_other": "{{count}} more only wait on these and clear by themselves.",
-      "reportsBlocked": "Tax and portfolio reports stay blocked until this is fixed."
+      "reportsBlocked": "Tax and portfolio reports stay blocked until this is fixed.",
+      "canFix_one": "Kassiber can fix this itself: it is a pair of two different on-chain transactions.",
+      "canFix_other": "Kassiber can fix these {{count}} itself: each is a pair of two different on-chain transactions.",
+      "canFixSome": "Kassiber can fix {{count}} of them itself: each is a pair of two different on-chain transactions.",
+      "fixAll_one": "Fix",
+      "fixAll_other": "Fix all {{count}}",
+      "fixSome": "Fix {{count}}"
     },
     "causes": {
       "title": "What to fix",
       "whatToDo": "What to do",
+      "fixAbove": "Fix above unpairs them, so each side is booked on its own.",
       "waiting_one": "{{count}} later transaction waits on this and clears once it is fixed.",
       "waiting_other": "{{count}} later transactions wait on this and clear once it is fixed.",
       "showWaiting": "Show them",
@@ -559,28 +565,32 @@
       "confirmBody": "Kassiber then books them on their own: the payment from {{outWallet}} as a disposal and the receipt in {{inWallet}} as a purchase at its market value, unless you classify them otherwise. The difference held open goes away, and journals are recalculated so the transactions waiting on it can clear.",
       "confirmUndo": "You can pair them again from Transfers & Custody.",
       "cancel": "Cancel",
-      "unpairing": "Unpairing…",
-      "unpairAll": "Unpair all {{count}} pairs",
-      "allDiffer": "All {{count}} pairs join two different on-chain transactions, so none of them is one movement between your wallets.",
-      "confirmTitle_one": "Unpair these two transactions?",
-      "confirmTitle_other": "Unpair these {{count}} pairs?",
-      "confirmBodyMany": "Kassiber then books each side on its own: each payment as a disposal and each receipt as a purchase at its market value, unless you classify them otherwise. The differences held open go away, and journals are recalculated once so the transactions waiting on them can clear.",
-      "confirm_one": "Unpair and recalculate",
-      "confirm_other": "Unpair {{count}} and recalculate",
-      "failedSome": "{{failed}} of {{count}} could not be unpaired: {{message}}",
-      "someDiffer": "{{count}} of these {{total}} pairs join two different on-chain transactions, so they are not one movement between your wallets.",
-      "unpairThese_one": "Unpair this pair",
-      "unpairThese_other": "Unpair these {{count}}",
+      "confirmTitle": "Unpair these two transactions?",
+      "confirm": "Unpair and recalculate",
       "showAll": "Show all {{count}} pairs",
       "showFewer": "Show fewer",
       "moreLater_one": "{{count}} more pair of this cause is listed once these are resolved.",
       "moreLater_other": "{{count}} more pairs of this cause are listed once these are resolved.",
       "andMore_one": "and {{count}} more pair",
-      "andMore_other": "and {{count}} more pairs",
-      "progress": "Unpairing {{done}} of {{count}}",
-      "removedTitle_one": "Pair removed",
-      "removedTitle_other": "{{count}} pairs removed",
-      "removedBody": "Journals are recalculated now."
+      "andMore_other": "and {{count}} more pairs"
+    },
+    "fix": {
+      "title_one": "Fix this issue?",
+      "title_other": "Fix these {{count}} issues?",
+      "body_one": "Kassiber unpairs a pair that joins two different on-chain transactions. Each side is then booked on its own: the payment as a disposal, the receipt as a purchase at market value, unless you classify them otherwise.",
+      "body_other": "Kassiber unpairs {{count}} pairs that join two different on-chain transactions. Each side is then booked on its own: payments as disposals, receipts as purchases at market value, unless you classify them otherwise.",
+      "checking": "Checking what this changes",
+      "effectQuarantine": "In quarantine: {{before}} → {{after}}",
+      "reportsReady": "Reports: ready after this",
+      "reportsBlocked": "Reports: still blocked afterwards",
+      "apply_one": "Fix",
+      "apply_other": "Fix {{count}}",
+      "applying": "Fixing",
+      "stale": "The book changed since this check.",
+      "retry": "Check again",
+      "doneTitle_one": "Fixed {{count}} issue",
+      "doneTitle_other": "Fixed {{count}} issues",
+      "doneBody": "{{remaining}} left in quarantine."
     }
   },
   "review": {

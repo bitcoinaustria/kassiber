@@ -38,7 +38,6 @@ import {
 import { useCurrency } from "@/lib/currency";
 import {
   pageDescriptionClassName,
-  pageHeaderActionsClassName,
   pageHeaderClassName,
   screenShellClassName,
 } from "@/lib/screen-layout";
@@ -50,11 +49,9 @@ import { cn } from "@/lib/utils";
 import type { Tx } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 
-import { QuarantineActions } from "./QuarantineActions";
 import {
   QuarantineAssumptions,
   QuarantineCausePanel,
-  type UnpairFailure,
 } from "./QuarantineCausePanel";
 import { QuarantineQueue } from "./QuarantineQueue";
 import {
@@ -152,9 +149,6 @@ export function QuarantineDashboard({
   const attachmentOpen =
     useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
   const unpairTransfer = useDaemonMutation("ui.transfers.unpair");
-  // Many pairs at once must not refetch the whole page after each one; the
-  // recalculation that follows refreshes everything once.
-  const unpairQuietly = useDaemonMutation("ui.transfers.unpair", { invalidateQueries: false });
   const revertHistory = useDaemonMutation("ui.transactions.history.revert");
   const overviewQuery = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const transactionQuery = useDaemon<TransactionResolveEnvelope>(
@@ -421,28 +415,6 @@ export function QuarantineDashboard({
     });
   };
 
-  const unpairMany = async (pairIds: string[], onProgress?: (done: number) => void) => {
-    const failed: UnpairFailure[] = [];
-    for (const [index, pairId] of pairIds.entries()) {
-      try {
-        await unpairQuietly.mutateAsync({ pair_id: pairId });
-      } catch (error) {
-        failed.push({ pairId, message: error instanceof Error ? error.message : String(error) });
-      }
-      onProgress?.(index + 1);
-    }
-    const removed = pairIds.length - failed.length;
-    if (removed) {
-      useUiStore.getState().addNotification({
-        title: t("quarantine.pair.removedTitle", { count: removed }),
-        body: t("quarantine.pair.removedBody"),
-        tone: "success",
-        dedupeKey: "quarantine-unpair",
-      });
-    }
-    return failed;
-  };
-
   const openFromList = (
     transactionId: string,
     tab: QuarantineSheetTab,
@@ -455,9 +427,6 @@ export function QuarantineDashboard({
         <p className={cn(pageDescriptionClassName, "self-center")}>
           {t("quarantine.page.description")}
         </p>
-        <div className={cn(pageHeaderActionsClassName, "shrink-0")}>
-          <QuarantineActions attentionCount={counts.attention} />
-        </div>
       </div>
 
       <QuarantineCausePanel
@@ -471,7 +440,6 @@ export function QuarantineDashboard({
           setShowQueue(true);
           onScopeChange("waiting");
         }}
-        onUnpair={unpairMany}
         onOpenTransaction={(transactionId, tab, context) =>
           openDetail(
             transactionId,

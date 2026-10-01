@@ -3,27 +3,29 @@ import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import { pageHeaderActionClassName } from "@/lib/screen-layout";
 import { AssistantSessionContext } from "@/components/ai/assistantSession";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore } from "@/store/ui";
 
-interface QuarantineActionsProps {
+interface FixWithAssistantProps {
   /** What needs the user: causes, not every row that follows one. */
   attentionCount: number;
+  /** Primary when Kassiber cannot fix anything itself. */
+  primary?: boolean;
 }
 
 /**
- * The page's one header action. Recalculating lives with the stale-list
- * notice, and each cause carries its own fix, so neither repeats up here.
+ * Hands what Kassiber cannot decide to the assistant: it gathers the
+ * evidence and returns one server-verified plan the owner confirms once.
+ * Hidden when the assistant is off.
  */
-export function QuarantineActions({ attentionCount }: QuarantineActionsProps) {
+export function FixWithAssistant({ attentionCount, primary = false }: FixWithAssistantProps) {
   const { t } = useTranslation("journals");
   const { t: tAssistant } = useTranslation("assistant");
   const assistant = useContext(AssistantSessionContext);
-  if (!assistant) return null;
-  const investigate = () => {
-    if (assistant.isStreaming || attentionCount === 0) return;
+  if (!assistant || attentionCount === 0) return null;
+  const start = () => {
+    if (assistant.isStreaming) return;
     const prompt = tAssistant("review.seedPrompt", { count: attentionCount });
     const state = useUiStore.getState();
     state.setAssistantDockDiscovered(true);
@@ -38,14 +40,12 @@ export function QuarantineActions({ attentionCount }: QuarantineActionsProps) {
   return (
     <Button
       type="button"
-      variant="outline"
-      className={pageHeaderActionClassName}
-      onClick={investigate}
-      disabled={attentionCount === 0 || assistant.isStreaming}
-      title={attentionCount === 0 ? t("quarantine.actions.investigateEmpty") : undefined}
+      variant={primary ? "default" : "outline"}
+      onClick={start}
+      disabled={assistant.isStreaming}
     >
       <Sparkles className="size-4" aria-hidden="true" />
-      {t("quarantine.actions.investigate")}
+      {t("quarantine.actions.fixWithAssistant")}
     </Button>
   );
 }

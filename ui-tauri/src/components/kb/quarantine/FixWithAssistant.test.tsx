@@ -11,24 +11,24 @@ vi.mock("@/components/ui/button", () => ({ Button: (props: ComponentProps<"butto
   buttons.push(props as { onClick?: () => void; disabled?: boolean });
   return <button disabled={props.disabled}>{props.children}</button>;
 } }));
-import { QuarantineActions } from "./QuarantineActions";
+import { FixWithAssistant } from "./FixWithAssistant";
 
 function renderActions(session: Partial<AssistantSessionContextValue> | null, count = 5) {
   return renderToStaticMarkup(<AssistantSessionContext.Provider value={session as AssistantSessionContextValue | null}>
-    <QuarantineActions attentionCount={count} />
+    <FixWithAssistant attentionCount={count} />
   </AssistantSessionContext.Provider>);
 }
 
-describe("quarantine investigation entry", () => {
+describe("fixing quarantine with the assistant", () => {
   beforeEach(() => { buttons.length = 0; useAssistantDraftStore.getState().setDraft(""); });
 
-  it("starts one scoped chat investigation and expands the existing dock", () => {
+  it("starts one scoped fix in chat and expands the existing dock", () => {
     const sendPrompt = vi.fn();
     renderActions({ sendPrompt, selection: { provider: "local", model: "model" }, isStreaming: false });
     buttons[0].onClick?.();
     expect(sendPrompt).toHaveBeenCalledOnce();
     expect(sendPrompt.mock.calls[0][0]).toContain("5 quarantine causes");
-    expect(sendPrompt.mock.calls[0][0]).toContain("one confirmation");
+    expect(sendPrompt.mock.calls[0][0]).toContain("confirm once");
     expect(useUiStore.getState().assistantDockMinimized).toBe(false);
     expect(useUiStore.getState().assistantDockExpanded).toBe(true);
   });
@@ -41,7 +41,7 @@ describe("quarantine investigation entry", () => {
     expect(useAssistantDraftStore.getState().draft).toContain("5 quarantine causes");
   });
 
-  it("does not start another investigation while running, and hides the action when AI is disabled", () => {
+  it("does not start another run while one is streaming, and hides the action when AI is disabled", () => {
     const sendPrompt = vi.fn();
     renderActions({ sendPrompt, selection: { provider: "local", model: "model" }, isStreaming: true });
     expect(buttons[0].disabled).toBe(true);
@@ -50,8 +50,7 @@ describe("quarantine investigation entry", () => {
     expect(renderActions(null)).toBe("");
   });
 
-  it("has nothing to investigate when nothing needs the user", () => {
-    renderActions({ sendPrompt: vi.fn(), selection: { provider: "local", model: "model" }, isStreaming: false }, 0);
-    expect(buttons[0].disabled).toBe(true);
+  it("offers nothing when nothing needs the user", () => {
+    expect(renderActions({ sendPrompt: vi.fn(), selection: { provider: "local", model: "model" }, isStreaming: false }, 0)).toBe("");
   });
 });

@@ -144,8 +144,7 @@
     "tableTitle": "Transaktionen in Quarantäne",
     "empty": "Keine Transaktionen in Quarantäne im aktiven Buch.",
     "actions": {
-      "investigate": "Mit Assistent untersuchen",
-      "investigateEmpty": "Nichts in Quarantäne zu untersuchen"
+      "fixWithAssistant": "Mit Assistent beheben"
     },
     "ownerFallback": "Aktives Buch",
     "detail": {
@@ -516,11 +515,18 @@
       "needsYou_other": "{{count}} Transaktionen brauchen dich",
       "waiting_one": "{{count}} weitere wartet nur darauf und löst sich von selbst.",
       "waiting_other": "{{count}} weitere warten nur darauf und lösen sich von selbst.",
-      "reportsBlocked": "Steuer- und Portfolioberichte bleiben blockiert, bis das geklärt ist."
+      "reportsBlocked": "Steuer- und Portfolioberichte bleiben blockiert, bis das geklärt ist.",
+      "canFix_one": "Kassiber kann das selbst beheben: Es ist ein Paar aus zwei verschiedenen On-chain-Transaktionen.",
+      "canFix_other": "Kassiber kann diese {{count}} selbst beheben: Jedes ist ein Paar aus zwei verschiedenen On-chain-Transaktionen.",
+      "canFixSome": "Kassiber kann {{count}} davon selbst beheben: Jedes ist ein Paar aus zwei verschiedenen On-chain-Transaktionen.",
+      "fixAll_one": "Beheben",
+      "fixAll_other": "Alle {{count}} beheben",
+      "fixSome": "{{count}} beheben"
     },
     "causes": {
       "title": "Was zu klären ist",
       "whatToDo": "Was zu tun ist",
+      "fixAbove": "„Beheben“ oben entkoppelt sie, damit jede Seite einzeln gebucht wird.",
       "waiting_one": "{{count}} spätere Transaktion wartet darauf und löst sich, sobald das geklärt ist.",
       "waiting_other": "{{count}} spätere Transaktionen warten darauf und lösen sich, sobald das geklärt ist.",
       "showWaiting": "Anzeigen",
@@ -559,28 +565,32 @@
       "confirmBody": "Kassiber bucht sie dann einzeln: die Zahlung aus {{outWallet}} als Veräußerung und den Eingang in {{inWallet}} als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst. Die offen gehaltene Differenz entfällt, und die Journale werden neu berechnet, damit die wartenden Transaktionen frei werden.",
       "confirmUndo": "Du kannst sie unter Übertragungen & Verwahrung wieder paaren.",
       "cancel": "Abbrechen",
-      "unpairing": "Wird entkoppelt…",
-      "unpairAll": "Alle {{count}} Paare entkoppeln",
-      "allDiffer": "Alle {{count}} Paare verbinden zwei verschiedene On-chain-Transaktionen; keines ist also eine Bewegung zwischen deinen Wallets.",
-      "confirmTitle_one": "Diese zwei Transaktionen entkoppeln?",
-      "confirmTitle_other": "Diese {{count}} Paare entkoppeln?",
-      "confirmBodyMany": "Kassiber bucht dann jede Seite einzeln: jede Zahlung als Veräußerung und jeden Eingang als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst. Die offen gehaltenen Differenzen entfallen, und die Journale werden einmal neu berechnet, damit die wartenden Transaktionen frei werden.",
-      "confirm_one": "Entkoppeln und neu berechnen",
-      "confirm_other": "{{count}} entkoppeln und neu berechnen",
-      "failedSome": "{{failed}} von {{count}} konnten nicht entkoppelt werden: {{message}}",
-      "someDiffer": "{{count}} dieser {{total}} Paare verbinden zwei verschiedene On-chain-Transaktionen; sie sind also keine Bewegung zwischen deinen Wallets.",
-      "unpairThese_one": "Dieses Paar entkoppeln",
-      "unpairThese_other": "Diese {{count}} entkoppeln",
+      "confirmTitle": "Diese zwei Transaktionen entkoppeln?",
+      "confirm": "Entkoppeln und neu berechnen",
       "showAll": "Alle {{count}} Paare anzeigen",
       "showFewer": "Weniger anzeigen",
       "moreLater_one": "{{count}} weiteres Paar dieser Ursache erscheint, sobald diese geklärt sind.",
       "moreLater_other": "{{count}} weitere Paare dieser Ursache erscheinen, sobald diese geklärt sind.",
       "andMore_one": "und {{count}} weiteres Paar",
-      "andMore_other": "und {{count}} weitere Paare",
-      "progress": "{{done}} von {{count}} werden entkoppelt",
-      "removedTitle_one": "Paar entfernt",
-      "removedTitle_other": "{{count}} Paare entfernt",
-      "removedBody": "Die Journale werden jetzt neu berechnet."
+      "andMore_other": "und {{count}} weitere Paare"
+    },
+    "fix": {
+      "title_one": "Dieses Problem beheben?",
+      "title_other": "Diese {{count}} Probleme beheben?",
+      "body_one": "Kassiber entkoppelt ein Paar, das zwei verschiedene On-chain-Transaktionen verbindet. Jede Seite wird dann einzeln gebucht: die Zahlung als Veräußerung, der Eingang als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst.",
+      "body_other": "Kassiber entkoppelt {{count}} Paare, die zwei verschiedene On-chain-Transaktionen verbinden. Jede Seite wird dann einzeln gebucht: Zahlungen als Veräußerung, Eingänge als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst.",
+      "checking": "Prüft, was sich dadurch ändert",
+      "effectQuarantine": "In Quarantäne: {{before}} → {{after}}",
+      "reportsReady": "Berichte: danach bereit",
+      "reportsBlocked": "Berichte: danach weiterhin blockiert",
+      "apply_one": "Beheben",
+      "apply_other": "{{count}} beheben",
+      "applying": "Wird behoben",
+      "stale": "Das Buch hat sich seit der Prüfung geändert.",
+      "retry": "Erneut prüfen",
+      "doneTitle_one": "{{count}} Problem behoben",
+      "doneTitle_other": "{{count}} Probleme behoben",
+      "doneBody": "Noch {{remaining}} in Quarantäne."
     }
   },
   "review": {
