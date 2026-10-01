@@ -37,6 +37,20 @@ EOF
   fi
 fi
 
+if ! command -v cargo >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+Kassiber's tax engine is a Rust crate built during `uv sync --locked`, so a Rust
+toolchain (1.77 or newer) is required.
+
+Install it from https://rustup.rs and rerun:
+  ./scripts/bootstrap-dev-env.sh
+EOF
+  exit 1
+fi
+
+# maturin would otherwise download an unpinned Rust toolchain on its own when
+# cargo is missing; fail with the message above instead.
+export MATURIN_NO_INSTALL_RUST=1
 UV_PROJECT_ENVIRONMENT="$VENV" uv sync --locked --python "$PYTHON"
 
 "$VENV/bin/python" - <<'PY'
@@ -45,9 +59,11 @@ import sys
 from importlib.metadata import version
 
 import embit
+import kassiber_tax
 import sqlcipher3
 
 print(f"Verified embit from {embit.__file__}")
+print(f"Verified kassiber_tax {kassiber_tax.engine_version()} from {kassiber_tax.__file__}")
 bdk_supported = sys.version_info < (3, 14) and (
     sys.platform == "darwin"
     or (sys.platform == "linux" and platform.machine() == "x86_64")

@@ -59,7 +59,12 @@ fi
 require_command file
 require_command pnpm
 require_command rustup
+require_command cargo
 require_command uv
+
+# uv builds the tax engine's binding with maturin and the toolchain above;
+# maturin must never download its own.
+export MATURIN_NO_INSTALL_RUST=1
 
 run uv sync --locked --python "$PYTHON_VERSION"
 

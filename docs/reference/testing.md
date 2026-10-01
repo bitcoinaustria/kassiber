@@ -18,8 +18,16 @@ uv run --locked python -m pytest tests/test_wallet_descriptors.py -q
 The bootstrap script runs `uv sync --locked`, which fails if `uv.lock` no longer
 matches `pyproject.toml` and never rewrites the lock, then
 verifies imports for the packages that most often go missing in ad-hoc shells
-(`embit` and `sqlcipher3`). On Debian/Ubuntu it fails early with the required
-SQLCipher system package command if the development headers are not available.
+(`embit`, `sqlcipher3`, and the tax engine's `kassiber_tax` binding). On
+Debian/Ubuntu it fails early with the required SQLCipher system package command
+if the development headers are not available.
+
+`uv sync --locked` builds the [tax engine](../plan/20-kassiber-tax-engine.md) from `tax-engine/` with
+maturin, so a Rust toolchain (1.77 or newer, from rustup) must be on `PATH`.
+uv rebuilds the binding whenever a Rust source file changes. The scripts set
+`MATURIN_NO_INSTALL_RUST=1` so a missing toolchain fails instead of maturin
+downloading one. The engine's own tests run with
+`cargo test --manifest-path tax-engine/Cargo.toml --locked`.
 
 ## Tiers
 
@@ -64,7 +72,9 @@ The required PR workflow is fail-fast without reducing the test inventory:
 3. The CLI smoke lane checks the broad argparse help surface in-process and
    keeps only status/health/next-actions, command discovery, and daemon EOF as
    real subprocess probes. TypeScript, ESLint, and Vitest run together in an
-   independent frontend job.
+   independent frontend job. The independent `Tax engine` job checks the Rust
+   crates' formatting and runs their tests with exactly the declared minimum
+   toolchain (Rust 1.77). Every uv job also builds the engine's binding.
 4. Specialized jobs can remain independent roots and join `ci/required`
    without blocking unrelated setup. Platform credential jobs retain their
    separate credential/packaging path filter, and ordinary pull requests do

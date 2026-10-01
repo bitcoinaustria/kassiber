@@ -92,6 +92,9 @@ jobs:
     env:
       UV_PYTHON: "3.11"
       UV_PYTHON_PREFERENCE: only-managed
+      # uv builds the tax engine's binding with maturin; the step below
+      # installs Rust, so maturin must never fetch a toolchain itself.
+      MATURIN_NO_INSTALL_RUST: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -129,6 +132,11 @@ jobs:
       - name: Install the managed Python
         shell: bash
         run: uv python install "$UV_PYTHON"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: stable
 
       - name: Sync dependencies
         run: uv sync --locked
