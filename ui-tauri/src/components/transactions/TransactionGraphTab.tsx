@@ -60,6 +60,7 @@ import {
   type TransactionSwapRouteLegKey,
 } from "./TransactionGraphModel";
 import { TransactionGraph3D } from "./graph3d/TransactionGraph3D";
+import { preloadTransactionGraph3D } from "./graph3d/preload";
 import {
   BOWTIE_LINE_LIMIT,
   bowtieLines,
@@ -1854,6 +1855,11 @@ export function TransactionGraphPanel({
     graph &&
     (graph.supportLevel === "full" || graph.supportLevel === "partial") &&
     (graph.inputs.length > 0 || graph.outputs.length > 0);
+  // Warm the 3D view while its data loads, not after.
+  const mayDraw = Boolean(loading || showDiagram);
+  useEffect(() => {
+    if (mayDraw) preloadTransactionGraph3D();
+  }, [mayDraw]);
 
   return (
     <div className="space-y-4">
