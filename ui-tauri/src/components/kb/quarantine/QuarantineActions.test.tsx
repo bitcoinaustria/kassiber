@@ -7,16 +7,15 @@ import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore } from "@/store/ui";
 
 const buttons = vi.hoisted(() => [] as Array<{ onClick?: () => void; disabled?: boolean }>);
-vi.mock("@/components/ui/button", () => ({ Button: (props: ComponentProps<"button"> & { asChild?: boolean; variant?: string }) => {
+vi.mock("@/components/ui/button", () => ({ Button: (props: ComponentProps<"button"> & { variant?: string }) => {
   buttons.push(props as { onClick?: () => void; disabled?: boolean });
-  return props.asChild ? <div>{props.children}</div> : <button disabled={props.disabled}>{props.children}</button>;
+  return <button disabled={props.disabled}>{props.children}</button>;
 } }));
-vi.mock("@tanstack/react-router", () => ({ Link: ({ children }: ComponentProps<"a">) => <a>{children}</a> }));
 import { QuarantineActions } from "./QuarantineActions";
 
 function renderActions(session: Partial<AssistantSessionContextValue> | null, count = 5) {
   return renderToStaticMarkup(<AssistantSessionContext.Provider value={session as AssistantSessionContextValue | null}>
-    <QuarantineActions quarantineCount={count} resolvePlanCount={1} isProcessingJournals={false} onProcessJournals={() => {}} onOpenResolvePlan={() => {}} />
+    <QuarantineActions attentionCount={count} />
   </AssistantSessionContext.Provider>);
 }
 
@@ -28,7 +27,7 @@ describe("quarantine investigation entry", () => {
     renderActions({ sendPrompt, selection: { provider: "local", model: "model" }, isStreaming: false });
     buttons[0].onClick?.();
     expect(sendPrompt).toHaveBeenCalledOnce();
-    expect(sendPrompt.mock.calls[0][0]).toContain("5 quarantine issues");
+    expect(sendPrompt.mock.calls[0][0]).toContain("5 quarantine causes");
     expect(sendPrompt.mock.calls[0][0]).toContain("one confirmation");
     expect(useUiStore.getState().assistantDockMinimized).toBe(false);
     expect(useUiStore.getState().assistantDockExpanded).toBe(true);
@@ -39,7 +38,7 @@ describe("quarantine investigation entry", () => {
     renderActions({ sendPrompt, selection: null, isStreaming: false });
     buttons[0].onClick?.();
     expect(sendPrompt).not.toHaveBeenCalled();
-    expect(useAssistantDraftStore.getState().draft).toContain("5 quarantine issues");
+    expect(useAssistantDraftStore.getState().draft).toContain("5 quarantine causes");
   });
 
   it("does not start another investigation while running, and hides the action when AI is disabled", () => {
@@ -48,6 +47,11 @@ describe("quarantine investigation entry", () => {
     expect(buttons[0].disabled).toBe(true);
     buttons[0].onClick?.();
     expect(sendPrompt).not.toHaveBeenCalled();
-    expect(renderActions(null)).not.toContain("Investigate with assistant");
+    expect(renderActions(null)).toBe("");
+  });
+
+  it("has nothing to investigate when nothing needs the user", () => {
+    renderActions({ sendPrompt: vi.fn(), selection: { provider: "local", model: "model" }, isStreaming: false }, 0);
+    expect(buttons[0].disabled).toBe(true);
   });
 });

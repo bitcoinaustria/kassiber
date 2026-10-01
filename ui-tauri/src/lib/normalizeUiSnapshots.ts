@@ -9,6 +9,7 @@ import type {
   QuarantineAction,
   QuarantineAssumption,
   QuarantineCategory,
+  QuarantineScope,
   QuarantineEvidence,
   QuarantineFreshness,
   QuarantineGroup,
@@ -167,6 +168,10 @@ function normalizeQuarantineGroup(value: Record<string, unknown>): QuarantineGro
     earliest_occurred_at: nullableString(value.earliest_occurred_at),
     evidence: isRecord(value.evidence) ? (value.evidence as QuarantineEvidence) : {},
     actions: arrayOrEmpty<unknown>(value.actions).filter(isRecord) as unknown as QuarantineAction[],
+    root_transaction_ids: arrayOrEmpty<unknown>(value.root_transaction_ids).filter(
+      (entry): entry is string => typeof entry === "string",
+    ),
+    root_count: finiteNumber(value.root_count),
   };
 }
 
@@ -201,6 +206,16 @@ export function normalizeQuarantineSnapshot(value: unknown): QuarantineSnapshot 
         .filter(isRecord)
         .map(normalizeQuarantineGroup),
       group_count: finiteNumber(summary.group_count),
+      ...(typeof summary.attention_count === "number"
+        ? {
+            attention_count: finiteNumber(summary.attention_count),
+            waiting_count: finiteNumber(summary.waiting_count),
+            scope_count: finiteNumber(summary.scope_count),
+            scope: (["attention", "waiting", "all"].includes(String(summary.scope))
+              ? summary.scope
+              : "all") as QuarantineScope,
+          }
+        : {}),
       assumptions: assumptions
         ? {
             presumed_external_outbound: normalizeQuarantineAssumption(

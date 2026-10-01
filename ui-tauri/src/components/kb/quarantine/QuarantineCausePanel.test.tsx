@@ -24,16 +24,80 @@ vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
 vi.mock("@/daemon/client", () => ({
   useDaemonStreamMutation: () => ({ mutate, isPending: false }),
 }));
-vi.mock("@/components/kb/AddConnectionDialog", () => ({
-  AddConnectionDialog: () => <div data-testid="add-connection" />,
-}));
 
 import { useUiStore } from "@/store/ui";
 
-import { QuarantineCausePanel } from "./QuarantineCausePanel";
-import type { QuarantineSnapshot } from "./types";
+import { QuarantineAssumptions, QuarantineCausePanel } from "./QuarantineCausePanel";
+import type { QuarantineGroup, QuarantineItem, QuarantineSnapshot } from "./types";
 
-function snapshot(overrides: Partial<QuarantineSnapshot["summary"]> = {}): QuarantineSnapshot {
+const ROOT: QuarantineItem = {
+  transaction_id: "out",
+  external_id: "out",
+  occurred_at: "2024-01-01T00:00:00Z",
+  confirmed_at: null,
+  wallet: "Cold",
+  direction: "outbound",
+  asset: "BTC",
+  amount: 1,
+  amount_msat: 100_000_000_000,
+  fee: 0,
+  fee_msat: 0,
+  reason: "custody_quantity_unresolved",
+  detail: {},
+  created_at: "2026-09-30T19:38:23Z",
+  category: "missing_wallet_history",
+  blocks_reports: true,
+  is_downstream: false,
+  root: null,
+  evidence: { blocker_code: "custody_gap_review_required", gap_id: "gap-1", wallet_label: "Cold" },
+  actions: [{ kind: "connect_wallet" }, { kind: "review_custody_gap", gap_id: "gap-1" }],
+  group_key: "custody_quantity_unresolved:custody_gap_review_required:gap-1",
+};
+
+const GAP_GROUP: QuarantineGroup = {
+  key: "custody_quantity_unresolved:custody_gap_review_required:gap-1",
+  category: "missing_wallet_history",
+  reason: "custody_quantity_unresolved",
+  root_transaction_id: "out",
+  root_occurred_at: "2024-01-01T00:00:00Z",
+  root_wallet: "Cold",
+  root_external_id: "out",
+  root_amount_msat: 100_000_000_000,
+  root_direction: "outbound",
+  root_asset: "BTC",
+  count: 3,
+  downstream_count: 2,
+  blocks_reports: true,
+  wallets: ["Cold", "Hot"],
+  earliest_occurred_at: "2024-01-01T00:00:00Z",
+  evidence: { blocker_code: "custody_gap_review_required", gap_id: "gap-1", wallet_label: "Cold" },
+  actions: [{ kind: "connect_wallet" }, { kind: "review_custody_gap", gap_id: "gap-1" }],
+  root_transaction_ids: ["out"],
+  root_count: 1,
+};
+
+const PAIR_EVIDENCE = {
+  blocker_code: "reviewed_residual_suspense",
+  pair_id: "pair-1",
+  pair_counterpart_transaction_id: "in",
+  pair_txids_differ: true,
+  pair_receipt_before_spend: true,
+};
+
+const PAIR_GROUP: QuarantineGroup = {
+  ...GAP_GROUP,
+  key: "custody_quantity_unresolved:reviewed_residual_suspense:",
+  category: "needs_decision",
+  evidence: PAIR_EVIDENCE,
+  actions: [{ kind: "review_pair", transaction_id: "out", pair_id: "pair-1" }],
+  root_transaction_ids: ["out", "later-root"],
+  root_count: 3,
+};
+
+function snapshot(
+  overrides: Partial<QuarantineSnapshot["summary"]> = {},
+  items: QuarantineItem[] = [ROOT],
+): QuarantineSnapshot {
   return {
     summary: {
       workspace: "Books",
@@ -49,28 +113,12 @@ function snapshot(overrides: Partial<QuarantineSnapshot["summary"]> = {}): Quara
         { category: "downstream", count: 2 },
       ],
       freshness: { needs_processing: false, last_processed_at: "2026-09-01T00:00:00Z", last_error: null },
-      groups: [
-        {
-          key: "custody_quantity_unresolved:custody_gap_review_required:gap-1",
-          category: "missing_wallet_history",
-          reason: "custody_quantity_unresolved",
-          root_transaction_id: "out",
-          root_occurred_at: "2024-01-01T00:00:00Z",
-          root_wallet: "Cold",
-          root_external_id: "out",
-          root_amount_msat: 100_000_000_000,
-          root_direction: "outbound",
-          root_asset: "BTC",
-          count: 3,
-          downstream_count: 2,
-          blocks_reports: true,
-          wallets: ["Cold", "Hot"],
-          earliest_occurred_at: "2024-01-01T00:00:00Z",
-          evidence: { blocker_code: "custody_gap_review_required", gap_id: "gap-1", wallet_label: "Cold" },
-          actions: [{ kind: "connect_wallet" }, { kind: "review_custody_gap", gap_id: "gap-1" }],
-        },
-      ],
+      groups: [GAP_GROUP],
       group_count: 1,
+      attention_count: 1,
+      waiting_count: 2,
+      scope: "attention",
+      scope_count: 1,
       assumptions: {
         presumed_external_outbound: {
           count: 1,
@@ -81,21 +129,33 @@ function snapshot(overrides: Partial<QuarantineSnapshot["summary"]> = {}): Quara
       },
       ...overrides,
     },
-    items: [],
+    items,
   };
 }
 
-function render(data: QuarantineSnapshot, onOpenTransaction = vi.fn(), hideSensitive = false) {
+function render(
+  data: QuarantineSnapshot,
+  {
+    onOpenTransaction = vi.fn(),
+    onShowWaiting = vi.fn(),
+    hideSensitive = false,
+  }: { onOpenTransaction?: ReturnType<typeof vi.fn>; onShowWaiting?: ReturnType<typeof vi.fn>; hideSensitive?: boolean } = {},
+) {
   return renderToStaticMarkup(
     <QuarantineCausePanel
       snapshot={data}
       isProcessingJournals={false}
       onProcessJournals={() => {}}
       onOpenTransaction={onOpenTransaction}
+      onConnectWallet={() => {}}
+      onImportHistory={() => {}}
+      onShowWaiting={onShowWaiting}
       hideSensitive={hideSensitive}
     />,
   );
 }
+
+const sensitiveCount = (html: string) => (html.match(/class="[^"]*\bsensitive\b/g) ?? []).length;
 
 describe("quarantine cause panel", () => {
   beforeEach(() => {
@@ -105,17 +165,48 @@ describe("quarantine cause panel", () => {
     useUiStore.setState({ developerToolsEnabled: false });
   });
 
-  it("explains the root cause, what to provide and what follows from it", () => {
+  it("leads with what needs the user, then says what only waits", () => {
     const html = render(snapshot());
-    expect(html).toContain("Why is something in quarantine?");
-    expect(html).toContain("1 blocks all reports");
-    expect(html).toContain("2 clear with their cause");
+    expect(html).toContain("1 transaction needs you");
+    expect(html).toContain("2 more only wait on these and clear by themselves.");
+    expect(html).toContain("Tax and portfolio reports stay blocked until this is fixed.");
     expect(html).toContain("An intermediate wallet is missing");
     expect(html).toContain("Coins left Cold and a similar amount came back later");
     expect(html).toContain("Blocks reports");
-    expect(html).toContain("2 dependent transactions clear automatically once this is resolved.");
-    expect(html).toContain("1 outflow booked as a disposal");
-    expect(buttons.map((button) => button.label)).toContain("Connect wallet");
+    expect(html).toContain("2 later transactions wait on this and clear once it is fixed.");
+    // The card says how many; the list below says which.
+    expect(html).toContain("1 transaction");
+    expect(buttons.map((button) => button.label)).toEqual(
+      expect.arrayContaining(["Connect wallet", "Review custody gap", "Show them"]),
+    );
+    // Assumptions are not quarantine; they render apart from the causes.
+    expect(html).not.toContain("outflow booked as a disposal");
+  });
+
+  it("lists every waiting transaction on request", () => {
+    const onShowWaiting = vi.fn();
+    render(snapshot(), { onShowWaiting });
+    buttons.find((button) => button.label === "Show them")?.onClick?.();
+    expect(onShowWaiting).toHaveBeenCalledOnce();
+  });
+
+  it("names what was seen in a pair that leaves a suspense, and opens the pair", () => {
+    const onOpenTransaction = vi.fn();
+    const html = render(
+      snapshot({ groups: [PAIR_GROUP] }, [{ ...ROOT, evidence: PAIR_EVIDENCE, category: "needs_decision", actions: PAIR_GROUP.actions }]),
+      { onOpenTransaction },
+    );
+    expect(html).toContain("A transfer pair doesn&#x27;t add up");
+    expect(html).toContain("The two sides are different on-chain transactions");
+    expect(html).toContain("The receipt is dated before the payment it is paired with.");
+    expect(html).toContain("3 transactions");
+    buttons.find((button) => button.label === "Review the pair")?.onClick?.();
+    expect(onOpenTransaction).toHaveBeenCalledWith("out", "linked", {
+      reason: "custody_quantity_unresolved",
+      category: "needs_decision",
+      evidence: PAIR_EVIDENCE,
+      rootLabel: null,
+    });
   });
 
   it("keeps the custody-gap editor behind developer tools", () => {
@@ -130,14 +221,23 @@ describe("quarantine cause panel", () => {
     expect(navigate).toHaveBeenCalledWith({ to: "/swaps", search: { tab: "gaps", gap: "gap-1" } });
   });
 
-  it("warns when the list is outdated or the last rebuild failed", () => {
+  it("says the list changed since its calculation, not that journals never ran", () => {
+    // Every invalidation clears the timestamp; the rows keep theirs.
+    const stale = render(
+      snapshot({ freshness: { needs_processing: true, last_processed_at: null, last_error: null } }),
+    );
+    expect(stale).toContain("This list may be outdated");
+    expect(stale).toContain("changed after the journals were last calculated (2026-09-30)");
+    expect(stale).not.toContain("have not been processed yet");
+    expect(buttons.map((button) => button.label)).toContain("Recalculate journals");
     expect(
       render(
-        snapshot({
-          freshness: { needs_processing: true, last_processed_at: "2026-09-01T00:00:00Z", last_error: null },
-        }),
+        snapshot(
+          { count: 0, groups: [], freshness: { needs_processing: true, last_processed_at: null, last_error: null } },
+          [],
+        ),
       ),
-    ).toContain("This list may be outdated");
+    ).toContain("Journals have not been processed yet");
     expect(
       render(
         snapshot({
@@ -154,41 +254,68 @@ describe("quarantine cause panel", () => {
   it("renders the same explanation in Austrian German", () => {
     void i18n.changeLanguage("de");
     const html = render(snapshot());
-    expect(html).toContain("Warum ist etwas in Quarantäne?");
+    expect(html).toContain("1 Transaktion braucht dich");
     expect(html).toContain("Eine Zwischen-Wallet fehlt");
     expect(html).toContain("Blockiert Berichte");
     void i18n.changeLanguage("en");
   });
 
-  it("masks amounts when sensitive values are hidden", () => {
-    const sensitive = (html: string) => (html.match(/class="[^"]*\bsensitive\b/g) ?? []).length;
-    expect(sensitive(render(snapshot()))).toBe(0);
-    // root amount, assumption total and assumption item
-    expect(sensitive(render(snapshot(), vi.fn(), true))).toBeGreaterThanOrEqual(3);
+  it("masks an explanation that quotes amounts when sensitive values are hidden", () => {
+    const oversell = snapshot({
+      groups: [
+        {
+          ...GAP_GROUP,
+          key: "insufficient_lots:BTC:Cold",
+          category: "missing_acquisition_history",
+          reason: "insufficient_lots",
+          evidence: { required_msat: 12 * 100_000_000_000, available_msat: 10 * 100_000_000_000, wallet_label: "Cold" },
+          actions: [{ kind: "import_history" }],
+        },
+      ],
+    });
+    expect(sensitiveCount(render(oversell))).toBe(0);
+    expect(sensitiveCount(render(oversell, { hideSensitive: true }))).toBe(1);
+    expect(sensitiveCount(render(snapshot(), { hideSensitive: true }))).toBe(0);
   });
 
-  it("hands the cause's reading to the sheet when its root is on another page", () => {
+  it("opens a cause's first transaction when it offers no action of its own", () => {
     const onOpenTransaction = vi.fn();
-    render(snapshot(), onOpenTransaction);
+    render(snapshot({ groups: [{ ...GAP_GROUP, actions: [] }] }), { onOpenTransaction });
     buttons.find((button) => button.label === "Open transaction")?.onClick?.();
-    expect(onOpenTransaction).toHaveBeenCalledWith("out", "details", {
-      reason: "custody_quantity_unresolved",
-      category: "missing_wallet_history",
-      evidence: { blocker_code: "custody_gap_review_required", gap_id: "gap-1", wallet_label: "Cold" },
-      rootLabel: null,
-    });
+    expect(onOpenTransaction).toHaveBeenCalledWith("out", "details", expect.objectContaining({ reason: "custody_quantity_unresolved" }));
   });
 
   it("renders nothing for an empty, current quarantine", () => {
     expect(
       render(
-        snapshot({
-          count: 0,
-          groups: [],
-          blocking_count: 0,
-          reports_blocked: false,
-          assumptions: null,
-        }),
+        snapshot(
+          { count: 0, groups: [], blocking_count: 0, reports_blocked: false, assumptions: null },
+          [],
+        ),
+      ),
+    ).toBe("");
+  });
+});
+
+describe("quarantine assumptions", () => {
+  it("folds the bookings Kassiber assumed, apart from the quarantine", () => {
+    const render = (hideSensitive: boolean) =>
+      renderToStaticMarkup(
+        <QuarantineAssumptions
+          assumptions={snapshot().summary.assumptions ?? null}
+          hideSensitive={hideSensitive}
+          onConnectWallet={() => {}}
+          onOpenTransaction={() => {}}
+        />,
+      );
+    const html = render(false);
+    expect(html).toContain("<details");
+    expect(html).toContain("1 outflow booked as a disposal");
+    expect(sensitiveCount(html)).toBe(0);
+    expect(sensitiveCount(render(true))).toBeGreaterThanOrEqual(2);
+    expect(
+      renderToStaticMarkup(
+        <QuarantineAssumptions assumptions={null} hideSensitive={false} onConnectWallet={() => {}} onOpenTransaction={() => {}} />,
       ),
     ).toBe("");
   });

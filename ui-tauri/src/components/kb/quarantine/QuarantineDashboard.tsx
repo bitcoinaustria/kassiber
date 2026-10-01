@@ -3,11 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
-import {
-  ReviewDataTable,
-  reviewRowKey,
-  type ReviewTableRow,
-} from "@/components/kb/ReviewDataTable";
+import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
 import {
   ExplorerOpenDialog,
   TransactionDetailSheet,
@@ -39,27 +35,42 @@ import {
   type DaemonEnvelope,
 } from "@/daemon/transport";
 import { useCurrency } from "@/lib/currency";
+import {
+  pageDescriptionClassName,
+  pageHeaderActionsClassName,
+  pageHeaderClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import type {
   HistoryRevertTarget,
   TransactionHistoryList,
 } from "@/lib/transactionHistory";
+import { cn } from "@/lib/utils";
 import type { Tx } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 
-import {
-  quarantineMetrics,
-  quarantineResolvePlan,
-  quarantineRows,
-  type QuarantineResolveStep,
-} from "./model";
 import { QuarantineActions } from "./QuarantineActions";
-import { QuarantineCausePanel } from "./QuarantineCausePanel";
-import { detailContextFor, type QuarantineDetailContext } from "./explain";
-import { QuarantineResolveDrawer } from "./QuarantineResolveDrawer";
-import type { QuarantineSnapshot } from "./types";
+import { QuarantineAssumptions, QuarantineCausePanel } from "./QuarantineCausePanel";
+import { QuarantineQueue } from "./QuarantineQueue";
+import {
+  detailContextFor,
+  quarantineRowTarget,
+  type QuarantineDetailContext,
+  type QuarantineSheetTab,
+} from "./explain";
+import type { QuarantineItem, QuarantineScope, QuarantineSnapshot } from "./types";
 
 interface QuarantineDashboardProps {
-  snapshot: QuarantineSnapshot;
+  /** The "needs you" page: drives the summary and the cause cards. */
+  attention: QuarantineSnapshot;
+  /** The listed scope's page; the attention page when that is what is listed. */
+  list: QuarantineSnapshot | null;
+  listLoading: boolean;
+  scope: QuarantineScope;
+  onScopeChange: (scope: QuarantineScope) => void;
+  offset: number;
+  pageSize: number;
+  onOffsetChange: (offset: number) => void;
   isProcessingJournals: boolean;
   onProcessJournals: () => void;
 }
@@ -73,17 +84,27 @@ interface OverviewSnapshot {
   priceEur?: number | null;
 }
 
-type TransactionDetailTarget = ReturnType<typeof readTransactionDetailParams> & {
-  rowId: string | null;
-};
+type ConnectionDialogState =
+  | { mode: "connect" }
+  | { mode: "import"; walletId: string | null }
+  | null;
 
-function readQuarantineDetailTarget(): TransactionDetailTarget {
+type DetailTarget = { transactionId: string | null; tab: string };
+
+function readQuarantineDetailTarget(): DetailTarget {
   const target = readTransactionDetailParams();
-  return { ...target, rowId: target.rowId ?? null };
+  return { transactionId: target.transactionId, tab: target.tab };
 }
 
 export function QuarantineDashboard({
-  snapshot,
+  attention,
+  list,
+  listLoading,
+  scope,
+  onScopeChange,
+  offset,
+  pageSize,
+  onOffsetChange,
   isProcessingJournals,
   onProcessJournals,
 }: QuarantineDashboardProps) {
@@ -94,22 +115,22 @@ export function QuarantineDashboard({
   const explorerSettings = useUiStore((s) => s.explorerSettings);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [detailTarget, setDetailTarget] = React.useState(
-    readQuarantineDetailTarget,
-  );
+  const [detailTarget, setDetailTarget] = React.useState(readQuarantineDetailTarget);
   // A cause can point at a root on another page; keep the daemon's reading
   // that came with the click so the sheet does not fall back to the code.
   const [openedContext, setOpenedContext] = React.useState<{
     transactionId: string;
     context: QuarantineDetailContext;
   } | null>(null);
+  // "Save & next" walks the list the transaction was opened from.
+  const [detailQueue, setDetailQueue] = React.useState<string[]>([]);
+  const [dialog, setDialog] = React.useState<ConnectionDialogState>(null);
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
   const [drafts, setDrafts] = React.useState<
     Record<string, TransactionEditDraft>
   >({});
   const [saveError, setSaveError] = React.useState<string | null>(null);
-  const [resolvePlanOpen, setResolvePlanOpen] = React.useState(false);
   const [attachmentListOverride, setAttachmentListOverride] = React.useState<{
     transactionId: string;
     attachments: AttachmentRecord[];
@@ -151,23 +172,17 @@ export function QuarantineDashboard({
     { transaction: detailTarget.transactionId ?? "" },
     { enabled: Boolean(detailTarget.transactionId) },
   );
-  const rows = React.useMemo(() => quarantineRows(snapshot, t), [snapshot, t]);
-  const metrics = React.useMemo(
-    () => quarantineMetrics(snapshot.summary, t, snapshot.items),
-    [snapshot.items, snapshot.summary, t],
+  const { summary } = attention;
+  const listItems = list?.items ?? [];
+  const knownItems = React.useMemo<QuarantineItem[]>(
+    () => [...attention.items, ...(list && list !== attention ? list.items : [])],
+    [attention, list],
   );
-  const resolvePlan = React.useMemo(
-    () => quarantineResolvePlan(snapshot, rows, t),
-    [rows, snapshot, t],
-  );
-  // Track the rows in the order the table actually shows them (search +
-  // status/metric filters + sort), so "Save & next" advances through the
-  // visible queue rather than the raw snapshot order.
-  const [orderedRows, setOrderedRows] = React.useState<ReviewTableRow[]>(rows);
-  const [detailQueueRowKeys, setDetailQueueRowKeys] = React.useState<
-    string[] | null
-  >(null);
-  const reasonGroupCount = snapshot.summary.by_reason.length;
+  const counts: Record<QuarantineScope, number> = {
+    attention: summary.attention_count ?? summary.count,
+    waiting: summary.waiting_count ?? 0,
+    all: summary.count,
+  };
   const detailTransaction = React.useMemo(() => {
     const tx = transactionQuery.data?.data?.transaction;
     return tx
@@ -207,94 +222,36 @@ export function QuarantineDashboard({
   const journalEvents = journalEventsQuery.data?.data?.events ?? [];
   const commercialContext = commercialContextQuery.data?.data;
   const historyData = historyQuery.data?.data;
-  const detailQueueRows = React.useMemo(() => {
-    if (detailQueueRowKeys?.length) {
-      const keyedRows = new Map(rows.map((row) => [reviewRowKey(row), row]));
-      return detailQueueRowKeys
-        .map((key) => keyedRows.get(key))
-        .filter((row): row is ReviewTableRow => Boolean(row));
-    }
-    if (!detailTarget.rowId) return orderedRows;
-    return orderedRows.some((row) => reviewRowKey(row) === detailTarget.rowId)
-      ? orderedRows
-      : rows;
-  }, [detailQueueRowKeys, detailTarget.rowId, orderedRows, rows]);
-  const selectedRowIndex = React.useMemo(() => {
-    if (!detailTarget.transactionId) return -1;
-    if (detailTarget.rowId) {
-      const rowIndex = detailQueueRows.findIndex(
-        (row) => reviewRowKey(row) === detailTarget.rowId,
-      );
-      if (rowIndex >= 0) return rowIndex;
-    }
-    return detailQueueRows.findIndex(
-      (row) =>
-        row.transactionAction?.transactionId === detailTarget.transactionId &&
-        (row.transactionAction.tab ?? "details") === detailTarget.tab,
-    );
-  }, [
-    detailQueueRows,
-    detailTarget.rowId,
-    detailTarget.tab,
-    detailTarget.transactionId,
-  ]);
-  const hasNext =
-    selectedRowIndex >= 0 && selectedRowIndex < detailQueueRows.length - 1;
-  const selectedReviewRow =
-    selectedRowIndex >= 0 ? detailQueueRows[selectedRowIndex] : null;
+  const queueIndex = detailTarget.transactionId
+    ? detailQueue.indexOf(detailTarget.transactionId)
+    : -1;
+  const hasNext = queueIndex >= 0 && queueIndex < detailQueue.length - 1;
   const detailContext = detailContextFor(
     detailTarget.transactionId,
-    snapshot.items,
+    knownItems,
     openedContext,
   );
 
   const openDetail = React.useCallback(
     (
-      action: NonNullable<ReviewTableRow["transactionAction"]>,
-      row?: ReviewTableRow,
-      rowKeys?: string[] | null,
+      transactionId: string,
+      tab: QuarantineSheetTab,
+      context: QuarantineDetailContext | null,
+      queue: string[],
     ) => {
       setSaveError(null);
-      const tab = action.tab ?? "details";
-      setDetailQueueRowKeys(rowKeys?.length ? rowKeys : null);
-      const matchingRow =
-        row ??
-        orderedRows.find(
-          (candidate) =>
-            candidate.transactionAction?.transactionId === action.transactionId &&
-            (candidate.transactionAction.tab ?? "details") === tab,
-        ) ??
-        rows.find(
-          (candidate) =>
-            candidate.transactionAction?.transactionId === action.transactionId &&
-            (candidate.transactionAction.tab ?? "details") === tab,
-        ) ??
-        orderedRows.find(
-          (candidate) =>
-            candidate.transactionAction?.transactionId === action.transactionId,
-        ) ??
-        rows.find(
-          (candidate) =>
-            candidate.transactionAction?.transactionId === action.transactionId,
-        );
-      setDetailTarget({
-        transactionId: action.transactionId,
-        tab,
-        rowId: matchingRow ? reviewRowKey(matchingRow) : null,
-      });
-      updateTransactionDetailParams(
-        action.transactionId,
-        tab,
-        matchingRow ? reviewRowKey(matchingRow) : null,
-      );
+      setOpenedContext(context ? { transactionId, context } : null);
+      setDetailQueue(queue);
+      setDetailTarget({ transactionId, tab });
+      updateTransactionDetailParams(transactionId, tab, null);
     },
-    [orderedRows, rows],
+    [],
   );
 
   const closeDetail = React.useCallback(() => {
-    setDetailTarget({ transactionId: null, tab: "details", rowId: null });
+    setDetailTarget({ transactionId: null, tab: "details" });
     setOpenedContext(null);
-    setDetailQueueRowKeys(null);
+    setDetailQueue([]);
     setExplorerTransaction(null);
     setSaveError(null);
     updateTransactionDetailParams(null);
@@ -312,8 +269,8 @@ export function QuarantineDashboard({
       tone: "error",
       dedupeKey: `quarantine-resolve-${detailTarget.transactionId}`,
     });
-    setDetailTarget({ transactionId: null, tab: "details", rowId: null });
-    setDetailQueueRowKeys(null);
+    setDetailTarget({ transactionId: null, tab: "details" });
+    setDetailQueue([]);
     updateTransactionDetailParams(null);
   }, [
     detailTarget.transactionId,
@@ -429,122 +386,93 @@ export function QuarantineDashboard({
         predicate: (query) =>
           query.queryKey.some((part) => part === "ui.journals.quarantine"),
       });
-      const latestSnapshot = queryClient
-        .getQueriesData<DaemonEnvelope<QuarantineSnapshot>>({
-          queryKey: ["daemon"],
-          predicate: (query) =>
-            query.queryKey.some(
-              (part) => part === "ui.journals.quarantine",
-            ),
-        })
-        .map(([, envelope]) => envelope?.data)
-        .find((data): data is QuarantineSnapshot => Boolean(data?.items));
-      const latestRows = latestSnapshot ? quarantineRows(latestSnapshot, t) : rows;
-      const nextQueueRows = detailQueueRowKeys?.length
-        ? detailQueueRowKeys
-            .map((key) => latestRows.find((row) => reviewRowKey(row) === key))
-            .filter((row): row is ReviewTableRow => Boolean(row))
-        : detailQueueRows;
-      const currentIndex = detailTarget.rowId
-        ? nextQueueRows.findIndex(
-            (row) => reviewRowKey(row) === detailTarget.rowId,
-          )
-        : nextQueueRows.findIndex(
-            (row) => row.transactionAction?.transactionId === transactionId,
-          );
-      const next = nextQueueRows[
-        (currentIndex >= 0 ? currentIndex : selectedRowIndex) + 1
-      ];
-      if (next?.transactionAction) {
-        openDetail(next.transactionAction, next, detailQueueRowKeys);
+      const index = detailQueue.indexOf(transactionId);
+      const next = index >= 0 ? detailQueue[index + 1] : undefined;
+      if (!next) {
+        closeDetail();
         return;
       }
-      closeDetail();
+      const nextItem = knownItems.find((item) => item.transaction_id === next);
+      const target = nextItem
+        ? quarantineRowTarget(nextItem)
+        : { tab: "details" as const, context: null };
+      openDetail(next, target.tab, target.context, detailQueue);
     },
-    [
-      closeDetail,
-      detailQueueRowKeys,
-      detailQueueRows,
-      detailTarget.rowId,
-      openDetail,
-      queryClient,
-      rows,
-      saveTransactionDraft,
-      selectedRowIndex,
-      t,
-    ],
+    [closeDetail, detailQueue, knownItems, openDetail, queryClient, saveTransactionDraft],
   );
 
-  const runResolveStep = React.useCallback(
-    (step: QuarantineResolveStep) => {
-      setResolvePlanOpen(false);
-      if (step.actionKind === "process-journals") {
-        onProcessJournals();
-        return;
-      }
-      if (step.primaryAction) {
-        const primaryRow = step.primaryRowKey
-          ? rows.find((row) => reviewRowKey(row) === step.primaryRowKey)
-          : undefined;
-        openDetail(step.primaryAction, primaryRow, step.rowKeys);
-      }
-    },
-    [onProcessJournals, openDetail, rows],
-  );
+  const openFromList = (
+    transactionId: string,
+    tab: QuarantineSheetTab,
+    context: QuarantineDetailContext | null,
+  ) => openDetail(transactionId, tab, context, listItems.map((item) => item.transaction_id));
 
   return (
-    <>
-      <ReviewDataTable
-        kind="quarantine"
-        description={t("quarantine.balanceExplanation")}
-        rows={rows}
-        metrics={metrics}
-        showSummaryBadge={false}
-        badgeLabel={
-          snapshot.summary.count
-            ? t("quarantine.badge.quarantined", {
-                count: snapshot.summary.count,
-              })
-            : t("quarantine.badge.clear")
-        }
-        tableTitle={t("quarantine.tableTitle")}
-        tableDescription={t("quarantine.tableDescription", {
-          count: reasonGroupCount,
-          rows: rows.length,
-        })}
-        searchPlaceholder={t("quarantine.searchPlaceholder")}
-        emptyMessage={t("quarantine.empty")}
-        onOpenTransactionAction={openDetail}
-        onVisibleRowsChange={setOrderedRows}
-        beforeTable={
-          <QuarantineCausePanel
-            snapshot={snapshot}
-            isProcessingJournals={isProcessingJournals}
-            onProcessJournals={onProcessJournals}
-            hideSensitive={hideSensitive}
-            onOpenTransaction={(transactionId, tab, context) => {
-              setOpenedContext(context ? { transactionId, context } : null);
-              openDetail({ transactionId, label: "", tab });
-            }}
-          />
-        }
-        actions={
-          <QuarantineActions
-            quarantineCount={snapshot.summary.count}
-            isProcessingJournals={isProcessingJournals}
-            onProcessJournals={onProcessJournals}
-            onOpenResolvePlan={() => setResolvePlanOpen(true)}
-            resolvePlanCount={resolvePlan.total}
-          />
-        }
-      />
-      <QuarantineResolveDrawer
-        open={resolvePlanOpen}
-        plan={resolvePlan}
+    <div className={cn(screenShellClassName)}>
+      <div className={pageHeaderClassName}>
+        <p className={cn(pageDescriptionClassName, "self-center")}>
+          {t("quarantine.page.description")}
+        </p>
+        <div className={cn(pageHeaderActionsClassName, "shrink-0")}>
+          <QuarantineActions attentionCount={counts.attention} />
+        </div>
+      </div>
+
+      <QuarantineCausePanel
+        snapshot={attention}
         isProcessingJournals={isProcessingJournals}
-        onOpenChange={setResolvePlanOpen}
-        onRunStep={runResolveStep}
+        onProcessJournals={onProcessJournals}
+        hideSensitive={hideSensitive}
+        onConnectWallet={() => setDialog({ mode: "connect" })}
+        onImportHistory={(walletId) => setDialog({ mode: "import", walletId })}
+        onShowWaiting={() => onScopeChange("waiting")}
+        onOpenTransaction={(transactionId, tab, context) =>
+          openDetail(
+            transactionId,
+            tab,
+            context ?? null,
+            (attention.summary.groups ?? []).flatMap((group) => group.root_transaction_ids),
+          )
+        }
       />
+
+      {summary.count ? (
+        <QuarantineQueue
+          items={listItems}
+          scope={scope}
+          counts={counts}
+          offset={offset}
+          pageSize={pageSize}
+          total={list?.summary.scope_count ?? counts[scope]}
+          loading={listLoading}
+          hideSensitive={hideSensitive}
+          onScopeChange={onScopeChange}
+          onOffsetChange={onOffsetChange}
+          onOpenTransaction={openFromList}
+        />
+      ) : (
+        <p className="kb-surface p-(--kb-card-padding) text-sm text-muted-foreground">
+          {t("quarantine.empty")}
+        </p>
+      )}
+
+      <QuarantineAssumptions
+        assumptions={summary.assumptions ?? null}
+        hideSensitive={hideSensitive}
+        onConnectWallet={() => setDialog({ mode: "connect" })}
+        onOpenTransaction={(transactionId, tab) => openDetail(transactionId, tab, null, [])}
+      />
+
+      {dialog ? (
+        <AddConnectionDialog
+          open
+          initialSourceId={dialog.mode === "connect" ? "descriptor" : null}
+          initialTargetWalletId={dialog.mode === "import" ? dialog.walletId : undefined}
+          onOpenChange={(open) => {
+            if (!open) setDialog(null);
+          }}
+        />
+      ) : null}
       <ExplorerOpenDialog
         transaction={explorerTransaction}
         target={explorerTarget}
@@ -565,11 +493,7 @@ export function QuarantineDashboard({
             : null)
         }
         quarantineContext={detailContext}
-        quarantineReasonOverride={
-          selectedReviewRow?.transactionAction?.reviewReason ??
-          detailContext?.reason ??
-          null
-        }
+        quarantineReasonOverride={detailContext?.reason ?? null}
         nowRate={overviewQuery.data?.data?.priceEur ?? null}
         attachments={detailTransaction ? attachmentItems : undefined}
         journalEvents={journalEvents}
@@ -711,8 +635,7 @@ export function QuarantineDashboard({
         isUnpairing={unpairTransfer.isPending}
         onOpenPairingReview={() => {
           const focus = detailTransaction?.id;
-          const reviewReason =
-            selectedReviewRow?.transactionAction?.reviewReason?.toLowerCase() ?? "";
+          const reviewReason = detailContext?.reason.toLowerCase() ?? "";
           const ownershipReview =
             reviewReason.includes("ownership_transfer") ||
             reviewReason.includes("owned_fanout_unresolved");
@@ -759,6 +682,6 @@ export function QuarantineDashboard({
           }
         }}
       />
-    </>
+    </div>
   );
 }

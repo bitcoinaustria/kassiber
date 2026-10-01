@@ -141,187 +141,15 @@
       "title": "Quarantine unavailable",
       "fallback": "The daemon did not return quarantine data."
     },
-    "description": "Blocked transactions held out of journals and reports until missing prices, basis, assets, or pair evidence are fixed.",
-    "balanceExplanation": "Blocked transactions stay out of journals and reports until their evidence is fixed. Quarantine is not a wallet or balance bucket: transactions remain in their source wallet. Observed on-chain balances still include the coins; book-based totals omit unresolved accounting effects and may change after review.",
-    "badge": {
-      "quarantined": "{{count}} quarantined",
-      "clear": "clear"
-    },
     "tableTitle": "Quarantined transactions",
-    "tableDescription_one": "{{rows}} shown · {{count}} reason group",
-    "tableDescription_other": "{{rows}} shown · {{count}} reason groups",
-    "searchPlaceholder": "Search wallet, txid, reason, amount...",
     "empty": "No quarantined transactions in the active book.",
     "actions": {
-      "transactions": "Transactions",
-      "processJournals": "Process journals",
       "investigate": "Investigate with assistant",
       "investigateEmpty": "Nothing in quarantine to investigate"
     },
-    "metric": {
-      "quarantined": "Quarantined",
-      "quarantinedFilter": "All quarantined",
-      "missingPrices": "Missing prices",
-      "basisOrPairs": "Basis or pairs",
-      "otherReview": "Other review"
-    },
-    "impact": "Held from reports",
-    "impactBlocksReports": "Blocks reports",
-    "impactHeldForReview": "Held for review",
-    "source": "Journal quarantine · {{direction}}",
     "ownerFallback": "Active book",
-    "detailFallback": {
-      "price": "price",
-      "wallet": "wallet"
-    },
     "detail": {
       "resolveError": "Could not open this transaction from the quarantine queue."
-    },
-    "direction": {
-      "inbound": "inbound",
-      "outbound": "outbound",
-      "fallback": "transaction"
-    },
-    "issue": {
-      "missingPrice": "Missing {{asset}} price for {{direction}}",
-      "pricingReview": "Coarse {{asset}} price needs review ({{granularity}})",
-      "implausibleFee": "Implausible transfer fee",
-      "implausibleFeeWithWallets": "Implausible transfer fee: {{from}} -> {{to}}",
-      "ownershipTransfer": "Self-transfer needs pairing in {{wallet}}",
-      "ownershipAmountMismatch": "Wallet sync mismatch in {{wallet}}",
-      "ownedFanout": "Multi-wallet transfer needs review in {{wallet}}",
-      "conflictingSpend": "Competing spend needs confirmation in {{wallet}}",
-      "pendingConfirmation": "On-chain transaction is still pending in {{wallet}}",
-      "transferGroupBlocked": "Transfer group blocked by {{reason}}",
-      "insufficientLots": "Not enough {{asset}} lots in {{wallet}}",
-      "missingBasis": "Missing {{asset}} cost basis in {{wallet}}",
-      "nativeTransitionFeeTiming": "Proven transfer needs fee timing",
-      "nativeTransitionAmountMismatch": "Proven transfer amounts do not reconcile",
-      "nativeTransitionAmbiguous": "Several records match this swap",
-      "ownershipSourceMissing": "Sending wallet history is missing",
-      "collaborativeReview": "Own movements need evidence"
-    },
-    "basis": {
-      "missingPrice": "Missing fiat price",
-      "missingBasis": "Missing cost basis",
-      "pairing": "Pairing decision",
-      "reviewRequired": "Review required",
-      "splitTransfer": "Split transfer / swap review",
-      "coarsePricing": "Coarse pricing — verify",
-      "ownershipTransfer": "Self-transfer between your wallets",
-      "ownershipAmountMismatch": "Wallet sync mismatch",
-      "ownedFanout": "Multi-leg transfer between your wallets",
-      "conflictingSpend": "Competing on-chain transactions",
-      "pendingConfirmation": "Pending on-chain confirmation",
-      "nativeTransitionFeeTiming": "Fee timing needs evidence",
-      "nativeTransitionAmountMismatch": "Transfer quantities need evidence",
-      "nativeTransitionAmbiguous": "Swap source is ambiguous",
-      "ownershipSourceMissing": "Own funds received without the matching debit",
-      "collaborativeReview": "Own payment and fee allocation unresolved"
-    },
-    "evidence": {
-      "price": "Add a fiat price or rates coverage",
-      "pair": "Choose or dismiss the matching movement",
-      "basis": "No acquisition lot is available for this disposal",
-      "asset": "Map the source asset before reporting",
-      "detail": "Review {{keys}}",
-      "fallback": "Review evidence",
-      "splitTransfer": "Review the self-transfer and residual swap or payout leg",
-      "splitTransferValues": "Implied fee {{impliedFee}} exceeds review ceiling {{ceiling}}",
-      "coarsePricing": "Priced from daily rates — fetch precise prices or confirm",
-      "coarsePricingValues": "{{quality}} / {{granularity}} price on {{wallet}}",
-      "priceValues": "Needed for {{requiredFor}} · {{route}}",
-      "basisValues": "Needs {{required}}, available {{available}} in {{wallet}}",
-      "ownershipAmountMismatch": "Recorded {{rowAmount}}, but owned outputs sum to {{ownedOutputs}}",
-      "ownershipLeg": "Candidate owned leg: {{amount}}",
-      "ownershipTransfer": "Proven from the on-chain transaction — an output paid another of your wallets, but the matching receipt couldn't be resolved automatically",
-      "ownedFanout": "The transaction pays more than one wallet you own, so each real receipt must be confirmed as its own carrying-value leg",
-      "conflictingSpend": "Two transactions spend the same input. Only the confirmed winner belongs in the journal",
-      "pendingConfirmation": "The synced chain payload explicitly reports this transaction as unconfirmed",
-      "nativeTransitionFeeTiming": "The custody link is proven, but the debit and receipt fall on different UTC dates or their timestamps are unavailable. Kassiber cannot automatically date the fee difference.",
-      "nativeTransitionAmountMismatch": "The link between the transactions is proven, but the recorded amounts and fees do not reconcile to a positive transfer.",
-      "nativeTransitionAmbiguous": "Native payment evidence matches more than one record. Kassiber needs a unique source before carrying its cost basis.",
-      "ownershipSourceMissing": "The receipt spends an output belonging to another connected wallet, but that wallet's outgoing record is missing.",
-      "collaborativeReview": "Wallet observations show your inputs and outputs. They do not yet explain which difference is your fee, a payment or another receipt in this shared transaction."
-    },
-    "nextAction": {
-      "price": "Set price, then process journals",
-      "pair": "Review pair, then process journals",
-      "basis": "Sync or import the funding acquisition, then process journals",
-      "fallback": "Resolve the source issue",
-      "splitTransfer": "Review split transfer/swap, then process journals",
-      "coarsePricing": "Fetch precise prices or confirm, then process journals",
-      "ownershipTransfer": "Pair it manually, or sync the destination wallet so its receipt is recorded, then process journals",
-      "ownershipConsolidation": "Several of your wallets funded this spend — review the consolidation and pair it, then process journals",
-      "ownershipAmountMismatch": "The recorded amount disagrees with the on-chain transaction — re-sync the wallet, then process journals",
-      "ownedFanout": "Confirm each real destination receipt separately, then process journals",
-      "conflictingSpend": "Sync confirmations, verify which transaction won, and exclude a loser only when the chain evidence is clear",
-      "pendingConfirmation": "Wait for confirmation or sync the wallet again, then process journals",
-      "nativeTransitionFeeTiming": "Review supporting records to establish when the fee difference was incurred.",
-      "nativeTransitionAmountMismatch": "Review the source amount and fee treatment against the complete recipient amount using supporting records.",
-      "nativeTransitionAmbiguous": "Check the matching records and their networks. Resolve duplicates or provide evidence identifying the payment.",
-      "ownershipSourceMissing": "Sync the sending wallet or import its missing history, then process journals.",
-      "collaborativeReview": "Review the connected wallet history and supporting records, then record the supported movements and fees in a custody component."
-    },
-    "action": {
-      "openTransaction": "Review details",
-      "openPricing": "Add price",
-      "openPairing": "Review transfer",
-      "openSyncReview": "Review sync issue",
-      "openConflictReview": "Review competing spend",
-      "openBasisReview": "Fix cost basis",
-      "openTaxReview": "Fix cost basis",
-      "nativeTransitionFeeTiming": "Review fee evidence",
-      "nativeTransitionAmountMismatch": "Review transfer quantities",
-      "nativeTransitionAmbiguous": "Review matching records",
-      "ownershipSourceMissing": "Review wallet sync",
-      "collaborativeReview": "Review movement evidence"
-    },
-    "resolvePlan": {
-      "button": "Resolve plan",
-      "eyebrow": "Bulk resolve",
-      "title": "Quarantine resolve plan",
-      "description": "A safe sequence for clearing this queue without guessing tax treatment.",
-      "summary": "{{count}} quarantined rows · {{steps}} repair steps before journal processing",
-      "summaryClear": "No quarantined rows need repair.",
-      "blocked": "{{count}} blocked",
-      "actionable": "{{count}} actionable",
-      "affectedRows": "Affected rows",
-      "moreRows_one": "+{{count}} more row",
-      "moreRows_other": "+{{count}} more rows",
-      "empty": "The queue is clear.",
-      "step": {
-        "sync-wallets": {
-          "title": "Sync or check wallet records",
-          "detail": "Rows where the recorded amount disagrees with owned on-chain outputs should be synced or inspected before anything else.",
-          "action": "Review sync issue"
-        },
-        "review-transfers": {
-          "title": "Review transfer decisions",
-          "detail": "Transfer, self-transfer, and split-swap rows need a human pairing decision before journals can trust the movement.",
-          "action": "Review first transfer"
-        },
-        "fix-basis": {
-          "title": "Review missing cost basis",
-          "detail": "These rows need acquisition lots or source context before tax reports can include their disposals.",
-          "action": "Review first basis gap"
-        },
-        "add-prices": {
-          "title": "Add or confirm prices",
-          "detail": "Missing or coarse prices can be resolved in the pricing tab, then saved through the queue.",
-          "action": "Add first price"
-        },
-        "review-other": {
-          "title": "Review remaining blockers",
-          "detail": "These rows need a case-by-case check because they do not fit a safer bulk category.",
-          "action": "Review first row"
-        },
-        "process": {
-          "title": "Process journals",
-          "detail": "Run this after the repair steps. Anything still unsafe will stay quarantined.",
-          "action": "Process journals"
-        }
-      }
     },
     "cause": {
       "ownershipSourceMissing": {
@@ -470,9 +298,9 @@
         "provide": "Review the custody component and create a new revision."
       },
       "reviewedSuspense": {
-        "title": "A reviewed route keeps part in suspense",
-        "why": "Part of a reviewed custody route is deliberately held in suspense, so later cost basis is not final.",
-        "provide": "Resolve the suspended part: connect the wallet it went to or record what happened to it."
+        "title": "Part of a reviewed transfer is unexplained",
+        "why": "A transfer you reviewed moved less than it took, and the difference is held open, so cost basis from here on can't be final.",
+        "provide": "Connect the wallet the difference went to, or record what happened to it."
       },
       "quantityOther": {
         "title": "Custody of these coins is unresolved",
@@ -480,9 +308,9 @@
         "provide": "Open the transaction; connecting the missing wallet or reviewing the route resolves it."
       },
       "basisBarrier": {
-        "title": "Waiting for an earlier problem",
-        "why": "An earlier transaction in this holding is unresolved ({{root}}), so the cost basis from that point on is not final.",
-        "provide": "Nothing to do here: this clears automatically once the earlier transaction is resolved."
+        "title": "Waiting on an earlier transaction",
+        "why": "An earlier transaction ({{root}}) is unresolved, so cost basis from that point on can't be final.",
+        "provide": "Nothing to do here. This clears once the earlier transaction is resolved."
       },
       "pairDependency": {
         "title": "Part of a blocked transfer chain",
@@ -612,6 +440,11 @@
         "amount": "an unknown amount",
         "date": "earlier date",
         "root": "see the cause above"
+      },
+      "reviewedSuspensePair": {
+        "title": "A transfer pair doesn't add up",
+        "why": "This transaction is paired with another as a move between your wallets, but less arrived than left. The difference is held open, so cost basis from here on can't be final.",
+        "provide": "Open the pair and check that both sides are the same movement. If they are unrelated, unpair them; if it is a real transfer, record where the difference went."
       }
     },
     "category": {
@@ -634,32 +467,13 @@
       "attachEvidence": "Attach evidence",
       "waitForConfirmation": "Waiting for confirmation",
       "resolveRoot": "Open cause",
-      "processJournals": "Recalculate",
+      "processJournals": "Recalculate journals",
       "openTransaction": "Open transaction",
-      "askAssistant": "Investigate with assistant"
+      "askAssistant": "Investigate with assistant",
+      "reviewPair": "Review the pair"
     },
     "panel": {
-      "title": "Why is something in quarantine?",
-      "intro": "Kassiber holds a transaction back from the tax journals when the evidence is not enough to book it correctly. It never guesses a taxable event. Each cause below says what is missing and what you can provide.",
-      "counts_one": "{{count}} transaction in quarantine",
-      "counts_other": "{{count}} transactions in quarantine",
-      "blocking_one": "{{count}} blocks all reports",
-      "blocking_other": "{{count}} block all reports",
-      "downstream_one": "{{count}} clears with its cause",
-      "downstream_other": "{{count}} clear with their cause",
-      "reportsBlocked": "Tax and portfolio reports stay blocked until the causes marked “Blocks reports” are resolved.",
-      "causesTitle": "Causes, oldest first",
-      "causesHint": "Resolving an earlier cause often clears later rows, so work from the top.",
-      "moreCauses_one": "{{count}} more cause is listed in the table below.",
-      "moreCauses_other": "{{count}} more causes are listed in the table below.",
       "blocksReports": "Blocks reports",
-      "dependents_one": "{{count}} dependent transaction clears automatically once this is resolved.",
-      "dependents_other": "{{count}} dependent transactions clear automatically once this is resolved.",
-      "affected_one": "{{count}} transaction",
-      "affected_other": "{{count}} transactions",
-      "wallets": "Wallets: {{wallets}}",
-      "since": "Since {{date}}",
-      "whatToProvide": "What to provide",
       "deprecatedWallet": "{{wallet}} is marked deprecated, so “Refresh all” skips it; sync it on its own.",
       "gapReviewLocked": "Custody-gap review is currently part of the developer tools. Connect the missing wallet or ask the assistant to investigate.",
       "syncStartedTitle": "Syncing {{wallet}}",
@@ -669,11 +483,10 @@
     },
     "freshness": {
       "staleTitle": "This list may be outdated",
-      "staleBody": "Transactions changed after journals were last processed ({{when}}). Recalculate to see the current quarantine.",
+      "staleBody": "Your transactions changed after the journals were last calculated ({{when}}). Recalculate to update this list.",
       "neverBody": "Journals have not been processed yet. Recalculate to see which transactions need attention.",
       "failedTitle": "The last journal update failed",
-      "failedBody": "{{message}} The list shows the state before that attempt.",
-      "unknownTime": "unknown time"
+      "failedBody": "{{message}} The list shows the state before that attempt."
     },
     "assumptions": {
       "title": "Assumptions Kassiber made",
@@ -695,7 +508,42 @@
       "previous": "Previous",
       "next": "Next"
     },
-    "impactFollows": "Clears with its cause"
+    "page": {
+      "description": "Transactions Kassiber can't book yet are held out of your tax journals and reports until their cause is fixed. They stay in their wallets, and wallet balances still include them."
+    },
+    "summary": {
+      "needsYou_one": "{{count}} transaction needs you",
+      "needsYou_other": "{{count}} transactions need you",
+      "waiting_one": "{{count}} more only waits on it and clears by itself.",
+      "waiting_other": "{{count}} more only wait on these and clear by themselves.",
+      "reportsBlocked": "Tax and portfolio reports stay blocked until this is fixed."
+    },
+    "causes": {
+      "title": "What to fix",
+      "whatToDo": "What to do",
+      "waiting_one": "{{count}} later transaction waits on this and clears once it is fixed.",
+      "waiting_other": "{{count}} later transactions wait on this and clear once it is fixed.",
+      "showWaiting": "Show them",
+      "more_one": "{{count}} more cause is in the list below.",
+      "more_other": "{{count}} more causes are in the list below.",
+      "count_one": "{{count}} transaction",
+      "count_other": "{{count}} transactions"
+    },
+    "queue": {
+      "scope": {
+        "attention": "Needs you",
+        "waiting": "Waiting",
+        "all": "All"
+      },
+      "scopeAria": "Which transactions to list",
+      "waitsOn": "Waits on {{root}}",
+      "attentionEmpty": "Nothing needs you right now.",
+      "waitingEmpty": "No transaction is waiting on another."
+    },
+    "fact": {
+      "pairTxidsDiffer": "The two sides are different on-chain transactions; one movement between your wallets has a single transaction id.",
+      "pairReceiptFirst": "The receipt is dated before the payment it is paired with."
+    }
   },
   "review": {
     "column": {

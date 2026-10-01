@@ -8,6 +8,7 @@ import type {
   QuarantineEvidence,
   QuarantineGroup,
   QuarantineItem,
+  QuarantineScope,
 } from "./types";
 
 // One reading of a quarantine reason for every surface (cause cards, the
@@ -47,6 +48,7 @@ export type CauseKey =
   | "searchCapacity"
   | "componentProblem"
   | "reviewedSuspense"
+  | "reviewedSuspensePair"
   | "quantityOther"
   | "basisBarrier"
   | "pairDependency"
@@ -134,6 +136,7 @@ export const CAUSE_KEYS = Array.from(
     ...Object.values(BLOCKER_CAUSES),
     "componentProblem",
     "quantityOther",
+    "reviewedSuspensePair",
   ]),
 );
 
@@ -183,6 +186,7 @@ const CAUSE_CATEGORIES: Record<CauseKey, QuarantineCategory> = {
   searchCapacity: "needs_decision",
   componentProblem: "needs_decision",
   reviewedSuspense: "needs_decision",
+  reviewedSuspensePair: "needs_decision",
   quantityOther: "needs_decision",
   unclassifiedIncome: "needs_decision",
   nonSaleDisposal: "needs_decision",
@@ -200,6 +204,10 @@ export function causeKeyFor(
     const blocker =
       evidence?.blocker_code ??
       (typeof detail?.blocker_code === "string" ? detail.blocker_code : "");
+    // A suspense left by a pair reads as the pair, which is what to check.
+    if (blocker === "reviewed_residual_suspense" && evidence?.pair_id) {
+      return "reviewedSuspensePair";
+    }
     if (blocker && BLOCKER_CAUSES[blocker]) return BLOCKER_CAUSES[blocker];
     if (blocker.startsWith("custody_component_")) return "componentProblem";
     return "quantityOther";
@@ -285,6 +293,20 @@ export function causeCopy(context: CauseContext, typedT: TFunction<"journals">):
   };
 }
 
+/**
+ * Observed facts behind a cause, in the user's words: what Kassiber saw that
+ * the user can check, not a verdict.
+ */
+export function causeFacts(
+  evidence: QuarantineEvidence | null | undefined,
+  t: TFunction<"journals">,
+): string[] {
+  const facts: string[] = [];
+  if (evidence?.pair_txids_differ) facts.push(t("quarantine.fact.pairTxidsDiffer"));
+  if (evidence?.pair_receipt_before_spend) facts.push(t("quarantine.fact.pairReceiptFirst"));
+  return facts;
+}
+
 export function categoryLabel(category: QuarantineCategory, t: TFunction<"journals">) {
   return (t as unknown as DynamicT)(`quarantine.category.${category}`);
 }
@@ -304,6 +326,7 @@ export function sheetTabForCause(
   }
   if (category === "missing_acquisition_history") return "tax";
   if (
+    key === "reviewedSuspensePair" ||
     key === "ownershipSourceAmbiguous" ||
     key === "ownershipDestinationAmbiguous" ||
     key === "nativeTransitionAmbiguous" ||
@@ -368,6 +391,8 @@ export function actionLabel(action: QuarantineAction, t: TFunction<"journals">) 
       return t("quarantine.cta.waitForConfirmation");
     case "resolve_root":
       return t("quarantine.cta.resolveRoot");
+    case "review_pair":
+      return t("quarantine.cta.reviewPair");
     case "process_journals":
       return t("quarantine.cta.processJournals");
     default:
@@ -427,5 +452,24 @@ export function quarantineDetailContext(
     category: item.category,
     evidence: item.evidence ?? {},
     rootLabel: item.root ? quarantineRootLabel(item.root) : null,
+  };
+}
+
+export const QUARANTINE_SCOPES: QuarantineScope[] = ["attention", "waiting", "all"];
+
+/** A row waits when it only follows a named cause and clears with it. */
+export function isWaiting(item: QuarantineItem) {
+  return Boolean(item.is_downstream && item.root);
+}
+
+/** Which sheet tab opens a row, and the reading it is opened with. */
+export function quarantineRowTarget(item: QuarantineItem): {
+  tab: QuarantineSheetTab;
+  context: QuarantineDetailContext | null;
+} {
+  const category = item.category ?? categoryForReason(item.reason, item.evidence, item.detail);
+  return {
+    tab: sheetTabForCause(item.reason, category, item.evidence),
+    context: quarantineDetailContext(item),
   };
 }
