@@ -42,6 +42,7 @@ ACTION_IMPORT_HISTORY = "import_history"
 ACTION_SET_PRICE = "set_price"
 ACTION_CLASSIFY = "classify"
 ACTION_PAIR_TRANSFER = "pair_transfer"
+ACTION_REVIEW_PAIR = "review_pair"
 ACTION_REVIEW_CUSTODY_GAP = "review_custody_gap"
 ACTION_ATTACH_EVIDENCE = "attach_evidence"
 ACTION_WAIT_FOR_CONFIRMATION = "wait_for_confirmation"
@@ -180,6 +181,12 @@ _QUANTITY_BLOCKERS: dict[str, ReasonInfo] = {
         CATEGORY_NEEDS_DECISION, ACTION_REVIEW_CUSTODY_GAP
     ),
     "source_overlap_quantity_unresolved": _info(CATEGORY_NEEDS_DECISION),
+    # A reviewed route moved less than it took: the difference is held in
+    # suspense. Most often a pair joined two transactions that are not one
+    # movement, so the pair itself is what to look at first.
+    "reviewed_residual_suspense": _info(
+        CATEGORY_NEEDS_DECISION, ACTION_REVIEW_PAIR, ACTION_REVIEW_CUSTODY_GAP
+    ),
     "unclaimed_source_residual": _info(
         CATEGORY_NEEDS_DECISION, ACTION_CONNECT_WALLET, ACTION_ATTACH_EVIDENCE
     ),
@@ -213,6 +220,12 @@ def reason_info(reason: str, detail: Mapping[str, Any] | None = None) -> ReasonI
 
 def is_downstream(reason: str) -> bool:
     return reason_info(reason).downstream
+
+
+#: Every stored reason that only follows another transaction's problem.
+DOWNSTREAM_REASONS: tuple[str, ...] = tuple(
+    sorted(reason for reason, info in _REASONS.items() if info.downstream)
+)
 
 
 def quantity_blocker_rank(blocker_code: str) -> tuple[int, str]:
@@ -253,6 +266,7 @@ __all__ = [
     "ACTION_PROCESS_JOURNALS",
     "ACTION_RESOLVE_ROOT",
     "ACTION_REVIEW_CUSTODY_GAP",
+    "ACTION_REVIEW_PAIR",
     "ACTION_SET_PRICE",
     "ACTION_SYNC_WALLET",
     "ACTION_WAIT_FOR_CONFIRMATION",
@@ -264,6 +278,7 @@ __all__ = [
     "CATEGORY_MISSING_WALLET_HISTORY",
     "CATEGORY_NEEDS_DECISION",
     "CATEGORY_UNSUPPORTED",
+    "DOWNSTREAM_REASONS",
     "ReasonInfo",
     "is_downstream",
     "primary_reasons",

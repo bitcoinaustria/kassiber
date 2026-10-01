@@ -151,14 +151,32 @@ when several issues apply, every `blocker_codes`/`issue_ids` plus `gap_ids`.
 `blocks_reports` (the row is named by a persisted custody quantity issue, which
 blocks every report), `is_downstream`, `root`, `reasons`, normalized
 `evidence` (wallet labels instead of ids, required/available msat, gap id) and
-ordered `actions`. The snapshot also groups rows by root cause, orders roots
-before their consequences and oldest first, pages with `offset`, and lists
+ordered `actions`, plus the `group_key` of the cause it belongs to. The
+snapshot also groups rows by root cause (each group names up to 25 of its
+`root_transaction_ids` and its `root_count`), orders roots before their
+consequences and oldest first, pages with `offset`, and lists
 `assumptions`: outflows booked as disposals only because no owned destination
 is known, and kind-less receipts booked as purchases at market value. Neither
 assumption is a quarantine, but both change results when the owner has an
-unconnected wallet. The desktop shows these causes above the table, keeps the
-gap editor behind developer tools, and offers exclusion only for price and
-decision questions.
+unconnected wallet. An optional `scope` picks which rows a page lists:
+`attention` (root causes, plus downstream rows whose root cannot be named),
+`waiting` (rows that only follow a named root) or `all` (the default); the
+summary always covers the whole book and reports `attention_count`,
+`waiting_count` and the listed scope's `scope_count`. `ui.review.badges`
+reports `quarantine_attention` beside the row count: the root causes, or every
+held row when none is on record, so the side-nav counts what needs the user.
+
+A `reviewed_residual_suspense` hold most often comes from a pair whose legs
+are not one movement: a pair review splits whatever the source sent beyond
+the destination and fee into a suspense leg. When the held transaction is one
+leg of a current pair, the evidence names the `pair_id` and the other leg, and
+says whether the legs carry different same-asset txids or the receipt
+predates the spend; the first action is `review_pair`, which opens that pair
+where it can be unpaired. Unpairing removes the suspense on the next journal
+run.
+
+The desktop shows these causes above the table, keeps the gap editor behind
+developer tools, and offers exclusion only for price and decision questions.
 
 ## Desktop review
 
