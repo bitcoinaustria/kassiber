@@ -18,3 +18,8 @@ name = "kassiber_tax_core"
 num-bigint = "0.4"
 num-integer = "0.1"
 num-traits = "0.2"
+# The JSON boundary: request and response documents (schema_version 1).
+# Both build with Rust 1.77. Cargo.lock holds serde at 1.0.228 because
+# serde_derive 1.0.229 moved to syn 3, a second copy next to pyo3's syn 2.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
