@@ -16,6 +16,9 @@ Its minimal release notifier delegates the GitHub request to the bundled CLI
 sidecar rather than carrying a second HTTP client. The desktop and CLI
 coordinate update-check consent revocation with an owner-only advisory lock;
 the native side uses `fs2` for the cross-platform file-lock primitive.
+Kassiber's own tax engine is a Rust crate (`tax-engine/`, AGPL-3.0-only) built
+as a Python extension; the rows below list its direct Rust dependencies, and
+`tax-engine/Cargo.lock` is the transitive inventory.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
@@ -50,6 +53,10 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `tauri-plugin-window-state` | `~2.4` (Windows and Linux only) | Remembers the main window's size, position, and maximized state across launches, restoring a position only onto a connected monitor. macOS uses AppKit's frame autosave instead | Apache-2.0 OR MIT |
 | `windows-native-keyring-store` | `1.0.0` | Windows user-scope credential backend for AI provider API keys | MIT OR Apache-2.0 |
 | `zbus-secret-service-keyring-store` | `1.0.0` | Linux Secret Service backend for AI provider API keys | MIT OR Apache-2.0 |
+| `pyo3` | `0.25.1` | Python binding for the tax engine (abi3, CPython 3.10 and newer); 0.24.1 or newer is required for RUSTSEC-2025-0020 | MIT OR Apache-2.0 |
+| `num-bigint` / `num-integer` / `num-traits` | `0.4` / `0.1` / `0.2` | Arbitrary-precision coefficients for the tax engine's CPython-compatible decimal type | MIT OR Apache-2.0 |
+| `serde` / `serde_json` | `1.0.228` / `1` | JSON request and response documents at the tax engine's Python boundary | MIT OR Apache-2.0 |
+| `maturin` | `1.15.0` (exact, build only) | Builds the tax engine's Python binding during `uv sync --locked`; not shipped | MIT OR Apache-2.0 |
 
 ## Notable downstream license note
 
