@@ -53,6 +53,7 @@ export function QuarantineQueue({
   onScopeChange,
   onOffsetChange,
   onOpenTransaction,
+  onHide,
 }: {
   items: QuarantineItem[];
   scope: QuarantineScope;
@@ -65,6 +66,8 @@ export function QuarantineQueue({
   hideSensitive: boolean;
   onScopeChange: (scope: QuarantineScope) => void;
   onOffsetChange: (offset: number) => void;
+  /** Folds the list away again. */
+  onHide?: () => void;
   onOpenTransaction: (
     transactionId: string,
     tab: QuarantineSheetTab,
@@ -82,7 +85,14 @@ export function QuarantineQueue({
   return (
     <section className="kb-surface" aria-label={t("quarantine.tableTitle")}>
       <div className="flex flex-col gap-3 border-b p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
-        <h2 className="text-sm font-medium sm:text-base">{t("quarantine.tableTitle")}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium sm:text-base">{t("quarantine.tableTitle")}</h2>
+          {onHide ? (
+            <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={onHide}>
+              {t("quarantine.queue.hide")}
+            </Button>
+          ) : null}
+        </div>
         {/* A selector, not an action: drawn as tabs so it reads as "what you
             are looking at" beside the page's buttons. */}
         <Tabs value={scope} onValueChange={(next) => onScopeChange(next as QuarantineScope)}>
