@@ -32,11 +32,10 @@ pub(crate) struct Fragment {
 }
 
 /// What consuming one taxable event produced.
-// The multi-asset runner reads these; the single-asset pass does not.
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub(crate) struct EventComputation {
     /// Index of the event in the asset's entry list.
+    #[allow(dead_code)] // Callers know the event they consumed.
     pub event: usize,
     /// Number of fragments appended for it.
     pub fragments: usize,
@@ -76,8 +75,8 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    /// The next taxable event, if any.
-    #[allow(dead_code)] // Interleaving runners order cursors by it.
+    /// The next taxable event, if any (interleaving runners order cursors
+    /// by it).
     pub fn peek(&self) -> Option<&'a Entry> {
         self.events
             .get(self.next)
@@ -92,8 +91,8 @@ impl<'a> Cursor<'a> {
             .collect()
     }
 
-    /// Lot and basis state, for runners that set basis overrides.
-    #[allow(dead_code)] // The Austrian runner writes carried basis here.
+    /// Lot and basis state, for runners that set basis overrides (the
+    /// Austrian runner writes carried basis here).
     pub fn state_mut(&mut self) -> &mut LotState {
         &mut self.state
     }

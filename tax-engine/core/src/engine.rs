@@ -6,12 +6,13 @@
 
 use std::collections::HashSet;
 
+use crate::austria;
 use crate::cursor::{Cursor, Fragment};
 use crate::decimal::Decimal;
 use crate::entry::Entry;
 use crate::error::{EngineError, EngineResult};
 use crate::methods::{lot_method, LotView};
-use crate::model::{AssetInput, AssetOutput, CountrySpec, Dec, EntryKind, MethodName};
+use crate::model::{AssetInput, AssetOutput, CountrySpec, Dec, EntryKind, ErrorBody, MethodName};
 use crate::num::{lt13, zero};
 use crate::outputs::{
     balances, fragment_values, gain_loss_out, open_positions, sold_percentages, yearly,
@@ -49,6 +50,48 @@ impl Country {
             Country::Generic { long_term_days } => long_term_days,
             Country::Austria => i64::MAX,
         }
+    }
+}
+
+/// One asset's constructed entries: what the adapter holds after building
+/// its transaction sets, before any computation.
+pub(crate) struct ParsedAsset {
+    pub asset: String,
+    /// Every entry, in insertion order.
+    pub entries: Vec<Entry>,
+}
+
+impl ParsedAsset {
+    /// Runs every constructor and the per-set duplicate-row check, failing
+    /// as building RP2's transaction sets does.
+    pub fn new(input: &AssetInput) -> EngineResult<Self> {
+        let entries = input
+            .entries
+            .iter()
+            .map(|entry| Entry::from_input(entry, None))
+            .collect::<EngineResult<Vec<_>>>()?;
+        for entry in &entries {
+            if entry.asset != input.asset {
+                return Err(EngineError::value(format!(
+                    "Attempting to add a {} entry to a {} set",
+                    entry.asset, input.asset
+                )));
+            }
+        }
+        // Each TransactionSet rejects a repeated row as it is added.
+        for kind in [EntryKind::In, EntryKind::Out, EntryKind::Intra] {
+            reject_duplicates(entries.iter().filter(|e| e.kind == kind))?;
+        }
+        Ok(ParsedAsset {
+            asset: input.asset.clone(),
+            entries,
+        })
+    }
+
+    /// Indices of the entries of `kind` RP2's set iteration yields, in its
+    /// order.
+    pub fn visible(&self, kind: EntryKind) -> Vec<usize> {
+        visible_sorted(&self.entries, kind)
     }
 }
 
@@ -95,23 +138,12 @@ impl PreparedAsset {
     /// as RP2 does before the first taxable event: on an invalid entry, a
     /// duplicate row, or no visible lot.
     pub fn new(input: &AssetInput) -> EngineResult<Self> {
-        let entries = input
-            .entries
-            .iter()
-            .map(|entry| Entry::from_input(entry, None))
-            .collect::<EngineResult<Vec<_>>>()?;
-        for entry in &entries {
-            if entry.asset != input.asset {
-                return Err(EngineError::value(format!(
-                    "Attempting to add a {} entry to a {} set",
-                    entry.asset, input.asset
-                )));
-            }
-        }
-        // Each TransactionSet rejects a repeated row as it is added.
-        for kind in [EntryKind::In, EntryKind::Out, EntryKind::Intra] {
-            reject_duplicates(entries.iter().filter(|e| e.kind == kind))?;
-        }
+        Self::from_parsed(ParsedAsset::new(input)?)
+    }
+
+    /// Builds the views `compute_tax` iterates from constructed entries.
+    pub fn from_parsed(parsed: ParsedAsset) -> EngineResult<Self> {
+        let ParsedAsset { asset, entries } = parsed;
         let ins = visible_sorted(&entries, EntryKind::In);
         let outs = visible_sorted(&entries, EntryKind::Out);
         let intras = visible_sorted(&entries, EntryKind::Intra);
@@ -156,7 +188,7 @@ impl PreparedAsset {
             ));
         }
         Ok(PreparedAsset {
-            asset: input.asset.clone(),
+            asset,
             entries,
             ins,
             outs,
@@ -178,13 +210,14 @@ pub(crate) fn compute_asset(
         &prepared.entries,
         &prepared.lots,
         &prepared.events,
-        lot_method(method)?,
+        lot_method(method, &prepared.entries, &prepared.lots),
     );
     let mut fragments = Vec::new();
     cursor.run(&mut fragments)?;
-    // RP2 replays the whole pass to snapshot open-position basis. For lot
-    // methods the replay repeats the first pass exactly, so the snapshot is
-    // taken from this cursor. A pool method's replay belongs here.
+    // RP2 replays the whole pass to snapshot open-position basis. Without
+    // carried basis (a single asset has none) the replay starts from the
+    // same state and repeats this pass exactly, for lot and pool methods
+    // alike, so the snapshot is taken from this cursor.
     let open_basis = cursor.open_position_basis()?.unwrap_or_default();
     let effective_basis = cursor.effective_basis();
     finish(
@@ -220,15 +253,31 @@ pub(crate) fn finish(
     }
     let balances = balances(entries, &prepared.ins, &prepared.outs, &prepared.intras)?;
     let sold = sold_percentages(fragments, lots)?;
+    let mut gain_losses: Vec<_> = fragments
+        .iter()
+        .zip(&values)
+        .map(|(fragment, value)| gain_loss_out(fragment, value, entries, lots))
+        .collect();
+    if country == Country::Austria {
+        // Kassiber classifies every row of an Austrian book, whatever the
+        // method; a failure aborts the report only when Kassiber reaches it.
+        for ((out, fragment), value) in gain_losses.iter_mut().zip(fragments).zip(&values) {
+            match austria::classify(fragment, &value.fiat_gain, entries, lots) {
+                Ok(category) => out.at_category = Some(category.as_str().to_owned()),
+                Err(error) => {
+                    out.at_category_error = Some(ErrorBody {
+                        class: error.class,
+                        message: error.message,
+                    })
+                }
+            }
+        }
+    }
     Ok(AssetOutput {
         asset: prepared.asset.clone(),
         in_transactions: lots.iter().map(|lot| lot.row).collect(),
         in_fiat_in_with_fee: effective_basis.iter().cloned().map(Dec).collect(),
-        gain_losses: fragments
-            .iter()
-            .zip(&values)
-            .map(|(fragment, value)| gain_loss_out(fragment, value, entries, lots))
-            .collect(),
+        gain_losses,
         yearly,
         open_positions: open_positions(lots, &sold, open_basis),
         balances,

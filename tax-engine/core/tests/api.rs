@@ -1,5 +1,5 @@
-//! The JSON boundary: request validation and the operations the engine does
-//! not implement yet. RP2 parity itself is checked by `engine_fixtures`.
+//! The JSON boundary: request validation and response shapes. RP2 parity
+//! itself is checked by `engine_fixtures`.
 
 use kassiber_tax_core::{check_entry, compute};
 use serde_json::{json, Value};
@@ -125,17 +125,33 @@ fn malformed_requests_are_request_errors() {
 }
 
 #[test]
-fn unimplemented_methods_and_operations_are_unsupported() {
-    for (method, operation) in [
-        ("moving_average", "compute"),
-        ("moving_average_at", "compute"),
-        ("fifo", "compute_multi"),
-        ("fifo", "validate"),
-    ] {
-        let response = compute(&compute_request(method, operation, one_asset()));
-        let (class, message) = error(&response).expect("unsupported request fails");
-        assert_eq!(class, "Unsupported", "{method} {operation}");
-        assert!(message.contains("not support"), "{message}");
+fn country_hooks_answer_without_assets_outside_austria() {
+    let parse =
+        |response: String| -> Value { serde_json::from_str(&response).expect("response is JSON") };
+    // Generic books have no country hooks: validation passes and the
+    // multi-asset runner declines, so the caller computes each asset.
+    let validated = parse(compute(&compute_request("fifo", "validate", one_asset())));
+    assert_eq!(validated, json!({"schema_version": 1, "ok": true}));
+    let multi = parse(compute(&compute_request(
+        "moving_average",
+        "compute_multi",
+        one_asset(),
+    )));
+    assert_eq!(
+        multi,
+        json!({"schema_version": 1, "ok": true, "handled": false})
+    );
+    let two = json!([
+        {"asset": "BTC", "entries": [buy()]},
+        {"asset": "BTC", "entries": [buy()]}
+    ]);
+    assert_eq!(
+        error(&compute(&compute_request("fifo", "validate", two))).map(|(class, _)| class),
+        Some("RequestError".to_owned())
+    );
+    for method in ["moving_average", "moving_average_at"] {
+        let response = compute(&compute_request(method, "compute", one_asset()));
+        assert_eq!(error(&response), None, "{method}");
     }
 }
 

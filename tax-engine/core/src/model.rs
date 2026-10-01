@@ -375,10 +375,17 @@ pub struct AssetOutput {
     pub balances: Vec<BalanceOut>,
 }
 
-/// The response to a successful `compute`.
+/// The response to a successful `compute`, `compute_multi`, or `validate`.
 #[derive(Clone, Debug, Serialize)]
 pub struct ComputeResponse {
     pub schema_version: u32,
     pub ok: bool,
-    pub assets: Vec<AssetOutput>,
+    /// `compute_multi` only: whether the Austrian runner ran. `false` (no
+    /// swap pairs) means the caller computes each asset with `compute`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handled: Option<bool>,
+    /// Per asset, in request order. Absent for `validate` and for an
+    /// unhandled `compute_multi`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assets: Option<Vec<AssetOutput>>,
 }

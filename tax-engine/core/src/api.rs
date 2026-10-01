@@ -3,6 +3,11 @@
 //! Each function parses one request document and returns one response
 //! document. Malformed requests fail with the `RequestError` class; every
 //! other failure carries RP2's class and message.
+//!
+//! `compute` runs one asset (RP2's `compute_tax`). `validate` and
+//! `compute_multi` take every asset of a run, in the adapter's order: they
+//! are the country hooks `validate_input_data` and `compute_tax_for_assets`,
+//! which only Austria implements.
 
 use serde::Serialize;
 
@@ -10,9 +15,10 @@ use crate::engine::{compute_asset, Country};
 use crate::entry::Entry;
 use crate::error::{EngineError, EngineResult, ErrorClass};
 use crate::model::{
-    CheckEntryRequest, CheckEntryResponse, ComputeRequest, ComputeResponse, ErrorBody,
-    ErrorResponse, MethodName, Operation, SCHEMA_VERSION,
+    AssetOutput, CheckEntryRequest, CheckEntryResponse, ComputeRequest, ComputeResponse, ErrorBody,
+    ErrorResponse, Operation, SCHEMA_VERSION,
 };
+use crate::swaps;
 
 /// Serializes a response; serializing these types cannot fail, but a
 /// failure still becomes an error document rather than a panic.
@@ -97,37 +103,30 @@ fn compute_inner(request: &str) -> EngineResult<ComputeResponse> {
     let request: ComputeRequest = parse(request)?;
     check_version(request.schema_version)?;
     let country = Country::from_spec(&request.country);
-    match request.operation {
-        Operation::Compute => {}
-        Operation::ComputeMulti | Operation::Validate => {
-            return Err(EngineError::unsupported(format!(
-                "the native tax engine does not support the '{}' operation yet",
-                match request.operation {
-                    Operation::ComputeMulti => "compute_multi",
-                    _ => "validate",
-                }
-            )));
-        }
-    }
-    if matches!(
-        request.method,
-        MethodName::MovingAverage | MethodName::MovingAverageAt
-    ) {
-        return Err(EngineError::unsupported(format!(
-            "the native tax engine does not support the '{}' accounting method yet",
-            request.method.as_str()
-        )));
-    }
-    let [asset] = request.assets.as_slice() else {
-        return Err(EngineError::request(format!(
-            "compute takes exactly one asset, got {}",
-            request.assets.len()
-        )));
-    };
-    let output = compute_asset(asset, country, request.method)?;
-    Ok(ComputeResponse {
+    let response = |handled: Option<bool>, assets: Option<Vec<AssetOutput>>| ComputeResponse {
         schema_version: SCHEMA_VERSION,
         ok: true,
-        assets: vec![output],
-    })
+        handled,
+        assets,
+    };
+    match request.operation {
+        Operation::Compute => {
+            let [asset] = request.assets.as_slice() else {
+                return Err(EngineError::request(format!(
+                    "compute takes exactly one asset, got {}",
+                    request.assets.len()
+                )));
+            };
+            let output = compute_asset(asset, country, request.method)?;
+            Ok(response(None, Some(vec![output])))
+        }
+        Operation::Validate => {
+            swaps::validate(&request.assets, country)?;
+            Ok(response(None, None))
+        }
+        Operation::ComputeMulti => {
+            let outputs = swaps::compute_multi(&request.assets, country, request.method)?;
+            Ok(response(Some(outputs.is_some()), outputs))
+        }
+    }
 }

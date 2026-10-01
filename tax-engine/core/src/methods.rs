@@ -3,8 +3,8 @@
 //! A [`LotMethod`] answers one seek at a time, as RP2's accounting-method
 //! plugins do. FIFO walks the lot list; LIFO, HIFO, and LOFO rank lots in a
 //! [`PyHeap`] with RP2's sort keys and its non-transitive 13-place
-//! comparison. Pool methods (moving averages) implement the same trait and
-//! override [`LotMethod::open_position_basis`].
+//! comparison. Pool methods (moving averages, in `pool`) implement the same
+//! trait and override [`LotMethod::open_position_basis`].
 
 use std::cmp::Ordering;
 
@@ -14,6 +14,7 @@ use crate::error::{EngineError, EngineResult};
 use crate::heap::PyHeap;
 use crate::model::MethodName;
 use crate::num::{cmp13, div, eq13, gt13, lt13, neg, zero};
+use crate::pool::{MovingAverage, MovingAverageAt};
 
 /// What a method needs to know about one lot (an `InTransaction`), in
 /// lot-list order.
@@ -71,7 +72,12 @@ impl LotState {
     /// The tail every lot-method seek shares once a lot is chosen: clear its
     /// partial entry and report the per-unit override when its effective
     /// basis differs from `fiat_in_with_fee`.
-    fn take(&mut self, lots: &[LotView], lot: usize, amount: Decimal) -> EngineResult<Selection> {
+    pub fn take(
+        &mut self,
+        lots: &[LotView],
+        lot: usize,
+        amount: Decimal,
+    ) -> EngineResult<Selection> {
         self.partial[lot] = Some(zero());
         let basis = self.basis(lots, lot);
         let unit_cost_basis_override = if eq13(basis, &lots[lot].fiat_in_with_fee)? {
@@ -143,26 +149,25 @@ pub(crate) trait LotMethod {
     ) -> EngineResult<()>;
 }
 
-/// Builds the selection for `method`, or reports that it is not
-/// implemented yet.
-pub(crate) fn lot_method(method: MethodName) -> EngineResult<Box<dyn LotMethod>> {
+/// Builds the selection for `method` over one asset's lots.
+pub(crate) fn lot_method<'a>(
+    method: MethodName,
+    entries: &'a [Entry],
+    lots: &'a [LotView],
+) -> Box<dyn LotMethod + 'a> {
     match method {
-        MethodName::Fifo => Ok(Box::new(Fifo::default())),
-        MethodName::Lifo => Ok(Box::new(Ranked::new(Rank::Lifo))),
-        MethodName::Hifo => Ok(Box::new(Ranked::new(Rank::Hifo))),
-        MethodName::Lofo => Ok(Box::new(Ranked::new(Rank::Lofo))),
-        MethodName::MovingAverage | MethodName::MovingAverageAt => {
-            Err(EngineError::unsupported(format!(
-                "the native tax engine does not support the '{}' accounting method yet",
-                method.as_str()
-            )))
-        }
+        MethodName::Fifo => Box::new(Fifo::default()),
+        MethodName::Lifo => Box::new(Ranked::new(Rank::Lifo)),
+        MethodName::Hifo => Box::new(Ranked::new(Rank::Hifo)),
+        MethodName::Lofo => Box::new(Ranked::new(Rank::Lofo)),
+        MethodName::MovingAverage => Box::new(MovingAverage::default()),
+        MethodName::MovingAverageAt => Box::new(MovingAverageAt::new(entries, lots)),
     }
 }
 
 /// FIFO: the first lot in list order that is not exhausted.
 #[derive(Debug, Default)]
-struct Fifo {
+pub(crate) struct Fifo {
     /// RP2's `from_index`: lots before it are known to be exhausted.
     from_index: usize,
 }
