@@ -1,0 +1,20 @@
+[package]
+name = "kassiber-tax-core"
+description = "Kassiber's tax engine: pure lot, pool, and gain computation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+name = "kassiber_tax_core"
+
+[dependencies]
+# Arbitrary-precision coefficients for the CPython-compatible decimal type.
+# num-integer and num-traits are num-bigint's own dependencies; the decimal
+# module uses their traits directly. All three build with Rust 1.60+.
+num-bigint = "0.4"
+num-integer = "0.1"
+num-traits = "0.2"

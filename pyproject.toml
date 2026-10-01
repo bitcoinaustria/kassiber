@@ -24,6 +24,7 @@ dependencies = [
   "keyring>=25.6,<26",
   "certifi>=2024.7.4",
   "lwk==0.18.0; (platform_system == 'Darwin' and platform_machine == 'arm64') or (platform_system == 'Linux' and platform_machine == 'x86_64') or (platform_system == 'Windows' and platform_machine == 'AMD64')",
+  "kassiber-tax",
 ]
 
 [dependency-groups]
@@ -36,6 +37,14 @@ dev = [
 
 [project.scripts]
 kassiber = "kassiber.cli.main:main"
+
+# The tax engine's Python binding is built from tax-engine/python by maturin;
+# see docs/plan/20-kassiber-tax-engine.md.
+[tool.uv.workspace]
+members = ["tax-engine/python"]
+
+[tool.uv.sources]
+kassiber-tax = { workspace = true }
 
 [tool.setuptools]
 include-package-data = true
