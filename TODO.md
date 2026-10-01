@@ -45,6 +45,13 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   changing Neu-first would change existing users' tax outcomes.
 - [ ] Evaluate per-wallet physical-lot attribution only if a jurisdiction
   requires it. Current per-wallet basis allocation is not a physical-lot claim.
+- [ ] Run phase 0 of the [tax engine plan](docs/plan/20-kassiber-tax-engine.md):
+  a pure Rust crate and PyO3 binding in the dev environment and one packaged
+  build, a decimal type that reproduces RP2's results, and FIFO plus moving
+  average for one asset behind a test-only switch. Done when the black-box
+  comparison with the current RP2 path, fees included, shows no semantic
+  differences on generated histories for that subset and
+  the dependency and license entries are drafted. Do not translate RP2 source.
 
 ## Quarantine follow-ups
 

@@ -197,6 +197,9 @@ Kassiber adapter small, pin the fork intentionally, and periodically upstream or
 rebase Austrian primitives where practical. Do not let Kassiber-side report
 needs leak tax math back across the seam.
 
+[Plan 20](20-kassiber-tax-engine.md) ends this risk by replacing RP2 with a
+Kassiber-owned engine. Until its cutover, the guidance above applies.
+
 ## Out Of Scope
 
 - FinanzOnline auto-submission
