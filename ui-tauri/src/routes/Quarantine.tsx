@@ -1,93 +1,84 @@
 import * as React from "react";
-import { useTranslation } from "react-i18next";
 
 import {
   QuarantineDashboard,
   QuarantineUnavailable,
+  type QuarantineScope,
   type QuarantineSnapshot,
 } from "@/components/kb/quarantine";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
-import { Button } from "@/components/ui/button";
 import { useDaemon } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { normalizeQuarantineSnapshot } from "@/lib/normalizeUiSnapshots";
 
-// The daemon serves at most this many rows per request; larger quarantines
-// page through the same root-first ordering.
+// The daemon serves at most this many rows per request; larger scopes page
+// through the same causes-first ordering.
 const QUARANTINE_PAGE_SIZE = 100;
 
 export function Quarantine() {
-  const { t } = useTranslation("journals");
+  const [scope, setScope] = React.useState<QuarantineScope>("attention");
   const [offset, setOffset] = React.useState(0);
-  const { data, isLoading, isError, error } = useDaemon<QuarantineSnapshot>(
+  // What needs the user is always read: it drives the summary and the causes.
+  const attentionQuery = useDaemon<QuarantineSnapshot>("ui.journals.quarantine", {
+    limit: QUARANTINE_PAGE_SIZE,
+    offset: scope === "attention" ? offset : 0,
+    scope: "attention",
+  });
+  const listQuery = useDaemon<QuarantineSnapshot>(
     "ui.journals.quarantine",
-    { limit: QUARANTINE_PAGE_SIZE, offset },
+    { limit: QUARANTINE_PAGE_SIZE, offset, scope },
+    { enabled: scope !== "attention" },
   );
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction();
-  const total = data?.data?.summary?.count ?? 0;
+  const { data, isLoading, isError, error } = attentionQuery;
+  const attention = React.useMemo(
+    () => (data?.data ? normalizeQuarantineSnapshot(data.data) : null),
+    [data?.data],
+  );
+  const listed = React.useMemo(
+    () =>
+      scope === "attention"
+        ? attention
+        : listQuery.data?.data
+          ? normalizeQuarantineSnapshot(listQuery.data.data)
+          : null,
+    [attention, listQuery.data?.data, scope],
+  );
+  const scopeTotal = listed?.summary.scope_count ?? listed?.summary.count ?? 0;
 
   React.useEffect(() => {
-    // A rebuild can shrink the quarantine below the current page.
-    if (offset > 0 && total > 0 && offset >= total) setOffset(0);
-  }, [offset, total]);
+    // A rebuild can shrink the scope below the current page.
+    if (offset > 0 && scopeTotal > 0 && offset >= scopeTotal) setOffset(0);
+  }, [offset, scopeTotal]);
 
   if (isLoading) {
     return <ScreenSkeleton titleWidth="w-40" />;
   }
 
-  if (isError || data?.error || !data?.data) {
+  if (isError || data?.error || !attention) {
     return (
       <QuarantineUnavailable
-        message={
-          error instanceof Error ? error.message : data?.error?.message
-        }
+        message={error instanceof Error ? error.message : data?.error?.message}
       />
     );
   }
 
-  const snapshot = normalizeQuarantineSnapshot(data.data);
-  const pageEnd = Math.min(offset + snapshot.items.length, snapshot.summary.count);
-
   return (
-    <>
-      <QuarantineDashboard
-        snapshot={snapshot}
-        isProcessingJournals={isProcessingJournals}
-        onProcessJournals={runJournalProcessing}
-      />
-      {snapshot.summary.count > QUARANTINE_PAGE_SIZE ? (
-        <nav
-          className="mt-3 flex items-center justify-end gap-2 text-xs text-muted-foreground"
-          aria-label={t("quarantine.tableTitle")}
-        >
-          <span className="tabular-nums">
-            {t("quarantine.paging.range", {
-              from: snapshot.items.length ? offset + 1 : 0,
-              to: pageEnd,
-              total: snapshot.summary.count,
-            })}
-          </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={offset === 0}
-            onClick={() => setOffset(Math.max(0, offset - QUARANTINE_PAGE_SIZE))}
-          >
-            {t("quarantine.paging.previous")}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={pageEnd >= snapshot.summary.count}
-            onClick={() => setOffset(offset + QUARANTINE_PAGE_SIZE)}
-          >
-            {t("quarantine.paging.next")}
-          </Button>
-        </nav>
-      ) : null}
-    </>
+    <QuarantineDashboard
+      attention={attention}
+      list={listed}
+      listLoading={scope !== "attention" && listQuery.isLoading}
+      scope={scope}
+      onScopeChange={(next) => {
+        setScope(next);
+        setOffset(0);
+      }}
+      offset={offset}
+      pageSize={QUARANTINE_PAGE_SIZE}
+      onOffsetChange={setOffset}
+      isProcessingJournals={isProcessingJournals}
+      onProcessJournals={runJournalProcessing}
+    />
   );
 }

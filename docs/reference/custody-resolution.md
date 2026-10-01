@@ -175,8 +175,12 @@ predates the spend; the first action is `review_pair`, which opens that pair
 where it can be unpaired. Unpairing removes the suspense on the next journal
 run.
 
-The desktop shows these causes above the table, keeps the gap editor behind
-developer tools, and offers exclusion only for price and decision questions.
+The desktop's Quarantine page leads with what needs the user and how many
+rows only wait, then one card per cause (what was seen, what to do, its
+action), then the rows split into Needs you, Waiting and All, each paged by
+the daemon. The side-nav badge counts the causes. The page keeps the gap
+editor behind developer tools and offers exclusion only for price and
+decision questions.
 
 ## Desktop review
 

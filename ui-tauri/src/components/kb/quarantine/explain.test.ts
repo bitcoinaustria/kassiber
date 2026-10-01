@@ -9,14 +9,17 @@ import {
   CAUSE_KEYS,
   KNOWN_QUANTITY_BLOCKERS,
   KNOWN_QUARANTINE_REASONS,
+  actionLabel,
   categoryForReason,
   causeCopy,
+  causeFacts,
   causeKeyFor,
   detailContextFor,
   exclusionFitsReason,
+  isWaiting,
+  quarantineRowTarget,
   sheetTabForCause,
 } from "./explain";
-import { quarantineItemToRow } from "./model";
 import type { QuarantineCategory, QuarantineItem } from "./types";
 
 const CATEGORIES: QuarantineCategory[] = [
@@ -158,58 +161,57 @@ describe("classified quarantine rows", () => {
     actions: [{ kind: "resolve_root", transaction_id: "out" }],
   };
 
-  it("takes priority, status and the root link from the daemon", () => {
-    const row = quarantineItemToRow(item, "Book", t);
-    expect(row.status).toBe("Needs review");
-    expect(row.priority).toBe("Low");
-    expect(row.impact).toBe("Clears with its cause");
-    expect(row.event).toBe("Waiting for an earlier problem");
-    expect(row.evidenceHint).toContain("2024-01-01, A");
-    expect(row.transactionAction).toMatchObject({
-      transactionId: "out",
-      tab: "details",
-      reviewReason: "custody_quantity_unresolved",
-      label: "Open cause",
-    });
-    const root = quarantineItemToRow(
-      {
-        ...item,
-        transaction_id: "out",
-        reason: "custody_quantity_unresolved",
-        category: "missing_wallet_history",
-        blocks_reports: true,
-        is_downstream: false,
-        root: null,
-        evidence: { blocker_code: "custody_gap_review_required", wallet_label: "A" },
-        actions: [{ kind: "connect_wallet" }],
-      },
-      "Book",
-      t,
+  it("lists a row that follows a named cause as waiting, and opens it with its reading", () => {
+    expect(isWaiting(item)).toBe(true);
+    expect(isWaiting({ ...item, root: null })).toBe(false);
+    expect(isWaiting({ ...item, is_downstream: false, root: null })).toBe(false);
+    const target = quarantineRowTarget(item);
+    expect(target.tab).toBe("details");
+    expect(target.context?.rootLabel).toBe("2024-01-01, A");
+    expect(causeCopy({ reason: item.reason, category: "downstream", rootLabel: "2024-01-01, A" }, t).title).toBe(
+      "Waiting on an earlier transaction",
     );
-    expect(root.status).toBe("Blocked");
-    expect(root.priority).toBe("High");
-    expect(root.event).toBe("An intermediate wallet is missing");
-    expect(root.transactionAction?.tab).toBe("details");
-    // The table button only opens the row; "Connect wallet" lives in the panel.
-    expect(root.transactionAction?.label).toBe("Open transaction");
   });
 
-  it("flags explanations that quote amounts so tables can mask them", () => {
-    const oversell = quarantineItemToRow(
+  it("reads a suspense a pair left as the pair, with what was seen, on the Linked tab", () => {
+    const evidence = {
+      blocker_code: "reviewed_residual_suspense",
+      pair_id: "pair-1",
+      pair_counterpart_transaction_id: "in",
+      pair_txids_differ: true,
+      pair_receipt_before_spend: true,
+    };
+    expect(causeKeyFor("custody_quantity_unresolved", evidence)).toBe("reviewedSuspensePair");
+    // Without a pair, the suspense keeps its general reading.
+    expect(
+      causeKeyFor("custody_quantity_unresolved", { blocker_code: "reviewed_residual_suspense" }),
+    ).toBe("reviewedSuspense");
+    expect(sheetTabForCause("custody_quantity_unresolved", "needs_decision", evidence)).toBe("linked");
+    expect(causeCopy({ reason: "custody_quantity_unresolved", evidence }, t).title).toBe(
+      "A transfer pair doesn't add up",
+    );
+    expect(causeFacts(evidence, t)).toEqual([
+      "The two sides are different on-chain transactions; one movement between your wallets has a single transaction id.",
+      "The receipt is dated before the payment it is paired with.",
+    ]);
+    expect(causeFacts({}, t)).toEqual([]);
+    expect(actionLabel({ kind: "review_pair", transaction_id: "out", pair_id: "pair-1" }, t)).toBe(
+      "Review the pair",
+    );
+  });
+
+  it("flags explanations that quote amounts so lists can mask them", () => {
+    const oversell = causeCopy(
       {
-        ...item,
         reason: "insufficient_lots",
         category: "missing_acquisition_history",
-        is_downstream: false,
-        root: null,
         evidence: { required_msat: 123_456_789_000, available_msat: 87_654_321_000 },
       },
-      "Book",
       t,
     );
-    expect(oversell.evidenceHint).toContain("123,456,789");
-    expect(oversell.evidenceHintSensitive).toBe(true);
-    expect(quarantineItemToRow(item, "Book", t).evidenceHintSensitive).toBe(false);
+    expect(oversell.why).toContain("123,456,789");
+    expect(oversell.whyQuotesAmounts).toBe(true);
+    expect(causeCopy({ reason: item.reason, category: "downstream" }, t).whyQuotesAmounts).toBe(false);
   });
 
   it("keeps the reading that came with a click for a root on another page", () => {
