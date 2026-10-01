@@ -138,12 +138,12 @@ function render(
   {
     onOpenTransaction = vi.fn(),
     onShowWaiting = vi.fn(),
-    onUnpair = vi.fn(async () => undefined),
+    onUnpair = vi.fn(async () => []),
     hideSensitive = false,
   }: {
     onOpenTransaction?: ReturnType<typeof vi.fn>;
     onShowWaiting?: ReturnType<typeof vi.fn>;
-    onUnpair?: (pairId: string) => Promise<void>;
+    onUnpair?: (pairIds: string[]) => Promise<Array<{ pairId: string; message: string }>>;
     hideSensitive?: boolean;
   } = {},
 ) {
