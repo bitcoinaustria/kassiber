@@ -252,6 +252,19 @@ class BindingRoundTripTest(unittest.TestCase):
         self.assertEqual(derived["unique_id"], "tx-1")
         self.assertFalse(derived["is_taxable"])
 
+    def test_canonical_decimals_round_trip_beyond_the_int_conversion_limit(self):
+        # Python caps int <-> str conversion at 4300 digits; the boundary form
+        # must not, so a long but valid coefficient keeps its exact value.
+        for value in (
+            Decimal("1." + "0" * 5000),
+            Decimal("-" + "9" * 5000 + "E-17"),
+            Decimal("0E-28"),
+            Decimal("-0.00"),
+        ):
+            with self.subTest(digits=len(value.as_tuple().digits)):
+                encoded = native_request.encode_decimal(value)
+                self.assertEqual(native_request.decode_decimal(encoded).as_tuple(), value.as_tuple())
+
     def test_compute_round_trip(self):
         buy = native_request.in_entry(**self.ENTRY)
         sell = native_request.out_entry(

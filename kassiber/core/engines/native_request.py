@@ -63,8 +63,10 @@ def encode_decimal(value: Decimal) -> str:
     if not value.is_finite():
         raise ValueError(f"the engine accepts only finite decimals, got {value}")
     sign, digits, exponent = value.as_tuple()
-    coefficient = "".join(str(digit) for digit in digits) or "0"
-    return f"{'-' if sign else ''}{int(coefficient)}E{exponent}"
+    # Join the digits directly: int() would reject coefficients longer than
+    # Python's integer string-conversion limit.
+    coefficient = "".join(str(digit) for digit in digits).lstrip("0") or "0"
+    return f"{'-' if sign else ''}{coefficient}E{exponent}"
 
 
 def encode_optional_decimal(value: Optional[Decimal]) -> Optional[str]:

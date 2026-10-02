@@ -84,9 +84,13 @@ pub enum Rounding {
 /// `Emin`, `Emax`, `clamp`, and the trap set are CPython's defaults
 /// ([`EMIN`], [`EMAX`], 0, and `InvalidOperation`/`DivisionByZero`/`Overflow`)
 /// for every context.
+/// Largest precision a [`Context`] accepts. RP2 uses 32; the cap bounds
+/// arithmetic intermediates, whose size grows with the precision.
+pub const MAX_PRECISION: u32 = 1_000;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Context {
-    /// Significant digits a rounded result keeps; must be at least 1.
+    /// Significant digits a rounded result keeps, from 1 to [`MAX_PRECISION`].
     pub prec: u32,
     /// How rounded results discard digits.
     pub rounding: Rounding,
@@ -99,7 +103,8 @@ impl Context {
         rounding: Rounding::HalfEven,
     };
 
-    /// Builds a context; operations reject a precision of 0.
+    /// Builds a context; operations reject a precision of 0 or above
+    /// [`MAX_PRECISION`].
     pub const fn new(prec: u32, rounding: Rounding) -> Self {
         Context { prec, rounding }
     }
@@ -110,7 +115,7 @@ impl Context {
     }
 
     fn check(&self) -> Result<(), DecimalError> {
-        if self.prec == 0 {
+        if self.prec == 0 || self.prec > MAX_PRECISION {
             Err(DecimalError::InvalidContext)
         } else {
             Ok(())
@@ -167,7 +172,7 @@ impl fmt::Display for DecimalError {
             DecimalError::DivisionByZero => "division by zero",
             DecimalError::DivisionUndefined => "zero divided by zero",
             DecimalError::Overflow => "decimal overflow",
-            DecimalError::InvalidContext => "decimal context precision must be at least 1",
+            DecimalError::InvalidContext => "decimal context precision must be between 1 and 1000",
             DecimalError::FormatTooLong => "fixed-point rendering is too long",
         };
         f.write_str(text)
@@ -1586,6 +1591,14 @@ mod tests {
         assert_eq!(d("1").add(&d("1"), &bad), Err(DecimalError::InvalidContext));
         assert_eq!(d("1").quantize(0, &bad), Err(DecimalError::InvalidContext));
         assert_eq!(d("1").neg(&bad), Err(DecimalError::InvalidContext));
+        // A huge precision must fail before it sizes any intermediate.
+        let huge = ctx(u32::MAX, Rounding::HalfEven);
+        assert_eq!(
+            d("1").div(&d("1"), &huge),
+            Err(DecimalError::InvalidContext)
+        );
+        let max = ctx(MAX_PRECISION, Rounding::HalfEven);
+        assert_eq!(d("1").div(&d("1"), &max), Ok(d("1")));
     }
 
     #[test]
