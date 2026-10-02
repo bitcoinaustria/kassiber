@@ -159,11 +159,16 @@ request and reading the response. Drift tests on both sides pin the schema.
   separate validation pass. Events are ordered by time, then by the
   same-timestamp rules in the parity list, then by projection order; the order
   is total, so ties never depend on iteration order.
-- Each leg of a linked carry pair keeps its own timestamp. The outgoing leg
-  captures the basis it selects when it occurs; the incoming leg receives that
-  basis when it occurs, from a pending carry held in memory for the run.
-  Same-time carry chains are ordered by their dependencies, so a single pass
-  replaces today's repeated recomputation.
+- Each leg of a linked carry pair keeps its own timestamp, and the
+  same-timestamp order above still holds: the incoming lot is listed when it
+  occurs, even before its carry resolves. A lot's basis is read only when a
+  disposal draws on it, so the outgoing leg's selected basis replaces the
+  incoming lot's basis when that leg is processed, and any event that could
+  draw on the incoming lot before then waits for the carry. That is how the
+  Austrian runner works today (`tax-engine/core/src/swaps.rs`); phase 4 uses
+  the same rule for the generic BTC↔LBTC carry, replacing its repeated
+  recomputation. Same-time carry chains resolve in dependency order, and the
+  runner fails with an error when no order can resolve them.
 - Pools are keyed by a country-chosen pool key. Each pool holds lots or an
   average-cost pool according to the method.
 - A basis is `Known(fiat)` or `Unknown(reason)`. Uncertainty flows through the
