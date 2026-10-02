@@ -14,6 +14,9 @@ separate cutoff-scoped open-position API for holdings. A one-shot semantic
 migration marks previously processed AT and generic moving-average books stale
 without deleting their retained journals or evidence. The G5 global-only
 verification cutoffs below are complete; narrower-pool activation is not.
+Since [plan 20](20-kassiber-tax-engine.md)'s cutover, Kassiber's own tax engine
+reproduces the RP2 behavior this plan describes, so the RP2 limits below now
+apply to the engine until a reviewed change lifts them.
 **Executable backlog:** the single matching item in `TODO.md`.
 **Current-truth documents until cutover:** `docs/austrian-handoff.md`,
 `docs/plan/06-austrian-tax-engine.md`, current code, and current tests.

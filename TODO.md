@@ -66,13 +66,14 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   from 2023 uses moving average" with the code, which applies the Neu moving
   average to every Neu disposal from 2021-03-01. Confirm against the
   KryptowährungsVO and fix whichever is wrong.
-- [ ] Run phase 0 of the [tax engine plan](docs/plan/20-kassiber-tax-engine.md):
-  a pure Rust crate and PyO3 binding in the dev environment and one packaged
-  build, a decimal type that reproduces RP2's results, and FIFO plus moving
-  average for one asset behind a test-only switch. Done when the black-box
-  comparison with the current RP2 path, fees included, shows no semantic
-  differences on generated histories for that subset and
-  the dependency and license entries are drafted. Do not translate RP2 source.
+- [ ] Run phase 4 of the [tax engine plan](docs/plan/20-kassiber-tax-engine.md):
+  lift the engine boundary to the finalized projection as typed events, fold
+  the adapter's balance mirror, the Austrian regime tracker, and the generic
+  carry workaround into the engine, and drop the `notes` markers that only
+  pass input to it. Persisted `at_regime=` journal descriptions stay while the
+  exit-tax report reads them. Done when the adapter only builds the request
+  and reads the response, drift tests on both sides pin the schema, and the
+  RP2 comparison stays empty.
 
 ## Quarantine follow-ups
 
@@ -276,8 +277,6 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
 
 ## Distribution
 
-- [ ] Publish RP2 as a versioned wheel and update the locked dependency path,
-  resolving the VCS-pinned packaging concern without changing engine behavior.
 - [ ] Decide whether packaged runtime requirements justify replacing PyInstaller
   with a `python-build-standalone` tree. Preserve the installed-app CLI path.
 - [ ] Complete Linux channel provisioning and first-release checks in the

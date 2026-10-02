@@ -588,7 +588,7 @@ the Core RPC backend, then verifies Kassiber behavior through the public CLI:
   operational balances genuinely rise **and** draw down (e.g. the treasury
   account falls through a 2020 shock and a 2022 bear market rather than
   climbing monotonically); regimes stay within each wallet's running balance
-  so RP2's per-account balance gate never trips
+  so the tax engine's per-account balance gate never trips
 - wallet key-rotation events for treasury, merchant, cold storage, and Liquid
   treasury, recognized from native ownership evidence after sync; the old source
   wallets are then marked deprecated so their history remains visible while

@@ -965,7 +965,7 @@
     "taxableIncome": "Taxable income",
     "gainLoss": "Gain / loss",
     "gainLossPending": "Pending journal run",
-    "gainLossHint": "Realized gain/loss from RP2 after journals are processed.",
+    "gainLossHint": "Realized gain/loss from the tax engine after journals are processed.",
     "priceEvidence": "Price evidence",
     "sourceMissing": "Source missing",
     "narrative": {
@@ -1154,7 +1154,7 @@
       "quarantined": "Quarantined",
       "pendingJournal": "Pending journal",
       "journaled": "Journaled",
-      "journaledHint": "Included in the RP2 journal once pricing is set and the tx isn't excluded."
+      "journaledHint": "Included in the tax journal once pricing is set and the tx isn't excluded."
     },
     "checklist": {
       "title": "Review checklist",

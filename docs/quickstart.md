@@ -209,7 +209,8 @@ Cross-asset BTC ↔ LBTC peg-ins/peg-outs and submarine swaps:
   disable it with `profiles set --no-bitcoin-rail-carrying-value`, or pass
   `--policy taxable` on a specific pair.
 - **Austrian profiles** — reviewed `--policy carrying-value` pairs get
-  Austrian swap markers and run through RP2's native multi-asset hook;
+  Austrian swap markers and run through the tax engine's Austrian multi-asset
+  hook;
   `--policy taxable` stays on the SELL + BUY path.
 
 ## 4. Process journals and run reports

@@ -582,11 +582,11 @@ rows, and stack locals. `--save` writes the artifact under
   cost basis becomes wrong capital-gains. For tax-grade numbers prefer
   `rates set` with values you trust.
 - **Austrian tax support is partial, not complete.** Kassiber ships a reviewed
-  RP2-backed Austrian `§ 27b EStG` handoff for the current E 1kv / exit-tax
-  slice. There is no `K1`/`K2` corporate-tax support; personal-tax output
-  does not become a corporate declaration by selecting a company profile.
-  Domestic-provider offsets, withholding, and carryforwards need explicit
-  review. FinanzOnline submission remains excluded.
+  Austrian `§ 27b EStG` handoff, computed by its own tax engine, for the
+  current E 1kv / exit-tax slice. There is no `K1`/`K2` corporate-tax support;
+  personal-tax output does not become a corporate declaration by selecting a
+  company profile. Domestic-provider offsets, withholding, and carryforwards
+  need explicit review. FinanzOnline submission remains excluded.
 - **Generic tax output is not tax advice.** It is accounting software
   output built on local wallet history and available pricing, not a
   substitute for jurisdiction-specific review.

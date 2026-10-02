@@ -17,10 +17,11 @@ transfer pairing, review/quarantine workflows, CLI/desktop UX, and
 accountant-facing BTC subledger exports. Source-of-funds reporting is in scope
 as a reviewed, path-scoped provenance report, not as chain-surveillance scoring.
 
-RP2 owns the existing crypto lot/tax calculation path until
-[plan 20](20-kassiber-tax-engine.md) replaces it with a Kassiber-owned engine
-written in Rust. Wallet buckets and
-personal tax journals are not double-entry books. The opt-in general ledger of
+Kassiber's own Rust [tax engine](../reference/tax-engine.md) owns the crypto
+lot/tax calculation path. It replaced RP2 under
+[plan 20](20-kassiber-tax-engine.md), which keeps RP2 as a test-only parity
+oracle. Wallet buckets and personal tax journals are not double-entry books.
+The opt-in general ledger of
 plans 17/18 was removed on 2026-09-30 under [plan 19](19-extensions.md#removed);
 an organization that needs one would get it as an extension.
 
@@ -47,12 +48,13 @@ Out of scope unless a future design says otherwise:
 - storage: SQLite under the OS-native per-user app-data root, with meaningful
   `~/.kassiber` state moved there once when the native target does not exist
 - storage shape: one DB per project under `<state-root>/projects/`
-- tax engine: RP2 fork at `bitcoinaustria/rp2`
+- tax engine: Rust crate in `tax-engine/`, called through the `kassiber_tax`
+  binding ([contract](../reference/tax-engine.md)); RP2 is a test-only oracle
 - machine envelope: `{kind, schema_version, data}` for success, structured
   `error` envelope for failure
 
 The production accounting path is observations and reviewed evidence →
-`core/custody_journal.py` → finalized tax projection → RP2 → stored journals
+`core/custody_journal.py` → finalized tax projection → tax engine → stored journals
 and reports. See
 [the tax implementation boundary](../reference/tax.md#implementation-boundary)
 and [the daemon contract](../reference/daemon.md#desktop-invoke-contract).
@@ -88,8 +90,8 @@ checklists and test counts are not current delivery evidence.
 |---|---|---|
 | Core extraction | Landed | keep logic in shared core, not CLI/UI copies |
 | Attachments | Landed | use shipped `attachments`; keep links/file blobs bounded |
-| Austrian RP2 path | Active | processing and review-gated E 1kv PDF/XLSX export work; domestic-provider KESt metadata pending |
-| Kassiber tax engine | Planned | replace RP2 with a pure Rust engine behind the existing seam, parity first, per [20-kassiber-tax-engine.md](20-kassiber-tax-engine.md) |
+| Austrian tax path | Active | processing and review-gated E 1kv PDF/XLSX export work; domestic-provider KESt metadata pending |
+| Kassiber tax engine | Active | phases 0-3 implemented: the pure Rust engine is the default behind the existing seam, with RP2-identical results and RP2 as a test-only oracle; phase 4 (simplify behind zero difference) is next, per [20-kassiber-tax-engine.md](20-kassiber-tax-engine.md) |
 | Organizational accounting and AI | Removed | plans 16-18 removed 2026-09-30 under plan 19; code preserved at git tag `archive/general-ledger` |
 | Desktop UI | In progress | Tauri 2 + React + TypeScript with a Python sidecar daemon, per [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md) |
 | Project storage | Implemented | per-project databases; [compatibility](../reference/database-compatibility.md) covers legacy upgrades |
@@ -115,7 +117,7 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
 - `03-storage-conventions.md`: project-bundle storage target
 - `04-desktop-ui.md`: historical desktop implementation roadmap
 - `05-attachments.md`: attachment/link boundary
-- `06-austrian-tax-engine.md`: Austrian RP2 boundary and E 1kv direction
+- `06-austrian-tax-engine.md`: Austrian engine boundary and E 1kv direction
 - `07-austrian-tax-open-questions.md`: unresolved AT assumptions and review gates
 - `08-external-document-reconciliation.md`: BTC-side evidence/reconciliation boundary
 - `09-source-of-funds.md`: source-of-funds report boundary and flow-link design
@@ -153,10 +155,9 @@ See [01-stack-decision.md](01-stack-decision.md) for the stack decision and
   mandatory for private portfolio users
 - treating source-of-funds reports as automatic proof when reviewed links or
   source evidence are missing
-- duplicating RP2 crypto lot math outside plan 20's engine and its RP2
-  comparison, or assuming its personal-tax result is always a valid
-  organizational book carrying value
-- relying on VCS-pinned RP2 for packaged builds without testing
+- duplicating crypto lot math outside the tax engine, changing its results
+  outside a reviewed plan 20 change, or assuming its personal-tax result is
+  always a valid organizational book carrying value
 - forgetting to re-run journals after metadata, pricing, pairing, or exclusion
   changes
 

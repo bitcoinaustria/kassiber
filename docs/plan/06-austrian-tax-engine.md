@@ -1,19 +1,23 @@
-# Austrian Tax Support On RP2
+# Austrian Tax Support
 
-**Status:** Active RP2-backed processing; review-gated E 1kv CSV/PDF/XLSX export
-is implemented for the current ausländisch / self-custody slice.
+**Status:** Active processing on Kassiber's tax engine, which replaced RP2
+under [plan 20](20-kassiber-tax-engine.md) with identical results; review-gated
+E 1kv CSV/PDF/XLSX export is implemented for the current ausländisch /
+self-custody slice.
 **Current source of truth:** `docs/austrian-handoff.md`,
-`kassiber/core/tax_events.py`, `kassiber/core/engines/rp2.py`,
-`kassiber/core/austrian.py`, `tests/test_review_regressions.py`, and TODO.md.
+`docs/reference/tax-engine.md`, `kassiber/core/tax_events.py`,
+`kassiber/core/engines/rp2.py`, `kassiber/core/austrian.py`,
+`tests/test_review_regressions.py`, and TODO.md.
 **Legal gate:** Kassiber is not tax advice. Austrian output must be reviewed by
 a Steuerberater before filing.
 
 ## Product Boundary
 
-Kassiber is the local-first Bitcoin accounting and reconciliation layer. RP2 is
-the tax engine.
+Kassiber's Python core is the local-first Bitcoin accounting and
+reconciliation layer; its Rust [tax engine](../reference/tax-engine.md)
+(`tax-engine/`) computes the taxes.
 
-Kassiber owns:
+The Python core owns:
 
 - wallet sync/import, rates, provenance, notes/tags/exclusions, attachments
 - transfer and manual pair preparation
@@ -21,23 +25,23 @@ Kassiber owns:
 - persisted journal/report rows and desktop/CLI presentation
 - Austrian report packaging such as E 1kv
 
-RP2 / `bitcoinaustria/rp2` owns:
+The tax engine owns:
 
 - country tax semantics
 - accounting methods and lot/moving-average math
 - cross-asset Neu swap carried-basis computation
 - gains/losses and disposal classification
-- Austrian plugin APIs such as `rp2.plugin.country.at.AT` and
-  `classify_disposal()`
+- the Austrian country APIs the adapter calls, `AT` and `classify_disposal()`,
+  which `kassiber.core.engines.native` exposes under RP2's names
 
-Do not grow a second Austrian tax engine inside Kassiber.
+Do not grow a second Austrian tax engine in Python.
 
 ## Austrian Rules Kassiber Must Respect
 
 - Austrian profiles use `tax_country=at`.
 - Acquisitions before `2021-03-01 Europe/Vienna` are Altvermögen; later
   acquisitions are Neuvermögen.
-- Neuvermögen from 2023 uses moving average where supported by the RP2 fork.
+- Neuvermögen from 2023 uses moving average where supported by the tax engine.
 - Crypto-to-crypto swaps can be non-taxable for Neuvermögen, with basis carried
   to the acquired asset.
 - Cross-asset carrying-value pairing is supported for Austrian profiles and
@@ -69,15 +73,15 @@ Typed Austrian semantic fields remain:
 - `at_regime`
 - `at_swap_link`
 
-The RP2 adapter maps the generic global id to the legacy `at_pool=default`
+The adapter maps the generic global id to the legacy `at_pool=default`
 marker only for Austrian rows. Differing transfer pool ids fail closed because
-RP2 has no approved two-ended Austrian marker contract. RP2's
+the engine has no approved two-ended Austrian marker contract. The engine's
 `compute_tax_for_assets` hook still owns carried-basis math for reviewed Neu
 cross-asset swaps.
 
 ## Current Engine Boundary
 
-The RP2 engine boundary is intentionally narrow:
+The engine boundary is intentionally narrow:
 
 ```python
 GenericRP2TaxEngine.build_ledger_state(
@@ -179,7 +183,7 @@ open-question defaults.
 
 Keep growing coverage around:
 
-- AT profiles processing through `rp2.plugin.country.at.AT`
+- AT profiles processing through the engine's Austrian country
 - persisted `at_category` / Kennzahl mapping
 - Neu cross-asset carrying-value basis carry
 - staking/income-like receipts
@@ -192,13 +196,11 @@ adding unpinned behavior.
 
 ## RP2 Fork Risk
 
-The fork solves upstream stagnation but creates divergence risk. Keep the
-Kassiber adapter small, pin the fork intentionally, and periodically upstream or
-rebase Austrian primitives where practical. Do not let Kassiber-side report
-needs leak tax math back across the seam.
-
-[Plan 20](20-kassiber-tax-engine.md) ends this risk by replacing RP2 with a
-Kassiber-owned engine. Until its cutover, the guidance above applies.
+The fork solved upstream stagnation but created divergence risk.
+[Plan 20](20-kassiber-tax-engine.md) ended that risk at its cutover: Kassiber's
+own engine replaced RP2, which remains only as the tests' parity oracle at a
+pinned commit. Do not let Kassiber-side report needs leak tax math back across
+the seam.
 
 ## Out Of Scope
 

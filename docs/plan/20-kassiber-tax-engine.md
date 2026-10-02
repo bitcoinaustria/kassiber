@@ -1,9 +1,11 @@
 # Kassiber tax engine
 
-**Status:** Direction accepted 2026-10-01. Not started: nothing here describes
-current behavior. Tasks move to [TODO.md](../../TODO.md) as each phase starts.
-**Current source of truth until cutover:** [tax](../reference/tax.md),
-[Austrian handoff](../austrian-handoff.md), [plan 06](06-austrian-tax-engine.md),
+**Status:** Direction accepted 2026-10-01. Phases 0-3 are implemented: the
+engine is the default and RP2 is a test-only oracle. Phases 4-6 remain; tasks
+move to [TODO.md](../../TODO.md) as each phase starts.
+**Current source of truth:** [tax engine](../reference/tax-engine.md),
+[tax](../reference/tax.md), [Austrian handoff](../austrian-handoff.md),
+[plan 06](06-austrian-tax-engine.md),
 [plan 16](16-cost-basis-pools-and-employment-compensation.md), current code, and
 current tests.
 
@@ -134,7 +136,7 @@ legal certainty matters, add this question to the legal opinion that
 
 ### Boundary
 
-In phases 0-3 the boundary sits where RP2 sits today, beneath the adapter.
+In phases 0-3 the boundary sits where RP2 sat, beneath the adapter.
 `kassiber.core.engines.native` mirrors the part of RP2's interface the adapter
 calls, and one engine call answers each RP2 call; the
 [tax engine reference](../reference/tax-engine.md) owns that format. The same
@@ -241,9 +243,9 @@ change:
    difference is a bug or a listed, reviewed difference.
    The comparison is semantic. It ignores generated journal ids
    (`uuid.uuid4()` today) and the engine-identity fields in calculation
-   metadata (`engine: "rp2"` today). It compares transaction anchors, exact
-   amounts, classifications, entry order, journal descriptions, and
-   calculation evidence.
+   metadata (`engine`: `"kassiber_tax"` or `"rp2"`). It compares transaction
+   anchors, exact amounts, classifications, entry order, journal descriptions,
+   and calculation evidence.
 5. **Shadow runs:** a test-only switch makes journal processing run both
    engines and fail on any semantic difference. It is not a product setting.
 6. **The full quality gate**, plus extension builds for macOS arm64, Linux
@@ -333,8 +335,8 @@ change:
   `wallet` pools stands.
 - [Plan 06](06-austrian-tax-engine.md): the fork-divergence risk ends at
   cutover.
-- TODO's RP2 wheel publication is only needed if packaging requires it before
-  cutover.
+- TODO's RP2 wheel publication is dropped: since cutover, RP2 no longer
+  ships.
 
 ## Out of scope
 
