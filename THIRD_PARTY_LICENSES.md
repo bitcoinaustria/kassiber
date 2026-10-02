@@ -6,7 +6,7 @@ It is not meant to be a hand-maintained inventory of every transitive package in
 
 ## Core dependency credit
 
-Kassiber currently depends directly on the Kassiber-maintained [RP2 fork](https://github.com/bitcoinaustria/rp2) as its tax engine, [BDK Python](https://github.com/bitcoindevkit/bdk-python) for dependency-backed Bitcoin observation, [Liquid Wallet Kit](https://github.com/Blockstream/lwk) for dependency-backed Liquid observation, [embit](https://github.com/diybitcoinhardware/embit) for compatibility descriptor derivation and Liquid decoding, [XlsxWriter](https://xlsxwriter.readthedocs.io/) for styled XLSX report exports and the generic-ledger import template, [openpyxl](https://openpyxl.readthedocs.io/) for reading filled-in `.xlsx` generic-ledger imports, [ReportLab](https://www.reportlab.com/) for styled PDF report exports, and [keyring](https://github.com/jaraco/keyring) for opt-in CLI access to native OS credential stores.
+Kassiber currently depends directly on [BDK Python](https://github.com/bitcoindevkit/bdk-python) for dependency-backed Bitcoin observation, [Liquid Wallet Kit](https://github.com/Blockstream/lwk) for dependency-backed Liquid observation, [embit](https://github.com/diybitcoinhardware/embit) for compatibility descriptor derivation and Liquid decoding, [XlsxWriter](https://xlsxwriter.readthedocs.io/) for styled XLSX report exports and the generic-ledger import template, [openpyxl](https://openpyxl.readthedocs.io/) for reading filled-in `.xlsx` generic-ledger imports, [ReportLab](https://www.reportlab.com/) for styled PDF report exports, and [keyring](https://github.com/jaraco/keyring) for opt-in CLI access to native OS credential stores.
 The descriptor connection screen uses local-only QR scanner libraries for
 webcam-based descriptor and BBQR import.
 The desktop shell includes Rust keyring crates for AI-provider-key native
@@ -16,12 +16,16 @@ Its minimal release notifier delegates the GitHub request to the bundled CLI
 sidecar rather than carrying a second HTTP client. The desktop and CLI
 coordinate update-check consent revocation with an owner-only advisory lock;
 the native side uses `fs2` for the cross-platform file-lock primitive.
+Kassiber's own tax engine is a Rust crate (`tax-engine/`, AGPL-3.0-only) built
+as a Python extension; the rows below list its direct Rust dependencies, and
+`tax-engine/Cargo.lock` is the transitive inventory. The Kassiber-maintained
+[RP2 fork](https://github.com/bitcoinaustria/rp2), which the engine replaced,
+is a development dependency only: tests use it as the engine's parity oracle.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
 | `bdkpython` | `3.0.0` (exact) | Watch-only Bitcoin wallet observation through BDK's Electrum client; state is persisted as explicit versioned JSON inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT OR Apache-2.0 |
 | `lwk` | `0.18.0` (exact) | Watch-only Liquid wallet observation through LWK's Electrum client; opaque `ForeignStore` values live only inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT (BSD-MIT wording) |
-| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@3d2e03ef27696fbd00f4516a0cb745300083e227` | Existing tax engine, retaining RP2-owned lot basis, Austrian moving-average and swap-carry fixes instead of duplicating tax calculations locally | Apache-2.0 |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential outputs, PSBT transaction/UTXO parsing and supported Payjoin receiver signature commitments | MIT |
 | `XlsxWriter` | `>=3.2,<4` | Styled `.xlsx` workbook export for practitioner-facing reports and the generic-ledger import template | BSD-2-Clause |
 | `openpyxl` | `>=3.1,<4` | Reads filled-in `.xlsx` files for the generic-ledger manual importer | MIT |
@@ -29,6 +33,8 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `sqlcipher3` | `>=0.6.2,<1` | Python binding around SQLCipher 4; wheels bundle a SQLCipher community build for at-rest database encryption | Zlib (binding) + BSD-style (SQLCipher community) |
 | `pyrage` | `>=1.3,<2` | In-process `age` implementation used by the `tar | age` backup format when no system `age`/`rage` binary is available | Apache-2.0 / MIT |
 | `keyring` | `>=25.6,<26` | Native macOS Keychain, Windows Credential Manager, and Linux Secret Service access for opt-in CLI remembered unlock | MIT |
+| `tzdata` | `>=2024.1` | Time zone data for `zoneinfo` where the OS has none, such as Windows | Apache-2.0 |
+| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@3d2e03ef27696fbd00f4516a0cb745300083e227` (dev only) | Parity oracle for Kassiber's tax engine: tests compare the engine with RP2, and `tax-engine/scripts/gen_engine_fixtures.py` builds fixtures from it; not shipped | Apache-2.0 |
 | `cryptography` | `>=50.0.0,<51` (dev only) | Self-signed TLS certificates for the regtest chain-observer oracle test; the application does not import it | Apache-2.0 OR BSD-3-Clause |
 | `PyYAML` | `>=6,<7` | Structured parsing for the repository-wide GitHub Actions pin-policy test | MIT |
 | `pako` | `^2.1.0` | Zlib/deflate decoding for Better Bitcoin QR descriptor import | MIT |
@@ -50,6 +56,10 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `tauri-plugin-window-state` | `~2.4` (Windows and Linux only) | Remembers the main window's size, position, and maximized state across launches, restoring a position only onto a connected monitor. macOS uses AppKit's frame autosave instead | Apache-2.0 OR MIT |
 | `windows-native-keyring-store` | `1.0.0` | Windows user-scope credential backend for AI provider API keys | MIT OR Apache-2.0 |
 | `zbus-secret-service-keyring-store` | `1.0.0` | Linux Secret Service backend for AI provider API keys | MIT OR Apache-2.0 |
+| `pyo3` | `0.25.1` | Python binding for the tax engine (abi3, CPython 3.10 and newer); 0.24.1 or newer is required for RUSTSEC-2025-0020 | MIT OR Apache-2.0 |
+| `num-bigint` / `num-integer` / `num-traits` | `0.4` / `0.1` / `0.2` | Arbitrary-precision coefficients for the tax engine's CPython-compatible decimal type | MIT OR Apache-2.0 |
+| `serde` / `serde_json` | `1.0.228` / `1` | JSON request and response documents at the tax engine's Python boundary | MIT OR Apache-2.0 |
+| `maturin` | `1.15.0` (exact, build only) | Builds the tax engine's Python binding during `uv sync --locked`; not shipped | MIT OR Apache-2.0 |
 
 ## Notable downstream license note
 
@@ -69,11 +79,9 @@ files and upstream license terms before any future bundling. No native binary
 is copied into Kassiber, and the import fails explicitly when the tools are
 missing.
 
-In the current tested RP2 install path, one runtime dependency worth calling out explicitly is:
-
-| Package | Why it matters | License |
-| --- | --- | --- |
-| `pycountry` | More restrictive than the surrounding MIT/BSD/Apache-style deps in the observed RP2 stack | LGPL-2.1-only |
+RP2's `pycountry` dependency (LGPL-2.1-only) no longer ships: packaged builds
+stopped bundling RP2 when Kassiber's own tax engine replaced it. It remains
+only in development environments, through the RP2 test oracle.
 
 ## Bundled source data
 

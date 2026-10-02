@@ -15,7 +15,8 @@ wallets.
 3. The custody interpreter proposes exact quantity claims. The arbitrator
    checks ownership, scope, conservation and competing claims once.
 4. The finalized projection supplies selected movements and external events to
-   RP2. Reports, graphs and AI read the resulting stored projection.
+   the [tax engine](tax-engine.md). Reports, graphs and AI read the resulting
+   stored projection.
 
 An export's transaction hash can identify an event, but graph-shaped imported
 JSON cannot impersonate a native observer, and a supporting import cannot erase
@@ -314,9 +315,9 @@ planning. Detailed component and guided-review contracts remain documented in
 
 ## Regression evidence
 
-The audit is covered by ownership and RP2 engine tests, same-block chronology
-tests, actual LWK/Core-record-to-matcher tests, database-backed matcher loader tests,
-and scoped/core AI tool tests. The ordinary fast regtest lane follows recorded
+The audit is covered by ownership and tax-engine adapter tests, same-block
+chronology tests, actual LWK/Core-record-to-matcher tests, database-backed
+matcher loader tests, and scoped/core AI tool tests. The ordinary fast regtest lane follows recorded
 node activity through sync, journal, report and XLSX export; the independent
 chain-observer lane compares Bitcoin/Liquid adapters against local node truth.
 These fixtures prove the specified cases, not the completeness of any user's

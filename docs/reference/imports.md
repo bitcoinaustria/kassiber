@@ -231,7 +231,7 @@ If imported transactions do not carry `fiat_rate` or `fiat_value`, `journals pro
 
 For inbound transactions, explicit earn-like `kind` values such as `income`,
 `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `lending_interest`, and
-`routing_income` are preserved and later promoted into RP2 earn-like receipts
+`routing_income` are preserved and later promoted into earn-like receipts
 during journal processing. `wages` is preserved as source provenance but books
 as a normal valued acquisition: wage-tax calculation remains outside Kassiber.
 Unlabeled inbound rows stay conservative and process as acquisitions.
@@ -488,8 +488,8 @@ and let Kassiber price the row.
 
 ### Types
 
-The `Type` maps to a direction plus a tax `kind`. Income kinds become RP2
-earn-like receipts. The **outbound** disposals `Gift sent`/`Donation`/`Lost`/
+The `Type` maps to a direction plus a tax `kind`. Income kinds become earn-like
+receipts. The **outbound** disposals `Gift sent`/`Donation`/`Lost`/
 `Stolen` are deliberately routed to the non-sale-disposal quarantine for
 explicit review instead of being booked as ordinary market sales. `Gift
 received` is the inbound counterpart and is booked as a plain acquisition at the
@@ -1329,10 +1329,11 @@ execution value from the CSV. BTC deposits and withdrawals intentionally do
 not invent a fiat price. Kassiber proposes nearby opposite-direction wallet
 movements with compatible amounts as `strong` custody-transfer candidates;
 they require review because amount and time are not physical identity. Once a
-pair is confirmed, RP2 carries the original basis between the custodial and
-self-custody wallets. If only part of the 21bitcoin balance is withdrawn, the
-tax engine consumes only the withdrawn lots according to the book's accounting
-method and leaves the remaining custodial balance with its original basis.
+pair is confirmed, the tax engine carries the original basis between the
+custodial and self-custody wallets. If only part of the 21bitcoin balance is
+withdrawn, the engine consumes only the withdrawn lots according to the book's
+accounting method and leaves the remaining custodial balance with its original
+basis.
 
 Behavior:
 

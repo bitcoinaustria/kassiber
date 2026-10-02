@@ -44,6 +44,12 @@ resolution, and Tauri command bindings. **No** tax, accounting, or storage
 logic moves to Rust. `kassiber.core` and `rp2` remain authoritative in
 Python.
 
+**Amended 2026-10-01:** [plan 20](20-kassiber-tax-engine.md) replaces RP2 with
+a Kassiber-owned tax engine written in Rust, called from Python. Since that
+plan's cutover, the engine is authoritative for tax calculations, and RP2 is
+only a test oracle that the sidecar no longer bundles. Custody, storage, and
+the daemon stay in Python until a later plan.
+
 ## Why
 
 - **Component ecosystem.** TanStack Table, shadcn/ui (charts and the rest),
