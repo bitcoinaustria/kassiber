@@ -54,7 +54,11 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   processes with test-pinned results and a stale migration.
 - [ ] Decide the Austrian treatment of a Neu swap's fee basis. The pool drops by
   amount plus fee, but only the amount's basis is carried, so the fee's share
-  is neither realized nor carried. Needs legal review before any change.
+  is neither realized nor carried. Needs legal review before any change. Done
+  when the reviewed treatment is recorded in
+  [the Austrian handoff](docs/austrian-handoff.md) and an engine fixture pins
+  it, whether the review keeps today's behavior or changes it (a change also
+  needs a stale migration).
 - [ ] Stop parsing user description text as Austrian notes markers. A
   description containing an `at_regime=`, `at_pool=`, or `at_swap_link=` token
   can add, duplicate, or conflict with the adapter's markers. Done when markers

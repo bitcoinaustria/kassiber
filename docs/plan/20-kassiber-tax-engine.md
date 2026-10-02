@@ -119,8 +119,11 @@ Apache-2.0 obligations on the new engine. Four fork files are copyright
 bitcoinaustria (`plugin/country/at.py`, `plugin/country/at_native_tax_engine.py`,
 `plugin/accounting_method/moving_average.py`, and
 `plugin/accounting_method/moving_average_at.py`). The fork's history shows
-every commit to them is by the Kassiber owner, so they may be ported directly. If
-legal certainty matters, add this question to the legal opinion that
+every commit to them is by the Kassiber owner. Authorship of commits does not
+by itself prove the content is free of adapted upstream code. The engine's
+Austrian and moving-average modules port them on the basis that they are the
+owner's original work, which the owner must confirm. If legal certainty matters,
+add this question to the legal opinion that
 [the stack ADR](01-stack-decision.md) already requires.
 
 ## Architecture
