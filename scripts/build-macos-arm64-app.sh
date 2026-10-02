@@ -122,13 +122,8 @@ run uv run --locked --python "$PYTHON_VERSION" --with pyinstaller==6.20.0 pyinst
   --copy-metadata lwk \
   --collect-submodules embit \
   --collect-data embit \
-  --collect-submodules rp2 \
-  --collect-data rp2 \
-  --collect-submodules prezzemolo \
   --collect-submodules keyring.backends \
   --copy-metadata keyring \
-  --hidden-import prezzemolo.avl_tree \
-  --hidden-import rp2.plugin.country.at \
   scripts/kassiber_pyinstaller_entry.py
 
 SIDECAR_DIST="dist/$SIDECAR_NAME"

@@ -1,13 +1,13 @@
-"""Regression coverage for the packaged-build rp2 import path.
+"""Regression coverage for the RP2 backend's import path.
 
-The third-party ``rp2.logger`` binds a ``logging.FileHandler`` to
-``./log/rp2_<timestamp>.log`` at module-import time. When Kassiber ships
-as a macOS .app, the daemon's working directory inherits the bundle's
-read-only ``Contents/Resources`` directory, so a naive rp2 import crashes
-with EACCES. ``_get_rp2_modules`` defends against this by priming
-``rp2.logger`` under a writable scratch cwd first; this test pins that
+Kassiber's own tax engine is the product backend; RP2 remains the parity
+oracle that tests select (plan 20). Older ``rp2.logger`` releases bound a
+``logging.FileHandler`` to ``./log/rp2_<timestamp>.log`` at import time,
+which crashed with EACCES under a read-only cwd such as a macOS bundle's
+``Contents/Resources``. ``_get_rp2_modules`` defends against this by priming
+``rp2.logger`` under a writable scratch cwd first; these tests pin that
 behavior by spawning a fresh interpreter whose cwd is a chmod-555
-directory and asserting the import succeeds.
+directory and asserting the RP2 backend still loads without a file logger.
 """
 
 from __future__ import annotations
@@ -35,9 +35,10 @@ class Rp2ReadOnlyCwdImportTest(unittest.TestCase):
             os.chmod(scratch, stat.S_IRUSR | stat.S_IXUSR)
             script = textwrap.dedent(
                 """
-                from kassiber.core.engines.rp2 import _get_rp2_modules
+                from kassiber.core.engines.rp2 import _get_rp2_modules, _use_tax_engine_backend
 
-                modules = _get_rp2_modules()
+                with _use_tax_engine_backend("rp2"):
+                    modules = _get_rp2_modules()
                 assert "InTransaction" in modules, modules.keys()
                 assert "Configuration" in modules, modules.keys()
                 print("ok")
@@ -79,9 +80,10 @@ class Rp2ReadOnlyCwdImportTest(unittest.TestCase):
 
                 tempfile.tempdir = {str(tmp)!r}
 
-                from kassiber.core.engines.rp2 import _get_rp2_modules
+                from kassiber.core.engines.rp2 import _get_rp2_modules, _use_tax_engine_backend
 
-                modules = _get_rp2_modules()
+                with _use_tax_engine_backend("rp2"):
+                    modules = _get_rp2_modules()
                 assert "InTransaction" in modules, modules.keys()
                 root = pathlib.Path(tempfile.gettempdir())
                 log_files = list(root.rglob("rp2_*.log"))

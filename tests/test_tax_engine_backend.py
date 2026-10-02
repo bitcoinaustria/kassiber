@@ -91,7 +91,8 @@ class NativeBackendIsolationTest(unittest.TestCase):
 
                 # The RP2 backend still fails closed with its own message.
                 try:
-                    adapter._get_rp2_modules()
+                    with adapter._use_tax_engine_backend("rp2"):
+                        adapter._get_rp2_modules()
                 except AppError as exc:
                     assert str(exc).startswith("RP2 integration requires the 'rp2' package."), str(exc)
                 else:
@@ -526,9 +527,9 @@ class InterfaceParityTest(unittest.TestCase):
             self.assertEqual(set(adapter._get_rp2_modules()), rp2_names - {"BalanceSet"})
 
     def test_backend_selection_is_scoped_and_validated(self):
-        # RP2 stays the default unless this session selected the native one.
+        # The native engine is the default unless this session selected RP2.
         session = os.environ.get("KASSIBER_TEST_TAX_ENGINE", "").strip().lower()
-        self.assertEqual(adapter._tax_engine_backend(), "native" if session == "native" else "rp2")
+        self.assertEqual(adapter._tax_engine_backend(), "rp2" if session == "rp2" else "native")
         before = adapter._tax_engine_backend()
         with adapter._use_tax_engine_backend("native"):
             self.assertEqual(adapter._tax_engine_backend(), "native")

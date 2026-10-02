@@ -60,11 +60,12 @@ from ..loans import (
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 
 _RP2_MODULES = None
-# The calculation backend under this adapter (plan 20). RP2 is the product
-# default; tests select the native engine with ``_use_tax_engine_backend``.
-# Product code has no setting or environment variable for it.
+# The calculation backend under this adapter (plan 20). Kassiber's own engine
+# is the product default; RP2 is a development dependency that tests select
+# with ``_use_tax_engine_backend`` as the parity oracle. Product code has no
+# setting or environment variable for it.
 _TAX_ENGINE_BACKENDS = ("rp2", "native")
-_TAX_ENGINE_BACKEND = "rp2"
+_TAX_ENGINE_BACKEND = "native"
 # The engine identity recorded in each realized entry's calculation metadata.
 _CALCULATION_ENGINE_NAMES = {"rp2": "rp2", "native": "kassiber_tax"}
 GENERIC_BITCOIN_RAIL_QUARANTINE_REASON = "bitcoin_rail_carry_basis_unresolved"

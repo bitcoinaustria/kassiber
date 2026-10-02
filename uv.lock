@@ -491,8 +491,8 @@ dependencies = [
     { name = "openpyxl" },
     { name = "pyrage" },
     { name = "reportlab" },
-    { name = "rp2" },
     { name = "sqlcipher3" },
+    { name = "tzdata" },
     { name = "xlsxwriter" },
 ]
 
@@ -502,6 +502,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "pyyaml" },
+    { name = "rp2" },
 ]
 
 [package.metadata]
@@ -515,8 +516,8 @@ requires-dist = [
     { name = "openpyxl", specifier = ">=3.1,<4" },
     { name = "pyrage", specifier = ">=1.3,<2" },
     { name = "reportlab", specifier = ">=4.4,<5" },
-    { name = "rp2", git = "https://github.com/bitcoinaustria/rp2.git?rev=3d2e03ef27696fbd00f4516a0cb745300083e227" },
     { name = "sqlcipher3", specifier = ">=0.6.2,<1" },
+    { name = "tzdata", specifier = ">=2024.1" },
     { name = "xlsxwriter", specifier = ">=3.2,<4" },
 ]
 
@@ -526,6 +527,7 @@ dev = [
     { name = "pytest", specifier = ">=9.0.3,<10" },
     { name = "pytest-xdist", specifier = ">=3.6,<4" },
     { name = "pyyaml", specifier = ">=6,<7" },
+    { name = "rp2", git = "https://github.com/bitcoinaustria/rp2.git?rev=3d2e03ef27696fbd00f4516a0cb745300083e227" },
 ]
 
 [[package]]
