@@ -449,6 +449,9 @@ def test_basis_barrier_does_not_suppress_unrelated_asset_projection():
     assert all(item["transaction_id"] != "usdt-later" for item in projection.quarantines)
 
 
+# The spy replaces the adapter's preparation and RP2 configuration, so the
+# shadow mode has no production outcome to compare with the oracle here.
+@pytest.mark.stubs_tax_engine
 def test_rp2_boundary_spy_never_receives_residual_or_later_basis_consumer():
     rows, state = _residual_state()
     profile = {

@@ -47,6 +47,10 @@ _BLOCK_RP2 = textwrap.dedent(
 
 def _run_python(script: str, *, cwd: Path) -> subprocess.CompletedProcess:
     env = os.environ.copy()
+    # These children examine production's own process: no RP2, no files.
+    # A shadow or census session's child hook would run the oracle there or
+    # write route records, so they run without the session's tax mode.
+    env.pop("KASSIBER_TEST_TAX_ENGINE", None)
     env["PYTHONPATH"] = os.pathsep.join(path for path in (str(_ROOT), env.get("PYTHONPATH")) if path)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     return subprocess.run(

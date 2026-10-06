@@ -57,6 +57,7 @@ the oracle and production together, so a shadow run cannot see it; the
 stored oracle outcomes of the projection-level goldens can.
 
 Only the comparison harness, this package, the ledger goldens and prepare
-tests, `tests/conftest.py`, the interface-mirror tests, and the fixture
-generator may import `tests.tax_oracle` or `tests.tax_engine_compare`, which
-re-exports it; `tests/test_tax_oracle_imports.py` holds the list.
+tests, `tests/conftest.py`, the child-process hook and its harness test, the
+interface-mirror tests, and the fixture generator may import
+`tests.tax_oracle` or `tests.tax_engine_compare`, which runs it;
+`tests/test_tax_oracle_imports.py` holds the list.

@@ -3,8 +3,9 @@
 ``tests/tax_oracle/`` exists to be compared against. A product module or an
 ordinary test that imported it would run on the oracle instead of
 production, and its assertions would stop saying anything about production.
-``tests/tax_engine_compare.py`` re-exports the oracle (``OracleTaxEngine``,
-``run_oracle``), so importing it is guarded the same way.
+``tests/tax_engine_compare.py`` runs the oracle for its importer
+(``run_oracle``, ``run_on_oracle_backend``), so importing it is guarded the
+same way.
 """
 
 from __future__ import annotations
@@ -25,6 +26,9 @@ ALLOWED = frozenset(
     {
         "tests/conftest.py",
         "tests/tax_engine_compare.py",
+        # Installs the session's shadow or census mode in child processes.
+        "tests/_child_hooks/sitecustomize.py",
+        "tests/test_tax_shadow_harness.py",
         "tests/test_tax_ledger_goldens.py",
         "tests/test_tax_ledger_prepare.py",
         "tax-engine/scripts/gen_ledger_fixtures.py",

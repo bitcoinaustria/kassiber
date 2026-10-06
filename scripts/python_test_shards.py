@@ -5,11 +5,19 @@ The mapping is intentionally file-based.  Pytest-xdist may distribute tests
 inside the safe domain shards, while socket/process-sensitive modules and the
 opt-in integration modules stay in isolated serial lanes.  New test modules fall
 back to core-accounting so discovery can never silently omit them.
+
+The tax-shadow overlay sits across the lanes instead of being one: the modules
+that reach the tax engine keep their lane and run a second time with
+`KASSIBER_TEST_TAX_ENGINE=shadow`, which compares production with the frozen
+oracle on every ledger build.
 """
 
 from __future__ import annotations
 
 import argparse
+import ast
+import os
+import re
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -167,6 +175,36 @@ _REPORT_CONTRACT_TOKENS = (
     "transfer_matching",
 )
 
+# A test module reaches the tax engine when its source, or the source of a
+# `tests` module it imports (transitively), contains one of these calls
+# (regular expressions; a CLI argument list may wrap between its words).
+SHADOW_CALL_PATTERNS = (
+    r"process_journals\(",
+    r"build_ledger_state\(",
+    r"KassiberTaxEngine\(",
+    r"GenericRP2TaxEngine\(",
+    r"CustodyJournalBuilder\(",
+    r"""["']journals["'],\s*["']process["']""",
+    r"ui\.journals\.process",
+)
+_SHADOW_CALL = re.compile("|".join(SHADOW_CALL_PATTERNS))
+# Engine callers that only the census mode (`KASSIBER_TEST_TAX_ENGINE=census`)
+# found, because they reach the engine through a product path none of the
+# patterns name.
+_SHADOW_EXTRA_MODULES = frozenset(
+    {
+        # `kassiber.core.review_workflow` builds the ledger for its previews.
+        "test_review_cli_ai",
+        "test_review_workflow",
+        # The daemon processes stale journals before its AI read tools and
+        # its `_DIRECT_AUTO_JOURNAL_REFRESH_KINDS` reads
+        # (`daemon_freshness._auto_maintain_for_read`).
+        "test_chain_analysis_consent",
+        "test_daemon_swap_matching",
+    }
+)
+SHADOW_MODE = "shadow"
+
 
 def discover_test_files(root: Path = ROOT) -> tuple[Path, ...]:
     tests_root = root / "tests"
@@ -226,30 +264,116 @@ def validate_manifest(root: Path = ROOT) -> dict[str, tuple[Path, ...]]:
     return manifest
 
 
-def _pytest_args(raw_args: Sequence[str]) -> list[str]:
-    args = list(raw_args)
-    if args and args[0] == "--":
-        args.pop(0)
-    return args
+def _imported_test_modules(path: Path, root: Path) -> frozenset[Path]:
+    """The `tests` modules that ``path`` imports, as paths relative to ``root``."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    package = path.relative_to(root).with_suffix("").parts[:-1]
+    names: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                base = package[: len(package) - node.level + 1]
+                module = ".".join((*base, *([node.module] if node.module else [])))
+            else:
+                module = node.module or ""
+            names.append(module)
+            names.extend(f"{module}.{alias.name}" for alias in node.names)
+    found = set()
+    for name in names:
+        parts = name.split(".")
+        if parts[0] != "tests":
+            continue
+        for candidate in (root.joinpath(*parts[:-1], f"{parts[-1]}.py"), root.joinpath(*parts, "__init__.py")):
+            if candidate.is_file():
+                found.add(candidate.relative_to(root))
+    return frozenset(found)
+
+
+def shadow_overlay(root: Path = ROOT) -> tuple[Path, ...]:
+    """The test modules that reach the tax engine, in discovery order."""
+    sources = {
+        path.relative_to(root): path
+        for path in (root / "tests").rglob("*.py")
+        if "__pycache__" not in path.parts
+    }
+    calls = {
+        path
+        for path, absolute in sources.items()
+        if _SHADOW_CALL.search(absolute.read_text(encoding="utf-8"))
+    }
+    imports: dict[Path, frozenset[Path]] = {}
+
+    def reaches_engine(start: Path) -> bool:
+        seen, pending = {start}, [start]
+        while pending:
+            path = pending.pop()
+            if path in calls:
+                return True
+            if path not in imports:
+                imports[path] = _imported_test_modules(sources[path], root)
+            for imported in imports[path] - seen:
+                seen.add(imported)
+                pending.append(imported)
+        return False
+
+    return tuple(
+        path
+        for path in discover_test_files(root)
+        if path.stem in _SHADOW_EXTRA_MODULES or reaches_engine(path)
+    )
+
+
+def shadow_lanes(root: Path = ROOT) -> tuple[str, ...]:
+    """The lanes that hold at least one overlay module, in lane order."""
+    overlay = set(shadow_overlay(root))
+    manifest = validate_manifest(root)
+    return tuple(shard for shard in ALL_SHARDS if overlay.intersection(manifest[shard]))
+
+
+def _shadow_paths(lane: str | None) -> tuple[Path, ...]:
+    overlay = shadow_overlay()
+    if lane is None:
+        return overlay
+    return tuple(path for path in validate_manifest()[lane] if path in overlay)
+
+
+def _run_pytest(
+    paths: Sequence[Path],
+    *,
+    distribution: str | None,
+    pytest_args: Sequence[str],
+    tax_mode: str | None = None,
+) -> int:
+    args = [str(ROOT / path) for path in paths]
+    if distribution is not None:
+        args.extend(("-n", "2", "--dist", distribution, "--max-worker-restart=0"))
+    args.extend(pytest_args)
+    command = [sys.executable, "-m", "pytest", *args]
+    env = None
+    prefix = ""
+    if tax_mode is not None:
+        env = {**os.environ, "KASSIBER_TEST_TAX_ENGINE": tax_mode}
+        prefix = f"KASSIBER_TEST_TAX_ENGINE={tax_mode} "
+    print(">", prefix + " ".join(command), flush=True)
+    return subprocess.call(command, cwd=ROOT, env=env)
 
 
 def _run_shard(shard: str, *, ci: bool, pytest_args: Sequence[str]) -> int:
     manifest = validate_manifest()
-    args = [str(ROOT / path) for path in manifest[shard]]
-    if ci and shard in PARALLEL_SHARDS:
-        args.extend(
-            (
-                "-n",
-                "2",
-                "--dist",
-                PARALLEL_SHARD_DISTRIBUTION[shard],
-                "--max-worker-restart=0",
-            )
-        )
-    args.extend(_pytest_args(pytest_args))
-    command = [sys.executable, "-m", "pytest", *args]
-    print(">", " ".join(command), flush=True)
-    return subprocess.call(command, cwd=ROOT)
+    distribution = PARALLEL_SHARD_DISTRIBUTION[shard] if ci and shard in PARALLEL_SHARDS else None
+    return _run_pytest(manifest[shard], distribution=distribution, pytest_args=pytest_args)
+
+
+def _run_shadow(lane: str | None, *, ci: bool, pytest_args: Sequence[str]) -> int:
+    paths = _shadow_paths(lane)
+    if not paths:
+        # An empty argument list would make pytest collect the whole suite.
+        print(f"{lane}: no test module reaches the tax engine", flush=True)
+        return 0
+    distribution = PARALLEL_SHARD_DISTRIBUTION.get(lane) if ci and lane is not None else None
+    return _run_pytest(paths, distribution=distribution, pytest_args=pytest_args, tax_mode=SHADOW_MODE)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -263,12 +387,34 @@ def _parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser("run", help="Run one shard with pytest")
     run_parser.add_argument("shard", choices=ALL_SHARDS)
     run_parser.add_argument("--ci", action="store_true", help="Enable safe xdist workers")
+
+    list_shadow_parser = subparsers.add_parser(
+        "list-shadow", help="List the tax-shadow overlay, or its part in one shard"
+    )
+    list_shadow_parser.add_argument("shard", nargs="?", choices=ALL_SHARDS)
+
+    run_shadow_parser = subparsers.add_parser(
+        "run-shadow",
+        help="Run the tax-shadow overlay, or its part in one shard, with KASSIBER_TEST_TAX_ENGINE=shadow",
+    )
+    run_shadow_parser.add_argument("shard", nargs="?", choices=ALL_SHARDS)
+    run_shadow_parser.add_argument(
+        "--ci", action="store_true", help="Enable the shard's safe xdist workers"
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _parser()
+    argv = list(sys.argv[1:] if argv is None else argv)
+    # Everything after `--` goes to pytest. Splitting here keeps an optional
+    # shard argument from swallowing the first pytest argument.
+    passthrough: list[str] = []
+    if "--" in argv:
+        split = argv.index("--")
+        argv, passthrough = argv[:split], argv[split + 1 :]
     args, pytest_args = parser.parse_known_args(argv)
+    pytest_args = [*pytest_args, *passthrough]
     manifest = validate_manifest()
     if args.command == "validate":
         if pytest_args:
@@ -277,12 +423,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             mode = "parallel" if shard in PARALLEL_SHARDS else "serial"
             print(f"{shard}: {len(manifest[shard])} modules ({mode})")
         return 0
-    if args.command == "list":
+    if args.command in {"list", "list-shadow"}:
         if pytest_args:
             parser.error(f"unrecognized arguments: {' '.join(pytest_args)}")
-        for path in manifest[args.shard]:
+        paths = manifest[args.shard] if args.command == "list" else _shadow_paths(args.shard)
+        for path in paths:
             print(path.as_posix())
         return 0
+    if args.command == "run-shadow":
+        return _run_shadow(args.shard, ci=args.ci, pytest_args=pytest_args)
     return _run_shard(args.shard, ci=args.ci, pytest_args=pytest_args)
 
 

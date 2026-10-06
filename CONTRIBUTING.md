@@ -74,7 +74,8 @@ Before push or PR, run the full gate:
 ```
 
 It checks the tax engine's Rust formatting and runs its tests, compiles Python,
-validates the test inventory, runs all Python tests once, and runs TypeScript,
+validates the test inventory, runs all Python tests once, reruns the modules
+that reach the tax engine against its frozen oracle, and runs TypeScript,
 ESLint, and Vitest. CI partitions that Python inventory
 into disjoint shards; the required aggregate and specialized integration lanes
 are explained in [Testing](docs/reference/testing.md#pull-request-ci).

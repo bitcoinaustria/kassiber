@@ -39,13 +39,56 @@ that for a whole pytest run:
 | Value | Meaning |
 | --- | --- |
 | unset | production |
-| `shadow` | production, plus the oracle on every `build_ledger_state` call; any difference fails the call (`tests/tax_engine_compare.py` masks only generated entry ids and the engine identity; failures compare after two listed normalizations: RP2 error class names map to `Engine*`, and RP2's temporary INI path prefix is dropped from messages) |
+| `shadow` | production, plus the oracle on every `build_ledger_state` call; any difference fails the call and the session (`tests/tax_engine_compare.py` masks only generated entry ids and the engine identity; failures compare after two listed normalizations: RP2 error class names map to `Engine*`, and RP2's temporary INI path prefix is dropped from messages) |
+| `census` | production, and records which test modules reached the engine; the session fails if one of them is missing from the shadow overlay |
 | `oracle` | every call on the oracle, to show the tests' expectations hold on RP2 |
 | `legacy-native` | every call on the oracle adapter over `kassiber/core/engines/native.py` |
 
-Product code reads no such variable, so subprocesses such as a test's daemon
-run production. See the [tax engine](tax-engine.md) for how the backends
-relate.
+Product code reads no such variable. Under `shadow` and `census`,
+`tests/_child_hooks/sitecustomize.py` installs the same mode in Python child
+processes, such as the `python -m kassiber` runs and daemons tests spawn,
+once they load `kassiber.core.engines` (or `tests/tax_engine_compare.py`, when
+a child imports it first); `conftest.py` puts that directory on
+`PYTHONPATH` whenever a mode is set, also under `KASSIBER_INTEGRATION`. A
+shadow difference fails the child's command. Children under the other modes,
+and children started with an environment of their own, run production. See
+the [tax engine](tax-engine.md) for how the backends relate.
+
+### Shadow overlay
+
+The shadow overlay is the set of test modules that reach the tax engine:
+those whose source, or the source of a `tests` module they import
+(transitively), calls `process_journals`, `build_ledger_state`,
+`CustodyJournalBuilder`, an engine class, or `journals process` through the
+CLI or the daemon, plus the modules the census found through other paths
+(`_SHADOW_EXTRA_MODULES` in `scripts/python_test_shards.py`). It sits across
+the CI lanes instead of being one: each module keeps its lane.
+
+```bash
+uv run --locked python scripts/python_test_shards.py list-shadow [lane]
+uv run --locked python scripts/python_test_shards.py run-shadow [lane] [--ci] [-- pytest args]
+```
+
+`run-shadow` runs the overlay, or its part in one lane, with
+`KASSIBER_TEST_TAX_ENGINE=shadow`; `--ci` adds the lane's xdist workers.
+
+Under `shadow` and `census`, every production call, in the test process, its
+xdist workers, and its child processes, appends a route record (test module,
+capability, route, and whether it returned, raised, or differed) to a file in
+the session's temporary directory; nothing from the book is recorded. At the
+end the session prints, per capability (`generic`, `generic_carry`, `at`,
+`at_swap`), how many calls went to the v2 engine and how many to the legacy
+adapter. Shadow fails the session on any recorded difference, even one a
+caller caught, and on any call of a capability production routes to v2 that
+went legacy. Production does not route by capability yet, so every call
+counts as `unclassified` and legacy. A test marked `stubs_tax_engine`
+replaces parts of the production engine, so shadow runs its calls on
+production without comparing them and lists them in the summary.
+`tests/test_tax_shadow_harness.py` pins which tests carry that marker. It
+also proves the child path with the test-only
+`KASSIBER_TEST_TAX_SHADOW_INJECT_DIFFERENCE=1`, which alters production's
+outcome before the comparison: a `journals process` child must fail with the
+shadow error.
 
 ## Tiers
 
@@ -100,6 +143,11 @@ The required PR workflow is fail-fast without reducing the test inventory:
 5. Each pytest/Vitest lane uploads a JUnit artifact even after failure. Python
    lanes print `--durations=50` output in their job summary. The stable
    `ci/required` aggregate is successful only when every required lane passes.
+6. The Python lanes run under `KASSIBER_TEST_TAX_ENGINE=census`, so a lane
+   fails when one of its modules reaches the tax engine but is missing from
+   the [shadow overlay](#shadow-overlay). The `Tax shadow` job, after
+   `Preflight`, reruns the overlay part of each lane that has one with
+   `run-shadow <lane> --ci`, comparing production with the frozen oracle.
 
 `scripts/python_test_shards.py` is the single file-to-lane mapping. Unknown new
 test modules default to `core-accounting`, while `tests/test_ci_shards.py`
@@ -109,7 +157,8 @@ test failures are never broadly retried. Locked uv and pnpm stores are cached;
 cache misses still install only from the checked-in lockfiles.
 
 The local `./scripts/quality-gate.sh` favors deterministic serial execution,
-but runs the same complete Python inventory once before the frontend checks.
+but runs the same complete Python inventory once, under `census`, and then the
+whole shadow overlay once with `run-shadow`, before the frontend checks.
 
 ## Dependency chain-observer oracle
 
