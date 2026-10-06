@@ -13371,7 +13371,7 @@ class ReviewRegressionTest(unittest.TestCase):
 
         self.assertEqual(calls, [{"BTC", "LBTC"}])
 
-    def test_rp2_engine_accepts_austrian_profile_and_routes_to_rp2_at(self):
+    def test_austrian_profile_policy_is_austrias_constants(self):
         profile = {
             "id": "profile-at",
             "workspace_id": "workspace-main",
@@ -13383,17 +13383,24 @@ class ReviewRegressionTest(unittest.TestCase):
         }
         engine = GenericRP2TaxEngine(profile)
         self.assertIsNotNone(engine)
-        # Policy should reflect rp2's AT plugin — moving_average_at default,
-        # English fallback generators, and Austrian accounting methods.
-        from kassiber.tax_policy import build_tax_policy
+        # Austria's rules ignore the profile's currency and holding period:
+        # EUR, no long-term period, moving_average_at by default with the
+        # generic lot methods also allowed, and English open positions.
+        from kassiber.tax_policy import TaxPolicy, build_tax_policy
 
-        policy = build_tax_policy(profile)
-        self.assertEqual(policy.tax_country, "at")
-        self.assertEqual(policy.fiat_currency, "EUR")
-        self.assertEqual(policy.default_accounting_method, "moving_average_at")
-        self.assertIn("moving_average_at", policy.accounting_methods)
-        self.assertEqual(policy.generation_language, "en")
-        self.assertEqual(policy.report_generators, ("open_positions",))
+        self.assertEqual(
+            build_tax_policy(dict(profile, fiat_currency="USD")),
+            TaxPolicy(
+                tax_country="at",
+                fiat_currency="EUR",
+                long_term_days=sys.maxsize,
+                accounting_methods=("fifo", "hifo", "lifo", "lofo", "moving_average", "moving_average_at"),
+                report_generators=("open_positions",),
+                default_accounting_method="moving_average_at",
+                generation_language="en",
+                allowed_cost_basis_pool_scopes=("global",),
+            ),
+        )
 
     def test_generic_rp2_engine_quarantines_unfunded_transfer(self):
         profile, _ = self._direct_transfer_engine_inputs()
