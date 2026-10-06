@@ -208,6 +208,22 @@ class QuarantineReviewTest(unittest.TestCase):
         self.assertEqual(badges["quarantine"], 2)
         self.assertEqual(badges["quarantine_attention"], 1)
 
+    def test_review_cases_list_causes_and_count_what_waits_on_them(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            _activate_residual_component(conn)
+            handlers.process_journals(conn, "Books", "Book")
+            profile = conn.execute("SELECT * FROM profiles WHERE id = 'profile'").fetchone()
+
+            cases = review_workflow.inspect_cases(conn, profile, limit=100)
+
+        # The sale only waits on the custody problem: repairing that clears it,
+        # so a reviewer pages through causes, not their consequences.
+        self.assertEqual([case["transaction_id"] for case in cases["cases"]], ["out"])
+        self.assertEqual(cases["cases"][0]["waiting_count"], 1)
+        self.assertEqual(cases["waiting_count"], 1)
+        self.assertIsNone(cases["next_cursor"])
+
     def test_a_pair_that_leaves_a_suspense_points_at_the_pair(self):
         with tempfile.TemporaryDirectory() as root:
             conn = self._open(root)

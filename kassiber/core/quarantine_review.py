@@ -407,6 +407,91 @@ def _assumptions(
     }
 
 
+def waiting_roots(
+    rows: Mapping[str, Mapping[str, Any]],
+    details: Mapping[str, Mapping[str, Any]],
+) -> dict[str, str]:
+    """Map each held row that only follows another to the root it clears with.
+
+    ``rows`` are the held transactions by id, each with its ``reason``,
+    ``occurred_at`` and ``asset``; ``details`` their parsed quarantine detail.
+    A downstream row whose root cannot be named is left out: with no cause to
+    point at, it needs the user itself.
+    """
+
+    def is_root_row(transaction_id: str) -> bool:
+        row = rows.get(transaction_id)
+        return row is not None and not catalog.is_downstream(str(row["reason"]))
+
+    def resolve_root(
+        transaction_id: str,
+        reason: str,
+        detail: Mapping[str, Any],
+        visited: frozenset[str] = frozenset(),
+    ) -> str | None:
+        visited = visited | {transaction_id}
+        candidates: list[str] = []
+        if reason == "custody_basis_barrier":
+            candidates = [str(item) for item in detail.get("root_transaction_ids") or []]
+        elif reason == "transfer_pair_dependency_blocked":
+            candidates = [str(item) for item in detail.get("blocked_by_transaction_ids") or []]
+        elif reason == "derived_transfer_group_blocked":
+            group_id = detail.get("transfer_group_id")
+            candidates = [
+                other_id
+                for other_id, other in details.items()
+                if group_id and other.get("transfer_group_id") == group_id
+            ]
+        elif reason == "basis_provenance_incomplete":
+            # The engine records only the contamination timestamp. Name a root
+            # only when exactly one root row of this asset sits there; a
+            # guess could send the owner to an unrelated batched row.
+            since = detail.get("lot_state_uncertain_since")
+            asset = rows[transaction_id]["asset"]
+            matches = [
+                other_id
+                for other_id, other in rows.items()
+                if since
+                and other["occurred_at"] == since
+                and other["asset"] == asset
+                and is_root_row(other_id)
+            ]
+            candidates = matches if len(matches) == 1 else []
+        roots = [
+            candidate
+            for candidate in candidates
+            if candidate not in visited and is_root_row(candidate)
+        ]
+        if not roots:
+            # Dependencies can chain (A holds B, B holds C): follow a
+            # downstream candidate to its own root, stopping at cycles.
+            for candidate in candidates:
+                if candidate in visited or candidate not in rows:
+                    continue
+                nested = resolve_root(
+                    candidate,
+                    str(rows[candidate]["reason"]),
+                    details[candidate],
+                    visited,
+                )
+                if nested is not None and nested not in visited:
+                    roots.append(nested)
+        if not roots:
+            return None
+        return min(roots, key=lambda item: (str(rows[item]["occurred_at"] or ""), item))
+
+    waiting: dict[str, str] = {}
+    for transaction_id, row in rows.items():
+        reason = str(row["reason"])
+        detail = details.get(transaction_id) or {}
+        if not catalog.reason_info(reason, detail).downstream:
+            continue
+        root_id = resolve_root(transaction_id, reason, detail)
+        if root_id is not None:
+            waiting[transaction_id] = root_id
+    return waiting
+
+
 def review_quarantine(
     conn: sqlite3.Connection,
     profile: Mapping[str, Any],
@@ -443,67 +528,7 @@ def review_quarantine(
     ).fetchall()
     by_id = {str(row["transaction_id"]): row for row in rows}
     details = {str(row["transaction_id"]): _parse_detail(row["detail_json"]) for row in rows}
-
-    def is_root_row(transaction_id: str) -> bool:
-        row = by_id.get(transaction_id)
-        return row is not None and not catalog.is_downstream(str(row["reason"]))
-
-    def resolve_root(
-        transaction_id: str,
-        reason: str,
-        detail: Mapping[str, Any],
-        visited: frozenset[str] = frozenset(),
-    ) -> str | None:
-        visited = visited | {transaction_id}
-        candidates: list[str] = []
-        if reason == "custody_basis_barrier":
-            candidates = [str(item) for item in detail.get("root_transaction_ids") or []]
-        elif reason == "transfer_pair_dependency_blocked":
-            candidates = [str(item) for item in detail.get("blocked_by_transaction_ids") or []]
-        elif reason == "derived_transfer_group_blocked":
-            group_id = detail.get("transfer_group_id")
-            candidates = [
-                other_id
-                for other_id, other in details.items()
-                if group_id and other.get("transfer_group_id") == group_id
-            ]
-        elif reason == "basis_provenance_incomplete":
-            # The engine records only the contamination timestamp. Name a root
-            # only when exactly one root row of this asset sits there; a
-            # guess could send the owner to an unrelated batched row.
-            since = detail.get("lot_state_uncertain_since")
-            asset = by_id[transaction_id]["asset"]
-            matches = [
-                other_id
-                for other_id, other in by_id.items()
-                if since
-                and other["occurred_at"] == since
-                and other["asset"] == asset
-                and is_root_row(other_id)
-            ]
-            candidates = matches if len(matches) == 1 else []
-        roots = [
-            candidate
-            for candidate in candidates
-            if candidate not in visited and is_root_row(candidate)
-        ]
-        if not roots:
-            # Dependencies can chain (A holds B, B holds C): follow a
-            # downstream candidate to its own root, stopping at cycles.
-            for candidate in candidates:
-                if candidate in visited or candidate not in by_id:
-                    continue
-                nested = resolve_root(
-                    candidate,
-                    str(by_id[candidate]["reason"]),
-                    details[candidate],
-                    visited,
-                )
-                if nested is not None and nested not in visited:
-                    roots.append(nested)
-        if not roots:
-            return None
-        return min(roots, key=lambda item: (str(by_id[item]["occurred_at"] or ""), item))
+    roots = waiting_roots(by_id, details)
 
     items: list[dict[str, Any]] = []
     for row in rows:
@@ -511,7 +536,7 @@ def review_quarantine(
         reason = str(row["reason"])
         detail = details[transaction_id]
         info = catalog.reason_info(reason, detail)
-        root_id = resolve_root(transaction_id, reason, detail) if info.downstream else None
+        root_id = roots.get(transaction_id)
         root = _root_summary(by_id[root_id]) if root_id is not None else None
         evidence = _evidence(reason, detail, row, wallets)
         if evidence.get("blocker_code") == "reviewed_residual_suspense" and transaction_id in pairs:
@@ -668,4 +693,4 @@ def review_quarantine(
     }
 
 
-__all__ = ["review_quarantine"]
+__all__ = ["review_quarantine", "waiting_roots"]

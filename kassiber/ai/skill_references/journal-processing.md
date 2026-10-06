@@ -79,7 +79,9 @@ kassiber --machine review receipt --idempotency-key <unique-review-key>
 ```
 
 Use `input_version` from cases, follow `next_cursor` until null, and inspect
-transaction/evidence context before writing `operations.json`. The file is an
+transaction/evidence context before writing `operations.json`. Cases are the
+rows to repair; a row that only waits on another case is not listed, because it
+clears with that case. `waiting_count` counts those rows per case and in total. The file is an
 array of typed operations, for example after verifying the stated invoice:
 
 ```json

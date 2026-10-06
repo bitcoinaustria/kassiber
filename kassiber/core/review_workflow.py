@@ -109,7 +109,20 @@ def _inspect_cases(conn, profile, *, limit, cursor):
     reasons = {str(q["transaction_id"]): str(q["reason"]) for q in state["quarantines"]}
     details = {str(q["transaction_id"]): _detail(q.get("detail_json")) for q in state["quarantines"]}
     pairs = quarantine_review.pairs_by_transaction(conn, str(profile["id"]))
-    ids = sorted(tx for tx in reasons if tx > after)
+    # A row that only waits on another case clears with it and has nothing to
+    # repair itself: count it on its case rather than listing it.
+    held = {
+        str(row["id"]): {"reason": reasons[str(row["id"])], "occurred_at": row["occurred_at"], "asset": row["asset"]}
+        for row in conn.execute(
+            "SELECT id, occurred_at, asset FROM transactions WHERE profile_id = ?", (profile["id"],),
+        )
+        if str(row["id"]) in reasons
+    }
+    waits_on = quarantine_review.waiting_roots(held, details)
+    waiting_by_case: dict[str, int] = {}
+    for root_id in waits_on.values():
+        waiting_by_case[root_id] = waiting_by_case.get(root_id, 0) + 1
+    ids = sorted(tx for tx in reasons if tx > after and tx not in waits_on)
     cases = []
     for transaction_id in ids[:limit]:
         row = conn.execute(
@@ -125,6 +138,7 @@ def _inspect_cases(conn, profile, *, limit, cursor):
             "supported_operations": (["price_override"] if "price" in reasons[transaction_id]
                                      else ["custody_component"] if any(word in reasons[transaction_id]
                                           for word in ("custody", "privacy", "transfer", "swap")) else []),
+            "waiting_count": waiting_by_case.get(transaction_id, 0),
         }
         # A suspense a pair left is answered by the pair: name it, and what
         # the two legs show, so a proposal can unpair it.
@@ -142,7 +156,7 @@ def _inspect_cases(conn, profile, *, limit, cursor):
         "schema_version": 1, "workspace_id": profile["workspace_id"],
         "profile_id": profile["id"], "input_version": version,
         "freshness": custody_journal.projection_freshness(conn, profile),
-        "cases": cases, "next_cursor": next_cursor,
+        "cases": cases, "next_cursor": next_cursor, "waiting_count": len(waits_on),
         "recent_receipts": _recent_receipts(conn, profile) if cursor is None else [],
     }
 

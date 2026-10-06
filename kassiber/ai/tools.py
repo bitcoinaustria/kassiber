@@ -3369,7 +3369,7 @@ _REVIEW_ARTIFACT_SCHEMA = {
 _REVIEW_TOOL_CATALOG = (
     ToolEntry(
         name="ui.review.cases", wire_name="ui_review_cases", daemon_kind="ui.review.cases",
-        description="Inspect a version-bound page of current quarantine cases. Follow next_cursor until null before claiming all cases were inspected. Evidence remains unresolved until verified; supported operations do not imply a suitable repair.",
+        description="Inspect a version-bound page of current quarantine cases. Follow next_cursor until null before claiming all cases were inspected. Rows that only wait on a case are not listed: they clear with it, and waiting_count says how many. Evidence remains unresolved until verified; supported operations do not imply a suitable repair.",
         parameters={"type": "object", "additionalProperties": False, "properties": {
             "limit": {"type": "integer", "minimum": 1, "maximum": 100},
             "cursor": {"type": "string", "description": "Unchanged next_cursor from the preceding page; expired cursors require a fresh first page."},
