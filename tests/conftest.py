@@ -94,7 +94,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
     `PYTHONPATH` carries it into the daemon subprocess the smoke tests spawn:
     `Popen` runs without `env=`, so the child inherits the variable and `site`
-    imports `tests/_egress_guard/sitecustomize.py` before the daemon starts.
+    imports `tests/_child_hooks/sitecustomize.py` before the daemon starts.
 
     It sets `KASSIBER_TEST_NO_EGRESS`, not `KASSIBER_NO_EGRESS`. The latter is
     a product kill switch that the BDK and LWK observers honor
@@ -122,7 +122,7 @@ def pytest_configure(config: pytest.Config) -> None:
     os.environ["KASSIBER_TEST_NO_EGRESS"] = "1"
     os.environ["PYTHONPATH"] = os.pathsep.join(
         [
-            str(root / "tests" / "_egress_guard"),
+            str(root / "tests" / "_child_hooks"),
             str(root),
             *([_PREVIOUS_PYTHONPATH] if _PREVIOUS_PYTHONPATH else []),
         ]
