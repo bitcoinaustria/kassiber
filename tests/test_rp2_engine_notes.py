@@ -7,7 +7,8 @@ from typing import Optional
 
 import pytest
 
-from kassiber.core.engines.rp2 import (
+from kassiber.errors import AppError
+from tests.tax_oracle.adapter import (
     _compose_event_notes,
     _compose_transfer_notes,
     _rp2_in_transaction_type,
@@ -17,7 +18,6 @@ from kassiber.core.engines.rp2 import (
     _rp2_configuration,
     _use_tax_engine_backend,
 )
-from kassiber.errors import AppError
 
 
 @dataclass

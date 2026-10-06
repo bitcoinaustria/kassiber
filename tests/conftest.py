@@ -51,27 +51,35 @@ def _isolate_offline_preference() -> None:
 def _select_tax_engine_backend() -> None:
     """Route the session's tax calculations per `KASSIBER_TEST_TAX_ENGINE`.
 
-    `rp2` or `native` runs every calculation on that backend; `shadow` runs
-    each `GenericRP2TaxEngine.build_ledger_state` call on both and fails on
-    any semantic difference (`tests/tax_engine_compare.py`). Unset keeps the
-    product default. Product code reads no such variable, so subprocesses
-    such as the smoke tests' daemon keep the default.
+    Unset runs production. `shadow` also runs the frozen oracle
+    (`tests/tax_oracle/`) on every production `build_ledger_state` call and
+    fails on any difference (`tests/tax_engine_compare.py`). `oracle` runs
+    every call on the oracle instead, to show the tests' expectations hold on
+    RP2, and `legacy-native` runs them on the oracle adapter over
+    `kassiber/core/engines/native.py`. Product code reads no such variable,
+    so subprocesses such as the smoke tests' daemon run production.
     """
     global _TAX_ENGINE_STACK
     mode = os.environ.get("KASSIBER_TEST_TAX_ENGINE", "").strip().lower()
     if not mode or _TAX_ENGINE_STACK is not None:
         return
-    from kassiber.core.engines.rp2 import _use_tax_engine_backend
-    from tests.tax_engine_compare import shadow_build_ledger_state
+    from tests.tax_engine_compare import (
+        LEGACY_NATIVE_BACKEND,
+        ORACLE_BACKEND,
+        oracle_build_ledger_state,
+        shadow_build_ledger_state,
+    )
 
     stack = contextlib.ExitStack()
-    if mode in ("rp2", "native"):
-        stack.enter_context(_use_tax_engine_backend(mode))
-    elif mode == "shadow":
+    if mode == "shadow":
         stack.enter_context(shadow_build_ledger_state())
+    elif mode == "oracle":
+        stack.enter_context(oracle_build_ledger_state(ORACLE_BACKEND))
+    elif mode == "legacy-native":
+        stack.enter_context(oracle_build_ledger_state(LEGACY_NATIVE_BACKEND))
     else:
         raise pytest.UsageError(
-            f"KASSIBER_TEST_TAX_ENGINE must be rp2, native, or shadow, not {mode!r}"
+            f"KASSIBER_TEST_TAX_ENGINE must be shadow, oracle, or legacy-native, not {mode!r}"
         )
     _TAX_ENGINE_STACK = stack
 

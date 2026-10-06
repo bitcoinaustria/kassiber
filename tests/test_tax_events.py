@@ -10,11 +10,11 @@ from kassiber.core.tax_events import (
     dedupe_quarantines,
     normalize_tax_asset_inputs,
 )
-from kassiber.core.pair_allocation import first_pair_by_edge
 from tests.custody_tax_helpers import (
     authoritative_chain_observation,
     finalized_tax_inputs,
 )
+from tests.tax_oracle.pair_allocation import first_pair_by_edge
 
 
 def _row(
@@ -3368,7 +3368,7 @@ class AustrianRegimeElectionAuditTest(unittest.TestCase):
         self.assertEqual(event.at_regime_basis, "wahlrecht")
 
     def test_election_marker_reaches_the_notes_channel(self):
-        from kassiber.core.engines.rp2 import _compose_event_notes
+        from tests.tax_oracle.adapter import _compose_event_notes
 
         event = self._sell_event(
             [self._alt_acquisition(), self._neu_acquisition(), self._sell_row()]

@@ -31,14 +31,21 @@ downloading one. The engine's own tests run with
 
 ## Tax engine backends
 
-Tests run the tax calculation on the product's default backend. Set
-`KASSIBER_TEST_TAX_ENGINE` to change that for a whole pytest run: `rp2` or
-`native` selects one backend, and `shadow` runs every
-`GenericRP2TaxEngine.build_ledger_state` call on both and fails on any
-difference in the journal result (`tests/tax_engine_compare.py` ignores only
-generated entry ids and the engine identity). Product code reads no such
-variable, so subprocesses such as a test's daemon use the default. See the
-[tax engine](tax-engine.md) for how the backends relate.
+Tests run the tax calculation on production. The reference is a frozen
+oracle in `tests/tax_oracle/`: the phase-3 adapter with its normalizer and
+Austrian rules, running on RP2. Set `KASSIBER_TEST_TAX_ENGINE` to change
+that for a whole pytest run:
+
+| Value | Meaning |
+| --- | --- |
+| unset | production |
+| `shadow` | production, plus the oracle on every `build_ledger_state` call; any difference fails the call (`tests/tax_engine_compare.py` masks only generated entry ids and the engine identity; failures compare after two listed normalizations: RP2 error class names map to `Engine*`, and RP2's temporary INI path prefix is dropped from messages) |
+| `oracle` | every call on the oracle, to show the tests' expectations hold on RP2 |
+| `legacy-native` | every call on the oracle adapter over `kassiber/core/engines/native.py` |
+
+Product code reads no such variable, so subprocesses such as a test's daemon
+run production. See the [tax engine](tax-engine.md) for how the backends
+relate.
 
 ## Tiers
 

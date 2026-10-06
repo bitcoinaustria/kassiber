@@ -453,10 +453,12 @@ def _austrian_backends():
     """(AT, AbstractCountry, ValueError type) for every installed tax backend.
 
     Patching each backend keeps these adapter tests meaningful whichever
-    backend runs, including shadow runs that drive both.
+    backend runs, including shadow runs that drive both: production and the
+    oracle's legacy-native leg on the native module, the oracle on RP2.
     """
-    from kassiber.core.engines import native
+    from tests.tax_oracle import adapter as oracle_adapter
 
+    native = oracle_adapter._native_backend()
     backends = [(native.AT, native.AbstractCountry, native.EngineValueError)]
     try:
         from rp2.abstract_country import AbstractCountry
@@ -682,7 +684,7 @@ class ATSwapOverSellQuarantineTest(unittest.TestCase):
 
     def test_oversold_swap_leg_quarantines_pair_without_marking(self):
         from kassiber.core.austrian import AT_SWAP_QUARANTINE_REASON
-        from kassiber.core.engines.rp2 import (
+        from tests.tax_oracle.adapter import (
             _prepare_assets,
             _rp2_configuration,
             _select_at_cross_asset_swap_links,

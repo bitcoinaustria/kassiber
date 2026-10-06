@@ -3,7 +3,9 @@
 ``kassiber/core/engines/native.py`` stands in for RP2 beneath the adapter.
 These tests pin what parity runs cannot show: that it runs with RP2 absent,
 writes nothing, keeps RP2's values, checks and messages at RP2's phase, and
-reaches the binding through its versioned JSON contract.
+reaches the binding through its versioned JSON contract. The interface
+mirror checks drive the frozen oracle adapter (``tests/tax_oracle/``) on
+RP2 and on its legacy-native leg.
 """
 
 from __future__ import annotations
@@ -21,9 +23,8 @@ from pathlib import Path
 import kassiber_tax
 
 from kassiber.core.engines import native, native_request
-from kassiber.core.engines import rp2 as adapter
-from kassiber.tax_policy import build_tax_policy
 from tests import tax_engine_compare as compare
+from tests.tax_oracle import adapter
 
 _ROOT = Path(__file__).resolve().parents[1]
 
@@ -357,7 +358,7 @@ def _outcome(backend, build, *, profile=PROFILE, wallets=("Cold", "Hot"), assets
         with adapter._rp2_configuration(profile, list(wallets), list(assets)) as configuration:
             return build(modules, configuration)
 
-    result, error = compare.run_backend(backend, call)
+    result, error = compare.run_on_oracle_backend(backend, call)
     return ("error", compare.error_signature(error)) if error is not None else ("ok", result)
 
 
@@ -540,9 +541,9 @@ class InterfaceParityTest(unittest.TestCase):
             self.assertEqual(set(adapter._get_rp2_modules()), rp2_names - {"BalanceSet"})
 
     def test_backend_selection_is_scoped_and_validated(self):
-        # The native engine is the default unless this session selected RP2.
+        # The oracle runs on RP2 unless this session selected its legacy-native leg.
         session = os.environ.get("KASSIBER_TEST_TAX_ENGINE", "").strip().lower()
-        self.assertEqual(adapter._tax_engine_backend(), "rp2" if session == "rp2" else "native")
+        self.assertEqual(adapter._tax_engine_backend(), "native" if session == "legacy-native" else "rp2")
         before = adapter._tax_engine_backend()
         with adapter._use_tax_engine_backend("native"):
             self.assertEqual(adapter._tax_engine_backend(), "native")
@@ -571,22 +572,10 @@ class CountryPolicyTest(unittest.TestCase):
         self.assertEqual(actual.get_long_term_capital_gain_period(), sys.maxsize)
         self.assertEqual({item.value for item in rp2_at.AtDisposalCategory}, {item.value for item in native.AtDisposalCategory})
 
-    def test_tax_policy_is_the_same_on_both_backends(self):
-        for profile in ({"tax_country": "at"}, {"tax_country": "generic", "fiat_currency": "usd", "tax_long_term_days": 30}):
-            with self.subTest(profile=profile):
-                expected = build_tax_policy(profile)
-                with adapter._use_tax_engine_backend("native"):
-                    self.assertEqual(build_tax_policy(profile), expected)
-
     def test_default_country_hooks(self):
         country = native.AbstractCountry("generic", "EUR")
         self.assertIsNone(country.validate_input_data([]))
         self.assertIsNone(country.compute_tax_for_assets(None, None, {}))
-
-    def test_iso_4217_codes_match_rp2s_lookup(self):
-        import pycountry
-
-        self.assertEqual(native._ISO_4217, frozenset(currency.alpha_3 for currency in pycountry.currencies))
 
     def test_classification_without_an_engine_category_fails_closed(self):
         lot = object.__new__(native.GainLoss)
@@ -623,14 +612,14 @@ class ErrorClassTest(unittest.TestCase):
 
 class JournalProvenanceTest(unittest.TestCase):
     def test_calculation_metadata_names_the_backend(self):
-        from kassiber.core.engines import GenericRP2TaxEngine
         from tests.custody_tax_helpers import finalized_tax_inputs
         from tests.test_tax_engine_parity import WALLET_REFS, _adapter_profile, _ledger_history
 
         profile = _adapter_profile("generic", "FIFO")
         rows, pairs = _ledger_history()
         inputs = finalized_tax_inputs(profile, rows=rows, wallet_refs_by_id=WALLET_REFS, manual_pair_records=pairs)
-        expected, actual = compare.run_both(GenericRP2TaxEngine(profile), inputs)
+        expected = compare.run_oracle(profile, inputs)
+        actual = compare.run_production(profile, inputs)
         for (result, error), engine in ((expected, "rp2"), (actual, "kassiber_tax")):
             self.assertIsNone(error)
             names = {entry["calculation"]["engine"] for entry in result.entries if "calculation" in entry}

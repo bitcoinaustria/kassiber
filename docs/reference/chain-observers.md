@@ -653,8 +653,9 @@ x86_64 sidecars before desktop bundling.
   output-inventory refresh tests, sync prefetch/savepoint tests, observer-blob
   rollback/restart reconstruction, and forced rebuild of unknown versions.
 - Packaging: `.github/workflows/prerelease-binaries.yml` packaged descriptor
-  smokes, `tests/test_rp2_packaging.py`, Homebrew cask rendering tests, Tauri
-  supervisor sidecar tests, and the quality-gate workflow validation.
+  smokes, the RP2 import checks in `tests/tax_oracle/test_oracle_contract.py`,
+  Homebrew cask rendering tests, Tauri supervisor sidecar tests, and the
+  quality-gate workflow validation.
 
 ## Required migration proof
 

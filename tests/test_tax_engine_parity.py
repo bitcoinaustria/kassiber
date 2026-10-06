@@ -1,20 +1,18 @@
 """Parity of the native tax engine with RP2 (plan 20).
 
-Engine level: seeded random histories are built exactly as the adapter
-builds its RP2 inputs (its configuration, constructor arguments, decimal
-conversion and accounting engine) and run through RP2 and through the native
-backend. Every value the adapter and ``explanation.py`` read is compared as a
-string, so a decimal must match in sign, coefficient and exponent. Failures
-must match in phase, class and message.
+Engine level: seeded random histories are built exactly as the frozen oracle
+adapter (``tests/tax_oracle/adapter.py``) builds its RP2 inputs (its
+configuration, constructor arguments, decimal conversion and accounting
+engine) and run through RP2 and through the legacy-native backend. Every
+value the adapter and ``explanation.py`` read is compared as a string, so a
+decimal must match in sign, coefficient and exponent. Failures must match in
+phase, class and message. The lot methods, the moving averages, Austrian
+classification and the Austrian multi-asset hooks (``validate``,
+``compute_multi``) are all covered.
 
-Adapter level: ``GenericRP2TaxEngine.build_ledger_state`` runs on finalized
-custody projections under both backends and the results are compared
-semantically (``tests/tax_engine_compare.py``).
-
-The moving averages, Austrian classification and the Austrian multi-asset
-hooks (``validate``, ``compute_multi``) are written against the engine
-contract; their native runs fail with ``Unsupported`` until the engine
-implements them.
+Adapter level: production's ``build_ledger_state`` runs on finalized custody
+projections and must equal the oracle's exactly
+(``tests/tax_engine_compare.py``).
 """
 
 from __future__ import annotations
@@ -29,11 +27,12 @@ from typing import Any, Optional
 
 import pytest
 
-from kassiber.core.engines import GenericRP2TaxEngine
-from kassiber.core.engines import rp2 as adapter
+from kassiber.core.engines import native
+from kassiber.errors import AppError
 from kassiber.msat import msat_to_btc
 from tests import tax_engine_compare as compare
 from tests.custody_tax_helpers import finalized_tax_inputs
+from tests.tax_oracle import adapter
 
 SEED = 20261002
 HOLDER = "Profile"
@@ -606,6 +605,31 @@ def test_comparison_sees_representation_type_and_order() -> None:
     assert not compare.value_differences({"a": [Decimal("1.50"), float("nan")]}, {"a": [Decimal("1.50"), float("nan")]})
 
 
+def test_error_signatures_apply_only_the_listed_differences() -> None:
+    from rp2.rp2_error import RP2ValueError
+
+    duplicate = "field 'exchanges' in section 'general' contains duplicate elements: W1"
+    # LD-3: RP2 prefixes its temporary INI path; LD-4: its classes map to the engine's.
+    assert compare.error_signature(RP2ValueError(f"/tmp/tmpk3x9.ini: {duplicate}")) == compare.error_signature(
+        native.EngineValueError(duplicate)
+    )
+    wrapped = [AppError("RP2 input validation failed", code="rp2_input_validation") for _ in range(2)]
+    wrapped[0].__cause__ = RP2ValueError(f"/tmp/a b.ini: {duplicate}")
+    wrapped[1].__cause__ = native.EngineValueError(duplicate)
+    assert compare.error_signature(wrapped[0]) == compare.error_signature(wrapped[1])
+    # Nothing else is forgiven: other text before the message, another class,
+    # or another AppError field still differs.
+    assert compare.error_signature(native.EngineValueError(f"x: {duplicate}")) != compare.error_signature(
+        native.EngineValueError(duplicate)
+    )
+    assert compare.error_signature(native.EngineTypeError(duplicate)) != compare.error_signature(
+        native.EngineValueError(duplicate)
+    )
+    assert compare.error_signature(AppError("m", code="validation")) != compare.error_signature(
+        AppError("m", code="unsupported")
+    )
+
+
 # ---------------------------------------------------------------------------
 # Adapter level
 
@@ -760,13 +784,14 @@ def _random_projection(index: int) -> tuple[list[dict[str, Any]], list[dict[str,
 
 
 class AdapterParityTest(unittest.TestCase):
-    """``build_ledger_state`` gives the same journal on both backends."""
+    """Production's ``build_ledger_state`` gives the oracle's journal."""
 
     def _assert_parity(self, profile, rows, pairs):
         inputs = finalized_tax_inputs(profile, rows=rows, wallet_refs_by_id=WALLET_REFS, manual_pair_records=pairs)
-        expected, actual = compare.run_both(GenericRP2TaxEngine(profile), inputs)
+        expected = compare.run_oracle(profile, inputs)
+        actual = compare.run_production(profile, inputs)
         self.assertEqual([], compare.ledger_differences(expected, actual))
-        return expected
+        return actual
 
     def test_generic_ledger_matches_on_each_lot_method(self):
         rows, pairs = _ledger_history()

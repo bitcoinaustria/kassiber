@@ -27,8 +27,9 @@ mirrors the subset of RP2's interface the adapter uses:
 | Austrian country | `validate_input_data`, `compute_tax_for_assets`, and `classify_disposal`, backed by the engine |
 
 The same adapter code therefore drives both backends, which is what makes the
-comparison exact. Selecting the backend is test-only: product code has no
-setting or environment variable for it (see [testing](testing.md#tax-engine-backends)).
+comparison exact. Product code has no setting or environment variable for the
+backend. Tests compare production with a frozen copy of the adapter running
+on RP2, `tests/tax_oracle/` (see [testing](testing.md#tax-engine-backends)).
 Journal entries record the backend that computed them in their calculation
 metadata: `"engine": "kassiber_tax"` for the native backend, `"rp2"` for RP2.
 
