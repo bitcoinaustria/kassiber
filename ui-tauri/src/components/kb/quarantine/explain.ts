@@ -8,7 +8,6 @@ import type {
   QuarantineEvidence,
   QuarantineGroup,
   QuarantineItem,
-  QuarantineScope,
 } from "./types";
 
 // One reading of a quarantine reason for every surface (cause cards, the
@@ -455,7 +454,24 @@ export function quarantineDetailContext(
   };
 }
 
-export const QUARANTINE_SCOPES: QuarantineScope[] = ["attention", "waiting", "all"];
+/** A held row as one line: when, in which wallet, which transaction. */
+export function quarantineRowMeta(item: QuarantineItem) {
+  const id = item.external_id;
+  const shortId = id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id;
+  return [item.occurred_at ? item.occurred_at.slice(0, 10) : "", item.wallet, shortId]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** The row's amount with its direction: sats for bitcoin, units otherwise. */
+export function quarantineRowAmount(item: QuarantineItem) {
+  const sign = item.direction === "outbound" ? "−" : "+";
+  const asset = item.asset.toUpperCase();
+  if (asset === "BTC" || asset === "LBTC") {
+    return `${sign}${formatSats(Math.round(Math.abs(item.amount_msat) / 1000))}`;
+  }
+  return `${sign}${Math.abs(item.amount)} ${item.asset}`;
+}
 
 /** A row waits when it only follows a named cause and clears with it. */
 export function isWaiting(item: QuarantineItem) {

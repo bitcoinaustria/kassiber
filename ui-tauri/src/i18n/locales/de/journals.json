@@ -141,7 +141,6 @@
       "title": "Quarantäne nicht verfügbar",
       "fallback": "Der Daemon hat keine Quarantänedaten geliefert."
     },
-    "tableTitle": "Transaktionen in Quarantäne",
     "emptyTitle": "Nichts in Quarantäne",
     "emptyBody": "Kann Kassiber eine Transaktion nicht buchen, erscheint sie hier, zusammen mit dem, was zu tun ist.",
     "actions": {
@@ -507,7 +506,8 @@
       "canFixSome": "Kassiber kann {{count}} davon selbst beheben: Jedes ist ein Paar aus zwei verschiedenen On-chain-Transaktionen.",
       "fixAll_one": "Beheben",
       "fixAll_other": "Alle {{count}} beheben",
-      "fixSome": "{{count}} beheben"
+      "fixSome": "{{count}} beheben",
+      "showWaiting": "Anzeigen"
     },
     "causes": {
       "title": "Was zu klären ist",
@@ -515,28 +515,23 @@
       "fixAbove": "„Beheben“ oben entkoppelt sie, damit jede Seite einzeln gebucht wird.",
       "waiting_one": "{{count}} spätere Transaktion wartet darauf und löst sich, sobald das geklärt ist.",
       "waiting_other": "{{count}} spätere Transaktionen warten darauf und lösen sich, sobald das geklärt ist.",
-      "showWaiting": "Anzeigen",
-      "more_one": "{{count}} weitere Ursache steht in der Liste unten.",
-      "more_other": "{{count}} weitere Ursachen stehen in der Liste unten.",
+      "more_one": "{{count}} weitere Ursache erscheint, sobald diese geklärt sind.",
+      "more_other": "{{count}} weitere Ursachen erscheinen, sobald diese geklärt sind.",
       "count_one": "{{count}} Transaktion",
       "count_other": "{{count}} Transaktionen",
       "showMore_one": "{{count}} weitere Ursache anzeigen",
       "showMore_other": "{{count}} weitere Ursachen anzeigen",
-      "showFewer": "Weniger Ursachen anzeigen"
+      "showFewer": "Weniger Ursachen anzeigen",
+      "showAllTransactions": "Alle {{count}} Transaktionen anzeigen",
+      "showFewerTransactions": "Weniger anzeigen",
+      "moreLater_one": "{{count}} weitere Transaktion dieser Ursache erscheint, sobald diese geklärt sind.",
+      "moreLater_other": "{{count}} weitere Transaktionen dieser Ursache erscheinen, sobald diese geklärt sind."
     },
     "queue": {
-      "scope": {
-        "attention": "Braucht dich",
-        "waiting": "Wartet",
-        "all": "Alle"
-      },
-      "scopeAria": "Welche Transaktionen gelistet werden",
       "waitsOn": "Wartet auf {{root}}",
-      "attentionEmpty": "Gerade braucht dich nichts.",
       "waitingEmpty": "Keine Transaktion wartet auf eine andere.",
-      "show_one": "Die Transaktion in Quarantäne anzeigen",
-      "show_other": "Alle {{count}} Transaktionen in Quarantäne anzeigen",
-      "hide": "Liste ausblenden"
+      "hide": "Liste ausblenden",
+      "title": "Wartet auf eine Ursache"
     },
     "fact": {
       "pairTxidsDiffer": "Die beiden Seiten sind verschiedene On-chain-Transaktionen; eine Bewegung zwischen deinen Wallets hat nur eine Transaktions-ID.",

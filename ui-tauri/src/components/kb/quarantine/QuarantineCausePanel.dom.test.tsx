@@ -303,3 +303,26 @@ describe("fixing pairs that leave a suspense", () => {
     expect(screen.getByRole("button", { name: "Fix 3" })).toBeTruthy();
   });
 });
+
+describe("a cause's transactions", () => {
+  const gapRow = (id: string, day: number): QuarantineItem => ({
+    ...root(id, ""),
+    external_id: id,
+    occurred_at: `2023-02-${String(day).padStart(2, "0")}T04:41:17Z`,
+    evidence: { blocker_code: "custody_gap_review_required", gap_id: "gap-1", wallet_label: "Merchant" },
+    actions: [],
+  });
+  const rows = Array.from({ length: 5 }, (_, index) => gapRow(`tx-${index}`, index + 1));
+
+  it("lists them on the card, folded, and opens one by clicking it", () => {
+    const { onOpenTransaction } = mount(snapshotOf(rows, 120));
+    expect(screen.getAllByText(/ · Merchant · tx-/)).toHaveLength(3);
+    fireEvent.click(screen.getByRole("button", { name: "Show all 5 transactions" }));
+    expect(screen.getAllByText(/ · Merchant · tx-/)).toHaveLength(5);
+    expect(screen.getByText("115 more transactions of this cause are listed once these are resolved.")).toBeTruthy();
+    fireEvent.click(screen.getByText("2023-02-02 · Merchant · tx-1"));
+    expect(onOpenTransaction).toHaveBeenCalledWith("tx-1", expect.any(String), expect.objectContaining({ reason: "custody_quantity_unresolved" }));
+    // The rows open themselves; no separate button for the first one.
+    expect(screen.queryByRole("button", { name: "Open transaction" })).toBeNull();
+  });
+});

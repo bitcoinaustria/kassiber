@@ -3,7 +3,6 @@ import * as React from "react";
 import {
   QuarantineDashboard,
   QuarantineUnavailable,
-  type QuarantineScope,
   type QuarantineSnapshot,
 } from "@/components/kb/quarantine";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
@@ -11,23 +10,24 @@ import { useDaemon } from "@/daemon/client";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { normalizeQuarantineSnapshot } from "@/lib/normalizeUiSnapshots";
 
-// The daemon serves at most this many rows per request; larger scopes page
-// through the same causes-first ordering.
+// The daemon serves at most this many rows per request; the waiting list
+// pages through the rest in the daemon's order.
 const QUARANTINE_PAGE_SIZE = 100;
 
 export function Quarantine() {
-  const [scope, setScope] = React.useState<QuarantineScope>("attention");
+  const [waitingShown, setWaitingShown] = React.useState(false);
   const [offset, setOffset] = React.useState(0);
   // What needs the user is always read: it drives the summary and the causes.
   const attentionQuery = useDaemon<QuarantineSnapshot>("ui.journals.quarantine", {
     limit: QUARANTINE_PAGE_SIZE,
-    offset: scope === "attention" ? offset : 0,
+    offset: 0,
     scope: "attention",
   });
-  const listQuery = useDaemon<QuarantineSnapshot>(
+  // What only waits on a cause is read once the owner asks for it.
+  const waitingQuery = useDaemon<QuarantineSnapshot>(
     "ui.journals.quarantine",
-    { limit: QUARANTINE_PAGE_SIZE, offset, scope },
-    { enabled: scope !== "attention" },
+    { limit: QUARANTINE_PAGE_SIZE, offset, scope: "waiting" },
+    { enabled: waitingShown },
   );
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction();
@@ -36,21 +36,19 @@ export function Quarantine() {
     () => (data?.data ? normalizeQuarantineSnapshot(data.data) : null),
     [data?.data],
   );
-  const listed = React.useMemo(
+  const waiting = React.useMemo(
     () =>
-      scope === "attention"
-        ? attention
-        : listQuery.data?.data
-          ? normalizeQuarantineSnapshot(listQuery.data.data)
-          : null,
-    [attention, listQuery.data?.data, scope],
+      waitingShown && waitingQuery.data?.data
+        ? normalizeQuarantineSnapshot(waitingQuery.data.data)
+        : null,
+    [waitingQuery.data?.data, waitingShown],
   );
-  const scopeTotal = listed?.summary.scope_count ?? listed?.summary.count ?? 0;
+  const waitingTotal = waiting?.summary.scope_count ?? 0;
 
   React.useEffect(() => {
-    // A rebuild can shrink the scope below the current page.
-    if (offset > 0 && scopeTotal > 0 && offset >= scopeTotal) setOffset(0);
-  }, [offset, scopeTotal]);
+    // A rebuild can shrink the list below the current page.
+    if (offset > 0 && waitingTotal > 0 && offset >= waitingTotal) setOffset(0);
+  }, [offset, waitingTotal]);
 
   if (isLoading) {
     return <ScreenSkeleton titleWidth="w-40" />;
@@ -67,11 +65,11 @@ export function Quarantine() {
   return (
     <QuarantineDashboard
       attention={attention}
-      list={listed}
-      listLoading={scope !== "attention" && listQuery.isLoading}
-      scope={scope}
-      onScopeChange={(next) => {
-        setScope(next);
+      waiting={waiting}
+      waitingLoading={waitingShown && waitingQuery.isLoading}
+      waitingShown={waitingShown}
+      onWaitingShownChange={(shown) => {
+        setWaitingShown(shown);
         setOffset(0);
       }}
       offset={offset}

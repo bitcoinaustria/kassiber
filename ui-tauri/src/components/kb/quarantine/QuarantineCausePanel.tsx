@@ -24,6 +24,8 @@ import {
   decidedFixes,
   quarantineDetailContext,
   quarantineGroupContext,
+  quarantineRowAmount,
+  quarantineRowMeta,
   sheetTabForCause,
   type QuarantineDetailContext,
   type QuarantineSheetTab,
@@ -38,8 +40,8 @@ import type {
   QuarantineSnapshot,
 } from "./types";
 
-/** Pairs shown before the rest fold away; "Fix all" still covers them all. */
-const SHOWN_PAIRS = 3;
+/** Pairs or transactions a cause shows before the rest fold away; "Fix all" still covers them all. */
+const SHOWN_ROWS = 3;
 /** Cause cards shown before the rest fold away. */
 const SHOWN_CAUSES = 4;
 
@@ -59,6 +61,8 @@ interface QuarantineCausePanelProps {
   onImportHistory: (walletId: string | null) => void;
   /** Lists the transactions that only wait on a cause. */
   onShowWaiting: () => void;
+  /** Whether that list is open, so the summary does not offer it twice. */
+  waitingShown?: boolean;
   hideSensitive?: boolean;
 }
 
@@ -96,6 +100,7 @@ export function QuarantineCausePanel({
   onConnectWallet,
   onImportHistory,
   onShowWaiting,
+  waitingShown = false,
   hideSensitive = false,
 }: QuarantineCausePanelProps) {
   const { t } = useTranslation("journals");
@@ -273,6 +278,20 @@ export function QuarantineCausePanel({
             {waitingCount ? (
               <p className="text-sm text-muted-foreground">
                 {t("quarantine.summary.waiting", { count: waitingCount })}
+                {waitingShown ? null : (
+                  <>
+                    {" "}
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-sm"
+                      onClick={onShowWaiting}
+                    >
+                      {t("quarantine.summary.showWaiting")}
+                    </Button>
+                  </>
+                )}
               </p>
             ) : null}
             {summary.reports_blocked ? (
@@ -315,7 +334,6 @@ export function QuarantineCausePanel({
                 hideSensitive={hideSensitive}
                 onAction={(action) => runAction(group, action)}
                 onOpenRoot={(transactionId) => openRoot(group, transactionId)}
-                onShowWaiting={onShowWaiting}
                 rootItems={rootItems}
                 onUnpair={(item) => setFixing({ items: [item], chosen: true })}
               />
@@ -354,7 +372,6 @@ function QuarantineCauseCard({
   hideSensitive,
   onAction,
   onOpenRoot,
-  onShowWaiting,
   rootItems,
   onUnpair,
 }: {
@@ -364,7 +381,6 @@ function QuarantineCauseCard({
   hideSensitive: boolean;
   onAction: (action: QuarantineAction) => void;
   onOpenRoot: (transactionId: string) => void;
-  onShowWaiting: () => void;
   rootItems: Map<string, QuarantineItem>;
   onUnpair: (item: QuarantineItem) => void;
 }) {
@@ -389,11 +405,12 @@ function QuarantineCauseCard({
   const deprecated = (group.evidence.missing_source_wallets ?? []).filter(
     (wallet) => wallet.deprecated,
   );
+  // Every loaded row of this cause, not just the roots the summary names:
+  // a cause can hold more than that list carries.
+  const members = causeMembers(group, rootIds, rootItems);
   // A suspense left by pairs is answered pair by pair: each one shown side by
   // side, with its own way out.
-  // Every loaded row of this cause, not just the roots the summary names:
-  // a cause can hold more pairs than that list carries.
-  const pairs = causePairs(group, rootIds, rootItems);
+  const pairs = causePairs(group, members);
   const actions = pairs.length
     ? group.actions.filter((action) => action.kind !== "review_pair")
     : group.actions;
@@ -455,8 +472,15 @@ function QuarantineCauseCard({
           onOpen={onOpenRoot}
           onUnpair={onUnpair}
         />
+      ) : members.length ? (
+        <CauseTransactionList
+          items={members}
+          total={rootCount}
+          hideSensitive={hideSensitive}
+          onOpen={onOpenRoot}
+        />
       ) : null}
-      {actions.length || (!pairs.length && rootIds.length) ? (
+      {actions.length || (!members.length && rootIds.length) ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {actions.map((action, index) => (
             <Button
@@ -476,7 +500,8 @@ function QuarantineCauseCard({
               {actionLabel(action, t)}
             </Button>
           ))}
-          {!group.actions.length && !pairs.length && rootIds[0] ? (
+          {/* Nothing of this cause loaded to list: open its first one. */}
+          {!group.actions.length && !members.length && rootIds[0] ? (
             <Button type="button" size="sm" variant="outline" onClick={() => onOpenRoot(rootIds[0])}>
               {t("quarantine.cta.openTransaction")}
             </Button>
@@ -485,18 +510,9 @@ function QuarantineCauseCard({
       ) : null}
 
       {group.downstream_count ? (
-        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <span>{t("quarantine.causes.waiting", { count: group.downstream_count })}</span>
-          <Button
-            type="button"
-            variant="link"
-            size="sm"
-            className="h-auto p-0 text-xs"
-            onClick={onShowWaiting}
-          >
-            {t("quarantine.causes.showWaiting")}
-          </Button>
-        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {t("quarantine.causes.waiting", { count: group.downstream_count })}
+        </p>
       ) : null}
     </li>
   );
@@ -526,19 +542,79 @@ function PairLegLine({
   );
 }
 
-function causePairs(
+/** The cause's loaded rows that need the user; older daemons name only its roots. */
+function causeMembers(
   group: QuarantineGroup,
   rootIds: string[],
   rootItems: Map<string, QuarantineItem>,
 ): QuarantineItem[] {
-  if (causeKeyFor(group.reason, group.evidence) !== "reviewedSuspensePair") return [];
   const members = [...rootItems.values()].filter((item) => item.group_key === group.key);
-  const candidates = members.length
-    ? members
-    : rootIds.map((transactionId) => rootItems.get(transactionId));
-  return candidates.filter(
-    (item): item is QuarantineItem =>
-      Boolean(item && !item.is_downstream && item.evidence?.pair_id && item.evidence.pair_legs),
+  if (members.length) return members;
+  return rootIds
+    .map((transactionId) => rootItems.get(transactionId))
+    .filter((item): item is QuarantineItem => Boolean(item && item.group_key === undefined));
+}
+
+function causePairs(group: QuarantineGroup, members: QuarantineItem[]): QuarantineItem[] {
+  if (causeKeyFor(group.reason, group.evidence) !== "reviewedSuspensePair") return [];
+  return members.filter((item) =>
+    Boolean(!item.is_downstream && item.evidence?.pair_id && item.evidence.pair_legs),
+  );
+}
+
+/**
+ * The transactions behind a cause, one line each; clicking one opens it.
+ * The card above says what to do for all of them.
+ */
+function CauseTransactionList({
+  items,
+  total,
+  hideSensitive,
+  onOpen,
+}: {
+  items: QuarantineItem[];
+  /** Transactions in the whole cause; more than listed when the rest are on later pages. */
+  total: number;
+  hideSensitive: boolean;
+  onOpen: (transactionId: string) => void;
+}) {
+  const { t } = useTranslation("journals");
+  const [expanded, setExpanded] = React.useState(false);
+  const shown = expanded ? items : items.slice(0, SHOWN_ROWS);
+  return (
+    <div className="mt-3 border-t pt-2" data-testid="quarantine-cause-transactions">
+      <ul className="divide-y">
+        {shown.map((item) => (
+          <li key={item.transaction_id}>
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 rounded-sm py-2 text-left text-sm hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              onClick={() => onOpen(item.transaction_id)}
+            >
+              <span className={cn("min-w-0 flex-1 truncate text-muted-foreground", sensitiveClass(hideSensitive))}>
+                {quarantineRowMeta(item)}
+              </span>
+              <span className={cn("shrink-0 tabular-nums", sensitiveClass(hideSensitive))}>
+                {quarantineRowAmount(item)}
+              </span>
+              <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            </button>
+          </li>
+        ))}
+      </ul>
+      {items.length > SHOWN_ROWS ? (
+        <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded((value) => !value)}>
+          {expanded
+            ? t("quarantine.causes.showFewerTransactions")
+            : t("quarantine.causes.showAllTransactions", { count: items.length })}
+        </Button>
+      ) : null}
+      {total > items.length ? (
+        <p className="text-xs text-muted-foreground">
+          {t("quarantine.causes.moreLater", { count: total - items.length })}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -563,7 +639,7 @@ function QuarantinePairList({
 }) {
   const { t } = useTranslation("journals");
   const [expanded, setExpanded] = React.useState(false);
-  const shown = expanded ? pairs : pairs.slice(0, SHOWN_PAIRS);
+  const shown = expanded ? pairs : pairs.slice(0, SHOWN_ROWS);
   return (
     <div className="mt-3 space-y-2 border-t pt-3" data-testid="quarantine-pairs">
       <p className="text-xs font-medium text-muted-foreground">
@@ -603,7 +679,7 @@ function QuarantinePairList({
           );
         })}
       </ul>
-      {pairs.length > SHOWN_PAIRS ? (
+      {pairs.length > SHOWN_ROWS ? (
         <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded((value) => !value)}>
           {expanded
             ? t("quarantine.pair.showFewer")

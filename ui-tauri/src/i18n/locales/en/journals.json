@@ -141,7 +141,6 @@
       "title": "Quarantine unavailable",
       "fallback": "The daemon did not return quarantine data."
     },
-    "tableTitle": "Quarantined transactions",
     "emptyTitle": "Nothing in quarantine",
     "emptyBody": "When Kassiber can't book a transaction, it shows up here with what to do.",
     "actions": {
@@ -507,7 +506,8 @@
       "canFixSome": "Kassiber can fix {{count}} of them itself: each is a pair of two different on-chain transactions.",
       "fixAll_one": "Fix",
       "fixAll_other": "Fix all {{count}}",
-      "fixSome": "Fix {{count}}"
+      "fixSome": "Fix {{count}}",
+      "showWaiting": "Show them"
     },
     "causes": {
       "title": "What to fix",
@@ -515,28 +515,23 @@
       "fixAbove": "Fix above unpairs them, so each side is booked on its own.",
       "waiting_one": "{{count}} later transaction waits on this and clears once it is fixed.",
       "waiting_other": "{{count}} later transactions wait on this and clear once it is fixed.",
-      "showWaiting": "Show them",
-      "more_one": "{{count}} more cause is in the list below.",
-      "more_other": "{{count}} more causes are in the list below.",
+      "more_one": "{{count}} more cause appears once these are fixed.",
+      "more_other": "{{count}} more causes appear once these are fixed.",
       "count_one": "{{count}} transaction",
       "count_other": "{{count}} transactions",
       "showMore_one": "Show {{count}} more cause",
       "showMore_other": "Show {{count}} more causes",
-      "showFewer": "Show fewer causes"
+      "showFewer": "Show fewer causes",
+      "showAllTransactions": "Show all {{count}} transactions",
+      "showFewerTransactions": "Show fewer",
+      "moreLater_one": "{{count}} more transaction of this cause is listed once these are resolved.",
+      "moreLater_other": "{{count}} more transactions of this cause are listed once these are resolved."
     },
     "queue": {
-      "scope": {
-        "attention": "Needs you",
-        "waiting": "Waiting",
-        "all": "All"
-      },
-      "scopeAria": "Which transactions to list",
       "waitsOn": "Waits on {{root}}",
-      "attentionEmpty": "Nothing needs you right now.",
       "waitingEmpty": "No transaction is waiting on another.",
-      "show_one": "Show the quarantined transaction",
-      "show_other": "Show all {{count}} quarantined transactions",
-      "hide": "Hide the list"
+      "hide": "Hide the list",
+      "title": "Waiting on a cause"
     },
     "fact": {
       "pairTxidsDiffer": "The two sides are different on-chain transactions; one movement between your wallets has a single transaction id.",

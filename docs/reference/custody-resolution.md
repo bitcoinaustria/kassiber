@@ -176,18 +176,19 @@ action is `review_pair`, which opens that pair where it can be unpaired.
 Unpairing removes the suspense on the next journal run, and journal
 auto-pairing never recreates a pair the owner removed.
 
-The desktop's Quarantine page leads with what needs the user and how many
-rows only wait, then one card per cause (what was seen, what to do, its
-action), then the rows split into Needs you, Waiting and All, each paged by
-the daemon. A suspense left by pairs lists each pair side by side; Unpair
-confirms what the two transactions are booked as on their own (a disposal and
-a purchase at market value, unless classified otherwise), then recalculates
-journals. Pairs that join two different on-chain transactions can go in one
-step, all of them or the decided subset, with one confirmation and one
-recalculation; each pair row opens its transaction. Long lists fold (three
-pairs, four causes), and the full list of held rows sits behind one line. The side-nav badge counts the causes. The page keeps the gap
-editor behind developer tools and offers exclusion only for price and
-decision questions.
+The desktop's Quarantine page leads with a summary: how many rows need the
+user, how many only wait on a cause (listed on request, one line each with the
+cause it waits on), whether reports are blocked, and the one step that fixes
+them. **Fix all** covers pairs that join two different on-chain transactions;
+**Fix with assistant** hands the rest to the assistant. Either way the change
+is previewed through `ui.review.plan` and applied, journals included, on one
+confirmation. Below, one card per cause says what was seen and what to do and
+lists its own transactions; a suspense left by pairs lists each pair side by
+side, and a pair Kassiber cannot decide keeps its own Unpair through the same
+preview. Long lists fold (three rows, four causes); rows beyond the loaded
+page appear once those are resolved. The side-nav badge counts the causes. The
+page keeps the gap editor behind developer tools and offers exclusion only for
+price and decision questions.
 
 ## Desktop review
 

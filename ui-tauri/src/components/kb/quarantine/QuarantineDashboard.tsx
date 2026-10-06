@@ -4,7 +4,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
-import { Button } from "@/components/ui/button";
 import {
   ExplorerOpenDialog,
   TransactionDetailSheet,
@@ -59,16 +58,16 @@ import {
   type QuarantineDetailContext,
   type QuarantineSheetTab,
 } from "./explain";
-import type { QuarantineItem, QuarantineScope, QuarantineSnapshot } from "./types";
+import type { QuarantineItem, QuarantineSnapshot } from "./types";
 
 interface QuarantineDashboardProps {
-  /** The "needs you" page: drives the summary and the cause cards. */
+  /** What needs the user: drives the summary and the cause cards. */
   attention: QuarantineSnapshot;
-  /** The listed scope's page; the attention page when that is what is listed. */
-  list: QuarantineSnapshot | null;
-  listLoading: boolean;
-  scope: QuarantineScope;
-  onScopeChange: (scope: QuarantineScope) => void;
+  /** A page of what only waits on a cause, while that list is open. */
+  waiting: QuarantineSnapshot | null;
+  waitingLoading: boolean;
+  waitingShown: boolean;
+  onWaitingShownChange: (shown: boolean) => void;
   offset: number;
   pageSize: number;
   onOffsetChange: (offset: number) => void;
@@ -99,10 +98,10 @@ function readQuarantineDetailTarget(): DetailTarget {
 
 export function QuarantineDashboard({
   attention,
-  list,
-  listLoading,
-  scope,
-  onScopeChange,
+  waiting,
+  waitingLoading,
+  waitingShown,
+  onWaitingShownChange,
   offset,
   pageSize,
   onOffsetChange,
@@ -126,8 +125,6 @@ export function QuarantineDashboard({
   // "Save & next" walks the list the transaction was opened from.
   const [detailQueue, setDetailQueue] = React.useState<string[]>([]);
   const [dialog, setDialog] = React.useState<ConnectionDialogState>(null);
-  // The causes are where the owner acts; the full list is one click away.
-  const [showQueue, setShowQueue] = React.useState(false);
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
   const [drafts, setDrafts] = React.useState<
@@ -176,16 +173,11 @@ export function QuarantineDashboard({
     { enabled: Boolean(detailTarget.transactionId) },
   );
   const { summary } = attention;
-  const listItems = list?.items ?? [];
+  const waitingItems = waiting?.items ?? [];
   const knownItems = React.useMemo<QuarantineItem[]>(
-    () => [...attention.items, ...(list && list !== attention ? list.items : [])],
-    [attention, list],
+    () => [...attention.items, ...(waiting?.items ?? [])],
+    [attention, waiting],
   );
-  const counts: Record<QuarantineScope, number> = {
-    attention: summary.attention_count ?? summary.count,
-    waiting: summary.waiting_count ?? 0,
-    all: summary.count,
-  };
   const detailTransaction = React.useMemo(() => {
     const tx = transactionQuery.data?.data?.transaction;
     return tx
@@ -414,11 +406,11 @@ export function QuarantineDashboard({
     });
   };
 
-  const openFromList = (
+  const openFromWaiting = (
     transactionId: string,
     tab: QuarantineSheetTab,
     context: QuarantineDetailContext | null,
-  ) => openDetail(transactionId, tab, context, listItems.map((item) => item.transaction_id));
+  ) => openDetail(transactionId, tab, context, waitingItems.map((item) => item.transaction_id));
 
   return (
     <div className={cn(screenShellClassName)}>
@@ -438,10 +430,8 @@ export function QuarantineDashboard({
         hideSensitive={hideSensitive}
         onConnectWallet={() => setDialog({ mode: "connect" })}
         onImportHistory={(walletId) => setDialog({ mode: "import", walletId })}
-        onShowWaiting={() => {
-          setShowQueue(true);
-          onScopeChange("waiting");
-        }}
+        onShowWaiting={() => onWaitingShownChange(true)}
+        waitingShown={waitingShown}
         onOpenTransaction={(transactionId, tab, context) =>
           openDetail(
             transactionId,
@@ -452,28 +442,20 @@ export function QuarantineDashboard({
         }
       />
 
-      {summary.count && !showQueue ? (
-        <div>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setShowQueue(true)}>
-            {t("quarantine.queue.show", { count: summary.count })}
-          </Button>
-        </div>
-      ) : summary.count ? (
+      {/* What needs the user sits on its cause's card; only what waits is listed. */}
+      {summary.count && waitingShown ? (
         <QuarantineQueue
-          items={listItems}
-          scope={scope}
-          counts={counts}
+          items={waitingItems}
           offset={offset}
           pageSize={pageSize}
-          total={list?.summary.scope_count ?? counts[scope]}
-          loading={listLoading}
+          total={waiting?.summary.scope_count ?? summary.waiting_count ?? 0}
+          loading={waitingLoading}
           hideSensitive={hideSensitive}
-          onScopeChange={onScopeChange}
           onOffsetChange={onOffsetChange}
-          onOpenTransaction={openFromList}
-          onHide={() => setShowQueue(false)}
+          onOpenTransaction={openFromWaiting}
+          onHide={() => onWaitingShownChange(false)}
         />
-      ) : (
+      ) : summary.count ? null : (
         <div className="kb-surface space-y-1 p-(--kb-card-padding)" data-testid="quarantine-empty">
           <p className="text-base font-semibold">{t("quarantine.emptyTitle")}</p>
           <p className="text-sm text-muted-foreground">{t("quarantine.emptyBody")}</p>
