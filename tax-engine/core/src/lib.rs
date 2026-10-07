@@ -12,6 +12,9 @@
 //! derived views). Austrian rules live in `austria` (markers, regimes,
 //! classification) and `swaps` (swap-pair validation and the multi-asset
 //! runner).
+//!
+//! [`ledger`] is the schema-2 layer that takes the finalized custody
+//! projection (plan 20 phase 4, in progress).
 
 /// Version of this engine build, recorded in journal provenance.
 pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -24,6 +27,7 @@ mod engine;
 pub mod entry;
 pub mod error;
 mod heap;
+pub mod ledger;
 mod methods;
 pub mod model;
 mod num;

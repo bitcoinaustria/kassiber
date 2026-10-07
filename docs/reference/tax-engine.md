@@ -187,6 +187,10 @@ its inputs exactly as the adapter does, and writes two files under
 `tax-engine/core/tests/engine_fixtures.rs` reports every differing field by
 case and path. The generator is deterministic for a seed; larger stress sets
 can be checked through `KASSIBER_ENGINE_FIXTURES` and `KASSIBER_AT_FIXTURES`.
+`tax-engine/core/tests/ledger_text.rs` checks the engine's own rendering of
+`str(transaction)` (`ledger::text`, for the phase 4 ledger operation, which
+builds its entries without a request `text`) against the RP2 text these
+fixtures store.
 
 `ledger_fixtures.json`, from `tax-engine/scripts/gen_ledger_fixtures.py`, holds
 whole-ledger goldens: finalized projections with the frozen oracle's ledger
