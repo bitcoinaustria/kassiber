@@ -118,6 +118,24 @@ Austrian books of the random generator against the oracle. Without RP2 its
 oracle checks skip, except under `KASSIBER_CI`, which CI sets, where they
 fail.
 
+### Comparing a real book
+
+Owners can compare production with the oracle on their own book, locally:
+
+```bash
+uv run --locked python -m tests.tax_oracle.compare_book --data-root <copy> \
+    [--db-passphrase-fd <fd>] [--profile <id or label>]
+```
+
+`<copy>` must be a disposable copy of a data directory, because opening it may
+migrate its schema. The tool refuses Kassiber's default and legacy data roots,
+anything inside the default state root or a registered project, and a
+directory without a database. It reads an encrypted copy's passphrase only
+from the file descriptor, never from the keyring, a remembered unlock, or the
+operator broker. Once the copy is open its connection is read-only; it builds
+each profile's custody projection, runs production and the oracle on it, and
+prints the differences to stdout. It makes no network connection.
+
 ## Tiers
 
 | Tier | Command | Docker | Purpose |

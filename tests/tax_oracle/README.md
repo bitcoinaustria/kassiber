@@ -17,6 +17,8 @@ with, running on RP2. `tests/tax_engine_compare.py` compares the two, and
 | `projection_range.py` | the shapes a finalized projection cannot have (LD-5) |
 | `FROZEN.json` | SHA-256 of each copied file after the edits below |
 | `test_oracle_contract.py` | the checks that keep the oracle what it claims to be |
+| `compare_book.py` | the owner's comparison of production with the oracle on a disposable copy of a real book ([testing](../../docs/reference/testing.md#comparing-a-real-book)) |
+| `test_compare_book.py` | `compare_book` opens only a disposable copy and leaves nothing behind |
 
 The four copies were taken at commit `540c21b8`.
 
