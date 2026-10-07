@@ -1,0 +1,409 @@
+[
+  {
+    "id": "inbound-value-ignores-quantity",
+    "file": "kassiber/core/tax_events.py",
+    "find": "                continue\n            fiat_value = _positive_fiat_value(row, amount * spot_price)\n        elif direction == \"outbound\":",
+    "replace": "                continue\n            fiat_value = _positive_fiat_value(row, spot_price)\n        elif direction == \"outbound\":",
+    "expect_failing": [
+      "tests/test_tax_events.py::LedgerGateTest::test_priced_inbound_books_at_its_value"
+    ],
+    "rule": "A priced acquisition books at its quantity times the spot price."
+  },
+  {
+    "id": "move-residual-counts-the-recorded-fee",
+    "file": "kassiber/core/tax_events.py",
+    "find": "                unrecognized_outflow = msat_to_btc(out_row[\"amount\"]) - msat_to_btc(\n                    in_row[\"amount\"]\n                )",
+    "replace": "                unrecognized_outflow = sent - received",
+    "expect_failing": [
+      "tests/test_tax_events.py::LedgerGateTest::test_recorded_move_fee_books_as_transfer_fee"
+    ],
+    "rule": "Only principal the destination did not receive counts against the fee band; a move's recorded fee books as its transfer fee."
+  },
+  {
+    "id": "pending-spend-not-held",
+    "file": "kassiber/core/tax_events.py",
+    "find": "        if row[\"id\"] in pending_onchain_row_ids:\n            quarantines.append(",
+    "replace": "        if False:\n            quarantines.append(",
+    "expect_failing": [
+      "tests/test_tax_events.py::LedgerGateTest::test_unconfirmed_spend_is_held_not_disposed"
+    ],
+    "rule": "A spend whose chain evidence is unconfirmed is held as pending_onchain_confirmation, not disposed."
+  },
+  {
+    "id": "unpriced-move-fee-books",
+    "file": "kassiber/core/tax_events.py",
+    "find": "            if spot_price is None and fee > 0:",
+    "replace": "            if False:",
+    "expect_failing": [
+      "tests/test_tax_events.py::LedgerGateTest::test_unpriced_move_fee_holds_both_legs"
+    ],
+    "rule": "A move whose fee has no price holds both legs as missing_spot_price."
+  },
+  {
+    "id": "blocked-bundle-siblings-not-flagged",
+    "file": "kassiber/core/tax_events.py",
+    "find": "        for group_id, reason in blocked_transfer_group_reasons.items():\n            _append_group_block_quarantines(",
+    "replace": "        for group_id, reason in ():\n            _append_group_block_quarantines(",
+    "expect_failing": [
+      "tests/test_tax_events.py::LedgerGateTest::test_blocked_bundle_holds_every_move_in_it"
+    ],
+    "rule": "The other moves of a blocked atomic bundle are held as derived_transfer_group_blocked."
+  },
+  {
+    "id": "blocked-bundle-siblings-book",
+    "file": "kassiber/core/tax_events.py",
+    "find": "            if transfer.group_id in blocked_group_ids\n        }",
+    "replace": "            if False\n        }",
+    "expect_failing": [
+      "tests/test_tax_events.py::LedgerGateTest::test_blocked_bundle_holds_every_move_in_it"
+    ],
+    "rule": "No move of a blocked atomic bundle books."
+  },
+  {
+    "id": "contamination-matches-row-ids",
+    "file": "kassiber/core/tax_events.py",
+    "find": "        if str(_row_get(row, \"journal_transaction_id\") or _row_get(row, \"id\"))\n        in quarantined_ids",
+    "replace": "        if str(_row_get(row, \"id\"))\n        in quarantined_ids",
+    "expect_failing": [
+      "tests/test_tax_events.py::LedgerGateTest::test_held_move_contaminates_later_disposals_by_anchor"
+    ],
+    "rule": "A held row taints the lot state from its time on, matched by its anchor transaction."
+  },
+  {
+    "id": "privacy-hop-not-held",
+    "file": "kassiber/core/tax_events.py",
+    "find": "        privacy_hop = _privacy_hop_evidence(row)\n        if privacy_hop:",
+    "replace": "        privacy_hop = None\n        if privacy_hop:",
+    "expect_failing": [
+      "tests/test_tax_events.py::LedgerGateTest::test_privacy_hop_without_provenance_is_held"
+    ],
+    "rule": "A standalone row with privacy-hop evidence is held as privacy_hop_unresolved."
+  },
+  {
+    "id": "reviewed-coinjoin-link-not-recognized",
+    "file": "kassiber/core/tax_events.py",
+    "find": "    return kind == \"coinjoin\" or kind == \"whirlpool\" or \"coinjoin\" in kind",
+    "replace": "    return False",
+    "expect_failing": [
+      "tests/test_tax_events.py::LedgerGateTest::test_reviewed_coinjoin_move_crosses_the_privacy_boundary"
+    ],
+    "rule": "A reviewed coinjoin move books across its privacy boundary."
+  },
+  {
+    "id": "conflict-loser-not-held",
+    "file": "kassiber/core/tax_events.py",
+    "find": "        if row[\"id\"] in conflict_row_ids:\n            quarantines.append(",
+    "replace": "        if False:\n            quarantines.append(",
+    "expect_failing": [
+      "tests/test_tax_events.py::ConflictPairInteractionTest::test_conflict_loser_move_leg_is_held_and_its_partner_books_alone",
+      "tests/test_tax_events.py::ConflictPairInteractionTest::test_conflict_loser_sale_is_held_not_disposed"
+    ],
+    "rule": "A spend that lost a conflict over its input is held as conflicting_spend."
+  },
+  {
+    "id": "conflict-pair-still-books",
+    "file": "kassiber/core/tax_events.py",
+    "find": "    for pair in non_conflict_pairs:\n        pair_refs_by_row.setdefault(",
+    "replace": "    for pair in intra_pairs:\n        pair_refs_by_row.setdefault(",
+    "expect_failing": [
+      "tests/test_tax_events.py::ConflictPairInteractionTest::test_conflict_loser_move_leg_is_held_and_its_partner_books_alone"
+    ],
+    "rule": "A move with a conflict-losing leg does not book; its other leg books alone."
+  },
+  {
+    "id": "confirmed-conflict-spend-held",
+    "file": "kassiber/core/ownership_transfers.py",
+    "find": "        if len(confirmed) == 1:",
+    "replace": "        if False:",
+    "expect_failing": [
+      "tests/test_tax_events.py::ConflictPairInteractionTest::test_conflict_loser_move_leg_is_held_and_its_partner_books_alone",
+      "tests/test_tax_events.py::ConflictPairInteractionTest::test_conflict_loser_sale_is_held_not_disposed"
+    ],
+    "rule": "Of two spends of one input, the only confirmed one wins and books; only the others are held."
+  },
+  {
+    "id": "regime-order-ignores-direction",
+    "file": "kassiber/core/tax_events.py",
+    "find": "                0 if str(_row_get(r, \"direction\") or \"\") == \"inbound\" else 1,\n",
+    "replace": "                0,\n",
+    "expect_failing": [
+      "tests/test_tax_events.py::AustrianSelfTransferRegimeTest::test_self_transfer_fee_regime_is_order_independent"
+    ],
+    "rule": "Regime inference applies a same-instant acquisition before a disposal or move, whatever the row ids."
+  },
+  {
+    "id": "regime-order-follows-projection",
+    "file": "kassiber/core/tax_events.py",
+    "find": "    if is_at:\n        regime_rows = sorted(",
+    "replace": "    if False:\n        regime_rows = sorted(",
+    "expect_failing": [
+      "tests/test_tax_events.py::AustrianSelfTransferRegimeTest::test_self_transfer_fee_regime_is_order_independent"
+    ],
+    "rule": "Regime inference applies a same-instant acquisition before a disposal or move, whatever the projection's row order."
+  },
+  {
+    "id": "move-regime-override-ignored",
+    "file": "kassiber/core/tax_events.py",
+    "find": "                at_regime = (\n                    regime_override\n                    if regime_override in (\"alt\", \"neu\")\n                    else outbound_regimes.get(str(out_row[\"id\"]))\n                )",
+    "replace": "                at_regime = outbound_regimes.get(str(out_row[\"id\"]))",
+    "expect_failing": [
+      "tests/test_tax_events.py::AustrianSelfTransferRegimeTest::test_self_transfer_fee_honors_regime_override"
+    ],
+    "rule": "A regime override on a move's out leg sets the regime of its fee."
+  },
+  {
+    "id": "conflict-pair-feeds-regime-inference",
+    "file": "kassiber/core/tax_events.py",
+    "find": "    regime_pairs = [*non_conflict_pairs, *samourai_regime_pairs]",
+    "replace": "    regime_pairs = [*intra_pairs, *samourai_regime_pairs]",
+    "expect_failing": [
+      "tests/test_tax_events.py::AustrianSelfTransferRegimeTest::test_conflict_loser_pair_excluded_from_regime_inference"
+    ],
+    "rule": "A move with a conflict-losing leg moves no Alt/Neu availability; its partner counts as a plain acquisition."
+  },
+  {
+    "id": "event-override-keeps-election",
+    "file": "kassiber/core/tax_events.py",
+    "find": "            if regime_override in (\"alt\", \"neu\"):\n                at_regime = regime_override\n                at_regime_basis = None",
+    "replace": "            if regime_override in (\"alt\", \"neu\"):\n                at_regime = regime_override",
+    "expect_failing": [
+      "tests/test_tax_events.py::AustrianRegimeElectionAuditTest::test_explicit_override_suppresses_election_marker"
+    ],
+    "rule": "A regime override on a disposal drops the Wahlrecht election marker."
+  },
+  {
+    "id": "inbound-regime-ignores-cutoff",
+    "file": "kassiber/core/tax_events.py",
+    "find": "            if direction == \"inbound\":\n                at_regime = infer_regime_from_timestamp(row[\"occurred_at\"])",
+    "replace": "            if direction == \"inbound\":\n                at_regime = \"neu\"",
+    "expect_failing": [
+      "tests/test_austrian_classification.py::AustrianEventMarkerTest::test_at_inbound_event_pre_cutoff_gets_alt_regime"
+    ],
+    "rule": "An Austrian acquisition's regime follows the Neu cutoff."
+  },
+  {
+    "id": "alt-fallback-disabled",
+    "file": "kassiber/core/austrian.py",
+    "find": "            if neu_available_msat_by_key.get(availability_key, 0) <= 0:\n                regime = REGIME_ALT",
+    "replace": "            if False:\n                regime = REGIME_ALT",
+    "expect_failing": [
+      "tests/test_austrian_classification.py::OutboundRegimeTest::test_post_cutoff_sale_with_only_alt_inventory_falls_back_to_alt",
+      "tests/test_austrian_classification.py::OutboundRegimeTest::test_post_cutoff_sale_from_alt_only_wallet_stays_alt",
+      "tests/test_tax_events.py::AustrianRegimeElectionAuditTest::test_pure_alt_wallet_disposal_is_forced_not_election",
+      "tests/test_tax_events.py::AustrianSelfTransferRegimeTest::test_move_from_alt_only_wallet_carries_alt_to_destination"
+    ],
+    "rule": "A post-cutoff disposal from a wallet holding only Alt coins is Alt."
+  },
+  {
+    "id": "alt-fallback-always",
+    "file": "kassiber/core/austrian.py",
+    "find": "            if neu_available_msat_by_key.get(availability_key, 0) <= 0:",
+    "replace": "            if True:",
+    "expect_failing": [
+      "tests/test_austrian_classification.py::OutboundRegimeTest::test_post_cutoff_sale_with_neu_inventory_stays_neu",
+      "tests/test_tax_events.py::AustrianRegimeElectionAuditTest::test_mixed_holdings_disposal_records_wahlrecht_election"
+    ],
+    "rule": "A post-cutoff disposal stays Neu while its wallet holds Neu coins."
+  },
+  {
+    "id": "election-not-recorded",
+    "file": "kassiber/core/austrian.py",
+    "find": "                election_row_ids.add(str(row[\"id\"]))",
+    "replace": "                pass",
+    "expect_failing": [
+      "tests/test_tax_events.py::AustrianRegimeElectionAuditTest::test_mixed_holdings_disposal_records_wahlrecht_election",
+      "tests/test_austrian_classification.py::OutboundRegimeTest::test_post_cutoff_sale_with_neu_inventory_stays_neu",
+      "tests/test_tax_descriptions.py::DescriptionTest::test_austrian_markers_compose_in_a_fixed_order"
+    ],
+    "rule": "A Neu disposal from a wallet that also holds Alt coins records the Wahlrecht election."
+  },
+  {
+    "id": "election-without-alt",
+    "file": "kassiber/core/austrian.py",
+    "find": "        if regime == REGIME_NEU and alt_available_msat_by_key.get(availability_key, 0) > 0:",
+    "replace": "        if regime == REGIME_NEU and alt_available_msat_by_key.get(availability_key, 0) >= 0:",
+    "expect_failing": [
+      "tests/test_tax_events.py::AustrianRegimeElectionAuditTest::test_pure_neu_wallet_disposal_is_forced_not_election"
+    ],
+    "rule": "A disposal from a wallet holding only Neu coins is forced, not an election."
+  },
+  {
+    "id": "availability-not-per-wallet",
+    "file": "kassiber/core/austrian.py",
+    "find": "    text = str(wallet_id)\n    return text if text else AT_DEFAULT_POOL",
+    "replace": "    return AT_DEFAULT_POOL",
+    "expect_failing": [
+      "tests/test_austrian_classification.py::OutboundRegimeTest::test_post_cutoff_sale_from_alt_only_wallet_stays_alt"
+    ],
+    "rule": "Alt/Neu availability is tracked per wallet, not across the global pool."
+  },
+  {
+    "id": "move-draws-alt-first",
+    "file": "kassiber/core/austrian.py",
+    "find": "        (REGIME_NEU, REGIME_ALT)\n        if preferred_regime == REGIME_NEU\n        else (REGIME_ALT, REGIME_NEU)",
+    "replace": "        (REGIME_ALT, REGIME_NEU)",
+    "expect_failing": [
+      "tests/test_austrian_classification.py::OutboundRegimeTest::test_post_cutoff_sale_from_transfer_funded_wallet_draws_moved_neu_inventory"
+    ],
+    "rule": "A post-cutoff move draws its wallet's Neu coins first and carries them to the destination (bitcoinaustria/kassiber#213)."
+  },
+  {
+    "id": "move-credits-no-destination",
+    "file": "kassiber/core/austrian.py",
+    "find": "        bucket[to_key] += carried",
+    "replace": "        bucket[to_key] += 0",
+    "expect_failing": [
+      "tests/test_tax_events.py::AustrianSelfTransferRegimeTest::test_move_from_alt_only_wallet_carries_alt_to_destination",
+      "tests/test_austrian_classification.py::OutboundRegimeTest::test_one_to_many_transfer_carries_regime_to_each_destination_wallet"
+    ],
+    "rule": "A move carries the Alt/Neu availability it draws to its destination wallet."
+  },
+  {
+    "id": "move-fee-from-last-regime",
+    "file": "kassiber/core/austrian.py",
+    "find": "    for regime in regime_order:\n        fee_slice = min(moved[regime], remaining_fee)",
+    "replace": "    for regime in reversed(regime_order):\n        fee_slice = min(moved[regime], remaining_fee)",
+    "expect_failing": [
+      "tests/test_austrian_classification.py::OutboundRegimeTest::test_self_transfer_fee_is_fee_first_when_neu_covers_fee_only"
+    ],
+    "rule": "A move's fee comes from the first regime it draws; only the rest reaches the destination."
+  },
+  {
+    "id": "austrian-pool-not-renamed",
+    "file": "kassiber/core/engines/rp2.py",
+    "find": "    return AT_DEFAULT_POOL if pool == GLOBAL_COST_BASIS_POOL_ID else pool",
+    "replace": "    return pool",
+    "expect_failing": [
+      "tests/test_austrian_classification.py::AustrianEventMarkerTest::test_at_inbound_event_gets_neu_regime_and_pool",
+      "tests/test_austrian_classification.py::AustrianEventMarkerTest::test_at_transfer_uses_the_single_pool",
+      "tests/test_tax_descriptions.py::DescriptionTest::test_austrian_move_fee_carries_its_regime_then_the_pool"
+    ],
+    "rule": "Austrian descriptions name the single global pool `default`."
+  },
+  {
+    "id": "generic-gets-austrian-markers",
+    "file": "kassiber/core/engines/rp2.py",
+    "find": "    include_austrian_markers = _profile_str(profile, \"tax_country\").lower() == \"at\"",
+    "replace": "    include_austrian_markers = True",
+    "expect_failing": [
+      "tests/test_tax_descriptions.py::DescriptionTest::test_generic_descriptions_carry_no_markers",
+      "tests/test_austrian_classification.py::AustrianEventMarkerTest::test_generic_profile_leaves_at_markers_out"
+    ],
+    "rule": "Generic books carry no Austrian markers."
+  },
+  {
+    "id": "swap-link-marker-first",
+    "file": "kassiber/core/engines/rp2.py",
+    "find": "        tokens.append(marker_token(MARKER_SWAP_LINK, swap_link))",
+    "replace": "        tokens.insert(0, marker_token(MARKER_SWAP_LINK, swap_link))",
+    "expect_failing": [
+      "tests/test_tax_descriptions.py::DescriptionTest::test_austrian_markers_compose_in_a_fixed_order",
+      "tests/test_austrian_classification.py::AustrianEventMarkerTest::test_at_swap_link_tags_both_legs_and_carries_the_swapped_basis"
+    ],
+    "rule": "Event markers keep their order: regime, regime basis, pool, swap link, then the description."
+  },
+  {
+    "id": "swap-link-not-tagged",
+    "file": "kassiber/core/tax_events.py",
+    "find": "            linked = swap_link_map.get(row[\"id\"])",
+    "replace": "            linked = None",
+    "expect_failing": [
+      "tests/test_austrian_classification.py::AustrianEventMarkerTest::test_at_swap_link_tags_both_legs_and_carries_the_swapped_basis"
+    ],
+    "rule": "Both legs of a selected Austrian swap carry its link."
+  },
+  {
+    "id": "move-fee-regime-dropped",
+    "file": "kassiber/core/engines/rp2.py",
+    "find": "    regime = getattr(transfer, \"at_regime\", None)\n    if regime:\n        tokens.append(marker_token(MARKER_REGIME, regime))\n    from_pool",
+    "replace": "    regime = None\n    if regime:\n        tokens.append(marker_token(MARKER_REGIME, regime))\n    from_pool",
+    "expect_failing": [
+      "tests/test_tax_descriptions.py::DescriptionTest::test_austrian_move_fee_carries_its_regime_then_the_pool",
+      "tests/test_tax_events.py::AustrianSelfTransferRegimeTest::test_self_transfer_fee_honors_regime_override"
+    ],
+    "rule": "An Austrian move's fee description starts with the fee's regime."
+  },
+  {
+    "id": "inbound-kind-defaults-to-income",
+    "file": "kassiber/core/engines/rp2.py",
+    "find": "    return _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE.get(kind, \"BUY\")",
+    "replace": "    return _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE.get(kind, \"INCOME\")",
+    "expect_failing": [
+      "tests/test_tax_descriptions.py::DescriptionTest::test_inbound_kinds_book_by_their_type"
+    ],
+    "rule": "An inbound kind that is not an earn kind books as a plain acquisition."
+  },
+  {
+    "id": "cross-asset-validation-code",
+    "file": "kassiber/core/engines/rp2.py",
+    "find": "            code=\"rp2_input_validation\",",
+    "replace": "            code=\"internal\",",
+    "expect_failing": [
+      "tests/test_austrian_classification.py::ATCrossAssetValidationTest::test_unpaired_swap_link_surfaces_as_apperror_with_code"
+    ],
+    "rule": "A failed cross-asset swap validation raises AppError with code rp2_input_validation."
+  },
+  {
+    "id": "holdings-use-lot-acquisition-values",
+    "file": "kassiber/core/engines/rp2.py",
+    "find": "        total_cost_basis += dec(computed_data.get_open_position_in_transaction_fiat_in_with_fee(transaction)) * remaining_ratio",
+    "replace": "        total_cost_basis += dec(transaction.fiat_in_with_fee) * remaining_ratio",
+    "expect_failing": [
+      "tests/test_tax_descriptions.py::test_pool_holdings_use_report_basis_without_rewriting_acquisition_journal[generic]",
+      "tests/test_tax_descriptions.py::test_pool_holdings_use_report_basis_without_rewriting_acquisition_journal[at]"
+    ],
+    "rule": "Holdings carry the moving-average pool's basis, not the remaining lots' acquisition values."
+  },
+  {
+    "id": "holdings-ignore-sold-share",
+    "file": "kassiber/core/engines/rp2.py",
+    "find": "        total_quantity += dec(transaction.crypto_in) * remaining_ratio",
+    "replace": "        total_quantity += dec(transaction.crypto_in)",
+    "expect_failing": [
+      "tests/test_tax_descriptions.py::test_pool_holdings_use_report_basis_without_rewriting_acquisition_journal[generic]",
+      "tests/test_tax_descriptions.py::test_pool_holdings_use_report_basis_without_rewriting_acquisition_journal[at]"
+    ],
+    "rule": "Holdings count only the unsold share of a partly sold lot when averaging their basis."
+  },
+  {
+    "id": "wallet-pool-scope-allowed",
+    "file": "kassiber/tax_policy.py",
+    "find": "    if scope not in allowed:",
+    "replace": "    if False:",
+    "expect_failing": [
+      "tests/test_tax_descriptions.py::DescriptionTest::test_wallet_cost_basis_pools_fail_closed"
+    ],
+    "rule": "A profile asking for per-wallet cost-basis pools fails closed."
+  },
+  {
+    "id": "transfer-review-checks-in-leg",
+    "file": "kassiber/core/tax_events.py",
+    "find": "                fee > 0\n                and spot_price is not None\n                and _pricing_needs_review(spot_price_row)",
+    "replace": "                fee > 0\n                and spot_price is not None\n                and _pricing_needs_review(in_row)",
+    "expect_failing": [
+      "tests/test_review_regressions.py::ReviewRegressionTest::test_transfer_pricing_review_targets_used_price_leg"
+    ],
+    "rule": "Coarse-price review applies to the leg whose price values the move's fee."
+  },
+  {
+    "id": "unscoped-review-keeps-txid-case",
+    "file": "kassiber/transfers.py",
+    "find": "        groups[(normalize_group_txid(external_id), asset)].append(row)",
+    "replace": "        groups[(external_id, asset)].append(row)",
+    "expect_failing": [
+      "tests/test_tax_events.py::TransferIdentityTest::test_unscoped_review_folds_mixed_case_txid"
+    ],
+    "rule": "Cross-wallet rows sharing an import id are held for review whatever the id's case."
+  },
+  {
+    "id": "unscoped-review-flags-nothing",
+    "file": "kassiber/transfers.py",
+    "find": "        review_ids.update(str(row[\"id\"]) for row in group)",
+    "replace": "        pass",
+    "expect_failing": [
+      "tests/test_tax_events.py::TransferIdentityTest::test_detect_intra_transfers_rejects_shared_import_id",
+      "tests/test_tax_events.py::TransferIdentityTest::test_unscoped_review_folds_mixed_case_txid"
+    ],
+    "rule": "Cross-wallet rows sharing an import id without a chain identity are held for review."
+  }
+]

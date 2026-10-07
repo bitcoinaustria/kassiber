@@ -136,6 +136,25 @@ operator broker. Once the copy is open its connection is read-only; it builds
 each profile's custody projection, runs production and the oracle on it, and
 prints the differences to stdout. It makes no network connection.
 
+### Mutation checks
+
+`tax-engine/scripts/mutations.json` names, for each tax rule a test pins, one
+edit that breaks the rule and the tests that must then fail. Most of those
+tests run `build_ledger_state`; the transfer-identity entries pin the helpers
+in `kassiber.transfers` directly:
+
+```bash
+uv run --locked python tax-engine/scripts/mutation_check.py [--only ID ...] [--keep]
+```
+
+The check copies the working tree to a scratch directory under the system
+temporary directory, runs each named test there once unmutated, then applies
+one edit at a time and fails if a named test still passes. Python edits run
+pytest on production with the installed extension; Rust edits run their
+cargo test filters. It is too slow for CI; run it when `mutations.json` or
+the code it edits changes. CI only checks that every entry still applies once
+and names existing tests (`tests/test_tax_mutations.py`).
+
 ## Tiers
 
 | Tier | Command | Docker | Purpose |
