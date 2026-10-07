@@ -14,7 +14,8 @@
 //! runner).
 //!
 //! [`ledger`] is the schema-2 layer that takes the finalized custody
-//! projection (plan 20 phase 4, in progress).
+//! projection (plan 20 phase 4, in progress), and [`manifest`] lists the
+//! names and tables Python also spells.
 
 /// Version of this engine build, recorded in journal provenance.
 pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -28,6 +29,7 @@ pub mod entry;
 pub mod error;
 mod heap;
 pub mod ledger;
+pub mod manifest;
 mod methods;
 pub mod model;
 mod num;
