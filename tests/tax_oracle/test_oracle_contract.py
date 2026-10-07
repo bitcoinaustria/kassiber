@@ -27,15 +27,10 @@ from pathlib import Path
 from kassiber import tax_policy
 from kassiber.core.engines import native
 from tests.custody_tax_helpers import finalized_tax_inputs
+from tests.tax_ledger_generator import WALLET_REFS, finalized, ledger_history, rail_history, random_inputs
+from tests.tax_ledger_generator import profile as ledger_profile
 from tests.tax_oracle import adapter, policy, projection_range
 from tests.tax_oracle.adapter import OracleTaxEngine
-from tests.test_tax_engine_parity import (
-    WALLET_REFS,
-    _adapter_profile,
-    _ledger_history,
-    _rail_history,
-    _random_projection,
-)
 
 _ROOT = Path(__file__).resolve().parents[2]
 _ORACLE = Path(__file__).resolve().parent
@@ -289,10 +284,13 @@ class Rp2ImportTest(unittest.TestCase):
             self.assertIn("ok", result.stdout)
 
 
-def _projection_books():
-    books = [_ledger_history(), _rail_history()]
-    books += [_random_projection(index) for index in range(16)]
-    books += [_random_projection(100 + index) for index in range(8)]
+def _projection_books(country):
+    """``(label, profile, inputs)`` of projection-built books for ``country``."""
+    profile = ledger_profile(country, "fifo")
+    books = [(name, profile, finalized(profile, *history())) for name, history in (("ledger", ledger_history), ("rail", rail_history))]
+    for seed in range(24):
+        book = random_inputs(seed, country)
+        books.append((f"seed {seed}", book.profile, book.inputs))
     return books
 
 
@@ -340,16 +338,13 @@ def _unequal_move(rows, pairs):
 class ProjectionRangeTest(unittest.TestCase):
     def test_projection_built_books_are_in_range(self):
         for country in ("generic", "at"):
-            profile = _adapter_profile(country, "fifo")
-            for rows, pairs in _projection_books():
-                inputs = finalized_tax_inputs(profile, rows=rows, wallet_refs_by_id=WALLET_REFS, manual_pair_records=pairs)
-                with self.subTest(country=country, first=rows[0]["id"]):
+            for label, profile, inputs in _projection_books(country):
+                with self.subTest(country=country, book=label):
                     self.assertEqual(projection_range.violations(profile, inputs), ())
 
     def test_each_shape_the_projection_cannot_build_is_named(self):
-        profile = _adapter_profile("generic", "fifo")
-        rows, pairs = _ledger_history()
-        inputs = finalized_tax_inputs(profile, rows=rows, wallet_refs_by_id=WALLET_REFS, manual_pair_records=pairs)
+        profile = ledger_profile("generic", "fifo")
+        inputs = finalized(profile, *ledger_history())
         wallets = dict(WALLET_REFS, A={**WALLET_REFS["A"], "id": "other"})
         cases = {
             "non_global_pool_scope": (dict(profile, cost_basis_pool_scope="wallet"), inputs),
@@ -375,9 +370,8 @@ class ProjectionRangeTest(unittest.TestCase):
                 self.assertEqual(projection_range.violations(case_profile, case_inputs), (name,))
 
     def test_each_branch_of_a_rule_is_named(self):
-        profile = _adapter_profile("generic", "fifo")
-        rows, pairs = _ledger_history()
-        inputs = finalized_tax_inputs(profile, rows=rows, wallet_refs_by_id=WALLET_REFS, manual_pair_records=pairs)
+        profile = ledger_profile("generic", "fifo")
+        inputs = finalized(profile, *ledger_history())
         cases = (
             ("outbound amount and fee zero", _set("amount", 0, side="outbound", fee=0), ("non_positive_amount",)),
             ("outbound fee alone", _set("amount", 0, side="outbound"), ()),
@@ -391,9 +385,8 @@ class ProjectionRangeTest(unittest.TestCase):
                 self.assertEqual(projection_range.violations(profile, _changed(inputs, change)), expected)
 
     def test_a_reviewed_privacy_pair_is_in_range(self):
-        profile = _adapter_profile("generic", "fifo")
-        rows, pairs = _ledger_history()
-        inputs = finalized_tax_inputs(profile, rows=rows, wallet_refs_by_id=WALLET_REFS, manual_pair_records=pairs)
+        profile = ledger_profile("generic", "fifo")
+        inputs = finalized(profile, *ledger_history())
 
         def reviewed(rows, pairs):
             _set_privacy(rows, pairs)

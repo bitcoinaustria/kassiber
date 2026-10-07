@@ -188,6 +188,11 @@ its inputs exactly as the adapter does, and writes two files under
 case and path. The generator is deterministic for a seed; larger stress sets
 can be checked through `KASSIBER_ENGINE_FIXTURES` and `KASSIBER_AT_FIXTURES`.
 
+`ledger_fixtures.json`, from `tax-engine/scripts/gen_ledger_fixtures.py`, holds
+whole-ledger goldens: finalized projections with the frozen oracle's ledger
+and the one production must give
+([projection goldens](testing.md#projection-goldens)).
+
 ## Privacy
 
 The engine performs no I/O, network access, or logging and keeps no state

@@ -226,6 +226,12 @@ class TaxShadowOverlayContractTest(unittest.TestCase):
             workflow["jobs"]["python-tests"]["env"]["KASSIBER_TEST_TAX_ENGINE"], "census"
         )
 
+    def test_ci_fails_oracle_checks_without_rp2(self):
+        # tests/test_tax_ledger_goldens.py skips its oracle checks without
+        # RP2, except under KASSIBER_CI.
+        workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+        self.assertEqual(workflow["env"]["KASSIBER_CI"], "1")
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

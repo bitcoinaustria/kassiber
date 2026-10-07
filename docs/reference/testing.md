@@ -90,6 +90,34 @@ also proves the child path with the test-only
 outcome before the comparison: a `journals process` child must fail with the
 shadow error.
 
+### Projection goldens
+
+`tax-engine/core/tests/data/ledger_fixtures.json` stores one case per line:
+a profile and finalized projection (`inputs`), the oracle's outcome on RP2
+(`oracle`), and the outcome production must give (`expected`), in the tagged
+codec of `tests/tax_ledger_codec.py`. `expected` equals `oracle` except where
+`listed_difference` names one: `LD-4` (RP2 error classes) or `LD-3` (RP2's
+configuration prefix too). The cases are the named shapes and seeded books of
+`tests/tax_ledger_generator.py`'s `corpus()`.
+
+```bash
+uv run --locked python tax-engine/scripts/gen_ledger_fixtures.py [--accept CASE ...]
+```
+
+The generator certifies each case before writing: the inputs survive the
+codec and stay inside what a finalized projection can be, the oracle reaches
+the shape the case is named for, and `expected` follows from `oracle`. It
+refuses to change or drop a stored case's inputs or outcomes unless that case
+is named with `--accept`; review the change before accepting it. Adding cases
+needs no `--accept`. Its output depends only on the code, so two runs are
+byte-equal. `tests/test_tax_ledger_goldens.py` checks that the file is the
+current corpus and what two fresh generator runs write, production against
+`expected`, and the live oracle against `oracle` (this catches a change in a
+product module the oracle shares), and runs 200 seeded generic and 200
+Austrian books of the random generator against the oracle. Without RP2 its
+oracle checks skip, except under `KASSIBER_CI`, which CI sets, where they
+fail.
+
 ## Tiers
 
 | Tier | Command | Docker | Purpose |

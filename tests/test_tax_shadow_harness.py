@@ -231,7 +231,7 @@ class SessionEndTest(unittest.TestCase):
         """
         from tests.custody_tax_helpers import finalized_tax_inputs
         from tests.tax_engine_compare import PRODUCTION_ENGINE
-        from tests.test_tax_engine_parity import WALLET_REFS, _adapter_profile, _ledger_history
+        from tests.tax_ledger_generator import WALLET_REFS, ledger_history as _ledger_history, profile as _adapter_profile
 
 
         def test_builds_a_ledger_and_swallows_assertions():

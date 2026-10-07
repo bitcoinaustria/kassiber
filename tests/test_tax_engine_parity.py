@@ -17,7 +17,6 @@ projections and must equal the oracle's exactly
 
 from __future__ import annotations
 
-import json
 import random
 import unittest
 from dataclasses import dataclass
@@ -31,7 +30,8 @@ from kassiber.core.engines import native
 from kassiber.errors import AppError
 from kassiber.msat import msat_to_btc
 from tests import tax_engine_compare as compare
-from tests.custody_tax_helpers import finalized_tax_inputs
+from tests.tax_ledger_generator import finalized, ledger_history, rail_history, random_inputs
+from tests.tax_ledger_generator import profile as ledger_profile
 from tests.tax_oracle import adapter
 
 SEED = 20261002
@@ -633,171 +633,22 @@ def test_error_signatures_apply_only_the_listed_differences() -> None:
 # ---------------------------------------------------------------------------
 # Adapter level
 
-WALLET_REFS = {
-    wallet_id: {
-        "id": wallet_id,
-        "label": label,
-        "wallet_account_id": "acct-1",
-        "account_code": "treasury",
-        "account_label": "Treasury",
-    }
-    for wallet_id, label in (("A", "Cold"), ("B", "Hot"), ("C", "Exchange"), ("L", "Liquid"))
-}
-
-
-def _adapter_profile(country: str, method: str) -> dict[str, Any]:
-    return {
-        "id": "profile-1",
-        "workspace_id": "ws-1",
-        "label": "Default",
-        "fiat_currency": "EUR",
-        "tax_country": country,
-        "tax_long_term_days": 365,
-        "gains_algorithm": method,
-    }
-
-
-def _row(
-    tx_id: str,
-    wallet: str,
-    direction: str,
-    amount: int,
-    occurred_at: str,
-    *,
-    fee: int = 0,
-    rate: Optional[str] = "40000",
-    fiat_value: Optional[str] = None,
-    kind: Optional[str] = None,
-    asset: str = "BTC",
-) -> dict[str, Any]:
-    """An imported exchange row (no chain proof), as the stores hold it."""
-    ref = WALLET_REFS[wallet]
-    liquid = asset in {"LBTC", "L-BTC"}
-    return {
-        "id": tx_id,
-        "workspace_id": "ws-1",
-        "profile_id": "profile-1",
-        "wallet_id": wallet,
-        "wallet_label": ref["label"],
-        "wallet_account_id": ref["wallet_account_id"],
-        "account_code": ref["account_code"],
-        "account_label": ref["account_label"],
-        "external_id": f"exchange-{tx_id}",
-        "occurred_at": occurred_at,
-        "created_at": occurred_at,
-        "direction": direction,
-        "asset": asset,
-        "amount": amount,
-        "fee": fee,
-        "fiat_currency": "EUR",
-        "fiat_rate": None if rate is None else float(rate),
-        "fiat_rate_exact": rate,
-        "fiat_value": None if fiat_value is None else float(fiat_value),
-        "fiat_value_exact": fiat_value,
-        "kind": kind or ("deposit" if direction == "inbound" else "withdrawal"),
-        "description": f"{tx_id} via {ref['label']}",
-        "note": None,
-        "raw_json": "{}",
-        "config_json": json.dumps({"chain": "liquid" if liquid else "bitcoin", "network": "liquidv1" if liquid else "main"}),
-        "excluded": 0,
-    }
-
-
-def _ledger_history() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    rows = [
-        _row("buy-1", "C", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z", kind="buy"),
-        _row("buy-2", "C", "inbound", 50_000_000_000, "2024-03-01T00:00:00Z", rate="50000.5", kind="buy"),
-        _row("mined", "A", "inbound", 1_234_567_890, "2024-04-01T00:00:00Z", rate="60000", kind="mining"),
-        _row("staked", "A", "inbound", 987_654_321, "2024-04-02T00:00:00Z", rate="60100.25", kind="staking"),
-        _row("sell-1", "C", "outbound", 30_000_000_000, "2024-06-01T00:00:00Z", fee=10_000_000, rate="65000", kind="sell"),
-        _row("move-out", "C", "outbound", 20_000_000_000, "2024-07-01T00:00:00Z", fee=1_000_000, rate="61000"),
-        _row("move-in", "B", "inbound", 20_000_000_000, "2024-07-01T00:10:00Z", rate="61000"),
-        _row("sell-2", "B", "outbound", 5_000_000_000, "2025-08-01T00:00:00Z", rate="90000.123", kind="sell"),
-        _row("sell-3", "C", "outbound", 70_000_000_000, "2025-09-01T00:00:00Z", fee=2_000_000, fiat_value="61234.56", rate=None, kind="sell"),
-    ]
-    pairs = [
-        {"id": "pair-1", "out_transaction_id": "move-out", "in_transaction_id": "move-in", "kind": "manual", "policy": "carrying-value"}
-    ]
-    return rows, pairs
-
-
-def _rail_history() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    rows = [
-        _row("rail-buy-1", "C", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z", kind="buy"),
-        _row("rail-buy-2", "C", "inbound", 40_000_000_000, "2024-02-01T00:00:00Z", rate="45000.25", kind="buy"),
-        _row("peg-out", "C", "outbound", 60_000_000_000, "2024-05-01T00:00:00Z", rate="60000"),
-        _row("peg-in", "L", "inbound", 59_900_000_000, "2024-05-01T01:00:00Z", rate="60000", asset="LBTC"),
-        _row("liquid-sell", "L", "outbound", 10_000_000_000, "2024-09-01T00:00:00Z", rate="70000", asset="LBTC", kind="sell"),
-    ]
-    pairs = [
-        {"id": "rail-1", "out_transaction_id": "peg-out", "in_transaction_id": "peg-in", "kind": "peg-in", "policy": "carrying-value"}
-    ]
-    return rows, pairs
-
-
-def _random_projection(index: int) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Imported buys, sales, income kinds, fees, missing prices, and reviewed
-    same-asset moves between wallets, in Kassiber's canonical timestamps."""
-    rng = random.Random(f"{SEED}:projection:{index}")
-    start = datetime(rng.choice([2019, 2021, 2023]), rng.randint(1, 12), rng.randint(1, 28), tzinfo=timezone.utc)
-    rows: list[dict[str, Any]] = []
-    pairs: list[dict[str, Any]] = []
-    held = {"A": 0, "B": 0, "C": 0}
-    when = start
-    for step in range(rng.randint(4, 14)):
-        when += timedelta(days=rng.choice([0, 1, 7, 90, 200]), hours=rng.choice([0, 0, 5]))
-        stamp = when.strftime("%Y-%m-%dT%H:%M:%SZ")
-        rate = str(_price(rng)) if rng.random() < 0.95 else None
-        roll = rng.random()
-        if roll < 0.45 or not any(held.values()):
-            wallet = rng.choice(["A", "C", "C"])
-            kind = rng.choice(["buy", "buy", "deposit", "mining", "staking", "income", "interest"])
-            amount = rng.choice([rng.randint(1, 10**11), rng.randint(1, 10**6) * 10**5])
-            rows.append(_row(f"in-{step}", wallet, "inbound", amount, stamp, rate=rate, kind=kind))
-            held[wallet] += amount
-        elif roll < 0.8:
-            wallet = rng.choice([name for name, value in held.items() if value > 0])
-            amount = rng.randint(1, held[wallet])
-            fee = rng.randint(0, min(amount - 1, 10**7)) if amount > 1 and rng.random() < 0.5 else 0
-            rows.append(_row(f"out-{step}", wallet, "outbound", amount - fee, stamp, fee=fee, rate=rate, kind="sell"))
-            held[wallet] -= amount
-        else:
-            source = rng.choice([name for name, value in held.items() if value > 0])
-            target = rng.choice([name for name in held if name != source])
-            amount = rng.randint(1, held[source])
-            fee = rng.randint(0, min(amount - 1, 10**7)) if amount > 1 else 0
-            arrival = (when + timedelta(minutes=rng.choice([0, 10]))).strftime("%Y-%m-%dT%H:%M:%SZ")
-            rows.append(_row(f"move-out-{step}", source, "outbound", amount - fee, stamp, fee=fee, rate=rate))
-            rows.append(_row(f"move-in-{step}", target, "inbound", amount - fee, arrival, rate=rate))
-            pairs.append(
-                {
-                    "id": f"pair-{step}",
-                    "out_transaction_id": f"move-out-{step}",
-                    "in_transaction_id": f"move-in-{step}",
-                    "kind": "manual",
-                    "policy": "carrying-value",
-                }
-            )
-            held[source] -= amount
-            held[target] += amount - fee
-    return rows, pairs
-
 
 class AdapterParityTest(unittest.TestCase):
     """Production's ``build_ledger_state`` gives the oracle's journal."""
 
-    def _assert_parity(self, profile, rows, pairs):
-        inputs = finalized_tax_inputs(profile, rows=rows, wallet_refs_by_id=WALLET_REFS, manual_pair_records=pairs)
+    def _assert_parity(self, profile, inputs):
         expected = compare.run_oracle(profile, inputs)
         actual = compare.run_production(profile, inputs)
         self.assertEqual([], compare.ledger_differences(expected, actual))
         return actual
 
     def test_generic_ledger_matches_on_each_lot_method(self):
-        rows, pairs = _ledger_history()
+        rows, pairs = ledger_history()
         for method in ("FIFO", "LIFO", "HIFO", "LOFO"):
             with self.subTest(method=method):
-                result, error = self._assert_parity(_adapter_profile("generic", method), rows, pairs)
+                profile = ledger_profile("generic", method)
+                result, error = self._assert_parity(profile, finalized(profile, rows, pairs))
                 self.assertIsNone(error)
                 entry_types = {entry["entry_type"] for entry in result.entries}
                 # The history reaches every journal shape the engine feeds.
@@ -809,34 +660,36 @@ class AdapterParityTest(unittest.TestCase):
                 self.assertTrue(result.wallet_holdings)
 
     def test_generic_bitcoin_rail_carry_matches(self):
-        rows, pairs = _rail_history()
+        rows, pairs = rail_history()
         for method in ("FIFO", "HIFO"):
             with self.subTest(method=method):
-                result, error = self._assert_parity(_adapter_profile("generic", method), rows, pairs)
+                profile = ledger_profile("generic", method)
+                result, error = self._assert_parity(profile, finalized(profile, rows, pairs))
                 self.assertIsNone(error)
                 self.assertIn("disposal", {entry["entry_type"] for entry in result.entries})
 
     def test_random_generic_projections_match(self):
-        for index in range(16):
-            rows, pairs = _random_projection(index)
-            method = ("FIFO", "LIFO", "HIFO", "LOFO")[index % 4]
-            with self.subTest(index=index, method=method):
-                self._assert_parity(_adapter_profile("generic", method), rows, pairs)
+        # tests/test_tax_ledger_goldens.py runs 200 seeds of each country.
+        for seed in range(16):
+            book = random_inputs(seed, "generic")
+            with self.subTest(seed=seed, method=book.profile["gains_algorithm"], tags=book.tags):
+                self._assert_parity(book.profile, book.inputs)
 
     def test_austrian_ledger_matches_on_lot_methods(self):
-        rows, pairs = _ledger_history()
+        rows, pairs = ledger_history()
         for method in ("fifo", "hifo"):
             with self.subTest(method=method):
-                self._assert_parity(_adapter_profile("at", method), rows, pairs)
+                profile = ledger_profile("at", method)
+                self._assert_parity(profile, finalized(profile, rows, pairs))
 
     def test_austrian_ledger_matches_on_moving_average_at(self):
-        for rows, pairs in (_ledger_history(), _rail_history()):
+        for rows, pairs in (ledger_history(), rail_history()):
             with self.subTest(first=rows[0]["id"]):
-                self._assert_parity(_adapter_profile("at", "moving_average_at"), rows, pairs)
+                profile = ledger_profile("at", "moving_average_at")
+                self._assert_parity(profile, finalized(profile, rows, pairs))
 
     def test_random_austrian_projections_match(self):
-        for index in range(8):
-            rows, pairs = _random_projection(100 + index)
-            method = ("moving_average_at", "fifo")[index % 2]
-            with self.subTest(index=index, method=method):
-                self._assert_parity(_adapter_profile("at", method), rows, pairs)
+        for seed in range(8):
+            book = random_inputs(seed, "at")
+            with self.subTest(seed=seed, method=book.profile["gains_algorithm"], tags=book.tags):
+                self._assert_parity(book.profile, book.inputs)

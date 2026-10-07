@@ -14,6 +14,9 @@ env:
   # uv builds the tax engine's binding with maturin. Never let maturin fetch
   # its own Rust toolchain mid-build; the runner image provides one.
   MATURIN_NO_INSTALL_RUST: "1"
+  # Tests that compare with the frozen tax oracle fail here, instead of
+  # skipping, when its RP2 dev dependency is missing.
+  KASSIBER_CI: "1"
 
 jobs:
   preflight:

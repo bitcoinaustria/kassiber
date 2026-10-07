@@ -17,6 +17,11 @@ wrapped error. Two listed differences of plan 20 apply to both sides:
 
 There is no other rule; an unknown difference always fails.
 
+The projection-level goldens (``tests/test_tax_ledger_goldens.py``) store
+outcomes as ``outcome_document``s: the oracle's with its failures before the
+two listed differences (``oracle_error_signature``), production's required
+one after them.
+
 ``install_tax_mode`` installs the ``KASSIBER_TEST_TAX_ENGINE`` modes for
 ``tests/conftest.py`` and, in Python child processes such as the CLI and the
 daemon, for ``tests/_child_hooks/sitecustomize.py``. ``shadow`` and
@@ -34,7 +39,7 @@ import threading
 from collections import Counter
 from contextlib import ExitStack, contextmanager
 from decimal import Decimal
-from typing import Any, Callable, ContextManager, Iterable, Iterator, Mapping, Optional
+from typing import Any, Callable, ContextManager, Iterable, Iterator, Mapping, Optional, Sequence
 
 from kassiber.core.engines import GenericRP2TaxEngine
 from kassiber.core.engines.base import TaxEngineLedgerInputs, TaxEngineLedgerResult
@@ -88,6 +93,9 @@ _NATIVE_ERROR_NAMES = {
 # LD-3: RP2 reads its configuration from a temporary INI file and prefixes
 # the file's path to its configuration messages.
 _INI_PREFIX = re.compile(r"^.*?\.ini: ")
+# The goldens store the oracle's failures before LD-3 and LD-4, but the INI
+# file's path is random, so it is stored as this placeholder.
+STORED_INI_PATH = "<RP2 configuration file>.ini"
 
 Outcome = tuple[Optional[Any], Optional[BaseException]]
 
@@ -170,6 +178,58 @@ def error_signature(error: Optional[BaseException]) -> Optional[tuple[Any, ...]]
     if isinstance(error, AppError):
         signature += [error.code, error.hint, error.details, error.retryable, error_signature(error.__cause__)]
     return tuple(signature)
+
+
+def oracle_error_signature(error: Optional[BaseException]) -> Optional[tuple[Any, ...]]:
+    """``error_signature`` without LD-3 and LD-4: what the goldens store for
+    an oracle failure.
+
+    The class names stay RP2's and a configuration message keeps its INI
+    prefix, with the random path replaced by ``STORED_INI_PATH``.
+    ``listed_signature`` of the result is ``error_signature(error)``.
+    """
+    if error is None:
+        return None
+    message = _INI_PREFIX.sub(lambda _match: f"{STORED_INI_PATH}: ", str(error), count=1)
+    signature: list[Any] = [type(error).__name__, message]
+    if isinstance(error, AppError):
+        signature += [error.code, error.hint, error.details, error.retryable, oracle_error_signature(error.__cause__)]
+    return tuple(signature)
+
+
+def listed_signature(signature: Optional[Sequence[Any]]) -> Optional[tuple[Any, ...]]:
+    """Apply LD-4 and LD-3 to a stored ``oracle_error_signature``."""
+    if signature is None:
+        return None
+    name, message, *fields = signature
+    listed: list[Any] = [_NATIVE_ERROR_NAMES.get(name, name), _INI_PREFIX.sub("", message, count=1)]
+    if fields:
+        *app_fields, cause = fields
+        listed += [*app_fields, listed_signature(cause)]
+    return tuple(listed)
+
+
+def outcome_document(
+    outcome: Outcome,
+    signature: Callable[[Optional[BaseException]], Optional[tuple[Any, ...]]] = error_signature,
+) -> dict[str, Any]:
+    """An outcome as the goldens store it: the masked ledger or the failure's signature."""
+    result, error = outcome
+    if error is None:
+        return {"result": comparable_ledger(result)}
+    return {"error": signature(error)}
+
+
+def document_differences(expected: Mapping[str, Any], actual: Mapping[str, Any]) -> list[str]:
+    """Differences between two ``outcome_document``s, by the same rule as ``ledger_differences``."""
+    if "result" in expected and "result" in actual:
+        return value_differences(expected["result"], actual["result"])
+    if expected.get("error") == actual.get("error"):
+        return []
+    return [
+        f"error: expected {expected.get('error')!r} != actual {actual.get('error')!r}"
+        + ("" if "error" in expected and "error" in actual else " (one side succeeded)")
+    ]
 
 
 def _outcome(call: Callable[[], Any]) -> Outcome:
@@ -533,17 +593,22 @@ __all__ = [
     "RECORDS_ENV",
     "ROUTED_CAPABILITIES",
     "SHADOW",
+    "STORED_INI_PATH",
     "TAX_MODES",
     "UNCLASSIFIED",
     "RouteRecord",
     "census_build_ledger_state",
     "comparable_ledger",
+    "document_differences",
     "error_signature",
     "install_tax_mode",
     "ledger_differences",
+    "listed_signature",
     "localize",
     "oracle_build_ledger_state",
+    "oracle_error_signature",
     "outcome_differences",
+    "outcome_document",
     "production_route",
     "read_route_records",
     "record_route",

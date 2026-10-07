@@ -77,7 +77,7 @@ class NativeBackendIsolationTest(unittest.TestCase):
                 from kassiber.errors import AppError
                 from kassiber.tax_policy import build_tax_policy
                 from tests.custody_tax_helpers import finalized_tax_inputs
-                from tests.test_tax_engine_parity import WALLET_REFS, _adapter_profile, _ledger_history, _rail_history
+                from tests.tax_ledger_generator import WALLET_REFS, ledger_history as _ledger_history, profile as _adapter_profile, rail_history as _rail_history
 
                 with adapter._use_tax_engine_backend("native"):
                     # An Austrian swap needs moving_average_at; under fifo it fails closed.
@@ -131,7 +131,7 @@ class NativeBackendIsolationTest(unittest.TestCase):
                 from kassiber.core.engines import GenericRP2TaxEngine
                 from kassiber.core.engines import rp2 as adapter
                 from tests.custody_tax_helpers import finalized_tax_inputs
-                from tests.test_tax_engine_parity import WALLET_REFS, _adapter_profile, _ledger_history
+                from tests.tax_ledger_generator import WALLET_REFS, ledger_history as _ledger_history, profile as _adapter_profile
 
                 profile = _adapter_profile("generic", "FIFO")
                 rows, pairs = _ledger_history()
@@ -617,7 +617,7 @@ class ErrorClassTest(unittest.TestCase):
 class JournalProvenanceTest(unittest.TestCase):
     def test_calculation_metadata_names_the_backend(self):
         from tests.custody_tax_helpers import finalized_tax_inputs
-        from tests.test_tax_engine_parity import WALLET_REFS, _adapter_profile, _ledger_history
+        from tests.tax_ledger_generator import WALLET_REFS, ledger_history as _ledger_history, profile as _adapter_profile
 
         profile = _adapter_profile("generic", "FIFO")
         rows, pairs = _ledger_history()
