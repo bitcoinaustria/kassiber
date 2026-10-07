@@ -75,5 +75,7 @@ Independent of loans: a carrying-value swap whose leg was blocked in phase 1
 (e.g. `insufficient_lots` on a self-custody round-trip mis-paired as a BTC↔L-BTC
 swap) is quarantined as a *pair* in `_select_at_cross_asset_swap_links` rather than
 promoted to an `at_swap_link` that would bypass the quantity gate and abort the
-whole multi-asset report. Regression: `ATSwapOverSellQuarantineTest`; contract in
+whole multi-asset report. Regression:
+`CarryPairPhaseOneBlockJournalTest.test_oversold_at_swap_leg_quarantines_pair_instead_of_aborting`
+in `tests/test_austrian_classification.py`; contract in
 [docs/austrian-handoff.md](../austrian-handoff.md).

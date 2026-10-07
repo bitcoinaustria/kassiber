@@ -60,6 +60,8 @@ stored oracle outcomes of the projection-level goldens can.
 
 Only the comparison harness, this package, the ledger goldens and prepare
 tests, `tests/conftest.py`, the child-process hook and its harness test, the
-interface-mirror tests, and the fixture generator may import
+interface-mirror tests, the marker-grammar cases of
+`tests/test_tax_descriptions.py` (until the engine's describer takes them
+over), and the fixture generator may import
 `tests.tax_oracle` or `tests.tax_engine_compare`, which runs it;
 `tests/test_tax_oracle_imports.py` holds the list.

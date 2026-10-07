@@ -63,7 +63,6 @@ from kassiber.core.reports import (
 )
 from kassiber.core.report_context import ReportContext
 from kassiber.core.runtime import bootstrap_runtime, close_runtime
-from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import (
     MAX_UI_DASHBOARD_CANDIDATES,
     _tax_free_wallet_summaries,
@@ -13481,60 +13480,62 @@ class ReviewRegressionTest(unittest.TestCase):
         profile, inputs = self._direct_transfer_engine_inputs()
         # Coarse pricing only quarantines when the profile opts into review.
         profile = {**dict(profile), "require_coarse_review": 1}
-        out_row = {
-            **inputs.source_rows[1],
-            "pricing_source_kind": pricing.SOURCE_MANUAL_RATE_CACHE,
-            "pricing_quality": pricing.QUALITY_EXACT,
-        }
-        unused_coarse_in_row = {
-            **inputs.source_rows[2],
+        funding, out_row, in_row = inputs.source_rows
+        pair_record = inputs.source_manual_pair_records[0]
+
+        def run(out_fields, in_fields):
+            rows = [funding, {**out_row, **out_fields}, {**in_row, **in_fields}]
+            return GenericRP2TaxEngine(profile).build_ledger_state(
+                finalized_tax_inputs(
+                    profile,
+                    rows=rows,
+                    wallet_refs_by_id=inputs.wallet_refs_by_id,
+                    manual_pair_records=[pair_record],
+                )
+            )
+
+        # The move's fee is priced from the exactly priced out leg, so the
+        # coarse price on the unused in leg needs no review.
+        unused_coarse_in = {
             "pricing_source_kind": pricing.SOURCE_FMV_PROVIDER,
             "pricing_quality": pricing.QUALITY_COARSE_FALLBACK,
         }
-        normalized = normalize_tax_asset_inputs(
-            profile,
-            "BTC",
-            [out_row, unused_coarse_in_row],
-            inputs.wallet_refs_by_id,
-            [{"out": out_row, "in": unused_coarse_in_row}],
+        state = run(
+            {
+                "pricing_source_kind": pricing.SOURCE_MANUAL_RATE_CACHE,
+                "pricing_quality": pricing.QUALITY_EXACT,
+            },
+            unused_coarse_in,
         )
-        self.assertEqual(normalized.quarantines, [])
-        self.assertEqual(len(normalized.transfers), 1)
+        self.assertEqual(state.quarantines, [])
+        self.assertEqual(len(state.intra_audit), 1)
 
-        unpriced_out_row = {
-            **out_row,
-            "id": "coarse-source-transfer-out",
-            "fiat_rate": None,
-            "fiat_value": None,
-            "pricing_source_kind": None,
-            "pricing_quality": None,
-        }
-        used_coarse_in_row = {
-            **unused_coarse_in_row,
-            "id": "coarse-source-transfer-in",
-        }
-        normalized = normalize_tax_asset_inputs(
-            profile,
-            "BTC",
-            [unpriced_out_row, used_coarse_in_row],
-            inputs.wallet_refs_by_id,
-            [{"out": unpriced_out_row, "in": used_coarse_in_row}],
+        # Without a price on the out leg the fee is priced from the coarse in
+        # leg, which then needs review, and its partner is held with it.
+        state = run(
+            {
+                "fiat_rate": None,
+                "fiat_value": None,
+                "pricing_source_kind": None,
+                "pricing_quality": None,
+            },
+            unused_coarse_in,
         )
-        self.assertEqual(len(normalized.quarantines), 2)
+        self.assertEqual(state.intra_audit, [])
+        self.assertEqual(len(state.quarantines), 2)
         quarantine = next(
             q
-            for q in normalized.quarantines
-            if q["transaction_id"] == "coarse-source-transfer-in"
+            for q in state.quarantines
+            if q["transaction_id"] == "onchain-self-transfer-1-in"
         )
-        self.assertEqual(quarantine["transaction_id"], "coarse-source-transfer-in")
         self.assertEqual(quarantine["reason"], "pricing_review_required")
         detail = json.loads(quarantine["detail_json"])
         self.assertEqual(detail["wallet"], "Hot")
         self.assertEqual(detail["pricing_quality"], pricing.QUALITY_COARSE_FALLBACK)
         partner = next(
             q
-            for q in normalized.quarantines
-            if q["transaction_id"] == "coarse-source-transfer-out"
+            for q in state.quarantines
+            if q["transaction_id"] == "onchain-self-transfer-1-out"
         )
         self.assertEqual(partner["reason"], "pricing_review_required")
         self.assertTrue(json.loads(partner["detail_json"])["paired_leg"])

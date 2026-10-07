@@ -4,45 +4,36 @@ from decimal import Decimal
 
 from kassiber.core.austrian import (
     AT_CATEGORY_TO_KENNZAHL,
-    AT_NEU_CUTOFF,
     REGIME_ALT,
     REGIME_NEU,
-    infer_outbound_regimes,
     infer_regime_from_timestamp,
     kennzahl_for_disposal_category,
 )
-from kassiber.core.tax_events import normalize_tax_asset_inputs
-from tests.custody_tax_helpers import finalized_tax_inputs
+from kassiber.core.engines import GenericRP2TaxEngine
+from kassiber.errors import AppError
+from tests.tax_ledger_generator import finalized, pair, profile, row
+
+MOVING_AVERAGE_AT = profile("at", "moving_average_at")
 
 
-def _row(
-    tx_id,
-    wallet_id,
-    direction,
-    amount,
-    *,
-    occurred_at="2026-01-01T00:00:00Z",
-    asset="BTC",
-    fee=0,
-    fiat_rate=50_000,
-    fiat_value=None,
-    external_id=None,
-):
-    return {
-        "id": tx_id,
-        "wallet_id": wallet_id,
-        "occurred_at": occurred_at,
-        "direction": direction,
-        "asset": asset,
-        "amount": amount,
-        "fee": fee,
-        "fiat_rate": fiat_rate,
-        "fiat_value": fiat_value,
-        "kind": "deposit" if direction == "inbound" else "withdrawal",
-        "description": tx_id,
-        "note": None,
-        "external_id": external_id or tx_id,
-    }
+def _ledger(book_profile, rows, pairs=()):
+    return GenericRP2TaxEngine(book_profile).build_ledger_state(
+        finalized(book_profile, rows, pairs)
+    )
+
+
+def _entry(state, transaction_id, entry_type):
+    [entry] = [
+        entry
+        for entry in state.entries
+        if entry["transaction_id"] == transaction_id
+        and entry["entry_type"] == entry_type
+    ]
+    return entry
+
+
+def _description(state, transaction_id, entry_type):
+    return _entry(state, transaction_id, entry_type)["description"]
 
 
 class InferRegimeFromTimestampTest(unittest.TestCase):
@@ -72,266 +63,154 @@ class InferRegimeFromTimestampTest(unittest.TestCase):
         )
 
 
-class InferOutboundRegimesTest(unittest.TestCase):
+class OutboundRegimeTest(unittest.TestCase):
+    """The regime an Austrian disposal draws, as its journal description records it.
+
+    The moving-average pool is global, but Alt/Neu availability stays per
+    wallet and moves with self-transfers. A post-cutoff disposal is Neu while
+    its wallet holds Neu coins (a Wahlrecht election when Alt is there too)
+    and Alt once only Alt remains.
+    """
+
     def test_post_cutoff_sale_with_only_alt_inventory_falls_back_to_alt(self):
-        rows = [
-            _row("buy-alt", "wallet-a", "inbound", 100_000_000, occurred_at="2020-06-01T00:00:00Z"),
-            _row("sell-later", "wallet-a", "outbound", 100_000_000, occurred_at="2025-06-01T00:00:00Z"),
-        ]
-        self.assertEqual(infer_outbound_regimes(rows), {"sell-later": REGIME_ALT})
+        state = _ledger(
+            MOVING_AVERAGE_AT,
+            [
+                row("buy-alt", "A", "inbound", 100_000_000, "2020-06-01T00:00:00Z", rate="8000", kind="buy"),
+                row("sell-later", "A", "outbound", 100_000_000, "2025-06-01T00:00:00Z", rate="90000", kind="sell"),
+            ],
+        )
+
+        sale = _entry(state, "sell-later", "disposal")
+        self.assertEqual(sale["description"], "at_regime=alt at_pool=default sell-later via Cold")
+        self.assertEqual(sale["at_category"], "alt_taxfree")
 
     def test_post_cutoff_sale_with_neu_inventory_stays_neu(self):
-        rows = [
-            _row("buy-alt", "wallet-a", "inbound", 50_000_000, occurred_at="2020-06-01T00:00:00Z"),
-            _row("buy-neu", "wallet-a", "inbound", 100_000_000, occurred_at="2024-06-01T00:00:00Z"),
-            _row("sell-later", "wallet-a", "outbound", 30_000_000, occurred_at="2025-06-01T00:00:00Z"),
-        ]
-        self.assertEqual(infer_outbound_regimes(rows), {"sell-later": REGIME_NEU})
+        state = _ledger(
+            MOVING_AVERAGE_AT,
+            [
+                row("buy-alt", "A", "inbound", 50_000_000, "2020-06-01T00:00:00Z", rate="8000", kind="buy"),
+                row("buy-neu", "A", "inbound", 100_000_000, "2024-06-01T00:00:00Z", rate="60000", kind="buy"),
+                row("sell-later", "A", "outbound", 30_000_000, "2025-06-01T00:00:00Z", rate="90000", kind="sell"),
+            ],
+        )
+
+        self.assertEqual(
+            _description(state, "sell-later", "disposal"),
+            "at_regime=neu at_regime_basis=wahlrecht at_pool=default sell-later via Cold",
+        )
 
     def test_post_cutoff_sale_from_alt_only_wallet_stays_alt(self):
-        rows = [
-            _row("buy-alt", "wallet-a", "inbound", 50_000_000, occurred_at="2020-06-01T00:00:00Z"),
-            _row("buy-neu", "wallet-b", "inbound", 100_000_000, occurred_at="2024-06-01T00:00:00Z"),
-            _row("sell-from-a", "wallet-a", "outbound", 30_000_000, occurred_at="2025-06-01T00:00:00Z"),
-        ]
-        self.assertEqual(infer_outbound_regimes(rows), {"sell-from-a": REGIME_ALT})
+        state = _ledger(
+            MOVING_AVERAGE_AT,
+            [
+                row("buy-alt", "A", "inbound", 50_000_000, "2020-06-01T00:00:00Z", rate="8000", kind="buy"),
+                row("buy-neu", "B", "inbound", 100_000_000, "2024-06-01T00:00:00Z", rate="60000", kind="buy"),
+                row("sell-from-a", "A", "outbound", 30_000_000, "2025-06-01T00:00:00Z", rate="90000", kind="sell"),
+            ],
+        )
+
+        self.assertEqual(
+            _description(state, "sell-from-a", "disposal"),
+            "at_regime=alt at_pool=default sell-from-a via Cold",
+        )
 
     def test_post_cutoff_sale_from_transfer_funded_wallet_draws_moved_neu_inventory(self):
-        # bitcoinaustria/kassiber#213: Neu acquired in wallet-a, moved to wallet-b, then sold from
-        # wallet-b. The rp2 cost-basis pool is global, but regime availability still follows wallets
-        # and explicit internal transfers.
-        rows = [
-            _row("buy-alt", "wallet-a", "inbound", 50_000_000, occurred_at="2020-06-01T00:00:00Z"),
-            _row("buy-neu", "wallet-a", "inbound", 100_000_000, occurred_at="2024-06-01T00:00:00Z"),
-            _row("xfer-out", "wallet-a", "outbound", 100_000_000, occurred_at="2024-07-01T00:00:00Z", external_id="xfer-1"),
-            _row("xfer-in", "wallet-b", "inbound", 100_000_000, occurred_at="2024-07-01T00:00:00Z", external_id="xfer-1"),
-            _row("sell-from-b", "wallet-b", "outbound", 30_000_000, occurred_at="2025-06-01T00:00:00Z"),
-        ]
-        intra_pairs = [{"out": rows[2], "in": rows[3]}]
-        # The self-transfer's out row now also carries a regime: its taxable
-        # miner-fee disposal must be tagged (Neu here — post-cutoff move drawing
-        # the Neu pool) or rp2's moving-average aborts the asset on an ambiguous
-        # disposal. The moved Neu inventory still funds the later sell-from-b.
+        # bitcoinaustria/kassiber#213: Neu acquired in A, moved to B, then sold
+        # from B. The move draws A's Neu coins (no Alt leaves A) and carries
+        # them to B.
+        state = _ledger(
+            MOVING_AVERAGE_AT,
+            [
+                row("buy-alt", "A", "inbound", 50_000_000, "2020-06-01T00:00:00Z", rate="8000", kind="buy"),
+                row("buy-neu", "A", "inbound", 100_000_000, "2024-06-01T00:00:00Z", rate="60000", kind="buy"),
+                row("xfer-out", "A", "outbound", 100_000_000, "2024-07-01T00:00:00Z", rate="60000"),
+                row("xfer-in", "B", "inbound", 100_000_000, "2024-07-01T00:10:00Z", rate="60000"),
+                row("sell-from-b", "B", "outbound", 30_000_000, "2025-06-01T00:00:00Z", rate="90000", kind="sell"),
+            ],
+            [pair("pair-1", "xfer-out", "xfer-in")],
+        )
+
+        for transaction_id, entry_type in (("xfer-out", "transfer_out"), ("xfer-in", "transfer_in")):
+            self.assertEqual(
+                _description(state, transaction_id, entry_type),
+                "at_regime=neu at_alt_out=0 at_alt_in=0 at_pool=default Transfer Cold -> Hot",
+            )
         self.assertEqual(
-            infer_outbound_regimes(rows, intra_pairs),
-            {"xfer-out": REGIME_NEU, "sell-from-b": REGIME_NEU},
+            _description(state, "sell-from-b", "disposal"),
+            "at_regime=neu at_pool=default sell-from-b via Hot",
         )
 
     def test_one_to_many_transfer_carries_regime_to_each_destination_wallet(self):
-        rows = [
-            _row("buy-alt", "wallet-a", "inbound", 100_000_000, occurred_at="2020-06-01T00:00:00Z"),
-            _row("xfer-in-b", "wallet-b", "inbound", 40_000_000, occurred_at="2025-01-01T00:00:00Z", external_id="cj-1"),
-            _row("xfer-in-c", "wallet-c", "inbound", 60_000_000, occurred_at="2025-01-01T00:00:00Z", external_id="cj-1"),
-            _row("xfer-out", "wallet-a", "outbound", 100_000_000, occurred_at="2025-01-01T00:00:00Z", external_id="cj-1"),
-            _row("sell-from-b", "wallet-b", "outbound", 10_000_000, occurred_at="2025-06-01T00:00:00Z"),
-            _row("sell-from-c", "wallet-c", "outbound", 10_000_000, occurred_at="2025-06-02T00:00:00Z"),
-        ]
-        intra_pairs = [
-            {"out": rows[3], "in": rows[1], "pair_id": "pair-b"},
-            {"out": rows[3], "in": rows[2], "pair_id": "pair-c"},
-        ]
-
-        self.assertEqual(
-            infer_outbound_regimes(rows, intra_pairs),
-            {
-                "xfer-out": REGIME_ALT,
-                "sell-from-b": REGIME_ALT,
-                "sell-from-c": REGIME_ALT,
-            },
+        # Custody slices the one source into a move per destination, so each
+        # move carries its own share of A's Alt coins.
+        state = _ledger(
+            MOVING_AVERAGE_AT,
+            [
+                row("buy-alt", "A", "inbound", 100_000_000, "2020-06-01T00:00:00Z", rate="8000", kind="buy"),
+                row("xfer-out", "A", "outbound", 100_000_000, "2025-01-01T00:00:00Z", rate="90000"),
+                row("xfer-in-b", "B", "inbound", 40_000_000, "2025-01-01T00:10:00Z", rate="90000"),
+                row("xfer-in-c", "C", "inbound", 60_000_000, "2025-01-01T00:10:00Z", rate="90000"),
+                row("sell-from-b", "B", "outbound", 10_000_000, "2025-06-01T00:00:00Z", rate="90000", kind="sell"),
+                row("sell-from-c", "C", "outbound", 10_000_000, "2025-06-02T00:00:00Z", rate="90000", kind="sell"),
+            ],
+            [pair("pair-b", "xfer-out", "xfer-in-b"), pair("pair-c", "xfer-out", "xfer-in-c")],
         )
 
-    def test_many_to_one_transfer_allocates_shared_inbound_once(self):
-        rows = [
-            _row("buy-alt-a", "wallet-a", "inbound", 80_000_000, occurred_at="2020-06-01T00:00:00Z"),
-            _row("buy-alt-b", "wallet-b", "inbound", 80_000_000, occurred_at="2020-06-02T00:00:00Z"),
-            _row("xfer-in-c", "wallet-c", "inbound", 100_000_000, occurred_at="2025-01-01T00:00:00Z", external_id="cj-2"),
-            _row("xfer-out-a", "wallet-a", "outbound", 80_000_000, occurred_at="2025-01-01T00:00:00Z", external_id="cj-2"),
-            _row("xfer-out-b", "wallet-b", "outbound", 80_000_000, occurred_at="2025-01-01T00:00:00Z", external_id="cj-2"),
-            _row("sell-from-c-large", "wallet-c", "outbound", 120_000_000, occurred_at="2025-06-01T00:00:00Z"),
-            _row("sell-from-c-after", "wallet-c", "outbound", 10_000_000, occurred_at="2025-06-02T00:00:00Z"),
-        ]
-        intra_pairs = [
-            {"out": rows[3], "in": rows[2], "pair_id": "pair-a"},
-            {"out": rows[4], "in": rows[2], "pair_id": "pair-b"},
-        ]
-
         self.assertEqual(
-            infer_outbound_regimes(rows, intra_pairs),
-            {
-                "xfer-out-a": REGIME_ALT,
-                "xfer-out-b": REGIME_ALT,
-                "sell-from-c-large": REGIME_ALT,
-                "sell-from-c-after": REGIME_NEU,
-            },
-        )
-
-    def test_many_to_one_uses_generic_source_fee_attribution_for_lot_flows(self):
-        rows = [
-            _row(
-                "buy-alt-a",
-                "wallet-a",
-                "inbound",
-                50_000_000,
-                occurred_at="2020-06-01T00:00:00Z",
-            ),
-            _row(
-                "buy-neu-b",
-                "wallet-b",
-                "inbound",
-                50_000_000,
-                occurred_at="2024-06-01T00:00:00Z",
-            ),
-            _row(
-                "source-a",
-                "wallet-a",
-                "outbound",
-                50_000_000,
-                fee=0,
-                occurred_at="2025-01-01T00:00:00Z",
-            ),
-            _row(
-                "source-b",
-                "wallet-b",
-                "outbound",
-                40_000_000,
-                fee=10_000_000,
-                occurred_at="2025-01-01T00:00:00Z",
-            ),
-            _row(
-                "destination",
-                "wallet-c",
-                "inbound",
-                90_000_000,
-                occurred_at="2025-01-01T00:00:00Z",
-            ),
-            _row(
-                "sell-c-neu",
-                "wallet-c",
-                "outbound",
-                45_000_000,
-                occurred_at="2025-06-01T00:00:00Z",
-            ),
-            _row(
-                "sell-c-after",
-                "wallet-c",
-                "outbound",
-                1_000_000,
-                occurred_at="2025-06-02T00:00:00Z",
-            ),
-        ]
-        pairs = [
-            {"out": rows[2], "in": rows[4], "pair_id": "source-a-pair"},
-            {"out": rows[3], "in": rows[4], "pair_id": "source-b-pair"},
-        ]
-        transfer_flows = {}
-
-        regimes = infer_outbound_regimes(rows, pairs, transfer_flows)
-
-        self.assertEqual(
-            transfer_flows[("source-a", "destination")],
-            {
-                "out": {REGIME_ALT: 50_000_000, REGIME_NEU: 0},
-                "in": {REGIME_ALT: 50_000_000, REGIME_NEU: 0},
-            },
+            _description(state, "xfer-in-b", "transfer_in"),
+            "at_regime=alt at_alt_out=40000000 at_alt_in=40000000 at_pool=default Transfer Cold -> Hot",
         )
         self.assertEqual(
-            transfer_flows[("source-b", "destination")],
-            {
-                "out": {REGIME_ALT: 0, REGIME_NEU: 50_000_000},
-                "in": {REGIME_ALT: 0, REGIME_NEU: 40_000_000},
-            },
+            _description(state, "xfer-in-c", "transfer_in"),
+            "at_regime=alt at_alt_out=60000000 at_alt_in=60000000 at_pool=default Transfer Cold -> Exchange",
         )
-        self.assertEqual(regimes["source-a"], REGIME_ALT)
-        self.assertEqual(regimes["source-b"], REGIME_NEU)
-        self.assertEqual(regimes["sell-c-neu"], REGIME_NEU)
-        self.assertEqual(regimes["sell-c-after"], REGIME_ALT)
-
-    def test_many_to_many_transfer_uses_same_reroutable_flow_as_booking(self):
-        rows = [
-            _row("buy-alt-a", "wallet-a", "inbound", 60_000_000, occurred_at="2020-06-01T00:00:00Z"),
-            _row("buy-neu-b", "wallet-b", "inbound", 40_000_000, occurred_at="2024-06-01T00:00:00Z"),
-            _row("nm-out-a", "wallet-a", "outbound", 60_000_000, occurred_at="2025-01-01T00:00:00Z"),
-            _row("nm-out-b", "wallet-b", "outbound", 40_000_000, occurred_at="2025-01-01T00:00:00Z"),
-            _row("nm-in-c", "wallet-c", "inbound", 40_000_000, occurred_at="2025-01-01T00:00:00Z"),
-            _row("nm-in-d", "wallet-d", "inbound", 60_000_000, occurred_at="2025-01-01T00:00:00Z"),
-            _row("sell-c", "wallet-c", "outbound", 10_000_000, occurred_at="2025-06-01T00:00:00Z"),
-            _row("sell-d", "wallet-d", "outbound", 10_000_000, occurred_at="2025-06-01T00:00:00Z"),
-        ]
-        intra_pairs = [
-            {"out": rows[2], "in": rows[4], "pair_id": "nm-1"},
-            {"out": rows[2], "in": rows[5], "pair_id": "nm-2"},
-            {"out": rows[3], "in": rows[4], "pair_id": "nm-3"},
-        ]
-
-        regimes = infer_outbound_regimes(rows, intra_pairs)
-
-        self.assertEqual(regimes["nm-out-a"], REGIME_ALT)
-        self.assertEqual(regimes["nm-out-b"], REGIME_NEU)
-        self.assertEqual(regimes["sell-c"], REGIME_NEU)
-        self.assertEqual(regimes["sell-d"], REGIME_ALT)
-
-    def test_manual_component_ignores_derived_pair_sharing_a_leg(self):
-        rows = [
-            _row("buy-alt-a", "wallet-a", "inbound", 100_000_000, occurred_at="2020-06-01T00:00:00Z"),
-            _row("buy-alt-c", "wallet-c", "inbound", 1_000_000, occurred_at="2020-06-01T00:00:00Z"),
-            _row("shared-in", "wallet-b", "inbound", 99_000_000, occurred_at="2025-01-01T00:00:00Z"),
-            _row("manual-out-a", "wallet-a", "outbound", 50_000_000, occurred_at="2025-01-01T00:00:00Z"),
-            _row("manual-out-b", "wallet-a", "outbound", 50_000_000, occurred_at="2025-01-01T00:00:00Z"),
-            _row("derived-out-c", "wallet-c", "outbound", 1_000_000, occurred_at="2025-01-01T00:00:00Z"),
-        ]
-        intra_pairs = [
-            {"out": rows[3], "in": rows[2], "pair_id": "manual-a"},
-            {"out": rows[4], "in": rows[2], "pair_id": "manual-b"},
-            {"out": rows[5], "in": rows[2], "group_id": "derived-group"},
-        ]
-        transfer_flows = {}
-
-        infer_outbound_regimes(rows, intra_pairs, transfer_flows)
-
         self.assertEqual(
-            transfer_flows[("manual-out-a", "shared-in")]["in"]["alt"],
-            49_000_000,
+            _description(state, "sell-from-b", "disposal"),
+            "at_regime=alt at_pool=default sell-from-b via Hot",
+        )
+        self.assertEqual(
+            _description(state, "sell-from-c", "disposal"),
+            "at_regime=alt at_pool=default sell-from-c via Exchange",
         )
 
     def test_self_transfer_fee_is_fee_first_when_neu_covers_fee_only(self):
         # A post-cutoff MOVE from a mixed Alt/Neu wallet uses the preferred Neu
         # slice for the taxable miner fee first. Only the remaining Neu quantity
         # carries to the destination; otherwise a later sale from the destination
-        # would see Neu inventory that was already consumed by the fee.
-        rows = [
-            _row("buy-alt", "wallet-a", "inbound", 100_000_000, occurred_at="2020-06-01T00:00:00Z"),
-            _row("buy-neu", "wallet-a", "inbound", 10_000_000, occurred_at="2024-06-01T00:00:00Z"),
-            _row(
-                "xfer-out",
-                "wallet-a",
-                "outbound",
-                100_000_000,
-                fee=5_000_000,
-                occurred_at="2025-01-01T00:00:00Z",
-                external_id="xfer-1",
-            ),
-            _row("xfer-in", "wallet-b", "inbound", 100_000_000, occurred_at="2025-01-01T00:00:00Z", external_id="xfer-1"),
-            _row("sell-neu-remainder", "wallet-b", "outbound", 7_000_000, occurred_at="2025-06-01T00:00:00Z"),
-            _row("sell-after-neu-fee", "wallet-b", "outbound", 1_000_000, occurred_at="2025-06-02T00:00:00Z"),
-        ]
-        intra_pairs = [{"out": rows[2], "in": rows[3]}]
+        # would see Neu inventory that was already consumed by the fee. B's first
+        # sale uses up exactly that remainder, so the next one is Alt.
+        state = _ledger(
+            MOVING_AVERAGE_AT,
+            [
+                row("buy-alt", "A", "inbound", 100_000_000, "2020-06-01T00:00:00Z", rate="8000", kind="buy"),
+                row("buy-neu", "A", "inbound", 10_000_000, "2024-06-01T00:00:00Z", rate="60000", kind="buy"),
+                row("xfer-out", "A", "outbound", 100_000_000, "2025-01-01T00:00:00Z", fee=5_000_000, rate="90000"),
+                row("xfer-in", "B", "inbound", 100_000_000, "2025-01-01T00:10:00Z", rate="90000"),
+                row("sell-neu-remainder", "B", "outbound", 5_000_000, "2025-06-01T00:00:00Z", rate="95000", kind="sell"),
+                row("sell-after-neu-fee", "B", "outbound", 1_000_000, "2025-06-02T00:00:00Z", rate="95000", kind="sell"),
+            ],
+            [pair("pair-1", "xfer-out", "xfer-in")],
+        )
 
         self.assertEqual(
-            infer_outbound_regimes(rows, intra_pairs),
-            {
-                "xfer-out": REGIME_NEU,
-                "sell-neu-remainder": REGIME_NEU,
-                "sell-after-neu-fee": REGIME_ALT,
-            },
+            _description(state, "xfer-out", "transfer_fee"),
+            "at_regime=neu at_pool=default xfer-out via Cold",
+        )
+        self.assertEqual(
+            _description(state, "xfer-in", "transfer_in"),
+            "at_regime=neu at_alt_out=95000000 at_alt_in=95000000 at_pool=default Transfer Cold -> Hot",
+        )
+        self.assertTrue(
+            _description(state, "sell-neu-remainder", "disposal").startswith("at_regime=neu ")
+        )
+        self.assertEqual(
+            _description(state, "sell-after-neu-fee", "disposal"),
+            "at_regime=alt at_pool=default sell-after-neu-fee via Hot",
         )
 
 
 class AustrianKennzahlMappingTest(unittest.TestCase):
-    def test_neu_cutoff_matches_rp2_fork_contract(self):
-        from rp2.plugin.country.at import AT_NEU_CUTOFF as RP2_AT_NEU_CUTOFF
-
-        self.assertEqual(AT_NEU_CUTOFF, RP2_AT_NEU_CUTOFF)
-
     def test_kennzahl_mapping_covers_every_kassiber_category(self):
         self.assertEqual(
             set(AT_CATEGORY_TO_KENNZAHL),
@@ -359,386 +238,133 @@ class AustrianKennzahlMappingTest(unittest.TestCase):
         self.assertIsNone(kennzahl_for_disposal_category(None))
 
 
-class AustrianNormalizationTest(unittest.TestCase):
-    def setUp(self):
-        self.at_profile = {
-            "id": "profile-at",
-            "workspace_id": "ws-1",
-            "tax_country": "at",
-        }
-        self.generic_profile = {
-            "id": "profile-gen",
-            "workspace_id": "ws-1",
-            "tax_country": "generic",
-        }
-        self.wallet_refs = {
-            "wallet-a": {"id": "wallet-a", "label": "Wallet A"},
-            "wallet-b": {"id": "wallet-b", "label": "Wallet B"},
-        }
+class AustrianEventMarkerTest(unittest.TestCase):
+    """The Austrian markers an event's journal description carries.
+
+    Austrian descriptions start with the regime (by the cutoff for an
+    acquisition) and the single cost-basis pool, which Austria calls
+    ``default``; a swap leg adds its link. Generic books carry none.
+    """
 
     def test_at_inbound_event_gets_neu_regime_and_pool(self):
-        rows = [_row("buy-1", "wallet-a", "inbound", 1, occurred_at="2025-06-01T00:00:00Z")]
-        result = normalize_tax_asset_inputs(
-            self.at_profile, "BTC", rows, self.wallet_refs, []
+        state = _ledger(
+            MOVING_AVERAGE_AT,
+            [row("buy-1", "A", "inbound", 100_000_000, "2025-06-01T00:00:00Z", kind="buy")],
         )
-        self.assertEqual(len(result.events), 1)
-        event = result.events[0]
-        self.assertEqual(event.at_regime, REGIME_NEU)
-        self.assertEqual(event.cost_basis_pool_id, "global")
-        self.assertIsNone(event.at_swap_link)
+
+        self.assertEqual(
+            _description(state, "buy-1", "acquisition"),
+            "at_regime=neu at_pool=default buy-1 via Cold",
+        )
 
     def test_at_inbound_event_pre_cutoff_gets_alt_regime(self):
-        rows = [_row("buy-1", "wallet-a", "inbound", 1, occurred_at="2020-06-01T00:00:00Z")]
-        result = normalize_tax_asset_inputs(
-            self.at_profile, "BTC", rows, self.wallet_refs, []
-        )
-        event = result.events[0]
-        self.assertEqual(event.at_regime, REGIME_ALT)
-
-    def test_generic_profile_leaves_at_fields_none(self):
-        rows = [_row("buy-1", "wallet-a", "inbound", 1, occurred_at="2025-06-01T00:00:00Z")]
-        result = normalize_tax_asset_inputs(
-            self.generic_profile, "BTC", rows, self.wallet_refs, []
-        )
-        event = result.events[0]
-        self.assertIsNone(event.at_regime)
-        self.assertEqual(event.cost_basis_pool_id, "global")
-        self.assertIsNone(event.at_swap_link)
-
-    def test_at_swap_link_tags_inbound_without_basis_override(self):
-        rows = [_row("buy-1", "wallet-a", "inbound", 1, occurred_at="2025-06-01T00:00:00Z")]
-        result = normalize_tax_asset_inputs(
-            self.at_profile,
-            "BTC",
-            rows,
-            self.wallet_refs,
-            [],
-            at_swap_link_by_row_id={"buy-1": "swap-42"},
-        )
-        event = result.events[0]
-        self.assertEqual(event.at_swap_link, "swap-42")
-        self.assertEqual(event.fiat_value, event.amount * event.spot_price)
-
-    def test_at_transfer_uses_global_pool(self):
-        rows = [
-            _row("out-1", "wallet-a", "outbound", 1, occurred_at="2025-06-01T00:00:00Z", external_id="chain-1"),
-            _row("in-1", "wallet-b", "inbound", 1, occurred_at="2025-06-01T00:00:00Z", external_id="chain-1"),
-        ]
-        # Provider labels are not physical txids; this pair represents an
-        # explicit reviewed link so the test isolates Austrian global-pool
-        # treatment rather than unresolved-import quarantine policy.
-        pair = {"out": rows[0], "in": rows[1], "source": "manual"}
-        result = normalize_tax_asset_inputs(
-            self.at_profile, "BTC", rows, self.wallet_refs, [pair]
-        )
-        self.assertEqual(len(result.transfers), 1)
-        # Transfers carry the single global pool, not the source wallet — so a later sale from the
-        # destination wallet resolves against the same Neu pool the coins were acquired in.
-        self.assertEqual(result.transfers[0].from_cost_basis_pool_id, "global")
-        self.assertEqual(result.transfers[0].to_cost_basis_pool_id, "global")
-
-    def test_at_outbound_post_cutoff_with_only_alt_inventory_gets_alt_regime(self):
-        rows = [
-            _row("buy-alt", "wallet-a", "inbound", 100_000_000, occurred_at="2020-06-01T00:00:00Z"),
-            _row("sell-later", "wallet-a", "outbound", 100_000_000, occurred_at="2025-06-01T00:00:00Z"),
-        ]
-        result = normalize_tax_asset_inputs(
-            self.at_profile, "BTC", rows, self.wallet_refs, []
-        )
-        self.assertEqual(result.events[1].at_regime, REGIME_ALT)
-
-
-
-def _austrian_backends():
-    """(AT, AbstractCountry, ValueError type) for every installed tax backend.
-
-    Patching each backend keeps these adapter tests meaningful whichever
-    backend runs, including shadow runs that drive both: production and the
-    oracle's legacy-native leg on the native module, the oracle on RP2.
-    """
-    from tests.tax_oracle import adapter as oracle_adapter
-
-    native = oracle_adapter._native_backend()
-    backends = [(native.AT, native.AbstractCountry, native.EngineValueError)]
-    try:
-        from rp2.abstract_country import AbstractCountry
-        from rp2.plugin.country.at import AT
-        from rp2.rp2_error import RP2ValueError
-    except ImportError:
-        return backends
-    return backends + [(AT, AbstractCountry, RP2ValueError)]
-
-class ATCrossAssetValidationWiringTest(unittest.TestCase):
-    """Pin that ``GenericRP2TaxEngine.build_ledger_state`` runs the country's cross-asset
-    validator between the parse and compute phases — the new backstop that catches
-    orphan ``at_swap_link`` markers Kassiber's annotator structurally cannot detect
-    (a paired leg that was never imported can't be annotated).
-    """
-
-    def setUp(self):
-        from kassiber.core.engines.rp2 import GenericRP2TaxEngine
-
-        self.GenericRP2TaxEngine = GenericRP2TaxEngine
-
-    def _profile(self):
-        return {
-            "id": "p1",
-            "workspace_id": "w1",
-            "label": "holder1",
-            "tax_country": "at",
-            "gains_algorithm": "moving_average_at",
-        }
-
-    def _wallet_refs(self):
-        return {
-            "wallet-a": {
-                "id": "wallet-a",
-                "label": "wallet-a",
-                "wallet_account_id": "acct-1",
-                "account_code": "A",
-                "account_label": "Account A",
-            },
-            "wallet-b": {
-                "id": "wallet-b",
-                "label": "wallet-b",
-                "wallet_account_id": "acct-1",
-                "account_code": "A",
-                "account_label": "Account A",
-            },
-        }
-
-    def _inbound_row(self, tx_id, wallet_id, asset, amount, occurred_at, *, fiat_rate=50_000):
-        return {
-            "id": tx_id,
-            "wallet_id": wallet_id,
-            "wallet_label": wallet_id,
-            "asset": asset,
-            "direction": "inbound",
-            "amount": amount,
-            "fee": 0,
-            "fiat_rate": fiat_rate,
-            "fiat_value": None,
-            "kind": "deposit",
-            "description": tx_id,
-            "note": None,
-            "external_id": tx_id,
-            "occurred_at": occurred_at,
-        }
-
-    def _build_inputs(self):
-        rows = [
-            self._inbound_row("buy-btc", "wallet-a", "BTC", 100_000_000_000, "2025-05-01T00:00:00Z"),
-            self._inbound_row("buy-eur", "wallet-b", "ETH", 1_000_000_000_000_000_000, "2025-05-02T00:00:00Z", fiat_rate=3_000),
-        ]
-        return finalized_tax_inputs(
-            self._profile(),
-            rows=rows,
-            wallet_refs_by_id=self._wallet_refs(),
-            manual_pair_records=[],
+        state = _ledger(
+            MOVING_AVERAGE_AT,
+            [row("buy-1", "A", "inbound", 100_000_000, "2020-06-01T00:00:00Z", rate="8000", kind="buy")],
         )
 
-    def test_validator_is_called_once_with_every_non_empty_input_data(self):
-        # Two assets with non-empty inventory → validator sees two InputData objects, once.
-        engine = self.GenericRP2TaxEngine(self._profile())
-        inputs = self._build_inputs()
-
-        # Spy by patching each backend's AT country at class level. build_tax_policy
-        # builds a fresh AT on every call, so patching the class affects the instance
-        # used by `_rp2_configuration`.
-        calls_by_backend: list[list[list[object]]] = []
-        originals = []
-        for at_class, _abstract, _error in _austrian_backends():
-            calls: list[list[object]] = []
-            original = at_class.validate_input_data
-
-            def spy(self, input_data_list, _calls=calls, _original=original):
-                _calls.append(list(input_data_list))
-                return _original(self, input_data_list)
-
-            at_class.validate_input_data = spy  # type: ignore[assignment]
-            calls_by_backend.append(calls)
-            originals.append((at_class, original))
-        try:
-            engine.build_ledger_state(inputs)
-        finally:
-            for at_class, original in originals:
-                at_class.validate_input_data = original  # type: ignore[assignment]
-
-        ran = [calls for calls in calls_by_backend if calls]
-        self.assertTrue(ran, "the active backend's validator must run")
-        for calls in ran:
-            self.assertEqual(len(calls), 1, "validator must be called exactly once per build_ledger_state")
-            self.assertEqual(len(calls[0]), 2, "validator must receive one InputData per non-empty asset")
-            seen_assets = {getattr(input_data, "asset", None) for input_data in calls[0]}
-            self.assertEqual(seen_assets, {"BTC", "ETH"})
-
-    def test_validator_failure_surfaces_as_apperror_with_code(self):
-        from kassiber.errors import AppError
-
-        engine = self.GenericRP2TaxEngine(self._profile())
-        inputs = self._build_inputs()
-
-        originals = []
-        for at_class, _abstract, error_class in _austrian_backends():
-
-            def failing(self, input_data_list, _error=error_class):
-                raise _error("Unpaired `at_swap_link=orphan` marker")
-
-            originals.append((at_class, at_class.validate_input_data))
-            at_class.validate_input_data = failing  # type: ignore[assignment]
-        try:
-            with self.assertRaises(AppError) as ctx:
-                engine.build_ledger_state(inputs)
-        finally:
-            for at_class, original in originals:
-                at_class.validate_input_data = original  # type: ignore[assignment]
-
-        self.assertEqual(ctx.exception.code, "rp2_input_validation")
-        self.assertIn("at_swap_link=orphan", str(ctx.exception))
-
-    def test_missing_validator_surfaces_as_unsupported_apperror(self):
-        # Protects developers who updated pyproject.toml but haven't re-synced: `AT` from a
-        # stale rp2 pin has no `validate_input_data`. The compat guard must raise a clear
-        # upgrade hint, not a generic `rp2_input_validation` wrapped AttributeError.
-        from kassiber.errors import AppError
-
-        engine = self.GenericRP2TaxEngine(self._profile())
-        inputs = self._build_inputs()
-
-        removed = []
-        for at_class, abstract_class, _error in _austrian_backends():
-            for owner in (at_class, abstract_class):
-                original = owner.__dict__.get("validate_input_data")
-                if original is not None:
-                    delattr(owner, "validate_input_data")
-                    removed.append((owner, original))
-        try:
-            with self.assertRaises(AppError) as ctx:
-                engine.build_ledger_state(inputs)
-        finally:
-            for owner, original in reversed(removed):
-                owner.validate_input_data = original  # type: ignore[assignment]
-
-        self.assertEqual(ctx.exception.code, "unsupported")
-        self.assertIn("PR #4", str(ctx.exception))
-
-
-class ATSwapOverSellQuarantineTest(unittest.TestCase):
-    """An Austrian carrying-value swap whose disposed leg has insufficient
-    quantity must be quarantined as a PAIR before it can be promoted to an
-    at_swap_link.
-
-    Regression for the report-abort path: marking such a leg lets it bypass the
-    single-asset quantity gate on the second prepare pass and reach compute_tax,
-    where rp2's per-account BalanceSet raises an uncatchable "balance went
-    negative" that aborts the whole multi-asset report instead of quarantining
-    the one offending pair. (Real-world trigger: a self-custody round-trip — e.g.
-    BTC funding a friend's multisig that later returns — that the user paired as
-    a BTC↔L-BTC carrying-value swap.)
-    """
-
-    def _profile(self):
-        return {
-            "id": "p1",
-            "workspace_id": "w1",
-            "label": "BA",
-            "tax_country": "at",
-            "gains_algorithm": "moving_average_at",
-        }
-
-    def _wallet_refs(self):
-        return {
-            "onchain": {
-                "id": "onchain",
-                "label": "onchain",
-                "wallet_account_id": "acct-1",
-                "account_code": "A",
-                "account_label": "Account A",
-            },
-            "liquid": {
-                "id": "liquid",
-                "label": "liquid",
-                "wallet_account_id": "acct-1",
-                "account_code": "A",
-                "account_label": "Account A",
-            },
-        }
-
-    def _row(self, tx_id, wallet_id, direction, asset, amount_msat, occurred_at):
-        return {
-            "id": tx_id,
-            "wallet_id": wallet_id,
-            "wallet_label": wallet_id,
-            "asset": asset,
-            "direction": direction,
-            "amount": amount_msat,
-            "fee": 0,
-            "fiat_rate": 50_000,
-            "fiat_value": None,
-            "kind": "deposit" if direction == "inbound" else "withdrawal",
-            "description": tx_id,
-            "note": None,
-            "external_id": tx_id,
-            "occurred_at": occurred_at,
-        }
-
-    def test_oversold_swap_leg_quarantines_pair_without_marking(self):
-        from kassiber.core.austrian import AT_SWAP_QUARANTINE_REASON
-        from tests.tax_oracle.adapter import (
-            _prepare_assets,
-            _rp2_configuration,
-            _select_at_cross_asset_swap_links,
+        self.assertEqual(
+            _description(state, "buy-1", "acquisition"),
+            "at_regime=alt at_pool=default buy-1 via Cold",
         )
 
-        profile = self._profile()
-        wallet_refs = self._wallet_refs()
-        # The BTC account holds only 0.0001 BTC but the swap disposes 0.0005 BTC —
-        # a local over-sell. The L-BTC acquisition leg is otherwise valid.
-        btc_in = self._row("btc-in", "onchain", "inbound", "BTC", 10_000_000, "2025-05-01T00:00:00Z")
-        btc_out = self._row("swap-out", "onchain", "outbound", "BTC", 50_000_000, "2025-06-01T00:00:00Z")
-        lbtc_in = self._row("swap-in", "liquid", "inbound", "L-BTC", 50_000_000, "2025-06-01T00:00:00Z")
-        rows = [btc_in, btc_out, lbtc_in]
-        rows_by_asset = {"BTC": [btc_in, btc_out], "L-BTC": [lbtc_in]}
+    def test_generic_profile_leaves_at_markers_out(self):
+        book = profile("generic", "FIFO")
+        state = _ledger(
+            book,
+            [
+                row("buy-1", "A", "inbound", 100_000_000, "2025-06-01T00:00:00Z", kind="buy"),
+                row("sell-1", "A", "outbound", 10_000_000, "2025-07-01T00:00:00Z", rate="90000", kind="sell"),
+            ],
+        )
 
-        with _rp2_configuration(profile, ["onchain", "liquid"], ["BTC", "L-BTC"]) as configuration:
-            prepared_by_asset = _prepare_assets(profile, rows_by_asset, wallet_refs, {}, configuration)
-            # Phase 1 (no swap links yet) must quarantine the over-sold BTC leg.
-            phase1_reasons = {
-                str(q["transaction_id"]): q["reason"]
-                for _, prepared in prepared_by_asset
-                for q in prepared.quarantines
-            }
-            self.assertEqual(phase1_reasons.get("swap-out"), "insufficient_lots")
+        self.assertEqual(_description(state, "buy-1", "acquisition"), "buy-1 via Cold")
+        sale = _entry(state, "sell-1", "disposal")
+        self.assertEqual(sale["description"], "sell-1 via Cold")
+        self.assertNotIn("at_category", sale)
 
-            pair = {
-                "out_id": "swap-out",
-                "in_id": "swap-in",
-                "out_asset": "BTC",
-                "in_asset": "L-BTC",
-                "policy": "carrying-value",
-                "pair_id": "swap-1",
-            }
-            swap_link_by_row_id, quarantined_row_ids, swap_quarantines = _select_at_cross_asset_swap_links(
-                profile, [pair], rows, prepared_by_asset
+    def test_at_swap_link_tags_both_legs_and_carries_the_swapped_basis(self):
+        # A reviewed carrying-value pair of a Neu BTC sale and a USDT receipt
+        # becomes a swap: both legs carry the link, the disposal is a
+        # neutral swap, and the USDT lot takes the BTC's basis (0.5 BTC at
+        # 40,000) instead of its own market value (300 USDT at 1).
+        state = _ledger(
+            MOVING_AVERAGE_AT,
+            [
+                row("buy-btc", "C", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z", rate="40000", kind="buy"),
+                row("swap-out", "C", "outbound", 50_000_000_000, "2024-06-01T00:00:00Z", fee=1_000_000, rate="60000", kind="sell"),
+                row("swap-in", "C", "inbound", 30_000_000_000_000, "2024-06-01T00:00:00Z", rate="1", kind="buy", asset="USDT"),
+            ],
+            [pair("swap-1", "swap-out", "swap-in")],
+        )
+
+        swap_out = _entry(state, "swap-out", "disposal")
+        self.assertEqual(
+            swap_out["description"],
+            "at_regime=neu at_pool=default at_swap_link=swap-1 swap-out via Exchange",
+        )
+        self.assertEqual(swap_out["at_category"], "neu_swap")
+        self.assertEqual(swap_out["gain_loss"], 0)
+        swap_in = _entry(state, "swap-in", "acquisition")
+        self.assertEqual(
+            swap_in["description"],
+            "at_regime=neu at_pool=default at_swap_link=swap-1 swap-in via Exchange",
+        )
+        self.assertEqual(swap_in["fiat_value"], Decimal("20000"))
+
+    def test_at_transfer_uses_the_single_pool(self):
+        # Transfers carry the one global pool, not the source wallet's, so a
+        # later sale from the destination draws the pool the coins were
+        # acquired in; nothing fails as a cross-pool move.
+        state = _ledger(
+            MOVING_AVERAGE_AT,
+            [
+                row("buy", "A", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z", rate="40000", kind="buy"),
+                row("move-out", "A", "outbound", 50_000_000_000, "2024-06-01T00:00:00Z", fee=1_000_000, rate="60000"),
+                row("move-in", "B", "inbound", 50_000_000_000, "2024-06-01T00:10:00Z", rate="60000"),
+            ],
+            [pair("pair-1", "move-out", "move-in")],
+        )
+
+        self.assertEqual(state.quarantines, [])
+        for transaction_id, entry_type in (
+            ("move-out", "transfer_fee"),
+            ("move-out", "transfer_out"),
+            ("move-in", "transfer_in"),
+        ):
+            self.assertIn(
+                "at_pool=default",
+                _description(state, transaction_id, entry_type).split(),
             )
 
-        # The over-sold pair is NOT promoted to an at_swap_link (which would
-        # bypass the quantity gate and abort the whole report)...
-        self.assertNotIn("swap-out", swap_link_by_row_id)
-        self.assertNotIn("swap-in", swap_link_by_row_id)
-        # ...both legs are excluded from the compute pass (so the surviving leg
-        # cannot orphan the cross-asset validator)...
-        self.assertEqual(quarantined_row_ids, {"swap-out", "swap-in"})
-        # ...and the pair surfaces for review under the swap-carry reason, with
-        # the original phase-1 cause preserved in the detail.
-        self.assertEqual(len(swap_quarantines), 2)
-        self.assertEqual(
-            {str(q["transaction_id"]) for q in swap_quarantines},
-            {"swap-out", "swap-in"},
-        )
-        for quarantine in swap_quarantines:
-            self.assertEqual(quarantine["reason"], AT_SWAP_QUARANTINE_REASON)
-            self.assertEqual(json.loads(quarantine["detail_json"])["reason_code"], "insufficient_lots")
+
+class ATCrossAssetValidationTest(unittest.TestCase):
+    """The country's cross-asset check runs before any per-asset compute.
+
+    Two chained swaps whose first hop sells 1 msat more than its wallet
+    holds: the first swap cannot be carried, so the USDT that funds the
+    second swap never arrives, the second swap's link is left with only its
+    inbound leg, and the whole build fails with the validation code.
+    """
+
+    def test_unpaired_swap_link_surfaces_as_apperror_with_code(self):
+        rows = [
+            row("btc-buy", "C", "inbound", 10_000_000_000, "2024-01-01T00:00:00Z", kind="buy"),
+            row("swap1-out", "C", "outbound", 10_000_000_001, "2024-02-01T00:00:00Z", rate="40000"),
+            row("swap1-in", "C", "inbound", 400_000_000_000, "2024-02-01T00:00:00Z", rate="1", asset="USDT"),
+            row("swap2-out", "C", "outbound", 400_000_000_000, "2024-03-01T00:00:00Z", rate="1", asset="USDT"),
+            row("swap2-in", "L", "inbound", 9_000_000_000, "2024-03-01T00:00:00Z", rate="44000", asset="LBTC"),
+        ]
+
+        with self.assertRaises(AppError) as raised:
+            _ledger(
+                MOVING_AVERAGE_AT,
+                rows,
+                [pair("s1", "swap1-out", "swap1-in"), pair("s2", "swap2-out", "swap2-in")],
+            )
+
+        self.assertEqual(raised.exception.code, "rp2_input_validation")
+        self.assertIn("Unpaired `at_swap_link=s2`", str(raised.exception))
 
 
 class CarryPairPhaseOneBlockJournalTest(unittest.TestCase):

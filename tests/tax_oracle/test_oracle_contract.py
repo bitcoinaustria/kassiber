@@ -4,9 +4,9 @@ The oracle is the phase-3 adapter with its normalizer, Austrian tracker and
 pair allocation, copied with the edits ``README.md`` lists and run on RP2.
 These checks keep it what it claims to be: the copies match ``FROZEN.json``,
 its policy equals the product's, the product's Austrian constants equal RP2's
-AT and the native AT, RP2 still offers what the adapter calls and loads
-without writing a log, and ``projection_range`` accepts what the projection
-builds and names each shape it cannot build.
+AT and the native AT (and its Neu cutoff RP2's), RP2 still offers what the
+adapter calls and loads without writing a log, and ``projection_range``
+accepts what the projection builds and names each shape it cannot build.
 """
 
 from __future__ import annotations
@@ -93,6 +93,15 @@ class OraclePolicyTest(unittest.TestCase):
                 self.assertEqual(country.get_default_accounting_method(), tax_policy.AUSTRIAN_DEFAULT_ACCOUNTING_METHOD)
                 self.assertEqual(tuple(sorted(country.get_report_generators())), tax_policy.AUSTRIAN_REPORT_GENERATORS)
                 self.assertEqual(country.get_default_generation_language(), tax_policy.AUSTRIAN_GENERATION_LANGUAGE)
+
+    def test_neu_cutoff_equals_rp2s(self):
+        # The Alt/Neu cutoff the product's Vienna helpers and reports use is
+        # the one RP2's AT plugin classifies by.
+        from rp2.plugin.country.at import AT_NEU_CUTOFF as RP2_AT_NEU_CUTOFF
+
+        from kassiber.core.austrian import AT_NEU_CUTOFF
+
+        self.assertEqual(AT_NEU_CUTOFF, RP2_AT_NEU_CUTOFF)
 
     def test_iso_4217_codes_match_pycountry(self):
         # RP2 validates the fiat currency against pycountry.
