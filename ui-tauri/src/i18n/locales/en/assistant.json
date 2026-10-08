@@ -299,6 +299,7 @@
     "deleteChat": "Delete chat \"{{title}}\""
   },
   "modelPicker": {
+    "cliDefault": "CLI default",
     "selectModel": "Select model",
     "noProviderConfigured": "No provider configured",
     "selectAModel": "Select a model",

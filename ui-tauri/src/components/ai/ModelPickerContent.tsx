@@ -384,7 +384,7 @@ export function ModelPickerContent({
     <div
       ref={rootRef}
       data-model-picker-content
-      className="relative flex max-h-[min(23rem,calc(var(--radix-popover-content-available-height,100vh)-1rem))] min-h-[15rem] w-full flex-row overflow-hidden"
+      className="relative flex h-[min(25rem,calc(var(--radix-popover-content-available-height,100vh)-1rem))] min-h-[15rem] w-full flex-row overflow-hidden"
       // Hold the height from when the search started: results scroll instead
       // of the popover jumping under the pointer.
       style={heldHeight !== null ? { height: heldHeight } : undefined}
