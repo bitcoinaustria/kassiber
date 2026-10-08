@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AiProvidersSettingsPanel } from "@/components/kb/settings/AiProvidersSettingsPanel";
 import { ProviderModelPicker } from "./ProviderModelPicker";
 import { useReasoningEffortSupport } from "./useReasoningEffortSupport";
+import { useUiStore } from "@/store/ui";
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -147,6 +148,24 @@ describe("ProviderModelPicker network consent", () => {
 
     mocks.openPicker?.(true);
 
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(mocks.runtimeRefetch).not.toHaveBeenCalled();
+  });
+
+  it("lists starred models from other providers without discovering them", () => {
+    useUiStore.setState({
+      assistantModelFavorites: [{ provider: "custom", model: "configured-model" }],
+    });
+    const html = renderToStaticMarkup(
+      <ProviderModelPicker
+        value={{ provider: "custom", model: "configured-model" }}
+        onChange={vi.fn()}
+      />,
+    );
+    useUiStore.setState({ assistantModelFavorites: [] });
+
+    // The picker opens on Favorites, built from stored identifiers only.
+    expect(html).toContain("configured-model");
     expect(mocks.invoke).not.toHaveBeenCalled();
     expect(mocks.runtimeRefetch).not.toHaveBeenCalled();
   });

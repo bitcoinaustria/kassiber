@@ -32,25 +32,6 @@ export function dedupeProviderRows(
   });
 }
 
-export function filterModelRows(
-  models: AiModelsListData["models"],
-  query: string,
-): AiModelsListData["models"] {
-  const tokens = query
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (tokens.length === 0) return models;
-  return models.filter((model) => {
-    const haystack = [model.id, model.display_name, model.owned_by]
-      .filter((value): value is string => typeof value === "string")
-      .join(" ")
-      .toLowerCase();
-    return tokens.every((token) => haystack.includes(token));
-  });
-}
-
 export function modelPrivacyPosture(
   provider: AiProviderRow,
   model: AiModelsListData["models"][number],
