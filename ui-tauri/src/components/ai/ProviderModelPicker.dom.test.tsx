@@ -94,8 +94,8 @@ const PROVIDERS = [
   },
   {
     name: "gemini",
-    display_name: "Gemini CLI",
-    base_url: "gemini-cli://default",
+    display_name: "Gemini API",
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai",
     kind: "remote",
     default_model: "gemini-2.5-pro",
     acknowledged_at: null,
@@ -194,7 +194,7 @@ describe("ProviderModelPicker (mounted)", () => {
     expect(optionNames()).toHaveLength(1);
     expect(optionNames()[0]).toContain("gemini-2.5-pro");
     // Results name the provider that would receive the prompt.
-    expect(optionNames()[0]).toContain("Gemini CLI");
+    expect(optionNames()[0]).toContain("Gemini API");
     // The rail steps aside while searching.
     expect(screen.queryByRole("toolbar")).toBeNull();
 
@@ -306,7 +306,7 @@ describe("ProviderModelPicker (mounted)", () => {
   it("asks before discovering an unacknowledged remote provider", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     mount();
-    fireEvent.click(screen.getByRole("button", { name: "Gemini CLI · remote" }));
+    fireEvent.click(screen.getByRole("button", { name: "Gemini API · remote" }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /Check models/ }));
     });
@@ -390,7 +390,7 @@ describe("ProviderModelPicker (mounted)", () => {
     const names = optionNames();
     expect(names).toHaveLength(3);
     expect(
-      names.some((name) => name.includes("gemini-2.5-flash") && name.includes("Gemini CLI")),
+      names.some((name) => name.includes("gemini-2.5-flash") && name.includes("Gemini API")),
     ).toBe(true);
     expect(names.some((name) => name.includes("gpt-5.4") && name.includes("Codex"))).toBe(true);
     expect(names.some((name) => name.includes("qwen3:8b") && name.includes("Ollama"))).toBe(true);
