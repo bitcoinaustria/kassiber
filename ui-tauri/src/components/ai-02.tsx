@@ -17,6 +17,7 @@ import {
   type ComposerPromptHistoryMessage,
   type ComposerPromptHistoryPosition,
 } from "@/components/ai/composerPromptHistory";
+import { isImeKeyEvent } from "@/lib/imeKeyEvent";
 import { formatShortcut } from "@/lib/shortcutLabel";
 import { cn } from "@/lib/utils";
 import {
@@ -268,7 +269,7 @@ export default function Ai02({
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Never act on keys that confirm an IME composition (CJK input, dead keys).
-    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+    if (isImeKeyEvent(event)) return;
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       handleSubmit();
@@ -291,6 +292,7 @@ export default function Ai02({
     // composer (including the open picker, whose events bubble back here
     // through the React portal). Scoped to the composer so a hidden dock
     // composer never reacts to it.
+    if (isImeKeyEvent(event)) return;
     if (
       (event.metaKey || event.ctrlKey) &&
       event.shiftKey &&

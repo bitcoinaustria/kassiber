@@ -14,6 +14,7 @@ import { Star } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AiProviderRow } from "@/lib/aiCapabilities";
+import { isImeKeyEvent } from "@/lib/imeKeyEvent";
 import { cn } from "@/lib/utils";
 import {
   FAVORITES_VIEW,
@@ -60,6 +61,7 @@ export const ModelPickerSidebar = React.memo(function ModelPickerSidebar({
   }, [activeKey, providers]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (isImeKeyEvent(event)) return;
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     if (event.key === "ArrowRight") {
       event.preventDefault();
