@@ -294,9 +294,18 @@ export function ProviderModelPicker({
       ) {
         providerModels.unshift({ id: value.model });
       }
-      return { provider, models: providerModels };
+      // `default` is Kassiber's "send no model" sentinel for CLI providers;
+      // name it rather than showing the sentinel as if it were a model id.
+      const labelled = isCliProvider(provider)
+        ? providerModels.map((model) =>
+            model.id === "default" && !model.display_name
+              ? { ...model, display_name: t("modelPicker.cliDefault") }
+              : model,
+          )
+        : providerModels;
+      return { provider, models: labelled };
     });
-  }, [providers, modelsByProvider, value]);
+  }, [providers, modelsByProvider, value, t]);
   const visibleGroups = React.useMemo(() => {
     if (!localOnly) return groupedRows;
     return groupedRows
@@ -311,7 +320,9 @@ export function ProviderModelPicker({
   }, [groupedRows, localOnly]);
 
   const selectedModelRow = value
-    ? models.find((model) => model.id === value.model)
+    ? groupedRows
+        .find((group) => group.provider.name === value.provider)
+        ?.models.find((model) => model.id === value.model)
     : undefined;
   const currentProvider = value
     ? providers.find((p) => p.name === value.provider)
