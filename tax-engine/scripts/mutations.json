@@ -405,5 +405,233 @@
       "tests/test_tax_events.py::TransferIdentityTest::test_unscoped_review_folds_mixed_case_txid"
     ],
     "rule": "Cross-wallet rows sharing an import id without a chain identity are held for review."
+  },
+  {
+    "id": "builder-drops-conflict-hold",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "            if row_id in conflicts:\n                holds[row_id] = HOLD_CONFLICTING_SPEND\n",
+    "replace": "            if False:\n                holds[row_id] = HOLD_CONFLICTING_SPEND\n",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[generic-hold-conflict]"
+    ],
+    "rule": "A row losing a shared-input conflict carries the conflicting_spend hold in the request."
+  },
+  {
+    "id": "builder-skips-wallet-label-tokens",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "    sorted_wallet_labels = sorted(_config_token(label, \"wallet_label\") for label in wallet_labels)",
+    "replace": "    sorted_wallet_labels = sorted(str(label).strip() for label in wallet_labels)",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_fails_as_the_oracle_does[delimited label]",
+      "tests/test_tax_ledger_contract.py::test_labels_with_ini_delimiters_name_their_field"
+    ],
+    "rule": "Every labelled wallet, used or not, must be a configuration token without INI delimiters."
+  },
+  {
+    "id": "builder-ignores-currency",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "        if currency.upper() not in ISO_4217:",
+    "replace": "        if False:",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_fails_as_the_oracle_does[unknown currency]"
+    ],
+    "rule": "A generic book's currency must be an ISO 4217 code, failing with the country's own error."
+  },
+  {
+    "id": "builder-allows-any-pool-scope",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "    profile_cost_basis_pool_scope(profile)\n",
+    "replace": "\n",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_fails_as_the_oracle_does[wallet pool scope]"
+    ],
+    "rule": "A pool scope the policy does not allow fails with the policy's AppError."
+  },
+  {
+    "id": "builder-allows-crossed-move",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "            raise AssertionError(\"finalized same-asset move pair crossed assets\")",
+    "replace": "            pass",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_fails_as_the_oracle_does[move pair across assets]"
+    ],
+    "rule": "A move pair whose legs hold different assets fails as the adapter's assertion."
+  },
+  {
+    "id": "builder-accepts-negative-fee",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "    if fee < 0:",
+    "replace": "    if False:",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[ld5-negative-fee]",
+      "tests/test_tax_ledger_contract.py::test_the_builder_names_every_invariant"
+    ],
+    "rule": "A negative fee is a shape a finalized projection cannot have (LD-5)."
+  },
+  {
+    "id": "builder-accepts-shared-leg",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "            if leg_id in legs:",
+    "replace": "            if False:",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[ld5-shared-pair-leg]"
+    ],
+    "rule": "Move pairs are edge-disjoint; a shared leg is refused (LD-5)."
+  },
+  {
+    "id": "builder-accepts-unreviewed-privacy-pair",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "        ) != REVIEWED_PRIVACY_PAIR_KIND:",
+    "replace": "        ) == REVIEWED_PRIVACY_PAIR_KIND:",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[ld5-unreviewed-privacy-pair]"
+    ],
+    "rule": "A move across a privacy boundary must be a reviewed coinjoin pair (LD-5)."
+  },
+  {
+    "id": "builder-drops-coarse-flag",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "        \"coarse\": _get(row, \"pricing_quality\") == pricing.QUALITY_COARSE_FALLBACK,",
+    "replace": "        \"coarse\": False,",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[generic-coarse-events-review]"
+    ],
+    "rule": "A coarse-priced row says so in the request."
+  },
+  {
+    "id": "builder-text-prefers-description",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "    for key in (\"note\", \"description\", \"kind\"):",
+    "replace": "    for key in (\"description\", \"note\", \"kind\"):",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[at-usertag-move-in-note-unread]"
+    ],
+    "rule": "A row's text is its note, else its description, else its kind."
+  },
+  {
+    "id": "builder-reorders-rows",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "        \"rows\": [_request_row(row, holds) for row in rows],",
+    "replace": "        \"rows\": [_request_row(row, holds) for row in sorted(rows, key=lambda row: str(row[\"id\"]))],",
+    "expect_failing": [
+      "tests/test_review_regressions.py::ReviewRegressionTest::test_austrian_direct_swap_payout_sorts_synthetic_rows"
+    ],
+    "rule": "The request lists the projection's rows in projection order, which is each asset's walk order."
+  },
+  {
+    "id": "builder-anchors-to-row-ids",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "        \"anchor\": row[\"journal_transaction_id\"],",
+    "replace": "        \"anchor\": str(row[\"id\"]),",
+    "expect_failing": [
+      "tests/test_custody_pre_tax_projection.py::test_engine_request_never_receives_residual_or_later_basis_consumer",
+      "tests/test_review_regressions.py::ReviewRegressionTest::test_austrian_direct_swap_payout_sorts_synthetic_rows"
+    ],
+    "rule": "A request row's anchor is the journal transaction the projection row stands for."
+  },
+  {
+    "id": "reader-enriches-partner-leg",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "    \"partner_leg\": lambda _row: {},",
+    "replace": "    \"partner_leg\": _pricing_review_facts,",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_enrichment_table_reproduces_every_stored_quarantine",
+      "tests/test_tax_ledger_contract.py::test_partner_legs_get_no_pricing_fields"
+    ],
+    "rule": "A partner leg's detail gets no pricing fields, though it shares its reason with the priced leg."
+  },
+  {
+    "id": "reader-hold-without-external-id",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "    \"hold\": _hold_facts,",
+    "replace": "    \"hold\": lambda _row: {},",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_enrichment_table_reproduces_every_stored_quarantine"
+    ],
+    "rule": "A hold quarantine names the held row's external id."
+  },
+  {
+    "id": "validate-stage-default-code",
+    "file": "kassiber/core/engines/errors.py",
+    "find": "    \"validate\": (\"RP2 cross-asset input validation failed: \", \"rp2_input_validation\"),",
+    "replace": "    \"validate\": (\"RP2 cross-asset input validation failed: \", \"app_error\"),",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_stage_table_raises_every_stored_engine_failure",
+      "tests/test_tax_ledger_contract.py::test_unwrapped_and_contract_stages"
+    ],
+    "rule": "A failed swap-pair validation is an AppError with code rp2_input_validation."
+  },
+  {
+    "id": "method-gate-cause-not-apperror",
+    "file": "kassiber/core/engines/errors.py",
+    "find": "    if inner.get(\"class\") == \"AppError\":",
+    "replace": "    if False:",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_method_gate_is_a_wrapped_multi_asset_failure",
+      "tests/test_tax_ledger_contract.py::test_the_stage_table_raises_every_stored_engine_failure"
+    ],
+    "rule": "The method gate's cause is the adapter's own AppError, wrapped by the multi-asset hook."
+  },
+  {
+    "id": "routing-ignores-routed-capabilities",
+    "file": "kassiber/core/engines/ledger.py",
+    "find": "    return V2 if book_capabilities <= ROUTED_CAPABILITIES else LEGACY",
+    "replace": "    return LEGACY",
+    "expect_failing": [
+      "tests/test_tax_ledger_routing.py::test_each_case_routes_by_its_capabilities[generic-ledger-fifo]"
+    ],
+    "rule": "A book goes to the engine when the engine implements every capability it uses."
+  },
+  {
+    "id": "routing-misses-austrian-swaps",
+    "file": "kassiber/core/engines/ledger.py",
+    "find": "        return frozenset({\"at\", \"at_swap\"} if carried else {\"at\"})",
+    "replace": "        return frozenset({\"at\"})",
+    "expect_failing": [
+      "tests/test_tax_ledger_routing.py::test_the_classifier_follows_the_adapters_conditions"
+    ],
+    "rule": "An Austrian book with a projected carrying-value cross-asset pair uses swap-link selection."
+  },
+  {
+    "id": "routing-ignores-the-in-leg",
+    "file": "kassiber/core/engines/ledger.py",
+    "find": "pair[\"policy\"] == \"carrying-value\" and pair[\"out_id\"] in row_ids and pair[\"in_id\"] in row_ids",
+    "replace": "pair[\"policy\"] == \"carrying-value\" and pair[\"out_id\"] in row_ids",
+    "expect_failing": [
+      "tests/test_tax_ledger_routing.py::test_a_carrying_pair_counts_only_with_both_legs_projected[generic]",
+      "tests/test_tax_ledger_routing.py::test_a_carrying_pair_counts_only_with_both_legs_projected[at]"
+    ],
+    "rule": "A carrying-value pair adds a capability only when its in leg is a projection row."
+  },
+  {
+    "id": "routing-ignores-the-out-leg",
+    "file": "kassiber/core/engines/ledger.py",
+    "find": "pair[\"policy\"] == \"carrying-value\" and pair[\"out_id\"] in row_ids and pair[\"in_id\"] in row_ids",
+    "replace": "pair[\"policy\"] == \"carrying-value\" and pair[\"in_id\"] in row_ids",
+    "expect_failing": [
+      "tests/test_tax_ledger_routing.py::test_a_carrying_pair_counts_only_with_both_legs_projected[generic]",
+      "tests/test_tax_ledger_routing.py::test_a_carrying_pair_counts_only_with_both_legs_projected[at]"
+    ],
+    "rule": "A carrying-value pair adds a capability only when its out leg is a projection row."
+  },
+  {
+    "id": "request-reads-a-missing-hold-as-none",
+    "file": "tax-engine/core/src/ledger/request.rs",
+    "find": "    #[serde(deserialize_with = \"nullable\")]\n    pub hold: Option<Hold>,",
+    "replace": "    pub hold: Option<Hold>,",
+    "expect_failing": [
+      "a_missing_nullable_field_is_refused"
+    ],
+    "rule": "A request must carry every nullable field; a missing one is a RequestError, not null."
+  },
+  {
+    "id": "empty-projection-builds-a-request",
+    "file": "kassiber/core/engines/ledger.py",
+    "find": "        if not projection.rows:\n            # No configuration, method, or currency check runs on an empty",
+    "replace": "        if False:\n            # No configuration, method, or currency check runs on an empty",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_an_empty_projection_checks_nothing_and_builds_no_request"
+    ],
+    "rule": "A projection without rows returns its own quarantines and pairs without any check or engine call."
   }
 ]

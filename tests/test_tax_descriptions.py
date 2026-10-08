@@ -15,7 +15,7 @@ from typing import Optional
 
 import pytest
 
-from kassiber.core.engines import GenericRP2TaxEngine
+from kassiber.core.engines import KassiberTaxEngine
 from kassiber.errors import AppError
 from tests.tax_ledger_generator import finalized, pair, profile, row
 from tests.tax_oracle.adapter import _compose_event_notes
@@ -24,7 +24,7 @@ MOVING_AVERAGE_AT = profile("at", "moving_average_at")
 
 
 def _ledger(book_profile, rows, pairs=()):
-    return GenericRP2TaxEngine(book_profile).build_ledger_state(
+    return KassiberTaxEngine(book_profile).build_ledger_state(
         finalized(book_profile, rows, pairs)
     )
 

@@ -8,9 +8,17 @@ adapter calls, and the decimal rules both sides follow.
 
 ## Where the engine sits
 
-`kassiber/core/engines/rp2.py` (the adapter) turns a finalized custody
-projection into journal entries. Until plan 20's phase 4, the engine replaces
-RP2's calculation underneath that adapter. The adapter keeps its gates,
+Journals run on `KassiberTaxEngine` (`kassiber/core/engines/ledger.py`). For
+every book with projected rows it builds a schema-2 request
+(`ledger_request.py`), which runs the configuration checks and refuses shapes
+a finalized projection cannot have. It sends the book to the engine's
+`ledger` operation only when the engine implements every capability the book
+uses (`ROUTED_CAPABILITIES`, a subset of `CAPABILITIES`: `generic`,
+`generic_carry`, `at`, `at_swap`). Plan 20's phase 4 moves them one at a
+time; none is routed yet, so `ROUTED_CAPABILITIES` is empty. Every
+other book runs on the phase-3 adapter, `kassiber/core/engines/rp2.py`, which
+turns the finalized custody projection into journal entries with the engine
+underneath it in place of RP2's calculation. The adapter keeps its gates,
 quarantines, journal composition, reviewed overrides, and fee reporting rules.
 
 The adapter reaches its calculation backend through `_get_rp2_modules()`.
@@ -53,8 +61,9 @@ metadata: `"engine": "kassiber_tax"` for the native backend, `"rp2"` for RP2.
 
 The binding exposes JSON-in, JSON-out functions. Decimals cross the boundary in
 the canonical form `[-]<digits>E<exponent>`, for example `-12345E-3`, which
-Python's `Decimal()` parses back to the identical value. Every request and
-response carries `"schema_version": 1`.
+Python's `Decimal()` parses back to the identical value. `check_entry` and
+`compute` carry `"schema_version": 1`; `ledger` carries `"schema_version": 2`.
+`engine_version()` returns the crate version (0.2.0).
 
 `kassiber/core/engines/native_request.py` builds these documents with the
 standard library only: the canonical decimal encoding, the timestamp fields as
@@ -167,6 +176,25 @@ method or operation a build does not implement (none at present). The last
 two are caller or engine bugs and block the report, as a Rust panic does:
 the binding turns a panic into `RuntimeError`.
 
+### `ledger(request) -> response`
+
+The schema-2 entry point takes the finalized projection as typed rows and
+pairs (`tax-engine/core/src/ledger/request.rs`): the policy, the
+configuration names, the holder, the wallets, per row its anchor, amounts in
+msat, exact rate and value, normalized kind, text, Austrian overrides,
+privacy-hop flag, hold, chain-order evidence, and parsed timestamp, and the
+move and cross-asset pairs. It carries facts, never marker text. Every type
+rejects unknown fields and missing ones (a field without a value is `null`,
+not left out; only a failed timestamp may omit `error_class`), and another
+schema version is a `RequestError`.
+`operation` is `ledger`, `prepare`, or `manifest`; `manifest` returns the
+engine's names and tables (`manifest.rs`), which
+`tests/test_tax_ledger_contract.py` compares with Python's. `ledger` and
+`prepare` answer `Unsupported` until the ledger layer is ported. A failure is
+`{"ok": false, "error": {"stage", "asset"?, "inner": {"class", "message"}}}`;
+`kassiber/core/engines/errors.py` raises what the adapter raised at that
+stage, wrapped where the adapter wrapped it.
+
 ### Fixtures
 
 `tax-engine/scripts/gen_engine_fixtures.py` runs RP2 as the oracle, building
@@ -193,9 +221,11 @@ builds its entries without a request `text`) against the RP2 text these
 fixtures store.
 
 `ledger_fixtures.json`, from `tax-engine/scripts/gen_ledger_fixtures.py`, holds
-whole-ledger goldens: finalized projections with the frozen oracle's ledger
-and the one production must give
-([projection goldens](testing.md#projection-goldens)).
+whole-ledger goldens: finalized projections with the frozen oracle's ledger,
+the one production must give, and the schema-2 request production's builder
+makes of each ([projection goldens](testing.md#projection-goldens)).
+`tax-engine/core/tests/ledger_fixtures.rs` reads every stored request into
+the typed request and writes it back unchanged.
 
 ## Privacy
 

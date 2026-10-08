@@ -22,7 +22,7 @@ from pathlib import Path
 
 import kassiber_tax
 
-from kassiber.core.engines import native, native_request
+from kassiber.core.engines import errors, native, native_request
 from tests import tax_engine_compare as compare
 from tests.tax_oracle import adapter
 
@@ -72,7 +72,7 @@ class NativeBackendIsolationTest(unittest.TestCase):
                 import tempfile
                 tempfile.tempdir = {scratch!r}
 
-                from kassiber.core.engines import GenericRP2TaxEngine
+                from kassiber.core.engines import KassiberTaxEngine
                 from kassiber.core.engines import rp2 as adapter
                 from kassiber.errors import AppError
                 from kassiber.tax_policy import build_tax_policy
@@ -86,7 +86,7 @@ class NativeBackendIsolationTest(unittest.TestCase):
                     for country, method, histories in runs:
                         profile = _adapter_profile(country, method)
                         for rows, pairs in histories:
-                            result = GenericRP2TaxEngine(profile).build_ledger_state(
+                            result = KassiberTaxEngine(profile).build_ledger_state(
                                 finalized_tax_inputs(profile, rows=rows, wallet_refs_by_id=WALLET_REFS, manual_pair_records=pairs)
                             )
                             realized = [entry for entry in result.entries if "calculation" in entry]
@@ -128,7 +128,7 @@ class NativeBackendIsolationTest(unittest.TestCase):
                 import tempfile
                 tempfile.tempdir = {str(temp_root)!r}
 
-                from kassiber.core.engines import GenericRP2TaxEngine
+                from kassiber.core.engines import KassiberTaxEngine
                 from kassiber.core.engines import rp2 as adapter
                 from tests.custody_tax_helpers import finalized_tax_inputs
                 from tests.tax_ledger_generator import WALLET_REFS, ledger_history as _ledger_history, profile as _adapter_profile
@@ -153,7 +153,7 @@ class NativeBackendIsolationTest(unittest.TestCase):
                         recording.append([event, str(args[0]) if args else ""])
 
                 sys.addaudithook(hook)
-                engine = GenericRP2TaxEngine(profile)
+                engine = KassiberTaxEngine(profile)
                 for backend in ("native", "rp2"):  # warm up lazy imports
                     with adapter._use_tax_engine_backend(backend):
                         engine.build_ledger_state(inputs)
@@ -508,36 +508,6 @@ class InterfaceParityTest(unittest.TestCase):
                 self.assertEqual(type(raised.exception).__name__, name)
                 self.assertTrue(str(raised.exception).startswith("IN transaction set is empty: TransactionSet:"))
 
-    def test_configuration_failures(self):
-        def nothing(modules, configuration):
-            return sorted(modules)
-
-        cases = [
-            ("missing currency", dict(PROFILE, fiat_currency=None), ("Cold",)),
-            ("unknown currency", dict(PROFILE, fiat_currency="XYZ"), ("Cold",)),
-            ("percent label", PROFILE, ("50% cold",)),
-            ("interpolated label", PROFILE, ("a%(x)s",)),
-            ("delimited label", PROFILE, ("Cold, Savings",)),
-        ]
-        for name, profile, wallets in cases:
-            with self.subTest(name):
-                outcome = self.assertSameOutcome(nothing, profile=profile, wallets=wallets)
-                self.assertEqual(outcome[0], "error")
-
-    def test_duplicate_labels_after_strip_fail_on_both(self):
-        # RP2's message carries its temporary INI path; the native one lacks it.
-        for backend in ("rp2", "native"):
-            with self.subTest(backend), adapter._use_tax_engine_backend(backend):
-                with self.assertRaises(Exception) as raised:
-                    with adapter._rp2_configuration(PROFILE, ["W1", " W1 "], ["BTC"]):
-                        pass
-                self.assertTrue(
-                    str(raised.exception).endswith(
-                        "field 'exchanges' in section 'general' contains duplicate elements: W1"
-                    ),
-                    str(raised.exception),
-                )
-
     def test_modules_mirror_the_rp2_names(self):
         with adapter._use_tax_engine_backend("rp2"):
             rp2_names = set(adapter._get_rp2_modules())
@@ -598,20 +568,24 @@ class CountryPolicyTest(unittest.TestCase):
 class ErrorClassTest(unittest.TestCase):
     def test_engine_errors_map_to_python_classes(self):
         cases = {
-            "ValueError": native.EngineValueError,
-            "TypeError": native.EngineTypeError,
-            "RuntimeError": native.EngineRuntimeError,
+            "ValueError": errors.EngineValueError,
+            "TypeError": errors.EngineTypeError,
+            "RuntimeError": errors.EngineRuntimeError,
             "InvalidOperation": __import__("decimal").InvalidOperation,
-            "Unsupported": native.EngineContractError,
-            "RequestError": native.EngineContractError,
+            "Unsupported": errors.EngineContractError,
+            "RequestError": errors.EngineContractError,
         }
         for name, expected in cases.items():
             with self.subTest(name):
-                error = native._engine_error({"class": name, "message": "m"})
+                error = errors.engine_error({"class": name, "message": "m"})
                 self.assertIsInstance(error, expected)
         # Like RP2's errors, they are not ValueError/TypeError subclasses.
-        self.assertFalse(issubclass(native.EngineValueError, ValueError))
-        self.assertEqual(str(native.EngineValueError("message")), "message")
+        self.assertFalse(issubclass(errors.EngineValueError, ValueError))
+        self.assertEqual(str(errors.EngineValueError("message")), "message")
+        self.assertEqual(str(errors.engine_error({"class": "Unsupported", "message": "m"})), "Unsupported: m")
+        # The legacy-native leg raises the same classes.
+        self.assertIs(native.EngineValueError, errors.EngineValueError)
+        self.assertIs(native.EngineContractError, errors.EngineContractError)
 
 
 class JournalProvenanceTest(unittest.TestCase):

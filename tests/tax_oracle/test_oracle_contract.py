@@ -104,10 +104,14 @@ class OraclePolicyTest(unittest.TestCase):
         self.assertEqual(AT_NEU_CUTOFF, RP2_AT_NEU_CUTOFF)
 
     def test_iso_4217_codes_match_pycountry(self):
-        # RP2 validates the fiat currency against pycountry.
+        # RP2 validates the fiat currency against pycountry; production's
+        # request builder and the legacy-native leg check the same list.
         import pycountry
 
-        self.assertEqual(native._ISO_4217, frozenset(currency.alpha_3 for currency in pycountry.currencies))
+        from kassiber.core.engines import ledger_request
+
+        self.assertEqual(ledger_request.ISO_4217, frozenset(currency.alpha_3 for currency in pycountry.currencies))
+        self.assertIs(native._ISO_4217, ledger_request.ISO_4217)
 
 
 def _austrian_swap_inputs():

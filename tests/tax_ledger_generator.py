@@ -10,7 +10,9 @@ Three things live here:
   books. Each dimension below is switched on by the seed with a stated
   probability, and every book it gives satisfies §3.5;
 - ``corpus``, the named cases ``tax-engine/scripts/gen_ledger_fixtures.py``
-  stores with the oracle's outcome.
+  stores with the oracle's outcome. Most stay within §3.5; the LD-5 cases
+  each have one shape a finalized projection cannot have, which production's
+  request builder refuses.
 
 Nothing here runs an engine.
 """
@@ -637,6 +639,9 @@ class GoldenCase:
     # What the oracle's outcome must show for the case to reach its shape;
     # returns the complaints (none when it does).
     check: Check
+    # The one §3.5 shape an LD-5 case has (a ``projection_range`` name);
+    # ``None`` for a case within range.
+    invariant: Optional[str] = None
 
 
 _REALIZED = ("income", "disposal", "fee", "transfer_fee")
@@ -1473,6 +1478,88 @@ def _error_cases() -> list[GoldenCase]:
     return cases
 
 
+def _ld5_cases() -> list[GoldenCase]:
+    """One case per shape a finalized projection cannot have (design §3.5).
+
+    Each is a small generic book built directly with exactly one such shape.
+    Production's request builder refuses it before the walk (listed
+    difference LD-5); the oracle's outcome is stored as it is.
+    """
+    book_profile = profile("generic", "FIFO")
+
+    def book(rows: Sequence[Mapping[str, Any]], pairs: Sequence[Mapping[str, Any]] = (), **extra: Any) -> TaxEngineLedgerInputs:
+        return direct(rows, pairs, **extra)
+
+    def buy() -> dict[str, Any]:
+        return projected("ld5-buy", "C", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z", kind="buy")
+
+    def sale(**fields: Any) -> dict[str, Any]:
+        return projected("ld5-sell", "C", "outbound", 10_000_000_000, "2024-06-01T00:00:00Z", fee=1_000_000, rate="60000", kind="sell", **fields)
+
+    def move_legs(amount_in: int = 20_000_000_000, **out_fields: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+        out_row = projected("ld5-move-out", "C", "outbound", 20_000_000_000, "2024-03-01T00:00:00Z", side="move-out", fee=1_000_000, rate="50000", **out_fields)
+        in_row = projected("ld5-move-in", "B", "inbound", amount_in, "2024-03-01T00:10:00Z", side="move-in", rate="50000")
+        return out_row, in_row
+
+    cases: list[GoldenCase] = []
+
+    def add(invariant: str, inputs: TaxEngineLedgerInputs) -> None:
+        cases.append(
+            GoldenCase(
+                f"ld5-{invariant.replace('_', '-')}",
+                ("generic", "error", "ld5"),
+                dict(book_profile),
+                inputs,
+                lambda result, error: [],
+                invariant,
+            )
+        )
+
+    refs = {key: dict(value) for key, value in WALLET_REFS.items()}
+    refs["B"]["id"] = "B-renamed"
+    add("wallet_ref_id_mismatch", book([buy(), sale()], wallet_refs=refs))
+    plain = sale()
+    plain["id"] = "ld5-sell"
+    add("non_synthetic_row_id", book([buy(), plain]))
+    unanchored = sale()
+    unanchored["journal_transaction_id"] = ""
+    add("missing_anchor", book([buy(), unanchored]))
+    elsewhere = sale()
+    elsewhere["wallet_id"] = "Z"
+    add("unknown_wallet", book([buy(), elsewhere]))
+    sideways = sale()
+    sideways["direction"] = "sideways"
+    add("unknown_direction", book([buy(), sideways]))
+    fractional = sale()
+    fractional["fee"] = 1_000_000.5
+    add("non_integer_msat", book([buy(), fractional]))
+    refund = sale()
+    refund["fee"] = -1_000_000
+    add("negative_fee", book([buy(), refund]))
+    empty = projected("ld5-empty", "C", "inbound", 0, "2024-02-01T00:00:00Z", kind="buy")
+    add("non_positive_amount", book([buy(), empty, sale()]))
+    inclusive = sale()
+    inclusive["amount_includes_fee"] = True
+    add("amount_includes_fee", book([buy(), inclusive]))
+    add("custody_component_fields", book([buy(), sale(custody_component_id="component-1")]))
+    add("corrupt_decimal_text", book([buy(), sale(fiat_rate_exact="sixty thousand")]))
+    out_row, in_row = move_legs()
+    blocked = move(out_row, in_row)
+    blocked["group_block_rows"] = (dict(out_row),)
+    add("group_block_rows", book([buy(), out_row, in_row], [blocked]))
+    out_row, in_row = move_legs(privacy_boundary="coinjoin")
+    add("unreviewed_privacy_pair", book([buy(), out_row, in_row], [move(out_row, in_row)]))
+    out_row, in_row = move_legs()
+    second_in = projected("ld5-move-in-2", "A", "inbound", 20_000_000_000, "2024-03-01T00:20:00Z", side="move-in", rate="50000")
+    add(
+        "shared_pair_leg",
+        book([buy(), out_row, in_row, second_in], [move(out_row, in_row), move(out_row, second_in, pair_id="move:second")]),
+    )
+    out_row, in_row = move_legs(amount_in=19_000_000_000)
+    add("unequal_move_amounts", book([buy(), out_row, in_row], [move(out_row, in_row)]))
+    return cases
+
+
 # The seeds the goldens store from the random half.
 GOLDEN_SEEDS = tuple(range(12))
 
@@ -1488,7 +1575,7 @@ def _seed_cases() -> list[GoldenCase]:
 
 def corpus() -> list[GoldenCase]:
     """Every named case the goldens store, in file order."""
-    cases = [*_generic_cases(), *_carry_cases(), *_at_cases(), *_error_cases(), *_seed_cases()]
+    cases = [*_generic_cases(), *_carry_cases(), *_at_cases(), *_error_cases(), *_ld5_cases(), *_seed_cases()]
     names = [case.name for case in cases]
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates:

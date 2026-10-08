@@ -9,7 +9,7 @@ from kassiber.core.austrian import (
     infer_regime_from_timestamp,
     kennzahl_for_disposal_category,
 )
-from kassiber.core.engines import GenericRP2TaxEngine
+from kassiber.core.engines import KassiberTaxEngine
 from kassiber.errors import AppError
 from tests.tax_ledger_generator import finalized, pair, profile, row
 
@@ -17,7 +17,7 @@ MOVING_AVERAGE_AT = profile("at", "moving_average_at")
 
 
 def _ledger(book_profile, rows, pairs=()):
-    return GenericRP2TaxEngine(book_profile).build_ledger_state(
+    return KassiberTaxEngine(book_profile).build_ledger_state(
         finalized(book_profile, rows, pairs)
     )
 
@@ -528,7 +528,7 @@ class CarryPairPhaseOneBlockJournalTest(unittest.TestCase):
         import tempfile
 
         from kassiber.core.austrian import AT_SWAP_QUARANTINE_REASON
-        from kassiber.core.engines.rp2 import GENERIC_BITCOIN_RAIL_QUARANTINE_REASON
+        from kassiber.core.engines.ledger import GENERIC_BITCOIN_RAIL_QUARANTINE_REASON
 
         for tax_country, reason in (
             ("at", AT_SWAP_QUARANTINE_REASON),

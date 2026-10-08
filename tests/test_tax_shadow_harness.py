@@ -7,7 +7,9 @@ the CLI and daemon children a test spawns. A difference
 `journals process` child, and the child's route record must reach the
 session, which fails at its end even when a caller swallowed the error.
 `census` records the calls without comparing and fails a session whose
-engine-reaching module is missing from the overlay.
+engine-reaching module is missing from the overlay. Each record carries the
+capability production classified the book under and the route it took, and
+a builder refusal the LD-5 rule accepts is counted and fails the session.
 """
 
 from __future__ import annotations
@@ -113,7 +115,7 @@ class ChildProcessShadowTest(unittest.TestCase):
                 result, records = self._process_journals(mode, python=("-X", "importtime"))
                 self.assertEqual(result.returncode, 0, result.stdout[-2000:] + result.stderr[-2000:])
                 self.assertEqual(json.loads(result.stdout)["data"]["entries_created"], 2)
-                self.assertEqual(records, [compare.RouteRecord(MODULE, compare.UNCLASSIFIED, "legacy", "result")])
+                self.assertEqual(records, [compare.RouteRecord(MODULE, "generic", compare.LEGACY, "result")])
                 imported = re.search(r"^import time:.*\|\s*tests\.tax_oracle\.adapter$", result.stderr, re.MULTILINE)
                 self.assertEqual(imported is not None, ran_oracle)
 
@@ -124,7 +126,7 @@ class ChildProcessShadowTest(unittest.TestCase):
         self.assertIn("production tax engine differs from the oracle in build_ledger_state", message)
         self.assertIn(f"injected by {compare.INJECT_DIFFERENCE_ENV}", message)
         self.assertIn("result['tax_summary']: length", message)
-        self.assertEqual(records, [compare.RouteRecord(MODULE, compare.UNCLASSIFIED, "legacy", "difference")])
+        self.assertEqual(records, [compare.RouteRecord(MODULE, "generic", compare.LEGACY, "difference")])
         _lines, failures = compare.session_report(compare.SHADOW, records)
         self.assertEqual(failures, [f"calls that differed from the oracle: 1, in {MODULE}"])
 
@@ -132,7 +134,7 @@ class ChildProcessShadowTest(unittest.TestCase):
         # The injection only alters what shadow compares; census compares nothing.
         result, records = self._process_journals(compare.CENSUS, inject=True)
         self.assertEqual(result.returncode, 0, result.stdout[-2000:] + result.stderr[-2000:])
-        self.assertEqual(records, [compare.RouteRecord(MODULE, compare.UNCLASSIFIED, "legacy", "result")])
+        self.assertEqual(records, [compare.RouteRecord(MODULE, "generic", compare.LEGACY, "result")])
 
     def test_a_child_loads_the_harness_only_with_the_engines(self):
         probe = textwrap.dedent(
@@ -186,10 +188,10 @@ class ChildProcessShadowTest(unittest.TestCase):
             """
         )
         expected = {
-            None: [None, "GenericRP2TaxEngine.build_ledger_state"],
+            None: [None, "KassiberTaxEngine.build_ledger_state"],
             compare.SHADOW: [compare.SHADOW, "shadow_build_ledger_state.<locals>.build_ledger_state"],
             compare.CENSUS: [compare.CENSUS, "census_build_ledger_state.<locals>.build_ledger_state"],
-            compare.ORACLE: [None, "GenericRP2TaxEngine.build_ledger_state"],
+            compare.ORACLE: [None, "KassiberTaxEngine.build_ledger_state"],
         }
         for mode, outcome in expected.items():
             with self.subTest(mode=mode):
@@ -267,8 +269,9 @@ class SessionEndTest(unittest.TestCase):
         self.assertIn("1 passed", result.stdout)
         self.assertIn("tax engine shadow", result.stdout)
         self.assertIn("production calls compared with the oracle: 1", result.stdout)
-        self.assertIn("generic: 0 v2, 0 legacy", result.stdout)
-        self.assertIn("unclassified: 0 v2, 1 legacy", result.stdout)
+        self.assertIn("generic: 0 v2, 1 legacy", result.stdout)
+        self.assertIn("at: 0 v2, 0 legacy", result.stdout)
+        self.assertIn("LD-5 refusals (shapes a finalized projection cannot have): 0", result.stdout)
 
     def test_a_swallowed_difference_still_fails_the_session(self):
         result = self._session(compare.SHADOW, inject=True)
@@ -296,9 +299,39 @@ class SessionEndTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout[-4000:] + result.stderr[-2000:])
         self.assertIn("2 passed", result.stdout)
         self.assertIn("production calls compared with the oracle: 1", result.stdout)
-        self.assertIn("unclassified: 0 v2, 2 legacy", result.stdout)
+        self.assertIn("generic: 0 v2, 2 legacy", result.stdout)
         self.assertIn("calls not compared because the test stubs the engine: 1, in /", result.stdout)
         self.assertIn("FAILED: calls that differed from the oracle: 1, in /", result.stdout)
+
+    def test_an_ld5_refusal_is_counted_and_fails_the_session(self):
+        # A row that includes its fee in its amount is a shape a finalized
+        # projection cannot have: production's builder refuses it, the LD-5
+        # rule accepts the refusal without comparing, and the session fails.
+        refused = textwrap.dedent(
+            """
+            import pytest
+
+            from kassiber.core.engines.errors import EngineContractError
+            from tests.tax_engine_compare import PRODUCTION_ENGINE
+            from tests.tax_ledger_generator import direct, profile as _adapter_profile, projected
+
+
+            def test_builds_an_unrepresentable_book():
+                book = _adapter_profile("generic", "FIFO")
+                row = projected("buy-1", "C", "inbound", 100_000, "2024-01-01T00:00:00Z")
+                row["amount_includes_fee"] = True
+                inputs = direct([row])
+                with pytest.raises(EngineContractError, match="amount_includes_fee"):
+                    PRODUCTION_ENGINE(book).build_ledger_state(inputs)
+            """
+        )
+        result = self._session(compare.SHADOW, test=refused)
+        self.assertEqual(result.returncode, 1, result.stdout[-4000:] + result.stderr[-2000:])
+        self.assertIn("1 passed", result.stdout)
+        self.assertIn("production calls compared with the oracle: 0", result.stdout)
+        self.assertIn("unclassified: 0 v2, 0 legacy, 1 not routed", result.stdout)
+        self.assertIn("LD-5 refusals (shapes a finalized projection cannot have): 1", result.stdout)
+        self.assertIn("FAILED: calls production's builder refused under LD-5: 1, in /", result.stdout)
 
     def test_census_fails_an_engine_caller_outside_the_overlay(self):
         result = self._session(compare.CENSUS)
@@ -330,9 +363,36 @@ class SessionReportTest(unittest.TestCase):
                 "at: 0 v2, 0 legacy",
                 "at_swap: 0 v2, 1 legacy",
                 "unclassified: 0 v2, 1 legacy",
+                "LD-5 refusals (shapes a finalized projection cannot have): 0",
             ],
         )
         self.assertEqual(failures, [])
+
+    def test_shadow_counts_calls_that_end_before_routing(self):
+        records = self._records(
+            ("tests/test_a.py", "generic", compare.NOT_ROUTED, "result"),
+            ("tests/test_a.py", "generic", compare.LEGACY, "result"),
+            ("tests/test_b.py", compare.UNCLASSIFIED, compare.NOT_ROUTED, "error"),
+        )
+        lines, failures = compare.session_report(compare.SHADOW, records, routed=frozenset())
+        self.assertIn("generic: 0 v2, 1 legacy, 1 not routed", lines)
+        self.assertIn("unclassified: 0 v2, 0 legacy, 1 not routed", lines)
+        self.assertEqual(failures, [])
+        # A routed capability that saw only calls ending before routing never
+        # reached v2.
+        only_unrouted = self._records(("tests/test_a.py", "at", compare.NOT_ROUTED, "result"))
+        _lines, failures = compare.session_report(compare.SHADOW, only_unrouted, routed=frozenset({"at"}))
+        self.assertEqual(failures, ["routed capability 'at' saw 1 calls but none on v2"])
+
+    def test_shadow_fails_on_any_ld5_refusal(self):
+        records = self._records(
+            ("tests/test_a.py", compare.UNCLASSIFIED, compare.NOT_ROUTED, compare.LD5),
+            ("tests/test_a.py", "generic", compare.LEGACY, "result"),
+        )
+        lines, failures = compare.session_report(compare.SHADOW, records)
+        self.assertEqual(lines[0], "production calls compared with the oracle: 1")
+        self.assertIn("LD-5 refusals (shapes a finalized projection cannot have): 1", lines)
+        self.assertEqual(failures, ["calls production's builder refused under LD-5: 1, in tests/test_a.py"])
 
     def test_shadow_fails_a_routed_capability_on_the_legacy_adapter(self):
         records = self._records(
@@ -428,9 +488,10 @@ class SessionReportTest(unittest.TestCase):
             count = path.read_text(encoding="utf-8").count("stubs_tax_engine")
             if count and name not in harness:
                 users[name] = count
-        # The spy replaces the phase-3 adapter's preparation and RP2
-        # configuration. A spy that only observes needs no marker.
-        self.assertEqual(users, {"tests/test_custody_pre_tax_projection.py": 1})
+        # A spy that only observes, like the request spies of
+        # test_custody_pre_tax_projection and test_review_regressions, needs
+        # no marker.
+        self.assertEqual(users, {})
 
 
 if __name__ == "__main__":  # pragma: no cover

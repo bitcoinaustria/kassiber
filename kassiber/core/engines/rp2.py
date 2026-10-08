@@ -58,6 +58,8 @@ from ..loans import (
     RELEASE_SUPPRESS_ROLES as _LOAN_RELEASE_SUPPRESS_ROLES,
 )
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
+from .ledger import GENERIC_BITCOIN_RAIL_QUARANTINE_REASON
+from .ledger_response import direct_payout_compat_records as _direct_payout_compat_records
 
 _RP2_MODULES = None
 # The calculation backend under this adapter (plan 20). Kassiber's own engine
@@ -68,7 +70,6 @@ _TAX_ENGINE_BACKENDS = ("rp2", "native")
 _TAX_ENGINE_BACKEND = "native"
 # The engine identity recorded in each realized entry's calculation metadata.
 _CALCULATION_ENGINE_NAMES = {"rp2": "rp2", "native": "kassiber_tax"}
-GENERIC_BITCOIN_RAIL_QUARANTINE_REASON = "bitcoin_rail_carry_basis_unresolved"
 _RP2_EARN_TRANSACTION_TYPES = {
     "airdrop",
     "hardfork",
@@ -1889,75 +1890,6 @@ def _select_at_cross_asset_swap_links(
         swap_link_by_row_id[in_id] = pair_id
 
     return swap_link_by_row_id, quarantined_row_ids, quarantines
-
-
-def _direct_payout_compat_records(
-    records: Sequence[Mapping[str, Any]],
-    projected_rows: Sequence[Mapping[str, Any]],
-) -> list[dict[str, Any]]:
-    """Keep the direct-payout storage/report adapter after pre-tax cutover.
-
-    Payout rows are compatibility metadata, not a source of tax events.  The
-    finalized projection already selected the exact source slice; this adapter
-    only preserves the established response/persistence shape.
-    """
-
-    projected_by_anchor: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
-    for row in projected_rows:
-        anchor = str(_row_get(row, "journal_transaction_id") or "")
-        if anchor and _row_get(row, "direction") == "outbound":
-            projected_by_anchor[anchor].append(row)
-    result: list[dict[str, Any]] = []
-    for record in records:
-        payout_id = str(_row_get(record, "id") or "")
-        out_id = str(_row_get(record, "out_transaction_id") or "")
-        if not payout_id or not out_id:
-            continue
-        reviewed_amount = (
-            _row_get(record, "out_amount")
-            or _row_get(record, "out_amount_msat")
-        )
-        candidates = projected_by_anchor.get(out_id, [])
-        reviewed_asset = str(_row_get(record, "out_asset") or "")
-        if reviewed_asset:
-            candidates = [
-                row
-                for row in candidates
-                if str(_row_get(row, "asset") or "") == reviewed_asset
-            ]
-        if reviewed_amount not in (None, ""):
-            candidates = [
-                row
-                for row in candidates
-                if int(_row_get(row, "amount") or 0) == int(reviewed_amount)
-            ]
-        projected_source = candidates[0] if len(candidates) == 1 else {}
-        result.append(
-            {
-                "payout_id": payout_id,
-                "kind": _row_get(record, "kind"),
-                "policy": _row_get(record, "policy"),
-                "out_id": out_id,
-                "out_asset": (
-                    _row_get(record, "out_asset")
-                    or _row_get(projected_source, "asset")
-                ),
-                "out_amount_msat": int(
-                    _row_get(record, "out_amount")
-                    or _row_get(record, "out_amount_msat")
-                    or _row_get(projected_source, "amount")
-                    or 0
-                ),
-                "payout_asset": _row_get(record, "payout_asset"),
-                "payout_amount_msat": int(_row_get(record, "payout_amount") or 0),
-                "payout_occurred_at": _row_get(record, "payout_occurred_at"),
-                "payout_external_id": _row_get(record, "payout_external_id"),
-                "counterparty": _row_get(record, "counterparty"),
-                "swap_fee_msat": int(_row_get(record, "swap_fee_msat") or 0),
-                "swap_fee_kind": _row_get(record, "swap_fee_kind"),
-            }
-        )
-    return result
 
 
 def _decimal_to_row_value(value: Decimal) -> str:

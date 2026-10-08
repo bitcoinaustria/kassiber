@@ -31,6 +31,10 @@ ALLOWED = frozenset(
         "tests/test_tax_shadow_harness.py",
         "tests/test_tax_ledger_goldens.py",
         "tests/test_tax_ledger_prepare.py",
+        # The builder and reader against the goldens and the oracle's own
+        # errors and tables, and the routing of the golden books.
+        "tests/test_tax_ledger_contract.py",
+        "tests/test_tax_ledger_routing.py",
         "tax-engine/scripts/gen_ledger_fixtures.py",
         # Tests that check the oracle's own internals, the interface mirror
         # of RP2, or the legacy-native leg.

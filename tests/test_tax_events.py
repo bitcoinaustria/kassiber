@@ -4,7 +4,7 @@ import unittest
 from decimal import Decimal
 
 from kassiber.core import pricing
-from kassiber.core.engines import GenericRP2TaxEngine
+from kassiber.core.engines import KassiberTaxEngine
 from kassiber.core import quarantine_catalog
 from kassiber.core.tax_events import (
     build_tax_quarantine,
@@ -110,7 +110,7 @@ COARSE = {
 
 
 def _ledger(book_profile, inputs):
-    return GenericRP2TaxEngine(book_profile).build_ledger_state(inputs)
+    return KassiberTaxEngine(book_profile).build_ledger_state(inputs)
 
 
 def _reasons(state):
@@ -777,7 +777,7 @@ class LightningPaymentHashEngineTest(unittest.TestCase):
                 "regtest", "2026-01-01T00:01:00Z",
             ),
         ]
-        state = GenericRP2TaxEngine(profile).build_ledger_state(
+        state = KassiberTaxEngine(profile).build_ledger_state(
             finalized_tax_inputs(
                 profile,
                 rows=rows,
@@ -814,7 +814,7 @@ class LightningPaymentHashEngineTest(unittest.TestCase):
             ]
         )
 
-        pair_only_state = GenericRP2TaxEngine(profile).build_ledger_state(
+        pair_only_state = KassiberTaxEngine(profile).build_ledger_state(
             finalized_tax_inputs(
                 profile,
                 rows=rows[1:],
@@ -848,7 +848,7 @@ class LightningPaymentHashEngineTest(unittest.TestCase):
                 "regtest", "2026-01-01T00:02:00Z",
             ),
         ]
-        chained_state = GenericRP2TaxEngine(profile).build_ledger_state(
+        chained_state = KassiberTaxEngine(profile).build_ledger_state(
             finalized_tax_inputs(
                 profile,
                 rows=chained_rows,
@@ -955,7 +955,7 @@ class LightningPaymentHashEngineTest(unittest.TestCase):
                 "payment_hash_source": "core_lightning" if payment_hash else None,
             }
 
-        state = GenericRP2TaxEngine(profile).build_ledger_state(
+        state = KassiberTaxEngine(profile).build_ledger_state(
             finalized_tax_inputs(
                 profile,
                 rows=[
@@ -1057,7 +1057,7 @@ class TransferGateEngineTest(unittest.TestCase):
                 "payment_hash": None,
             })
 
-        state = GenericRP2TaxEngine(profile).build_ledger_state(
+        state = KassiberTaxEngine(profile).build_ledger_state(
             finalized_tax_inputs(
                 profile,
                 rows=[

@@ -26,7 +26,7 @@ import configparser
 import sys
 from dataclasses import dataclass
 from datetime import date, datetime
-from decimal import Decimal, DivisionByZero, InvalidOperation, Overflow
+from decimal import Decimal, InvalidOperation
 from enum import Enum
 from types import SimpleNamespace
 from typing import Any, Iterator, Mapping, Optional, Sequence
@@ -34,69 +34,25 @@ from typing import Any, Iterator, Mapping, Optional, Sequence
 import kassiber_tax
 
 from . import native_request as _request
+from .errors import (
+    ERROR_CLASSES,
+    EngineContractError,
+    EngineError,
+    EngineRuntimeError,
+    EngineTypeError,
+    EngineValueError,
+    engine_error,
+)
+from .ledger_request import ISO_4217 as _ISO_4217
+from .ledger_request import _string_set
 
 # ---------------------------------------------------------------------------
 # Errors
 
-
-class EngineError(Exception):
-    """An RP2 error the engine reports, with RP2's message."""
-
-    def __init__(self, message: str) -> None:
-        self.__message = message
-        super().__init__(message)
-
-    def __repr__(self) -> str:
-        return self.__message
-
-    @property
-    def message(self) -> str:
-        return self.__message
-
-
-class EngineValueError(EngineError):
-    """RP2's ``RP2ValueError``."""
-
-
-class EngineTypeError(EngineError):
-    """RP2's ``RP2TypeError``."""
-
-
-class EngineRuntimeError(EngineError):
-    """RP2's ``RP2RuntimeError``."""
-
-
-class EngineContractError(RuntimeError):
-    """A malformed request or an operation the engine does not implement.
-
-    Both are caller or engine bugs, never a property of the book, so they
-    block the report like a Rust panic (which the binding raises as
-    ``RuntimeError``).
-    """
-
-    def __init__(self, error_class: str, message: str) -> None:
-        self.error_class = error_class
-        super().__init__(f"{error_class}: {message}")
-
-
-_ERROR_CLASSES = {
-    "ValueError": EngineValueError,
-    "TypeError": EngineTypeError,
-    "RuntimeError": EngineRuntimeError,
-    # RP2's arithmetic raises these ``decimal`` signals unwrapped.
-    "InvalidOperation": InvalidOperation,
-    "DivisionByZero": DivisionByZero,
-    "Overflow": Overflow,
-}
-
-
-def _engine_error(body: Mapping[str, Any]) -> Exception:
-    error_class = str(body.get("class"))
-    message = str(body.get("message"))
-    exception = _ERROR_CLASSES.get(error_class)
-    if exception is None:
-        return EngineContractError(error_class, message)
-    return exception(message)
+# The engine's error classes live in ``errors``; production raises the same
+# classes through the ledger reader.
+_ERROR_CLASSES = ERROR_CLASSES
+_engine_error = engine_error
 
 
 def _call(operation: str, document: Mapping[str, Any]) -> dict[str, Any]:
@@ -278,23 +234,6 @@ class AtDisposalCategory(Enum):
 # ---------------------------------------------------------------------------
 # Countries
 
-# ISO 4217 alpha-3 codes, as RP2's ``pycountry`` lookup accepts them
-# (case-insensitively); ``tests/test_tax_engine_backend.py`` keeps them in step.
-_ISO_4217 = frozenset(
-    """
-    AED AFN ALL AMD AOA ARS AUD AWG AZN BAM BBD BDT BHD BIF BMD BND BOB BOV BRL
-    BSD BTN BWP BYN BZD CAD CDF CHE CHF CHW CLF CLP CNY COP COU CRC CUP CVE CZK
-    DJF DKK DOP DZD EGP ERN ETB EUR FJD FKP GBP GEL GHS GIP GMD GNF GTQ GYD HKD
-    HNL HTG HUF IDR ILS INR IQD IRR ISK JMD JOD JPY KES KGS KHR KMF KPW KRW KWD
-    KYD KZT LAK LBP LKR LRD LSL LYD MAD MDL MGA MKD MMK MNT MOP MRU MUR MVR MWK
-    MXN MXV MYR MZN NAD NGN NIO NOK NPR NZD OMR PAB PEN PGK PHP PKR PLN PYG QAR
-    RON RSD RUB RWF SAR SBD SCR SDG SEK SGD SHP SLE SOS SRD SSP STN SVC SYP SZL
-    THB TJS TMT TND TOP TRY TTD TWD TZS UAH UGX USD USN UYI UYU UYW UZS VED VES
-    VND VUV WST XAD XAF XAG XAU XBA XBB XBC XBD XCD XCG XDR XOF XPD XPF XPT XSU
-    XTS XUA XXX YER ZAR ZMW ZWG
-    """.split()
-)
-
 # The country codes the adapter passes; RP2 accepts any ISO 3166-1 alpha-2.
 _COUNTRY_CODES = frozenset({"generic", "at"})
 
@@ -451,24 +390,6 @@ def classify_disposal(gain_loss: "GainLoss") -> AtDisposalCategory:
 
 # ---------------------------------------------------------------------------
 # Configuration
-
-
-def _string_set(field: str, section: configparser.SectionProxy) -> frozenset[str]:
-    # RP2 reads these fields from an INI file with a default ConfigParser:
-    # ``%`` interpolation applies and each comma-separated element is
-    # stripped. The same section is parsed from memory so the same values
-    # pass or fail the same way; messages lack RP2's file-path prefix.
-    text = section[field]
-    if not text or not text.strip():
-        raise EngineValueError(f"field '{field}' in section '{section.name}' cannot be empty")
-    result: set[str] = set()
-    for element in (value.strip() for value in text.split(",")):
-        if not element:
-            raise EngineValueError(f"field '{field}' in section '{section.name}' cannot contain empty elements")
-        if element in result:
-            raise EngineValueError(f"field '{field}' in section '{section.name}' contains duplicate elements: {element}")
-        result.add(element)
-    return frozenset(result)
 
 
 def _type_check_string(name: str, value: Any) -> str:

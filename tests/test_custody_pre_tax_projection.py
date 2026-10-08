@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-from contextlib import contextmanager
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -26,7 +24,8 @@ from kassiber.transfers import (
     onchain_transfer_scope,
 )
 from kassiber.core.engines.base import TaxEngineLedgerInputs
-from kassiber.core.engines.rp2 import GenericRP2TaxEngine, _GenericRailCarryResult
+from kassiber.core.engines import KassiberTaxEngine
+from kassiber.core.engines import ledger as ledger_engine
 from tests.custody_tax_helpers import (
     authoritative_chain_observation,
     finalized_tax_inputs,
@@ -449,11 +448,11 @@ def test_basis_barrier_does_not_suppress_unrelated_asset_projection():
     assert all(item["transaction_id"] != "usdt-later" for item in projection.quarantines)
 
 
-# The spy replaces the adapter's preparation and RP2 configuration, so the
-# shadow mode has no production outcome to compare with the oracle here.
-@pytest.mark.stubs_tax_engine
-def test_rp2_boundary_spy_never_receives_residual_or_later_basis_consumer():
+def test_engine_request_never_receives_residual_or_later_basis_consumer():
     rows, state = _residual_state()
+    # Stored rows carry these columns; the engine reads them for the text.
+    for row in rows:
+        row.update(note=None, description=None)
     profile = {
         "id": "profile",
         "workspace_id": "workspace",
@@ -467,34 +466,36 @@ def test_rp2_boundary_spy_never_receives_residual_or_later_basis_consumer():
         "source": {"id": "source", "label": "source", "account_code": "treasury", "account_label": "Treasury", "wallet_account_id": "account"},
         "destination": {"id": "destination", "label": "destination", "account_code": "treasury", "account_label": "Treasury", "wallet_account_id": "account"},
     }
-    captured: list[dict[str, object]] = []
+    original_build_request = ledger_engine.build_request
+    requests: list[dict[str, object]] = []
 
-    def spy_prepare(_profile, rows_by_asset, *_args, **_kwargs):
-        captured.extend(row for asset_rows in rows_by_asset.values() for row in asset_rows)
-        return []
+    def spy_build_request(*args, **kwargs):
+        request = original_build_request(*args, **kwargs)
+        requests.append(request)
+        return request
 
-    @contextmanager
-    def configuration(*_args, **_kwargs):
-        yield SimpleNamespace(country=SimpleNamespace(validate_input_data=lambda _items: None))
-
-    with (
-        patch("kassiber.core.engines.rp2._rp2_configuration", side_effect=configuration),
-        patch("kassiber.core.engines.rp2._apply_generic_bitcoin_rail_carry_values", side_effect=lambda _p, rows_for_engine, *_a, **_k: _GenericRailCarryResult(list(rows_for_engine), set(), [])),
-        patch("kassiber.core.engines.rp2._prepare_assets", side_effect=spy_prepare),
-        patch("kassiber.core.engines.rp2._validate_prepared_rp2_inputs"),
-        patch("kassiber.core.engines.rp2._rp2_asset_states_from_prepared", return_value={}),
-    ):
-        GenericRP2TaxEngine(profile).build_ledger_state(
+    # The spy only observes: the book still runs on production.
+    with patch.object(ledger_engine, "build_request", side_effect=spy_build_request):
+        KassiberTaxEngine(profile).build_ledger_state(
             TaxEngineLedgerInputs(
                 finalized_tax_projection=projection,
                 wallet_refs_by_id=wallet_refs,
             )
         )
 
-    anchored = {row["journal_transaction_id"] for row in captured}
+    # A shadow session also builds the request to count the call's route.
+    assert requests and all(request == requests[-1] for request in requests)
+    rows = requests[-1]["rows"]
+    assert [row["id"] for row in rows] == [str(row["id"]) for row in projection.rows]
+    anchored = {row["anchor"] for row in rows}
     assert anchored == {"acquisition", "source-move", "retained"}
     assert "later-sale" not in anchored
-    assert all(int(row["amount"]) != 100 for row in captured)
+    assert all(row["amount_msat"] != 100 for row in rows)
+    assert sorted((row["anchor"], row["wallet_id"], row["direction"], row["amount_msat"], row["fee_msat"]) for row in rows) == [
+        ("acquisition", "source", "inbound", 10_000, 0),
+        ("retained", "destination", "inbound", 9_900, 0),
+        ("source-move", "source", "outbound", 9_900, 0),
+    ]
 
 
 def test_tax_engine_contract_rejects_raw_rows_at_construction():

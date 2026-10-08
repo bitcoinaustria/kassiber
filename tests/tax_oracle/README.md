@@ -56,11 +56,14 @@ same commit, with a fixture that shows it, and updates `FROZEN.json`.
 
 The product modules imported above are shared. A change in one of them moves
 the oracle and production together, so a shadow run cannot see it; the
-stored oracle outcomes of the projection-level goldens can.
+stored oracle outcomes of the projection-level goldens can. On the
+legacy-native leg, `engines.native` also shares production's error classes
+(`engines.errors`) and its currency list and INI parse
+(`engines.ledger_request`).
 
-Only the comparison harness, this package, the ledger goldens and prepare
-tests, `tests/conftest.py`, the child-process hook and its harness test, the
-interface-mirror tests, the marker-grammar cases of
+Only the comparison harness, this package, the ledger goldens, contract,
+routing, and prepare tests, `tests/conftest.py`, the child-process hook and
+its harness test, the interface-mirror tests, the marker-grammar cases of
 `tests/test_tax_descriptions.py` (until the engine's describer takes them
 over), and the fixture generator may import
 `tests.tax_oracle` or `tests.tax_engine_compare`, which runs it;

@@ -10,9 +10,10 @@ writes and certifies it). Here:
   oracle shares product modules with production (``tests/tax_oracle/README.md``),
   so a change in one of them moves both and only this check sees it;
 - the file is the generator's corpus, ``expected`` follows from ``oracle``
-  by the listed differences alone, two fresh generator runs write the file
-  byte for byte, and the generator refuses to change a stored case without
-  ``--accept``;
+  by the listed differences alone (an LD-5 case's ``expected`` is the request
+  builder's refusal of its one out-of-range shape), two fresh generator runs
+  write the file byte for byte, and the generator refuses to change a stored
+  case without ``--accept``;
 - the random half: 200 seeded generic and 200 Austrian books of
   ``tests/tax_ledger_generator.py``, oracle against production.
 
@@ -100,8 +101,18 @@ def test_expected_follows_from_the_oracle_by_the_listed_differences() -> None:
         if difference is None:
             assert compare.document_differences(oracle, expected) == [], case["name"]
             continue
-        # LD-5 (builder fail-closed shapes) arrives with the request builder.
+        if difference == "LD-5":
+            # The builder's refusal names the case's invariant, which the
+            # inputs have; the oracle's outcome is not compared.
+            name, message = expected["error"]
+            assert name == "EngineContractError", case["name"]
+            assert message.startswith(f"RequestError: {case['invariant']}: "), case["name"]
+            profile, inputs = codec.decode_inputs(case["inputs"])
+            assert case["invariant"] in projection_range.violations(profile, inputs), case["name"]
+            assert case["request"] is None, case["name"]
+            continue
         assert difference in ("LD-3", "LD-4"), case["name"]
+        assert case["invariant"] is None, case["name"]
         assert "error" in oracle and "error" in expected, case["name"]
         assert compare.listed_signature(oracle["error"]) == expected["error"], case["name"]
         assert oracle["error"] != expected["error"], case["name"]
@@ -110,9 +121,16 @@ def test_expected_follows_from_the_oracle_by_the_listed_differences() -> None:
 
 
 def test_every_stored_projection_is_in_range() -> None:
+    # Except the LD-5 cases, which have exactly their one shape.
+    invariants = set()
     for case in _document()["cases"]:
         profile, inputs = codec.decode_inputs(case["inputs"])
-        assert projection_range.violations(profile, inputs) == (), case["name"]
+        expected = (case["invariant"],) if case["invariant"] else ()
+        assert projection_range.violations(profile, inputs) == expected, case["name"]
+        assert (case["listed_difference"] == "LD-5") == bool(case["invariant"]), case["name"]
+        invariants.add(case["invariant"])
+    # Every invariant but the pool scope, which raises the oracle's own error.
+    assert invariants - {None} == set(projection_range.INVARIANTS) - {projection_range.NON_GLOBAL_POOL_SCOPE}
 
 
 def test_the_goldens_are_the_generators_corpus() -> None:
@@ -123,6 +141,7 @@ def test_the_goldens_are_the_generators_corpus() -> None:
     for case in cases:
         stored = _case(case.name)
         assert stored["tags"] == list(case.tags), case.name
+        assert stored["invariant"] == case.invariant, case.name
         assert stored["inputs"] == json.loads(json.dumps(codec.encode_inputs(case.profile, case.inputs))), case.name
 
 

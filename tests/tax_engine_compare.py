@@ -15,7 +15,13 @@ wrapped error. Two listed differences of plan 20 apply to both sides:
 - RP2's error classes count as their ``Engine*`` counterparts (LD-4);
 - RP2's configuration messages lose their temporary INI path prefix (LD-3).
 
-There is no other rule; an unknown difference always fails.
+A third applies to production alone (LD-5): its request builder may refuse a
+book with an ``EngineContractError`` naming a shape a finalized projection
+cannot have, where ``tests/tax_oracle/projection_range.py`` (written from the
+design, not from the builder) finds the same shape in the inputs. The oracle's
+outcome is then not compared, and the session counts the event; it must stay
+zero for the books the suite builds. There is no other rule; an unknown
+difference always fails.
 
 The projection-level goldens (``tests/test_tax_ledger_goldens.py``) store
 outcomes as ``outcome_document``s: the oracle's with its failures before the
@@ -27,6 +33,8 @@ one after them.
 daemon, for ``tests/_child_hooks/sitecustomize.py``. ``shadow`` and
 ``census`` append one route record per production call to the session's
 records file, which the session reads back at its end (``session_report``).
+A record names the capability production classified the book under and the
+route it took (``kassiber/core/engines/ledger.py``).
 """
 
 from __future__ import annotations
@@ -41,14 +49,16 @@ from contextlib import ExitStack, contextmanager
 from decimal import Decimal
 from typing import Any, Callable, ContextManager, Iterable, Iterator, Mapping, Optional, Sequence
 
-from kassiber.core.engines import GenericRP2TaxEngine
+from kassiber.core.engines import KassiberTaxEngine
+from kassiber.core.engines import ledger as production_ledger
 from kassiber.core.engines.base import TaxEngineLedgerInputs, TaxEngineLedgerResult
+from kassiber.core.engines.errors import EngineContractError
 from kassiber.errors import AppError
 
 GENERATED = "<generated>"
 MAX_DIFFERENCES = 40
 # The engine class production journals run on.
-PRODUCTION_ENGINE = GenericRP2TaxEngine
+PRODUCTION_ENGINE = KassiberTaxEngine
 # The oracle's calculation backends: RP2, and the legacy-native leg (the
 # oracle adapter on ``kassiber/core/engines/native.py``) that localizes a
 # difference to the fold or the lot engine.
@@ -77,12 +87,19 @@ MODULE_ENV = "KASSIBER_TEST_TAX_SHADOW_MODULE"
 # that a child process compares (tests/test_tax_shadow_harness.py).
 INJECT_DIFFERENCE_ENV = "KASSIBER_TEST_TAX_SHADOW_INJECT_DIFFERENCE"
 
-# The book capabilities production routes by.
-CAPABILITIES = ("generic", "generic_carry", "at", "at_swap")
-# Production does not classify books yet; every call runs the phase-3 adapter.
-UNCLASSIFIED = "unclassified"
-# The capabilities production sends to the v2 engine: none yet.
-ROUTED_CAPABILITIES: frozenset[str] = frozenset()
+# The book capabilities production routes by, and the ones it sends to the
+# v2 engine; production owns both.
+CAPABILITIES = production_ledger.CAPABILITIES
+ROUTED_CAPABILITIES = production_ledger.ROUTED_CAPABILITIES
+# A call raw rows or a refused book end before production classifies it.
+UNCLASSIFIED = production_ledger.UNCLASSIFIED
+# The routes: the v2 engine, the phase-3 adapter, or none (a projection
+# without rows, raw rows, or a refused book end before routing).
+V2 = production_ledger.V2
+LEGACY = production_ledger.LEGACY
+NOT_ROUTED = production_ledger.NOT_ROUTED
+# The outcome of a call production's builder refused under LD-5.
+LD5 = "ld5"
 
 # LD-4: RP2's classes and the native backend's, which keep RP2's messages.
 _NATIVE_ERROR_NAMES = {
@@ -320,20 +337,31 @@ def localize(
 
 
 def production_route(engine: Any, inputs: TaxEngineLedgerInputs) -> tuple[str, str]:
-    """The capability a production call counts under, and its route.
+    """The capability a production call counts under, and its route, as production decides them."""
+    return production_ledger.classify(engine.profile, inputs)
 
-    Production has no capability routing yet, so every call is unclassified
-    and runs the legacy (phase-3) adapter.
+
+def listed_refusal(profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs, outcome: Outcome) -> Optional[str]:
+    """The LD-5 invariant production refused the book for, when the refusal is listed.
+
+    It is listed when production raised the builder's ``EngineContractError``
+    for an invariant that ``projection_range`` also finds in the inputs.
     """
-    return UNCLASSIFIED, "legacy"
+    _result, error = outcome
+    invariant = getattr(error, "invariant", None) if isinstance(error, EngineContractError) else None
+    if invariant is None:
+        return None
+    from tests.tax_oracle import projection_range
+
+    return invariant if invariant in projection_range.violations(profile, inputs) else None
 
 
 @dataclasses.dataclass(frozen=True)
 class RouteRecord:
     module: Optional[str]
     capability: str
-    route: str  # "v2" or "legacy"
-    outcome: str  # "result", "error", "difference", or "uncompared"
+    route: str  # "v2", "legacy", or "none"
+    outcome: str  # "result", "error", "difference", "uncompared", or "ld5"
 
 
 def record_route(capability: str, route: str, outcome: str) -> None:
@@ -377,28 +405,36 @@ def session_report(
 ) -> tuple[list[str], list[str]]:
     """The summary lines and failures of a session's route records.
 
-    Shadow counts the v2 and legacy calls of each capability. It fails on
-    any call that differed from the oracle, and on any call of a routed
-    capability that went legacy (which includes a routed capability that
-    never reached v2). Census fails when a test module reached the engine
-    but is not in ``overlay`` (test paths relative to the repository), or
-    when a call ran outside any test.
+    Shadow counts the v2 and legacy calls of each capability, and the calls
+    that ended before routing. It fails on any call that differed from the
+    oracle, on any call of a routed capability that went legacy, on a routed
+    capability that saw calls but none on v2, and on any LD-5 refusal (the
+    books the suite builds are finalized projections). Census fails when a
+    test module reached the engine but is not in ``overlay`` (test paths
+    relative to the repository), or when a call ran outside any test.
     """
     records = list(records)
     lines: list[str] = []
     failures: list[str] = []
     if mode == SHADOW:
-        compared = sum(1 for record in records if record.outcome != "uncompared")
+        compared = sum(1 for record in records if record.outcome not in ("uncompared", LD5))
         lines.append(f"production calls compared with the oracle: {compared}")
         routes = Counter((record.capability, record.route) for record in records)
         extra = sorted({record.capability for record in records} - set(CAPABILITIES))
         for capability in (*CAPABILITIES, *extra):
-            v2, legacy = routes[(capability, "v2")], routes[(capability, "legacy")]
-            lines.append(f"{capability}: {v2} v2, {legacy} legacy")
+            v2, legacy, unrouted = (routes[(capability, route)] for route in (V2, LEGACY, NOT_ROUTED))
+            lines.append(f"{capability}: {v2} v2, {legacy} legacy" + (f", {unrouted} not routed" if unrouted else ""))
             if capability in routed and legacy:
                 failures.append(
                     f"{legacy} of {v2 + legacy} calls of routed capability {capability!r} went to the legacy adapter"
                 )
+            elif capability in routed and unrouted and not v2:
+                failures.append(f"routed capability {capability!r} saw {unrouted} calls but none on v2")
+        refused = [record for record in records if record.outcome == LD5]
+        lines.append(f"LD-5 refusals (shapes a finalized projection cannot have): {len(refused)}")
+        if refused:
+            modules = sorted({record.module or "outside any test" for record in refused})
+            failures.append(f"calls production's builder refused under LD-5: {len(refused)}, in {', '.join(modules)}")
         uncompared = [record for record in records if record.outcome == "uncompared"]
         if uncompared:
             modules = sorted({record.module or "outside any test" for record in uncompared})
@@ -485,6 +521,11 @@ def shadow_build_ledger_state() -> Iterator[None]:
         with _SHADOW_LOCK:
             expected = run_oracle(self.profile, inputs)
             actual = _outcome(lambda: _PRODUCTION_BUILD_LEDGER_STATE(self, inputs))
+            if listed_refusal(self.profile, inputs, actual) is not None:
+                # LD-5: the oracle's outcome is not compared; the session
+                # counts the refusal.
+                record_route(capability, route, LD5)
+                raise actual[1]  # type: ignore[misc]
             injected = os.environ.get(INJECT_DIFFERENCE_ENV) == "1"
             if injected:
                 actual = _with_injected_difference(actual)
@@ -583,9 +624,12 @@ __all__ = [
     "CENSUS",
     "GENERATED",
     "INJECT_DIFFERENCE_ENV",
+    "LD5",
+    "LEGACY",
     "LEGACY_NATIVE",
     "LEGACY_NATIVE_BACKEND",
     "MODULE_ENV",
+    "NOT_ROUTED",
     "ORACLE",
     "ORACLE_BACKEND",
     "PRODUCTION_ENGINE",
@@ -596,6 +640,7 @@ __all__ = [
     "STORED_INI_PATH",
     "TAX_MODES",
     "UNCLASSIFIED",
+    "V2",
     "RouteRecord",
     "census_build_ledger_state",
     "comparable_ledger",
@@ -603,6 +648,7 @@ __all__ = [
     "error_signature",
     "install_tax_mode",
     "ledger_differences",
+    "listed_refusal",
     "listed_signature",
     "localize",
     "oracle_build_ledger_state",
