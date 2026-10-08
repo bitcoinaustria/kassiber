@@ -3,6 +3,7 @@
 // Mounted, not static: prompt recall, the IME guard and the picker shortcut
 // are keyboard behaviour that only exists once the composer is live.
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { Sparkles } from "lucide-react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -96,7 +97,7 @@ describe("Ai02 composer (mounted)", () => {
       <Harness
         alwaysShowSuggestions
         prompts={[
-          { icon: () => null, text: "Suggest", prompt: "second question" },
+          { icon: Sparkles, text: "Suggest", prompt: "second question" },
         ]}
       />,
     );
