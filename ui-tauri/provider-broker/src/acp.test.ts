@@ -1,5 +1,5 @@
 import { chmod, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -306,7 +306,8 @@ describe("broker temporary root", () => {
     await withWorkingDirectory("copilot", async (cwd) => {
       seen = cwd;
     });
-    expect(seen.startsWith(`${root}/kassiber-ai-copilot-`)).toBe(true);
+    expect(dirname(seen)).toBe(root);
+    expect(basename(seen).startsWith("kassiber-ai-copilot-")).toBe(true);
     process.env.KASSIBER_AI_BROKER_TMPDIR = "relative/path";
     expect(brokerTempRoot()).not.toBe("relative/path");
   });

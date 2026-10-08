@@ -227,6 +227,45 @@ class BrokerClientTest(unittest.TestCase):
             # log, for one) is removed even though the broker never cleaned up.
             self.assertFalse(Path(root_file.read_text(encoding="utf-8")).exists())
 
+    @unittest.skipIf(os.name == "nt", "process groups are POSIX-only")
+    def test_probe_timeout_stops_a_provider_that_ignores_sigterm(self):
+        # The broker exits on SIGTERM, but a provider CLI that ignores it and
+        # has its own stdio would otherwise survive the escalation.
+        with tempfile.TemporaryDirectory(prefix="kassiber-broker-stubborn-") as tmp:
+            pid_file = Path(tmp) / "child.pid"
+            script = Path(tmp) / "stubborn_broker.py"
+            stubborn = (
+                "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)"
+            )
+            script.write_text(
+                "import subprocess, sys, time\n"
+                f"child = subprocess.Popen([sys.executable, '-c', {stubborn!r}],"
+                " stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+                f"open({str(pid_file)!r}, 'w').write(str(child.pid))\n"
+                "time.sleep(60)\n",
+                encoding="utf-8",
+            )
+            with patch.dict(
+                "os.environ",
+                {
+                    "KASSIBER_AI_BROKER_NODE": sys.executable,
+                    "KASSIBER_AI_PROVIDER_BROKER": str(script),
+                },
+            ):
+                with self.assertRaises(AppError):
+                    BrokerAIClient._single_result({"command": "status"}, timeout=2.0)
+            child_pid = int(pid_file.read_text(encoding="utf-8"))
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                try:
+                    os.kill(child_pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.05)
+            else:
+                os.kill(child_pid, 9)
+                self.fail("a SIGTERM-resistant provider outlived the timed-out probe")
+
     def test_native_provider_locators_share_one_registry(self):
         self.assertEqual(cli_provider_for_locator(" CODEX-CLI://DEFAULT "), "codex")
         self.assertEqual(cli_provider_for_locator("claude-cli://default"), "claude")

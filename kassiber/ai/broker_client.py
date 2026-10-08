@@ -128,10 +128,24 @@ def _start_broker(node: str, script: Path) -> subprocess.Popen[str]:
         shutil.rmtree(root, ignore_errors=True)
         raise
     process._kassiber_temp_root = root  # type: ignore[attr-defined]
+    if os.name != "nt":
+        # start_new_session makes the broker its own group leader.
+        process._kassiber_pgid = process.pid  # type: ignore[attr-defined]
     return process
 
 
 def _discard_broker_root(process: subprocess.Popen[str]) -> None:
+    """Remove an exited broker's root, after anything it left running.
+
+    A provider CLI that ignored SIGTERM can outlive the broker in the same
+    process group, and could still be writing under the root.
+    """
+
+    if os.name != "nt" and getattr(process, "_kassiber_pgid", None):
+        try:
+            os.killpg(process._kassiber_pgid, signal.SIGKILL)  # type: ignore[attr-defined]
+        except (OSError, ProcessLookupError):
+            pass
     root = getattr(process, "_kassiber_temp_root", None)
     if root:
         shutil.rmtree(root, ignore_errors=True)
@@ -267,7 +281,11 @@ class BrokerAIClient:
 
         try:
             if os.name != "nt":
-                os.killpg(os.getpgid(process.pid), sig)
+                # The group id is recorded at start: once the broker itself
+                # has exited, getpgid() can no longer find it, but provider
+                # CLIs that ignored SIGTERM may still be in the group.
+                pgid = getattr(process, "_kassiber_pgid", None) or os.getpgid(process.pid)
+                os.killpg(pgid, sig)
             else:
                 process.terminate()
         except (OSError, ProcessLookupError):
