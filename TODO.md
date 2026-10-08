@@ -214,6 +214,15 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
 - [ ] Verify whether Claude Code's and Codex's agent sandboxes block the
   operator broker socket for the agent's own commands while the host-launched
   MCP server still reaches it, and document the recommended settings.
+- [ ] Record a live Gemini CLI chat transcript (signed-in account) for the ACP
+  adapter: confirm the `<tool> (kassiber MCP Server)` title form, that an
+  empty `tools.core` leaves no built-in tool, and that a resumed session loads.
+  Copilot was verified live against 1.0.93; Gemini only through its 0.63.0
+  source and an unauthenticated handshake.
+- [ ] Add more Agent Client Protocol agents to `provider-broker/src/acp.ts`
+  only once each can start with every built-in tool removed (Cursor and Grok
+  cannot in ACP mode today; Qwen Code may inherit Gemini's settings file).
+  Keep Copilot's user-configured MCP servers from starting, not just hidden.
 
 - [ ] Finish the desktop restore contract for CLI `backup import --install`:
   it already refuses a live desktop or broker owner, but it still skips
