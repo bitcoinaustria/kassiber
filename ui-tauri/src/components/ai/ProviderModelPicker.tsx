@@ -377,7 +377,6 @@ export function ProviderModelPicker({
   const setPickerOpen = (next: boolean) => {
     onOpenChange?.(next);
     if (controlledOpen === undefined) setUncontrolledOpen(next);
-    onOverlayOpenChange?.(next || thinkingOpen);
     if (!next) acknowledgeProvider.reset();
   };
 
@@ -420,6 +419,12 @@ export function ProviderModelPicker({
     await query.refetch();
   };
 
+  // Report open menus from state, not from the open handlers: the composer
+  // can open the picker itself (Mod+Shift+M) through the controlled prop.
+  const overlayOpen = open || thinkingOpen;
+  React.useEffect(() => {
+    onOverlayOpenChange?.(overlayOpen);
+  }, [onOverlayOpenChange, overlayOpen]);
   React.useEffect(
     () => () => onOverlayOpenChange?.(false),
     [onOverlayOpenChange],
@@ -504,10 +509,7 @@ export function ProviderModelPicker({
           <ComposerControlSeparator />
           <DropdownMenu
             open={thinkingOpen}
-            onOpenChange={(next) => {
-              setThinkingOpen(next);
-              onOverlayOpenChange?.(open || next);
-            }}
+            onOpenChange={setThinkingOpen}
           >
             <DropdownMenuTrigger asChild disabled={!enabled}>
               <ComposerControl
