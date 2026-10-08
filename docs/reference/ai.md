@@ -242,6 +242,15 @@ native CLI must not refresh global runtime status or start other providers.
 Stored configuration and cached models remain visible without discovery.
 First use still requires Kassiber's off-device acknowledgement.
 
+Typing in the picker ranks every provider's already-known models (configured
+defaults and earlier check results) at once; it never contacts a provider.
+Starred models collect under **Favorites** at the top of the rail. Favorites
+are stored with the UI preferences as bare provider/model identifiers, like
+the current selection. The picker is keyboard-driven: Mod+Shift+M opens it
+from the composer, the arrow keys and Enter pick a row, Mod+1…9 pick the nth
+row, and Mod+Shift+Up/Down switch provider. The collapsed trigger shows the
+provider name, model and privacy posture.
+
 The **All / Local** control filters the inventory by the posture Kassiber can
 prove. Model rows show both their source namespace and privacy posture.
 OpenCode model IDs identify their source provider (`omlx/...`, `ollama/...`,
