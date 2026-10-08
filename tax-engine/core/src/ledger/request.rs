@@ -209,6 +209,16 @@ pub enum Regime {
     Neu,
 }
 
+impl Regime {
+    /// The value as a marker writes it (`alt`, `neu`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Regime::Alt => "alt",
+            Regime::Neu => "neu",
+        }
+    }
+}
+
 /// Why a row is held out of the ledger. A conflict wins over pending.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

@@ -14,9 +14,10 @@
 //! Schema version 2 is `ledger`, which takes the finalized custody
 //! projection (`crate::ledger`): its `manifest` operation lists the
 //! engine's names and tables; its `prepare` operation returns a generic
-//! book's normalized stage (Austrian books and the generic rail carry are
-//! `Unsupported`); and its `ledger` operation answers `Unsupported` until
-//! the ledger layer is ported (plan 20 phase 4).
+//! book's normalized and prepared stages, and on a failure the stages it
+//! reached (Austrian books and the generic rail carry are `Unsupported`);
+//! and its `ledger` operation answers `Unsupported` until the ledger layer
+//! is ported (plan 20 phase 4).
 
 use serde::Serialize;
 
@@ -24,7 +25,9 @@ use crate::engine::{compute_asset, Country};
 use crate::entry::Entry;
 use crate::error::{EngineError, EngineResult, ErrorClass};
 use crate::ledger::request::{self as v2, LedgerRequest, ManifestRequest};
-use crate::ledger::response::{ErrorResponse as V2ErrorResponse, ManifestResponse, StagedError};
+use crate::ledger::response::{
+    ErrorResponse as V2ErrorResponse, ManifestResponse, PrepareFailure, StagedError,
+};
 use crate::ledger::run;
 use crate::manifest::manifest;
 use crate::model::{
@@ -163,8 +166,21 @@ fn ledger_inner(request: &str) -> Result<String, StagedError> {
             })
         }
         v2::Operation::Prepare => {
-            let request: LedgerRequest = v2::parse(request).map_err(StagedError::contract)?;
-            v2_json(&run::prepare(&request)?)
+            // Every failure of the operation lists the stages it reached,
+            // none when the request does not read.
+            let request: LedgerRequest = match v2::parse(request) {
+                Ok(request) => request,
+                Err(error) => {
+                    return v2_json(&PrepareFailure::new(
+                        StagedError::contract(error),
+                        Vec::new(),
+                    ))
+                }
+            };
+            match run::prepare(&request) {
+                Ok(response) => v2_json(&response),
+                Err(failure) => v2_json(&failure),
+            }
         }
         v2::Operation::Ledger => {
             let _: LedgerRequest = v2::parse(request).map_err(StagedError::contract)?;

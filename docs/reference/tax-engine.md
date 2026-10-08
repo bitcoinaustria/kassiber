@@ -192,9 +192,13 @@ engine's names and tables (`manifest.rs`), which
 `tests/test_tax_ledger_contract.py` compares with Python's. `ledger` answers
 `Unsupported` until the ledger layer is ported. `prepare` is a diagnostic for
 tests: it stops after the final prepare pass and returns each asset's
-intermediate stages, so far the normalized stage (`ledger/normalize.rs`: the
+intermediate stages: the normalized stage (`ledger/normalize.rs`: the
 events and moves the walk books, their order, normalize's quarantines, and
-the time from which the asset's lot state is tainted). It answers for a
+the time from which the asset's lot state is tainted) and the prepared
+stage (`ledger/order.rs`, `walk.rs`, `describe.rs`: the lot engine's
+entries as v1 entry documents with their composed notes and text, the
+gates' quarantines, and the transfer audit with the legs' description). A
+failed `prepare` also lists the stages its pass reached. It answers for a
 generic book without the Bitcoin rail carry and `Unsupported` for the others
 until those parts are ported. A failure is
 `{"ok": false, "error": {"stage", "asset"?, "inner": {"class", "message"}}}`;
@@ -232,7 +236,8 @@ the one production must give, and the schema-2 request production's builder
 makes of each ([projection goldens](testing.md#projection-goldens)).
 `tax-engine/core/tests/ledger_fixtures.rs` reads every stored request into
 the typed request and writes it back unchanged, and checks that `prepare`
-answers for the books it implements.
+answers for the books it implements and lists the stages a failed pass
+reached.
 
 ## Privacy
 

@@ -6,11 +6,17 @@
 //! holds the boundary documents, [`request`] and [`response`]; [`text`],
 //! which renders an entry's `str(transaction)` once the constructor has
 //! derived its values; `normalize`, the adapter's normalization of one
-//! asset's rows and moves (generic books); and `run`, the pipeline, which
-//! so far answers the `prepare` operation up to the normalized stage.
+//! asset's rows and moves (generic books); `order`, `walk`, and `describe`,
+//! which put the normalized events and moves in the walk's order, keep the
+//! adapter's balance mirror and gates, and build the lot engine's entries
+//! with the notes the adapter composed; and `run`, the pipeline, which so
+//! far answers the `prepare` operation up to the prepared stage.
 
+pub(crate) mod describe;
 pub(crate) mod normalize;
+pub(crate) mod order;
 pub mod request;
 pub mod response;
 pub(crate) mod run;
 pub mod text;
+pub(crate) mod walk;

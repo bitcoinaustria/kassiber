@@ -17,10 +17,11 @@ kind and never by reason, since one reason can come from two templates
 A failure names its stage; ``errors.ledger_error`` raises what the adapter
 raised there.
 
-This is the reader's first part: failures, quarantines, carried rows, the
-tax summary, holdings, and the pass-through fields. Journal entries and the
-transfer audit are rendered once the engine composes them; until then a
-response that has any is refused.
+This is the reader's first part: failures, quarantines, transfer-audit
+rows (``render_audit``), carried rows, the tax summary, holdings, and the
+pass-through fields. Journal entries are rendered once the engine composes
+them; until then ``read_ledger`` refuses a response that has entries or
+audit rows.
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ from ..privacy_hops import privacy_hop_evidence_from_row
 from ..tax_events import build_tax_quarantine
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 from .errors import EngineContractError, ledger_error
-from .ledger_request import SCHEMA_VERSION, decode_decimal
+from .ledger_request import SCHEMA_VERSION, decode_decimal, pair_group_id
 
 # The row fields ``_pricing_review_detail`` copied into its detail.
 PRICING_REVIEW_FIELDS = (
@@ -122,6 +123,53 @@ def render_quarantine(
     detail = {key: detail_value(value) for key, value in quarantine["detail"].items()}
     detail.update(enrich(row))
     return build_tax_quarantine(profile, row, str(quarantine["reason"]), detail)
+
+
+def render_audit(inputs: TaxEngineLedgerInputs, audit: Mapping[str, Any]) -> dict[str, Any]:
+    """One transfer-audit row as the adapter wrote it, with its key order.
+
+    The engine gives the move's quantities, price, Austrian regime, flows,
+    and pool; the ids, anchors, wallets, time, external id, pairing source,
+    and atomic group come from the move and its legs.
+    """
+    projection = inputs.finalized_tax_projection
+    pair = projection.intra_pairs[int(audit["pair"])]
+    out_row, in_row = pair["out"], pair["in"]
+    from_wallet = inputs.wallet_refs_by_id[out_row["wallet_id"]]
+    to_wallet = inputs.wallet_refs_by_id[in_row["wallet_id"]]
+    spot_price = audit["spot_price"]
+    row = {
+        "out_id": out_row["id"],
+        "in_id": in_row["id"],
+        "out_anchor_transaction_id": str(_get(out_row, "journal_transaction_id") or out_row["id"]),
+        "in_anchor_transaction_id": str(_get(in_row, "journal_transaction_id") or in_row["id"]),
+        "from_wallet_id": from_wallet["id"],
+        "from_wallet_label": from_wallet["label"],
+        "to_wallet_id": to_wallet["id"],
+        "to_wallet_label": to_wallet["label"],
+        "asset": str(_get(out_row, "asset")),
+        "occurred_at": out_row["occurred_at"],
+        "external_id": out_row["external_id"],
+        "crypto_sent": float(decode_decimal(audit["sent"])),
+        "crypto_received": float(decode_decimal(audit["received"])),
+        "crypto_fee": float(decode_decimal(audit["fee"])),
+        "crypto_sent_msat": int(audit["sent_msat"]),
+        "crypto_received_msat": int(audit["received_msat"]),
+        "crypto_fee_msat": int(audit["fee_msat"]),
+        "spot_price": float(decode_decimal(spot_price)) if spot_price is not None else 0.0,
+        "pairing_source": pair.get("source"),
+    }
+    if audit["at_regime"]:
+        row["at_regime"] = audit["at_regime"]
+    flows = audit["regime_flows"]
+    if flows:
+        row["regime_flows"] = {"out": dict(flows["out"]), "in": dict(flows["in"])}
+    if audit["at_pool"]:
+        row["at_pool"] = audit["at_pool"]
+    group_id = pair_group_id(pair)
+    if group_id:
+        row["transfer_group_id"] = group_id
+    return row
 
 
 def carried_row(row: Mapping[str, Any], value: str, rate: Optional[str]) -> dict[str, Any]:
@@ -345,6 +393,7 @@ __all__ = [
     "loads",
     "raise_for_error",
     "read_ledger",
+    "render_audit",
     "render_quarantine",
     "render_tax_summary",
     "rows_after_carry",

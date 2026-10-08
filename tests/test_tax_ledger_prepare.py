@@ -1,35 +1,51 @@
-"""The engine's normalized stage against the oracle's (plan 20 phase 4, design §3.10).
+"""The engine's prepare stages against the oracle's (plan 20 phase 4, design §3.10).
 
 The engine's ``prepare`` operation stops after the final prepare pass and
-returns, per asset, what the adapter's normalization produced: the events
-and transfers the walk books, their order, normalize's quarantines, and the
-time from which the asset's lot state is tainted. Here each of those is
-compared, field by field and exactly (types, decimal exponents, key and list
-order), with the frozen oracle's ``normalize_tax_asset_inputs`` as the
-adapter's ``_prepare_assets`` calls it, on the legacy-native backend:
+returns, per asset, the two stages the adapter's ``_prepare_assets`` builds:
+
+- the normalized stage: the events and transfers the walk books, their
+  order, normalize's quarantines, and the time from which the asset's lot
+  state is tainted;
+- the prepared stage: the lot engine's entries (v1 entry documents with
+  their notes and ``str(transaction)`` text, ``None`` for an asset without
+  an inbound entry), the gates' quarantines, and the transfer audit, with
+  the transfer legs' description.
+
+Here each of those is compared, field by field and exactly (types, decimal
+exponents, key and list order), with the frozen oracle's intermediates as
+its own ``_prepare_assets`` builds them on the legacy-native backend, whose
+entries are v1 documents already:
 
 - every generic golden case without the generic rail carry;
 - the first 200 seeded generic books of ``tests/tax_ledger_generator.py``
   without a carrying-value cross-asset pair;
 - shapes neither reaches: stored rates and values that are not finite (each
   read as CPython's ``Decimal`` reads it, so a NaN raises where it is
-  compared), a product that overflows, a subnormal price, missing wallet
-  labels, an empty timestamp, two blocked groups whose legs share
-  transactions, a group blocked for two reasons, a failing ungrouped
-  move.
+  compared and an entry's infinite value where its constructor compares
+  it), a product that overflows, a subnormal price, missing wallet labels,
+  an empty timestamp, two blocked groups whose legs share transactions, a
+  group blocked for two reasons, a failing ungrouped move, a group a spend
+  drains between its moves, one instant spelled two ways, a holder label
+  with spaces around it.
+
+A failed pass is compared by the stages it reached and its signature,
+raised through the production stage table (``errors.ledger_error``); the
+same pass on RP2, the oracle production must equal, fails exactly so. Two
+books where the legacy-native backend checks an infinite value before RP2's
+constructor would take RP2's failure and the legacy-native stages.
 
 The engine names rows by id; the fields the reader takes from the rows and
 pairs (times, wallet ids, external ids, pairing sources) are filled in from
-the projection here, and its quarantines are rendered by the production
-reader (``ledger_response.render_quarantine``), so the ``detail_kind``
-enrichment is compared too. A failure is compared by its signature, raised
-through the production stage table (``errors.ledger_error``).
+the projection here, and its quarantines and audit rows are rendered by the
+production reader (``ledger_response.render_quarantine``,
+``render_audit``), so the ``detail_kind`` enrichment and the audit's key
+order are compared too.
 
 A last check runs the whole oracle on the legacy-native backend and records
-each normalization it performs, so the mirror of the adapter's call used
-here cannot drift from the adapter's own. Austrian books and the generic
-rail carry are not ported yet; the engine answers ``Unsupported`` for them
-(``tax-engine/core/tests/ledger_fixtures.rs``).
+each normalization and walk it performs, so the mirror of the adapter's
+call used here cannot drift from the adapter's own. Austrian books and the
+generic rail carry are not ported yet; the engine answers ``Unsupported``
+for them (``tax-engine/core/tests/ledger_fixtures.rs``).
 """
 
 from __future__ import annotations
@@ -37,10 +53,11 @@ from __future__ import annotations
 import dataclasses
 import json
 from collections import defaultdict
+from contextlib import contextmanager
 from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Iterator, Mapping, Optional
 from unittest.mock import patch
 
 import kassiber_tax
@@ -52,7 +69,7 @@ from kassiber.core.engines.base import TaxEngineLedgerInputs
 from kassiber.core.engines.errors import ledger_error
 from tests import tax_engine_compare as compare
 from tests import tax_ledger_codec as codec
-from tests.tax_ledger_generator import WALLET_REFS, direct, move, profile, projected, random_inputs
+from tests.tax_ledger_generator import WALLET_REFS, chain_order, direct, move, profile, projected, random_inputs
 from tests.tax_oracle import adapter as oracle_adapter
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -134,26 +151,49 @@ def _final_pass(
     return rows_by_asset, pairs_by_asset, generic_rail.blocked_row_ids
 
 
+@contextmanager
+def _configuration(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> Iterator[Any]:
+    """The adapter's configuration, opened as its ``build_ledger_state``
+    opens it (``tests/tax_oracle/adapter.py:2333-2342``), on the backend in
+    force."""
+    projection = inputs.finalized_tax_projection
+    wallet_labels = [
+        str(item["label"]) for item in inputs.wallet_refs_by_id.values() if item.get("label") not in (None, "")
+    ]
+    assets = {str(oracle_adapter._row_get(row, "asset")) for row in projection.rows}
+    with oracle_adapter._rp2_configuration(book_profile, wallet_labels, assets) as configuration:
+        yield configuration
+
+
 def _oracle_prepare_assets(
     book_profile: Mapping[str, Any],
     inputs: TaxEngineLedgerInputs,
+    stages: list[list[Any]],
     final_pass: Optional[tuple[Any, Any, set[str]]] = None,
-) -> list[Any]:
+) -> None:
     """The adapter's ``_prepare_assets`` over the final pass, as the adapter
-    calls it, with the walk stubbed out: one ``NormalizedTaxAssetInputs``
-    per asset."""
+    calls it, appending each asset's ``[normalized, prepared]`` to ``stages``
+    as it goes; ``prepared`` stays ``None`` when the walk raises."""
     rows_by_asset, pairs_by_asset, excluded = final_pass or _final_pass(book_profile, inputs)
-    with patch.object(oracle_adapter, "_prepare_rp2_asset_input", lambda *args: None):
-        prepared = oracle_adapter._prepare_assets(
-            book_profile,
-            rows_by_asset,
-            inputs.wallet_refs_by_id,
-            pairs_by_asset,
-            None,
-            excluded_row_ids=excluded,
-            loan_leg_by_transaction_id={},
-        )
-    return [normalized for normalized, _ in prepared]
+    walk = oracle_adapter._prepare_rp2_asset_input
+
+    def recording(walk_profile: Mapping[str, Any], normalized: Any, configuration: Any) -> Any:
+        stages.append([normalized, None])
+        prepared = walk(walk_profile, normalized, configuration)
+        stages[-1][1] = prepared
+        return prepared
+
+    with _configuration(book_profile, inputs) as configuration:
+        with patch.object(oracle_adapter, "_prepare_rp2_asset_input", recording):
+            oracle_adapter._prepare_assets(
+                book_profile,
+                rows_by_asset,
+                inputs.wallet_refs_by_id,
+                pairs_by_asset,
+                configuration,
+                excluded_row_ids=excluded,
+                loan_leg_by_transaction_id={},
+            )
 
 
 def _fields(item: Any) -> Document:
@@ -190,20 +230,54 @@ def _oracle_asset(projection: Any, normalized: Any) -> Document:
     }
 
 
+def _oracle_prepared(normalized: Any, prepared: Any) -> Document:
+    """The prepared stage: the entries as v1 documents, the gates'
+    quarantines (the adapter's list starts with normalize's), and the
+    transfer audit with its legs' description."""
+    gate_quarantines = prepared.quarantines[len(normalized.quarantines) :]
+    assert prepared.quarantines[: len(normalized.quarantines)] == list(normalized.quarantines)
+    input_data = prepared.input_data
+    return {
+        "entries": None if input_data is None else [entry.request_entry for entry in input_data.entries()],
+        "quarantines": gate_quarantines,
+        "intra_audit": prepared.intra_audit,
+        "descriptions": [
+            oracle_adapter._compose_transfer_journal_description(audit) for audit in prepared.intra_audit
+        ],
+    }
+
+
 def _oracle_document(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> Document:
     projection = inputs.finalized_tax_projection
     # Outside the captured outcome, so a book that runs the carry fails here.
     final_pass = _final_pass(book_profile, inputs)
-    normalized, error = compare.run_on_oracle_backend(
-        compare.LEGACY_NATIVE_BACKEND, lambda: _oracle_prepare_assets(book_profile, inputs, final_pass)
+    stages: list[list[Any]] = []
+    _, error = compare.run_on_oracle_backend(
+        compare.LEGACY_NATIVE_BACKEND, lambda: _oracle_prepare_assets(book_profile, inputs, stages, final_pass)
     )
-    if error is not None:
-        return {"error": compare.error_signature(error)}
-    return {"assets": [_oracle_asset(projection, item) for item in normalized]}
+    return {
+        "assets": [
+            {
+                "normalized": _oracle_asset(projection, normalized),
+                "prepared": None if prepared is None else _oracle_prepared(normalized, prepared),
+            }
+            for normalized, prepared in stages
+        ],
+        "error": compare.error_signature(error),
+    }
+
+
+def _rp2_error(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> Optional[tuple[Any, ...]]:
+    """How the same pass fails on RP2, the oracle production must equal."""
+    final_pass = _final_pass(book_profile, inputs)
+    _, error = compare.run_on_oracle_backend(
+        compare.ORACLE_BACKEND, lambda: _oracle_prepare_assets(book_profile, inputs, [], final_pass)
+    )
+    return compare.error_signature(error)
 
 
 # ---------------------------------------------------------------------------
-# The engine's normalized stage
+# The engine's stages
 
 
 def _decimal(text: Optional[str]) -> Optional[Decimal]:
@@ -292,6 +366,20 @@ def _engine_asset(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs
     }
 
 
+def _engine_prepared(
+    book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs, prepared: Mapping[str, Any]
+) -> Document:
+    rows_by_id = {str(row["id"]): row for row in inputs.finalized_tax_projection.rows}
+    return {
+        "entries": prepared["entries"],
+        "quarantines": [
+            ledger_response.render_quarantine(book_profile, rows_by_id, item) for item in prepared["quarantines"]
+        ],
+        "intra_audit": [ledger_response.render_audit(inputs, item) for item in prepared["intra_audit"]],
+        "descriptions": [item["description"] for item in prepared["intra_audit"]],
+    }
+
+
 def _engine_response(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> dict[str, Any]:
     request = ledger_request.build_request(book_profile, inputs, operation="prepare")
     assert ledger.capabilities(request) == GENERIC
@@ -300,16 +388,30 @@ def _engine_response(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInp
 
 def _engine_document(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> Document:
     response = _engine_response(book_profile, inputs)
-    if response["ok"] is not True:
-        return {"error": compare.error_signature(ledger_error(response["error"]))}
-    assert response["engine_version"] == kassiber_tax.engine_version()
-    return {"assets": [_engine_asset(book_profile, inputs, asset) for asset in response["assets"]]}
+    if response["ok"] is True:
+        assert response["engine_version"] == kassiber_tax.engine_version()
+        error = None
+    else:
+        error = compare.error_signature(ledger_error(response["error"]))
+    return {
+        "assets": [
+            {
+                "normalized": _engine_asset(book_profile, inputs, asset),
+                "prepared": None
+                if asset["prepared"] is None
+                else _engine_prepared(book_profile, inputs, asset["prepared"]),
+            }
+            for asset in response["assets"]
+        ],
+        "error": error,
+    }
 
 
-def _assert_same_normalized_stage(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> Document:
+def _assert_same_stages(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> Document:
     expected = _oracle_document(book_profile, inputs)
     actual = _engine_document(book_profile, inputs)
-    assert compare.value_differences(expected, actual, "normalized") == []
+    assert compare.value_differences(expected, actual, "prepare") == []
+    assert _rp2_error(book_profile, inputs) == expected["error"]
     return expected
 
 
@@ -317,24 +419,42 @@ def _assert_same_normalized_stage(book_profile: Mapping[str, Any], inputs: TaxEn
 # The comparisons
 
 
-def test_the_corpus_reaches_the_normalize_branches() -> None:
+def _gate_quarantines(document: Document) -> list[tuple[str, str, dict[str, Any]]]:
+    return [
+        (item["transaction_id"], item["reason"], json.loads(item["detail_json"]))
+        for asset in document["assets"]
+        if asset["prepared"] is not None
+        for item in asset["prepared"]["quarantines"]
+    ]
+
+
+def test_the_corpus_reaches_the_normalize_and_walk_branches() -> None:
     """The golden and random books compared below reach booked moves,
-    tainted lot states, and every quarantine normalize raises on a generic
-    book but its group blocking: the golden bundle fails later, in the
-    walk's group gate, so the edge books block groups here."""
+    tainted lot states, every quarantine normalize raises on a generic book
+    but its group blocking (the golden bundle fails later, in the walk's
+    group gate, so the edge books block groups there), and every gate of a
+    generic book's walk. ``missing_cost_basis`` is not among them: on a
+    generic book the priced amount is the sum of the accounts, so the
+    account gate fails first (only an Austrian swap-out may overdraw;
+    ``ledger::walk`` tests it)."""
     reasons: dict[str, set[str]] = {"golden": set(), "random": set()}
-    transfers = contaminated = 0
+    gates: dict[str, set[str]] = {"golden": set(), "random": set()}
+    transfers = contaminated = audit_rows = without_inbound = 0
     books = [("golden", *_golden(name)) for name in _generic_case_names()]
     for seed in _random_seeds():
         book = random_inputs(seed, "generic")
         books.append(("random", book.profile, book.inputs))
     for source, book_profile, inputs in books:
         document = _oracle_document(book_profile, inputs)
-        assert "assets" in document, (source, document)
+        assert document["error"] is None, (source, document["error"])
         for asset in document["assets"]:
-            reasons[source] |= {item["reason"] for item in asset["quarantines"]}
-            transfers += len(asset["transfers"])
-            contaminated += asset["earliest_lot_contamination_at"] is not None
+            normalized, prepared = asset["normalized"], asset["prepared"]
+            reasons[source] |= {item["reason"] for item in normalized["quarantines"]}
+            transfers += len(normalized["transfers"])
+            contaminated += normalized["earliest_lot_contamination_at"] is not None
+            gates[source] |= {item["reason"] for item in prepared["quarantines"]}
+            audit_rows += len(prepared["intra_audit"])
+            without_inbound += prepared["entries"] is None
     assert len(_generic_case_names()) >= 35
     assert reasons["golden"] | reasons["random"] == {
         "missing_spot_price",
@@ -343,24 +463,65 @@ def test_the_corpus_reaches_the_normalize_branches() -> None:
         "conflicting_spend",
         "pending_onchain_confirmation",
     }, reasons
-    assert transfers > 0 and contaminated > 0
+    assert gates["golden"] | gates["random"] == {
+        "insufficient_lots",
+        "basis_provenance_incomplete",
+        "derived_transfer_group_blocked",
+        "unclassified_income_kind",
+        "non_sale_disposal_kind",
+    }, gates
+    assert transfers > 0 and contaminated > 0 and audit_rows > 0 and without_inbound > 0
+
+
+def test_the_ungrouped_gate_and_coarse_move_goldens_are_compared() -> None:
+    """The goldens design §8 names for this comparison are among the
+    compared books, with their shapes: an ungrouped move that fails the gate
+    is quarantined on both legs when they are two transactions and once
+    when they share one; a coarse fee-bearing move is reviewed on its priced
+    leg with its partner, and neither leg books."""
+    names = set(_generic_case_names())
+    ungrouped = {
+        "generic-ungrouped-pass",
+        "generic-ungrouped-fail-distinct-anchors",
+        "generic-ungrouped-fail-shared-anchor",
+    }
+    coarse = {"generic-coarse-move-out-priced", "generic-coarse-move-in-priced"}
+    assert ungrouped | coarse <= names
+
+    def gates(name: str) -> list[tuple[str, str, dict[str, Any]]]:
+        return [item for item in _gate_quarantines(_oracle_document(*_golden(name))) if item[1] == "insufficient_lots"]
+
+    assert gates("generic-ungrouped-pass") == []
+    distinct = gates("generic-ungrouped-fail-distinct-anchors")
+    assert len(distinct) == 2 and distinct[1][2]["paired_leg"] == "inbound"
+    assert distinct[1][2]["blocked_by_transaction_id"] == distinct[0][0] != distinct[1][0]
+    shared = gates("generic-ungrouped-fail-shared-anchor")
+    assert len(shared) == 1 and "paired_leg" not in shared[0][2]
+    for name in sorted(coarse):
+        document = _oracle_document(*_golden(name))
+        normalized = document["assets"][0]["normalized"]
+        details = [json.loads(item["detail_json"]) for item in normalized["quarantines"]]
+        assert [item["reason"] for item in normalized["quarantines"]][:2] == ["pricing_review_required"] * 2, name
+        assert "pricing_quality" in details[0] and details[1]["paired_leg"] is True, name
 
 
 @pytest.mark.parametrize("name", _generic_case_names())
-def test_the_golden_books_normalize_as_the_oracle(name: str) -> None:
-    _assert_same_normalized_stage(*_golden(name))
+def test_the_golden_books_prepare_as_the_oracle(name: str) -> None:
+    _assert_same_stages(*_golden(name))
 
 
-def test_the_random_books_normalize_as_the_oracle() -> None:
+def test_the_random_books_prepare_as_the_oracle() -> None:
     differing: list[str] = []
     failed = 0
     for seed in _random_seeds():
         book = random_inputs(seed, "generic")
         expected = _oracle_document(book.profile, book.inputs)
-        failed += "error" in expected
-        differences = compare.value_differences(expected, _engine_document(book.profile, book.inputs), "normalized")
+        failed += expected["error"] is not None
+        differences = compare.value_differences(expected, _engine_document(book.profile, book.inputs), "prepare")
         if differences:
             differing.append(f"seed {seed}: {differences[:3]}")
+        if _rp2_error(book.profile, book.inputs) != expected["error"]:
+            differing.append(f"seed {seed}: RP2 fails otherwise")
     assert differing == []
     assert failed == 0
 
@@ -410,6 +571,47 @@ EDGE_BOOKS = {
     ],
     "rate-zero-value-negative": lambda: [
         projected("buy", "A", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z", rate="0", fiat_value="-5")
+    ],
+    # The walk buckets by the text of a time, so the sale, spelled with an
+    # offset, sorts before the purchase at the same instant.
+    "same-instant-two-spellings": lambda: [
+        projected("buy", "A", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z"),
+        projected("sell", "A", "outbound", 10_000_000_000, "2024-01-01T00:00:00+00:00"),
+    ],
+    # A sale priced at Infinity: without a fee, `fee * spot_price` raises
+    # before the constructor; with one, the constructor's price check does.
+    "sell-rate-infinity": lambda: [
+        projected("buy", "A", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z"),
+        projected("sell", "A", "outbound", 10_000_000_000, "2024-02-01T00:00:00Z", rate="Infinity"),
+    ],
+    "sell-rate-infinity-fee": lambda: [
+        projected("buy", "A", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z"),
+        projected("sell", "A", "outbound", 10_000_000_000, "2024-02-01T00:00:00Z", fee=1_000, rate="Infinity"),
+    ],
+    # A finite price with an infinite value fails at the proceeds check.
+    "sell-value-infinity": lambda: [
+        projected("buy", "A", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z"),
+        projected("sell", "A", "outbound", 10_000_000_000, "2024-02-01T00:00:00Z", fiat_value="Infinity"),
+    ],
+    # The fee's value overflows while the sale's own value does not.
+    "fee-times-price-overflows": lambda: [
+        projected("buy", "A", "inbound", 400_000_000_000, "2024-01-01T00:00:00Z"),
+        projected("sell", "A", "outbound", 1, "2024-02-01T00:00:00Z", fee=200_000_000_000, rate="9E+999999"),
+    ],
+    # The constructor parses the time: text it cannot read, and a time
+    # without an offset.
+    "unparsed-timestamp": lambda: [
+        projected("buy", "A", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z"),
+        projected("late", "A", "inbound", 1_000, "not a time"),
+    ],
+    "naive-timestamp": lambda: [
+        projected("buy", "A", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z"),
+        projected("late", "A", "inbound", 1_000, "2024-03-01T00:00:00"),
+    ],
+    # An asset without an inbound entry hands the lot engine nothing.
+    "asset-without-inbound": lambda: [
+        projected("buy", "A", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z"),
+        projected("lbtc-sell", "L", "outbound", 1_000, "2024-02-01T00:00:00Z", asset="LBTC"),
     ],
 }
 
@@ -533,6 +735,58 @@ def _edge_moves() -> dict[str, tuple[list[dict[str, Any]], list[dict[str, Any]],
     # Text: an event without note, description, or kind is named by its row
     # id; an empty note gives way to the description; a move takes its out
     # leg's note.
+    # A move priced at Infinity fails at the constructor's price check.
+    out, inbound = legs("m", "A", "B", "2024-02-01T00:00:00Z", rate="Infinity")
+    books["move-rate-infinity"] = ([buy("buy", "A"), out, inbound], [move(out, inbound)], WALLET_REFS)
+
+    # A group that passes its check at its first move, then a sale drains
+    # the source: the first move stays booked, and the move that no longer
+    # fits and the group's later one are quarantined.
+    one_out, one_in = legs("g-one", "A", "B", "2024-02-01T00:00:00Z", amount=15_000_000_000)
+    spend = projected("spend", "A", "outbound", 30_000_000_000, "2024-02-02T00:00:00Z")
+    two_out = projected("g-two-out", "A", "outbound", 15_000_000_000, "2024-02-03T00:00:00Z", fee=1_000_000, anchor="g-two", side="out")
+    two_in = projected("g-two-in", "C", "inbound", 15_000_000_000, "2024-02-03T00:00:00Z", anchor="g-two-receipt", side="in")
+    three_out, three_in = legs("g-three", "B", "C", "2024-02-04T00:00:00Z", amount=1_000_000_000)
+    books["group-drained-between-moves"] = (
+        [buy("buy", "A"), one_out, one_in, spend, two_out, two_in, three_out, three_in],
+        [move(one_out, one_in, group_id="g"), move(two_out, two_in, group_id="g"), move(three_out, three_in, group_id="g")],
+        WALLET_REFS,
+    )
+
+    # A group whose check fails at its second move, which leaves from a
+    # slice of the first move's transaction: each transaction is named once.
+    one_out, one_in = legs("p-one", "A", "B", "2024-02-01T00:00:00Z", amount=15_000_000_000)
+    two_out = projected("p-two-out", "A", "outbound", 45_000_000_000, "2024-02-02T00:00:00Z", fee=1_000_000, anchor="p-one", side="out2")
+    two_in = projected("p-two-in", "C", "inbound", 45_000_000_000, "2024-02-02T00:00:00Z", anchor="p-two", side="in2")
+    books["group-check-fails-at-a-later-move"] = (
+        [buy("buy", "A"), one_out, one_in, two_out, two_in],
+        [move(one_out, one_in, group_id="g"), move(two_out, two_in, group_id="g")],
+        WALLET_REFS,
+    )
+
+    # Two same-time moves whose wallets hint each other's order (a cycle):
+    # the chain evidence says the second spends the first, which also funds
+    # the second's source.
+    late_out, late_in = legs("late", "B", "A", "2024-02-01T00:00:00Z", amount=5_000_000_000, chain_order=chain_order("late", "early"))
+    early_out, early_in = legs("early", "A", "B", "2024-02-01T00:00:00Z", chain_order=chain_order("early"))
+    books["chain-evidence-against-wallet-hints"] = (
+        [buy("buy", "A"), late_out, late_in, early_out, early_in],
+        [move(late_out, late_in), move(early_out, early_in)],
+        WALLET_REFS,
+    )
+
+    # Three same-time moves listed against a wallet hint: the second funds
+    # the first's source, so it books first; the first, ready only then,
+    # still goes before the third, which has been ready from the start.
+    first_out, first_in = legs("first", "B", "C", "2024-02-01T00:00:00Z", amount=5_000_000_000)
+    second_out, second_in = legs("second", "A", "B", "2024-02-01T00:00:00Z")
+    third_out, third_in = legs("third", "A", "C", "2024-02-01T00:00:00Z")
+    books["a-move-made-ready-precedes-one-waiting"] = (
+        [buy("buy", "A"), first_out, first_in, second_out, second_in, third_out, third_in],
+        [move(first_out, first_in), move(second_out, second_in), move(third_out, third_in)],
+        WALLET_REFS,
+    )
+
     out, inbound = legs("t", "A", "B", "2024-02-01T00:00:00Z", note="cold storage top-up")
     books["text-fallbacks"] = (
         [
@@ -548,29 +802,77 @@ def _edge_moves() -> dict[str, tuple[list[dict[str, Any]], list[dict[str, Any]],
 
 
 EDGE_MOVES = sorted(_edge_moves())
+INVALID = ("InvalidOperation", "[<class 'decimal.InvalidOperation'>]")
 
 
 @pytest.mark.parametrize("name", sorted(EDGE_BOOKS))
-def test_edge_rows_normalize_as_the_oracle(name: str) -> None:
-    _assert_same_normalized_stage(profile("generic", "FIFO"), direct(EDGE_BOOKS[name]()))
+def test_edge_rows_prepare_as_the_oracle(name: str) -> None:
+    _assert_same_stages(profile("generic", "FIFO"), direct(EDGE_BOOKS[name]()))
 
 
 @pytest.mark.parametrize("name", EDGE_MOVES)
-def test_edge_moves_normalize_as_the_oracle(name: str) -> None:
+def test_edge_moves_prepare_as_the_oracle(name: str) -> None:
     rows, pairs, wallets = _edge_moves()[name]
-    _assert_same_normalized_stage(profile("generic", "FIFO", require_coarse_review=True), direct(rows, pairs, wallet_refs=wallets))
+    _assert_same_stages(profile("generic", "FIFO", require_coarse_review=True), direct(rows, pairs, wallet_refs=wallets))
 
 
-def _quarantines(asset: Document, reason: str) -> list[tuple[str, dict[str, Any]]]:
-    return [(item["transaction_id"], json.loads(item["detail_json"])) for item in asset["quarantines"] if item["reason"] == reason]
+def test_a_holder_label_with_spaces_fails_as_the_oracle() -> None:
+    """The configuration's holder is the stripped profile label, while
+    every entry carries the label as it is, so the first entry's holder is
+    not known (a listed strip artifact, design §6)."""
+    book_profile = profile("generic", "FIFO", label=" Default ")
+    inputs = direct([projected("buy", "A", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z")])
+    document = _assert_same_stages(book_profile, inputs)
+    assert document["error"] == ("EngineValueError", "Parameter 'holder' value is not known:  Default ")
+    assert [asset["prepared"] for asset in document["assets"]] == [None]
+
+
+def test_rp2s_constructor_order_decides_where_an_infinite_value_fails() -> None:
+    """Two books whose entry has an infinite value and fails an earlier
+    constructor check too. RP2's constructor reaches the other check first:
+    a wallet without a label is not a string, a time it cannot read does
+    not parse. The legacy-native backend checks every value before it
+    constructs, so it fails on the value; the engine fails as RP2 does, and
+    its stages are the legacy-native ones."""
+    generic = profile("generic", "FIFO")
+    unlabelled = {**WALLET_REFS, "U": {**WALLET_REFS["A"], "id": "U", "label": None}}
+    books = {
+        "value-infinity-in-an-unlabelled-wallet": (
+            direct(
+                [_in_wallet(projected("buy", "A", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z", fiat_value="Infinity"), "U")],
+                wallet_refs=unlabelled,
+            ),
+            ("EngineTypeError", "Parameter 'exchange' has non-string value None"),
+        ),
+        "rate-infinity-at-an-unparsed-time": (
+            direct([projected("buy", "A", "inbound", 100_000_000_000, "not a time", rate="Infinity")]),
+            ("EngineValueError", "Error parsing parameter 'timestamp': Unknown string format: not a time"),
+        ),
+    }
+    for name, (inputs, expected) in books.items():
+        legacy = _oracle_document(generic, inputs)
+        engine = _engine_document(generic, inputs)
+        assert _rp2_error(generic, inputs) == engine["error"] == expected, name
+        assert legacy["error"] == INVALID, name
+        assert compare.value_differences({**legacy, "error": expected}, engine, "prepare") == [], name
+
+
+def _quarantines(stage: Document, reason: str) -> list[tuple[str, dict[str, Any]]]:
+    return [(item["transaction_id"], json.loads(item["detail_json"])) for item in stage["quarantines"] if item["reason"] == reason]
 
 
 def test_the_edge_books_reach_their_shapes() -> None:
     """Each edge book shows on the oracle what its name says."""
     generic = profile("generic", "FIFO")
     rows = {name: _oracle_document(generic, direct(build())) for name, build in EDGE_BOOKS.items()}
-    invalid = ("InvalidOperation", "[<class 'decimal.InvalidOperation'>]")
-    assert {name for name, document in rows.items() if document.get("error") == invalid} == {
+
+    def normalize_raises(document: Document) -> bool:
+        return document["error"] is not None and document["assets"] == []
+
+    def walk_raises(document: Document) -> bool:
+        return document["error"] is not None and [asset["prepared"] for asset in document["assets"]] == [None]
+
+    assert {name for name, document in rows.items() if document["error"] == INVALID and normalize_raises(document)} == {
         "rate-nan",
         "rate-signaling-nan",
         "value-nan",
@@ -578,38 +880,81 @@ def test_the_edge_books_reach_their_shapes() -> None:
         "rate-infinity-value-nan",
         "fee-only-rate-infinity",
     }
-    assert rows["product-overflows"] == {"error": ("Overflow", "[<class 'decimal.Overflow'>]")}
+    assert {name for name, document in rows.items() if document["error"] == INVALID and walk_raises(document)} == {
+        "rate-infinity",
+        "rate-infinity-value",
+        "value-infinity",
+        "sell-rate-infinity",
+        "sell-rate-infinity-fee",
+        "sell-value-infinity",
+    }
+    overflow = ("Overflow", "[<class 'decimal.Overflow'>]")
+    assert rows["product-overflows"]["error"] == overflow and normalize_raises(rows["product-overflows"])
+    assert rows["fee-times-price-overflows"]["error"] == overflow and walk_raises(rows["fee-times-price-overflows"])
+    walk_errors = {
+        "price-subnormal": "BTC InTransaction (2024-01-01 00:00:00+00:00, id 1): parameter 'spot_price' cannot be 0",
+        "unparsed-timestamp": "Error parsing parameter 'timestamp': Unknown string format: not a time",
+        "naive-timestamp": "Parameter 'timestamp' value has no timezone info: 2024-03-01T00:00:00",
+    }
+    for name, message in walk_errors.items():
+        assert rows[name]["error"] == ("EngineValueError", message) and walk_raises(rows[name]), name
 
     def event(name: str, index: int = 0) -> Document:
-        return rows[name]["assets"][0]["events"][index]
+        return rows[name]["assets"][0]["normalized"]["events"][index]
 
     infinity = Decimal("Infinity")
     assert (event("rate-infinity")["spot_price"], event("rate-infinity")["fiat_value"]) == (infinity, infinity)
     assert (event("rate-infinity-value")["spot_price"], event("rate-infinity-value")["fiat_value"]) == (infinity, Decimal("5"))
     assert (event("value-infinity")["spot_price"], event("value-infinity")["fiat_value"]) == (infinity, infinity)
+    assert (event("sell-rate-infinity", 1)["spot_price"], event("sell-rate-infinity", 1)["fee"]) == (infinity, Decimal("0"))
+    assert event("sell-rate-infinity-fee", 1)["spot_price"] == infinity
+    assert (event("sell-value-infinity", 1)["spot_price"], event("sell-value-infinity", 1)["fiat_value"]) == (Decimal("40000"), infinity)
     assert event("rate-negative-infinity-value")["spot_price"] == Decimal("1000")
     assert (event("fee-only-value", 1)["spot_price"], event("fee-only-value", 1)["fiat_value"]) == (Decimal("3E+5"), Decimal("3"))
     assert event("price-subnormal")["spot_price"].as_tuple().exponent == -1000030
-    assert [item["reason"] for item in rows["rate-zero-value-negative"]["assets"][0]["quarantines"]] == ["missing_spot_price"]
+    assert [item["reason"] for item in rows["rate-zero-value-negative"]["assets"][0]["normalized"]["quarantines"]] == ["missing_spot_price"]
+
+    fee_only = rows["fee-only-value"]["assets"][0]["prepared"]["entries"]
+    assert [(entry["kind"], entry["transaction_type"], entry["fiat_out_no_fee"] if entry["kind"] == "out" else None) for entry in fee_only] == [
+        ("in", "BUY", None),
+        ("out", "FEE", None),
+    ]
+    spellings = rows["same-instant-two-spellings"]["assets"][0]["prepared"]
+    assert _quarantines(spellings, "insufficient_lots") == [
+        ("sell", {"asset": "BTC", "available": 0.0, "required": 0.1, "wallet": "Cold"})
+    ]
+    without_inbound = rows["asset-without-inbound"]["assets"]
+    assert [asset["normalized"]["asset"] for asset in without_inbound] == ["BTC", "LBTC"]
+    assert without_inbound[1]["prepared"]["entries"] is None
+    assert [tx for tx, _ in _quarantines(without_inbound[1]["prepared"], "insufficient_lots")] == ["lbtc-sell"]
 
     review = profile("generic", "FIFO", require_coarse_review=True)
     moves = {name: _oracle_document(review, direct(book_rows, pairs, wallet_refs=wallets)) for name, (book_rows, pairs, wallets) in _edge_moves().items()}
-    assert moves["move-rate-nan"] == {"error": invalid}
-    assert moves["move-priced-by-in-leg"]["assets"][0]["transfers"][0]["spot_price"] == Decimal("41000")
-    assert moves["move-rate-positive-value-nan"]["assets"][0]["transfers"][0]["spot_price"] == Decimal("40000")
+    assert moves["move-rate-nan"]["error"] == INVALID and normalize_raises(moves["move-rate-nan"])
+    assert moves["move-rate-infinity"]["error"] == INVALID and walk_raises(moves["move-rate-infinity"])
+    assert moves["move-rate-infinity"]["assets"][0]["normalized"]["transfers"][0]["spot_price"] == infinity
 
-    ungrouped = moves["ungrouped-unpriced-move"]["assets"][0]
+    def normalized(name: str) -> Document:
+        return moves[name]["assets"][0]["normalized"]
+
+    def prepared(name: str) -> Document:
+        return moves[name]["assets"][0]["prepared"]
+
+    assert normalized("move-priced-by-in-leg")["transfers"][0]["spot_price"] == Decimal("41000")
+    assert normalized("move-rate-positive-value-nan")["transfers"][0]["spot_price"] == Decimal("40000")
+
+    ungrouped = normalized("ungrouped-unpriced-move")
     assert [(tx, "transfer_group_id" in detail) for tx, detail in _quarantines(ungrouped, "missing_spot_price")] == [("m", False), ("m", False)]
     assert _quarantines(ungrouped, "derived_transfer_group_blocked") == []
 
-    blocked = moves["two-blocked-groups-sharing-transactions"]["assets"][0]
+    blocked = normalized("two-blocked-groups-sharing-transactions")
     assert blocked["transfers"] == []
     assert [(tx, detail["transfer_group_id"], detail["blocked_by_reason"]) for tx, detail in _quarantines(blocked, "derived_transfer_group_blocked")] == [
         ("g1-pass", "g1", "missing_spot_price"),
         ("g2-new", "g2", "missing_spot_price"),
     ]
 
-    first_reason = moves["blocked-group-keeps-its-first-reason"]["assets"][0]
+    first_reason = normalized("blocked-group-keeps-its-first-reason")
     assert first_reason["transfers"] == []
     assert [(item["transaction_id"], item["reason"]) for item in first_reason["quarantines"]] == [
         ("coarse", "pricing_review_required"),
@@ -622,7 +967,43 @@ def test_the_edge_books_reach_their_shapes() -> None:
         ("sibling", "pricing_review_required"),
     ]
 
-    unlabelled = moves["unlabelled-wallet"]["assets"][0]
+    # The walk's group gate, checked again at a later move after a spend.
+    drained = prepared("group-drained-between-moves")
+    assert [(item["transaction_id"], item["reason"], json.loads(item["detail_json"]).get("paired_leg")) for item in drained["quarantines"]] == [
+        ("g-two", "insufficient_lots", None),
+        ("g-two-receipt", "derived_transfer_group_blocked", True),
+        ("g-three", "derived_transfer_group_blocked", False),
+    ]
+    assert json.loads(drained["quarantines"][0]["detail_json"])["transfer_group_id"] == "g"
+    assert [audit["out_anchor_transaction_id"] for audit in drained["intra_audit"]] == ["g-one"]
+    assert [entry["kind"] for entry in drained["entries"]] == ["in", "out", "intra"]
+    # The group's check at its first move, failing at the second; each
+    # transaction is named once.
+    later = prepared("group-check-fails-at-a-later-move")
+    assert [(item["transaction_id"], item["reason"]) for item in later["quarantines"]] == [
+        ("p-one", "insufficient_lots"),
+        ("p-two", "derived_transfer_group_blocked"),
+    ]
+    assert later["intra_audit"] == []
+
+    # Chain evidence orders the moves against their wallets' hints, so the
+    # move listed second books first and funds the other.
+    chained = prepared("chain-evidence-against-wallet-hints")
+    assert chained["quarantines"] == []
+    assert [audit["out_anchor_transaction_id"] for audit in chained["intra_audit"]] == ["early", "late"]
+    # A move that becomes ready joins the waiting ones in normalize's order.
+    ready = moves["a-move-made-ready-precedes-one-waiting"]["assets"][0]
+    assert [(transfer["from_wallet_label"], transfer["to_wallet_label"]) for transfer in ready["normalized"]["transfers"]] == [
+        ("Hot", "Exchange"),
+        ("Cold", "Hot"),
+        ("Cold", "Exchange"),
+    ]
+    assert ready["prepared"]["quarantines"] == []
+    assert [audit["out_anchor_transaction_id"] for audit in ready["prepared"]["intra_audit"]] == ["second", "first", "third"]
+
+    assert moves["unlabelled-wallet"]["error"] == ("EngineTypeError", "Parameter 'exchange' has non-string value None")
+    assert walk_raises(moves["unlabelled-wallet"])
+    unlabelled = normalized("unlabelled-wallet")
     assert [transfer["description"] for transfer in unlabelled["transfers"]] == ["Transfer None -> Hot"]
     assert [(tx, detail["from_wallet"]) for tx, detail in _quarantines(unlabelled, "missing_spot_price")[:2]] == [("v", None), ("v", None)]
     assert [(tx, detail["wallet"]) for tx, detail in _quarantines(unlabelled, "derived_transfer_group_blocked")] == [("w", "U")]
@@ -631,25 +1012,32 @@ def test_the_edge_books_reach_their_shapes() -> None:
         {"asset": "BTC", "direction": "inbound", "required_for": "acquisition", "wallet": None},
     )
 
-    untimed = moves["empty-timestamp"]["assets"][0]
+    untimed = normalized("empty-timestamp")
     assert [tx for tx, _ in _quarantines(untimed, "missing_spot_price")] == ["untimed", "unpriced"]
     assert untimed["earliest_lot_contamination_at"] == "2024-02-01T00:00:00Z"
 
-    text = moves["text-fallbacks"]["assets"][0]
+    text = normalized("text-fallbacks")
     assert [item["description"] for item in text["events"]] == [text["events"][0]["transaction_id"], "paid rent"]
     assert [transfer["description"] for transfer in text["transfers"]] == ["cold storage top-up"]
+    # The descriptions are the entries' notes; a move's legs are described
+    # by their wallets.
+    entries = prepared("text-fallbacks")["entries"]
+    assert [entry["notes"] for entry in entries] == [text["events"][0]["transaction_id"], "paid rent", "cold storage top-up"]
+    assert prepared("text-fallbacks")["descriptions"] == ["Transfer Cold -> Hot"]
 
 
 def test_the_mirror_is_the_adapters_own_call() -> None:
-    """The whole oracle, on the legacy-native backend, normalizes each asset
-    exactly as ``_oracle_prepare_assets`` does, as far as it gets."""
-    recorded: list[Any] = []
-    normalize = oracle_adapter.normalize_tax_asset_inputs
+    """The whole oracle, on the legacy-native backend, normalizes and walks
+    each asset exactly as ``_oracle_prepare_assets`` does, as far as it
+    gets."""
+    recorded: list[list[Any]] = []
+    walk = oracle_adapter._prepare_rp2_asset_input
 
-    def recording(*args: Any, **kwargs: Any) -> Any:
-        result = normalize(*args, **kwargs)
-        recorded.append(result)
-        return result
+    def recording(walk_profile: Mapping[str, Any], normalized: Any, configuration: Any) -> Any:
+        recorded.append([normalized, None])
+        prepared = walk(walk_profile, normalized, configuration)
+        recorded[-1][1] = prepared
+        return prepared
 
     books = [_golden(name) for name in _generic_case_names()]
     for seed in _random_seeds():
@@ -658,18 +1046,28 @@ def test_the_mirror_is_the_adapters_own_call() -> None:
     complete = 0
     for book_profile, inputs in books:
         recorded.clear()
-        with patch.object(oracle_adapter, "normalize_tax_asset_inputs", recording):
+        with patch.object(oracle_adapter, "_prepare_rp2_asset_input", recording):
             _, error = compare.run_oracle(book_profile, inputs, backend=compare.LEGACY_NATIVE_BACKEND)
-        mirror = _oracle_prepare_assets(book_profile, inputs)
+        mirror: list[list[Any]] = []
+        compare.run_on_oracle_backend(
+            compare.LEGACY_NATIVE_BACKEND, lambda: _oracle_prepare_assets(book_profile, inputs, mirror)
+        )
         projection = inputs.finalized_tax_projection
-        # One prepare pass: one normalization per asset, until the walk or
-        # anything later fails.
+
+        def stages(items: list[list[Any]]) -> list[Document]:
+            return [
+                {
+                    "normalized": _oracle_asset(projection, normalized),
+                    "prepared": None if prepared is None else _oracle_prepared(normalized, prepared),
+                }
+                for normalized, prepared in items
+            ]
+
+        # One prepare pass: each asset normalized and walked once, until
+        # anything fails.
         assert len(recorded) <= len(mirror)
         if error is None:
             assert len(recorded) == len(mirror)
             complete += 1
-        assert compare.value_differences(
-            [_oracle_asset(projection, item) for item in mirror[: len(recorded)]],
-            [_oracle_asset(projection, item) for item in recorded],
-        ) == []
+        assert compare.value_differences(stages(mirror[: len(recorded)]), stages(recorded)) == []
     assert complete >= 200

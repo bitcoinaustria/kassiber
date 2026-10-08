@@ -138,17 +138,24 @@ fail.
 
 `tests/test_tax_ledger_prepare.py` compares the engine's `prepare` stages
 with the frozen oracle's own intermediates, field by field, so a difference
-shows the stage it starts in before whole-ledger goldens can. So far that is
-the normalized stage: per asset, the events, moves, their order, normalize's
-quarantines (rendered by the production reader), and the contamination time,
-against the oracle's `normalize_tax_asset_inputs` as its `_prepare_assets`
-calls it on the legacy-native backend. It covers the generic golden books
-without the Bitcoin rail carry, the first 200 seeded generic books without a
-carrying-value cross-asset pair, and edge books neither reaches (non-finite
-stored rates and values, overflow, subnormal prices, missing labels, an
-empty timestamp, blocked groups that share transactions). A last check runs
-the whole oracle and records its own normalize calls, so the test's mirror
-of that call cannot drift.
+shows the stage it starts in before whole-ledger goldens can. Per asset that
+is the normalized stage (the events, moves, their order, normalize's
+quarantines, and the contamination time) and the prepared stage (the lot
+engine's entries as v1 entry documents with their notes and text, the walk's
+gate quarantines, and the transfer audit with the legs' description), against
+what the oracle's `_prepare_assets` builds on the legacy-native backend.
+Quarantines and audit rows go through the production reader. A failed pass is
+compared by the stages it reached and its error, and the same pass on RP2
+must fail exactly so. It covers the generic golden books without the Bitcoin
+rail carry, the first 200 seeded generic books without a carrying-value
+cross-asset pair, and edge books neither reaches (non-finite stored rates and
+values, overflow, subnormal prices, missing labels, an empty or unparsed
+timestamp, blocked groups that share transactions, a group drained between
+its moves, one instant spelled two ways, a holder label with spaces). Where
+the legacy-native backend checks an infinite value before RP2's constructor
+would, the engine follows RP2. A last check runs the whole oracle and records
+its own normalize and walk calls, so the test's mirror of that call cannot
+drift.
 
 ### Comparing a real book
 

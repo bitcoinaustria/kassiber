@@ -7,8 +7,9 @@
 //! same document, so the builder and the engine read one schema. The ledger
 //! operation answers `Unsupported` until the ledger layer is ported; the
 //! `prepare` operation answers for a generic book without the Bitcoin rail
-//! carry (its normalized stage, which `tests/test_tax_ledger_prepare.py`
-//! compares with the oracle's) and is `Unsupported` for the others; the
+//! carry (its normalized and prepared stages, which
+//! `tests/test_tax_ledger_prepare.py` compares with the oracle's), lists the
+//! stages it reached when it fails, and is `Unsupported` for the others; the
 //! `manifest` operation answers, and other schema versions, unknown fields,
 //! and missing fields (nullable ones included) are refused.
 
@@ -130,7 +131,7 @@ fn prepares(request: &Value) -> bool {
 }
 
 #[test]
-fn prepare_normalizes_generic_books_without_the_rail_carry() {
+fn prepare_normalizes_and_walks_generic_books_without_the_rail_carry() {
     let mut prepared = 0;
     for (name, stored) in stored_requests() {
         let mut request = stored.clone();
@@ -224,9 +225,150 @@ fn prepare_normalizes_generic_books_without_the_rail_carry() {
                     "{name}: row {id} vanished"
                 );
             }
+            check_prepared_stage(&name, &request, &anchor, &events, &outs, &asset["prepared"]);
         }
     }
     assert!(prepared >= 35, "only {prepared} generic books");
+}
+
+/// The prepared stage of one asset: the walk books each normalized event
+/// and move or quarantines it, numbers its entries in walk order, lists
+/// the inbound entries first, and audits each booked move.
+fn check_prepared_stage(
+    name: &str,
+    request: &Value,
+    anchor: &HashMap<&str, &str>,
+    events: &[String],
+    outs: &[String],
+    prepared: &Value,
+) {
+    let gates = prepared["quarantines"]
+        .as_array()
+        .expect("gate quarantines");
+    for gate in gates {
+        assert_eq!(gate["detail_kind"], "plain", "{name}: {gate}");
+    }
+    let audit = prepared["intra_audit"].as_array().expect("audit");
+    let Some(entries) = prepared["entries"].as_array() else {
+        // Without an inbound entry the lot engine gets nothing.
+        assert!(prepared["entries"].is_null(), "{name}");
+        return;
+    };
+    let kinds: Vec<&str> = entries
+        .iter()
+        .map(|entry| entry["kind"].as_str().expect("kind"))
+        .collect();
+    let mut sorted = kinds.clone();
+    sorted.sort_by_key(|kind| ["in", "out", "intra"].iter().position(|k| k == kind));
+    assert_eq!(kinds, sorted, "{name}: inbound, outbound, then moves");
+    assert_eq!(kinds.first(), Some(&"in"), "{name}");
+    let mut numbers: Vec<i64> = entries
+        .iter()
+        .map(|entry| entry["row"].as_i64().expect("row"))
+        .collect();
+    numbers.sort_unstable();
+    assert_eq!(
+        numbers,
+        (1..=entries.len() as i64).collect::<Vec<_>>(),
+        "{name}: rows numbered in walk order"
+    );
+    let booked: HashSet<&str> = entries
+        .iter()
+        .map(|entry| entry["unique_id"].as_str().expect("unique id"))
+        .collect();
+    let gated: HashSet<&str> = gates
+        .iter()
+        .map(|gate| anchor[gate["row"].as_str().expect("row")])
+        .collect();
+    for item in events.iter().chain(outs) {
+        assert!(
+            booked.contains(item.as_str()) || gated.contains(anchor[item.as_str()]),
+            "{name}: {item} neither booked nor quarantined by a gate"
+        );
+    }
+    // One audit row per move entry, in order, naming the move's pair.
+    let moved: Vec<&str> = entries
+        .iter()
+        .filter(|entry| entry["kind"] == "intra")
+        .map(|entry| entry["unique_id"].as_str().unwrap())
+        .collect();
+    let audited: Vec<&str> = audit
+        .iter()
+        .map(|row| {
+            let pair = row["pair"].as_u64().expect("pair") as usize;
+            request["intra_pairs"][pair]["out"]
+                .as_str()
+                .expect("out leg")
+        })
+        .collect();
+    assert_eq!(moved, audited, "{name}");
+    for entry in entries {
+        let text = entry["text"].as_str().expect("text");
+        let class = match entry["kind"].as_str() {
+            Some("in") => "InTransaction:",
+            Some("out") => "OutTransaction:",
+            _ => "IntraTransaction:",
+        };
+        assert!(text.starts_with(class), "{name}: {text}");
+    }
+}
+
+#[test]
+fn a_failed_prepare_lists_the_stages_it_reached() {
+    // A generic book's standalone purchase, priced at Infinity: its asset
+    // normalizes, and its walk fails where the constructor compares the
+    // price.
+    let standalone = |request: &Value| -> Option<usize> {
+        let legs: HashSet<&str> = request["intra_pairs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|pair| [pair["out"].as_str().unwrap(), pair["in"].as_str().unwrap()])
+            .collect();
+        request["rows"].as_array().unwrap().iter().position(|row| {
+            row["direction"] == "inbound"
+                && row["hold"].is_null()
+                && !legs.contains(row["id"].as_str().unwrap())
+        })
+    };
+    let (name, mut request) = stored_requests()
+        .into_iter()
+        .find(|(_, request)| prepares(request) && standalone(request).is_some())
+        .expect("a generic book");
+    let index = standalone(&request).unwrap();
+    request["operation"] = json!("prepare");
+    let row = &mut request["rows"][index];
+    row["rate"] = json!("Infinity");
+    row["kind"] = json!("buy");
+    row["coarse"] = json!(false);
+    row["privacy_hop"] = json!(false);
+    let asset = row["asset"].clone();
+    let text = ledger(&request.to_string());
+    let (stage, class, message) = failure(&text);
+    assert_eq!(
+        (stage.as_str(), class.as_str(), message.as_str()),
+        (
+            "prepare",
+            "InvalidOperation",
+            "[<class 'decimal.InvalidOperation'>]"
+        ),
+        "{name}"
+    );
+    let response: Value = serde_json::from_str(&text).unwrap();
+    let assets = response["assets"].as_array().expect("the stages reached");
+    let last = assets.last().expect("the failing asset");
+    assert_eq!(last["asset"], asset, "{name}");
+    assert!(last["normalized"].is_object(), "{name}");
+    assert!(last["prepared"].is_null(), "{name}");
+    for earlier in &assets[..assets.len() - 1] {
+        assert!(earlier["prepared"].is_object(), "{name}");
+    }
+    // A request that does not read reached no stage.
+    let (stage, ..) = failure(&ledger(r#"{"schema_version": 2, "operation": "prepare"}"#));
+    assert_eq!(stage, "request");
+    let refused: Value =
+        serde_json::from_str(&ledger(r#"{"schema_version": 2, "operation": "prepare"}"#)).unwrap();
+    assert_eq!(refused["assets"], json!([]));
 }
 
 #[test]

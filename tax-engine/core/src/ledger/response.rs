@@ -15,18 +15,20 @@
 //!
 //! The `prepare` operation answers with the intermediate stages instead
 //! (design §3.10), per asset, so a test can compare each stage with the
-//! oracle's own intermediates: so far the normalized stage.
+//! oracle's own intermediates: the normalized stage and the prepared stage
+//! (the walk's entries, gate quarantines, and transfer audit). A failed
+//! `prepare` also lists the stages the pass reached before it failed.
 
-use serde::ser::Serializer;
+use serde::ser::{SerializeMap, Serializer};
 use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::decimal::Decimal;
 use crate::error::{EngineError, ErrorClass};
 use crate::manifest::{DetailKind, EntryType, Manifest, QuarantineReason};
-use crate::model::Dec;
+use crate::model::{Dec, EntryInput, EntryKind};
 
-use super::request::{Regime, SCHEMA_VERSION};
+use super::request::{Regime, Ts, SCHEMA_VERSION};
 
 /// Where a ledger run failed (design §3.9).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -269,20 +271,26 @@ pub struct RegimeFlows {
     pub inbound: Flows,
 }
 
-/// One booked move.
+/// One booked move. The reader takes its rows' ids, anchors, wallets, time,
+/// external id, pairing source, and group from the move and its legs.
 #[derive(Clone, Debug, Serialize)]
 pub struct AuditOut {
     /// The index into the request's `intra_pairs`.
     pub pair: usize,
+    /// The out leg's amount and fee.
     pub sent: Dec,
+    /// The in leg's amount.
     pub received: Dec,
+    /// `sent - received`.
     pub fee: Dec,
-    pub sent_msat: u64,
-    pub received_msat: u64,
-    pub fee_msat: u64,
+    pub sent_msat: u128,
+    pub received_msat: u128,
+    pub fee_msat: u128,
+    /// `null` for a move without a price.
     pub spot_price: Option<Dec>,
-    pub at_regime: Option<String>,
+    pub at_regime: Option<Regime>,
     pub regime_flows: Option<RegimeFlows>,
+    /// Austrian books only: the source's pool, as markers write it.
     pub at_pool: Option<String>,
     /// The transfer legs' description.
     pub description: String,
@@ -331,11 +339,108 @@ pub struct PrepareResponse {
     pub assets: Vec<PreparedAssetOut>,
 }
 
+/// The response to a failed `prepare` request: the failure, and each
+/// asset's stages the pass reached before it, in order. The last asset has
+/// no prepared stage when its walk raised; an asset whose normalization
+/// raised is not listed.
+#[derive(Clone, Debug, Serialize)]
+pub struct PrepareFailure {
+    pub schema_version: u32,
+    pub ok: bool,
+    pub error: StagedError,
+    pub assets: Vec<PreparedAssetOut>,
+}
+
+impl PrepareFailure {
+    pub fn new(error: StagedError, assets: Vec<PreparedAssetOut>) -> Self {
+        PrepareFailure {
+            schema_version: SCHEMA_VERSION,
+            ok: false,
+            error,
+            assets,
+        }
+    }
+}
+
 /// One asset's stages.
 #[derive(Clone, Debug, Serialize)]
 pub struct PreparedAssetOut {
     pub asset: String,
     pub normalized: NormalizedOut,
+    /// `null` only in a failed pass, for the asset whose walk raised.
+    pub prepared: Option<PreparedOut>,
+}
+
+/// One asset, walked (the adapter's `_RP2PreparedInput`).
+#[derive(Clone, Debug, Serialize)]
+pub struct PreparedOut {
+    /// The entries the lot engine computes: the inbound, then the outbound,
+    /// then the move entries, each in walk order. `null` when the asset has
+    /// no inbound entry, as the adapter then drops the others.
+    pub entries: Option<Vec<EntryInputOut>>,
+    /// The gates' quarantines, in walk order.
+    pub quarantines: Vec<QuarantineOut>,
+    /// One row per booked move, in walk order.
+    pub intra_audit: Vec<AuditOut>,
+}
+
+/// An entry the walk built, as a v1 request carries it
+/// (`native_request.in_entry`, `out_entry`, `intra_entry`): the keys of its
+/// kind in that order, `ts` as the row's, then its `str(transaction)` text.
+#[derive(Clone, Debug)]
+pub struct EntryInputOut {
+    pub input: EntryInput,
+    pub ts: Ts,
+}
+
+impl Serialize for EntryInputOut {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let input = &self.input;
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("kind", &input.kind)?;
+        map.serialize_entry("row", &input.row)?;
+        map.serialize_entry("unique_id", &input.unique_id)?;
+        map.serialize_entry("asset", &input.asset)?;
+        match input.kind {
+            EntryKind::In => {
+                map.serialize_entry("transaction_type", &input.transaction_type)?;
+                map.serialize_entry("notes", &input.notes)?;
+                map.serialize_entry("exchange", &input.exchange)?;
+                map.serialize_entry("holder", &input.holder)?;
+                map.serialize_entry("spot_price", &input.spot_price)?;
+                map.serialize_entry("crypto_in", &input.crypto_in)?;
+                map.serialize_entry("crypto_fee", &input.crypto_fee)?;
+                map.serialize_entry("fiat_in_no_fee", &input.fiat_in_no_fee)?;
+                map.serialize_entry("fiat_in_with_fee", &input.fiat_in_with_fee)?;
+                map.serialize_entry("fiat_fee", &input.fiat_fee)?;
+            }
+            EntryKind::Out => {
+                map.serialize_entry("transaction_type", &input.transaction_type)?;
+                map.serialize_entry("notes", &input.notes)?;
+                map.serialize_entry("exchange", &input.exchange)?;
+                map.serialize_entry("holder", &input.holder)?;
+                map.serialize_entry("spot_price", &input.spot_price)?;
+                map.serialize_entry("crypto_out_no_fee", &input.crypto_out_no_fee)?;
+                map.serialize_entry("crypto_fee", &input.crypto_fee)?;
+                map.serialize_entry("crypto_out_with_fee", &input.crypto_out_with_fee)?;
+                map.serialize_entry("fiat_out_no_fee", &input.fiat_out_no_fee)?;
+                map.serialize_entry("fiat_fee", &input.fiat_fee)?;
+            }
+            EntryKind::Intra => {
+                map.serialize_entry("notes", &input.notes)?;
+                map.serialize_entry("from_exchange", &input.from_exchange)?;
+                map.serialize_entry("from_holder", &input.from_holder)?;
+                map.serialize_entry("to_exchange", &input.to_exchange)?;
+                map.serialize_entry("to_holder", &input.to_holder)?;
+                map.serialize_entry("spot_price", &input.spot_price)?;
+                map.serialize_entry("crypto_sent", &input.crypto_sent)?;
+                map.serialize_entry("crypto_received", &input.crypto_received)?;
+            }
+        }
+        map.serialize_entry("ts", &self.ts)?;
+        map.serialize_entry("text", &input.text)?;
+        map.end()
+    }
 }
 
 /// One asset, normalized (the adapter's `NormalizedTaxAssetInputs`).

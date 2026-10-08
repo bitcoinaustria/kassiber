@@ -296,8 +296,9 @@ pub fn kind_has_token(kind: &str, tokens: &[&str]) -> bool {
     !kind.is_empty() && tokens.iter().any(|token| kind.contains(token))
 }
 
-/// RP2's name of a transaction type (`TransactionType.BUY.name`).
-fn type_name(transaction_type: TransactionType) -> String {
+/// RP2's name of a transaction type (`TransactionType.BUY.name`), as the
+/// manifest lists it and the walk passes it to the constructor.
+pub(crate) fn type_name(transaction_type: TransactionType) -> String {
     transaction_type.value().to_ascii_uppercase()
 }
 

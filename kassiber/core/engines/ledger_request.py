@@ -555,7 +555,8 @@ def _request_row(row: Mapping[str, Any], holds: Mapping[str, str]) -> dict[str, 
     }
 
 
-def _pair_group_id(pair: Mapping[str, Any]) -> Optional[str]:
+def pair_group_id(pair: Mapping[str, Any]) -> Optional[str]:
+    """A move's atomic group (``_pair_group_id``): ``None`` for none or ``""``."""
     raw = pair.get("group_id")
     if raw in (None, ""):
         return None
@@ -611,7 +612,7 @@ def build_request(
                 "out": str(pair["out"]["id"]),
                 "in": str(pair["in"]["id"]),
                 "source": _text(pair.get("source")),
-                "group_id": _pair_group_id(pair),
+                "group_id": pair_group_id(pair),
             }
             for pair in projection.intra_pairs
         ],
@@ -637,6 +638,7 @@ __all__ = [
     "decode_decimal",
     "dumps",
     "encode_decimal",
+    "pair_group_id",
     "parse_timestamp",
     "timestamp_fields",
 ]

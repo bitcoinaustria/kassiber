@@ -3,22 +3,18 @@
 An event's description is its persisted journal text: Austrian books prefix
 it with the regime markers in a fixed order (``at_regime``,
 ``at_regime_basis``, ``at_pool``, ``at_swap_link``), and ``exit_tax`` and
-the UI read them back. The end-to-end cases run ``build_ledger_state``.
-``MarkerGrammarTest`` pins the grammar on the frozen oracle's composer until
-the engine's ``describe.rs`` takes these cases over (plan 20, phase 4).
+the UI read them back. The cases here run ``build_ledger_state``; the
+grammar's own cases are the engine's (``tax-engine/core/src/ledger/describe.rs``).
 """
 
 import unittest
-from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional
 
 import pytest
 
 from kassiber.core.engines import KassiberTaxEngine
 from kassiber.errors import AppError
 from tests.tax_ledger_generator import finalized, pair, profile, row
-from tests.tax_oracle.adapter import _compose_event_notes
 
 MOVING_AVERAGE_AT = profile("at", "moving_average_at")
 
@@ -34,63 +30,6 @@ def _descriptions(state):
         (entry["transaction_id"], entry["entry_type"]): entry["description"]
         for entry in state.entries
     }
-
-
-@dataclass
-class _EventStub:
-    description: str = ""
-    at_regime: Optional[str] = None
-    at_regime_basis: Optional[str] = None
-    cost_basis_pool_id: Optional[str] = None
-    at_swap_link: Optional[str] = None
-
-
-class MarkerGrammarTest(unittest.TestCase):
-    def test_single_regime_marker(self):
-        event = _EventStub(at_regime="neu", description="Bought BTC")
-        self.assertEqual(_compose_event_notes(event), "at_regime=neu Bought BTC")
-
-    def test_multi_marker(self):
-        event = _EventStub(
-            at_regime="neu",
-            cost_basis_pool_id="wallet-1",
-            at_swap_link="swap-42",
-            description="Swapped LBTC for BTC",
-        )
-        self.assertEqual(
-            _compose_event_notes(event),
-            "at_regime=neu at_pool=wallet-1 at_swap_link=swap-42 Swapped LBTC for BTC",
-        )
-
-    def test_regime_basis_follows_the_regime(self):
-        event = _EventStub(
-            at_regime="neu",
-            at_regime_basis="wahlrecht",
-            cost_basis_pool_id="global",
-            description="Sell",
-        )
-        self.assertEqual(
-            _compose_event_notes(event),
-            "at_regime=neu at_regime_basis=wahlrecht at_pool=default Sell",
-        )
-
-    def test_description_only(self):
-        event = _EventStub(description="Regular buy")
-        self.assertEqual(_compose_event_notes(event), "Regular buy")
-
-    def test_empty_description_with_markers(self):
-        event = _EventStub(
-            at_regime="alt", cost_basis_pool_id="wallet-2", description=""
-        )
-        self.assertEqual(_compose_event_notes(event), "at_regime=alt at_pool=wallet-2")
-
-    def test_no_markers_no_description(self):
-        self.assertEqual(_compose_event_notes(_EventStub()), "")
-
-    def test_empty_swap_link_is_not_emitted(self):
-        # A bare `at_swap_link=` token is never emitted.
-        event = _EventStub(at_swap_link="", description="Buy")
-        self.assertEqual(_compose_event_notes(event), "Buy")
 
 
 class DescriptionTest(unittest.TestCase):

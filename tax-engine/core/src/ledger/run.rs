@@ -3,11 +3,13 @@
 //!
 //! It groups the rows by asset in first-appearance order, and the moves by
 //! their out leg's asset, as the adapter does (`:2209-2235`), then runs
-//! each prepare pass asset by asset. So far a pass is normalize alone
-//! ([`super::normalize`]), and only the `prepare` operation runs it, for a
-//! generic book without a carrying-value Bitcoin rail pair, whose one
-//! prepare pass is its final one. An Austrian book, and a generic one that
-//! needs the rail carry, is `Unsupported` until those parts are ported.
+//! each prepare pass asset by asset: normalize ([`super::normalize`]), then
+//! the walk ([`super::walk`]), so the first failure is the adapter's (it
+//! normalizes and walks one asset before the next). So far only the
+//! `prepare` operation runs a pass, for a generic book without a
+//! carrying-value Bitcoin rail pair, whose one prepare pass is its final
+//! one. An Austrian book, and a generic one that needs the rail carry, is
+//! `Unsupported` until those parts are ported.
 //!
 //! The book's references must resolve: unique row and wallet ids, rows of
 //! known wallets, moves between two distinct rows of one asset with equal
@@ -18,14 +20,16 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::error::{EngineError, EngineResult};
+use crate::model::ConfigSpec;
 use crate::ENGINE_VERSION;
 
-use super::normalize::{normalize, Item, Normalized};
+use super::normalize::{normalize, Item, Normalized, Quarantine};
 use super::request::{Country, LedgerRequest, Row, Wallet, SCHEMA_VERSION};
 use super::response::{
-    EventOut, NormalizedOut, PrepareResponse, PreparedAssetOut, QuarantineOut, Stage, StagedError,
-    TransferOut,
+    EntryInputOut, EventOut, NormalizedOut, PrepareFailure, PrepareResponse, PreparedAssetOut,
+    PreparedOut, QuarantineOut, Stage, StagedError, TransferOut,
 };
+use super::walk::{walk, Walked};
 
 /// The cross-asset pair policy the carries apply to.
 const CARRYING_VALUE: &str = "carrying-value";
@@ -158,49 +162,115 @@ impl<'a> Book<'a> {
     }
 }
 
+/// One asset's stages after a prepare pass.
+struct Stages {
+    normalized: Normalized,
+    /// `None` when the walk raised.
+    walked: Option<Walked>,
+}
+
 /// One prepare pass over every asset, in order (`_prepare_assets`,
-/// `adapter.py:1671-1706`); so far normalize alone, over all of each
-/// asset's rows. The first failure ends the pass, as it does the adapter's.
-fn prepare_assets(book: &Book) -> EngineResult<Vec<Normalized>> {
-    book.assets
-        .iter()
-        .map(|part| normalize(book, part, &part.rows))
-        .collect()
+/// `adapter.py:1671-1706`): normalize, then walk, over all of each asset's
+/// rows. The stages it reached, and the failure that ended it, as the
+/// adapter's first failure ends its pass.
+fn prepare_assets(book: &Book, config: &ConfigSpec) -> (Vec<Stages>, Option<EngineError>) {
+    let mut stages = Vec::new();
+    for part in &book.assets {
+        let normalized = match normalize(book, part, &part.rows) {
+            Ok(normalized) => normalized,
+            Err(error) => return (stages, Some(error)),
+        };
+        match walk(book, part, &normalized, config) {
+            Ok(walked) => stages.push(Stages {
+                normalized,
+                walked: Some(walked),
+            }),
+            Err(error) => {
+                stages.push(Stages {
+                    normalized,
+                    walked: None,
+                });
+                return (stages, Some(error));
+            }
+        }
+    }
+    (stages, None)
 }
 
 /// The `prepare` operation (design §3.10): the final prepare pass, per
-/// asset. A failure inside the pass is the `prepare` stage's, raised bare.
-pub(crate) fn prepare(request: &LedgerRequest) -> Result<PrepareResponse, StagedError> {
-    let book = Book::new(request).map_err(StagedError::contract)?;
+/// asset. A failure inside the pass is the `prepare` stage's, raised bare,
+/// and lists the stages the pass reached.
+pub(crate) fn prepare(request: &LedgerRequest) -> Result<PrepareResponse, PrepareFailure> {
+    let contract = |error| PrepareFailure::new(StagedError::contract(error), Vec::new());
+    let book = Book::new(request).map_err(contract)?;
     match request.policy.country {
         Country::At {} => {
-            return Err(StagedError::contract(EngineError::unsupported(
+            return Err(contract(EngineError::unsupported(
                 "the prepare operation does not implement Austrian books yet",
             )))
         }
         Country::Generic { .. } if book.has_rail_carry() => {
-            return Err(StagedError::contract(EngineError::unsupported(
+            return Err(contract(EngineError::unsupported(
                 "the prepare operation does not implement the generic Bitcoin rail carry yet",
             )))
         }
         Country::Generic { .. } => {}
     }
-    let normalized =
-        prepare_assets(&book).map_err(|error| StagedError::new(Stage::Prepare, error))?;
-    Ok(PrepareResponse {
-        schema_version: SCHEMA_VERSION,
-        ok: true,
-        engine_version: ENGINE_VERSION,
-        assets: book
-            .assets
-            .iter()
-            .zip(normalized)
-            .map(|(part, normalized)| PreparedAssetOut {
-                asset: part.asset.to_owned(),
-                normalized: normalized_out(&book, normalized),
-            })
+    let (stages, error) = prepare_assets(&book, &request.config.spec());
+    let assets = book
+        .assets
+        .iter()
+        .zip(stages)
+        .map(|(part, stages)| PreparedAssetOut {
+            asset: part.asset.to_owned(),
+            normalized: normalized_out(&book, stages.normalized),
+            prepared: stages.walked.map(|walked| prepared_out(&book, walked)),
+        })
+        .collect();
+    match error {
+        None => Ok(PrepareResponse {
+            schema_version: SCHEMA_VERSION,
+            ok: true,
+            engine_version: ENGINE_VERSION,
+            assets,
+        }),
+        Some(error) => Err(PrepareFailure::new(
+            StagedError::new(Stage::Prepare, error),
+            assets,
+        )),
+    }
+}
+
+/// A quarantine as the response names it: its row by id.
+fn quarantine_out(book: &Book, quarantine: Quarantine) -> QuarantineOut {
+    QuarantineOut {
+        row: book.rows[quarantine.row].id.clone(),
+        reason: quarantine.reason,
+        detail_kind: quarantine.detail_kind,
+        detail: quarantine.detail,
+    }
+}
+
+/// The prepared stage as the response names it: each entry with its row's
+/// timestamp, rows by id.
+fn prepared_out(book: &Book, walked: Walked) -> PreparedOut {
+    PreparedOut {
+        entries: walked.entries.map(|entries| {
+            entries
+                .into_iter()
+                .map(|entry| EntryInputOut {
+                    ts: book.rows[entry.row].ts.clone(),
+                    input: entry.input,
+                })
+                .collect()
+        }),
+        quarantines: walked
+            .quarantines
+            .into_iter()
+            .map(|quarantine| quarantine_out(book, quarantine))
             .collect(),
-    })
+        intra_audit: walked.audit,
+    }
 }
 
 /// The normalized stage as the response names it: rows by id.
@@ -256,12 +326,7 @@ fn normalized_out(book: &Book, normalized: Normalized) -> NormalizedOut {
         quarantines: normalized
             .quarantines
             .into_iter()
-            .map(|quarantine| QuarantineOut {
-                row: id(quarantine.row),
-                reason: quarantine.reason,
-                detail_kind: quarantine.detail_kind,
-                detail: quarantine.detail,
-            })
+            .map(|quarantine| quarantine_out(book, quarantine))
             .collect(),
         earliest_lot_contamination_at: normalized.earliest_lot_contamination_at,
     }

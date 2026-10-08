@@ -36,9 +36,8 @@ ALLOWED = frozenset(
         "tests/test_tax_ledger_contract.py",
         "tests/test_tax_ledger_routing.py",
         "tax-engine/scripts/gen_ledger_fixtures.py",
-        # Tests that check the oracle's own internals, the interface mirror
-        # of RP2, or the legacy-native leg.
-        "tests/test_tax_descriptions.py",
+        # Tests that check the interface mirror of RP2 or the legacy-native
+        # leg.
         "tests/test_tax_engine_backend.py",
         "tests/test_tax_engine_parity.py",
     }
