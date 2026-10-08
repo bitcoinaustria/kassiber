@@ -113,9 +113,15 @@ export function ModelPickerContent({
 }) {
   const { t } = useTranslation("assistant");
   const listId = React.useId();
-  const [view, setView] = React.useState<ModelPickerView>(() =>
-    initialModelPickerView({ groups, value, favorites }),
+  // `null` until the provider inventory has arrived: opening the picker
+  // before `ai.providers.list` resolves must not pin the empty Favorites view.
+  // Resolved once, so starring the current model later does not move the view.
+  const [view, setView] = React.useState<ModelPickerView | null>(() =>
+    groups.length > 0 ? initialModelPickerView({ groups, value, favorites }) : null,
   );
+  if (view === null && groups.length > 0) {
+    setView(initialModelPickerView({ groups, value, favorites }));
+  }
   const [query, setQuery] = React.useState("");
   const [highlightedKey, setHighlightedKey] = React.useState<string | null>(null);
   const [heldHeight, setHeldHeight] = React.useState<number | null>(null);
@@ -138,11 +144,13 @@ export function ModelPickerContent({
   // the active view; fall back to the first remaining provider.
   const activeView = React.useMemo<ModelPickerView>(
     () =>
-      view === FAVORITES_VIEW || groupByName.has(view.provider)
-        ? view
-        : groups[0]
-          ? { provider: groups[0].provider.name }
-          : FAVORITES_VIEW,
+      view === null
+        ? FAVORITES_VIEW
+        : view === FAVORITES_VIEW || groupByName.has(view.provider)
+          ? view
+          : groups[0]
+            ? { provider: groups[0].provider.name }
+            : FAVORITES_VIEW,
     [groupByName, groups, view],
   );
   const activeGroup =

@@ -373,4 +373,57 @@ describe("ProviderModelPicker (mounted)", () => {
     expect(search.getAttribute("aria-describedby")).toBeTruthy();
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
+
+  it("lists every provider's favorites on the active Favorites entry, without discovery", () => {
+    useUiStore.setState({
+      assistantModelFavorites: [
+        { provider: "codex", model: "gpt-5.4" },
+        { provider: "ollama", model: "qwen3:8b" },
+        // Never returned by a check: known only from the stored identifiers.
+        { provider: "gemini", model: "gemini-2.5-flash" },
+      ],
+    });
+    mount();
+    expect(
+      screen.getByRole("button", { name: "Favorites" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    const names = optionNames();
+    expect(names).toHaveLength(3);
+    expect(
+      names.some((name) => name.includes("gemini-2.5-flash") && name.includes("Gemini CLI")),
+    ).toBe(true);
+    expect(names.some((name) => name.includes("gpt-5.4") && name.includes("Codex"))).toBe(true);
+    expect(names.some((name) => name.includes("qwen3:8b") && name.includes("Ollama"))).toBe(true);
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("resolves the opening view once providers arrive after the picker opened", () => {
+    mocks.providers = [];
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = () => (
+      <QueryClientProvider client={client}>
+        <ProviderModelPicker
+          value={{ provider: "codex", model: "gpt-5.4" }}
+          onChange={vi.fn()}
+          open
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree());
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+
+    mocks.providers = PROVIDERS.map((provider) => ({ ...provider }));
+    rerender(tree());
+    expect(
+      screen.getByRole("button", { name: "Codex · remote" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(optionNames()[0]).toContain("gpt-5.4");
+    expect(screen.queryByText("No favorites yet")).toBeNull();
+
+    // An explicit rail choice is kept across later inventory refreshes.
+    fireEvent.click(screen.getByRole("button", { name: "Ollama · local" }));
+    rerender(tree());
+    expect(optionNames()[0]).toContain("qwen3:8b");
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
 });
