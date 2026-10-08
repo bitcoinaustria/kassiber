@@ -289,46 +289,48 @@ export function ModelPickerContent({
   // close), so Mod+digit keeps its meaning everywhere else.
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.repeat || event.altKey) return;
+      if (event.defaultPrevented || event.altKey) return;
       if (isImeKeyEvent(event)) return;
       if (!(event.metaKey || event.ctrlKey)) return;
-      if (
-        !event.shiftKey &&
-        (event.key.toLowerCase() === "d" || event.code === "KeyD")
-      ) {
+      const command =
+        !event.shiftKey && (event.key.toLowerCase() === "d" || event.code === "KeyD")
+          ? ({ kind: "favorite" } as const)
+          : event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown")
+            ? ({ kind: "provider", step: event.key === "ArrowDown" ? 1 : -1 } as const)
+            : !event.shiftKey && /^[1-9]$/.test(event.key)
+              ? ({ kind: "jump", index: Number(event.key) - 1 } as const)
+              : null;
+      if (!command) return;
+      // Consume every recognised shortcut while the picker is open, including
+      // auto-repeats of a held key: otherwise the browser's own binding (Mod+D
+      // bookmarks the page in a browser preview) fires on the repeats.
+      event.preventDefault();
+      event.stopPropagation();
+      // A held key acts once.
+      if (event.repeat) return;
+      if (command.kind === "favorite") {
         // Mod+D stars or unstars the highlighted row: the keyboard path to
         // Favorites, since focus stays in the search field (T3's star button
         // is pointer-only).
         const item = items[highlightedIndex];
         if (!item || selectDisabled) return;
-        event.preventDefault();
-        event.stopPropagation();
         onToggleFavorite(item.provider.name, item.model.id);
         return;
       }
-      if (event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
-        event.preventDefault();
-        event.stopPropagation();
+      if (command.kind === "provider") {
         const current = railViews.findIndex(
           (candidate) => modelPickerViewKey(candidate) === modelPickerViewKey(activeView),
         );
-        const step = event.key === "ArrowDown" ? 1 : -1;
         const next =
           railViews[
             current < 0
               ? 0
-              : (current + step + railViews.length) % railViews.length
+              : (current + command.step + railViews.length) % railViews.length
           ];
         if (next) selectView(next);
         return;
       }
-      if (!event.shiftKey && /^[1-9]$/.test(event.key)) {
-        const item = items[Number(event.key) - 1];
-        if (!item) return;
-        event.preventDefault();
-        event.stopPropagation();
-        pick(item);
-      }
+      pick(items[command.index]);
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);

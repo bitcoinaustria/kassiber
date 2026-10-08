@@ -358,6 +358,36 @@ describe("ProviderModelPicker (mounted)", () => {
     });
   });
 
+  it("consumes held picker shortcuts but acts on them once", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { search, onChange } = mount();
+    // fireEvent returns false once the event's default was prevented.
+    expect(fireEvent.keyDown(search, { key: "d", ctrlKey: true })).toBe(false);
+    expect(fireEvent.keyDown(search, { key: "d", ctrlKey: true, repeat: true })).toBe(false);
+    expect(fireEvent.keyDown(search, { key: "d", ctrlKey: true, repeat: true })).toBe(false);
+    expect(useUiStore.getState().assistantModelFavorites).toEqual([
+      { provider: "ollama", model: "qwen3:8b" },
+    ]);
+
+    expect(
+      fireEvent.keyDown(search, {
+        key: "ArrowDown",
+        ctrlKey: true,
+        shiftKey: true,
+        repeat: true,
+      }),
+    ).toBe(false);
+    // A repeat alone does not switch provider.
+    expect(optionNames()[0]).toContain("qwen3:8b");
+
+    await act(async () => {
+      expect(
+        fireEvent.keyDown(search, { key: "1", ctrlKey: true, repeat: true }),
+      ).toBe(false);
+    });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("stars and unstars the highlighted model with Mod+D", () => {
     const { search } = mount();
     fireEvent.change(search, { target: { value: "codex" } });
