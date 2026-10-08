@@ -9,20 +9,24 @@ returns, per asset, the two stages the adapter's ``_prepare_assets`` builds:
 - the prepared stage: the lot engine's entries (v1 entry documents with
   their notes and ``str(transaction)`` text, ``None`` for an asset without
   an inbound entry), the gates' quarantines, and the transfer audit, with
-  the transfer legs' description.
+  the transfer legs' description;
+
+and the Austrian swap-link selection over the first pass, which decides
+whether a second pass runs: the rows it links, the rows its blocked pairs
+leave out of the second pass, and their quarantines.
 
 Here each of those is compared, field by field and exactly (types, decimal
 exponents, key and list order), with the frozen oracle's intermediates as
-its own ``_prepare_assets`` builds them on the legacy-native backend, whose
-entries are v1 documents already:
+its own ``_prepare_assets`` and ``_select_at_cross_asset_swap_links`` build
+them on the legacy-native backend, whose entries are v1 documents already:
 
 - every generic golden case without the generic rail carry, and every
-  Austrian one without a carrying-value cross-asset pair (so without swap
-  links and a second pass): its regime tracker, the regimes, elections, and
-  flows it gives events and moves, and the overrides;
+  Austrian one: its regime tracker, the regimes, elections, and flows it
+  gives events and moves, the overrides, and, with a carrying-value
+  cross-asset pair, the selection and the second pass;
 - the first 200 seeded generic books and the first 200 seeded Austrian
   books of ``tests/tax_ledger_generator.py`` without a carrying-value
-  cross-asset pair;
+  cross-asset pair, and the first 200 seeded Austrian books with one;
 - shapes neither reaches: stored rates and values that are not finite (each
   read as CPython's ``Decimal`` reads it, so a NaN raises where it is
   compared and an entry's infinite value where its constructor compares
@@ -35,7 +39,12 @@ entries are v1 documents already:
   cannot read, a time without a value, the tracker's order at one instant,
   moves out of an empty source and with a held leg, a move whose fee
   spans both regimes, an override of a move's regime, an election an
-  override drops, and wallets whose ids the tracker merges.
+  override drops, and wallets whose ids the tracker merges; and swap pairs
+  whose out leg is a move's, whose leg is not a row, without an id (also
+  over a direct-payout row), whose quarantined transaction only the pair
+  names, whose leg's transaction has two reasons, with an unconfirmed leg,
+  sharing a row, and one linked on a first-pass regime the second pass
+  changes.
 
 A failed pass is compared by the stages it reached and its signature,
 raised through the production stage table (``errors.ledger_error``); the
@@ -51,10 +60,10 @@ production reader (``ledger_response.render_quarantine``,
 order are compared too.
 
 A last check runs the whole oracle on the legacy-native backend and records
-each normalization and walk it performs, so the mirror of the adapter's
-call used here cannot drift from the adapter's own. Austrian swap links and
-the generic rail carry are not ported yet; the engine answers
-``Unsupported`` for them (``tax-engine/core/tests/ledger_fixtures.rs``).
+each normalization and walk it performs, in both passes, so the mirror of
+the adapter's calls used here cannot drift from the adapter's own. The
+generic rail carry is not ported yet; the engine answers ``Unsupported``
+for it (``tax-engine/core/tests/ledger_fixtures.rs``).
 """
 
 from __future__ import annotations
@@ -97,6 +106,7 @@ RANDOM_BOOKS = 200
 CARRYING_VALUE = "carrying-value"
 GENERIC = frozenset({"generic"})
 AUSTRIAN = frozenset({"at"})
+AUSTRIAN_SWAPS = frozenset({"at", "at_swap"})
 
 Document = dict[str, Any]
 
@@ -125,6 +135,11 @@ def _austrian_case_names() -> list[str]:
     return _case_names(AUSTRIAN)
 
 
+def _swap_case_names() -> list[str]:
+    """The golden cases whose books are Austrian with a carrying-value pair."""
+    return _case_names(AUSTRIAN_SWAPS)
+
+
 def _golden(name: str) -> tuple[Mapping[str, Any], TaxEngineLedgerInputs]:
     case = next(case for case in _document()["cases"] if case["name"] == name)
     return codec.decode_inputs(case["inputs"])
@@ -144,20 +159,41 @@ def _random_seeds(country: str = "generic") -> tuple[int, ...]:
     return tuple(seeds)
 
 
+@lru_cache(maxsize=1)
+def _random_swap_seeds() -> tuple[int, ...]:
+    """The first ``RANDOM_BOOKS`` seeds whose Austrian book selects swap links:
+    one with a carrying-value cross-asset pair whose legs are rows."""
+    seeds: list[int] = []
+    seed = 0
+    while len(seeds) < RANDOM_BOOKS:
+        book = random_inputs(seed, "at")
+        request = ledger_request.build_request(book.profile, book.inputs)
+        if ledger.capabilities(request) == AUSTRIAN_SWAPS:
+            seeds.append(seed)
+        seed += 1
+    return tuple(seeds)
+
+
 # ---------------------------------------------------------------------------
 # The oracle's normalized stage
 
 
-def _final_pass(
-    book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs
-) -> tuple[dict[str, list[Mapping[str, Any]]], dict[str, list[Mapping[str, Any]]], set[str]]:
-    """The arguments of the adapter's final prepare pass for a book without
-    carries: rows and moves grouped as ``_build_finalized_ledger_state``
-    groups them (``tests/tax_oracle/adapter.py:2209-2244``), after the rail
-    carry, which returns the rows as they are and blocks none. An Austrian
-    book without a carrying-value cross-asset pair selects no swap link, so
-    its first pass is its final one (the mirror test below checks that the
-    adapter runs one pass).
+@dataclasses.dataclass(frozen=True)
+class _PassArguments:
+    """What the adapter's prepare passes read, after the rail carry."""
+
+    rows: list[Mapping[str, Any]]
+    rows_by_asset: dict[str, list[Mapping[str, Any]]]
+    pairs_by_asset: dict[str, list[Mapping[str, Any]]]
+    excluded: set[str]
+
+
+def _pass_arguments(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> _PassArguments:
+    """The arguments of the adapter's prepare passes for a book without the
+    generic rail carry: rows and moves grouped as
+    ``_build_finalized_ledger_state`` groups them
+    (``tests/tax_oracle/adapter.py:2209-2244``), after the rail carry, which
+    returns the rows as they are and blocks none.
     """
     adapter = oracle_adapter
     projection = inputs.finalized_tax_projection
@@ -180,7 +216,7 @@ def _final_pass(
     rows_by_asset: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for row in generic_rail.rows:
         rows_by_asset[str(adapter._row_get(row, "asset"))].append(row)
-    return rows_by_asset, pairs_by_asset, generic_rail.blocked_row_ids
+    return _PassArguments(generic_rail.rows, rows_by_asset, pairs_by_asset, generic_rail.blocked_row_ids)
 
 
 @contextmanager
@@ -197,35 +233,55 @@ def _configuration(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInput
         yield configuration
 
 
-def _oracle_prepare_assets(
+def _oracle_passes(
     book_profile: Mapping[str, Any],
     inputs: TaxEngineLedgerInputs,
-    stages: list[list[Any]],
-    final_pass: Optional[tuple[Any, Any, set[str]]] = None,
+    passes: list[list[list[Any]]],
+    selections: list[tuple[dict[str, str], set[str], list[dict[str, Any]]]],
+    arguments: Optional[_PassArguments] = None,
 ) -> None:
-    """The adapter's ``_prepare_assets`` over the final pass, as the adapter
-    calls it, appending each asset's ``[normalized, prepared]`` to ``stages``
-    as it goes; ``prepared`` stays ``None`` when the walk raises."""
-    rows_by_asset, pairs_by_asset, excluded = final_pass or _final_pass(book_profile, inputs)
+    """The adapter's prepare passes, as ``_build_finalized_ledger_state``
+    runs them (``tests/tax_oracle/adapter.py:2236-2266``): ``_prepare_assets``
+    over the first pass; the swap-link selection over it (nothing on a
+    generic book); and, when the selection links or blocks a pair, the
+    second pass, with the links and without the blocked rows. Each pass
+    appends a list to ``passes``, and each asset's ``[normalized, prepared]``
+    to that list as it goes (``prepared`` stays ``None`` when the walk
+    raises); the selection is appended to ``selections``."""
+    arguments = arguments or _pass_arguments(book_profile, inputs)
     walk = oracle_adapter._prepare_rp2_asset_input
 
     def recording(walk_profile: Mapping[str, Any], normalized: Any, configuration: Any) -> Any:
-        stages.append([normalized, None])
+        passes[-1].append([normalized, None])
         prepared = walk(walk_profile, normalized, configuration)
-        stages[-1][1] = prepared
+        passes[-1][-1][1] = prepared
         return prepared
+
+    def prepare_pass(configuration: Any, links: Optional[dict[str, str]], excluded: set[str]) -> Any:
+        passes.append([])
+        return oracle_adapter._prepare_assets(
+            book_profile,
+            arguments.rows_by_asset,
+            inputs.wallet_refs_by_id,
+            arguments.pairs_by_asset,
+            configuration,
+            at_swap_link_by_row_id=links,
+            excluded_row_ids=excluded,
+            loan_leg_by_transaction_id={},
+        )
 
     with _configuration(book_profile, inputs) as configuration:
         with patch.object(oracle_adapter, "_prepare_rp2_asset_input", recording):
-            oracle_adapter._prepare_assets(
+            prepared_by_asset = prepare_pass(configuration, None, arguments.excluded)
+            links, blocked, quarantines = oracle_adapter._select_at_cross_asset_swap_links(
                 book_profile,
-                rows_by_asset,
-                inputs.wallet_refs_by_id,
-                pairs_by_asset,
-                configuration,
-                excluded_row_ids=excluded,
-                loan_leg_by_transaction_id={},
+                inputs.finalized_tax_projection.cross_asset_pairs,
+                arguments.rows,
+                prepared_by_asset,
             )
+            selections.append((links, blocked, quarantines))
+            if links or blocked:
+                prepare_pass(configuration, links, set(arguments.excluded) | blocked)
 
 
 def _fields(item: Any) -> Document:
@@ -279,31 +335,46 @@ def _oracle_prepared(normalized: Any, prepared: Any) -> Document:
     }
 
 
+def _oracle_selection(
+    selection: Optional[tuple[dict[str, str], set[str], list[dict[str, Any]]]],
+) -> Optional[Document]:
+    """The swap-link selection: each linked row and its link in the order
+    the pairs linked them, the blocked ids sorted, and the pairs'
+    quarantines; ``None`` when the first pass failed before it."""
+    if selection is None:
+        return None
+    links, blocked, quarantines = selection
+    return {"links": list(links.items()), "blocked": sorted(blocked), "quarantines": list(quarantines)}
+
+
 def _oracle_document(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> Document:
     projection = inputs.finalized_tax_projection
     # Outside the captured outcome, so a book that runs the carry fails here.
-    final_pass = _final_pass(book_profile, inputs)
-    stages: list[list[Any]] = []
+    arguments = _pass_arguments(book_profile, inputs)
+    passes: list[list[list[Any]]] = []
+    selections: list[Any] = []
     _, error = compare.run_on_oracle_backend(
-        compare.LEGACY_NATIVE_BACKEND, lambda: _oracle_prepare_assets(book_profile, inputs, stages, final_pass)
+        compare.LEGACY_NATIVE_BACKEND, lambda: _oracle_passes(book_profile, inputs, passes, selections, arguments)
     )
+    final_pass = passes[-1] if passes else []
     return {
         "assets": [
             {
                 "normalized": _oracle_asset(projection, normalized),
                 "prepared": None if prepared is None else _oracle_prepared(normalized, prepared),
             }
-            for normalized, prepared in stages
+            for normalized, prepared in final_pass
         ],
+        "swap_links": _oracle_selection(selections[0] if selections else None),
         "error": compare.error_signature(error),
     }
 
 
 def _rp2_error(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> Optional[tuple[Any, ...]]:
-    """How the same pass fails on RP2, the oracle production must equal."""
-    final_pass = _final_pass(book_profile, inputs)
+    """How the same passes fail on RP2, the oracle production must equal."""
+    arguments = _pass_arguments(book_profile, inputs)
     _, error = compare.run_on_oracle_backend(
-        compare.ORACLE_BACKEND, lambda: _oracle_prepare_assets(book_profile, inputs, [], final_pass)
+        compare.ORACLE_BACKEND, lambda: _oracle_passes(book_profile, inputs, [], [], arguments)
     )
     return compare.error_signature(error)
 
@@ -412,9 +483,24 @@ def _engine_prepared(
     }
 
 
+def _engine_selection(
+    book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs, swap_links: Optional[Mapping[str, Any]]
+) -> Optional[Document]:
+    if swap_links is None:
+        return None
+    rows_by_id = {str(row["id"]): row for row in inputs.finalized_tax_projection.rows}
+    return {
+        "links": [tuple(item) for item in swap_links["links"]],
+        "blocked": list(swap_links["blocked"]),
+        "quarantines": [
+            ledger_response.render_quarantine(book_profile, rows_by_id, item) for item in swap_links["quarantines"]
+        ],
+    }
+
+
 def _engine_response(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> dict[str, Any]:
     request = ledger_request.build_request(book_profile, inputs, operation="prepare")
-    assert ledger.capabilities(request) in (GENERIC, AUSTRIAN)
+    assert ledger.capabilities(request) in (GENERIC, AUSTRIAN, AUSTRIAN_SWAPS)
     return ledger_response.loads(kassiber_tax.ledger(ledger_request.dumps(request)))
 
 
@@ -435,6 +521,7 @@ def _engine_document(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInp
             }
             for asset in response["assets"]
         ],
+        "swap_links": _engine_selection(book_profile, inputs, response["swap_links"]),
         "error": error,
     }
 
@@ -538,7 +625,7 @@ def test_the_ungrouped_gate_and_coarse_move_goldens_are_compared() -> None:
         assert "pricing_quality" in details[0] and details[1]["paired_leg"] is True, name
 
 
-@pytest.mark.parametrize("name", _generic_case_names() + _austrian_case_names())
+@pytest.mark.parametrize("name", _generic_case_names() + _austrian_case_names() + _swap_case_names())
 def test_the_golden_books_prepare_as_the_oracle(name: str) -> None:
     _assert_same_stages(*_golden(name))
 
@@ -558,6 +645,28 @@ def test_the_random_books_prepare_as_the_oracle(country: str) -> None:
             differing.append(f"seed {seed}: RP2 fails otherwise")
     assert differing == []
     assert failed == 0
+
+
+def test_the_random_swap_books_prepare_as_the_oracle() -> None:
+    """The first 200 seeded Austrian books with swap links: both passes'
+    selection and the final pass. Some fail in a pass where the oracle does
+    (a marker a row's text repeats, read by an entry's constructor); the
+    rest fail later, if at all, in the lot engine (``test_tax_ledger_goldens``
+    compares those outcomes)."""
+    differing: list[str] = []
+    second_passes = 0
+    for seed in _random_swap_seeds():
+        book = random_inputs(seed, "at")
+        expected = _oracle_document(book.profile, book.inputs)
+        differences = compare.value_differences(expected, _engine_document(book.profile, book.inputs), "prepare")
+        if differences:
+            differing.append(f"seed {seed}: {differences[:3]}")
+        if _rp2_error(book.profile, book.inputs) != expected["error"]:
+            differing.append(f"seed {seed}: RP2 fails otherwise")
+        selection = expected["swap_links"]
+        second_passes += selection is not None and bool(selection["links"] or selection["blocked"])
+    assert differing == []
+    assert second_passes > RANDOM_BOOKS // 2, second_passes
 
 
 EDGE_BOOKS = {
@@ -1245,6 +1354,240 @@ def test_the_austrian_edge_books_reach_their_shapes() -> None:
     assert events("wallet-ids-the-tracker-merges")["blank-sale"] == ("alt", None)
 
 
+# ---------------------------------------------------------------------------
+# Austrian swap-link selection
+
+
+NEU_DAY = "2024-02-01T00:00:00Z"
+SwapBook = tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]
+
+
+def _cross(out_row: Mapping[str, Any], in_row: Mapping[str, Any], pair_id: Optional[str] = "swap", **fields: Any) -> dict[str, Any]:
+    """A reviewed carrying-value cross-asset pair, as the projection lists one."""
+    return {
+        "pair_id": pair_id,
+        "component_id": None,
+        "out_id": out_row["id"],
+        "in_id": in_row["id"],
+        "out_transaction_id": out_row["journal_transaction_id"],
+        "in_transaction_id": in_row["journal_transaction_id"],
+        "out_asset": out_row["asset"],
+        "in_asset": in_row["asset"],
+        "policy": CARRYING_VALUE,
+        "kind": "manual",
+        **fields,
+    }
+
+
+def _swap_edges() -> dict[str, SwapBook]:
+    """Austrian books for selection shapes the swap goldens and seeded
+    books do not reach: each name says the shape (checked on the oracle
+    below). Rows are Neu unless their time is ``ALT_DAY``."""
+
+    def buy(tx: str, wallet: str, at: str = "2024-01-01T00:00:00Z", amount: int = 100_000_000_000, **fields: Any) -> dict[str, Any]:
+        return projected(tx, wallet, "inbound", amount, at, kind="buy", **fields)
+
+    def swap(tx: str, wallet: str = "A", at: str = NEU_DAY, amount: int = 10_000_000_000, **fields: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+        out_row = projected(f"{tx}-out", wallet, "outbound", amount, at, kind="sell", rate="60000", side="out", **fields)
+        in_row = projected(f"{tx}-in", wallet, "inbound", 600_000_000_000_000, at, kind="buy", rate="1", asset="USDT", side="in")
+        return out_row, in_row
+
+    books: dict[str, SwapBook] = {}
+
+    # The out leg is also a move's out leg, so normalize makes no event of
+    # it and no quarantine names it: the pair is blocked as
+    # ``swap_leg_unavailable``, and the second pass books the move at its in
+    # leg.
+    move_out = projected("move-out", "A", "outbound", 10_000_000_000, NEU_DAY, anchor="move", side="out", kind="transfer")
+    move_in = projected("move-in", "B", "inbound", 10_000_000_000, NEU_DAY, anchor="move", side="in", kind="transfer")
+    usdt_in = projected("usdt-in", "B", "inbound", 600_000_000_000_000, NEU_DAY, kind="buy", rate="1", asset="USDT")
+    books["swap-leg-is-a-move-leg"] = (
+        [buy("buy", "A"), move_out, move_in, usdt_in],
+        [move(move_out, move_in, group_id=None)],
+        [_cross(move_out, usdt_in)],
+    )
+    # A pair with a leg outside the projection is skipped: its rows book
+    # as a sale and a purchase.
+    out_row, in_row = swap("swap")
+    books["pair-leg-outside-the-projection"] = (
+        [buy("buy", "A"), out_row, in_row],
+        [],
+        [_cross(out_row, in_row, in_id="custody-tax:not-projected")],
+    )
+    # A pair without an id links its rows by ``<out>-><in>``.
+    out_row, in_row = swap("swap")
+    books["pair-without-an-id"] = ([buy("buy", "A"), out_row, in_row], [], [_cross(out_row, in_row, pair_id=None)])
+    # A leg's reason is found by the row, its transaction, then the pair's
+    # transaction for the side: here only the pair names a transaction the
+    # first pass quarantined (an unpriced purchase after the swap).
+    out_row, in_row = swap("swap")
+    books["reason-by-the-pairs-transaction"] = (
+        [buy("buy", "A"), out_row, in_row, buy("other", "A", at="2024-03-01T00:00:00Z", rate=None)],
+        [],
+        [_cross(out_row, in_row, out_transaction_id="other")],
+    )
+    # A transaction's first reason wins: an unpriced slice of the swap-out's
+    # transaction (normalize's ``missing_spot_price``) taints the lot state,
+    # so the first pass's gate then refuses the swap-out itself
+    # (``basis_provenance_incomplete``).
+    out_row, in_row = swap("swap")
+    slice_row = projected("swap-slice", "A", "outbound", 1_000_000_000, NEU_DAY, kind="sell", rate=None, anchor="swap-out", side="slice")
+    books["first-reason-of-a-transaction"] = ([buy("buy", "A"), out_row, slice_row, in_row], [], [_cross(out_row, in_row)])
+    # An unconfirmed in leg is held: no event, its hold's reason.
+    pending = chain_txid("pending-swap-in")
+    usdt_out = projected("usdt-out", "A", "outbound", 300_000_000_000_000, NEU_DAY, kind="sell", rate="1", asset="USDT")
+    btc_in = projected(
+        "btc-in", "A", "inbound", 5_000_000_000, NEU_DAY, kind="buy", rate="60000",
+        external_id=pending, raw_json=graph_json(pending, confirmed=False),
+    )
+    books["held-in-leg"] = (
+        [buy("usdt-buy", "A", amount=300_000_000_000_000, rate="1", asset="USDT"), usdt_out, btc_in],
+        [],
+        [_cross(usdt_out, btc_in)],
+    )
+    # One row in two pairs: the later pair's link replaces the earlier's on
+    # the shared row, which keeps its place; the earlier in leg keeps its
+    # own link (the lot engine then finds it unpaired).
+    out_row, first_in = swap("swap")
+    second_in = projected("second-in", "A", "inbound", 300_000_000_000_000, NEU_DAY, kind="buy", rate="1", asset="USDT")
+    books["one-row-in-two-pairs"] = (
+        [buy("buy", "A"), out_row, first_in, second_in],
+        [],
+        [_cross(out_row, first_in, pair_id="first"), _cross(out_row, second_in, pair_id="second")],
+    )
+    # The link is chosen on the first pass's regime, Neu while a swap-in
+    # funds the wallet with Neu; the second pass leaves that swap-in out
+    # (its pair is blocked: nothing to swap from), so the linked sale is
+    # Alt there and stays linked.
+    usdt_short = projected("usdt-short", "A", "outbound", 300_000_000_000_000, "2024-01-01T00:00:00Z", kind="sell", rate="1", asset="USDT")
+    neu_in = projected("neu-in", "A", "inbound", 50_000_000_000, "2024-01-01T00:00:00Z", kind="buy", rate="40000")
+    out_row, in_row = swap("swap", at="2024-06-01T00:00:00Z", amount=30_000_000_000)
+    books["a-link-keeps-its-first-pass-regime"] = (
+        [buy("alt", "A", at=ALT_DAY), usdt_short, neu_in, out_row, in_row],
+        [],
+        [_cross(usdt_short, neu_in, pair_id="blocked"), _cross(out_row, in_row, pair_id="kept")],
+    )
+    # A pair without an id whose out row is a direct-payout row: the
+    # fallback id starts like a direct payout's, so only the out leg is
+    # quarantined, and nothing more is withheld (by the pair's own id).
+    payout_out = {**projected("payout-out", "A", "outbound", 200_000_000_000, NEU_DAY, kind="sell", rate="60000"), "id": "direct-payout:edge:source"}
+    payout_in = projected("payout-in", "A", "inbound", 600_000_000_000_000, NEU_DAY, kind="buy", rate="1", asset="USDT")
+    books["fallback-id-of-a-direct-payout-row"] = (
+        [buy("buy", "A"), payout_out, payout_in],
+        [],
+        [_cross(payout_out, payout_in, pair_id=None)],
+    )
+    return books
+
+
+SWAP_EDGES = sorted(_swap_edges())
+
+
+def _swap_edge(name: str) -> tuple[Mapping[str, Any], TaxEngineLedgerInputs]:
+    rows, pairs, cross = _swap_edges()[name]
+    return profile("at", "moving_average_at"), direct(rows, pairs, cross_asset_pairs=cross)
+
+
+@pytest.mark.parametrize("name", SWAP_EDGES)
+def test_swap_edge_books_prepare_as_the_oracle(name: str) -> None:
+    _assert_same_stages(*_swap_edge(name))
+
+
+def _pair_fates(inputs: TaxEngineLedgerInputs, selection: Document) -> dict[str, str]:
+    """Each carrying-value pair's fate in a selection, by its link id:
+    ``linked``, ``blocked: <reason code>``, ``skipped`` (an Alt swap), or
+    ``outside`` (a leg is not a row)."""
+    projection = inputs.finalized_tax_projection
+    row_ids = {str(row["id"]) for row in projection.rows}
+    linked = {link for _row, link in selection["links"]}
+    blocked = {
+        json.loads(item["detail_json"])["at_swap_link"]: json.loads(item["detail_json"])["reason_code"]
+        for item in selection["quarantines"]
+    }
+    fates: dict[str, str] = {}
+    for pair in projection.cross_asset_pairs:
+        if pair.get("policy") != CARRYING_VALUE:
+            continue
+        link = str(pair.get("pair_id") or f"{pair['out_id']}->{pair['in_id']}")
+        if str(pair["out_id"]) not in row_ids or str(pair["in_id"]) not in row_ids:
+            fates[link] = "outside"
+        elif link in blocked:
+            fates[link] = f"blocked: {blocked[link]}"
+        else:
+            fates[link] = "linked" if link in linked else "skipped"
+    return fates
+
+
+def test_the_swap_edge_books_reach_their_shapes() -> None:
+    """Each swap edge book shows on the oracle what its name says."""
+    documents = {name: (_swap_edge(name)[1], _oracle_document(*_swap_edge(name))) for name in SWAP_EDGES}
+
+    def fates(name: str) -> dict[str, str]:
+        inputs, document = documents[name]
+        return _pair_fates(inputs, document["swap_links"])
+
+    def events(name: str) -> dict[str, tuple[Any, Any]]:
+        inputs, document = documents[name]
+        anchors = {str(row["id"]): str(row["journal_transaction_id"]) for row in inputs.finalized_tax_projection.rows}
+        return {
+            anchors[str(event["transaction_id"])]: (event["at_regime"], event["at_swap_link"])
+            for asset in document["assets"]
+            for event in asset["normalized"]["events"]
+        }
+
+    for name in SWAP_EDGES:
+        assert documents[name][1]["error"] is None, name
+    assert fates("swap-leg-is-a-move-leg") == {"swap": "blocked: swap_leg_unavailable"}
+    [move_stage] = [asset for asset in documents["swap-leg-is-a-move-leg"][1]["assets"] if asset["normalized"]["transfers"]]
+    assert len(move_stage["prepared"]["intra_audit"]) == 1
+    assert fates("pair-leg-outside-the-projection") == {"swap": "outside"}
+    assert documents["pair-leg-outside-the-projection"][1]["swap_links"] == {"links": [], "blocked": [], "quarantines": []}
+    [link] = fates("pair-without-an-id")
+    assert link.endswith(":out->" + link.split("->")[1]) and fates("pair-without-an-id") == {link: "linked"}
+    assert fates("reason-by-the-pairs-transaction") == {"swap": "blocked: missing_spot_price"}
+    assert fates("first-reason-of-a-transaction") == {"swap": "blocked: missing_spot_price"}
+    passes: list[list[list[Any]]] = []
+    compare.run_on_oracle_backend(
+        compare.LEGACY_NATIVE_BACKEND,
+        lambda: _oracle_passes(*_swap_edge("first-reason-of-a-transaction"), passes, []),
+    )
+    [first_btc] = [prepared for normalized, prepared in passes[0] if normalized.asset == "BTC"]
+    assert [(item["transaction_id"], item["reason"]) for item in first_btc.quarantines] == [
+        ("swap-out", "missing_spot_price"),
+        ("swap-out", "basis_provenance_incomplete"),
+    ]
+    assert fates("held-in-leg") == {"swap": "blocked: pending_onchain_confirmation"}
+    two = documents["one-row-in-two-pairs"][1]["swap_links"]
+    assert [link for _row, link in two["links"]] == ["second", "first", "second"]
+    assert fates("a-link-keeps-its-first-pass-regime") == {"blocked": "blocked: insufficient_lots", "kept": "linked"}
+    assert events("a-link-keeps-its-first-pass-regime")["swap-out"] == ("alt", "kept")
+    payout = documents["fallback-id-of-a-direct-payout-row"][1]["swap_links"]
+    assert [json.loads(item["detail_json"]).get("out_amount") for item in payout["quarantines"]] == [None]
+    assert payout["blocked"] == sorted(["direct-payout:edge:source", _swap_edges()["fallback-id-of-a-direct-payout-row"][0][2]["id"]])
+
+
+def test_the_swap_books_reach_the_selection_branches() -> None:
+    """The swap goldens and seeded books compared above link Neu swaps,
+    skip Alt ones, block pairs for a normalize reason and for a gate
+    reason, block a direct payout (withholding its target-asset disposal),
+    and run a second pass whose gates differ from the first's (the pass-B
+    overdraw reaches ``missing_cost_basis``)."""
+    fates: set[str] = set()
+    withheld_payouts = 0
+    books = [_golden(name) for name in _swap_case_names()]
+    books += [(book.profile, book.inputs) for book in (random_inputs(seed, "at") for seed in _random_swap_seeds())]
+    for book_profile, inputs in books:
+        document = _oracle_document(book_profile, inputs)
+        if document["swap_links"] is None:
+            continue
+        fates |= set(_pair_fates(inputs, document["swap_links"]).values())
+        withheld_payouts += any(item.endswith(":out") for item in document["swap_links"]["blocked"])
+    assert {"linked", "skipped", "blocked: missing_spot_price", "blocked: insufficient_lots"} <= fates, fates
+    assert withheld_payouts >= 2
+    overdraw = _oracle_document(*_golden("at-pass-b-overdraw-sale"))
+    assert "missing_cost_basis" in {item[1] for item in _gate_quarantines(overdraw)}
+
+
 def test_the_mirror_is_the_adapters_own_call() -> None:
     """The whole oracle, on the legacy-native backend, normalizes and walks
     each asset exactly as ``_oracle_prepare_assets`` does, as far as it
@@ -1258,20 +1601,25 @@ def test_the_mirror_is_the_adapters_own_call() -> None:
         recorded[-1][1] = prepared
         return prepared
 
-    books = [_golden(name) for name in _generic_case_names() + _austrian_case_names()]
+    books = [_golden(name) for name in _generic_case_names() + _austrian_case_names() + _swap_case_names()]
     for country in ("generic", "at"):
         for seed in _random_seeds(country):
             book = random_inputs(seed, country)
             books.append((book.profile, book.inputs))
-    complete = 0
+    for seed in _random_swap_seeds():
+        book = random_inputs(seed, "at")
+        books.append((book.profile, book.inputs))
+    complete = second_passes = 0
     for book_profile, inputs in books:
         recorded.clear()
         with patch.object(oracle_adapter, "_prepare_rp2_asset_input", recording):
             _, error = compare.run_oracle(book_profile, inputs, backend=compare.LEGACY_NATIVE_BACKEND)
-        mirror: list[list[Any]] = []
+        passes: list[list[list[Any]]] = []
         compare.run_on_oracle_backend(
-            compare.LEGACY_NATIVE_BACKEND, lambda: _oracle_prepare_assets(book_profile, inputs, mirror)
+            compare.LEGACY_NATIVE_BACKEND, lambda: _oracle_passes(book_profile, inputs, passes, [])
         )
+        mirror = [stage for one_pass in passes for stage in one_pass]
+        second_passes += len(passes) == 2
         projection = inputs.finalized_tax_projection
 
         def stages(items: list[list[Any]]) -> list[Document]:
@@ -1283,12 +1631,13 @@ def test_the_mirror_is_the_adapters_own_call() -> None:
                 for normalized, prepared in items
             ]
 
-        # One prepare pass: each asset normalized and walked once, until
-        # anything fails. An Austrian book without a carrying-value pair
-        # selects no swap link, so it has no second pass.
+        # Each prepare pass normalizes and walks each asset once, until
+        # anything fails; an Austrian book whose selection links or blocks a
+        # pair runs a second pass.
         assert len(recorded) <= len(mirror)
         if error is None:
             assert len(recorded) == len(mirror)
             complete += 1
         assert compare.value_differences(stages(mirror[: len(recorded)]), stages(recorded)) == []
-    assert complete >= 400
+    assert complete >= 500
+    assert second_passes > RANDOM_BOOKS // 2

@@ -1419,6 +1419,19 @@ def _at_cases() -> list[GoldenCase]:
         else:
             check = succeeds(descriptions=("at_swap_link=s1", "at_swap_link=s2"))
         cases.append(_book(f"at-chained-swap{'-unpaired-abort' if short else ''}", ("at", "swap", "chain"), mat, rows, pairs, check))
+    # A link the first pass chose on its regime: a swap-in makes the wallet
+    # hold Neu, so the sale is Neu and linked; the swap-in's own pair is
+    # blocked (no USDT to swap from), so the second pass sees only Alt, where
+    # the sale is Alt and no swap leg, and its in leg is left unpaired.
+    rows = [
+        row("alt", "A", "inbound", 100_000_000_000, "2020-06-01T00:00:00Z", rate="9000", kind="buy"),
+        row("usdt-short", "A", "outbound", 3_000_000_000_000_000, "2024-01-01T00:00:00Z", rate="1", kind="sell", asset="USDT"),
+        row("neu-in", "A", "inbound", 50_000_000_000, "2024-01-01T00:00:00Z", kind="buy"),
+        row("swap-out", "A", "outbound", 30_000_000_000, "2024-06-01T00:00:00Z", rate="60000", kind="sell"),
+        row("swap-in", "A", "inbound", 1_800_000_000_000_000, "2024-06-01T00:00:00Z", rate="1", kind="buy", asset="USDT"),
+    ]
+    pairs = [pair("blocked", "usdt-short", "neu-in"), pair("kept", "swap-out", "swap-in")]
+    cases.append(_book("at-swap-link-turns-alt-abort", ("at", "swap", "chain"), mat, rows, pairs, fails("RP2 cross-asset input validation failed: Unpaired `at_swap_link=kept`")))
     payout_source = [
         row("lbtc-buy", "L", "inbound", 100_000_000_000, "2024-06-01T10:00:00Z", rate="30000", fiat_value="30000", asset="LBTC"),
         row("payout-source", "L", "outbound", 50_000_000_000, "2025-03-01T09:00:00Z", rate="50000", fiat_value="25000", asset="LBTC", kind="withdrawal"),
@@ -1428,6 +1441,27 @@ def _at_cases() -> list[GoldenCase]:
     for policy in ("carrying-value", "taxable"):
         payout = _payout("payout-1", "payout-source", asset="BTC", policy=policy, amount=49_990_000_000, value="24995")
         cases.append(_book(f"at-direct-payout-{policy}", ("at", "swap", "direct_payout"), mat, payout_source, check=succeeds(), payouts=[payout]))
+    # A direct payout whose source cannot carry is blocked: its source is
+    # short (the gate's reason) or unpriced (normalize drops it). Only the
+    # source is quarantined, and neither settlement leg books, the
+    # target-asset disposal ``<pair>:out`` included. A payout out of
+    # Altvermögen is no Neu swap: it books as a disposal and an acquisition,
+    # and its target-asset disposal books too.
+    def payout_book(*, held: int = 100_000_000_000, rate: Optional[str] = "50000", value: Optional[str] = "25000", alt: bool = False) -> list[dict[str, Any]]:
+        return [
+            row("lbtc-buy", "L", "inbound", held, "2020-01-01T10:00:00Z" if alt else "2024-06-01T10:00:00Z", rate="30000", asset="LBTC"),
+            row("payout-source", "L", "outbound", 50_000_000_000, "2020-06-01T09:00:00Z" if alt else "2025-03-01T09:00:00Z", rate=rate, fiat_value=value, asset="LBTC", kind="withdrawal"),
+            *payout_source[2:],
+        ]
+
+    blocked = _quarantined((("payout-source", "at_swap_basis_carry_unresolved"),), ("acquisition", "acquisition", "disposal"))
+    for variant, rows, check, at in (
+        ("short-source", payout_book(held=40_000_000_000), blocked, "2025-03-01T09:00:30Z"),
+        ("unpriced-source", payout_book(rate=None, value=None), blocked, "2025-03-01T09:00:30Z"),
+        ("alt-source", payout_book(alt=True), succeeds(absent=("at_swap_basis_carry_unresolved",), regimes={"payout-source": "alt"}), "2020-06-01T09:00:30Z"),
+    ):
+        payout = _payout("payout-1", "payout-source", asset="BTC", policy="carrying-value", amount=49_990_000_000, value="24995", at=at)
+        cases.append(_book(f"at-direct-payout-{variant}", ("at", "swap", "direct_payout"), mat, rows, check=check, payouts=[payout]))
 
     # The pass-B overdraw: a promoted swap-out bypasses the gate on pass B
     # after pass B dropped the 1-msat swap-in that funded it on pass A.

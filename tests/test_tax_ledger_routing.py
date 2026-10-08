@@ -12,10 +12,10 @@ runs on the phase-3 adapter. Here:
   projected), and the golden corpus uses every capability; a carrying pair
   with either leg outside the projection adds none;
 - each case routes to v2 exactly when its capabilities are routed, and
-  gives the stored ``expected`` either way: today ``generic`` and ``at`` are
-  routed, so a generic book without the Bitcoin rail carry and an Austrian
-  book without a carrying-value cross-asset pair run on the engine and the
-  others on the adapter; with nothing routed every book runs on the
+  gives the stored ``expected`` either way: today ``generic``, ``at``, and
+  ``at_swap`` are routed, so every Austrian book and a generic book without
+  the Bitcoin rail carry run on the engine and a generic book with the
+  carry on the adapter; with nothing routed every book runs on the
   adapter; with the case's capabilities routed it reaches the engine, which
   refuses the books it does not implement yet;
 - calls that end before routing count as such.
@@ -127,11 +127,22 @@ def test_the_primary_capability_is_the_most_specific() -> None:
 
 
 def test_generic_and_austrian_books_are_routed() -> None:
-    assert ledger.ROUTED_CAPABILITIES == frozenset({"generic", "at"})
+    assert ledger.ROUTED_CAPABILITIES == frozenset({"generic", "at", "at_swap"})
     assert compare.ROUTED_CAPABILITIES is ledger.ROUTED_CAPABILITIES
-    # The goldens hold Austrian books on both routes.
-    routes = {ledger.route(ledger.capabilities(case["request"])) for case in _routed_cases() if case["request"]["policy"]["country"]["kind"] == "at"}
-    assert routes == {ledger.V2, ledger.LEGACY}
+
+    def routes(country: str, capability: str) -> set[str]:
+        return {
+            ledger.route(ledger.capabilities(case["request"]))
+            for case in _routed_cases()
+            if case["request"]["policy"]["country"]["kind"] == country
+            and ledger.primary_capability(ledger.capabilities(case["request"])) == capability
+        }
+
+    # Every Austrian book runs on the engine, with swap links or without;
+    # a generic book only without the rail carry.
+    assert routes("at", "at") == routes("at", "at_swap") == {ledger.V2}
+    assert routes("generic", "generic") == {ledger.V2}
+    assert routes("generic", "generic_carry") == {ledger.LEGACY}
 
 
 def _expected_outcome(case: dict[str, Any], book_profile: Any, inputs: TaxEngineLedgerInputs) -> list[str]:

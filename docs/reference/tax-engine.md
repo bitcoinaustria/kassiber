@@ -15,9 +15,9 @@ a finalized projection cannot have. It sends the book to the engine's
 `ledger` operation only when the engine implements every capability the book
 uses (`ROUTED_CAPABILITIES`, a subset of `CAPABILITIES`: `generic`,
 `generic_carry`, `at`, `at_swap`). Plan 20's phase 4 moves them one at a
-time; so far `generic` and `at` are routed, so a generic book without a
-carrying-value Bitcoin rail pair and an Austrian book without a
-carrying-value cross-asset pair run on the engine, and `ledger_response.py`
+time; so far `generic`, `at`, and `at_swap` are routed, so every Austrian
+book and a generic book without a carrying-value Bitcoin rail pair run on
+the engine, and `ledger_response.py`
 renders the engine's journal ledger into `TaxEngineLedgerResult`: uuids,
 profile, wallet and account ids, row times, the legacy floats, and each
 fragment's row facts. Every other book runs on the phase-3 adapter,
@@ -199,8 +199,23 @@ schema version is a `RequestError`.
 `operation` is `ledger`, `prepare`, or `manifest`; `manifest` returns the
 engine's names and tables (`manifest.rs`), which
 `tests/test_tax_ledger_contract.py` compares with Python's. `ledger` returns
-the journal ledger (`ledger/run.rs`, `compose.rs`): after the final prepare
-pass it runs the lot engine over each asset with an inbound entry (the
+the journal ledger (`ledger/run.rs`, `compose.rs`). It runs a first prepare
+pass; on an Austrian book the swap-link selection (`ledger/swaplinks.rs`)
+then reads that pass, as the adapter's `_select_at_cross_asset_swap_links`
+did: of the carrying-value cross-asset pairs whose legs are rows, one a leg
+of which the first pass dropped or quarantined is blocked (both legs
+quarantined as `at_swap_basis_carry_unresolved` with that reason, else
+`swap_leg_unavailable`; a direct payout only on its source, and its
+target-asset disposal `<pair>:out` withheld too), one whose out leg was Neu
+is linked, and an Alt one books as a sale and a purchase. When it links or
+blocks a pair, a second pass leaves the blocked rows out and gives the
+linked rows' events their link, which reaches the lot engine through the
+composed notes; its stages replace the first pass's, and the pairs'
+quarantines come first. The second pass does not check a link again, so a
+chained swap whose first hop is blocked, or a link whose out leg the second
+pass makes Alt, leaves a marker unpaired and aborts in the swap check, as
+in the adapter (design §4.9). After the final pass `ledger` runs the lot
+engine over each asset with an inbound entry (the
 country's checks, the accounting-method gate, then the multi-asset hook or
 each asset's own computation) and composes acquisitions, realized entries
 with their gain/loss fragments, transfer legs, holdings, and the tax summary,
@@ -214,15 +229,17 @@ order, normalize's quarantines, and the time from which the asset's lot
 state is tainted) and the prepared
 stage (`ledger/order.rs`, `walk.rs`, `describe.rs`: the lot engine's
 entries as v1 entry documents with their composed notes and text, the
-gates' quarantines, and the transfer audit with the legs' description). A
-failed `prepare` also lists the stages its pass reached. Both operations
-answer for a generic book without the Bitcoin rail carry and an Austrian
-book without a carrying-value cross-asset pair (whose first prepare pass is
-its final one), and `Unsupported` for the others until those parts are
-ported. On an Austrian book `ledger` also composes each fragment's category
-after the row's reviewed overrides, and runs the multi-asset swap runner
-when the entries' notes pair `at_swap_link=` markers a user typed into a
-row's text (design §4.2). A failure is
+gates' quarantines, and the transfer audit with the legs' description),
+and the swap-link selection (the rows it links, the ids its blocked pairs
+leave out, and their quarantines). A failed `prepare` also lists the stages
+the failing pass reached, and the selection when the first pass succeeded.
+Both operations answer for every Austrian book and a generic book without
+the Bitcoin rail carry, and `Unsupported` for a generic book with it until
+the carry is ported. On an Austrian book `ledger` also composes each
+fragment's category after the row's reviewed overrides, and runs the
+multi-asset swap runner when the entries' notes pair `at_swap_link=`
+markers, the selected links' or ones a user typed into a row's text
+(design §4.2). A failure is
 `{"ok": false, "error": {"stage", "asset"?, "inner": {"class", "message"}}}`;
 `kassiber/core/engines/errors.py` raises what the adapter raised at that
 stage, wrapped where the adapter wrapped it.
@@ -273,7 +290,16 @@ instead end in the Neu shortfall abort, rarely, and pricing may release
 one, as on the oracle (TODO "Stop an Austrian Neu shortfall from aborting
 the whole report"); its entries start with their regime, its moves' regime
 flows conserve and match their legs' descriptions, and its categories
-follow the reviewed overrides.
+follow the reviewed overrides. Austrian swap books add cross-asset swaps
+between BTC, LBTC, and USDT. Besides the Neu shortfall they may end in the
+other failures the oracle shares (a Neu swap under a lot method, an
+unpaired link after the second pass, and rarely cyclic swaps or an account
+a linked swap-out overdrew beyond the lot engine's tolerance); otherwise a
+blocked pair books neither leg, both booked legs of a linked pair carry its
+link, a Neu swap's acquired lot takes what was swapped (its fee aside) at
+the source pool's average, each wallet ends at its holding (below zero only
+where a linked swap-out skipped the gates), and pricing quarantines no new
+row, with the same exclusion.
 
 ## Privacy
 

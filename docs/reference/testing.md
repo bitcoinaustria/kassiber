@@ -86,10 +86,10 @@ refuses (configuration failures and LD-5 shapes) count as `unclassified`. It
 also prints the number of LD-5 refusals. Shadow fails the session on any
 recorded difference, even one a caller caught, on any call of a capability
 production routes to v2 that went legacy or never reached v2, and on any LD-5
-refusal, since the suite's books are finalized projections. `generic` and
-`at` are routed, so a generic book without the Bitcoin rail carry and an
-Austrian book without a carrying-value cross-asset pair go to the v2 engine
-and every other call that reaches routing to the legacy adapter. A
+refusal, since the suite's books are finalized projections. `generic`, `at`,
+and `at_swap` are routed, so every Austrian book and a generic book without
+the Bitcoin rail carry go to the v2 engine and every other call that reaches
+routing (a generic book with the carry) to the legacy adapter. A
 test marked `stubs_tax_engine` replaces parts of the production engine, so
 shadow runs its calls on production without comparing them and lists them in
 the summary.
@@ -150,24 +150,32 @@ is the normalized stage (the events, moves, their order, their Austrian
 regimes, elections, and regime flows, normalize's quarantines, and the
 contamination time) and the prepared stage (the lot
 engine's entries as v1 entry documents with their notes and text, the walk's
-gate quarantines, and the transfer audit with the legs' description), against
-what the oracle's `_prepare_assets` builds on the legacy-native backend.
-Quarantines and audit rows go through the production reader. A failed pass is
-compared by the stages it reached and its error, and the same pass on RP2
-must fail exactly so. It covers the generic golden books without the Bitcoin
-rail carry and the Austrian ones without a carrying-value cross-asset pair,
-the first 200 seeded generic and Austrian books without such a pair, and
-edge books neither reaches (non-finite stored rates and values, overflow,
-subnormal prices, missing labels, an empty or unparsed timestamp, blocked
-groups that share transactions, a group drained between its moves, one
-instant spelled two ways, a holder label with spaces; on Austrian books,
+gate quarantines, and the transfer audit with the legs' description) of the
+final pass, against what the oracle's `_prepare_assets` builds on the
+legacy-native backend, and the Austrian swap-link selection over the first
+pass (the rows it links, the ids its blocked pairs leave out of the second
+pass, and their quarantines), against the oracle's
+`_select_at_cross_asset_swap_links`. Quarantines and audit rows go through
+the production reader. A failed pass is compared by the stages it reached
+and its error, and the same passes on RP2 must fail exactly so. It covers
+the generic golden books without the Bitcoin rail carry and every Austrian
+one, the first 200 seeded generic and Austrian books without a
+carrying-value cross-asset pair and the first 200 seeded Austrian books with
+one, and edge books neither reaches (non-finite stored rates and values,
+overflow, subnormal prices, missing labels, an empty or unparsed timestamp,
+blocked groups that share transactions, a group drained between its moves,
+one instant spelled two ways, a holder label with spaces; on Austrian books,
 times the regime tracker reads otherwise than RP2 or cannot read, the
 tracker's order at one instant, a held move leg, a move fee across both
-regimes, overrides of the tracker's regimes, and wallet ids it merges). Where
-the legacy-native backend checks an infinite value before RP2's constructor
+regimes, overrides of the tracker's regimes, wallet ids it merges, and swap
+pairs whose out leg is a move's, whose leg is not a row, without an id, whose
+reason only the pair's transaction id finds, whose leg's transaction has two
+reasons, with an unconfirmed leg, sharing a row, and linked on a regime the
+second pass changes). Where the
+legacy-native backend checks an infinite value before RP2's constructor
 would, the engine follows RP2. A last check runs the whole oracle and records
-its own normalize and walk calls, so the test's mirror of that call cannot
-drift.
+its own normalize and walk calls in both passes, so the test's mirror of
+those calls cannot drift.
 
 ### Comparing a real book
 
