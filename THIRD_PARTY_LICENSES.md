@@ -103,6 +103,16 @@ Payments protocol testing. It is not a Kassiber runtime dependency.
 | [esbuild](https://github.com/evanw/esbuild) | `ui-tauri/package.json`, `ui-tauri/provider-broker/` | Bundles the TypeScript chat provider broker into one Python-package data file; it is a build dependency, not a provider runtime | MIT |
 | [happy-dom](https://github.com/capricorn86/happy-dom), [Testing Library](https://github.com/testing-library/react-testing-library) | `ui-tauri/package.json`, `*.dom.test.tsx` | Mounted desktop-UI tests: a DOM for React effects to run in, and `renderHook`/`act` to drive them. Opt-in per file; the default suite stays static-render on Node | MIT |
 
+## Adapted source code
+
+Some desktop UI code is adapted from other open-source projects rather than
+installed as a dependency. Each adapted file names its origin in a header
+comment.
+
+| Project | Files | Role | License |
+| --- | --- | --- | --- |
+| [T3 Code](https://github.com/pingdotgg/t3code) | `ui-tauri/src/components/ai/modelPickerSearch.ts`, `modelPickerKeys.ts`, `composerPromptHistory.ts`, `ModelPickerContent.tsx`, `ModelPickerSidebar.tsx`, `ModelListRow.tsx`, and `ComposerControl.tsx` | Provider/model picker layout, ranked model search, keyboard navigation, favorites, composer controls and ArrowUp prompt recall. Copyright (c) 2026 T3 Tools Inc. | MIT |
+
 ## Practical notes
 
 - Third-party provider names and logos shown in the UI are not covered by

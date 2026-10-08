@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   dedupeProviderRows,
   filterModelsByPrivacy,
-  filterModelRows,
   modelPrivacyPosture,
   providerRuntimeSelectable,
   providerRuntimeTone,
@@ -15,25 +14,14 @@ import {
   OpenCodeIcon,
   PROVIDER_BRAND_ICON_BY_RUNTIME,
 } from "./providerBrandIcons";
+import { providerIconKey, providerInitials } from "./providerIdentity";
+import { initialModelPickerView } from "./modelPickerKeys";
 
 describe("provider brand icons", () => {
   it("matches each native runtime to the corresponding T3-style mark", () => {
     expect(PROVIDER_BRAND_ICON_BY_RUNTIME.codex).toBe(OpenAIIcon);
     expect(PROVIDER_BRAND_ICON_BY_RUNTIME.claude).toBe(ClaudeIcon);
     expect(PROVIDER_BRAND_ICON_BY_RUNTIME.opencode).toBe(OpenCodeIcon);
-  });
-});
-
-describe("filterModelRows", () => {
-  const models = [
-    { id: "gpt-5.4", display_name: "GPT 5.4", owned_by: "OpenAI" },
-    { id: "claude-opus-4-7", display_name: "Claude Opus 4.7", owned_by: "Anthropic" },
-  ];
-
-  it("matches all search tokens across model metadata", () => {
-    expect(filterModelRows(models, "claude anthropic")).toEqual([models[1]]);
-    expect(filterModelRows(models, "openai 5.4")).toEqual([models[0]]);
-    expect(filterModelRows(models, "missing")).toEqual([]);
   });
 });
 
@@ -154,5 +142,65 @@ describe("model privacy filtering", () => {
     expect(modelPrivacyPosture(provider, models[0])).toBe("remote");
     expect(filterModelsByPrivacy(provider, models, true)).toEqual([models[1]]);
     expect(filterModelsByPrivacy(provider, models, false)).toEqual(models);
+  });
+});
+
+describe("provider identity", () => {
+  const row = (name: string, base_url: string) => ({
+    name,
+    base_url,
+    kind: "remote" as const,
+    has_api_key: false,
+    is_default: false,
+  });
+
+  it("keys brand marks by CLI runtime, including the ACP agents", () => {
+    expect(providerIconKey(row("codex", "codex-cli://default"))).toBe("codex");
+    expect(providerIconKey(row("gemini", "gemini-cli://default"))).toBe("gemini");
+    expect(providerIconKey(row("copilot", "Copilot-CLI://default"))).toBe("copilot");
+    expect(providerIconKey(row("ollama", "http://127.0.0.1:11434/v1"))).toBeNull();
+  });
+
+  it("falls back to initials for providers without a mark", () => {
+    expect(providerInitials("Ollama")).toBe("OL");
+    expect(providerInitials("GitHub Copilot")).toBe("GC");
+    expect(providerInitials("gemini-cli")).toBe("GC");
+    expect(providerInitials("  ")).toBe("?");
+  });
+});
+
+describe("initialModelPickerView", () => {
+  const groups = [
+    { provider: { name: "ollama", is_default: true } },
+    { provider: { name: "codex", is_default: false } },
+  ];
+
+  it("opens on the current model's provider", () => {
+    expect(
+      initialModelPickerView({
+        groups,
+        value: { provider: "codex", model: "gpt-5.4" },
+        favorites: [],
+      }),
+    ).toEqual({ provider: "codex" });
+  });
+
+  it("opens on Favorites when the current model is starred", () => {
+    expect(
+      initialModelPickerView({
+        groups,
+        value: { provider: "codex", model: "gpt-5.4" },
+        favorites: [{ provider: "codex", model: "gpt-5.4" }],
+      }),
+    ).toBe("favorites");
+  });
+
+  it("falls back to the default provider, then Favorites", () => {
+    expect(initialModelPickerView({ groups, value: null, favorites: [] })).toEqual({
+      provider: "ollama",
+    });
+    expect(initialModelPickerView({ groups: [], value: null, favorites: [] })).toBe(
+      "favorites",
+    );
   });
 });

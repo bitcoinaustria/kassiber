@@ -34,3 +34,38 @@ export function parseModelPickerModelKey(
     model: value.slice(providerLength),
   };
 }
+
+/** The picker's left-rail selection: the Favorites list or one provider. */
+export const FAVORITES_VIEW = "favorites" as const;
+export type ModelPickerView = typeof FAVORITES_VIEW | { provider: string };
+
+export function modelPickerViewKey(view: ModelPickerView): string {
+  return view === FAVORITES_VIEW ? FAVORITES_VIEW : `provider:${view.provider}`;
+}
+
+/** Where the picker opens: Favorites if the current model is starred, else its provider. */
+export function initialModelPickerView(input: {
+  groups: ReadonlyArray<{ provider: { name: string; is_default?: boolean } }>;
+  value: { provider: string; model: string } | null;
+  favorites: ReadonlyArray<{ provider: string; model: string }>;
+}): ModelPickerView {
+  const { groups, value, favorites } = input;
+  if (
+    value &&
+    favorites.some(
+      (favorite) =>
+        favorite.provider === value.provider && favorite.model === value.model,
+    )
+  ) {
+    return FAVORITES_VIEW;
+  }
+  const current = value
+    ? groups.find(({ provider }) => provider.name === value.provider)
+    : undefined;
+  const fallback =
+    current ?? groups.find(({ provider }) => provider.is_default) ?? groups[0];
+  return fallback ? { provider: fallback.provider.name } : FAVORITES_VIEW;
+}
+
+/** Toggles the model picker while the composer has focus (T3 Code's binding). */
+export const MODEL_PICKER_SHORTCUT = ["mod", "shift", "m"] as const;

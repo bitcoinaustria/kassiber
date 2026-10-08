@@ -49,7 +49,10 @@
       "xhigh": "Extra high",
       "max": "Max",
       "ultra": "Ultra"
-    }
+    },
+    "effortDefault": "Default",
+    "effortAutoHint": "Let the model decide",
+    "newLine": "New line"
   },
   "prompts": {
     "reviewQuarantine": {
@@ -313,7 +316,26 @@
     "localModels": "Local",
     "remoteConfirm": "Use {{provider}} for chat? It reuses the provider's existing local CLI login/configuration, but prompts and selected Kassiber data may leave this device. Kassiber's typed tools stay capability-scoped; mutations and network access require consent. Provider-native coding tools are disabled.",
     "remoteDiscoveryConfirm": "Check models from {{provider}}? This contacts the provider now.",
-    "cliChatOnly": "Local CLI broker · Kassiber tools available · native coding tools disabled"
+    "cliChatOnly": "Local CLI broker · Kassiber tools available · native coding tools disabled",
+    "providers": "Providers",
+    "favorites": "Favorites",
+    "addFavorite": "Add to favorites",
+    "removeFavorite": "Remove from favorites",
+    "noFavorites": "No favorites yet",
+    "noFavoritesHint": "Star a model to keep it here, whichever provider serves it.",
+    "noModelsHint": "Use Check models to ask {{provider}} which models it offers.",
+    "checkModelsHint": "Ask {{provider}} for its models now. Nothing is checked until you click.",
+    "staleShort": "last check failed",
+    "posture": {
+      "local": "local",
+      "remote": "remote",
+      "tee": "TEE"
+    },
+    "postureHint": {
+      "local": "Runs on this device",
+      "remote": "Prompts leave this device",
+      "tee": "Prompts leave this device for a trusted enclave"
+    }
   },
   "review": {
     "seedPrompt": "Investigate the {{count}} quarantine issues in this book. Page through all cases, gather available evidence, and prepare one typed correction plan with reasons. Request one confirmation for the server-verified plan; make no unapproved changes. Explain any cases that still need evidence or a decision.",

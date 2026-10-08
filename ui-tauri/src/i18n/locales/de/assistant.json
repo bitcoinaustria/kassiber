@@ -49,7 +49,10 @@
       "xhigh": "Sehr hoch",
       "max": "Maximal",
       "ultra": "Ultra"
-    }
+    },
+    "effortDefault": "Standard",
+    "effortAutoHint": "Das Modell entscheidet",
+    "newLine": "Neue Zeile"
   },
   "prompts": {
     "reviewQuarantine": {
@@ -313,7 +316,26 @@
     "localModels": "Lokal",
     "remoteConfirm": "{{provider}} für den Chat verwenden? Die vorhandene lokale CLI-Anmeldung/-Konfiguration wird wiederverwendet, Prompts und ausgewählte Kassiber-Daten können dieses Gerät aber verlassen. Kassibers typisierte Tools bleiben fähigkeitsbeschränkt; Änderungen und Netzwerkzugriffe erfordern Zustimmung. Provider-eigene Coding-Tools sind deaktiviert.",
     "remoteDiscoveryConfirm": "Modelle von {{provider}} prüfen? Dadurch wird der Provider jetzt kontaktiert.",
-    "cliChatOnly": "Lokaler CLI-Broker · Kassiber-Tools verfügbar · native Coding-Tools deaktiviert"
+    "cliChatOnly": "Lokaler CLI-Broker · Kassiber-Tools verfügbar · native Coding-Tools deaktiviert",
+    "providers": "Provider",
+    "favorites": "Favoriten",
+    "addFavorite": "Zu Favoriten hinzufügen",
+    "removeFavorite": "Aus Favoriten entfernen",
+    "noFavorites": "Noch keine Favoriten",
+    "noFavoritesHint": "Markiere ein Modell mit dem Stern, dann findest du es hier – egal, welcher Provider es bereitstellt.",
+    "noModelsHint": "Mit „Modelle prüfen“ fragst du {{provider}}, welche Modelle verfügbar sind.",
+    "checkModelsHint": "{{provider}} jetzt nach seinen Modellen fragen. Ohne Klick wird nichts geprüft.",
+    "staleShort": "letzte Prüfung fehlgeschlagen",
+    "posture": {
+      "local": "lokal",
+      "remote": "entfernt",
+      "tee": "TEE"
+    },
+    "postureHint": {
+      "local": "Läuft auf diesem Gerät",
+      "remote": "Prompts verlassen dieses Gerät",
+      "tee": "Prompts verlassen dieses Gerät in Richtung einer vertrauenswürdigen Enklave"
+    }
   },
   "review": {
     "seedPrompt": "Untersuche die {{count}} Quarantäne-Probleme in diesem Buch. Geh alle Fälle seitenweise durch, sammle verfügbare Belege und erstelle einen gemeinsamen typisierten Korrekturplan mit Begründungen. Bitte einmal um Bestätigung des vom Server geprüften Plans; ändere nichts ohne Freigabe. Erkläre, welche Fälle noch Belege oder eine Entscheidung benötigen.",
