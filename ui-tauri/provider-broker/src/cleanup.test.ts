@@ -1,10 +1,15 @@
 import { spawn } from "node:child_process";
-import { access, mkdtemp, writeFile } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { cleanUpNow, trackChild, trackDirectory } from "./cleanup.js";
+
+const roots: string[] = [];
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
 
 describe("broker termination cleanup", () => {
   it("stops agents and removes per-turn directories", async () => {
@@ -27,6 +32,7 @@ describe("broker termination cleanup", () => {
 
   it("forgets a directory once its turn removed it", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "kassiber-ai-cleanup-"));
+    roots.push(cwd);
     const untrack = trackDirectory(cwd);
     untrack();
     cleanUpNow();
