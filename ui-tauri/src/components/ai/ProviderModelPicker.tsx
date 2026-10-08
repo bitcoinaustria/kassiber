@@ -137,6 +137,9 @@ export function ProviderModelPicker({
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const open = controlledOpen ?? uncontrolledOpen;
   const [thinkingOpen, setThinkingOpen] = React.useState(false);
+  // Set while the effort menu closes because the picker took over (e.g.
+  // Mod+Shift+M pressed inside the open menu).
+  const effortHandoffRef = React.useRef(false);
   const [localOnly, setLocalOnly] = React.useState(false);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const acknowledgeProvider = useDaemonMutation("ai.providers.acknowledge");
@@ -432,6 +435,18 @@ export function ProviderModelPicker({
 
   // Report open menus from state, not from the open handlers: the composer
   // can open the picker itself (Mod+Shift+M) through the controlled prop.
+  // Only one composer menu at a time. When the picker opens over the effort
+  // menu, close the menu without its focus restoration: returning focus to
+  // the effort trigger lands outside the picker, which dismisses the picker
+  // before a click on a model can select it.
+  React.useEffect(() => {
+    if (!open) return;
+    setThinkingOpen((wasOpen) => {
+      if (wasOpen) effortHandoffRef.current = true;
+      return false;
+    });
+  }, [open]);
+
   const overlayOpen = open || thinkingOpen;
   React.useEffect(() => {
     onOverlayOpenChange?.(overlayOpen);
@@ -534,7 +549,16 @@ export function ProviderModelPicker({
                 <ComposerControlChevron />
               </ComposerControl>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" side="top" className="min-w-44">
+            <DropdownMenuContent
+              align="start"
+              side="top"
+              className="min-w-44"
+              onCloseAutoFocus={(event) => {
+                if (!effortHandoffRef.current) return;
+                effortHandoffRef.current = false;
+                event.preventDefault();
+              }}
+            >
               <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
                 {t("composer.reasoningEffort")}
               </DropdownMenuLabel>
