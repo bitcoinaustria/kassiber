@@ -11,165 +11,6 @@
     "rule": "Of two spends of one input, the only confirmed one wins and books; only the others are held."
   },
   {
-    "id": "regime-order-ignores-direction",
-    "file": "kassiber/core/tax_events.py",
-    "find": "                0 if str(_row_get(r, \"direction\") or \"\") == \"inbound\" else 1,\n",
-    "replace": "                0,\n",
-    "expect_failing": [
-      "tests/test_tax_events.py::AustrianSelfTransferRegimeTest::test_self_transfer_fee_regime_is_order_independent"
-    ],
-    "rule": "Regime inference applies a same-instant acquisition before a disposal or move, whatever the row ids."
-  },
-  {
-    "id": "regime-order-follows-projection",
-    "file": "kassiber/core/tax_events.py",
-    "find": "    if is_at:\n        regime_rows = sorted(",
-    "replace": "    if False:\n        regime_rows = sorted(",
-    "expect_failing": [
-      "tests/test_tax_events.py::AustrianSelfTransferRegimeTest::test_self_transfer_fee_regime_is_order_independent"
-    ],
-    "rule": "Regime inference applies a same-instant acquisition before a disposal or move, whatever the projection's row order."
-  },
-  {
-    "id": "move-regime-override-ignored",
-    "file": "kassiber/core/tax_events.py",
-    "find": "                at_regime = (\n                    regime_override\n                    if regime_override in (\"alt\", \"neu\")\n                    else outbound_regimes.get(str(out_row[\"id\"]))\n                )",
-    "replace": "                at_regime = outbound_regimes.get(str(out_row[\"id\"]))",
-    "expect_failing": [
-      "tests/test_tax_events.py::AustrianSelfTransferRegimeTest::test_self_transfer_fee_honors_regime_override"
-    ],
-    "rule": "A regime override on a move's out leg sets the regime of its fee."
-  },
-  {
-    "id": "conflict-pair-feeds-regime-inference",
-    "file": "kassiber/core/tax_events.py",
-    "find": "    regime_pairs = [*non_conflict_pairs, *samourai_regime_pairs]",
-    "replace": "    regime_pairs = [*intra_pairs, *samourai_regime_pairs]",
-    "expect_failing": [
-      "tests/test_tax_events.py::AustrianSelfTransferRegimeTest::test_conflict_loser_pair_excluded_from_regime_inference"
-    ],
-    "rule": "A move with a conflict-losing leg moves no Alt/Neu availability; its partner counts as a plain acquisition."
-  },
-  {
-    "id": "event-override-keeps-election",
-    "file": "kassiber/core/tax_events.py",
-    "find": "            if regime_override in (\"alt\", \"neu\"):\n                at_regime = regime_override\n                at_regime_basis = None",
-    "replace": "            if regime_override in (\"alt\", \"neu\"):\n                at_regime = regime_override",
-    "expect_failing": [
-      "tests/test_tax_events.py::AustrianRegimeElectionAuditTest::test_explicit_override_suppresses_election_marker"
-    ],
-    "rule": "A regime override on a disposal drops the Wahlrecht election marker."
-  },
-  {
-    "id": "inbound-regime-ignores-cutoff",
-    "file": "kassiber/core/tax_events.py",
-    "find": "            if direction == \"inbound\":\n                at_regime = infer_regime_from_timestamp(row[\"occurred_at\"])",
-    "replace": "            if direction == \"inbound\":\n                at_regime = \"neu\"",
-    "expect_failing": [
-      "tests/test_austrian_classification.py::AustrianEventMarkerTest::test_at_inbound_event_pre_cutoff_gets_alt_regime"
-    ],
-    "rule": "An Austrian acquisition's regime follows the Neu cutoff."
-  },
-  {
-    "id": "alt-fallback-disabled",
-    "file": "kassiber/core/austrian.py",
-    "find": "            if neu_available_msat_by_key.get(availability_key, 0) <= 0:\n                regime = REGIME_ALT",
-    "replace": "            if False:\n                regime = REGIME_ALT",
-    "expect_failing": [
-      "tests/test_austrian_classification.py::OutboundRegimeTest::test_post_cutoff_sale_with_only_alt_inventory_falls_back_to_alt",
-      "tests/test_austrian_classification.py::OutboundRegimeTest::test_post_cutoff_sale_from_alt_only_wallet_stays_alt",
-      "tests/test_tax_events.py::AustrianRegimeElectionAuditTest::test_pure_alt_wallet_disposal_is_forced_not_election",
-      "tests/test_tax_events.py::AustrianSelfTransferRegimeTest::test_move_from_alt_only_wallet_carries_alt_to_destination"
-    ],
-    "rule": "A post-cutoff disposal from a wallet holding only Alt coins is Alt."
-  },
-  {
-    "id": "alt-fallback-always",
-    "file": "kassiber/core/austrian.py",
-    "find": "            if neu_available_msat_by_key.get(availability_key, 0) <= 0:",
-    "replace": "            if True:",
-    "expect_failing": [
-      "tests/test_austrian_classification.py::OutboundRegimeTest::test_post_cutoff_sale_with_neu_inventory_stays_neu",
-      "tests/test_tax_events.py::AustrianRegimeElectionAuditTest::test_mixed_holdings_disposal_records_wahlrecht_election"
-    ],
-    "rule": "A post-cutoff disposal stays Neu while its wallet holds Neu coins."
-  },
-  {
-    "id": "election-not-recorded",
-    "file": "kassiber/core/austrian.py",
-    "find": "                election_row_ids.add(str(row[\"id\"]))",
-    "replace": "                pass",
-    "expect_failing": [
-      "tests/test_tax_events.py::AustrianRegimeElectionAuditTest::test_mixed_holdings_disposal_records_wahlrecht_election",
-      "tests/test_austrian_classification.py::OutboundRegimeTest::test_post_cutoff_sale_with_neu_inventory_stays_neu",
-      "tests/test_tax_descriptions.py::DescriptionTest::test_austrian_markers_compose_in_a_fixed_order"
-    ],
-    "rule": "A Neu disposal from a wallet that also holds Alt coins records the Wahlrecht election."
-  },
-  {
-    "id": "election-without-alt",
-    "file": "kassiber/core/austrian.py",
-    "find": "        if regime == REGIME_NEU and alt_available_msat_by_key.get(availability_key, 0) > 0:",
-    "replace": "        if regime == REGIME_NEU and alt_available_msat_by_key.get(availability_key, 0) >= 0:",
-    "expect_failing": [
-      "tests/test_tax_events.py::AustrianRegimeElectionAuditTest::test_pure_neu_wallet_disposal_is_forced_not_election"
-    ],
-    "rule": "A disposal from a wallet holding only Neu coins is forced, not an election."
-  },
-  {
-    "id": "availability-not-per-wallet",
-    "file": "kassiber/core/austrian.py",
-    "find": "    text = str(wallet_id)\n    return text if text else AT_DEFAULT_POOL",
-    "replace": "    return AT_DEFAULT_POOL",
-    "expect_failing": [
-      "tests/test_austrian_classification.py::OutboundRegimeTest::test_post_cutoff_sale_from_alt_only_wallet_stays_alt"
-    ],
-    "rule": "Alt/Neu availability is tracked per wallet, not across the global pool."
-  },
-  {
-    "id": "move-draws-alt-first",
-    "file": "kassiber/core/austrian.py",
-    "find": "        (REGIME_NEU, REGIME_ALT)\n        if preferred_regime == REGIME_NEU\n        else (REGIME_ALT, REGIME_NEU)",
-    "replace": "        (REGIME_ALT, REGIME_NEU)",
-    "expect_failing": [
-      "tests/test_austrian_classification.py::OutboundRegimeTest::test_post_cutoff_sale_from_transfer_funded_wallet_draws_moved_neu_inventory"
-    ],
-    "rule": "A post-cutoff move draws its wallet's Neu coins first and carries them to the destination (bitcoinaustria/kassiber#213)."
-  },
-  {
-    "id": "move-credits-no-destination",
-    "file": "kassiber/core/austrian.py",
-    "find": "        bucket[to_key] += carried",
-    "replace": "        bucket[to_key] += 0",
-    "expect_failing": [
-      "tests/test_tax_events.py::AustrianSelfTransferRegimeTest::test_move_from_alt_only_wallet_carries_alt_to_destination",
-      "tests/test_austrian_classification.py::OutboundRegimeTest::test_one_to_many_transfer_carries_regime_to_each_destination_wallet"
-    ],
-    "rule": "A move carries the Alt/Neu availability it draws to its destination wallet."
-  },
-  {
-    "id": "move-fee-from-last-regime",
-    "file": "kassiber/core/austrian.py",
-    "find": "    for regime in regime_order:\n        fee_slice = min(moved[regime], remaining_fee)",
-    "replace": "    for regime in reversed(regime_order):\n        fee_slice = min(moved[regime], remaining_fee)",
-    "expect_failing": [
-      "tests/test_austrian_classification.py::OutboundRegimeTest::test_self_transfer_fee_is_fee_first_when_neu_covers_fee_only"
-    ],
-    "rule": "A move's fee comes from the first regime it draws; only the rest reaches the destination."
-  },
-  {
-    "id": "austrian-pool-not-renamed",
-    "file": "kassiber/core/engines/rp2.py",
-    "find": "    return AT_DEFAULT_POOL if pool == GLOBAL_COST_BASIS_POOL_ID else pool",
-    "replace": "    return pool",
-    "expect_failing": [
-      "tests/test_austrian_classification.py::AustrianEventMarkerTest::test_at_inbound_event_gets_neu_regime_and_pool",
-      "tests/test_austrian_classification.py::AustrianEventMarkerTest::test_at_transfer_uses_the_single_pool",
-      "tests/test_tax_descriptions.py::DescriptionTest::test_austrian_move_fee_carries_its_regime_then_the_pool"
-    ],
-    "rule": "Austrian descriptions name the single global pool `default`."
-  },
-  {
     "id": "swap-link-marker-first",
     "file": "kassiber/core/engines/rp2.py",
     "find": "        tokens.append(marker_token(MARKER_SWAP_LINK, swap_link))",
@@ -191,27 +32,6 @@
     "rule": "Both legs of a selected Austrian swap carry its link."
   },
   {
-    "id": "move-fee-regime-dropped",
-    "file": "kassiber/core/engines/rp2.py",
-    "find": "    regime = getattr(transfer, \"at_regime\", None)\n    if regime:\n        tokens.append(marker_token(MARKER_REGIME, regime))\n    from_pool",
-    "replace": "    regime = None\n    if regime:\n        tokens.append(marker_token(MARKER_REGIME, regime))\n    from_pool",
-    "expect_failing": [
-      "tests/test_tax_descriptions.py::DescriptionTest::test_austrian_move_fee_carries_its_regime_then_the_pool",
-      "tests/test_tax_events.py::AustrianSelfTransferRegimeTest::test_self_transfer_fee_honors_regime_override"
-    ],
-    "rule": "An Austrian move's fee description starts with the fee's regime."
-  },
-  {
-    "id": "inbound-kind-defaults-to-income",
-    "file": "kassiber/core/engines/rp2.py",
-    "find": "    return _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE.get(kind, \"BUY\")",
-    "replace": "    return _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE.get(kind, \"INCOME\")",
-    "expect_failing": [
-      "tests/test_tax_descriptions.py::DescriptionTest::test_inbound_kinds_book_by_their_type"
-    ],
-    "rule": "An inbound kind that is not an earn kind books as a plain acquisition."
-  },
-  {
     "id": "cross-asset-validation-code",
     "file": "kassiber/core/engines/rp2.py",
     "find": "            code=\"rp2_input_validation\",",
@@ -220,26 +40,6 @@
       "tests/test_austrian_classification.py::ATCrossAssetValidationTest::test_unpaired_swap_link_surfaces_as_apperror_with_code"
     ],
     "rule": "A failed cross-asset swap validation raises AppError with code rp2_input_validation."
-  },
-  {
-    "id": "holdings-use-lot-acquisition-values",
-    "file": "kassiber/core/engines/rp2.py",
-    "find": "        total_cost_basis += dec(computed_data.get_open_position_in_transaction_fiat_in_with_fee(transaction)) * remaining_ratio",
-    "replace": "        total_cost_basis += dec(transaction.fiat_in_with_fee) * remaining_ratio",
-    "expect_failing": [
-      "tests/test_tax_descriptions.py::test_pool_holdings_use_report_basis_without_rewriting_acquisition_journal[at]"
-    ],
-    "rule": "Holdings carry the moving-average pool's basis, not the remaining lots' acquisition values."
-  },
-  {
-    "id": "holdings-ignore-sold-share",
-    "file": "kassiber/core/engines/rp2.py",
-    "find": "        total_quantity += dec(transaction.crypto_in) * remaining_ratio",
-    "replace": "        total_quantity += dec(transaction.crypto_in)",
-    "expect_failing": [
-      "tests/test_tax_descriptions.py::test_pool_holdings_use_report_basis_without_rewriting_acquisition_journal[at]"
-    ],
-    "rule": "Holdings count only the unsold share of a partly sold lot when averaging their basis."
   },
   {
     "id": "wallet-pool-scope-allowed",
@@ -1111,8 +911,8 @@
   {
     "id": "compose-merges-holding-periods",
     "file": "tax-engine/core/src/ledger/compose.rs",
-    "find": "            let key = (entry.row, gain_loss.long_term);",
-    "replace": "            let key = (entry.row, false);",
+    "find": "            let key = (entry.row, gain_loss.long_term, at_category.clone());",
+    "replace": "            let key = (entry.row, false, at_category.clone());",
     "expect_failing": [
       "ledger::compose::tests::realized_entries_sum_their_fragments_by_event_and_holding_period"
     ],
@@ -1294,5 +1094,371 @@
       "tests/test_tax_ledger_contract.py::test_the_reader_renders_entries_as_the_adapter_wrote_them"
     ],
     "rule": "A transfer leg's quantity passes through the audit row's float, as the adapter's did."
+  },
+  {
+    "id": "regimes-cutoff-inclusive",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "        CutoffInstant::Read(instant) if instant.us < NEU_CUTOFF_US => Ok(Regime::Alt),",
+    "replace": "        CutoffInstant::Read(instant) if instant.us <= NEU_CUTOFF_US => Ok(Regime::Alt),",
+    "expect_failing": [
+      "ledger::regimes::tests::the_cutoff_is_strict_and_an_unread_time_fails_with_pythons_value_error"
+    ],
+    "rule": "A time's regime is Alt strictly before the Neuvermögen cutoff and Neu from it on."
+  },
+  {
+    "id": "regimes-unread-time-is-neu",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "        CutoffInstant::Unread(unread) => Err(EngineError::new(\n            ErrorClass::BuiltinValueError,\n            unread.error.clone(),\n        )),",
+    "replace": "        CutoffInstant::Unread(_) => Ok(Regime::Neu),",
+    "expect_failing": [
+      "ledger::regimes::tests::the_cutoff_is_strict_and_an_unread_time_fails_with_pythons_value_error",
+      "ledger::normalize::tests::an_austrian_time_the_tracker_cannot_read_fails_before_normalize_reads_a_price"
+    ],
+    "rule": "A time the Austrian rules cannot read fails the pass with Python's ValueError where the tracker reads it."
+  },
+  {
+    "id": "regimes-order-ignores-direction",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "                row.direction != Direction::Inbound,",
+    "replace": "                false,",
+    "expect_failing": [
+      "ledger::regimes::tests::rows_sort_by_text_time_then_inbound_first_then_id"
+    ],
+    "rule": "Regime inference applies a same-instant acquisition before a disposal or move, whatever the row ids."
+  },
+  {
+    "id": "regimes-order-ignores-time",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "                sort_time(row, is_set(row)),",
+    "replace": "                \"\",",
+    "expect_failing": [
+      "ledger::regimes::tests::rows_sort_by_text_time_then_inbound_first_then_id"
+    ],
+    "rule": "Regime inference walks rows by the text of their time, not in projection order."
+  },
+  {
+    "id": "regimes-held-rows-tracked",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "        .filter(|&index| rows[index].hold.is_none())",
+    "replace": "        .filter(|&_index| true)",
+    "expect_failing": [
+      "ledger::regimes::tests::rows_sort_by_text_time_then_inbound_first_then_id",
+      "ledger::normalize::tests::an_austrian_time_the_tracker_cannot_read_fails_before_normalize_reads_a_price"
+    ],
+    "rule": "Held rows (conflicting or unconfirmed spends) move no Alt/Neu availability."
+  },
+  {
+    "id": "regimes-alt-fallback-disabled",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "                        regime = Regime::Alt;",
+    "replace": "                        regime = Regime::Neu;",
+    "expect_failing": [
+      "ledger::regimes::tests::a_post_cutoff_sale_from_an_alt_only_wallet_is_alt"
+    ],
+    "rule": "A post-cutoff disposal from a wallet holding only Alt is Alt."
+  },
+  {
+    "id": "regimes-alt-fallback-always",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "                    if self.neu.get(key) == 0 {",
+    "replace": "                    if true {",
+    "expect_failing": [
+      "ledger::regimes::tests::a_sale_from_a_mixed_wallet_elects_neu"
+    ],
+    "rule": "A post-cutoff disposal from a wallet holding Alt and Neu stays Neu."
+  },
+  {
+    "id": "regimes-election-not-recorded",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "                        self.out.elected.insert(index);",
+    "replace": "",
+    "expect_failing": [
+      "ledger::regimes::tests::a_sale_from_a_mixed_wallet_elects_neu",
+      "ledger::regimes::tests::availability_is_per_wallet_and_a_disposal_depletes_only_its_regime",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A Neu disposal from a wallet that also holds Alt records the Wahlrecht election."
+  },
+  {
+    "id": "regimes-election-without-alt",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "                if regime == Regime::Neu && self.alt.get(key) > 0 {",
+    "replace": "                if regime == Regime::Neu {",
+    "expect_failing": [
+      "ledger::regimes::tests::a_sale_from_a_neu_only_wallet_is_forced_neu"
+    ],
+    "rule": "A Neu disposal from a wallet holding no Alt is forced, not an election."
+  },
+  {
+    "id": "regimes-availability-not-per-wallet",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "    if row.wallet_id.is_empty() {",
+    "replace": "    if true {",
+    "expect_failing": [
+      "ledger::regimes::tests::availability_is_per_wallet_and_a_disposal_depletes_only_its_regime"
+    ],
+    "rule": "Alt/Neu availability is kept per wallet."
+  },
+  {
+    "id": "regimes-move-draws-alt-first",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "            Regime::Neu => [Regime::Neu, Regime::Alt],",
+    "replace": "            Regime::Neu => [Regime::Alt, Regime::Neu],",
+    "expect_failing": [
+      "ledger::regimes::tests::a_move_carries_regimes_spills_and_pays_its_fee_first"
+    ],
+    "rule": "A Neu-preferring move spends the source's Neu before its Alt."
+  },
+  {
+    "id": "regimes-move-credits-no-destination",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "            self.bucket(regime).add(to, carry);",
+    "replace": "",
+    "expect_failing": [
+      "ledger::regimes::tests::a_move_carries_regimes_spills_and_pays_its_fee_first"
+    ],
+    "rule": "A move carries what it moved, less its fee, to the destination wallet's regimes."
+  },
+  {
+    "id": "regimes-move-fee-from-last-regime",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "        for regime in order {\n            let fee_slice = moved[slot(regime)].min(remaining_fee);",
+    "replace": "        for regime in [order[1], order[0]] {\n            let fee_slice = moved[slot(regime)].min(remaining_fee);",
+    "expect_failing": [
+      "ledger::regimes::tests::a_move_carries_regimes_spills_and_pays_its_fee_first"
+    ],
+    "rule": "A move's fee is the first slice of what left the source."
+  },
+  {
+    "id": "regimes-move-fee-regime-from-what-moved",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "            .find(|&&regime| fee_by[slot(regime)] > 0)",
+    "replace": "            .find(|&&regime| moved[slot(regime)] > 0)",
+    "expect_failing": [
+      "ledger::regimes::tests::a_move_whose_fee_takes_the_last_neu_is_neu"
+    ],
+    "rule": "A move's regime is its fee's first regime, before the regimes it carried."
+  },
+  {
+    "id": "regimes-move-applies-at-its-in-leg",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "        let trigger = if visited.contains(&pair.out) {",
+    "replace": "        let trigger = if false {",
+    "expect_failing": [
+      "ledger::regimes::tests::a_move_applies_at_its_out_legs_time"
+    ],
+    "rule": "A move moves availability at its out leg's time."
+  },
+  {
+    "id": "normalize-austrian-events-without-regime",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            self.event_regime(index)?",
+    "replace": "            (None, None)",
+    "expect_failing": [
+      "ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "Every Austrian event carries a regime."
+  },
+  {
+    "id": "normalize-inbound-regime-ignores-the-cutoff",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            Direction::Inbound => (by_time, None),",
+    "replace": "            Direction::Inbound => (Regime::Neu, None),",
+    "expect_failing": [
+      "ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "An Austrian acquisition's regime is its time's: Alt before the cutoff."
+  },
+  {
+    "id": "normalize-override-keeps-election",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            Some(chosen) => (Some(chosen), None),",
+    "replace": "            Some(chosen) => (Some(chosen), basis),",
+    "expect_failing": [
+      "ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides"
+    ],
+    "rule": "A regime override replaces the event's regime and drops the election marker."
+  },
+  {
+    "id": "normalize-event-override-ignored",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        Ok(match row.regime_override {",
+    "replace": "        Ok(match None::<Regime> {",
+    "expect_failing": [
+      "ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A reviewed regime override is the event's regime."
+  },
+  {
+    "id": "normalize-move-override-ignored",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "                out_row\n                    .regime_override\n                    .or_else(|| self.tracked.regimes.get(&pair.out).copied()),",
+    "replace": "                self.tracked.regimes.get(&pair.out).copied(),",
+    "expect_failing": [
+      "ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides",
+      "ledger::walk::tests::austrian_moves_carry_the_pool_in_their_notes_and_audit",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A regime override on a move's out leg is the move's regime."
+  },
+  {
+    "id": "normalize-moves-without-flows",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "                self.tracked.flows.get(&pair.index).cloned(),",
+    "replace": "                None,",
+    "expect_failing": [
+      "ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides",
+      "ledger::walk::tests::austrian_moves_carry_the_pool_in_their_notes_and_audit",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "An Austrian move records the msat each regime sent and received (at_alt_out/at_alt_in)."
+  },
+  {
+    "id": "walk-move-fee-regime-dropped",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        let regime = transfer.at_regime.map(Regime::as_str);",
+    "replace": "        let regime: Option<&str> = None;",
+    "expect_failing": [
+      "ledger::walk::tests::austrian_moves_carry_the_pool_in_their_notes_and_audit",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "An Austrian move's fee notes and leg descriptions carry its regime."
+  },
+  {
+    "id": "compose-categories-ignore-overrides",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "                overridden(&self.book.rows[event.row], category)",
+    "replace": "                Some(category)",
+    "expect_failing": [
+      "ledger::compose::tests::austrian_categories_follow_the_overrides_and_split_entries",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "Reviewed category and taxability overrides replace or clear the engine's Austrian category."
+  },
+  {
+    "id": "compose-taxability-off-clears-non-reportable",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            if row.taxability_off && NON_REPORTABLE_CATEGORY_OVERRIDES.contains(&chosen) =>",
+    "replace": "            if false =>",
+    "expect_failing": [
+      "ledger::compose::tests::austrian_categories_follow_the_overrides_and_split_entries"
+    ],
+    "rule": "With taxability off, a non-reportable category override (alt_taxfree, neu_swap) stays."
+  },
+  {
+    "id": "compose-none-override-kept",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "        Some(\"none\") => None,\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::compose::tests::austrian_categories_follow_the_overrides_and_split_entries"
+    ],
+    "rule": "The category override `none` clears the category."
+  },
+  {
+    "id": "compose-fees-keep-their-category",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "                    (group.cost_basis.clone(), num::zero(), None)",
+    "replace": "                    (group.cost_basis.clone(), num::zero(), group.at_category.clone())",
+    "expect_failing": [
+      "ledger::compose::tests::austrian_categories_follow_the_overrides_and_split_entries",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "Fee and transfer-fee entries report no Austrian category."
+  },
+  {
+    "id": "compose-groups-ignore-categories",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            let key = (entry.row, gain_loss.long_term, at_category.clone());",
+    "replace": "            let key = (entry.row, gain_loss.long_term, None::<String>);",
+    "expect_failing": [
+      "ledger::compose::tests::austrian_categories_follow_the_overrides_and_split_entries"
+    ],
+    "rule": "An Austrian event splits into one entry per category, also a fee across Alt and Neu lots."
+  },
+  {
+    "id": "compose-classification-errors-ignored",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            return Err(EngineError::new(error.class, error.message.clone()));",
+    "replace": "            return Ok(String::from(\"neu_gain\"));",
+    "expect_failing": [
+      "ledger::compose::tests::an_austrian_classification_failure_is_raised_unwrapped",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A classification failure fails the ledger, unwrapped, at the first failing fragment."
+  },
+  {
+    "id": "run-austrian-books-unsupported",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "            Country::At {} => Ok(()),",
+    "replace": "            Country::At {} => Err(EngineError::unsupported(\"Austrian books\")),",
+    "expect_failing": [
+      "the_ledger_operation_reproduces_every_stored_response",
+      "prepare_normalizes_and_walks_books_without_carries"
+    ],
+    "rule": "The engine answers an Austrian book without a carrying-value cross-asset pair."
+  },
+  {
+    "id": "run-austrian-swap-pairs-accepted",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "                && (pair.bitcoin_rail || !rail)",
+    "replace": "                && pair.bitcoin_rail",
+    "expect_failing": [
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "An Austrian book with a carrying-value cross-asset pair needs swap-link selection, which the engine does not run yet."
+  },
+  {
+    "id": "run-swap-runner-results-dropped",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "        return Ok(outputs);",
+    "replace": "        return Err(StagedError::contract(EngineError::unsupported(\"runner\")));",
+    "expect_failing": [
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "User-tagged swap pairs run the multi-asset runner, whose results are the assets' own."
+  },
+  {
+    "id": "manifest-default-inbound-is-income",
+    "file": "tax-engine/core/src/manifest.rs",
+    "find": "pub const DEFAULT_INBOUND_TYPE: TransactionType = TransactionType::Buy;",
+    "replace": "pub const DEFAULT_INBOUND_TYPE: TransactionType = TransactionType::Income;",
+    "expect_failing": [
+      "manifest::tests::manifest_serializes_every_table"
+    ],
+    "rule": "An inbound kind the table does not list books as a purchase (BUY), not income."
+  },
+  {
+    "id": "builder-cutoff-reads-rp2s-parse",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "    return {\"us\": (when - _EPOCH) // _ONE_US}",
+    "replace": "    return {\"us\": timestamp_fields(value).get(\"us\", 0)}",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_cutoff_instant_is_the_austrian_rules_reading"
+    ],
+    "rule": "The Austrian cutoff reads a time as the Austrian rules do (fromisoformat, naive as UTC), not as RP2 parses it."
+  },
+  {
+    "id": "errors-builtin-value-error-is-rp2s",
+    "file": "kassiber/core/engines/errors.py",
+    "find": "    \"BuiltinValueError\": ValueError,",
+    "replace": "    \"BuiltinValueError\": EngineValueError,",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_unwrapped_and_contract_stages"
+    ],
+    "rule": "The Austrian time parse raises Python's own ValueError."
+  },
+  {
+    "id": "routing-austrian-books-legacy",
+    "file": "kassiber/core/engines/ledger.py",
+    "find": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"at\"})",
+    "replace": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\"})",
+    "expect_failing": [
+      "tests/test_tax_ledger_routing.py::test_generic_and_austrian_books_are_routed"
+    ],
+    "rule": "Austrian books without a carrying-value cross-asset pair run on the engine."
   }
 ]
