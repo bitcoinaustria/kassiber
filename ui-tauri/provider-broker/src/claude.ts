@@ -11,6 +11,7 @@ import {
 import { promptFromMessages, systemInstructions } from "./prompt.js";
 import {
   providerStatus,
+  requestedFastMode,
   safeErrorMessage,
   safeSessionCursor,
   sensitiveContext,
@@ -46,6 +47,14 @@ export function sensitiveClaudeEnvironment(): NodeJS.ProcessEnv {
  */
 const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 
+/**
+ * Fast mode (`--settings '{"fastMode":true}'`) is honoured only on Opus: the CLI
+ * accepts the setting on other models but reports `fast_mode_state: "off"`,
+ * so only the `opus` alias advertises it.
+ */
+export const CLAUDE_FAST_MODELS = new Set(["opus"]);
+const CLAUDE_FAST_DESCRIPTION = "Faster Opus output, billed at a higher rate";
+
 export const CLAUDE_MODELS: BrokerModel[] = [
   {
     id: "default",
@@ -67,6 +76,8 @@ export const CLAUDE_MODELS: BrokerModel[] = [
     owned_by: "Anthropic",
     supports_reasoning_effort: true,
     reasoning_efforts: CLAUDE_EFFORTS,
+    supports_fast_mode: true,
+    fast_mode_description: CLAUDE_FAST_DESCRIPTION,
   },
   {
     id: "sonnet",
@@ -145,6 +156,7 @@ type ClaudeStreamLine = {
   type?: string;
   subtype?: string;
   session_id?: string;
+  fast_mode_state?: string;
   event?: {
     type?: string;
     delta?: { type?: string; text?: string; thinking?: string };
@@ -172,6 +184,11 @@ type ClaudeStreamLine = {
  * MCP server. `--bare` would preserve explicit MCP, but deliberately skips the
  * OAuth/keychain login users already configured and suppresses stream events.
  */
+/** Fast mode was requested and the selected model honours it. */
+export function claudeFastModeApplies(request: ChatRequest): boolean {
+  return requestedFastMode(request) && CLAUDE_FAST_MODELS.has(request.model);
+}
+
 export async function chatArgs(
   request: ChatRequest,
   cwd: string,
@@ -219,6 +236,9 @@ export async function chatArgs(
   if (sessionId) args.push(`--resume=${sessionId}`);
   const effort = request.options?.reasoning_effort;
   if (effort && effort !== "auto") args.push("--effort", effort);
+  // `--settings` still applies under `--setting-sources ""`: it is inline
+  // configuration, not a settings file the CLI discovers.
+  if (claudeFastModeApplies(request)) args.push("--settings", JSON.stringify({ fastMode: true }));
   // Variadic, so it goes last: the CLI consumes tool names until the next flag.
   args.push("--disallowed-tools", ...CLAUDE_DISABLED_TOOLS);
   return args;
@@ -239,6 +259,8 @@ export async function claudeChat(
     }
   }
   const resumed = safeSessionCursor(request.options?.provider_session_id) !== undefined;
+  const fastRequested = claudeFastModeApplies(request);
+  let fastStateReported = false;
 
   const child = spawn(executable, await chatArgs(request, cwd, toolBridge), {
     cwd,
@@ -276,6 +298,22 @@ export async function claudeChat(
         continue;
       }
       if (typeof message.session_id === "string") providerSessionId = message.session_id;
+      // The CLI may still decline fast mode (plan, rate limit). Say so once
+      // as a status hint; the turn itself carries on at standard speed.
+      if (
+        fastRequested &&
+        !fastStateReported &&
+        typeof message.fast_mode_state === "string"
+      ) {
+        fastStateReported = true;
+        if (message.fast_mode_state !== "on") {
+          writeEvent({
+            type: "status",
+            phase: "fast_mode_unavailable",
+            message: "Fast mode unavailable; answering at standard speed",
+          });
+        }
+      }
 
       if (message.type === "stream_event" && message.event) {
         const event = message.event;
