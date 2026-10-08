@@ -12,13 +12,27 @@ export function isCliProvider(provider: AiProviderRow): boolean {
   return isNativeAiProviderLocator(provider.base_url);
 }
 
+/** Local inference servers recognised by provider name, for their marks. */
+const LOCAL_SERVER_NAMES: ReadonlyArray<[RegExp, string]> = [
+  [/^ollama\b/i, "ollama"],
+  [/^omlx\b/i, "omlx"],
+];
+
 /**
- * The runtime id used to look up a provider's brand mark (`codex`, `claude`,
- * `opencode`, `copilot`). Purely cosmetic — it never decides
- * routing, posture, or whether a provider may be contacted.
+ * The key used to look up a provider's brand mark: the CLI runtime (`codex`,
+ * `claude`, `opencode`, `copilot`), or `ollama` / `omlx` for a local server
+ * whose name or display name starts with one. Purely cosmetic — it never
+ * decides routing, posture, or whether a provider may be contacted.
  */
 export function providerIconKey(provider: AiProviderRow): string | null {
-  return nativeAiProviderRuntime(provider.base_url);
+  const runtime = nativeAiProviderRuntime(provider.base_url);
+  if (runtime) return runtime;
+  for (const label of [provider.name, provider.display_name ?? ""]) {
+    for (const [pattern, key] of LOCAL_SERVER_NAMES) {
+      if (pattern.test(label.trim())) return key;
+    }
+  }
+  return null;
 }
 
 // Generic suffixes that would make "Gemini CLI" and "GitHub Copilot" both "GC".

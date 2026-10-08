@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import type { AiProviderKind, AiProviderRow } from "@/lib/aiCapabilities";
 import { cn } from "@/lib/utils";
 import {
+  LOCAL_SERVER_ICON_BY_KEY,
   PROVIDER_BRAND_ICON_BY_RUNTIME,
   type ProviderBrandIcon,
 } from "./providerBrandIcons";
@@ -19,8 +20,10 @@ import {
   providerInitials,
 } from "./providerIdentity";
 
-const BRAND_ICONS: Readonly<Record<string, ProviderBrandIcon | undefined>> =
-  PROVIDER_BRAND_ICON_BY_RUNTIME;
+const BRAND_ICONS: Readonly<Record<string, ProviderBrandIcon | undefined>> = {
+  ...PROVIDER_BRAND_ICON_BY_RUNTIME,
+  ...LOCAL_SERVER_ICON_BY_KEY,
+};
 
 const POSTURE_TONE: Record<AiProviderKind, string> = {
   local: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",

@@ -157,8 +157,10 @@ describe("provider identity", () => {
   it("keys brand marks by CLI runtime, including the ACP agents", () => {
     expect(providerIconKey(row("codex", "codex-cli://default"))).toBe("codex");
     expect(providerIconKey(row("gemini", "gemini-cli://default"))).toBeNull();
+    expect(providerIconKey(row("ollama", "http://localhost:11434/v1"))).toBe("ollama");
+    expect(providerIconKey(row("omlx", "http://127.0.0.1:8000/v1"))).toBe("omlx");
+    expect(providerIconKey({ ...row("my-box", "http://10.0.0.5:11434/v1"), display_name: "Ollama (studio)" })).toBe("ollama");
     expect(providerIconKey(row("copilot", "Copilot-CLI://default"))).toBe("copilot");
-    expect(providerIconKey(row("ollama", "http://127.0.0.1:11434/v1"))).toBeNull();
   });
 
   it("falls back to initials for providers without a mark", () => {

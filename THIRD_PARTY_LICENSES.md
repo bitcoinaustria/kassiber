@@ -112,6 +112,8 @@ comment.
 | Project | Files | Role | License |
 | --- | --- | --- | --- |
 | [T3 Code](https://github.com/pingdotgg/t3code) | `ui-tauri/src/components/ai/modelPickerSearch.ts`, `modelPickerKeys.ts`, `composerPromptHistory.ts`, `ModelPickerContent.tsx`, `ModelPickerSidebar.tsx`, `ModelListRow.tsx`, `ComposerControl.tsx`, `providerIdentity.ts` (provider initials), and the send/stop marks and action-button styles in `ui-tauri/src/components/ai-02.tsx` | Provider/model picker layout, ranked model search, keyboard navigation, favorites, composer controls, composer action buttons and ArrowUp prompt recall. Copyright (c) 2026 T3 Tools Inc. | MIT |
+| [Simple Icons](https://simpleicons.org) | The Ollama mark in `ui-tauri/src/components/ai/providerBrandIcons.tsx` | Brand mark for Ollama providers in the model picker; the mark itself remains Ollama's trademark | CC0-1.0 |
+| [oMLX](https://github.com/jundot/omlx) | The oMLX mark in `ui-tauri/src/components/ai/providerBrandIcons.tsx` | Brand mark for oMLX providers in the model picker, from the project's own icon | Apache-2.0 |
 
 ## Practical notes
 
