@@ -27,6 +27,7 @@ import type {
   AiProviderRow,
   AssistantModelSelection,
 } from "@/lib/aiCapabilities";
+import { isImeKeyEvent } from "@/lib/imeKeyEvent";
 import { formatShortcut } from "@/lib/shortcutLabel";
 import { cn } from "@/lib/utils";
 import { ModelListRow } from "./ModelListRow";
@@ -279,6 +280,7 @@ export function ModelPickerContent({
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat || event.altKey) return;
+      if (isImeKeyEvent(event)) return;
       if (!(event.metaKey || event.ctrlKey)) return;
       if (event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
         event.preventDefault();
@@ -317,7 +319,7 @@ export function ModelPickerContent({
   };
 
   const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.nativeEvent.isComposing) return;
+    if (isImeKeyEvent(event)) return;
     const plain = !event.altKey && !event.ctrlKey && !event.metaKey;
     if (plain && event.key === "ArrowDown") {
       event.preventDefault();

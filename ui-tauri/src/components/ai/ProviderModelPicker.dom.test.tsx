@@ -322,4 +322,37 @@ describe("ProviderModelPicker (mounted)", () => {
     fireEvent.keyDown(ollama, { key: "ArrowRight" });
     expect(document.activeElement).toBe(search);
   });
+
+  describe("IME input", () => {
+    it("does not pick a model with an IME-confirming Enter", async () => {
+      const { search, onChange } = mount();
+      fireEvent.change(search, { target: { value: "codex" } });
+      await act(async () => {
+        // WebKit reports the confirming Enter as keyCode 229 with
+        // isComposing already false.
+        fireEvent.keyDown(search, { key: "Enter", keyCode: 229 });
+        fireEvent.keyDown(search, { key: "Enter", isComposing: true });
+      });
+      expect(onChange).not.toHaveBeenCalled();
+      await act(async () => {
+        fireEvent.keyDown(search, { key: "Enter" });
+      });
+      expect(onChange).toHaveBeenCalledWith({ provider: "codex", model: "gpt-5.4" });
+    });
+
+    it("ignores picker shortcuts during a composition", async () => {
+      const { search, onChange } = mount();
+      await act(async () => {
+        fireEvent.keyDown(search, { key: "1", ctrlKey: true, keyCode: 229 });
+        fireEvent.keyDown(search, {
+          key: "ArrowDown",
+          ctrlKey: true,
+          shiftKey: true,
+          isComposing: true,
+        });
+      });
+      expect(onChange).not.toHaveBeenCalled();
+      expect(optionNames()[0]).toContain("qwen3:8b");
+    });
+  });
 });
