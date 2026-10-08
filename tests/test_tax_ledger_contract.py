@@ -6,7 +6,11 @@ adapter's shapes, and ``errors.py`` raises what the adapter raised. Here:
 
 - the builder over every stored golden input reproduces the stored request
   (``tax-engine/core/tests/data/ledger_fixtures.json``), or fails with the
-  stored outcome itself; the engine reads every stored request;
+  stored outcome itself; the engine answers every stored request with the
+  stored response, byte for byte, where production routes the book to it,
+  and with ``Unsupported`` elsewhere;
+- the reader renders every stored response into the stored ``expected``
+  outcome exactly (§3.8);
 - the engine's manifest equals the names and tables Python spells (§3.11);
 - the stage table reproduces every stored failure of an engine stage,
   including the method gate the multi-asset hook wraps (§3.9);
@@ -25,6 +29,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from decimal import Decimal
 from functools import lru_cache
 from importlib.util import find_spec
@@ -108,14 +113,39 @@ def test_the_builder_reproduces_the_stored_request(name: str) -> None:
     assert _canonical(request) == _canonical(case["request"])
 
 
-def test_the_engine_reads_every_stored_request() -> None:
-    requests = [case["request"] for case in _document()["cases"] if case["request"] is not None]
-    assert len(requests) >= 100
-    for request in requests:
-        response = json.loads(kassiber_tax.ledger(ledger_request.dumps(request)))
-        # Not a request error: the engine read it. The ledger layer is not
-        # ported yet.
-        assert response["error"]["stage"] == "unsupported", response
+def test_the_engine_reproduces_every_stored_response() -> None:
+    cases = [case for case in _document()["cases"] if case["request"] is not None]
+    assert len(cases) >= 100
+    answered = 0
+    for case in cases:
+        text = kassiber_tax.ledger(ledger_request.dumps(case["request"]))
+        routed = ledger.route(ledger.capabilities(case["request"])) == ledger.V2
+        assert (case["response"] is not None) == routed, case["name"]
+        if case["response"] is None:
+            # Production runs the book on the phase-3 adapter; the engine
+            # read the request but does not implement it yet.
+            assert json.loads(text)["error"]["stage"] == "unsupported", case["name"]
+            continue
+        # The engine's own bytes: key order and decimal forms included.
+        assert text == ledger_request.dumps(case["response"]), case["name"]
+        answered += 1
+    assert answered >= 40
+
+
+def _answered_case_names() -> list[str]:
+    return [case["name"] for case in _document()["cases"] if case["response"] is not None]
+
+
+@pytest.mark.parametrize("name", _answered_case_names())
+def test_the_reader_renders_every_stored_response_as_expected(name: str) -> None:
+    case = _case(name)
+    book_profile, inputs = codec.decode_inputs(case["inputs"])
+    try:
+        outcome: compare.Outcome = (ledger_response.read_ledger(book_profile, inputs, case["response"]), None)
+    except Exception as exc:  # noqa: BLE001 - a failure is the case's outcome
+        outcome = (None, exc)
+    actual = compare.outcome_document(outcome)
+    assert compare.document_differences(codec.decode(case["expected"]), actual) == []
 
 
 def test_the_builder_sends_facts_not_markers() -> None:
@@ -375,6 +405,90 @@ def test_partner_legs_get_no_pricing_fields() -> None:
         )
     assert ledger_response.detail_value({"float": "-15E-1", "nested": [{"float": "0E0"}]}) == {"float": "-15E-1", "nested": [0.0]}
     assert ledger_response.detail_value({"float": "-15E-1"}) == -1.5
+
+
+def test_the_reader_renders_entries_as_the_adapter_wrote_them() -> None:
+    # A synthetic response over a small projection: what the reader adds to
+    # each entry the engine composed (design §3.8).
+    buy = projected("buy", "A", "inbound", 100_000_000_000, "2024-01-01T00:00:00+01:00", rate="40000")
+    # A move large enough that its quantities lose digits through float.
+    out = projected("m", "A", "outbound", 98_765_432_109_875_543, "2024-02-01T00:00:00Z", side="move-out", fee=1_000)
+    inbound = projected("m", "B", "inbound", 98_765_432_109_875_543, "2024-02-01T00:00:00Z", side="move-in")
+    inputs = direct([buy, out, inbound], [move(out, inbound, group_id=None)])
+    book_profile = profile("at", "fifo")
+    lot = {"row": buy["id"], "spot_price": "40000E0", "fiat_fee": "0E0", "crypto_fee": "0E0", "basis": "40000E0", "crypto_in": "1E0"}
+    event = {"row": out["id"], "spot_price": "50000E0", "fiat_fee": "5E-4", "crypto_fee": "1E-8"}
+    response = {
+        "schema_version": 2,
+        "ok": True,
+        "engine_version": "0.2.0",
+        "entries": [
+            {"entry_type": "acquisition", "row": buy["id"], "wallet": "Cold", "asset": "BTC", "quantity": "1E0",
+             "fiat_value": "40000E0", "unit_cost": "40000E0", "description": "at_regime=neu buy"},
+            {"entry_type": "disposal", "row": out["id"], "wallet": "Cold", "asset": "BTC", "quantity": "-1E-8",
+             "proceeds": "5E-4", "cost_basis": "4E-4", "gain_loss": "1E-4", "description": "at_regime=neu fee",
+             "at_category": "neu_gain", "capital_gains_type": "short",
+             "fragments": [{"crypto_amount": "1E-8", "cost_basis": "4E-4", "proceeds": "5E-4", "gain_loss": "1E-4",
+                            "unit_basis_override": None, "event": event, "lot": lot}]},
+            {"entry_type": "transfer_out", "audit": 0},
+            {"entry_type": "transfer_in", "audit": 0},
+        ],
+        "quarantines": [],
+        "intra_audit": [{"pair": 0, "sent": "98765432109876543E-11", "received": "98765432109875543E-11", "fee": "1E-8",
+                         "sent_msat": 98_765_432_109_876_543, "received_msat": 98_765_432_109_875_543, "fee_msat": 1_000,
+                         "spot_price": None, "at_regime": None,
+                         "regime_flows": None, "at_pool": None, "description": "Transfer Cold -> Hot"}],
+        "tax_summary": [],
+        "holdings": [],
+        "carried_rows": [],
+    }
+    result = ledger_response.read_ledger(book_profile, inputs, response)
+    acquisition, disposal, sent, received = result.entries
+    keys = ["id", "workspace_id", "profile_id", "transaction_id", "wallet_id", "account_id", "occurred_at", "entry_type",
+            "asset", "quantity", "fiat_value", "unit_cost", "cost_basis", "proceeds", "gain_loss", "description"]
+    assert list(acquisition) == keys
+    assert list(disposal) == [*keys, "at_category", "at_kennzahl", "capital_gains_type", "calculation"]
+    assert list(sent) == keys and list(received) == keys
+    assert len({entry["id"] for entry in result.entries}) == 4
+    assert all(uuid.UUID(entry["id"]).version == 4 for entry in result.entries)
+    assert (acquisition["transaction_id"], acquisition["wallet_id"], acquisition["occurred_at"]) == ("buy", "A", "2024-01-01T00:00:00+01:00")
+    assert (acquisition["workspace_id"], acquisition["profile_id"], acquisition["account_id"]) == ("ws-1", "profile-1", "acct-1")
+    assert acquisition["cost_basis"] is acquisition["proceeds"] is acquisition["gain_loss"] is None
+    assert disposal["at_kennzahl"] == austrian.kennzahl_for_disposal_category("neu_gain")
+    assert disposal["fiat_value"] == disposal["proceeds"] == Decimal("5E-4")
+    assert str(disposal["unit_cost"]) == "0"
+    calculation = disposal["calculation"]
+    assert list(calculation) == ["schema_version", "engine", "method", "fragments"]
+    assert (calculation["schema_version"], calculation["engine"], calculation["method"]) == (1, "kassiber_tax", "fifo")
+    [fragment] = calculation["fragments"]
+    assert fragment["basis_authority"] == "acquired_lot"
+    assert (fragment["quantity_msat"], fragment["quantity_msat_exact"]) == (1_000, "1000")
+    assert (fragment["acquisition_basis_exact"], fragment["acquisition_quantity_msat"]) == ("40000", 100_000_000_000)
+    # Each fragment names its row's anchor and time, and copies its pricing.
+    assert (fragment["lot"]["transaction_id"], fragment["lot"]["occurred_at"]) == ("buy", "2024-01-01T00:00:00+01:00")
+    assert fragment["lot"]["pricing"]["fiat_rate_exact"] == "40000"
+    assert list(fragment["lot"]["pricing"]) == list(ledger_response.FRAGMENT_PRICING_FIELDS)
+    assert (fragment["event"]["engine_event_id"], fragment["event"]["occurred_at"]) == (out["id"], "2024-02-01T00:00:00+00:00")
+    assert (fragment["event"]["fiat_fee_exact"], fragment["event"]["crypto_fee_msat_exact"]) == ("0.0005", "1000")
+    # The legs take the audit row's float quantities, as ``dec`` reads them
+    # (TODO "Keep transfer-leg quantities exact").
+    exact_sent, exact_received = Decimal("987654.32109876543"), Decimal("987654.32109875543")
+    assert (sent["entry_type"], sent["wallet_id"], sent["quantity"]) == ("transfer_out", "A", -Decimal(str(float(exact_sent))))
+    assert (received["entry_type"], received["wallet_id"]) == ("transfer_in", "B")
+    assert received["quantity"] == Decimal(str(float(exact_received))) != exact_received
+    assert str(sent["quantity"]) == "-987654.3210987655"
+    assert sent["description"] == received["description"] == "Transfer Cold -> Hot"
+    assert sent["occurred_at"] == received["occurred_at"] == out["occurred_at"]
+    assert (sent["transaction_id"], received["transaction_id"]) == ("m", "m")
+    assert sent["fiat_value"] == sent["unit_cost"] == Decimal("0")
+    # A realized entry without a category has neither key; an unknown wallet
+    # fails as the adapter failed.
+    plain = {**response["entries"][1], "at_category": None}
+    assert "at_kennzahl" not in ledger_response.read_ledger(book_profile, inputs, {**response, "entries": [plain]}).entries[0]
+    unknown = {**response["entries"][0], "wallet": "Nowhere"}
+    with pytest.raises(AppError, match="RP2 emitted transaction for unknown wallet 'Nowhere'") as raised:
+        ledger_response.read_ledger(book_profile, inputs, {**response, "entries": [unknown]})
+    assert raised.value.code == "internal"
 
 
 def test_the_reader_renders_summary_holdings_and_failures() -> None:

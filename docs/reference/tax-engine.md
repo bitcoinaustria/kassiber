@@ -15,11 +15,15 @@ a finalized projection cannot have. It sends the book to the engine's
 `ledger` operation only when the engine implements every capability the book
 uses (`ROUTED_CAPABILITIES`, a subset of `CAPABILITIES`: `generic`,
 `generic_carry`, `at`, `at_swap`). Plan 20's phase 4 moves them one at a
-time; none is routed yet, so `ROUTED_CAPABILITIES` is empty. Every
-other book runs on the phase-3 adapter, `kassiber/core/engines/rp2.py`, which
-turns the finalized custody projection into journal entries with the engine
-underneath it in place of RP2's calculation. The adapter keeps its gates,
-quarantines, journal composition, reviewed overrides, and fee reporting rules.
+time; so far `generic` is routed, so a generic book without a
+carrying-value Bitcoin rail pair runs on the engine, and `ledger_response.py`
+renders the engine's journal ledger into `TaxEngineLedgerResult`: uuids,
+profile, wallet and account ids, row times, the legacy floats, and each
+fragment's row facts. Every other book runs on the phase-3 adapter,
+`kassiber/core/engines/rp2.py`, which turns the finalized custody projection
+into journal entries with the engine underneath it in place of RP2's
+calculation. The adapter keeps its gates, quarantines, journal composition,
+reviewed overrides, and fee reporting rules.
 
 The adapter reaches its calculation backend through `_get_rp2_modules()`.
 That returns either the RP2 modules or `kassiber.core.engines.native`, which
@@ -189,8 +193,14 @@ not left out; only a failed timestamp may omit `error_class`), and another
 schema version is a `RequestError`.
 `operation` is `ledger`, `prepare`, or `manifest`; `manifest` returns the
 engine's names and tables (`manifest.rs`), which
-`tests/test_tax_ledger_contract.py` compares with Python's. `ledger` answers
-`Unsupported` until the ledger layer is ported. `prepare` is a diagnostic for
+`tests/test_tax_ledger_contract.py` compares with Python's. `ledger` returns
+the journal ledger (`ledger/run.rs`, `compose.rs`): after the final prepare
+pass it runs the lot engine over each asset with an inbound entry (the
+country's checks, the accounting-method gate, then the multi-asset hook or
+each asset's own computation) and composes acquisitions, realized entries
+with their gain/loss fragments, transfer legs, holdings, and the tax summary,
+as the adapter did; quarantines, the transfer audit, and the rows the generic
+carry rewrote come with them. `prepare` is a diagnostic for
 tests: it stops after the final prepare pass and returns each asset's
 intermediate stages: the normalized stage (`ledger/normalize.rs`: the
 events and moves the walk books, their order, normalize's quarantines, and
@@ -198,9 +208,9 @@ the time from which the asset's lot state is tainted) and the prepared
 stage (`ledger/order.rs`, `walk.rs`, `describe.rs`: the lot engine's
 entries as v1 entry documents with their composed notes and text, the
 gates' quarantines, and the transfer audit with the legs' description). A
-failed `prepare` also lists the stages its pass reached. It answers for a
-generic book without the Bitcoin rail carry and `Unsupported` for the others
-until those parts are ported. A failure is
+failed `prepare` also lists the stages its pass reached. Both operations
+answer for a generic book without the Bitcoin rail carry and `Unsupported`
+for the others until those parts are ported. A failure is
 `{"ok": false, "error": {"stage", "asset"?, "inner": {"class", "message"}}}`;
 `kassiber/core/engines/errors.py` raises what the adapter raised at that
 stage, wrapped where the adapter wrapped it.
@@ -232,12 +242,21 @@ fixtures store.
 
 `ledger_fixtures.json`, from `tax-engine/scripts/gen_ledger_fixtures.py`, holds
 whole-ledger goldens: finalized projections with the frozen oracle's ledger,
-the one production must give, and the schema-2 request production's builder
-makes of each ([projection goldens](testing.md#projection-goldens)).
+the one production must give, the schema-2 request production's builder
+makes of each, and the engine's response for each book production routes to
+it ([projection goldens](testing.md#projection-goldens)).
 `tax-engine/core/tests/ledger_fixtures.rs` reads every stored request into
-the typed request and writes it back unchanged, and checks that `prepare`
-answers for the books it implements and lists the stages a failed pass
-reached.
+the typed request and writes it back unchanged, replays every stored
+response, and checks that `prepare` answers for the books it implements and
+lists the stages a failed pass reached.
+`tax-engine/core/tests/ledger_properties.rs` checks invariants of the
+`ledger` operation on seeded generic books (plan 20 Verification 1): the
+same request gives the same bytes; msat are conserved per asset and per
+move; every book succeeds and each wallet's journal replays to its holding
+without going below zero; and pricing an unpriced inbound row (a purchase,
+income, or a move's in leg) quarantines no new row, except the shortfall a
+released earlier sale causes, which the oracle shares (TODO "Keep pricing
+from adding quarantines").
 
 ## Privacy
 

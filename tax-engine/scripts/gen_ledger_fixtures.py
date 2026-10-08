@@ -4,9 +4,11 @@
 Each case is one ``build_ledger_state`` call: a profile and the finalized
 custody projection it runs on (``inputs``), the frozen oracle's outcome on RP2
 (``oracle``, ``tests/tax_oracle/``), the outcome production must give
-(``expected``), and the engine request production's builder makes of the
+(``expected``), the engine request production's builder makes of the
 inputs (``request``; ``null`` when the builder fails, as it does for a
-configuration failure or an LD-5 case). The cases are
+configuration failure or an LD-5 case), and the engine's response to that
+request when production routes the book to the engine (``response``; ``null``
+for a book production still runs on the phase-3 adapter). The cases are
 ``tests.tax_ledger_generator.corpus()``: named histories for every shape the
 phase-4 engine must reproduce, the LD-5 shapes, plus seeded books from the
 random generator. ``tests/tax_ledger_codec.py`` stores the values, so a
@@ -32,13 +34,18 @@ case; the oracle's outcome reaches the shape the case is named for;
 ``expected`` follows from ``oracle`` by the listed differences alone; and the
 request builder gives the same request on the stored and the original
 inputs, or fails with ``expected`` itself (a configuration failure, or the
-LD-5 refusal naming the case's invariant). It refuses to change or drop a
-stored case's ``inputs``, ``oracle``, ``expected``, ``listed_difference``, or
+LD-5 refusal naming the case's invariant); and for a routed book, the
+response reads back as the engine's own bytes and production's reader
+renders it into ``expected`` exactly. It refuses to change or drop a stored
+case's ``inputs``, ``oracle``, ``expected``, ``listed_difference``, or
 ``invariant`` unless that case is named with ``--accept``; adding cases, and
-adding or changing ``request``, never needs it. Only the request builder of
-production runs here; ``tests/test_tax_ledger_goldens.py`` checks production
-against ``expected``, the live oracle against ``oracle``, and
-``tests/test_tax_ledger_contract.py`` the builder against ``request``.
+adding or changing ``request`` or ``response``, never needs it. Only
+production's request builder, engine, and reader run here;
+``tests/test_tax_ledger_goldens.py`` checks production against ``expected``
+and the live oracle against ``oracle``, ``tests/test_tax_ledger_contract.py``
+the builder against ``request`` and the engine and reader against
+``response``, and ``tax-engine/core/tests/ledger_fixtures.rs`` replays the
+responses.
 
     uv run --locked python tax-engine/scripts/gen_ledger_fixtures.py [--accept CASE ...]
 
@@ -59,7 +66,9 @@ REPO = Path(__file__).resolve().parents[2]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from kassiber.core.engines import ledger_request  # noqa: E402
+import kassiber_tax  # noqa: E402
+
+from kassiber.core.engines import ledger, ledger_request, ledger_response  # noqa: E402
 from kassiber.core.engines.errors import EngineContractError  # noqa: E402
 from tests import tax_engine_compare as compare  # noqa: E402
 from tests import tax_ledger_codec as codec  # noqa: E402
@@ -101,6 +110,26 @@ def _request(profile: Any, inputs: Any) -> tuple[Optional[dict[str, Any]], Optio
         return ledger_request.build_request(profile, inputs), None
     except Exception as exc:  # noqa: BLE001 - a builder failure is part of the case
         return None, exc
+
+
+def _response(
+    case: GoldenCase, profile: Any, inputs: Any, request: Optional[dict[str, Any]], expected: dict[str, Any]
+) -> Optional[dict[str, Any]]:
+    """The engine's response to a book production routes to it, checked."""
+    if request is None or ledger.route(ledger.capabilities(request)) != ledger.V2:
+        return None
+    text = kassiber_tax.ledger(ledger_request.dumps(request))
+    response = json.loads(text)
+    if _canonical(response) != text:
+        raise CertificationError(f"{case.name}: the stored response would not keep the engine's bytes")
+    try:
+        outcome: compare.Outcome = (ledger_response.read_ledger(profile, inputs, response), None)
+    except Exception as exc:  # noqa: BLE001 - a failure is the case's outcome
+        outcome = (None, exc)
+    differences = compare.document_differences(expected, compare.outcome_document(outcome))
+    if differences:
+        raise CertificationError(f"{case.name}: the reader does not render the response into expected: {differences[:5]}")
+    return response
 
 
 def certify(case: GoldenCase) -> dict[str, Any]:
@@ -164,6 +193,7 @@ def certify(case: GoldenCase) -> dict[str, Any]:
         "oracle": codec.encode(oracle),
         "expected": codec.encode(expected),
         "request": request,
+        "response": _response(case, profile, decoded, request, expected),
     }
 
 
@@ -212,6 +242,7 @@ def render(cases: list[dict[str, Any]]) -> str:
             "oracle keeps RP2's failure classes and configuration prefix (its random path replaced); expected applies the listed differences.",
             "LD-5 cases have the one shape invariant names, which production's request builder refuses; their oracle outcome is not compared.",
             "request is the engine request production's builder makes of the inputs (schema_version 2); null when the builder fails.",
+            "response is the engine's answer to request when production routes the book to the engine; null when it runs on the phase-3 adapter.",
         ],
         "stats": dict(sorted(stats.items())),
     }

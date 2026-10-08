@@ -1,17 +1,20 @@
-//! The schema-2 request against the projection-level goldens.
+//! The schema-2 request and response against the projection-level goldens.
 //!
 //! `data/ledger_fixtures.json` (`tax-engine/scripts/gen_ledger_fixtures.py`)
 //! stores, per case, the request production's Python builder makes of the
-//! case's finalized projection. Every stored request must deserialize into
+//! case's finalized projection, and the engine's response when production
+//! routes the book to the engine. Every stored request must deserialize into
 //! the typed request, which rejects unknown fields, and serialize back to the
 //! same document, so the builder and the engine read one schema. The ledger
-//! operation answers `Unsupported` until the ledger layer is ported; the
-//! `prepare` operation answers for a generic book without the Bitcoin rail
-//! carry (its normalized and prepared stages, which
-//! `tests/test_tax_ledger_prepare.py` compares with the oracle's), lists the
-//! stages it reached when it fails, and is `Unsupported` for the others; the
-//! `manifest` operation answers, and other schema versions, unknown fields,
-//! and missing fields (nullable ones included) are refused.
+//! operation reproduces every stored response (the generator certified that
+//! production's reader renders each into the oracle's outcome) and is
+//! `Unsupported` for the other books; the `prepare` operation answers for the
+//! same books, a generic one without the Bitcoin rail carry (its normalized
+//! and prepared stages, which `tests/test_tax_ledger_prepare.py` compares with
+//! the oracle's), lists the stages it reached when it fails, and is
+//! `Unsupported` for the others; the `manifest` operation answers, and other
+//! schema versions, unknown fields, and missing fields (nullable ones
+//! included) are refused.
 
 use std::collections::{HashMap, HashSet};
 
@@ -23,11 +26,15 @@ use serde_json::{json, Value};
 
 const FIXTURES: &str = include_str!("data/ledger_fixtures.json");
 
-/// Fewest stored requests, so a truncated or emptied file cannot pass.
+/// Fewest stored requests and responses, so a truncated or emptied file
+/// cannot pass.
 const MIN_REQUESTS: usize = 100;
+const MIN_RESPONSES: usize = 40;
 
-/// Every stored request, labelled by its case.
-fn stored_requests() -> Vec<(String, Value)> {
+/// Every stored case with a request: its name, request, and the response
+/// stored for it (`null` for a book production does not route to the
+/// engine).
+fn stored_cases() -> Vec<(String, Value, Value)> {
     let document: Value = serde_json::from_str(FIXTURES).expect("ledger fixtures are JSON");
     document["cases"]
         .as_array()
@@ -36,9 +43,27 @@ fn stored_requests() -> Vec<(String, Value)> {
         .filter(|case| !case["request"].is_null())
         .map(|case| {
             let name = case["name"].as_str().expect("case name").to_string();
-            (name, case["request"].clone())
+            (name, case["request"].clone(), case["response"].clone())
         })
         .collect()
+}
+
+/// Every stored request, labelled by its case.
+fn stored_requests() -> Vec<(String, Value)> {
+    stored_cases()
+        .into_iter()
+        .map(|(name, request, _)| (name, request))
+        .collect()
+}
+
+/// The stage of a failed response, `None` for a success.
+fn failed_stage(response: &str) -> Option<String> {
+    let value: Value = serde_json::from_str(response).expect("response is JSON");
+    assert_eq!(value["schema_version"], 2, "{response}");
+    if value["ok"] == true {
+        return None;
+    }
+    Some(value["error"]["stage"].as_str().expect("stage").to_string())
 }
 
 /// The stage and inner class of a failed response.
@@ -94,20 +119,38 @@ fn every_stored_request_reads_and_writes_back_unchanged() {
 }
 
 #[test]
-fn the_ledger_operation_is_not_implemented_yet() {
-    for (name, stored) in stored_requests() {
-        let (stage, class, message) = failure(&ledger(&stored.to_string()));
-        assert_eq!(
-            (stage.as_str(), class.as_str()),
-            ("unsupported", "Unsupported"),
-            "{name}: {message}"
-        );
+fn the_ledger_operation_reproduces_every_stored_response() {
+    let mut replayed = 0;
+    for (name, request, stored) in stored_cases() {
+        let text = ledger(&request.to_string());
+        if !prepares(&request) {
+            // Production runs this book on the phase-3 adapter.
+            assert!(stored.is_null(), "{name}: a response for an unrouted book");
+            let (stage, class, message) = failure(&text);
+            assert_eq!(
+                (stage.as_str(), class.as_str()),
+                ("unsupported", "Unsupported"),
+                "{name}: {message}"
+            );
+            continue;
+        }
+        assert!(!stored.is_null(), "{name}: no stored response");
+        let response: Value = serde_json::from_str(&text).expect("response is JSON");
+        assert_eq!(response, stored, "{name}");
+        // Pure: the same request gives the same document.
+        assert_eq!(ledger(&request.to_string()), text, "{name}");
+        replayed += 1;
     }
+    assert!(
+        replayed >= MIN_RESPONSES,
+        "only {replayed} stored responses"
+    );
 }
 
-/// Whether the `prepare` operation implements a book: a generic one without
-/// a carrying-value Bitcoin rail pair whose legs are both rows (the
-/// `generic` capability alone, `kassiber/core/engines/ledger.py`).
+/// Whether the `ledger` and `prepare` operations implement a book: a
+/// generic one without a carrying-value Bitcoin rail pair whose legs are
+/// both rows (the `generic` capability alone,
+/// `kassiber/core/engines/ledger.py`).
 fn prepares(request: &Value) -> bool {
     if request["policy"]["country"]["kind"] != "generic" {
         return false;
@@ -472,11 +515,16 @@ fn a_missing_nullable_field_is_refused() {
             format!("missing field `{key}`")
         };
         assert!(message.contains(&expected), "{name}: {pointer}: {message}");
-        // Present as `null`, the same field reads.
+        // Present as `null`, the same field reads: the book succeeds or
+        // fails at a stage past reading it.
         let mut null = stored.clone();
         *null.pointer_mut(pointer).expect("the field") = Value::Null;
-        let (stage, _, message) = failure(&ledger(&null.to_string()));
-        assert_eq!(stage, "unsupported", "{name}: {pointer}: {message}");
+        let text = ledger(&null.to_string());
+        assert_ne!(
+            failed_stage(&text).as_deref(),
+            Some("request"),
+            "{name}: {pointer}: {text}"
+        );
     }
 }
 

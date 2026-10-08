@@ -115,7 +115,8 @@ class ChildProcessShadowTest(unittest.TestCase):
                 result, records = self._process_journals(mode, python=("-X", "importtime"))
                 self.assertEqual(result.returncode, 0, result.stdout[-2000:] + result.stderr[-2000:])
                 self.assertEqual(json.loads(result.stdout)["data"]["entries_created"], 2)
-                self.assertEqual(records, [compare.RouteRecord(MODULE, "generic", compare.LEGACY, "result")])
+                # A generic book without the rail carry runs on the engine.
+                self.assertEqual(records, [compare.RouteRecord(MODULE, "generic", compare.V2, "result")])
                 imported = re.search(r"^import time:.*\|\s*tests\.tax_oracle\.adapter$", result.stderr, re.MULTILINE)
                 self.assertEqual(imported is not None, ran_oracle)
 
@@ -126,7 +127,7 @@ class ChildProcessShadowTest(unittest.TestCase):
         self.assertIn("production tax engine differs from the oracle in build_ledger_state", message)
         self.assertIn(f"injected by {compare.INJECT_DIFFERENCE_ENV}", message)
         self.assertIn("result['tax_summary']: length", message)
-        self.assertEqual(records, [compare.RouteRecord(MODULE, "generic", compare.LEGACY, "difference")])
+        self.assertEqual(records, [compare.RouteRecord(MODULE, "generic", compare.V2, "difference")])
         _lines, failures = compare.session_report(compare.SHADOW, records)
         self.assertEqual(failures, [f"calls that differed from the oracle: 1, in {MODULE}"])
 
@@ -134,7 +135,7 @@ class ChildProcessShadowTest(unittest.TestCase):
         # The injection only alters what shadow compares; census compares nothing.
         result, records = self._process_journals(compare.CENSUS, inject=True)
         self.assertEqual(result.returncode, 0, result.stdout[-2000:] + result.stderr[-2000:])
-        self.assertEqual(records, [compare.RouteRecord(MODULE, "generic", compare.LEGACY, "result")])
+        self.assertEqual(records, [compare.RouteRecord(MODULE, "generic", compare.V2, "result")])
 
     def test_a_child_loads_the_harness_only_with_the_engines(self):
         probe = textwrap.dedent(
@@ -269,7 +270,8 @@ class SessionEndTest(unittest.TestCase):
         self.assertIn("1 passed", result.stdout)
         self.assertIn("tax engine shadow", result.stdout)
         self.assertIn("production calls compared with the oracle: 1", result.stdout)
-        self.assertIn("generic: 0 v2, 1 legacy", result.stdout)
+        # A generic book without the rail carry runs on the engine.
+        self.assertIn("generic: 1 v2, 0 legacy", result.stdout)
         self.assertIn("at: 0 v2, 0 legacy", result.stdout)
         self.assertIn("LD-5 refusals (shapes a finalized projection cannot have): 0", result.stdout)
 
@@ -299,7 +301,7 @@ class SessionEndTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout[-4000:] + result.stderr[-2000:])
         self.assertIn("2 passed", result.stdout)
         self.assertIn("production calls compared with the oracle: 1", result.stdout)
-        self.assertIn("generic: 0 v2, 2 legacy", result.stdout)
+        self.assertIn("generic: 2 v2, 0 legacy", result.stdout)
         self.assertIn("calls not compared because the test stubs the engine: 1, in /", result.stdout)
         self.assertIn("FAILED: calls that differed from the oracle: 1, in /", result.stdout)
 
@@ -387,7 +389,7 @@ class SessionReportTest(unittest.TestCase):
     def test_shadow_fails_on_any_ld5_refusal(self):
         records = self._records(
             ("tests/test_a.py", compare.UNCLASSIFIED, compare.NOT_ROUTED, compare.LD5),
-            ("tests/test_a.py", "generic", compare.LEGACY, "result"),
+            ("tests/test_a.py", "generic", compare.V2, "result"),
         )
         lines, failures = compare.session_report(compare.SHADOW, records)
         self.assertEqual(lines[0], "production calls compared with the oracle: 1")
@@ -418,9 +420,9 @@ class SessionReportTest(unittest.TestCase):
 
     def test_shadow_fails_on_any_difference(self):
         records = self._records(
-            ("tests/test_b.py", "generic", "legacy", "difference"),
-            ("tests/test_a.py", "generic", "legacy", "result"),
-            (None, "generic", "legacy", "difference"),
+            ("tests/test_b.py", "generic", "v2", "difference"),
+            ("tests/test_a.py", "generic", "v2", "result"),
+            (None, "generic", "v2", "difference"),
         )
         _lines, failures = compare.session_report(compare.SHADOW, records)
         self.assertEqual(failures, ["calls that differed from the oracle: 2, in outside any test, tests/test_b.py"])

@@ -86,8 +86,9 @@ refuses (configuration failures and LD-5 shapes) count as `unclassified`. It
 also prints the number of LD-5 refusals. Shadow fails the session on any
 recorded difference, even one a caller caught, on any call of a capability
 production routes to v2 that went legacy or never reached v2, and on any LD-5
-refusal, since the suite's books are finalized projections. No capability is
-routed yet, so every call that reaches routing goes to the legacy adapter. A
+refusal, since the suite's books are finalized projections. `generic` is
+routed, so a generic book without the Bitcoin rail carry goes to the v2
+engine and every other call that reaches routing to the legacy adapter. A
 test marked `stubs_tax_engine` replaces parts of the production engine, so
 shadow runs its calls on production without comparing them and lists them in
 the summary.
@@ -102,12 +103,14 @@ shadow error.
 `tax-engine/core/tests/data/ledger_fixtures.json` stores one case per line:
 a profile and finalized projection (`inputs`), the oracle's outcome on RP2
 (`oracle`), the outcome production must give (`expected`), in the tagged
-codec of `tests/tax_ledger_codec.py`, and the engine request production's
-builder makes of the inputs (`request`, `null` when the builder fails).
-`expected` equals `oracle` except where `listed_difference` names one: `LD-4`
-(RP2 error classes), `LD-3` (RP2's configuration prefix too), or `LD-5`: the
-case has the one shape `invariant` names, which a finalized projection cannot
-have, and `expected` is the builder's refusal. The cases are the named
+codec of `tests/tax_ledger_codec.py`, the engine request production's
+builder makes of the inputs (`request`, `null` when the builder fails), and
+the engine's response to it when production routes the book to the engine
+(`response`, `null` otherwise). `expected` equals `oracle` except where
+`listed_difference` names one: `LD-4` (RP2 error classes), `LD-3` (RP2's
+configuration prefix too), or `LD-5`: the case has the one shape `invariant`
+names, which a finalized projection cannot have, and `expected` is the
+builder's refusal. The cases are the named
 shapes, one LD-5 case per such shape, and seeded books of
 `tests/tax_ledger_generator.py`'s `corpus()`.
 
@@ -118,21 +121,24 @@ uv run --locked python tax-engine/scripts/gen_ledger_fixtures.py [--accept CASE 
 The generator certifies each case before writing: the inputs survive the
 codec and stay inside what a finalized projection can be (an LD-5 case has
 exactly its one shape), the oracle reaches the shape the case is named for,
-`expected` follows from `oracle`, and the builder gives the same request on
-the stored and the original inputs or fails with `expected`. It refuses to
+`expected` follows from `oracle`, the builder gives the same request on
+the stored and the original inputs or fails with `expected`, and production's
+reader renders a stored response into `expected` exactly. It refuses to
 change or drop a stored case's inputs, outcomes, listed difference, or
 invariant unless that case is named with `--accept`; review the change before
-accepting it. Adding cases, or a changed request, needs no `--accept`;
-`tests/test_tax_ledger_contract.py` checks the builder against the stored
-requests, and `tax-engine/core/tests/ledger_fixtures.rs` checks that the
-engine reads each of them. Its output depends only on the code, so two runs are
-byte-equal. `tests/test_tax_ledger_goldens.py` checks that the file is the
-current corpus and what two fresh generator runs write, production against
-`expected`, and the live oracle against `oracle` (this catches a change in a
-product module the oracle shares), and runs 200 seeded generic and 200
-Austrian books of the random generator against the oracle. Without RP2 its
-oracle checks skip, except under `KASSIBER_CI`, which CI sets, where they
-fail.
+accepting it. Adding cases, or a changed request or response, needs no
+`--accept`; `tests/test_tax_ledger_contract.py` checks the builder against
+the stored requests and the engine and the reader against the stored
+responses (the engine's bytes, and the reader's outcome against `expected`),
+and `tax-engine/core/tests/ledger_fixtures.rs` checks that the engine reads
+each request and replays each response. Its output depends only on the code,
+so two runs are byte-equal. `tests/test_tax_ledger_goldens.py` checks that
+the file is the current corpus and what two fresh generator runs write,
+production against `expected`, and the live oracle against `oracle` (this
+catches a change in a product module the oracle shares), and runs 200 seeded
+generic and 200 Austrian books of the random generator against the oracle.
+Without RP2 its oracle checks skip, except under `KASSIBER_CI`, which CI
+sets, where they fail.
 
 ### Stage comparison
 
@@ -180,7 +186,10 @@ prints the differences to stdout. It makes no network connection.
 `tax-engine/scripts/mutations.json` names, for each tax rule a test pins, one
 edit that breaks the rule and the tests that must then fail. Most of those
 tests run `build_ledger_state`; the transfer-identity entries pin the helpers
-in `kassiber.transfers` directly:
+in `kassiber.transfers` directly. An edit to the phase-3 adapter or its
+normalizer names tests whose books still run on it; once production routes a
+capability to the engine, the rule's entry edits the engine (cargo filters,
+including the replay of the stored responses) or the Python reader instead:
 
 ```bash
 uv run --locked python tax-engine/scripts/mutation_check.py [--only ID ...] [--keep]

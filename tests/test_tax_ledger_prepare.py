@@ -431,9 +431,9 @@ def _gate_quarantines(document: Document) -> list[tuple[str, str, dict[str, Any]
 def test_the_corpus_reaches_the_normalize_and_walk_branches() -> None:
     """The golden and random books compared below reach booked moves,
     tainted lot states, every quarantine normalize raises on a generic book
-    but its group blocking (the golden bundle fails later, in the walk's
-    group gate, so the edge books block groups there), and every gate of a
-    generic book's walk. ``missing_cost_basis`` is not among them: on a
+    (its group blocking through the goldens ``generic-bundle-unpriced-move``
+    and ``generic-bundle-blocked-twice``), and every gate of a generic
+    book's walk. ``missing_cost_basis`` is not among them: on a
     generic book the priced amount is the sum of the accounts, so the
     account gate fails first (only an Austrian swap-out may overdraw;
     ``ledger::walk`` tests it)."""
@@ -462,6 +462,7 @@ def test_the_corpus_reaches_the_normalize_and_walk_branches() -> None:
         "privacy_hop_unresolved",
         "conflicting_spend",
         "pending_onchain_confirmation",
+        "derived_transfer_group_blocked",
     }, reasons
     assert gates["golden"] | gates["random"] == {
         "insufficient_lots",

@@ -113,8 +113,10 @@ class NativeBackendIsolationTest(unittest.TestCase):
 
     def test_writes_no_files_and_opens_no_sockets(self):
         # An audit hook records every write-mode open, file-system change and
-        # socket call during one journal run per backend. The RP2 run proves
-        # the hook sees its temporary INI file.
+        # socket call during one journal run of production and one of the
+        # phase-3 adapter on each backend. The RP2 run proves the hook sees
+        # its temporary INI file. Production runs this generic book on the
+        # engine, so the adapter is called directly.
         with tempfile.TemporaryDirectory(prefix="kassiber-native-io-") as scratch:
             temp_root = Path(scratch) / "tmp"
             work = Path(scratch) / "cwd"
@@ -153,24 +155,29 @@ class NativeBackendIsolationTest(unittest.TestCase):
                         recording.append([event, str(args[0]) if args else ""])
 
                 sys.addaudithook(hook)
-                engine = KassiberTaxEngine(profile)
-                for backend in ("native", "rp2"):  # warm up lazy imports
-                    with adapter._use_tax_engine_backend(backend):
+                runs = {{
+                    "production": (None, KassiberTaxEngine(profile)),
+                    "native": ("native", adapter.GenericRP2TaxEngine(profile)),
+                    "rp2": ("rp2", adapter.GenericRP2TaxEngine(profile)),
+                }}
+                for backend, engine in runs.values():  # warm up lazy imports
+                    with adapter._use_tax_engine_backend(backend or "native"):
                         engine.build_ledger_state(inputs)
                 events = {{}}
-                for backend in ("native", "rp2"):
+                for name, (backend, engine) in runs.items():
                     recording.clear()
                     state["active"] = True
-                    with adapter._use_tax_engine_backend(backend):
+                    with adapter._use_tax_engine_backend(backend or "native"):
                         engine.build_ledger_state(inputs)
                     state["active"] = False
-                    events[backend] = list(recording)
+                    events[name] = list(recording)
                 print(json.dumps(events))
                 """
             )
             result = _run_python(script, cwd=work)
             self.assertEqual(result.returncode, 0, msg=f"stderr={result.stderr[-4000:]!r}")
             events = json.loads(result.stdout.strip().splitlines()[-1])
+            self.assertEqual(events["production"], [])
             self.assertEqual(events["native"], [])
             self.assertTrue(
                 any(event == "open" and path.endswith(".ini") for event, path in events["rp2"]),

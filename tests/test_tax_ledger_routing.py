@@ -11,10 +11,12 @@ runs on the phase-3 adapter. Here:
   pair, an Austrian carrying-value cross-asset pair, each with both legs
   projected), and the golden corpus uses every capability; a carrying pair
   with either leg outside the projection adds none;
-- each case routes to v2 exactly when its capabilities are routed: with
-  nothing routed (today) every book runs on the adapter and gives the
-  stored ``expected``; with the case's capabilities routed it reaches the
-  engine, which does not implement the ledger operation yet;
+- each case routes to v2 exactly when its capabilities are routed, and
+  gives the stored ``expected`` either way: today ``generic`` is routed, so
+  a generic book without the Bitcoin rail carry runs on the engine and the
+  others on the adapter; with nothing routed every book runs on the
+  adapter; with the case's capabilities routed it reaches the engine, which
+  refuses the books it does not implement yet;
 - calls that end before routing count as such.
 """
 
@@ -123,9 +125,14 @@ def test_the_primary_capability_is_the_most_specific() -> None:
     assert ledger.primary_capability(frozenset()) == ledger.UNCLASSIFIED
 
 
-def test_nothing_is_routed_yet() -> None:
-    assert ledger.ROUTED_CAPABILITIES == frozenset()
+def test_generic_books_are_routed() -> None:
+    assert ledger.ROUTED_CAPABILITIES == frozenset({"generic"})
     assert compare.ROUTED_CAPABILITIES is ledger.ROUTED_CAPABILITIES
+
+
+def _expected_outcome(case: dict[str, Any], book_profile: Any, inputs: TaxEngineLedgerInputs) -> list[str]:
+    actual = compare.outcome_document(compare.run_production(book_profile, inputs))
+    return compare.document_differences(codec.decode(case["expected"]), actual)
 
 
 @pytest.mark.parametrize("name", [case["name"] for case in _routed_cases()])
@@ -134,18 +141,27 @@ def test_each_case_routes_by_its_capabilities(name: str) -> None:
     book_profile, inputs = codec.decode_inputs(case["inputs"])
     capabilities = ledger.capabilities(case["request"])
     primary = ledger.primary_capability(capabilities)
-    # Nothing routed: the adapter runs and gives the stored outcome.
-    assert ledger.classify(book_profile, inputs) == (primary, ledger.LEGACY)
-    actual = compare.outcome_document(compare.run_production(book_profile, inputs))
-    assert compare.document_differences(codec.decode(case["expected"]), actual) == []
-    # Everything the book uses routed: the book reaches the engine. A forced
-    # route is not production's behavior, so it runs on the unpatched class,
-    # outside a shadow session's comparison.
+    # Production: the engine when it implements every capability the book
+    # uses, the adapter otherwise, and the stored outcome either way. Forced
+    # routes below are not production's behavior, so they run on the
+    # unpatched class, outside a shadow session's comparison.
+    route = ledger.V2 if capabilities <= ledger.ROUTED_CAPABILITIES else ledger.LEGACY
+    assert ledger.classify(book_profile, inputs) == (primary, route)
+    assert _expected_outcome(case, book_profile, inputs) == []
+    # Nothing routed: the adapter, with the same outcome.
+    with patch.object(ledger, "ROUTED_CAPABILITIES", frozenset()):
+        assert ledger.classify(book_profile, inputs) == (primary, ledger.LEGACY)
+        assert _expected_outcome(case, book_profile, inputs) == []
+    # Everything the book uses routed: the book reaches the engine, which
+    # refuses the books it does not implement yet.
     with patch.object(ledger, "ROUTED_CAPABILITIES", capabilities):
         assert ledger.classify(book_profile, inputs) == (primary, ledger.V2)
-        _result, error = compare.run_production(book_profile, inputs)
-        assert isinstance(error, EngineContractError)
-        assert str(error) == "Unsupported: the ledger operation is not implemented yet"
+        if case["response"] is not None:
+            assert _expected_outcome(case, book_profile, inputs) == []
+        else:
+            _result, error = compare.run_production(book_profile, inputs)
+            assert isinstance(error, EngineContractError)
+            assert str(error).startswith("Unsupported: the ledger operation does not implement ")
     # One capability missing: the adapter again.
     for missing in capabilities:
         with patch.object(ledger, "ROUTED_CAPABILITIES", capabilities - {missing}):

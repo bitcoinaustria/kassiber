@@ -17,27 +17,55 @@ kind and never by reason, since one reason can come from two templates
 A failure names its stage; ``errors.ledger_error`` raises what the adapter
 raised there.
 
-This is the reader's first part: failures, quarantines, transfer-audit
-rows (``render_audit``), carried rows, the tax summary, holdings, and the
-pass-through fields. Journal entries are rendered once the engine composes
-them; until then ``read_ledger`` refuses a response that has entries or
-audit rows.
+Journal entries come in the adapter's order and with its keys
+(``_append_rp2_journal_entries``): the engine gives each entry's type, row,
+wallet label, exact values, and description, and a realized entry's
+fragments with their event's and lot's values; this reader adds the uuid,
+the profile's ids, the wallet's and account's ids, the transaction id and
+time of the entry's row, the Austrian Kennzahl of its category, and the
+``calculation`` metadata, whose fragments carry the row facts of
+``explanation.gain_fragment``. A transfer leg is rendered from its audit
+row, with the adapter's float quantities.
 """
 
 from __future__ import annotations
 
 import json
+import uuid
 from collections import defaultdict
 from decimal import Decimal
 from typing import Any, Callable, Mapping, Optional, Sequence
 
-from ...msat import btc_to_msat
+from ...errors import AppError
+from ...msat import btc_to_msat, dec
 from .. import pricing
+from ..austrian import kennzahl_for_disposal_category
 from ..privacy_hops import privacy_hop_evidence_from_row
 from ..tax_events import build_tax_quarantine
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 from .errors import EngineContractError, ledger_error
-from .ledger_request import SCHEMA_VERSION, decode_decimal, pair_group_id
+from .ledger_request import SCHEMA_VERSION, decode_decimal, pair_group_id, timestamp_fields
+
+# The engine identity each realized entry's calculation metadata records
+# (the adapter's name for its native backend).
+CALCULATION_ENGINE = "kassiber_tax"
+
+# The row fields a fragment's event and lot copy into ``pricing``
+# (``explanation._source``).
+FRAGMENT_PRICING_FIELDS = (
+    "fiat_currency",
+    "fiat_rate_exact",
+    "fiat_value_exact",
+    "pricing_source_kind",
+    "pricing_quality",
+    "fiat_price_source",
+    "pricing_timestamp",
+    "pricing_provider",
+    "pricing_pair",
+    "pricing_fetched_at",
+    "pricing_granularity",
+    "pricing_method",
+)
 
 # The row fields ``_pricing_review_detail`` copied into its detail.
 PRICING_REVIEW_FIELDS = (
@@ -351,6 +379,188 @@ def empty_result(inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult:
     )
 
 
+def _profile_str(profile: Mapping[str, Any], key: str) -> str:
+    if hasattr(profile, "keys") and key in profile.keys():
+        value = profile[key]
+        return "" if value is None else str(value).strip()
+    return ""
+
+
+def _journal_transaction_id(row: Optional[Mapping[str, Any]], fallback: str) -> str:
+    return str(_get(row, "journal_transaction_id", fallback))
+
+
+def _exact(value: Optional[Decimal]) -> Optional[str]:
+    return None if value is None else format(value, "f")
+
+
+def _optional_decimal(text: Optional[str]) -> Optional[Decimal]:
+    return None if text is None else decode_decimal(text)
+
+
+class _EntryReader:
+    """Renders the engine's journal entries as the adapter wrote them."""
+
+    def __init__(
+        self,
+        profile: Mapping[str, Any],
+        rows_by_id: Mapping[str, Mapping[str, Any]],
+        refs_by_label: Mapping[str, Mapping[str, Any]],
+        audit: Sequence[Mapping[str, Any]],
+        rendered_audit: Sequence[Mapping[str, Any]],
+    ) -> None:
+        self.profile = profile
+        self.rows_by_id = rows_by_id
+        self.refs_by_label = refs_by_label
+        self.audit = audit
+        self.rendered_audit = rendered_audit
+        self.method = _profile_str(profile, "gains_algorithm")
+        self._iso: dict[Any, str] = {}
+
+    def wallet(self, label: str) -> Mapping[str, Any]:
+        ref = self.refs_by_label.get(label)
+        if ref is None:
+            raise AppError(f"RP2 emitted transaction for unknown wallet '{label}'", code="internal")
+        return ref
+
+    def _head(self, wallet: Mapping[str, Any], transaction_id: str, occurred_at: Any) -> dict[str, Any]:
+        return {
+            "id": str(uuid.uuid4()),
+            "workspace_id": self.profile["workspace_id"],
+            "profile_id": self.profile["id"],
+            "transaction_id": transaction_id,
+            "wallet_id": wallet["id"],
+            "account_id": wallet["wallet_account_id"],
+            "occurred_at": occurred_at,
+        }
+
+    def iso(self, occurred_at: Any) -> str:
+        """``timestamp.isoformat()`` of the entry an engine row id stands for."""
+        if occurred_at not in self._iso:
+            self._iso[occurred_at] = timestamp_fields(occurred_at)["iso"]
+        return self._iso[occurred_at]
+
+    def source(self, asset: str, facts: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
+        """A fragment's event or lot (``explanation._source``)."""
+        if facts is None:
+            return None
+        row_id = facts["row"]
+        row = self.rows_by_id.get(row_id)
+        source = dict(row) if row is not None else {}
+        crypto_fee = decode_decimal(facts["crypto_fee"])
+        return {
+            "transaction_id": source.get("journal_transaction_id") or source.get("id"),
+            "engine_event_id": row_id,
+            "occurred_at": self.iso(source.get("occurred_at")),
+            "asset": asset,
+            "spot_price_exact": _exact(decode_decimal(facts["spot_price"])),
+            "fiat_fee_exact": _exact(decode_decimal(facts["fiat_fee"])),
+            "crypto_fee_msat": btc_to_msat(crypto_fee),
+            "crypto_fee_msat_exact": str(btc_to_msat(crypto_fee)),
+            "pricing": {key: source.get(key) for key in FRAGMENT_PRICING_FIELDS},
+        }
+
+    def fragment(self, asset: str, fragment: Mapping[str, Any]) -> dict[str, Any]:
+        """One gain/loss fragment (``explanation.gain_fragment``)."""
+        crypto_amount = decode_decimal(fragment["crypto_amount"])
+        override = _optional_decimal(fragment["unit_basis_override"])
+        lot = fragment["lot"]
+        crypto_in = decode_decimal(lot["crypto_in"]) if lot else None
+        return {
+            "quantity_msat": btc_to_msat(crypto_amount),
+            "quantity_msat_exact": str(btc_to_msat(crypto_amount)),
+            "cost_basis_exact": _exact(decode_decimal(fragment["cost_basis"])),
+            "proceeds_exact": _exact(decode_decimal(fragment["proceeds"])),
+            "gain_loss_exact": _exact(decode_decimal(fragment["gain_loss"])),
+            "unit_basis_override_exact": _exact(override),
+            "basis_authority": "engine_unit_override" if override is not None else "acquired_lot" if lot else "income",
+            "acquisition_basis_exact": _exact(decode_decimal(lot["basis"])) if lot else None,
+            "acquisition_quantity_msat": btc_to_msat(crypto_in) if lot else None,
+            "acquisition_quantity_msat_exact": str(btc_to_msat(crypto_in)) if lot else None,
+            "event": self.source(asset, fragment["event"]),
+            "lot": self.source(asset, lot),
+        }
+
+    def acquisition(self, item: Mapping[str, Any]) -> dict[str, Any]:
+        row_id = item["row"]
+        row = self.rows_by_id.get(row_id)
+        wallet = self.wallet(item["wallet"])
+        fiat_in_with_fee = decode_decimal(item["fiat_value"])
+        return {
+            **self._head(wallet, _journal_transaction_id(row, row_id), row["occurred_at"]),
+            "entry_type": "acquisition",
+            "asset": item["asset"],
+            "quantity": decode_decimal(item["quantity"]),
+            "fiat_value": fiat_in_with_fee,
+            "unit_cost": decode_decimal(item["unit_cost"]),
+            "cost_basis": None,
+            "proceeds": None,
+            "gain_loss": None,
+            "description": item["description"],
+        }
+
+    def realized(self, item: Mapping[str, Any]) -> dict[str, Any]:
+        row_id = item["row"]
+        row = self.rows_by_id.get(row_id)
+        wallet = self.wallet(item["wallet"])
+        proceeds = decode_decimal(item["proceeds"])
+        entry = {
+            **self._head(wallet, _journal_transaction_id(row, row_id), row["occurred_at"]),
+            "entry_type": item["entry_type"],
+            "asset": item["asset"],
+            "quantity": decode_decimal(item["quantity"]),
+            "fiat_value": proceeds,
+            "unit_cost": Decimal("0"),
+            "cost_basis": decode_decimal(item["cost_basis"]),
+            "proceeds": proceeds,
+            "gain_loss": decode_decimal(item["gain_loss"]),
+            "description": item["description"],
+        }
+        category = item["at_category"]
+        if category is not None:
+            entry["at_category"] = category
+            entry["at_kennzahl"] = kennzahl_for_disposal_category(category)
+        entry["capital_gains_type"] = item["capital_gains_type"]
+        entry["calculation"] = {
+            "schema_version": 1,
+            "engine": CALCULATION_ENGINE,
+            "method": self.method,
+            "fragments": [self.fragment(item["asset"], fragment) for fragment in item["fragments"]],
+        }
+        return entry
+
+    def transfer_leg(self, item: Mapping[str, Any]) -> dict[str, Any]:
+        """One leg of a booked move, from its audit row and its legs' rows."""
+        index = int(item["audit"])
+        audit = self.rendered_audit[index]
+        outbound = item["entry_type"] == "transfer_out"
+        # The adapter indexes the legs' wallets directly (a ``KeyError`` for
+        # an unknown label).
+        wallet = self.refs_by_label[audit["from_wallet_label"] if outbound else audit["to_wallet_label"]]
+        row_id = audit["out_id"] if outbound else audit["in_id"]
+        quantity = dec(audit["crypto_sent"] if outbound else audit["crypto_received"])
+        return {
+            **self._head(wallet, _journal_transaction_id(self.rows_by_id.get(row_id), row_id), audit["occurred_at"]),
+            "entry_type": item["entry_type"],
+            "asset": audit["asset"],
+            "quantity": -quantity if outbound else quantity,
+            "fiat_value": Decimal("0"),
+            "unit_cost": Decimal("0"),
+            "cost_basis": None,
+            "proceeds": None,
+            "gain_loss": None,
+            "description": self.audit[index]["description"],
+        }
+
+    def entry(self, item: Mapping[str, Any]) -> dict[str, Any]:
+        entry_type = item["entry_type"]
+        if entry_type == "acquisition":
+            return self.acquisition(item)
+        if entry_type in ("transfer_out", "transfer_in"):
+            return self.transfer_leg(item)
+        return self.realized(item)
+
+
 def read_ledger(
     profile: Mapping[str, Any],
     inputs: TaxEngineLedgerInputs,
@@ -358,22 +568,20 @@ def read_ledger(
 ) -> TaxEngineLedgerResult:
     """The ledger a ``ledger`` response describes, or the failure it reports."""
     raise_for_error(response)
-    if response["entries"] or response["intra_audit"]:
-        raise EngineContractError(
-            "Unsupported", "the reader does not render journal entries or the transfer audit yet"
-        )
     projection = inputs.finalized_tax_projection
     rows_by_id = rows_after_carry(projection.rows, response["carried_rows"])
-    account_holdings, wallet_holdings = accumulate_holdings(
-        response["holdings"], wallet_refs_by_label(inputs.wallet_refs_by_id)
-    )
+    refs_by_label = wallet_refs_by_label(inputs.wallet_refs_by_id)
+    intra_audit = [render_audit(inputs, item) for item in response["intra_audit"]]
+    reader = _EntryReader(profile, rows_by_id, refs_by_label, response["intra_audit"], intra_audit)
+    entries = [reader.entry(item) for item in response["entries"]]
+    account_holdings, wallet_holdings = accumulate_holdings(response["holdings"], refs_by_label)
     return TaxEngineLedgerResult(
-        entries=[],
+        entries=entries,
         quarantines=[
             *projection.quarantines,
             *(render_quarantine(profile, rows_by_id, item) for item in response["quarantines"]),
         ],
-        intra_audit=[],
+        intra_audit=intra_audit,
         cross_asset_pairs=list(projection.cross_asset_pairs),
         direct_swap_payouts=direct_payout_compat_records(inputs.direct_payout_records, projection.rows),
         tax_summary=[render_tax_summary(row) for row in response["tax_summary"]],
@@ -383,7 +591,9 @@ def read_ledger(
 
 
 __all__ = [
+    "CALCULATION_ENGINE",
     "DETAIL_ENRICHMENT",
+    "FRAGMENT_PRICING_FIELDS",
     "PRICING_REVIEW_FIELDS",
     "accumulate_holdings",
     "carried_row",

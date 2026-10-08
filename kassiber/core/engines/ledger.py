@@ -9,7 +9,8 @@ when the engine implements every capability the book uses
 (``ROUTED_CAPABILITIES``), and otherwise to the phase-3 adapter
 (``engines/rp2.py``), unchanged. Capabilities move to the engine one at a
 time while the tests compare production with the frozen oracle
-(``tests/tax_engine_compare.py``); none is routed yet.
+(``tests/tax_engine_compare.py``); so far ``generic`` is routed, so a
+generic book without the Bitcoin rail carry runs on the engine.
 
 A book's capabilities:
 
@@ -37,7 +38,7 @@ GENERIC_BITCOIN_RAIL_QUARANTINE_REASON = "bitcoin_rail_carry_basis_unresolved"
 CAPABILITIES = ("generic", "generic_carry", "at", "at_swap")
 # The capabilities the Rust engine implements; a book goes to the engine only
 # when all of its capabilities are here.
-ROUTED_CAPABILITIES: frozenset[str] = frozenset()
+ROUTED_CAPABILITIES: frozenset[str] = frozenset({"generic"})
 
 V2 = "v2"
 LEGACY = "legacy"

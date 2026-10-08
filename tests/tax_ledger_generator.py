@@ -895,6 +895,48 @@ def _generic_cases() -> list[GoldenCase]:
             succeeds(absent=("insufficient_lots", "derived_transfer_group_blocked"), entry_types=("transfer_out",)),
         )
     )
+    # Bundles normalize blocks before the walk: one whose fee-bearing move
+    # has no price, and one blocked twice (a coarse move under review, then
+    # an unpriced one), which keeps its first reason. Their priced siblings
+    # are flagged and book nothing.
+    coarse_out = projected("coarse-out", "A", "outbound", 10_000_000_000, "2024-05-01T00:00:00Z", side="move-out", fee=1_000_000, rate="60000", **coarse)
+    coarse_in = projected("coarse-in", "B", "inbound", 10_000_000_000, "2024-05-01T00:10:00Z", side="move-in", rate="60000", **coarse)
+    unpriced_out = projected("unpriced-out", "A", "outbound", 10_000_000_000, "2024-05-02T00:00:00Z", side="move-out", fee=1_000_000, rate=None)
+    unpriced_in = projected("unpriced-in", "B", "inbound", 10_000_000_000, "2024-05-02T00:10:00Z", side="move-in", rate=None)
+    sibling_out = projected("sibling-out", "A", "outbound", 10_000_000_000, "2024-05-03T00:00:00Z", side="move-out", fee=1_000_000, rate="60000")
+    sibling_in = projected("sibling-in", "C", "inbound", 10_000_000_000, "2024-05-03T00:10:00Z", side="move-in", rate="60000")
+    later = projected("sell-a", "A", "outbound", 1_000_000_000, "2024-06-01T00:00:00Z", rate="70000", kind="sell")
+    cases.append(
+        _case(
+            "generic-bundle-unpriced-move",
+            ("generic", "move", "bundle", "pricing", "fee"),
+            fifo,
+            direct(
+                [rich, unpriced_out, unpriced_in, sibling_out, sibling_in, later],
+                [move(unpriced_out, unpriced_in, group_id="bundle:priced"), move(sibling_out, sibling_in, group_id="bundle:priced")],
+            ),
+            _blocked_in_normalize(("missing_spot_price", "missing_spot_price"), "missing_spot_price"),
+        )
+    )
+    cases.append(
+        _case(
+            "generic-bundle-blocked-twice",
+            ("generic", "move", "bundle", "pricing", "coarse", "fee"),
+            review,
+            direct(
+                [rich, coarse_out, coarse_in, unpriced_out, unpriced_in, sibling_out, sibling_in, later],
+                [
+                    move(coarse_out, coarse_in, group_id="bundle:twice"),
+                    move(unpriced_out, unpriced_in, group_id="bundle:twice"),
+                    move(sibling_out, sibling_in, group_id="bundle:twice"),
+                ],
+            ),
+            _blocked_in_normalize(
+                ("pricing_review_required", "pricing_review_required", "missing_spot_price", "missing_spot_price"),
+                "pricing_review_required",
+            ),
+        )
+    )
 
     # Ungrouped moves: one that passes, one that fails with distinct
     # anchors, and one whose legs share one anchor (one quarantine).
@@ -993,7 +1035,67 @@ def _generic_cases() -> list[GoldenCase]:
         )
     )
     cases.append(_usertag_swap("generic-usertag-swap", "generic", "FIFO", tagged=True, check=succeeds(absent=("at_swap_basis_carry_unresolved",))))
+
+    # An oracle quirk the engine keeps (design §4.12, property 5): a
+    # quarantined sale consumes nothing, so pricing an earlier purchase
+    # releases the sale it left short, which then starves a later move.
+    for priced in (False, True):
+        buy = projected("buy", "A", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z", kind="buy")
+        late_buy = projected("late-buy", "A", "inbound", 100_000_000_000, "2024-02-01T00:00:00Z", rate="40000" if priced else None, kind="buy")
+        sale = projected("sale", "A", "outbound", 150_000_000_000, "2024-03-01T00:00:00Z", rate="50000", kind="sell")
+        move_out = projected("move", "A", "outbound", 80_000_000_000, "2024-04-01T00:00:00Z", side="move-out", rate="50000")
+        move_in = projected("move", "B", "inbound", 80_000_000_000, "2024-04-01T00:00:00Z", side="move-in", rate="50000")
+        cases.append(
+            _case(
+                "generic-pricing-releases-a-sale-" + ("priced" if priced else "unpriced"),
+                ("generic", "pricing", "gate", "move", "quirk"),
+                fifo,
+                direct([buy, late_buy, sale, move_out, move_in], [move(move_out, move_in, group_id=None)]),
+                _quarantined(
+                    [("move", "insufficient_lots")] if priced else [("late-buy", "missing_spot_price"), ("sale", "insufficient_lots")],
+                    ["acquisition", "acquisition", "disposal"] if priced else ["acquisition", "transfer_out", "transfer_in"],
+                ),
+            )
+        )
     return cases
+
+
+def _quarantined(quarantines: Sequence[tuple[str, str]], entry_types: Sequence[str]) -> Check:
+    """The oracle succeeds with exactly these ``(transaction, reason)``
+    quarantines and entry types, in order."""
+
+    def check(result: Optional[TaxEngineLedgerResult], error: Optional[BaseException]) -> list[str]:
+        if error is not None:
+            return [f"expected success, got {type(error).__name__}: {error}"]
+        assert result is not None
+        found = [(str(item["transaction_id"]), str(item["reason"])) for item in result.quarantines]
+        types = [str(entry["entry_type"]) for entry in result.entries]
+        complaints = [] if found == list(quarantines) else [f"quarantines {found}, expected {list(quarantines)}"]
+        return complaints + ([] if types == list(entry_types) else [f"entries {types}, expected {list(entry_types)}"])
+
+    return check
+
+
+def _blocked_in_normalize(reasons: tuple[str, ...], blocked_by: str) -> Check:
+    """The oracle blocks the book's one bundle in normalize: its failing
+    moves' quarantines come first, in order, then one flag for each other
+    transaction of the bundle, naming the bundle's first reason, and no move
+    of the bundle books."""
+
+    def check(result: Optional[TaxEngineLedgerResult], error: Optional[BaseException]) -> list[str]:
+        if error is not None:
+            return [f"expected success, got {type(error).__name__}: {error}"]
+        assert result is not None
+        found = [str(item["reason"]) for item in result.quarantines]
+        flags = [json.loads(item["detail_json"]) for item in result.quarantines if item["reason"] == "derived_transfer_group_blocked"]
+        complaints = [] if found[: len(reasons)] == list(reasons) else [f"quarantines {found}, expected {list(reasons)} first"]
+        if not flags or any(flag.get("blocked_by_reason") != blocked_by for flag in flags):
+            complaints.append(f"group flags {flags} are not blocked by {blocked_by}")
+        if result.intra_audit:
+            complaints.append(f"{len(result.intra_audit)} moves booked")
+        return complaints
+
+    return check
 
 
 def _hold_inputs(*, conflict: bool) -> TaxEngineLedgerInputs:
