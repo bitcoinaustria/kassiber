@@ -444,7 +444,7 @@ export function ModelPickerContent({
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => onLocalOnlyChange(local)}
                 className={cn(
-                  "rounded-[5px] px-1.5 py-0.5 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+                  "rounded-sm px-1.5 py-0.5 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
                   localOnly === local && "bg-background text-foreground shadow-xs",
                 )}
               >
