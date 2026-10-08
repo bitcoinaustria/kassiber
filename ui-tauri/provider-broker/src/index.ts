@@ -1,5 +1,6 @@
 import { stdin } from "node:process";
 import { createInterface } from "node:readline";
+import { ACP_AGENTS, acpChat, acpStatus } from "./acp.js";
 import { codexChat, codexStatus } from "./codex.js";
 import { claudeChat, claudeStatus } from "./claude.js";
 import { NativeToolBridge, runMcpServer } from "./native-tools.js";
@@ -27,6 +28,14 @@ const PROVIDERS = {
   codex: { status: codexStatus, chat: codexChat },
   claude: { status: () => claudeStatus(), chat: claudeChat },
   opencode: { status: openCodeStatus, chat: openCodeChat },
+  gemini: {
+    status: (cwd) => acpStatus(ACP_AGENTS.gemini, cwd),
+    chat: (request, cwd, bridge) => acpChat(ACP_AGENTS.gemini, request, cwd, bridge),
+  },
+  copilot: {
+    status: (cwd) => acpStatus(ACP_AGENTS.copilot, cwd),
+    chat: (request, cwd, bridge) => acpChat(ACP_AGENTS.copilot, request, cwd, bridge),
+  },
 } satisfies Record<ProviderId, ProviderAdapter>;
 
 async function status(provider: ProviderId): Promise<ProviderStatus> {

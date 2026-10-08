@@ -112,6 +112,25 @@ export function providerEnvironment(provider: ProviderId): NodeJS.ProcessEnv {
     providerPrefixes.push("ANTHROPIC_", "CLAUDE_", "AWS_", "GOOGLE_", "CLOUDSDK_");
   }
   if (provider === "opencode") providerPrefixes.push("OPENCODE_");
+  if (provider === "gemini") {
+    // Not a GEMINI_ prefix: GEMINI_CLI_SYSTEM_SETTINGS_PATH and friends would
+    // replace the settings file that removes Gemini's built-in tools.
+    ["GEMINI_API_KEY", "GEMINI_CLI_HOME"].forEach((name) => allowed.add(name));
+    providerPrefixes.push("GOOGLE_", "CLOUDSDK_");
+  }
+  if (provider === "copilot") {
+    // Named, not a COPILOT_ prefix: COPILOT_ALLOW_ALL=true would approve every
+    // tool and trust the working directory's hooks and MCP servers.
+    [
+      "COPILOT_GITHUB_TOKEN",
+      "GH_TOKEN",
+      "GITHUB_TOKEN",
+      "COPILOT_HOME",
+      "GH_HOST",
+      "COPILOT_GH_HOST",
+    ].forEach((name) => allowed.add(name));
+    providerPrefixes.push("COPILOT_PROVIDER_");
+  }
   // Ambient server-auth settings would make the loopback server demand
   // credentials the SDK client here does not send, so every session call 401s
   // for users with a password-protected OpenCode config.

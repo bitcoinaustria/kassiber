@@ -39,7 +39,8 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `i18next` | `25.8.18` (exact) | Desktop UI localization runtime (English/German, expandable); see [docs/reference/i18n.md](docs/reference/i18n.md) | MIT |
 | `react-i18next` | `16.5.8` (exact) | React bindings (hooks/provider) for i18next translations | MIT |
 | `@opencode-ai/sdk` | `1.18.10` (exact) | Typed client for the loopback OpenCode server supervised by Kassiber | MIT |
-| `@modelcontextprotocol/sdk` | `^1.30.0` | Ephemeral local MCP server that carries Kassiber's typed tool schemas into the Claude and OpenCode CLIs | MIT |
+| `@modelcontextprotocol/sdk` | `^1.30.0` | Ephemeral local MCP server that carries Kassiber's typed tool schemas into the Claude, OpenCode, Gemini, and Copilot CLIs | MIT |
+| `@agentclientprotocol/sdk` | `1.5.0` (exact) | Agent Client Protocol client for the Gemini and GitHub Copilot CLIs supervised by the chat broker | Apache-2.0 |
 | `zod` | `4.4.3` (exact) | JSON-Schema-to-validator conversion for the tool schemas that MCP server advertises | MIT |
 | `fs2` | `0.4.3` | Cross-platform exclusive advisory lock for update-check consent and in-flight GitHub requests | MIT OR Apache-2.0 |
 | `dirs` | `6.0.0` | Resolves an absolute per-user home directory before the Tauri app handle exists | MIT OR Apache-2.0 |
