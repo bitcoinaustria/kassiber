@@ -69,3 +69,9 @@ export function initialModelPickerView(input: {
 
 /** Toggles the model picker while the composer has focus (T3 Code's binding). */
 export const MODEL_PICKER_SHORTCUT = ["mod", "shift", "m"] as const;
+
+/**
+ * Stars or unstars the highlighted model while the picker is open. Mod+D is
+ * the browsers' "bookmark this" key, so it reads as "add to favorites".
+ */
+export const MODEL_PICKER_FAVORITE_SHORTCUT = ["mod", "d"] as const;

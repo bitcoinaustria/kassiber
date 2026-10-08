@@ -323,7 +323,7 @@
     "addFavorite": "Zu Favoriten hinzufügen",
     "removeFavorite": "Aus Favoriten entfernen",
     "noFavorites": "Noch keine Favoriten",
-    "noFavoritesHint": "Markiere ein Modell mit dem Stern, dann findest du es hier – egal, welcher Provider es bereitstellt.",
+    "noFavoritesHint": "Markiere ein Modell mit dem Stern oder drücke {{shortcut}} beim hervorgehobenen, dann findest du es hier – egal, welcher Provider es bereitstellt.",
     "noModelsHint": "Mit „Modelle prüfen“ fragst du {{provider}}, welche Modelle verfügbar sind.",
     "checkModelsHint": "{{provider}} jetzt nach seinen Modellen fragen. Ohne Klick wird nichts geprüft.",
     "staleShort": "letzte Prüfung fehlgeschlagen",
@@ -336,7 +336,8 @@
       "local": "Läuft auf diesem Gerät",
       "remote": "Prompts verlassen dieses Gerät",
       "tee": "Prompts verlassen dieses Gerät in Richtung einer vertrauenswürdigen Enklave"
-    }
+    },
+    "favoriteShortcutHint": "Drücke {{shortcut}}, um das hervorgehobene Modell zu den Favoriten hinzuzufügen oder daraus zu entfernen."
   },
   "review": {
     "seedPrompt": "Behebe die {{count}} Quarantäne-Ursachen in diesem Buch; Zeilen, die nur auf eine Ursache warten, lösen sich mit ihr. Geh alle Fälle seitenweise durch, sammle verfügbare Belege und fasse jede Korrektur, die die Belege stützen, in einem vom Server geprüften Plan mit Begründungen zusammen, damit ich einmal bestätige. Ändere nichts ohne Freigabe. Liste danach kurz auf, was noch Belege oder eine Entscheidung von mir braucht.",
