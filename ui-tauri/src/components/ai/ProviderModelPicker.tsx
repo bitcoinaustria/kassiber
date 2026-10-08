@@ -538,7 +538,7 @@ export function ProviderModelPicker({
                         <span className="flex items-center gap-1.5">
                           {t(`composer.effort.${effort}`)}
                           {effort === "auto" ? (
-                            <span className="rounded border border-border px-1 text-3xs leading-4 text-muted-foreground">
+                            <span className="rounded-sm border border-border px-1 text-3xs leading-4 text-muted-foreground">
                               {t("composer.effortDefault")}
                             </span>
                           ) : null}
