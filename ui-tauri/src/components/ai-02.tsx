@@ -178,6 +178,7 @@ export default function Ai02({
   const handlePromptClick = (prompt: string) => {
     if (inputRef.current) {
       inputRef.current.value = prompt;
+      historyPositionRef.current = null;
       setInputValue(prompt);
       inputRef.current.focus();
     }
@@ -440,7 +441,12 @@ export default function Ai02({
               ref={inputRef}
               rows={1}
               value={inputValue}
-              onChange={(event) => setInputValue(event.target.value)}
+              onChange={(event) => {
+                // Any typed edit ends recall, even one that restores the
+                // recalled wording: only history steps keep a position.
+                historyPositionRef.current = null;
+                setInputValue(event.target.value);
+              }}
               onKeyDown={handleKeyDown}
               placeholder={resolvedPlaceholder}
               className={cn(

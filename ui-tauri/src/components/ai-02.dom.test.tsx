@@ -80,6 +80,32 @@ describe("Ai02 composer (mounted)", () => {
     expect(field().value).toBe("second question, edited");
   });
 
+  it("treats restoring the recalled wording by hand as a draft", () => {
+    render(<Harness />);
+    fireEvent.keyDown(field(), { key: "ArrowUp" });
+    fireEvent.change(field(), { target: { value: "second question!" } });
+    fireEvent.change(field(), { target: { value: "second question" } });
+    fireEvent.keyDown(field(), { key: "ArrowUp" });
+    expect(field().value).toBe("second question");
+    fireEvent.keyDown(field(), { key: "ArrowDown" });
+    expect(field().value).toBe("second question");
+  });
+
+  it("ends recall when a suggestion is inserted", () => {
+    render(
+      <Harness
+        alwaysShowSuggestions
+        prompts={[
+          { icon: () => null, text: "Suggest", prompt: "second question" },
+        ]}
+      />,
+    );
+    fireEvent.keyDown(field(), { key: "ArrowUp" });
+    fireEvent.click(screen.getByRole("button", { name: "Suggest" }));
+    fireEvent.keyDown(field(), { key: "ArrowUp" });
+    expect(field().value).toBe("second question");
+  });
+
   it("does not send while an IME composition is being confirmed", () => {
     const onSubmit = vi.fn();
     render(<Harness initial="こんにちは" onSubmit={onSubmit} />);
