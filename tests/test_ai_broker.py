@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import io
+import os
 import sys
 import tempfile
 import threading
@@ -183,6 +184,41 @@ class BrokerClientTest(unittest.TestCase):
                 )
                 client = BrokerAIClient(locator="codex-cli://default")
                 self.assertEqual(client.list_models(), [{"id": "model-a"}])
+
+    @unittest.skipIf(os.name == "nt", "process groups are POSIX-only")
+    def test_probe_timeout_stops_the_provider_cli_too(self):
+        # A status probe that overruns its deadline must not leave the
+        # provider CLI the broker started running in the background.
+        with tempfile.TemporaryDirectory(prefix="kassiber-broker-hang-") as tmp:
+            pid_file = Path(tmp) / "child.pid"
+            script = Path(tmp) / "hanging_broker.py"
+            script.write_text(
+                "import subprocess, sys, time\n"
+                "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+                f"open({str(pid_file)!r}, 'w').write(str(child.pid))\n"
+                "time.sleep(60)\n",
+                encoding="utf-8",
+            )
+            with patch.dict(
+                "os.environ",
+                {
+                    "KASSIBER_AI_BROKER_NODE": sys.executable,
+                    "KASSIBER_AI_PROVIDER_BROKER": str(script),
+                },
+            ):
+                with self.assertRaises(AppError):
+                    BrokerAIClient._single_result({"command": "status"}, timeout=2.0)
+            child_pid = int(pid_file.read_text(encoding="utf-8"))
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                try:
+                    os.kill(child_pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.05)
+            else:
+                os.kill(child_pid, 9)
+                self.fail("the provider CLI outlived the timed-out probe")
 
     def test_native_provider_locators_share_one_registry(self):
         self.assertEqual(cli_provider_for_locator(" CODEX-CLI://DEFAULT "), "codex")

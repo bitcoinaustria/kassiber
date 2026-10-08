@@ -8,6 +8,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import type { BrokerToolDefinition, BrokerToolResult } from "./protocol.js";
 import { writeEvent } from "./protocol.js";
+import { trackDirectory } from "./cleanup.js";
 
 const MAX_BRIDGE_MESSAGE_BYTES = 2_000_000;
 
@@ -47,6 +48,7 @@ export class NativeToolBridge {
 
   static async start(tools: BrokerToolDefinition[]): Promise<NativeToolBridge> {
     const directory = await mkdtemp(join(tmpdir(), "kassiber-ai-bridge-"));
+    trackDirectory(directory);
     const socketPath = bridgeSocketPath(directory);
     const server = createServer((socket) => {
       let body = "";

@@ -1,6 +1,7 @@
 import { stdin } from "node:process";
 import { createInterface } from "node:readline";
 import { ACP_AGENTS, acpChat, acpStatus } from "./acp.js";
+import { cleanUpOnTermination } from "./cleanup.js";
 import { codexChat, codexStatus } from "./codex.js";
 import { claudeChat, claudeStatus } from "./claude.js";
 import { NativeToolBridge, runMcpServer } from "./native-tools.js";
@@ -89,6 +90,8 @@ async function main(): Promise<void> {
     await replies;
   }
 }
+
+if (process.argv[2] !== "mcp") cleanUpOnTermination();
 
 const work =
   process.argv[2] === "mcp"

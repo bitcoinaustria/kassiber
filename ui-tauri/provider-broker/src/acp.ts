@@ -15,6 +15,7 @@ import type {
   StopReason,
   ToolCallUpdate,
 } from "@agentclientprotocol/sdk";
+import { trackChild } from "./cleanup.js";
 import { mcpCommand, type NativeToolBridge } from "./native-tools.js";
 import type {
   BrokerModel,
@@ -275,6 +276,7 @@ function startAgent(executable: string, launch: AgentLaunch, cwd: string): Agent
     env: launch.env,
     stdio: ["pipe", "pipe", "pipe"],
   });
+  trackChild(child);
   let stderrPreview = "";
   child.stderr.on("data", (chunk) => {
     if (stderrPreview.length < 4_096) stderrPreview += String(chunk);

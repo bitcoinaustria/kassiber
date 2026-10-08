@@ -275,7 +275,9 @@ remote HTTP provider through its explicitly configured base URL. Native CLI
 providers retain their own executable transport settings, as described below.
 
 Each broker probe or chat runs from a fresh Kassiber-owned empty temporary
-directory that is removed afterward. Provider subprocesses receive only their
+directory that is removed afterward, including when the daemon ends the broker
+with a signal: the broker then stops its provider processes and removes that
+directory and the tool bridge before exiting. Provider subprocesses receive only their
 own authentication/configuration environment plus the shared network/runtime
 minimum; unrelated provider and Kassiber secrets are excluded. Claude gets an
 empty built-in tool set, no filesystem setting sources, the file/exec/network

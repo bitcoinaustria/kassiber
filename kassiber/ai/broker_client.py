@@ -177,18 +177,25 @@ class BrokerAIClient:
         if not node or not script.is_file():
             raise _broker_unavailable()
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 [node, str(script)],
-                input=json.dumps(request) + "\n",
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
                 text=True,
-                capture_output=True,
-                timeout=timeout,
-                check=False,
                 start_new_session=os.name != "nt",
             )
-        except (OSError, subprocess.TimeoutExpired) as exc:
+        except OSError as exc:
             raise _broker_unavailable() from exc
-        for line in completed.stdout.splitlines():
+        try:
+            stdout, _ = process.communicate(json.dumps(request) + "\n", timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            # A probe that overruns has provider CLIs of its own running; ending
+            # only the broker would leave them behind.
+            BrokerAIClient._signal_group(process, signal.SIGKILL)
+            process.communicate()
+            raise _broker_unavailable() from exc
+        for line in stdout.splitlines():
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
