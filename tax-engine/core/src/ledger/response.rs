@@ -16,8 +16,10 @@
 //! The `prepare` operation answers with the intermediate stages instead
 //! (design §3.10), per asset, so a test can compare each stage with the
 //! oracle's own intermediates: the normalized stage and the prepared stage
-//! (the walk's entries, gate quarantines, and transfer audit). A failed
-//! `prepare` also lists the stages the pass reached before it failed.
+//! (the walk's entries, gate quarantines, and transfer audit), of the final
+//! pass, and the Austrian swap-link selection that decided whether a second
+//! pass ran. A failed `prepare` also lists the stages the failing pass
+//! reached, and the selection when the first pass succeeded.
 
 use serde::ser::{SerializeMap, Serializer};
 use serde::Serialize;
@@ -332,36 +334,57 @@ pub struct CarriedRow {
 }
 
 /// The response to a successful `prepare` request: each asset's stages
-/// after the final prepare pass, assets in first-appearance order.
+/// after the final prepare pass, assets in first-appearance order, and the
+/// swap-link selection over the first pass.
 #[derive(Clone, Debug, Serialize)]
 pub struct PrepareResponse {
     pub schema_version: u32,
     pub ok: bool,
     pub engine_version: &'static str,
     pub assets: Vec<PreparedAssetOut>,
+    pub swap_links: SwapLinksOut,
 }
 
 /// The response to a failed `prepare` request: the failure, and each
-/// asset's stages the pass reached before it, in order. The last asset has
-/// no prepared stage when its walk raised; an asset whose normalization
-/// raised is not listed.
+/// asset's stages the failing pass reached before it, in order. The last
+/// asset has no prepared stage when its walk raised; an asset whose
+/// normalization raised is not listed. `swap_links` is `null` when the
+/// first pass failed.
 #[derive(Clone, Debug, Serialize)]
 pub struct PrepareFailure {
     pub schema_version: u32,
     pub ok: bool,
     pub error: StagedError,
     pub assets: Vec<PreparedAssetOut>,
+    pub swap_links: Option<SwapLinksOut>,
 }
 
 impl PrepareFailure {
-    pub fn new(error: StagedError, assets: Vec<PreparedAssetOut>) -> Self {
+    pub fn new(
+        error: StagedError,
+        assets: Vec<PreparedAssetOut>,
+        swap_links: Option<SwapLinksOut>,
+    ) -> Self {
         PrepareFailure {
             schema_version: SCHEMA_VERSION,
             ok: false,
             error,
             assets,
+            swap_links,
         }
     }
+}
+
+/// The Austrian swap-link selection over the first pass (design §4.9),
+/// empty on a book without one: each linked row and its link, in the order
+/// the pairs linked them; the ids of the rows the blocked pairs leave out of
+/// the second pass, sorted (a direct payout's `<pair>:out` whether or not a
+/// row has it); and the blocked pairs' quarantines, in pair order.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct SwapLinksOut {
+    pub links: Vec<(String, String)>,
+    pub blocked: Vec<String>,
+    pub quarantines: Vec<QuarantineOut>,
 }
 
 /// One asset's stages.

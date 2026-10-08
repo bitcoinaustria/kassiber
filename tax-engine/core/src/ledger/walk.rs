@@ -790,11 +790,11 @@ mod tests {
     // `_prepare_rp2_asset_input` gives for the same rows: the gate
     // details, the entries' arguments, and the first failure
     // (`tests/test_tax_ledger_prepare.py` compares the two on every golden
-    // and seeded book without swap links and on edge books like these, and
-    // checks each failure against RP2). The Austrian cases that need a
-    // swap link set it on the normalized stage by hand, since normalize
-    // does not select links yet; the oracle gives the same gates and notes
-    // for the same link.
+    // and seeded book, the Austrian swap books' second pass included, and
+    // on edge books like these, and checks each failure against RP2). The Austrian cases that need a
+    // swap link set it on the normalized stage by hand, where the selection
+    // after a first pass would give it to normalize; the oracle gives the
+    // same gates and notes for the same link.
 
     const JAN: &str = "2024-01-01T00:00:00Z";
     const FEB: &str = "2024-02-01T00:00:00Z";
@@ -913,13 +913,15 @@ mod tests {
     }
 
     /// Normalizes and walks a one-asset book, after `edit` changes the
-    /// normalized stage (a swap link, which normalize does not select yet).
+    /// normalized stage (a swap link, which the selection after a first pass
+    /// would give normalize).
     fn walk_with(request: &LedgerRequest, edit: impl Fn(&mut Normalized)) -> EngineResult<Walked> {
         let book = Book::new(request).expect("a book");
         let [part] = book.assets.as_slice() else {
             panic!("one asset");
         };
-        let mut normalized = normalize(&book, part, &part.rows).expect("normalized");
+        let mut normalized =
+            normalize(&book, part, &part.rows, &HashMap::new()).expect("normalized");
         edit(&mut normalized);
         walk(&book, part, &normalized, &request.config.spec())
     }

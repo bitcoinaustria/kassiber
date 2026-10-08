@@ -9,10 +9,10 @@
 //! operation reproduces every stored response (the generator certified that
 //! production's reader renders each into the oracle's outcome) and is
 //! `Unsupported` for the other books; the `prepare` operation answers for the
-//! same books, a generic one without the Bitcoin rail carry and an Austrian
-//! one without a carrying-value cross-asset pair (their normalized and
-//! prepared stages, which `tests/test_tax_ledger_prepare.py` compares with
-//! the oracle's), lists the stages it reached when it fails, and is
+//! same books, every Austrian one and a generic one without the Bitcoin rail
+//! carry (their final pass's normalized and prepared stages and the swap-link
+//! selection, which `tests/test_tax_ledger_prepare.py` compares with the
+//! oracle's), lists the stages it reached when it fails, and is
 //! `Unsupported` for the others; the `manifest` operation answers, and other
 //! schema versions, unknown fields, and missing fields (nullable ones
 //! included) are refused.
@@ -148,35 +148,41 @@ fn the_ledger_operation_reproduces_every_stored_response() {
     );
 }
 
-/// Whether the `ledger` and `prepare` operations implement a book: one
-/// without a carrying-value pair whose legs are both rows, a Bitcoin rail
-/// pair on a generic book and any cross-asset pair on an Austrian one (the
-/// `generic` capability alone or the `at` capability alone,
-/// `kassiber/core/engines/ledger.py`).
-fn prepares(request: &Value) -> bool {
-    let austrian = request["policy"]["country"]["kind"] == "at";
+/// Whether a book has a carrying-value pair whose legs are both rows: the
+/// pairs the Austrian swap-link selection considers, and on a generic book,
+/// when they are Bitcoin rail pairs, the rail carry's.
+fn has_carrying_pair(request: &Value, rail: bool) -> bool {
     let rows: HashSet<&str> = request["rows"]
         .as_array()
         .expect("rows")
         .iter()
         .map(|row| row["id"].as_str().expect("row id"))
         .collect();
-    !request["cross_asset_pairs"]
+    request["cross_asset_pairs"]
         .as_array()
         .expect("cross-asset pairs")
         .iter()
         .any(|pair| {
             pair["policy"] == "carrying-value"
-                && (austrian || pair["bitcoin_rail"] == true)
+                && (!rail || pair["bitcoin_rail"] == true)
                 && rows.contains(pair["out_id"].as_str().expect("out id"))
                 && rows.contains(pair["in_id"].as_str().expect("in id"))
         })
 }
 
+/// Whether the `ledger` and `prepare` operations implement a book: every
+/// Austrian book, and a generic one without the rail carry (the `generic`,
+/// `at`, and `at_swap` capabilities, `kassiber/core/engines/ledger.py`).
+fn prepares(request: &Value) -> bool {
+    request["policy"]["country"]["kind"] == "at" || !has_carrying_pair(request, true)
+}
+
 #[test]
-fn prepare_normalizes_and_walks_books_without_carries() {
+fn prepare_normalizes_and_walks_books_without_the_rail_carry() {
     let mut prepared = 0;
     let mut austrian = 0;
+    let mut swaps = 0;
+    let mut second_passes = 0;
     for (name, stored) in stored_requests() {
         let mut request = stored.clone();
         request["operation"] = json!("prepare");
@@ -192,6 +198,7 @@ fn prepare_normalizes_and_walks_books_without_carries() {
         }
         prepared += 1;
         austrian += usize::from(stored["policy"]["country"]["kind"] == "at");
+        swaps += usize::from(has_carrying_pair(&stored, false));
         // Pure: the same request gives the same document.
         assert_eq!(ledger(&request.to_string()), text, "{name}");
         let response: Value = serde_json::from_str(&text).expect("response is JSON");
@@ -212,6 +219,8 @@ fn prepare_normalizes_and_walks_books_without_carries() {
             .iter()
             .map(|row| (row["id"].as_str().unwrap(), row["anchor"].as_str().unwrap()))
             .collect();
+        let excluded = check_swap_links(&name, &request, &response);
+        second_passes += usize::from(!excluded.is_empty());
         let mut assets: Vec<&str> = Vec::new();
         for row in rows {
             let asset = row["asset"].as_str().expect("asset");
@@ -274,6 +283,13 @@ fn prepare_normalizes_and_walks_books_without_carries() {
                 .collect();
             for row in rows.iter().filter(|row| row["asset"] == asset["asset"]) {
                 let id = row["id"].as_str().unwrap();
+                // A row a blocked swap pair leaves out of the final pass is
+                // named by the pair's quarantine (a direct payout's only by
+                // its source's), and appears nowhere in the pass.
+                if excluded.contains(id) {
+                    assert!(!covered.contains(id), "{name}: excluded row {id} booked");
+                    continue;
+                }
                 assert!(
                     covered.contains(id) || named.contains(anchor[id]),
                     "{name}: row {id} vanished"
@@ -282,8 +298,80 @@ fn prepare_normalizes_and_walks_books_without_carries() {
             check_prepared_stage(&name, &request, &anchor, &events, &outs, &asset["prepared"]);
         }
     }
-    assert!(prepared >= 70, "only {prepared} books");
-    assert!(austrian >= 30, "only {austrian} Austrian books");
+    assert!(prepared >= 100, "only {prepared} books");
+    assert!(austrian >= 50, "only {austrian} Austrian books");
+    assert!(swaps >= 15, "only {swaps} Austrian books with swap pairs");
+    assert!(
+        second_passes >= 6,
+        "only {second_passes} second passes leave rows out"
+    );
+}
+
+/// The swap-link selection of a successful `prepare`: none on a generic
+/// book; on an Austrian one, links name rows the final pass makes events
+/// with that link, and blocked pairs' quarantines name their rows' blocked
+/// ids. Returns the rows the final pass leaves out.
+fn check_swap_links<'r>(name: &str, request: &'r Value, response: &Value) -> HashSet<&'r str> {
+    let selection = &response["swap_links"];
+    let links = selection["links"].as_array().expect("links");
+    let blocked: HashSet<&str> = selection["blocked"]
+        .as_array()
+        .expect("blocked")
+        .iter()
+        .map(|id| id.as_str().expect("blocked id"))
+        .collect();
+    let quarantines = selection["quarantines"].as_array().expect("quarantines");
+    if request["policy"]["country"]["kind"] != "at" || !has_carrying_pair(request, false) {
+        assert_eq!(
+            selection,
+            &json!({"links": [], "blocked": [], "quarantines": []}),
+            "{name}"
+        );
+        return HashSet::new();
+    }
+    let events: HashMap<&str, &Value> = response["assets"]
+        .as_array()
+        .expect("assets")
+        .iter()
+        .flat_map(|asset| asset["normalized"]["events"].as_array().expect("events"))
+        .map(|event| (event["row"].as_str().expect("event row"), event))
+        .collect();
+    for link in links {
+        let (row, id) = (
+            link[0].as_str().expect("row"),
+            link[1].as_str().expect("link"),
+        );
+        // A linked row the pass makes an event carries its link.
+        if let Some(event) = events.get(row) {
+            assert_eq!(event["at_swap_link"], id, "{name}: {row}");
+        }
+    }
+    for quarantine in quarantines {
+        assert_eq!(
+            quarantine["reason"], "at_swap_basis_carry_unresolved",
+            "{name}"
+        );
+        assert_eq!(quarantine["detail_kind"], "plain", "{name}");
+        let row = quarantine["row"].as_str().expect("row");
+        assert!(
+            blocked.contains(row),
+            "{name}: {row} quarantined, not blocked"
+        );
+    }
+    let rows: HashSet<&str> = request["rows"]
+        .as_array()
+        .expect("rows")
+        .iter()
+        .map(|row| row["id"].as_str().expect("row id"))
+        .collect();
+    let excluded: HashSet<&'r str> = rows.into_iter().filter(|id| blocked.contains(id)).collect();
+    for id in &excluded {
+        assert!(
+            !events.contains_key(id),
+            "{name}: excluded row {id} is an event"
+        );
+    }
+    excluded
 }
 
 /// The prepared stage of one asset: the walk books each normalized event

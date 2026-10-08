@@ -15,11 +15,11 @@
 //! projection (`crate::ledger`): its `manifest` operation lists the
 //! engine's names and tables; its `ledger` operation returns a book's
 //! journal ledger, or the stage that failed; and its `prepare` operation
-//! returns a book's normalized and prepared stages, and on a failure the
-//! stages it reached. Both answer a generic book without the Bitcoin rail
-//! carry and an Austrian book without a carrying-value cross-asset pair;
-//! Austrian swap links and the generic rail carry are `Unsupported` until
-//! they are ported (plan 20 phase 4).
+//! returns a book's normalized and prepared stages and its Austrian
+//! swap-link selection, and on a failure the stages it reached. Both answer
+//! every Austrian book and a generic book without the Bitcoin rail carry;
+//! the generic rail carry is `Unsupported` until it is ported (plan 20
+//! phase 4).
 
 use serde::Serialize;
 
@@ -176,6 +176,7 @@ fn ledger_inner(request: &str) -> Result<String, StagedError> {
                     return v2_json(&PrepareFailure::new(
                         StagedError::contract(error),
                         Vec::new(),
+                        None,
                     ))
                 }
             };

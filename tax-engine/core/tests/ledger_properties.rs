@@ -47,12 +47,15 @@
 //!    disposal or income reports the override's, none when the override
 //!    clears it, and the lot engine's otherwise.
 //!
-//! Basis conservation across carries is the carries' property (Austrian
-//! swaps and the generic rail carry, not yet on the engine).
+//! Austrian swap books add cross-asset swaps between BTC, LBTC, and USDT,
+//! which the swap-link selection links, blocks, or skips; their properties
+//! (7 to 9, with the failures the oracle shares) are below. Basis
+//! conservation across the generic rail carry is the carry's property (not
+//! yet on the engine).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use kassiber_tax_core::decimal::Decimal;
+use kassiber_tax_core::decimal::{Context, Decimal};
 use kassiber_tax_core::ledger;
 use kassiber_tax_core::time::CivilDate;
 use serde_json::{json, Value};
@@ -151,6 +154,8 @@ struct Builder {
     austrian: bool,
     rows: Vec<Value>,
     pairs: Vec<Value>,
+    /// Cross-asset swap pairs (swap books only).
+    cross: Vec<Value>,
     /// The next row's number.
     next_id: usize,
     /// Seconds since the epoch of the next row.
@@ -177,6 +182,7 @@ impl Builder {
             austrian,
             rows: Vec::new(),
             pairs: Vec::new(),
+            cross: Vec::new(),
             next_id: 0,
             clock,
             held: HashMap::new(),
@@ -360,6 +366,86 @@ impl Builder {
         self.rows.push(out);
         self.rows.push(inbound);
     }
+
+    /// A cross-asset swap out of one asset into another in the same
+    /// wallet, at the same instant or ten minutes later, reviewed as a
+    /// carrying-value pair (now and then a taxable one, or one without an
+    /// id). Its legs draw the same row choices as any other row (prices,
+    /// holds, overrides).
+    fn swap(&mut self) {
+        // Out of an asset a wallet holds; a book that holds nothing yet
+        // buys instead.
+        let routes = [
+            ("BTC", "USDT"),
+            ("BTC", "USDT"),
+            ("USDT", "BTC"),
+            ("BTC", "LBTC"),
+            ("LBTC", "USDT"),
+        ];
+        let holding: Vec<(&'static str, (&'static str, &'static str))> = WALLETS
+            .iter()
+            .flat_map(|(wallet, _)| routes.iter().map(move |route| (*wallet, *route)))
+            .filter(|(wallet, (from, _))| {
+                self.held.get(&(*from, *wallet)).copied().unwrap_or(0) > 0
+            })
+            .collect();
+        if holding.is_empty() {
+            self.step("BTC");
+            return;
+        }
+        self.tick();
+        let (wallet, (from, to)) = *self.rng.pick(&holding);
+        let fee = if self.rng.chance(40) {
+            1 + self.rng.below(20_000_000)
+        } else {
+            0
+        };
+        let held = *self.held.get(&(from, wallet)).unwrap_or(&0);
+        let amount = self.amount(held.saturating_sub(fee));
+        // USDT at about 40000 per BTC.
+        let received = match (from, to) {
+            (_, "USDT") => amount.saturating_mul(40_000),
+            ("USDT", _) => (amount / 40_000).max(1),
+            _ => amount,
+        };
+        let mut out = self.row(from, wallet, "outbound", amount);
+        out["fee_msat"] = json!(fee);
+        if self.rng.chance(20) {
+            self.clock += 600;
+        }
+        let mut inbound = self.row(to, wallet, "inbound", received);
+        for (leg, asset) in [(&mut out, from), (&mut inbound, to)] {
+            if asset == "USDT" && !leg["rate"].is_null() {
+                leg["rate"] = json!(format!("{}E-2", 90 + self.rng.below(20)));
+            }
+        }
+        let pair_id = if self.rng.chance(80) {
+            Value::from(format!("swap:{}", self.cross.len()))
+        } else {
+            Value::Null
+        };
+        let policy = if self.rng.chance(85) {
+            "carrying-value"
+        } else {
+            "taxable"
+        };
+        self.cross.push(json!({
+            "pair_id": pair_id,
+            "out_id": out["id"],
+            "in_id": inbound["id"],
+            "out_transaction_id": out["anchor"],
+            "in_transaction_id": inbound["anchor"],
+            "out_asset": from,
+            "in_asset": to,
+            "policy": policy,
+            "bitcoin_rail": from != "USDT" && to != "USDT",
+        }));
+        let slot = self.held.entry((from, wallet)).or_default();
+        *slot = slot.saturating_sub(amount + fee);
+        *self.held.entry((to, wallet)).or_default() += received;
+        self.rows.push(out);
+        self.rows.push(inbound);
+    }
 }
 
 /// A generic book for `seed`.
@@ -422,6 +508,96 @@ fn book_of(seed: u64, austrian: bool) -> Value {
         "cross_asset_pairs": [],
     })
 }
+
+/// An Austrian book for `seed` with cross-asset swaps between BTC, LBTC,
+/// and USDT, mostly under Austria's default method (the only one that
+/// keeps a Neu swap neutral; under the others a Neu swap aborts, as the
+/// oracle does). Its choices come from a stream of their own, so the other
+/// books stay the same.
+fn swap_book(seed: u64) -> Value {
+    let mut builder = Builder::new(seed ^ 0x5357_4150_5357_4150, true);
+    // Mostly after the Neuvermögen cutoff, so most swaps are Neu.
+    builder.clock = CUTOFF_S - builder.rng.below(20 * 86_400) as i64;
+    // A clean book prices every row, holds none, and books no income or
+    // gift the gates refuse, so its swap-outs are not refused for a lot
+    // state the noise made uncertain.
+    let clean = builder.rng.chance(50);
+    let steps = 4 + builder.rng.below(26);
+    let liquid = builder.rng.chance(30);
+    for _ in 0..steps {
+        if builder.rng.chance(25) {
+            builder.swap();
+            continue;
+        }
+        let asset = if liquid && builder.rng.chance(35) {
+            "LBTC"
+        } else {
+            "BTC"
+        };
+        builder.step(asset);
+    }
+    let (method, label) = *builder.rng.pick(&SWAP_METHODS);
+    let mut rows = builder.rows;
+    // A hold comes from chain evidence, which a USDT row has none of.
+    for row in &mut rows {
+        if row["asset"] == "USDT" {
+            row["hold"] = Value::Null;
+        }
+    }
+    if clean {
+        for row in &mut rows {
+            if row["rate"].is_null() {
+                row["rate"] = json!(if row["asset"] == "USDT" {
+                    "1E0"
+                } else {
+                    "4000000E-2"
+                });
+            }
+            row["coarse"] = json!(false);
+            row["privacy_hop"] = json!(false);
+            row["hold"] = Value::Null;
+            if row["kind"] != "transfer" {
+                row["kind"] = json!(if row["direction"] == "inbound" {
+                    "buy"
+                } else {
+                    "sell"
+                });
+            }
+        }
+    }
+    rows.sort_by(|a, b| {
+        (a["ts"]["raw"].as_str(), a["id"].as_str())
+            .cmp(&(b["ts"]["raw"].as_str(), b["id"].as_str()))
+    });
+    json!({
+        "schema_version": 2,
+        "operation": "ledger",
+        "policy": {
+            "country": {"kind": "at"},
+            "method": method,
+            "method_label": label,
+            "require_coarse_review": builder.rng.chance(30),
+        },
+        "config": {
+            "assets": ["BTC", "LBTC", "USDT"],
+            "exchanges": ["Cold", "Exchange", "Hot"],
+            "holders": ["Default"],
+        },
+        "holder": "Default",
+        "wallets": WALLETS.iter().map(|(id, label)| json!({"id": id, "label": label})).collect::<Vec<_>>(),
+        "rows": rows,
+        "intra_pairs": builder.pairs,
+        "cross_asset_pairs": builder.cross,
+    })
+}
+
+/// A swap book's methods: Austria's default three times in four.
+const SWAP_METHODS: [(&str, &str); 4] = [
+    ("moving_average_at", "moving_average_at"),
+    ("moving_average_at", "moving_average_at"),
+    ("moving_average_at", "moving_average_at"),
+    ("fifo", "fifo"),
+];
 
 fn run(request: &Value) -> Value {
     serde_json::from_str(&ledger(&request.to_string())).expect("the response is JSON")
@@ -1231,4 +1407,457 @@ fn pricing_an_austrian_move_can_release_a_neu_shortfall() {
     );
     let after = run(&request(json!("40000E0")));
     assert!(is_neu_shortfall(&after), "{after}");
+}
+
+// Austrian swap books (design §4.12, WI-10): Austrian books with
+// cross-asset swaps, whose carrying-value pairs the swap-link selection
+// links, blocks, or skips after a first pass. A swap book may end in a
+// failure the oracle shares (design §6); every other one must succeed, and
+// on those property 4 holds with its exclusion (pricing may also release
+// one of those failures), and:
+//
+// 7. msat are conserved per asset, and each wallet's journal replay ends at
+//    its holding; it may end below zero only in a wallet a linked swap-out
+//    left, which skips the gates (design §4.6);
+// 8. a blocked pair books neither leg and quarantines its two legs, and
+//    both booked legs of a linked pair carry its link;
+// 9. basis is conserved across a Neu swap under `moving_average_at`: the
+//    swapped-in lot's basis is what was swapped (its fee aside) at the
+//    source pool's average, the average the same disposal takes without
+//    the link.
+
+/// The failures a swap book may end in, all the oracle's own: the Neu
+/// shortfall (here also in the swap runner), a Neu swap under a lot method,
+/// a link the second pass leaves unpaired (a chained swap whose first hop
+/// is blocked, or a link whose out leg the second pass makes Alt), and,
+/// rarely, two same-pool swaps that depend on each other and an account a
+/// linked swap-out overdrew beyond the lot engine's tolerance. Every swap
+/// book of 3,000 seeds was replayed on the oracle (WI-10 in the
+/// implementation log): it fails exactly where the engine does.
+fn swap_failure(response: &Value) -> Option<&'static str> {
+    let error = &response["error"];
+    let message = error["inner"]["message"].as_str().unwrap_or("");
+    if error["stage"] == "compute_multi" {
+        if message.starts_with("Cyclic Austrian swap basis dependency") {
+            return Some("cyclic swaps");
+        }
+        if message.contains(" balance of account ") && message.contains(" went negative ") {
+            return Some("overdrawn account");
+        }
+    }
+    match error["stage"].as_str() {
+        Some("compute" | "compute_multi")
+            if message == "Total in-transaction crypto value < total taxable crypto value" =>
+        {
+            Some("Neu shortfall")
+        }
+        Some("compute_multi")
+            if message.starts_with(
+                "Austrian swap neutrality requires the `moving_average_at` accounting method",
+            ) =>
+        {
+            Some("Neu swap under a lot method")
+        }
+        Some("validate") if message.starts_with("Unpaired `at_swap_link=") => Some("unpaired link"),
+        _ => None,
+    }
+}
+
+/// The swap books that succeed, with their responses; the others must end
+/// in a failure the oracle shares, and most must succeed.
+fn swap_outcomes() -> Vec<(u64, Value, Value)> {
+    let mut books = Vec::new();
+    let mut failures: BTreeMap<&str, usize> = BTreeMap::new();
+    for seed in 0..SEEDS {
+        let request = swap_book(seed);
+        let response = run(&request);
+        if response["ok"] == true {
+            books.push((seed, request, response));
+        } else {
+            let kind = swap_failure(&response);
+            assert!(kind.is_some(), "seed {seed}: {response}");
+            *failures.entry(kind.unwrap()).or_default() += 1;
+        }
+    }
+    assert!(
+        books.len() > SEEDS as usize * 2 / 3,
+        "only {} swap books succeed ({failures:?})",
+        books.len()
+    );
+    books
+}
+
+/// A pair's link: its id, else `<out>-><in>`.
+fn link_of(pair: &Value) -> String {
+    match pair["pair_id"].as_str() {
+        Some(id) if !id.is_empty() => id.to_owned(),
+        _ => format!(
+            "{}->{}",
+            pair["out_id"].as_str().unwrap(),
+            pair["in_id"].as_str().unwrap()
+        ),
+    }
+}
+
+/// Each carrying-value pair with both legs among the rows, and its fate in
+/// a response: `blocked` (its swap quarantines), `linked` (an entry carries
+/// its link), or `skipped`.
+fn swap_fates<'r>(request: &'r Value, response: &Value) -> Vec<(&'r Value, &'static str)> {
+    let rows: BTreeSet<&str> = request["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["id"].as_str().unwrap())
+        .collect();
+    let blocked: BTreeSet<String> = response["quarantines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["reason"] == "at_swap_basis_carry_unresolved")
+        .map(|item| item["detail"]["at_swap_link"].as_str().unwrap().to_owned())
+        .collect();
+    let texts: Vec<&str> = response["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|entry| entry["description"].as_str())
+        .collect();
+    request["cross_asset_pairs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|pair| {
+            pair["policy"] == "carrying-value"
+                && rows.contains(pair["out_id"].as_str().unwrap())
+                && rows.contains(pair["in_id"].as_str().unwrap())
+        })
+        .map(|pair| {
+            let link = link_of(pair);
+            let token = format!("at_swap_link={link}");
+            let fate = if blocked.contains(&link) {
+                "blocked"
+            } else if texts
+                .iter()
+                .any(|text| text.split(' ').any(|word| word == token))
+            {
+                "linked"
+            } else {
+                "skipped"
+            };
+            (pair, fate)
+        })
+        .collect()
+}
+
+#[test]
+fn swap_books_give_the_same_bytes() {
+    for seed in 0..SEEDS {
+        let text = swap_book(seed).to_string();
+        assert_eq!(ledger(&text), ledger(&text), "seed {seed}");
+    }
+}
+
+#[test]
+fn swap_books_succeed_or_fail_as_the_oracle_does() {
+    let mut fates: BTreeMap<&str, usize> = BTreeMap::new();
+    for (_seed, request, response) in swap_outcomes() {
+        for (_pair, fate) in swap_fates(&request, &response) {
+            *fates.entry(fate).or_default() += 1;
+        }
+    }
+    // The books link, block, and skip pairs.
+    for fate in ["linked", "blocked", "skipped"] {
+        assert!(
+            fates.get(fate).copied().unwrap_or(0) > SEEDS as usize / 20,
+            "{fates:?}"
+        );
+    }
+}
+
+#[test]
+fn swap_books_conserve_msat_and_wallets_end_at_their_holdings() {
+    let mut overdrawn = 0;
+    let mut swapped = 0;
+    for (seed, request, response) in swap_outcomes() {
+        let accounts = row_accounts(&request);
+        let pairs = request["intra_pairs"].as_array().unwrap();
+        let audit = response["intra_audit"].as_array().unwrap();
+        let mut flow: BTreeMap<String, i128> = BTreeMap::new();
+        let mut balance: BTreeMap<(String, String), i128> = BTreeMap::new();
+        // The accounts a linked swap-out left: it skips the gates.
+        let mut linked_outs: BTreeSet<(String, String)> = BTreeSet::new();
+        for entry in response["entries"].as_array().unwrap() {
+            let kind = entry["entry_type"].as_str().unwrap();
+            let (account, quantity) = match kind {
+                "acquisition" | "disposal" | "fee" | "transfer_fee" => (
+                    accounts[entry["row"].as_str().unwrap()].clone(),
+                    msat(&entry["quantity"]),
+                ),
+                "transfer_out" | "transfer_in" => {
+                    let row = &audit[entry["audit"].as_u64().unwrap() as usize];
+                    let pair = &pairs[row["pair"].as_u64().unwrap() as usize];
+                    if kind == "transfer_out" {
+                        (
+                            accounts[pair["out"].as_str().unwrap()].clone(),
+                            -msat(&row["sent"]),
+                        )
+                    } else {
+                        (
+                            accounts[pair["in"].as_str().unwrap()].clone(),
+                            msat(&row["received"]),
+                        )
+                    }
+                }
+                _ => continue,
+            };
+            if kind == "disposal"
+                && marker(entry["description"].as_str().unwrap(), "at_swap_link").is_some()
+            {
+                linked_outs.insert(account.clone());
+                swapped += 1;
+            }
+            if kind != "transfer_out" && kind != "transfer_in" {
+                *flow.entry(account.0.clone()).or_default() += quantity;
+            }
+            // A move's fee is in what it sent.
+            if kind != "transfer_fee" {
+                *balance.entry(account).or_default() += quantity;
+            }
+        }
+        let mut held_by_wallet: BTreeMap<(String, String), i128> = BTreeMap::new();
+        for holding in response["holdings"].as_array().unwrap() {
+            held_by_wallet.insert(
+                (
+                    holding["asset"].as_str().unwrap().to_owned(),
+                    holding["wallet"].as_str().unwrap().to_owned(),
+                ),
+                msat(&holding["quantity"]),
+            );
+        }
+        // Per asset, what flowed in less what flowed out is what the
+        // accounts end at, the overdrawn ones included.
+        let mut ends: BTreeMap<String, i128> = BTreeMap::new();
+        for ((asset, _), value) in &balance {
+            *ends.entry(asset.clone()).or_default() += value;
+        }
+        flow.retain(|_, value| *value != 0);
+        ends.retain(|_, value| *value != 0);
+        assert_eq!(flow, ends, "seed {seed}");
+        // Every account ends at its holding; one may end below zero only
+        // when a linked swap-out left it.
+        for (account, value) in &balance {
+            if *value < 0 {
+                assert!(
+                    linked_outs.contains(account),
+                    "seed {seed}: {account:?} ends at {value} msat without a linked swap-out"
+                );
+                overdrawn += 1;
+            }
+        }
+        balance.retain(|_, value| *value > 0);
+        assert_eq!(balance, held_by_wallet, "seed {seed}");
+    }
+    assert!(
+        swapped > SEEDS as usize / 10,
+        "only {swapped} linked swap-outs"
+    );
+    assert!(
+        overdrawn <= SEEDS as usize / 50,
+        "{overdrawn} overdrawn accounts"
+    );
+}
+
+#[test]
+fn swap_pairs_book_both_legs_linked_or_neither() {
+    let mut checked = BTreeMap::new();
+    for (seed, request, response) in swap_outcomes() {
+        let entries = response["entries"].as_array().unwrap();
+        let quarantines = response["quarantines"].as_array().unwrap();
+        for (pair, fate) in swap_fates(&request, &response) {
+            let link = link_of(pair);
+            let legs = [
+                pair["out_id"].as_str().unwrap(),
+                pair["in_id"].as_str().unwrap(),
+            ];
+            let booked: Vec<&Value> = entries
+                .iter()
+                .filter(|entry| entry["row"].as_str().is_some_and(|row| legs.contains(&row)))
+                .collect();
+            match fate {
+                "blocked" => {
+                    assert!(booked.is_empty(), "seed {seed}: blocked {link} booked");
+                    let named: Vec<&str> = quarantines
+                        .iter()
+                        .filter(|item| {
+                            item["reason"] == "at_swap_basis_carry_unresolved"
+                                && item["detail"]["at_swap_link"] == link.as_str()
+                        })
+                        .map(|item| item["row"].as_str().unwrap())
+                        .collect();
+                    assert_eq!(named, legs, "seed {seed}: {link}");
+                }
+                "linked" => {
+                    for entry in &booked {
+                        let text = entry["description"].as_str().unwrap();
+                        assert_eq!(
+                            marker(text, "at_swap_link"),
+                            Some(link.as_str()),
+                            "seed {seed}: {text}"
+                        );
+                    }
+                }
+                _ => {
+                    for entry in &booked {
+                        let text = entry["description"].as_str().unwrap();
+                        assert!(
+                            marker(text, "at_swap_link").is_none(),
+                            "seed {seed}: {text}"
+                        );
+                    }
+                }
+            }
+            *checked.entry(fate).or_insert(0) += 1;
+        }
+    }
+    assert!(checked.len() == 3, "{checked:?}");
+}
+
+#[test]
+fn neu_swaps_carry_the_pool_basis_of_what_they_swap() {
+    let mut carried = 0;
+    for (seed, request, response) in swap_outcomes() {
+        if request["policy"]["method"] != "moving_average_at" {
+            continue;
+        }
+        let entries = response["entries"].as_array().unwrap();
+        for (pair, fate) in swap_fates(&request, &response) {
+            if fate != "linked" {
+                continue;
+            }
+            let (out_id, in_id) = (
+                pair["out_id"].as_str().unwrap(),
+                pair["in_id"].as_str().unwrap(),
+            );
+            let Some(acquired) = entries
+                .iter()
+                .find(|entry| entry["entry_type"] == "acquisition" && entry["row"] == in_id)
+            else {
+                continue;
+            };
+            // The same book without this pair: its out leg is an ordinary
+            // Neu disposal, which takes the pool's average.
+            let mut control = request.clone();
+            control["cross_asset_pairs"]
+                .as_array_mut()
+                .unwrap()
+                .retain(|other| other != pair);
+            let control = run(&control);
+            if control["ok"] != true {
+                continue;
+            }
+            let Some(disposal) = control["entries"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|entry| entry["entry_type"] == "disposal" && entry["row"] == out_id)
+            else {
+                continue;
+            };
+            let averages: BTreeSet<&str> = disposal["fragments"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|fragment| fragment["unit_basis_override"].as_str().unwrap_or(""))
+                .collect();
+            let [average] = averages.into_iter().collect::<Vec<_>>()[..] else {
+                continue;
+            };
+            if average.is_empty()
+                || !disposal["description"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("at_regime=neu ")
+            {
+                continue;
+            }
+            let out_row = request["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|row| row["id"] == out_id)
+                .unwrap();
+            // The swapped amount, its fee aside, at the average, as one
+            // 32-digit product; compared by value (the engine's exponent is
+            // the stored goldens' concern).
+            let amount =
+                Decimal::from_canonical(&format!("{}E-11", out_row["amount_msat"])).unwrap();
+            let expected = amount
+                .mul(&Decimal::from_canonical(average).unwrap(), &Context::RP2)
+                .unwrap();
+            let basis = Decimal::from_canonical(acquired["fiat_value"].as_str().unwrap()).unwrap();
+            assert!(
+                basis.sub(&expected, &Context::RP2).unwrap().is_zero(),
+                "seed {seed}: {}: basis {} != {} x {average}",
+                link_of(pair),
+                acquired["fiat_value"],
+                out_row["amount_msat"]
+            );
+            carried += 1;
+        }
+    }
+    assert!(
+        carried > SEEDS as usize / 10,
+        "only {carried} carried swaps checked"
+    );
+}
+
+/// Property 4 on swap books, with its exclusion. Pricing can also release
+/// a swap book into one of the failures the oracle shares: a pair a
+/// missing price blocked is linked, and the second pass then ends as
+/// another swap book may (every repriced swap book of 3,000 seeds was
+/// replayed on the oracle, WI-10 in the implementation log). Such a
+/// failure is counted, and must be rare.
+#[test]
+fn pricing_an_unpriced_inbound_row_of_a_swap_book_quarantines_no_new_row() {
+    let mut repriced = 0;
+    let mut released_failures = 0;
+    for (seed, request, before) in swap_outcomes() {
+        let rows = request["rows"].as_array().unwrap();
+        for index in 0..rows.len() {
+            let row = &rows[index];
+            if row["direction"] != "inbound" || !row["rate"].is_null() || !row["value"].is_null() {
+                continue;
+            }
+            let mut priced = request.clone();
+            priced["rows"][index]["rate"] = json!(if row["asset"] == "USDT" {
+                "1E0"
+            } else {
+                "4000000E-2"
+            });
+            priced["rows"][index]["coarse"] = json!(false);
+            let after = run(&priced);
+            repriced += 1;
+            if after["ok"] != true {
+                assert!(
+                    swap_failure(&after).is_some(),
+                    "seed {seed}, row {index}: {after}"
+                );
+                released_failures += 1;
+                continue;
+            }
+            let (added, _released) = unexcused_additions(&request, &before, &after);
+            assert!(
+                added.is_empty(),
+                "seed {seed}: pricing row {index} quarantines {added:?}"
+            );
+        }
+    }
+    assert!(
+        repriced > SEEDS as usize / 2,
+        "only {repriced} inbound rows repriced"
+    );
+    assert!(
+        released_failures <= repriced / 20,
+        "{released_failures} of {repriced} repricings fail"
+    );
 }

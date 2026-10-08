@@ -8,7 +8,7 @@
 //!
 //! On an Austrian book the regime tracker ([`super::regimes`]) runs first,
 //! over the pass's rows without a hold and its moves without a held leg
-//! (`:1775-1866`). Swap links are not ported yet, so no event has one.
+//! (`:1775-1866`).
 //!
 //! The pass visits its rows in projection order:
 //!
@@ -31,8 +31,9 @@
 //! and the tracker's for an outbound one, which may record an election
 //! (Wahlrecht); a move's is the tracker's for its out leg, with the msat each
 //! regime moved. A row's regime override replaces either and drops the
-//! election (`:2366-2373`, `:2399-2401`, `:2503-2528`). Every pool is the
-//! global one.
+//! election (`:2366-2373`, `:2399-2401`, `:2503-2528`). An event whose row
+//! the pass's swap links name ([`super::swaplinks`]) carries that link
+//! (`:2526-2528`). Every pool is the global one.
 //!
 //! Then a blocked group loses its moves and its legs whose transactions no
 //! quarantine names yet are flagged (`:2554-2581`), and the asset's lot
@@ -143,7 +144,7 @@ pub(crate) struct Normalized {
 
 /// `msat_to_btc`: `Decimal(msat) / Decimal("100000000000")`. Wide enough
 /// for an amount plus its fee, as Python's integers are.
-fn btc(msat: u128) -> EngineResult<Decimal> {
+pub(crate) fn btc(msat: u128) -> EngineResult<Decimal> {
     num::div(&Decimal::from(msat), &Decimal::from(MSAT_PER_BTC))
 }
 
@@ -243,15 +244,18 @@ fn with_group(mut detail: Map<String, Value>, group_id: Option<&str>) -> Map<Str
 }
 
 /// One normalize pass over an asset's `active` rows (all of them unless a
-/// pass excludes some). The holds come from all of the asset's rows (the
-/// builder detects them so), and the moves are all of the asset's moves,
-/// as the adapter passes them to every pass (`adapter.py:1690-1703`).
+/// pass excludes some), with the pass's swap links by row
+/// (`at_swap_link_by_row_id`; read on Austrian books only). The holds come
+/// from all of the asset's rows (the builder detects them so), and the
+/// moves are all of the asset's moves, as the adapter passes them to every
+/// pass (`adapter.py:1690-1703`).
 pub(crate) fn normalize<'a>(
     book: &Book<'a>,
     part: &AssetRows<'a>,
     active: &[usize],
+    links: &HashMap<usize, String>,
 ) -> EngineResult<Normalized> {
-    Normalizer::new(book, part).run(active)
+    Normalizer::new(book, part, links).run(active)
 }
 
 struct Normalizer<'b, 'a> {
@@ -271,10 +275,12 @@ struct Normalizer<'b, 'a> {
     blocked: Vec<(&'a str, QuarantineReason)>,
     /// The regime tracker's findings (Austrian books only).
     tracked: Tracked,
+    /// The pass's swap links, by row.
+    links: &'b HashMap<usize, String>,
 }
 
 impl<'b, 'a> Normalizer<'b, 'a> {
-    fn new(book: &'b Book<'a>, part: &'b AssetRows<'a>) -> Self {
+    fn new(book: &'b Book<'a>, part: &'b AssetRows<'a>, links: &'b HashMap<usize, String>) -> Self {
         let rows = book.rows;
         let mut moves = Vec::new();
         let mut move_by_row = HashMap::new();
@@ -304,6 +310,7 @@ impl<'b, 'a> Normalizer<'b, 'a> {
             out: Normalized::default(),
             blocked: Vec::new(),
             tracked: Tracked::default(),
+            links,
         }
     }
 
@@ -567,10 +574,13 @@ impl<'b, 'a> Normalizer<'b, 'a> {
             return Ok(());
         };
         let fiat_value = fiat_value(row, &amount, &spot)?;
-        let (at_regime, at_regime_basis) = if self.austrian {
-            self.event_regime(index)?
+        let (at_regime, at_regime_basis, at_swap_link) = if self.austrian {
+            let (regime, basis) = self.event_regime(index)?;
+            // `if linked:`, so an empty link is none.
+            let link = self.links.get(&index).filter(|link| !link.is_empty());
+            (regime, basis, link.cloned())
         } else {
-            (None, None)
+            (None, None, None)
         };
         self.out.events.push(Event {
             row: index,
@@ -583,7 +593,7 @@ impl<'b, 'a> Normalizer<'b, 'a> {
             at_regime,
             at_regime_basis,
             cost_basis_pool_id: GLOBAL_POOL,
-            at_swap_link: None,
+            at_swap_link,
         });
         self.out.ordered_items.push(Item::Event(index));
         Ok(())
@@ -904,7 +914,7 @@ mod tests {
         let [part] = book.assets.as_slice() else {
             panic!("one asset");
         };
-        normalize(&book, part, &part.rows)
+        normalize(&book, part, &part.rows, &HashMap::new())
     }
 
     /// Row ids without their prefix.
