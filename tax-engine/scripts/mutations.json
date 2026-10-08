@@ -11,37 +11,6 @@
     "rule": "Of two spends of one input, the only confirmed one wins and books; only the others are held."
   },
   {
-    "id": "swap-link-marker-first",
-    "file": "kassiber/core/engines/rp2.py",
-    "find": "        tokens.append(marker_token(MARKER_SWAP_LINK, swap_link))",
-    "replace": "        tokens.insert(0, marker_token(MARKER_SWAP_LINK, swap_link))",
-    "expect_failing": [
-      "tests/test_tax_descriptions.py::DescriptionTest::test_austrian_markers_compose_in_a_fixed_order",
-      "tests/test_austrian_classification.py::AustrianEventMarkerTest::test_at_swap_link_tags_both_legs_and_carries_the_swapped_basis"
-    ],
-    "rule": "Event markers keep their order: regime, regime basis, pool, swap link, then the description."
-  },
-  {
-    "id": "swap-link-not-tagged",
-    "file": "kassiber/core/tax_events.py",
-    "find": "            linked = swap_link_map.get(row[\"id\"])",
-    "replace": "            linked = None",
-    "expect_failing": [
-      "tests/test_austrian_classification.py::AustrianEventMarkerTest::test_at_swap_link_tags_both_legs_and_carries_the_swapped_basis"
-    ],
-    "rule": "Both legs of a selected Austrian swap carry its link."
-  },
-  {
-    "id": "cross-asset-validation-code",
-    "file": "kassiber/core/engines/rp2.py",
-    "find": "            code=\"rp2_input_validation\",",
-    "replace": "            code=\"internal\",",
-    "expect_failing": [
-      "tests/test_austrian_classification.py::ATCrossAssetValidationTest::test_unpaired_swap_link_surfaces_as_apperror_with_code"
-    ],
-    "rule": "A failed cross-asset swap validation raises AppError with code rp2_input_validation."
-  },
-  {
     "id": "wallet-pool-scope-allowed",
     "file": "kassiber/tax_policy.py",
     "find": "    if scope not in allowed:",
@@ -223,7 +192,8 @@
     "replace": "    \"validate\": (\"RP2 cross-asset input validation failed: \", \"app_error\"),",
     "expect_failing": [
       "tests/test_tax_ledger_contract.py::test_the_stage_table_raises_every_stored_engine_failure",
-      "tests/test_tax_ledger_contract.py::test_unwrapped_and_contract_stages"
+      "tests/test_tax_ledger_contract.py::test_unwrapped_and_contract_stages",
+      "tests/test_austrian_classification.py::ATCrossAssetValidationTest::test_unpaired_swap_link_surfaces_as_apperror_with_code"
     ],
     "rule": "A failed swap-pair validation is an AppError with code rp2_input_validation."
   },
@@ -1252,8 +1222,8 @@
   {
     "id": "normalize-austrian-events-without-regime",
     "file": "tax-engine/core/src/ledger/normalize.rs",
-    "find": "            self.event_regime(index)?",
-    "replace": "            (None, None)",
+    "find": "            let (regime, basis) = self.event_regime(index)?;",
+    "replace": "            let (regime, basis) = (None, None);",
     "expect_failing": [
       "ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides",
       "the_ledger_operation_reproduces_every_stored_response"
@@ -1397,19 +1367,9 @@
     "replace": "            Country::At {} => Err(EngineError::unsupported(\"Austrian books\")),",
     "expect_failing": [
       "the_ledger_operation_reproduces_every_stored_response",
-      "prepare_normalizes_and_walks_books_without_carries"
+      "prepare_normalizes_and_walks_books_without_the_rail_carry"
     ],
-    "rule": "The engine answers an Austrian book without a carrying-value cross-asset pair."
-  },
-  {
-    "id": "run-austrian-swap-pairs-accepted",
-    "file": "tax-engine/core/src/ledger/run.rs",
-    "find": "                && (pair.bitcoin_rail || !rail)",
-    "replace": "                && pair.bitcoin_rail",
-    "expect_failing": [
-      "the_ledger_operation_reproduces_every_stored_response"
-    ],
-    "rule": "An Austrian book with a carrying-value cross-asset pair needs swap-link selection, which the engine does not run yet."
+    "rule": "The engine answers every Austrian book."
   },
   {
     "id": "run-swap-runner-results-dropped",
@@ -1454,11 +1414,222 @@
   {
     "id": "routing-austrian-books-legacy",
     "file": "kassiber/core/engines/ledger.py",
-    "find": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"at\"})",
-    "replace": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\"})",
+    "find": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"at\", \"at_swap\"})",
+    "replace": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"at_swap\"})",
     "expect_failing": [
       "tests/test_tax_ledger_routing.py::test_generic_and_austrian_books_are_routed"
     ],
     "rule": "Austrian books without a carrying-value cross-asset pair run on the engine."
+  },
+  {
+    "id": "routing-austrian-swaps-legacy",
+    "file": "kassiber/core/engines/ledger.py",
+    "find": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"at\", \"at_swap\"})",
+    "replace": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"at\"})",
+    "expect_failing": [
+      "tests/test_tax_ledger_routing.py::test_generic_and_austrian_books_are_routed"
+    ],
+    "rule": "Austrian books with a carrying-value cross-asset pair run on the engine."
+  },
+  {
+    "id": "describe-swap-link-first",
+    "file": "tax-engine/core/src/ledger/describe.rs",
+    "find": "        tokens.push(token(MARKER_SWAP_LINK, link));",
+    "replace": "        tokens.insert(0, token(MARKER_SWAP_LINK, link));",
+    "expect_failing": [
+      "ledger::describe::tests::markers_come_in_a_fixed_order",
+      "ledger::swaplinks::tests::a_neu_swap_links_both_legs_and_carries_the_pool_basis"
+    ],
+    "rule": "Event markers keep their order: regime, regime basis, pool, swap link, then the description."
+  },
+  {
+    "id": "normalize-events-ignore-swap-links",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            let link = self.links.get(&index).filter(|link| !link.is_empty());",
+    "replace": "            let link: Option<&String> = None;",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_neu_swap_links_both_legs_and_carries_the_pool_basis",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "Both legs of a selected Austrian swap carry its link."
+  },
+  {
+    "id": "swaplinks-every-policy-considered",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "        if pair.policy.as_deref() != Some(CARRYING_VALUE) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ledger::swaplinks::tests::taxable_pairs_and_pairs_with_a_leg_outside_are_skipped"
+    ],
+    "rule": "Only carrying-value pairs are swap pairs."
+  },
+  {
+    "id": "swaplinks-in-leg-reason-ignored",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "        let reason = leg_reason(out, pair.out_transaction_id.as_deref())\n            .or_else(|| leg_reason(inbound, pair.in_transaction_id.as_deref()));",
+    "replace": "        let reason = leg_reason(out, pair.out_transaction_id.as_deref());",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_leg_normalize_drops_blocks_its_pair"
+    ],
+    "rule": "A pair's reason is its out leg's, else its in leg's."
+  },
+  {
+    "id": "swaplinks-reason-skips-the-anchor",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "            Some(row.anchor.as_str()).filter(|anchor| !anchor.is_empty()),",
+    "replace": "            None,",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_legs_transaction_is_looked_up_before_the_pairs"
+    ],
+    "rule": "A leg's reason is looked up by its transaction, not only by its row."
+  },
+  {
+    "id": "swaplinks-reason-skips-the-pairs-transaction",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "            pair_transaction.filter(|transaction| !transaction.is_empty()),",
+    "replace": "            None,",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_reason_is_found_through_the_pairs_transaction"
+    ],
+    "rule": "A leg's reason is also looked up by the pair's transaction id for that side."
+  },
+  {
+    "id": "swaplinks-gates-only",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "        for quarantine in normalized.quarantines.iter().chain(&walked.quarantines) {",
+    "replace": "        for quarantine in walked.quarantines.iter() {",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_leg_normalize_drops_blocks_its_pair",
+      "ledger::swaplinks::tests::a_reason_is_found_through_the_pairs_transaction"
+    ],
+    "rule": "A pair is blocked for normalize's quarantines as for the gates'."
+  },
+  {
+    "id": "swaplinks-last-reason-wins",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "            reasons\n                .entry(rows[quarantine.row].anchor.as_str())\n                .or_insert(quarantine.reason);",
+    "replace": "            reasons.insert(rows[quarantine.row].anchor.as_str(), quarantine.reason);",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_legs_transaction_is_looked_up_before_the_pairs"
+    ],
+    "rule": "A transaction's reason is the first quarantine naming it, normalize's before the gates'."
+  },
+  {
+    "id": "swaplinks-missing-event-not-blocked",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "        let blocked_for = if out_event.is_none() || !events.contains_key(&inbound) {",
+    "replace": "        let blocked_for = if false {",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_leg_normalize_drops_blocks_its_pair"
+    ],
+    "rule": "A pair a leg of which normalize dropped is blocked."
+  },
+  {
+    "id": "swaplinks-unavailable-leg-reason",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "pub(crate) const SWAP_LEG_UNAVAILABLE: &str = \"swap_leg_unavailable\";",
+    "replace": "pub(crate) const SWAP_LEG_UNAVAILABLE: &str = \"leg_unavailable\";",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_leg_normalize_drops_blocks_its_pair"
+    ],
+    "rule": "A pair blocked for a dropped leg no quarantine names gives `swap_leg_unavailable`."
+  },
+  {
+    "id": "swaplinks-alt-swaps-linked",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "        if out_event.and_then(|event| event.at_regime) != Some(Regime::Neu) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ledger::swaplinks::tests::an_alt_swap_is_not_linked",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "Only a pair whose out leg is Neu on the first pass is linked."
+  },
+  {
+    "id": "swaplinks-relink-appends",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "        match self.links.iter_mut().find(|(linked, _)| *linked == row) {",
+    "replace": "        match None::<&mut (usize, String)> {",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_later_pair_relinks_a_shared_row_in_its_place"
+    ],
+    "rule": "A row a later pair links again keeps its place with the later link."
+  },
+  {
+    "id": "swaplinks-direct-payout-quarantines-both-legs",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "    if link.starts_with(DIRECT_PAYOUT) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_blocked_direct_payout_withholds_its_target_disposal",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A blocked direct payout quarantines only its source, without the out amount."
+  },
+  {
+    "id": "swaplinks-direct-payout-target-books",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "        blocked.push(format!(\"{pair_id}:out\"));",
+    "replace": "",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_blocked_direct_payout_withholds_its_target_disposal",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A blocked direct payout also withholds its target-asset disposal."
+  },
+  {
+    "id": "swaplinks-direct-payout-target-by-fallback-id",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "    let pair_id = pair.pair_id.as_deref().unwrap_or(\"\");",
+    "replace": "    let pair_id = link_id(pair);",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_fallback_id_like_a_direct_payout_withholds_only_the_pair"
+    ],
+    "rule": "A direct payout's target-asset disposal is found by the pair's own id, not its fallback link."
+  },
+  {
+    "id": "swaplinks-out-amount-with-fee",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "    let amount = btc(rows[out].amount_msat.into())?;",
+    "replace": "    let amount = btc(u128::from(rows[out].amount_msat) + u128::from(rows[out].fee_msat))?;",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_short_swap_out_blocks_its_pair_with_the_gates_reason"
+    ],
+    "rule": "A blocked pair's out amount is the out leg's amount, without its fee."
+  },
+  {
+    "id": "run-no-second-pass",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "    if !selection.changes_the_pass() {",
+    "replace": "    if true {",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_neu_swap_links_both_legs_and_carries_the_pool_basis",
+      "ledger::swaplinks::tests::a_short_swap_out_blocks_its_pair_with_the_gates_reason",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A selection that links or blocks a pair runs a second pass."
+  },
+  {
+    "id": "run-second-pass-keeps-blocked-rows",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "        excluded: selection\n            .blocked\n            .iter()\n            .filter_map(|id| book.row_index(id))\n            .collect(),",
+    "replace": "        excluded: HashSet::new(),",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_short_swap_out_blocks_its_pair_with_the_gates_reason",
+      "ledger::swaplinks::tests::a_blocked_direct_payout_withholds_its_target_disposal",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The second pass leaves out the blocked pairs' rows."
+  },
+  {
+    "id": "run-swap-quarantines-dropped",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "        // The swap pairs' quarantines come before the assets'.\n        quarantines: selection\n            .quarantines\n            .into_iter()\n            .map(|quarantine| quarantine_out(&book, quarantine))\n            .collect(),",
+    "replace": "        quarantines: Vec::new(),",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_short_swap_out_blocks_its_pair_with_the_gates_reason",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A blocked pair's quarantines come before the assets' quarantines."
   }
 ]
