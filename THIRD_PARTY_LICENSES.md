@@ -111,7 +111,7 @@ comment.
 
 | Project | Files | Role | License |
 | --- | --- | --- | --- |
-| [T3 Code](https://github.com/pingdotgg/t3code) | `ui-tauri/src/components/ai/modelPickerSearch.ts`, `modelPickerKeys.ts`, `composerPromptHistory.ts`, `ModelPickerContent.tsx`, `ModelPickerSidebar.tsx`, `ModelListRow.tsx`, and `ComposerControl.tsx` | Provider/model picker layout, ranked model search, keyboard navigation, favorites, composer controls and ArrowUp prompt recall. Copyright (c) 2026 T3 Tools Inc. | MIT |
+| [T3 Code](https://github.com/pingdotgg/t3code) | `ui-tauri/src/components/ai/modelPickerSearch.ts`, `modelPickerKeys.ts`, `composerPromptHistory.ts`, `ModelPickerContent.tsx`, `ModelPickerSidebar.tsx`, `ModelListRow.tsx`, `ComposerControl.tsx`, `providerIdentity.ts` (provider initials), and the send/stop marks and action-button styles in `ui-tauri/src/components/ai-02.tsx` | Provider/model picker layout, ranked model search, keyboard navigation, favorites, composer controls, composer action buttons and ArrowUp prompt recall. Copyright (c) 2026 T3 Tools Inc. | MIT |
 
 ## Practical notes
 
