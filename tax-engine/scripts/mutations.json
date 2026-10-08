@@ -755,5 +755,416 @@
       "ledger::normalize::tests::contamination_starts_at_the_earliest_slice_of_a_quarantined_transaction"
     ],
     "rule": "A quarantined row without a timestamp taints nothing."
+  },
+  {
+    "id": "walk-ungrouped-flags-its-own-transaction-twice",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if in_anchor == out_anchor {\n            return;\n        }",
+    "replace": "        if false {\n            return;\n        }",
+    "expect_failing": [
+      "ledger::walk::tests::an_ungrouped_move_that_does_not_fit_is_quarantined_once_per_transaction"
+    ],
+    "rule": "A failed ungrouped move is quarantined on its in leg only when that leg is another transaction."
+  },
+  {
+    "id": "walk-ungrouped-in-leg-paired-leg-is-a-bool",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "fields.insert(String::from(\"paired_leg\"), Value::from(\"inbound\"));",
+    "replace": "fields.insert(String::from(\"paired_leg\"), Value::from(true));",
+    "expect_failing": [
+      "ledger::walk::tests::an_ungrouped_move_that_does_not_fit_is_quarantined_once_per_transaction"
+    ],
+    "rule": "A failed ungrouped move's in-leg quarantine says `paired_leg: \"inbound\"`."
+  },
+  {
+    "id": "walk-group-move-not-checked-again",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "                if let Some((reason, detail)) = self.gate(transfer, &self.accounts, &self.priced) {\n                    states.insert(group_id, GroupState::Failed);",
+    "replace": "                if let Some((reason, detail)) = None::<(QuarantineReason, Map<String, Value>)> {\n                    states.insert(group_id, GroupState::Failed);",
+    "expect_failing": [
+      "ledger::walk::tests::a_group_is_checked_whole_at_its_first_move_and_each_move_again_at_its_own"
+    ],
+    "rule": "An approved group's move is checked again at its own position."
+  },
+  {
+    "id": "walk-group-recheck-flags-the-whole-group",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "self.group_quarantines(&group[position..], transfer, reason, detail);",
+    "replace": "self.group_quarantines(group, transfer, reason, detail);",
+    "expect_failing": [
+      "ledger::walk::tests::a_group_is_checked_whole_at_its_first_move_and_each_move_again_at_its_own"
+    ],
+    "rule": "A move that fails its own check quarantines itself and the group's later moves, not the booked ones."
+  },
+  {
+    "id": "walk-group-not-checked-at-its-first-move",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "                    if let Some((reason, detail)) = self.gate(candidate, &accounts, &priced) {",
+    "replace": "                    if let Some((reason, detail)) = None::<(QuarantineReason, Map<String, Value>)> {",
+    "expect_failing": [
+      "ledger::walk::tests::a_group_is_checked_whole_at_its_first_move_and_each_move_again_at_its_own"
+    ],
+    "rule": "A group is checked whole, on copies of the mirror, at its first move."
+  },
+  {
+    "id": "walk-failed-group-books-later-moves",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "            Some(GroupState::Failed) => Ok(()),",
+    "replace": "            Some(GroupState::Failed) => self.apply(transfer),",
+    "expect_failing": [
+      "ledger::walk::tests::a_group_is_checked_whole_at_its_first_move_and_each_move_again_at_its_own"
+    ],
+    "rule": "A failed group's later moves are skipped."
+  },
+  {
+    "id": "walk-group-flags-in-legs-as-out-legs",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "(\"paired_leg\", Value::from(!side_out)),",
+    "replace": "(\"paired_leg\", Value::from(side_out)),",
+    "expect_failing": [
+      "ledger::walk::tests::a_group_is_checked_whole_at_its_first_move_and_each_move_again_at_its_own"
+    ],
+    "rule": "A group flag's `paired_leg` is true for an in leg."
+  },
+  {
+    "id": "walk-group-names-a-transaction-twice",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "                if !seen.insert(self.anchor(row)) {\n                    continue;\n                }",
+    "replace": "                seen.insert(self.anchor(row));",
+    "expect_failing": [
+      "ledger::walk::tests::a_group_is_checked_whole_at_its_first_move_and_each_move_again_at_its_own"
+    ],
+    "rule": "A failed group names each transaction once."
+  },
+  {
+    "id": "walk-move-gate-ignores-the-account",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if available < transfer.sent {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ledger::walk::tests::an_ungrouped_move_that_does_not_fit_is_quarantined_once_per_transaction"
+    ],
+    "rule": "A move must find its sent amount in its source account."
+  },
+  {
+    "id": "walk-moves-leave-the-destination-empty",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        self.accounts.add(to, &transfer.received)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::walk::tests::entries_are_the_adapters_constructor_calls_in_walk_order"
+    ],
+    "rule": "A booked move credits its destination account with what it received."
+  },
+  {
+    "id": "walk-move-fee-stays-priced",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        self.priced = num::sub(&self.priced, &transfer.fee)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::walk::tests::a_marked_swap_out_skips_the_gates_and_can_overdraw"
+    ],
+    "rule": "A booked move's fee leaves the priced amount."
+  },
+  {
+    "id": "walk-swap-out-faces-the-account-gate",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if available < needed && !marked {",
+    "replace": "        if available < needed {",
+    "expect_failing": [
+      "ledger::walk::tests::a_marked_swap_out_skips_the_gates_and_can_overdraw"
+    ],
+    "rule": "A marked Austrian swap-out skips the account gate."
+  },
+  {
+    "id": "walk-sale-skips-the-priced-gate",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if self.priced < needed && !marked {",
+    "replace": "        if false && self.priced < needed && !marked {",
+    "expect_failing": [
+      "ledger::walk::tests::a_marked_swap_out_skips_the_gates_and_can_overdraw"
+    ],
+    "rule": "A disposal must find its amount priced (`missing_cost_basis`)."
+  },
+  {
+    "id": "walk-taints-after-its-start-only",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "            if !marked && row.ts.raw() >= since.as_str() {",
+    "replace": "            if !marked && row.ts.raw() > since.as_str() {",
+    "expect_failing": [
+      "ledger::walk::tests::outbound_gates_hold_dispositions_shortfalls_and_tainted_lots"
+    ],
+    "rule": "A disposal at or after the time the lot state became uncertain is quarantined."
+  },
+  {
+    "id": "walk-dispositions-leave-the-account",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "            self.quarantine(event.row, QuarantineReason::NonSaleDisposalKind, fields);",
+    "replace": "            self.accounts.sub(wallet, &needed)?;\n            self.quarantine(event.row, QuarantineReason::NonSaleDisposalKind, fields);",
+    "expect_failing": [
+      "ledger::walk::tests::outbound_gates_hold_dispositions_shortfalls_and_tainted_lots"
+    ],
+    "rule": "A quarantined non-sale disposition leaves its account untouched."
+  },
+  {
+    "id": "walk-listed-kinds-read-as-income",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if !is_listed_kind(kind) && kind_has_token(kind, &INCOME_LIKE_KIND_TOKENS) {",
+    "replace": "        if kind_has_token(kind, &INCOME_LIKE_KIND_TOKENS) {",
+    "expect_failing": [
+      "ledger::walk::tests::inbound_kinds_that_look_like_unlisted_income_are_quarantined"
+    ],
+    "rule": "Only inbound kinds the kind table does not list are held as unclassified income."
+  },
+  {
+    "id": "walk-unclassified-income-books",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if !is_listed_kind(kind) && kind_has_token(kind, &INCOME_LIKE_KIND_TOKENS) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ledger::walk::tests::inbound_kinds_that_look_like_unlisted_income_are_quarantined"
+    ],
+    "rule": "An unlisted inbound kind that looks like income is quarantined."
+  },
+  {
+    "id": "walk-generic-books-hold-airdrops",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if self.austrian && AT_ZERO_COST_KINDS.contains(&kind) {",
+    "replace": "        if AT_ZERO_COST_KINDS.contains(&kind) {",
+    "expect_failing": [
+      "ledger::walk::tests::inbound_kinds_that_look_like_unlisted_income_are_quarantined"
+    ],
+    "rule": "Only Austrian books quarantine airdrops and hard forks."
+  },
+  {
+    "id": "walk-airdrops-taint-generic-lots",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "                    || (austrian && AT_ZERO_COST_KINDS.contains(&kind))",
+    "replace": "                    || AT_ZERO_COST_KINDS.contains(&kind)",
+    "expect_failing": [
+      "ledger::walk::tests::dropped_inbounds_taint_the_lots_from_their_time"
+    ],
+    "rule": "Airdrops and hard forks taint only an Austrian book's lots."
+  },
+  {
+    "id": "walk-gate-drops-taint-nothing",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if contaminates && earliest.as_deref().map_or(true, |since| time < since) {",
+    "replace": "        if false && earliest.as_deref().map_or(true, |since| time < since) {",
+    "expect_failing": [
+      "ledger::walk::tests::dropped_inbounds_taint_the_lots_from_their_time"
+    ],
+    "rule": "Events the gates drop taint the lot state from their time."
+  },
+  {
+    "id": "walk-hands-over-entries-without-inbound",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        let entries = (!self.ins.is_empty()).then(|| {",
+    "replace": "        let entries = true.then(|| {",
+    "expect_failing": [
+      "ledger::walk::tests::an_asset_without_an_inbound_entry_hands_the_lot_engine_nothing"
+    ],
+    "rule": "An asset without an inbound entry hands the lot engine nothing."
+  },
+  {
+    "id": "walk-entries-in-insertion-order",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "            entries.append(&mut self.outs);\n            entries.append(&mut self.moves);",
+    "replace": "            entries.append(&mut self.moves);\n            entries.append(&mut self.outs);",
+    "expect_failing": [
+      "ledger::walk::tests::entries_are_the_adapters_constructor_calls_in_walk_order"
+    ],
+    "rule": "Entries go to the lot engine as inbound, outbound, then move entries."
+  },
+  {
+    "id": "walk-fee-value-checked-in-the-constructor",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "            Fiat::Infinity if event.fee.is_zero() => {\n                return Err(DecimalError::InvalidOperation.into())\n            }",
+    "replace": "            Fiat::Infinity if event.fee.is_zero() => (infinity_stand_in()?, true),",
+    "expect_failing": [
+      "ledger::walk::tests::infinite_values_fail_where_rps_constructor_compares_them"
+    ],
+    "rule": "A disposal's `fee * spot_price` is evaluated before the constructor runs."
+  },
+  {
+    "id": "walk-infinite-values-checked-first",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        let entry = Entry::from_input(&input, Some(self.config))?;\n        if infinite {",
+    "replace": "        if infinite {\n            return Err(DecimalError::InvalidOperation.into());\n        }\n        let entry = Entry::from_input(&input, Some(self.config))?;\n        if infinite {",
+    "expect_failing": [
+      "ledger::walk::tests::infinite_values_fail_where_rps_constructor_compares_them"
+    ],
+    "rule": "An infinite entry value fails where RP2's constructor first compares it, after the checks before."
+  },
+  {
+    "id": "walk-fee-valued-at-the-amount",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "            Fiat::Finite(price) => (num::mul(&event.fee, price)?, false),",
+    "replace": "            Fiat::Finite(price) => (num::mul(&event.amount, price)?, false),",
+    "expect_failing": [
+      "ledger::walk::tests::entries_are_the_adapters_constructor_calls_in_walk_order"
+    ],
+    "rule": "A disposal's fiat fee is its fee times the spot price."
+  },
+  {
+    "id": "walk-fee-only-spend-sells",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        input.transaction_type = Some(String::from(if sell { \"SELL\" } else { \"FEE\" }));",
+    "replace": "        input.transaction_type = Some(String::from(\"SELL\"));",
+    "expect_failing": [
+      "ledger::walk::tests::entries_are_the_adapters_constructor_calls_in_walk_order"
+    ],
+    "rule": "A spend of only a fee is a FEE entry."
+  },
+  {
+    "id": "walk-holder-stripped",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        input.holder = self.holder.map(str::to_owned);\n        input.spot_price = Some(Dec(spot));\n        input.crypto_in",
+    "replace": "        input.holder = self.holder.map(|holder| holder.trim().to_owned());\n        input.spot_price = Some(Dec(spot));\n        input.crypto_in",
+    "expect_failing": [
+      "ledger::walk::tests::the_holder_is_the_profile_label_as_it_is"
+    ],
+    "rule": "Entries carry the profile label as it is."
+  },
+  {
+    "id": "order-inbound-after-moves",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "        ordered.extend(inbound);\n        ordered.extend(\n            same_time_moves(rows, &moves)\n                .into_iter()\n                .map(|position| Item::Transfer(moves[position].out)),\n        );",
+    "replace": "        ordered.extend(\n            same_time_moves(rows, &moves)\n                .into_iter()\n                .map(|position| Item::Transfer(moves[position].out)),\n        );\n        ordered.extend(inbound);",
+    "expect_failing": [
+      "ledger::order::tests::buckets_follow_the_text_of_their_time_and_put_inbounds_first"
+    ],
+    "rule": "Within one time, inbound events come before moves."
+  },
+  {
+    "id": "order-moves-ignore-chain-evidence",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "                if target_proof.parents.contains(&source_proof.scope) {",
+    "replace": "                if false {",
+    "expect_failing": [
+      "ledger::order::tests::chain_evidence_orders_moves_and_overrules_wallet_hints"
+    ],
+    "rule": "A move precedes a same-time move that spends its transaction."
+  },
+  {
+    "id": "order-slices-take-wallet-hints",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "                if source_proof.scope == target_proof.scope {\n                    continue;\n                }",
+    "replace": "                if false {\n                    continue;\n                }",
+    "expect_failing": [
+      "ledger::order::tests::slices_of_one_transaction_take_no_wallet_hint"
+    ],
+    "rule": "Slices of one on-chain transaction take no wallet hint."
+  },
+  {
+    "id": "order-hints-may-close-a-cycle",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "                if reaches(&outgoing, target, source) {",
+    "replace": "                if false {",
+    "expect_failing": [
+      "ledger::order::tests::a_wallet_hint_that_would_close_a_cycle_is_dropped"
+    ],
+    "rule": "With chain evidence, a wallet hint that would close a cycle is dropped."
+  },
+  {
+    "id": "order-cycles-drop-moves",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "        return (0..count).collect();",
+    "replace": "        return ordered;",
+    "expect_failing": [
+      "ledger::order::tests::a_wallet_cycle_keeps_normalizes_order"
+    ],
+    "rule": "A cycle among same-time moves keeps normalize's order."
+  },
+  {
+    "id": "order-ready-not-resorted",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "                ready.push(target);\n            }\n        }\n        ready.sort_by_key(position);",
+    "replace": "                ready.push(target);\n            }\n        }",
+    "expect_failing": [
+      "ledger::order::tests::a_move_made_ready_joins_the_waiting_ones_in_normalizes_order",
+      "ledger::order::tests::a_wallet_hint_that_would_close_a_cycle_is_dropped"
+    ],
+    "rule": "A same-time move that becomes ready joins the waiting ones in normalize's order, not behind them."
+  },
+  {
+    "id": "order-hints-run-backwards",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "                rows[moves[source].inbound].wallet_id == rows[moves[target].out].wallet_id;",
+    "replace": "                rows[moves[source].out].wallet_id == rows[moves[target].inbound].wallet_id;",
+    "expect_failing": [
+      "ledger::order::tests::a_move_into_a_wallet_precedes_a_move_out_of_it"
+    ],
+    "rule": "A same-time move into a wallet precedes a move out of it."
+  },
+  {
+    "id": "describe-generic-notes-name-the-pool",
+    "file": "tax-engine/core/src/ledger/describe.rs",
+    "find": "    if let Some(pool) = austrian.then(|| wire_pool(event.pool)).flatten() {",
+    "replace": "    if let Some(pool) = wire_pool(event.pool) {",
+    "expect_failing": [
+      "ledger::describe::tests::generic_notes_carry_no_pool"
+    ],
+    "rule": "Only Austrian notes carry the pool."
+  },
+  {
+    "id": "describe-global-pool-kept",
+    "file": "tax-engine/core/src/ledger/describe.rs",
+    "find": "        GLOBAL_POOL => Some(DEFAULT_POOL.to_owned()),\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::describe::tests::the_regime_basis_follows_the_regime_and_the_global_pool_is_default"
+    ],
+    "rule": "Austrian markers write the global pool as `default`."
+  },
+  {
+    "id": "describe-election-dropped",
+    "file": "tax-engine/core/src/ledger/describe.rs",
+    "find": "    if let Some(basis) = present(event.regime_basis) {\n        tokens.push(token(MARKER_REGIME_BASIS, basis));\n    }",
+    "replace": "",
+    "expect_failing": [
+      "ledger::describe::tests::the_regime_basis_follows_the_regime_and_the_global_pool_is_default"
+    ],
+    "rule": "An elected regime's basis follows the regime in the notes."
+  },
+  {
+    "id": "describe-legs-write-any-regime",
+    "file": "tax-engine/core/src/ledger/describe.rs",
+    "find": "    if let Some(regime @ (\"alt\" | \"neu\")) = leg.regime {",
+    "replace": "    if let Some(regime) = leg.regime {",
+    "expect_failing": [
+      "ledger::describe::tests::transfer_legs_describe_the_move_without_its_text"
+    ],
+    "rule": "Transfer legs write only an `alt` or `neu` regime."
+  },
+  {
+    "id": "describe-move-notes-drop-the-proof",
+    "file": "tax-engine/core/src/ledger/describe.rs",
+    "find": "        Some(\"ownership_derived\") => {\n            tokens.push(String::from(\"self-transfer proven by address ownership\"))\n        }",
+    "replace": "        Some(\"ownership_derived\") => {}",
+    "expect_failing": [
+      "ledger::describe::tests::move_notes_put_the_regime_and_pool_before_the_proof_and_the_text"
+    ],
+    "rule": "A move proven by address ownership says so in its notes."
+  },
+  {
+    "id": "reader-audit-anchor-is-the-row-id",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "        \"out_anchor_transaction_id\": str(_get(out_row, \"journal_transaction_id\") or out_row[\"id\"]),",
+    "replace": "        \"out_anchor_transaction_id\": str(out_row[\"id\"]),",
+    "expect_failing": [
+      "tests/test_tax_ledger_prepare.py::test_the_golden_books_prepare_as_the_oracle[generic-bundle-passing]"
+    ],
+    "rule": "An audit row names the out leg's transaction."
+  },
+  {
+    "id": "reader-audit-drops-the-group",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "    if group_id:\n        row[\"transfer_group_id\"] = group_id\n    return row",
+    "replace": "    return row",
+    "expect_failing": [
+      "tests/test_tax_ledger_prepare.py::test_the_golden_books_prepare_as_the_oracle[generic-bundle-passing]"
+    ],
+    "rule": "An audit row of a grouped move names its group."
   }
 ]
