@@ -7,6 +7,7 @@ import os
 import shutil
 import signal
 import subprocess
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any, Iterator
@@ -103,6 +104,39 @@ def _broker_script() -> Path:
     return Path(__file__).with_name("provider_broker") / "index.mjs"
 
 
+def _start_broker(node: str, script: Path) -> subprocess.Popen[str]:
+    """Start the broker with a temporary root this supervisor owns.
+
+    Provider working directories (and an ACP agent's per-turn home, which holds
+    its session log) live under that root. A broker that is killed, times out,
+    or is terminated on Windows cannot clean up after itself, so
+    ``_discard_broker`` removes the root once the process is gone.
+    """
+
+    root = tempfile.mkdtemp(prefix="kassiber-ai-broker-")
+    try:
+        process = subprocess.Popen(
+            [node, str(script)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            env={**os.environ, "KASSIBER_AI_BROKER_TMPDIR": root},
+            start_new_session=os.name != "nt",
+        )
+    except OSError:
+        shutil.rmtree(root, ignore_errors=True)
+        raise
+    process._kassiber_temp_root = root  # type: ignore[attr-defined]
+    return process
+
+
+def _discard_broker_root(process: subprocess.Popen[str]) -> None:
+    root = getattr(process, "_kassiber_temp_root", None)
+    if root:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _broker_unavailable() -> AppError:
     return AppError(
         "The local AI provider broker is unavailable",
@@ -177,24 +211,25 @@ class BrokerAIClient:
         if not node or not script.is_file():
             raise _broker_unavailable()
         try:
-            process = subprocess.Popen(
-                [node, str(script)],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                start_new_session=os.name != "nt",
-            )
+            process = _start_broker(node, script)
         except OSError as exc:
             raise _broker_unavailable() from exc
         try:
             stdout, _ = process.communicate(json.dumps(request) + "\n", timeout=timeout)
         except subprocess.TimeoutExpired as exc:
             # A probe that overruns has provider CLIs of its own running; ending
-            # only the broker would leave them behind.
-            BrokerAIClient._signal_group(process, signal.SIGKILL)
-            process.communicate()
+            # only the broker would leave them behind. SIGTERM first lets the
+            # broker stop them and clean up; the group is killed if it cannot.
+            BrokerAIClient._signal_group(process, signal.SIGTERM)
+            try:
+                process.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                BrokerAIClient._signal_group(process, signal.SIGKILL)
+                process.communicate()
             raise _broker_unavailable() from exc
+        finally:
+            if process.poll() is not None:
+                _discard_broker_root(process)
         for line in stdout.splitlines():
             try:
                 event = json.loads(line)
@@ -266,6 +301,7 @@ class BrokerAIClient:
                     pipe.close()
                 except OSError:
                     pass
+        _discard_broker_root(process)
 
     def _check_cancelled(self) -> None:
         if self._cancelled.is_set():
@@ -319,18 +355,11 @@ class BrokerAIClient:
         )
         if not continuing:
             self._pending_call_ids.clear()
-            if process is not None and process.poll() is None:
-                self._signal_group(process, signal.SIGTERM)
+            if process is not None:
+                self._finish_process(process)
             self._check_cancelled()
             try:
-                process = subprocess.Popen(
-                    [node, str(script)],
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    start_new_session=os.name != "nt",
-                )
+                process = _start_broker(node, script)
             except OSError as exc:
                 raise _broker_unavailable() from exc
             with self._lock:

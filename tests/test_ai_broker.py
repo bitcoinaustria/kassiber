@@ -192,8 +192,12 @@ class BrokerClientTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="kassiber-broker-hang-") as tmp:
             pid_file = Path(tmp) / "child.pid"
             script = Path(tmp) / "hanging_broker.py"
+            root_file = Path(tmp) / "root.txt"
             script.write_text(
-                "import subprocess, sys, time\n"
+                "import os, subprocess, sys, time\n"
+                "root = os.environ['KASSIBER_AI_BROKER_TMPDIR']\n"
+                "open(os.path.join(root, 'session-log.jsonl'), 'w').write('{}')\n"
+                f"open({str(root_file)!r}, 'w').write(root)\n"
                 "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
                 f"open({str(pid_file)!r}, 'w').write(str(child.pid))\n"
                 "time.sleep(60)\n",
@@ -219,6 +223,9 @@ class BrokerClientTest(unittest.TestCase):
             else:
                 os.kill(child_pid, 9)
                 self.fail("the provider CLI outlived the timed-out probe")
+            # The per-turn state under the broker's root (an agent's session
+            # log, for one) is removed even though the broker never cleaned up.
+            self.assertFalse(Path(root_file.read_text(encoding="utf-8")).exists())
 
     def test_native_provider_locators_share_one_registry(self):
         self.assertEqual(cli_provider_for_locator(" CODEX-CLI://DEFAULT "), "codex")

@@ -479,7 +479,8 @@ export async function acpChat(
   let replaying = false;
   // Text before the prompt is sent is a startup notice, not the answer.
   let prompted = false;
-  const kassiberCalls = new Set<string>();
+  // Each accepted call id and the Kassiber tool it was accepted as.
+  const kassiberCalls = new Map<string, string>();
   let rejectViolation: (error: Error) => void = () => undefined;
   const violation = new Promise<never>((_, reject) => {
     rejectViolation = reject;
@@ -493,17 +494,30 @@ export async function acpChat(
     agent.stop();
   };
 
+  /**
+   * Whether a call is still the Kassiber tool its id was accepted as. Updates
+   * may omit the title or kind, but a title or kind they do supply must still
+   * match; a known id cannot be retitled into another tool or into execution.
+   */
+  const stillKassiber = (call: Pick<ToolCallUpdate, "toolCallId" | "title" | "kind">) => {
+    const accepted = kassiberCalls.get(call.toolCallId);
+    if (accepted === undefined) return false;
+    if (call.kind === "execute") return false;
+    if (call.title == null) return true;
+    return kassiberToolFor(spec, call, advertised) === accepted;
+  };
+
+  /** Accept a call as a Kassiber tool, or report that it is not one. */
+  const acceptToolCall = (call: Pick<ToolCallUpdate, "toolCallId" | "title" | "kind">) => {
+    if (kassiberCalls.has(call.toolCallId)) return stillKassiber(call);
+    const tool = kassiberToolFor(spec, call, advertised);
+    if (!tool) return false;
+    kassiberCalls.set(call.toolCallId, tool);
+    return true;
+  };
+
   const inspectToolCall = (update: Pick<ToolCallUpdate, "toolCallId" | "title" | "kind">) => {
-    if (kassiberCalls.has(update.toolCallId)) {
-      // A later update may still retitle the call or turn it into execution.
-      if (update.kind === "execute") stop();
-      return;
-    }
-    if (kassiberToolFor(spec, update, advertised)) {
-      kassiberCalls.add(update.toolCallId);
-      return;
-    }
-    stop();
+    if (!acceptToolCall(update)) stop();
   };
 
   const onUpdate = (notification: SessionNotification) => {
@@ -540,13 +554,7 @@ export async function acpChat(
   const onPermission = (params: RequestPermissionRequest): RequestPermissionResponse => {
     if (params.sessionId !== sessionId || replaying) return { outcome: { outcome: "cancelled" } };
     const call = params.toolCall;
-    if (
-      call.kind !== "execute" &&
-      (kassiberCalls.has(call.toolCallId) || kassiberToolFor(spec, call, advertised))
-    ) {
-      kassiberCalls.add(call.toolCallId);
-      return allowOnce(params);
-    }
+    if (acceptToolCall(call)) return allowOnce(params);
     const answer = rejectOnce(params);
     stop();
     return answer;

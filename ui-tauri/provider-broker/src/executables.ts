@@ -122,8 +122,22 @@ export function providerEnvironment(provider: ProviderId): NodeJS.ProcessEnv {
       "GITHUB_TOKEN",
       "GH_HOST",
       "COPILOT_GH_HOST",
+      // Bring-your-own-model settings, by name. COPILOT_PROVIDER_API_KEY_COMMAND
+      // is left out: Copilot runs it as a shell command on every request,
+      // outside any tool call Kassiber could see or refuse.
+      "COPILOT_PROVIDER_BASE_URL",
+      "COPILOT_PROVIDER_TYPE",
+      "COPILOT_PROVIDER_API_KEY",
+      "COPILOT_PROVIDER_BEARER_TOKEN",
+      "COPILOT_PROVIDER_WIRE_API",
+      "COPILOT_PROVIDER_TRANSPORT",
+      "COPILOT_PROVIDER_AZURE_API_VERSION",
+      "COPILOT_PROVIDER_MODEL_ID",
+      "COPILOT_PROVIDER_WIRE_MODEL",
+      "COPILOT_PROVIDER_MAX_PROMPT_TOKENS",
+      "COPILOT_PROVIDER_MAX_OUTPUT_TOKENS",
+      "COPILOT_PROVIDER_HEADERS",
     ].forEach((name) => allowed.add(name));
-    providerPrefixes.push("COPILOT_PROVIDER_");
   }
   // Ambient server-auth settings would make the loopback server demand
   // credentials the SDK client here does not send, so every session call 401s

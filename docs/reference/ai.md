@@ -190,15 +190,19 @@ launch is the boundary.
   user's own Copilot config is not found, and status reports a sign-in
   problem.
 - Copilot ignores MCP servers sent in `session/new`, so Kassiber's server goes
-  through `--additional-mcp-config`. `COPILOT_ALLOW_ALL` never reaches the CLI.
+  through `--additional-mcp-config`. `COPILOT_ALLOW_ALL` and
+  `COPILOT_PROVIDER_API_KEY_COMMAND` (a shell command Copilot would run on
+  every request) never reach the CLI; the other bring-your-own-model settings
+  are passed by name.
 - Because the session lives in that per-turn home, each turn starts a new
   Copilot session from the visible transcript; there is no resume cursor.
 
 Each ACP session also fails closed behind that launch. Kassiber advertises no
 client file system or terminal. A tool call or permission request is accepted
 only when its title is exactly the agent's form for an advertised Kassiber tool
-and it is not an `execute` call; anything else is rejected and stops the
-agent. A shell tool's title can be its model-chosen command line, so the title
+and it is not an `execute` call, and a later update to that call may not
+change it into another tool or into execution; anything else is rejected and
+stops the agent. A shell tool's title can be its model-chosen command line, so the title
 check is a tripwire rather than the boundary. Selected-data (sensitive context)
 requests are refused. Startup notices an agent sends as message text are
 dropped. The handshake must finish within 25 seconds so the broker can still
@@ -275,9 +279,13 @@ remote HTTP provider through its explicitly configured base URL. Native CLI
 providers retain their own executable transport settings, as described below.
 
 Each broker probe or chat runs from a fresh Kassiber-owned empty temporary
-directory that is removed afterward, including when the daemon ends the broker
-with a signal: the broker then stops its provider processes and removes that
-directory and the tool bridge before exiting. Provider subprocesses receive only their
+directory that is removed afterward. The daemon gives each broker a temporary
+root of its own and holds those working directories there, so it can remove
+them once the broker has exited, however it exited. A broker ended with SIGTERM
+also stops its provider processes and removes its tool bridge first; a probe
+that overruns its deadline gets SIGTERM, then SIGKILL for its whole process
+group. On Windows, terminating the broker does not yet end the provider
+processes it started. Provider subprocesses receive only their
 own authentication/configuration environment plus the shared network/runtime
 minimum; unrelated provider and Kassiber secrets are excluded. Claude gets an
 empty built-in tool set, no filesystem setting sources, the file/exec/network
