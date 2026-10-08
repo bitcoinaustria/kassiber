@@ -1,16 +1,9 @@
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  COPILOT_AGENT,
-  GEMINI_AGENT,
-  acpChat,
-  geminiSystemSettings,
-  kassiberToolFromTitle,
-  modelsFromConfigOptions,
-} from "./acp.js";
+import { COPILOT_AGENT, acpChat, kassiberToolFor, modelsFromConfigOptions } from "./acp.js";
 import { providerEnvironment } from "./executables.js";
 import { NativeToolBridge } from "./native-tools.js";
 import type { BrokerEvent, ChatRequest } from "./protocol.js";
@@ -73,7 +66,7 @@ async function fakeAgent(onPrompt: string): Promise<{ argvFile: string }> {
     script,
     `import { writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
-writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify(process.argv.slice(2)));
+writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify({ argv: process.argv.slice(2), home: process.env.COPILOT_HOME, allowAll: process.env.COPILOT_ALLOW_ALL ?? null }));
 const send = (message) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", ...message }) + "\\n");
 let nextId = 1000;
 for await (const line of createInterface({ input: process.stdin })) {
@@ -113,62 +106,37 @@ async function runChat(request: ChatRequest): Promise<void> {
 
 describe("ACP tool attribution", () => {
   const advertised = new Set(["status", "ui_transactions_list"]);
+  const call = (title: string, kind: "read" | "execute" | "other" = "read") =>
+    kassiberToolFor(COPILOT_AGENT, { title, kind }, advertised);
 
-  it("recognises the advertised Kassiber tools in each agent's title form", () => {
-    expect(kassiberToolFromTitle("kassiber-status", advertised)).toBe("status");
-    expect(kassiberToolFromTitle("status (kassiber MCP Server)", advertised)).toBe("status");
-    expect(kassiberToolFromTitle("mcp__kassiber__ui_transactions_list", advertised)).toBe(
-      "ui_transactions_list",
-    );
-    expect(kassiberToolFromTitle('kassiber_status: {"a":1}', advertised)).toBe("status");
+  it("recognises only the agent's exact title for an advertised tool", () => {
+    expect(call("kassiber-status")).toBe("status");
+    expect(call(" kassiber-ui_transactions_list ")).toBe("ui_transactions_list");
+    expect(call("kassiber-status", "other")).toBe("status");
   });
 
   it("treats everything else as a native tool", () => {
-    expect(kassiberToolFromTitle("Read file", advertised)).toBeUndefined();
-    expect(kassiberToolFromTitle("status", advertised)).toBeUndefined();
-    expect(kassiberToolFromTitle("bash: cat ~/.ssh/id_rsa", advertised)).toBeUndefined();
-    expect(kassiberToolFromTitle("kassiber-ui_wallets_sync", advertised)).toBeUndefined();
-    expect(kassiberToolFromTitle("run kassiber-status for me", advertised)).toBeUndefined();
-    expect(kassiberToolFromTitle("other-status", advertised)).toBeUndefined();
-    expect(kassiberToolFromTitle(undefined, advertised)).toBeUndefined();
+    expect(call("Read file")).toBeUndefined();
+    expect(call("status")).toBeUndefined();
+    expect(call("bash: cat ~/.ssh/id_rsa")).toBeUndefined();
+    expect(call("kassiber-ui_wallets_sync")).toBeUndefined();
+    expect(call("run kassiber-status for me")).toBeUndefined();
+    expect(call("mcp__kassiber__status")).toBeUndefined();
+    expect(kassiberToolFor(COPILOT_AGENT, { title: undefined, kind: "read" }, advertised)).toBeUndefined();
+  });
+
+  it("never accepts a shell call titled like a Kassiber tool", () => {
+    // A shell tool's title is its command line, which the model chooses.
+    expect(call("kassiber-ui_transactions_list:; printf injected", "execute")).toBeUndefined();
+    expect(call("kassiber-ui_transactions_list:; printf injected")).toBeUndefined();
+    expect(call("kassiber-status", "execute")).toBeUndefined();
   });
 });
 
 describe("ACP agent lockdown", () => {
-  it("removes every Gemini built-in tool and allows only the Kassiber server", () => {
-    const settings = geminiSystemSettings("kassiber") as {
-      tools: { core: unknown[]; exclude: string[] };
-      mcp: { allowed: string[] };
-      hooksConfig: { enabled: boolean };
-    };
-    expect(settings.tools.core).toEqual([]);
-    expect(settings.tools.exclude).toContain("run_shell_command");
-    expect(settings.tools.exclude).toContain("read_file");
-    expect(settings.tools.exclude).toContain("web_fetch");
-    expect(settings.mcp.allowed).toEqual(["kassiber"]);
-    expect(settings.hooksConfig.enabled).toBe(false);
-  });
-
-  it("points Gemini at Kassiber's settings even if the user set their own", async () => {
-    process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH = "/tmp/user-settings.json";
-    process.env.GEMINI_API_KEY = "gemini-secret";
-    const cwd = await tempDir("kassiber-acp-gemini-");
-    const launch = await GEMINI_AGENT.launch({ cwd, request: chatRequest({ provider: "gemini" }) });
-    expect(launch.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH).toBe(
-      join(cwd, "kassiber-gemini-system-settings.json"),
-    );
-    expect(launch.env.GEMINI_API_KEY).toBe("gemini-secret");
-    expect(launch.args).toEqual(["--acp", "--extensions", "none"]);
-    const written = JSON.parse(
-      await readFile(join(cwd, "kassiber-gemini-system-settings.json"), "utf8"),
-    ) as { mcp: { allowed: string[] } };
-    // No tools this turn: not even a user server named "kassiber" may start.
-    expect(written.mcp.allowed[0]).toMatch(/^kassiber-none-/);
-  });
-
   it("limits Copilot to the advertised Kassiber tools, or to none", async () => {
     const withTools = await COPILOT_AGENT.launch({
-      cwd: "/tmp",
+      cwd: await tempDir("kassiber-acp-args-"),
       request: chatRequest({ model: "gpt-x", options: { reasoning_effort: "high" } }),
       mcp: ["/usr/bin/node", "broker.mjs", "mcp", "/tmp/s.sock", "/tmp/m.json"],
     });
@@ -183,7 +151,10 @@ describe("ACP agent lockdown", () => {
     ) as { mcpServers: Record<string, { command: string }> };
     expect(Object.keys(config.mcpServers)).toEqual(["kassiber"]);
 
-    const chatOnly = await COPILOT_AGENT.launch({ cwd: "/tmp", request: chatRequest({ tools: [] }) });
+    const chatOnly = await COPILOT_AGENT.launch({
+      cwd: await tempDir("kassiber-acp-args-"),
+      request: chatRequest({ tools: [] }),
+    });
     expect(chatOnly.args.slice(chatOnly.args.indexOf("--available-tools"))).toEqual([
       "--available-tools",
       "kassiber-none",
@@ -194,11 +165,20 @@ describe("ACP agent lockdown", () => {
   it("keeps Copilot's allow-all switch out of its environment", () => {
     process.env.COPILOT_ALLOW_ALL = "true";
     process.env.COPILOT_GITHUB_TOKEN = "gh-token";
-    process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH = "/tmp/user-settings.json";
     const copilot = providerEnvironment("copilot");
     expect(copilot.COPILOT_ALLOW_ALL).toBeUndefined();
     expect(copilot.COPILOT_GITHUB_TOKEN).toBe("gh-token");
-    expect(providerEnvironment("gemini").GEMINI_CLI_SYSTEM_SETTINGS_PATH).toBeUndefined();
+  });
+
+  it("gives Copilot an empty home of its own, ignoring the user's", async () => {
+    // The user's home holds MCP servers, plugins, settings and sessions; a
+    // server configured there must never start.
+    process.env.COPILOT_HOME = "/tmp/user-copilot-home";
+    const cwd = await tempDir("kassiber-acp-home-");
+    const launch = await COPILOT_AGENT.launch({ cwd, request: chatRequest() });
+    expect(launch.env.COPILOT_HOME).toBe(join(cwd, "copilot-home"));
+    expect(await readdir(join(cwd, "copilot-home"))).toEqual([]);
+    expect((await stat(join(cwd, "copilot-home"))).mode & 0o777).toBe(0o700);
   });
 
   it("reads models from a model config option, including grouped ones", () => {
@@ -240,11 +220,9 @@ describe("ACP session enforcement", () => {
       { type: "delta", reasoning: "thinking" },
       { type: "delta", content: "Hello" },
     ]);
-    expect(events.at(-1)).toEqual({
-      type: "done",
-      finish_reason: "stop",
-      provider_session_id: "fake-session",
-    });
+    // The session lived in the turn's own Copilot home, so there is nothing
+    // to resume; the next turn sends the visible transcript again.
+    expect(events.at(-1)).toEqual({ type: "done", finish_reason: "stop" });
   });
 
   it("stops the agent when it starts a native tool", async () => {
@@ -256,6 +234,13 @@ describe("ACP session enforcement", () => {
     expect(events.some((event) => event.type === "done")).toBe(false);
   });
 
+  it("stops a shell call even when its title spells a Kassiber tool", async () => {
+    await fakeAgent(`
+      update({ sessionUpdate: "tool_call", toolCallId: "t3", title: "kassiber-status", kind: "execute", status: "pending" });
+    `);
+    await expect(runChat(chatRequest())).rejects.toThrow(/provider-native tool/);
+  });
+
   it("rejects a permission request for a native tool and stops the agent", async () => {
     await fakeAgent(`
       ask({ toolCallId: "t2", title: "bash: curl https://example.test", kind: "execute" });
@@ -263,17 +248,25 @@ describe("ACP session enforcement", () => {
     await expect(runChat(chatRequest())).rejects.toThrow(/provider-native tool/);
   });
 
-  it("refuses selected-data requests instead of leaving them in the agent's history", async () => {
+  it("refuses selected-data requests", async () => {
     await fakeAgent(`reply({ stopReason: "end_turn" });`);
     await expect(
       runChat(chatRequest({ tools: [], options: { sensitive_context: true } })),
-    ).rejects.toThrow(/private request/);
+    ).rejects.toThrow(/stateless, tool-free exchange/);
   });
 
   it("launches the installed CLI with Kassiber's lockdown flags", async () => {
     const { argvFile } = await fakeAgent(`reply({ stopReason: "end_turn" });`);
+    process.env.COPILOT_ALLOW_ALL = "true";
     await runChat(chatRequest());
-    const argv = JSON.parse(await readFile(argvFile, "utf8")) as string[];
+    const recorded = JSON.parse(await readFile(argvFile, "utf8")) as {
+      argv: string[];
+      home: string;
+      allowAll: string | null;
+    };
+    const argv = recorded.argv;
+    expect(recorded.home).toMatch(/copilot-home$/);
+    expect(recorded.allowAll).toBeNull();
     expect(argv[0]).toBe("--acp");
     expect(argv.slice(argv.indexOf("--available-tools"))).toEqual([
       "--available-tools",

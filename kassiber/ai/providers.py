@@ -46,7 +46,7 @@ AI_NATIVE_PROVIDER_SEED_GENERATIONS = (
         AI_NATIVE_PROVIDERS_SEEDED_SETTING,
         ("codex-cli://default", "claude-cli://default", "opencode-cli://default"),
     ),
-    (AI_ACP_PROVIDERS_SEEDED_SETTING, ("gemini-cli://default", "copilot-cli://default")),
+    (AI_ACP_PROVIDERS_SEEDED_SETTING, ("copilot-cli://default",)),
 )
 DESKTOP_BUNDLE_ID = "at.bitcoinaustria.kassiber"
 AI_PROVIDER_SECRET_STORE_SQLCIPHER = "sqlcipher_inline"
@@ -104,15 +104,6 @@ DEFAULT_BOOTSTRAP_PROVIDERS = (
         "default_model": None,
         "kind": "remote",
         "notes": "Broker using the installed OpenCode server and existing configuration. Kassiber's typed tools are available; native coding tools are not.",
-    },
-    {
-        "name": "gemini",
-        "display_name": "Gemini",
-        "base_url": "gemini-cli://default",
-        "api_key": None,
-        "default_model": "default",
-        "kind": "remote",
-        "notes": "Broker using the installed Gemini CLI over the Agent Client Protocol and its existing login. Kassiber's typed tools are available; native coding tools are not.",
     },
     {
         "name": "copilot",
@@ -498,8 +489,7 @@ def normalize_base_url(value: Any) -> str:
     `AppError(code='validation')` on bad input. Most providers use an
     OpenAI Responses-compatible HTTP root; fixed local CLI adapters use
     ``claude-cli://default``, ``codex-cli://default``,
-    ``opencode-cli://default``, ``gemini-cli://default``, or
-    ``copilot-cli://default``.
+    ``opencode-cli://default``, or ``copilot-cli://default``.
     """
     base = str_or_none(value)
     if base is None:

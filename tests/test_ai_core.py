@@ -2094,7 +2094,7 @@ class ProvidersCrudTest(unittest.TestCase):
             by_name = {provider["name"]: provider for provider in providers}
             self.assertEqual(
                 set(by_name),
-                {"ollama", "omlx", "codex", "claude", "opencode", "gemini", "copilot"},
+                {"ollama", "omlx", "codex", "claude", "opencode", "copilot"},
             )
             self.assertEqual(by_name["ollama"]["kind"], "local")
             self.assertEqual(by_name["ollama"]["base_url"], "http://localhost:11434/v1")
@@ -2105,9 +2105,8 @@ class ProvidersCrudTest(unittest.TestCase):
             self.assertEqual(
                 by_name["opencode"]["base_url"], "opencode-cli://default"
             )
-            self.assertEqual(by_name["gemini"]["base_url"], "gemini-cli://default")
             self.assertEqual(by_name["copilot"]["base_url"], "copilot-cli://default")
-            self.assertEqual(by_name["gemini"]["kind"], "remote")
+            self.assertEqual(by_name["copilot"]["kind"], "remote")
             self.assertIsNone(by_name["codex"]["acknowledged_at"])
             self.assertIsNone(by_name["copilot"]["acknowledged_at"])
         finally:
@@ -2120,8 +2119,8 @@ class ProvidersCrudTest(unittest.TestCase):
                 list_db_ai_providers(conn)
                 # A book from before the ACP generation: seeded, flag missing.
                 conn.execute(
-                    "DELETE FROM ai_providers WHERE base_url IN (?, ?)",
-                    ("gemini-cli://default", "copilot-cli://default"),
+                    "DELETE FROM ai_providers WHERE base_url = ?",
+                    ("copilot-cli://default",),
                 )
                 conn.execute(
                     "DELETE FROM settings WHERE key = ?",
@@ -2129,13 +2128,13 @@ class ProvidersCrudTest(unittest.TestCase):
                 )
                 conn.commit()
                 names = {provider["name"] for provider in list_db_ai_providers(conn)}
-                self.assertTrue({"gemini", "copilot"} <= names)
-                # Deleting one afterwards is the user's choice and sticks.
-                conn.execute("DELETE FROM ai_providers WHERE name = ?", ("gemini",))
+                self.assertIn("copilot", names)
+                # Deleting it afterwards is the user's choice and sticks.
+                conn.execute("DELETE FROM ai_providers WHERE name = ?", ("copilot",))
                 conn.commit()
                 names = {provider["name"] for provider in list_db_ai_providers(conn)}
-                self.assertNotIn("gemini", names)
-                self.assertIn("copilot", names)
+                self.assertNotIn("copilot", names)
+                self.assertIn("codex", names)
             finally:
                 conn.close()
 

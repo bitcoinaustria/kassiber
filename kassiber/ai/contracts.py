@@ -13,7 +13,6 @@ CLI_PROVIDER_BY_LOCATOR = {
     "codex-cli://default": "codex",
     "opencode-cli://default": "opencode",
     # Agent Client Protocol agents, run through the broker's generic ACP adapter.
-    "gemini-cli://default": "gemini",
     "copilot-cli://default": "copilot",
 }
 CLI_PROVIDER_LOCATORS = tuple(CLI_PROVIDER_BY_LOCATOR)

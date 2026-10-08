@@ -1,4 +1,4 @@
-export type ProviderId = "codex" | "claude" | "opencode" | "gemini" | "copilot";
+export type ProviderId = "codex" | "claude" | "opencode" | "copilot";
 
 export type BrokerModel = {
   id: string;
@@ -117,8 +117,7 @@ export function writeEvent(event: BrokerEvent): void {
  * than an id, which turns a resumed chat into arbitrary CLI configuration
  * (`--dangerously-skip-permissions`, `--mcp-config=…`, `--debug-file=…`). The
  * providers all issue id-shaped cursors, so anything outside that shape
- * is dropped and the turn simply starts a fresh provider session. ACP agents
- * issue UUIDs, which fit the same shape.
+ * is dropped and the turn simply starts a fresh provider session.
  */
 export function safeSessionCursor(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;

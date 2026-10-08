@@ -9,7 +9,6 @@ export const NATIVE_AI_PROVIDER_BY_LOCATOR = {
   "codex-cli://default": "codex",
   "opencode-cli://default": "opencode",
   // Agent Client Protocol agents behind the broker's generic ACP adapter.
-  "gemini-cli://default": "gemini",
   "copilot-cli://default": "copilot",
 } as const;
 export type NativeAiProviderRuntime =

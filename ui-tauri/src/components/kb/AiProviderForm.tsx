@@ -102,14 +102,6 @@ const PROVIDER_PRESETS = [
     default_model: "",
   },
   {
-    name: "gemini-cli",
-    display_name: "Gemini CLI",
-    label: "Gemini CLI",
-    base_url: "gemini-cli://default",
-    kind: "remote" as const,
-    default_model: "default",
-  },
-  {
     name: "copilot-cli",
     display_name: "GitHub Copilot CLI",
     label: "GitHub Copilot CLI",

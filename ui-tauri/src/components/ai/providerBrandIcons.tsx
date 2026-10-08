@@ -1,4 +1,4 @@
-import { useId, type FC, type SVGProps } from "react";
+import type { FC, SVGProps } from "react";
 
 import type { NativeAiProviderRuntime } from "@/lib/aiCapabilities";
 
@@ -61,26 +61,6 @@ export const OpenCodeIcon: ProviderBrandIcon = (props) => (
   </svg>
 );
 
-/** Gemini's four-point spark, in its blue-to-violet brand gradient. */
-export const GeminiIcon: ProviderBrandIcon = (props) => {
-  const gradientId = useId();
-  return (
-    <svg {...props} viewBox="0 0 24 24" fill="none">
-      <defs>
-        <linearGradient id={gradientId} x1="0" y1="24" x2="24" y2="0">
-          <stop offset="0" stopColor="#1C7DFF" />
-          <stop offset="0.52" stopColor="#1C69FF" />
-          <stop offset="1" stopColor="#C688F8" />
-        </linearGradient>
-      </defs>
-      <path
-        d="M12 0C12 6.627 17.373 12 24 12C17.373 12 12 17.373 12 24C12 17.373 6.627 12 0 12C6.627 12 12 6.627 12 0Z"
-        fill={`url(#${gradientId})`}
-      />
-    </svg>
-  );
-};
-
 /** The GitHub mark (Primer Octicons, MIT); Copilot ships under it. */
 export const GitHubCopilotIcon: ProviderBrandIcon = ({ className, ...props }) => (
   <svg
@@ -100,6 +80,5 @@ export const PROVIDER_BRAND_ICON_BY_RUNTIME = {
   codex: OpenAIIcon,
   claude: ClaudeIcon,
   opencode: OpenCodeIcon,
-  gemini: GeminiIcon,
   copilot: GitHubCopilotIcon,
 } as const satisfies Record<NativeAiProviderRuntime, ProviderBrandIcon>;

@@ -1,8 +1,8 @@
 # Kassiber chat provider broker
 
 This bundled Node/TypeScript broker adapts the installed Codex app-server,
-Claude CLI, OpenCode SDK/server, and Agent Client Protocol agents (Gemini and
-GitHub Copilot, through one generic adapter in `src/acp.ts`) to a small
+Claude CLI, OpenCode SDK/server, and Agent Client Protocol agents (GitHub
+Copilot today, through one generic adapter in `src/acp.ts`) to a small
 bidirectional JSONL stream
 consumed by the Python daemon. Provider-specific behavior lives behind the
 typed adapter registry in `src/index.ts`, so another provider does not need a

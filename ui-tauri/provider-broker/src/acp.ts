@@ -1,6 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
@@ -45,16 +44,18 @@ import {
  * switch off an agent's own shell, file and web tools — the protocol only lets
  * a client answer permission prompts, and agents run some tools without
  * asking. So an agent is listed here only when its CLI can be launched with
- * every built-in tool removed and with no user MCP servers, hooks, skills or
- * extensions. ACP then carries the conversation and the Kassiber MCP server.
+ * every built-in tool removed and with none of the user's MCP servers, hooks,
+ * plugins, skills, memory or settings loaded. That launch is the boundary;
+ * ACP then carries the conversation and the Kassiber MCP server.
  *
- * On top of each agent's own lockdown, the session itself fails closed:
+ * The session also fails closed behind it:
  *   - Kassiber advertises no client file system and no terminal, so `fs/*` and
  *     `terminal/*` requests are refused as unknown methods.
- *   - Any tool call that is not one of the advertised Kassiber tools ends the
- *     turn and stops the agent, and its permission request is rejected.
- *   - Sensitive selected-data requests are refused: neither agent can promise
- *     not to keep the session on disk.
+ *   - A tool call or permission request is accepted only when its title is
+ *     exactly the agent's form for an advertised Kassiber tool and it is not
+ *     an `execute` call; anything else stops the agent. Titles can echo
+ *     model-chosen text, so this is a tripwire, not the boundary.
+ *   - Sensitive selected-data requests are refused.
  */
 
 /** The server name agents see; also the prefix they put on tool titles. */
@@ -63,9 +64,14 @@ export const ACP_MCP_SERVER_NAME = "kassiber";
 /** ACP major version this client speaks. */
 const ACP_PROTOCOL_VERSION = 1;
 
-const HANDSHAKE_TIMEOUT_MS = 45_000;
+/**
+ * Startup budget for `initialize` and `session/new`. The Python caller gives a
+ * whole status probe 35 seconds before killing the broker, so the agent must
+ * be stopped here first, while `finally` can still clean it up.
+ */
+const HANDSHAKE_TIMEOUT_MS = 25_000;
 
-export type AcpAgentId = Extract<ProviderId, "gemini" | "copilot">;
+export type AcpAgentId = Extract<ProviderId, "copilot">;
 
 type LaunchContext = {
   cwd: string;
@@ -90,6 +96,13 @@ export type AcpAgentSpec = {
   efforts?: string[];
   /** CLI notices the agent sends as ordinary message text. */
   isNotice?: (text: string) => boolean;
+  /** The exact title the agent gives a call to an advertised Kassiber tool. */
+  toolTitle: (tool: string) => string;
+  /**
+   * Whether a session survives the turn. An agent whose state lives in the
+   * per-turn directory starts fresh each time from the visible transcript.
+   */
+  persistentSessions: boolean;
   launch: (context: LaunchContext) => Promise<AgentLaunch>;
 };
 
@@ -103,6 +116,14 @@ const COPILOT_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
  * Copilot ignores MCP servers passed in `session/new` (verified against
  * 1.0.93: the server is never started), so Kassiber's server goes through
  * `--additional-mcp-config` and its tools are named `kassiber-<tool>`.
+ *
+ * That flag only adds to `~/.copilot/mcp-config.json`, and the same directory
+ * holds plugins, settings (including a persisted allow-all) and saved
+ * sessions. `COPILOT_HOME` therefore points at an empty directory inside the
+ * turn's working directory, so none of it loads and nothing outlives the
+ * turn. Sign-in still works: Copilot keeps its token in the system keyring or
+ * takes `COPILOT_GITHUB_TOKEN` / `GH_TOKEN`; a login stored only in the
+ * user's own config file is not found, and status reports a sign-in problem.
  */
 export const COPILOT_AGENT: AcpAgentSpec = {
   id: "copilot",
@@ -114,7 +135,11 @@ export const COPILOT_AGENT: AcpAgentSpec = {
   // applied (1.0.93); it describes Kassiber's lockdown, not the answer.
   isNotice: (text) =>
     /^Info: (?:Disabled tools:|Unknown tool name in the tool allowlist:)/.test(text),
-  launch: async ({ request, mcp }) => {
+  toolTitle: (tool) => `${ACP_MCP_SERVER_NAME}-${tool}`,
+  persistentSessions: false,
+  launch: async ({ cwd, request, mcp }) => {
+    const home = join(cwd, "copilot-home");
+    await mkdir(home, { mode: 0o700 });
     const tools = request?.tools ?? [];
     const args = [
       "--acp",
@@ -153,126 +178,36 @@ export const COPILOT_AGENT: AcpAgentSpec = {
     );
     return {
       args,
-      env: { ...providerEnvironment("copilot"), COPILOT_AUTO_UPDATE: "false" },
-      sessionMcp: false,
-    };
-  },
-};
-
-/**
- * Settings Gemini CLI reads at the highest precedence, ahead of the user's
- * and the workspace's. `tools.core` is an allowlist of built-in tools, so an
- * empty list registers none of them (`maybeRegister` in Gemini's tool
- * registry); `tools.exclude` names the dangerous ones again in case a future
- * release stops treating an empty list that way.
- */
-export function geminiSystemSettings(mcpServer: string): Record<string, unknown> {
-  return {
-    tools: {
-      core: [],
-      exclude: [
-        "run_shell_command",
-        "read_file",
-        "read_many_files",
-        "write_file",
-        "replace",
-        "list_directory",
-        "glob",
-        "grep_search",
-        "search_file_content",
-        "web_fetch",
-        "google_web_search",
-        "save_memory",
-        "write_todos",
-      ],
-    },
-    // Only Kassiber's per-turn server may start; user-configured servers stay off.
-    mcp: { allowed: [mcpServer] },
-    hooksConfig: { enabled: false },
-    skills: { enabled: false },
-    experimental: { enableAgents: false },
-    general: {
-      enableAutoUpdate: false,
-      enableAutoUpdateNotification: false,
-      plan: { enabled: false },
-    },
-    privacy: { usageStatisticsEnabled: false },
-    telemetry: { enabled: false },
-  };
-}
-
-/**
- * Google Gemini CLI.
- *
- * Built-in tools are removed with a Kassiber-owned system settings file (see
- * `geminiSystemSettings`), extensions with `--extensions none`. Gemini takes
- * MCP servers from `session/new` and titles their calls
- * `<tool> (kassiber MCP Server)`.
- */
-export const GEMINI_AGENT: AcpAgentSpec = {
-  id: "gemini",
-  displayName: "Gemini",
-  executable: "gemini",
-  loginHint: "Run `gemini` once outside Kassiber to sign in.",
-  launch: async ({ cwd, request, mcp }) => {
-    // With no Kassiber tools this turn, allow a server name nothing uses, so a
-    // user server that happens to be called `kassiber` cannot start either.
-    const allowed = mcp ? ACP_MCP_SERVER_NAME : `${ACP_MCP_SERVER_NAME}-none-${randomUUID()}`;
-    const settingsPath = join(cwd, "kassiber-gemini-system-settings.json");
-    await writeFile(settingsPath, JSON.stringify(geminiSystemSettings(allowed)), {
-      mode: 0o600,
-    });
-    const args = ["--acp", "--extensions", "none"];
-    if (request && request.model !== "default") args.push("--model", request.model);
-    return {
-      args,
       env: {
-        ...providerEnvironment("gemini"),
-        GEMINI_CLI_SYSTEM_SETTINGS_PATH: settingsPath,
-        GEMINI_CLI_NO_RELAUNCH: "true",
+        ...providerEnvironment("copilot"),
+        COPILOT_HOME: home,
+        COPILOT_AUTO_UPDATE: "false",
       },
-      sessionMcp: true,
+      sessionMcp: false,
     };
   },
 };
 
 export const ACP_AGENTS = {
   copilot: COPILOT_AGENT,
-  gemini: GEMINI_AGENT,
 } satisfies Record<AcpAgentId, AcpAgentSpec>;
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 /**
- * Recover which advertised Kassiber tool an ACP tool call is, or undefined
- * when it is anything else.
- *
- * ACP has no typed MCP tool-call field, so agents only say it in the title.
- * The forms below cover the agents in `ACP_AGENTS` plus the common prefixes
- * other agents use (`mcp__kassiber__x`, `kassiber_x`, `kassiber.x`), and every
- * match must name a tool advertised this turn, so a title that merely
- * mentions Kassiber is still treated as foreign.
+ * The advertised Kassiber tool an ACP tool call is, or undefined for anything
+ * else. ACP has no typed MCP field, so this compares the title with the
+ * agent's exact form for each advertised tool, with no prefix or suffix
+ * tolerance, and never accepts an `execute` call: a shell tool titled with
+ * its command line could otherwise spell `kassiber-status`.
  */
-export function kassiberToolFromTitle(
-  title: string | null | undefined,
+export function kassiberToolFor(
+  spec: Pick<AcpAgentSpec, "toolTitle">,
+  call: Pick<ToolCallUpdate, "title" | "kind">,
   advertised: ReadonlySet<string>,
 ): string | undefined {
-  if (typeof title !== "string") return undefined;
-  const server = escapeRegExp(ACP_MCP_SERVER_NAME);
-  // Some agents append the arguments: `tool: {"a":1}`.
-  const trimmed = title.trim();
-  const patterns = [
-    new RegExp(
-      `^(?:mcp__)?${server}(?:___|__|_|-|\\.|/|:)(?<tool>[A-Za-z0-9][A-Za-z0-9_]*)(?::.*)?$`,
-      "s",
-    ),
-    new RegExp(`^(?<tool>[A-Za-z0-9][A-Za-z0-9_]*) \\(${server} MCP Server\\)(?::.*)?$`, "s"),
-  ];
-  for (const pattern of patterns) {
-    const tool = pattern.exec(trimmed)?.groups?.tool;
-    if (tool && advertised.has(tool)) return tool;
+  if (call.kind === "execute" || typeof call.title !== "string") return undefined;
+  const title = call.title.trim();
+  for (const tool of advertised) {
+    if (spec.toolTitle(tool) === title) return tool;
   }
   return undefined;
 }
@@ -525,7 +460,7 @@ export async function acpChat(
   if (!executable) throw new Error(`${spec.displayName} is not installed.`);
   if (sensitiveContext(request)) {
     throw new Error(
-      `${spec.displayName} cannot keep a private request out of its session history; use another provider for selected data.`,
+      `${spec.displayName} cannot be held to a stateless, tool-free exchange; use another provider for selected data.`,
     );
   }
   const tools: BrokerToolDefinition[] = toolBridge ? (request.tools ?? []) : [];
@@ -556,9 +491,13 @@ export async function acpChat(
     agent.stop();
   };
 
-  const inspectToolCall = (update: Pick<ToolCallUpdate, "toolCallId" | "title">) => {
-    if (kassiberCalls.has(update.toolCallId)) return;
-    if (kassiberToolFromTitle(update.title, advertised)) {
+  const inspectToolCall = (update: Pick<ToolCallUpdate, "toolCallId" | "title" | "kind">) => {
+    if (kassiberCalls.has(update.toolCallId)) {
+      // A later update may still retitle the call or turn it into execution.
+      if (update.kind === "execute") stop();
+      return;
+    }
+    if (kassiberToolFor(spec, update, advertised)) {
       kassiberCalls.add(update.toolCallId);
       return;
     }
@@ -599,7 +538,10 @@ export async function acpChat(
   const onPermission = (params: RequestPermissionRequest): RequestPermissionResponse => {
     if (params.sessionId !== sessionId || replaying) return { outcome: { outcome: "cancelled" } };
     const call = params.toolCall;
-    if (kassiberCalls.has(call.toolCallId) || kassiberToolFromTitle(call.title, advertised)) {
+    if (
+      call.kind !== "execute" &&
+      (kassiberCalls.has(call.toolCallId) || kassiberToolFor(spec, call, advertised))
+    ) {
       kassiberCalls.add(call.toolCallId);
       return allowOnce(params);
     }
@@ -621,13 +563,19 @@ export async function acpChat(
         );
         checkProtocol(spec, init);
 
-        const cursor = safeSessionCursor(request.options?.provider_session_id);
+        const cursor = spec.persistentSessions
+          ? safeSessionCursor(request.options?.provider_session_id)
+          : undefined;
         let resumed = false;
         if (cursor && init.agentCapabilities?.loadSession) {
           replaying = true;
           sessionId = cursor;
           try {
-            await ctx.request(acp.methods.agent.session.load, { sessionId: cursor, cwd, mcpServers });
+            await withTimeout(
+              ctx.request(acp.methods.agent.session.load, { sessionId: cursor, cwd, mcpServers }),
+              HANDSHAKE_TIMEOUT_MS,
+              `${spec.displayName} did not reopen the session.`,
+            );
             resumed = true;
           } catch {
             // Agents key saved sessions by directory, and each turn runs in a
@@ -638,7 +586,11 @@ export async function acpChat(
           }
         }
         if (!resumed) {
-          const session = await ctx.request(acp.methods.agent.session.new, { cwd, mcpServers });
+          const session = await withTimeout(
+            ctx.request(acp.methods.agent.session.new, { cwd, mcpServers }),
+            HANDSHAKE_TIMEOUT_MS,
+            `${spec.displayName} did not open a session.`,
+          );
           sessionId = session.sessionId;
         }
         const activeSession = sessionId;
@@ -665,7 +617,7 @@ export async function acpChat(
     writeEvent({
       type: "done",
       finish_reason: finishReason(result.stopReason),
-      provider_session_id: result.sessionId,
+      ...(spec.persistentSessions ? { provider_session_id: result.sessionId } : {}),
     });
   } catch (error) {
     if (error instanceof NativeToolAttempt) throw error;
