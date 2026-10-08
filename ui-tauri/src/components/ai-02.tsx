@@ -88,6 +88,10 @@ const DEFAULT_PROMPT_KEYS = [
 
 const TEXTAREA_MAX_HEIGHT_PX = 176;
 
+// The send and stop marks and ACTION_BUTTON_CLASS are adapted from T3 Code
+// (MIT, Copyright (c) 2026 T3 Tools Inc.),
+// `apps/web/src/components/chat/ComposerPrimaryActions.tsx`.
+
 /** Send arrow drawn like T3 Code's, a touch lighter than lucide's ArrowUp. */
 function SendArrowIcon() {
   return (
