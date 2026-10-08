@@ -156,7 +156,7 @@ describe("provider identity", () => {
 
   it("keys brand marks by CLI runtime, including the ACP agents", () => {
     expect(providerIconKey(row("codex", "codex-cli://default"))).toBe("codex");
-    expect(providerIconKey(row("gemini", "gemini-cli://default"))).toBe("gemini");
+    expect(providerIconKey(row("gemini", "gemini-cli://default"))).toBeNull();
     expect(providerIconKey(row("copilot", "Copilot-CLI://default"))).toBe("copilot");
     expect(providerIconKey(row("ollama", "http://127.0.0.1:11434/v1"))).toBeNull();
   });

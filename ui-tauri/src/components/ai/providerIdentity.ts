@@ -14,7 +14,7 @@ export function isCliProvider(provider: AiProviderRow): boolean {
 
 /**
  * The runtime id used to look up a provider's brand mark (`codex`, `claude`,
- * `opencode`, `gemini`, `copilot`). Purely cosmetic — it never decides
+ * `opencode`, `copilot`). Purely cosmetic — it never decides
  * routing, posture, or whether a provider may be contacted.
  */
 export function providerIconKey(provider: AiProviderRow): string | null {
