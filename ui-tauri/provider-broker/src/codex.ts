@@ -6,6 +6,7 @@ import type { BrokerModel, ChatRequest, ProviderStatus } from "./protocol.js";
 import type { NativeToolBridge } from "./native-tools.js";
 import {
   providerStatus,
+  requestedFastMode,
   safeErrorMessage,
   safeSessionCursor,
   sensitiveContext,
@@ -212,6 +213,31 @@ async function initialize(connection: CodexConnection): Promise<void> {
   connection.notify("initialized");
 }
 
+/** Codex's service tier for fast mode, as sent on `turn/start`. */
+export const CODEX_FAST_SERVICE_TIER = "priority";
+
+/**
+ * The model's fast tier from `model/list`: a `serviceTiers` entry with the
+ * `priority` id (shown as "Fast"), or the deprecated `additionalSpeedTiers:
+ * ["fast"]` when an older app-server sends only that.
+ */
+export function fastServiceTier(
+  model: Record<string, unknown>,
+): { description?: string } | null {
+  const tiers = Array.isArray(model.serviceTiers) ? model.serviceTiers : [];
+  for (const tier of tiers) {
+    if (typeof tier !== "object" || tier === null) continue;
+    const { id, name, description } = tier as Record<string, unknown>;
+    if (id === CODEX_FAST_SERVICE_TIER || (typeof name === "string" && /^fast$/i.test(name))) {
+      return typeof description === "string" && description.trim()
+        ? { description: description.trim().slice(0, 120) }
+        : {};
+    }
+  }
+  const legacy = Array.isArray(model.additionalSpeedTiers) ? model.additionalSpeedTiers : [];
+  return legacy.includes("fast") ? {} : null;
+}
+
 async function loadModels(connection: CodexConnection): Promise<BrokerModel[]> {
   const rows: BrokerModel[] = [];
   let cursor: string | undefined;
@@ -232,12 +258,19 @@ async function loadModels(connection: CodexConnection): Promise<BrokerModel[]> {
             )
             .filter(Boolean)
         : [];
+      const fast = fastServiceTier(model);
       rows.push({
         id: String(model.id || model.model),
         display_name: typeof model.displayName === "string" ? model.displayName : undefined,
         owned_by: "OpenAI Codex",
         supports_reasoning_effort: efforts.length > 0,
         reasoning_efforts: efforts,
+        ...(fast
+          ? {
+              supports_fast_mode: true,
+              ...(fast.description ? { fast_mode_description: fast.description } : {}),
+            }
+          : {}),
       });
     }
     cursor = typeof response?.nextCursor === "string" ? response.nextCursor : undefined;
@@ -416,6 +449,7 @@ export async function codexChat(
       });
     });
     const effort = request.options?.reasoning_effort;
+    const fast = requestedFastMode(request);
     await connection.request("turn/start", {
       threadId,
       input: [{ type: "text", text: prompt }],
@@ -426,6 +460,8 @@ export async function codexChat(
       }),
       ...(request.model === "default" ? {} : { model: request.model }),
       ...(effort && effort !== "auto" ? { effort } : {}),
+      // Only when asked: omitting the field keeps the account's standard tier.
+      ...(fast ? { serviceTier: CODEX_FAST_SERVICE_TIER } : {}),
     });
     const result = await Promise.race([completion, connection.closed]);
     if (result.status !== "completed") throw new Error("Codex did not complete the response.");
