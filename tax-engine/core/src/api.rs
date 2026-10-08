@@ -13,11 +13,13 @@
 //!
 //! Schema version 2 is `ledger`, which takes the finalized custody
 //! projection (`crate::ledger`): its `manifest` operation lists the
-//! engine's names and tables; its `ledger` operation returns a generic
-//! book's journal ledger, or the stage that failed; and its `prepare`
-//! operation returns a generic book's normalized and prepared stages, and
-//! on a failure the stages it reached. Austrian books and the generic rail
-//! carry are `Unsupported` until they are ported (plan 20 phase 4).
+//! engine's names and tables; its `ledger` operation returns a book's
+//! journal ledger, or the stage that failed; and its `prepare` operation
+//! returns a book's normalized and prepared stages, and on a failure the
+//! stages it reached. Both answer a generic book without the Bitcoin rail
+//! carry and an Austrian book without a carrying-value cross-asset pair;
+//! Austrian swap links and the generic rail carry are `Unsupported` until
+//! they are ported (plan 20 phase 4).
 
 use serde::Serialize;
 

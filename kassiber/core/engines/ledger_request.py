@@ -13,7 +13,8 @@ value (``docs/plan/20-kassiber-tax-engine.md``, design §1.1 and §3):
 - per row: the normalized kind, the stored rate and value as exact decimals,
   coarse pricing, the text, the Austrian overrides, privacy-hop evidence,
   conflict and pending holds (over all rows of the row's asset), chain-order
-  evidence, and the parsed timestamp;
+  evidence, and the timestamp, both as RP2 parses it and as Kassiber's
+  Austrian rules read it for the Neuvermögen cutoff;
 - per pair: the move's legs and atomic bundle, and a cross-asset pair's
   legs, policy, and whether it is a Bitcoin rail.
 
@@ -43,6 +44,7 @@ from ...errors import AppError
 from ...tax_policy import build_tax_policy, profile_cost_basis_pool_scope, profile_value
 from ...transfers import _SYNTHETIC_TRANSFER_ID_PREFIXES, is_bitcoin_rail_pair
 from .. import pricing
+from ..austrian import _parse_occurred_at
 from ..ownership_transfers import detect_conflicting_spend_ids, detect_pending_onchain_ids
 from ..privacy_hops import privacy_hop_evidence_from_row
 from ..transaction_kinds import normalized_transaction_kind
@@ -265,6 +267,24 @@ def timestamp_fields(value: Any) -> dict[str, Any]:
         "display": str(parsed),
         "iso": parsed.isoformat(),
     }
+
+
+def cutoff_instant(value: Any) -> dict[str, Any]:
+    """``occurred_at`` as Kassiber's Austrian rules read it for the cutoff.
+
+    ``austrian.infer_regime_from_timestamp`` reads ``str(occurred_at)`` with
+    ``datetime.fromisoformat`` (``Z`` spelled ``+00:00``, a time without an
+    offset taken as UTC), which reads naive, date-only, and other ISO 8601
+    forms otherwise than RP2's parse (``timestamp_fields``). The engine
+    compares the instant, in microseconds since the epoch, with the cutoff;
+    a time Python cannot read carries the ``ValueError`` message the
+    engine raises where the tracker reads it.
+    """
+    try:
+        when = _parse_occurred_at(str(value))
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {"us": (when - _EPOCH) // _ONE_US}
 
 
 # ---------------------------------------------------------------------------
@@ -539,6 +559,7 @@ def _request_row(row: Mapping[str, Any], holds: Mapping[str, str]) -> dict[str, 
         "wallet_id": str(row["wallet_id"]),
         "direction": row["direction"],
         "ts": timestamp_fields(_get(row, "occurred_at")),
+        "cutoff_instant": cutoff_instant(_get(row, "occurred_at")),
         "amount_msat": row["amount"],
         "fee_msat": row["fee"],
         "rate": decimal_text(_get(row, "fiat_rate_exact"), _get(row, "fiat_rate")),
@@ -634,6 +655,7 @@ __all__ = [
     "check_configuration",
     "check_invariants",
     "configuration_names",
+    "cutoff_instant",
     "decimal_text",
     "decode_decimal",
     "dumps",

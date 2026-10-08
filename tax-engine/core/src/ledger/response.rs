@@ -257,15 +257,16 @@ pub struct QuarantineOut {
     pub detail: Map<String, Value>,
 }
 
-/// Per-regime msat of a mixed Austrian move.
-#[derive(Clone, Debug, Serialize)]
+/// Per-regime msat of a mixed Austrian move. A move sends its amount and
+/// fee, which together can exceed `u64`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Flows {
-    pub alt: u64,
-    pub neu: u64,
+    pub alt: u128,
+    pub neu: u128,
 }
 
 /// What left the source and what reached the destination, per regime.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct RegimeFlows {
     pub out: Flows,
     #[serde(rename = "in")]

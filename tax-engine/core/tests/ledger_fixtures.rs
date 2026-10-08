@@ -9,8 +9,9 @@
 //! operation reproduces every stored response (the generator certified that
 //! production's reader renders each into the oracle's outcome) and is
 //! `Unsupported` for the other books; the `prepare` operation answers for the
-//! same books, a generic one without the Bitcoin rail carry (its normalized
-//! and prepared stages, which `tests/test_tax_ledger_prepare.py` compares with
+//! same books, a generic one without the Bitcoin rail carry and an Austrian
+//! one without a carrying-value cross-asset pair (their normalized and
+//! prepared stages, which `tests/test_tax_ledger_prepare.py` compares with
 //! the oracle's), lists the stages it reached when it fails, and is
 //! `Unsupported` for the others; the `manifest` operation answers, and other
 //! schema versions, unknown fields, and missing fields (nullable ones
@@ -147,14 +148,13 @@ fn the_ledger_operation_reproduces_every_stored_response() {
     );
 }
 
-/// Whether the `ledger` and `prepare` operations implement a book: a
-/// generic one without a carrying-value Bitcoin rail pair whose legs are
-/// both rows (the `generic` capability alone,
+/// Whether the `ledger` and `prepare` operations implement a book: one
+/// without a carrying-value pair whose legs are both rows, a Bitcoin rail
+/// pair on a generic book and any cross-asset pair on an Austrian one (the
+/// `generic` capability alone or the `at` capability alone,
 /// `kassiber/core/engines/ledger.py`).
 fn prepares(request: &Value) -> bool {
-    if request["policy"]["country"]["kind"] != "generic" {
-        return false;
-    }
+    let austrian = request["policy"]["country"]["kind"] == "at";
     let rows: HashSet<&str> = request["rows"]
         .as_array()
         .expect("rows")
@@ -167,15 +167,16 @@ fn prepares(request: &Value) -> bool {
         .iter()
         .any(|pair| {
             pair["policy"] == "carrying-value"
-                && pair["bitcoin_rail"] == true
+                && (austrian || pair["bitcoin_rail"] == true)
                 && rows.contains(pair["out_id"].as_str().expect("out id"))
                 && rows.contains(pair["in_id"].as_str().expect("in id"))
         })
 }
 
 #[test]
-fn prepare_normalizes_and_walks_generic_books_without_the_rail_carry() {
+fn prepare_normalizes_and_walks_books_without_carries() {
     let mut prepared = 0;
+    let mut austrian = 0;
     for (name, stored) in stored_requests() {
         let mut request = stored.clone();
         request["operation"] = json!("prepare");
@@ -190,11 +191,21 @@ fn prepare_normalizes_and_walks_generic_books_without_the_rail_carry() {
             continue;
         }
         prepared += 1;
+        austrian += usize::from(stored["policy"]["country"]["kind"] == "at");
         // Pure: the same request gives the same document.
         assert_eq!(ledger(&request.to_string()), text, "{name}");
         let response: Value = serde_json::from_str(&text).expect("response is JSON");
-        assert_eq!(response["ok"], true, "{name}: {text}");
         assert_eq!(response["schema_version"], 2, "{name}");
+        if response["ok"] != true {
+            // Only a book whose user text marks swaps or repeats a marker
+            // fails before composition, in the walk's constructor (a
+            // duplicate `at_regime=` the constructor reads). Its stages
+            // reached are listed.
+            let (stage, ..) = failure(&text);
+            assert_eq!(stage, "prepare", "{name}: {text}");
+            assert!(name.starts_with("at-usertag-"), "{name}: {text}");
+            continue;
+        }
         assert_eq!(response["engine_version"], ENGINE_VERSION, "{name}");
         let rows = request["rows"].as_array().expect("rows");
         let anchor: HashMap<&str, &str> = rows
@@ -271,7 +282,8 @@ fn prepare_normalizes_and_walks_generic_books_without_the_rail_carry() {
             check_prepared_stage(&name, &request, &anchor, &events, &outs, &asset["prepared"]);
         }
     }
-    assert!(prepared >= 35, "only {prepared} generic books");
+    assert!(prepared >= 70, "only {prepared} books");
+    assert!(austrian >= 30, "only {austrian} Austrian books");
 }
 
 /// The prepared stage of one asset: the walk books each normalized event
@@ -444,7 +456,26 @@ fn other_schema_versions_and_unknown_fields_are_refused() {
         .remove("policy");
     let mut bad_decimal = stored.clone();
     bad_decimal["rows"][0]["rate"] = json!("1.5");
-    for request in [extra_row_field, extra_field, missing_field, bad_decimal] {
+    // A row's cutoff instant is required, and is either an instant or
+    // Python's error, nothing else.
+    let mut no_instant = stored.clone();
+    no_instant["rows"][0]
+        .as_object_mut()
+        .expect("row object")
+        .remove("cutoff_instant");
+    let mut odd_instant = stored.clone();
+    odd_instant["rows"][0]["cutoff_instant"] = json!({"us": 0, "error": "both"});
+    let mut text_instant = stored.clone();
+    text_instant["rows"][0]["cutoff_instant"] = json!("2024-01-01T00:00:00Z");
+    for request in [
+        extra_row_field,
+        extra_field,
+        missing_field,
+        bad_decimal,
+        no_instant,
+        odd_instant,
+        text_instant,
+    ] {
         let (stage, class, message) = failure(&ledger(&request.to_string()));
         assert_eq!(
             (stage.as_str(), class.as_str()),

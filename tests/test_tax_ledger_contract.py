@@ -8,7 +8,8 @@ adapter's shapes, and ``errors.py`` raises what the adapter raised. Here:
   (``tax-engine/core/tests/data/ledger_fixtures.json``), or fails with the
   stored outcome itself; the engine answers every stored request with the
   stored response, byte for byte, where production routes the book to it,
-  and with ``Unsupported`` elsewhere;
+  and with ``Unsupported`` elsewhere; a row's time reaches the engine both
+  as RP2 parses it and as the oracle's Austrian rules read it;
 - the reader renders every stored response into the stored ``expected``
   outcome exactly (§3.8);
 - the engine's manifest equals the names and tables Python spells (§3.11);
@@ -167,9 +168,73 @@ def test_the_builder_sends_facts_not_markers() -> None:
     assert (sell["rate"], sell["value"], sell["coarse"], sell["text"]) == (None, "NaN", True, "at_regime=alt sale")
     assert (sell["regime_override"], sell["category_override"], sell["taxability_off"]) == ("neu", "neu_swap", True)
     assert (buy["regime_override"], buy["category_override"], buy["taxability_off"]) == (None, None, False)
+    assert (buy["cutoff_instant"], sell["cutoff_instant"]) == ({"us": 1_704_063_600_000_000}, {"us": 1_706_745_600_000_000})
     assert set(buy) == {
-        "id", "anchor", "asset", "wallet_id", "direction", "ts", "amount_msat", "fee_msat", "rate", "value", "coarse",
-        "kind", "text", "regime_override", "category_override", "taxability_off", "privacy_hop", "hold", "chain_order",
+        "id", "anchor", "asset", "wallet_id", "direction", "ts", "cutoff_instant", "amount_msat", "fee_msat", "rate",
+        "value", "coarse", "kind", "text", "regime_override", "category_override", "taxability_off", "privacy_hop",
+        "hold", "chain_order",
+    }
+
+
+# Times the two parsers read alike and otherwise: offsets, the cutoff
+# itself, a time without an offset and a date (RP2 refuses both; the
+# Austrian rules take UTC), basic format, a lowercase ``z`` and digits
+# Python's ``re`` matches but ``fromisoformat`` does not (RP2 reads both),
+# out-of-range fields, and values that are not text.
+_CUTOFF_TIMES = (
+    "2021-02-28T23:00:00Z",
+    "2021-02-28T22:59:59.999999Z",
+    "2021-03-01T00:00:00+01:00",
+    "2021-03-01T00:00:00.0000001+01:00",
+    "2021-02-28T23:59:59",
+    "2021-03-01",
+    "20210301T000000+0100",
+    "2021-02-28 23:30:00+00:30",
+    "2021-03-01T00:00:00z",
+    "\u0662\u0660\u0662\u0661-03-01T00:00:00Z",
+    "2021-02-30T00:00:00Z",
+    "2021-03-01T24:00:00Z",
+    "2021-03-01T00:00:00+25:00",
+    "0001-01-01T00:00:00+23:59",
+    "9999-12-31T23:59:59-23:59",
+    "not a time",
+    "",
+    None,
+    20210301,
+)
+
+
+def test_the_cutoff_instant_is_the_austrian_rules_reading() -> None:
+    from tests.tax_oracle import austrian as oracle_austrian
+
+    cutoff_us = int(oracle_austrian.AT_NEU_CUTOFF.timestamp()) * 1_000_000
+    readings = set()
+    for value in _CUTOFF_TIMES:
+        instant = ledger_request.cutoff_instant(value)
+        try:
+            # The tracker's own call (``infer_outbound_regimes``).
+            expected = oracle_austrian.infer_regime_from_timestamp(str(value))
+        except ValueError as exc:
+            assert instant == {"error": str(exc)}, value
+            readings.add("error")
+            continue
+        assert set(instant) == {"us"}, value
+        assert ("alt" if instant["us"] < cutoff_us else "neu") == expected, value
+        assert instant["us"] == (oracle_austrian._parse_occurred_at(str(value)) - ledger_request._EPOCH) // ledger_request._ONE_US
+        readings.add(expected)
+        # Where RP2 reads the time too, it reads the same instant, unless
+        # Python reads it otherwise.
+        fields = ledger_request.timestamp_fields(value)
+        if "us" in fields:
+            assert fields["us"] == instant["us"], value
+    assert readings == {"alt", "neu", "error"}
+    # A naive time and a date are read as UTC, where RP2 cannot read them.
+    assert "error" in ledger_request.timestamp_fields("2021-02-28T23:59:59")
+    assert ledger_request.cutoff_instant("2021-02-28T23:59:59") == {"us": cutoff_us + 3_599_000_000}
+    # A lowercase ``z`` RP2 reads, Python does not.
+    assert "us" in ledger_request.timestamp_fields("2021-03-01T00:00:00z")
+    assert ledger_request.cutoff_instant("2021-03-01T00:00:00z") == {
+        "error": "Invalid isoformat string: '2021-03-01T00:00:00z'"
     }
 
 
@@ -235,6 +300,8 @@ def test_the_manifest_matches_the_oracles_kind_rules() -> None:
     source = Path(adapter.__file__).read_text(encoding="utf-8")
     zero_cost = "kind in {" + ", ".join(json.dumps(kind) for kind in manifest["at_zero_cost_kinds"]) + "}"
     assert zero_cost in source
+    assert set(manifest["non_reportable_category_overrides"]) == adapter._NON_REPORTABLE_AT_CATEGORY_OVERRIDES
+    assert len(manifest["non_reportable_category_overrides"]) == len(adapter._NON_REPORTABLE_AT_CATEGORY_OVERRIDES)
 
 
 # ---------------------------------------------------------------------------
@@ -248,6 +315,7 @@ _ENGINE_CLASSES = {
     "InvalidOperation": "InvalidOperation",
     "DivisionByZero": "DivisionByZero",
     "Overflow": "Overflow",
+    "ValueError": "BuiltinValueError",
     "AppError": "AppError",
 }
 _WRAPPERS = (
@@ -315,6 +383,10 @@ def test_unwrapped_and_contract_stages() -> None:
     assert str(compute) == "RP2 tax calculation failed for asset 'LBTC': m"
     validate = errors.ledger_error({"stage": "validate", "inner": {"class": "ValueError", "message": "m"}})
     assert validate.code == "rp2_input_validation"
+    # Kassiber's Austrian time parse raises Python's own ValueError, bare.
+    builtin = errors.ledger_error({"stage": "prepare", "inner": {"class": "BuiltinValueError", "message": "Invalid isoformat string: 'x'"}})
+    assert type(builtin) is ValueError and str(builtin) == "Invalid isoformat string: 'x'"
+    assert compare.error_signature(builtin) == ("ValueError", "Invalid isoformat string: 'x'")
     assert set(errors.STAGES) == {"prepare", "validate", "compute_multi", "compute", "classify", "request", "unsupported"}
 
 

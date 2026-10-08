@@ -204,6 +204,7 @@ mod tests {
             "wallet_id": wallet,
             "direction": direction,
             "ts": {"raw": at, "error": "not read here"},
+            "cutoff_instant": {"error": "not read here"},
             "amount_msat": 1_000,
             "fee_msat": 0,
             "rate": null,

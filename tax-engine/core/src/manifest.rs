@@ -91,6 +91,11 @@ pub(crate) const AT_CATEGORIES: [AtCategory; 7] = [
     AtCategory::AltTaxfree,
 ];
 
+/// The Austrian category overrides that stay on a row whose taxability is
+/// switched off (`_NON_REPORTABLE_AT_CATEGORY_OVERRIDES`): the reviewed
+/// non-reportable categories.
+pub const NON_REPORTABLE_CATEGORY_OVERRIDES: [&str; 2] = ["alt_taxfree", "neu_swap"];
+
 /// A reason the ledger quarantines a row for. These are the reasons of the
 /// adapter's live paths; the normalizer's dead branches are not ported.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -333,6 +338,8 @@ pub struct Manifest {
     /// The Austrian pool id written for Kassiber's global pool.
     pub default_pool: &'static str,
     pub at_categories: Vec<&'static str>,
+    /// The overrides an Austrian row keeps with its taxability off.
+    pub non_reportable_category_overrides: &'static [&'static str],
     pub entry_types: &'static [EntryType],
     pub quarantine_reasons: &'static [QuarantineReason],
     pub detail_kinds: &'static [DetailKind],
@@ -375,6 +382,7 @@ pub fn manifest() -> Manifest {
             .iter()
             .map(|category| category.as_str())
             .collect(),
+        non_reportable_category_overrides: &NON_REPORTABLE_CATEGORY_OVERRIDES,
         entry_types: &EntryType::ALL,
         quarantine_reasons: &QuarantineReason::ALL,
         detail_kinds: &DetailKind::ALL,
@@ -566,6 +574,15 @@ mod tests {
         for (index, category) in AT_CATEGORIES.iter().enumerate() {
             assert_eq!(category_position(*category), index, "{}", category.as_str());
         }
+        // The non-reportable overrides are categories.
+        for name in NON_REPORTABLE_CATEGORY_OVERRIDES {
+            assert!(
+                AT_CATEGORIES
+                    .iter()
+                    .any(|category| category.as_str() == name),
+                "{name}"
+            );
+        }
         let reasons: BTreeSet<&str> = QuarantineReason::ALL.iter().map(|r| r.as_str()).collect();
         assert_eq!(reasons.len(), QuarantineReason::ALL.len());
         assert!(QuarantineReason::ALL.iter().all(|r| reason_listed(*r)));
@@ -613,6 +630,7 @@ mod tests {
                 "income_like_kind_tokens",
                 "markers",
                 "neu_cutoff_us",
+                "non_reportable_category_overrides",
                 "non_sale_disposal_kind_tokens",
                 "quarantine_reasons",
                 "rail_quarantine_reason",
@@ -648,6 +666,10 @@ mod tests {
                 "alt_spekulation",
                 "alt_taxfree",
             ])
+        );
+        assert_eq!(
+            value["non_reportable_category_overrides"],
+            serde_json::json!(["alt_taxfree", "neu_swap"])
         );
         assert_eq!(
             value["entry_types"],

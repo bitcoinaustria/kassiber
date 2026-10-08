@@ -16,16 +16,21 @@
 //!    builds its accounting method inside the multi-asset hook
 //!    (`:620-636`, design §3.9);
 //! 3. the multi-asset hook (`swaps::compute_multi`, stage `compute_multi`),
-//!    which only an Austrian book with swap pairs takes, and otherwise each
-//!    asset's own computation (`compute_asset`, stage `compute`, naming the
-//!    asset);
+//!    which only an Austrian book whose entries' notes pair `at_swap_link=`
+//!    markers takes (the runner's results are the assets' own, in order),
+//!    and otherwise each asset's own computation (`compute_asset`, stage
+//!    `compute`, naming the asset);
 //!
 //! and then composes each computed asset ([`super::compose`]) in order. An
 //! asset without an inbound entry is not computed: only its quarantines and
-//! transfer audit appear. So far both operations run a generic book without
-//! a carrying-value Bitcoin rail pair, whose one prepare pass is its final
-//! one. An Austrian book, and a generic one that needs the rail carry, is
-//! `Unsupported` until those parts are ported.
+//! transfer audit appear. So far both operations run a book whose one
+//! prepare pass is its final one: a generic book without a carrying-value
+//! Bitcoin rail pair, and an Austrian book without a carrying-value
+//! cross-asset pair (no swap links are selected, so there is no second
+//! pass). An Austrian book with such a pair, and a generic one that needs
+//! the rail carry, is `Unsupported` until those parts are ported. Marker
+//! tokens a user typed into a row's text still pair swaps in the lot
+//! engine, as they do today (design §4.2).
 //!
 //! The book's references must resolve: unique row and wallet ids, rows of
 //! known wallets, moves between two distinct rows of one asset with equal
@@ -169,25 +174,31 @@ impl<'a> Book<'a> {
             .and_then(|wallet| wallet.label.as_deref())
     }
 
-    /// Whether the generic rail carry runs: a carrying-value Bitcoin rail
-    /// pair with both legs among the rows (`adapter.py:2073-2080`).
-    fn has_rail_carry(&self) -> bool {
+    /// Whether a carrying-value cross-asset pair has both legs among the
+    /// rows, a Bitcoin rail pair when `rail` is set: the pairs the generic
+    /// rail carry (`adapter.py:2073-2080`) and the Austrian swap-link
+    /// selection (`:1835-1846`) consider.
+    fn has_carrying_pair(&self, rail: bool) -> bool {
         self.request.cross_asset_pairs.iter().any(|pair| {
             pair.policy.as_deref() == Some(CARRYING_VALUE)
-                && pair.bitcoin_rail
+                && (pair.bitcoin_rail || !rail)
                 && self.row_by_id.contains_key(pair.out_id.as_str())
                 && self.row_by_id.contains_key(pair.in_id.as_str())
         })
     }
 
     /// Refuses a book the pipeline does not implement yet: an Austrian
-    /// book, or a generic one that runs the rail carry.
+    /// book whose swap-link selection has a pair to consider, or a generic
+    /// one that runs the rail carry.
     fn check_supported(&self, operation: &str) -> EngineResult<()> {
         match self.request.policy.country {
-            Country::At {} => Err(EngineError::unsupported(format!(
-                "the {operation} operation does not implement Austrian books yet"
-            ))),
-            Country::Generic { .. } if self.has_rail_carry() => {
+            Country::At {} if self.has_carrying_pair(false) => {
+                Err(EngineError::unsupported(format!(
+                    "the {operation} operation does not implement Austrian swap links yet"
+                )))
+            }
+            Country::At {} => Ok(()),
+            Country::Generic { .. } if self.has_carrying_pair(true) => {
                 Err(EngineError::unsupported(format!(
                     "the {operation} operation does not implement the generic Bitcoin rail carry yet"
                 )))
@@ -370,8 +381,9 @@ fn method_gate(policy: &Policy) -> StagedError {
 
 /// The lot engine over `inputs`, the assets with an inbound entry, in
 /// order (`_rp2_asset_states_from_prepared`, `adapter.py:1321-1379`): the
-/// method gate and the multi-asset hook (Austria's swap runner, not ported
-/// yet), else each asset on its own. One result per input, in order.
+/// method gate and the multi-asset hook (Austria's swap runner, when the
+/// entries' notes pair swap markers), else each asset on its own. One
+/// result per input, in order.
 fn compute(
     policy: &Policy,
     inputs: &[AssetInput],
@@ -386,13 +398,24 @@ fn compute(
         .method_name();
     let multi = swaps::compute_multi(inputs, country, method)
         .map_err(|error| StagedError::new(Stage::ComputeMulti, error))?;
-    if multi.is_some() {
-        // Only an Austrian book with a swap pair reaches the runner, and
-        // `Book::check_supported` refuses Austrian books until their port
-        // maps its results back by asset.
-        return Err(StagedError::contract(EngineError::unsupported(
-            "the ledger operation does not implement the Austrian swap runner yet",
-        )));
+    if let Some(outputs) = multi {
+        // The adapter takes each asset's result from the hook's mapping
+        // (`:1355-1371`). The runner returns one per input, in order, so no
+        // asset can be missing from it.
+        let complete = outputs.len() == inputs.len()
+            && outputs
+                .iter()
+                .zip(inputs)
+                .all(|(output, input)| output.asset == input.asset);
+        if !complete {
+            return Err(StagedError::new(
+                Stage::Classify,
+                EngineError::runtime(
+                    "Internal error: the multi-asset runner did not compute every asset",
+                ),
+            ));
+        }
+        return Ok(outputs);
     }
     inputs
         .iter()

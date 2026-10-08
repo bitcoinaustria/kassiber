@@ -244,6 +244,9 @@ pub struct Row {
     /// `occurred_at` as Python parsed it; `raw` orders the string
     /// comparisons.
     pub ts: Ts,
+    /// `occurred_at` as Kassiber's Austrian rules read it, for the Alt/Neu
+    /// cutoff.
+    pub cutoff_instant: CutoffInstant,
     pub amount_msat: u64,
     pub fee_msat: u64,
     /// `fiat_rate_exact`, else `fiat_rate`.
@@ -352,6 +355,35 @@ impl Ts {
             Ts::Failed(ts) => &ts.raw,
         }
     }
+}
+
+/// A row's time as Kassiber's Austrian rules read it
+/// (`austrian._parse_occurred_at` of `str(occurred_at)`: Python's
+/// `datetime.fromisoformat` with `Z` spelled `+00:00`, a time without an
+/// offset taken as UTC), which is not RP2's parse in [`Ts`]: the two read
+/// naive, date-only, basic-format, and lowercase-`z` times differently. The
+/// regime tracker and an event's timestamp regime compare it with the
+/// Neuvermögen cutoff; a time Python cannot read fails there, with Python's
+/// own `ValueError` and its message.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CutoffInstant {
+    Read(ReadInstant),
+    Unread(UnreadInstant),
+}
+
+/// The instant, in microseconds since the Unix epoch.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReadInstant {
+    pub us: i64,
+}
+
+/// The `ValueError` message of a time Python cannot read.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UnreadInstant {
+    pub error: String,
 }
 
 /// A stored decimal as Python parsed it: the canonical form when finite,

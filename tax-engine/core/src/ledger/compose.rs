@@ -12,7 +12,13 @@
 //!   income, a move whose fee is taxable is a transfer fee, a fee-only spend
 //!   is a fee, and everything else a disposal. A fee or transfer fee
 //!   realizes no gain (its proceeds are its basis), and every realized
-//!   quantity but income's is negated;
+//!   quantity but income's is negated. On an Austrian book every fragment,
+//!   fees and income included, has the lot engine's category, which the
+//!   row's overrides may replace or clear (`adapter.py:1453-1471`); the
+//!   first fragment whose classification failed fails the composition.
+//!   Fragments group by their category too, so one event can give several
+//!   entries, and a fee or transfer fee drops its category only after that
+//!   split (A map §9.9);
 //! - the two legs of each move the walk booked, in audit order;
 //! - holdings: each positive balance of a wallet with a label, valued at
 //!   the open lots' average basis;
@@ -23,18 +29,18 @@
 //! comparison exact, as the adapter computes them on plain `Decimal`s. The
 //! reader (`kassiber/core/engines/ledger_response.py`) adds what is not tax
 //! logic: ids, wallet and account references, times, floats, and each
-//! fragment's row facts. Generic books only so far: the Austrian
-//! categories and their overrides are not composed yet.
+//! fragment's row facts, and an Austrian category's Kennzahl.
 
 use std::collections::{HashMap, HashSet};
 
 use crate::decimal::Decimal;
 use crate::entry::{Detail, Entry, TransactionType};
 use crate::error::{EngineError, EngineResult};
-use crate::manifest::EntryType;
+use crate::manifest::{EntryType, NON_REPORTABLE_CATEGORY_OVERRIDES};
 use crate::model::{AssetOutput, Dec, EntryKind, GainLossOut};
 use crate::num;
 
+use super::request::{Country, Row};
 use super::response::{
     AcquisitionOut, AuditOut, EntryOut, FragmentEvent, FragmentLot, FragmentOut, HoldingOut,
     RealizedOut, SummaryOut, TransferLegOut,
@@ -98,6 +104,25 @@ fn description(entry: &Entry) -> EngineResult<String> {
     Ok(entry.notes.clone())
 }
 
+/// The category an Austrian fragment reports after its row's overrides
+/// (`adapter.py:1458-1470`): with taxability off, a non-reportable override
+/// is kept and anything else clears the category; the override `none`
+/// clears it too; any other override replaces it.
+fn overridden(row: &Row, category: String) -> Option<String> {
+    let chosen = row.category_override.as_deref();
+    match chosen {
+        Some(chosen)
+            if row.taxability_off && NON_REPORTABLE_CATEGORY_OVERRIDES.contains(&chosen) =>
+        {
+            Some(chosen.to_owned())
+        }
+        _ if row.taxability_off => None,
+        Some("none") => None,
+        Some(chosen) => Some(chosen.to_owned()),
+        None => Some(category),
+    }
+}
+
 /// One realized entry while its fragments are summed.
 struct Realized {
     entry_type: EntryType,
@@ -106,6 +131,8 @@ struct Realized {
     asset: String,
     description: String,
     long_term: bool,
+    /// The Austrian category after the overrides.
+    at_category: Option<String>,
     quantity: Decimal,
     cost_basis: Decimal,
     proceeds: Decimal,
@@ -164,6 +191,19 @@ impl<'c, 'a> Composer<'c, 'a> {
                 .fiat_in_with_fee()
                 .ok_or_else(|| internal("a lot is not an acquisition")),
         }
+    }
+
+    /// An Austrian fragment's category (`_classify_at_disposal`): the lot
+    /// engine's, or the failure it recorded for it, raised here.
+    fn classify(gain_loss: &GainLossOut) -> EngineResult<String> {
+        if let Some(error) = &gain_loss.at_category_error {
+            return Err(EngineError::new(error.class, error.message.clone()));
+        }
+        gain_loss.at_category.clone().ok_or_else(|| {
+            EngineError::runtime(
+                "Internal error: the engine returned no Austrian category for this gain/loss",
+            )
+        })
     }
 
     fn crypto_in(lot: &Entry) -> EngineResult<&Decimal> {
@@ -245,10 +285,11 @@ impl<'c, 'a> Composer<'c, 'a> {
             .iter()
             .map(|audit| self.book.request.intra_pairs[audit.pair].out.as_str())
             .collect();
-        // By taxable event (row number) and holding period, in the order
-        // they first appear.
+        let austrian = matches!(self.book.request.policy.country, Country::At {});
+        // By taxable event (row number), holding period, and on an Austrian
+        // book category, in the order they first appear.
         let mut groups: Vec<Realized> = Vec::new();
-        let mut positions: HashMap<(i64, bool), usize> = HashMap::new();
+        let mut positions: HashMap<(i64, bool, Option<String>), usize> = HashMap::new();
         for gain_loss in &self.asset.output.gain_losses {
             let event = self.entry(gain_loss.event.row, gain_loss.event.kind)?;
             let entry = &event.entry;
@@ -263,7 +304,15 @@ impl<'c, 'a> Composer<'c, 'a> {
             } else {
                 EntryType::Disposal
             };
-            let key = (entry.row, gain_loss.long_term);
+            let at_category = if austrian {
+                let category = Self::classify(gain_loss)?;
+                // The overrides of the event's row (an event's own, a
+                // move's out leg).
+                overridden(&self.book.rows[event.row], category)
+            } else {
+                None
+            };
+            let key = (entry.row, gain_loss.long_term, at_category.clone());
             let position = match positions.get(&key) {
                 Some(&position) => position,
                 None => {
@@ -275,6 +324,7 @@ impl<'c, 'a> Composer<'c, 'a> {
                         asset: entry.asset.clone(),
                         description: description(entry)?,
                         long_term: gain_loss.long_term,
+                        at_category,
                         quantity: num::zero(),
                         cost_basis: num::zero(),
                         proceeds: num::zero(),
@@ -295,12 +345,13 @@ impl<'c, 'a> Composer<'c, 'a> {
         groups
             .into_iter()
             .map(|group| {
-                // Fees reduce the balance and its basis but realize nothing.
+                // Fees reduce the balance and its basis but realize nothing,
+                // and report no category.
                 let fee = matches!(group.entry_type, EntryType::Fee | EntryType::TransferFee);
-                let (proceeds, gain_loss) = if fee {
-                    (group.cost_basis.clone(), num::zero())
+                let (proceeds, gain_loss, at_category) = if fee {
+                    (group.cost_basis.clone(), num::zero(), None)
                 } else {
-                    (group.proceeds, group.gain_loss)
+                    (group.proceeds, group.gain_loss, group.at_category)
                 };
                 let quantity = if group.entry_type == EntryType::Income {
                     group.quantity
@@ -317,7 +368,7 @@ impl<'c, 'a> Composer<'c, 'a> {
                     cost_basis: Dec(group.cost_basis),
                     gain_loss: Dec(gain_loss),
                     description: group.description,
-                    at_category: None,
+                    at_category,
                     capital_gains_type: if group.long_term { "long" } else { "short" },
                     fragments: group.fragments,
                 }))
@@ -419,7 +470,7 @@ mod tests {
     use crate::ledger::run::ledger;
     use crate::time::CivilDate;
 
-    // Small generic books through the whole pipeline. Every expectation is
+    // Small books through the whole pipeline. Every expectation is
     // what the oracle gives for the same rows (a projection built with
     // `tests/tax_ledger_generator.py`'s `projected` and `direct`, compared
     // with `tests/tax_engine_compare.py`: production equals the oracle on
@@ -458,6 +509,7 @@ mod tests {
             "wallet_id": wallet,
             "direction": direction,
             "ts": ts(date),
+            "cutoff_instant": {"us": ts(date)["us"]},
             "amount_msat": amount,
             "fee_msat": 0,
             "rate": "40000E0",
@@ -507,11 +559,31 @@ mod tests {
     }
 
     fn request(method: Value, label: &str, rows: Vec<Value>, pairs: Vec<Value>) -> LedgerRequest {
+        book_request(
+            json!({"kind": "generic", "long_term_days": 365}),
+            method,
+            label,
+            rows,
+            pairs,
+        )
+    }
+
+    fn austrian(method: &str, rows: Vec<Value>, pairs: Vec<Value>) -> LedgerRequest {
+        book_request(json!({"kind": "at"}), json!(method), method, rows, pairs)
+    }
+
+    fn book_request(
+        country: Value,
+        method: Value,
+        label: &str,
+        rows: Vec<Value>,
+        pairs: Vec<Value>,
+    ) -> LedgerRequest {
         serde_json::from_value(json!({
             "schema_version": 2,
             "operation": "ledger",
             "policy": {
-                "country": {"kind": "generic", "long_term_days": 365},
+                "country": country,
                 "method": method,
                 "method_label": label,
                 "require_coarse_review": false,
@@ -1131,6 +1203,184 @@ mod tests {
         assert_eq!(
             response["holdings"],
             json!([{"asset": "BTC", "wallet": "Cold", "quantity": "1E0", "cost_basis": "40000E0"}])
+        );
+    }
+
+    /// `(type, row, category)` of each realized entry.
+    fn categories(response: &Value) -> Vec<Value> {
+        response["entries"]
+            .as_array()
+            .expect("entries")
+            .iter()
+            .filter(|entry| entry.get("at_category").is_some())
+            .map(|entry| {
+                let row = entry["row"]
+                    .as_str()
+                    .unwrap()
+                    .trim_start_matches("custody-tax:");
+                json!([entry["entry_type"], row, entry["at_category"]])
+            })
+            .collect()
+    }
+
+    /// An Austrian book: Alt and Neu lots, staking, a sale, a fee-only spend
+    /// across the last Alt and the first Neu, and sales whose rows carry
+    /// reviewed category and taxability overrides.
+    fn austrian_book(method: &str) -> Value {
+        let sale = |id: &str, date: &str, amount: u64, fields: Value| {
+            let mut sale = row(
+                id,
+                "A",
+                "outbound",
+                date,
+                amount,
+                json!({"rate": "20000E0"}),
+            );
+            for (key, value) in fields.as_object().expect("fields") {
+                sale[key] = value.clone();
+            }
+            sale
+        };
+        run(&austrian(
+            method,
+            vec![
+                row(
+                    "alt",
+                    "A",
+                    "inbound",
+                    "2020-06-01",
+                    100_000_000_000,
+                    json!({"rate": "8000E0"}),
+                ),
+                row(
+                    "neu",
+                    "A",
+                    "inbound",
+                    "2022-01-01",
+                    100_000_000_000,
+                    json!({}),
+                ),
+                row(
+                    "earn",
+                    "A",
+                    "inbound",
+                    "2022-02-01",
+                    10_000_000_000,
+                    json!({"kind": "staking"}),
+                ),
+                sale("sale1", "2023-01-01", 90_000_000_000, json!({})),
+                sale(
+                    "feeonly",
+                    "2023-02-01",
+                    0,
+                    json!({"fee_msat": 20_000_000_000_u64, "kind": "withdrawal"}),
+                ),
+                sale(
+                    "swap-said",
+                    "2023-03-01",
+                    20_000_000_000,
+                    json!({"category_override": "neu_swap", "taxability_off": true}),
+                ),
+                sale(
+                    "cleared",
+                    "2023-03-02",
+                    10_000_000_000,
+                    json!({"category_override": "none"}),
+                ),
+                sale(
+                    "off",
+                    "2023-03-03",
+                    10_000_000_000,
+                    json!({"category_override": "neu_gain", "taxability_off": true}),
+                ),
+                sale(
+                    "chosen",
+                    "2023-03-04",
+                    10_000_000_000,
+                    json!({"category_override": "alt_spekulation"}),
+                ),
+            ],
+            vec![],
+        ))
+    }
+
+    #[test]
+    fn austrian_categories_follow_the_overrides_and_split_entries() {
+        // The oracle gives the same (scratch replay on RP2, WI-9 log).
+        let fifo = austrian_book("fifo");
+        assert_eq!(
+            categories(&fifo),
+            vec![
+                json!(["income", "earn", "income_capital_yield"]),
+                json!(["disposal", "sale1", "alt_taxfree"]),
+                // One fee across an Alt and a Neu lot: two entries, split by
+                // category, which a fee then drops.
+                json!(["fee", "feeonly", null]),
+                json!(["fee", "feeonly", null]),
+                // Taxability off keeps a non-reportable override.
+                json!(["disposal", "swap-said", "neu_swap"]),
+                // `none` clears the category, and so does taxability off
+                // with any other override.
+                json!(["disposal", "cleared", null]),
+                json!(["disposal", "off", null]),
+                // Any other override replaces it.
+                json!(["disposal", "chosen", "alt_spekulation"]),
+            ]
+        );
+        let fees: Vec<&Value> = fifo["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry["entry_type"] == "fee")
+            .map(|entry| &entry["quantity"])
+            .collect();
+        assert_eq!(fees, [&json!("-1E-1"), &json!("-1E-1")]);
+        // Under the moving average one Neu pool takes the fee whole.
+        let average = austrian_book("moving_average_at");
+        assert_eq!(
+            categories(&average)[1],
+            json!(["disposal", "sale1", "neu_loss"])
+        );
+        assert_eq!(categories(&average)[2], json!(["fee", "feeonly", null]));
+        // A generic book reports no category at all.
+        assert!(categories(&fifo_book())
+            .iter()
+            .all(|entry| entry[2].is_null()));
+    }
+
+    #[test]
+    fn an_austrian_classification_failure_is_raised_unwrapped() {
+        // A move's text repeating `at_swap_link=` is never read under a lot
+        // method until its fee is classified (golden
+        // `at-usertag-move-duplicate-swap-link-fifo`).
+        let [mut out, inbound] = legs("m", "A", "B", "2024-02-01", 50_000_000_000, json!({}));
+        out["fee_msat"] = json!(100_000_000);
+        out["text"] = json!("at_swap_link=m1 at_swap_link=m2");
+        let response = run(&austrian(
+            "fifo",
+            vec![
+                row(
+                    "buy",
+                    "A",
+                    "inbound",
+                    "2024-01-01",
+                    100_000_000_000,
+                    json!({}),
+                ),
+                out,
+                inbound,
+            ],
+            vec![pair("m")],
+        ));
+        assert_eq!(
+            response["error"],
+            json!({
+                "stage": "classify",
+                "inner": {
+                    "class": "ValueError",
+                    "message": "Duplicate `at_swap_link=` markers in notes; only one is allowed per transaction. Found: ['at_swap_link=m1', 'at_swap_link=m2']",
+                },
+            })
         );
     }
 }

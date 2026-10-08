@@ -4,7 +4,8 @@ The engine reports every failure with a class and RP2's exact message
 (``tax-engine/core/src/error.rs``). Here those classes become Python
 exceptions: RP2's own errors keep RP2's messages under Kassiber's names
 (``EngineValueError`` for ``RP2ValueError`` and so on, a listed difference of
-plan 20), ``decimal`` signals stay ``decimal`` signals, and a malformed
+plan 20), ``decimal`` signals stay ``decimal`` signals, Python's own
+``ValueError`` (Kassiber's Austrian time parse) stays one, and a malformed
 request or an operation the engine does not implement is an
 ``EngineContractError``, which blocks the report like a panic.
 
@@ -72,6 +73,10 @@ ERROR_CLASSES: dict[str, type[Exception]] = {
     "InvalidOperation": InvalidOperation,
     "DivisionByZero": DivisionByZero,
     "Overflow": Overflow,
+    # Python's own ``ValueError``, which Kassiber's Austrian rules raise for
+    # a time ``datetime.fromisoformat`` cannot read
+    # (``austrian.infer_regime_from_timestamp``).
+    "BuiltinValueError": ValueError,
 }
 
 

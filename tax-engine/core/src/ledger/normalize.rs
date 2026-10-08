@@ -4,8 +4,11 @@
 //! (`tests/tax_oracle/normalize.py:1570-2692`) a finalized projection
 //! reaches, ported literally. The request builder refuses every shape that
 //! would reach the rest (`ledger_request.INVARIANTS`), so the dead branches
-//! have no port. Generic books only so far: the Austrian regime tracker and
-//! swap links are not ported yet, so every Austrian field stays empty.
+//! have no port.
+//!
+//! On an Austrian book the regime tracker ([`super::regimes`]) runs first,
+//! over the pass's rows without a hold and its moves without a held leg
+//! (`:1775-1866`). Swap links are not ported yet, so no event has one.
 //!
 //! The pass visits its rows in projection order:
 //!
@@ -24,6 +27,13 @@
 //!   needs a price, and an outbound one a price for its amount, else for its
 //!   fee.
 //!
+//! On an Austrian book an event's regime is its time's for an inbound row
+//! and the tracker's for an outbound one, which may record an election
+//! (Wahlrecht); a move's is the tracker's for its out leg, with the msat each
+//! regime moved. A row's regime override replaces either and drops the
+//! election (`:2366-2373`, `:2399-2401`, `:2503-2528`). Every pool is the
+//! global one.
+//!
 //! Then a blocked group loses its moves and its legs whose transactions no
 //! quarantine names yet are flagged (`:2554-2581`), and the asset's lot
 //! state is tainted from the earliest `occurred_at` of a visited row whose
@@ -41,10 +51,11 @@ use serde_json::{Map, Value};
 
 use crate::decimal::{Decimal, DecimalError};
 use crate::error::{EngineResult, ErrorClass};
-use crate::manifest::{DetailKind, QuarantineReason};
+use crate::manifest::{DetailKind, QuarantineReason, REGIME_BASIS_ELECTION};
 use crate::num;
 
-use super::request::{DecimalText, Direction, Hold, Regime, Row, Ts};
+use super::regimes::{self, Tracked};
+use super::request::{Country, DecimalText, Direction, Hold, Regime, Row, Ts};
 use super::response::{Fiat, RegimeFlows};
 use super::run::{AssetRows, Book, MovePair};
 
@@ -193,7 +204,7 @@ fn fiat_value(row: &Row, amount: &Decimal, spot: &Fiat) -> EngineResult<Fiat> {
 /// timestamp is text (`str(... or "")` upstream), so only an empty one is
 /// falsy; of the values that are not text, `None` is the falsy one a row
 /// could carry.
-fn occurred_at_is_set(ts: &Ts) -> bool {
+pub(crate) fn occurred_at_is_set(ts: &Ts) -> bool {
     match ts {
         Ts::Parsed(_) => true,
         Ts::Failed(failed) => {
@@ -248,25 +259,31 @@ struct Normalizer<'b, 'a> {
     rows: &'a [Row],
     asset: &'a str,
     review_coarse: bool,
-    /// Moves without a held leg, by leg; with a group, by group
-    /// (`:1775-1784`, `:1881-1893`).
+    austrian: bool,
+    /// Moves without a held leg, in request order; by leg; with a group, by
+    /// group (`:1775-1784`, `:1881-1893`).
+    moves: Vec<&'b MovePair<'a>>,
     move_by_row: HashMap<usize, &'b MovePair<'a>>,
     moves_by_group: HashMap<&'a str, Vec<&'b MovePair<'a>>>,
     out: Normalized,
     /// Groups a failed move blocks, with the first reason, in the order
     /// they were first blocked.
     blocked: Vec<(&'a str, QuarantineReason)>,
+    /// The regime tracker's findings (Austrian books only).
+    tracked: Tracked,
 }
 
 impl<'b, 'a> Normalizer<'b, 'a> {
     fn new(book: &'b Book<'a>, part: &'b AssetRows<'a>) -> Self {
         let rows = book.rows;
+        let mut moves = Vec::new();
         let mut move_by_row = HashMap::new();
         let mut moves_by_group: HashMap<&'a str, Vec<&'b MovePair<'a>>> = HashMap::new();
         for pair in &part.pairs {
             if rows[pair.out].hold.is_some() || rows[pair.inbound].hold.is_some() {
                 continue;
             }
+            moves.push(pair);
             // Moves share no leg (the request guarantees it), so each row has
             // at most one.
             move_by_row.insert(pair.out, pair);
@@ -280,14 +297,21 @@ impl<'b, 'a> Normalizer<'b, 'a> {
             rows,
             asset: part.asset,
             review_coarse: book.request.policy.require_coarse_review,
+            austrian: matches!(book.request.policy.country, Country::At {}),
+            moves,
             move_by_row,
             moves_by_group,
             out: Normalized::default(),
             blocked: Vec::new(),
+            tracked: Tracked::default(),
         }
     }
 
     fn run(mut self, active: &[usize]) -> EngineResult<Normalized> {
+        if self.austrian {
+            let order = regimes::regime_rows(self.rows, active, |row| occurred_at_is_set(&row.ts));
+            self.tracked = regimes::track(self.rows, &order, &self.moves)?;
+        }
         let mut handled = HashSet::new();
         for &index in active {
             if let Some(hold) = self.rows[index].hold {
@@ -441,6 +465,18 @@ impl<'b, 'a> Normalizer<'b, 'a> {
         }
         let from_label = self.label(pair.out);
         let to_label = self.label(pair.inbound);
+        // The out leg's override, else the tracker's regime, which every move
+        // without a held leg has; no time fallback (`:2366-2373`).
+        let (at_regime, regime_flows) = if self.austrian {
+            (
+                out_row
+                    .regime_override
+                    .or_else(|| self.tracked.regimes.get(&pair.out).copied()),
+                self.tracked.flows.get(&pair.index).cloned(),
+            )
+        } else {
+            (None, None)
+        };
         // An f-string writes a missing label as `None`.
         let description = out_row.text.clone().unwrap_or_else(|| {
             format!(
@@ -462,8 +498,8 @@ impl<'b, 'a> Normalizer<'b, 'a> {
             description,
             from_cost_basis_pool_id: GLOBAL_POOL,
             to_cost_basis_pool_id: GLOBAL_POOL,
-            at_regime: None,
-            regime_flows: None,
+            at_regime,
+            regime_flows,
             group_id: pair.group_id.map(str::to_owned),
         });
         self.out.ordered_items.push(Item::Transfer(pair.out));
@@ -531,6 +567,11 @@ impl<'b, 'a> Normalizer<'b, 'a> {
             return Ok(());
         };
         let fiat_value = fiat_value(row, &amount, &spot)?;
+        let (at_regime, at_regime_basis) = if self.austrian {
+            self.event_regime(index)?
+        } else {
+            (None, None)
+        };
         self.out.events.push(Event {
             row: index,
             wallet_label: label.map(str::to_owned),
@@ -539,13 +580,38 @@ impl<'b, 'a> Normalizer<'b, 'a> {
             spot_price: spot,
             fiat_value,
             description: row.text.clone().unwrap_or_else(|| row.id.clone()),
-            at_regime: None,
-            at_regime_basis: None,
+            at_regime,
+            at_regime_basis,
             cost_basis_pool_id: GLOBAL_POOL,
             at_swap_link: None,
         });
         self.out.ordered_items.push(Item::Event(index));
         Ok(())
+    }
+
+    /// An Austrian event's regime and why it has it (`:2503-2528`): an
+    /// inbound row's time's regime; an outbound row's from the tracker,
+    /// with its election. An override replaces the regime and drops the
+    /// election. Python reads the time's regime for every event, also where
+    /// the tracker has one; the tracker already read it, so this cannot
+    /// fail first.
+    fn event_regime(&self, index: usize) -> EngineResult<(Option<Regime>, Option<&'static str>)> {
+        let row = &self.rows[index];
+        let by_time = regimes::timestamp_regime(row)?;
+        let (regime, basis) = match row.direction {
+            Direction::Inbound => (by_time, None),
+            Direction::Outbound => (
+                self.tracked.regimes.get(&index).copied().unwrap_or(by_time),
+                self.tracked
+                    .elected
+                    .contains(&index)
+                    .then_some(REGIME_BASIS_ELECTION),
+            ),
+        };
+        Ok(match row.regime_override {
+            Some(chosen) => (Some(chosen), None),
+            None => (Some(regime), basis),
+        })
     }
 
     /// `:2554-2581` with `_append_group_block_quarantines` (`:264-308`): a
@@ -707,17 +773,21 @@ mod tests {
     // Behaviour on small books. Each expectation is what the oracle's
     // `normalize_tax_asset_inputs` gives for the same rows
     // (`tests/test_tax_ledger_prepare.py` compares the two on every golden
-    // and seeded generic book and on edge books like these).
+    // and seeded book without carries and on edge books like these; the
+    // Austrian book below was replayed on the oracle's normalize).
 
     const JAN: &str = "2024-01-01T00:00:00Z";
     const FEB: &str = "2024-02-01T00:00:00Z";
     const MAR: &str = "2024-03-01T00:00:00Z";
     const APR: &str = "2024-04-01T00:00:00Z";
+    /// Before the Neuvermögen cutoff.
+    const ALT: &str = "2020-06-01T00:00:00Z";
 
     /// A parsed timestamp at midnight UTC, or a failed one (normalize reads
     /// only the text).
     fn ts(raw: &str) -> Value {
         let seconds = match raw {
+            ALT => 1_590_969_600_i64,
             JAN => 1_704_067_200_i64,
             FEB => 1_706_745_600,
             MAR => 1_709_251_200,
@@ -732,11 +802,19 @@ mod tests {
             "us": seconds * 1_000_000,
             "offset_s": 0,
             "date": date,
-            "year": 2024,
+            "year": raw[..4].parse::<i32>().expect("a year"),
             "vienna_date": date,
             "display": format!("{date} 00:00:00+00:00"),
             "iso": format!("{date}T00:00:00+00:00"),
         })
+    }
+
+    /// The row's time as the Austrian cutoff reads it.
+    fn cutoff(raw: &str) -> Value {
+        match ts(raw).get("us") {
+            Some(us) => json!({ "us": us }),
+            None => json!({ "error": format!("Invalid isoformat string: '{raw}'") }),
+        }
     }
 
     /// A projection row: `id` is also its transaction (anchor) unless
@@ -749,6 +827,7 @@ mod tests {
             "wallet_id": wallet,
             "direction": direction,
             "ts": ts(at),
+            "cutoff_instant": cutoff(at),
             "amount_msat": amount,
             "fee_msat": 0,
             "rate": "40000E0",
@@ -779,11 +858,29 @@ mod tests {
     }
 
     fn request(rows: Vec<Value>, pairs: Vec<Value>, review_coarse: bool) -> LedgerRequest {
+        book_request(
+            json!({"kind": "generic", "long_term_days": 365}),
+            rows,
+            pairs,
+            review_coarse,
+        )
+    }
+
+    fn austrian(rows: Vec<Value>, pairs: Vec<Value>) -> LedgerRequest {
+        book_request(json!({"kind": "at"}), rows, pairs, false)
+    }
+
+    fn book_request(
+        country: Value,
+        rows: Vec<Value>,
+        pairs: Vec<Value>,
+        review_coarse: bool,
+    ) -> LedgerRequest {
         serde_json::from_value(json!({
             "schema_version": 2,
             "operation": "prepare",
             "policy": {
-                "country": {"kind": "generic", "long_term_days": 365},
+                "country": country,
                 "method": "fifo",
                 "method_label": "FIFO",
                 "require_coarse_review": review_coarse,
@@ -1372,5 +1469,170 @@ mod tests {
         );
         assert!(normalized.transfers.is_empty());
         assert_eq!(items(&request, &normalized), ["event buy"]);
+    }
+
+    /// Each event's regime and basis, and each move's regime and flows, by
+    /// row name.
+    fn regimes(request: &LedgerRequest, normalized: &Normalized) -> Vec<Value> {
+        let rows = &request.rows;
+        normalized
+            .events
+            .iter()
+            .map(|event| {
+                json!([
+                    name(rows, event.row),
+                    event.at_regime.map(Regime::as_str),
+                    event.at_regime_basis,
+                ])
+            })
+            .chain(normalized.transfers.iter().map(|transfer| {
+                let flows = transfer.regime_flows.as_ref().map(|flows| {
+                    [
+                        flows.out.alt,
+                        flows.out.neu,
+                        flows.inbound.alt,
+                        flows.inbound.neu,
+                    ]
+                });
+                json!([
+                    name(rows, transfer.out),
+                    transfer.at_regime.map(Regime::as_str),
+                    flows
+                ])
+            }))
+            .collect()
+    }
+
+    #[test]
+    fn austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides() {
+        let request = austrian(
+            vec![
+                row("alt-buy", "A", "inbound", ALT, 100_000_000_000, json!({})),
+                // An inbound override is the event's regime, but the tracker
+                // keeps the time's: B holds Alt only.
+                row(
+                    "said-neu",
+                    "B",
+                    "inbound",
+                    ALT,
+                    10_000_000_000,
+                    json!({"regime_override": "neu"}),
+                ),
+                row("neu-buy", "A", "inbound", JAN, 50_000_000_000, json!({})),
+                // A holds both regimes: an election.
+                row("sale", "A", "outbound", FEB, 1_000_000_000, json!({})),
+                // An override drops the election.
+                row(
+                    "said-alt",
+                    "A",
+                    "outbound",
+                    FEB,
+                    1_000_000_000,
+                    json!({"regime_override": "alt"}),
+                ),
+                row("b-sale", "B", "outbound", FEB, 1_000_000_000, json!({})),
+                row(
+                    "move-out",
+                    "A",
+                    "outbound",
+                    MAR,
+                    60_000_000_000,
+                    json!({"anchor": "move", "fee_msat": 1_000_000}),
+                ),
+                row(
+                    "move-in",
+                    "C",
+                    "inbound",
+                    MAR,
+                    60_000_000_000,
+                    json!({"anchor": "move"}),
+                ),
+                row(
+                    "over-out",
+                    "C",
+                    "outbound",
+                    APR,
+                    5_000_000_000,
+                    json!({"anchor": "over", "regime_override": "alt"}),
+                ),
+                row(
+                    "over-in",
+                    "B",
+                    "inbound",
+                    APR,
+                    5_000_000_000,
+                    json!({"anchor": "over"}),
+                ),
+            ],
+            vec![
+                pair("move-out", "move-in", None),
+                pair("over-out", "over-in", None),
+            ],
+        );
+        let normalized = run_pass(&request).unwrap();
+        // The move spends A's Neu left after the election (48 BTC) first,
+        // its fee from that slice, then 12.001 BTC of Alt; its override
+        // twin keeps its own flows.
+        assert_eq!(
+            regimes(&request, &normalized),
+            vec![
+                json!(["alt-buy", "alt", null]),
+                json!(["said-neu", "neu", null]),
+                json!(["neu-buy", "neu", null]),
+                json!(["sale", "neu", "wahlrecht"]),
+                json!(["said-alt", "alt", null]),
+                json!(["b-sale", "alt", null]),
+                json!([
+                    "move-out",
+                    "neu",
+                    [
+                        12_001_000_000_u64,
+                        48_000_000_000_u64,
+                        12_001_000_000_u64,
+                        47_999_000_000_u64
+                    ]
+                ]),
+                json!([
+                    "over-out",
+                    "alt",
+                    [0, 5_000_000_000_u64, 0, 5_000_000_000_u64]
+                ]),
+            ]
+        );
+        // A generic book has none of these.
+        let mut generic = request.clone();
+        generic.policy.country = crate::ledger::request::Country::Generic {
+            long_term_days: 365,
+        };
+        let normalized = run_pass(&generic).unwrap();
+        assert!(normalized
+            .events
+            .iter()
+            .all(|event| event.at_regime.is_none() && event.at_regime_basis.is_none()));
+        assert!(normalized
+            .transfers
+            .iter()
+            .all(|transfer| transfer.at_regime.is_none() && transfer.regime_flows.is_none()));
+    }
+
+    #[test]
+    fn an_austrian_time_the_tracker_cannot_read_fails_before_normalize_reads_a_price() {
+        // The tracker reads every row first, so its error comes before the
+        // NaN rate's of a row it visits earlier.
+        let request = austrian(
+            vec![
+                row("nan", "A", "inbound", JAN, 1_000, json!({"rate": "NaN"})),
+                row("unread", "A", "inbound", "a time", 1_000, json!({})),
+            ],
+            Vec::new(),
+        );
+        let error = run_pass(&request).unwrap_err();
+        assert_eq!(error.class, ErrorClass::BuiltinValueError);
+        assert_eq!(error.message, "Invalid isoformat string: 'a time'");
+        // A held row is not the tracker's: its time is never read.
+        let mut held = request.clone();
+        held.rows[1].hold = Some(Hold::PendingOnchainConfirmation);
+        let error = run_pass(&held).unwrap_err();
+        assert_eq!(error.class, ErrorClass::InvalidOperation);
     }
 }

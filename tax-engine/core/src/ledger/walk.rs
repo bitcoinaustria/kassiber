@@ -790,11 +790,11 @@ mod tests {
     // `_prepare_rp2_asset_input` gives for the same rows: the gate
     // details, the entries' arguments, and the first failure
     // (`tests/test_tax_ledger_prepare.py` compares the two on every golden
-    // and seeded generic book and on edge books like these, and checks each
-    // failure against RP2). The Austrian cases set the Austrian fields of
-    // the normalized stage by hand (a swap link, a move's regime), since
-    // normalize does not derive them yet; the oracle gives the same gates
-    // and notes for those values, beside the regimes its tracker adds.
+    // and seeded book without swap links and on edge books like these, and
+    // checks each failure against RP2). The Austrian cases that need a
+    // swap link set it on the normalized stage by hand, since normalize
+    // does not select links yet; the oracle gives the same gates and notes
+    // for the same link.
 
     const JAN: &str = "2024-01-01T00:00:00Z";
     const FEB: &str = "2024-02-01T00:00:00Z";
@@ -827,6 +827,14 @@ mod tests {
         })
     }
 
+    /// The row's time as the Austrian cutoff reads it.
+    fn cutoff(raw: &str) -> Value {
+        match ts(raw).get("us") {
+            Some(us) => json!({ "us": us }),
+            None => json!({ "error": format!("Invalid isoformat string: '{raw}'") }),
+        }
+    }
+
     /// A projection row: `id` is also its transaction (anchor) unless
     /// `fields` says otherwise.
     fn row(id: &str, wallet: &str, direction: &str, at: &str, amount: u64, fields: Value) -> Value {
@@ -837,6 +845,7 @@ mod tests {
             "wallet_id": wallet,
             "direction": direction,
             "ts": ts(at),
+            "cutoff_instant": cutoff(at),
             "amount_msat": amount,
             "fee_msat": 0,
             "rate": "40000E0",
@@ -904,8 +913,7 @@ mod tests {
     }
 
     /// Normalizes and walks a one-asset book, after `edit` changes the
-    /// normalized stage (the Austrian fields the generic normalize leaves
-    /// empty).
+    /// normalized stage (a swap link, which normalize does not select yet).
     fn walk_with(request: &LedgerRequest, edit: impl Fn(&mut Normalized)) -> EngineResult<Walked> {
         let book = Book::new(request).expect("a book");
         let [part] = book.assets.as_slice() else {
@@ -1590,11 +1598,11 @@ mod tests {
         assert_eq!(
             notes,
             [
-                ("buy-a".into(), "at_pool=default buy-a".into()),
-                ("buy-b".into(), "at_pool=default buy-b".into()),
+                ("buy-a".into(), "at_regime=neu at_pool=default buy-a".into()),
+                ("buy-b".into(), "at_regime=neu at_pool=default buy-b".into()),
                 (
                     "swap-out".into(),
-                    "at_pool=default at_swap_link=swap-1 swap-out".into()
+                    "at_regime=neu at_pool=default at_swap_link=swap-1 swap-out".into()
                 ),
             ]
         );
@@ -1692,10 +1700,9 @@ mod tests {
             ],
             vec![pair("move-out", "move-in", None)],
         );
-        let walked = walk_with(&request, |normalized| {
-            normalized.transfers[0].at_regime = Some(Regime::Neu);
-        })
-        .unwrap();
+        // The tracker gives the move its fee's regime and its flows: Neu
+        // only, all of it carried but the fee.
+        let walked = walk_book(&request).unwrap();
         let moved = &walked.entries.as_ref().unwrap()[1].input;
         assert_eq!(
             moved.notes.as_deref(),
@@ -1711,8 +1718,26 @@ mod tests {
             (
                 Some(Regime::Neu),
                 Some("default"),
-                "at_regime=neu at_pool=default Transfer Cold -> Hot"
+                "at_regime=neu at_alt_out=0 at_alt_in=0 at_pool=default Transfer Cold -> Hot"
             )
+        );
+        let flows = audit.regime_flows.as_ref().unwrap();
+        assert_eq!(
+            (
+                flows.out.alt,
+                flows.out.neu,
+                flows.inbound.alt,
+                flows.inbound.neu
+            ),
+            (0, 50_001_000_000, 0, 50_000_000_000)
+        );
+        // An override replaces the tracker's regime; the flows stay.
+        let mut overridden = request.clone();
+        overridden.rows[1].regime_override = Some(Regime::Alt);
+        let audit = &walk_book(&overridden).unwrap().audit[0];
+        assert_eq!(
+            audit.description,
+            "at_regime=alt at_alt_out=0 at_alt_in=0 at_pool=default Transfer Cold -> Hot"
         );
     }
 
