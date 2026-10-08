@@ -13,11 +13,12 @@
 //! classification) and `swaps` (swap-pair validation and the multi-asset
 //! runner).
 //!
-//! [`ledger`] is the schema-2 layer that takes the finalized custody
+//! [`mod@ledger`] is the schema-2 layer that takes the finalized custody
 //! projection (plan 20 phase 4, in progress), and [`manifest`] lists the
 //! names and tables Python also spells.
 
-/// Version of this engine build, recorded in journal provenance.
+/// Version of this engine build. The binding reports it; journals do not
+/// record it yet (plan 20 phase 4, open question Q3).
 pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod api;
@@ -38,5 +39,5 @@ mod pool;
 mod swaps;
 pub mod time;
 
-pub use api::{check_entry, compute};
+pub use api::{check_entry, compute, ledger};
 pub use engine::Country;

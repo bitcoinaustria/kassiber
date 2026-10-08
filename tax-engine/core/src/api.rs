@@ -1,19 +1,29 @@
-//! JSON-in, JSON-out entry points (schema version 1).
+//! JSON-in, JSON-out entry points.
 //!
 //! Each function parses one request document and returns one response
 //! document. Malformed requests fail with the `RequestError` class; every
 //! other failure carries RP2's class and message.
 //!
-//! `compute` runs one asset (RP2's `compute_tax`). `validate` and
-//! `compute_multi` take every asset of a run, in the adapter's order: they
-//! are the country hooks `validate_input_data` and `compute_tax_for_assets`,
-//! which only Austria implements.
+//! Schema version 1 is the lot engine's own API, which the v1 fixtures pin:
+//! `check_entry` validates one constructor call, and `compute` runs one
+//! asset (RP2's `compute_tax`). `validate` and `compute_multi` take every
+//! asset of a run, in the adapter's order: they are the country hooks
+//! `validate_input_data` and `compute_tax_for_assets`, which only Austria
+//! implements.
+//!
+//! Schema version 2 is `ledger`, which takes the finalized custody
+//! projection (`crate::ledger`): its `manifest` operation lists the
+//! engine's names and tables, and its `ledger` and `prepare` operations
+//! answer `Unsupported` until the ledger layer is ported (plan 20 phase 4).
 
 use serde::Serialize;
 
 use crate::engine::{compute_asset, Country};
 use crate::entry::Entry;
 use crate::error::{EngineError, EngineResult, ErrorClass};
+use crate::ledger::request::{self as v2, LedgerRequest, ManifestRequest};
+use crate::ledger::response::{ErrorResponse as V2ErrorResponse, ManifestResponse, StagedError};
+use crate::manifest::manifest;
 use crate::model::{
     AssetOutput, CheckEntryRequest, CheckEntryResponse, ComputeRequest, ComputeResponse, ErrorBody,
     ErrorResponse, Operation, SCHEMA_VERSION,
@@ -129,4 +139,54 @@ fn compute_inner(request: &str) -> EngineResult<ComputeResponse> {
             Ok(response(Some(outputs.is_some()), outputs))
         }
     }
+}
+
+/// Runs a schema-2 request (`ledger`, `prepare`, or `manifest`).
+pub fn ledger(request: &str) -> String {
+    match ledger_inner(request) {
+        Ok(text) => text,
+        Err(error) => v2_error_json(StagedError::contract(error)),
+    }
+}
+
+fn ledger_inner(request: &str) -> EngineResult<String> {
+    match v2::operation(request)? {
+        v2::Operation::Manifest => {
+            let _: ManifestRequest = v2::parse(request)?;
+            v2_json(&ManifestResponse {
+                schema_version: v2::SCHEMA_VERSION,
+                ok: true,
+                manifest: manifest(),
+            })
+        }
+        operation @ (v2::Operation::Ledger | v2::Operation::Prepare) => {
+            let _: LedgerRequest = v2::parse(request)?;
+            let name = if operation == v2::Operation::Ledger {
+                "ledger"
+            } else {
+                "prepare"
+            };
+            Err(EngineError::unsupported(format!(
+                "the {name} operation is not implemented yet"
+            )))
+        }
+    }
+}
+
+fn v2_json<T: Serialize>(value: &T) -> EngineResult<String> {
+    serde_json::to_string(value).map_err(|error| {
+        EngineError::new(
+            ErrorClass::RuntimeError,
+            format!("Internal error: response serialization failed: {error}"),
+        )
+    })
+}
+
+fn v2_error_json(error: StagedError) -> String {
+    // A plain struct of strings; fall back to a fixed document regardless.
+    serde_json::to_string(&V2ErrorResponse::new(error)).unwrap_or_else(|_| {
+        String::from(
+            r#"{"schema_version":2,"ok":false,"error":{"stage":"request","inner":{"class":"RuntimeError","message":"Internal error: error serialization failed"}}}"#,
+        )
+    })
 }

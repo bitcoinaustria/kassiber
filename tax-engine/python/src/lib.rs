@@ -51,10 +51,18 @@ fn compute(py: Python<'_>, request: &str) -> PyResult<String> {
     run(py, request, kassiber_tax_core::compute)
 }
 
+/// Runs one schema-2 request (`ledger`, `prepare`, or `manifest`); returns
+/// the response document.
+#[pyfunction]
+fn ledger(py: Python<'_>, request: &str) -> PyResult<String> {
+    run(py, request, kassiber_tax_core::ledger)
+}
+
 #[pymodule]
 fn kassiber_tax(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(engine_version, m)?)?;
     m.add_function(wrap_pyfunction!(check_entry, m)?)?;
     m.add_function(wrap_pyfunction!(compute, m)?)?;
+    m.add_function(wrap_pyfunction!(ledger, m)?)?;
     Ok(())
 }

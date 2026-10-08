@@ -3,7 +3,10 @@
 //!
 //! The layer builds the lot engine's entries from projection rows, runs the
 //! existing lot engine on them, and composes the journal ledger. So far it
-//! holds [`text`], which renders an entry's `str(transaction)` once the
+//! holds the boundary documents, [`request`] and [`response`], and
+//! [`text`], which renders an entry's `str(transaction)` once the
 //! constructor has derived its values.
 
+pub mod request;
+pub mod response;
 pub mod text;
