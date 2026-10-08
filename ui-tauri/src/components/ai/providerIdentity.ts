@@ -21,15 +21,22 @@ export function providerIconKey(provider: AiProviderRow): string | null {
   return nativeAiProviderRuntime(provider.base_url);
 }
 
+// Generic suffixes that would make "Gemini CLI" and "GitHub Copilot" both "GC".
+const GENERIC_NAME_WORDS = new Set(["cli", "ai", "acp", "agent"]);
+
 /**
  * Up to two initials for a provider without a brand mark. Adapted from T3 Code
  * (MIT, Copyright (c) 2026 T3 Tools Inc.), `providerInstanceInitials`.
  */
 export function providerInitials(label: string): string {
-  const words = label
+  const allWords = label
     .replace(/[_-]+/g, " ")
     .split(/\s+/u)
     .filter(Boolean);
+  const distinctive = allWords.filter(
+    (word) => !GENERIC_NAME_WORDS.has(word.toLowerCase()),
+  );
+  const words = distinctive.length > 0 ? distinctive : allWords;
   if (words.length === 0) return "?";
   if (words.length === 1) {
     return Array.from(words[0]).slice(0, 2).join("").toUpperCase();
