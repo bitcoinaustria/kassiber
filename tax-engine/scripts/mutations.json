@@ -1,116 +1,5 @@
 [
   {
-    "id": "inbound-value-ignores-quantity",
-    "file": "kassiber/core/tax_events.py",
-    "find": "                continue\n            fiat_value = _positive_fiat_value(row, amount * spot_price)\n        elif direction == \"outbound\":",
-    "replace": "                continue\n            fiat_value = _positive_fiat_value(row, spot_price)\n        elif direction == \"outbound\":",
-    "expect_failing": [
-      "tests/test_tax_events.py::LedgerGateTest::test_priced_inbound_books_at_its_value"
-    ],
-    "rule": "A priced acquisition books at its quantity times the spot price."
-  },
-  {
-    "id": "move-residual-counts-the-recorded-fee",
-    "file": "kassiber/core/tax_events.py",
-    "find": "                unrecognized_outflow = msat_to_btc(out_row[\"amount\"]) - msat_to_btc(\n                    in_row[\"amount\"]\n                )",
-    "replace": "                unrecognized_outflow = sent - received",
-    "expect_failing": [
-      "tests/test_tax_events.py::LedgerGateTest::test_recorded_move_fee_books_as_transfer_fee"
-    ],
-    "rule": "Only principal the destination did not receive counts against the fee band; a move's recorded fee books as its transfer fee."
-  },
-  {
-    "id": "pending-spend-not-held",
-    "file": "kassiber/core/tax_events.py",
-    "find": "        if row[\"id\"] in pending_onchain_row_ids:\n            quarantines.append(",
-    "replace": "        if False:\n            quarantines.append(",
-    "expect_failing": [
-      "tests/test_tax_events.py::LedgerGateTest::test_unconfirmed_spend_is_held_not_disposed"
-    ],
-    "rule": "A spend whose chain evidence is unconfirmed is held as pending_onchain_confirmation, not disposed."
-  },
-  {
-    "id": "unpriced-move-fee-books",
-    "file": "kassiber/core/tax_events.py",
-    "find": "            if spot_price is None and fee > 0:",
-    "replace": "            if False:",
-    "expect_failing": [
-      "tests/test_tax_events.py::LedgerGateTest::test_unpriced_move_fee_holds_both_legs"
-    ],
-    "rule": "A move whose fee has no price holds both legs as missing_spot_price."
-  },
-  {
-    "id": "blocked-bundle-siblings-not-flagged",
-    "file": "kassiber/core/tax_events.py",
-    "find": "        for group_id, reason in blocked_transfer_group_reasons.items():\n            _append_group_block_quarantines(",
-    "replace": "        for group_id, reason in ():\n            _append_group_block_quarantines(",
-    "expect_failing": [
-      "tests/test_tax_events.py::LedgerGateTest::test_blocked_bundle_holds_every_move_in_it"
-    ],
-    "rule": "The other moves of a blocked atomic bundle are held as derived_transfer_group_blocked."
-  },
-  {
-    "id": "blocked-bundle-siblings-book",
-    "file": "kassiber/core/tax_events.py",
-    "find": "            if transfer.group_id in blocked_group_ids\n        }",
-    "replace": "            if False\n        }",
-    "expect_failing": [
-      "tests/test_tax_events.py::LedgerGateTest::test_blocked_bundle_holds_every_move_in_it"
-    ],
-    "rule": "No move of a blocked atomic bundle books."
-  },
-  {
-    "id": "contamination-matches-row-ids",
-    "file": "kassiber/core/tax_events.py",
-    "find": "        if str(_row_get(row, \"journal_transaction_id\") or _row_get(row, \"id\"))\n        in quarantined_ids",
-    "replace": "        if str(_row_get(row, \"id\"))\n        in quarantined_ids",
-    "expect_failing": [
-      "tests/test_tax_events.py::LedgerGateTest::test_held_move_contaminates_later_disposals_by_anchor"
-    ],
-    "rule": "A held row taints the lot state from its time on, matched by its anchor transaction."
-  },
-  {
-    "id": "privacy-hop-not-held",
-    "file": "kassiber/core/tax_events.py",
-    "find": "        privacy_hop = _privacy_hop_evidence(row)\n        if privacy_hop:",
-    "replace": "        privacy_hop = None\n        if privacy_hop:",
-    "expect_failing": [
-      "tests/test_tax_events.py::LedgerGateTest::test_privacy_hop_without_provenance_is_held"
-    ],
-    "rule": "A standalone row with privacy-hop evidence is held as privacy_hop_unresolved."
-  },
-  {
-    "id": "reviewed-coinjoin-link-not-recognized",
-    "file": "kassiber/core/tax_events.py",
-    "find": "    return kind == \"coinjoin\" or kind == \"whirlpool\" or \"coinjoin\" in kind",
-    "replace": "    return False",
-    "expect_failing": [
-      "tests/test_tax_events.py::LedgerGateTest::test_reviewed_coinjoin_move_crosses_the_privacy_boundary"
-    ],
-    "rule": "A reviewed coinjoin move books across its privacy boundary."
-  },
-  {
-    "id": "conflict-loser-not-held",
-    "file": "kassiber/core/tax_events.py",
-    "find": "        if row[\"id\"] in conflict_row_ids:\n            quarantines.append(",
-    "replace": "        if False:\n            quarantines.append(",
-    "expect_failing": [
-      "tests/test_tax_events.py::ConflictPairInteractionTest::test_conflict_loser_move_leg_is_held_and_its_partner_books_alone",
-      "tests/test_tax_events.py::ConflictPairInteractionTest::test_conflict_loser_sale_is_held_not_disposed"
-    ],
-    "rule": "A spend that lost a conflict over its input is held as conflicting_spend."
-  },
-  {
-    "id": "conflict-pair-still-books",
-    "file": "kassiber/core/tax_events.py",
-    "find": "    for pair in non_conflict_pairs:\n        pair_refs_by_row.setdefault(",
-    "replace": "    for pair in intra_pairs:\n        pair_refs_by_row.setdefault(",
-    "expect_failing": [
-      "tests/test_tax_events.py::ConflictPairInteractionTest::test_conflict_loser_move_leg_is_held_and_its_partner_books_alone"
-    ],
-    "rule": "A move with a conflict-losing leg does not book; its other leg books alone."
-  },
-  {
     "id": "confirmed-conflict-spend-held",
     "file": "kassiber/core/ownership_transfers.py",
     "find": "        if len(confirmed) == 1:",
@@ -281,17 +170,6 @@
     "rule": "Austrian descriptions name the single global pool `default`."
   },
   {
-    "id": "generic-gets-austrian-markers",
-    "file": "kassiber/core/engines/rp2.py",
-    "find": "    include_austrian_markers = _profile_str(profile, \"tax_country\").lower() == \"at\"",
-    "replace": "    include_austrian_markers = True",
-    "expect_failing": [
-      "tests/test_tax_descriptions.py::DescriptionTest::test_generic_descriptions_carry_no_markers",
-      "tests/test_austrian_classification.py::AustrianEventMarkerTest::test_generic_profile_leaves_at_markers_out"
-    ],
-    "rule": "Generic books carry no Austrian markers."
-  },
-  {
     "id": "swap-link-marker-first",
     "file": "kassiber/core/engines/rp2.py",
     "find": "        tokens.append(marker_token(MARKER_SWAP_LINK, swap_link))",
@@ -349,7 +227,6 @@
     "find": "        total_cost_basis += dec(computed_data.get_open_position_in_transaction_fiat_in_with_fee(transaction)) * remaining_ratio",
     "replace": "        total_cost_basis += dec(transaction.fiat_in_with_fee) * remaining_ratio",
     "expect_failing": [
-      "tests/test_tax_descriptions.py::test_pool_holdings_use_report_basis_without_rewriting_acquisition_journal[generic]",
       "tests/test_tax_descriptions.py::test_pool_holdings_use_report_basis_without_rewriting_acquisition_journal[at]"
     ],
     "rule": "Holdings carry the moving-average pool's basis, not the remaining lots' acquisition values."
@@ -360,7 +237,6 @@
     "find": "        total_quantity += dec(transaction.crypto_in) * remaining_ratio",
     "replace": "        total_quantity += dec(transaction.crypto_in)",
     "expect_failing": [
-      "tests/test_tax_descriptions.py::test_pool_holdings_use_report_basis_without_rewriting_acquisition_journal[generic]",
       "tests/test_tax_descriptions.py::test_pool_holdings_use_report_basis_without_rewriting_acquisition_journal[at]"
     ],
     "rule": "Holdings count only the unsold share of a partly sold lot when averaging their basis."
@@ -374,16 +250,6 @@
       "tests/test_tax_descriptions.py::DescriptionTest::test_wallet_cost_basis_pools_fail_closed"
     ],
     "rule": "A profile asking for per-wallet cost-basis pools fails closed."
-  },
-  {
-    "id": "transfer-review-checks-in-leg",
-    "file": "kassiber/core/tax_events.py",
-    "find": "                fee > 0\n                and spot_price is not None\n                and _pricing_needs_review(spot_price_row)",
-    "replace": "                fee > 0\n                and spot_price is not None\n                and _pricing_needs_review(in_row)",
-    "expect_failing": [
-      "tests/test_review_regressions.py::ReviewRegressionTest::test_transfer_pricing_review_targets_used_price_leg"
-    ],
-    "rule": "Coarse-price review applies to the leg whose price values the move's fee."
   },
   {
     "id": "unscoped-review-keeps-txid-case",
@@ -1166,5 +1032,267 @@
       "tests/test_tax_ledger_prepare.py::test_the_golden_books_prepare_as_the_oracle[generic-bundle-passing]"
     ],
     "rule": "An audit row of a grouped move names its group."
+  },
+  {
+    "id": "normalize-values-acquisitions-at-the-price",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        let fiat_value = fiat_value(row, &amount, &spot)?;\n",
+    "replace": "        let fiat_value = spot.clone();\n",
+    "expect_failing": [
+      "ledger::compose::tests::acquisitions_come_in_lot_order_at_their_basis_with_their_unit_cost",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A priced acquisition books at its quantity times the spot price."
+  },
+  {
+    "id": "normalize-moves-send-no-fee",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        let sent = btc(u128::from(out_row.amount_msat) + u128::from(out_row.fee_msat))?;",
+    "replace": "        let sent = btc(u128::from(out_row.amount_msat))?;",
+    "expect_failing": [
+      "ledger::compose::tests::a_taxable_move_fee_is_a_transfer_fee_and_each_move_books_two_legs",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A move sends its out leg's amount and fee, so its recorded fee books as its transfer fee."
+  },
+  {
+    "id": "normalize-books-unpriced-move-fees",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        if spot.is_none() && fee.is_positive() {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ledger::normalize::tests::a_move_without_an_out_price_is_priced_and_reviewed_on_its_in_leg",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A move whose fee has no price holds both legs as missing_spot_price."
+  },
+  {
+    "id": "normalize-leaves-blocked-siblings-unflagged",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "                    if !seen.insert(rows[leg].anchor.as_str()) {",
+    "replace": "                    if true || !seen.insert(rows[leg].anchor.as_str()) {",
+    "expect_failing": [
+      "ledger::normalize::tests::a_blocked_group_flags_each_transaction_once",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The other moves of a blocked atomic bundle are held as derived_transfer_group_blocked."
+  },
+  {
+    "id": "normalize-books-privacy-hops",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        if row.privacy_hop {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A standalone row with privacy-hop evidence is held as privacy_hop_unresolved."
+  },
+  {
+    "id": "normalize-drops-reviewed-coinjoin-moves",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        let sent = btc(u128::from(out_row.amount_msat) + u128::from(out_row.fee_msat))?;",
+    "replace": "        if out_row.privacy_hop {\n            return Ok(());\n        }\n        let sent = btc(u128::from(out_row.amount_msat) + u128::from(out_row.fee_msat))?;",
+    "expect_failing": [
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A reviewed coinjoin move books across its privacy boundary."
+  },
+  {
+    "id": "compose-unit-cost-multiplies",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            let unit_cost = num::div(&basis.0, quantity)?;",
+    "replace": "            let unit_cost = num::mul(&basis.0, quantity)?;",
+    "expect_failing": [
+      "ledger::compose::tests::acquisitions_come_in_lot_order_at_their_basis_with_their_unit_cost",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "An acquisition's unit cost is its basis over its quantity."
+  },
+  {
+    "id": "compose-merges-holding-periods",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            let key = (entry.row, gain_loss.long_term);",
+    "replace": "            let key = (entry.row, false);",
+    "expect_failing": [
+      "ledger::compose::tests::realized_entries_sum_their_fragments_by_event_and_holding_period"
+    ],
+    "rule": "A taxable event's fragments make one realized entry per holding period."
+  },
+  {
+    "id": "compose-fees-realize-gains",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "                let fee = matches!(group.entry_type, EntryType::Fee | EntryType::TransferFee);",
+    "replace": "                let fee = false;",
+    "expect_failing": [
+      "ledger::compose::tests::realized_entries_sum_their_fragments_by_event_and_holding_period",
+      "ledger::compose::tests::a_taxable_move_fee_is_a_transfer_fee_and_each_move_books_two_legs"
+    ],
+    "rule": "A fee or transfer fee realizes no gain: its proceeds are its basis."
+  },
+  {
+    "id": "compose-income-is-negated",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "                let quantity = if group.entry_type == EntryType::Income {",
+    "replace": "                let quantity = if false {",
+    "expect_failing": [
+      "ledger::compose::tests::realized_entries_sum_their_fragments_by_event_and_holding_period"
+    ],
+    "rule": "Income keeps its quantity's sign; every other realized quantity is negated."
+  },
+  {
+    "id": "compose-move-fees-are-disposals",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            } else if booked_move && kind == TransactionType::Move {",
+    "replace": "            } else if false {",
+    "expect_failing": [
+      "ledger::compose::tests::a_taxable_move_fee_is_a_transfer_fee_and_each_move_books_two_legs",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The taxable fee of a booked move is a transfer fee."
+  },
+  {
+    "id": "compose-transfer-fee-wallet",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "        Detail::Intra { from_exchange, .. } => from_exchange,",
+    "replace": "        Detail::Intra { to_exchange, .. } => to_exchange,",
+    "expect_failing": [
+      "ledger::compose::tests::a_taxable_move_fee_is_a_transfer_fee_and_each_move_books_two_legs",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A move's transfer fee is booked to the wallet that sent it."
+  },
+  {
+    "id": "compose-legs-ignore-earlier-assets",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "                let audit = self.asset.first_audit + index;",
+    "replace": "                let audit = index;",
+    "expect_failing": [
+      "ledger::compose::tests::a_taxable_move_fee_is_a_transfer_fee_and_each_move_books_two_legs"
+    ],
+    "rule": "Each transfer leg names its own move's audit row, across assets."
+  },
+  {
+    "id": "compose-holdings-keep-empty-balances",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            if *quantity <= num::zero() {",
+    "replace": "            if *quantity < num::zero() {",
+    "expect_failing": [
+      "ledger::compose::tests::holdings_value_positive_balances_at_the_open_lots_average_basis"
+    ],
+    "rule": "Holdings list positive balances only."
+  },
+  {
+    "id": "compose-holdings-use-lot-acquisition-values",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            let cost_basis = num::mul(&position.fiat_in_with_fee.0, &remaining)?;",
+    "replace": "            let cost_basis = num::mul(lot.fiat_in_with_fee().expect(\"a lot\"), &remaining)?;",
+    "expect_failing": [
+      "ledger::compose::tests::holdings_value_positive_balances_at_the_open_lots_average_basis"
+    ],
+    "rule": "Holdings carry the moving-average pool's basis, not the remaining lots' acquisition values."
+  },
+  {
+    "id": "compose-holdings-ignore-sold-share",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            let quantity = num::mul(Self::crypto_in(lot)?, &remaining)?;",
+    "replace": "            let quantity = Self::crypto_in(lot)?.clone();",
+    "expect_failing": [
+      "ledger::compose::tests::holdings_value_positive_balances_at_the_open_lots_average_basis"
+    ],
+    "rule": "Holdings count only the unsold share of a partly sold lot when averaging their basis."
+  },
+  {
+    "id": "compose-summary-keeps-fees-and-moves",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            .filter(|yearly| !matches!(yearly.transaction_type, \"fee\" | \"move\"))\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::compose::tests::the_tax_summary_drops_fees_and_moves_and_sorts_by_year_type_and_holding_period"
+    ],
+    "rule": "The tax summary leaves out fees and moves."
+  },
+  {
+    "id": "compose-summary-in-engine-order",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "        rows.sort_by_key(|row| (row.year, row.transaction_type, row.long_term));\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::compose::tests::the_tax_summary_drops_fees_and_moves_and_sorts_by_year_type_and_holding_period"
+    ],
+    "rule": "The tax summary is sorted by year, type, and holding period."
+  },
+  {
+    "id": "run-method-gate-without-computation",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "    if inputs.is_empty() {\n        return Ok(Vec::new());\n    }\n    let method",
+    "replace": "    let method",
+    "expect_failing": [
+      "ledger::compose::tests::the_method_gate_fails_the_multi_asset_stage_once_an_asset_is_computed",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The method gate fails only a book with an asset to compute."
+  },
+  {
+    "id": "run-compute-failure-names-no-asset",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "                asset: Some(input.asset.clone()),",
+    "replace": "                asset: None,",
+    "expect_failing": [
+      "ledger::compose::tests::a_failing_computation_names_its_asset"
+    ],
+    "rule": "A failing computation names its asset."
+  },
+  {
+    "id": "run-gates-before-normalize",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "            stages\n                .normalized\n                .quarantines\n                .into_iter()\n                .chain(walked.quarantines)\n",
+    "replace": "            walked\n                .quarantines\n                .into_iter()\n                .chain(stages.normalized.quarantines)\n",
+    "expect_failing": [
+      "ledger::compose::tests::each_asset_lists_its_normalize_quarantines_then_its_gates",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "Each asset lists normalize's quarantines, then its gates'."
+  },
+  {
+    "id": "reader-fragment-time-as-stored",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "            \"occurred_at\": self.iso(source.get(\"occurred_at\")),",
+    "replace": "            \"occurred_at\": source.get(\"occurred_at\"),",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_entries_as_the_adapter_wrote_them",
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_every_stored_response_as_expected[generic-ledger-fifo]"
+    ],
+    "rule": "A fragment's event and lot carry their timestamp's isoformat()."
+  },
+  {
+    "id": "reader-drops-the-kennzahl",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "            entry[\"at_kennzahl\"] = kennzahl_for_disposal_category(category)",
+    "replace": "            entry[\"at_kennzahl\"] = None",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_entries_as_the_adapter_wrote_them"
+    ],
+    "rule": "A realized entry with a category carries that category's Kennzahl."
+  },
+  {
+    "id": "reader-legs-swap-wallets",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "        wallet = self.refs_by_label[audit[\"from_wallet_label\"] if outbound else audit[\"to_wallet_label\"]]",
+    "replace": "        wallet = self.refs_by_label[audit[\"to_wallet_label\"] if outbound else audit[\"from_wallet_label\"]]",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_entries_as_the_adapter_wrote_them",
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_every_stored_response_as_expected[generic-ledger-fifo]"
+    ],
+    "rule": "A move's out leg books to its source wallet and its in leg to its destination."
+  },
+  {
+    "id": "reader-legs-exact-quantities",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "        quantity = dec(audit[\"crypto_sent\"] if outbound else audit[\"crypto_received\"])",
+    "replace": "        quantity = decode_decimal(self.audit[index][\"sent\"] if outbound else self.audit[index][\"received\"])",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_entries_as_the_adapter_wrote_them"
+    ],
+    "rule": "A transfer leg's quantity passes through the audit row's float, as the adapter's did."
   }
 ]
