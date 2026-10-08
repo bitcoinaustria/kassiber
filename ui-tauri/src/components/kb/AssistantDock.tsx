@@ -286,6 +286,10 @@ export function AssistantDock({
             }
             followUpPlaceholder={t("composer.followUpPlaceholder")}
             historyMessages={messages}
+            // The queued follow-up carries the staged file, so the slim
+            // composer must show it and treat itself as non-empty.
+            attachedFilename={attachment?.filename ?? null}
+            onClearAttachment={clearAttachment}
             tStop={t("composer.stopGenerating")}
             tRestore={t("dock.restore")}
           />
@@ -631,6 +635,8 @@ function WorkingFollowUpSurface({
   modelPickerEnabled,
   followUpPlaceholder,
   historyMessages,
+  attachedFilename,
+  onClearAttachment,
   tStop,
   tRestore,
 }: {
@@ -650,6 +656,8 @@ function WorkingFollowUpSurface({
   modelPickerEnabled: boolean;
   followUpPlaceholder: string;
   historyMessages: ReadonlyArray<ComposerPromptHistoryMessage>;
+  attachedFilename: string | null;
+  onClearAttachment: () => void;
   tStop: string;
   tRestore: string;
 }) {
@@ -709,6 +717,8 @@ function WorkingFollowUpSurface({
         modelPickerEnabled={modelPickerEnabled}
         placeholder={followUpPlaceholder}
         historyMessages={historyMessages}
+        attachedFilename={attachedFilename}
+        onClearAttachment={onClearAttachment}
         prompts={[]}
       />
     </div>
