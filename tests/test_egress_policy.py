@@ -19,6 +19,7 @@ from unittest import mock
 import pytest
 
 from kassiber import egress_policy
+from kassiber.ai.contracts import CLI_PROVIDER_LOCATORS
 from kassiber.errors import AppError
 
 
@@ -170,12 +171,12 @@ def test_ai_client_blocks_a_loopback_gateway_to_a_remote_model(preference, kind)
     build_opener.assert_not_called()
 
 
-def test_cli_provider_broker_refuses_before_spawning(preference):
+@pytest.mark.parametrize("locator", CLI_PROVIDER_LOCATORS)
+def test_cli_provider_broker_refuses_before_spawning(preference, locator):
     from kassiber.ai import broker_client
-    from kassiber.ai.contracts import CLI_PROVIDER_LOCATORS
 
     egress_policy.set_offline_mode(True)
-    client = broker_client.BrokerAIClient(locator=CLI_PROVIDER_LOCATORS[0])
+    client = broker_client.BrokerAIClient(locator=locator)
     with (
         mock.patch.object(broker_client.subprocess, "run") as run,
         mock.patch.object(broker_client.subprocess, "Popen") as popen,

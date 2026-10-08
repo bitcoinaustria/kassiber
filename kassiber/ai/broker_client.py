@@ -296,7 +296,7 @@ class BrokerAIClient:
                     "Sensitive context cannot continue an active tool session",
                     code="ai_request_invalid", retryable=False,
                 )
-        # The broker runs remote CLI providers (Claude, Codex, OpenCode).
+        # The broker runs remote CLI providers (Claude, Codex, OpenCode, ACP agents).
         egress_policy.require_online("Remote AI providers are")
         node = _node_executable()
         script = _broker_script()

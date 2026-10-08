@@ -567,7 +567,7 @@
     "testConnection": "Verbindung testen",
     "addProviderButton": "Provider hinzufügen",
     "errorBaseUrlRequired": "Basis-URL ist erforderlich",
-    "errorUrlScheme": "Verwende http(s)://, codex-cli://default, claude-cli://default oder opencode-cli://default",
+    "errorUrlScheme": "Verwende http(s):// oder einen eingebauten CLI-Locator: codex-cli://default, claude-cli://default, opencode-cli://default, gemini-cli://default oder copilot-cli://default",
     "errorSaveBeforeTest": "Speichere den Provider, bevor du einen neuen API-Schlüssel testest.",
     "errorTestFailed": "Verbindungstest fehlgeschlagen",
     "errorCliLocalPosture": "Codex-, Claude- und OpenCode-CLI-Provider können Prompts gerätefern senden. Wähle entfernt oder TEE.",

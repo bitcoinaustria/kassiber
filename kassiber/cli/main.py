@@ -3495,7 +3495,8 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help=(
             "OpenAI Responses-compatible root, e.g. http://localhost:11434/v1; "
-            "or claude-cli://default / codex-cli://default / opencode-cli://default"
+            "or claude-cli://default / codex-cli://default / opencode-cli://default / "
+            "gemini-cli://default / copilot-cli://default"
         ),
     )
     ai_providers_create.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")

@@ -188,6 +188,9 @@ class BrokerClientTest(unittest.TestCase):
         self.assertEqual(cli_provider_for_locator(" CODEX-CLI://DEFAULT "), "codex")
         self.assertEqual(cli_provider_for_locator("claude-cli://default"), "claude")
         self.assertEqual(cli_provider_for_locator("opencode-cli://default"), "opencode")
+        self.assertEqual(cli_provider_for_locator("gemini-cli://default"), "gemini")
+        self.assertEqual(cli_provider_for_locator("Copilot-CLI://default"), "copilot")
+        self.assertIsNone(cli_provider_for_locator("cursor-cli://default"))
         self.assertIsNone(cli_provider_for_locator("https://example.test/v1"))
 
     def test_streaming_and_provider_session_continuation_metadata(self):
