@@ -134,6 +134,22 @@ Austrian books of the random generator against the oracle. Without RP2 its
 oracle checks skip, except under `KASSIBER_CI`, which CI sets, where they
 fail.
 
+### Stage comparison
+
+`tests/test_tax_ledger_prepare.py` compares the engine's `prepare` stages
+with the frozen oracle's own intermediates, field by field, so a difference
+shows the stage it starts in before whole-ledger goldens can. So far that is
+the normalized stage: per asset, the events, moves, their order, normalize's
+quarantines (rendered by the production reader), and the contamination time,
+against the oracle's `normalize_tax_asset_inputs` as its `_prepare_assets`
+calls it on the legacy-native backend. It covers the generic golden books
+without the Bitcoin rail carry, the first 200 seeded generic books without a
+carrying-value cross-asset pair, and edge books neither reaches (non-finite
+stored rates and values, overflow, subnormal prices, missing labels, an
+empty timestamp, blocked groups that share transactions). A last check runs
+the whole oracle and records its own normalize calls, so the test's mirror
+of that call cannot drift.
+
 ### Comparing a real book
 
 Owners can compare production with the oracle on their own book, locally:
