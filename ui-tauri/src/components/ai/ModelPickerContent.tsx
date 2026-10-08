@@ -463,7 +463,14 @@ export function ModelPickerContent({
                   <span className="truncate">{providerDisplayName(activeGroup.provider)}</span>
                   <PostureBadge posture={activeGroup.provider.kind} />
                 </p>
-                <p className="truncate text-2xs leading-snug text-muted-foreground">
+                <p
+                  className="truncate text-2xs leading-snug text-muted-foreground"
+                  title={
+                    isCliProvider(activeGroup.provider)
+                      ? t("modelPicker.cliChatOnly")
+                      : activeGroup.provider.base_url
+                  }
+                >
                   {isCliProvider(activeGroup.provider)
                     ? discovery?.isFetching
                       ? t("modelPicker.checkingProvider")

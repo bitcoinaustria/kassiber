@@ -164,7 +164,9 @@ describe("provider identity", () => {
   it("falls back to initials for providers without a mark", () => {
     expect(providerInitials("Ollama")).toBe("OL");
     expect(providerInitials("GitHub Copilot")).toBe("GC");
-    expect(providerInitials("gemini-cli")).toBe("GC");
+    expect(providerInitials("Gemini CLI")).toBe("GE");
+    expect(providerInitials("gemini-cli")).toBe("GE");
+    expect(providerInitials("CLI")).toBe("CL");
     expect(providerInitials("  ")).toBe("?");
   });
 });
