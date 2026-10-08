@@ -5,9 +5,25 @@
 //! their out leg's asset, as the adapter does (`:2209-2235`), then runs
 //! each prepare pass asset by asset: normalize ([`super::normalize`]), then
 //! the walk ([`super::walk`]), so the first failure is the adapter's (it
-//! normalizes and walks one asset before the next). So far only the
-//! `prepare` operation runs a pass, for a generic book without a
-//! carrying-value Bitcoin rail pair, whose one prepare pass is its final
+//! normalizes and walks one asset before the next). After the final pass
+//! the `ledger` operation runs the lot engine over the assets with an
+//! inbound entry, as the adapter does (`:1282-1379`, `:1709-1726`):
+//!
+//! 1. the country's checks of every such asset (`swaps::validate`; only
+//!    Austria checks anything), failing at stage `validate`;
+//! 2. when there is such an asset, the method gate: a profile method the
+//!    policy does not allow fails at stage `compute_multi`, as the adapter
+//!    builds its accounting method inside the multi-asset hook
+//!    (`:620-636`, design §3.9);
+//! 3. the multi-asset hook (`swaps::compute_multi`, stage `compute_multi`),
+//!    which only an Austrian book with swap pairs takes, and otherwise each
+//!    asset's own computation (`compute_asset`, stage `compute`, naming the
+//!    asset);
+//!
+//! and then composes each computed asset ([`super::compose`]) in order. An
+//! asset without an inbound entry is not computed: only its quarantines and
+//! transfer audit appear. So far both operations run a generic book without
+//! a carrying-value Bitcoin rail pair, whose one prepare pass is its final
 //! one. An Austrian book, and a generic one that needs the rail carry, is
 //! `Unsupported` until those parts are ported.
 //!
@@ -19,15 +35,18 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::engine::{self, compute_asset};
 use crate::error::{EngineError, EngineResult};
-use crate::model::ConfigSpec;
+use crate::model::{AssetInput, AssetOutput, ConfigSpec, CountrySpec};
+use crate::swaps;
 use crate::ENGINE_VERSION;
 
+use super::compose::{compose, ComputedAsset};
 use super::normalize::{normalize, Item, Normalized, Quarantine};
-use super::request::{Country, LedgerRequest, Row, Wallet, SCHEMA_VERSION};
+use super::request::{Country, LedgerRequest, Policy, Row, Wallet, SCHEMA_VERSION};
 use super::response::{
-    EntryInputOut, EventOut, NormalizedOut, PrepareFailure, PrepareResponse, PreparedAssetOut,
-    PreparedOut, QuarantineOut, Stage, StagedError, TransferOut,
+    EntryInputOut, EventOut, Inner, InnerClass, LedgerResponse, NormalizedOut, PrepareFailure,
+    PrepareResponse, PreparedAssetOut, PreparedOut, QuarantineOut, Stage, StagedError, TransferOut,
 };
 use super::walk::{walk, Walked};
 
@@ -160,6 +179,22 @@ impl<'a> Book<'a> {
                 && self.row_by_id.contains_key(pair.in_id.as_str())
         })
     }
+
+    /// Refuses a book the pipeline does not implement yet: an Austrian
+    /// book, or a generic one that runs the rail carry.
+    fn check_supported(&self, operation: &str) -> EngineResult<()> {
+        match self.request.policy.country {
+            Country::At {} => Err(EngineError::unsupported(format!(
+                "the {operation} operation does not implement Austrian books yet"
+            ))),
+            Country::Generic { .. } if self.has_rail_carry() => {
+                Err(EngineError::unsupported(format!(
+                    "the {operation} operation does not implement the generic Bitcoin rail carry yet"
+                )))
+            }
+            Country::Generic { .. } => Ok(()),
+        }
+    }
 }
 
 /// One asset's stages after a prepare pass.
@@ -203,19 +238,7 @@ fn prepare_assets(book: &Book, config: &ConfigSpec) -> (Vec<Stages>, Option<Engi
 pub(crate) fn prepare(request: &LedgerRequest) -> Result<PrepareResponse, PrepareFailure> {
     let contract = |error| PrepareFailure::new(StagedError::contract(error), Vec::new());
     let book = Book::new(request).map_err(contract)?;
-    match request.policy.country {
-        Country::At {} => {
-            return Err(contract(EngineError::unsupported(
-                "the prepare operation does not implement Austrian books yet",
-            )))
-        }
-        Country::Generic { .. } if book.has_rail_carry() => {
-            return Err(contract(EngineError::unsupported(
-                "the prepare operation does not implement the generic Bitcoin rail carry yet",
-            )))
-        }
-        Country::Generic { .. } => {}
-    }
+    book.check_supported("prepare").map_err(contract)?;
     let (stages, error) = prepare_assets(&book, &request.config.spec());
     let assets = book
         .assets
@@ -239,6 +262,147 @@ pub(crate) fn prepare(request: &LedgerRequest) -> Result<PrepareResponse, Prepar
             assets,
         )),
     }
+}
+
+/// The `ledger` operation (design §4.3): the final prepare pass, the lot
+/// engine over every asset with an inbound entry, and the composed ledger.
+/// A failure names the stage it happened at (design §3.9).
+pub(crate) fn ledger(request: &LedgerRequest) -> Result<LedgerResponse, StagedError> {
+    let book = Book::new(request).map_err(StagedError::contract)?;
+    book.check_supported("ledger")
+        .map_err(StagedError::contract)?;
+    let (stages, error) = prepare_assets(&book, &request.config.spec());
+    if let Some(error) = error {
+        return Err(StagedError::new(Stage::Prepare, error));
+    }
+    // The assets the lot engine computes, in order.
+    let inputs: Vec<AssetInput> = book
+        .assets
+        .iter()
+        .zip(&stages)
+        .filter_map(|(part, stages)| {
+            let entries = stages.walked.as_ref()?.entries.as_ref()?;
+            Some(AssetInput {
+                asset: part.asset.to_owned(),
+                entries: entries.iter().map(|built| built.input.clone()).collect(),
+            })
+        })
+        .collect();
+    let country = engine_country(&request.policy.country);
+    swaps::validate(&inputs, country).map_err(|error| StagedError::new(Stage::Validate, error))?;
+    let mut outputs = compute(&request.policy, &inputs, country)?.into_iter();
+    let mut response = LedgerResponse {
+        schema_version: SCHEMA_VERSION,
+        ok: true,
+        engine_version: ENGINE_VERSION,
+        entries: Vec::new(),
+        quarantines: Vec::new(),
+        intra_audit: Vec::new(),
+        tax_summary: Vec::new(),
+        holdings: Vec::new(),
+        carried_rows: Vec::new(),
+    };
+    // Composition, asset by asset. Its own invariant failures (impossible
+    // after a successful prepare pass and computation) are composition
+    // failures too.
+    let internal = |message| StagedError::new(Stage::Classify, EngineError::runtime(message));
+    for stages in stages {
+        let walked = stages
+            .walked
+            .ok_or_else(|| internal("Internal error: a prepared asset was not walked"))?;
+        if let Some(entries) = &walked.entries {
+            let output = outputs.next().ok_or_else(|| {
+                internal("Internal error: the lot engine computed fewer assets than it was given")
+            })?;
+            let asset = ComputedAsset {
+                entries,
+                output: &output,
+                audit: &walked.audit,
+                first_audit: response.intra_audit.len(),
+            };
+            // Composition raises what the adapter's composition raised,
+            // unwrapped.
+            let composed =
+                compose(&book, &asset).map_err(|error| StagedError::new(Stage::Classify, error))?;
+            response.entries.extend(composed.entries);
+            response.holdings.extend(composed.holdings);
+            response.tax_summary.extend(composed.tax_summary);
+        }
+        // The asset's quarantines: normalize's, then the gates'.
+        response.quarantines.extend(
+            stages
+                .normalized
+                .quarantines
+                .into_iter()
+                .chain(walked.quarantines)
+                .map(|quarantine| quarantine_out(&book, quarantine)),
+        );
+        response.intra_audit.extend(walked.audit);
+    }
+    Ok(response)
+}
+
+/// The lot engine's country.
+fn engine_country(country: &Country) -> engine::Country {
+    engine::Country::from_spec(&match country {
+        Country::Generic { long_term_days } => CountrySpec::Generic {
+            long_term_days: *long_term_days,
+        },
+        Country::At {} => CountrySpec::At {},
+    })
+}
+
+/// The method gate (`_build_rp2_accounting_engine`, `adapter.py:620-636`):
+/// the adapter's own `AppError`, raised inside the multi-asset hook.
+fn method_gate(policy: &Policy) -> StagedError {
+    StagedError {
+        stage: Stage::ComputeMulti,
+        asset: None,
+        inner: Inner {
+            class: InnerClass::AppError,
+            message: format!(
+                "Unsupported RP2 accounting method '{}'",
+                policy.method_label
+            ),
+        },
+    }
+}
+
+/// The lot engine over `inputs`, the assets with an inbound entry, in
+/// order (`_rp2_asset_states_from_prepared`, `adapter.py:1321-1379`): the
+/// method gate and the multi-asset hook (Austria's swap runner, not ported
+/// yet), else each asset on its own. One result per input, in order.
+fn compute(
+    policy: &Policy,
+    inputs: &[AssetInput],
+    country: engine::Country,
+) -> Result<Vec<AssetOutput>, StagedError> {
+    if inputs.is_empty() {
+        return Ok(Vec::new());
+    }
+    let method = policy
+        .method
+        .ok_or_else(|| method_gate(policy))?
+        .method_name();
+    let multi = swaps::compute_multi(inputs, country, method)
+        .map_err(|error| StagedError::new(Stage::ComputeMulti, error))?;
+    if multi.is_some() {
+        // Only an Austrian book with a swap pair reaches the runner, and
+        // `Book::check_supported` refuses Austrian books until their port
+        // maps its results back by asset.
+        return Err(StagedError::contract(EngineError::unsupported(
+            "the ledger operation does not implement the Austrian swap runner yet",
+        )));
+    }
+    inputs
+        .iter()
+        .map(|input| {
+            compute_asset(input, country, method).map_err(|error| StagedError {
+                asset: Some(input.asset.clone()),
+                ..StagedError::new(Stage::Compute, error)
+            })
+        })
+        .collect()
 }
 
 /// A quarantine as the response names it: its row by id.

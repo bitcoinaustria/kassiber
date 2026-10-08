@@ -13,11 +13,11 @@
 //!
 //! Schema version 2 is `ledger`, which takes the finalized custody
 //! projection (`crate::ledger`): its `manifest` operation lists the
-//! engine's names and tables; its `prepare` operation returns a generic
-//! book's normalized and prepared stages, and on a failure the stages it
-//! reached (Austrian books and the generic rail carry are `Unsupported`);
-//! and its `ledger` operation answers `Unsupported` until the ledger layer
-//! is ported (plan 20 phase 4).
+//! engine's names and tables; its `ledger` operation returns a generic
+//! book's journal ledger, or the stage that failed; and its `prepare`
+//! operation returns a generic book's normalized and prepared stages, and
+//! on a failure the stages it reached. Austrian books and the generic rail
+//! carry are `Unsupported` until they are ported (plan 20 phase 4).
 
 use serde::Serialize;
 
@@ -183,10 +183,8 @@ fn ledger_inner(request: &str) -> Result<String, StagedError> {
             }
         }
         v2::Operation::Ledger => {
-            let _: LedgerRequest = v2::parse(request).map_err(StagedError::contract)?;
-            Err(StagedError::contract(EngineError::unsupported(
-                "the ledger operation is not implemented yet",
-            )))
+            let request: LedgerRequest = v2::parse(request).map_err(StagedError::contract)?;
+            v2_json(&run::ledger(&request)?)
         }
     }
 }

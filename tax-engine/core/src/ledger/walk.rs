@@ -62,11 +62,14 @@ use super::response::{AuditOut, Fiat};
 use super::run::{AssetRows, Book};
 use super::text::entry_text;
 
-/// An entry the walk built: the lot engine's input, with its text, and the
-/// row whose time the entry has (an event's row, a move's out leg).
+/// An entry the walk built: the lot engine's input, with its text, the
+/// constructed entry (its stored and derived values, which composition
+/// reads; it keeps no text), and the row whose time the entry has (an
+/// event's row, a move's out leg).
 #[derive(Clone, Debug)]
 pub(crate) struct BuiltEntry {
     pub input: EntryInput,
+    pub entry: Entry,
     pub row: usize,
 }
 
@@ -755,8 +758,9 @@ impl<'w, 'a> Walker<'w, 'a> {
             ));
         }
         input.text = entry_text(&entry)?;
-        let built = BuiltEntry { input, row };
-        match entry.kind {
+        let kind = entry.kind;
+        let built = BuiltEntry { input, entry, row };
+        match kind {
             EntryKind::In => self.ins.push(built),
             EntryKind::Out => self.outs.push(built),
             EntryKind::Intra => self.moves.push(built),

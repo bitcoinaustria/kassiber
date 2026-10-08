@@ -45,8 +45,9 @@ pub enum Stage {
     /// One asset's computation: wrapped as
     /// `RP2 tax calculation failed for asset '<asset>': ...`.
     Compute,
-    /// An Austrian classification, at the first failing fragment: raised
-    /// unwrapped.
+    /// Composition: an Austrian classification at the first failing
+    /// fragment, or any other failure while the ledger is composed, in
+    /// composition order: raised unwrapped.
     Classify,
     /// A malformed request.
     Request,
