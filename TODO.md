@@ -51,7 +51,11 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   explicit regimes (for example 1 BTC Alt plus 0.1 BTC Neu, then a 0.5 BTC
   sale). Decide between splitting the disposal across regimes and capping the
   Neu tag with the Wahlrecht ordering entry above; done when that book
-  processes with test-pinned results and a stale migration.
+  processes with test-pinned results and a stale migration. Pricing can
+  release such a disposal, so pricing an unpriced row can turn a processed
+  book into this abort (goldens `at-pricing-releases-a-neu-shortfall-*`, an
+  explicit exclusion in `tax-engine/core/tests/ledger_properties.rs`); the
+  fix must remove that exclusion too.
 - [ ] Decide the Austrian treatment of a Neu swap's fee basis. The pool drops by
   amount plus fee, but only the amount's basis is carried, so the fee's share
   is neither realized nor carried. Needs legal review before any change. Done

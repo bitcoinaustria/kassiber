@@ -15,8 +15,9 @@ a finalized projection cannot have. It sends the book to the engine's
 `ledger` operation only when the engine implements every capability the book
 uses (`ROUTED_CAPABILITIES`, a subset of `CAPABILITIES`: `generic`,
 `generic_carry`, `at`, `at_swap`). Plan 20's phase 4 moves them one at a
-time; so far `generic` is routed, so a generic book without a
-carrying-value Bitcoin rail pair runs on the engine, and `ledger_response.py`
+time; so far `generic` and `at` are routed, so a generic book without a
+carrying-value Bitcoin rail pair and an Austrian book without a
+carrying-value cross-asset pair run on the engine, and `ledger_response.py`
 renders the engine's journal ledger into `TaxEngineLedgerResult`: uuids,
 profile, wallet and account ids, row times, the legacy floats, and each
 fragment's row facts. Every other book runs on the phase-3 adapter,
@@ -186,8 +187,12 @@ The schema-2 entry point takes the finalized projection as typed rows and
 pairs (`tax-engine/core/src/ledger/request.rs`): the policy, the
 configuration names, the holder, the wallets, per row its anchor, amounts in
 msat, exact rate and value, normalized kind, text, Austrian overrides,
-privacy-hop flag, hold, chain-order evidence, and parsed timestamp, and the
-move and cross-asset pairs. It carries facts, never marker text. Every type
+privacy-hop flag, hold, chain-order evidence, and its time twice: as RP2
+parses it (`ts`) and as Kassiber's Austrian rules read it for the
+Neuvermögen cutoff (`cutoff_instant`: `datetime.fromisoformat` with `Z` as
+UTC and a naive time taken as UTC, `{"us": ...}`, or `{"error": ...}` with
+the `ValueError` message the regime tracker raises), and the move and
+cross-asset pairs. It carries facts, never marker text. Every type
 rejects unknown fields and missing ones (a field without a value is `null`,
 not left out; only a failed timestamp may omit `error_class`), and another
 schema version is a `RequestError`.
@@ -202,15 +207,22 @@ with their gain/loss fragments, transfer legs, holdings, and the tax summary,
 as the adapter did; quarantines, the transfer audit, and the rows the generic
 carry rewrote come with them. `prepare` is a diagnostic for
 tests: it stops after the final prepare pass and returns each asset's
-intermediate stages: the normalized stage (`ledger/normalize.rs`: the
-events and moves the walk books, their order, normalize's quarantines, and
-the time from which the asset's lot state is tainted) and the prepared
+intermediate stages: the normalized stage (`ledger/normalize.rs` with the
+Austrian regime tracker, `ledger/regimes.rs`: the events and moves the walk
+books with their Austrian regimes, elections, and regime flows, their
+order, normalize's quarantines, and the time from which the asset's lot
+state is tainted) and the prepared
 stage (`ledger/order.rs`, `walk.rs`, `describe.rs`: the lot engine's
 entries as v1 entry documents with their composed notes and text, the
 gates' quarantines, and the transfer audit with the legs' description). A
 failed `prepare` also lists the stages its pass reached. Both operations
-answer for a generic book without the Bitcoin rail carry and `Unsupported`
-for the others until those parts are ported. A failure is
+answer for a generic book without the Bitcoin rail carry and an Austrian
+book without a carrying-value cross-asset pair (whose first prepare pass is
+its final one), and `Unsupported` for the others until those parts are
+ported. On an Austrian book `ledger` also composes each fragment's category
+after the row's reviewed overrides, and runs the multi-asset swap runner
+when the entries' notes pair `at_swap_link=` markers a user typed into a
+row's text (design §4.2). A failure is
 `{"ok": false, "error": {"stage", "asset"?, "inner": {"class", "message"}}}`;
 `kassiber/core/engines/errors.py` raises what the adapter raised at that
 stage, wrapped where the adapter wrapped it.
@@ -250,13 +262,18 @@ the typed request and writes it back unchanged, replays every stored
 response, and checks that `prepare` answers for the books it implements and
 lists the stages a failed pass reached.
 `tax-engine/core/tests/ledger_properties.rs` checks invariants of the
-`ledger` operation on seeded generic books (plan 20 Verification 1): the
-same request gives the same bytes; msat are conserved per asset and per
-move; every book succeeds and each wallet's journal replays to its holding
-without going below zero; and pricing an unpriced inbound row (a purchase,
-income, or a move's in leg) quarantines no new row, except the shortfall a
-released earlier sale causes, which the oracle shares (TODO "Keep pricing
-from adding quarantines").
+`ledger` operation on seeded generic and Austrian books (plan 20
+Verification 1): the same request gives the same bytes; msat are conserved
+per asset and per move; every book succeeds and each wallet's journal
+replays to its holding without going below zero; and pricing an unpriced
+inbound row (a purchase, income, or a move's in leg) quarantines no new
+row, except the shortfall a released earlier sale causes, which the oracle
+shares (TODO "Keep pricing from adding quarantines"). An Austrian book may
+instead end in the Neu shortfall abort, rarely, and pricing may release
+one, as on the oracle (TODO "Stop an Austrian Neu shortfall from aborting
+the whole report"); its entries start with their regime, its moves' regime
+flows conserve and match their legs' descriptions, and its categories
+follow the reviewed overrides.
 
 ## Privacy
 

@@ -16,9 +16,13 @@ exponents, key and list order), with the frozen oracle's intermediates as
 its own ``_prepare_assets`` builds them on the legacy-native backend, whose
 entries are v1 documents already:
 
-- every generic golden case without the generic rail carry;
-- the first 200 seeded generic books of ``tests/tax_ledger_generator.py``
-  without a carrying-value cross-asset pair;
+- every generic golden case without the generic rail carry, and every
+  Austrian one without a carrying-value cross-asset pair (so without swap
+  links and a second pass): its regime tracker, the regimes, elections, and
+  flows it gives events and moves, and the overrides;
+- the first 200 seeded generic books and the first 200 seeded Austrian
+  books of ``tests/tax_ledger_generator.py`` without a carrying-value
+  cross-asset pair;
 - shapes neither reaches: stored rates and values that are not finite (each
   read as CPython's ``Decimal`` reads it, so a NaN raises where it is
   compared and an entry's infinite value where its constructor compares
@@ -26,7 +30,12 @@ entries are v1 documents already:
   an empty timestamp, two blocked groups whose legs share transactions, a
   group blocked for two reasons, a failing ungrouped move, a group a spend
   drains between its moves, one instant spelled two ways, a holder label
-  with spaces around it.
+  with spaces around it; on Austrian books, times the tracker reads
+  otherwise than RP2 (without an offset, a date, a lowercase ``z``) or
+  cannot read, a time without a value, the tracker's order at one instant,
+  moves out of an empty source and with a held leg, a move whose fee
+  spans both regimes, an override of a move's regime, an election an
+  override drops, and wallets whose ids the tracker merges.
 
 A failed pass is compared by the stages it reached and its signature,
 raised through the production stage table (``errors.ledger_error``); the
@@ -43,9 +52,9 @@ order are compared too.
 
 A last check runs the whole oracle on the legacy-native backend and records
 each normalization and walk it performs, so the mirror of the adapter's
-call used here cannot drift from the adapter's own. Austrian books and the
-generic rail carry are not ported yet; the engine answers ``Unsupported``
-for them (``tax-engine/core/tests/ledger_fixtures.rs``).
+call used here cannot drift from the adapter's own. Austrian swap links and
+the generic rail carry are not ported yet; the engine answers
+``Unsupported`` for them (``tax-engine/core/tests/ledger_fixtures.rs``).
 """
 
 from __future__ import annotations
@@ -69,7 +78,17 @@ from kassiber.core.engines.base import TaxEngineLedgerInputs
 from kassiber.core.engines.errors import ledger_error
 from tests import tax_engine_compare as compare
 from tests import tax_ledger_codec as codec
-from tests.tax_ledger_generator import WALLET_REFS, chain_order, direct, move, profile, projected, random_inputs
+from tests.tax_ledger_generator import (
+    WALLET_REFS,
+    chain_order,
+    chain_txid,
+    direct,
+    graph_json,
+    move,
+    profile,
+    projected,
+    random_inputs,
+)
 from tests.tax_oracle import adapter as oracle_adapter
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,6 +96,7 @@ FIXTURES = ROOT / "tax-engine" / "core" / "tests" / "data" / "ledger_fixtures.js
 RANDOM_BOOKS = 200
 CARRYING_VALUE = "carrying-value"
 GENERIC = frozenset({"generic"})
+AUSTRIAN = frozenset({"at"})
 
 Document = dict[str, Any]
 
@@ -86,13 +106,23 @@ def _document() -> dict[str, Any]:
     return json.loads(FIXTURES.read_text(encoding="utf-8"))
 
 
-def _generic_case_names() -> list[str]:
-    """The golden cases whose books are generic and run no rail carry."""
+def _case_names(capabilities: frozenset[str]) -> list[str]:
+    """The golden cases whose books use exactly ``capabilities``."""
     return [
         case["name"]
         for case in _document()["cases"]
-        if case["request"] is not None and ledger.capabilities(case["request"]) == GENERIC
+        if case["request"] is not None and ledger.capabilities(case["request"]) == capabilities
     ]
+
+
+def _generic_case_names() -> list[str]:
+    """The golden cases whose books are generic and run no rail carry."""
+    return _case_names(GENERIC)
+
+
+def _austrian_case_names() -> list[str]:
+    """The golden cases whose books are Austrian without a carrying-value pair."""
+    return _case_names(AUSTRIAN)
 
 
 def _golden(name: str) -> tuple[Mapping[str, Any], TaxEngineLedgerInputs]:
@@ -100,13 +130,13 @@ def _golden(name: str) -> tuple[Mapping[str, Any], TaxEngineLedgerInputs]:
     return codec.decode_inputs(case["inputs"])
 
 
-@lru_cache(maxsize=1)
-def _random_seeds() -> tuple[int, ...]:
-    """The first ``RANDOM_BOOKS`` seeds whose generic book has no carrying-value cross-asset pair."""
+@lru_cache(maxsize=2)
+def _random_seeds(country: str = "generic") -> tuple[int, ...]:
+    """The first ``RANDOM_BOOKS`` seeds whose book of ``country`` has no carrying-value cross-asset pair."""
     seeds: list[int] = []
     seed = 0
     while len(seeds) < RANDOM_BOOKS:
-        book = random_inputs(seed, "generic")
+        book = random_inputs(seed, country)
         pairs = book.inputs.finalized_tax_projection.cross_asset_pairs
         if not any(pair.get("policy") == CARRYING_VALUE for pair in pairs):
             seeds.append(seed)
@@ -121,11 +151,13 @@ def _random_seeds() -> tuple[int, ...]:
 def _final_pass(
     book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs
 ) -> tuple[dict[str, list[Mapping[str, Any]]], dict[str, list[Mapping[str, Any]]], set[str]]:
-    """The arguments of the adapter's final prepare pass for a generic book
-    without the rail carry: rows and moves grouped as
-    ``_build_finalized_ledger_state`` groups them
-    (``tests/tax_oracle/adapter.py:2209-2244``), after the carry, which
-    returns the rows as they are and blocks none.
+    """The arguments of the adapter's final prepare pass for a book without
+    carries: rows and moves grouped as ``_build_finalized_ledger_state``
+    groups them (``tests/tax_oracle/adapter.py:2209-2244``), after the rail
+    carry, which returns the rows as they are and blocks none. An Austrian
+    book without a carrying-value cross-asset pair selects no swap link, so
+    its first pass is its final one (the mirror test below checks that the
+    adapter runs one pass).
     """
     adapter = oracle_adapter
     projection = inputs.finalized_tax_projection
@@ -382,7 +414,7 @@ def _engine_prepared(
 
 def _engine_response(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> dict[str, Any]:
     request = ledger_request.build_request(book_profile, inputs, operation="prepare")
-    assert ledger.capabilities(request) == GENERIC
+    assert ledger.capabilities(request) in (GENERIC, AUSTRIAN)
     return ledger_response.loads(kassiber_tax.ledger(ledger_request.dumps(request)))
 
 
@@ -506,16 +538,17 @@ def test_the_ungrouped_gate_and_coarse_move_goldens_are_compared() -> None:
         assert "pricing_quality" in details[0] and details[1]["paired_leg"] is True, name
 
 
-@pytest.mark.parametrize("name", _generic_case_names())
+@pytest.mark.parametrize("name", _generic_case_names() + _austrian_case_names())
 def test_the_golden_books_prepare_as_the_oracle(name: str) -> None:
     _assert_same_stages(*_golden(name))
 
 
-def test_the_random_books_prepare_as_the_oracle() -> None:
+@pytest.mark.parametrize("country", ["generic", "at"])
+def test_the_random_books_prepare_as_the_oracle(country: str) -> None:
     differing: list[str] = []
     failed = 0
-    for seed in _random_seeds():
-        book = random_inputs(seed, "generic")
+    for seed in _random_seeds(country):
+        book = random_inputs(seed, country)
         expected = _oracle_document(book.profile, book.inputs)
         failed += expected["error"] is not None
         differences = compare.value_differences(expected, _engine_document(book.profile, book.inputs), "prepare")
@@ -1027,6 +1060,191 @@ def test_the_edge_books_reach_their_shapes() -> None:
     assert prepared("text-fallbacks")["descriptions"] == ["Transfer Cold -> Hot"]
 
 
+# ---------------------------------------------------------------------------
+# Austrian edge books
+
+
+ALT_DAY = "2020-06-01T00:00:00Z"
+
+
+def _austrian_edges() -> dict[str, tuple[list[dict[str, Any]], list[dict[str, Any]], Mapping[str, Any]]]:
+    """Austrian books for the tracker's shapes the corpus does not reach:
+    each name says the shape (checked on the oracle below)."""
+
+    def buy(tx: str, wallet: str, at: str, amount: int = 50_000_000_000, **fields: Any) -> dict[str, Any]:
+        return projected(tx, wallet, "inbound", amount, at, kind="buy", **fields)
+
+    def sell(tx: str, wallet: str, at: str, amount: int = 10_000_000_000, **fields: Any) -> dict[str, Any]:
+        return projected(tx, wallet, "outbound", amount, at, kind="sell", **fields)
+
+    def legs(tx: str, source: str, target: str, at: str, *, amount: int = 10_000_000_000, fee: int = 0, out: Optional[dict[str, Any]] = None, inbound: Optional[dict[str, Any]] = None):
+        out_row = projected(f"{tx}-out", source, "outbound", amount, at, fee=fee, anchor=tx, side="out", kind="transfer", **(out or {}))
+        in_row = projected(f"{tx}-in", target, "inbound", amount, at, anchor=tx, side="in", kind="transfer", **(inbound or {}))
+        return out_row, in_row
+
+    books: dict[str, tuple[list[dict[str, Any]], list[dict[str, Any]], Mapping[str, Any]]] = {}
+
+    # The tracker reads a time without an offset as UTC, where RP2 cannot
+    # read it: the unpriced purchase is quarantined, but its Neu still
+    # counts, so the wallet's later sale is an election.
+    books["naive-time-counts-as-utc"] = (
+        [buy("alt", "A", ALT_DAY), buy("naive", "A", "2021-02-28T23:30:00", rate=None), sell("sale", "A", "2022-06-01T00:00:00Z")],
+        [],
+        WALLET_REFS,
+    )
+    # A date is midnight UTC for the tracker; the walk's constructor refuses it.
+    books["date-only-time"] = (
+        [buy("alt", "A", ALT_DAY), buy("dated", "A", "2021-03-01"), sell("sale", "A", "2022-06-01T00:00:00Z")],
+        [],
+        WALLET_REFS,
+    )
+    # Times the tracker cannot read fail with Python's ValueError before
+    # anything is normalized: text, a lowercase ``z`` RP2 would read, and an
+    # empty time on a row normalize would quarantine.
+    books["unreadable-time"] = ([buy("alt", "A", ALT_DAY), buy("bad", "A", "not a time")], [], WALLET_REFS)
+    books["lowercase-z-time"] = ([buy("alt", "A", ALT_DAY), sell("z", "A", "2022-06-01T00:00:00z")], [], WALLET_REFS)
+    books["empty-time"] = ([buy("alt", "A", ALT_DAY), buy("untimed", "A", "", rate=None)], [], WALLET_REFS)
+    # One instant in the tracker's order: the purchase counts before the
+    # sale, so the sale elects Neu; the instant spelled ``+00:00`` sorts
+    # before ``Z``, so that sale sees only Alt.
+    books["one-instant-in-the-trackers-order"] = (
+        [
+            buy("alt", "A", ALT_DAY),
+            sell("same-time-sale", "A", "2022-06-01T00:00:00Z"),
+            buy("same-time-buy", "A", "2022-06-01T00:00:00Z"),
+            sell("offset-sale", "A", "2022-06-01T00:00:00+00:00"),
+        ],
+        [],
+        WALLET_REFS,
+    )
+    # A move whose in leg is unconfirmed is no move: its out leg is a
+    # standalone sale, for the tracker and for normalize.
+    pending = chain_txid("pending-receipt")
+    out_row, in_row = legs(
+        "held", "A", "B", "2022-06-01T00:00:00Z",
+        inbound={"external_id": pending, "raw_json": graph_json(pending, confirmed=False)},
+    )
+    books["move-with-a-pending-leg"] = (
+        [buy("alt", "A", ALT_DAY), buy("neu", "A", "2022-01-01T00:00:00Z"), out_row, in_row],
+        [move(out_row, in_row)],
+        WALLET_REFS,
+    )
+    # A move whose fee spans the last Neu and Alt: the fee's first slice is
+    # Neu, so the move's regime is Neu, and only Alt reaches the destination.
+    out_row, in_row = legs("span", "A", "B", "2022-06-01T00:00:00Z", amount=50_000_000_000, fee=20_000_000)
+    books["move-fee-spans-regimes"] = (
+        [buy("alt", "A", ALT_DAY, amount=100_000_000_000), buy("neu", "A", "2022-01-01T00:00:00Z", amount=10_000_000), out_row, in_row],
+        [move(out_row, in_row)],
+        WALLET_REFS,
+    )
+    # Overrides: an inbound's override is its event's regime but moves no
+    # availability, so its wallet's later sale is Alt; a sale's override
+    # drops its election; a move's override replaces the tracker's regime
+    # and keeps its flows.
+    out_row, in_row = legs("said-alt", "A", "B", "2022-06-03T00:00:00Z", out={"at_regime_override": "alt"})
+    books["overrides-and-the-tracker"] = (
+        [
+            buy("alt", "A", ALT_DAY),
+            buy("alt-said-neu", "C", ALT_DAY, at_regime_override="neu"),
+            buy("neu", "A", "2022-01-01T00:00:00Z"),
+            sell("c-sale", "C", "2022-06-01T00:00:00Z"),
+            sell("elected-said-neu", "A", "2022-06-02T00:00:00Z", at_regime_override="neu"),
+            out_row,
+            in_row,
+        ],
+        [move(out_row, in_row)],
+        WALLET_REFS,
+    )
+    # A wallet with an empty id counts as ``default`` for the tracker, so it
+    # shares the Alt of the wallet whose id is ``default``.
+    merged = {
+        **WALLET_REFS,
+        "": {**WALLET_REFS["A"], "id": "", "label": "Blank"},
+        "default": {**WALLET_REFS["A"], "id": "default", "label": "Fallback"},
+    }
+    books["wallet-ids-the-tracker-merges"] = (
+        [_in_wallet(buy("alt", "A", ALT_DAY), "default"), _in_wallet(sell("blank-sale", "A", "2022-06-01T00:00:00Z"), "")],
+        [],
+        merged,
+    )
+    return books
+
+
+AUSTRIAN_EDGES = sorted(_austrian_edges())
+
+
+@pytest.mark.parametrize("name", AUSTRIAN_EDGES)
+def test_austrian_edge_books_prepare_as_the_oracle(name: str) -> None:
+    rows, pairs, wallets = _austrian_edges()[name]
+    _assert_same_stages(profile("at", "moving_average_at"), direct(rows, pairs, wallet_refs=wallets))
+
+
+def test_the_austrian_edge_books_reach_their_shapes() -> None:
+    """Each Austrian edge book shows on the oracle what its name says."""
+    books = _austrian_edges()
+    documents = {
+        name: _oracle_document(profile("at", "moving_average_at"), direct(rows, pairs, wallet_refs=wallets))
+        for name, (rows, pairs, wallets) in books.items()
+    }
+
+    def anchors(name: str) -> dict[str, str]:
+        return {str(row["id"]): str(row["journal_transaction_id"]) for row in books[name][0]}
+
+    def events(name: str) -> dict[str, tuple[Any, Any]]:
+        by_id = anchors(name)
+        return {
+            by_id[str(event["transaction_id"])]: (event["at_regime"], event["at_regime_basis"])
+            for asset in documents[name]["assets"]
+            for event in asset["normalized"]["events"]
+        }
+
+    def transfers(name: str) -> list[tuple[Any, Any]]:
+        return [
+            (transfer["at_regime"], transfer["regime_flows"])
+            for asset in documents[name]["assets"]
+            for transfer in asset["normalized"]["transfers"]
+        ]
+
+    naive = documents["naive-time-counts-as-utc"]
+    assert naive["error"] is None
+    assert [item["transaction_id"] for item in naive["assets"][0]["normalized"]["quarantines"]] == ["naive"]
+    assert events("naive-time-counts-as-utc")["sale"] == ("neu", "wahlrecht")
+
+    dated = documents["date-only-time"]
+    assert dated["error"] == ("EngineValueError", "Parameter 'timestamp' value has no timezone info: 2021-03-01")
+    assert dated["assets"][0]["prepared"] is None
+    assert events("date-only-time") == {"alt": ("alt", None), "dated": ("neu", None), "sale": ("neu", "wahlrecht")}
+
+    for name, text in (("unreadable-time", "not a time"), ("lowercase-z-time", "2022-06-01T00:00:00z"), ("empty-time", "")):
+        assert documents[name]["error"] == ("ValueError", f"Invalid isoformat string: {text!r}"), name
+        assert documents[name]["assets"] == [], name
+
+    assert events("one-instant-in-the-trackers-order") == {
+        "alt": ("alt", None),
+        "same-time-sale": ("neu", "wahlrecht"),
+        "same-time-buy": ("neu", None),
+        "offset-sale": ("alt", None),
+    }
+
+    held = documents["move-with-a-pending-leg"]["assets"][0]["normalized"]
+    assert [(item["transaction_id"], item["reason"]) for item in held["quarantines"]] == [("held", "pending_onchain_confirmation")]
+    assert held["transfers"] == []
+    assert events("move-with-a-pending-leg")["held"] == ("neu", "wahlrecht")
+
+    assert transfers("move-fee-spans-regimes") == [
+        ("neu", {"out": {"alt": 50_010_000_000, "neu": 10_000_000}, "in": {"alt": 50_000_000_000, "neu": 0}})
+    ]
+
+    overrides = events("overrides-and-the-tracker")
+    assert overrides["alt-said-neu"] == ("neu", None)
+    assert overrides["c-sale"] == ("alt", None)
+    assert overrides["elected-said-neu"] == ("neu", None)
+    [(regime, flows)] = transfers("overrides-and-the-tracker")
+    assert regime == "alt" and flows["out"]["neu"] > 0
+
+    assert events("wallet-ids-the-tracker-merges")["blank-sale"] == ("alt", None)
+
+
 def test_the_mirror_is_the_adapters_own_call() -> None:
     """The whole oracle, on the legacy-native backend, normalizes and walks
     each asset exactly as ``_oracle_prepare_assets`` does, as far as it
@@ -1040,10 +1258,11 @@ def test_the_mirror_is_the_adapters_own_call() -> None:
         recorded[-1][1] = prepared
         return prepared
 
-    books = [_golden(name) for name in _generic_case_names()]
-    for seed in _random_seeds():
-        book = random_inputs(seed, "generic")
-        books.append((book.profile, book.inputs))
+    books = [_golden(name) for name in _generic_case_names() + _austrian_case_names()]
+    for country in ("generic", "at"):
+        for seed in _random_seeds(country):
+            book = random_inputs(seed, country)
+            books.append((book.profile, book.inputs))
     complete = 0
     for book_profile, inputs in books:
         recorded.clear()
@@ -1065,10 +1284,11 @@ def test_the_mirror_is_the_adapters_own_call() -> None:
             ]
 
         # One prepare pass: each asset normalized and walked once, until
-        # anything fails.
+        # anything fails. An Austrian book without a carrying-value pair
+        # selects no swap link, so it has no second pass.
         assert len(recorded) <= len(mirror)
         if error is None:
             assert len(recorded) == len(mirror)
             complete += 1
         assert compare.value_differences(stages(mirror[: len(recorded)]), stages(recorded)) == []
-    assert complete >= 200
+    assert complete >= 400

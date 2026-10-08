@@ -1478,6 +1478,20 @@ def _at_cases() -> list[GoldenCase]:
             check=fails("RP2 tax calculation failed for asset 'BTC'"),
         )
     )
+    # Pricing can release the Neu shortfall (an oracle quirk the Austrian
+    # pricing property excuses): a move out of an Alt-only wallet whose
+    # regime the user set to Neu is held while its fee has no price; priced
+    # by its in leg, it books a Neu fee no Neu lot covers.
+    for variant, in_rate, check in (
+        ("unpriced", None, _quarantined((("move-out", "missing_spot_price"), ("move-in", "missing_spot_price")), ("acquisition",))),
+        ("priced", "40000", fails("RP2 tax calculation failed for asset 'BTC': Total in-transaction crypto value < total taxable crypto value")),
+    ):
+        rows = [
+            row("alt-buy", "C", "inbound", 100_000_000_000, "2021-01-01T00:00:00Z", rate="30000", kind="buy"),
+            row("move-out", "C", "outbound", 50_000_000_000, "2021-02-01T00:00:00Z", fee=100_000_000, rate=None, at_regime_override="neu"),
+            row("move-in", "B", "inbound", 50_000_000_000, "2021-02-01T00:10:00Z", rate=in_rate),
+        ]
+        cases.append(_book(f"at-pricing-releases-a-neu-shortfall-{variant}", ("at", "regime", "pricing"), mat, rows, [pair("pair-1", "move-out", "move-in")], check))
 
     # User text with marker tokens keeps today's effect (design §3.6).
     cases.append(_usertag_swap("at-usertag-swap-moving-average-at", "at", "moving_average_at", tagged=True, check=succeeds(categories=("neu_swap",))))
@@ -1537,6 +1551,18 @@ def _at_cases() -> list[GoldenCase]:
         if item["id"] == "move-out":
             item["note"] = "consolidation at_swap_link=m1"
     cases.append(_book("at-usertag-move-swap-link", ("at", "marker_text", "move"), mat, rows, pairs, fails("`at_swap_link=` marker on non-SELL disposal")))
+    # Under a lot method nothing computes with the move's tag: classifying
+    # its fee reads it (a Neu swap, which a fee then drops), and a repeated
+    # tag fails that classification, unwrapped.
+    for name, note, check in (
+        ("at-usertag-move-swap-link-fifo", "consolidation at_swap_link=m1", succeeds(entry_types=("transfer_fee",), descriptions=("consolidation at_swap_link=m1",))),
+        ("at-usertag-move-duplicate-swap-link-fifo", "at_swap_link=m1 at_swap_link=m2", fails("Duplicate `at_swap_link=` markers", error_class="RP2ValueError")),
+    ):
+        rows, pairs = ledger_history()
+        for item in rows:
+            if item["id"] == "move-out":
+                item["note"] = note
+        cases.append(_book(name, ("at", "marker_text", "move"), profile("at", "fifo"), rows, pairs, check))
     return cases
 
 

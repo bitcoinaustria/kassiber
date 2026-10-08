@@ -86,9 +86,10 @@ refuses (configuration failures and LD-5 shapes) count as `unclassified`. It
 also prints the number of LD-5 refusals. Shadow fails the session on any
 recorded difference, even one a caller caught, on any call of a capability
 production routes to v2 that went legacy or never reached v2, and on any LD-5
-refusal, since the suite's books are finalized projections. `generic` is
-routed, so a generic book without the Bitcoin rail carry goes to the v2
-engine and every other call that reaches routing to the legacy adapter. A
+refusal, since the suite's books are finalized projections. `generic` and
+`at` are routed, so a generic book without the Bitcoin rail carry and an
+Austrian book without a carrying-value cross-asset pair go to the v2 engine
+and every other call that reaches routing to the legacy adapter. A
 test marked `stubs_tax_engine` replaces parts of the production engine, so
 shadow runs its calls on production without comparing them and lists them in
 the summary.
@@ -145,19 +146,24 @@ sets, where they fail.
 `tests/test_tax_ledger_prepare.py` compares the engine's `prepare` stages
 with the frozen oracle's own intermediates, field by field, so a difference
 shows the stage it starts in before whole-ledger goldens can. Per asset that
-is the normalized stage (the events, moves, their order, normalize's
-quarantines, and the contamination time) and the prepared stage (the lot
+is the normalized stage (the events, moves, their order, their Austrian
+regimes, elections, and regime flows, normalize's quarantines, and the
+contamination time) and the prepared stage (the lot
 engine's entries as v1 entry documents with their notes and text, the walk's
 gate quarantines, and the transfer audit with the legs' description), against
 what the oracle's `_prepare_assets` builds on the legacy-native backend.
 Quarantines and audit rows go through the production reader. A failed pass is
 compared by the stages it reached and its error, and the same pass on RP2
 must fail exactly so. It covers the generic golden books without the Bitcoin
-rail carry, the first 200 seeded generic books without a carrying-value
-cross-asset pair, and edge books neither reaches (non-finite stored rates and
-values, overflow, subnormal prices, missing labels, an empty or unparsed
-timestamp, blocked groups that share transactions, a group drained between
-its moves, one instant spelled two ways, a holder label with spaces). Where
+rail carry and the Austrian ones without a carrying-value cross-asset pair,
+the first 200 seeded generic and Austrian books without such a pair, and
+edge books neither reaches (non-finite stored rates and values, overflow,
+subnormal prices, missing labels, an empty or unparsed timestamp, blocked
+groups that share transactions, a group drained between its moves, one
+instant spelled two ways, a holder label with spaces; on Austrian books,
+times the regime tracker reads otherwise than RP2 or cannot read, the
+tracker's order at one instant, a held move leg, a move fee across both
+regimes, overrides of the tracker's regimes, and wallet ids it merges). Where
 the legacy-native backend checks an infinite value before RP2's constructor
 would, the engine follows RP2. A last check runs the whole oracle and records
 its own normalize and walk calls, so the test's mirror of that call cannot

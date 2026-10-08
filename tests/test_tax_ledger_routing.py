@@ -12,8 +12,9 @@ runs on the phase-3 adapter. Here:
   projected), and the golden corpus uses every capability; a carrying pair
   with either leg outside the projection adds none;
 - each case routes to v2 exactly when its capabilities are routed, and
-  gives the stored ``expected`` either way: today ``generic`` is routed, so
-  a generic book without the Bitcoin rail carry runs on the engine and the
+  gives the stored ``expected`` either way: today ``generic`` and ``at`` are
+  routed, so a generic book without the Bitcoin rail carry and an Austrian
+  book without a carrying-value cross-asset pair run on the engine and the
   others on the adapter; with nothing routed every book runs on the
   adapter; with the case's capabilities routed it reaches the engine, which
   refuses the books it does not implement yet;
@@ -125,9 +126,12 @@ def test_the_primary_capability_is_the_most_specific() -> None:
     assert ledger.primary_capability(frozenset()) == ledger.UNCLASSIFIED
 
 
-def test_generic_books_are_routed() -> None:
-    assert ledger.ROUTED_CAPABILITIES == frozenset({"generic"})
+def test_generic_and_austrian_books_are_routed() -> None:
+    assert ledger.ROUTED_CAPABILITIES == frozenset({"generic", "at"})
     assert compare.ROUTED_CAPABILITIES is ledger.ROUTED_CAPABILITIES
+    # The goldens hold Austrian books on both routes.
+    routes = {ledger.route(ledger.capabilities(case["request"])) for case in _routed_cases() if case["request"]["policy"]["country"]["kind"] == "at"}
+    assert routes == {ledger.V2, ledger.LEGACY}
 
 
 def _expected_outcome(case: dict[str, Any], book_profile: Any, inputs: TaxEngineLedgerInputs) -> list[str]:
